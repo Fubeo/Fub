@@ -41,6 +41,7 @@
 // la forma dei record; questo file non ne è un secondo, e infatti le risposte
 // che compone sono tipizzate dal contratto e non da sé.
 import { fakeNoteTypes } from "./fake-note-types";
+import { childName, parentOf } from "../rules/organizer";
 import type {
   BundleInfo,
   ComponentAction,
@@ -325,6 +326,11 @@ export interface Options {
   view?: ViewSpec[];
   commands?: CommandSpec[];
   settings?: SettingEntry[];
+  /// L'organizzazione del vault alla prima apertura: icone, appuntate, ordine e
+  /// spazi. Di serie vuota, come un vault appena creato. Il finto la tiene come
+  /// il kernel: una rinomina (di Fub, da un'altra app o di una cartella) la porta
+  /// con sé, e un'appuntata messa resta messa.
+  organization?: Organization;
   syntaxForms?: SyntaxForm[];
   /// Bundle nativi/ufficiali che l'host conosce.
   bundles?: BundleInfo[];
@@ -537,7 +543,10 @@ export interface FakeHost {
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
   /// di più, perché è ciò che succede quando un ascoltatore si monta dopo il
   /// router — e un evento consegnato a nessuno non fallisce da sé.
-  emit(event: KernelEvent): boolean;
+  ///
+  /// `vault` è il vault di cui è il fatto, come lo mette il ponte vero
+  /// (`KernelNotice.vault`); senza, il notice non ne nomina nessuno.
+  emit(event: KernelEvent, vault?: string): boolean;
   /// La cartella del tema collegato è cambiata (`fub://theme-changed`): manda
   /// a chi ascolta lo stato di adesso, coi file salvati. Chi prova modifica
   /// prima `themeFolders` (un fascio nuovo, un rifiuto, la cartella tolta).
@@ -635,6 +644,74 @@ function wikiPageDoc(ids: Iterable<string>, page: string): string | undefined {
 /// Un wikilink (anche incorporato, `![[…]]`): la pagina, poi il frammento e
 /// l'alias, che la rinomina lascia com'erano.
 const WIKILINK = /(!?\[\[)([^\]|#\n]*)([^\]\n]*)\]\]/g;
+
+/// L'organizzazione del vault come la tiene il kernel (`organization.rs`): una
+/// copia, perché il client non deve condividere con il finto i suoi oggetti.
+function copyOrganization(org: Organization): Organization {
+  return {
+    icons: { ...org.icons },
+    pinned: [...org.pinned],
+    order: Object.fromEntries(Object.entries(org.order).map(([folder, names]) => [folder, [...names]])),
+    spaces: [...org.spaces],
+  };
+}
+
+/// Le liste dell'organizzazione sono insiemi ordinati: un id non ci sta due
+/// volte, e chi c'era già non si sposta (come `senza_doppioni` del kernel).
+function withoutDuplicates(org: Organization): void {
+  const once = (ids: string[]) => [...new Set(ids)];
+  org.pinned = once(org.pinned);
+  org.spaces = once(org.spaces);
+  for (const folder of Object.keys(org.order)) org.order[folder] = once(org.order[folder]!);
+}
+
+/// Il posto di un path nell'ordine scelto a mano della sua cartella: lo stesso
+/// posto se la cartella resta, altrimenti esce da lì.
+function moveInOrder(org: Organization, from: string, to: string): void {
+  const names = org.order[parentOf(from)];
+  const at = names?.indexOf(childName(from)) ?? -1;
+  if (!names || at === -1) return;
+  if (parentOf(from) === parentOf(to)) names[at] = childName(to);
+  else names.splice(at, 1);
+}
+
+/// Un documento cambia path (`from` → `to`): l'icona segue se il path d'arrivo è
+/// libero, il pin e il posto nell'ordine seguono. Come `migrate` del kernel.
+function moveNote(org: Organization, from: string, to: string): void {
+  const icon = org.icons[from];
+  if (icon !== undefined && (org.icons[to] === undefined || from === to)) {
+    delete org.icons[from];
+    org.icons[to] = icon;
+  }
+  org.pinned = org.pinned.map((id) => (id === from ? to : id));
+  moveInOrder(org, from, to);
+  withoutDuplicates(org);
+}
+
+/// Una cartella cambia path, con ciò che sta sotto: come `migrate_folder` del
+/// kernel. Su una collisione vince ciò che la destinazione aveva già.
+function moveFolder(org: Organization, from: string, to: string): void {
+  const rebase = (path: string): string | null =>
+    path === from ? to : path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : null;
+  for (const [key, icon] of Object.entries(org.icons)) {
+    const moved = rebase(key);
+    if (moved !== null && org.icons[moved] === undefined) {
+      delete org.icons[key];
+      org.icons[moved] = icon;
+    }
+  }
+  for (const [key, names] of Object.entries(org.order)) {
+    const moved = rebase(key);
+    if (moved !== null && org.order[moved] === undefined) {
+      delete org.order[key];
+      org.order[moved] = names;
+    }
+  }
+  org.pinned = org.pinned.map((path) => rebase(path) ?? path);
+  org.spaces = org.spaces.map((path) => rebase(path) ?? path);
+  moveInOrder(org, from, to);
+  withoutDuplicates(org);
+}
 
 /// I testi riscritti da una rinomina di `from` in `to`, per documento: i soli
 /// wikilink che nominavano `from` cambiano pagina, nella forma in cui erano
@@ -956,6 +1033,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
   let trashedCount = 0;
   /// Le cartelle create vuote: le altre si ricavano dai path dei documenti.
   const createdFolders = new Set<string>();
+  /// L'organizzazione del vault: la tengono le scritture del finto, come il
+  /// kernel tiene il suo sidecar. Parte da quella che il vault ha (`options`).
+  let organization: Organization = copyOrganization(
+    options.organization ?? { icons: {}, pinned: [], order: {}, spaces: [] },
+  );
 
   for (const [id, text] of Object.entries(options.file ?? {})) write(id, text);
   for (const [id, resource] of Object.entries(options.resources ?? {})) writeBytes(id, resource.bytes, resource.mime);
@@ -1369,18 +1451,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (plugin.mounted) plugin.runtime_known = true;
   }
 
-  function emit(event: KernelEvent): boolean {
+  function emit(event: KernelEvent, vault?: string): boolean {
     if (!listener) return false;
-    listener({ event, origin: { actor: { kind: "user" }, batch: null } });
+    listener({ event, origin: { actor: { kind: "user" }, batch: null }, ...(vault === undefined ? {} : { vault }) });
     return true;
   }
 
   /// Un documento è di tipo `document` se ha un'estensione che il vault
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
-  /// legge dalla risposta e non dalla propria testa.
+  /// legge dalla risposta e non dalla propria testa. Un `.base` è un
+  /// documento come nell'host vero (`fub-format-base` registra `base`):
+  /// l'albero lo apre col clic, come una nota.
   function entryKind(id: string): VaultEntry["kind"] {
     const format = formatOf(id);
-    return format !== null && format !== "canvas" && format !== "base" ? "document" : "asset";
+    return format !== null && format !== "canvas" ? "document" : "asset";
   }
 
   function entry(id: string): VaultEntry {
@@ -1548,10 +1632,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
         };
       case "settings":
         return { kind: "settings", value: settings.map((e) => ({ ...e })) };
-      case "organization": {
-        const org: Organization = { icons: {}, pinned: [], order: {}, spaces: [] };
-        return { kind: "organization", value: org };
-      }
+      case "organization":
+        return { kind: "organization", value: copyOrganization(organization) };
       case "drafts": {
         const drafts: DraftInfo[] = [];
         return { kind: "drafts", value: paginate(drafts, q.page) };
@@ -1788,6 +1870,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const rewritten = renameRewrites(new Map([...docs].map(([id, entry]) => [id, entry.text])), from, to);
         docs.delete(from);
         docs.set(to, before);
+        moveNote(organization, from, to);
         const own = rewritten.get(from);
         if (own !== undefined) write(to, own);
         emit({ type: "document_renamed", from, to });
@@ -1940,6 +2023,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const folders = [...createdFolders].filter((f) => f === from || inside(f, from));
         if (moving.length === 0 && folders.length === 0) throw { kind: "not_found", message: `«${from}» non c'è` } satisfies PluginError;
         if ([...docs.keys()].some((id) => id === to || inside(id, to))) throw { kind: "already_exists", message: `«${to}» c'è già` } satisfies PluginError;
+        moveFolder(organization, from, to);
         for (const id of moving) {
           const target = `${to}${id.slice(from.length)}`;
           docs.set(target, docs.get(id)!);
@@ -2403,10 +2487,22 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return gate("queryIndex", named([q], vault), result);
       },
       cancelJob: (id, vault) => gate("cancelJob", named([id], vault), Promise.resolve()),
-      setIcon: (path, icon) => gate("setIcon", [path, icon], Promise.resolve()),
-      setPinned: (id, pinned) => gate("setPinned", [id, pinned], Promise.resolve()),
-      setSpace: (path, space) => gate("setSpace", [path, space], Promise.resolve()),
-      setOrder: (folder, names) => gate("setOrder", [folder, names], Promise.resolve()),
+      setIcon: (path, icon) => installedOperation("setIcon", [path, icon], () => {
+        if (icon) organization.icons[path] = icon;
+        else delete organization.icons[path];
+      }),
+      setPinned: (id, pinned) => installedOperation("setPinned", [id, pinned], () => {
+        if (pinned && !organization.pinned.includes(id)) organization.pinned.push(id);
+        if (!pinned) organization.pinned = organization.pinned.filter((pin) => pin !== id);
+      }),
+      setSpace: (path, space) => installedOperation("setSpace", [path, space], () => {
+        if (space && !organization.spaces.includes(path)) organization.spaces.push(path);
+        if (!space) organization.spaces = organization.spaces.filter((kept) => kept !== path);
+      }),
+      setOrder: (folder, names) => installedOperation("setOrder", [folder, names], () => {
+        if (names.length > 0) organization.order[folder] = [...names];
+        else delete organization.order[folder];
+      }),
       setSetting: (key, value) =>
         gate("setSetting", [key, value], Promise.resolve(writeSetting(key, value))),
       resetSetting: (key) => gate("resetSetting", [key], Promise.resolve(writeSetting(key, null))),
@@ -2496,7 +2592,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         });
         answer
           .then(() => Promise.resolve())
-          .then(() => events.forEach(emit), () => undefined);
+          .then(() => events.forEach((event) => emit(event)), () => undefined);
         return answer;
       },
       listInstalledPlugins: (vault) =>
@@ -2806,6 +2902,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!before) throw new Error(`host fake: «${from}» non esiste`);
       docs.delete(from);
       docs.set(to, before);
+      // Come il kernel: una rinomina da fuori passa dallo stesso punto di quella
+      // di Fub, e l'organizzazione la segue.
+      moveNote(organization, from, to);
       // Ciò che non è un documento cambia con gli eventi `entry_*`, come nel
       // kernel: la shell che li ignorasse qui se ne accorgerebbe.
       const kind = entryKind(from);
@@ -2869,7 +2968,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
     componentsFromOutside: (azione, apply = true) => {
       if (root === null) throw new Error("host fake: no vault is open");
       const recorded = componentChoice(azione, apply);
-      componentEvents(recorded).forEach(emit);
+      componentEvents(recorded).forEach((event) => emit(event));
       return structuredClone(recorded.risposta);
     },
     fault: (name, reason) => {

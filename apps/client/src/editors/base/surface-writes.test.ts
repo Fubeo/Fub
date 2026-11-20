@@ -15,7 +15,7 @@ vi.mock("../../ui/notify", () => ({
 }));
 
 type Kind = "table" | "kanban" | "calendar" | "timeline";
-interface Note { doc: string; stato: string; inizio: string; fine: string }
+interface Note { doc: string; stato: string; inizio: string; fine: string; visto: boolean }
 
 // Una data del core: `{ year, month, day, time }`, senza ora.
 const dateValue = (day: string) => {
@@ -29,13 +29,14 @@ const dateValue = (day: string) => {
 function mount(kind: Kind) {
   const today = localDay();
   const notes: Note[] = [
-    { doc: "Opere/Nebbia.md", stato: "Arrivata", inizio: today, fine: addDays(today, 2) },
-    { doc: "Opere/Campo.md", stato: "In prestito", inizio: addDays(today, 3), fine: addDays(today, 4) },
+    { doc: "Opere/Nebbia.md", stato: "Arrivata", inizio: today, fine: addDays(today, 2), visto: false },
+    { doc: "Opere/Campo.md", stato: "In prestito", inizio: addDays(today, 3), fine: addDays(today, 4), visto: false },
   ];
   const props = (note: Note) => [
     { key: "stato", value: { kind: "text", value: note.stato } },
     { key: "inizio", value: dateValue(note.inizio) },
     { key: "fine", value: dateValue(note.fine) },
+    { key: "visto", value: { kind: "bool", value: note.visto } },
   ];
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => { release = () => resolve(); });
@@ -49,13 +50,13 @@ function mount(kind: Kind) {
     if (!query) throw new Error("unexpected query");
     if (query.op === "parse") return { kind: "custom", value: { views: ["Vista"], types: [kind] } };
     if (query.op === "plan") return { kind: "custom", value: {
-      view: "Vista", view_type: kind, columns: ["stato"], column_labels: {}, required_props: [], all_properties: true,
+      view: "Vista", view_type: kind, columns: kind === "table" ? ["stato", "visto"] : ["stato"], column_labels: {}, required_props: [], all_properties: true,
       group: kind === "kanban" ? "stato" : null, limit: null, map: null, create_defaults: {}, filters: "all", sort: [], order: [],
       ...(kind === "calendar" ? { date_key: "inizio" } : {}),
       ...(kind === "timeline" ? { start_key: "inizio", end_key: "fine" } : {}),
     } };
     if (query.op === "derive") return { kind: "custom", value: { summaries: {}, rows: notes.map((note) => ({
-      doc: note.doc, values: { stato: { kind: "text", value: note.stato } },
+      doc: note.doc, values: { stato: { kind: "text", value: note.stato }, visto: { kind: "bool", value: note.visto } },
       ...(kind === "calendar" ? { time: { day: note.inizio } } : {}),
       ...(kind === "timeline" ? { time: { start: note.inizio, end: note.fine, inverted: false } } : {}),
     })) } };
@@ -72,11 +73,12 @@ function mount(kind: Kind) {
   const invokeCommand = vi.fn(async (command: string, args: Record<string, unknown> = {}) => {
     if (command !== "note.property.set") return {};
     const note = notes.find((each) => each.doc === args.doc)!;
-    const key = args.key as "stato" | "inizio" | "fine";
+    const key = args.key as "stato" | "inizio" | "fine" | "visto";
     const expected = JSON.parse(args.expected as string) as { value?: unknown };
-    const current = key === "stato" ? { kind: "text", value: note.stato } : dateValue(note[key]);
+    const current = key === "stato" ? { kind: "text", value: note.stato } : key === "visto" ? { kind: "bool", value: note.visto } : dateValue(note[key]);
     if (JSON.stringify(expected.value) !== JSON.stringify(current)) throw { kind: "conflict", message: "La nota è cambiata: riprova." };
-    note[key] = JSON.parse(args.value as string) as string;
+    if (key === "visto") note.visto = JSON.parse(args.value as string) as boolean;
+    else note[key] = JSON.parse(args.value as string) as string;
     return { undo: { label: "Annulla la proprietà" } };
   });
   const surface = mountBaseSurface("base", { paneId: "base-scritture", documentId: "Opere.base", parent: host }, {
@@ -91,6 +93,8 @@ function mount(kind: Kind) {
 
 const press = (target: Element, init: KeyboardEventInit) => target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
 const failures = () => notified.filter((each) => each.tone === "guasto");
+// La nota `doc` cambiata e salvata: l'evento che il core manda.
+const changed = (doc: string, property: string) => forwardNotice({ event: { type: "document_changed", id: doc, changes: { aspects: ["frontmatter"], properties: [property], tags_added: [], tags_removed: [] } }, origin: { actor: { kind: "kernel" }, batch: null } });
 
 describe("una scrittura chiesta nella Base va fino in fondo o si dice (#484)", () => {
   it("la cella si scrive anche se un evento del vault arriva mentre la scrittura si prepara", async () => {
@@ -112,6 +116,54 @@ describe("una scrittura chiesta nella Base va fino in fondo o si dice (#484)", (
       expect(failures()).toEqual([]);
     } finally { close(); }
   });
+
+  it("la cella che un'altra scrittura ha cambiato non si scrive sopra: la CAS la rifiuta e la Base chiede quale testo tenere", async () => {
+    notified.length = 0;
+    const { host, notes, invokeCommand, release, mutating, close } = mount("table");
+    try {
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(2));
+      const stato = host.querySelector<HTMLInputElement>('tr[data-doc="Opere/Nebbia.md"] td[data-cell="1"] input')!;
+      stato.focus();
+      stato.value = "Confermata";
+      stato.dispatchEvent(new Event("input", { bubbles: true }));
+      stato.dispatchEvent(new Event("change"));
+      await mutating;
+      // La nota cambia altrove fra la preparazione e l'invio, e lo dice l'evento.
+      notes[0]!.stato = "Prestata";
+      changed("Opere/Nebbia.md", "stato");
+      release();
+      await vi.waitFor(() => expect(host.querySelector(".conflict-banner")).not.toBeNull());
+      // Il comando è partito una volta, col valore letto: il testo nuovo resta.
+      expect(invokeCommand.mock.calls.filter(([command]) => command === "note.property.set")).toEqual([
+        ["note.property.set", { doc: "Opere/Nebbia.md", key: "stato", expected: JSON.stringify({ kind: "value", value: { kind: "text", value: "Arrivata" } }), value: JSON.stringify("Confermata") }],
+      ]);
+      expect(notes[0]!.stato).toBe("Prestata");
+    } finally { close(); }
+  });
+
+  it("la casella che un'altra scrittura ha cambiato non si scrive sopra, e la riga di stato lo dice anche dopo la rilettura", async () => {
+    notified.length = 0;
+    const { host, notes, invokeCommand, release, mutating, close } = mount("table");
+    try {
+      await vi.waitFor(() => expect(host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(2));
+      const visto = host.querySelector<HTMLInputElement>('tr[data-doc="Opere/Nebbia.md"] input[type="checkbox"]')!;
+      visto.checked = true;
+      visto.dispatchEvent(new Event("change"));
+      await mutating;
+      notes[0]!.visto = true;
+      notes[0]!.stato = "Prestata";
+      changed("Opere/Nebbia.md", "stato");
+      release();
+      await vi.waitFor(() => expect(host.querySelector(".base-status")?.textContent).toBe("La nota è cambiata: riprova."));
+      // La rilettura chiesta dall'evento non cancella il motivo.
+      await vi.waitFor(() => expect(host.querySelector<HTMLInputElement>('tr[data-doc="Opere/Nebbia.md"] td[data-cell="1"] input')?.value).toBe("Prestata"));
+      expect(host.querySelector(".base-status")?.textContent).toBe("La nota è cambiata: riprova.");
+      expect(invokeCommand.mock.calls.filter(([command]) => command === "note.property.set")).toEqual([
+        ["note.property.set", { doc: "Opere/Nebbia.md", key: "visto", expected: JSON.stringify({ kind: "value", value: { kind: "bool", value: false } }), value: "true" }],
+      ]);
+    } finally { close(); }
+  });
+
 
   it("la cella non si scrive se la Base diventa in sola lettura, e la riga di stato lo dice", async () => {
     notified.length = 0;

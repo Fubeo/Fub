@@ -4,7 +4,7 @@ import { errorText } from "../../../../host/errors";
 import { onLanguage, t } from "../../../../i18n/strings";
 import { highlightMarkdownCode } from "./highlight-code";
 import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifetime";
-import { mountMermaidBlocks } from "../../../../ui/mermaid";
+import { mountMermaidBlocks, type DiagramLookOverride } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
 import { claimQueryBlocks, embedTasksBlocks, fillQueryBlock, markTaskDues } from "./query-block";
@@ -65,6 +65,12 @@ export interface MarkdownMountOptions {
   /** Draws every diagram in one light, whatever the theme (print is paper). */
   readonly diagramAppearance?: DiagramLight;
   /**
+   * The look imposed on each diagram of this document, by its position among
+   * the document's diagrams (from 0); `null` for a diagram of a transcluded
+   * note. The PDF export uses it (`export/vectors.ts`); the note is untouched.
+   */
+  readonly diagramLook?: (index: number | null) => DiagramLookOverride | null;
+  /**
    * What the right click on a rendered vault image can do besides copying:
    * open it in the viewer, open it with another app, show it in the
    * explorer. `imageMenu: false` leaves the right click to whoever hosts the
@@ -90,6 +96,20 @@ export interface MarkdownMountOptions {
    * riportata non la ricevono: si scrive un livello solo.
    */
   readonly transclude?: TranscludeSlot;
+  /**
+   * Le schede affiancate (T42, `live-cards.ts`): riceve ogni embed da solo nel
+   * suo paragrafo dentro una colonna di `[!columns]`, appena reso, con la vita
+   * della resa. Se lo prende (`true`) al suo posto c'è una scheda viva, e la
+   * resa non lo idrata. Le note riportate non la ricevono.
+   */
+  readonly liveCard?: (slot: HTMLElement, life: Lifetime) => boolean;
+  /**
+   * I valori di cella nel testo (T53, `cell-value.ts`): riceve ogni embed reso
+   * che una scheda non ha preso, con la vita della resa. Se lo prende (`true`)
+   * l'embed è il valore della cella che nomina, testo come il resto, e la resa
+   * non lo idrata. Le note riportate non la ricevono.
+   */
+  readonly cellValue?: (slot: HTMLElement, life: Lifetime) => boolean;
 }
 
 /// Una nota riportata, come la trasclusione viva la riceve: il documento che
@@ -365,6 +385,7 @@ function enhanceContent(
     revealSource: options.openSource,
     editFence: options.editFence,
     appearance: options.diagramAppearance,
+    look: options.diagramLook && ((index) => options.diagramLook?.(index) ?? null),
   }));
   life.add(mountMathBlocks(container));
   markTaskDues(container);
@@ -477,7 +498,7 @@ const lightbox = lazyPart(() => import("../../../../ui/lightbox"));
 export function mountRenderedDocument(
   container: HTMLElement,
   rendered: RenderedDocument,
-  options: Pick<MarkdownMountOptions, "documentId" | "declaredFences" | "diagramAppearance" | "resources">,
+  options: Pick<MarkdownMountOptions, "documentId" | "declaredFences" | "diagramAppearance" | "diagramLook" | "resources">,
 ): RenderedDocumentMount {
   const life = openLifetime();
   const race = new Race();
@@ -512,6 +533,8 @@ async function hydrateEmbeds(
   await Promise.all(Array.from(container.querySelectorAll<HTMLElement>(".embed[data-embed-page]")).map(async (slot) => {
     const page = slot.dataset.embedPage || options.documentId;
     if (!page) return;
+    // Il valore di una cella (T53) non si trasclude: lo tiene `cellValue`.
+    if (slot.dataset.cellValue) return;
     // Un media non è una nota da trascludere: lo idrata `hydrateVaultMedia`.
     if (slot.dataset.embedPage && mediaKindOfId(slot.dataset.embedPage) !== "other") return;
     if (chain.size > MAX_EMBED_DEPTH) {
@@ -574,6 +597,10 @@ async function hydrateEmbeds(
       navigateFragment: undefined,
       // Si scrive un livello solo: una nota riportata dentro questa resta da leggere.
       transclude: undefined,
+      liveCard: undefined,
+      cellValue: undefined,
+      // A diagram of the transcluded note is not one of this note's blocks.
+      diagramLook: options.diagramLook && (() => options.diagramLook?.(null) ?? null),
       openWikilink: (page, heading, block) => options.openWikilink?.(page || content.doc_id, heading, block),
       openPath: (path, from = content.doc_id) => options.openPath?.(path, from),
     };
@@ -698,7 +725,25 @@ export function mountMarkdown(
     const queries = claimQueryBlocks(container);
     embedTasksBlocks(container, mountedLife);
     enhanceContent(container, parts, options, mountedLife);
-    hasEmbeds = !!container.querySelector(".embed[data-embed-page]");
+    if (options.liveCard) {
+      for (const slot of container.querySelectorAll<HTMLElement>(".fub-column > p > .embed[data-embed-page]")) {
+        try {
+          options.liveCard(slot, mountedLife);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    }
+    if (options.cellValue) {
+      for (const slot of container.querySelectorAll<HTMLElement>(".embed[data-embed-page]")) {
+        try {
+          options.cellValue(slot, mountedLife);
+        } catch (error) {
+          console.error(error);
+        }
+      }
+    }
+    hasEmbeds = !!container.querySelector(".embed[data-embed-page]:not([data-cell-value])");
     const hasImages = !!container.querySelector("img[data-vault-src]");
     const documentId = options.documentId;
     if (queries.length > 0 || (documentId && (hasEmbeds || hasImages))) {

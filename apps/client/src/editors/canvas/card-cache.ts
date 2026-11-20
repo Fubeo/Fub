@@ -2,7 +2,7 @@
 // PDF o d'immagine la sua immagine ferma c'è subito, senza rileggere né
 // ridisegnare il file, e la memoria ha un tetto in byte.
 //
-// La forma è quella di `CardSnapshots` di `cards.ts`, scritta per struttura
+// La forma è quella di `CardSnapshots` di `editors/core/cards/contract.ts`, scritta per struttura
 // (questo modulo non importa il contratto). Dentro: una mappa per percorso,
 // e in ogni percorso una mappa per parte («w640», «page-3@640»); l'ordine
 // d'uso è uno solo per tutte le voci, così il più vecchio usato esce per

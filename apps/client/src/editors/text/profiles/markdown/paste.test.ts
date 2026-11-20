@@ -7,6 +7,7 @@ import { createMarkdownProfile } from "./profile";
 import { markdownFromClipboard, markdownPaste, pastePlainText } from "./paste";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { pasteHtml } from "../../paste-html";
+import { rememberCellsCopy } from "./cells-clipboard";
 
 const DOC = "prima\r\nqui\r\nfine";
 /// Come `DOC`, con una riga vuota al posto di «qui»: il cursore sta a 6.
@@ -578,5 +579,49 @@ describe("Markdown clipboard paste", () => {
     expect(view.state.doc.toString()).toBe("prima qui");
     await vi.waitFor(() => expect(view.state.doc.toString()).toBe("prima **forte**"));
     view.destroy();
+  });
+});
+
+describe("celle incollate da un foglio (T52)", () => {
+  const TSV = "Voce\tImporto\nLuce | gas\t98\n";
+  const TABLE = "| Voce        | Importo |\r\n| ----------- | ------- |\r\n| Luce \\| gas | 98      |";
+
+  it("il testo a tabulazioni diventa una tabella, staccata dal testo intorno", () => {
+    const { engine, event, host } = paste("", TSV, "", EditorSelection.single(5));
+    expect(event.defaultPrevented).toBe(true);
+    expect(engine.getDoc()).toBe(`prima\r\n\r\n${TABLE}\r\n\r\nqui\r\nfine`);
+    // Celle di un foglio che non è del vault: nessuna scelta.
+    expect(host.querySelector(".cm-fub-address-choice")).toBeNull();
+    engine.destroy();
+    host.remove();
+  });
+
+  it("le celle di un foglio del vault offrono «Incolla come scheda», che scrive l'embed", () => {
+    // Il foglio copia col formato di GridCraft: i numeri prendono i separatori della nota.
+    const shown = "Voce\tImporto\nAffitto\t1,240.50 €\n";
+    rememberCellsCopy(shown, { doc: "Conti.xlsx", sheet: "Foglio1", range: "A1:B2" });
+    const { engine, host, view } = paste("", shown, "", EditorSelection.single(6), true, BLANK);
+    expect(engine.getDoc()).toBe("prima\r\n\r\n| Voce    |    Importo |\r\n| ------- | ---------: |\r\n| Affitto | 1.240,50 € |\r\n\r\nfine");
+    const choice = host.querySelector(".cm-fub-address-choice");
+    expect(choice?.getAttribute("aria-label")).toBe("Come scrivere le celle");
+    const buttons = [...host.querySelectorAll<HTMLElement>(".cm-fub-address-choice [data-choice]")];
+    expect(buttons.map((button) => button.textContent)).toEqual(["Tabella", "Incolla come scheda"]);
+    press(buttons[1]!);
+    expect(engine.getDoc()).toBe("prima\r\n\r\n![[Conti.xlsx#Foglio1!A1:B2]]\r\n\r\nfine");
+    expect(view.state.selection.main.head).toBe(7 + "![[Conti.xlsx#Foglio1!A1:B2]]".length);
+    rememberCellsCopy("", { doc: "", sheet: "", range: "" });
+    engine.destroy();
+    host.remove();
+  });
+
+  it("le celle di un altro programma con l'HTML passano dalla conversione, il codice resta testo", () => {
+    const other = paste("<table><tr><td>a</td><td>b</td></tr></table>", "a\tb", "", EditorSelection.single(6), true, BLANK);
+    expect(other.host.querySelector(".cm-fub-address-choice")).toBeNull();
+    other.engine.destroy();
+    other.host.remove();
+    const code = paste("", "a\tb", "", EditorSelection.single(8), true, "```\r\nx\r\n```");
+    expect(code.engine.getDoc()).not.toContain("| a");
+    code.engine.destroy();
+    code.host.remove();
   });
 });

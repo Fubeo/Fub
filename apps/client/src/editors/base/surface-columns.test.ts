@@ -537,6 +537,133 @@ describe("la tabella come nel prototipo", () => {
   });
 });
 
+// Un gesto di più passi o un comando sulle note, chiesto e poi lasciato a
+// metà dalla Base chiusa: quello che è stato scritto e quello che no si dice
+// con un avviso, mai in silenzio (#484).
+describe("un gesto a Base chiusa lo dice (#484)", () => {
+  // Il comando `command` aspetta finché la prova non lo lascia rispondere;
+  // `fail` lo fa rifiutare.
+  const hold = (invokeCommand: ReturnType<typeof mount>["invokeCommand"], command: string, fail?: unknown) => {
+    const answer = invokeCommand.getMockImplementation()!;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let announce: () => void = () => {};
+    const reached = new Promise<void>((resolve) => { announce = resolve; });
+    invokeCommand.mockImplementation(async (name: string, args: Record<string, unknown> = {}) => {
+      if (name === command) {
+        announce();
+        await held;
+        if (fail !== undefined) throw fail;
+      }
+      return answer(name, args);
+    });
+    return { reached, release };
+  };
+  const failures = () => notified.filter((each) => each.tone === "guasto").map((each) => each.message);
+  const rename = (from: string, to: string): void => {
+    document.querySelector<HTMLButtonElement>(`th[data-column="${from}"] .base-head`)!.click();
+    pick("Rinomina la proprietà…");
+    const field = document.querySelector<HTMLInputElement>(".base-rename-field")!;
+    field.value = to;
+    field.dispatchEvent(new Event("input"));
+    document.querySelector<HTMLFormElement>(".base-rename")!.requestSubmit();
+  };
+
+  it("la proprietà rinominata nelle note mentre la Base si chiude dice che le viste hanno il nome vecchio", async () => {
+    const { host, invokeCommand, views, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"], sort: [{ key: "stato", descending: false }] } }]);
+    const { reached, release } = hold(invokeCommand, "property.key.rename");
+    try {
+      await ready(host);
+      rename("stato", "fase");
+      await reached;
+      done();
+      release();
+      await vi.waitFor(() => expect(failures()).toEqual(["«stato» ora si chiama «fase» nelle note, ma non in tutte le viste. Queste viste hanno ancora il nome vecchio: Tabella. Niente è stato scritto nel file .base: la Base si è chiusa prima."]));
+      expect(invokeCommand).toHaveBeenCalledWith("property.key.rename", { old_key: "stato", new_key: "fase" });
+      expect(views[0]!.keys.sort).toEqual([{ key: "stato", descending: false }]);
+    } finally { done(); }
+  });
+
+  it("la proprietà che non si rinomina a Base chiusa lo dice con un avviso", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
+    const { reached, release } = hold(invokeCommand, "property.key.rename", new Error("la chiave «fase» c'è già"));
+    try {
+      await ready(host);
+      rename("stato", "fase");
+      await reached;
+      done();
+      release();
+      await vi.waitFor(() => expect(failures()).toEqual(["La proprietà non è stata rinominata: la chiave «fase» c'è già"]));
+    } finally { done(); }
+  });
+
+  it("la vista aggiunta mentre la Base si chiude lo dice, e il gesto non resta appeso", async () => {
+    const { host, invokeCommand, views, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["valore", "stato"] } }]);
+    const { reached, release } = hold(invokeCommand, "base.view.add");
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-new-view")!.click();
+      pick("Bacheca");
+      await reached;
+      done();
+      release();
+      await vi.waitFor(() => expect(failures()).toEqual(["Vista «Bacheca» aggiunta, ma non con tutto: la Base si è chiusa prima che finisse."]));
+      expect(views.map((view) => view.name)).toEqual(["Tabella", "Bacheca"]);
+      // Senza «Annulla»: la barra che toglierebbe la vista non c'è più.
+      expect(notified.find((each) => each.tone === "guasto")!.action).toBeUndefined();
+    } finally { done(); }
+  });
+
+  it("«Annulla» della vista nuova premuto a Base chiusa lo dice con un avviso", async () => {
+    const { host, invokeCommand, views, done } = mount([{ name: "Tabella", type: "table", keys: {} }]);
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-tool-new-view")!.click();
+      pick("Tabella");
+      await vi.waitFor(() => expect(notified.map((each) => each.message)).toEqual(["Vista aggiunta"]));
+      await settled(host);
+      done();
+      notified[0]!.action!.run();
+      expect(failures()).toEqual(["Niente è stato scritto nel file .base: la Base si è chiusa prima."]);
+      expect(invokeCommand).not.toHaveBeenCalledWith("base.view.remove", expect.anything());
+      expect(views.map((view) => view.name)).toEqual(["Tabella", "Tabella 2"]);
+    } finally { done(); }
+  });
+
+  it("il tipo che non cambia a Base chiusa lo dice con un avviso", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
+    const { reached, release } = hold(invokeCommand, "property.type.set", new Error("il registro dei tipi non si legge"));
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>('th[data-column="valore"] .base-head')!.click();
+      pick("Tipo");
+      const text = await vi.waitFor(() => {
+        const found = [...document.querySelectorAll<HTMLButtonElement>(".context-submenu button")].find((each) => each.querySelector(".menu-label")?.textContent === "Testo");
+        expect(found).toBeDefined();
+        return found!;
+      });
+      text.click();
+      await reached;
+      done();
+      release();
+      await vi.waitFor(() => expect(failures()).toEqual(["Il tipo non è cambiato: il registro dei tipi non si legge"]));
+    } finally { done(); }
+  });
+
+  it("la nota che non si crea a Base chiusa lo dice con un avviso", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
+    const { reached, release } = hold(invokeCommand, "note.create", new Error("la cartella non si scrive"));
+    try {
+      await ready(host);
+      host.querySelector<HTMLButtonElement>(".base-table tbody .base-add-row-button")!.click();
+      await reached;
+      done();
+      release();
+      await vi.waitFor(() => expect(failures()).toEqual(["la cartella non si scrive"]));
+    } finally { done(); }
+  });
+});
+
 describe("una colonna container.* è di sola lettura", () => {
   it("la sua cella non si apre in modifica, come quella di `file.*`", async () => {
     // La cartella del file che ospita la Base non è una proprietà della nota:

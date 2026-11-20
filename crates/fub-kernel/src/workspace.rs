@@ -186,6 +186,17 @@ pub struct Rejected {
     pub id: DocId,
     /// Cosa ha risposto il disco, o il parser.
     pub why: PluginError,
+    /// [`Gate::FormatParse`] quando a dire di no è stato il provider del
+    /// formato (un parse fallito, una sorgente che non è la sua), `None`
+    /// quando il file non si è nemmeno letto.
+    ///
+    /// È la porta che il guasto porta con sé verso chi lo mostra: il messaggio
+    /// di un [`FormatError`] è la prosa del codec, in inglese e per chi
+    /// sviluppa, e chi disegna lo sostituisce con la sua frase («questo
+    /// documento non si apre») solo se sa che il guasto è entrato da lì
+    /// (IMP-117). Il provider era davvero in mezzo, che è il criterio con cui
+    /// [`Event::Trouble`] dice una porta.
+    pub gate: Option<Gate>,
 }
 
 /// L'esito di un'apertura: cosa **non** ha letto (§15.7).
@@ -226,11 +237,13 @@ impl Opening {
         self.discarded.is_empty() && !self.interrupted
     }
 
-    fn discards(&mut self, id: DocId, why: impl Into<PluginError>) {
+    fn discards(&mut self, id: DocId, why: KernelError) {
         self.index.insert(id.clone());
+        let gate = matches!(why, KernelError::Format(_)).then_some(Gate::FormatParse);
         self.discarded.push(Rejected {
             id,
             why: why.into(),
+            gate,
         });
     }
 }
@@ -5646,6 +5659,32 @@ impl Workspace {
         }
     }
 
+    /// Toglie i compagni di lock che nessuno tiene più: quelli di un'uscita
+    /// forzata in mezzo a un salvataggio, e quelli che le versioni di Fub che
+    /// il lock non lo toglievano hanno lasciato accanto a ogni file salvato o
+    /// spostato. Sono file nascosti di Fub nella cartella dell'utente, e chi la
+    /// sincronizza o la guarda con un altro programma li vede.
+    ///
+    /// Se un lock è rimasto indietro lo dice il supporto
+    /// ([`VaultStorage::remove_abandoned_lock`]): uno tenuto adesso da un
+    /// salvataggio — di questo processo o di un altro Fub sullo stesso vault —
+    /// resta. Un guasto non risale, come per i temporanei.
+    fn sweep_locks(&self, locks: &[Utf8PathBuf]) {
+        for path in locks {
+            match self.docs.vault.storage().remove_abandoned_lock(path) {
+                Ok(true) => tracing::info!(
+                    target: "fub.kernel",
+                    "lock rimasto indietro, tolto: {path}"
+                ),
+                Ok(false) => {}
+                Err(and) => tracing::warn!(
+                    target: "fub.kernel",
+                    "lock {path} non tolto: {and}"
+                ),
+            }
+        }
+    }
+
     /// **La prima fase dell'apertura** (§15.7): guarda cosa c'è, e basta.
     ///
     /// Al ritorno il vault è **utilizzabile** — l'anagrafe c'è, le cartelle ci
@@ -5666,6 +5705,18 @@ impl Workspace {
         let observed_at = crate::time::now_unix_millis();
         let scanned = self.docs.vault.scan()?;
         self.sweep_temporary(&scanned.temporary_remaining_back);
+        self.sweep_locks(&scanned.locks_remaining_back);
+        // `.fub/` non è contenuto e la scansione non ci entra: i suoi lock
+        // rimasti indietro si cercano a parte, con lo stesso criterio. Un
+        // guasto della camminata non ferma l'apertura, come quello della
+        // pulizia.
+        match self.docs.vault.service_locks() {
+            Ok(locks) => self.sweep_locks(&locks),
+            Err(and) => tracing::warn!(
+                target: "fub.kernel",
+                "lock di .fub non cercati: {and}"
+            ),
+        }
 
         // La scansione raccoglie una fotografia completa ma non muta ancora il
         // core: durante `IndexProvider::up_to_date` i reader vedono l'ultimo stato
@@ -6411,7 +6462,7 @@ impl Workspace {
                     Severity::Failure,
                     Some(discard.id.clone()),
                     discard.why.clone(),
-                    None,
+                    discard.gate,
                 );
             }
             ws.emit_event(Event::IndexUpdated);
@@ -7392,6 +7443,14 @@ impl Workspace {
     /// scelto di scartarla.
     pub fn discard_draft(&mut self, doc: &DocId) -> std::io::Result<()> {
         self.drafts.discard(doc)
+    }
+
+    /// La porta delle bozze staccata dal workspace: chi la tiene scrive e butta
+    /// bozze senza prestito né turno di scrittura (#485), così una bozza non
+    /// aspetta il salvataggio lento che deve coprire. Le mutazioni delle bozze
+    /// restano in fila fra loro e con le migrazioni della rinomina.
+    pub fn draft_port(&self) -> crate::drafts::DraftPort {
+        crate::drafts::DraftPort::new(Arc::clone(&self.drafts), Arc::clone(&self.clock))
     }
 
     /// Le bozze di questo vault, **e quante non si sono lette**.
@@ -8561,8 +8620,12 @@ impl Workspace {
         tracing::warn!(target: "fub.kernel", "sincronizzazione di {abs}: {and}");
         let subject = self.docs.vault.doc_id_for_path(abs).ok();
         let reason = PluginError::Internal(format!("sincronizzazione di {abs}: {and}").into());
+        // Un documento che il provider non legge più dice la porta del formato,
+        // come allo scarto dell'apertura: il messaggio è la prosa del codec, e
+        // chi lo mostra lo sostituisce con la sua frase (IMP-117).
+        let gate = matches!(and, KernelError::Format(_)).then_some(Gate::FormatParse);
         self.as_actor(Actor::Watcher, |ws| {
-            ws.report_trouble(Severity::Warning, subject, reason, None);
+            ws.report_trouble(Severity::Warning, subject, reason, gate);
             ws.dispatch_pending();
         });
     }

@@ -1434,8 +1434,10 @@ button.cm-fub-page-icon:focus-visible {
   font: inherit;
   cursor: pointer;
 }
+/* Un giorno del mese accanto si sceglie come gli altri: il tono smorzato
+   della UI, non il fantasma del documento, che sotto i 4,5:1 non si legge. */
 .cm-fub-prop-date-day[data-outside] {
-  color: var(--doc-ghost);
+  color: var(--muted);
 }
 .cm-fub-prop-date-day[data-today] {
   box-shadow: inset 0 0 0 1px var(--accent);
@@ -2171,8 +2173,9 @@ button.cm-fub-page-icon:focus-visible {
   padding-inline: var(--space-6);
   background: var(--sheet-2);
 }
-.cm-editor .cm-content :not(.cm-fub-callout-line) + .cm-fub-callout-line,
-.cm-editor .cm-content .cm-fub-callout-line:first-child {
+/* La prima riga del riquadro: quella che non segue un'altra sua riga (il
+   fratello a sinistra ha un nome, vedi `theme/fratelli.test.ts`). */
+.cm-editor .cm-content .cm-fub-callout-line:not(.cm-fub-callout-line + :where(.cm-fub-callout-line)) {
   padding-top: var(--space-5);
   border-top-left-radius: var(--radius-control);
   border-top-right-radius: var(--radius-control);
@@ -2451,8 +2454,8 @@ button.cm-fub-page-icon:focus-visible {
   padding-inline: var(--space-6);
   background: var(--sheet-2);
 }
-.cm-editor .cm-content :not(.cm-fub-codeblock) + .cm-fub-codeblock,
-.cm-editor .cm-content .cm-fub-codeblock:first-child {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.cm-editor .cm-content .cm-fub-codeblock:not(.cm-fub-codeblock + :where(.cm-fub-codeblock)) {
   padding-top: var(--space-4);
   border-top-left-radius: var(--radius-control);
   border-top-right-radius: var(--radius-control);
@@ -2939,10 +2942,9 @@ button.cm-fub-page-icon:focus-visible {
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
 }
-[data-markdown-mode="live_preview"] .cm-content .cm-fub-frontmatter:first-child,
-[data-markdown-mode="blocks"] .cm-content .cm-fub-frontmatter:first-child,
-[data-markdown-mode="live_preview"] .cm-content :not(.cm-fub-frontmatter) + .cm-fub-frontmatter,
-[data-markdown-mode="blocks"] .cm-content :not(.cm-fub-frontmatter) + .cm-fub-frontmatter {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+[data-markdown-mode="live_preview"] .cm-content .cm-fub-frontmatter:not(.cm-fub-frontmatter + :where(.cm-fub-frontmatter)),
+[data-markdown-mode="blocks"] .cm-content .cm-fub-frontmatter:not(.cm-fub-frontmatter + :where(.cm-fub-frontmatter)) {
   padding-top: var(--space-4);
   border-top-left-radius: var(--radius-control);
   border-top-right-radius: var(--radius-control);
@@ -2996,7 +2998,9 @@ button.cm-fub-page-icon:focus-visible {
   line-height: var(--leading-normal);
   white-space: normal;
 }
-.markdown-rendered :not(.block-footnote-definition) + .block-footnote-definition {
+/* La prima nota a piè di pagina dopo il testo (non la prima della pagina):
+   il fratello a sinistra ha un nome, vedi `theme/fratelli.test.ts`. */
+.markdown-rendered .block-footnote-definition:where(:not(:first-child)):not(.block-footnote-definition + :where(.block-footnote-definition)) {
   margin-top: var(--space-6);
   padding-top: var(--space-5);
   border-top: 1px solid var(--doc-rule-soft);

@@ -17,6 +17,7 @@ import {
   loadLayout,
   closePane,
   closeTab,
+  focusPane,
   mintPaneId,
   split,
   activeDoc,
@@ -42,7 +43,9 @@ import {
   moveTabToPane,
   reopenClosedTab,
   goBack,
+  goForward,
   type Layout,
+  type Tab,
   type SplitNode,
 } from "./layout";
 
@@ -314,6 +317,95 @@ describe("una tab che non è un documento", () => {
     expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
   });
 
+  // IMP-114: il grafo nel primo riquadro, una nota aperta dal grafo nel
+  // riquadro accanto (che prende il fuoco), poi il pulsante Graph della rail.
+  // Prima nasceva un secondo grafo nel riquadro col fuoco.
+  it("la view aperta in un altro riquadro prende il fuoco invece di raddoppiare", () => {
+    const l = newItem();
+    openIn("main", "index.md", l);
+    openViewIn("main", "graph", l);
+    const right = split("main", "row", l)!;
+    focusPane(right, l);
+    openIn(right, "Alpha CRLF.md", l);
+    openIn(right, "index.md", l);
+    openViewIn(right, "graph", l);
+    const graphs = panes(l).flatMap((id) => l.panes[id]!.tabs).filter((tab) => tab.k === "view");
+    expect(graphs).toEqual([{ k: "view", view: "graph" }]);
+    expect(l.focus).toBe("main");
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
+    expect(l.panes[right]!.tabs).toEqual([
+      { k: "doc", doc: "Alpha CRLF.md" },
+      { k: "doc", doc: "index.md" },
+    ]);
+  });
+
+  /// Le view di tutta la finestra, riquadro per riquadro.
+  function viewsOf(l: Layout): Tab[] {
+    return panes(l).flatMap((id) => l.panes[id]!.tabs).filter((tab) => tab.k === "view");
+  }
+
+  // IMP-114, seguito: Indietro passa da `goBack` e non da `openViewIn`. Il
+  // grafo è stato trascinato nell'altro riquadro, ma la cronologia di quello
+  // da cui veniva lo ricorda ancora: Indietro lo rimetteva lì, accanto al
+  // primo.
+  it("Indietro verso una view che sta in un altro riquadro porta il fuoco lì", () => {
+    const l = newItem();
+    openIn("main", "index.md", l);
+    const right = split("main", "row", l)!;
+    openViewIn(right, "graph", l);
+    openIn(right, "Alpha CRLF.md", l);
+    const graph = l.panes[right]!.tabs.findIndex((tab) => tab.k === "view");
+    expect(moveTabToPane(right, graph, "main", l)).toBe(true);
+    focusPane(right, l);
+
+    expect(goBack(right, l)).toBe(true);
+    expect(viewsOf(l)).toEqual([{ k: "view", view: "graph" }]);
+    expect(l.focus).toBe("main");
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
+    expect(activeDoc(right, l)).toBe("Alpha CRLF.md");
+  });
+
+  it("Avanti verso una view che sta in un altro riquadro porta il fuoco lì", () => {
+    const l = newItem();
+    openIn("main", "index.md", l);
+    const right = split("main", "row", l)!;
+    openIn(right, "Alpha CRLF.md", l);
+    openViewIn(right, "graph", l);
+    expect(goBack(right, l)).toBe(true);
+    // Il grafo resta nel futuro del riquadro di destra, e intanto lo si
+    // chiude lì e lo si apre nel primo.
+    closeTab(right, l.panes[right]!.tabs.findIndex((tab) => tab.k === "view"), l);
+    openViewIn("main", "graph", l);
+    activateTab("main", 0, l);
+    focusPane(right, l);
+
+    expect(goForward(right, l)).toBe(true);
+    expect(viewsOf(l)).toEqual([{ k: "view", view: "graph" }]);
+    expect(l.focus).toBe("main");
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
+    expect(activeDoc(right, l)).toBe("Alpha CRLF.md");
+  });
+
+  it("riaprire la scheda chiusa di una view aperta altrove porta il fuoco lì", () => {
+    const drain = newItem();
+    while (reopenClosedTab(drain));
+    const l = newItem();
+    openIn("main", "index.md", l);
+    const right = split("main", "row", l)!;
+    openIn(right, "Alpha CRLF.md", l);
+    openViewIn(right, "graph", l);
+    closeTab(right, l.panes[right]!.tabs.findIndex((tab) => tab.k === "view"), l);
+    openViewIn("main", "graph", l);
+    activateTab("main", 0, l);
+    focusPane(right, l);
+
+    expect(reopenClosedTab(l)).toBe(true);
+    expect(viewsOf(l)).toEqual([{ k: "view", view: "graph" }]);
+    expect(l.focus).toBe("main");
+    expect(activeTab("main", l)).toEqual({ k: "view", view: "graph" });
+    expect(l.panes[right]!.tabs).toEqual([{ k: "doc", doc: "Alpha CRLF.md" }]);
+  });
+
   // Un rename è un fatto dei documenti: una view che si chiamasse come una nota
   // non deve seguirlo. È il caso che un elenco di stringhe avrebbe sbagliato.
   it("un rename non tocca le view", () => {
@@ -556,6 +648,64 @@ describe("rileggere la finestra com'era", () => {
     split("main", "col", l);
     const reread = parseLayout(JSON.parse(JSON.stringify(l)));
     expect(reread).toEqual(l);
+  });
+
+  // IMP-114: le versioni di prima salvavano due grafi affiancati. È un layout
+  // già sul disco: si legge senza il doppione, e il resto resta com'era.
+  it("un grafo salvato due volte si rilegge una volta sola, con le altre linguette intatte", () => {
+    const saved = {
+      tree: { k: "split", dir: "row", children: [{ k: "leaf", pane: "main" }, { k: "leaf", pane: "p2" }] },
+      panes: {
+        main: { tabs: [{ k: "doc", doc: "index.md" }, { k: "view", view: "graph" }], active: 1, modes: {} },
+        p2: {
+          tabs: [
+            { k: "doc", doc: "Alpha CRLF.md" },
+            { k: "doc", doc: "index.md" },
+            { k: "view", view: "graph", pinned: true },
+            { k: "view", view: "links", params: { doc: "index.md" } },
+          ],
+          active: 2,
+          modes: { text: "source" },
+        },
+      },
+      focus: "p2",
+    };
+    const reread = parseLayout(saved)!;
+    expect(reread).not.toBeNull();
+    expect(reread.panes.main).toEqual(saved.panes.main);
+    expect(reread.panes.p2!.tabs).toEqual([
+      { k: "doc", doc: "Alpha CRLF.md" },
+      { k: "doc", doc: "index.md" },
+      { k: "view", view: "links", params: { doc: "index.md" } },
+    ]);
+    // Il doppione era davanti: davanti va la linguetta che gli stava prima.
+    expect(reread.panes.p2!.active).toBe(1);
+    expect(reread.panes.p2!.modes).toEqual({ text: "source" });
+    expect(reread.focus).toBe("p2");
+  });
+
+  it("un riquadro con il solo doppione resta, vuoto", () => {
+    const reread = parseLayout({
+      tree: { k: "split", dir: "row", children: [{ k: "leaf", pane: "main" }, { k: "leaf", pane: "p2" }] },
+      panes: {
+        main: { tabs: [{ k: "view", view: "graph" }], active: 0, modes: {} },
+        p2: { tabs: [{ k: "view", view: "graph" }], active: 0, modes: {} },
+      },
+      focus: "main",
+    })!;
+    expect(reread.panes.main!.tabs).toEqual([{ k: "view", view: "graph" }]);
+    expect(reread.panes.p2).toEqual({ tabs: [], active: -1, modes: {} });
+  });
+
+  it("lo specchio di un riquadro collegato non è un doppione", () => {
+    const l = newItem();
+    split("main", "row", l);
+    const [left, right] = panes(l);
+    setPaneLink(left!, "coppia", l);
+    setPaneLink(right!, "coppia", l);
+    openViewIn(left!, "graph", l);
+    expect(activeTab(right!, l)).toEqual({ k: "view", view: "graph" });
+    expect(parseLayout(JSON.parse(JSON.stringify(l)))).toEqual(l);
   });
 
   it("ritrova l'aspetto scelto per famiglia, e scarta quello che non è un aspetto", () => {

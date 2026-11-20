@@ -46,6 +46,9 @@ export const COMPACT_COMMANDS: ReadonlySet<string> = new Set([
   "formulas.nameManager",
   "formulas.evaluate",
   "cell.get",
+  // Soltanto la selezione: la scheda di una nota porta la griglia alla prima
+  // cella della sua parte (T43), anche su un altro foglio, senza scrivere.
+  "selection.set",
 ]);
 
 const served = (commands: readonly GridCommandState[]): GridCommandState[] =>
@@ -147,7 +150,7 @@ export interface GridActiveCellSource extends SurfaceActiveCellSource {
 /// un osservatore del DOM. Chi ascolta è avvisato una volta per giro, dopo
 /// i richiami del motore: a quel punto la barra è già aggiornata.
 export function activeCellSource(
-  engine: Pick<GridEngine, "book" | "selectionRefs">,
+  engine: Pick<GridEngine, "book" | "selectionRefs" | "command">,
   root: HTMLElement,
   life: Lifetime,
 ): GridActiveCellSource {
@@ -157,7 +160,13 @@ export function activeCellSource(
   return {
     read(): SurfaceActiveCell | null {
       if (life.closed || engine.book() === null) return null;
-      return { name: engine.selectionRefs().active, formula: formulaBarText(root) };
+      const refs = engine.selectionRefs();
+      return { name: refs.active, formula: formulaBarText(root), sheet: refs.sheet, range: refs.range };
+    },
+    select(sheet, cell) {
+      if (life.closed || engine.book() === null) return false;
+      const at = `'${sheet.replaceAll("'", "''")}'!${cell}`;
+      return engine.command("selection.set", JSON.stringify({ range: at, active: at }));
     },
     subscribe(listener) {
       if (life.closed) return () => {};

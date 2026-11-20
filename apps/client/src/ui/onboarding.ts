@@ -321,7 +321,7 @@ export function mountOnboarding(shell: OnboardingShell, parent?: Lifetime): Tear
   const showDiagnostics = () => void run(support.status, async () => {
     const errors = await api.startupDiagnostics(shell.currentVault() || null);
     if (lifetime.closed) return;
-    const message = errors.length ? errors.map(errorText).join("\n") : t("support.no_diagnostics");
+    const message = errors.length ? errors.map((error) => errorText(error)).join("\n") : t("support.no_diagnostics");
     status(support.status, message);
     if (isDemo()) notify(message, errors.length ? "guasto" : "info");
   });
@@ -611,7 +611,9 @@ export async function askVaultProfile(root: string, hooks: VaultProfileHooks, pa
   });
   // Esc vale «Studio»: applica il consigliato e apre, come «Continua» su di lui.
   lifetime.add(trapFocus(screen, () => void apply(recommended.nome)));
-  row.querySelector<HTMLElement>(`[data-profile="${CSS.escape(chosen)}"]`)?.focus();
+  // Senza scorrere: la schermata si legge dal titolo, anche quando la fila
+  // dei profili sta sotto la piega (finestra bassa).
+  row.querySelector<HTMLElement>(`[data-profile="${CSS.escape(chosen)}"]`)?.focus({ preventScroll: true });
   return finished;
 }
 

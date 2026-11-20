@@ -140,6 +140,8 @@ fn catalog() -> Vec<StringCatalog> {
         .with("render.copy", "The copy of the file for the app cannot be written to the temporary folder.")
         .with("render.cancelled", "The preview with the app was stopped.")
         .with("render.changed", "The file changed while the app was making the preview.");
+    // I due comandi leggono il campo «Documento» anche scritto per nome.
+    let (it, en) = crate::doc_names::speaking(crate::doc_names::KEYS, it, en);
     vec![it, en]
 }
 
@@ -251,7 +253,20 @@ impl CommandProvider for CraftCommands {
     ) -> Result<CommandOutcome, PluginError> {
         if command == PHOTO_COMMAND {
             let args = Args::new(&args);
-            let Some(doc) = args.document("doc") else {
+            // Le foto sono allegati, e un allegato non sta nell'elenco dei
+            // documenti: un percorso che non c'è e che nessun documento porta
+            // come nome resta il «non trovato» della foto (`photo.missing`),
+            // che dice quale file manca. Un nome che portano in tanti resta
+            // la frase che li elenca.
+            let named = match args.named_document("doc", &*host, |_| true, crate::doc_names::KEYS) {
+                Err(PluginError::BadArgs(Text::Message(message)))
+                    if message.key == crate::doc_names::KEYS.missing =>
+                {
+                    args.document("doc")
+                }
+                other => other?,
+            };
+            let Some(doc) = named else {
                 return Err(PluginError::BadArgs(Text::message(
                     "photo.missing",
                     vec![Arg::text("doc", "")],
@@ -263,7 +278,15 @@ impl CommandProvider for CraftCommands {
             return Err(PluginError::UnknownCommand(command.to_string().into()));
         }
         let args = Args::new(&args);
-        let Some(doc) = args.document("doc") else {
+        // Per nome valgono i soli file che hanno un'anteprima: un omonimo di
+        // un altro tipo non rende ambiguo il nome.
+        let named = args.named_document(
+            "doc",
+            &*host,
+            |doc| preview::previewable(&*host, doc),
+            crate::doc_names::KEYS,
+        )?;
+        let Some(doc) = named else {
             return Err(PluginError::BadArgs(Text::message(
                 "not_craft",
                 vec![Arg::text("doc", "")],

@@ -1,6 +1,8 @@
 //! Il pannello cronologia (`HistoryView`): la lista delle versioni, l'anteprima
 //! e la conferma del ripristino.
 
+use std::collections::HashMap;
+
 use super::*;
 
 // ---------------------------------------------------------------------------
@@ -65,8 +67,14 @@ pub(super) const TS: &str = "ts";
 const PREVIEW_STATE: &str = "preview";
 /// Se l'anteprima aperta mostra il confronto invece del testo.
 const COMPARE_STATE: &str = "compare";
-/// L'istante di cui si sta chiedendo il ripristino, finché non si risponde.
-const CONFIRM_STATE: &str = "restore_confirm";
+/// La chiave sotto cui le versioni di prima ricordavano la domanda del
+/// ripristino nello stato di vista. Non si scrive più (vedi [`HistoryView`]):
+/// si legge solo per toglierla, perché una domanda rimasta lì da un avvio di
+/// prima è ciò che IMP-110 ha trovato.
+const LEGACY_CONFIRM_STATE: &str = "restore_confirm";
+/// La chiave del nodo che il bottone «Ripristina» e la sua domanda si
+/// scambiano: chiusa la domanda, il fuoco torna al bottone.
+const RESTORE_KEY: &str = "restore";
 /// Disfa l'ultimo ripristino fatto da questo pannello.
 const A_UNDO_RESTORE: &str = "undo_restore";
 /// L'annullamento dell'ultimo ripristino, finché vale ([`RestoreUndo`]).
@@ -152,7 +160,49 @@ pub(super) fn read_snapshot(
 }
 
 /// Il pannello cronologia: le versioni della nota aperta, e come tornarci.
-pub struct HistoryView;
+///
+/// # La domanda del ripristino vive in memoria, e muore col processo
+///
+/// L'anteprima e il confronto stanno nello stato di vista, che dura fra un
+/// avvio e l'altro: riaprire la cronologia dov'era è un favore. La domanda
+/// «Riportare la nota a questa versione?» invece è un passo **a metà** di un
+/// gesto che riscrive la nota, e ritrovarla al riavvio con «Sì, ripristina»
+/// pronto sotto il dito vuol dire un clic da una sovrascrittura che nessuno
+/// ricorda di aver chiesto (IMP-110). Per questo sta qui, per esemplare, e
+/// non nello stato di vista: si chiude con una risposta, con un'altra
+/// anteprima, o con la fine del processo.
+#[derive(Default)]
+pub struct HistoryView {
+    /// esemplare → la domanda in corso: di quale nota, e quale versione.
+    asking: HashMap<String, Asked>,
+}
+
+/// La domanda del ripristino in corso in un esemplare.
+struct Asked {
+    doc: String,
+    ts: u64,
+}
+
+impl HistoryView {
+    /// L'istante di cui si sta chiedendo il ripristino in questo esemplare, se
+    /// la domanda è della nota attiva.
+    fn asked(&self, instance: &ViewInstance, host: &dyn ReadApi) -> Option<u64> {
+        let asked = self.asking.get(&instance.instance)?;
+        let active = host.active_context().and_then(|c| c.doc)?;
+        (active.as_str() == asked.doc).then_some(asked.ts)
+    }
+
+    /// Ridisegna con la domanda di questo esemplare, se ce n'è una.
+    fn redraw(
+        &self,
+        instance: &ViewInstance,
+        host: &dyn ReadApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        Ok(ViewUpdate::Replace {
+            root: tree_asking(host, self.asked(instance, host))?,
+        })
+    }
+}
 
 impl ViewProvider for HistoryView {
     fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
@@ -185,18 +235,24 @@ impl ViewProvider for HistoryView {
 
     fn render_view(
         &self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
-        tree(host)
+        tree_asking(host, self.asked(instance, host))
     }
 
     fn on_action(
         &mut self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
+        // La domanda che le versioni di prima avevano lasciato nello stato di
+        // vista: al primo gesto sul pannello se ne va dal disco. Disegnata non
+        // lo è più comunque, perché `tree` non la legge.
+        if host.view_state(LEGACY_CONFIRM_STATE)?.is_some() {
+            host.set_view_state(LEGACY_CONFIRM_STATE, None)?;
+        }
         match action.action.0.as_str() {
             // L'anteprima si **ricorda**, non si disegna e basta: il pannello si
             // ridisegna a ogni scrittura, e un'anteprima che vivesse nel solo
@@ -210,7 +266,10 @@ impl ViewProvider for HistoryView {
                 };
                 host.set_view_state(PREVIEW_STATE, Some(serde_json::Value::from(ts)))?;
                 host.set_view_state(COMPARE_STATE, None)?;
-                Ok(ViewUpdate::Replace { root: tree(host)? })
+                // Un'altra versione in anteprima: la domanda era per quella di
+                // prima.
+                self.asking.remove(&instance.instance);
+                self.redraw(instance, host)
             }
             // Il confronto è la stessa anteprima vista in un altro modo: resta
             // nello stato di vista per la stessa ragione, e si chiude con lei.
@@ -226,7 +285,7 @@ impl ViewProvider for HistoryView {
                     COMPARE_STATE,
                     Some(serde_json::Value::Bool(action.action.0 == A_COMPARE)),
                 )?;
-                Ok(ViewUpdate::Replace { root: tree(host)? })
+                self.redraw(instance, host)
             }
             // Copiare non scrive niente nel vault: il testo va alla shell, che
             // possiede gli appunti. Il kernel lascia passare questo intento
@@ -255,7 +314,8 @@ impl ViewProvider for HistoryView {
             A_CLOSE_PREVIEW => {
                 host.set_view_state(PREVIEW_STATE, None)?;
                 host.set_view_state(COMPARE_STATE, None)?;
-                Ok(ViewUpdate::Replace { root: tree(host)? })
+                self.asking.remove(&instance.instance);
+                self.redraw(instance, host)
             }
             // Ripristinare **non** è una scrittura di questo pannello: è il
             // comando `version.restore`, invocato per id come lo invocherebbe la
@@ -265,21 +325,28 @@ impl ViewProvider for HistoryView {
             // Ripristinare riscrive la nota, e da questo pannello l'annullamento
             // del comando non arriva a chi ha cliccato: prima si chiede.
             A_RESTORE => {
-                let (Some(_), Some(ts)) = (
+                let (Some(doc), Some(ts)) = (
                     same_notes(&action, host),
                     action.payload.get(TS).and_then(|v| v.as_u64()),
                 ) else {
                     return Ok(ViewUpdate::None);
                 };
-                host.set_view_state(CONFIRM_STATE, Some(serde_json::Value::from(ts)))?;
-                Ok(ViewUpdate::Replace { root: tree(host)? })
+                self.asking.insert(
+                    instance.instance.clone(),
+                    Asked {
+                        doc: doc.to_string(),
+                        ts,
+                    },
+                );
+                self.redraw(instance, host)
             }
+            // Il «no», dal bottone o da Esc (la shell manda la stessa azione).
             A_RESTORE_CANCEL => {
-                host.set_view_state(CONFIRM_STATE, None)?;
-                Ok(ViewUpdate::Replace { root: tree(host)? })
+                self.asking.remove(&instance.instance);
+                self.redraw(instance, host)
             }
             A_RESTORE_CONFIRM => {
-                host.set_view_state(CONFIRM_STATE, None)?;
+                self.asking.remove(&instance.instance);
                 let (Some(doc), Some(ts)) = (
                     same_notes(&action, host),
                     action.payload.get(TS).and_then(|v| v.as_u64()),
@@ -312,7 +379,7 @@ impl ViewProvider for HistoryView {
                         ),
                     )?;
                 }
-                Ok(ViewUpdate::Replace { root: tree(host)? })
+                self.redraw(instance, host)
             }
             // «Annulla» dopo un ripristino: i passi dell'`Undo` che
             // `version.restore` ha dichiarato, eseguiti come li eseguirebbe la
@@ -332,7 +399,7 @@ impl ViewProvider for HistoryView {
                         }
                     }
                 }
-                Ok(ViewUpdate::Replace { root: tree(host)? })
+                self.redraw(instance, host)
             }
             _ => Ok(ViewUpdate::None),
         }
@@ -366,7 +433,16 @@ fn same_notes(action: &UiAction, host: &dyn ReadApi) -> Option<DocId> {
     (activate.as_str() == drawn).then_some(activate)
 }
 
+/// Il pannello senza una domanda in corso: la forma che le prove interne
+/// disegnano.
+#[cfg(test)]
 pub(super) fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
+    tree_asking(host, None)
+}
+
+/// Il pannello; `asked` è l'istante di cui si sta chiedendo il ripristino,
+/// che vive in [`HistoryView`] e non nello stato di vista.
+fn tree_asking(host: &dyn ReadApi, asked: Option<u64>) -> Result<UiNode, PluginError> {
     let Some(doc) = host.active_context().and_then(|c| c.doc) else {
         return Ok(UiNode::empty_state(Text::key(NO_ACTIVE_DOC)));
     };
@@ -470,30 +546,37 @@ pub(super) fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         // ripristino è l'unico primario, e c'è solo per le versioni passate:
         // ripristinare l'attuale riscriverebbe il file con ciò che contiene.
         let mut actions = Vec::new();
-        let asking = !current
-            && host
-                .view_state(CONFIRM_STATE)?
-                .and_then(|v| v.as_u64())
-                .is_some_and(|asked| asked == ts);
+        let asking = !current && asked == Some(ts);
         if asking {
-            // La domanda al posto del bottone, dove l'occhio già stava.
-            actions.push(UiNode::text(Text::key(RESTORE_QUESTION)));
-            actions.push(UiNode::button(
-                Text::key(RESTORE_CONFIRM_LABEL),
-                Intent::Danger,
-                ActionRef::with(A_RESTORE_CONFIRM, payload.clone()),
-            ));
-            actions.push(UiNode::button(
-                Text::key(RESTORE_CANCEL_LABEL),
-                Intent::Neutral,
+            // La domanda al posto del bottone, dove l'occhio già stava, con la
+            // sua chiave: chiusa la domanda, il fuoco torna al bottone. È un
+            // nodo `CONFIRM_NS` perché la shell le dia Esc e il fuoco.
+            actions.push(UiNode::confirmation(
+                RESTORE_KEY,
                 ActionRef::new(A_RESTORE_CANCEL),
+                vec![
+                    UiNode::text(Text::key(RESTORE_QUESTION)),
+                    UiNode::button(
+                        Text::key(RESTORE_CONFIRM_LABEL),
+                        Intent::Danger,
+                        ActionRef::with(A_RESTORE_CONFIRM, payload.clone()),
+                    ),
+                    UiNode::button(
+                        Text::key(RESTORE_CANCEL_LABEL),
+                        Intent::Neutral,
+                        ActionRef::new(A_RESTORE_CANCEL),
+                    ),
+                ],
             ));
         } else if !current {
-            actions.push(UiNode::button(
-                Text::key(RESTORE_LABEL),
-                Intent::Primary,
-                ActionRef::with(A_RESTORE, payload.clone()),
-            ));
+            actions.push(
+                UiNode::button(
+                    Text::key(RESTORE_LABEL),
+                    Intent::Primary,
+                    ActionRef::with(A_RESTORE, payload.clone()),
+                )
+                .with_key(RESTORE_KEY),
+            );
         }
         actions.push(if comparing {
             UiNode::button(

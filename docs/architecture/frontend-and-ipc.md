@@ -147,7 +147,7 @@ della revisione verificata dalla scrittura.
 La bozza di recupero ha una cadenza, non un debounce: la prima modifica arma
 un timer di un secondo (`DRAFT_MS`) che le battute successive non riarmano,
 così chi scrive senza pause perde al più un secondo se il processo muore. Il
-salvataggio resta un debounce sulla pausa.
+salvataggio è un debounce sulla pausa, e la bozza non lo aspetta ([regola](runtime-events-and-jobs.md#bozze-e-salvataggio)).
 
 ### Il testo in sospeso
 

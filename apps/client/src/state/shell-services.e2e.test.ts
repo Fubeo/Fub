@@ -594,6 +594,126 @@ describe("aprire un vault: i passi e il loro ordine", () => {
   });
 });
 
+describe("i fatti di un vault lasciato non sono del vault aperto (#216)", () => {
+  /// Le letture di un documento che la shell fa da sé: è ciò che un
+  /// `document_changed` provoca su una nota aperta e pulita.
+  const reads = (shell: Shell): number =>
+    shell.host.calls.filter((call) => call.gate === "readDocument" || call.gate === "openDocument").length;
+  const changed = { type: "document_changed", id: "Benvenuto.md" } as const;
+
+  /// L'host finto ha un vault solo: `/vault` e `/altro` hanno le stesse note,
+  /// che è proprio il caso — due vault con una `Benvenuto.md` ciascuno.
+  it("un cambio di una nota di A non rilegge la nota con lo stesso id in B; uno di B sì, e tornando ad A anche i suoi", async () => {
+    const shell = await start(VAULT);
+    const { openVault } = await import("../desktop-shell");
+    const { openDocument } = await import("./document-controller");
+
+    await openVault("/altro");
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+    expect(shell.sessions.get("Benvenuto.md")).toBeDefined();
+
+    // Il fatto di A: nessuna rilettura, nessun avviso sul foglio di B.
+    const before = reads(shell);
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(before);
+    expect(document.querySelector(".sheet-notice[data-notice]")).toBeNull();
+
+    // Lo stesso fatto di B passa: chi ascolta è vivo.
+    await shell.host.module.api.writeDocument("Benvenuto.md", "testo cambiato in B\n", { kind: "dictated" }, "/altro");
+    expect(shell.host.emit(changed, "/altro")).toBe(true);
+    await waitFor("la nota di B si rilegge", () => reads(shell) > before);
+
+    // Un ritorno ad A che l'host rifiuta lascia la finestra in B, e A fra i
+    // lasciati.
+    const repair = shell.host.fault("openVault", "cartella illeggibile");
+    await expect(openVault("/vault")).rejects.toThrow("cartella illeggibile");
+    repair();
+    expect(shell.store.state.vaultRoot).toBe("/altro");
+    await settle();
+    const refused = reads(shell);
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(refused);
+
+    // Tornare ad A: i suoi fatti tornano a passare, quelli di B no.
+    await openVault("/vault");
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+    const back = reads(shell);
+    expect(shell.host.emit(changed, "/altro")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(back);
+    await shell.host.module.api.writeDocument("Benvenuto.md", "testo cambiato in A\n", { kind: "dictated" }, "/vault");
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await waitFor("la nota di A si rilegge", () => reads(shell) > back);
+  });
+
+  /// Il salvataggio di A in volo durante il cambio finisce in A, e la sua eco —
+  /// il `document_changed` che A emette scrivendolo — arriva quando la
+  /// finestra mostra già B: non è un cambio della `Benvenuto.md` di B.
+  it("un salvataggio di A in volo durante il cambio finisce in A, e la sua eco non tocca B", async () => {
+    const shell = await start(VAULT);
+    const { openVault } = await import("../desktop-shell");
+    const { openDocument } = await import("./document-controller");
+    typeInEditor("battuta in volo");
+    const unlock = shell.host.throttle("writeDocument");
+
+    const opening = openVault("/altro");
+    await waitFor("il salvataggio di A parte", () => shell.host.atGate("writeDocument").length > 0);
+    unlock();
+    await opening;
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+
+    const writes = shell.host.atGate("writeDocument");
+    expect(writes.map((c) => c.args[3])).toEqual(writes.map(() => "/vault"));
+    expect(shell.host.files()["Benvenuto.md"]).toContain("battuta in volo");
+    const before = reads(shell);
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    expect(shell.host.emit({ type: "index_updated" }, "/vault")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(before);
+    expect(document.querySelector(".sheet-notice[data-notice]")).toBeNull();
+  });
+
+  /// La demo lascia aperto nell'host il vault di prima, col suo watcher: ciò
+  /// che vi cambia mentre si guarda la demo non è della demo. Chiusa la demo,
+  /// il vault di prima torna a parlare.
+  it("con la demo aperta i fatti del vault di prima non arrivano, e tornano alla chiusura", async () => {
+    const shell = await start(VAULT, (shell) => {
+      const api = shell.host.module.api as unknown as Record<string, unknown>;
+      api.demoRoot = () => Promise.resolve("/demo");
+      api.openDemo = () => Promise.resolve({ root: "/demo", previous: "/vault" });
+      api.closeDemo = () => Promise.resolve({ errors: [], current: "/vault" });
+    });
+    const { openDocument } = await import("./document-controller");
+    const press = async (label: string): Promise<void> => {
+      const target = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === shell.t(label as never) && !b.disabled && !b.hidden);
+      expect(target, label).toBeDefined();
+      const since = box.trace.length;
+      target!.click();
+      await vi.waitFor(() => expect(box.trace.slice(since)).toContain(label === "demo.open" ? "signal:vault:/demo" : "signal:vault:/vault"));
+    };
+    await press("demo.open");
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+    const before = reads(shell);
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(before);
+
+    await press("demo.close");
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+    const back = reads(shell);
+    await shell.host.module.api.writeDocument("Benvenuto.md", "cambiato fuori\n", { kind: "dictated" }, "/vault");
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await waitFor("la nota del vault di prima si rilegge", () => reads(shell) > back);
+  });
+});
+
 describe("la scheda di una view principale quando il vault cambia (#237 R08)", () => {
   /// Una view che si apre in un riquadro, come il grafo: l'host finto sa
   /// disegnare soltanto il cestino, e qui basta che sia una view principale.
@@ -741,6 +861,9 @@ describe("recuperare le bozze", () => {
     let atAnnouncement: unknown = "il vault non si è mai annunciato";
 
     const shell = await start(VAULT, (early) => {
+      // Il disco non prende il testo: la fascia si guarda senza la corsa col
+      // salvataggio automatico, che la toglierebbe (IMP-146, la prova sotto).
+      early.host.fault("writeDocument", "disco pieno");
       box.probes.set("signal:vault:/vault", () => {
         atAnnouncement = early.sessions.inspect("Benvenuto.md") ?? "nessuna sessione";
       });
@@ -750,7 +873,8 @@ describe("recuperare le bozze", () => {
     expect(textToVideo()).toContain("testo ritrovato nella bozza");
     expect(shell.notices()).toContain(`Benvenuto.md: ${shell.t("draft.case.intatta")}`);
     expect(shell.notices()).toContain(shell.plural(1, "draft.found.one", "draft.found"));
-    // E il foglio lo tiene scritto sopra il testo finché non lo si chiude.
+    // E il foglio lo tiene scritto sopra il testo finché non lo si chiude, o
+    // finché il testo ritrovato non è sul disco.
     const recovered = document.querySelector<HTMLElement>('.sheet-notice[data-notice="recovered"]');
     expect(recovered?.textContent).toContain(shell.t("draft.case.intatta"));
   });
@@ -778,6 +902,32 @@ describe("recuperare le bozze", () => {
     expect(await recoverDrafts()).toBe(0);
     expect(textToVideo()).toContain("battuta dopo il recupero");
     expect(textToVideo()).not.toContain("una bozza più vecchia del buffer");
+  });
+
+  /// La fascia dice che il testo è una copia non salvata da recuperare: finché
+  /// il disco non lo ha resta, anche dopo un salvataggio fallito; quando
+  /// «Riprova» lo scrive, il fatto è passato e la fascia se ne va (IMP-146).
+  /// La bozza sul disco non si tocca prima della scrittura riuscita.
+  it("la fascia della bozza ritrovata resta finché il testo non è sul disco, poi se ne va", async () => {
+    box.drafts = [draftOfWelcome("testo ritrovato nella bozza\n")];
+    let repair = (): void => {};
+    const shell = await start(VAULT, (early) => {
+      repair = early.host.fault("writeDocument", { kind: "permission_denied", message: "file in sola lettura" });
+    });
+    const banner = () => document.querySelector<HTMLElement>('.sheet-notice[data-notice="recovered"]');
+    await waitFor("il salvataggio automatico fallisce", () => shell.sessions.saveState("Benvenuto.md") === "fallito");
+    expect(banner()?.textContent).toContain(shell.t("draft.case.intatta"));
+    expect(shell.host.atGate("discardDraft")).toHaveLength(0);
+
+    repair();
+    const retry = [...document.querySelectorAll<HTMLElement>('.sheet-notice[data-notice="save_failed"] button')]
+      .find((button) => button.textContent === shell.t("app.retry"));
+    expect(retry).toBeDefined();
+    retry!.click();
+    await waitFor("il testo è sul disco", () => shell.sessions.saveState("Benvenuto.md") === "salvato");
+
+    expect(shell.host.files()["Benvenuto.md"]).toBe("testo ritrovato nella bozza\n");
+    await waitFor("la fascia se ne va", () => banner() === null);
   });
 
   /// Il recupero è una rete di sicurezza: se non parte, il vault si apre lo

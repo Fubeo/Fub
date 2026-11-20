@@ -26,7 +26,8 @@ cursore).
   denominatore, poi fra le righe della formula; oltre il bordo si esce nella
   nota.
 - Gli spazi vuoti sono quadratini: Tab va al seguente, Maiusc Tab al
-  precedente. Spazio esce dal pezzo in cui si scrive.
+  precedente (in una matrice, alla cella dopo: vedi «Le matrici»). Spazio
+  esce dal pezzo in cui si scrive.
 - Un comando scritto per nome (`\frac`, `\alpha`) entra quando è finito, con
   spazio, Tab o Invio; Esc lo toglie.
 - Backspace e Canc non rompono mai la formula: tolgono un pezzo intero o ne
@@ -37,6 +38,53 @@ cursore).
   x», «fine della formula»), una volta per posto.
 
 Una formula aperta e chiusa senza scrivere resta byte per byte com'era.
+
+## Scegliere un pezzo
+
+- Maiusc ← e Maiusc → allargano la scelta di un pezzo intero alla volta: una
+  lettera, un segno, una frazione, una radice; un pezzo col suo esponente
+  conta come uno. In fondo al tratto in cui si sta (un numeratore, ciò che sta
+  sotto una radice) la scelta prende il pezzo che lo contiene. Maiusc Inizio e
+  Maiusc Fine scelgono fino al capo; Ctrl A sceglie tutta la formula.
+- Col mouse, trascinare sceglie; Maiusc clic allarga la scelta fin lì.
+- Una scelta non resta mai a metà: se tocca un pezzo solo in parte (metà
+  frazione, la base senza l'esponente, una cella e quella accanto, un
+  `\middle` senza le sue parentesi) si allarga al pezzo intero. Gli spazi ai
+  capi non contano.
+- Il pezzo scelto si colora e il cursore sparisce; il lettore di schermo dice
+  «pezzo scelto».
+- Che cosa fa la scelta: Ctrl C copia il LaTeX del pezzo (senza `$`), Ctrl X
+  lo copia e lo toglie; Backspace e Canc lo tolgono; un segno lo sostituisce,
+  e Ctrl Z lo rimette in un passo solo. `/` lo mette nel numeratore di una
+  frazione, `^` e `_` in un esponente o in un pedice, `(` e `[` fra
+  parentesi. Un pezzo della tavolozza con uno spazio vuoto (radice, frazione,
+  parentesi, una matrice) lo prende dentro, e il cursore va allo spazio vuoto
+  dopo; dove il pezzo nuovo non ha posto per lui (una somma, un testo) il
+  pezzo nuovo va davanti; un simbolo semplice lo sostituisce.
+- ← e → lasciano la scelta dal loro lato; Esc e spazio la lasciano dalla fine,
+  senza uscire dalla formula.
+
+Le regole stanno in `math/edit.ts` (`choosePiece`, `stepPiece`, `wrapPiece`);
+il segno disegnato in `math/caret.ts`.
+
+## Le matrici
+
+In una matrice (`pmatrix` e le sue sorelle, `array`, `cases`) Tab passa alla
+cella dopo, prima per gli spazi vuoti della cella in cui si sta, e Maiusc Tab
+a quella prima; dall'ultima cella Tab esce dalla matrice. Invio passa alla
+riga dopo nella stessa colonna; dall'ultima riga ne aggiunge una vuota, col
+cursore nella prima cella. Una cella vuota è un quadratino, come uno spazio
+vuoto, anche in una matrice appena presa dalla tavolozza. Il lettore di
+schermo dice riga e colonna. In un `aligned` Invio resta quello del paragrafo
+dopo, e le celle vuote apposta (`&= …`) non sono quadratini.
+
+## Al tocco
+
+Un tocco sulla formula la apre col cursore nel punto toccato; il dito che
+scorre sulla formula porta il cursore con sé, in ogni direzione, senza
+scegliere: la nota si fa scorrere fuori dalla formula. La tavolozza sta sotto la formula, e dice «Tocca un
+simbolo per metterlo nella formula». Al tocco non c'è il velo del passaggio
+sui pulsanti, che resterebbe acceso sull'ultimo toccato.
 
 ## I simboli per nome
 
@@ -227,7 +275,8 @@ entra in un `\begin{aligned}…\end{aligned}`, col primo `=` fuori dalle graffe
 che diventa `&=`, e sotto una riga nuova che comincia con `&=`; poi ogni Invio
 aggiunge una riga dopo quella del cursore, senza spezzare un pezzo a metà. La
 prima volta un avviso lo spiega. Ctrl Invio o Esc finiscono. In una formula in
-riga Invio finisce, come prima. La regola sta in `math/align.ts`.
+riga Invio finisce, come prima; dentro una matrice passa alla riga dopo (vedi
+«Le matrici»). La regola sta in `math/align.ts`.
 
 ## Le macro del vault
 

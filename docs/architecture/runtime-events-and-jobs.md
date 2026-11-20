@@ -58,6 +58,34 @@ sequenceDiagram
     Q->>UI: evento serializzato
 ```
 
+### Di quale vault è un evento
+
+L'host tiene una sessione per vault aperto, con il suo bus e il suo ponte verso
+l'uscita (`bridge::spawn`); l'uscita verso la shell è una. Il ponte conosce la
+radice della sua sessione e la passa a `EventSink::emit` con ogni notice;
+l'app la manda alla shell nel campo `vault`
+([contratto IPC](../reference/ipc-contract.md#eventi)).
+
+La shell mostra un vault alla volta. Cambiando vault, `vault-session.ts`:
+
+1. scrive ciò che è in sospeso nel vault che lascia, prima e dopo
+   `open_vault` del nuovo (ogni sessione scrive nel vault in cui è nata);
+2. chiude le sessioni dei documenti del vault lasciato;
+3. segna il vault come **lasciato** (`leaveVault` in `state/kernel.ts`):
+   da qui il router scarta i suoi eventi;
+4. chiude il vault lasciato nell'host (`close_vault`): watcher, job, indici e
+   lock di scrittura. La demo è l'eccezione: lascia aperto il vault di prima,
+   a cui `close_demo` torna;
+5. rende corrente il vault nuovo.
+
+Rientrare in un vault (tornare ad A, chiudere la demo) lo toglie dai lasciati
+**prima** di chiedere `open_vault`, perché i primi fatti dell'apertura (il job
+dell'indice) partono prima della risposta. `vault_opened` e `vault_closed`
+passano sempre: nominano la loro radice, e chi segue un lavoro di un vault che
+se ne va (un import, un controllo) li aspetta. Chi li ascolta confronta
+`root` con il vault a cui tiene. Un evento senza `vault` è della macchina e
+arriva sempre.
+
 ### Lotto e piano su più documenti
 
 Il lotto (`Workspace::batch`, decisione 0011) raggruppa ciò che si dice a chi
@@ -179,6 +207,31 @@ durante `invoke`. Dove l'esito dipende da uno snapshot, il finalizzatore
 verifica generazione, revisione o identità del workspace. Un token legato a
 un'altra istanza produce un `Conflict` e torna al chiamante: il finalizzatore
 sbagliato non chiude il frame originale.
+
+### Bozze e salvataggio
+
+La bozza di recupero esiste per coprire il tempo in cui il disco non ha ancora
+il testo, quindi non aspetta la scrittura del file che deve coprire (#485).
+
+- **Shell.** La `DocumentSession` ha due code: una per le scritture del file e
+  i comandi distruttivi, una per le bozze. Una bozza parte anche mentre una
+  scrittura lenta è in volo, e porta la revisione di base che quella scrittura
+  conosce ancora: un crash in quei secondi ritrova l'ultimo testo e sa da
+  quale versione del file parte. Nella coda delle bozze c'è una sola scrittura
+  o un solo scarto alla volta, nell'ordine in cui sono partiti, così una
+  risposta vecchia non passa sopra a una bozza più nuova. La cadenza resta
+  quella di sempre (`DRAFT_MS`): niente IPC per battuta.
+- **Fine del salvataggio.** La bozza si toglie solo se il testo della sessione
+  è quello appena scritto, e lo scarto si accoda dietro le bozze già partite.
+  Se nel frattempo è arrivato testo nuovo la bozza resta, e la cadenza la
+  riscrive sulla revisione nuova.
+- **Host.** `save_draft` e `discard_draft` girano fuori dal thread principale
+  e non prendono il turno di scrittura, che il salvataggio tiene per tutta la
+  sua durata: prendono la porta delle bozze (`Workspace::draft_port`) con un
+  prestito condiviso breve e scrivono dopo averlo lasciato. Le bozze non
+  toccano anagrafe, indici né eventi; un lucchetto interno a
+  `fub-kernel/src/drafts.rs` le tiene in fila con le migrazioni della
+  rinomina.
 
 ### Chi prende il turno per un comando
 
@@ -320,6 +373,14 @@ negato, argomenti errati, non trovato, I/O, cancellazione e altre varianti.
 La localizzazione della frase avviene prima della presentazione, ma il tipo non
 viene perso. La shell non decide il comportamento cercando sottostringhe in un
 messaggio.
+
+Una scrittura che chi usa Fub ha chiesto va fino in fondo, oppure chi l'ha
+chiesta sa che non è passata. Un evento del vault, una rilettura o una
+superficie chiusa nel frattempo servono a non ridisegnare con dati vecchi, mai a
+non mandare un comando già chiesto o a tacerne il rifiuto: il conflitto vero lo
+dice la revisione attesa del comando. A superficie chiusa il rifiuto arriva come
+avviso della shell, e un gesto di più passi rimasto a metà dice che cosa è
+scritto e che cosa no (la Base, #484).
 
 ## Shutdown
 

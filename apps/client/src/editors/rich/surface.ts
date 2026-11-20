@@ -193,9 +193,18 @@ export interface RichSurfaceCallbacks {
 export function mountRichSurface(profile: string, context: SurfaceMountContext, callbacks: RichSurfaceCallbacks): EditorSurface {
   if (profile !== RICH_PROFILE) throw new Error(`rich surface profile ${profile} is not registered`);
   const parent = context.parent;
+  /// Il percorso del documento: cambia con una rinomina (`followRename`), che
+  /// non rimonta la pagina.
+  let documentId = context.documentId;
   parent.replaceChildren();
   const root = document.createElement("div");
   root.className = "rich-surface";
+  /// Dentro una scheda (`SurfaceMountContext.compact`, T44) il documento è
+  /// una colonna: in Scrittura, senza la carta, senza la barra multifunzione
+  /// e senza il pulsante del pannello. Si scrive lo stesso testo con le
+  /// stesse azioni; stili e impaginazione restano del file.
+  const compact = context.compact === true;
+  if (compact) root.dataset.compact = "true";
   const notice = document.createElement("p");
   notice.className = "rich-notice";
   notice.setAttribute("role", "status");
@@ -207,6 +216,10 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   parent.append(root);
 
   let engine: RichEngine | null = null;
+  // Il fuoco chiesto prima che il motore arrivasse (una scheda che si attiva
+  // col primo clic): lo prende appena c'è, se il fuoco sta ancora dove stava
+  // allora. Esc o un clic altrove nel frattempo lo hanno spostato: resta lì.
+  let focusAsked: { readonly holder: Element | null } | null = null;
   // La barra multifunzione arriva col motore; la mini-barra è la sua.
   let ribbon: RichRibbon | null = null;
   // Il pannello del documento arriva anche lui col motore.
@@ -216,7 +229,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   const reveals = new Set<(viewId: string) => void>();
   let pending: string | null = null;
   let readOnly = false;
-  let mode = RICH_PAGE_MODE;
+  let mode = compact ? RICH_WRITING_MODE : RICH_PAGE_MODE;
   /// In Lettura il documento non si scrive, qualunque cosa dica il file.
   const locked = () => readOnly || mode === RICH_READING_MODE;
   let closed = false;
@@ -255,10 +268,12 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     const pick = images?.pick;
     if (!images || !pick) return undefined;
     return async () => {
-      const doc = await pick(context.documentId);
+      const doc = await pick(documentId);
       if (doc === null) return null;
-      const ref = relativeRef(context.documentId, doc);
-      const blob = await images.read(ref.startsWith(".") ? ref : `./${ref}`, context.documentId, RICH_IMAGE_LIMIT);
+      // Il nome di adesso: durante la scelta il documento può aver cambiato nome.
+      const from = documentId;
+      const ref = relativeRef(from, doc);
+      const blob = await images.read(ref.startsWith(".") ? ref : `./${ref}`, from, RICH_IMAGE_LIMIT);
       return blob ?? "unreadable";
     };
   }
@@ -274,6 +289,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
         onClosedWrite: warnClosed,
+        ...(context.escapeLeaves === true ? { escapeLeaves: true } : {}),
       });
       const ribbonHost = document.createElement("div");
       ribbonHost.className = "rich-ribbon-host";
@@ -312,7 +328,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       if (mark) opener.append(mark);
       opener.append(document.createElement("span"));
       opener.addEventListener("click", () => opened.show("comments"));
-      root.append(opener);
+      if (!compact) root.append(opener);
       engine.followView([parent, root], ribbonHost);
       stopEngine = engine.subscribe(() => {
         showNotice();
@@ -323,9 +339,11 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       engine.setReadOnly(locked());
       engine.setPaper(paper());
       applyFit();
-      ribbonHost.hidden = mode === RICH_READING_MODE;
+      ribbonHost.hidden = compact || mode === RICH_READING_MODE;
       if (pending !== null) engine.setDoc(pending);
       pending = null;
+      if (focusAsked !== null && document.activeElement === focusAsked.holder) engine.focus();
+      focusAsked = null;
       showNotice();
       notify();
     },
@@ -584,6 +602,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     profile: RICH_PROFILE,
     surfaceId: context.paneId,
     modes,
+    ...(compact ? { defaultMode: RICH_WRITING_MODE } : {}),
     setMode(next) {
       if (!modes.some((each) => each.id === next)) throw new Error(`rich surface mode ${next} is not registered`);
       mode = next;
@@ -592,7 +611,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       if (engine) {
         // La barra si ritira in Lettura: resta la carta.
         const host = root.querySelector<HTMLElement>(":scope > .rich-ribbon-host");
-        if (host) host.hidden = next === RICH_READING_MODE;
+        if (host) host.hidden = compact || next === RICH_READING_MODE;
         if (next === RICH_READING_MODE) ribbon?.closeFind();
         engine.setReadOnly(locked());
         applyFit();
@@ -613,7 +632,17 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       },
       getDoc: () => (engine ? engine.getDoc() : pending ?? ""),
     },
-    focus: () => engine?.focus(),
+    // Una rinomina con la stessa estensione è lo stesso documento: la pagina
+    // resta col suo fuoco, cursore e annulla; cambia solo da dove si leggono
+    // le immagini scelte nel vault. Le battute arrivano alla shell per
+    // riquadro, non per nome.
+    followRename(next) {
+      documentId = next;
+    },
+    focus: () => {
+      if (engine) engine.focus();
+      else focusAsked = { holder: document.activeElement };
+    },
     // La barra multifunzione è della superficie: la barra di formattazione
     // della shell non si mostra sopra.
     ownBar: true,
@@ -700,6 +729,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       engine?.setPaper(paper());
     },
     editorActions,
+    history: (step) => !!engine && editable() && engine.history(step),
     contextMenu,
     miniBar: () => (editable() ? miniBar : null),
     destroy() {

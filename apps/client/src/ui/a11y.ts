@@ -122,6 +122,26 @@ export function redirectFocusReturn(from: HTMLElement, to: HTMLElement): void {
   }
 }
 
+/// Il fuoco l'ha preso qualcos'altro, di proposito: le trappole aperte la cui
+/// superficie soddisfa `owns`, sciogliendosi, non lo riportano indietro. È il
+/// clic fuori da un menu che cade su ciò che prende il fuoco (il testo di una
+/// nota, un campo): il clic l'ha già dato lì, e riportarlo sul pulsante che
+/// aveva aperto il menu manderebbe al pulsante le battute dopo (IMP-151).
+/// Escape e una scelta da tastiera lasciano il ritorno com'è.
+export function keepFocusWhereItIs(owns: (root: HTMLElement) => boolean): void {
+  for (const trap of trapStack) {
+    if (owns(trap.root)) trap.previous = null;
+  }
+}
+
+/// Una finestra modale è aperta: una superficie che intrappola il fuoco e si
+/// dichiara modale (`aria-modal="true"`), in cima o sotto un menu aperto da
+/// lei. Mentre c'è, il fondo non si tocca: è la regola delle scorciatoie
+/// globali (`ui/keyboard.ts`, IMP-152).
+export function modalOpen(): boolean {
+  return trapStack.some((trap) => trap.root.isConnected && trap.root.getAttribute("aria-modal") === "true");
+}
+
 export function focusableElements(root: HTMLElement): HTMLElement[] {
   const selector =
     'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
@@ -187,6 +207,11 @@ export function focusZone(zone: HTMLElement): void {
 /// WebKit ogni `focus()` ricalcola lo stile della pagina, e cercare il primo
 /// elemento raggiungibile ne forza il layout (`offsetParent`): due spostamenti
 /// del fuoco all'apertura costavano due ricalcoli nel fotogramma del gesto.
+///
+/// **Si apre in cima.** Il fuoco iniziale non fa scorrere la superficie
+/// (`preventScroll`), e chi lo mette da sé con `moveFocus: false` fa lo stesso:
+/// il primo comando può stare in fondo, e chi apre deve leggere dall'inizio.
+/// Il giro del Tab, invece, scorre: lì il fuoco lo sposta chi guarda.
 export function trapFocus(root: HTMLElement, close: () => void, options: TrapOptions = {}): Teardown {
   const lifetime = openLifetime();
   // *Questa* trappola nella pila: conta la sua identità (due trappole sulla
@@ -257,7 +282,11 @@ export function trapFocus(root: HTMLElement, close: () => void, options: TrapOpt
 
   if (options.moveFocus !== false) {
     const inside = focusableElements(root);
-    (inside[0] ?? root).focus();
+    // Senza scorrere: una superficie si apre dall'inizio. Il browser porta in
+    // vista chi prende il fuoco, e se il primo comando sta in fondo (i pulsanti
+    // di un dialogo lungo) chi guarda la vedrebbe già a metà, con l'inizio
+    // saltato. Il fuoco resta lì: Tab e le frecce lo mostrano quando si muove.
+    (inside[0] ?? root).focus({ preventScroll: true });
   }
 
   return () => lifetime.close();

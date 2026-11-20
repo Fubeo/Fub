@@ -21,7 +21,7 @@ import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS, NEW_VIEW_KINDS,
   addBaseView, allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, choiceLanes, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, linkedNotes, listBaseViews, parseBaseEmbed, persistBaseView,
-  planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, setBaseViewKey, writtenLines,
+  planBaseView, prepareBaseMutations, removeBaseView, restoreBaseView, sameExpected, setBaseViewKey, writtenLines,
   type BaseCellValue, type BaseDocumentWrites, type BaseExpected, type BaseGroupOrder, type BaseMutation, type BasePlan, type BaseRow, type BaseRowInput, type BaseSurfaceDeps, type BaseViewKey, type BaseViewKind, type BaseViewWrite,
 } from "./data";
 import { decimalOf, filterValue, isOpaque, propertyKind, propertyValues, type ValueKind } from "./filter";
@@ -169,6 +169,18 @@ function svg<K extends keyof SVGElementTagNameMap>(tag: K, attributes: Record<st
 /// Il posto del fuoco nella tabella, per ritrovarlo dopo un ridisegno: la cella
 /// (la nota e la colonna) o la griglia. Un fuoco fuori dalla tabella non ne ha.
 type TableFocus = { readonly doc: string; readonly column: string } | "grid";
+/// Una cella in modifica (`cellDrafts`): il testo del campo, la proprietà
+/// letta al primo tasto, e dove è arrivata. `editing` si scrive alla
+/// conferma (Invio, Tab, un clic fuori, la Base chiusa); `writing` è partita;
+/// `conflict` aspetta la scelta fra il testo scritto e quello sul disco.
+interface CellDraft {
+  readonly doc: string;
+  readonly column: string;
+  text: string;
+  expected: BaseExpected;
+  state: "editing" | "writing" | "conflict";
+}
+const draftKey = (doc: string, column: string): string => `${doc}\u0000${column}`;
 function tableFocusOf(target: Element | null): TableFocus | null {
   if (target === null || target.closest(".base-table-viewport") === null) return null;
   const cell = target.closest<HTMLTableCellElement>("tbody > tr[data-doc] > td[data-cell]");
@@ -249,6 +261,21 @@ export function mountBaseSurface(
   // La scrittura della cella col fuoco, per ciascun campo: `destroy` la chiede
   // se la modifica non è ancora consegnata (né Invio, né Tab, né clic).
   const cellSaves = new WeakMap<HTMLInputElement, () => void>();
+  // Il testo che si sta scrivendo in una cella, per nota e colonna, dal primo
+  // tasto finché non è scritto o lasciato (IMP-137). Un ridisegno (un evento
+  // del vault, una ricarica, lo scorrimento) toglie il campo: quello nuovo
+  // riprende da qui testo e fuoco, invece del valore del disco. `expected` è
+  // la proprietà letta quando si è cominciato a scrivere: la scrittura la
+  // confronta col file (CAS), e se la nota è cambiata nel frattempo niente si
+  // scrive in silenzio: la Base chiede quale testo tenere (`conflict`).
+  const cellDrafts = new Map<string, CellDraft>();
+  // Un ridisegno in corso: il campo che se ne va (e il `blur` o il `change`
+  // che il browser gli mandasse togliendolo) non è una conferma.
+  let redrawing = 0;
+  const retire = (replace: () => void): void => {
+    redrawing++;
+    try { replace(); } finally { redrawing--; }
+  };
   // L'esito dell'ultimo gesto che non ha scritto: resta nella riga di stato
   // finché un gesto nuovo non lo sostituisce.
   let notice: string | null = null;
@@ -450,7 +477,7 @@ export function mountBaseSurface(
   const presentError = (reason: unknown): void => {
     error = errorText(reason);
     status.textContent = error;
-    body.replaceChildren(button(labels().retry, () => void reload(true)));
+    retire(() => body.replaceChildren(button(labels().retry, () => void reload(true))));
   };
   // Chi può riscrivere il file `.base`, e se no perché.
   const lock = () => readOnly ? "read_only" as const : options.sourceInNote ? "embedded" as const : null;
@@ -595,15 +622,17 @@ export function mountBaseSurface(
   };
   // Un gesto che non ha scritto lo dice dove si vede: nella Base aperta a modo
   // suo (`onScreen`), a Base chiusa con un avviso.
-  const unwritten = (message: string, onScreen: () => void): void => {
-    if (destroyed) notify(message, "guasto");
-    else onScreen();
+  const unwritten = (message: string, onScreen: () => void, quiet = false): void => {
+    if (!destroyed) onScreen();
+    else if (!quiet) notify(message, "guasto");
   };
   const editCell = async (row: BaseRow, column: string, value: string | null): Promise<void> => {
     if (!plan || readOnlyColumn(column)) return;
     const expected = expectedProperty(row, column);
     const view = plan.view;
     const definition = source;
+    // Il motivo di una scrittura di prima non resta sotto quella nuova.
+    notice = null;
     try {
       const mutations = await prepareBaseMutations(deps, definition, view, [{ doc: row.doc, key: column, expected, value }]);
       for (const mutation of mutations) await writeProperty(mutation);
@@ -612,12 +641,148 @@ export function mountBaseSurface(
       const message = t("base.cell.unsaved", { name: noteTitle(row.doc), reason: errorText(failure) });
       // No optimistic overwrite. The original observation stays on screen and
       // the next explicit reload will fetch the conflicting authoritative note.
-      if (destroyed || failure instanceof BaseReadOnly) unwritten(message, () => { draw(); status.textContent = message; });
+      // Il motivo resta nella riga di stato (`notice`) anche dopo la
+      // rilettura che l'evento della nota cambiata fa partire (#484).
+      if (destroyed || failure instanceof BaseReadOnly) unwritten(message, () => { notice = message; draw(); status.textContent = message; });
       else if (isErrorKind(failure, "conflict")) {
+        notice = errorText(failure);
         draw();
-        status.textContent = errorText(failure);
+        status.textContent = notice;
       } else presentError(failure);
     }
+  };
+  // La conferma di una cella in modifica (`cellDrafts`). Si scrive contro la
+  // proprietà letta al primo tasto, non contro quella di adesso: se la nota è
+  // cambiata mentre si scriveva (un'altra app, un'altra scheda), la scrittura
+  // non passa e la Base chiede quale testo tenere. Lo dice prima di chiedere
+  // al core se l'ultima lettura lo sa già (la riga cambiata o uscita dalla
+  // vista), altrimenti lo dice la CAS del comando. A Base chiusa (`closing`)
+  // la scelta non si può mostrare: si prova la scrittura, e un rifiuto è un
+  // avviso.
+  const confirmCell = async (key: string, closing = false): Promise<void> => {
+    const draft = cellDrafts.get(key);
+    if (!draft || draft.state !== "writing") return;
+    const { doc, column, text, expected } = draft;
+    const value = text === "" ? null : JSON.stringify(text);
+    const current = rows.find((each) => each.doc === doc);
+    if (!closing && (!current || !sameExpected(expectedProperty(current, column), expected))) {
+      draft.state = "conflict";
+      draw();
+      return;
+    }
+    try {
+      if (!plan) throw new Error("base: piano assente");
+      const mutations = await prepareBaseMutations(deps, source, plan.view, [{ doc, key: column, expected, value }]);
+      for (const mutation of mutations) await writeProperty(mutation);
+      // Scritta. Un testo cambiato intanto nel campo resta in modifica, e il
+      // suo valore letto diventa quello appena scritto, come la riga riletta
+      // lo dice.
+      const typedOn = cellDrafts.get(key) === draft && draft.text !== text;
+      if (typedOn) draft.state = "editing";
+      else if (cellDrafts.get(key) === draft) cellDrafts.delete(key);
+      if (!destroyed) await reload(true);
+      const fresh = rows.find((each) => each.doc === doc);
+      if (typedOn && fresh && cellDrafts.get(key) === draft) draft.expected = expectedProperty(fresh, column);
+    } catch (failure) {
+      const conflict = isErrorKind(failure, "conflict");
+      if (conflict && !destroyed && cellDrafts.get(key) === draft) {
+        draft.state = "conflict";
+        draw();
+        // La nota sul disco non è quella letta: la riga si rilegge, e la
+        // scelta sa se la nota è ancora nella vista.
+        void reload(false);
+        return;
+      }
+      if (cellDrafts.get(key) === draft) cellDrafts.delete(key);
+      // Il testo che non si è scritto per un conflitto si legge nell'avviso.
+      const reason = conflict ? t("base.cell.conflict_closed", { column: labelOf(column), text }) : errorText(failure);
+      const message = t("base.cell.unsaved", { name: noteTitle(doc), reason });
+      if (destroyed || conflict || failure instanceof BaseReadOnly) unwritten(message, () => { draw(); status.textContent = message; });
+      else presentError(failure);
+    }
+  };
+  // La scelta su una cella in conflitto: il testo scritto, contro il valore
+  // del disco di adesso (una nuova CAS: se la nota cambia ancora, si richiede),
+  // o il valore del disco, lasciando il testo.
+  const keepCellText = (key: string): void => {
+    const draft = cellDrafts.get(key);
+    const current = draft && rows.find((each) => each.doc === draft.doc);
+    if (!draft || draft.state !== "conflict" || !current) return;
+    draft.expected = expectedProperty(current, draft.column);
+    draft.state = "writing";
+    draw();
+    focusCell(draft.doc, draft.column);
+    void confirmCell(key);
+  };
+  const dropCellText = (key: string): void => {
+    const draft = cellDrafts.get(key);
+    if (!draft) return;
+    cellDrafts.delete(key);
+    draw();
+    focusCell(draft.doc, draft.column);
+    // Il valore del disco di adesso, anche se l'evento del vault non è ancora
+    // arrivato.
+    void reload(false);
+  };
+  // Il fuoco torna sulla cella dopo la scelta; se la riga non c'è più, alla
+  // Base, dove Ctrl+Z continua ad arrivare.
+  const focusCell = (doc: string, column: string): void => {
+    const row = [...body.querySelectorAll<HTMLElement>("[data-doc]")].find((each) => each.dataset.doc === doc && each.querySelector(".base-cell") !== null);
+    const field = [...(row?.querySelectorAll<HTMLElement>(".base-cell") ?? [])].find((each) => each.dataset.column === column);
+    const control = field?.querySelector<HTMLElement>("input, button");
+    if (control) control.focus({ preventScroll: true });
+    else root.focus({ preventScroll: true });
+  };
+  // Le celle in conflitto, sopra le righe: una scelta per cella, come il
+  // conflitto di una nota. Una nota uscita dalla vista non ha più la cella:
+  // il testo scritto si legge nell'avviso e si può copiare.
+  const conflicts = document.createElement("div");
+  conflicts.hidden = true;
+  body.before(conflicts);
+  // Una scelta già mostrata resta la stessa a ogni ridisegno (un evento del
+  // vault, una ricarica): non si riannuncia e non perde il fuoco. Si rifà solo
+  // se cambia quello che dice.
+  const conflictBoxes = new Map<string, { said: string; box: HTMLElement }>();
+  const drawConflicts = (): void => {
+    const waiting = [...cellDrafts.entries()].filter(([, draft]) => draft.state === "conflict");
+    conflicts.hidden = waiting.length === 0;
+    const kept = new Map<string, { said: string; box: HTMLElement }>();
+    const boxes = waiting.map(([key, draft]) => {
+      const gone = !rows.some((each) => each.doc === draft.doc);
+      const names = { name: noteTitle(draft.doc), column: labelOf(draft.column), text: draft.text };
+      const said = gone ? t("base.cell.conflict_gone", names) : t("base.cell.conflict", names);
+      const shown = conflictBoxes.get(key);
+      if (shown && shown.said === said) { kept.set(key, shown); return shown.box; }
+      const box = document.createElement("div");
+      box.className = "conflict-banner";
+      box.setAttribute("role", "alert");
+      box.dataset.doc = draft.doc;
+      box.dataset.column = draft.column;
+      const line = document.createElement("p");
+      line.textContent = said;
+      const actions = document.createElement("div");
+      actions.className = "conflict-actions";
+      const mine = gone
+        ? button(t("base.cell.conflict_copy"), () => void writeClipboardText(draft.text).then(() => { status.textContent = t("editor_menu.copied"); }, presentError))
+        : button(t("document.conflict.keep_mine"), () => keepCellText(key));
+      mine.classList.add("primary");
+      mine.dataset.choice = "mine";
+      const theirs = button(t("document.conflict.use_disk"), () => dropCellText(key));
+      theirs.dataset.choice = "theirs";
+      actions.append(mine, theirs);
+      box.append(line, actions);
+      // Il fuoco che era sulla scelta di prima della stessa cella resta lì.
+      const focused = shown?.box.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.choice : undefined;
+      kept.set(key, { said, box });
+      if (focused) queueMicrotask(() => box.querySelector<HTMLElement>(`[data-choice="${focused}"]`)?.focus({ preventScroll: true }));
+      return box;
+    });
+    conflictBoxes.clear();
+    for (const [key, entry] of kept) conflictBoxes.set(key, entry);
+    // Solo se l'elenco è cambiato: rimettere gli stessi nodi toglierebbe il
+    // fuoco dal bottone.
+    const same = boxes.length === conflicts.children.length && boxes.every((box, index) => conflicts.children[index] === box);
+    if (!same) conflicts.replaceChildren(...boxes);
   };
   // ---- I gesti della barra ------------------------------------------------
   // Ogni gesto riscrive una sola chiave della vista, con la revisione del file
@@ -634,7 +799,7 @@ export function mountBaseSurface(
     attempt?.finish(written);
     if (!busy) return;
     busy = false;
-    pushModel();
+    if (!destroyed) pushModel();
   };
   const maybeSettle = (): void => {
     if (writing && writing.answered && writing.after !== null && writing.planned) settle(true);
@@ -717,7 +882,8 @@ export function mountBaseSurface(
     if (forgotten !== undefined) {
       forgetGroupChoice(view);
       await persistQueue;
-      if (destroyed) return;
+      // La Base chiusa intanto: il gesto non parte più, e lo dice (#484).
+      if (destroyed) { notify(t("base.write.closed"), "guasto"); return; }
     }
     const written = await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base));
     if (forgotten !== undefined && !written && !destroyed && !groupChoices.has(view)) {
@@ -729,16 +895,21 @@ export function mountBaseSurface(
   const run = async (attempt: WriteAttempt, invoke: (base: string | null) => Promise<BaseViewWrite>, quiet: boolean): Promise<void> => {
     const writes = deps.documentWrites;
     let withdraw: (() => void) | undefined;
+    // Un gesto partito va fino in fondo anche se intanto la Base si chiude
+    // (#484): il conflitto lo dice la revisione del comando. Un passo che non
+    // scrive lo dice sotto la barra, a Base chiusa con un avviso; un passo di
+    // un gesto più lungo (`quiet`) lo lascia dire al gesto.
+    const said = (message: string): void => unwritten(message, () => { status.textContent = message; }, quiet);
     try {
       // Il `.base` aperto anche come testo, con modifiche non ancora sul
       // disco: prima si salvano. Se restano non salvate il gesto si ferma,
       // perché scriverebbe sopra un file che non è quello sullo schermo.
       if (writes) {
         const unsaved = await writes.flush();
-        if (destroyed || writing !== attempt) return;
+        if (writing !== attempt) return;
         if (unsaved.includes(context.documentId)) {
           notice = t("base.write.unsaved");
-          status.textContent = notice;
+          said(notice);
           settle();
           return;
         }
@@ -755,7 +926,9 @@ export function mountBaseSurface(
           : undefined);
       }
       lastWrite = written;
-      if (destroyed || writing !== attempt) return;
+      if (writing !== attempt) return;
+      // A Base chiusa nessun testo nuovo arriverà: il gesto finisce qui.
+      if (destroyed) { settle(written.revision !== null || written.undo !== null); return; }
       // Niente scritto, niente testo nuovo da aspettare: la barra si riaccende.
       if (written.revision === null && written.undo === null) { settle(); return; }
       attempt.answered = true;
@@ -766,11 +939,11 @@ export function mountBaseSurface(
       if (writing === attempt) settleTimer = window.setTimeout(() => { settleTimer = 0; settle(true); }, WRITE_SETTLE_MS);
     } catch (failure) {
       withdraw?.();
-      if (destroyed || writing !== attempt) return;
+      if (writing !== attempt) return;
       // Niente è stato scritto: il comando ha rifiutato il valore, o il file
       // è cambiato altrove. La vista resta quella del file com'è.
-      notice = isErrorKind(failure, "conflict") ? t("base.write.conflict") : t("base.write.rejected", { reason: errorText(failure) });
-      status.textContent = notice;
+      notice = isErrorKind(failure, "conflict") && !destroyed ? t("base.write.conflict") : t("base.write.rejected", { reason: errorText(failure) });
+      said(notice);
       settle();
     }
   };
@@ -862,20 +1035,25 @@ export function mountBaseSurface(
       for (const [key, value] of keys) {
         if (!await perform((base) => setBaseViewKey(deps, context.documentId, name, key, value, base), { quiet: true, before: start })) { complete = false; break; }
       }
-      if (destroyed) return;
-      const undo = {
+      // A Base chiusa la vista aggiunta si dice lo stesso, ma senza «Annulla»:
+      // la barra che la toglierebbe non c'è più (#484).
+      // Un «Annulla» premuto quando la Base si è già chiusa lo dice.
+      const undo = destroyed ? undefined : {
         label: t("app.undo"), hint: t("base.view.remove_hint", { name }),
-        run: () => void perform((base) => removeBaseView(deps, context.documentId, name, base)),
+        run: () => {
+          if (destroyed) notify(t("base.write.closed"), "guasto");
+          else void perform((base) => removeBaseView(deps, context.documentId, name, base));
+        },
       };
       // Un passo rifiutato: la vista c'è ma non ha tutto. Il motivo resta
       // sotto la barra (la vista aperta non cambia), e l'avviso lo dice.
       if (!complete) {
-        notify(t("base.view.added_partly", { name }), "guasto", undo);
+        notify(t(destroyed ? "base.view.added_closed" : "base.view.added_partly", { name }), "guasto", undo);
         return;
       }
-      if (names.includes(name)) chooseView(name);
+      if (!destroyed && names.includes(name)) chooseView(name);
       notify(added?.notify ?? t("base.view.added", { name }), "info", undo);
-    } finally { sequencing--; pushModel(); }
+    } finally { sequencing--; if (!destroyed) pushModel(); }
   };
 
   // ---- Il menu della colonna -------------------------------------------
@@ -940,12 +1118,12 @@ export function mountBaseSurface(
         const outcome = await deps.invokeCommand(PROPERTY_RENAME, { old_key: from, new_key: to });
         said = typeof outcome?.notify === "string" && outcome.notify ? outcome.notify : null;
       } catch (failure) {
-        if (destroyed) return;
-        notice = t("base.rename.failed", { reason: errorText(failure) });
-        status.textContent = notice;
+        const message = t("base.rename.failed", { reason: errorText(failure) });
+        unwritten(message, () => { notice = message; status.textContent = message; });
         return;
       }
-      if (destroyed) return;
+      // Le note hanno il nome nuovo: anche a Base chiusa si contano le viste
+      // che lo nominano, e quelle rimaste col nome vecchio si dicono (#484).
       // Le viste riscritte per intero, e quelle rimaste col nome vecchio in
       // tutto o in parte.
       const done: string[] = [];
@@ -955,31 +1133,28 @@ export function mountBaseSurface(
       for (const view of [...names]) {
         let viewPlan: BasePlan;
         try { viewPlan = await planBaseView(deps, source, view); } catch (failure) {
-          if (destroyed) return;
           missed.push(view);
           reason ??= errorText(failure);
           continue;
         }
-        if (destroyed) return;
         const keys = renamedInView(viewPlan, from, to);
         if (keys.length === 0) continue;
         let whole = true;
         for (const [key, value] of keys) {
           if (!await perform((base) => setBaseViewKey(deps, context.documentId, view, key, value, base), { quiet: true, before: start })) { whole = false; break; }
         }
-        if (destroyed) return;
         if (whole) done.push(view);
-        else { missed.push(view); reason ??= notice; }
+        else { missed.push(view); reason ??= notice ?? (destroyed ? t("base.write.closed") : null); }
       }
-      if (destroyed) return;
       if (missed.length) {
         // L'errore resta: le note hanno il nome nuovo, queste viste no.
-        notice = t("base.rename.views_missed", { views: missed.join(", "), reason: reason ?? "" });
-        status.textContent = notice;
-        notify(t("base.rename.partly", { from, to }), "guasto");
+        const message = t("base.rename.views_missed", { views: missed.join(", "), reason: reason ?? "" });
+        if (!destroyed) { notice = message; status.textContent = message; }
+        notify(destroyed ? `${t("base.rename.partly", { from, to })}. ${message}` : t("base.rename.partly", { from, to }), "guasto");
         return;
       }
       notify(said ?? t("base.rename.done", { from, to }), "info");
+      if (destroyed) return;
       notice = done.length ? t("base.rename.views", { count: done.length }) : null;
       if (notice) status.textContent = notice;
     } finally { sequencing--; if (!destroyed) pushModel(); }
@@ -992,9 +1167,8 @@ export function mountBaseSurface(
       if (typeof outcome?.notify === "string" && outcome.notify) notify(outcome.notify, "info");
       if (!destroyed) void reload(false);
     } catch (failure) {
-      if (destroyed) return;
-      notice = t("base.type.failed", { reason: errorText(failure) });
-      status.textContent = notice;
+      const message = t("base.type.failed", { reason: errorText(failure) });
+      unwritten(message, () => { notice = message; status.textContent = message; });
     }
   };
   function chooseView(name: string): void {
@@ -1033,7 +1207,7 @@ export function mountBaseSurface(
     try {
       await deps.invokeCommand(TEMPLATE_COMMAND, { template });
       if (!destroyed) await reload(true);
-    } catch (failure) { if (!destroyed) presentError(failure); }
+    } catch (failure) { unwritten(errorText(failure), () => presentError(failure)); }
     finally { creating = false; if (!destroyed) pushModel(); }
   }
   const editable = (row: BaseRow, column: string): HTMLElement => {
@@ -1054,28 +1228,67 @@ export function mountBaseSurface(
       const control = document.createElement("input");
       control.type = "text";
       control.value = cellText(value);
-      // Il valore di partenza: Esc ci torna senza scrivere niente.
+      // Il valore di partenza, quello del disco: Esc ci torna senza scrivere
+      // niente.
       control.defaultValue = control.value;
       control.setAttribute("aria-label", `${row.doc} ${column}`);
-      // Una cella non ancora scritta non ha niente da disfare: lì Ctrl+Z è della
-      // Base (`undoKey`), finché non si scrive nel campo.
-      control.dataset.untouched = "true";
-      control.addEventListener("input", () => { delete control.dataset.untouched; }, { once: true });
-      // Invio chiude la modifica: il fuoco passa alla griglia, e la scrittura
-      // parte col `change` che il campo manda perdendo il fuoco. Il fuoco non
-      // cade così sul corpo della pagina, e Ctrl+Z arriva alla Base (IMP-124).
-      control.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && !event.isComposing) control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
+      // Una cella che si stava scrivendo prima del ridisegno riprende il suo
+      // testo, non il valore del disco (IMP-137); in conflitto lo dice.
+      const key = draftKey(row.doc, column);
+      const draft = cellDrafts.get(key);
+      if (draft) {
+        control.value = draft.text;
+        if (draft.state === "conflict") control.setAttribute("aria-invalid", "true");
+      } else {
+        // Una cella non ancora scritta non ha niente da disfare: lì Ctrl+Z è
+        // della Base (`undoKey`), finché non si scrive nel campo.
+        control.dataset.untouched = "true";
+        control.addEventListener("input", () => { delete control.dataset.untouched; }, { once: true });
+      }
+      // Il campo tolto da un ridisegno non conferma niente: il suo testo è in
+      // `cellDrafts`, e il campo nuovo lo riprende.
+      const retired = (): boolean => redrawing > 0 || !control.isConnected;
+      control.addEventListener("input", () => {
+        if (retired()) return;
+        const typing = cellDrafts.get(key);
+        if (typing) typing.text = control.value;
+        else cellDrafts.set(key, { doc: row.doc, column, text: control.value, expected: expectedProperty(row, column), state: "editing" });
       });
-      // La scrittura della cella. Il `change` arriva mentre il browser sposta il
-      // fuoco (Tab, un clic): la consegna dopo quel passaggio, così il ridisegno
-      // che la chiude non cade sulla cella verso cui il fuoco va (IMP-124).
-      // Chiudendo la Base parte subito (`destroy`), e il `change` che il browser
-      // mandasse dopo non la ripete.
+      // Invio chiude la modifica: il fuoco passa alla griglia, e la scrittura
+      // parte perdendo il fuoco. Il fuoco non cade così sul corpo della
+      // pagina, e Ctrl+Z arriva alla Base (IMP-124). Esc lascia il testo
+      // scritto e torna al valore del disco.
+      control.addEventListener("keydown", (event) => {
+        if (event.isComposing) return;
+        if (event.key === "Enter") control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
+        else if (event.key === "Escape") {
+          const left = cellDrafts.get(key);
+          cellDrafts.delete(key);
+          control.value = control.defaultValue;
+          control.removeAttribute("aria-invalid");
+          if (left?.state === "conflict") drawConflicts();
+        }
+      });
+      // La scrittura della cella. Il `change` (o il `blur`, per un testo
+      // ripreso dopo un ridisegno, che il browser non vede cambiato) arriva
+      // mentre il browser sposta il fuoco (Tab, un clic): la consegna dopo quel
+      // passaggio, così il ridisegno che la chiude non cade sulla cella verso
+      // cui il fuoco va (IMP-124). Chiudendo la Base parte subito (`destroy`),
+      // e il `change` che il browser mandasse dopo non la ripete. Un campo
+      // tornato al valore del disco non ha niente da scrivere.
       let closing = false;
       const save = (now: boolean): void => {
-        const next = control.value === "" ? null : JSON.stringify(control.value);
-        const write = (): void => { void editCell(row, column, next); };
+        const pending = cellDrafts.get(key);
+        if (control.value === control.defaultValue && pending?.state !== "conflict" && pending?.state !== "writing") { cellDrafts.delete(key); return; }
+        const next = pending ?? { doc: row.doc, column, text: control.value, expected: expectedProperty(row, column), state: "editing" as const };
+        cellDrafts.set(key, next);
+        next.text = control.value;
+        // In conflitto la scelta aspetta: il testo nuovo è quello che «Mantieni»
+        // scriverà.
+        if (next.state === "conflict") { drawConflicts(); status.textContent = t("base.cell.conflict_waiting"); return; }
+        if (next.state === "writing") return;
+        next.state = "writing";
+        const write = (): void => { void confirmCell(key, now); };
         if (now) { write(); return; }
         const timer = window.setTimeout(() => { pendingWrites.delete(timer); write(); }, 0);
         pendingWrites.set(timer, write);
@@ -1085,11 +1298,13 @@ export function mountBaseSurface(
         closing = true;
         save(true);
       });
-      control.addEventListener("change", () => { if (!closing) save(false); });
+      control.addEventListener("change", () => { if (!closing && !retired()) save(false); });
+      control.addEventListener("blur", () => { if (!closing && !retired() && cellDrafts.get(key)?.state === "editing") save(false); });
       // Un numero si legge coi separatori della lingua; col fuoco il campo
-      // torna al valore com'è, quello che si scrive.
+      // torna al valore com'è, quello che si scrive. Un testo in modifica si
+      // mostra com'è.
       const shown = shownText(value, resolvedLanguage());
-      if (value?.kind === "number" && shown !== control.value) {
+      if (!draft && value?.kind === "number" && shown !== control.value) {
         const raw = control.value;
         control.value = shown;
         control.addEventListener("focus", () => { if (control.value === shown) control.value = raw; });
@@ -1215,7 +1430,7 @@ export function mountBaseSurface(
       // di lui (la stessa cella), come dopo un ridisegno della tabella intera.
       const kept = tableFocusOf(document.activeElement);
       const swap = (...nodes: Node[]): void => {
-        tableBody.replaceChildren(...nodes);
+        retire(() => tableBody.replaceChildren(...nodes));
         if (kept !== null && kept !== "grid") focusKept(kept);
       };
       if (!range) { swap(...(addRow ? [addRow] : [])); return; }
@@ -1586,7 +1801,8 @@ export function mountBaseSurface(
       await deps.invokeCommand(PROPERTY_OPTION_SET, { key: property, option: name, color: freeColor(optionsOf(propertyTypes, property)), ...(kind === "status" ? { group: "todo" } : {}) });
       await readPropertyTypes();
     } catch (failure) {
-      if (!destroyed) status.textContent = errorText(failure);
+      const message = errorText(failure);
+      unwritten(message, () => { status.textContent = message; });
     }
   };
   /// Rilegge il registro dei tipi; se cambia, la Bacheca si ridisegna.
@@ -1923,7 +2139,8 @@ export function mountBaseSurface(
     // Il fuoco nella tabella (una cella, o la griglia) lo perde la tabella che
     // si disegna: `drawTable` lo riprende dov'era.
     tableFocus = tableFocusOf(document.activeElement);
-    body.replaceChildren();
+    retire(() => body.replaceChildren());
+    drawConflicts();
     // Le righe di prima non ci sono più: la scelta torna, se le sue celle ci
     // sono ancora, quando la tabella nuova si disegna (`restorePick`).
     const hadPick = picked !== null;
@@ -1978,7 +2195,7 @@ export function mountBaseSurface(
       await deps.invokeCommand("note.create", Object.keys(defaults).length ? { properties: JSON.stringify(defaults) } : {});
       if (!destroyed) await reload(true);
     }
-    catch (failure) { presentError(failure); }
+    catch (failure) { unwritten(errorText(failure), () => presentError(failure)); }
     finally { creating = false; if (!destroyed) pushModel(); }
   }
   async function copyResults(): Promise<void> {
@@ -2158,8 +2375,21 @@ export function mountBaseSurface(
       if (focused instanceof HTMLInputElement) cellSaves.get(focused)?.();
       for (const [timer, write] of pendingWrites) { window.clearTimeout(timer); write(); }
       pendingWrites.clear();
+      // Le altre celle in modifica, senza più il campo (uno scorrimento, un
+      // ridisegno le ha tolte): partono anche loro. Una cella in conflitto non
+      // si scrive sopra la nota cambiata: l'avviso ne riporta il testo (IMP-137).
+      for (const [key, draft] of cellDrafts) {
+        if (draft.state === "editing") { draft.state = "writing"; void confirmCell(key, true); }
+        else if (draft.state === "conflict") {
+          cellDrafts.delete(key);
+          notify(t("base.cell.unsaved", { name: noteTitle(draft.doc), reason: t("base.cell.conflict_closed", { column: labelOf(draft.column), text: draft.text }) }), "guasto");
+        }
+      }
       closeMenus();
       destroyed = true; generation++; pending?.abort(); tileCleanup?.(); cellListeners.clear();
+      // Un gesto della barra già scritto non aspetta più il testo nuovo, che
+      // a Base chiusa non arriva: finisce, e un gesto di più passi sa com'è andato.
+      if (writing?.answered) settle(true);
       window.clearTimeout(settleTimer);
       for (const [timer, withdraw] of undoGraces) { window.clearTimeout(timer); withdraw(); }
       undoGraces.clear();

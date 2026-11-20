@@ -175,8 +175,7 @@ impl CommandProvider for VersioningCommands {
             return Err(PluginError::UnknownCommand(command.to_string().into()));
         }
         let args = Args::new(&args);
-        let doc = args
-            .document(DOC)
+        let doc = crate::formats::any_document(&args, DOC, &*host)?
             .or_else(|| host.active_context().and_then(|c| c.doc))
             .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
         let ts = args

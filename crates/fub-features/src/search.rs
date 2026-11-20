@@ -316,6 +316,7 @@ mod engine;
 mod index;
 mod provider;
 mod schema;
+mod words;
 
 pub use catalog::{catalog, settings};
 use catalog::{

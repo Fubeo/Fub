@@ -251,7 +251,10 @@ fn catalog_manager_requires_signed_entries_for_install_update_rollback_and_revok
     assert_eq!(unchanged.manifest.version, "0.1.0");
     assert_eq!(unchanged.consent, Consent::Granted);
     let lock = root(&dir).join("wasm-plugins/.inventory.json.lock");
-    std::fs::remove_file(&lock).expect("inventory lock exists");
+    assert!(
+        !lock.exists(),
+        "il lock dell’inventario si toglie al rilascio"
+    );
     std::fs::create_dir(&lock).expect("simulate interrupted inventory publication");
     assert!(matches!(
         manager.catalog_update(

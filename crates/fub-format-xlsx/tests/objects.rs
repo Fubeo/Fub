@@ -466,3 +466,96 @@ fn una_casella_di_testo_si_inserisce_si_scrive_si_sposta_e_resta_nel_file() {
     );
     assert_eq!(shown(&opened.window((0, 30), (0, 12), &[])), None);
 }
+
+/// La parte `text` della cartella (`fub.part`, T54), come JSON.
+fn part(opened: &mut Opened, text: &str) -> serde_json::Value {
+    let params = serde_json::json!({ "part": text }).to_string();
+    let outcome = opened.command("fub.part", &params);
+    serde_json::from_str(outcome.result.as_deref().expect("la risposta")).unwrap()
+}
+
+/// Il disegno del grafico `id` nella finestra, se c'è.
+fn chart_svg(window: &GridBytesWindow, id: u64) -> Option<String> {
+    window
+        .objects
+        .iter()
+        .find(|object| object.kind == GridObjectKind::Chart && u64::from(object.id) == id)
+        .and_then(|object| object.svg.clone())
+}
+
+#[test]
+fn un_grafico_e_una_parte_col_suo_titolo_e_la_sua_finestra_porta_il_disegno() {
+    let mut opened = opened();
+    let json = part(&mut opened, "Vendite");
+    assert_eq!(json["found"], true, "{json}");
+    assert_eq!(json["kind"], "chart");
+    assert_eq!(json["sheet"], opened.session.sheets[0].id.as_str());
+    // L'istogramma va da A7 all'inizio della riga 21 e della colonna F:
+    // copre A7:E20.
+    assert_eq!(json["range"], "A7:E20");
+    let id = json["chart"].as_u64().expect("l'id del grafico");
+
+    // Le maiuscole e gli spazi non contano, come per gli altri nomi.
+    assert_eq!(part(&mut opened, "  vendite ")["chart"], id);
+
+    // La finestra della parte, e soltanto lei, porta il grafico disegnato da
+    // GridCraft.
+    let window = opened.window((6, 14), (0, 5), &[]);
+    let svg = chart_svg(&window, id).expect("il grafico nella finestra della sua parte");
+    assert!(svg.starts_with("<svg") && svg.contains("Vendite"), "{svg}");
+}
+
+#[test]
+fn un_grafico_che_il_file_non_ha_elenca_quelli_che_ci_sono() {
+    let mut opened = opened();
+    // Il nome della cornice di Excel («Grafico 4») non è nel modello: un
+    // grafico si chiama col titolo.
+    for missing in ["Grafico 4", "Spese"] {
+        let json = part(&mut opened, missing);
+        assert_eq!(json["found"], false, "{missing}: {json}");
+        let charts: Vec<&str> = json["parts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|part| part["kind"] == "chart")
+            .map(|part| part["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(charts, ["Vendite"], "{missing}");
+    }
+}
+
+#[test]
+fn il_disegno_del_grafico_segue_i_dati_salvati() {
+    let mut opened = opened();
+    let id = part(&mut opened, "Vendite")["chart"].as_u64().unwrap();
+    let before = chart_svg(&opened.window((6, 14), (0, 5), &[]), id).expect("il disegno");
+    let sheet = opened.session.sheets[0].id.clone();
+    let commit = opened
+        .provider
+        .apply(
+            &opened.session.instance,
+            fub_abi::GridApplyRequest {
+                revision: opened.session.revision.clone(),
+                patches: vec![fub_abi::GridCellPatch {
+                    cell: fub_abi::GridCellKey {
+                        sheet,
+                        row: "r0".into(),
+                        column: "c0".into(),
+                    },
+                    before: None,
+                    after: "40".into(),
+                }],
+            },
+        )
+        .expect("la cella si scrive");
+    // Il file salvato si riapre, come fa la scheda all'evento del file: il
+    // grafico è rifatto sui dati nuovi.
+    let saved = opened
+        .provider
+        .bytes_to_write(&opened.session.instance, commit.revision)
+        .expect("i byte da salvare");
+    let mut reopened = opened_from(&saved);
+    let id_after = part(&mut reopened, "Vendite")["chart"].as_u64().unwrap();
+    let after = chart_svg(&reopened.window((6, 14), (0, 5), &[]), id_after).expect("il disegno");
+    assert_ne!(before, after, "il grafico è rifatto sui dati nuovi");
+}

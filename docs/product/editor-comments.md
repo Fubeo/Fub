@@ -161,7 +161,9 @@ Scrittura (`livepreview.ts`, che chiede `comments/mask.ts` come disegnarle);
 la cancellazione e l'avviso stanno in `comments/mask.ts`, la copia e il taglio
 che porta il commento in `comments/copy.ts` (l'incolla in `paste.ts`, i gesti
 del menu in `surface.ts`), la Sorgente in `comments/source.ts`, la Lettura in
-`render-inline.ts`, l'allargamento dei gesti di formato in `format-toggle.ts`.
+`render-inline.ts`, l'allargamento dei gesti di formato in `format-toggle.ts`;
+`comments/threads.ts` legge dall'albero i commenti di un tratto per chi lavora
+fuori dalla resa.
 Il segno, la discussione e il pannello stanno in `comments/`: `model.ts`
 (leggere le discussioni, la firma, dove va un commento nuovo), `resolve.ts`
 (Risolvi, Elimina, l'archivio), `margin.ts` (il margine, il segno nel testo,
@@ -174,8 +176,8 @@ in `crates/fub-host/src/settings.rs`. Il numero di parole della nota (la banda, 
 sul sorgente senza i segni e i messaggi dei commenti; allo stesso modo la riga
 «Selezione» del pannello, sul testo selezionato che la shell gli passa com'è
 scritto. I colori sono della
-pelle (`skin/editors.css`, componente `note-comments` dell'anatomia; il segno,
-la discussione e il pannello in `skin/document.css`, componenti
+pelle (`theme/scrittoio/skin/editors.css`, componente `note-comments` dell'anatomia; il segno,
+la discussione e il pannello in `theme/scrittoio/skin/document.css`, componenti
 `document-comment-margin`, `document-comment-discussion` e
 `document-comments-panel`).
 

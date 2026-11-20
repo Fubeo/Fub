@@ -10,7 +10,9 @@
 import { Prec, type Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@codemirror/view";
 import { redo, undo } from "@codemirror/commands";
+import { resolvedLanguage } from "../../../../i18n/strings";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { notify } from "../../../../ui/notify";
 import { withLineBreaks } from "../../line-breaks";
 import { followPath, followWikilink, textLinkGesture, type WikilinkFollow } from "./link-gesture";
 import { routeHref } from "./link-syntax";
@@ -22,11 +24,15 @@ import {
   cellContentStart,
   parseTable,
   tableChanges,
+  tableWidth,
   type GridPosition,
   type ParsedTable,
   type TableData,
 } from "./table-model";
-import { TableGrid, type TableGridActions } from "./table-grid";
+import { generatedChartAfter, tableChart } from "./table-chart";
+import { proposesSheet, sheetCells, type TableSheetPort } from "./table-sheet";
+import { TableGrid, type TableChartAction, type TableGridActions } from "./table-grid";
+import { liveStrings } from "./strings";
 
 /// Ciò che chi monta l'editor vuole sapere della griglia attiva: la barra di
 /// formattazione le chiede lo stato delle azioni e gliele fa eseguire.
@@ -37,13 +43,28 @@ export interface TableGridCallbacks {
   changed(): void;
 }
 
+/// «Trasforma in foglio» (T52): la nota aperta e chi scrive il foglio.
+export interface TableSheetHost {
+  doc(): string;
+  readonly port: TableSheetPort;
+}
+
 export interface TableWidgetCallbacks extends WikilinkFollow {
   openWikilink(page: string, heading: string | null, block: string | null): void;
   searchTag(tag: string): void;
   readonly tableGrid?: TableGridCallbacks;
+  readonly tableSheet?: TableSheetHost;
 }
 
 type GridSelection = { anchor: GridPosition; focus: GridPosition };
+
+/// Quanto testo sotto la tabella si guarda per ritrovare il grafico scritto
+/// da «Grafico da questa tabella» (T54).
+const CHART_LOOKAHEAD = 64 * 1024;
+
+/// Le viste a cui una tabella grande ha già proposto il foglio (T52): una
+/// volta per nota aperta, non a ogni ridisegno.
+const proposed = new WeakSet<EditorView>();
 
 /// La griglia montata di ogni widget, per elemento.
 const controllers = new WeakMap<HTMLElement, TableController>();
@@ -92,11 +113,14 @@ class TableController {
       changed: () => {
         if (activeGrids.get(this.#view) === this.grid) this.#widget.callbacks.tableGrid?.changed();
       },
+      chart: () => this.#chart(),
+      sheet: () => this.#sheet(),
     }, parsed);
     if (typeof ResizeObserver !== "undefined") {
       this.#observer = new ResizeObserver(() => this.#view.requestMeasure());
       this.#observer.observe(this.grid.element);
     }
+    this.#propose(parsed);
   }
 
   /// Un widget nuovo per la stessa tabella: la griglia si aggiorna sul posto.
@@ -104,6 +128,52 @@ class TableController {
     this.#widget = widget;
     this.#parsed = parsed;
     this.grid.update(parsed);
+    this.#propose(parsed);
+  }
+
+  /// Una tabella oltre le 200 righe o le 30 colonne si legge meglio in un
+  /// foglio: la nota lo propone una volta, con la voce che lo fa.
+  #propose(parsed: ParsedTable): void {
+    const view = this.#view;
+    if (proposed.has(view) || !proposesSheet(parsed.rows.length - 1, tableWidth(parsed))) return;
+    // Dopo il disegno: il widget si costruisce dentro un aggiornamento della
+    // vista, e la tabella si ritrova nel testo solo quando è montata.
+    queueMicrotask(() => {
+      if (proposed.has(view) || this.#sheet() === null) return;
+      proposed.add(view);
+      notify(liveStrings.t("table_sheet.propose"), "info", {
+        label: liveStrings.t("table_sheet.menu"),
+        run: () => this.#sheet()?.(),
+      });
+    });
+  }
+
+  /// «Trasforma in foglio» (T52): la voce c'è se chi monta l'editor sa
+  /// scrivere il foglio e la nota si scrive.
+  #sheet(): (() => void) | null {
+    const host = this.#widget.callbacks.tableSheet;
+    if (!host || this.#view.state.readOnly || this.#widget.readOnly || this.locate() === null) return null;
+    return () => void this.#turnIntoSheet(host);
+  }
+
+  async #turnIntoSheet(host: TableSheetHost): Promise<void> {
+    const view = this.#view;
+    // La tabella di adesso: il testo può essere cambiato da quando il menu
+    // si è aperto.
+    const located = this.locate();
+    if (!located) {
+      notify(liveStrings.t("table_sheet.failed"), "info");
+      return;
+    }
+    const locale = frontmatterLanguage(view.state) ?? resolvedLanguage();
+    const cells = sheetCells(located.parsed.rows, tableWidth(located.parsed), locale);
+    // I byte UTF-8 del file com'è sul disco: `sliceDoc` rende gli a capo del
+    // file, anche i `\r`.
+    const encoder = new TextEncoder();
+    const start = encoder.encode(view.state.sliceDoc(0, located.from)).length;
+    const text = view.state.sliceDoc(located.from, located.to);
+    const failed = await host.port.turn({ doc: host.doc(), at: [start, start + encoder.encode(text).length], text, cells });
+    if (failed !== null) notify(failed, "guasto");
   }
 
   /// Dove sta adesso la tabella, e la sua sorgente se è ancora quella che la
@@ -146,6 +216,63 @@ class TableController {
     // La stessa griglia è stata aggiornata sul posto: niente da rimettere.
     if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
     return true;
+  }
+
+  /// «Grafico da questa tabella» (T54): il recinto coi valori di adesso, se la
+  /// tabella ne ha uno, e se sotto c'è già quello da rigenerare.
+  #chartPlan(): { readonly from: number; readonly to: number; readonly insert: string; readonly regenerate: boolean } | null {
+    const view = this.#view;
+    const located = this.locate();
+    if (!located || view.state.readOnly || this.#widget.readOnly) return null;
+    const locale = frontmatterLanguage(view.state) ?? resolvedLanguage();
+    const date = new Intl.DateTimeFormat(resolvedLanguage(), { dateStyle: "medium" }).format(new Date());
+    const fence = tableChart(located.parsed, locale, liveStrings.t("table_chart.note", { date }));
+    if (fence === null) return null;
+    const doc = view.state.doc;
+    // Il grafico di prima sta subito sotto: basta guardare fin dove arriva un
+    // recinto ragionevole.
+    const after = doc.sliceString(located.to, Math.min(doc.length, located.to + CHART_LOOKAHEAD));
+    const existing = generatedChartAfter(after);
+    if (existing) {
+      return { from: located.to + existing.from, to: located.to + existing.to, insert: fence, regenerate: true };
+    }
+    // Sotto la tabella, con una riga vuota prima e, se il testo continua
+    // subito, una dopo. La tabella può finire col suo a capo o subito prima.
+    const endsLine = located.to > 0 && doc.sliceString(located.to - 1, located.to) === "\n";
+    let lead: string;
+    let tail: string;
+    if (endsLine) {
+      lead = "\n";
+      tail = after === "" || /^[ \t]*(?:\n|$)/u.test(after) ? "\n" : "\n\n";
+    } else {
+      lead = "\n\n";
+      tail = /^\n[ \t]*\S/u.test(after) ? "\n" : "";
+    }
+    return { from: located.to, to: located.to, insert: `${lead}${fence}${tail}`, regenerate: false };
+  }
+
+  #chart(): TableChartAction | null {
+    const plan = this.#chartPlan();
+    if (plan === null) return null;
+    return {
+      regenerate: plan.regenerate,
+      run: () => {
+        // Il testo può essere cambiato da quando il menu si è aperto: si
+        // rifà il conto su quello di adesso.
+        const now = this.#chartPlan();
+        if (now === null) {
+          notify(liveStrings.t("table_chart.failed"), "info");
+          return;
+        }
+        const view = this.#view;
+        view.dispatch({
+          changes: { from: now.from, to: now.to, insert: withLineBreaks(view.state, now.insert) },
+          userEvent: "input",
+          scrollIntoView: true,
+        });
+        notify(liveStrings.t(now.regenerate ? "table_chart.rewritten" : "table_chart.written"), "info");
+      },
+    };
   }
 
   /// Rimette il cursore nel testo prima o dopo la tabella. Una tabella in

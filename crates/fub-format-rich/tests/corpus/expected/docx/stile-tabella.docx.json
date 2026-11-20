@@ -1,0 +1,76 @@
+{
+  "file": "docx/stile-tabella.docx",
+  "sha256": "c9edbdeb79448954e920046d09146c875013410cc7befa51beca886dd6a98412",
+  "open": {
+    "readonly": null,
+    "projection": "2cb6f152a5c08735f7b439dca9b54bb3fe7498c73b0b2a56d3c71adb2c132255",
+    "blocks": 5,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 0",
+    "blocchi chiusi: {}; scrittura intera: true",
+    "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "8464d8e8e8328ac8f1a31833f489ada27e24a4a2f4b5b4d24d35c3ecbb39f16b",
+    "words": 52
+  },
+  "export": {
+    "html": [],
+    "txt": [
+      "la copia Testo semplice non porta: 2 tabelle"
+    ],
+    "latex": [],
+    "rtf": [],
+    "odt": [],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E5": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E8": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E9": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E10": "n/a"
+  }
+}

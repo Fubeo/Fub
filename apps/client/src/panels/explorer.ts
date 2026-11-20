@@ -72,7 +72,7 @@ import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { onComponents } from "../state/components";
-import { canShowFile, copyNoteLinks, openDocument, openDocumentBeside } from "../state/document-controller";
+import { canShowFile, copyNoteLinks, openDocument, openDocumentBeside, presentBookExport } from "../state/document-controller";
 import { newNoteInActiveSpace } from "../state/new-note";
 import { mountExplorerTypes, type ExplorerTypes } from "./explorer-types";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
@@ -220,6 +220,15 @@ export function mountExplorer(lifetime: Lifetime): void {
     // Una riga ha già aperto il suo menu.
     if (e.defaultPrevented) return;
     e.preventDefault();
+    // Un contestuale arrivato sulla voce e non sulla sua riga (il tasto Menu
+    // lo manda al `treeitem` a fuoco, un clic sul margine della voce pure) è
+    // della voce: il menu della radice creerebbe fuori dalla cartella
+    // (IMP-144).
+    const item = e.target instanceof Element ? e.target.closest<HTMLElement>('[role="treeitem"][data-path]') : null;
+    if (item && fileListEl.contains(item)) {
+      rowMenuAt(e, item);
+      return;
+    }
     rootMenu(e);
   });
   lifetime.listen(spaceTitleEl, "click", openSpaceNote);
@@ -353,6 +362,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     group: (paths) => groupIntoNewFolder(paths),
     copy: (paths) => copyEntries(paths),
     copyLinks: (paths) => copyNoteLinks(paths),
+    exportPdf: (paths) => presentBookExport(paths, t("pdf_export.book.selection")),
     lifetime,
   });
   lifetime.add(() => {
@@ -1438,8 +1448,21 @@ function openRowMenu(li: HTMLElement): void {
     bubbles: true,
     cancelable: true,
   });
-  if (row.classList.contains("folder")) folderMenu(at, path);
-  else noteMenu(at, row, path);
+  rowMenuAt(at, li);
+}
+
+/// Il contestuale della voce `li` aperto in `at`: lo chiede alla sua riga,
+/// così cartella, nota e allegato aprono il menu del clic destro e non uno
+/// scelto qui. L'evento non risale: l'albero non lo riceve una seconda volta.
+function rowMenuAt(at: MouseEvent, li: HTMLElement): void {
+  const row = li.querySelector<HTMLElement>(":scope > .tree-row");
+  if (!row || !li.dataset.path) return;
+  row.dispatchEvent(new MouseEvent("contextmenu", {
+    clientX: at.clientX,
+    clientY: at.clientY,
+    bubbles: false,
+    cancelable: true,
+  }));
 }
 
 /// Una cartella senza niente dentro: né sottocartelle né file, di nessuna
@@ -1564,6 +1587,7 @@ function folderMenu(at: MouseEvent, path: string): void {
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
       { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
       { label: t("explorer.search_in_folder"), run: () => searchInFolder(path) },
+      { label: t("pane.export_pdf"), run: () => void exportFolderPdf(path) },
       {
         separator: true,
         label: t("explorer.organize"),
@@ -1589,6 +1613,30 @@ function folderMenu(at: MouseEvent, path: string): void {
       ...(pasting ? { clipboard: [{ label: t("explorer.paste"), icon: "template", hint: displayBinding("Mod-v"), run: () => void pasteEntries(path) }] } : {}),
     },
   );
+}
+
+/// Le note di una cartella nell'ordine dell'albero, a ogni profondità: la
+/// pagina della cartella per prima, poi le sottocartelle (ognuna con le sue
+/// note), poi le note, come l'albero le mostra con l'ordine scelto. Si
+/// chiedono tutte, anche quelle delle cartelle chiuse.
+async function notesInTreeOrder(path: string): Promise<string[]> {
+  const content = await folderContent(path, WITHOUT_PAGE);
+  const node = sortContent({ path, ...content }, state.meta, state.explorerSort);
+  const page = folderNoteOf(node, state.handledExtensions, legacyPages);
+  const out: string[] = page ? [page] : [];
+  for (const sub of node.folders) out.push(...(await notesInTreeOrder(sub.path)));
+  for (const id of node.notes) if (id !== page) out.push(id);
+  return out;
+}
+
+/// «Esporta in PDF…» su una cartella (T78): le sue note in un PDF solo, ogni
+/// nota un capitolo.
+async function exportFolderPdf(path: string): Promise<void> {
+  try {
+    await presentBookExport(await notesInTreeOrder(path), path === "" ? t("explorer.root") : childName(path));
+  } catch (error) {
+    notify(t("pdf_export.failed", { reason: errorText(error) }), "guasto");
+  }
 }
 
 /// Il menu «Nuovo» del «+» del titolo, sotto il pulsante: i tipi che si possono

@@ -698,8 +698,9 @@ const NO_DOC: &str = "no_doc";
 /// Il file non è testo (un PDF, un'immagine): non ci sono parole da contare.
 /// È anche la chiave con cui `fub-cli wordcount` riconosce la risposta.
 const NOT_TEXT: &str = "not_text";
-/// Il documento aperto non si legge (vuoto, rovinato, cifrato): le parole non
-/// si contano, e non è un guasto del pannello.
+/// Il documento aperto non si legge (vuoto, rovinato, cifrato): la barra lo
+/// dice una volta, con le parole della scheda, e non parla di parole da
+/// contare (IMP-143). Il perché lo dice la scheda, che lo sa per ogni file.
 const UNREADABLE: &str = "unreadable";
 /// `stats.document` chiamata senza la nota da contare.
 const E_DOC_PARAM: &str = "e_doc_param";
@@ -740,10 +741,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 NOT_TEXT,
                 "Questo file non è testo: non ci sono parole da contare.",
             )
-            .with(
-                UNREADABLE,
-                "Questo documento non si apre: non ci sono parole da contare.",
-            )
+            .with(UNREADABLE, "Questo documento non si apre.")
             .with(E_DOC_PARAM, "Manca la nota da contare.")
             .with(DOC_PARAM, "Documento")
             .with(WORDS_TITLE, "Parole")
@@ -766,10 +764,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 NOT_TEXT,
                 "This file is not text: there are no words to count.",
             )
-            .with(
-                UNREADABLE,
-                "This document does not open: there are no words to count.",
-            )
+            .with(UNREADABLE, "This document can't be opened.")
             .with(E_DOC_PARAM, "The note to count is missing.")
             .with(DOC_PARAM, "Document")
             .with(WORDS_TITLE, "Words")
@@ -1213,7 +1208,12 @@ mod tests {
         assert_eq!(tree.key.as_deref(), Some(UNREADABLE));
         assert_eq!(
             rows(&tree, "en"),
-            vec!["This document does not open: there are no words to count.".to_string()]
+            vec!["This document can't be opened.".to_string()]
+        );
+        assert_eq!(
+            rows(&tree, "it"),
+            vec!["Questo documento non si apre.".to_string()],
+            "la barra dice che il documento non si apre, senza parole da contare (IMP-143)"
         );
     }
 

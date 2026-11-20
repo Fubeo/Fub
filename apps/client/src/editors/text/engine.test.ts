@@ -5,7 +5,7 @@ import { getCM } from "@replit/codemirror-vim";
 import { insertNewlineAndIndent, redoDepth, undoDepth } from "@codemirror/commands";
 import { EditorSelection, EditorState, StateField, Transaction, type Extension } from "@codemirror/state";
 import { findNext, replaceAll, SearchQuery, selectMatches, setSearchQuery } from "@codemirror/search";
-import { createTextEngine, type TextEngine } from "./engine";
+import { createTextEngine, TEXT_HISTORY_DEPTH, type TextEngine } from "./engine";
 import type { EditorChange } from "../core/text-operation";
 import { MAX_FOOTPRINTS, type FootprintState } from "./history-footprints";
 interface TestEditor {
@@ -374,6 +374,35 @@ describe("raggruppamento degli eventi utente", () => {
     expect(ed.getDoc()).toBe("uno");
     expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("");
+  });
+
+  it("annulla fino all'originale anche dopo più di cento passi lenti", () => {
+    // La storia di CodeMirror tiene `minDepth` passi (100 se non le si dice
+    // altro) e oltre butta via i più vecchi senza dirlo: l'annulla non
+    // tornava più al testo aperto.
+    const original = "# Nota\n\ntesto aperto\n";
+    const { ed, view } = editor();
+    ed.setDoc(original);
+    const steps = 300;
+    let clock = 1_000_000;
+    for (let i = 0; i < steps; i++) {
+      // Ogni tasto oltre il `newGroupDelay` dal precedente: un passo a sé.
+      clock += 1_000;
+      const end = view().state.doc.length;
+      view().dispatch({
+        changes: { from: end, insert: "x" },
+        selection: EditorSelection.single(end + 1),
+        userEvent: "input.type",
+        annotations: Transaction.time.of(clock),
+      });
+    }
+    expect(steps).toBeGreaterThan(100);
+    expect(steps).toBeLessThan(TEXT_HISTORY_DEPTH);
+    expect(undoDepth(view().state)).toBe(steps);
+    let undone = 0;
+    while (undone <= steps && ed.undo()) undone += 1;
+    expect(undone).toBe(steps);
+    expect(ed.getDoc()).toBe(original);
   });
 
   it("ripristina la selezione dopo undo e redo", () => {

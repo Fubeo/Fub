@@ -207,14 +207,9 @@ utile è sotto il limite esatto e la shell li usa con `Date`.
 
 ## Errori
 
-La forma conserva:
-
-```text
-kind + message
-```
-
-La shell decide il comportamento da `kind`. `message` è presentabile e può
-essere localizzato, ma non viene analizzato con sottostringhe.
+La forma conserva `kind + message`. La shell decide il comportamento da
+`kind`. `message` è presentabile e può essere localizzato, ma non viene
+analizzato con sottostringhe.
 
 `message` sul filo è sempre una stringa. Dentro l'host un errore può restare
 una chiave del catalogo, perché chi lo riceve in Rust lo riconosce da quella.
@@ -223,28 +218,42 @@ l'errore di una chiamata dell'host lo passa da `Host::localized_error`
 (`for_the_shell` in `fub-app`): una chiave non risolta sul filo è un oggetto,
 non una frase. L'errore di un indice esterno lo risolve il kernel col
 catalogo di chi l'ha scritto (`QueryFailure`), anche nella domanda staccata.
-Se una chiave sfugge lo stesso, `errorText` nel client mostra la frase della
-specie (`error.kind.*`), mai «[object Object]». Un errore nuovo destinato
-all'utente usa una chiave del catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
-letterali per crate e ne impedisce la crescita.
+Un errore nuovo destinato all'utente usa una chiave del catalogo invece di un
+letterale. Il guard `check-error-literals.mjs` conta i letterali per crate e ne
+impedisce la crescita.
+
+### Un errore davanti a chi usa Fub
+
+Nel client la regola è una (`host/errors.ts`): una riga d'errore dice **che
+cosa** non è riuscito e **perché**. Il soggetto lo dà chi chiama, con una sua
+chiave col segnaposto `{reason}`; il motivo lo dà `errorText(e, motivo)`:
+`"messaggio"` (default) per comandi, view e servizi dei componenti, già
+tradotti dal kernel, e per i nostri `Error`; `"specie"` per le primitive
+dell'host su un documento (aprire, creare, rinominare, leggere, ridisegnare,
+cercare) e per la webview. Sceglie chi chiama, non la specie. Una chiave non
+risolta o un oggetto qualsiasi danno la frase della specie, mai «[object
+Object]»; ciò che va solo nel registro tiene il messaggio intero. Un documento
+rifiutato dal provider di formato esce come `trouble` con
+`gate: "format_parse"`: notifica e barra di stato dicono che non si apre, col
+nome, senza la prosa del codec.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
 
 ## Eventi
 
-Gli eventi IPC sono fatti già accaduti. Contengono almeno:
-
-- specie;
-- origine;
-- soggetto;
-- batch, quando presente;
-- payload tipizzato;
-- severità per gli avvisi.
+Gli eventi IPC sono fatti già accaduti. Contengono almeno specie, origine,
+soggetto, batch quando presente, payload tipizzato e severità per gli avvisi.
 
 Una coda può compattare progresso o notifiche ripetute. Il risultato autorevole
 di un'operazione resta nella sua risposta.
 
-Gli avvisi nati prima della shell non si spingono, si tirano con
+Su `fub://evenSu `fub://event` ogni notice è `{ event, origin, vault? }`
+(`fub_host::ShellNotice`). `vault` è la radice canonica del vault del fatto, la
+stessa stringa di `VaultInfo.root`, su tutto ciò che il ponte di una sessione
+consegna, `overflow` compreso; manca, non è `null`, per un fatto della
+macchina. È additivo: chi non lo legge riceve il notice di prima. L'uso:
+[di quale vault è un evento](../architecture/runtime-events-and-jobs.md#di-quale-vault-è-un-evento).
+ti prima della shell non si spingono, si tirano con
 `session_notice`: prima la diagnosi del log, poi gli altri avvisi d'avvio
 (come il percorso di disegno, `Event::Custom` col topic `rendering`, vedi
 [la webview del desktop](../architecture/desktop-webview.md#gli-avvisi)), uno
@@ -269,6 +278,18 @@ Una view può rispondere a un'azione con `ViewUpdate::Custom` di `ns`
 `{ "view": "<id>" }`: la shell apre l'ispettore su quella scheda, o dice che
 non c'è. Non è privilegiato, perché cambia solo quale scheda si guarda; lo usa
 «e altri N» sotto la Struttura per portare ai Collegamenti.
+
+Una domanda prima di un gesto distruttivo è un **nodo** `UiKind::Custom` di
+`ns` `fub.confirm` (`fub_abi::ui::CONFIRM_NS`, costruito da
+`UiNode::confirmation`): il `fallback` è la domanda con i suoi bottoni, il
+payload è `{ "cancel": ActionRef }`, l'azione del «no». La shell disegna il
+`fallback` nella fila del nodo che sostituisce, porta il fuoco al «no» quando
+la domanda compare, preme il «no» con Esc e, quando la domanda sparisce, rende
+il fuoco al nodo con la sua stessa chiave (il bottone che l'ha aperta). Una
+shell che non conosce il `ns` disegna il solo `fallback`. Non è privilegiato.
+La domanda è stato del momento: il provider la tiene in memoria e non nello
+stato di vista, che sopravvive al riavvio. La usano Cronologia, Cestino,
+«Versioni sincronizzate» e «Pubblicazione».
 
 ## Barra di formattazione e azioni dell'editor
 
@@ -378,8 +399,9 @@ PDF aperti sotto una chiave si leggono e non segnano niente; senza la feature
 dell'app, per ogni formato: aprire e salvare un `.docx` legge, proietta e
 misura il pacchetto, e la finestra non si ferma ad aspettarli. L'ordine delle
 scritture di un documento lo tiene la `DocumentSession` della shell, che le
-accoda, e una lettura superata la scarta. Le bozze (`save_draft`,
-`discard_draft`) restano sul thread principale, nell'ordine in cui arrivano.
+accoda, e una lettura superata la scarta. Anche le bozze (`save_draft`,
+`discard_draft`) girano fuori dal thread principale, senza il turno di scrittura,
+in fila nella coda delle bozze della sessione ([Bozze e salvataggio](../architecture/runtime-events-and-jobs.md#bozze-e-salvataggio)).
 
 La forma della proiezione (revisioni, commenti, pagina, oggetti, inchiostri e
 disegni, blocchi chiusi, versioni e schema dei dati opachi) è in

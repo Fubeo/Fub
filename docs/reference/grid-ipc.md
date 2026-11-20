@@ -50,7 +50,11 @@ oggetto non porta ciò che mostra (`too_large`, `unsupported`). La richiesta
 della finestra elenca in `known_media` le impronte che la shell ha già: di
 quelle immagini la finestra porta la chiave senza i byte. Il
 commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
-applicare al buffer della sessione documento.
+applicare al buffer della sessione documento. Il commit non porta i fogli, e
+la shell controlla ogni finestra sulla misura che conosce: `apply` non cambia
+le righe e le colonne dei fogli, neanche quando una formula scritta sotto
+l'ultima riga usata allargherebbe il margine. La misura nuova arriva con il
+primo `GridCommandOutcome`, che porta i fogli, o alla riapertura.
 
 La sessione porta anche il catalogo dei comandi che serve
 (`GridCommandState`: id, acceso, perché è spento). `grid_bytes_commands`

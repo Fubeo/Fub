@@ -13,11 +13,16 @@ import { resolvedLanguage } from "../../../../../../i18n/strings";
 import { iconEl } from "../../../../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry, PropertyWrite } from "../../properties";
-import { saidDay } from "../../dates";
+import { parseDateInput, saidDay } from "../../dates";
+
+// La regola del campo sta con quella di `@`, e la usa anche il promemoria
+// (T36): qui la si riesporta per chi la cercava accanto all'editor.
+export { parseDateInput };
 import { firstWeekday } from "../../../../../../state/dates";
 import { liveStrings } from "../../strings";
 import { freeColor, KIND_ICONS, linkName, linkTo, OPTION_GROUPS, optionsOf, parseNumber, targetOf, validDate, type OptionGroup, type PropertyOption, type RelationTarget, type RowKind } from "./kind";
 import { entryStamp, longDate, optionElement, personElement, relationItems, type PropertyRowHost, type RelationNote, type WriteOutcome } from "./values";
+import { errorText } from "../../../../../../host/errors";
 
 /// Un editor aperto su una chiave: l'impronta che porta alla scrittura.
 interface Session {
@@ -241,25 +246,6 @@ function addMonths(iso: string, months: number): string {
   return isoOf(new Date(first.getFullYear(), first.getMonth(), Math.min(day, last)));
 }
 
-/// Una data scritta nel campo, con la regola di `@` (`saidDay`): «venerdì»,
-/// «fra due settimane», «20 marzo», «3/4», `2026-03-20`, `20/3/2026`. Dopo,
-/// un'ora facoltativa: «venerdì 18:30», «domani alle 9», `2026-03-20T10:30`.
-/// `null` se non è un giorno del calendario o l'ora non è un'ora: niente si
-/// indovina.
-export function parseDateInput(text: string, today: Date = new Date(), firstDay = 1, locale = "it"): { date: string; time: string | null } | null {
-  const value = text.trim();
-  const date = saidDay(value, today, firstDay, locale);
-  if (date !== null) return { date, time: null };
-  const clock = /^(.+?)(?:T|\s+(?:alle ore|alle|ore|at)\s+|\s+)(\d{1,2}):(\d{2})$/iu.exec(value)
-    ?? /^(.+?)\s+(?:alle ore|alle|ore|at)\s+(\d{1,2})(?:\.(\d{2}))?$/iu.exec(value);
-  if (!clock) return null;
-  const day = saidDay(clock[1]!, today, firstDay, locale);
-  const hours = Number(clock[2]);
-  const minutes = Number(clock[3] ?? "0");
-  if (day === null || hours > 23 || minutes > 59) return null;
-  return { date: day, time: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}` };
-}
-
 /// Data, e Data e ora: il campo per scriverla, i giorni vicini, il mese da
 /// sfogliare. Nella griglia ← → cambiano giorno, ↑ ↓ settimana, Pagina su e
 /// giù mese, Inizio e Fine vanno ai capi della settimana; Invio sceglie. Il
@@ -416,7 +402,7 @@ export function openDateEditor(entry: PropertyEntry, kind: "date" | "date_time",
   /// la riga lo segna fuori dal tipo.
   const promote = async (): Promise<void> => {
     if (!host.setType) return;
-    const problem = await host.setType(entry.key, "date_time").catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    const problem = await host.setType(entry.key, "date_time").catch((error: unknown) => errorText(error, "specie"));
     if (problem === null) host.notify?.(liveStrings.t("page.properties.date.with_time", { key: entry.key }), "info");
     else host.notify?.(liveStrings.t("page.properties.type.failed", { key: entry.key, reason: problem }), "guasto");
   };
@@ -930,7 +916,7 @@ export function openRelationEditor(entry: PropertyEntry, anchor: HTMLButtonEleme
     creating = true;
     const made = await port.create(name, target).then(
       (created) => created ?? liveStrings.t("page.properties.relation.create.unknown"),
-      (error: unknown) => error instanceof Error ? error.message : String(error),
+      (error: unknown) => errorText(error, "specie"),
     );
     creating = false;
     if (own.closed) return;
@@ -1123,7 +1109,7 @@ export function openOptionsEditor(entry: PropertyEntry, kind: "select" | "status
     creating = true;
     const color = freeColor(options);
     const group: OptionGroup | null = status ? "todo" : null;
-    const problem = await host.addOption(entry.key, { name, color, group }).catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    const problem = await host.addOption(entry.key, { name, color, group }).catch((error: unknown) => errorText(error, "specie"));
     creating = false;
     if (own.closed) return;
     if (problem !== null) {

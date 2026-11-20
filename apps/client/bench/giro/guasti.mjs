@@ -164,12 +164,14 @@ async function ripara(pagina, porta) {
 
 /// Il testo che il riquadro a fuoco mostra.
 function testoDelRiquadro(pagina) {
-  return pagina.evaluate(() => document.querySelector(".pane.focus .cm-content")?.innerText ?? "");
+  return pagina.evaluate(() => [...document.querySelectorAll(".pane.focus .cm-content")].find((c) => c.getBoundingClientRect().width > 0)?.innerText ?? "");
 }
 
-/// La linguetta attiva del riquadro a fuoco, se ha questo nome.
+/// La linguetta attiva del riquadro a fuoco, se ha questo nome. `:text-is`
+/// prende l'elemento più piccolo col testo: il nome sta in `.tab-name-head`
+/// (e `-tail` quando è lungo), non direttamente in `.tab-name`.
 function aFuoco(nome) {
-  return `.pane.focus .tab[aria-selected="true"] .tab-name:text-is("${nome}")`;
+  return `.pane.focus .tab[aria-selected="true"] :text-is("${nome}")`;
 }
 
 /// Il riquadro la cui linguetta attiva ha questo nome.
@@ -199,7 +201,7 @@ async function apriLaNota(pagina) {
 
 /// Scrive in fondo alla nota del riquadro a fuoco, su una riga nuova.
 async function scriviInFondo(pagina, testo) {
-  await pagina.locator(".pane.focus .cm-content").click();
+  await pagina.locator(".pane.focus .cm-content >> visible=true").first().click();
   await pagina.keyboard.press("Control+End");
   await pagina.keyboard.press("Enter");
   await pagina.keyboard.type(testo);
@@ -298,6 +300,9 @@ function fuoco(pagina) {
       const ok = el.closest(".pane.focus") !== null && el.closest(".cm-editor")?.classList.contains("cm-focused") === true;
       return { ok, testo: true, dove: ok ? "il testo della nota a fuoco" : `il testo di un riquadro non a fuoco (${nome})` };
     }
+    // Il campo del lanciatore tiene il fuoco finché è aperto e non ha cornice:
+    // il segno è il cursore che lampeggia (`skin.css`, `.launcher-input`).
+    if (el.matches(".launcher-input")) return { ok: true, testo: false, dove: "il campo del lanciatore" };
     const visibile = el.matches(":focus-visible");
     const disegnato = anello(el) || anello(el.querySelector(":scope > .tree-row"));
     return { ok: visibile && disegnato, testo: false, dove: `${nome}${visibile ? "" : ", senza :focus-visible"}${disegnato ? "" : ", senza anello"}` };
@@ -588,7 +593,7 @@ const tastieraScrivere = {
   id: "tastiera-scrivere",
   nome: "tastiera (4): scrivere in Live un titolo, una lista e un grassetto",
   async fai(pagina) {
-    if (!(await pagina.isVisible('.pane.focus[data-mode="live_preview"]'))) await dallaPalette(pagina, "passa a live", "Passa a Live");
+    if (!(await pagina.isVisible('.pane.focus[data-mode="live_preview"]'))) await dallaPalette(pagina, "passa a scrittura", "Passa a Scrittura");
     const tasti = pagina.keyboard;
     await tasti.press("Control+End");
     await tasti.press("Enter");
@@ -599,7 +604,7 @@ const tastieraScrivere = {
     await tasti.type(`- ${VOCI[0]}`);
     await tasti.press("Enter");
     await tasti.type(VOCI[1]);
-    await tasti.press("Enter");
+    // Invio sulla voce vuota esce dall'elenco con la riga vuota.
     await tasti.press("Enter");
     await tasti.press("Enter");
     await tasti.type("Una parola in ");
@@ -619,19 +624,17 @@ const tastieraScrivere = {
 };
 
 const MODALITA = [
-  ["blocks", "Blocchi"],
   ["source", "Sorgente"],
   ["reading", "Lettura"],
-  ["live_preview", "Live"],
+  ["live_preview", "Scrittura"],
 ];
 
 const tastieraModalita = {
   id: "tastiera-modalita",
-  nome: "tastiera (5): le quattro modalità, con le scorciatoie e la palette",
+  nome: "tastiera (5): le tre modalità, con le scorciatoie e la palette",
   async fai(pagina, giro) {
     for (const [modo, etichetta] of MODALITA) {
-      if (modo === "blocks") await pagina.keyboard.press("Control+Shift+B");
-      else if (modo === "reading") await pagina.keyboard.press("Control+e");
+      if (modo === "reading") await pagina.keyboard.press("Control+e");
       else await dallaPalette(pagina, `passa a ${etichetta.toLowerCase()}`, `Passa a ${etichetta}`);
       await pagina.waitForSelector(`.pane.focus[data-mode="${modo}"]`);
       await pagina.waitForFunction(
@@ -669,16 +672,15 @@ const tastieraTabella = {
     await aspettaStato(pagina, "salvato");
     await anello(pagina, "messa la tabella");
 
-    // Nei Blocchi: il cursore sull'etichetta, e il blocco sale sopra il
-    // paragrafo con la scorciatoia della maniglia.
+    // La scorciatoia dei vecchi Blocchi resta e porta alla Scrittura, che
+    // ha i Blocchi dentro: il cursore sull'etichetta, e il blocco sale sopra
+    // il paragrafo con la scorciatoia della maniglia.
     await pagina.keyboard.press("Control+Shift+B");
-    await pagina.waitForSelector('.pane.focus[data-mode="blocks"]');
+    await pagina.waitForSelector('.pane.focus[data-mode="live_preview"]');
     await selezionaConLaRicerca(pagina, ETICHETTA);
     await pagina.keyboard.press("Control+Shift+ArrowUp");
     await aspettaStato(pagina, "salvato");
     await giro.foto("blocco-spostato");
-    await dallaPalette(pagina, "passa a live", "Passa a Live");
-    await pagina.waitForSelector('.pane.focus[data-mode="live_preview"]');
   },
   async controlla(pagina, host) {
     const testo = await host.testo(NOTA);

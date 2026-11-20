@@ -113,6 +113,10 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // lavoro e non mentre si lavora, e il comando c'è soltanto dove la
     // superficie dichiara un export.
     ("shell.doc.export", None),
+    // Apre lo spazio «Esporta in PDF» della nota (E28): le pagine come
+    // usciranno, con le regolazioni accanto. **Senza accordo**, come
+    // «Esporta…»; nel menu «…» del riquadro sta accanto a «Stampa».
+    ("shell.doc.export_pdf", None),
     // Il link al titolo o al paragrafo sotto il cursore. **Senza accordo**:
     // si usa ogni tanto, e lo si cerca dalla palette.
     ("shell.doc.copy_anchor_link", None),

@@ -87,7 +87,9 @@ Il campo del pannello dei segnalibri segue la stessa regola, sul nome e sul
 percorso del segnalibro.
 Nella testata del foglio ogni cartella del percorso della nota si preme col
 puntatore: l'albero la apre e la porta in vista. Il nome resta il titolo che
-si rinomina col doppio clic o con F2.
+si rinomina col doppio clic o con F2. Una nota rinominata o spostata, da Fub o
+da un'altra app, resta appuntata col percorso nuovo e tiene la sua icona: la
+scrivania e l'explorer mostrano la stessa appuntata.
 
 ## Cartelle nuove
 
@@ -156,6 +158,11 @@ vault `files.confirm-trash` non è spenta; l'esito offre «Annulla». Una cartel
 trascinata su un'altra, o sul fondo del pannello, ci entra con `folder.rename`, mai
 dentro sé stessa. Prima del comando la shell salva i buffer aperti; le cartelle
 espanse e lo spazio attivo seguono il path nuovo, e l'esito offre «Annulla».
+
+Il menu di una voce dell'albero, cartella, nota o allegato, è lo stesso dalla
+sua riga e dalla voce intera: tasto destro, tasto Menu o Maiusc+F10 sulla voce
+a fuoco. Solo il titolo del pannello e lo spazio sotto l'ultima voce aprono
+il menu della radice, che crea nello spazio attivo.
 
 ## Trascinare
 

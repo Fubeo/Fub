@@ -4,7 +4,15 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RenderedDocument } from "../../host/contract";
-import { printRendered, settlePrint } from "./print-view";
+import { copyRenderedText, mountPrintSurface, printRendered, settlePrint } from "./print-view";
+import { writeClipboardText } from "../../platform/clipboard";
+import { errorText } from "../../host/errors";
+import { t } from "../../i18n/strings";
+
+vi.mock("../../platform/clipboard", async (original) => ({
+  ...(await original<typeof import("../../platform/clipboard")>()),
+  writeClipboardText: vi.fn(async () => {}),
+}));
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -100,5 +108,80 @@ describe("la stampa di una resa montata", () => {
       .rejects.toThrow("resa non montabile");
     expect(print).not.toHaveBeenCalled();
     expect(document.querySelector(".print-host")).toBeNull();
+  });
+});
+
+describe("copiare il testo reso", () => {
+  // Gli appunti che dicono di no arrivano con la prosa inglese del motore
+  // («NotAllowedError…»): la riga dice che cosa non è riuscito e la specie,
+  // nella lingua di chi legge.
+  it("un rifiuto degli appunti dice che cosa non è riuscito, senza la prosa del motore", async () => {
+    const refused = new DOMException("Write permission denied.", "NotAllowedError");
+    vi.mocked(writeClipboardText).mockRejectedValue(refused);
+    const said = await copyRenderedText("ciao").then(() => "", (error: Error) => error.message);
+    expect(said).toBe(t("errors.print.copy_failed", { reason: errorText(refused, "specie") }));
+    expect(said).not.toContain("cannot copy");
+    expect(said).not.toContain("permission denied");
+  });
+});
+
+describe("la resa per la stampa da misurare", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it("ciò che non arriva entro l'attesa diventa un riquadro col nome e «non disegnato»", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const mount = vi.fn((body: HTMLElement) => {
+      body.innerHTML = [
+        '<p data-md-from="0">Testo</p>',
+        '<div class="mermaid-diagram" data-state="loading" data-md-from="10"><span>…</span></div>',
+        '<div class="math-block" data-state="loading"></div>',
+        '<figure data-vault-media="pending" data-vault-id="allegati/grafico%20vendite.png"><img alt=""></figure>',
+        '<img alt="Il porto" src="porto.jpg">',
+        '<img alt="Arrivata" src="ok.png">',
+      ].join("");
+      const [broken, fine] = body.querySelectorAll<HTMLImageElement>(":scope > img");
+      Object.defineProperty(broken, "complete", { configurable: true, value: true });
+      Object.defineProperty(broken, "naturalWidth", { configurable: true, value: 0 });
+      Object.defineProperty(fine, "complete", { configurable: true, value: true });
+      Object.defineProperty(fine, "naturalWidth", { configurable: true, value: 40 });
+      for (const image of body.querySelectorAll("img")) Object.defineProperty(image, "decode", { configurable: true, value: async () => {} });
+      return { ready: Promise.resolve(), dispose: vi.fn() };
+    });
+    const surface = mountPrintSurface(container, { title: "Nota", rendered: { html: "", parts: [] }, mount, limit: 20 });
+    expect(container.querySelector(".print-page h1")?.textContent).toBe("Nota");
+    expect(await surface.settled).toBe(4);
+    const boxes = [...surface.body.querySelectorAll<HTMLElement>(".print-undrawn")];
+    expect(boxes.map((box) => box.querySelector(".print-undrawn-name")?.textContent)).toEqual([
+      t("print.undrawn.diagram"),
+      t("print.undrawn.formula"),
+      "grafico vendite.png",
+      "Il porto",
+    ]);
+    for (const box of boxes) {
+      expect(box.querySelector(".print-undrawn-state")?.textContent).toBe(t("print.undrawn"));
+      expect(box.getAttribute("role")).toBe("img");
+    }
+    expect(boxes[0].getAttribute("aria-label")).toBe(t("print.undrawn.label", { name: t("print.undrawn.diagram") }));
+    // Il riquadro tiene il posto del blocco nel sorgente: l'indice e il clic
+    // sulla pagina lo ritrovano.
+    expect(boxes[0].dataset.mdFrom).toBe("10");
+    expect(surface.body.querySelector("[data-state='loading'], [data-vault-media='pending']")).toBeNull();
+    expect(surface.body.querySelector("img[alt='Arrivata']")).not.toBeNull();
+    surface.dispose();
+    expect(container.children).toHaveLength(0);
+    expect(mount.mock.results[0]!.value.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("senza chi idrata monta l'HTML sanificato; un montaggio che fallisce non lascia niente", async () => {
+    const container = document.createElement("div");
+    const surface = mountPrintSurface(container, { title: "Nota", rendered: { html: "<p>uno</p><script>x()</script>", parts: [] } });
+    expect(await surface.settled).toBe(0);
+    expect(surface.body.innerHTML).toBe("<p>uno</p>");
+    surface.dispose();
+    expect(() => mountPrintSurface(container, { title: "Nota", rendered: { html: "", parts: [] }, mount: () => { throw new Error("no"); } })).toThrow("no");
+    expect(container.children).toHaveLength(0);
   });
 });

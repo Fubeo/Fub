@@ -33,6 +33,7 @@ import { foldedHeading } from "./title";
 import { featuredProperties, propertiesElement, samePageProperties, type PageProperties } from "./featured";
 import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
 import { openTypeChooser, TYPE_KEY, typeIconElement, typeNoticeElement, typeStamp } from "./note-type";
+import { errorText } from "../../../../../host/errors";
 
 export type { PageProperties } from "./featured";
 
@@ -361,7 +362,7 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
       });
     }, (error: unknown) => {
       host.popover?.(false);
-      host.notify?.(error instanceof Error ? error.message : String(error), "guasto");
+      host.notify?.(liveStrings.t("page.type.list_failed", { reason: errorText(error, "specie") }), "guasto");
     });
   } : undefined;
   const notice = typeNoticeElement(data.noteType, {
@@ -451,7 +452,8 @@ function titleField(data: PageData, host: PageHost, root: HTMLElement, life: Lif
     busy = true;
     title.readOnly = true;
     root.setAttribute("aria-busy", "true");
-    const problem = await host.rename(name).catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    const problem = await host.rename(name).catch((error: unknown) =>
+      liveStrings.t("page.rename_failed", { name, reason: errorText(error, "specie") }));
     busy = false;
     root.removeAttribute("aria-busy");
     if (life.closed) return;

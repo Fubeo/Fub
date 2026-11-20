@@ -89,6 +89,10 @@ const SHEET_FULL_GRID = { width: 1308, height: 820 };
 /// prototipo): la misura «700 px» del prototipo di Scrittoio 2, che sul
 /// computer non si può avere.
 const NOTE_NARROW = { width: 800, height: 800 };
+/// La finestra minima del desktop per lo spazio «Esporta in PDF» (il «700 px»
+/// del prototipo è sotto la minima: il pannello sotto le pagine lo guarda la
+/// scena del telefono).
+const EXPORT_NARROW = { width: 800, height: 800 };
 /// La testata della trasclusione viva nel riquadro col fuoco.
 const TRANSCLUSION_HEAD = ".pane.focus .pane-editor .transclusion .transclusion-head";
 /// Il blocco sincronizzato nel riquadro col fuoco.
@@ -286,13 +290,13 @@ export const SCENE = touchLast(onPage("shell", [
   // prestito e la domanda.
   {
     id: "nota-pdf",
-    title: "Una nota con un PDF che ha l'anteprima: la prima pagina, il nome sotto",
+    title: "Una nota con un PDF che ha l'anteprima, in Lettura: la prima pagina, il nome sotto",
     query: "pdf-scena=nota",
     prepare: (page) => openPdfNote(page, true),
   },
   {
     id: "nota-pdf-senza",
-    title: "La stessa nota, il PDF senza anteprima: il link",
+    title: "La stessa nota in Lettura, il PDF senza anteprima: il link",
     query: "pdf-scena=nota-senza",
     prepare: (page) => openPdfNote(page, false),
   },
@@ -571,6 +575,135 @@ export const SCENE = touchLast(onPage("shell", [
     },
     hover: (page) => page.mouse.move(8, 400),
   },
+  // **Lo spazio «Esporta in PDF»** (T70): dal menu «…» del riquadro, le
+  // pagine come usciranno su un fondo neutro, a destra le dieci sezioni
+  // chiuse che dicono ciò che vale, in fondo la banda. A 700 px il pannello
+  // va sotto le pagine; il telefono sta fra le scene di `mobile.html`.
+  // Con Tema e Colori aperte (T71): gli otto temi, gli undici colori con la
+  // riga dell'accento aperta (i tondi, il selettore, il codice), il
+  // contrasto e i due interruttori, come al passo 28 del prototipo.
+  // Con Contenuto e Interruzioni aperte (T74): le righe con le scelte, i
+  // commenti nel margine accanto al loro paragrafo, la tabella a griglia e
+  // il codice coi numeri delle righe, come al passo 29.
+  // Con Caratteri e Pagina aperte (T72): i caratteri di Fub e del vault
+  // (uno chiuso dalla licenza), i cursori, i margini, le guide sulle pagine.
+  ...[
+    ["esporta-pdf", "Lo spazio «Esporta in PDF»: le pagine, le sezioni chiuse, la banda", undefined],
+    ["esporta-pdf-stretta", "Lo spazio «Esporta in PDF» alla finestra minima (800 px): il pannello stretto, senza suggerimento", EXPORT_NARROW],
+    ["esporta-pdf-temi", "Lo spazio «Esporta in PDF» con Tema e Colori aperte, la riga dell'accento aperta", undefined, "temi"],
+    ["esporta-pdf-testata", "Lo spazio «Esporta in PDF» come al profilo «Relazione»: frontespizio, indice coi numeri, sezione e data in testata, due pagine", undefined, "testata"],
+    ["esporta-pdf-caratteri", "Lo spazio «Esporta in PDF» con Caratteri e Pagina aperte: i caratteri del vault, i margini, le guide", undefined, "caratteri"],
+    ["esporta-pdf-contenuto", "Lo spazio «Esporta in PDF» con Contenuto e Interruzioni aperte: commenti nel margine, tabelle a griglia, codice numerato", undefined, "contenuto"],
+  ].map(([id, title, viewport, sections]) => ({
+    id,
+    title,
+    ...(viewport ? { viewport } : {}),
+    ...(sections === "caratteri" ? { query: "esporta-caratteri=1" } : {}),
+    prepare: async (page) => {
+      // In una finestra stretta l'albero è nel cassetto chiuso: la nota si
+      // apre larga, poi la finestra torna com'era (la scena, o lo stato
+      // della conformità).
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+      if (sections === "temi") await openThemeSections(page);
+      if (sections === "caratteri") await openFontSections(page);
+      if (sections === "contenuto") await openContentSections(page);
+      if (sections === "testata") await openFrontSections(page);
+    },
+  })),
+  // **Il menu dei profili** (T79): lo spazio parte da «Relazione», il
+  // predefinito del vault, che ha il segno; i profili con la loro riga, salva
+  // come nuovo, salva, copia, rinomina, i predefiniti
+  // e «Torna al profilo com'era». Anche nella finestra minima.
+  ...[
+    ["esporta-pdf-profili", "Il menu dei profili d'esportazione: i profili del vault, salva, copia, rinomina, predefinito", undefined],
+    ["esporta-pdf-profili-stretta", "Il menu dei profili d'esportazione alla finestra minima (800 px)", EXPORT_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "profili-pdf=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await openNote(page, "Guida/Sintassi di Fub.md");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+      await page.click(".export-space .export-profile");
+      await page.waitForSelector('#context-menu [role=menuitemradio]:has-text("Relazione")');
+      await page.mouse.move(0, 0);
+    },
+  })),
+  // **La sezione Diagrammi** (T75): la nota con un flusso, una formula più
+  // larga della colonna, un diagramma con un errore e uno in Aurora; aperta
+  // la sezione, ai nodi il blu della tavolozza. Sulle pagine il flusso coi
+  // nodi blu, la formula rimpicciolita che lo dice, il riquadro «non
+  // disegnato» col problema. Anche nella finestra minima.
+  ...[
+    ["esporta-pdf-diagrammi", "La sezione Diagrammi dell'esportazione: gli stili, il colore dei nodi dato a mano, il fondo; sulle pagine la formula rimpicciolita e il diagramma non disegnato", undefined],
+    ["esporta-pdf-diagrammi-stretta", "La sezione Diagrammi alla finestra minima (800 px)", EXPORT_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "live=esporta-diagrammi",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      // La disposizione larga prima di aprire la nota: `openLive` legge se
+      // l'albero sta nel cassetto.
+      await page.waitForFunction(() => !document.querySelector("#layout")?.classList.contains("layout-compact"));
+      await openLive(page, [], "top");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+      await openExportDiagrams(page);
+    },
+  })),
+  // **Il clic sulla pagina** (T76): un clic su un paragrafo apre le sue
+  // regolazioni, col blocco contornato; sul diagramma anche il suo stile. La
+  // nota ha `<!-- pagina -->` prima del ritorno, che comincia una pagina sua.
+  ...[
+    ["esporta-pdf-blocco", "Il menu di un paragrafo sulla pagina dell'esportazione: pagina nuova, lascia fuori, Regola, Vai al blocco", undefined, "Prima tappa"],
+    ["esporta-pdf-blocco-diagramma", "Il menu di un diagramma sulla pagina dell'esportazione: con lo stile di quel diagramma", undefined, null],
+    ["esporta-pdf-blocco-stretta", "Il menu di un paragrafo sulla pagina dell'esportazione alla finestra minima (800 px)", EXPORT_NARROW, "Prima tappa"],
+  ].map(([id, title, viewport, text]) => ({
+    id,
+    title,
+    query: "live=esporta-blocchi",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const size = viewport ?? page.viewportSize();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.waitForFunction(() => !document.querySelector("#layout")?.classList.contains("layout-compact"));
+      await openLive(page, [], "top");
+      if (size) await page.setViewportSize(size);
+      await openExportSpace(page);
+      await openExportBlockMenu(page, text);
+    },
+  })),
+  // **Le due voci di oggi** (T80): nel menu «…» di una nota Markdown,
+  // «Esporta ▸» offre l'HTML e «PDF…», che apre lo spazio «Esporta in PDF»
+  // (il vecchio PDF di solo testo non c'è più); «Esporta in PDF…» sta al
+  // posto di «Stampa», che è nella barra dello spazio. Anche nella finestra
+  // minima.
+  ...[
+    ["menu-riquadro-esporta", "Il menu «…» di una nota con «Esporta» aperto: HTML e PDF, che apre lo spazio «Esporta in PDF»", undefined],
+    ["menu-riquadro-esporta-stretta", "Il menu «…» di una nota con «Esporta» aperto, alla finestra minima (800 px)", EXPORT_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "esporta-menu=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await page.click(".pane.focus [data-pane-menu]");
+      await page.locator("#context-menu [role=menuitem]", { has: page.locator(".menu-label", { hasText: /^Esporta$/ }) }).click();
+      await page.waitForSelector(".context-submenu [role=menuitem]");
+      await page.mouse.move(0, 0);
+    },
+  })),
   // **La macchina da scrivere** (T24): accesa nelle Impostazioni › Editor, il
   // cursore sceso con le frecce resta a metà altezza del foglio.
   {
@@ -1533,6 +1666,8 @@ export const SCENE = touchLast(onPage("shell", [
     ["live-24-ripiegabile", "ripiegabile", "La Live con un ripiegabile chiuso e uno aperto con un altro dentro"],
     ["live-25-colonne", "colonne", "La Live con due e tre colonne, a 900 px", [], { width: 900, height: 800 }],
     ["live-27-indice", "indice", "La Live con l'indice dei titoli in cima alla nota"],
+    ["live-28-promemoria", "promemoria", "La Live coi promemoria: le pastiglie blu con l'ora, il giorno se non è oggi, grigia col compito fatto"],
+    ["live-29-promemoria-stretta", "promemoria", "I promemoria nella finestra minima, 800 px", [], { width: 800, height: 800 }],
     ["live-26-colonne-stretta", "colonne", "La Live con le colonne nella finestra minima, 800 px", [], { width: 800, height: 800 }],
   ].map(([id, live, title, keys = [], viewport]) => ({
     id,
@@ -1540,6 +1675,29 @@ export const SCENE = touchLast(onPage("shell", [
     query: `live=${live}`,
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
+  })),
+  // La scelta del promemoria (T36): il clic sulla pastiglia la apre sotto di
+  // lei, coi giorni vicini, il mese col giorno scelto e l'ora; il piede
+  // toglie il promemoria. Ciò che non è un giorno resta scritto e lo dice.
+  ...[
+    ["promemoria-01-scelta", "La scelta del promemoria aperta dalla pastiglia: le parole, i giorni vicini, il mese e l'ora", null],
+    ["promemoria-02-parole", "Le parole nella scelta del promemoria: «Non capisco» per ciò che non è un giorno", "quando capita"],
+  ].map(([id, title, words]) => ({
+    id,
+    title,
+    query: "live=promemoria",
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.locator(".cm-content .cm-fub-reminder").nth(1).click();
+      await page.waitForSelector(".cm-fub-reminder-picker");
+      if (words !== null) {
+        const field = page.locator(".cm-fub-reminder-picker input").first();
+        await field.fill(words);
+        await field.press("Enter");
+        await page.waitForSelector(".cm-fub-reminder-picker .cm-fub-prop-note:not([hidden])");
+      }
+      await page.mouse.move(0, 0);
+    },
   })),
   // La formula che si modifica toccandola (T60, E27): → davanti alla formula
   // in riga apre sotto di lei il riquadro con la formula grande, il cursore
@@ -1583,6 +1741,10 @@ export const SCENE = touchLast(onPage("shell", [
     // copie e il posto; Invio nel blocco va a capo e allinea gli uguali.
     ["formula-19-menu", "formula-toccata", "Il tasto destro su una formula: Modifica, «Copia come» in riga e «Da riga a blocco»", "menu"],
     ["formula-20-allinea", "formula-toccata", "Invio in un blocco $$: un aligned con gli uguali allineati e la riga nuova", "align"],
+    // Scegliere un pezzo e le matrici (T66): Maiusc ← sceglie pezzi interi,
+    // colorati; in una matrice Tab va alla cella dopo, Invio alla riga dopo.
+    ["formula-21-scelta", "formula-toccata", "Maiusc ← nel blocco $$: la radice, il + e x² scelti come pezzi interi", "choose"],
+    ["formula-22-matrice", "formula-toccata", "Una matrice dalla tavolozza: Tab e Invio fra le celle, e dall'ultima riga una riga nuova", "matrix"],
   ].map(([id, live, title, gesture]) => ({
     id,
     title,
@@ -1651,6 +1813,325 @@ export const SCENE = touchLast(onPage("shell", [
         await page.waitForFunction((selector) => getComputedStyle(document.querySelector(selector)).opacity === "1", `${SYNCED_BLOCK} > .transclusion-head`);
       },
     }),
+  })),
+  // Le schede vive nella nota (T41, il prototipo `.scard`, passi 16–18): il
+  // PDF e il foglio a riposo, col nome del file in testata; il foglio attivo,
+  // col bordo d'accento e «Esc per uscire»; in fondo un file mancante e un
+  // formato che la nota non sa mostrare; la stessa nota nella finestra minima.
+  ...[
+    ["schede-vive-01-riposo", "Le schede vive a riposo: il contratto in PDF e il foglio dei conti, col nome del file in testata", "top", null],
+    ["schede-vive-02-attiva", "Il foglio attivo: bordo d'accento, «Esc per uscire», «Apri» e «A tutta pagina»; le lettere e i numeri, e la cella attiva nel gruppo «Foglio» della barra", "top", "sheet", null, "&formatbar=1"],
+    ["schede-vive-03-mancante", "Un file mancante («Ritrova…», «Togli dalla nota») e un formato che la nota non mostra («Apri»)", "bottom", null],
+    ["schede-vive-04-stretta", "Le schede vive nella finestra minima, 800 px", "top", null, NOTE_NARROW],
+    ["schede-vive-05-parte-persa", "Il foglio di cui l'intervallo non c'è più: «Intervallo non trovato: Budget!A1:E7» e «Scegli di nuovo» (T43)", "lost", null],
+    ["schede-vive-06-scelta", "Il foglio scelto coi Blocchi (un clic sulla testata): il filo della selezione lo circonda (T56)", "top", null, null, null, "sheet"],
+  ].map(([id, title, scroll, activate, viewport, extra, choose]) => ({
+    id,
+    title,
+    query: `live=schede-vive&pdf-scena=domanda&workbook=1${extra ?? ""}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], scroll === "bottom" ? "bottom" : "top");
+      await page.waitForFunction(() => {
+        const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
+        return cards.length > 0 && cards.every((card) => card.dataset.cardState !== "loading");
+      });
+      // I fogli hanno letto la loro parte e preso l'altezza delle righe vere.
+      await page.waitForFunction(() => [...document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet')]
+        .every((sheet) => sheet.dataset.cardState === "content" || sheet.dataset.cardState === "lost"));
+      if (scroll === "bottom") {
+        // In fondo con ogni blocco disegnato e misurato (#510): le ultime
+        // schede ci sono di sicuro, anche se lo scorrimento di `openLive` era
+        // arrivato prima che quelle in alto prendessero la loro altezza.
+        await scrollLiveToEnd(page);
+        await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-state="missing"]');
+        const last = '.pane.focus .pane-editor .live-card[data-card-state="unsupported"]';
+        await page.waitForSelector(last);
+        await page.waitForFunction((selector) => {
+          const card = document.querySelector(selector)?.getBoundingClientRect();
+          return card !== undefined && card.bottom <= window.innerHeight;
+        }, last);
+      }
+      if (scroll === "lost") {
+        // La parte persa sta sotto il foglio: la si porta in alto nella vista.
+        const lost = '.pane.focus .pane-editor .live-card .canvas-card-lost';
+        await page.waitForSelector(lost);
+        await page.evaluate((selector) => document.querySelector(selector)?.closest(".live-card")?.scrollIntoView({ block: "center" }), lost);
+      }
+      if (choose) {
+        const card = `.pane.focus .pane-editor .live-card[data-card-kind="${choose}"]`;
+        await page.click(`${card} .live-card-name`);
+        await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+        await expectVeilOnCard(page, card);
+      }
+      if (activate) {
+        const body = `.pane.focus .pane-editor .live-card[data-card-kind="${activate}"] .live-card-body`;
+        await page.click(body);
+        await page.waitForSelector(`.pane.focus .pane-editor .live-card[data-card-kind="${activate}"][data-card-active="true"]`);
+        // La griglia scrive dalla prima cella della parte, e la barra lo dice
+        // (sotto i 760 px la cella non si vede: c'è, senza `hidden`).
+        if (extra) await page.waitForSelector(".format-bar-context .format-bar-context-cell:not([hidden])", { state: "attached" });
+      }
+    },
+  })),
+  // Gli estratti (T49, il prototipo `.scard .act` e `.exc`, passi 17–18): il
+  // foglio dei conti attivo con due righe scelte e «Estrai» d'accento in
+  // testata; dopo «Estrai», l'estratto sotto la scheda; il passo del
+  // contratto scritto come lo scrive Obsidian, una citazione con la fonte e
+  // «Vai alla pagina»; il passo nella finestra minima.
+  ...[
+    ["estratti-01-estrai", "Il foglio attivo con A1:B2 scelte: «Estrai» d'accento in testata", "choose"],
+    ["estratti-02-estratto", "Dopo «Estrai»: l'estratto delle celle scelte sotto la scheda, legato al foglio", "extract"],
+    ["estratti-03-passo", "Un passo del contratto (`#page=1&selection=…`): la citazione con la fonte e «Vai alla pagina»", "passage"],
+    ["estratti-04-stretta", "Il passo nella finestra minima, 800 px", "passage", NOTE_NARROW],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=estratti&pdf-scena=domanda&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const sheet = '.pane.focus .pane-editor .live-card[data-card-kind="sheet"]';
+      const passage = '.pane.focus .pane-editor .live-card[data-card-state="passage"]';
+      await openLive(page, [], "top");
+      await page.waitForSelector(`${sheet} .canvas-card-sheet[data-card-state="content"]`);
+      await page.waitForSelector(`${passage} .live-card-excerpt-go`);
+      if (gesture === "passage") {
+        await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), passage);
+        return;
+      }
+      await page.click(`${sheet} .live-card-body`);
+      await page.waitForSelector(`${sheet}[data-card-active="true"]`);
+      // Due righe e due colonne scelte trascinando, da A1 a B2 (il finto dà
+      // solo le finestre che partono da A1, e l'estratto ci parte).
+      const cell = async (row, column) => {
+        // Le celle dell'editor attivo (`aria-selected`), non quelle ferme sotto.
+        const box = await page.locator(`${sheet} .grid-cell[aria-selected][data-row="${row}"][data-column="${column}"]`).boundingBox();
+        if (!box) throw new Error(`la cella ${row},${column} del foglio non si vede`);
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      };
+      const from = await cell(0, 0);
+      const to = await cell(1, 1);
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 4 });
+      await page.mouse.up();
+      await page.waitForSelector(`${sheet}[data-card-extract="ready"] .live-card-extract`);
+      if (gesture === "extract") {
+        await page.click(`${sheet} .live-card-extract`);
+        await page.waitForFunction(() => document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet[data-card-state="content"]').length === 2);
+        await page.evaluate(() => {
+          const cards = document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"]');
+          cards[1]?.scrollIntoView({ block: "center" });
+        });
+      }
+    },
+  })),
+  // I valori di cella nel testo (T53, il prototipo `.cellv` del paragrafo
+  // `p-conti`): in Scrittura il valore col tratteggio d'accento, i casi limite
+  // (vuota, #DIV/0!, foglio che non c'è, file mancante) e la cella da sola con
+  // `|value`; al passaggio il velo d'accento; in Lettura testo come il resto;
+  // nella finestra minima (i 700 px del prototipo li guarda la conformità).
+  ...[
+    ["valori-cella-01-scrittura", "I valori di cella in Scrittura: 680 su 800, la cella vuota «—», #DIV/0!, il foglio e il file che non ci sono, -120 da solo", "live_preview", null, false],
+    ["valori-cella-02-passaggio", "Il puntatore sul primo valore: il velo d'accento", "live_preview", null, true],
+    ["valori-cella-03-lettura", "I valori di cella in Lettura: testo come il resto, col formato del foglio", "reading", null, false],
+    ["valori-cella-04-stretta", "I valori di cella nella finestra minima, 800 px", "live_preview", NOTE_NARROW, false],
+  ].map(([id, title, mode, viewport, hover]) => ({
+    id,
+    title,
+    query: "live=valori-cella&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const value = mode === "reading"
+        ? '.pane.focus[data-mode="reading"] .markdown-rendered .fub-cell-value'
+        : ".pane.focus .pane-editor .cm-fub-cell-value";
+      if (mode === "reading") await chooseMode(page, "reading");
+      // Ogni valore ha avuto la sua risposta: nessuno è ancora «…».
+      await page.waitForFunction((selector) => {
+        const all = [...document.querySelectorAll(selector)];
+        return all.length >= 6 && all.every((each) => each.dataset.cellState !== undefined && each.dataset.cellState !== "loading");
+      }, value);
+    },
+    ...(hover ? { hover: (page) => page.hover(".pane.focus .pane-editor .cm-fub-cell-value >> nth=0") } : {}),
+  })),
+  // I grafici (T54): il grafico «Vendite» del foglio come scheda, disegnato
+  // da GridCraft e alto quanto la sua proporzione; un grafico che il file non
+  // ha («Intervallo non trovato»); la tabella col recinto Mermaid che
+  // «Grafico da questa tabella» le ha scritto sotto; il menu della tabella
+  // con la voce; la finestra minima.
+  ...[
+    ["grafici-01-scrittura", "Il grafico del foglio come scheda, alto quanto la sua proporzione", "top", false, null],
+    ["grafici-05-perso", "Il fondo del grafico del foglio e, sotto, un grafico che il file non ha", "lost", false, null],
+    ["grafici-02-tabella", "La tabella dei preventivi e la torta scritta dalla tabella", "table", false, null],
+    ["grafici-03-menu", "Il menu della tabella con «Rigenera il grafico dalla tabella»", "table", true, null],
+    ["grafici-04-stretta", "I grafici nella finestra minima, 800 px", "top", false, NOTE_NARROW],
+  ].map(([id, title, scroll, menu, viewport]) => ({
+    id,
+    title,
+    query: "live=grafici&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      // Il grafico ha il suo disegno e la scheda persa il suo avviso.
+      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img');
+      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost');
+      if (scroll === "table") {
+        // La torta si disegna quando entra in vista.
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
+        await page.waitForFunction(() => {
+          const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
+          return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
+        });
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
+      }
+      if (scroll === "lost") {
+        await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .canvas-card-lost")?.closest(".live-card")?.scrollIntoView({ block: "end" }));
+      }
+      // Le violazioni di Mermaid fuori vista: come nelle scene dei diagrammi.
+      await page.evaluate(() => {
+        const found = globalThis.__fubCsp;
+        for (let i = found.length - 1; i >= 0; i--) {
+          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+        }
+      });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      if (menu) {
+        await page.click('.pane.focus .pane-editor .tb-grid [data-row="1"][data-col="0"]', { button: "right" });
+        await page.waitForSelector("#context-menu [role=menuitem]");
+      }
+    },
+  })),
+  // La scheda di documento (T44, il prototipo `.docw`, passo 17): il verbale
+  // in ODT a riposo, in continuo e senza pagine; scelto coi Blocchi (attivo,
+  // poi Esc); attivo, con l'editor dei documenti in Scrittura e la sua barra.
+  // In fondo la relazione di cento pagine, tronca con «Apri».
+  ...[
+    ["scheda-documento-01-riposo", "Il verbale in ODT a riposo: il testo reso in continuo, senza pagine", "top", "rest"],
+    ["scheda-documento-02-scelta", "Il verbale scelto coi Blocchi, dopo Esc", "top", "chosen"],
+    ["scheda-documento-03-attiva", "Il verbale attivo: si scrive nel documento, con la barra dei documenti", "top", "active"],
+    ["scheda-documento-04-lunga", "Un documento di cento pagine: la scheda si ferma e offre «Apri»", "bottom", "rest"],
+    ["scheda-documento-05-stretta", "Il verbale a riposo nella finestra minima, 800 px (T56)", "top", "rest", NOTE_NARROW],
+  ].map(([id, title, scroll, state, viewport]) => ({
+    id,
+    title,
+    query: "live=scheda-documento",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const cards = '.pane.focus .pane-editor .live-card[data-card-kind="document"]';
+      await page.waitForFunction((selector) => {
+        const all = [...document.querySelectorAll(selector)];
+        return all.length === 2 && all.every((card) => card.dataset.cardState === "view");
+      }, cards);
+      if (scroll === "bottom") {
+        await page.waitForSelector(`${cards} .canvas-card-document-more`);
+        await page.evaluate((selector) => document.querySelectorAll(selector)[1]?.scrollIntoView({ block: "end" }), cards);
+      }
+      if (state === "rest") return;
+      await page.click(`.pane.focus .pane-editor .live-card[data-card-kind="document"] .live-card-body`);
+      // Il fuoco nel testo del documento: si scrive lì.
+      await page.waitForSelector(`.pane.focus .pane-editor .live-card[data-card-kind="document"][data-card-active="true"] .rich-content.ProseMirror-focused`);
+      if (state === "active") return;
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(`.pane.focus .pane-editor .live-card[data-card-kind="document"][data-card-chosen="true"]`);
+    },
+  })),
+  // La misura e il posto delle schede (T42, il prototipo `.pair` e la lavagna
+  // a tutta pagina, passo 17): due schede affiancate in un `[!columns]`, una
+  // a tutta pagina e bassa, una come riga; il bordo che si trascina sotto il
+  // puntatore; la stessa nota a 700 px, dove la scheda larga torna nella
+  // colonna.
+  ...[
+    ["schede-misura-01-affiancate", "Il contratto e i conti affiancati in due colonne, sopra i conti a tutta pagina", "top", false],
+    ["schede-misura-02-riga", "I conti bassi col bordo da trascinare sotto il puntatore, e il contratto come riga", "bottom", true],
+    ["schede-misura-03-stretta", "Nella finestra minima le schede affiancate stanno una sotto l'altra, e quella larga torna nella colonna", "wide", false, NOTE_NARROW],
+  ].map(([id, title, scroll, hover, viewport]) => ({
+    id,
+    title,
+    query: "live=schede-misura&pdf-scena=domanda&workbook=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForFunction(() => {
+        const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
+        return cards.length >= 4 && cards.every((card) => card.dataset.cardState !== "loading");
+      });
+      if (scroll === "bottom") {
+        await page.evaluate(() => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        });
+        await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-display="row"]');
+      }
+      if (scroll === "wide") {
+        // La seconda scheda delle colonne in alto, sopra quella larga.
+        await page.evaluate(() => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          const second = document.querySelectorAll(".pane.focus .pane-editor .fub-column > .live-card")[1];
+          if (scroller && second) scroller.scrollTop += second.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 24;
+        });
+      }
+    },
+    ...(hover ? {
+      hover: async (page) => {
+        const sized = '.pane.focus .pane-editor .live-card[data-card-height="set"]';
+        await page.hover(`${sized} .live-card-resize`);
+        await page.waitForSelector(`${sized}[data-card-resizable="true"]`);
+      },
+    } : {}),
+  })),
+  // La scheda PDF (T45, il prototipo `.pdfw` e `.pdfn`, passo 17): il manuale
+  // di quattro pagine del giro, dalla pagina 2 con «2 / 4». A riposo; scelta
+  // (un clic sulla testata, i Blocchi accesi); attiva, col puntatore sopra
+  // (le frecce accanto al numero) e una riga del testo della pagina scelta;
+  // la stessa nota a riposo nella finestra minima (i 700 px del prototipo li
+  // guarda la conformità).
+  ...[
+    ["schede-pdf-01-riposo", "La scheda PDF a riposo: la pagina 2 sulla carta, «2 / 4» sotto", null],
+    ["schede-pdf-02-scelta", "La scheda PDF scelta coi Blocchi: il filo della selezione la circonda", "choose"],
+    ["schede-pdf-03-attiva", "La scheda PDF attiva: bordo d'accento, le frecce accanto al numero, una riga del testo scelta", "activate"],
+    ["schede-pdf-04-stretta", "La scheda PDF nella finestra minima, 800 px: la pagina si stringe con la carta", null, NOTE_NARROW],
+  ].map(([id, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: "live=schede-pdf&giro=editor",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      const card = '.pane.focus .pane-editor .live-card[data-card-kind="pdf"]';
+      await openLive(page, [], "top");
+      await page.waitForSelector(`${card}[data-card-state="view"] .canvas-card-pdf[data-card-state="content"]`);
+      await page.waitForFunction((selector) => document.querySelector(`${selector} .canvas-card-pdf-status`)?.textContent === "2 / 4", card);
+      // La scheda intera in vista, col numero sotto la pagina.
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+      if (gesture === "choose") {
+        await page.click(`${card} .live-card-name`);
+        await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+        await expectVeilOnCard(page, card);
+      }
+      if (gesture === "activate") {
+        await page.click(`${card} .live-card-body`);
+        await page.waitForSelector(`${card}[data-card-active="true"]`);
+        // Il clic ha portato il puntatore sulla scheda, che ha steso il testo;
+        // se ne sceglie la seconda riga, come farebbe un trascinamento.
+        await page.waitForSelector(`${card} .canvas-card-pdf-text span`);
+        await page.evaluate((selector) => {
+          const pieces = [...document.querySelectorAll(`${selector} .canvas-card-pdf-text span`)];
+          const line = pieces.find((piece) => piece.textContent.startsWith("Una nota"));
+          if (!line) throw new Error("la pagina 2 del manuale non ha la sua riga");
+          const range = document.createRange();
+          range.selectNodeContents(line);
+          getSelection().removeAllRanges();
+          getSelection().addRange(range);
+        }, card);
+      }
+    },
+    ...(gesture === "activate" ? {
+      hover: async (page) => {
+        // Sulla scheda attiva il testo sta sopra la pagina e prende il puntatore.
+        await page.hover('.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-text');
+      },
+    } : {}),
   })),
   // La riga dei suggerimenti (T14): al centro della banda, i tasti per ciò che
   // si sta facendo. Una parola scelta a 1280 px; un blocco scelto nella
@@ -2192,6 +2673,38 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForSelector(".kit-dialog");
     },
   },
+  {
+    id: "dialog-long",
+    title: "Un dialogo lungo si apre in cima: il fuoco sull'azione in fondo non lo fa scorrere",
+    prepare: async (page) => {
+      // Il dialogo del kit con un corpo più alto della finestra e le azioni in
+      // fondo: è il caso in cui il fuoco iniziale trascinava la vista a metà.
+      await page.evaluate(async () => {
+        const { openDialog } = await import("/src/kit/dialog.ts");
+        const { openLifetime } = await import("/src/ui/lifetime.ts");
+        const list = document.createElement("ol");
+        for (let step = 1; step <= 60; step++) {
+          const item = document.createElement("li");
+          item.textContent = `Passo ${step}: imposta la proprietà «stato» della nota a «letta».`;
+          list.append(item);
+        }
+        openDialog({
+          title: "Accendere la ricetta «Segna come letta»?",
+          description: "Ecco i passi che farà, dall'inizio alla fine.",
+          body: list,
+          actions: [
+            { id: "later", label: "Non ora", value: false },
+            { id: "adopt", label: "Accendi", kind: "primary", value: true },
+          ],
+          dismissValue: false,
+          lifetime: openLifetime(),
+        });
+      });
+      await page.waitForSelector('.kit-dialog [data-action="adopt"]:focus');
+      const top = await page.$eval(".kit-dialog", (dialog) => dialog.scrollTop);
+      if (top !== 0) throw new Error(`il dialogo lungo si apre scorso di ${top} px`);
+    },
+  },
   // Il lanciatore: una superficie sola, e una foto per ciò che cambia da un
   // modo all'altro. Si apre sempre dalla pillola, che è la strada che non
   // dipende da un accordo riconfigurabile; il modo lo sceglie il prefisso
@@ -2431,6 +2944,104 @@ export const SCENE = touchLast(onPage("shell", [
       document.activeElement?.id === "avvio-riprova",
     prepare: async () => {},
   },
+  // La scheda di disegno (T46, ADR 0248; la riga «Disegno .svg» del passo 17
+  // del prototipo): la pianta del soggiorno a riposo, il disegno fermo;
+  // scelta coi Blocchi (attiva, poi Esc); attiva, con la penna, le forme e il
+  // testo in una fila sopra il foglio; attiva nella finestra minima. Sotto,
+  // il logo fatto altrove resta un'immagine ferma.
+  ...[
+    ["scheda-disegno-01-riposo", "La pianta a riposo: il disegno fermo, e sotto un SVG fatto altrove", "rest"],
+    ["scheda-disegno-02-scelta", "La pianta scelta coi Blocchi, dopo Esc", "chosen"],
+    ["scheda-disegno-03-attiva", "La pianta attiva: la penna, le forme e il testo in una fila sopra il foglio", "active"],
+    ["scheda-disegno-04-attiva-stretta", "La pianta attiva nella finestra minima: gli strumenti scorrono di lato", "active", NOTE_NARROW],
+  ].map(([id, title, state, viewport]) => ({
+    id,
+    title,
+    query: "live=scheda-disegno",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const cards = '.pane.focus .pane-editor .live-card[data-card-kind="drawing"]';
+      // Le due schede mostrano il loro disegno: la pianta di Fub, il logo estraneo.
+      await page.waitForFunction((selector) => {
+        const all = [...document.querySelectorAll(selector)];
+        return all.length === 2 && all.every((card) => card.dataset.cardState === "view" && card.querySelector(".canvas-card-drawing[data-card-drawing] img.canvas-card-picture")?.complete === true);
+      }, cards);
+      // La pianta intera nella vista, col testo prima e dopo.
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), cards);
+      if (state === "rest") return;
+      await page.click(`${cards} .live-card-body`);
+      await page.waitForSelector(`${cards}[data-card-active="true"] .canvas-card-drawing-editor:not([hidden]) .draw-surface`);
+      if (state === "active") return;
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(`${cards}[data-card-chosen="true"]`);
+    },
+  })),
+  // La zona lavagna (T47, il passo 18 del prototipo): il percorso della
+  // visita a riposo, tutto nella scheda; scelto coi Blocchi (attivo, poi
+  // Esc); attivo, la lavagna vera con la barra della selezione e senza la
+  // colonna degli strumenti; attivo nella finestra minima.
+  ...[
+    ["scheda-lavagna-01-riposo", "Il percorso della visita a riposo: tutta la lavagna nella scheda", "rest"],
+    ["scheda-lavagna-02-scelta", "Il percorso scelto coi Blocchi, dopo Esc", "chosen"],
+    ["scheda-lavagna-03-attiva", "Il percorso attivo: le schede si spostano, senza la colonna degli strumenti", "active"],
+    ["scheda-lavagna-04-attiva-stretta", "Il percorso attivo nella finestra minima", "active", NOTE_NARROW],
+  ].map(([id, title, state, viewport]) => ({
+    id,
+    title,
+    query: "live=scheda-lavagna",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const card = '.pane.focus .pane-editor .live-card[data-card-kind="canvas"]';
+      // La lavagna a riposo mostra le sue quattro schede.
+      await page.waitForFunction((selector) => {
+        const root = document.querySelector(selector);
+        return root?.dataset.cardState === "view"
+          && root.querySelector('.canvas-card-board[data-card-board="board"]') !== null
+          && root.querySelectorAll(".canvas-card-board-rest .canvas-node").length === 4;
+      }, card);
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+      if (state === "rest") return;
+      await page.click(`${card} .live-card-body`);
+      await page.waitForFunction((selector) => {
+        const writer = document.querySelector(`${selector}[data-card-active="true"] .canvas-card-board-editor:not([hidden])`);
+        return writer !== null && writer.querySelectorAll(".canvas-node").length === 4;
+      }, card);
+      if (state === "active") return;
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+    },
+  })),
+  // La scheda di un file Craft nella nota (T56): il logo dello studio di
+  // VectorCraft, con le anteprime fatte dalle app spente (`craft-scheda`),
+  // a riposo, scelta, attiva e nella finestra minima.
+  ...[
+    ["scheda-craft-01-riposo", "Il logo di VectorCraft a riposo: il nome, la riga dei dati, perché l'anteprima manca, «Apri» e «Apri con…»", "rest"],
+    ["scheda-craft-02-scelta", "Il logo di VectorCraft scelto coi Blocchi (un clic sulla testata)", "chosen"],
+    ["scheda-craft-03-attiva", "Il logo di VectorCraft attivo: bordo d'accento e «Esc per uscire»", "active"],
+    ["scheda-craft-04-stretta", "Il logo di VectorCraft a riposo nella finestra minima, 800 px", "rest", NOTE_NARROW],
+  ].map(([id, title, state, viewport]) => ({
+    id,
+    title,
+    query: "live=scheda-craft&craft-scheda=spente",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      const card = '.pane.focus .pane-editor .live-card[data-card-kind="craft"]';
+      await page.waitForSelector(`${card}[data-card-state="view"]`);
+      await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+      if (state === "chosen") {
+        await page.click(`${card} .live-card-name`);
+        await page.waitForSelector(`${card}[data-card-chosen="true"]`);
+        await expectVeilOnCard(page, card);
+      }
+      if (state === "active") {
+        await page.click(`${card} .live-card-body`);
+        await page.waitForSelector(`${card}[data-card-active="true"]`);
+      }
+    },
+  })),
 ]).concat(
   // **Il kit** (`bench/kit.html`): le primitive di `src/kit/` vestite dalla
   // stessa serie. Stanno in questo elenco perché sono la stessa pelle e le
@@ -2501,6 +3112,72 @@ export const SCENE = touchLast(onPage("shell", [
   // dal basso, la barra di formattazione sta sopra la tastiera. La finestra è
   // quella di un telefono in piedi; l'ultima scena lo sdraia.
   onPage("mobile", [
+    // Le schede vive nella nota sul telefono (T56), una scena per specie a
+    // riposo: il foglio e il PDF (con il file mancante e il formato senza
+    // vista sotto), il contratto di quattro pagine, il verbale, la pianta,
+    // la zona lavagna e il file Craft.
+    ...[
+      ["mobile-schede-vive", "Il telefono: il contratto e i conti come schede vive", "live=schede-vive&pdf-scena=domanda&workbook=1"],
+      ["mobile-schede-mancante", "Il telefono: un file mancante e un formato che la nota non mostra", "live=schede-vive&pdf-scena=domanda&workbook=1", "unsupported"],
+      ["mobile-scheda-pdf", "Il telefono: la scheda PDF, dalla pagina 2", "live=schede-pdf&giro=editor", "pdf"],
+      ["mobile-scheda-documento", "Il telefono: il verbale in ODT a riposo", "live=scheda-documento", "document"],
+      ["mobile-scheda-disegno", "Il telefono: la pianta a riposo", "live=scheda-disegno", "drawing"],
+      ["mobile-scheda-lavagna", "Il telefono: il percorso della visita a riposo", "live=scheda-lavagna", "canvas"],
+      ["mobile-scheda-craft", "Il telefono: il logo di VectorCraft senza anteprima", "live=scheda-craft&craft-scheda=spente", "craft"],
+    ].map(([id, title, query, focus]) => ({
+      id,
+      title,
+      query,
+      viewport: PHONE,
+      prepare: async (page) => {
+        await openLive(page, [], "top");
+        await page.waitForFunction(() => {
+          const cards = [...document.querySelectorAll(".pane.focus .pane-editor .live-card")];
+          return cards.length > 0 && cards.every((card) => card.dataset.cardState !== "loading")
+            && [...document.querySelectorAll(".pane.focus .pane-editor .canvas-card-sheet")]
+              .every((sheet) => sheet.dataset.cardState === "content" || sheet.dataset.cardState === "lost");
+        });
+        if (!focus) return;
+        if (focus === "unsupported") {
+          // Le schede sopra hanno preso la loro altezza: si va in fondo, dove
+          // CodeMirror monta le ultime, con ogni blocco misurato (#510).
+          await scrollLiveToEnd(page);
+        }
+        const card = focus === "unsupported"
+          ? '.pane.focus .pane-editor .live-card[data-card-state="unsupported"]'
+          : `.pane.focus .pane-editor .live-card[data-card-kind="${focus}"]`;
+        await page.waitForSelector(card);
+        // Il PDF ha la sua pagina sulla carta prima della foto.
+        if (focus === "pdf") await page.waitForSelector(`${card} .canvas-card-pdf[data-card-state="content"]`);
+        if (focus !== "unsupported") {
+          await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+          return;
+        }
+        // Le schede sopra crescono anche dopo il salto: si riporta la scheda
+        // in fondo a ogni fotogramma finché altezza e posto restano gli
+        // stessi per dieci fotogrammi di fila (prima la foto cambiava di
+        // corsa in corsa).
+        await page.waitForFunction((selector) => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          const target = document.querySelector(selector);
+          if (!scroller || !target) return false;
+          target.scrollIntoView({ block: "end" });
+          const firma = `${scroller.scrollHeight}:${scroller.scrollTop}:${Math.round(target.getBoundingClientRect().bottom)}`;
+          const fermo = window.__finoFirma === firma ? (window.__finoFermo ?? 0) + 1 : 0;
+          window.__finoFirma = firma;
+          window.__finoFermo = fermo;
+          return fermo >= 10;
+        }, card, { polling: "raf" });
+      },
+    })),
+    // Lo spazio «Esporta in PDF» (T70) sul telefono: la prima forma, col
+    // pannello sotto le pagine.
+    {
+      id: "mobile-esporta-pdf",
+      title: "Il telefono: lo spazio «Esporta in PDF», col pannello sotto le pagine",
+      viewport: PHONE,
+      prepare: (page) => openExportSpace(page),
+    },
     // La formula in riga toccata (T60) sul telefono: il riquadro non esce
     // dallo schermo.
     {
@@ -2518,6 +3195,16 @@ export const SCENE = touchLast(onPage("shell", [
       query: "live=formula-toccata",
       viewport: PHONE,
       prepare: (page) => touchFormula(page, "palette"),
+    },
+    // Al tocco (T66): il dito porta il cursore nella formula, la tavolozza
+    // sta sotto e dice «Tocca», nessun velo di passaggio.
+    {
+      id: "mobile-formula-tocco",
+      title: "Al tocco: il dito porta il cursore sotto la radice, la tavolozza sotto la formula",
+      query: "live=formula-toccata",
+      viewport: PHONE,
+      touch: true,
+      prepare: (page) => touchFormula(page, "touch"),
     },
     // La testata della pagina (T6) sul telefono: la copertina bassa, le
     // colonne delle proprietà strette.
@@ -2956,6 +3643,170 @@ async function openDocumentWindow(page) {
 }
 
 /// Mette ogni scena sulla sua pagina: è dell'elenco, non di ciascuna voce.
+/// Apre lo spazio «Esporta in PDF» dal menu «…» del riquadro col fuoco e
+/// aspetta che l'impaginazione sia finita: la banda dice le pagine e i
+/// fogli visibili hanno le loro fasce.
+async function openExportSpace(page) {
+  await page.click(".pane.focus [data-pane-menu]");
+  await page.click('#context-menu [role=menuitem]:has-text("Esporta in PDF")');
+  await page.waitForSelector(".export-space .export-band-pages");
+  await page.waitForFunction(() => {
+    const pages = document.querySelector(".export-space .export-band-pages")?.textContent ?? "";
+    return /^\d/.test(pages) && document.querySelector(".export-space .export-slot .export-fascia") !== null;
+  }, null, { timeout: 15_000 });
+  // L'entrata dello spazio è finita, e il puntatore non sta su un controllo.
+  await page.waitForFunction(() => document.querySelector(".export-space")?.getAnimations().length === 0);
+  await page.mouse.move(0, 0);
+}
+
+/// Il clic su un blocco delle pagine dello spazio «Esporta in PDF» (T76): la
+/// fascia che ha `text`, o quella del diagramma se `text` è `null`; aspetta il
+/// menu aperto col blocco contornato.
+async function openExportBlockMenu(page, text) {
+  // La nota ha un diagramma: disegnato nella resa misurata e sulla pagina.
+  await page.waitForFunction(() => {
+    const drawn = [...(document.querySelector(".export-measure")?.querySelectorAll(".mermaid-diagram") ?? [])];
+    return drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
+      && document.querySelector(".export-space .export-fascia .mermaid-diagram img") !== null;
+  }, null, { timeout: 15_000 });
+  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
+  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
+  await page.evaluate(() => {
+    const found = globalThis.__fubCsp;
+    for (let i = found.length - 1; i >= 0; i--) {
+      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+    }
+  });
+  const band = text === null
+    ? page.locator(".export-space .export-fascia:has(.mermaid-diagram)").first()
+    : page.locator(".export-space .export-fascia", { hasText: text }).first();
+  await band.scrollIntoViewIfNeeded();
+  const box = await band.boundingBox();
+  if (!box) throw new Error("la fascia del blocco non si vede");
+  await page.mouse.click(box.x + Math.min(box.width / 2, 120), box.y + box.height / 2);
+  await page.waitForSelector("#context-menu [role^=menuitem]");
+  await page.waitForSelector(".export-space .export-fascia.is-selected");
+}
+
+/// Apre la sezione Diagrammi dello spazio «Esporta in PDF», apre la riga dei
+/// nodi e sceglie il blu della tavolozza (`#1f4f8f`); aspetta che la resa
+/// rimontata sia di nuovo impaginata, coi diagrammi disegnati.
+async function openExportDiagrams(page) {
+  await page.click('.export-section[data-section="diagrammi"] .export-section-head');
+  await page.waitForSelector(".export-dg-styles");
+  await page.click("#export-dg-color-diagramma-nodi");
+  await page.click("#export-dg-ink-diagramma-nodi-1f4f8f");
+  await page.waitForSelector("#export-dg-reset-diagramma-nodi");
+  await page.waitForFunction(() => {
+    const pages = document.querySelector(".export-space .export-band-pages")?.textContent ?? "";
+    const host = document.querySelector(".export-measure");
+    const drawn = [...(host?.querySelectorAll(".mermaid-diagram") ?? [])];
+    return /^\d/.test(pages) && drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
+      && document.querySelector(".export-space .export-slot .export-fascia") !== null;
+  }, null, { timeout: 15_000 });
+  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
+  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
+  await page.evaluate(() => {
+    const found = globalThis.__fubCsp;
+    for (let i = found.length - 1; i >= 0; i--) {
+      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
+    }
+  });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// Apre le sezioni Tema e Colori dello spazio «Esporta in PDF» e la riga
+/// dell'accento, poi porta il pannello in cima.
+async function openThemeSections(page) {
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-section[data-section="colori"] .export-section-head');
+  await page.click("#export-color-accento");
+  await page.waitForSelector("#export-color-palette-accento");
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Apre Caratteri e Pagina (T72) e aspetta i caratteri del vault caricati,
+/// coi pulsanti scritti nel loro carattere.
+async function openFontSections(page) {
+  await page.click('.export-section[data-section="caratteri"] .export-section-head');
+  await page.waitForSelector('.export-font[data-vault="Caratteri/Macchina.woff2"]');
+  await page.click('.export-section[data-section="pagina"] .export-section-head');
+  await page.waitForSelector(".export-doc[data-guides=true] .export-guide");
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Apre le sezioni Contenuto e Interruzioni, sceglie i commenti nel margine,
+/// le tabelle a griglia e il codice numerato, aspetta le pagine rifatte e
+/// porta in vista la pagina coi commenti e la sezione Contenuto.
+async function openContentSections(page) {
+  await page.click('.export-section[data-section="contenuto"] .export-section-head');
+  await page.click('.export-section[data-section="interruzioni"] .export-section-head');
+  await page.click("#export-content-comments-margine");
+  await page.click("#export-content-tables-griglia");
+  await page.click("#export-content-code");
+  await page.waitForFunction(() => {
+    const pages = document.querySelector(".export-space .export-band-pages")?.textContent ?? "";
+    return /^\d/.test(pages) && document.querySelector(".export-space .export-page .export-comment-placed") !== null;
+  }, null, { timeout: 15_000 });
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    const section = document.querySelector('.export-section[data-section="contenuto"]');
+    if (side && section instanceof HTMLElement) side.scrollTop = section.offsetTop - side.offsetTop;
+    const note = document.querySelector(".export-space .export-page .export-comment-placed");
+    const stage = document.querySelector(".export-stage");
+    if (note && stage) {
+      const top = note.getBoundingClientRect().top - stage.getBoundingClientRect().top + stage.scrollTop;
+      stage.scrollTop = Math.max(0, top - 160);
+    }
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Porta lo spazio «Esporta in PDF» dove sta il passo 29 del prototipo (il
+/// profilo «Relazione per il Comune»): tema Relazione, frontespizio e indice,
+/// in testata la sezione a sinistra e il titolo a destra, nel piè la data a
+/// sinistra e «pagina di pagine» a destra; le sezioni Frontespizio e Testata
+/// aperte, due pagine affiancate (T73).
+async function openFrontSections(page) {
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-theme[data-theme="relazione"]');
+  await page.click('.export-section[data-section="tema"] .export-section-head');
+  await page.click('.export-section[data-section="fronte"] .export-section-head');
+  await page.click("#export-front-cover");
+  await page.click("#export-front-toc");
+  await page.click('.export-section[data-section="testata"] .export-section-head');
+  for (const [slot, label] of [["sopra-sinistra", "Sezione"], ["sotto-sinistra", "Data"], ["sotto-centro", "Niente"], ["sotto-destra", "Pagina di pagine"]]) {
+    await page.click(`#export-header-${slot}`);
+    await page.click(`#context-menu [role=menuitemradio]:has-text("${label}")`);
+    await page.waitForSelector("#context-menu", { state: "detached" });
+  }
+  // Sotto i 760 px le viste non ci sono (la finestra della conformità a 700).
+  if (await page.isVisible('.export-segment[data-view="due"]')) await page.click('.export-segment[data-view="due"]');
+  await page.waitForSelector(".export-space .export-cover-title");
+  await page.waitForSelector(".export-space .export-toc-row");
+  // L'indice ha i numeri veri quando l'impaginazione è finita.
+  await page.waitForFunction(() => [...document.querySelectorAll(".export-space .export-toc-page")].every((node) => /^\d+$/.test(node.textContent ?? "")), null, { timeout: 15_000 });
+  await page.evaluate(() => {
+    const side = document.querySelector(".export-side");
+    if (side) side.scrollTop = 0;
+    const stage = document.querySelector(".export-stage");
+    if (stage) stage.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.mouse.move(0, 0);
+}
 /// Le scene che soltanto il banco dei gesti apre (`bench/grid-gestures.mjs`):
 /// non hanno una foto di riferimento né un passaggio del banco
 /// dell'accessibilità, e le baseline restano tutte quelle di `SCENE`.
@@ -3191,6 +4042,30 @@ async function openNote(page, path) {
 /// il caso dice e scrive i tasti della scena (`@Invio` è un tasto, il resto
 /// testo). Senza cursore la nota si guarda dall'alto e senza fuoco; `scroll`
 /// dice se dall'alto o dal fondo.
+/// Il velo della selezione di blocchi copre la scheda scelta bordo per bordo,
+/// e le righe sotto le schede stanno dove CodeMirror le misura (IMP-155): i
+/// margini della scheda gli sfuggivano, e il velo saliva di 18 px.
+async function expectVeilOnCard(page, card) {
+  await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-mark");
+  const wrong = await page.evaluate(async (selector) => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const chosen = document.querySelector(selector).getBoundingClientRect();
+    const mark = document.querySelector(".pane.focus .pane-editor .cm-fub-block-mark").getBoundingClientRect();
+    const out = [];
+    if (Math.abs(mark.top - chosen.top) > 0.5 || Math.abs(mark.bottom - chosen.bottom) > 0.5) {
+      out.push(`velo ${mark.top}–${mark.bottom}, scheda ${chosen.top}–${chosen.bottom}`);
+    }
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    for (const line of document.querySelectorAll(".pane.focus .pane-editor .cm-fub-live-card-slot + .cm-line")) {
+      const measured = view.lineBlockAt(view.posAtDOM(line)).top + view.documentTop;
+      const seen = line.getBoundingClientRect().top;
+      if (Math.abs(measured - seen) > 0.5) out.push(`riga sotto una scheda misurata a ${measured}, vista a ${seen}`);
+    }
+    return out.join("; ");
+  }, `${card}[data-card-chosen="true"]`);
+  if (wrong) throw new Error(`il velo non sta sulla scheda: ${wrong}`);
+}
+
 async function openLive(page, keys, scroll, mode = "live_preview") {
   const doc = await page.evaluate(() => globalThis.__fubLiveBench?.doc ?? null);
   if (doc === null) throw new Error("la pagina non ha la nota della Live");
@@ -3270,6 +4145,88 @@ async function touchFormula(page, gesture) {
     if (!/\\begin\{aligned\}[\s\S]*&=\s*y\s*\\end\{aligned\}/.test(doc)) throw new Error(`Invio nel blocco non allinea: ${doc}`);
     await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
     await page.mouse.move(0, 0);
+    return;
+  }
+  if (gesture === "choose" || gesture === "matrix" || gesture === "touch") {
+    // Scegliere un pezzo, le matrici, il tocco (T66), nel blocco $$.
+    const cdp = gesture === "touch" ? await touchOn(page) : null;
+    if (cdp && (await page.evaluate(() => matchMedia("(hover: hover)").matches))) throw new Error("il tocco emulato non ha tolto il passaggio");
+    await openLive(page, [], "top");
+    const centre = async (selector, fy = 0.5, fx = 0.5) => {
+      const box = await page.locator(selector).first().boundingBox();
+      if (!box) throw new Error(`la formula non ha ${selector}`);
+      return { x: box.x + box.width * fx, y: box.y + box.height * fy };
+    };
+    if (cdp) {
+      // Un tocco sulla formula la apre; il dito, poi, porta il cursore dal
+      // numeratore fin sotto la radice, senza scegliere niente.
+      const tap = async (point) => {
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      };
+      await tap(await centre(".cm-content .math-block .mfrac", 0.2));
+      await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+      const from = await centre(".cm-fub-mx-block .mfrac", 0.2);
+      const to = await centre(".cm-fub-mx-block .sqrt", 0.5, 0.7);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [from] });
+      for (let step = 1; step <= 8; step++) {
+        const point = { x: from.x + ((to.x - from.x) * step) / 8, y: from.y + ((to.y - from.y) * step) / 8 };
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      if ((await said()) !== "sotto la radice") throw new Error(`il dito non porta il cursore sotto la radice: ${await said()}`);
+      if (await page.locator(".cm-fub-mx-block [data-fubsel]").count()) throw new Error("il dito ha scelto un pezzo");
+      // La tavolozza sotto la formula, con l'invito al tocco.
+      await page.waitForSelector(".cm-fub-mx-block .cm-fub-mx-palette .cm-fub-mx-quick .cm-fub-mx-tile .katex");
+      const tip = await page.locator(".cm-fub-mx-block .cm-fub-mx-tip").textContent();
+      if (tip !== "Tocca un simbolo per metterlo nella formula") throw new Error(`l'invito della tavolozza non è quello del tocco: ${tip}`);
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      return;
+    }
+    const box = await page.locator(".cm-content .math-block").first().boundingBox();
+    if (!box) throw new Error("manca il blocco $$");
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    await page.keyboard.press("End");
+    if (gesture === "choose") {
+      // Maiusc ← tre volte: la radice, il +, poi x con il suo esponente.
+      for (let i = 0; i < 3; i++) await page.keyboard.press("Shift+ArrowLeft");
+      const picked = await page.waitForSelector(".cm-fub-mx-block [data-fubsel] .sqrt", { timeout: 5000 }).then(() => true, () => false);
+      if (!picked) {
+        const seen = await page.evaluate(() => {
+          const mx = document.querySelector(".cm-fub-mx-block");
+          return `scelta=${mx?.dataset.chosen} segni=${mx?.querySelectorAll("[data-fubsel]").length} detto=${mx?.querySelector("[role=status]")?.textContent} fuoco=${document.activeElement?.className}`;
+        });
+        throw new Error(`Maiusc ← non sceglie la radice: ${seen}`);
+      }
+      await page.waitForSelector(".cm-fub-mx-block [data-fubsel] .msupsub");
+      if (await page.locator(".cm-fub-mx-block [data-fubsel] .mfrac").count()) throw new Error("la scelta ha preso anche la frazione");
+      if ((await said()) !== "pezzo scelto") throw new Error(`la scelta non si dice: ${await said()}`);
+    } else {
+      // Una matrice dalla tavolozza: Tab passa alla cella dopo, Invio alla
+      // riga dopo e, dall'ultima, ne aggiunge una.
+      await page.keyboard.type("+");
+      await page.click(".cm-fub-mx-block .cm-fub-mx-all");
+      await page.click(".cm-fub-mx-block .cm-fub-mx-find-input");
+      await page.keyboard.type("matrice");
+      await page.click('.cm-fub-mx-block .cm-fub-mx-grid .cm-fub-mx-tile[aria-label="Matrice 2 per 2"]');
+      await page.waitForSelector(`.cm-fub-mx-block ${ready} [data-fubhole]`);
+      await page.keyboard.type("1");
+      await page.keyboard.press("Tab");
+      await page.keyboard.type("0");
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("1");
+      await page.keyboard.press("Enter");
+      if ((await said()) !== "riga 3, colonna 1, spazio vuoto") throw new Error(`Invio dall'ultima riga non porta alla riga nuova: ${await said()}`);
+      const doc = await page.evaluate(async () => {
+        const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+        return findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement).state.doc.toString();
+      });
+      if (!/\\begin\{pmatrix\}\s*1\s*&\s*0\s*\\\\\s*&\s*1\s*\\\\\s*&\s*\\end\{pmatrix\}/.test(doc)) throw new Error(`la matrice non è quella attesa: ${doc}`);
+      await page.waitForSelector(`.cm-fub-mx-block ${ready}`);
+    }
+    await page.mouse.move(0, 0);
+    await page.waitForFunction(() => document.getAnimations().length === 0);
     return;
   }
   if (gesture.startsWith("source")) {
@@ -3798,6 +4755,73 @@ async function settleLive(page, bottom) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
+/// Porta in fondo la nota della Live a fuoco con un'impaginazione che non
+/// dipende da come ci si è arrivati (#510).
+///
+/// CodeMirror disegna solo le righe vicine alla vista (il suo «viewport»); le
+/// altre le conta con l'ultima altezza misurata o con una stima, e la Live
+/// toglie le decorazioni di riga (i titoli) a ciò che esce dal viewport.
+/// Scorrere subito in fondo dava così due impaginazioni, a seconda che il
+/// viewport coprisse ancora la nota intera o no: quale delle due dipendeva da
+/// quando le schede vive finivano di montarsi rispetto allo scorrimento, e le
+/// righe in vista si spostavano di una frazione di pixel (la foto cambiava di
+/// un pixel da un giro all'altro).
+///
+/// Qui la finestra si allunga finché la nota ci sta tutta: CodeMirror disegna
+/// e misura ogni blocco, schede comprese, nel loro stato finale. Poi la
+/// finestra torna com'era e si scorre in fondo: un viewport che copre la nota
+/// intera resta valido (CodeMirror lo rifà solo se lascia scoperta la vista o
+/// va troppo oltre), e la foto non dipende più dalla storia. Pronto è una
+/// condizione, non un ritardo: la nota disegnata tutta, senza vuoti stimati
+/// (`.cm-gap`), nessuna scheda in caricamento, l'altezza ferma e lo
+/// scorrimento in fondo. Se non ci si arriva, si alza.
+async function scrollLiveToEnd(page) {
+  const settled = () => page.evaluate(async () => {
+    const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+    if (!scroller) throw new Error("la nota a fuoco non ha lo scorrimento di CodeMirror");
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    const loading = () => scroller.querySelector('.live-card[data-card-state="loading"], [data-state="loading"]') !== null;
+    // Misurata: l'altezza e lo scorrimento fermi per due fotogrammi, e
+    // nessuna scheda che legge ancora il suo file.
+    for (let tries = 0; tries < 100; tries += 1) {
+      const before = [scroller.scrollHeight, scroller.scrollTop];
+      await frame();
+      await frame();
+      if (!loading() && scroller.scrollHeight === before[0] && scroller.scrollTop === before[1]) {
+        return {
+          overflow: scroller.scrollHeight - scroller.clientHeight,
+          gaps: scroller.querySelectorAll(".cm-content > .cm-gap").length,
+          bottom: scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1,
+        };
+      }
+    }
+    throw new Error("la nota non si ferma: CodeMirror rimisura a ogni fotogramma");
+  });
+  const window = page.viewportSize();
+  if (!window) throw new Error("la pagina non ha una finestra fissa");
+  let state = await settled();
+  for (let tries = 0; state.overflow > 0 || state.gaps > 0; tries += 1) {
+    if (tries >= 10) throw new Error(`la nota non sta in una finestra lunga: avanza di ${state.overflow} px con ${state.gaps} vuoti`);
+    const { height } = page.viewportSize();
+    await page.setViewportSize({ width: window.width, height: height + Math.max(state.overflow, 0) + 200 });
+    state = await settled();
+  }
+  await page.setViewportSize(window);
+  await settled();
+  for (let tries = 0; ; tries += 1) {
+    if (tries >= 10) throw new Error("la nota non resta in fondo: la sua altezza cambia a ogni giro");
+    await page.evaluate(() => {
+      const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+      scroller.scrollTop = scroller.scrollHeight;
+    });
+    state = await settled();
+    if (state.bottom) break;
+  }
+  // In fondo la nota dev'essere ancora disegnata tutta: se CodeMirror avesse
+  // rifatto il viewport, la foto tornerebbe a dipendere da quando.
+  if (state.gaps > 0) throw new Error("in fondo la nota ha di nuovo dei vuoti stimati: è troppo lunga per questa preparazione");
+}
+
 /// Apre un documento di videoscrittura dall'albero e aspetta che la
 /// superficie abbia montato la sua proiezione.
 /// In una finestra stretta l'albero sta nel cassetto: lo si apre, e dopo la
@@ -3911,6 +4935,9 @@ async function openRaw(page, doc, withImage) {
 /// disegnata (`withPreview`) o il link.
 async function openPdfNote(page, withPreview) {
   await fromTreeDrawer(page, () => openNote(page, "Casa/Affitto di via Roma.md"));
+  // In Scrittura il PDF incorporato è una scheda viva (T41, le scene
+  // `schede-vive-*`); l'anteprima di Craft e il link di T31 sono della Lettura.
+  await chooseMode(page, "reading");
   if (withPreview) {
     // Lo slot dell'incorporamento ha già la sua didascalia: l'immagine ci
     // entra da sola, senza un `figure` suo.

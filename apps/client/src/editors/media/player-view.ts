@@ -11,6 +11,7 @@
 import type { Lifetime } from "../../ui/lifetime";
 import { formatBytes, type ResourceDescriptor } from "./media-types";
 import { t } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
 
 export interface MediaError {
   readonly id: string;
@@ -39,7 +40,7 @@ function errorBox(error: MediaError, life: Lifetime, onOpenExternal?: () => void
     open.textContent = t("media.open_external");
     life.listen(open, "click", () => {
       void Promise.resolve().then(onOpenExternal).catch((failure) => {
-        reason.textContent = t("media.open_external_failed", { reason: String(failure) });
+        reason.textContent = t("media.open_external_failed", { reason: errorText(failure, "specie") });
       });
     });
     box.append(open);

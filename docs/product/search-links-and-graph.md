@@ -44,7 +44,7 @@ TypeScript è legata da una fixture, così la barra della shell, `fub-cli search
 e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
 
 - parole separate da spazi in AND, `"frase esatta"`, `-x` per negare, `OR` maiuscolo fra
-  alternative e `( … )` per raggruppare;
+  alternative e `( … )` per raggruppare; una parola è fatta di lettere, cifre, accenti combinanti e CJK, mentre emoji e simboli separano (da soli non trovano niente, senza errore) e non c'è normalizzazione NFC;
 - `/regex/`, e i filtri di proprietà `[chiave]`, `[chiave:valore]`, `[chiave:>v]`, `[chiave:<v]`,
   con valori numerici, booleani o date ISO confrontati per specie;
 - gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`, `ext:`, `task:todo`,
@@ -143,7 +143,7 @@ propongono i titoli che le contengono, e la scelta scrive `Nota#Titolo`, col
 percorso quando due note hanno lo stesso nome. Dopo `[[Nota#^` e `[[#^` si
 propongono gli id dei blocchi della nota, ciascuno con l'inizio del suo testo,
 letti dalla sessione aperta se c'è, altrimenti dal file. `[[^^parole` cerca un
-blocco in tutto il vault: [Blocchi di altre note](editor-writing.md#blocchi-di-altre-note).
+blocco in tutto il vault: [Blocchi di altre note](editor-links.md#blocchi-di-altre-note).
 
 Il pannello Struttura mostra i titoli della nota aperta come un albero. Il campo
 in cima lo filtra: restano i titoli che contengono il testo, con i titoli sopra
@@ -179,7 +179,7 @@ sessioni né buffer, e si chiude uscendo dal link e dalla scheda o con Esc. Un
 link che non si risolve non apre niente.
 
 Nell'editor, Scrittura o Sorgente, `Alt+Invio` su un wikilink apre la nota, alla
-sezione o al blocco che nomina, nella [sbirciata](editor-writing.md#la-sbirciata)
+sezione o al blocco che nomina, nella [sbirciata](editor-links.md#la-sbirciata)
 (Ctrl/Cmd+click la apre come dice `editor.link-click`); su un indirizzo esterno
 lo apre solo se la policy di Lettura lo permette. Dentro il codice il tasto non apre niente. In Scrittura `Maiusc+Alt+Invio`
 su un wikilink apre la sua scheda col fuoco sulle azioni; Esc torna al testo.
@@ -281,10 +281,10 @@ ricerca del campo **Gruppi**, separate da `;`, è un gruppo: una nota prende il
 colore della prima che la trova, e la legenda le nomina. Filtro e ricerche dei
 gruppi sono stato della vista, come gli altri filtri.
 
-Il grafo non ha un posto riservato nella shell. Si apre con il comando
-`graph.open` che il componente dichiara (`Mod-Shift-g`), dalla palette, dal menu
-Vista o dalla rail, che mostrano ogni view principale apribile senza argomenti.
-Con il componente spento spariscono anche comando, voce di menu e icona.
+Il grafo non ha un posto riservato. Si apre con `graph.open` (`Mod-Shift-g`),
+dalla palette, dal menu Vista o dalla rail, uno per finestra: se è aperto,
+questi gesti, Indietro, Avanti e `Mod-Shift-t` lo mettono a fuoco nel suo
+riquadro. Spento il componente, spariscono anche loro.
 
 Questo confine deve restare stabile:
 

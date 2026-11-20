@@ -536,6 +536,13 @@ export function expectedProperty(row: BaseRow, key: string): BaseExpected {
   const name = propertyName(key);
   return Object.prototype.hasOwnProperty.call(row.properties, name) ? { kind: "value", value: row.properties[name] } : { kind: "absent" };
 }
+/// Due letture della stessa proprietà dicono lo stesso valore: la cella in
+/// modifica sa così se la nota sotto è cambiata da quando si è cominciato a
+/// scrivere (IMP-137).
+export function sameExpected(left: BaseExpected, right: BaseExpected): boolean {
+  if (left.kind !== right.kind) return false;
+  return left.kind === "absent" || (right.kind === "value" && sameJson(left.value, right.value));
+}
 export function baseRowsToCsv(rows: BaseRow[], columns: string[]): string {
   const escape = (value: string): string => /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
   return `${[columns.map(escape).join(","), ...rows.map((row) => columns.map((key) => escape(cellText(row.values[key]))).join(","))].join("\r\n")}\r\n`;

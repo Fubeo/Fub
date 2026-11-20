@@ -36,6 +36,8 @@ export interface TreeSelectionHost {
   copy(paths: string[]): void;
   /// I link alle note scelte negli appunti del sistema.
   copyLinks(paths: string[]): Promise<unknown>;
+  /// Le note scelte in un PDF solo, nell'ordine della scelta (T78).
+  exportPdf?(paths: string[]): Promise<unknown>;
   readonly lifetime: Lifetime;
 }
 
@@ -237,6 +239,7 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
         { label: t("explorer.selection.move"), run: () => void act(host.move) },
         { label: t("explorer.selection.group_menu"), run: () => void act(host.group) },
         { separator: true, label: t("explorer.selection.copy_links"), run: () => void host.copyLinks([...picked]) },
+        ...(host.exportPdf ? [{ label: t("pane.export_pdf"), run: () => void host.exportPdf?.([...picked]) }] : []),
         { separator: true, label: t("explorer.selection.trash"), danger: true, run: () => void act(host.trash) },
       ],
       searchable: [

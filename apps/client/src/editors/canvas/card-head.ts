@@ -25,7 +25,7 @@
 // è una copia della stessa nota).
 
 import { t, plural } from "../../i18n/strings";
-import { LIVE_MARGIN, LIVE_ZOOM_MIN } from "./cards";
+import { LIVE_MARGIN, LIVE_ZOOM_MIN } from "../core/cards/contract";
 import type { CanvasNode } from "./model";
 import { cardTarget } from "./sources";
 

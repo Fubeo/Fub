@@ -21,12 +21,13 @@
 //! fuori dall'albero) accanto a quello che c'è già.
 //!
 //! La domanda si disegna: [`ViewUpdate::Replace`] con un albero in cui, al posto
-//! dell'elenco, c'è la domanda e i suoi due bottoni. Ciò che la rende possibile
-//! è lo **stato di vista** (§11.2): la domanda in corso sta sotto la chiave
-//! [`ASK`], che è per esemplare e non per provider — due cestini aperti non si
-//! rubano la conferma a vicenda — e sparisce appena si risponde. La risposta
-//! costa un giro in più di `on_action`, che è esattamente quello che costerebbe
-//! una modale.
+//! del bottone che l'ha aperta, c'è la domanda e i suoi bottoni, dentro un nodo
+//! [`UiNode::confirmation`] che le dà Esc e il fuoco. La domanda in corso sta in
+//! [`TrashView`], **per esemplare** — due cestini aperti non si rubano la
+//! conferma a vicenda — e sparisce appena si risponde, o col processo: non sta
+//! nello stato di vista, che sopravvive al riavvio (IMP-110). La risposta costa
+//! un giro in più di `on_action`, che è esattamente quello che costerebbe una
+//! modale.
 //!
 //! Ne segue una proprietà che la modale non aveva: la domanda **è nel pannello**,
 //! cioè accanto alle cose di cui parla, e chi la lascia lì aperta non blocca il
@@ -42,6 +43,8 @@
 //! nome che si può usare e lo mette **in un campo modificabile**, che è la
 //! differenza fra proporre e decidere. La convenzione dei nomi resta una sola,
 //! ed è del kernel.
+
+use std::collections::HashMap;
 
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
@@ -86,7 +89,7 @@ const RESTORE_AS: &str = "restore_as";
 /// Chiedi conferma prima di svuotare, e — al secondo giro — svuota.
 const EMPTY: &str = "empty";
 const EMPTY_CONFIRM: &str = "empty_confirm";
-/// Rinuncia alla domanda in corso: la chiave [`ASK`] torna a non esserci.
+/// Rinuncia alla domanda in corso, dal bottone o da Esc.
 const CANCEL: &str = "cancel";
 
 /// Le chiavi del payload.
@@ -96,16 +99,15 @@ const ORIGINAL: &str = "original";
 /// Il campo in cui si legge (e si corregge) il nome proposto.
 const NAME_FIELD: &str = "name";
 
-/// La chiave sotto cui la **domanda in corso** sta nello stato di vista.
-///
-/// Sta lì e non in un campo di questa struct per la ragione del pannello tag: un
-/// campo sarebbe uno per provider, cioè condiviso da tutti gli esemplari del
-/// pannello, e due cestini aperti si passerebbero la conferma di svuotamento —
-/// che è il modo peggiore di distruggere qualcosa.
-const ASK: &str = "ask";
-/// Le due forme che la domanda può avere, come stanno scritte nello stato.
-const ASK_EMPTY: &str = "empty";
-const ASK_RESTORE: &str = "restore";
+/// La chiave sotto cui le versioni di prima ricordavano la domanda in corso
+/// nello stato di vista. Non si scrive più (vedi [`TrashView`]): si legge solo
+/// per toglierla, perché una domanda «Svuoto davvero?» rimasta lì da un avvio
+/// di prima è a un clic dalla distruzione del cestino (IMP-110).
+const LEGACY_ASK: &str = "ask";
+
+/// La chiave del bottone «Svuota il cestino», che la sua domanda eredita:
+/// chiusa la domanda, il fuoco torna al bottone.
+const EMPTY_KEY: &str = "trash-empty";
 
 const VIEW_TITLE: &str = "view_title";
 const IS_EMPTY: &str = "is_empty";
@@ -161,10 +163,47 @@ pub fn catalog() -> Vec<StringCatalog> {
 
 /// Il pannello cestino.
 ///
-/// **Senza campi**, come il pannello tag e per la stessa ragione: ciò che deve
-/// sopravvivere fra due `render_view` — la domanda in corso — sta nello stato di
-/// vista dell'esemplare.
-pub struct TrashView;
+/// # La domanda vive in memoria, e muore col processo
+///
+/// La domanda in corso deve sopravvivere fra due `render_view`, e per esemplare:
+/// due cestini aperti non devono passarsi la conferma di svuotamento, che è il
+/// modo peggiore di distruggere qualcosa. Per questo è una mappa per esemplare
+/// e non un campo solo. Non sta nello stato di vista, che dura fra un avvio e
+/// l'altro: ritrovare al riavvio «Distruggo definitivamente…?» con il sì pronto
+/// sotto il dito vuol dire un clic da una distruzione che nessuno ricorda di
+/// aver chiesto (IMP-110). Si chiude con una risposta o con la fine del
+/// processo.
+#[derive(Default)]
+pub struct TrashView {
+    /// esemplare → la domanda in corso.
+    asking: HashMap<String, Ask>,
+}
+
+/// La domanda in corso in un esemplare del cestino.
+enum Ask {
+    /// «Svuoto davvero?»
+    Empty,
+    /// «Il path è di nuovo occupato: con che nome?», con il nome proposto.
+    Restore {
+        entry: String,
+        original: String,
+        name: String,
+    },
+}
+
+impl TrashView {
+    /// Ridisegna con la domanda di questo esemplare, se ce n'è una.
+    fn redraw(
+        &self,
+        instance: &ViewInstance,
+        host: &dyn ReadApi,
+        warning: Option<Text>,
+    ) -> Result<ViewUpdate, PluginError> {
+        Ok(ViewUpdate::Replace {
+            root: tree(host, warning, self.asking.get(&instance.instance))?,
+        })
+    }
+}
 
 impl ViewProvider for TrashView {
     fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
@@ -191,18 +230,24 @@ impl ViewProvider for TrashView {
 
     fn render_view(
         &self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
-        tree(host, None)
+        tree(host, None, self.asking.get(&instance.instance))
     }
 
     fn on_action(
         &mut self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
+        // La domanda che le versioni di prima avevano lasciato nello stato di
+        // vista: al primo gesto sul pannello se ne va dal disco. Disegnata non
+        // lo è più comunque, perché `tree` non la legge.
+        if host.view_state(LEGACY_ASK)?.is_some() {
+            host.set_view_state(LEGACY_ASK, None)?;
+        }
         match action.action.0.as_str() {
             // Ripristina, e se il path è tornato occupato **chiedi** invece di
             // decidere: la domanda diventa un pezzo dell'albero.
@@ -215,74 +260,64 @@ impl ViewProvider for TrashView {
                     Ok(_) => Ok(ViewUpdate::Navigate { doc_id: original }),
                     Err(PluginError::AlreadyExists(_)) => {
                         let proposed_name = host.free_name(&DocId::new(&original));
-                        host.set_view_state(
-                            ASK,
-                            Some(serde_json::json!({
-                                "kind": ASK_RESTORE,
-                                ENTRY: entry,
-                                ORIGINAL: original,
-                                NAME_FIELD: proposed_name.0,
-                            })),
-                        )?;
-                        Ok(ViewUpdate::Replace {
-                            root: tree(host, None)?,
-                        })
+                        self.asking.insert(
+                            instance.instance.clone(),
+                            Ask::Restore {
+                                entry,
+                                original,
+                                name: proposed_name.0,
+                            },
+                        );
+                        self.redraw(instance, host, None)
                     }
                     // Ogni altro guasto è **un altro guasto**, e dirlo con la
                     // domanda sbagliata è il difetto che il §12.2 aveva già
                     // trovato in questo stesso punto quando stava nella shell:
                     // con un disco pieno si vedeva «esiste già».
-                    Err(and) => Ok(ViewUpdate::Replace {
-                        root: tree(
-                            host,
-                            Some(Text::message(
-                                RESTORE_FAILED,
-                                vec![
-                                    Arg::text("doc", display_name(&DocId::new(&original))),
-                                    Arg::text("reason", and.to_string()),
-                                ],
-                            )),
-                        )?,
-                    }),
+                    Err(and) => self.redraw(
+                        instance,
+                        host,
+                        Some(Text::message(
+                            RESTORE_FAILED,
+                            vec![
+                                Arg::text("doc", display_name(&DocId::new(&original))),
+                                Arg::text("reason", and.to_string()),
+                            ],
+                        )),
+                    ),
                 }
             }
             // La risposta alla domanda: il nome sta nel campo, che l'utente può
             // aver corretto. Vuoto = il nome proposto non c'è più, e non si
             // ripristina niente a caso.
             RESTORE_AS => {
-                let ask = host.view_state(ASK)?;
-                let entry = ask
-                    .as_ref()
-                    .and_then(|a| a.get(ENTRY))
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string);
+                let entry = match self.asking.remove(&instance.instance) {
+                    Some(Ask::Restore { entry, .. }) => Some(entry),
+                    _ => None,
+                };
                 let new = action
                     .text_field(NAME_FIELD)
                     .unwrap_or_default()
                     .to_string();
-                host.set_view_state(ASK, None)?;
                 let (Some(entry), false) = (entry, new.is_empty()) else {
-                    return Ok(ViewUpdate::Replace {
-                        root: tree(host, None)?,
-                    });
+                    return self.redraw(instance, host, None);
                 };
                 match host.run_command(
                     TRASH_RESTORE,
                     serde_json::json!({ ENTRY: entry, "to": new }),
                 ) {
                     Ok(_) => Ok(ViewUpdate::Navigate { doc_id: new }),
-                    Err(and) => Ok(ViewUpdate::Replace {
-                        root: tree(
-                            host,
-                            Some(Text::message(
-                                RESTORE_FAILED,
-                                vec![
-                                    Arg::text("doc", display_name(&DocId::new(&new))),
-                                    Arg::text("reason", and.to_string()),
-                                ],
-                            )),
-                        )?,
-                    }),
+                    Err(and) => self.redraw(
+                        instance,
+                        host,
+                        Some(Text::message(
+                            RESTORE_FAILED,
+                            vec![
+                                Arg::text("doc", display_name(&DocId::new(&new))),
+                                Arg::text("reason", and.to_string()),
+                            ],
+                        )),
+                    ),
                 }
             }
             // Svuotare è l'unica cosa da cui non si torna indietro (lo dice la
@@ -293,26 +328,26 @@ impl ViewProvider for TrashView {
                 if count == 0 {
                     return Ok(ViewUpdate::None);
                 }
-                host.set_view_state(ASK, Some(serde_json::json!({ "kind": ASK_EMPTY })))?;
-                Ok(ViewUpdate::Replace {
-                    root: tree(host, None)?,
-                })
+                self.asking.insert(instance.instance.clone(), Ask::Empty);
+                self.redraw(instance, host, None)
             }
+            // Il sì vale solo per la domanda in corso in questo esemplare: un
+            // `empty_confirm` arrivato senza — da un albero vecchio, da un
+            // altro esemplare — non svuota niente.
             EMPTY_CONFIRM => {
-                host.set_view_state(ASK, None)?;
+                if !matches!(self.asking.remove(&instance.instance), Some(Ask::Empty)) {
+                    return self.redraw(instance, host, None);
+                }
                 let outcome = host.run_command(TRASH_EMPTY, serde_json::Value::Null);
                 let warning = outcome.err().map(|and| {
                     Text::message(EMPTY_FAILED, vec![Arg::text("reason", and.to_string())])
                 });
-                Ok(ViewUpdate::Replace {
-                    root: tree(host, warning)?,
-                })
+                self.redraw(instance, host, warning)
             }
+            // Il «no», dal bottone o da Esc (la shell manda la stessa azione).
             CANCEL => {
-                host.set_view_state(ASK, None)?;
-                Ok(ViewUpdate::Replace {
-                    root: tree(host, None)?,
-                })
+                self.asking.remove(&instance.instance);
+                self.redraw(instance, host, None)
             }
             _ => Ok(ViewUpdate::None),
         }
@@ -335,86 +370,53 @@ fn display_name(id: &DocId) -> String {
     id.page_name().to_string()
 }
 
-/// L'albero del pannello: la domanda in corso se ce n'è una, l'elenco sempre.
+/// L'albero del pannello: l'elenco sempre, e la domanda in corso al posto del
+/// bottone che l'ha aperta.
 ///
 /// `warning` è ciò che è appena andato storto, e non sta nello stato di vista: un
 /// guasto non deve sopravvivere alla chiusura del vault né tornare a galla alla
 /// riapertura, perché nel frattempo può essere stato riparato. Vive quanto
-/// l'albero che lo mostra, che è quanto deve.
-fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError> {
+/// l'albero che lo mostra, che è quanto deve. `ask` è la domanda in corso di
+/// questo esemplare, che vive in [`TrashView`] per la stessa ragione.
+fn tree(
+    host: &dyn ReadApi,
+    warning: Option<Text>,
+    ask: Option<&Ask>,
+) -> Result<UiNode, PluginError> {
     let entries = host.list_trash()?;
     let mut children = Vec::new();
 
     if let Some(warning) = warning {
         children.push(UiNode::failed(warning, None));
     }
-    if let Some(question) = question(host, &entries)? {
-        children.push(question);
-    }
 
     if entries.is_empty() {
+        // Niente da svuotare né da ripristinare: una domanda rimasta, perché il
+        // cestino si è vuotato da un'altra finestra, non ha più un oggetto.
         children.push(UiNode::empty_state(Text::key(IS_EMPTY)));
         return Ok(UiNode::column(1, children));
     }
 
-    children.push(UiNode::list(entries.iter().map(row).collect::<Vec<_>>()));
-    children.push(UiNode::button(
-        Text::key(EMPTY_LABEL),
-        Intent::Danger,
-        ActionRef::new(EMPTY),
-    ));
-    Ok(UiNode::column(1, children))
-}
-
-/// Una voce del cestino: cosa era, quando è finita lì, e come tornare indietro.
-///
-/// La chiave è l'id nel cestino — che è unico e non cambia — perché una lista
-/// che si riordina quando qualcuno cestina un'altra nota non deve spostare il
-/// fuoco da sotto le dita di chi stava per premere «Ripristina» (§2.8).
-fn row(entry: &TrashEntry) -> UiNode {
-    UiNode::keyed(
-        entry.id.0.clone(),
-        UiKind::Stack {
-            dir: fub_abi::ui::Axis::Row,
-            gap: 1,
-            children: vec![
-                UiNode::list_item(
-                    Text::from(display_name(&entry.original)),
-                    Some(Text::message(
-                        DELETED_AT,
-                        // I secondi del cestino diventano i millisecondi
-                        // dell'argomento: la conversione sta qui e non nel
-                        // catalogo, perché è chi ha il dato a sapere in che
-                        // unità ce l'ha.
-                        vec![Arg::timestamp("when", entry.deleted_at * 1000)],
-                    )),
-                    None,
-                ),
-                UiNode::button(
-                    Text::key(RESTORE_LABEL),
-                    Intent::Primary,
-                    ActionRef::with(
-                        RESTORE,
-                        serde_json::json!({
-                            ENTRY: entry.id.0,
-                            ORIGINAL: entry.original.0,
-                        }),
-                    ),
-                ),
-            ],
-        },
-    )
-}
-
-/// La domanda in corso, disegnata — o niente, che è il caso normale.
-fn question(host: &dyn ReadApi, entries: &[TrashEntry]) -> Result<Option<UiNode>, PluginError> {
-    let Some(ask) = host.view_state(ASK)? else {
-        return Ok(None);
+    let restoring = match ask {
+        Some(Ask::Restore {
+            entry,
+            original,
+            name,
+        }) => Some((entry.as_str(), original.as_str(), name.as_str())),
+        _ => None,
     };
-    let kind = ask.get("kind").and_then(|v| v.as_str()).unwrap_or_default();
-    let node = match kind {
-        ASK_EMPTY => UiNode::column(
-            1,
+    children.push(UiNode::list(
+        entries
+            .iter()
+            .map(|entry| row(entry, restoring.filter(|(asked, ..)| *asked == entry.id.0)))
+            .collect::<Vec<_>>(),
+    ));
+    if matches!(ask, Some(Ask::Empty)) {
+        // La domanda al posto del bottone, dove l'occhio già stava, e con la
+        // sua chiave: chiusa la domanda, il fuoco torna al bottone.
+        children.push(UiNode::confirmation(
+            EMPTY_KEY,
+            ActionRef::new(CANCEL),
             vec![
                 UiNode::text(Text::message(
                     CONFIRM_EMPTY,
@@ -431,49 +433,110 @@ fn question(host: &dyn ReadApi, entries: &[TrashEntry]) -> Result<Option<UiNode>
                     ActionRef::new(CANCEL),
                 ),
             ],
-        ),
-        ASK_RESTORE => {
-            let original = ask
-                .get(ORIGINAL)
-                .and_then(|v| v.as_str())
-                .unwrap_or_default();
-            let proposed_name = ask
-                .get(NAME_FIELD)
-                .and_then(|v| v.as_str())
-                .unwrap_or_default();
-            UiNode::column(
-                1,
-                vec![
-                    UiNode::text(Text::message(
-                        EXISTS_AGAIN,
-                        vec![Arg::text("doc", display_name(&DocId::new(original)))],
-                    )),
-                    // Un `Form` e non un campo con un bottone accanto: inviare
-                    // manda **tutti** i campi contenuti, ed è ciò che rende
-                    // l'invio da tastiera la stessa cosa del click.
-                    UiNode::new(UiKind::Form {
-                        children: vec![UiNode::new(UiKind::TextInput {
-                            field: NAME_FIELD.to_string(),
-                            label: None,
-                            value: proposed_name.to_string(),
-                            placeholder: None,
-                            action: None,
-                        })],
-                        submit_label: Text::key(RESTORE_LABEL),
-                        submit: ActionRef::new(RESTORE_AS),
-                    }),
-                    UiNode::button(
-                        Text::key(CANCEL_LABEL),
-                        Intent::Neutral,
-                        ActionRef::new(CANCEL),
-                    ),
-                ],
+        ));
+    } else {
+        children.push(
+            UiNode::button(
+                Text::key(EMPTY_LABEL),
+                Intent::Danger,
+                ActionRef::new(EMPTY),
             )
-        }
-        // Una chiave che questo pannello non sa più leggere — perché la forma
-        // della domanda è cambiata sotto uno stato salvato — non è un errore:
-        // è una domanda che non si fa più.
-        _ => return Ok(None),
+            .with_key(EMPTY_KEY),
+        );
+    }
+    Ok(UiNode::column(1, children))
+}
+
+/// La chiave del bottone «Ripristina» di una voce, che la domanda del nome
+/// eredita. Unica nel pannello, perché la shell rimette il fuoco al primo nodo
+/// con quella chiave.
+fn restore_key(entry: &str) -> String {
+    format!("restore:{entry}")
+}
+
+/// Una voce del cestino: cosa era, quando è finita lì, e come tornare indietro.
+///
+/// La chiave è l'id nel cestino — che è unico e non cambia — perché una lista
+/// che si riordina quando qualcuno cestina un'altra nota non deve spostare il
+/// fuoco da sotto le dita di chi stava per premere «Ripristina» (§2.8).
+///
+/// `asking` è la domanda del nome per questa voce, se è in corso: `(id, path
+/// d'origine, nome proposto)`. Prende il posto del bottone, sotto la voce di
+/// cui parla.
+fn row(entry: &TrashEntry, asking: Option<(&str, &str, &str)>) -> UiNode {
+    let item = UiNode::list_item(
+        Text::from(display_name(&entry.original)),
+        Some(Text::message(
+            DELETED_AT,
+            // I secondi del cestino diventano i millisecondi
+            // dell'argomento: la conversione sta qui e non nel
+            // catalogo, perché è chi ha il dato a sapere in che
+            // unità ce l'ha.
+            vec![Arg::timestamp("when", entry.deleted_at * 1000)],
+        )),
+        None,
+    );
+    let (dir, action) = match asking {
+        Some((_, original, proposed_name)) => (
+            fub_abi::ui::Axis::Column,
+            restore_question(&entry.id.0, original, proposed_name),
+        ),
+        None => (
+            fub_abi::ui::Axis::Row,
+            UiNode::button(
+                Text::key(RESTORE_LABEL),
+                Intent::Primary,
+                ActionRef::with(
+                    RESTORE,
+                    serde_json::json!({
+                        ENTRY: entry.id.0,
+                        ORIGINAL: entry.original.0,
+                    }),
+                ),
+            )
+            .with_key(restore_key(&entry.id.0)),
+        ),
     };
-    Ok(Some(node.with_key("ask")))
+    UiNode::keyed(
+        entry.id.0.clone(),
+        UiKind::Stack {
+            dir,
+            gap: 1,
+            children: vec![item, action],
+        },
+    )
+}
+
+/// La domanda del nome: il path d'origine è di nuovo occupato, e il nome
+/// libero proposto sta in un campo che si può correggere.
+fn restore_question(entry: &str, original: &str, proposed_name: &str) -> UiNode {
+    UiNode::confirmation(
+        restore_key(entry),
+        ActionRef::new(CANCEL),
+        vec![
+            UiNode::text(Text::message(
+                EXISTS_AGAIN,
+                vec![Arg::text("doc", display_name(&DocId::new(original)))],
+            )),
+            // Un `Form` e non un campo con un bottone accanto: inviare
+            // manda **tutti** i campi contenuti, ed è ciò che rende
+            // l'invio da tastiera la stessa cosa del click.
+            UiNode::new(UiKind::Form {
+                children: vec![UiNode::new(UiKind::TextInput {
+                    field: NAME_FIELD.to_string(),
+                    label: None,
+                    value: proposed_name.to_string(),
+                    placeholder: None,
+                    action: None,
+                })],
+                submit_label: Text::key(RESTORE_LABEL),
+                submit: ActionRef::new(RESTORE_AS),
+            }),
+            UiNode::button(
+                Text::key(CANCEL_LABEL),
+                Intent::Neutral,
+                ActionRef::new(CANCEL),
+            ),
+        ],
+    )
 }

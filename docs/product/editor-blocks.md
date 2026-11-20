@@ -9,7 +9,8 @@
 
 I **blocchi** stanno dentro la modalità [Scrittura](editor-writing.md) della
 nota Markdown: danno a ogni blocco una maniglia, un menu, il trascinamento e
-una selezione di blocchi, e in cima la testata della pagina. Quanto si vede dei
+una selezione di blocchi; la testata della pagina in cima c'è anche coi blocchi
+spenti. Quanto si vede dei
 segni Markdown lo dice `editor.live-reveal`, come in tutta Scrittura. Il file
 resta Markdown puro: nessun blocco ha un id nascosto né un formato a parte, e
 Sorgente mostra gli stessi byte. Gli a capo che un gesto scrive (spostare,
@@ -35,6 +36,11 @@ una nota a piè di pagina. Una voce di elenco è un blocco a sé, con le sue
 sottovoci come figli. Un `^id` scritto su una riga sua, sotto un blocco, fa
 parte di quel blocco e si sposta con lui.
 
+Che cosa scrivono nel file colori, ripiegabili, colonne, indice, persone e
+date lo dice [Colori, colonne, persone e date](editor-note-extras.md); la
+testata della pagina sta nella [sua pagina](editor-header.md), i segnalibri web
+in [Link, sbirciata e pagine incorporate](editor-links.md#i-segnalibri-web).
+
 ## Maniglie e menu
 
 Al passaggio del puntatore a sinistra del blocco compaiono, in grigio, il
@@ -52,7 +58,7 @@ nome del blocco e il piede dei tasti ([Tasto destro](editor-menus.md)). Ha:
   riquadro, blocco di codice, ripiegabile. Il testo resta, cambiano soltanto i segni; un titolo che
   prende più righe le unisce con uno spazio, e le sottovoci restano blocchi
   sotto. Una tabella non si trasforma;
-- **Colore ▸**, il testo e il fondo coi nove colori dei Blocchi;
+- **Colore ▸**, il testo e il fondo coi nove [colori](editor-note-extras.md#i-colori);
 - **Duplica**, **Sposta in…** ([in un'altra nota](editor-move-to.md)) e, per
   ultimo, **Elimina**; **Sposta su**, **Sposta giù** e **Affianca in colonne** si trovano scrivendo;
 - **Copia il link al blocco**: scrive negli appunti `[[Nota#Titolo]]` per un
@@ -148,7 +154,7 @@ sono selezionati.
 - Dentro un blocco di codice Tab e Shift+Tab rientrano il codice.
 - Mod+Alt+0 fa un paragrafo, Mod+Alt+1…3 un titolo, 4 un'attività, 5 un
   elenco puntato, 6 uno numerato, 7 un ripiegabile, 8 un blocco di codice;
-  valgono anche in Live.
+  valgono anche coi blocchi spenti.
 
 Durante una composizione (IME) e con Vim fuori dal modo inserimento questi tasti
 si fanno da parte: Esc resta di Vim. In una scheda della lavagna Esc è della
@@ -159,7 +165,7 @@ selezione di blocchi già fatta la chiude prima di uscire
 ## I blocchi spenti
 
 Con `editor.blocks` spenta Scrittura è un editor di testo: la testata della
-pagina e i segni della Live restano, il «/» resta, e i gesti cambiano così.
+pagina e la resa dei segni restano, il «/» resta, e i gesti cambiano così.
 
 | Gesto | Blocchi accesi | Blocchi spenti |
 | --- | --- | --- |
@@ -181,7 +187,7 @@ della scheda nei due stati.
 
 ## Il movimento
 
-I Blocchi si muovono soltanto per un gesto di blocco, mai per una battuta: la
+I blocchi si muovono soltanto per un gesto di blocco, mai per una battuta: la
 transazione porta l'annotazione `blockGesture`, e un plugin legge i riquadri
 delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
 `moto`, soltanto con `transform` e `opacity`.
@@ -222,7 +228,7 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
 Oltre 60 righe in movimento, le righe si limitano a una dissolvenza. Col moto
 ridotto non si muove niente: chi nasce appare soltanto in dissolvenza, il
 posto appare senza scivolare e il blocco in mano si posa senza volo.
-Ogni gesto si dice anche nella regione viva dei Blocchi («Posizione 3 di 5, in
+Ogni gesto si dice anche nella regione viva dei blocchi («Posizione 3 di 5, in
 «I conti»» dopo uno spostamento, «Ora è Titolo 2», «Aperto»).
 
 **Cursore morbido** (`editor.soft-cursor`, spento di norma) fa scivolare il
@@ -235,213 +241,15 @@ Con la rivelazione `mai` un `^id` in coda a un blocco, o su una riga sua, non si
 vede; con `elemento` e `riga` resta visibile e attenuato. In Sorgente si vede
 sempre.
 
-## La testata della pagina
-
-In cima ai Blocchi stanno la copertina, l'icona e il titolo della pagina, con
-le proprietà subito sotto; la Lettura mostra la stessa testata (ordine,
-proprietà e tastiera in [Scrittura](editor-header.md)). Icona,
-copertina e classi sono righe del frontmatter, scritte come le altre
-proprietà, e in Sorgente si vedono così:
-
-```yaml
-icon: 🧳            # o una figura: icon: fub:book (o book)
-cover: ../Risorse/mare.png
-cover-y: 30         # dove sta la copertina, da 0 (in cima) a 100
-cssclasses: [wide, sans]
-```
-
-- **Titolo.** È il nome del file; per la pagina di una cartella
-  (`Viaggio/_index.md`, vedi [Esplora e cartelle](explorer-and-folders.md)) è il
-  nome della cartella. Si scrive in riga: Invio o l'uscita dal campo rinominano
-  il file, o la cartella, con i collegamenti; Esc torna al nome di prima. Un
-  nome che non si può usare o che c'è già non rinomina niente e lo dice. Invio
-  dal titolo porta al testo; ↑ e ↓ passano per le proprietà della testata.
-- **Icona.** Un'emoji, cercata per nome in italiano o in inglese, o una delle
-  figure monocrome dell'esplora, prima delle emoji, scritte `icon: fub:book`;
-  si legge, senza riscriverlo, anche il nome nudo dei [tipi di
-  nota](../reference/note-conventions.md#i-tipi-di-nota), `icon: book`. Una
-  figura prende il colore del testo. Un nome sconosciuto o un testo che non è
-  un carattere solo (una parola, un path) non si mostra, e torna «Aggiungi
-  un'icona». L'icona si vede anche fuori dalla pagina, quando l'indice ha
-  letto la nota salvata: nella sua riga dell'esplora (e della cartella di cui
-  è la pagina, se non ne ha una sua), nella scheda e prima dei `[[wikilink]]`
-  che la nominano in Live e in Blocchi, se due omonime non ne hanno diverse.
-- **Copertina.** Un'immagine del vault, con lo stesso path di un'immagine nel
-  testo, un indirizzo, o un colore pieno (`cover: "#a3c4f3"`); per
-  un'immagine «Riposiziona» ne sceglie la parte che si vede.
-- **Nuova sottopagina.** Chiede il nome, dice se la pagina sta per diventare
-  quella di una cartella, crea la nota con `note.subpage` e scrive `[[Nome]]`
-  in una riga vuota o in un paragrafo dopo il blocco del cursore.
-- **Il menu «⋯».** «Larghezza piena», «Testo piccolo» e il carattere (quello
-  del tema, con grazie, senza grazie, monospaziato) scrivono `cssclasses`
-  (`wide`, `small`, `serif`, `sans`, `mono`) e lasciano le altre classi della
-  nota. Il tema le applica al riquadro quando l'indice ha letto la nota salvata.
-  Classi scritte con un commento o in una forma che la riscrittura perderebbe
-  non si toccano: il menu apre lo YAML sulla loro riga.
-
-In sola lettura la testata si guarda soltanto. Ogni modifica è un passo
-d'annullamento suo.
-
-## I colori
-
-Come in Notion, il testo e il suo fondo hanno nove colori: `gray`, `brown`,
-`orange`, `yellow`, `green`, `blue`, `purple`, `pink`, `red`. Sul disco sono
-HTML in riga con una classe chiusa, che la Lettura, la Live, i Blocchi e
-l'export rendono e il sanitizzatore lascia passare da sola:
-
-```html
-<span class="fub-color-red">urgente</span>
-<mark class="fub-bg-yellow">da ricordare</mark>
-```
-
-«Colore» li scrive dalla barra (`markdown.color.*` e `markdown.background.*`
-in [`ipc-contract`](../reference/ipc-contract.md)), dal «/» e dal menu del
-blocco: sulla selezione, o sul testo della riga dopo i segni del blocco. Un
-testo già colorato cambia classe invece di prendere un tag in più;
-«predefinito» toglie la classe, e con l'ultima il tag. Le tinte sono del tema,
-in entrambe le luci, con un contrasto di almeno 4,5:1 sul foglio.
-
-## I ripiegabili
-
-Il ripiegabile di Notion è `<details>` con il suo `<summary>`. Le righe vuote
-dopo il sommario e prima della chiusura tengono il contenuto Markdown:
-
-```html
-<details>
-<summary>Ingredienti</summary>
-
-- farina
-- acqua
-
-</details>
-```
-
-In Live e nei Blocchi resta il sommario con la freccia davanti, e il contenuto
-sta rientrato sotto; i tag e le due righe vuote non si vedono. La freccia apre
-e chiude soltanto nella vista e non scrive niente. Un ripiegabile comincia
-aperto se ha `open`, che «Aperto di norma» nel menu del blocco mette o toglie,
-e un cursore che entra nel contenuto lo apre. La Lettura e l'export lo rendono
-come `<details>` vero. Ogni altra forma, come un sommario con altri tag o un
-`<details>` senza la sua chiusura, resta HTML; senza chiusura ha l'ondulato.
-
-## Le colonne
-
-Le colonne sono un callout `[!columns]` con un callout `[!column]` annidato
-per colonna, da due a quattro, separati da una riga `>`:
-
-```markdown
-> [!columns]
-> > [!column]
-> > Pro
->
-> > [!column]
-> > Contro
-```
-
-La Lettura, la Live e i Blocchi le mettono in griglia, alla pari, e un foglio
-largo meno di 700 px le mette una sotto l'altra. Col cursore dentro, la Live
-le mostra una sotto l'altra con l'etichetta «Colonna 1», «Colonna 2»…, e il
-testo si scrive lì. Le crea «Colonne» (`markdown.columns`) dalla barra o dal
-«/», con un blocco per colonna delle righe selezionate; nei Blocchi anche
-«Colonne» nel menu del blocco, che mette il blocco accanto al fratello che lo
-segue (o la selezione di blocchi, una colonna per blocco), e il blocco
-trascinato e lasciato sul bordo destro (o sinistro) di un altro, che gli va accanto o in
-fondo alle sue colonne. Un callout `[!columns]` con un solo `[!column]`, più
-di quattro o altro testo fra loro resta un callout. Gli altri programmi le
-leggono come citazioni annidate, e l'export come callout annidati.
-
-## L'indice
-
-Un recinto `toc` diventa l'indice dei titoli della nota, ognuno un link al suo
-titolo, rientrato di quanto il suo livello sta sotto il più alto elencato:
-
-```toc
-livelli: 2-3
-```
-
-`livelli: a-b` (o `levels: a-b`) tiene soltanto quei livelli; senza, ci sono
-tutti. Nel file resta il recinto: l'indice segue i titoli da solo, in Lettura,
-in Live, nei Blocchi e nell'export. In Live e nei Blocchi il clic su una voce
-porta al titolo; il recinto si modifica dalla sua riga. «Indice»
-(`markdown.toc`) lo inserisce dalla barra e dal «/». Gli altri programmi lo
-mostrano come un blocco di codice.
-
-## Le persone
-
-Una persona è una nota della cartella `files.people-folder`, un'impostazione
-del vault che parte da `Persone`; vuota, `@` resta testo. In Live e nei
-Blocchi `@` all'inizio di una parola propone le persone il cui nome combacia,
-cercate dall'indice, e scrive il link con il nome come testo:
-
-```markdown
-Ne parlo con [[Persone/Anna Bianchi|Anna Bianchi]].
-```
-
-Se nessuna si chiama così, «Nuova persona» scrive lo stesso link e crea la
-nota nella cartella. Il link a una nota della cartella si mostra come una
-pastiglia con la `@` davanti; in Lettura e negli altri programmi resta un
-wikilink.
-
-## Le date
-
-`@` propone anche i giorni: il giorno stesso, «domani», «ieri», «venerdì»
-(il prossimo), «prossimo venerdì» (nella settimana dopo, dal giorno di
-`locale.first-day-of-week` o del sistema), «4 novembre», «nov 4», `2026-11-04`
-e, con la regola del campo della data nelle proprietà (`saidDay`), «fra due
-settimane» e «3/4»; in italiano e in inglese, e una parola a metà basta. Il
-giorno diventa il link alla sua giornaliera (`daily.folder`, `daily.format`),
-col giorno per esteso come testo:
-
-```markdown
-Consegna [[Daily/2026-11-04|4 novembre 2026]].
-```
-
-In un compito c'è anche la scadenza `📅 2026-11-04`. «Persona»
-(`markdown.mention`) e «Data» (`markdown.date`) scrivono la `@` dal «/» e
-dalla barra; «Nuova sottopagina» (`note.subpage`) sta nel «/» fra i comandi
-del vault.
-
-## I segnalibri web
-
-Un indirizzo `http` o `https` scritto da solo in un paragrafo, fuori dal
-cursore, si vede come una scheda con titolo, descrizione, sito e icona della
-pagina; col cursore dentro torna l'indirizzo. Il file resta l'URL nudo, e in
-Lettura e negli altri programmi è un link. La scheda si scarica **soltanto su
-richiesta**: aprire una nota legge la cache e basta, e un indirizzo senza
-scheda offre «Mostra l'anteprima». Il download è il comando `linkcard.fetch`
-del bundle `fub.linkcard`, col permesso `fub:network` che si spegne nelle
-Preferenze: la scheda in cache torna subito nell'effetto `custom` con `ns`
-`fub.linkcard`, quella scaricata arriva col `job_done` del job
-`linkcard.fetch`. Della pagina si leggono soltanto i metadati della testa, fino a
-1 MiB; l'icona entra se è un'immagine raster entro 64 KiB, mai un SVG. Le
-schede stanno nella cache del bundle, ricostruibile. «Pagina web»
-(`markdown.linkcard`) apre dal «/» un paragrafo con `https://`.
-
 ## Dove si trova
 
 - `apps/client/src/editors/text/profiles/markdown/blocks/`: modello, maniglie,
   selezione, spostamenti, trasformazioni, link, movimento (`motion.ts`),
   scorrimento al bordo (`autoscroll.ts`), bersagli fuori (`drop-targets.ts`);
 - `apps/client/src/editors/text/profiles/markdown/block-gesture.ts`: i gesti
-  di blocco, annotati anche dalla Live;
+  di blocco, annotati anche dalla resa di Scrittura (`livepreview.ts`) e dalle
+  azioni comuni (la freccia di un ripiegabile, la casella di un'attività);
 - `apps/client/src/editors/text/profiles/markdown/block-id.ts`: gli id nascosti;
-- `apps/client/src/editors/text/profiles/markdown/details.ts`: la regola dei
-  ripiegabili, gemella di `crates/fub-format-markdown/src/render.rs`;
-- `apps/client/src/editors/text/profiles/markdown/blocks/columns.ts`: le
-  colonne fatte coi blocchi;
-- `apps/client/src/editors/text/profiles/markdown/toc.ts`: l'indice, gemello
-  di `crates/fub-format-markdown/src/render.rs`;
-- `apps/client/src/state/page-rename.ts`: la rinomina dal titolo;
-- `apps/client/src/state/page-icons.ts`: le icone fuori dalla pagina;
-- `apps/client/src/ui/page-mark.ts`: che cosa vuol dire un valore d'icona
-  (un'emoji o una figura `fub:<nome>`);
-- `apps/client/src/state/people.ts`: la cartella delle persone;
-- `apps/client/src/editors/text/profiles/markdown/dates.ts` e
-  `apps/client/src/state/dates.ts`: le date di `@` e la giornaliera, gemella
-  di `crates/fub-features/src/template.rs`;
-- `apps/client/src/editors/text/profiles/markdown/link-card.ts` e
-  `apps/client/src/state/link-cards.ts`: la scheda nella Live e le risposte di
-  `crates/fub-host/src/link_card.rs`;
 - `apps/client/src/state/editor-blocks.ts`: la preferenza `editor.blocks`,
   letta all'avvio della finestra e dalla superficie, scritta dal menu «…»
   del riquadro;

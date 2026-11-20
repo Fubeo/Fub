@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_ENTRY, COLOR_ENTRY, SLASH_RESULTS, SLASH_TOP, SYNC_BLOCK_ENTRY, slashMenuEntries } from "./entries";
+import { BASE_ENTRY, CANVAS_ENTRY, COLOR_ENTRY, REMINDER_ENTRY, SLASH_RESULTS, SLASH_TOP, SYNC_BLOCK_ENTRY, slashMenuEntries } from "./entries";
 import { ALL, SPECS, spec } from "./fixture.test-data";
 
 const OTHERS = [
@@ -74,6 +74,12 @@ describe("le voci del «/» nel testo", () => {
     expect(slashMenuEntries(LIST, "qwerty", ALL).entries).toEqual([]);
   });
 
+  it("la voce dei compiti si trova con le parole di chi la cerca: compito, attività, da fare, checkbox", () => {
+    for (const query of ["compito", "compiti", "attività", "attivita", "da fare", "checkbox", "checklist", "todo", "task"]) {
+      expect(slashMenuEntries(LIST, query, ALL).entries[0]?.id, query).toBe("markdown.list.task");
+    }
+  });
+
   it("un errore di battitura da quattro lettere: «/tabela» è Tabella, «forse»", () => {
     expect(slashMenuEntries(LIST, "tabela", ALL).entries[0]).toMatchObject({ id: "markdown.table", why: "forse" });
   });
@@ -136,6 +142,33 @@ describe("la Base dal «/» (T18)", () => {
   });
 });
 
+describe("la lavagna dal «/» (T47)", () => {
+  // `canvas.create` c'è soltanto con la componente della lavagna accesa.
+  const WITH_BOARDS = [...LIST, spec("canvas.create", "Nuova lavagna", ["toolbar"])];
+
+  it("sta fra i file, dopo l'incorporamento, con la sua figura e l'embed di una lavagna", () => {
+    const { entries } = slashMenuEntries(WITH_BOARDS, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids.indexOf(CANVAS_ENTRY)).toBeGreaterThan(ids.indexOf("markdown.embed"));
+    expect(entries.find((entry) => entry.id === CANVAS_ENTRY)).toMatchObject({
+      label: "Lavagna", section: "media", action: true, picker: null, icon: "dashboard", hint: "![[.canvas",
+      description: "Una zona libera dentro la nota: schede, fili e penna.",
+    });
+  });
+
+  it("scrivendo «/lavagna», «canvas» o «whiteboard» la si trova per prima", () => {
+    for (const query of ["lavagna", "canvas", "whiteboard"]) {
+      expect(slashMenuEntries(WITH_BOARDS, query, ALL).entries[0]!.id, query).toBe(CANVAS_ENTRY);
+    }
+  });
+
+  it("non c'è senza la lavagna, dove la superficie non sa crearla, né se è nascosta", () => {
+    expect(slashMenuEntries(LIST, "", ALL).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BOARDS, "", (id) => id !== CANVAS_ENTRY && ALL(id)).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BOARDS, "lavagna", ALL, undefined, { ...use(), hidden: [CANVAS_ENTRY] }).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
+  });
+});
+
 describe("il blocco di un'altra nota dal «/» (T30)", () => {
   it("subito dopo la trasclusione, con la lente del prototipo, senza forma da scrivere", () => {
     const { entries } = slashMenuEntries(LIST, "", ALL);
@@ -149,5 +182,29 @@ describe("il blocco di un'altra nota dal «/» (T30)", () => {
   it("scrivendo «sincronizzato» la si trova per prima; non c'è dove la superficie non la sa fare", () => {
     expect(slashMenuEntries(LIST, "sincronizzato", ALL).entries[0]!.id).toBe(SYNC_BLOCK_ENTRY);
     expect(slashMenuEntries(LIST, "", (id) => id !== SYNC_BLOCK_ENTRY && ALL(id)).entries.some((entry) => entry.id === SYNC_BLOCK_ENTRY)).toBe(false);
+  });
+});
+
+describe("il promemoria dal «/» (T36)", () => {
+  it("subito dopo la data, fra persone e date, con la sveglia e il `⏰`", () => {
+    const { entries } = slashMenuEntries(LIST, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids[ids.indexOf("markdown.date") + 1]).toBe(REMINDER_ENTRY);
+    expect(entries.find((entry) => entry.id === REMINDER_ENTRY)).toMatchObject({
+      label: "Promemoria", section: "people", action: true, picker: null, icon: "fmt-alarm", hint: "⏰",
+    });
+  });
+
+  it("si trova per nome e per sinonimi; non c'è dove la superficie non lo sa fare, né se è nascosto", () => {
+    expect(slashMenuEntries(LIST, "promemoria", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "sveglia", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "reminder", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "", (id) => id !== REMINDER_ENTRY && ALL(id)).entries.some((entry) => entry.id === REMINDER_ENTRY)).toBe(false);
+    expect(slashMenuEntries(LIST, "", ALL, undefined, { ...use(), hidden: [REMINDER_ENTRY] }).entries.some((entry) => entry.id === REMINDER_ENTRY)).toBe(false);
+  });
+
+  it("«/promemoria venerdì 9» è il comando rapido in cima, col giorno e l'ora", () => {
+    const first = slashMenuEntries(LIST, "promemoria venerdì 9", ALL, undefined, use()).entries[0]!;
+    expect(first).toMatchObject({ id: REMINDER_ENTRY, quick: true, params: { date: "2026-10-30", time: "09:00" } });
   });
 });

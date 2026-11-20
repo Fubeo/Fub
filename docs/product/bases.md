@@ -9,7 +9,7 @@ tocca, e lascia il resto com'è.
 flowchart LR
     NOTE["note del vault"] --> FILTRI["filtri e colonne"]
     FILE[".base"] --> FILTRI
-    FILTRI --> VISTA["vista: tabella, schede, elenco, bacheca, mappa"]
+    FILTRI --> VISTA["vista: tabella, schede, elenco, bacheca, mappa, calendario, linea del tempo"]
     COMANDO["comando base.view.*"] --> FILE
 ```
 
@@ -67,7 +67,7 @@ stanno nel blocco `fub:` della vista:
 
 Il nome della proprietà si scrive con o senza il prefisso `prop.` (`due` e
 `prop.due` sono la stessa cosa). Solo le proprietà contano: `file.*` e le
-formule non sono ancora date del calendario. Una vista senza la sua chiave si
+formule non sono date del calendario. Una vista senza la sua chiave si
 legge, e il piano dice che la chiave manca (`date_key` o `start_key` vuoti).
 
 **La forma su disco.** Obsidian non conosce `calendar` e `timeline`, quindi
@@ -210,7 +210,7 @@ del file resta byte per byte:
   il titolo di un gruppo di colonne), vanno con la loro voce;
 - l'ordine delle chiavi che non si toccano;
 - le virgolette, i rientri e le righe vuote;
-- le fini di riga (`\n` o `\r\n`) e l'assenza dell'a capo in fondo al file;
+- le fini di riga (`\n` o `\r\n`), il BOM in testa e l'a capo che manca in fondo;
 - le chiavi che Fub non conosce.
 
 Una chiave nuova va al suo posto, prima della prima chiave che la segue nella
@@ -267,7 +267,7 @@ destra gli attrezzi:
 |---|---|---|
 | Filtro | compone il filtro della vista a vista (proprietà, operatore, valore) o come riga di ricerca (`[stato:Arrivata]`); le due forme mostrano lo stesso filtro | `filters` |
 | Ordina | le chiavi dell'ordinamento con la direzione, e il raggruppamento di questa finestra | `sort` |
-| Proprietà | quali colonne mostrare e in che ordine: si trascinano, o Alt+↑ e Alt+↓ dalla tastiera | `order` |
+| Proprietà | quali colonne mostrare e in che ordine: si trascinano, o Alt+↑ e Alt+↓ dalla tastiera. In cima c'è sempre la colonna della nota, spuntata e fissa («sempre la prima»): non si sposta e non si nasconde, e un `file.name` scritto in `order` resta al suo posto. Sotto, le colonne della vista e poi le proprietà delle note non mostrate; se le note non hanno proprietà, il pannello lo dice | `order` |
 | Cerca | filtra le righe mentre scrivi | niente |
 | «…» | copia ed esporta le righe come CSV | niente |
 | Nuova | crea una nota con le proprietà iniziali della vista; la freccia accanto la crea da un modello della cartella `Templates` | la nota nuova |
@@ -283,7 +283,7 @@ un gesto è in volo la barra non ne accetta un altro.
 Il file riscritto da un gesto si ricarica **in silenzio**: niente avviso «è
 cambiato su disco», perché il cambio l'ha chiesto chi usa la Base, e la tabella
 resta dove era scorsa. La frase del comando arriva come avviso con «Annulla»,
-che disfa l'ultima operazione del vault come dalla tavolozza o con Ctrl+Z: se
+che disfa l'ultima operazione del vault come dalla tavolozza o con Ctrl+Alt+Z: se
 quella non riscrive il `.base` (niente da annullare, o era su un altro file), la
 Base non resta in attesa e un cambio che arriva dopo si dice. Un cambio fatto da
 un'altra app, da un'altra finestra o da un altro comando si dice come sempre. Se
@@ -413,7 +413,7 @@ l'anno se non è questo) e i numeri col separatore delle migliaia («2.600»):
 com'è, e la ricerca, il CSV e le copie usano il valore. Le colonne `file.*`,
 `container.*` e le formule sono di sola lettura: la loro cella è testo. In fondo alle righe
 «Nuova nota» fa quello che fa «Nuova» nella barra; in sola lettura non c'è.
-Una modifica chiesta (cella, colonna della bacheca, nota spostata nel calendario o nella linea del tempo) passa anche se il vault cambia o la Base si chiude; se la nota è cambiata o la Base è in sola lettura no, e lo dice la riga di stato o, a Base chiusa, un avviso.
+Una modifica chiesta (cella, colonna della bacheca, nota spostata nel calendario o nella linea del tempo, gesto della barra) passa anche se il vault cambia o la Base si chiude; se la nota o il file è cambiato o la Base è in sola lettura no, e lo dice la riga di stato o, a Base chiusa, un avviso, che per un gesto rimasto a metà dice che cosa manca. Il testo di una cella non ancora confermato e la nota cambiata da fuori: [la cella in modifica](bases-cell-edit.md).
 
 Ogni valore sta su una riga sola e le colonne prendono la misura del loro
 contenuto: la tabella è larga quanto la scatola e mai meno di 560 px; quando

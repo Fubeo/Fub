@@ -31,7 +31,7 @@
 // `InkPathCache` tiene i percorsi già calcolati per id, inchiostro e pennello,
 // e a ogni giro lascia andare quelli che non si disegnano più.
 
-import type { CardCellBox, CardPageBox } from "./cards";
+import type { CardCellBox, CardPageBox } from "../core/cards/contract";
 import { contentBox, validAspect, type InkFitMode } from "./ink-fit";
 
 const SVG_NS = "http://www.w3.org/2000/svg";

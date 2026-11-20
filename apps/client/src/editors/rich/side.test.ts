@@ -9,10 +9,18 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type CommentView } from "./projection";
 import { mountRichSide, RICH_SIDE_VIEWS, type RichSide } from "./side";
 import { lineFeeds, tryApplyOperation, type EditorChange } from "../core/text-operation";
+import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
+import type { DocumentSource, WriteBase } from "../../host/contract";
+import { mountKeyboard } from "../../ui/keyboard";
+import { revisions } from "./review";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
 
 let engines: RichEngine[] = [];
 let sides: RichSide[] = [];
+let lifetimes: Lifetime[] = [];
 afterEach(() => {
+  for (const life of lifetimes) life.close();
+  lifetimes = [];
   for (const side of sides) side.destroy();
   for (const engine of engines) engine.destroy();
   sides = [];
@@ -36,10 +44,15 @@ function engine(blocks: readonly Block[], comments: readonly CommentView[] = [],
   return made;
 }
 
-/// Il pannello con un ispettore che monta la scheda chiesta.
+/// Il pannello con un ispettore che monta la scheda chiesta. L'ispettore è
+/// legato al documento come nella shell: col fuoco su un suo pulsante,
+/// Ctrl+Z va alla storia del documento (`ui/off-sheet-keys.ts`).
 function side(e: RichEngine, review = true) {
   const host = document.createElement("div");
   document.body.append(host);
+  const keys = openLifetime();
+  lifetimes.push(keys);
+  mountKeyboard(keys, () => {}, { owns: (target) => host.contains(target), history: (step) => e.history(step) });
   const unmounts = new Map<string, () => void>();
   const made = mountRichSide(e, { review }, (viewId) => {
     if (unmounts.has(viewId)) return;
@@ -221,11 +234,12 @@ describe("la scheda Revisioni", () => {
     const name = field(host, t("rich.comment.author"));
     expect(key(name, { key: "z" }).defaultPrevented).toBe(false);
     expect(items().map((el) => el.dataset.kind)).toEqual(["del"]);
-    // Smontata la scheda, il contenitore della shell non tiene il tasto.
+    // Smontata la scheda, l'ispettore resta legato al documento: da lì
+    // Ctrl+Z annulla ancora, senza un ascoltatore della scheda.
     unmount(RICH_SIDE_VIEWS.revisions);
-    expect(key(host, { key: "z" }).defaultPrevented).toBe(false);
     expect(items()).toHaveLength(0);
-    expect(e.state.doc.textContent).toBe("resta nuovo e vecchio");
+    expect(key(host, { key: "z" }).defaultPrevented).toBe(true);
+    expect(revisions(e.state.doc).map((change) => change.kind)).toEqual(["ins", "del"]);
   });
 
   it("dopo Rifiuta e Rifiuta tutte il fuoco resta nella scheda, e Ctrl+Z da lì li annulla (IMP-126)", () => {
@@ -424,5 +438,139 @@ describe("la scheda Proprietà", () => {
     e.select(1);
     e.run("text.newline");
     expect(host.childElementCount).toBe(0);
+  });
+});
+
+describe("i gesti della scheda Revisioni arrivano al disco come una battuta (IMP-127)", () => {
+  const DOC = "rev.docx";
+  const ada = { by: "Ada", at: AT };
+  const bea = { by: "Bea", at: AT };
+  const tracked = (track: boolean) => JSON.stringify({ format: "fub-rich", version: 1, track, blocks: [
+    para([{ t: "text", x: "resta " }, { t: "text", x: "nuovo", ins: ada }, { t: "text", x: " e " }, { t: "text", x: "vecchio", del: bea }, { t: "text", x: " e " }, { t: "text", x: "altro", ins: bea }]),
+  ] });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /// Il documento aperto come nella shell: la sessione unica, il motore che
+  /// le porta ogni cambio (`written` nel controllore) e la scheda Revisioni.
+  /// Il disco risponde quando lo si lascia (`finish`): una scrittura lenta
+  /// del provider tiene la successiva in coda, come nell'app sotto carico.
+  async function opened(track: boolean) {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let disk = { text: tracked(track), revision: "r0" };
+    const writes: { text: string; finish: () => void }[] = [];
+    const source = async (): Promise<DocumentSource> => ({ text: disk.text, revision: disk.revision, format_id: "docx", source_kind: "text", text_kind: "source" });
+    const api: DocumentSessionApi = {
+      readDocument: vi.fn(source),
+      openDocument: vi.fn(source),
+      writeDocument: vi.fn((_id: string, text: string, base: WriteBase) => new Promise<string>((resolve, reject) => {
+        writes.push({
+          text,
+          finish: () => {
+            if (base.kind === "descends_from" && base.value !== disk.revision) return reject({ kind: "conflict", message: "superata" });
+            disk = { text, revision: `r${writes.length}` };
+            resolve(disk.revision);
+          },
+        });
+      })),
+      resourceWrite: vi.fn(async () => ({ revision: "byte" })),
+      saveDraft: vi.fn(async () => {}),
+      discardDraft: vi.fn(async () => {}),
+      documentClosed: vi.fn(async () => {}),
+    };
+    const sessions = new DocumentSessionCollection(api, () => null);
+    const text = await sessions.read(DOC);
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const refused: string[] = [];
+    const e = new RichEngine(parent, {
+      label: () => "documento",
+      onChange: (change) => {
+        const outcome = sessions.acceptSurfaceChange(DOC, "riquadro", change);
+        if (outcome.kind !== "accepted") refused.push(outcome.kind);
+      },
+      onSelectionChange: () => {},
+    });
+    engines.push(e);
+    e.setDoc(text);
+    const { side: panel, host } = side(e);
+    panel.show("revisions");
+    // Il tasto parte da dove sta il fuoco, come nell'app.
+    const undo = () => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ctrlKey: true, key: "z" });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+    };
+    const one = (label: "rich.rev.reject.one" | "rich.rev.accept.one") => {
+      const button = pressed(host.querySelector(".rich-side-change")!, t(label));
+      button.focus();
+      button.click();
+    };
+    const all = (label: "rich.rev.reject_all.short" | "rich.rev.accept_all.short") => {
+      const button = pressed(host, t(label));
+      button.focus();
+      button.click();
+    };
+    /// Passa l'attesa di un salvataggio dopo una battuta: torna il testo
+    /// dell'ultima scrittura chiesta al disco.
+    const saved = async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      return writes[writes.length - 1]?.text;
+    };
+    return { e, sessions, writes, refused, disk: () => disk, undo, one, all, saved };
+  }
+
+  for (const track of [true, false]) {
+    it(`Rifiuta, Ctrl+Z, Ctrl+Z, Rifiuta tutte: ogni gesto parte verso il disco, che alla chiusura è il foglio (registra: ${track})`, async () => {
+      const doc = await opened(track);
+      const sheet = () => doc.e.getDoc();
+      const words = () => doc.e.state.doc.textContent;
+      const start = words();
+
+      doc.one("rich.rev.reject.one");
+      expect(words()).toBe("resta  e vecchio e altro");
+      expect(doc.sessions.isDirty(DOC)).toBe(true);
+      expect(await doc.saved()).toBe(sheet());
+      // La prima scrittura resta lenta: i gesti dopo aspettano in coda.
+      doc.undo();
+      expect(words()).toBe(start);
+      doc.undo();
+      expect(words()).toBe(start);
+      doc.all("rich.rev.reject_all.short");
+      expect(words()).toBe("resta  e vecchio e ");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(doc.writes).toHaveLength(1);
+      expect(doc.sessions.inspect(DOC)?.saveState).toBe("in_corso");
+      doc.writes[0]!.finish();
+      // Finita la scrittura lenta, il buffer resta sporco del testo nuovo: la
+      // prossima parte da sé, sulla revisione appena scritta.
+      expect(await doc.saved()).toBe(sheet());
+      expect(doc.writes).toHaveLength(2);
+
+      // La chiusura aspetta la scrittura in corso; il disco è il foglio.
+      const closing = doc.sessions.flushPendingSave();
+      doc.writes[1]!.finish();
+      expect(await closing).toEqual([]);
+      expect(doc.writes).toHaveLength(2);
+      expect(doc.disk().text).toBe(sheet());
+      expect(doc.sessions.inspect(DOC)).toMatchObject({ dirty: false, saveState: "salvato" });
+      expect(doc.refused).toEqual([]);
+    });
+  }
+
+  it("Accetta e Accetta tutte partono verso il disco allo stesso modo", async () => {
+    const doc = await opened(true);
+    doc.one("rich.rev.accept.one");
+    expect(await doc.saved()).toBe(doc.e.getDoc());
+    doc.writes[0]!.finish();
+    doc.all("rich.rev.accept_all.short");
+    expect(await doc.saved()).toBe(doc.e.getDoc());
+    doc.writes[1]!.finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(doc.disk().text).toBe(doc.e.getDoc());
+    expect(doc.e.state.doc.textContent).toBe("resta nuovo e  e altro");
+    expect(doc.sessions.inspect(DOC)).toMatchObject({ dirty: false, saveState: "salvato" });
+    expect(doc.refused).toEqual([]);
   });
 });

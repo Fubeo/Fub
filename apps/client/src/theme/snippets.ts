@@ -1,5 +1,6 @@
 import { api } from "../host/ipc";
 import { settings } from "../host/query";
+import { errorText } from "../host/errors";
 import { onEvent } from "../state/kernel";
 import type { Lifetime } from "../ui/lifetime";
 import { t } from "../i18n/strings";
@@ -101,7 +102,7 @@ function compile(raw: string, rejectInvalid: boolean): { css: string; statuses: 
         // del controllo dei temi (IMP-023).
         error = reason instanceof ThemeCssError
           ? describeCssViolations(reason.violations)
-          : reason instanceof Error ? reason.message : String(reason);
+          : errorText(reason);
         if (rejectInvalid) throw new Error(`${snippet.id}: ${error}`);
       }
     }
@@ -135,7 +136,7 @@ export function cancelCssSnippetsPreview(): void {
     // preview active or prevent closing settings. Keep saved bytes untouched.
     statuses = [{
       id: "(stored)", enabled: false, trust: "local-user",
-      error: reason instanceof Error ? reason.message : String(reason),
+      error: errorText(reason),
     }];
     unmount("snippets");
   }

@@ -1521,7 +1521,7 @@ fn view_set(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = doc_arg(args)?;
+    let doc = doc_arg(args, host)?;
     let view = text_arg(args, VIEW)?;
     let key = key_arg(args)?;
     let value = match args.text(VALUE) {
@@ -1546,7 +1546,7 @@ fn view_add(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = doc_arg(args)?;
+    let doc = doc_arg(args, host)?;
     let name = text_arg(args, NAME)?;
     let view_type = match args.text(TYPE) {
         None => ViewType::Table,
@@ -1569,7 +1569,7 @@ fn view_remove(
     mode: InvokeMode,
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
-    let doc = doc_arg(args)?;
+    let doc = doc_arg(args, host)?;
     let view = text_arg(args, VIEW)?;
     let change = BaseChange::RemoveView {
         view: view.to_string(),
@@ -1590,10 +1590,7 @@ fn write(
     host: &mut dyn HostApi,
     phrases: Phrases,
 ) -> Result<CommandOutcome, PluginError> {
-    let is_base = host
-        .format_of(doc)
-        .is_some_and(|format| format.descriptor.id == BASE_FORMAT_ID);
-    if !is_base {
+    if !is_base(host, doc) {
         return Err(PluginError::BadArgs(about(E_NOT_BASE, doc, Vec::new())));
     }
     let revision = host.document_revision(doc)?;
@@ -1694,9 +1691,17 @@ fn patch_failure(doc: &DocId, error: PatchError) -> PluginError {
     }
 }
 
-fn doc_arg(args: Args<'_>) -> Result<DocId, PluginError> {
-    args.document(DOC)
+/// Il `.base` del comando: scelto dall'elenco o scritto per nome, fra i soli
+/// documenti del formato `.base`.
+fn doc_arg(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
+    crate::formats::document_named_by(&args, DOC, host, |doc| is_base(host, doc))?
         .ok_or_else(|| PluginError::BadArgs(Text::key(E_NO_DOC)))
+}
+
+/// Il documento è un `.base`? Lo dice il formato che lo serve, non l'estensione.
+fn is_base(host: &dyn HostApi, doc: &DocId) -> bool {
+    host.format_of(doc)
+        .is_some_and(|format| format.descriptor.id == BASE_FORMAT_ID)
 }
 
 fn text_arg<'a>(args: Args<'a>, name: &str) -> Result<&'a str, PluginError> {
@@ -2014,7 +2019,9 @@ pub fn catalog() -> Vec<StringCatalog> {
                 .insert((*key).to_string(), (*template).to_string());
         }
     }
-    catalogs
+    // I comandi leggono il campo «Documento» con le frasi comuni del nome
+    // scritto ([`crate::formats::document_named_by`]).
+    crate::formats::speaking(catalogs)
 }
 
 #[cfg(test)]

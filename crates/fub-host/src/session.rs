@@ -438,9 +438,33 @@ pub trait EventSink: Send + Sync + 'static {
     /// esiste. Chi tiene il conto è il ponte, che è uno solo
     /// (`bridge::consegna`); chi implementa questo trait deve solo **non
     /// mentire**.
+    ///
+    /// **`vault` dice di quale vault è il fatto** (#216): la radice canonica
+    /// della sessione il cui ponte lo consegna, la stessa stringa di
+    /// `VaultInfo::root`. `None` è un fatto che non appartiene a un vault (una
+    /// chiave della macchina). L'host tiene una sessione per vault aperto, ma
+    /// il canale verso chi guarda è uno: senza questo un `document_changed
+    /// "Nota.md"` di un vault lasciato aperto arriverebbe identico a uno del
+    /// vault che la shell mostra. L'uscita deve portarlo fino a chi riceve
+    /// ([`ShellNotice`]); chi riceve decide cosa è suo.
     #[must_use = "un'uscita che non dice se ha consegnato è una perdita silenziosa: \
                   chi riceve resta indietro e nessuno gli dice di riconciliare"]
-    fn emit(&self, notice: &Notice) -> Delivery;
+    fn emit(&self, notice: &Notice, vault: Option<&str>) -> Delivery;
+}
+
+/// Un notice **come lo riceve una shell**: l'evento, la sua origine e il vault
+/// da cui viene (#216).
+///
+/// È la forma di `fub://event`: i campi di [`Notice`] allo stesso livello, più
+/// `vault` quando il fatto è di un vault. Il campo è additivo — una shell che
+/// non lo legge riceve il notice di sempre — e assente, non `null`, per un
+/// fatto della macchina.
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+pub struct ShellNotice<'a> {
+    #[serde(flatten)]
+    pub notice: &'a Notice,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vault: Option<&'a str>,
 }
 
 /// Cosa è successo a un notice arrivato a un'[uscita](EventSink).
@@ -2164,7 +2188,7 @@ impl Host {
         })?;
 
         if let (Some(sink), Some(live)) = (&self.sink, live) {
-            crate::bridge::spawn(live, sink.clone());
+            crate::bridge::spawn(live, sink.clone(), root.to_string());
         }
 
         // **La seconda fase nasce dopo il subscriber live**, e l'ordine è la
@@ -3581,13 +3605,17 @@ impl Host {
             self.sync_theme_link();
         }
         if let Some(sink) = &self.sink {
-            let delivers = sink.emit(&fub_abi::Notice::new(
-                fub_abi::Event::SettingChanged {
-                    key: key.to_string(),
-                    scope: fub_abi::settings::SettingScope::Machine,
-                },
-                fub_abi::event::Origin::by(fub_abi::event::Actor::User),
-            ));
+            // Una chiave della macchina non è di nessun vault.
+            let delivers = sink.emit(
+                &fub_abi::Notice::new(
+                    fub_abi::Event::SettingChanged {
+                        key: key.to_string(),
+                        scope: fub_abi::settings::SettingScope::Machine,
+                    },
+                    fub_abi::event::Origin::by(fub_abi::event::Actor::User),
+                ),
+                None,
+            );
             if delivers == Delivery::Dropped {
                 tracing::error!(
                     target: "fub.host",
@@ -4662,6 +4690,14 @@ impl Host {
         finish_events(&workspace, deferred)
     }
 
+    /// Scrive la bozza di un documento **senza il turno di scrittura** (#485).
+    ///
+    /// La bozza esiste per coprire il tempo in cui il disco non ha ancora il
+    /// testo: se aspettasse il turno, aspetterebbe proprio il salvataggio lento
+    /// che deve coprire, e un crash in quei secondi perderebbe l'ultimo testo.
+    /// Le bozze non toccano lo stato del workspace, quindi se ne prende la porta
+    /// con un prestito condiviso e la si usa dopo averlo lasciato; l'ordine fra
+    /// le bozze di un documento lo tiene la coda delle bozze della shell.
     pub fn save_draft(
         &self,
         vault: Option<&str>,
@@ -4669,19 +4705,28 @@ impl Host {
         text: &str,
         base: Option<Revision>,
     ) -> Result<(), PluginError> {
-        self.write_workspace(vault, |workspace| {
-            workspace.save_draft(id, text, base).map_err(|error| {
-                PluginError::Internal(format!("draft not written: {error}").into())
-            })
-        })
+        self.draft_port(vault)?
+            .save(id, text, base)
+            .map_err(|error| PluginError::Internal(format!("draft not written: {error}").into()))
     }
 
+    /// Butta la bozza di un documento, senza il turno come [`Self::save_draft`].
     pub fn discard_draft(&self, vault: Option<&str>, id: &DocId) -> Result<(), PluginError> {
-        self.write_workspace(vault, |workspace| {
-            workspace.discard_draft(id).map_err(|error| {
-                PluginError::Internal(format!("draft not discarded: {error}").into())
-            })
-        })
+        self.draft_port(vault)?
+            .discard(id)
+            .map_err(|error| PluginError::Internal(format!("draft not discarded: {error}").into()))
+    }
+
+    /// La porta delle bozze del vault, presa con un prestito condiviso breve:
+    /// i reader non guardano il turno, quindi un salvataggio in volo non la
+    /// ferma se non nei tratti in cui tiene il workspace in esclusiva.
+    fn draft_port(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<fub_kernel::drafts::DraftPort, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let port = workspace.read()?.draft_port();
+        Ok(port)
     }
 
     pub fn set_active_context(
@@ -5027,7 +5072,24 @@ impl Host {
             .get("doc")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| PluginError::BadArgs("doc obbligatorio".into()))?;
+        // Il recinto prima di tutto, come per un id scelto dall'elenco; poi il
+        // nome scritto a mano, fra tutti i documenti: che cosa si può
+        // cestinare lo dicono i permessi e il cestino, qui sotto.
         let id = fenced_doc_id(&DocId::new(id))?;
+        let id = {
+            let ws = workspace.read()?;
+            fub_abi::command::resolve_document_name(
+                id.as_str(),
+                |doc| {
+                    &ws.free_name(doc) != doc
+                        && (ws.format_of(doc).is_some() || ws.document_revision(doc).is_ok())
+                },
+                || Ok(ws.documents()),
+                |_| true,
+                crate::doc_names::CORE_KEYS,
+            )?
+        };
+        let id = fenced_doc_id(&id)?;
         let _turn = workspace.write_turn();
         let prepared = {
             let ws = workspace.read()?;
@@ -6522,6 +6584,40 @@ mod os_trash_command_tests {
             &r.op,
             JournalOp::Trashed { doc, .. } if doc.as_str() == "Nota.md"
         )));
+    }
+
+    /// Il campo «Documento» scritto a mano (#486): «nota» è la sola nota che
+    /// si chiama così; un nome che nessuno porta si dice con una frase.
+    #[test]
+    fn os_trash_takes_a_note_written_by_name() {
+        let (vault, os, host) = fixture(false);
+        let missing = host
+            .invoke_user_command(
+                None,
+                OS_TRASH_COMMAND,
+                serde_json::json!({ "doc": "Preventivo" }),
+                InvokeMode::Apply,
+            )
+            .expect_err("nessun documento si chiama così");
+        let PluginError::BadArgs(text) = missing else {
+            panic!("atteso BadArgs, arrivato {missing:?}")
+        };
+        assert!(
+            text.as_literal()
+                .is_some_and(|t| t.contains("«Preventivo»") && t.contains("elenco del campo")),
+            "{text:?}"
+        );
+        assert!(vault.path().join("Nota.md").exists());
+
+        host.invoke_user_command(
+            None,
+            OS_TRASH_COMMAND,
+            serde_json::json!({ "doc": "nota" }),
+            InvokeMode::Apply,
+        )
+        .expect("il nome nomina la sola nota");
+        assert!(!vault.path().join("Nota.md").exists());
+        assert!(os.path().join("Nota.md").exists());
     }
 }
 

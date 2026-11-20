@@ -615,6 +615,22 @@ impl UiNode {
         })
     }
 
+    /// Una **domanda prima di un gesto distruttivo** ([`CONFIRM_NS`]): i
+    /// `children` sono la domanda e le sue risposte, `cancel` è l'azione del
+    /// «no», che la shell manda anche per Esc. `key` è la chiave del nodo
+    /// che la domanda sostituisce (il bottone che l'ha aperta): quando la
+    /// domanda sparisce, il fuoco torna lì.
+    pub fn confirmation(key: impl Into<String>, cancel: ActionRef, children: Vec<UiNode>) -> Self {
+        UiNode::keyed(
+            key,
+            UiKind::Custom {
+                ns: CONFIRM_NS.to_string(),
+                payload: serde_json::json!({ "cancel": cancel }),
+                fallback: children,
+            },
+        )
+    }
+
     /// I figli di questo nodo, qualunque sia la specie.
     ///
     /// Esiste per chi deve **attraversare** l'albero senza conoscerlo — la
@@ -919,6 +935,25 @@ pub const WEB_OPEN_NS: &str = "fub.web.open";
 /// cambia soltanto quale scheda si guarda, e una shell senza quella scheda lo
 /// dice e non fa altro.
 pub const INSPECTOR_TAB_NS: &str = "fub.inspector.tab";
+
+/// Il `ns` di un **nodo** [`UiKind::Custom`] (non di un intento) che racchiude
+/// una domanda prima di un gesto distruttivo: «Riportare la nota a questa
+/// versione? Sì, ripristina / Annulla». Lo costruisce
+/// [`UiNode::confirmation`].
+///
+/// Il `fallback` è la domanda stessa, testo e bottoni, e una shell che non
+/// conosce questo `ns` la disegna così com'è. Il `payload` è
+/// `{ "cancel": ActionRef }`, l'azione del «no». La shell che lo conosce
+/// disegna lo stesso `fallback` e aggiunge ciò che una fila di bottoni non sa
+/// dire: il fuoco va al «no» quando la domanda compare, **Esc** manda
+/// `cancel`, e quando la domanda sparisce il fuoco torna al nodo con la sua
+/// stessa chiave (il bottone che l'ha aperta).
+///
+/// Non è privilegiato e non dà niente in più del `fallback`: Esc manda
+/// un'azione che il provider ha già disegnato su un bottone. La domanda è
+/// stato del momento: un provider non la scrive nello stato di vista, che
+/// sopravvive al riavvio (IMP-110).
+pub const CONFIRM_NS: &str = "fub.confirm";
 
 /// Un intento `Custom` che la shell esegue con un privilegio del processo —
 /// scrivere negli appunti, ricaricare la finestra o modificare il testo aperto —

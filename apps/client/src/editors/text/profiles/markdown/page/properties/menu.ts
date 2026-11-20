@@ -9,6 +9,7 @@ import { iconEl } from "../../../../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../../../../ui/lifetime";
 import type { PropertyEntry } from "../../properties";
 import { liveStrings } from "../../strings";
+import { errorText } from "../../../../../../host/errors";
 import { MENU_TYPES, rowIcon, typeIcon, type RowKind } from "./kind";
 import { entryStamp, typeName, type PropertyRowHost } from "./values";
 
@@ -139,7 +140,7 @@ export function openPropertyMenu(entry: PropertyEntry, kind: RowKind, anchor: HT
 /// per tutte le note, e i valori che non tornano restano testo, segnati.
 async function chooseType(key: string, type: PropertyType, host: PropertyRowHost): Promise<void> {
   if (!host.setType) return;
-  const problem = await host.setType(key, type).catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  const problem = await host.setType(key, type).catch((error: unknown) => errorText(error, "specie"));
   if (problem === null) host.notify?.(liveStrings.t("page.properties.type.done", { key, type: typeName(type).toLocaleLowerCase() }), "info");
   else host.notify?.(liveStrings.t("page.properties.type.failed", { key, reason: problem }), "guasto");
 }

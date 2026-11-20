@@ -5,6 +5,7 @@ import {
   diagramFence,
   diagramProblem,
   diagramTitle,
+  drawnDiagramSvg,
   flowDirectionEdit,
   flowLine,
   forgetMermaidRenders,
@@ -306,6 +307,35 @@ describe("Mermaid lifecycle", () => {
 });
 
 describe("gli stili dei diagrammi", () => {
+  it("l'aspetto imposto dall'esportazione vince sullo stile, dà i colori e toglie il fondo", async () => {
+    setDiagramStylePreference("aurora");
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:esporta");
+    const diagram = mountedView("%% stile: inchiostro\nflowchart LR; A-->B", {
+      appearance: "light",
+      look: { style: "acquerello", colors: { nodes: "#1f4f8f", lines: "#b3261e" }, paper: false, ground: "#fffdf8" },
+    });
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    expect(diagram.element.dataset.diagramStyle).toBe("acquerello");
+    expect(lastConfig().themeVariables.lineColor).toBe("#b3261e");
+    expect(String(lastConfig().themeCSS)).toContain("fill:#1f4f8f;");
+    // Senza il fondo la tavola non ha carta: sta sulla pagina.
+    expect(diagram.element.style.getPropertyValue("--diagram-paper")).toBe("");
+    // Il disegno si ritrova dall'immagine, per l'SVG che va nel PDF.
+    expect(drawnDiagramSvg(diagram.element.querySelector("img")!)).toContain("<svg");
+    // `%% stile:` nella nota resta com'è.
+    expect(diagram.element.querySelector("pre code")!.textContent).toContain("%% stile: inchiostro");
+  });
+
+  it("con Armonia dell'esportazione legge i colori della carta di stampa", async () => {
+    renderer.render.mockResolvedValue({ svg });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:tema");
+    const tokens = { ground: "#fbf8ee", "--doc-fg": "#2b2a27", "--muted": "#55524a", "--accent": "#8d2d63" };
+    const diagram = mountedView("flowchart LR; A-->B", { appearance: "light", look: { style: "armonia", tokens } });
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    expect(lastConfig().themeVariables.primaryColor).toBe(paletteFor("armonia", "light", "normal", (name) => tokens[name as keyof typeof tokens] ?? null).primary.fill);
+  });
+
   it("disegna con lo stile scelto e ridisegna quando la scelta cambia", async () => {
     document.documentElement.dataset.theme = "dark";
     setDiagramStylePreference("aurora");

@@ -77,6 +77,14 @@ export function shownLook(root: HTMLElement): Look | null {
 /// (`--doc-bg`, `--doc-fg`) come li vede `at`. Negli altri aspetti, nessuna.
 export function adaptedPaper(root: HTMLElement, at: Element = root): Paper | null {
   if (shownLook(root) !== "adattato") return null;
+  return themePaper(at);
+}
+
+/// La carta del tema come la vede `at` (`--doc-bg`, `--doc-fg`), in ogni
+/// aspetto; `null` se `at` non la vede (fuori dal documento). Per chi porta i
+/// colori di un file sulla carta su cui sta comunque, come la scheda di un
+/// foglio nella nota.
+export function themePaper(at: Element): Paper | null {
   const css = getComputedStyle(at);
   const bg = css.getPropertyValue("--doc-bg").trim();
   const ink = css.getPropertyValue("--doc-fg").trim();

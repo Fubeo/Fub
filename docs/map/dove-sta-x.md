@@ -49,6 +49,15 @@
 | `TextEngine` (il padrone di CodeMirror) | `apps/client/src/editors/text/engine.ts` |
 | il registro delle superfici | `apps/client/src/editors/core/registry.ts` |
 | la porta dei suggerimenti (`openHintSource`) e la riga della banda | `apps/client/src/editors/core/hints.ts`; la riga in `apps/client/src/shells/scrittoio/frame/hints-row.ts` |
+| le preferenze dell'editor delle note (`editor.blocks`, `editor.toolbar`, `editor.hints`, `editor.link-click`, `editor.typewriter`, `editor.typography`, `editor.minibar`, `editor.slash`) | `crates/fub-host/src/settings.rs`; `editor.blocks` letta in `apps/client/src/state/editor-blocks.ts` |
+| i livelli di presenza sul foglio (`markPresence`) | `apps/client/src/editors/core/presence.ts` |
+| la sbirciata (`createNotePeek`) | `apps/client/src/state/note-peek.ts` |
+| i gruppi del blocco nella barra di formato | `apps/client/src/editors/text/profiles/markdown/block-groups.ts`, dalla porta `blockGroup` di `apps/client/src/editors/core/registry.ts` |
+| il lanciatore (Ctrl O) | `apps/client/src/shells/scrittoio/launcher/` |
+| i commenti nelle note (CriticMarkup) | `apps/client/src/editors/text/profiles/markdown/comments/`; la grammatica del provider in `crates/fub-format-markdown/src/parse/comments.rs` |
+| il registro dei tipi delle proprietà (`properties.types`) | `crates/fub-kernel/src/properties.rs`; i comandi in `crates/fub-features/src/properties/commands.rs`, le Relazioni in `relation.rs` |
+| le toppe mirate del `.base` | `crates/fub-format-base/src/patch.rs`; il modello e la forma su disco (`disk_form`) in `model.rs` |
+| la Tabella (i gesti comuni a note, documenti e fogli) | `apps/client/src/tabella/` |
 | `SHELL_COMMANDS` e i suoi mirror | `crates/fub-host/src/shell.rs` e `apps/client/src/ui/shell-keys.generated.ts` |
 | `PluginManifest` (`provides`, `requires`) | `crates/fub-abi/src/traits/plugin.rs` |
 | `plugins.disabled` (spegnere per vault) | `crates/fub-host/src/settings.rs` |
@@ -59,6 +68,7 @@
 | `draw.workspace` (Semplice o Completo) | le impostazioni della feature `draw`, `crates/fub-features/src/draw.rs` |
 | le quattordici impostazioni della lavagna, `canvas.*` (`ink_mouse_remember`, `finger_moves_card`, `finger_writes`, `pen_button`, `wheel`, `drag_empty`, `workspace`, `toolbar`, `grid`, `snap`, `snap_step`, `parts_picker`, `drop_folder`, `drop_folder_path`) | le impostazioni della feature `lavagna`, `crates/fub-features/src/lavagna.rs`; le chiavi, i valori di serie e la lettura in `apps/client/src/rules/canvas-settings.ts`, le legge e le segue `apps/client/src/editors/canvas/preferences.ts` |
 | dove vanno i file trascinati dal computer sulla lavagna (`canvas.drop_folder`) | `apps/client/src/state/canvas-intake.ts` (`dropFolderFor`, `depositCanvasFiles`); la cartella delle note è `files.attachment-folder`, letta in `apps/client/src/state/document-controller.ts` |
+| la regola del documento scritto per nome in un campo «Documento» | `document_named` e `Args::named_document` in `crates/fub-abi/src/command.rs`; per le feature `crates/fub-features/src/formats.rs`, per l'host `crates/fub-host/src/doc_names.rs`; `docs/reference/document-by-name.md` |
 | il registro dei comandi del vault | `crates/fub-features/src/commands.rs` e i suoi moduli in `commands/` (dogfood del `CommandProvider`) |
 | il catalogo dei comandi dei fogli | `crates/fub-abi/src/grid_bytes.rs`, servito in `crates/fub-format-xlsx` |
 | il lessico dei menu | `apps/client/src/i18n/lexicon.ts` |
@@ -67,7 +77,7 @@
 | il disegno sul motore (chi possiede che cosa) | [Il disegno sul motore](../architecture/disegno.md) |
 | la tavolozza dell'inchiostro | `apps/client/src/ink/palette.ts` (Okabe–Ito) |
 | i colori della lavagna (i sei di JSON Canvas, i nove delle note, «Altro…») | `apps/client/src/editors/canvas/colors.ts` |
-| le schede vive della lavagna (`liveCardIds`, `LIVE_ZOOM_MIN`, `MAX_LIVE_CARDS`) e il contratto dei renderer | `apps/client/src/editors/canvas/cards.ts`; i renderer in `apps/client/src/editors/canvas/cards/` e `apps/client/src/editors/grid/card.ts` |
+| le schede vive della lavagna (`liveCardIds`, `LIVE_ZOOM_MIN`, `MAX_LIVE_CARDS`, che vale anche per le schede della nota) e il contratto dei renderer | `apps/client/src/editors/core/cards/contract.ts`; i renderer in `apps/client/src/editors/core/cards/kinds/` e `apps/client/src/editors/grid/card.ts` |
 | l'inventario della parità della lavagna (le voci e i test) | `apps/client/src/__fixtures__/canvas-parity/`, con le regole in `docs/development/canvas-parity.md` |
 | il limite dei 64 MiB per i media | `apps/client/src/editors/media/media-types.ts` |
 | il sanificatore dell'HTML | `apps/client/src/ui/sanitize.ts` |

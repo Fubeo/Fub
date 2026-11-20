@@ -1989,14 +1989,18 @@ fn an_installed_theme_whose_pointer_does_not_read_is_blocked() {
 
     // Il posto è il nome canonico della cartella dei temi, come lo apre
     // l'installazione: su Windows è un'altra scrittura della cartella
-    // temporanea (il prefisso `\\?\`, il nome lungo al posto di `RUNNER~1`).
+    // temporanea (il nome lungo al posto di `RUNNER~1`). Alla persona arriva
+    // nella forma normale, senza il prefisso `\\?\` (#482).
     let themes = themes.canonicalize_utf8().unwrap();
+    let shown = fub_host::vault_path::plain_text(themes.join("acme.carta").as_str()).into_owned();
+    #[cfg(windows)]
+    assert!(!shown.starts_with(r"\\?\"), "{shown}");
     assert_blocked(
         &host,
         &config,
         &new,
         ThemeBlock::Pointer,
-        &themes.join("acme.carta"),
+        Utf8Path::new(&shown),
     );
     assert_eq!(
         std::fs::read_to_string(themes.join("acme.carta/.fub-current.json")).unwrap(),
@@ -2904,8 +2908,11 @@ fn switching_or_resetting_a_profile_keeps_the_linked_folder() {
     let folder = source.join("carta");
     write_theme(&folder, "acme.collegato", "theme-2", "");
     let host = developer(&config, true);
-    let linked = link(&host, &folder);
-    let kept = Some(linked.folder.clone());
+    link(&host, &folder);
+    // L'impostazione tiene la forma canonica (su Windows col prefisso
+    // `\\?\`); quella mostrata nel `ThemeLink` è la normale.
+    let kept = Some(folder.canonicalize_utf8().unwrap().to_string());
+    assert_eq!(linked_key(&host), kept);
     let (first, _) = host.settings_profiles(None, SettingScope::Machine).unwrap();
     assert!(!host
         .export_settings_profile(None, SettingScope::Machine, &first)

@@ -797,10 +797,14 @@ export interface Origin {
 }
 
 // Ciò che il ponte Tauri consegna davvero: l'evento E la sua origine
-// (fub_abi::event::Notice, decisione 0012).
+// (fub_abi::event::Notice, decisione 0012), più il vault di cui è il fatto
+// (fub_host::ShellNotice, #216). `vault` è la radice canonica, la stessa di
+// `VaultInfo.root`; manca per un fatto della macchina (una chiave di
+// configurazione, un avviso tirato con `session_notice`).
 export interface KernelNotice {
   event: KernelEvent;
   origin: Origin;
+  vault?: string;
 }
 
 // La dichiarazione di una view offerta da un provider (rispecchia
@@ -3014,6 +3018,8 @@ export const COMMANDS = {
   subpage: "note.subpage",
   moveBlock: "note.block.move",
   syncBlock: "note.block.sync",
+  tableSheet: "note.table.sheet",
+  fromNote: "canvas.from_note",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",

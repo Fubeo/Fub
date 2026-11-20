@@ -5,20 +5,24 @@
 // tabulazioni, la sessione chiusa da ferma e a `destroy` (una volta sola,
 // anche con una finestra in volo), lo `Stale` dell'host, i fogli nascosti,
 // le unioni, le due schede dello stesso file, le celle per l'inchiostro
-// (`cellAt`, `cellRect`, `cellsShown`, T38). `applyGridBytes` non si chiama mai.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+// (`cellAt`, `cellRect`, `cellsShown`, T38), la parte che una nota incorpora
+// (T43). `applyGridBytes` non si chiama mai, e l'unico comando è quello che
+// legge soltanto dove sta la parte (`fub.part`).
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fixture from "../../__fixtures__/xlsx-grid.json";
 import type {
   GridBytesSession,
   GridBytesWindow,
   GridCellStyle,
   GridMerge,
+  GridObject,
   GridSurfaceSpec,
   GridWindowRequest,
   PluginError,
 } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { declareClipboard } from "../../platform/clipboard";
+import { contrast } from "../../theme/contrast";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { CardCache } from "../canvas/card-cache";
 import type {
@@ -30,7 +34,7 @@ import type {
   CardMode,
   CardView,
   CardWriting,
-} from "../canvas/cards";
+} from "../core/cards/contract";
 import { COMPONENT_EDITORS, type SurfaceBootstrapOptions } from "../core/bootstrap";
 import { GRID_PROFILE, UI_GRID } from "../core/component-surfaces";
 import type { EditorSurface, LazySurfaceFactory } from "../core/registry";
@@ -41,11 +45,24 @@ import {
   SHEET_CARD_COLUMN_WIDTH,
   SHEET_CARD_ROW_HEADER,
   SHEET_CARD_ROW_HEIGHT,
+  SHEET_NOTE_COLUMN_HEADER,
+  SHEET_NOTE_ROW_HEADER,
   sheetCardRenderer,
+  sheetPartAnswer,
   type SheetCardPort,
 } from "./card";
 import type { GridHost } from "./engine";
 import { workbookHost } from "./test-support";
+
+/// Il menu di «Scegli di nuovo»: le voci, senza disegnarlo.
+const menus = vi.hoisted(() => [] as { label: string; run?: () => void }[][]);
+vi.mock("../../ui/menu", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../ui/menu")>()),
+  showContextMenu: (_at: unknown, items: { label: string; run?: () => void }[]) => {
+    menus.push(items);
+    return { close: () => {} };
+  },
+}));
 
 const PATH = "Statistica/voti.xlsx";
 const FORMAT = "xlsx";
@@ -99,6 +116,13 @@ interface FakeOptions {
   surfaces?: GridSurfaceSpec[];
   /// Quante aperture rifiutare con `conflict` prima di aprire.
   stale?: number;
+  /// La risposta di `fub.part` al testo della parte (T43); senza, la
+  /// sessione non serve il comando.
+  part?: (text: string) => unknown;
+  /// Le celle con un valore non ricalcolato.
+  staleAt?: (row: number, column: number) => boolean;
+  /// Gli oggetti della finestra (T54: il grafico).
+  objects?: (request: GridWindowRequest) => GridObject[];
 }
 
 interface FakeHost extends GridHost {
@@ -107,6 +131,8 @@ interface FakeHost extends GridHost {
   readonly closes: string[];
   applies: number;
   commands: number;
+  /// I testi delle parti chieste con `fub.part`.
+  readonly parts: string[];
   /// Se c'è, la prossima apertura (o finestra) aspetta questa promessa.
   holdOpen: Deferred<void> | null;
   holdWindow: Deferred<void> | null;
@@ -127,6 +153,7 @@ function fakeHost(options: FakeOptions = {}): FakeHost {
     closes: [],
     applies: 0,
     commands: 0,
+    parts: [],
     holdOpen: null,
     holdWindow: null,
     revision: "rev-1",
@@ -157,7 +184,7 @@ function fakeHost(options: FakeOptions = {}): FakeHost {
         hidden: options.hidden ?? [],
         notices: [],
         conflicts: [],
-        commands: [],
+        commands: options.part ? [{ id: "fub.part", enabled: true, reason: null }] : [],
         book: BOOK,
       };
     },
@@ -191,7 +218,7 @@ function fakeHost(options: FakeOptions = {}): FakeHost {
           value: { kind: "text" as const, value: text },
           display: text,
           lock: null,
-          stale: false,
+          stale: options.staleAt?.(row.index, column.index) ?? false,
           conflict: false,
           data_bar: null,
           icon: null,
@@ -216,7 +243,7 @@ function fakeHost(options: FakeOptions = {}): FakeHost {
         merges,
         view: VIEW,
         tables: [],
-        objects: [],
+        objects: options.objects?.(request) ?? [],
       };
     },
     async applyGridBytes() {
@@ -227,7 +254,12 @@ function fakeHost(options: FakeOptions = {}): FakeHost {
       host.commands += 1;
       return [];
     },
-    async gridBytesCommand() {
+    async gridBytesCommand(_surface, _instance, request) {
+      if (request.command.id === "fub.part" && options.part) {
+        const text = (JSON.parse(request.command.params) as { part: string }).part;
+        host.parts.push(text);
+        return { result: JSON.stringify(options.part(text)) } as never;
+      }
       host.commands += 1;
       throw new Error("the sheet card runs no commands");
     },
@@ -251,6 +283,9 @@ interface Bench {
   /// Quante volte la scheda ha detto che le celle si sono spostate (T38), e
   /// che cosa fare ogni volta (per guardare la scheda in quel momento).
   readonly cells: { count: number; seen: (() => void) | null };
+  /// Le altezze chieste dalla scheda nella nota (T43) e le parti scelte.
+  readonly fits: (number | null)[];
+  readonly chosen: string[];
   mount(mode: CardMode): CardView;
   root(): HTMLElement;
 }
@@ -261,6 +296,9 @@ function bench(options: FakeOptions & {
   source?: () => Promise<{ journal: string; base: string; format: string | null } | null>;
   withOpen?: boolean;
   editors?: CardEditorPort;
+  /// Dentro una nota (T43), con la parte del `subpath`.
+  note?: boolean;
+  subpath?: string;
 } = {}): Bench {
   const element = document.createElement("div");
   document.body.append(element);
@@ -297,6 +335,8 @@ function bench(options: FakeOptions & {
   const writings: Bench["writings"] = [];
   const states: Bench["states"] = [];
   const cells: Bench["cells"] = { count: 0, seen: null };
+  const fits: Bench["fits"] = [];
+  const chosen: Bench["chosen"] = [];
   const made: Bench = {
     host: element,
     grid,
@@ -307,10 +347,21 @@ function bench(options: FakeOptions & {
     writings,
     states,
     cells,
+    fits,
+    chosen,
     mount(mode) {
       const context: CardContext = {
         path: PATH,
-        subpath: null,
+        subpath: options.subpath ?? null,
+        ...(options.note ? {
+          host: "note" as const,
+          fitHeight: (height: number | null) => {
+            fits.push(height);
+          },
+          choosePart: (part: string) => {
+            chosen.push(part);
+          },
+        } : {}),
         documentId: "Lavagne/studio.canvas",
         lifetime,
         snapshots: new CardCache(),
@@ -664,6 +715,32 @@ describe("la scheda di foglio", () => {
     card.key!(copyKey());
     await settle();
     expect(clipboard).toEqual(["R1C1\tR1C2\t\nR2C1\t\t\n"]);
+  });
+
+  it("le celle sono una griglia ARIA: ogni `gridcell` nella sua `row`, senza righe vuote", async () => {
+    // Una riga intera coperta dall'unione sopra: non porta una `row` vuota.
+    const b = bench({ merges: [{ row: 0, column: 0, rows: 2, columns: 5 }] });
+    b.mount("live");
+    await settle();
+    const grid = b.root().querySelector<HTMLElement>(".canvas-card-sheet-grid")!;
+    expect(grid.getAttribute("role")).toBe("grid");
+    const rows = [...grid.querySelectorAll<HTMLElement>('[role="row"]')];
+    // La riga 2 sta tutta nell'unione: restano la 1, la 3 e la 4.
+    expect(rows.map((row) => row.getAttribute("aria-rowindex"))).toEqual(["1", "3", "4"]);
+    // La riga non si disegna: le celle restano posate sulla griglia.
+    for (const row of rows) expect(row.style.display).toBe("contents");
+    for (const each of grid.querySelectorAll<HTMLElement>('[role="gridcell"]')) {
+      expect(each.parentElement?.getAttribute("role")).toBe("row");
+      expect(each.parentElement?.parentElement).toBe(grid);
+    }
+    // Nessun figlio diretto della griglia è una cella; il resto è nascosto o senza ruolo.
+    for (const child of grid.children) expect(child.getAttribute("role")).not.toBe("gridcell");
+    const merged = cell(b.root(), 0, 0);
+    expect(merged.getAttribute("aria-colindex")).toBe("1");
+    expect(merged.getAttribute("aria-rowspan")).toBe("2");
+    expect(merged.getAttribute("aria-colspan")).toBe("5");
+    expect(cell(b.root(), 3, 4).getAttribute("aria-colindex")).toBe("5");
+    expect(cell(b.root(), 3, 4).hasAttribute("aria-colspan")).toBe(false);
   });
 
   it("una cella unita che comincia sopra la vista si disegna dalla prima riga in vista", async () => {
@@ -1268,5 +1345,334 @@ describe("la scheda di foglio che scrive (T42)", () => {
     expect(port.destroyed).toBe(port.surfaces.length);
     expect(writer(made)).toBeNull();
     expect(made.host.querySelector(".grid-surface")).toBeNull();
+  });
+});
+
+// --- La parte che una nota incorpora (T43) -----------------------------------
+
+/// Due fogli; la parte `Budget!B2:C3` (indici 1–2) sta sul secondo.
+const TWO_SHEETS = [{ id: "s1", rows: 100, columns: 26 }, { id: "s2", rows: 100, columns: 26 }];
+const found = (sheet: string, range: string) => ({ found: true, kind: "range", sheet, range });
+const headers = (root: HTMLElement) => root.querySelectorAll(".grid-header, .grid-corner").length;
+
+describe("la parte di un foglio (T43)", () => {
+  it("con un `subpath` chiede la parte al provider e mostra solo quel rettangolo, sul suo foglio", async () => {
+    const b = bench({ sheets: TWO_SHEETS, subpath: "#Budget!B2:C3", part: () => found("s2", "B2:C3") });
+    b.mount("live");
+    await settle();
+    expect(b.grid.parts).toEqual(["Budget!B2:C3"]);
+    expect(b.grid.windows).toHaveLength(1);
+    expect(b.grid.windows[0]!.request).toMatchObject({ sheet: "s2", row_start: 1, row_count: 2, column_start: 1, column_count: 2 });
+    const root = b.root();
+    expect(cellTexts(root)).toEqual(["R2C2", "R2C3", "R3C2", "R3C3"]);
+    // Sulla lavagna le lettere e i numeri restano, e la prima cella è all'angolo.
+    expect([...root.querySelectorAll(".grid-column-header")].map((h) => h.textContent)).toEqual(["B", "C"]);
+    expect(cell(root, 1, 1).style.left).toBe(`${SHEET_CARD_ROW_HEADER}px`);
+    expect(b.fits).toEqual([]);
+  });
+
+  it("la rotella non esce dalla parte", async () => {
+    const b = bench({ subpath: "#A3:B8", part: () => found("s1", "A3:B8") });
+    const card = b.mount("live");
+    await settle();
+    card.enter!();
+    wheel(b.root(), 20 * SHEET_CARD_ROW_HEIGHT);
+    await settle();
+    // Quattro righe in vista: la prima è al più la quinta della parte.
+    expect(b.grid.windows.every((window) => window.request.row_start >= 2 && window.request.row_start + window.request.row_count <= 8)).toBe(true);
+    expect(b.grid.windows.every((window) => window.request.column_start === 0 && window.request.column_count === 2)).toBe(true);
+    wheel(b.root(), -40 * SHEET_CARD_ROW_HEIGHT);
+    await settle();
+    expect(cell(b.root(), 2, 0).textContent).toBe("R3C1");
+    expect(b.root().querySelector('.grid-cell[data-row="1"]')).toBeNull();
+  });
+
+  it("nella nota: la prima cella usata senza parte, niente lettere né numeri a riposo, alta quanto le righe", async () => {
+    const b = bench({ note: true, part: (text) => (text === "" ? { found: true, kind: "active", sheet: "s1", range: "C3:D5" } : null) });
+    const card = b.mount("live");
+    await settle();
+    // Senza `subpath` la nota chiede lo stesso: la parte vuota.
+    expect(b.grid.parts).toEqual([""]);
+    const root = b.root();
+    expect(cellTexts(root)).toEqual(["R3C3", "R3C4", "R4C3", "R4C4", "R5C3", "R5C4"]);
+    expect(headers(root)).toBe(0);
+    // Lo spazio delle lettere e dei numeri resta, vuoto: attivarla non sposta le celle.
+    expect(cell(root, 2, 2).style.left).toBe(`${SHEET_NOTE_ROW_HEADER}px`);
+    expect(cell(root, 2, 2).style.top).toBe(`${SHEET_NOTE_COLUMN_HEADER}px`);
+    expect(b.fits).toEqual([SHEET_NOTE_COLUMN_HEADER + 3 * SHEET_CARD_ROW_HEIGHT]);
+    expect(card.enter!()).toBe(true);
+    expect([...root.querySelectorAll(".grid-column-header")].map((h) => h.textContent)).toEqual(["C", "D"]);
+    expect([...root.querySelectorAll(".grid-row-header")].map((h) => h.textContent)).toEqual(["3", "4", "5"]);
+    expect(cell(root, 2, 2).style.left).toBe(`${SHEET_NOTE_ROW_HEADER}px`);
+    card.leave!();
+    expect(headers(root)).toBe(0);
+  });
+
+  it("nella nota i colori del file stanno sulla carta della nota, e la seguono quando cambia la luce", async () => {
+    const red: GridCellStyle = { ...PLAIN, bold: false, italic: false, text_color: "#FF0000" };
+    const b = bench({ note: true, styleOf: (row, column) => (row === 0 && column === 0 ? red : null), part: () => found("s1", "A1:B2") });
+    // La carta della nota di notte; la porta non ne dà una (la nota non è adattata).
+    b.host.style.setProperty("--doc-bg", "#131c16");
+    b.host.style.setProperty("--doc-fg", "#e6ece8");
+    const card = b.mount("live");
+    await settle();
+    const root = b.root();
+    expect(root.classList.contains("look-adattato")).toBe(true);
+    const dark = cell(root, 0, 0).style.getPropertyValue("--file-color-a");
+    expect(cell(root, 0, 0).style.getPropertyValue("--file-color")).toBe("#FF0000");
+    // Il rosso puro sul fondo scuro sta a 4,35:1: portato sulla carta regge.
+    expect(dark).not.toBe("");
+    expect(contrast(dark, "#131c16")).toBeGreaterThanOrEqual(4.5);
+    // Di giorno: la scheda rilegge la carta e ridipinge.
+    b.host.style.setProperty("--doc-bg", "#ffffff");
+    b.host.style.setProperty("--doc-fg", "#131715");
+    card.themeChanged!();
+    const light = cell(b.root(), 0, 0).style.getPropertyValue("--file-color-a");
+    expect(light).not.toBe(dark);
+    expect(contrast(light, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("sulla lavagna, senza la carta della porta, le celle stanno sulla carta del file", async () => {
+    const b = bench();
+    b.host.style.setProperty("--doc-bg", "#131c16");
+    b.host.style.setProperty("--doc-fg", "#e6ece8");
+    b.mount("live");
+    await settle();
+    expect(b.root().classList.contains("look-file")).toBe(true);
+  });
+
+  it("selezione e Ctrl+C dentro la parte, a tabulazioni", async () => {
+    const b = bench({ note: true, subpath: "#Spese", part: () => ({ found: true, kind: "table", sheet: "s1", range: "B2:C3" }) });
+    const card = b.mount("live");
+    await settle();
+    card.enter!();
+    pointer(cell(b.root(), 1, 1), "pointerdown");
+    pointer(cell(b.root(), 2, 2), "pointermove");
+    expect(card.key!(copyKey())).toBe(true);
+    await settle();
+    expect(clipboard).toEqual(["R2C2\tR2C3\nR3C2\tR3C3\n"]);
+  });
+
+  it("un valore non ricalcolato porta il segno del foglio", async () => {
+    const b = bench({ note: true, staleAt: (row, column) => row === 0 && column === 1, part: () => found("s1", "A1:B2") });
+    b.mount("live");
+    await settle();
+    expect(cell(b.root(), 0, 1).classList.contains("stale")).toBe(true);
+    expect(cell(b.root(), 0, 1).title).toBe(t("grid.workbook.stale"));
+    expect(cell(b.root(), 0, 0).classList.contains("stale")).toBe(false);
+  });
+
+  it("una parte che non c'è dice «Intervallo non trovato» e «Scegli di nuovo» la riscrive con una che c'è", async () => {
+    menus.length = 0;
+    const parts = [{ kind: "sheet", name: "Conti 2024" }, { kind: "sheet", name: "Note" }, { kind: "name", name: "Totali" }, { kind: "table", name: "Spese" }];
+    const b = bench({ note: true, subpath: "#Budget!A1:E7", part: () => ({ found: false, parts }) });
+    b.mount("live");
+    await settle();
+    const root = b.root();
+    expect(root.dataset.cardState).toBe("lost");
+    expect(root.querySelector(".canvas-card-message")!.textContent).toBe(t("canvas.card.part_lost", { part: "Budget!A1:E7" }));
+    // Nessuna finestra: la sessione è già chiusa.
+    expect(b.grid.windows).toHaveLength(0);
+    expect(b.grid.closes).toEqual(["i1"]);
+    const choose = root.querySelector<HTMLButtonElement>('[data-card-action="choose-part"]')!;
+    expect(choose.textContent).toBe(t("canvas.card.part_choose"));
+    choose.click();
+    expect(menus).toHaveLength(1);
+    expect(menus[0]!.map((item) => item.label)).toEqual([
+      t("canvas.card.part_sheet", { name: "Conti 2024" }),
+      t("canvas.card.part_sheet", { name: "Note" }),
+      "Totali",
+      "Spese",
+    ]);
+    // Un foglio si scrive come in una formula: fra apici se serve.
+    menus[0]![0]!.run!();
+    menus[0]![1]!.run!();
+    menus[0]![2]!.run!();
+    expect(b.chosen).toEqual(["'Conti 2024'", "Note", "Totali"]);
+  });
+
+  it("sulla lavagna, o in sola lettura, la parte persa non ha «Scegli di nuovo»", async () => {
+    const b = bench({ subpath: "#Sparito", part: () => ({ found: false, parts: [{ kind: "sheet", name: "s1" }] }) });
+    b.mount("live");
+    await settle();
+    expect(b.root().dataset.cardState).toBe("lost");
+    expect(b.root().querySelector('[data-card-action="choose-part"]')).toBeNull();
+  });
+
+  it("nella nota, una cartella che non si legge lascia l'altezza delle righe: l'avviso ha la sua", async () => {
+    const b = bench({ note: true, subpath: "#A1:B2", part: () => found("s1", "A1:B2") });
+    (b.grid as { -readonly [K in keyof FakeHost]: FakeHost[K] }).gridBytesWindow = async () => {
+      throw new Error("boom");
+    };
+    b.mount("live");
+    await settle();
+    expect(b.root().dataset.cardState).toBe("unavailable");
+    expect(b.fits).toEqual([SHEET_NOTE_COLUMN_HEADER + 2 * SHEET_CARD_ROW_HEIGHT, null]);
+  });
+
+  it("un provider che non serve `fub.part` mostra il foglio attivo dall'inizio", async () => {
+    const b = bench({ note: true, subpath: "#Budget!B2:C3" });
+    b.mount("live");
+    await settle();
+    expect(b.grid.parts).toEqual([]);
+    expect(b.grid.windows[0]!.request).toMatchObject({ sheet: "s1", row_start: 0, column_start: 0 });
+  });
+
+  it("la cartella aperta in una linguetta con modifiche non salvate: la scheda legge lo stesso giornale, e lo segue", async () => {
+    // La porta dà il giornale e la base della sessione aperta (A-9): ciò che
+    // la linguetta ha scritto e non salvato si vede anche nella nota.
+    let journal = "J1";
+    let range = "A1:B2";
+    const b = bench({
+      note: true,
+      subpath: "#Totali",
+      source: async () => ({ journal, base: "base", format: FORMAT }),
+      part: () => ({ found: true, kind: "name", sheet: "s1", range }),
+    });
+    b.mount("live");
+    await settle();
+    expect(b.grid.opens[0]).toMatchObject({ journal: "J1", base: "base" });
+    expect(b.fits).toEqual([SHEET_NOTE_COLUMN_HEADER + 2 * SHEET_CARD_ROW_HEIGHT]);
+    // La linguetta scrive ancora (e il nome cresce con le righe nuove): la
+    // sessione avvisa, la scheda riapre sul giornale nuovo e rilegge la parte.
+    journal = "J2";
+    range = "A1:B4";
+    b.grid.revision = "rev-2";
+    b.port.changed[0]!();
+    await settle();
+    expect(b.grid.opens[1]).toMatchObject({ journal: "J2" });
+    expect(b.grid.parts).toEqual(["Totali", "Totali"]);
+    expect(b.grid.windows[b.grid.windows.length - 1]!.request).toMatchObject({ revision: "rev-2", row_start: 0, row_count: 4 });
+    expect(b.fits).toEqual([SHEET_NOTE_COLUMN_HEADER + 2 * SHEET_CARD_ROW_HEIGHT, SHEET_NOTE_COLUMN_HEADER + 4 * SHEET_CARD_ROW_HEIGHT]);
+  });
+
+  it("un estratto (T49) segue la sua fonte: il file cambia e si rilegge la parte; la parte sparita dice «Intervallo non trovato»", async () => {
+    let answer: unknown = found("s2", "B2:C3");
+    const b = bench({ note: true, sheets: TWO_SHEETS, subpath: "#Budget!B2:C3", part: () => answer });
+    b.mount("live");
+    await settle();
+    expect(b.root().dataset.cardState).toBe("content");
+    expect(b.grid.parts).toEqual(["Budget!B2:C3"]);
+    // La cartella cambia (una riga inserita sopra): la parte si chiede di
+    // nuovo e il rettangolo nuovo si legge, senza toccare la nota.
+    answer = found("s2", "B3:C4");
+    b.grid.revision = "rev-2";
+    b.port.changed[0]!();
+    await settle();
+    expect(b.grid.parts).toEqual(["Budget!B2:C3", "Budget!B2:C3"]);
+    expect(b.grid.windows[b.grid.windows.length - 1]!.request).toMatchObject({ sheet: "s2", row_start: 2, row_count: 2, column_start: 1 });
+    // Il foglio della fonte è stato tolto: l'estratto lo dice.
+    answer = { found: false, parts: [{ kind: "sheet", name: "s1" }] };
+    b.grid.revision = "rev-3";
+    b.port.changed[0]!();
+    await settle();
+    expect(b.root().dataset.cardState).toBe("lost");
+    expect(b.root().querySelector(".canvas-card-message")!.textContent).toBe(t("canvas.card.part_lost", { part: "Budget!B2:C3" }));
+  });
+
+  it("scrivendo, la griglia va alla prima cella della parte, sul suo foglio", async () => {
+    const port = writingPort();
+    const selected: [string, string][] = [];
+    const open = port.open.bind(port);
+    port.open = async (path, host, options) => {
+      const editor = await open(path, host, options);
+      return editor && { ...editor, select: (sheet: string, at: string) => (selected.push([sheet, at]), true) };
+    };
+    const made = bench({ editors: port, note: true, sheets: TWO_SHEETS, subpath: "#s2!C4:D6", part: () => found("s2", "C4:D6") });
+    const view = made.mount("live");
+    await settle();
+    expect(view.enter!()).toBe(true);
+    expect(view.edit!()).toBe(true);
+    await until("la griglia c'è", () => made.writings.some((writing) => writing?.context));
+    expect(selected).toEqual([["s2", "C4"]]);
+  });
+});
+
+describe("il grafico di un foglio (T54)", () => {
+  /// Il grafico «Vendite» di 320×240 px, ancorato in A7, col disegno `svg`.
+  const chartObject = (svg: string | null, missing: GridObject["missing"] = null): GridObject => ({
+    kind: "chart",
+    id: 5,
+    row: 6,
+    column: 0,
+    dx: 0,
+    dy: 0,
+    width: 320,
+    height: 240,
+    alt: "Vendite",
+    svg,
+    media: null,
+    shape: null,
+    missing,
+  });
+  const chartPart = () => ({ found: true, kind: "chart", sheet: "s1", range: "A7:E20", chart: 5 });
+  const svgOf = (root: HTMLElement) => decodeURIComponent(root.querySelector<HTMLImageElement>(".canvas-card-sheet-chart img")!.src.replace(/^data:image\/svg\+xml;charset=utf-8,/u, ""));
+
+  it("la parte che nomina un grafico mostra il suo disegno, intero e nella sua proporzione, senza celle", async () => {
+    let drawn = '<svg xmlns="http://www.w3.org/2000/svg"><text>Vendite 3 5 2</text></svg>';
+    const b = bench({ note: true, subpath: "#Vendite", part: chartPart, objects: () => [chartObject(drawn)] });
+    const card = b.mount("live");
+    await settle();
+    expect(b.grid.parts).toEqual(["Vendite"]);
+    // Una finestra sola, sulle celle che il grafico copre.
+    expect(b.grid.windows).toHaveLength(1);
+    expect(b.grid.windows[0]!.request).toMatchObject({ sheet: "s1", row_start: 6, row_count: 14, column_start: 0, column_count: 5 });
+    const root = b.root();
+    expect(root.dataset.cardState).toBe("content");
+    expect(cellTexts(root)).toEqual([]);
+    const chart = root.querySelector<HTMLElement>(".canvas-card-sheet-chart")!;
+    expect(chart.getAttribute("role")).toBe("img");
+    expect(chart.getAttribute("aria-label")).toBe(t("grid.object.named", { kind: t("grid.object.kind.chart"), name: "Vendite" }));
+    expect(svgOf(root)).toBe(drawn);
+    expect(chart.querySelector("img")!.style.objectFit).toBe("contain");
+    // Nella nota è alta quanto la proporzione chiede alla sua larghezza.
+    expect(b.fits).toEqual([Math.round(WIDTH * 240 / 320)]);
+    expect(card.contentAspect!()).toBeCloseTo(320 / 240);
+    // Non c'è niente in cui entrare né da scrivere: il grafico si cambia nel foglio.
+    expect(card.enter!()).toBe(false);
+    expect(card.edit!()).toBe(false);
+
+    // Segue i dati: all'evento del file la sessione si riapre e il disegno si rilegge.
+    drawn = '<svg xmlns="http://www.w3.org/2000/svg"><text>Vendite 40 5 2</text></svg>';
+    for (const changed of b.port.changed) changed();
+    await settle();
+    expect(b.grid.opens).toHaveLength(2);
+    expect(svgOf(b.root())).toBe(drawn);
+  });
+
+  it("un grafico che il file nomina ma che non si disegna dice perché e offre «Apri»", async () => {
+    for (const objects of [[], [chartObject(null, "too_large")]]) {
+      const b = bench({ note: true, subpath: "#Vendite", part: chartPart, objects: () => objects });
+      const card = b.mount("live");
+      await settle();
+      const root = b.root();
+      expect(root.dataset.cardState).toBe("unavailable");
+      expect(root.querySelector(".canvas-card-message")!.textContent).toBe(t("canvas.card.chart_unavailable"));
+      expect(root.querySelector(".canvas-file-link")!.textContent).toBe(t("canvas.card.open"));
+      expect(b.fits).toEqual([]);
+      expect(card.contentAspect!()).toBeNull();
+    }
+  });
+
+  it("un grafico che non c'è più propone fra le parti anche i grafici della cartella", async () => {
+    menus.length = 0;
+    const parts = [{ kind: "sheet", name: "Note" }, { kind: "chart", name: "Vendite" }];
+    const b = bench({ note: true, subpath: "#Grafico spese", part: () => ({ found: false, parts }) });
+    b.mount("live");
+    await settle();
+    expect(b.root().dataset.cardState).toBe("lost");
+    b.root().querySelector<HTMLButtonElement>('[data-card-action="choose-part"]')!.click();
+    expect(menus[0]!.map((item) => item.label)).toEqual([
+      t("canvas.card.part_sheet", { name: "Note" }),
+      t("canvas.card.part_chart", { name: "Vendite" }),
+    ]);
+    menus[0]![1]!.run!();
+    expect(b.chosen).toEqual(["Vendite"]);
+  });
+
+  it("una risposta di grafico senza un id che si legge non si usa", () => {
+    expect(sheetPartAnswer(JSON.stringify({ found: true, kind: "chart", sheet: "s1", range: "A7:E20" }))).toBeNull();
+    expect(sheetPartAnswer(JSON.stringify(chartPart()))).toEqual({ sheet: "s1", range: { rowStart: 6, rowEnd: 19, columnStart: 0, columnEnd: 4 }, chart: 5 });
+    expect(sheetPartAnswer(JSON.stringify({ found: true, kind: "range", sheet: "s1", range: "B2:C3", chart: 9 }))).toMatchObject({ chart: null });
   });
 });

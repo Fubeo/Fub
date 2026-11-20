@@ -25,6 +25,7 @@ import { EditorView } from "prosemirror-view";
 import type { PaperFit } from "../core/registry";
 import { operationFromText, type EditorChange, type EditorChangeOrigin } from "../core/text-operation";
 import { ProofClient, type ProofPorts } from "../core/proof";
+import { errorText } from "../../host/errors";
 import {
   applyFormat,
   backspace,
@@ -78,12 +79,56 @@ export interface RichEngineOptions {
   /// un a capo, una cancellazione che lo tocca. La battuta non entra; chi
   /// mostra la superficie lo dice (una volta, non a ogni tasto).
   readonly onClosedWrite?: () => void;
+  /// Esc non è del documento (una scheda nella nota, `escapeLeaves` del
+  /// registro): il motore lo tiene solo per chiudere ciò che ha aperto (il
+  /// pennello, il taglio fra le celle), e sennò lo lascia passare a chi lo
+  /// ospita, senza il `preventDefault` che ProseMirror mette a ogni Esc.
+  readonly escapeLeaves?: boolean;
 }
+
+/// Esc che lascia il documento (`escapeLeaves`): i tasti del motore lo
+/// provano prima; se nessuno lo prende, ProseMirror non lo tocca e l'evento
+/// sale intatto a chi ospita la superficie (la scheda, che esce). Senza,
+/// ProseMirror lo segna sempre come preso (`captureKeyDown`).
+const escapePassesThrough = new Plugin({
+  props: {
+    handleDOMEvents: {
+      keydown: (view, event) => {
+        if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return false;
+        if (view.someProp("handleKeyDown", (handle) => handle(view, event))) event.preventDefault();
+        return true;
+      },
+    },
+  },
+});
 
 /// Ciò che il motore sa del testo che ha ricevuto.
 export type Intake =
   | { readonly kind: "ok"; readonly readonly: ReadOnlyReason | null }
   | { readonly kind: "invalid"; readonly reason: string };
+
+/// Un gesto che si vede sulla pagina e non è ancora nel documento: i tratti
+/// della sessione aperta della scheda «Disegna». Annulla e Ripeti sono del
+/// documento, e chi lo guarda non distingue un tratto entrato da uno in
+/// attesa: prima di un passo della storia il gesto entra.
+export interface RichPendingEdit {
+  /// C'è qualcosa in attesa.
+  pending(): boolean;
+  /// Lo fa entrare nel documento. Per `undo`, ciò che Annulla deve togliere
+  /// entra come ultimo passo suo.
+  settle(step: "undo" | "redo"): void;
+}
+
+/// Le azioni del catalogo che sono un passo della storia.
+const HISTORY_STEPS: Readonly<Record<string, "undo" | "redo">> = { "text.undo": "undo", "text.redo": "redo" };
+
+/// Quanti passi tiene la storia del documento. Quella di ProseMirror ne tiene
+/// 100 se non le si dice altro, e oltre butta via i più vecchi senza dirlo:
+/// dopo una raffica di tasti l'annulla non tornava più al documento aperto, e
+/// il salvataggio portava sul disco lo stato a metà (IMP-150). Diecimila passi
+/// sono ore di scrittura un gesto alla volta; un passo tiene soltanto ciò che
+/// ha cambiato, e i nodi che non cambiano sono in comune.
+export const RICH_HISTORY_DEPTH = 10_000;
 
 export class RichEngine {
   readonly #view: EditorView;
@@ -137,6 +182,9 @@ export class RichEngine {
   /// l'ultima occorrenza a cui è andato Trova.
   #goingTo: { ring: boolean } | null = null;
   #lastFound = -1;
+  /// Ciò che è già sulla pagina ma non ancora nel documento (i tratti della
+  /// sessione dell'inchiostro): un passo della storia lo fa entrare prima.
+  readonly #pendingEdits = new Set<RichPendingEdit>();
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -231,7 +279,7 @@ export class RichEngine {
 
   #plugins(): Plugin[] {
     const plugins: Plugin[] = [
-      history(),
+      history({ depth: RICH_HISTORY_DEPTH }),
       tableShapeGuard,
       fillTableKeys,
       cellSelectionPlugin,
@@ -255,6 +303,7 @@ export class RichEngine {
         }),
       );
     }
+    if (this.#options.escapeLeaves) plugins.unshift(escapePassesThrough);
     return plugins;
   }
 
@@ -267,7 +316,7 @@ export class RichEngine {
       "Mod-Enter": insertBreak("\u000c"),
       Backspace: chainCommands(backspace, deleteChar(-1)),
       Delete: chainCommands(deleteForward, deleteChar(1)),
-      "Mod-y": redo,
+      "Mod-y": (state, dispatch) => this.#historyStep("redo", state, dispatch),
       // Dopo un Esc il Tab porta fuori dal documento, come nell'editor di testo.
       Tab: (state, dispatch) => Date.now() > this.#tabLeaves && chainCommands(cellTab(1), shiftListLevel(1), insertTab)(state, dispatch),
       "Shift-Tab": (state, dispatch) => Date.now() > this.#tabLeaves && chainCommands(cellTab(-1), shiftListLevel(-1))(state, dispatch),
@@ -282,9 +331,41 @@ export class RichEngine {
       if (!action.chord || action.chord in keys) continue;
       keys[action.chord] = ASK_ACTIONS.has(id) ? (state) => action.run(state) && this.#ask(id) : action.run;
     }
-    keys["Mod-z"] = undo;
-    keys["Mod-Shift-z"] = redo;
+    keys["Mod-z"] = (state, dispatch) => this.#historyStep("undo", state, dispatch);
+    keys["Mod-Shift-z"] = (state, dispatch) => this.#historyStep("redo", state, dispatch);
     return keys;
+  }
+
+  /// Un passo della storia, dopo che ciò che era in attesa è entrato.
+  /// `state` è quello di chi chiama; se un gesto in attesa è entrato, il
+  /// passo si fa sullo stato nuovo.
+  #historyStep(step: "undo" | "redo", state: EditorState, dispatch?: (tr: Transaction) => void): boolean {
+    const settled = dispatch ? this.#settle(step) : false;
+    const command = step === "undo" ? undo : redo;
+    return command(settled ? this.#view.state : state, dispatch) || settled;
+  }
+
+  /// Fa entrare nel documento ciò che è in attesa. Vero se qualcosa è entrato.
+  #settle(step: "undo" | "redo"): boolean {
+    let settled = false;
+    for (const edit of [...this.#pendingEdits]) {
+      if (!edit.pending()) continue;
+      edit.settle(step);
+      settled = true;
+    }
+    return settled;
+  }
+
+  /// Un gesto in attesa che Annulla e Ripeti fanno entrare prima del loro
+  /// passo. Restituisce chi lo toglie.
+  holdPending(edit: RichPendingEdit): () => void {
+    this.#pendingEdits.add(edit);
+    return () => this.#pendingEdits.delete(edit);
+  }
+
+  #hasPending(): boolean {
+    for (const edit of this.#pendingEdits) if (edit.pending()) return true;
+    return false;
   }
 
   #state(doc: PmNode): EditorState {
@@ -402,7 +483,7 @@ export class RichEngine {
     } catch (error) {
       this.#head = { version: this.#head.version, opaque_schema: this.#head.opaque_schema };
       this.#closed = [];
-      this.#intake = { kind: "invalid", reason: error instanceof Error ? error.message : String(error) };
+      this.#intake = { kind: "invalid", reason: errorText(error) };
       return null;
     }
   }
@@ -603,6 +684,12 @@ export class RichEngine {
     return done;
   }
 
+  /// Un passo della storia del documento senza portare il fuoco nel testo:
+  /// Ctrl+Z da un pannello resta sul pannello (`ui/off-sheet-keys.ts`).
+  history(step: "undo" | "redo"): boolean {
+    return this.apply((state, dispatch) => this.#historyStep(step, state, dispatch), false);
+  }
+
   /// Un gesto che sposta soltanto la selezione, come andare a una revisione o
   /// a un commento: vale anche in sola lettura. Se il comando toccasse il
   /// documento non si applica.
@@ -653,13 +740,17 @@ export class RichEngine {
     if (!action || !this.editable()) return false;
     if (ASK_ACTIONS.has(id)) return action.run(this.#view.state) && this.#ask(id);
     this.#refused = false;
-    const done = action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view) && !this.#refused;
+    const step = HISTORY_STEPS[id];
+    const settled = step ? this.#settle(step) : false;
+    const done = (action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view) && !this.#refused) || settled;
     if (done) this.#view.focus();
     return done;
   }
 
   actionState(id: string): { enabled: boolean; active: boolean | null } {
     if (!this.editable()) return { enabled: false, active: null };
+    // Un tratto in attesa si annulla anche se la storia è ancora vuota.
+    if (HISTORY_STEPS[id] === "undo" && this.#hasPending()) return { enabled: true, active: null };
     const state = richActionState(id, this.#view.state);
     // Mentre si registra, un'azione che non si registra non si offre; né
     // un'azione che cambia ciò che non si scrive.

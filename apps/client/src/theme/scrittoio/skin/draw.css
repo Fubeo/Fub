@@ -946,7 +946,8 @@ button.draw-isolation-crumb:hover {
 .vector-about:has(> .vector-about-desc[hidden]):has(> .vector-about-links[hidden]):has(> .vector-about-objects[hidden]) {
   display: none;
 }
-.vector-about > :not([hidden]) ~ :not([hidden]) {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.vector-about > :nth-child(n + 2 of :not([hidden])) {
   margin-top: var(--space-2);
 }
 /* I collegamenti si leggono come link: il testo sottolineato. */

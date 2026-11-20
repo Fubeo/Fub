@@ -321,7 +321,25 @@ export function sanitizeFragment(html: string): DocumentFragment {
     const clean = sanitizeNode(child);
     if (clean) out.appendChild(clean);
   }
+  nameTaskBoxes(out);
   return out;
+}
+
+/// Ogni casella di una voce prende per nome il testo della voce, senza le
+/// sottovoci: «Comprare il pane», non una casella anonima. Il nome si legge
+/// dal frammento già ripulito, quindi è testo che il documento mostra; e sta
+/// in `aria-label`, non in un `label[for]` o in `aria-labelledby`, perché chi
+/// copia la resa (le pagine dell'esportazione) toglie gli `id`.
+function nameTaskBoxes(fragment: DocumentFragment): void {
+  for (const box of fragment.querySelectorAll<HTMLInputElement>("li > input")) {
+    let text = "";
+    for (const node of box.parentElement!.childNodes) {
+      if (node instanceof Element && (node.localName === "ul" || node.localName === "ol")) continue;
+      text += node.textContent ?? "";
+    }
+    const name = text.replace(/\s+/g, " ").trim();
+    if (name) box.setAttribute("aria-label", name);
+  }
 }
 
 /// I nove colori del contenuto, come Notion. Si scrivono come classi chiuse,

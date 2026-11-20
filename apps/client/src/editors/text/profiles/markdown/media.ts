@@ -29,7 +29,9 @@ import { parseWikilinkInner } from "../../../../rules/syntax";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { Expected } from "../../../../ui/race";
 import { REMOTE_SRC_ATTRIBUTE, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
+import { keepButtonKeys } from "./button-keys";
 import { webEmbedOf, webEmbedPlaceholder, type WebEmbedOpener } from "./web-embed";
+import { liveStrings } from "./strings";
 
 /// Ciò che serve a idratare, iniettabile nei banchi.
 export interface MediaPort {
@@ -98,6 +100,33 @@ export const EMBED_IMAGE_BYTES = 16 * 1024 * 1024;
 /// lo dice il disegno, quando si apre. `null` per un file che non è un disegno, o che non si
 /// legge: si mostra il file.
 ///
+/// Un passo di un PDF: la pagina (da 1) e la selezione come la scrive
+/// Obsidian (`4,0,4,163`: elemento e carattere d'inizio e di fine nel testo
+/// della pagina).
+export interface PdfPassage {
+  readonly page: number;
+  readonly selection: string;
+}
+
+/// Il passo che la parte di un embed nomina (`#page=2&selection=4,0,4,163`,
+/// anche col colore dell'evidenziatore dopo), o `null` se la parte non è un
+/// passo.
+export function pdfPassage(subpath: string | null): PdfPassage | null {
+  if (subpath === null || !subpath.startsWith("#")) return null;
+  let page: number | null = null;
+  let selection: string | null = null;
+  for (const pair of subpath.slice(1).split("&")) {
+    const cut = pair.indexOf("=");
+    if (cut <= 0) return null;
+    const key = pair.slice(0, cut);
+    const value = pair.slice(cut + 1);
+    if (key === "page" && /^\d{1,6}$/.test(value) && page === null) page = Number(value);
+    else if (key === "selection" && /^\d{1,7}(?:,\d{1,7}){3}$/.test(value) && selection === null) selection = value;
+    else if (key !== "color") return null;
+  }
+  return page !== null && page >= 1 && selection !== null ? { page, selection } : null;
+}
+
 /// `heading` è la sezione che un embed nomina, `![[disegno#Copertina]]`: il
 /// titolo mostra il disegno intero, una tavola il disegno ritagliato su di
 /// lei. `false` se il disegno si legge e non ha quella sezione: l'embed non
@@ -203,6 +232,15 @@ export function embedSize(label: string | undefined): { width: string; height?: 
   return match[2] ? { width: match[1]!, height: match[2] } : { width: match[1]! };
 }
 
+/// La misura da scrivere dopo la barra di un embed, nella forma che Obsidian
+/// capisce e che `embedSize` rilegge: `640`, o `640x300` con l'altezza. Una
+/// misura sola in altezza non esiste: chi la vuole scrive anche la larghezza.
+export function embedSizeText(width: number, height: number | null = null): string {
+  const w = Math.max(1, Math.min(99999, Math.round(width)));
+  if (height === null) return String(w);
+  return `${w}x${Math.max(1, Math.min(99999, Math.round(height)))}`;
+}
+
 async function lease(
   port: MediaPort,
   id: string,
@@ -304,6 +342,9 @@ export function showRemoteImages(
           if (!life.closed) button.disabled = false;
         });
       });
+      // Nella Live il pulsante sta dentro l'editor: Invio, Spazio e Tab
+      // sono suoi, non un a capo o un rientro nella nota (#454).
+      keepButtonKeys(button, life);
       box.append(button);
     }
     img.hidden = true;
@@ -431,7 +472,11 @@ export async function hydrateVaultMedia(
         // il clic lo porta come un `[[x.pdf#page=3]]`, e il visore parte da
         // quella pagina.
         const link = (): HTMLElement => {
-          const anchor = Object.assign(document.createElement("a"), { href: "#", textContent: page });
+          // Un passo (T49, `#page=2&selection=…`) dice la sua pagina: il clic
+          // apre il PDF lì, e il testo del passo lo leggerà il motore dei PDF.
+          const passage = pdfPassage(slot.dataset.embedHeading ? `#${slot.dataset.embedHeading}` : null);
+          const text = passage ? liveStrings.t("live_card.passage.source", { name: page, page: String(passage.page) }) : page;
+          const anchor = Object.assign(document.createElement("a"), { href: "#", textContent: text });
           anchor.className = "wikilink";
           anchor.dataset.wikilinkPage = page;
           if (slot.dataset.embedHeading) anchor.dataset.wikilinkHeading = slot.dataset.embedHeading;

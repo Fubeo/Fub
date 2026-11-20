@@ -178,8 +178,7 @@ frontmatter non sono archi del grafo dei link, quindi i backlink non
 bastano. Contano solo le chiavi dichiarate `relation`; un link rotto non
 lega; una nota che lega sé stessa compare fra chi la lega.
 
-Il client non la mostra ancora: nessuna porta la espone all'interfaccia, e
-la riga «Collegata da» della testata aspetta quella porta.
+Nessuna porta la espone all'interfaccia: il client non la mostra.
 
 ### Il riepilogo in una Base
 

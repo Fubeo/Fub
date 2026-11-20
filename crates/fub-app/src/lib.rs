@@ -47,6 +47,7 @@ use fub_abi::{
 };
 use fub_host::{
     componenti, doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey,
+    ShellNotice,
 };
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
@@ -61,6 +62,12 @@ pub use fub_host::{
     BundleInfo, EmbedContent, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
+/// I tipi degli appunti GTK senza proprietario, che fanno morire WebKitGTK:
+/// il `gtk_clipboard_request_targets` che l'eseguibile esporta (`main.rs`)
+/// chiama [`appunti_gtk::gtk_clipboard_request_targets`].
+#[cfg(target_os = "linux")]
+#[doc(hidden)]
+pub mod appunti_gtk;
 mod avvio;
 #[cfg(feature = "bench-gc")]
 mod bench_gc;
@@ -80,6 +87,7 @@ mod print;
 mod promemoria;
 mod resources;
 mod reveal;
+mod riga_di_comando;
 mod support;
 mod tree_access;
 mod web_viewer;
@@ -321,7 +329,7 @@ where
 struct WebviewEvents(std::sync::OnceLock<AppHandle>);
 
 impl EventSink for WebviewEvents {
-    fn emit(&self, notice: &Notice) -> Delivery {
+    fn emit(&self, notice: &Notice, vault: Option<&str>) -> Delivery {
         let Some(app) = self.0.get() else {
             tracing::warn!(
                 target: "fub.app",
@@ -333,7 +341,11 @@ impl EventSink for WebviewEvents {
         };
         // Events can contain vault data: never broadcast them to a document
         // surface or a remote viewer. The main webview is the only host.
-        match app.emit_to("main", "fub://event", notice) {
+        // Il vault viaggia col fatto (#216): l'host tiene aperti anche vault
+        // che la shell non mostra (la demo lascia aperto quello di prima, e un
+        // vault lasciato chiude dopo che il nuovo è già aperto), e la shell
+        // scarta da sé ciò che non è del vault che mostra.
+        match app.emit_to("main", "fub://event", ShellNotice { notice, vault }) {
             Ok(()) => Delivery::Done,
             Err(and) => {
                 // Un notice che non attraversa l'IPC è un **bug del programma**,
@@ -1001,27 +1013,38 @@ async fn write_document(
 /// `base` è la revisione del file su cui il buffer sta lavorando — assente per
 /// una nota mai salvata — e la manda **chi ha il buffer**, perché è l'unico a
 /// sapere da quale lettura quel testo si è discostato.
+///
+/// Fuori dal thread principale, e senza il turno di scrittura del workspace
+/// (#485): la bozza parte anche mentre un salvataggio lento è in volo, e
+/// aspettarlo qui fermerebbe la finestra per tutta la sua durata. L'ordine
+/// delle bozze di un documento lo tiene la coda delle bozze della sessione,
+/// che non ne manda mai due insieme.
 #[tauri::command]
-fn save_draft(
-    host: State<Host>,
+async fn save_draft(
+    app: AppHandle,
     id: String,
     text: String,
     base: Option<String>,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.save_draft(
-        vault.as_deref(),
-        &doc_id(&id)?,
-        &text,
-        base.map(Revision::new),
-    )
+    let id = doc_id(&id)?;
+    off_main(app, move |host| {
+        host.save_draft(vault.as_deref(), &id, &text, base.map(Revision::new))
+    })
+    .await
 }
 
 /// **Butta la bozza di un documento**: il buffer è tornato pulito, o l'utente ha
-/// scelto di scartare ciò che aveva recuperato.
+/// scelto di scartare ciò che aveva recuperato. Fuori dal thread principale
+/// come [`save_draft`], e nella stessa coda della sessione.
 #[tauri::command]
-fn discard_draft(host: State<Host>, id: String, vault: Option<String>) -> Result<(), PluginError> {
-    host.discard_draft(vault.as_deref(), &doc_id(&id)?)
+async fn discard_draft(
+    app: AppHandle,
+    id: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    let id = doc_id(&id)?;
+    off_main(app, move |host| host.discard_draft(vault.as_deref(), &id)).await
 }
 
 // Le cinque azioni STRUTTURALI — crea, rinomina, cestina, ripristina, svuota —
@@ -3200,6 +3223,11 @@ fn log_the_webview(declared: Option<Result<String, String>>) {
 }
 
 pub fn run() {
+    // `--version` e `--help` rispondono ed escono prima di tutto il resto:
+    // niente finestra, niente Tauri, niente configurazione né log.
+    if let Some(codice) = riga_di_comando::rispondi(std::env::args_os().skip(1)) {
+        std::process::exit(codice);
+    }
     // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
     // store installato ricevono lo stesso valore: nessun proprietario riapre
     // l'ambiente o deduce una seconda posizione.
@@ -3235,6 +3263,8 @@ pub fn run() {
     log_the_webview(webview);
     #[cfg(target_os = "linux")]
     vblank::scrivi_nel_log(&vblank);
+    #[cfg(target_os = "linux")]
+    appunti_gtk::scrivi_nel_log();
     #[cfg(target_os = "linux")]
     orologio::scrivi_nel_log(&orologio);
     let installed_availability = match config_dir.as_deref() {

@@ -57,11 +57,10 @@ pub(super) fn notes_block_sync(
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
     let context = host.active_context();
-    let doc = args
-        .document("doc")
+    let doc = crate::formats::document_with(&args, "doc", &*host, fub_abi::options::source::PROSE)?
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_OPEN_NOTES)))?;
-    let to = args.document("to");
+    let to = crate::formats::document_with(&args, "to", &*host, fub_abi::options::source::PROSE)?;
     let asked_id = args
         .text(A_ID)
         .map(str::trim)

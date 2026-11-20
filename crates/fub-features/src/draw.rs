@@ -273,7 +273,9 @@ pub fn settings() -> Vec<SettingSpec> {
 /// dell'export i soli errori, perché le note del log sono testo semplice come
 /// quelle degli altri export.
 pub fn catalog() -> Vec<StringCatalog> {
-    vec![
+    // Le frasi comuni dei formati: fra queste, quelle del documento scritto
+    // per nome nei campi «Da» di «Nuovo disegno» e «PDF» di «Annota il PDF».
+    crate::formats::speaking(vec![
         choice::in_italian(annotated::in_italian(annotate::in_italian(
             create::in_italian(StringCatalog::new("it")),
         )))
@@ -361,7 +363,7 @@ pub fn catalog() -> Vec<StringCatalog> {
              that moment. They also turn off from the «Don’t show tips again» box \
              that comes with each one, and apply to this machine.",
         ),
-    ]
+    ])
 }
 
 /// I provider del bundle: uno per formato dei disegni, e i due PDF delle
@@ -384,6 +386,27 @@ pub fn exports() -> Vec<Box<dyn ExportProvider>> {
 /// prima apertura, così un disegno esce uguale nell'editor e nell'export.
 pub fn facce() -> &'static [&'static [u8]] {
     &embed::FACES
+}
+
+/// I pezzi dei caratteri che l'esportazione delle note in PDF prende da qui:
+/// decodificare un WOFF o un WOFF2, dire le facce di un file, fissare un
+/// carattere variabile in un punto dei suoi assi, sapere se la licenza lascia
+/// incorporarlo. Sono gli stessi
+/// dell'export dei disegni, perché un carattere si legge in un modo solo.
+pub(crate) mod per_il_pdf {
+    #[cfg(test)]
+    pub(crate) use super::fonts::tests::{renamed, with_fs_type};
+    pub(crate) use super::fonts::{
+        decode, describe, embeddable, instance, same_family, Coordinate, Style, MAX_FONT_BYTES,
+    };
+    /// Il file di un carattere di Fub per nome (`inter-latin-wght-normal.woff2`).
+    pub(crate) use super::typefaces::fub_file as file_di_fub;
+
+    /// I caratteri di serie di Fub (Inter, Literata, JetBrains Mono), per il
+    /// testo dentro un vettore: sono quelli dei diagrammi.
+    pub(crate) fn caratteri_di_serie() -> std::sync::Arc<resvg::usvg::fontdb::Database> {
+        std::sync::Arc::clone(super::embed::fub_fonts())
+    }
 }
 
 /// La famiglia di `serif` fra quelle di [`facce`].

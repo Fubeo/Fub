@@ -439,6 +439,63 @@ export function dueUrgency(date: string, today: string): DueUrgency {
   return date < iso ? "near" : "later";
 }
 
+/// Il segno che introduce il promemoria di un compito. Gemello di
+/// `fub_abi::rules::tasks::REMINDER_MARK`.
+export const REMINDER_MARK = "⏰";
+
+/// L'ora di un promemoria scritto senza ora. Gemella di
+/// `fub_abi::rules::tasks::DEFAULT_REMINDER_MINUTE` (le nove).
+export const DEFAULT_REMINDER_TIME = "09:00";
+
+/// Il promemoria trovato nel testo di un compito: il tratto che occupa (segno
+/// compreso, in unità UTF-16), l'ora del muro `AAAA-MM-GG HH:MM` a cui suona,
+/// `null` se non si legge, e se l'ora era scritta.
+export interface TaskReminder {
+  from: number;
+  to: number;
+  when: string | null;
+  timed: boolean;
+}
+
+/// Il promemoria di un testo, se ha un `⏰`.
+///
+/// Gemella di `fub_abi::rules::tasks::task_reminder`: l'ultimo `⏰`; dopo,
+/// spazi e tabulazioni saltati; la data `AAAA-MM-GG` non seguita da un'altra
+/// cifra, poi un'ora `HH:MM` facoltativa. Senza ora suona alle nove; ciò che
+/// dopo la data comincia con una cifra è un'ora o un refuso (`25:00` non
+/// suona alle nove). Un promemoria che non si legge ha il tratto fino alla
+/// fine della parola che doveva esserlo.
+export function taskReminder(text: string): TaskReminder | null {
+  const from = text.lastIndexOf(REMINDER_MARK);
+  if (from < 0) return null;
+  const markEnd = from + REMINDER_MARK.length;
+  const blanks = (at: number) => {
+    while (text[at] === " " || text[at] === "\t") at++;
+    return at;
+  };
+  const digitAt = (at: number) => /^[0-9]$/.test(text[at] ?? "");
+  const unreadable = (at: number): TaskReminder => {
+    const rest = text.slice(at);
+    const word = rest.search(/[ \t]/);
+    const length = word < 0 ? rest.length : word;
+    return { from, to: length === 0 ? markEnd : at + length, when: null, timed: false };
+  };
+  const start = blanks(markEnd);
+  const date = text.slice(start, start + 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || digitAt(start + 10) || !civilDate(date)) return unreadable(start);
+  const dateEnd = start + 10;
+  const timeStart = blanks(dateEnd);
+  if (timeStart === dateEnd || !digitAt(timeStart)) {
+    return { from, to: dateEnd, when: `${date} ${DEFAULT_REMINDER_TIME}`, timed: false };
+  }
+  const clock = text.slice(timeStart, timeStart + 5);
+  const shaped = /^(\d{2}):(\d{2})$/.exec(clock);
+  if (shaped && Number(shaped[1]) < 24 && Number(shaped[2]) < 60 && !digitAt(timeStart + 5)) {
+    return { from, to: timeStart + 5, when: `${date} ${clock}`, timed: true };
+  }
+  return unreadable(timeStart);
+}
+
 /// `AAAA-MM-GG` è un giorno che esiste? Gemella di
 /// `fub_abi::rules::tasks::civil_day` (che risponde coi giorni dall'epoca).
 function civilDate(text: string): boolean {

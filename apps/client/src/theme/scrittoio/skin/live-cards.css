@@ -1,0 +1,1054 @@
+/* ── La scheda viva nella nota ───────────────────────────────────────────
+   (E19, T41; il prototipo `.scard`, passi 16–18.) Un file incorporato da
+   solo nel paragrafo (un PDF, un foglio, un file Craft) si mostra con
+   l'ospite delle schede della lavagna: una testata alta 34 px (icona della
+   specie, nome del file, parte mostrata; «Apri» e «A tutta pagina» al
+   passaggio e da attiva) sopra il corpo della specie. Sta nella pagina e ne
+   prende la tavolozza: il foglio `--doc-bg`, i fili `--doc-rule` e
+   `--doc-rule-soft`, il grigio `--doc-gutter-fg`, l'inchiostro `--doc-fg`, il
+   passaggio `--doc-block-hover`. Attiva, il bordo è d'accento. L'interno del
+   corpo è della specie (`canvas-card-*`), e non si veste qui. */
+.live-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin: var(--space-3) 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  transition: box-shadow 0.15s;
+}
+/* Il posto della scheda nella Scrittura: `flow-root` tiene dentro i margini
+   della scheda, così l'altezza che CodeMirror misura (il bordo dell'elemento
+   del widget, margini esclusi) è quella vera, e le righe sotto non salgono. */
+.cm-fub-live-card-slot {
+  display: flow-root;
+}
+/* Il filo, sopra il corpo: la specie disegna fino al bordo. */
+.live-card::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--doc-rule);
+  content: "";
+  pointer-events: none;
+  transition: box-shadow 0.15s;
+}
+.live-card:focus {
+  outline: none;
+}
+.live-card[data-card-active="true"] {
+  box-shadow: 0 12px 28px -18px rgb(0 0 0 / 40%);
+}
+.live-card[data-card-active="true"]::after {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* Scelta coi Blocchi: il filo della selezione dei blocchi la circonda. */
+.live-card[data-card-chosen="true"]::after,
+.live-card:focus-visible::after {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.live-card-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  height: 34px;
+  padding: 0 var(--space-4) 0 12px;
+  border-bottom: 1px solid var(--doc-rule-soft);
+  color: var(--doc-gutter-fg);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: default;
+}
+.live-card-head > svg,
+.live-card-head button > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.live-card-title {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+.live-card-name {
+  color: var(--doc-fg);
+  font-weight: 600;
+}
+.live-card-spacer {
+  flex: 1;
+}
+/* «Esc per uscire»: solo da attiva, e mai al tocco (lì c'è «Fine»). */
+.live-card-escape {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+}
+.live-card-escape kbd {
+  padding: 2px 4px 1px;
+  border-radius: 5px;
+  background: var(--doc-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--doc-rule),
+    0 1px 0 var(--doc-rule);
+  color: var(--doc-gutter-fg);
+  font: var(--weight-medium) 10px/1 var(--font-mono);
+}
+.live-card[data-card-active="true"] .live-card-escape {
+  display: inline-flex;
+}
+.live-card-head button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.live-card:hover .live-card-head button,
+.live-card:focus-within .live-card-head button,
+.live-card[data-card-active="true"] .live-card-head button,
+.live-card[data-card-state="missing"] .live-card-head button,
+.live-card[data-card-state="unsupported"] .live-card-head button {
+  opacity: 1;
+}
+.live-card-head button:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.live-card-head button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.live-card-head .live-card-done {
+  display: none;
+}
+/* «A tutta pagina» c'è solo dove c'è una vista da allargare. */
+.live-card:not([data-card-state="view"]) .live-card-full {
+  display: none;
+}
+/* Un file che manca non si apre: le sue voci stanno nel corpo. */
+.live-card[data-card-state="missing"] .live-card-open {
+  display: none;
+}
+.live-card-full[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+/* La barra della specie mentre si scrive nel suo file (un foglio: la
+   formula, il nastro corto). */
+.live-card-tools {
+  flex: none;
+  border-bottom: 1px solid var(--doc-rule-soft);
+}
+
+/* Il corpo: alto quanto basta alla specie, entro la colonna. A riposo è
+   inerte (la rotella scorre la nota, il clic la attiva); da attiva è suo. */
+.live-card-body {
+  position: relative;
+  min-height: 120px;
+  height: 360px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.live-card[data-card-kind="sheet"] .live-card-body {
+  height: 300px;
+}
+.live-card:not([data-card-active="true"]) .live-card-body > * {
+  pointer-events: none;
+}
+.live-card:not([data-card-active="true"]) .live-card-body .kit-button {
+  pointer-events: auto;
+}
+.live-card[data-card-active="true"] .live-card-body {
+  cursor: default;
+}
+.live-card[data-card-full="true"] .live-card-body {
+  height: calc(var(--live-card-full, 80vh) - 36px);
+}
+.live-card[data-card-state="missing"] .live-card-body,
+.live-card[data-card-state="unsupported"] .live-card-body,
+.live-card[data-card-state="loading"] .live-card-body {
+  height: auto;
+  min-height: 0;
+  cursor: default;
+}
+
+/* Il file mancante, il formato senza vista, l'attesa: una riga che dice
+   che cosa e una che dice che fare. */
+.live-card-missing,
+.live-card-unsupported {
+  display: grid;
+  gap: var(--space-3);
+  padding: 14px 16px;
+}
+.live-card-message {
+  overflow: hidden;
+  padding: 0;
+  color: var(--doc-fg);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-card[data-card-state="loading"] .live-card-message {
+  padding: 14px 16px;
+  color: var(--doc-gutter-fg);
+}
+.live-card-hint {
+  color: var(--doc-gutter-fg);
+  font-size: 12.5px;
+}
+.live-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+.live-card[data-card-state="missing"]::after {
+  box-shadow: inset 0 0 0 1px var(--doc-danger);
+}
+.live-card[data-card-state="missing"] .live-card-message {
+  color: var(--doc-danger);
+}
+
+/* Al tocco: niente Esc da dire, «Fine» per uscire; le voci della testata
+   restano a vista, senza la parola, per stare nella riga. */
+@media not (any-hover: hover) {
+  .live-card[data-card-active="true"] .live-card-escape {
+    display: none;
+  }
+  .live-card[data-card-active="true"] .live-card-head .live-card-done {
+    display: inline-flex;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .live-card-head button {
+    opacity: 1;
+  }
+  .live-card-head button:not(.live-card-done) .live-card-label {
+    display: none;
+  }
+}
+
+/* Il telefono: il corpo più basso. */
+:root[data-client-shell="mobile"] .live-card-body {
+  height: 260px;
+}
+
+/* ── La scheda di foglio nella nota (T43, prototipo passo 16) ─────────────
+   Mostra la parte che l'embed nomina, alta quanto le sue righe (la scheda
+   lo chiede in `--live-card-fit`, fino a sedici righe). Le lettere e i
+   numeri hanno il loro spazio anche a riposo, vuoto (`.scard-b`), e si
+   vedono soltanto a scheda attiva, piccoli e senza fondo (`.gr-let`,
+   `.gr-num`). Un valore che Fub non ha ricalcolato porta il filo a puntini
+   del foglio. */
+.live-card[data-card-fit="true"] .live-card-body {
+  height: var(--live-card-fit);
+  min-height: 0;
+}
+.live-card[data-card-fit="true"][data-card-full="true"] .live-card-body {
+  height: calc(var(--live-card-full, 80vh) - 36px);
+}
+.live-card .canvas-card-sheet .grid-header,
+.live-card .canvas-card-sheet .grid-corner {
+  border: 0;
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  font-size: 10.5px;
+  font-weight: var(--weight-bold);
+}
+/* Come nel prototipo, la lettera della colonna scelta non si accende: il
+   segno della selezione è nelle celle. */
+.live-card .canvas-card-sheet .grid-header.selected {
+  box-shadow: none;
+}
+.live-card .canvas-card-sheet .stale {
+  text-decoration: underline dotted var(--doc-gutter-fg);
+  text-underline-offset: 3px;
+}
+/* La parte che non c'è più: che cosa manca e «Scegli di nuovo». */
+.live-card[data-card-kind="sheet"] .canvas-card-lost {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: 14px 16px;
+}
+.live-card[data-card-kind="sheet"] .canvas-card-lost .canvas-card-message {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--doc-danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-card[data-card-kind="sheet"]:has(.canvas-card-lost) .live-card-body {
+  height: auto;
+  min-height: 0;
+  cursor: default;
+}
+/* La cella attiva nel gruppo «Foglio» della barra di formato (`.fxr`): il
+   nome e la formula in una riga a spaziatura fissa, tagliata. */
+.format-bar-context .format-bar-context-cell {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 168px;
+  padding: 0 6px 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 12px/1 var(--font-mono);
+  white-space: nowrap;
+}
+.format-bar-context .format-bar-context-cell[hidden] {
+  display: none;
+}
+/* Nella finestra stretta la cella lascia il posto ai gesti (prototipo, riga
+   784: `.fxr` sparisce sotto i 760 px della finestra). */
+@media (max-width: 760px) {
+  .format-bar-context .format-bar-context-cell {
+    display: none;
+  }
+}
+.format-bar-context-cell .grid-cell-name {
+  flex: none;
+  border: 0;
+  color: var(--muted);
+  font-size: inherit;
+}
+.format-bar-context-cell .grid-formula-editor {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.format-bar-context-cell .canvas-formula-text {
+  padding: 0;
+  font: inherit;
+}
+
+/* ── La scheda di documento ──────────────────────────────────────────────
+   (E20, T44; il prototipo `.docw` e `.docp`, passo 17.) Un `.docx` o un
+   `.odt` nella nota: a riposo il testo reso in continuo, senza pagine, nel
+   carattere di lettura a 14 px; da attiva l'editor dei documenti in
+   Scrittura, compatto, con la stessa misura, così il testo non salta
+   quando la scheda si attiva. Il testo scorre solo da attiva; la riga
+   «Apri» di un documento lungo resta in fondo, sempre a vista. */
+.live-card[data-card-kind="document"] .canvas-card-document {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  overflow: hidden;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 18px 18px;
+  color: var(--doc-fg);
+  font: 14px/1.6 var(--font-reading);
+  /* La scheda sta dentro il testo della nota, che tiene gli a capo: gli a
+     capo fra i blocchi della resa non sono righe. */
+  white-space: normal;
+}
+.live-card[data-card-kind="document"][data-card-active="true"] .canvas-card-document-content {
+  overflow: auto;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content :is(p, ul, ol, blockquote, table) {
+  margin: 0 0 9px;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content :is(ul, ol) {
+  padding-inline-start: 1.4em;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content :is(h1, h2, h3, h4, h5, h6) {
+  margin: 12px 0 8px;
+  color: var(--doc-fg);
+  font: 600 15px/1.35 var(--font-reading);
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content > :first-child {
+  margin-top: 0;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content table {
+  border-collapse: collapse;
+}
+.live-card[data-card-kind="document"] .canvas-card-document-content :is(td, th) {
+  padding: 3px 8px;
+  border: 1px solid var(--doc-rule-soft);
+  text-align: start;
+  vertical-align: top;
+}
+/* Un documento lungo si ferma a 200 blocchi (`DOCUMENT_CARD_MAX_BLOCKS` di
+   `kinds/document.ts`): gli altri non si disegnano, e la riga in fondo
+   offre «Apri». */
+.canvas-card-document-content[data-card-truncated="true"] > :nth-child(n + 201) {
+  display: none;
+}
+.canvas-card-document-more {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 10px 18px 14px;
+  border-top: 1px solid var(--doc-rule-soft);
+  color: var(--doc-gutter-fg);
+  font-size: 12.5px;
+}
+
+/* Da attiva: la superficie dei documenti nel corpo, senza il suo fondo (la
+   carta è quella della scheda) e con la misura del riposo. */
+.live-card[data-card-kind="document"] .canvas-card-document .rich-surface,
+.live-card[data-card-kind="document"] .canvas-card-document .rich-page {
+  background: transparent;
+}
+/* Gli avvisi della sessione (il conflitto, la bozza) in cima, il testo sotto
+   che scorre. */
+.live-card[data-card-kind="document"] .canvas-card-document > * {
+  flex: none;
+}
+.live-card[data-card-kind="document"] .canvas-card-document > .rich-surface,
+.live-card[data-card-kind="document"] .canvas-card-document > .canvas-card-document-content {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-content {
+  max-width: none;
+  margin: 0;
+  padding: 16px 18px 18px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-para {
+  margin-block: 0 9px;
+}
+/* Le voci di un elenco stanno strette come nella resa; lo spazio viene dopo
+   l'ultima. */
+.live-card[data-card-kind="document"] .look-tema .rich-para.rich-list {
+  margin-block: 0;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-list + :not(.rich-list) {
+  margin-top: 9px;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-heading {
+  margin: 12px 0 8px;
+  padding: 0;
+  border: 0;
+  color: var(--doc-fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: normal;
+}
+.live-card[data-card-kind="document"] .look-tema .rich-content > :first-child {
+  margin-top: 0;
+}
+
+/* ── La misura, la riga, le schede affiancate (T42) ──────────────────────
+   (E19; il prototipo `.pair` e `.blk[data-t="lavagna"] .scard`, passo 17.)
+   La misura scritta nell'embed (`![[Conti.xlsx|640x300]]`) arriva come
+   `--live-card-width` e `--live-card-height`. Una larghezza minore della
+   colonna stringe la scheda; una maggiore la allarga oltre il testo, prima a
+   destra fino a 64 px («Larga», come la Base) e poi anche a sinistra fino ad
+   altri 64 («Tutta la pagina», come la lavagna del prototipo). Sotto i 1180
+   px di finestra resta il margine di destra, sotto i 940 nessuno: la scheda
+   torna nella colonna. L'altezza è di tutta la scheda, testata compresa. */
+.live-card[data-card-width="set"] {
+  width: min(var(--live-card-width), calc(100% + 128px));
+  margin-left: calc(-1 * max(0px, min(var(--live-card-width), calc(100% + 128px)) - 100% - 64px));
+}
+@media (max-width: 1180px) {
+  .live-card[data-card-width="set"] {
+    width: min(var(--live-card-width), calc(100% + 64px));
+    margin-left: 0;
+  }
+}
+@media (max-width: 940px) {
+  .live-card[data-card-width="set"] {
+    width: min(var(--live-card-width), 100%);
+  }
+}
+@container sheet (max-width: 560px) {
+  .live-card[data-card-width="set"] {
+    width: min(var(--live-card-width), 100%);
+    margin-left: 0;
+  }
+}
+:root[data-client-shell="mobile"] .live-card[data-card-width="set"] {
+  width: min(var(--live-card-width), 100%);
+  margin-left: 0;
+}
+.live-card[data-card-state="view"][data-card-height="set"]:not([data-card-full="true"]) .live-card-body {
+  height: min(calc(var(--live-card-height) - 35px), 80vh);
+  min-height: 60px;
+}
+
+/* Il bordo in basso: si trascina per cambiare l'altezza. Una lineetta al
+   centro lo dice al passaggio; mentre si trascina è d'accento. */
+.live-card-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: none;
+  height: 10px;
+  cursor: ns-resize;
+}
+.live-card[data-card-resizable="true"] .live-card-resize {
+  display: block;
+}
+.live-card-resize::after {
+  position: absolute;
+  bottom: 3px;
+  left: calc(50% - 16px);
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--doc-rule);
+  content: "";
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.live-card:hover .live-card-resize::after,
+.live-card-resize:focus-visible::after,
+.live-card[data-card-resizing="true"] .live-card-resize::after {
+  opacity: 1;
+}
+.live-card-resize:hover::after,
+.live-card-resize:focus-visible::after,
+.live-card[data-card-resizing="true"] .live-card-resize::after {
+  background: var(--accent);
+}
+/* Col fuoco da tastiera la lineetta porta l'anello del fuoco, come i
+   pulsanti della testata: il bordo largo 10 px non ne ha uno suo. */
+.live-card-resize:focus-visible {
+  outline: none;
+}
+.live-card-resize:focus-visible::after {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* «Mostra come: riga»: l'icona e il nome, in una riga sola. */
+.live-card[data-card-display="row"] {
+  margin: var(--space-2) 0;
+  border-radius: 8px;
+}
+.live-card[data-card-display="row"]::after {
+  border-radius: 8px;
+}
+.live-card[data-card-state="row"] .live-card-head {
+  border-bottom: 0;
+}
+.live-card[data-card-state="row"] .live-card-tools,
+.live-card[data-card-state="row"] .live-card-body {
+  display: none;
+}
+
+/* Le schede affiancate: le colonne di K3 (`[!columns]`) con le schede alla
+   pari, alte uguali, 14 px fra l'una e l'altra; come la scheda «Tutta la
+   pagina» escono di 64 px dai due lati del testo finché la finestra ne ha il
+   margine. Nel foglio stretto e al telefono stanno una sotto l'altra (la
+   regola delle colonne, `document.css`). */
+.markdown-rendered .fub-columns[data-live-cards="true"] {
+  column-gap: 14px;
+  align-items: stretch;
+  margin-inline: -64px;
+}
+@media (max-width: 1180px) {
+  .markdown-rendered .fub-columns[data-live-cards="true"] {
+    margin-inline: 0;
+  }
+}
+:root[data-client-shell="mobile"] .markdown-rendered .fub-columns[data-live-cards="true"] {
+  margin-inline: 0;
+}
+.markdown-rendered .fub-columns[data-live-cards="true"] > .fub-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fub-column > .live-card {
+  flex: 1 0 auto;
+  margin: 0;
+}
+.fub-column > .live-card[data-card-state="view"] .live-card-body {
+  flex: 1 0 auto;
+}
+/* In una colonna la testata è stretta: «Apri» e «A tutta pagina» non tengono
+   il posto finché non si mostrano, così il nome del file si legge intero. */
+.fub-column > .live-card[data-card-state="view"]:not(:hover):not(:focus-within):not([data-card-active="true"]) .live-card-head button {
+  display: none;
+}
+
+/* ── La scheda di disegno ────────────────────────────────────────────────
+   (E20, T46, ADR 0248; il passo 17 del prototipo non ne ha un disegno: è
+   la riga «Disegno .svg» della tabella delle specie.) Un `.svg` di Fub nella
+   nota: a riposo il disegno fermo, intero e al centro, come la scheda
+   d'immagine; da attiva l'editor dei disegni sopra di lui, alto quanto il
+   corpo, con gli strumenti e la barra in una fila sopra il foglio
+   (`cardChrome`) e niente colonna di lato. Il pannello delle proprietà (il
+   testo da scrivere) si apre sopra il foglio, sul lato destro, e non lo
+   stringe. Un SVG qualunque resta l'immagine. */
+.live-card[data-card-kind="drawing"] .canvas-card-drawing {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+/* Il disegno fermo sta sulla carta, bianca in tutti e due i temi come il
+   foglio dell'editor (`skin/draw.css`): l'inchiostro scuro di uno schizzo si
+   legge anche al buio. Un SVG qualunque ha la sua carta, se ne ha una. */
+.live-card[data-card-kind="drawing"] .canvas-card-drawing[data-card-drawing="fub"] {
+  background: #ffffff;
+}
+.live-card[data-card-kind="drawing"] .canvas-card-drawing[data-card-state="editing"] > .canvas-card-image {
+  visibility: hidden;
+}
+.live-card[data-card-kind="drawing"] .canvas-card-drawing-editor {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--doc-bg);
+}
+.live-card[data-card-kind="drawing"] .canvas-card-drawing-editor[hidden] {
+  display: none;
+}
+/* La fila sopra il foglio: gli strumenti, poi la barra (menu, Annulla,
+   Ripeti, le opzioni dello strumento), che prende lo spazio che resta e
+   manda in «…» ciò che non ci sta. Se le restano meno di 12rem va a capo,
+   sotto gli strumenti; gli strumenti scorrono di lato solo in una scheda
+   più stretta di loro. */
+.live-card[data-card-kind="drawing"] .draw-card-bar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  border-width: 0;
+  border-bottom-width: 1px;
+  border-style: solid;
+  border-color: var(--doc-rule);
+  background: var(--bg-elev);
+}
+.live-card[data-card-kind="drawing"] .draw-card-bar > .draw-rail {
+  flex: 0 1 auto;
+  max-width: 100%;
+  flex-direction: row;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-width: 0;
+  border-right-width: 1px;
+  border-style: solid;
+  border-color: var(--doc-rule-soft);
+  background: transparent;
+}
+.live-card[data-card-kind="drawing"] .draw-card-bar > .draw-header {
+  flex: 1 1 12rem;
+  min-width: 0;
+  border-width: 0;
+  background: transparent;
+}
+.live-card[data-card-kind="drawing"] .draw-editor[data-compact] .draw-body {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+}
+.live-card[data-card-kind="drawing"] .draw-editor[data-compact] .draw-dock {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 2;
+  width: min(18rem, 70%);
+  background: var(--bg-elev);
+  box-shadow: -8px 0 20px -14px rgb(0 0 0 / 40%);
+}
+
+/* ── La scheda PDF (T45) ─────────────────────────────────────────────────
+   (E20; il prototipo `.pdfw`, `.pdfp` e `.pdfn`, passo 17.) Una pagina
+   intera sul vassoio della scheda (`--doc-fill-soft`, il `--tray` del
+   prototipo sulla pagina), in alto al centro, con 16
+   px di margine; sotto, in una fascia di 40 px, «‹ 2 / 6 ›»: il numero c'è
+   sempre, le frecce compaiono al passaggio, col fuoco e da attiva (una
+   freccia che non porta oltre resta velata). Sopra la pagina sta il testo
+   di pdf.js (`canvas-card-pdf-text`): pezzi trasparenti nei punti della
+   pagina, che da attiva si scelgono e si copiano; a riposo è inerte, e
+   sulla lavagna anche. Lo strato prende la misura della pagina e la scala
+   dei caratteri dalla scheda (`--page-ratio`, `--total-scale-factor`), e
+   ogni pezzo la sua misura da pdf.js (`--min-font-size`, `--font-height`,
+   `--scale-x`, `--rotate`, scritte sull'elemento). */
+.canvas-card-pdf-text {
+  position: absolute;
+  width: min(100cqw, 100cqh * var(--page-ratio, 0.7071));
+  height: min(100cqh, 100cqw / var(--page-ratio, 0.7071));
+  overflow: clip;
+  line-height: 1;
+  letter-spacing: normal;
+  text-align: initial;
+  pointer-events: none;
+  user-select: none;
+}
+.canvas-card-pdf-text span,
+.canvas-card-pdf-text br {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.canvas-card-pdf-text > :not(.markedContent),
+.canvas-card-pdf-text .markedContent span:not(.markedContent) {
+  font-size: calc(var(--total-scale-factor, 1) * var(--min-font-size, 1) * var(--font-height, 0px));
+  transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1)) scale(calc(1 / var(--min-font-size, 1)));
+}
+.canvas-card-pdf-text .markedContent {
+  display: contents;
+}
+.canvas-card-pdf-text ::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: transparent;
+}
+/* Nella nota la scheda attiva ha il fuoco dentro il contenuto di CodeMirror,
+   che lì dà la selezione di sistema, piena, con `!important`
+   (`hideNativeSelection`): coprirebbe le parole scelte. Soltanto un
+   `!important` più specifico la batte, come per la tabella. */
+.cm-editor .cm-content .live-card .canvas-card-pdf-text ::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent) !important;
+}
+
+.live-card .canvas-card-pdf {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 40px;
+  column-gap: 4px;
+  padding: 16px 16px 0;
+  background: var(--doc-fill-soft);
+}
+.live-card .canvas-card-pdf-page,
+.live-card .canvas-card-pdf-text {
+  grid-area: 1 / 1 / 2 / -1;
+  align-self: start;
+  justify-self: center;
+  width: min(100cqw, (100cqh - 40px) * var(--page-ratio, 0.7071));
+  height: min(100cqh - 40px, 100cqw / var(--page-ratio, 0.7071));
+}
+.live-card .canvas-card-pdf-page {
+  border-radius: 2px;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 18%),
+    0 8px 22px -12px rgb(0 0 0 / 40%);
+}
+.live-card .canvas-card-pdf-message {
+  grid-area: 1 / 1 / 2 / -1;
+  align-self: center;
+  justify-self: center;
+  max-width: 44ch;
+  margin: 0;
+  color: var(--doc-gutter-fg);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+.live-card .canvas-card-pdf-previous,
+.live-card .canvas-card-pdf-next,
+.live-card .canvas-card-pdf-status {
+  position: static;
+  grid-row: 2;
+  align-self: center;
+  transform: none;
+}
+.live-card .canvas-card-pdf-previous {
+  grid-column: 2;
+}
+.live-card .canvas-card-pdf-status {
+  grid-column: 3;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--doc-gutter-fg);
+  font: 12px var(--font-ui);
+  font-variant-numeric: tabular-nums;
+}
+.live-card .canvas-card-pdf-next {
+  grid-column: 4;
+}
+.live-card .canvas-card-pdf-previous,
+.live-card .canvas-card-pdf-next {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: none;
+  box-shadow: none;
+  color: var(--doc-gutter-fg);
+  font-size: 16px;
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 0.12s;
+}
+.live-card:hover .canvas-card-pdf-previous,
+.live-card:hover .canvas-card-pdf-next,
+.live-card:focus-within .canvas-card-pdf-previous,
+.live-card:focus-within .canvas-card-pdf-next,
+.live-card[data-card-active="true"] .canvas-card-pdf-previous,
+.live-card[data-card-active="true"] .canvas-card-pdf-next {
+  opacity: 1;
+}
+.live-card .canvas-card-pdf-previous:hover,
+.live-card .canvas-card-pdf-next:hover {
+  background: var(--doc-block-hover);
+  color: var(--doc-fg);
+}
+.live-card .canvas-card-pdf-previous:focus-visible,
+.live-card .canvas-card-pdf-next:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.live-card .canvas-card-pdf-previous:disabled,
+.live-card .canvas-card-pdf-next:disabled {
+  background: none;
+  color: var(--doc-gutter-fg);
+  opacity: 0.25;
+}
+.live-card[data-card-active="true"] .canvas-card-pdf-text,
+.live-card[data-card-active="true"] .canvas-card-pdf-text span {
+  pointer-events: auto;
+  user-select: text;
+}
+/* Di Notte la pagina bianca si abbassa un poco, come nel prototipo
+   (`.win[data-light="notte"] .pdfp { filter: brightness(0.9) }`). Il
+   vocabolario dei temi non ha `brightness()`: lo stesso effetto, pixel per
+   pixel, è un velo nero al 10% sulla pagina (0,9 × il colore), che sta
+   sopra la pagina e sotto il testo da scegliere (posizionato). La misura è
+   quella della pagina (`--page-ratio`, scritta anche sulla radice). */
+:root[data-theme="dark"] .live-card .canvas-card-pdf[data-card-state="content"]::after {
+  content: "";
+  grid-area: 1 / 1 / 2 / -1;
+  align-self: start;
+  justify-self: center;
+  width: min(100cqw, (100cqh - 40px) * var(--page-ratio, 0.7071));
+  height: min(100cqh - 40px, 100cqw / var(--page-ratio, 0.7071));
+  border-radius: 2px;
+  background: rgb(0 0 0 / 10%);
+  pointer-events: none;
+}
+
+/* ── Il valore di una cella nel testo (T53, prototipo `.cellv`) ─────────────
+   `![[Conti.xlsx#Budget!C7]]` in mezzo a una frase è il valore della cella,
+   col formato del foglio: un tratteggio d'accento sotto, le cifre tabellari,
+   mai spezzato a capo; al passaggio il velo d'accento, e il clic apre il
+   foglio. Un errore di formula, il file mancante e la cella che non c'è
+   prendono il colore dell'errore; la cella vuota («—») e il valore in lettura
+   il grigio. In Lettura (`.embed.fub-cell-value`) è testo come il resto. */
+.cm-fub-cell-value {
+  border-bottom: 1.5px dotted color-mix(in srgb, var(--accent) 60%, transparent);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cm-fub-cell-value:hover {
+  border-radius: 3px;
+  background: var(--accent-veil);
+}
+.cm-fub-cell-value:is([data-cell-state="loading"], [data-cell-state="empty"], [data-cell-state="unavailable"]) {
+  color: var(--doc-gutter-fg);
+}
+.cm-fub-cell-value:is([data-cell-state="error"], [data-cell-state="missing"], [data-cell-state="lost"]) {
+  border-bottom-color: color-mix(in srgb, var(--doc-danger) 60%, transparent);
+  color: var(--doc-danger);
+}
+.embed.fub-cell-value {
+  display: inline;
+  padding: 0;
+  border: 0;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.embed.fub-cell-value:is([data-cell-state="error"], [data-cell-state="missing"], [data-cell-state="lost"]) {
+  color: var(--doc-danger);
+}
+/* ── La zona lavagna (T47) ───────────────────────────────────────────────
+   (E25, D15 A; il prototipo `.scard[data-kind="canvas"]` e `.cvz`, passo
+   18.) Un `.canvas` nella nota è la lavagna vera (N6), in forma di scheda:
+   la testata, la barra dei comandi, la colonna degli strumenti e il
+   navigatore della lavagna non ci sono, e tornano «A tutta pagina»; resta
+   la barra della selezione, sopra le schede scelte. Il fondo è quello del
+   prototipo: il vassoio della pagina (`--doc-fill-soft`, il `--tray` del
+   prototipo) al 60% sul foglio, coi punti della griglia nel filo
+   `--doc-rule` (il `--line-2`). A riposo la lavagna intera si guarda e
+   basta (il contenitore è inerte: la rotella scorre la nota, il clic attiva
+   la scheda); da attiva prende il posto di quella a riposo, sopra di lei. Le
+   schede e i fili sono della lavagna, vestiti come sulla lavagna. */
+.live-card[data-card-kind="canvas"] .canvas-card-board {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.live-card[data-card-kind="canvas"] .canvas-card-board-rest,
+.live-card[data-card-kind="canvas"] .canvas-card-board-editor {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.live-card[data-card-kind="canvas"] .canvas-card-board-rest[hidden],
+.live-card[data-card-kind="canvas"] .canvas-card-board-editor[hidden] {
+  display: none;
+}
+.live-card[data-card-kind="canvas"] .canvas-card-board-rest {
+  cursor: pointer;
+}
+.live-card[data-card-kind="canvas"] .canvas-viewport {
+  background-color: color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg));
+}
+.live-card[data-card-kind="canvas"] .canvas-grid {
+  background-image: radial-gradient(var(--doc-rule) 1px, transparent 1.2px);
+}
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-header,
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-toolbar,
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-rail,
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-navigator {
+  display: none;
+}
+/* Senza la colonna la vista prende tutta la larghezza. */
+.live-card[data-card-kind="canvas"] [data-card-editor="compact"] .canvas-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* «A tutta pagina»: la lavagna intera, con i suoi strumenti. */
+.live-card[data-card-kind="canvas"][data-card-full="true"] .canvas-card-board-editor .canvas-header,
+.live-card[data-card-kind="canvas"][data-card-full="true"] .canvas-card-board-editor .canvas-toolbar,
+.live-card[data-card-kind="canvas"][data-card-full="true"] .canvas-card-board-editor .canvas-rail {
+  display: flex;
+}
+.live-card[data-card-kind="canvas"][data-card-full="true"] .canvas-card-board-editor .canvas-body {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+/* Annidata troppo a fondo, o senza la lavagna: una riga che dice perché, e
+   «Apri». */
+.live-card[data-card-kind="canvas"] .canvas-card-board-message {
+  max-width: 44ch;
+  color: var(--doc-gutter-fg);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+.live-card[data-card-kind="canvas"] .canvas-card-board[data-card-board="unavailable"] .canvas-card-board-rest,
+.live-card[data-card-kind="canvas"] .canvas-card-board[data-card-board="link"] .canvas-card-board-rest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background-color: color-mix(in srgb, var(--doc-fill-soft) 60%, var(--doc-bg));
+  cursor: default;
+}
+/* ── Gli estratti e «Annota» (T49) ───────────────────────────────────────
+   (E25; il prototipo `.scard .only-live.act` e `.exc`, passi 17–18.)
+   «Estrai» sta in testata solo sulla scheda attiva che ha estratti (il
+   foglio; il PDF lo mostra spento, col perché): d'accento e in grassetto
+   come l'azione del prototipo (`--acc-ink` → `--accent-soft`), grigio da
+   spento. Un passo di PDF (`#page=2&selection=…`, scritto da Obsidian) è una
+   citazione, non una scheda: la barra gialla del prototipo (`#e8c84a` in
+   tutte e due le luci, come là), il carattere del corpo del testo (il
+   prototipo scrive un corsivo su `--f-text`, che non dichiara: il suo
+   `font` non vale e il testo eredita quello del paragrafo, dritto), e sotto
+   la fonte con «Vai alla pagina». */
+.live-card-head .live-card-extract {
+  display: none;
+}
+.live-card[data-card-active="true"][data-card-extract] .live-card-head .live-card-extract {
+  display: inline-flex;
+}
+.live-card[data-card-extract="ready"] .live-card-head .live-card-extract {
+  color: var(--accent-soft);
+  font-weight: 600;
+}
+.live-card[data-card-extract="off"] .live-card-head .live-card-extract {
+  color: var(--doc-gutter-fg);
+  cursor: default;
+}
+.live-card[data-card-state="passage"] {
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.live-card[data-card-state="passage"]::after,
+.live-card[data-card-state="passage"] .live-card-head,
+.live-card[data-card-state="passage"] .live-card-resize {
+  display: none;
+}
+.live-card[data-card-state="passage"] .live-card-body {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  cursor: default;
+}
+.live-card[data-card-state="passage"] .live-card-body > * {
+  pointer-events: auto;
+}
+.live-card-excerpt {
+  margin: 4px 0;
+  padding: 4px 0 4px 16px;
+  border-left: 3px solid #e8c84a;
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  font-style: normal;
+  line-height: var(--leading-relaxed);
+}
+.live-card-excerpt-wait {
+  margin: 0;
+}
+.live-card-excerpt-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--doc-gutter-fg);
+  font: 12.5px var(--font-ui);
+  font-style: normal;
+}
+.live-card-excerpt-source > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.live-card-excerpt-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-card-excerpt-go {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--accent-soft);
+}
+.live-card-excerpt-go:hover {
+  background: var(--accent-veil);
+}
+.live-card-excerpt-go:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}

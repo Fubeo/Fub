@@ -258,8 +258,11 @@ export interface SurfaceRect {
  * - `note`: a row that names a whole note of the same vault (a note of the
  *   drawer's tree): dropped there, the block goes to that note («Sposta in»,
  *   T32). The note may be the document itself.
+ * - `board`: a whiteboard of the same vault open beside (a pane showing a
+ *   `.canvas`): dropped there, the block becomes a card of it («Porta su una
+ *   lavagna», T48).
  */
-export type SurfaceDropOffer = SurfacePlaceOffer | SurfaceNoteOffer;
+export type SurfaceDropOffer = SurfacePlaceOffer | SurfaceNoteOffer | SurfaceBoardOffer;
 
 /** What every offer has: where it is on screen and how it shows the pointer over it. */
 interface SurfaceDropRow {
@@ -284,6 +287,15 @@ export interface SurfaceNoteOffer extends SurfaceDropRow {
   /** The note the row names, in the vault `vault`. */
   readonly document: SurfaceDropDocument;
   /** Its name as the row shows it. */
+  readonly title: string;
+}
+
+/** A whiteboard open beside, in the same vault: see `SurfaceDropOffer`. */
+export interface SurfaceBoardOffer extends SurfaceDropRow {
+  readonly kind: "board";
+  /** The whiteboard the pane shows, in the vault `vault`. */
+  readonly document: SurfaceDropDocument;
+  /** Its name as the pane's tab shows it. */
   readonly title: string;
 }
 
@@ -326,7 +338,8 @@ export function offerDropTargets(source: SurfaceDropOffers): () => void {
 
 /**
  * The drop places every source offers for `document` now: its own places
- * (same document, same vault) and the notes of its vault. A source that throws
+ * (same document, same vault), the notes of its vault and the whiteboards of
+ * its vault open beside. A source that throws
  * offers nothing: a gesture never breaks for a place it can't reach.
  */
 export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
@@ -335,7 +348,8 @@ export function dropOffers(document: SurfaceDropDocument): SurfaceDropOffer[] {
     try {
       for (const offer of source.offers(document)) {
         if (offer.document.vault !== document.vault) continue;
-        if (offer.kind === "note" || offer.document.documentId === document.documentId) out.push(offer);
+        const own = offer.document.documentId === document.documentId;
+        if (offer.kind === "board" ? !own : offer.kind === "note" || own) out.push(offer);
       }
     } catch {
       // Una sorgente guasta non toglie le altre.
@@ -445,6 +459,14 @@ export interface SurfaceStatus {
 export interface SurfaceActiveCell {
   readonly name: string;
   readonly formula: string;
+  /**
+   * The sheet of the active cell, by name, and the selected range around it
+   * in A1 (`B2:C4`, or the cell alone): «Estrai» of a sheet card in a note
+   * writes them as the part of a new embed (T49). Absent when the surface
+   * can't tell.
+   */
+  readonly sheet?: string;
+  readonly range?: string;
 }
 
 export interface SurfaceActiveCellSource {
@@ -452,6 +474,12 @@ export interface SurfaceActiveCellSource {
   read(): SurfaceActiveCell | null;
   /** Called when the active cell or what it holds may have changed. */
   subscribe(listener: () => void): () => void;
+  /**
+   * Moves the active cell to `cell` of the sheet named `sheet` without writing
+   * anything (a sheet card in a note lands on its range, T43). `false` when
+   * the surface can't.
+   */
+  select?(sheet: string, cell: string): boolean;
 }
 
 /**
@@ -583,6 +611,16 @@ export interface EditorSurface {
   setMode(mode: string): void;
   /** The document text, when this surface edits it. */
   readonly buffer?: SurfaceBuffer;
+  /**
+   * The document changed its path (a rename or a move, from this window or
+   * from outside) and kept its extension: the surface stays mounted and from
+   * now on reads by `documentId` what it read by the old path (images and
+   * links relative to the document). Its text, cursor, selection, scroll,
+   * focus and local undo do not change. Without it the pane remounts the
+   * surface on the new path; a text surface that reads its identity from the
+   * document session follows without it.
+   */
+  followRename?(documentId: string): void;
   focus?(): void;
   /**
    * Opens the surface's own find bar, the one its editor offers inside the
@@ -604,6 +642,15 @@ export interface EditorSurface {
    */
   readonly jumps?: { back(): boolean; forward(): boolean };
   /**
+   * One step of the surface's own undo history, without moving the focus:
+   * Ctrl+Z pressed on a button or a tab of a panel bound to this document
+   * (find and replace, revisions, the inspector) while the focus is out of the
+   * page (`ui/off-sheet-keys.ts`). `false` when there was nothing to undo or
+   * the document cannot be written. A surface without it leaves those keys
+   * alone.
+   */
+  history?(step: "undo" | "redo"): boolean;
+  /**
    * The surface draws its own bar of commands (the document ribbon): the
    * shell's format bar then stays out of the way, while the selection
    * bubble and the `fub.editor.action` commands keep working.
@@ -615,7 +662,10 @@ export interface EditorSurface {
   readonly panels?: SurfacePanels;
   /** The document's entries in the status band. */
   readonly status?: SurfaceStatus;
-  /** The active cell of a grid, for a host that hides the formula bar. */
+  /**
+   * The active cell of a grid: for a host that hides the formula bar, and to
+   * land on a cell when the shell opens the sheet at one (T53).
+   */
   readonly activeCell?: SurfaceActiveCellSource;
   /** The cells selected in a table or a Base, for the sum in the status band. */
   readonly cellSelection?: SurfaceCellSelectionSource;
@@ -639,6 +689,11 @@ export interface EditorSurface {
    */
   selectedText?(): SelectedText | null;
   setReadOnly?(readOnly: boolean): void;
+  /// Montata in una scheda (`SurfaceMountContext.compact`), la scheda va a
+  /// tutta pagina (`true`) o ne torna: la superficie offre il resto dei suoi
+  /// strumenti, o torna a quelli della scheda (T46). Assente: la superficie
+  /// è la stessa a ogni misura.
+  setFullPage?(full: boolean): void;
   setTheme?(theme: Theme): void;
   /** The syntax the vault declares for this document (tags, wikilinks, ...). */
   setSyntaxForms?(forms: readonly SyntaxForm[]): void;
@@ -734,6 +789,13 @@ export interface SurfaceBlockGroup {
   /** The name the bar shows before the gestures, in the UI language. */
   readonly label: string;
   readonly items: readonly SurfaceMenuEntry[];
+  /**
+   * What the block is writing now, shown after the name as a sheet's formula
+   * bar (the active cell of a sheet card in a note, T43). `null`: nothing yet
+   * (the slot stays); absent: the group has no such slot. Its text is updated
+   * in place, without redrawing the group.
+   */
+  readonly context?: { readonly cell: string; readonly formula: string } | null;
 }
 
 /** A command a surface offers to the command palette. */

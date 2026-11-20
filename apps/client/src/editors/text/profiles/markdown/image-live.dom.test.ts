@@ -3,12 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
-import { EditorView, runScopeHandlers } from "@codemirror/view";
-import { history, undo, undoDepth } from "@codemirror/commands";
+import { EditorView, keymap, runScopeHandlers } from "@codemirror/view";
+import { defaultKeymap, history, indentWithTab, undo, undoDepth } from "@codemirror/commands";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { parseImage, rewriteImage, writeImage } from "./image-live";
+import { mountMarkdown } from "./mount";
 
 // L'immagine in Live: selezione, riquadro e maniglia (D8, D9).
 
@@ -144,4 +145,50 @@ describe("con `elemento`", () => {
     expect(view.state.selection.main.head).toBe(doc.indexOf("!") + 2);
     expect(image()).toBeNull();
   });
+});
+
+describe("i pulsanti dentro un'immagine (#454)", () => {
+  // La Live vera: i tasti dell'editor (a capo, rientro) e una resa che offre
+  // «Scarica nel vault» come la superficie Markdown.
+  function live(doc: string): EditorView {
+    const view = new EditorView({
+      parent: document.body,
+      state: EditorState.create({
+        doc,
+        extensions: [
+          history(),
+          keymap.of([...defaultKeymap, indentWithTab]),
+          markdown({ base: markdownGrammar }),
+          livePreview({
+            openWikilink() {},
+            searchTag() {},
+            mountRendered: (container, html) => mountMarkdown(container, html, { importRemoteImage: async () => {} }),
+          }),
+          Prec.highest(liveReveal.of("mai")),
+        ],
+      }),
+    });
+    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
+    view.dispatch({});
+    views.push(view);
+    return view;
+  }
+  const keys: KeyboardEventInit[] = [{ key: "Enter" }, { key: " " }, { key: "Tab" }, { key: "Tab", shiftKey: true }];
+
+  for (const [name, doc, selector] of [
+    ["«Scarica nel vault» di un'immagine remota", "Testo ![gatto](https://e.it/a.png) qui", ".image-remote-load"],
+    ["«Carica» di una pagina incorporata", "Testo ![](https://www.youtube.com/watch?v=abc) qui", ".web-embed-load"],
+  ] as const) {
+    it(`${name}: Invio, Spazio, Tab e Maiusc+Tab non cambiano la nota`, () => {
+      const view = live(doc);
+      const button = document.querySelector<HTMLButtonElement>(`.cm-fub-image ${selector}`)!;
+      expect(button).not.toBeNull();
+      button.focus();
+      for (const init of keys) {
+        button.dispatchEvent(new KeyboardEvent("keydown", { ...init, bubbles: true, cancelable: true }));
+      }
+      expect(view.state.doc.toString()).toBe(doc);
+      expect(undoDepth(view.state)).toBe(0);
+    });
+  }
 });

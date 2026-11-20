@@ -24,6 +24,7 @@ import { activeTab, loadLayout } from "./layout";
 import { setPrimaryViews } from "../ui/primary-views";
 import { loadOrganization } from "./organization";
 import { preferredPaneMode } from "./pane-mode";
+import { enterVault, leaveVault } from "./kernel";
 import { emit, loadActiveSpace, loadExpanded, loadExplorerSort, state } from "./store";
 import { beforeNote, loadCommandSpecs } from "./vault";
 
@@ -109,7 +110,17 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     }
     if (!alive()) return;
     const left = state.vaultRoot;
-    const info = await api.openVault(dir);
+    // Rientrare in un vault lasciato (tornare da B ad A, chiudere la demo):
+    // i suoi fatti tornano a passare **prima** dell'apertura, perché i primi
+    // partono mentre l'host apre (#216). La radice canonica si sa solo dalla
+    // risposta, e si toglie anche quella. Un'apertura rifiutata lascia la
+    // finestra dov'era: il vault lasciato torna fra i lasciati.
+    const wasLeft = enterVault(dir);
+    const info = await api.openVault(dir).catch((error: unknown) => {
+      if (wasLeft) leaveVault(dir);
+      throw error;
+    });
+    enterVault(info.root);
     if (!alive()) return;
     // **Ciò che è stato battuto mentre l'host apriva il vault nuovo** (FUB-001).
     // Il vault di prima resta aperto nell'host finché non lo si chiude, e ogni
@@ -121,6 +132,11 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     await flushPendingSave();
     if (!alive()) return;
     const unsaved = await resetDocumentsForVault();
+    // Le sessioni del vault lasciato non ci sono più: da qui i suoi fatti —
+    // l'eco dei salvataggi appena scritti, il suo watcher se resta aperto (la
+    // demo), un `document_changed` di una nota con lo stesso id — non arrivano
+    // più alla finestra, che sta per mostrare l'altro (#216).
+    if (left && left !== info.root) leaveVault(left);
     // Le view principali erano quelle che il vault lasciato dichiarava: la
     // prima `synchronize()` qui sotto, con quell'elenco, disegnerebbe nel vault
     // nuovo la view di una scheda ripristinata anche se questo non la dichiara

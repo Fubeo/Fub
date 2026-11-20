@@ -44,7 +44,10 @@
 // pausa breve, quando la superficie avvisa che qualcosa è cambiato: mai a ogni
 // battuta, e mai mentre il fuoco è nella barra o in un suo menu, così il
 // gruppo non si perde andandoci. Cambiato il gruppo, il nome si annuncia una
-// volta.
+// volta. Un gruppo con `context` (la scheda di foglio attiva in una nota,
+// T43) mostra dopo il nome la cella attiva e la sua formula, con la barra
+// della formula della lavagna (`cardFormulaBar`): il testo cambia lì, senza
+// ridisegnare il gruppo.
 //
 // La forma la sceglie `editor.toolbar` (`form`): `compatta` tiene annulla,
 // ripeti, lo stile, grassetto, corsivo, link, elenco e compito, più i comandi
@@ -62,6 +65,7 @@
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import type { EditorSurface, SurfaceBlockGroup } from "../editors/core/registry";
 import { MENU_RULE, type SurfaceMenuEntry, type SurfaceMenuItem } from "../editors/core/editor-menu";
+import { cardFormulaBar, type CardFormulaBar } from "../editors/core/formula-bar";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
@@ -76,6 +80,7 @@ import { showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/m
 import { attachTooltip } from "../ui/tooltip";
 import { slashMenuEntries } from "./slash/entries";
 import { slashPrefs } from "./slash/prefs";
+import { ALARM_PATHS } from "../editors/text/profiles/markdown/task-reminder";
 
 /// I gruppi, nell'ordine in cui si incontrano: un gruppo nuovo comincia dove
 /// cambia quello del pulsante, quindi l'ordine resta del plugin.
@@ -408,6 +413,9 @@ const FORMAT_ICONS: Readonly<Record<string, readonly string[]>> = {
   "fmt-h6": ["M4 6v12M12 6v12M4 12h8", "M19.6 8.4a3 3 0 0 0-4.1 2.1c-.5 1.8-.3 3.6-.3 3.6", "M15.2 15a2.4 2.4 0 1 0 4.8 0 2.4 2.4 0 1 0-4.8 0"],
   "fmt-person": ["M8.4 12a3.6 3.6 0 1 0 7.2 0 3.6 3.6 0 1 0-7.2 0", "M15.6 12v1.6a2.4 2.4 0 0 0 4.8 0V12a8.4 8.4 0 1 0-3.3 6.7"],
   "fmt-date": ["M6.5 5.5h11A2.5 2.5 0 0 1 20 8v9.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5V8a2.5 2.5 0 0 1 2.5-2.5z", "M4 10h16M8.5 3.5v4M15.5 3.5v4"],
+  // La sveglia del promemoria (T36), la figura `i-alarm` del prototipo: la
+  // stessa della pastiglia nella nota.
+  "fmt-alarm": ALARM_PATHS,
   "fmt-webpage": ["M3.5 12a8.5 8.5 0 1 0 17 0 8.5 8.5 0 1 0-17 0", "M3.5 12h17M12 3.5c2.6 2.6 2.6 14.4 0 17M12 3.5c-2.6 2.6-2.6 14.4 0 17"],
   "fmt-color": [
     "M12 3.5c4.7 0 8.5 3.4 8.5 7.6 0 2.6-2.1 4.2-4.3 4.2h-1.7a1.6 1.6 0 0 0-1.2 2.7 1.6 1.6 0 0 1-1.2 2.6C7.3 20.6 3.5 16.8 3.5 12S7.3 3.5 12 3.5z",
@@ -615,6 +623,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   let contextShown = false;
   let contextSignature = "";
   let contextGroup: SurfaceBlockGroup | null = null;
+  /// La cella del gruppo del blocco, se il gruppo ne ha una (T43).
+  let contextCell: CardFormulaBar | null = null;
   let announcer: HTMLElement | null = null;
   let blockTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1000,7 +1010,8 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       const item = surfaceItem(entry);
       return item ? [[entryId(entry), item]] : [];
     });
-    const shape = `${group.id}|${group.label}|` + items.map(([id, item]) =>
+    const cell = group.context === undefined ? "" : "cell|";
+    const shape = `${group.id}|${group.label}|${cell}` + items.map(([id, item]) =>
       `${id}=${item.label}=${item.icon ?? ""}=${item.checked ?? ""}=${item.disabled === true}=${item.items !== undefined}`
     ).join(";");
     return { items, shape: items.length === 0 ? "" : shape };
@@ -1010,13 +1021,18 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     const box = contextBox;
     if (!box) return;
     const { items, shape } = contextShape(group);
-    if (shape === contextSignature) return;
+    if (shape === contextSignature) {
+      // Lo stesso gruppo: cambia soltanto il testo della cella.
+      if (shape !== "" && group) showContextCell(group);
+      return;
+    }
     const before = contextGroup?.id ?? null;
     contextSignature = shape;
     contextGroup = shape === "" ? null : group;
     contextDrawn.close();
     contextDrawn = openLifetime();
     box.replaceChildren();
+    contextCell = null;
     contextShown = contextGroup !== null;
     box.hidden = !contextShown;
     if (contextGroup) {
@@ -1027,6 +1043,12 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       name.setAttribute("aria-hidden", "true");
       name.textContent = contextGroup.label;
       box.append(name);
+      if (contextGroup.context !== undefined) {
+        contextCell = cardFormulaBar();
+        contextCell.element.classList.add("format-bar-context-cell");
+        box.append(contextCell.element);
+        showContextCell(contextGroup);
+      }
       for (const [id, item] of items) {
         const menu = item.items !== undefined;
         const control = button("format-bar-button format-bar-labelled", item.label, null, contextDrawn);
@@ -1049,6 +1071,16 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     }
     keys.refresh();
     scheduleFit();
+  }
+
+  /// La cella attiva e la sua formula del gruppo; vuota (e nascosta) finché
+  /// non c'è.
+  function showContextCell(group: SurfaceBlockGroup): void {
+    const cell = contextCell;
+    if (!cell) return;
+    const context = group.context ?? null;
+    cell.element.hidden = context === null;
+    cell.show(context ?? { cell: "", formula: "" });
   }
 
   /// Fermo mentre il fuoco è nella barra o un suo menu è aperto: chi ci va

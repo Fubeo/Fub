@@ -33,9 +33,10 @@ const SWITCHABLE_FILE = "switchable-chunks.json";
 const NOT_AT_STARTUP: readonly { readonly what: string; readonly chunk?: RegExp; readonly module?: RegExp }[] = [
   { what: "pdfjs", module: /\/node_modules\/pdfjs-dist\// },
   { what: "editors/canvas", module: /\/src\/editors\/canvas\// },
-  // La porta per scrivere nelle schede della lavagna: serve solo a lei, e
-  // `document-controller.ts` la carica con un `import()` al primo uso.
-  { what: "state/card-editors", module: /\/src\/state\/card-editors\.ts$/ },
+  // L'ospite delle schede (il contratto, le specie e la porta per scrivere
+  // dentro una scheda): arriva con la lavagna, e `document-controller.ts`
+  // carica la porta con un `import()` al primo uso.
+  { what: "editors/core/cards", module: /\/src\/editors\/core\/cards\// },
   { what: "drawing-*", chunk: /^drawing-/ },
   { what: "editors/spatial", module: /\/src\/editors\/spatial\// },
   { what: "editors/rich", module: /\/src\/editors\/rich\// },
@@ -431,8 +432,11 @@ export default defineConfig({
           // lo leggono tutte le finestre: senza un nome suo finisce nel chunk
           // condiviso più grosso e ne consuma il margine a ogni frase nuova.
           if (/\/src\/i18n\/catalog\.ts$/.test(id)) return "shell-strings";
+          // L'inglese ha il suo: le due lingue insieme passavano il budget.
+          if (/\/src\/i18n\/catalog-en\.ts$/.test(id)) return "shell-strings-en";
           // Il motore del testo con i suoi pezzi, il tema che legge, gli
-          // appunti delle tabelle e il diario della griglia: li usano la
+          // appunti delle tabelle, la regola di `<!-- pagina -->` (la Live e
+          // l'esportazione in PDF) e il diario della griglia: li usano la
           // shell e la finestra del documento fin dall'avvio. Senza un nome
           // suo, da quando i fogli arrivano soltanto con un `import()`,
           // Rollup li fondeva nel chunk del ponte dei documenti, oltre la
@@ -440,7 +444,7 @@ export default defineConfig({
           if (
             /\/src\/editors\/text\/(engine|theme|phrases|history-footprints|smart-lists|properties-display|live-reveal|paste-html|indent-guides|soft-cursor)\.ts$/.test(id) ||
             /\/src\/theme\/(theme|loader|options|snippets|diagram-style|content-look)\.ts$/.test(id) ||
-            /\/src\/(rules\/offsets|editors\/core\/tsv|tabella\/clipboard|tabella\/selection|state\/grid-journal)\.ts$/.test(id)
+            /\/src\/(rules\/offsets|rules\/page-break|editors\/core\/tsv|tabella\/clipboard|tabella\/selection|state\/grid-journal)\.ts$/.test(id)
           ) {
             return "text-engine";
           }
@@ -452,6 +456,7 @@ export default defineConfig({
           // La resa della Lettura: dal Markdown all'HTML dei blocchi e delle
           // righe, con la grammatica che legge (note a piè di pagina, link,
           // ripiegabili, indice, testate dei callout, commenti CriticMarkup),
+          // i valori di cella nel testo (T53: la Lettura li rende come testo),
           // la sintassi del vault,
           // il sanificatore dell'HTML e le stringhe del profilo. La usano la
           // Live, la stampa, la copia in HTML e le anteprime; cambia con la
@@ -463,7 +468,7 @@ export default defineConfig({
           // o farebbe un ciclo fra questo chunk e il ponte: il plugin
           // `bundle-size-budgets` ferma la build in tutti e due i casi
           // (`UNDER_THE_RENDER`).
-          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head|comments\/syntax)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
+          if (/\/src\/editors\/text\/profiles\/markdown\/(render|render-inline|strings|grammar|link-syntax|details|toc|callout-head|cell-value|comments\/syntax)\.ts$|\/src\/rules\/syntax(\.generated)?\.ts$|\/src\/ui\/sanitize\.ts$/.test(id)) {
             return "markdown-render";
           }
           // Le discussioni dei commenti nella Live (il margine, il riquadro, il
@@ -486,6 +491,31 @@ export default defineConfig({
           // pannelli e la resa delle note; cambia col protocollo delle viste,
           // non con l'editor. Chiuso verso il basso come la resa.
           if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$/.test(id)) return "ui-views";
+          // L'ospite dei diagrammi Mermaid (`ui/mermaid.ts`): carica la
+          // libreria con un `import()`, disegna, apre il menu e l'anteprima.
+          // Lo montano la shell e la Live; cambia coi diagrammi, non con
+          // l'editor, e da solo tiene il chunk del ponte dei documenti sotto
+          // il budget. Chiuso verso il basso: ciò che importa sta nei chunk
+          // condivisi, e `lazy-part`, che usano anche le note e i media, sta
+          // nel chunk che Rollup gli estrae a parte, non nel ponte.
+          if (/\/src\/ui\/mermaid\.ts$/.test(id)) return "diagram-host";
+          // Le tabelle Markdown: il modello (`table-model.ts`: legge e
+          // riscrive la tabella, ordina e passa a TSV) e la griglia
+          // (`table-grid.ts`: selezione, menu e appunti delle celle). Li usano
+          // la Live, i grafici e «Trasforma in foglio»; cambiano col formato e
+          // coi gesti delle tabelle, non con l'editor, e da soli tengono il
+          // ponte dei documenti sotto il budget. Chiusi verso il basso:
+          // importano soltanto moduli che stanno nei loro chunk (`tabella/`,
+          // `ui/`, le stringhe), nessuno del ponte.
+          if (/\/src\/editors\/text\/profiles\/markdown\/table-(model|grid)\.ts$/.test(id)) return "markdown-tables";
+          // La disposizione dei riquadri e delle schede (`state/layout.ts`):
+          // il modello che la shell salva e rilegge, letto da quasi ogni
+          // pannello, anche da quelli che si caricano dopo. Cambia con la
+          // disposizione, non con la shell, e da sola tiene il chunk condiviso
+          // della shell (`search`) sotto il budget. Chiusa verso il basso:
+          // importa soltanto le stringhe, lo stato e l'aspetto del contenuto,
+          // che stanno nei loro chunk, nessuno di `search`.
+          if (/\/src\/state\/layout\.ts$/.test(id)) return "shell-layout";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {

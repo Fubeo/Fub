@@ -473,10 +473,19 @@ async function inspectKeyboard(page) {
     };
     // Un menu dentro una superficie modale (il menu della maniglia: un
     // dialogo col campo della ricerca e, sotto, il menu delle voci) ne è una
-    // parte: il giro del Tab è quello della superficie, campo compreso.
+    // parte: il giro del Tab è quello della superficie, campo compreso. Lo
+    // dice la superficie stessa, che dà il suo nome al menu delle voci. Un
+    // menu aperto *da* un dialogo modale (il menu dei profili dello spazio
+    // «Esporta in PDF») sta nel suo DOM perché fuori sarebbe inerte, ma ha il
+    // suo nome e la sua trappola: il giro del Tab è il suo.
+    const ownMenu = (el) => {
+      const surface = el.parentElement?.closest("[aria-modal=\"true\"]");
+      if (!surface) return false;
+      return Boolean(surface.id) && (el.getAttribute("aria-labelledby") ?? "").split(/\s+/).includes(surface.id);
+    };
     const modal = [...document.querySelectorAll("[aria-modal=\"true\"], [role=\"menu\"]")]
       .filter((el) => !hidden(el))
-      .filter((el) => el.getAttribute("role") !== "menu" || !el.parentElement?.closest("[aria-modal=\"true\"]"))
+      .filter((el) => el.getAttribute("role") !== "menu" || !ownMenu(el))
       .at(-1);
     const scope = modal ?? document;
     const nodes = [...scope.querySelectorAll("*")].filter(

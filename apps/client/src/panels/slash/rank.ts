@@ -76,7 +76,11 @@ export function rank(entry: { readonly id: string; readonly label: string; reado
     const at = label.indexOf(q);
     match = { score: 2, span: [at, at + q.length] };
   } else if (q.length >= 3 && words.some((word) => word.includes(q))) match = { score: 2.5, span: null };
-  else if (q.length >= 4 && words.some((word) => editDistanceAtMost1(word, q) || editDistanceAtMost1(word.slice(0, q.length), q))) {
+  else if (/\s/.test(q) && q.split(/\s+/).every((part) => words.some((word) => word.startsWith(part)))) {
+    // Più parole («da fare», «elenco attività»): ognuna è l'inizio di una
+    // parola del nome o dei sinonimi.
+    match = { score: 2.5, span: null };
+  } else if (q.length >= 4 && words.some((word) => editDistanceAtMost1(word, q) || editDistanceAtMost1(word.slice(0, q.length), q))) {
     match = { score: 3, span: null, why: "forse" };
   }
   if (!match) return null;

@@ -19,6 +19,7 @@
 
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::model::Span;
+use fub_abi::rules::text_policy;
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -244,7 +245,21 @@ pub enum Construct {
 /// Un vettore vuoto vuol dire che il file è già così: niente da scrivere. Le
 /// modifiche sono disgiunte e vanno tutte sulla revisione di `source`, in
 /// un'unica richiesta di modifica.
+///
+/// Un BOM in testa al file si salta e non si toglie (`text_policy`): la toppa
+/// lavora sul testo dopo il BOM e le sue modifiche tornano nelle coordinate
+/// del file, così il BOM resta il primo carattere.
 pub fn apply(source: &str, change: &BaseChange) -> Result<Vec<TextEdit>, PatchError> {
+    let bom = text_policy::bom_len(source);
+    let mut edits = apply_body(text_policy::strip_bom(source), change)?;
+    for edit in &mut edits {
+        edit.span = Span::new(edit.span.start + bom, edit.span.end + bom);
+    }
+    Ok(edits)
+}
+
+/// [`apply`] sul testo senza BOM: le modifiche sono nelle sue coordinate.
+fn apply_body(source: &str, change: &BaseChange) -> Result<Vec<TextEdit>, PatchError> {
     // Prima i costrutti che non si toccano, poi il modello: un file con due
     // documenti è rifiutato per quello che è, non per il modello che non legge.
     let doc = Doc::read(source)?;

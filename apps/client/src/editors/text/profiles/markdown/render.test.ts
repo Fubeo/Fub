@@ -9,6 +9,13 @@ function content(source: string): HTMLElement {
 }
 
 describe("contenuto Markdown reso", () => {
+  it("in Lettura `<!-- pagina -->` (D17) non si vede e non toglie niente al blocco dopo", () => {
+    const root = content("Prima.\n\n<!-- pagina -->\n## Dopo\n");
+    expect(root.textContent).not.toContain("pagina");
+    expect(root.querySelector("[data-page-break]")).toBeNull();
+    expect(root.querySelector("h2")?.textContent).toBe("Dopo");
+  });
+
   it("mostra una task una sola volta, conservando le voci annidate", () => {
     const root = content("- [ ] Da fare\n  - dettaglio\n- [x] Fatto\n");
     expect(Array.from(root.querySelectorAll("li.task"), (item) => item.textContent)).toEqual(["Da faredettaglio", "Fatto"]);
@@ -256,6 +263,8 @@ describe("note, immagini, codice e HTML in riga", () => {
     const figure = renderMarkdown("![Il ponte|320](ponte.png)").html;
     expect(figure).toMatch(/^<figure[^>]*><img src="ponte.png" alt="Il ponte"[^>]*width="320"[^>]*><figcaption>Il ponte<\/figcaption><\/figure>$/);
     expect(renderMarkdown("Il ![ponte](ponte.png) in riga").html).not.toContain("<figure");
+    // Una cella chiesta come valore nel testo (T53) non è una figura.
+    expect(renderMarkdown("![[Conti.xlsx#Budget!C7|value]]").html).not.toContain("<figure");
     expect(renderMarkdown("![](ponte.png)").html).not.toContain("<figure");
   });
 

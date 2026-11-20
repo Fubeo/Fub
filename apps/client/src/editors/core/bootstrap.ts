@@ -1,6 +1,11 @@
 import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
 import type { TransclusionDeps } from "../text/profiles/markdown/transclusion";
+import type { LiveCardKit, LiveCardsPort } from "../text/profiles/markdown/live-cards";
+import type { CellValuePort, CellValueReader } from "../text/profiles/markdown/cell-value";
 import type { MoveBlockPort } from "../text/profiles/markdown/blocks/move-to";
+import type { TableSheetPort } from "../text/profiles/markdown/table-sheet";
+import { FUB_CELLS_TYPE, rememberCellsCopy } from "../text/profiles/markdown/cells-clipboard";
+import type { BoardPort } from "../text/profiles/markdown/blocks/to-board";
 import type { SyncBlockPort } from "../text/profiles/markdown/blocks/sync-to";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
@@ -40,14 +45,15 @@ import { pdfIdWithoutFragment } from "../media/pdf-ids";
 import type { PdfEngineLoader, PdfJsModule } from "../media/pdf-view";
 import type { CanvasAttachmentPort, CanvasCards, CanvasMediaPort, CanvasNotesPort, CardLinkRef } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
-import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "../canvas/cards";
+import type { CardEditorPort, CardMode, CardRenderer, CardSnapshots, CardView } from "./cards/contract";
 import type { CardCitations } from "../canvas/card-head";
-import type { NoteCardPort } from "../canvas/cards/note";
+import type { NoteCardPort } from "./cards/kinds/note";
 import type { PartsPickerPort } from "../canvas/parts-picker";
-import { backlinkSources, documentOutline, existingDocuments, linkedFrom } from "../../host/query";
-import type { WebCardPort } from "../canvas/cards/web";
-import type { PdfCardPort } from "../canvas/cards/pdf";
-import type { CraftCardPort } from "../canvas/cards/craft";
+import { backlinkSources, documentOutline, existingDocuments, linkedFrom, resolvedReference } from "../../host/query";
+import type { WebCardPort } from "./cards/kinds/web";
+import type { PdfCardPort } from "./cards/kinds/pdf";
+import type { ImageCardPort } from "./cards/kinds/image";
+import type { CraftCardPort } from "./cards/kinds/craft";
 import type { SheetCardPort } from "../grid/card";
 import { openResourcePort, type ResourcePort, type ResourceTransport } from "../media/resource-port";
 import {
@@ -135,6 +141,10 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onNewSubpage?: (doc: string, name: string) => Promise<string | null>;
   /// «Sposta in…» dal menu del blocco e sulle note del cassetto (T32).
   readonly moveBlock?: MoveBlockPort;
+  /// «Trasforma in foglio» dal menu della tabella (T52).
+  readonly tableSheet?: TableSheetPort;
+  /// «Porta su una lavagna» dal menu del blocco e sulle lavagne a lato (T48).
+  readonly boardBlock?: BoardPort;
   /// Il blocco sincronizzato dal menu del blocco e dal «/» (T30).
   readonly syncBlock?: SyncBlockPort;
   /// Le icone delle pagine per i wikilink della Live.
@@ -295,21 +305,36 @@ function staticSurface(
   element.className = `document-surface document-surface-${family}`;
   element.tabIndex = 0;
   element.setAttribute("role", family === "error" ? "alert" : "document");
-  element.dataset.i18nLabel = messageKey;
   context.parent.replaceChildren(element);
 
   let active = true;
   const redraw = () => {
     if (!active) return;
+    // Con un perché la superficie d'errore dice che il documento non si apre,
+    // con una frase di chi guarda. Il motivo è prosa del codec, in inglese, e
+    // sta in «Dettagli», chiuso. «Nessuna superficie disponibile» è il gergo
+    // del registro, e resta solo per chi non ha un perché.
+    if (family === "error" && context.errorReason) {
+      // Niente `data-i18n-label`: lo riscriverebbe il cambio di lingua con la
+      // frase generica, e la riga accessibile dev'essere quella del documento.
+      delete element.dataset.i18nLabel;
+      const phrase = t("surface.failed");
+      const note = document.createElement("p");
+      note.textContent = phrase;
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = t("surface.details");
+      const reason = document.createElement("p");
+      reason.textContent = context.errorReason;
+      details.append(summary, reason);
+      element.replaceChildren(note, details);
+      element.setAttribute("aria-label", phrase);
+      return;
+    }
     const message = t(messageKey);
-    // Con un perché, la superficie d'errore dice che il documento non si
-    // mostra e perché; «nessuna superficie disponibile» è il gergo del
-    // registro, e resta solo per chi non ne ha uno.
-    const failed = family === "error" && context.errorReason
-      ? `${t("surface.failed")}: ${context.errorReason}`
-      : null;
-    element.textContent = failed ?? message;
-    element.setAttribute("aria-label", failed ?? message);
+    element.dataset.i18nLabel = messageKey;
+    element.textContent = message;
+    element.setAttribute("aria-label", message);
   };
   redraw();
   const stopLanguage = onLanguage(redraw);
@@ -362,28 +387,38 @@ function pdfEngineLoader(): Promise<PdfEngineLoader> {
   return pdfEngine;
 }
 
-const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
+/// Il motore dei PDF, caricato alla prima richiesta: anche per le pagine di
+/// un PDF incorporato che l'esportazione mette in coda (T74).
+export const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
 
 /// Le immagini ferme delle schede: una cache sola per finestra, per tutte le
 /// lavagne che vi si aprono, legata al vault in cui si sono fatte. Una lavagna
 /// montata in un altro vault la svuota: lo stesso percorso è un altro file.
 let windowSnapshots: { readonly cache: CardSnapshots & { clear(): void }; vault: string | undefined } | null = null;
 
-/// Le schede di una superficie della lavagna, dato il suo contenitore.
-type CanvasCardsFor = (context: SurfaceMountContext) => CanvasCards;
+/// Chi ospita le schede: la lavagna, o una nota (T41). Lo stesso registro, con
+/// una differenza sola: nella nota un documento si scrive (T44), sulla
+/// lavagna si legge (D-14 (a)).
+type CardHost = "canvas" | "note";
+
+/// Le schede di una superficie, dato il suo contenitore e chi le ospita.
+type CanvasCardsFor = (context: SurfaceMountContext, host?: CardHost) => CanvasCards;
 
 /// I renderer delle schede, caricati col codice della lavagna (A-14): non
 /// pesano sull'avvio di Fub. La scheda di foglio arriva con un suo `import()`
 /// al primo foglio.
 async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): Promise<CanvasCardsFor> {
-  const [cards, { CardCache }, note, image, pdf, web, craft] = await Promise.all([
-    import("../canvas/cards"),
+  const [cards, { CardCache }, note, image, pdf, web, craft, documents, drawing, board] = await Promise.all([
+    import("./cards/contract"),
     import("../canvas/card-cache"),
-    import("../canvas/cards/note"),
-    import("../canvas/cards/image"),
-    import("../canvas/cards/pdf"),
-    import("../canvas/cards/web"),
-    import("../canvas/cards/craft"),
+    import("./cards/kinds/note"),
+    import("./cards/kinds/image"),
+    import("./cards/kinds/pdf"),
+    import("./cards/kinds/web"),
+    import("./cards/kinds/craft"),
+    import("./cards/kinds/document"),
+    import("./cards/kinds/drawing"),
+    import("./cards/kinds/canvas"),
   ]);
   windowSnapshots ??= { cache: new CardCache(), vault: openVaultRoot() };
   const snapshots = windowSnapshots.cache;
@@ -416,10 +451,12 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
     load: media.pdfLoader ?? loadPdf,
     watch,
   } : null;
+  /// La porta delle immagini: la scheda d'immagine e, nella nota, il disegno
+  /// fermo della scheda di disegno (T46).
+  let imagePort: ImageCardPort | null = null;
   if (media && pdfPort) {
     const transport = media.transport;
-    fixed.push(
-      image.imageCardRenderer({
+    imagePort = {
         read: async (path) => {
           const port = await openCardResource(transport, path);
           if (!port) return null;
@@ -434,18 +471,28 @@ async function loadCanvasCards(options: SurfaceBootstrapOptions, ports: CanvasCa
         },
         open: (path) => open(path, null),
         watch,
-      }),
-      pdf.pdfCardRenderer(pdfPort),
-    );
+      };
+    fixed.push(image.imageCardRenderer(imagePort), pdf.pdfCardRenderer(pdfPort));
   }
   const grid = options.gridHost;
-  return (context) => {
+  return (context, host = "canvas") => {
     const vault = openVaultRoot();
     if (windowSnapshots && windowSnapshots.vault !== vault) {
       windowSnapshots.cache.clear();
       windowSnapshots.vault = vault;
     }
-    const renderers = [...fixed];
+    const renderers = [
+      ...fixed,
+      documents.documentCardRenderer({ show: ports.note.show, watch, open, writes: host === "note" }),
+    ];
+    // Il disegno che si modifica sul posto è della nota (T46): sulla lavagna
+    // un `.svg` resta una scheda d'immagine.
+    if (host === "note" && imagePort) renderers.push(drawing.drawingCardRenderer(imagePort));
+    // La zona lavagna è della nota (T47): sulla lavagna un `.canvas` resta
+    // una scheda di file.
+    if (host === "note") {
+      renderers.push(board.canvasCardRenderer({ ...(ports.editors ? { editors: ports.editors } : {}), open }));
+    }
     if (grid) {
       renderers.push(lazySheetRenderer(async () => {
         const { sheetCardRenderer } = await import("../grid/card");
@@ -513,6 +560,66 @@ const CANVAS_CITATIONS: CardCitations = {
     };
   },
 };
+
+/// Le schede vive di una nota (E19, T41): lo stesso ospite delle schede della
+/// lavagna (le specie, il registro, le immagini ferme della finestra, la porta
+/// per scrivere dentro una scheda), caricato con un `import()` alla prima
+/// scheda che la nota mostra, mai all'apertura della nota. Un `import()`
+/// fallito si riprova alla scheda dopo.
+function noteLiveCards(options: SurfaceBootstrapOptions, ports: CanvasCardPorts, context: SurfaceMountContext): LiveCardsPort {
+  let kit: Promise<LiveCardKit | null> | null = null;
+  return {
+    load: () => (kit ??= Promise.all([loadCanvasCards(options, ports), import("./cards/contract"), import("./cards/kinds/canvas")]).then(
+      ([cardsFor, contract, zone]): LiveCardKit => {
+        const cards = cardsFor(context, "note");
+        return {
+          registry: cards.registry,
+          snapshots: cards.snapshots,
+          watch: cards.watch,
+          ...(ports.editors ? { editors: ports.editors } : {}),
+          kindOf: (path) => contract.noteCardKindOf(path),
+          maxLive: contract.MAX_LIVE_CARDS,
+          // «Annota» (T49): la lavagna con la sola scheda, come la zona la legge.
+          annotationBoard: (path, subpath, width, height) => zone.annotationBoardText(path, subpath, width, height),
+        };
+      },
+      (error: unknown) => {
+        kit = null;
+        console.warn("note: l'ospite delle schede non si carica", error);
+        return null;
+      },
+    )),
+    resolve: async (page, from) =>
+      (await resolvedReference({ kind: "wiki", value: { page, heading: null, block: null } }, from))?.doc ?? null,
+    open: (path, subpath) => ports.open(path, subpath),
+    ...(options.onPickCanvasFile ? { pick: (name: string) => options.onPickCanvasFile!(name) } : {}),
+  };
+}
+
+/// I valori di cella nel testo di una nota (E23, T53): il lettore dei fogli
+/// (`editors/grid/cell-reader.ts`) sulle stesse porte della scheda di foglio,
+/// caricato con un `import()` al primo valore. L'ascolto è quello delle
+/// schede, che fa dimenticare anche l'immagine ferma del file. Senza le
+/// chiamate dei fogli (un'altra finestra) non c'è: l'embed resta com'era.
+function noteCellValues(options: SurfaceBootstrapOptions, ports: CanvasCardPorts): CellValuePort | null {
+  const grid = options.gridHost;
+  if (!grid) return null;
+  let reader: Promise<CellValueReader | null> | null = null;
+  return {
+    load: () => (reader ??= import("../grid/cell-reader").then(
+      ({ sheetCellReader }): CellValueReader => sheetCellReader({ host: grid, source: ports.sheet.source }),
+      (error: unknown) => {
+        reader = null;
+        console.warn("note: il lettore dei valori di cella non si carica", error);
+        return null;
+      },
+    )),
+    resolve: async (page, from) =>
+      (await resolvedReference({ kind: "wiki", value: { page, heading: null, block: null } }, from))?.doc ?? null,
+    watch: (path, changed) => ports.watch(path, changed),
+    open: (path, subpath) => ports.open(path, subpath),
+  };
+}
 
 /// Il selettore delle sezioni della lavagna (T74): il sommario che l'indice
 /// ha già (`documentOutline`, la domanda `outline`) e la resa di una sezione
@@ -620,6 +727,7 @@ function lazySheetRenderer(load: () => Promise<CardRenderer>): CardRenderer {
           view?.setMode(next);
         },
         resize: () => view?.resize?.(),
+        themeChanged: () => view?.themeChanged?.(),
         enter: () => view?.enter?.() ?? false,
         leave: () => view?.leave?.(),
         key: (event) => view?.key?.(event) ?? false,
@@ -685,6 +793,7 @@ export function createDocumentSurfaceRegistry(
           });
         }
         if (profile === "markdown") {
+          const cellValues = options.canvasCards ? noteCellValues(options, options.canvasCards) : null;
           return mountMarkdownSurface(context, {
             onChange: (change) => options.onChange(context.paneId, change),
             onSelectionChange: () => options.onSelectionChange(context.paneId),
@@ -701,10 +810,14 @@ export function createDocumentSurfaceRegistry(
             onRenamePage: options.onRenamePage,
             onNewSubpage: options.onNewSubpage,
             ...(options.moveBlock ? { moveBlock: options.moveBlock } : {}),
+            ...(options.tableSheet ? { tableSheet: options.tableSheet } : {}),
+            ...(options.boardBlock ? { boardBlock: options.boardBlock } : {}),
             ...(options.syncBlock ? { syncBlock: options.syncBlock } : {}),
             pageIcons: options.pageIcons,
             linkCards: options.linkCards,
             ...(options.transclusion ? { transclusion: options.transclusion } : {}),
+            ...(options.canvasCards ? { liveCards: noteLiveCards(options, options.canvasCards, context) } : {}),
+            ...(cellValues ? { cellValues } : {}),
             noteFacts,
             completions: options.completions,
             slash: options.slash,
@@ -972,10 +1085,22 @@ function mountGrid(
     engine.setPaper(adaptedPaper(context.parent));
     // I comandi del catalogo nella tavolozza arrivano allo stesso modo.
     let palette: GridPalette | null = null;
-    if (compact) {
-      compactKit.guardCompactKeys(context.parent, () => engine.editMode(), compactLife);
-      activeCell = compactKit.activeCellSource(engine, context.parent, compactLife);
-    }
+    if (compact) compactKit.guardCompactKeys(context.parent, () => engine.editMode(), compactLife);
+    // La cella attiva: dati per chi ospita la scheda, e il modo di portare il
+    // foglio aperto su una cella (T53: il clic su un valore nel testo).
+    activeCell = compactKit.activeCellSource(engine, context.parent, compactLife);
+    // Le celle copiate dicono da dove vengono (T52): una nota che le incolla
+    // offre la scheda di quella parte del foglio. Dopo la copia del motore,
+    // che scrive il testo e l'HTML, e solo se l'ha fatta lui.
+    const tellOrigin = (event: ClipboardEvent): void => {
+      if (!event.defaultPrevented || !event.clipboardData) return;
+      const refs = engine.selectionRefs();
+      const origin = { doc: context.documentId, sheet: refs.sheet, range: refs.range };
+      event.clipboardData.setData(FUB_CELLS_TYPE, JSON.stringify(origin));
+      rememberCellsCopy(engine.selectionTsv(), origin);
+    };
+    compactLife.listen(context.parent, "copy", tellOrigin);
+    compactLife.listen(context.parent, "cut", tellOrigin);
     if (!compact) void import("../grid/palette/commands").then(
       ({ mountGridPalette }) => {
         if (!destroyed) palette = mountGridPalette(engine);

@@ -1017,6 +1017,7 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         document,
         &document.body,
         &std::cell::Cell::new(MAX_SHOWN_BYTES),
+        None,
     )?;
     let mut used = BTreeSet::new();
     used_styles(&blocks, &mut used);
@@ -1184,21 +1185,45 @@ pub(crate) fn style_of(document: &Document, props: &ParaProps) -> Option<String>
 }
 
 /// I blocchi di `body`. `left` è il peso che le immagini da vedere possono
-/// ancora portare.
+/// ancora portare; `in_table` è ciò che lo stile della tabella che li
+/// contiene dà ai paragrafi ([`table_para`]), fuori da una tabella `None`.
 fn blocks(
     document: &Document,
     body: &[std::sync::Arc<WcBlock>],
     left: &Budget,
+    in_table: Option<&ParaProps>,
 ) -> Result<Vec<Block>, RichError> {
     body.iter()
         .map(|block| match &**block {
-            WcBlock::Para(paragraph) => para(document, paragraph, left).map(Block::Para),
+            WcBlock::Para(paragraph) => para(document, paragraph, left, in_table).map(Block::Para),
             WcBlock::Table(table) => self::table(document, table, left).map(Block::Table),
         })
         .collect()
 }
 
+/// Ciò che lo stile della tabella dà ai paragrafi delle sue celle: il suo
+/// `w:pPr` con quello della regione `wholeTable`, lungo la catena da cui
+/// deriva. Una tabella senza stile ha quello predefinito delle tabelle del
+/// documento (`w:default`). Nella cascata di ECMA-376 §17.7.2 sta fra i
+/// valori predefiniti del documento e lo stile del paragrafo
+/// ([`StyleSheet::resolve_para_in`]); `None` se non dà niente.
+pub(crate) fn table_para(styles: &StyleSheet, table: &WcTable) -> Option<ParaProps> {
+    let id = match table.props.style.as_deref() {
+        Some(id) => id,
+        None => styles
+            .styles
+            .iter()
+            .find(|s| s.kind == StyleKind::Table && s.default)
+            .map(|s| s.id.as_str())?,
+    };
+    styles
+        .table_style(id)
+        .map(|style| style.para)
+        .filter(|para| *para != ParaProps::default())
+}
+
 fn table(document: &Document, table: &WcTable, left: &Budget) -> Result<Table, RichError> {
+    let in_table = table_para(&document.styles, table);
     let bare = WcTable {
         rows: Vec::new(),
         ..table.clone()
@@ -1222,7 +1247,7 @@ fn table(document: &Document, table: &WcTable, left: &Budget) -> Result<Table, R
                     Ok(Cell {
                         k: Some(blob::encode(&bare)?),
                         span: (cell.span() > 1).then_some(cell.span() as u32),
-                        blocks: blocks(document, &cell.blocks, left)?,
+                        blocks: blocks(document, &cell.blocks, left, in_table.as_ref())?,
                     })
                 })
                 .collect::<Result<_, RichError>>()?;
@@ -1239,7 +1264,12 @@ fn table(document: &Document, table: &WcTable, left: &Budget) -> Result<Table, R
     })
 }
 
-fn para(document: &Document, paragraph: &Paragraph, left: &Budget) -> Result<Para, RichError> {
+fn para(
+    document: &Document,
+    paragraph: &Paragraph,
+    left: &Budget,
+    in_table: Option<&ParaProps>,
+) -> Result<Para, RichError> {
     let styles = &document.styles;
     let keep = ParaKeep {
         props: paragraph.props.clone(),
@@ -1278,7 +1308,7 @@ fn para(document: &Document, paragraph: &Paragraph, left: &Budget) -> Result<Par
     Ok(Para {
         role,
         locked: false,
-        align: align(styles, &paragraph.props),
+        align: align_in(styles, &paragraph.props, in_table),
         k: if empty {
             None
         } else {
@@ -1309,7 +1339,7 @@ fn para(document: &Document, paragraph: &Paragraph, left: &Budget) -> Result<Par
             .as_deref()
             .and_then(|section| running::of(document, section.footers.default))
             .map(Box::new),
-        p: layout(styles, &paragraph.props),
+        p: layout(styles, &paragraph.props, in_table),
         s: (role == Role::Body)
             .then(|| style_of(document, &paragraph.props))
             .flatten()
@@ -1708,9 +1738,13 @@ pub(crate) fn bare_layout(props: &ParaProps) -> ParaProps {
     }
 }
 
-/// La disposizione che chi legge vede, dove differisce da quella dello stile.
-pub(crate) fn layout(styles: &StyleSheet, props: &ParaProps) -> Layout {
-    let full = styles.resolve_para(props);
+/// La disposizione che chi legge vede, dove differisce da quella dello stile
+/// del paragrafo. In una cella conta anche lo stile della tabella (`table`,
+/// [`table_para`]): ciò che dà, e che lo stile del paragrafo non cambia, è una
+/// differenza da quello stile, come la formattazione diretta. Il paragone
+/// resta lo stile del paragrafo da solo, quello che la shell conosce.
+pub(crate) fn layout(styles: &StyleSheet, props: &ParaProps, table: Option<&ParaProps>) -> Layout {
+    let full = styles.resolve_para_in(props, table);
     let plain = styles.resolve_para(&bare_layout(props));
     let length = |a: f32, b: f32| (!same_size(a, b)).then_some(a);
     let (line, plain_line) = (Line::of(full.line_spacing), Line::of(plain.line_spacing));
@@ -1725,7 +1759,17 @@ pub(crate) fn layout(styles: &StyleSheet, props: &ParaProps) -> Layout {
 }
 
 pub(crate) fn align(styles: &StyleSheet, props: &ParaProps) -> Option<Align> {
-    match styles.resolve_para(props).align {
+    align_in(styles, props, None)
+}
+
+/// L'allineamento risolto di un paragrafo, in una cella con lo stile della
+/// tabella (`table`, [`table_para`]).
+pub(crate) fn align_in(
+    styles: &StyleSheet,
+    props: &ParaProps,
+    table: Option<&ParaProps>,
+) -> Option<Align> {
+    match styles.resolve_para_in(props, table).align {
         WcAlign::Center => Some(Align::Center),
         WcAlign::Right => Some(Align::Right),
         WcAlign::Justify => Some(Align::Justify),
@@ -1880,5 +1924,44 @@ mod tests {
         let left = Budget::new(PNG.len() + 1);
         assert!(shown(&document, &image("a.png", [0.0; 4]), &left).is_some());
         assert_eq!(shown(&document, &image("a.png", [0.0; 4]), &left), None);
+    }
+
+    /// Lo stile che conta in una cella: quello della tabella, lungo la sua
+    /// catena; senza, quello predefinito delle tabelle del documento; niente
+    /// se non dà niente ai paragrafi.
+    #[test]
+    fn lo_stile_della_tabella_dei_paragrafi_delle_celle() {
+        use wordcraft_doc::styles::Style;
+        let mut styles = StyleSheet::builtin();
+        let mut table = WcTable::new(1, 1, 400.0);
+        let grid = table_para(&styles, &table).expect("Table Grid dà la spaziatura");
+        assert_eq!(grid.space_after, Some(0.0));
+        assert_eq!(grid.line_spacing, Some(LineSpacing::Multiple(1.0)));
+        // Senza stile, il predefinito: TableNormal non dà niente.
+        table.props.style = None;
+        assert_eq!(table_para(&styles, &table), None);
+        // Un predefinito che dà qualcosa vale per la tabella senza stile.
+        for style in &mut styles.styles {
+            style.default &= style.kind != StyleKind::Table;
+        }
+        styles.styles.push(Style {
+            id: "Mia".into(),
+            kind: StyleKind::Table,
+            based_on: Some("TableGrid".into()),
+            default: true,
+            para: ParaProps {
+                space_before: Some(2.0),
+                ..ParaProps::default()
+            },
+            ..Style::default()
+        });
+        let mine = table_para(&styles, &table).expect("lo stile predefinito");
+        assert_eq!(
+            (mine.space_before, mine.space_after),
+            (Some(2.0), Some(0.0))
+        );
+        // Uno stile che non è di tabella non conta.
+        table.props.style = Some("Normal".into());
+        assert_eq!(table_para(&styles, &table), None);
     }
 }

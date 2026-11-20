@@ -7,8 +7,12 @@
 // giornale e sulla base che dà la porta (`SheetCardPort.source`), e chiede
 // con `gridBytesWindow` solo le righe e le colonne che la scheda mostra. Ogni
 // cella si disegna con la stessa `paintCell` della griglia, sulle stesse
-// classi (`grid-cell`, `grid-header`…), dentro `look-file` o, se la porta dà
-// una carta, `look-adattato`.
+// classi (`grid-cell`, `grid-header`…), dentro `look-file` o, se c'è una
+// carta, `look-adattato`. La carta la dà la porta (il riquadro della lavagna
+// nell'aspetto adattato); nella nota la scheda sta sempre sulla carta della
+// nota, e i colori del file ci si portano sopra (`#readPaper`). Le celle sono
+// una griglia ARIA vera: ogni riga disegnata è un `row` (`display: contents`,
+// la posizione resta delle celle) con le sue `gridcell`.
 //
 // I modi:
 //
@@ -41,24 +45,45 @@
 // ridisegna i tratti nello stesso fotogramma. Ferma, valgono le celle
 // rimaste; mentre si scrive (la griglia vera al posto della resa) e senza
 // celle non si vede nessuna cella.
+//
+// La parte (T43): con un `subpath` (`#Budget!A1:E7`, un nome definito, una
+// tabella, un foglio), o dentro una nota (`context.host`), la scheda chiede
+// al provider dove sta la parte col comando che legge soltanto `fub.part`, e
+// mostra solo quel rettangolo; senza parte, il foglio attivo dalla sua prima
+// cella usata. Una parte che non c'è più dice «Intervallo non trovato» con
+// «Scegli di nuovo» (le parti che la cartella ha). Nella nota le lettere e i
+// numeri si vedono solo a scheda attiva, nello spazio che resta loro, e la
+// scheda è alta quanto le righe della parte (`fitHeight`). Un provider che
+// non serve `fub.part` mostra il foglio attivo dall'inizio, come prima.
+//
+// Il grafico (T54): una parte può nominare un grafico col suo titolo
+// (`#Grafico spese`). Allora il provider risponde anche con l'id del grafico
+// e le celle che copre; la scheda legge la finestra di quelle celle e mostra
+// soltanto il disegno del grafico che la finestra porta, l'SVG di GridCraft
+// come nel foglio aperto, intero e nella sua proporzione (nella nota alta
+// quanto serve). Segue i dati come le celle: all'evento del file la sessione
+// si riapre e il disegno si rilegge. Un grafico non ha celle in cui entrare
+// né da scrivere: si cambia nel foglio aperto, con «Apri».
 
-import type { GridBytesCell, GridBytesSession, GridBytesWindow, GridCellStyle, GridMerge, GridWindowRequest } from "../../host/contract";
+import type { GridBytesCell, GridBytesSession, GridBytesWindow, GridCellStyle, GridMerge, GridObject, GridWindowRequest } from "../../host/contract";
 import { GRID_BYTES_PROTOCOL_VERSION, GRID_FAMILY } from "../../host/contract";
 import { isErrorKind } from "../../host/errors";
 import { t } from "../../i18n/strings";
 import { writeClipboardText } from "../../platform/clipboard";
 import { adapter, type Adapter, type Paper } from "../../theme/adapt";
-import { markLook } from "../../theme/content-look";
+import { markLook, themePaper } from "../../theme/content-look";
 import { formatKindOf, formatNameOf } from "../../ui/format-kind";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { showContextMenu } from "../../ui/menu";
 import { notify } from "../../ui/notify";
-import type { CardCellBox, CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../canvas/cards";
+import type { CardCellBox, CardContext, CardEditor, CardEditorState, CardMode, CardRenderer, CardView } from "../core/cards/contract";
 import type { CanvasNode } from "../canvas/model";
 import { tsvRows } from "../core/tsv";
 import { editCellIn } from "./compact";
 import type { GridHost } from "./engine";
-import { cellA1, expandToMerges, mergeAnchor, mergeAt, parseCellA1, type GridRange } from "./merges";
+import { cellA1, expandToMerges, mergeAnchor, mergeAt, parseCellA1, parseRangeA1, type GridRange } from "./merges";
 import { columnLabel, type GridPosition } from "./model";
+import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, paintBorders, paintCell } from "./paint";
 import { cellKey, validateBytesSession, validateBytesWindow, WORKBOOK_SCALE } from "./workbook";
 
@@ -81,7 +106,7 @@ export interface SheetCardPort {
 }
 
 /// Che cosa mostra la scheda adesso; sta in `data-card-state` della radice.
-export type SheetCardState = "placeholder" | "loading" | "content" | "unavailable" | "missing";
+export type SheetCardState = "placeholder" | "loading" | "content" | "unavailable" | "missing" | "lost";
 
 /// La riga e la colonna di serie e le intestazioni, in unità della lavagna:
 /// quelle del foglio aperto (`engine.ts`).
@@ -89,6 +114,16 @@ export const SHEET_CARD_ROW_HEIGHT = 28;
 export const SHEET_CARD_COLUMN_WIDTH = 120;
 export const SHEET_CARD_ROW_HEADER = 52;
 export const SHEET_CARD_COLUMN_HEADER = 28;
+/// Nella nota (T43, prototipo `.scard-b`) lo spazio delle lettere e dei
+/// numeri è più stretto e resta anche a riposo, vuoto: attivarla non sposta le
+/// celle.
+export const SHEET_NOTE_ROW_HEADER = 30;
+export const SHEET_NOTE_COLUMN_HEADER = 22;
+/// Nella nota la scheda è alta quanto la parte, fino a queste righe di
+/// serie; oltre si scorre dentro.
+const MAX_FIT_ROWS = 16;
+/// Il comando del provider che dice dove sta una parte (`fub.part`).
+const PART_COMMAND = "fub.part";
 /// Una finestra chiede al più queste righe e colonne: i limiti di
 /// `validateBytesWindow`.
 const MAX_WINDOW_ROWS = 256;
@@ -105,6 +140,10 @@ const MAX_SPAN = 65_536;
 /// Quante letture al più per coprire la vista: una riga alta o nascosta
 /// cambia quante righe servono, e la lettura dopo lo sa.
 const MAX_WINDOW_PASSES = 4;
+/// Un grafico nella nota sta fra queste altezze (T54), nella sua proporzione:
+/// i limiti dell'altezza di una scheda (`docs/product/live-cards.md`).
+const MIN_CHART_HEIGHT = 120;
+const MAX_CHART_HEIGHT = 2400;
 
 /// Il renderer delle schede di foglio.
 export function sheetCardRenderer(port: SheetCardPort): CardRenderer {
@@ -158,6 +197,73 @@ interface ShownCells {
 /// La porta dice che il file non c'è.
 class SheetMissing extends Error {}
 
+/// La parte che la scheda mostra (T43): il foglio, per id e per nome, e il
+/// rettangolo, come lo dice il provider; per un grafico (T54) anche il suo id
+/// nel file.
+interface SheetPart {
+  readonly sheet: string;
+  readonly name: string;
+  readonly range: GridRange;
+  readonly chart: number | null;
+}
+
+/// Dove sta una parte trovata, come la dice `fub.part`.
+export interface FoundPart {
+  readonly sheet: string;
+  readonly range: GridRange;
+  /// L'id del grafico che la parte nomina (T54); `null` per celle.
+  readonly chart: number | null;
+}
+
+/// Una parte che il provider non trova: il testo cercato e le parti che ci
+/// sono (`kind` `sheet`, `name`, `table`).
+interface LostPart {
+  readonly text: string;
+  readonly parts: readonly { readonly kind: string; readonly name: string }[];
+}
+
+/// La risposta di `fub.part`: dove sta, le parti che ci sono, o `null` se non
+/// si legge (un provider diverso): allora la scheda mostra il foglio attivo.
+export function sheetPartAnswer(
+  result: string | null | undefined,
+): FoundPart | { readonly parts: LostPart["parts"] } | null {
+  if (typeof result !== "string") return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(result);
+  } catch {
+    return null;
+  }
+  if (typeof json !== "object" || json === null) return null;
+  const answer = json as { found?: unknown; kind?: unknown; sheet?: unknown; range?: unknown; chart?: unknown; parts?: unknown };
+  if (answer.found === true) {
+    const range = typeof answer.range === "string" ? parseRangeA1(answer.range) : null;
+    if (typeof answer.sheet !== "string" || !range) return null;
+    if (answer.kind !== "chart") return { sheet: answer.sheet, range, chart: null };
+    // Un grafico senza un id che si legge non si sa trovare nella finestra.
+    const chart = answer.chart;
+    return typeof chart === "number" && Number.isSafeInteger(chart) && chart >= 0 ? { sheet: answer.sheet, range, chart } : null;
+  }
+  if (answer.found !== false || !Array.isArray(answer.parts)) return null;
+  const parts = answer.parts.flatMap((part: unknown) => {
+    if (typeof part !== "object" || part === null) return [];
+    const { kind, name } = part as { kind?: unknown; name?: unknown };
+    return typeof kind === "string" && typeof name === "string" && name !== "" ? [{ kind, name }] : [];
+  });
+  return { parts };
+}
+
+/// Il testo della parte nel `subpath` (`#Budget!A1:E7` → `Budget!A1:E7`);
+/// vuoto senza parte.
+function partText(subpath: string | null): string {
+  return subpath === null ? "" : subpath.replace(/^#/, "").trim();
+}
+
+/// Il nome di un foglio come lo scrive una formula: fra apici se serve.
+export function sheetRef(name: string): string {
+  return /^[A-Za-z_][A-Za-z0-9_.]*$/.test(name) && !/^[A-Za-z]{1,3}[0-9]+$/.test(name) ? name : `'${name.replaceAll("'", "''")}'`;
+}
+
 class SheetCard implements CardView {
   readonly #port: SheetCardPort;
   readonly #context: CardContext;
@@ -203,12 +309,25 @@ class SheetCard implements CardView {
   #editor: CardEditor | null = null;
   /// L'uscita in corso: il giornale va alla sessione, poi la resa si rilegge.
   #leaving: Promise<void> | null = null;
+  /// Dentro una nota (T43).
+  readonly #inNote: boolean;
+  /// La parte mostrata (T43); `null`: il foglio intero.
+  #part: SheetPart | null = null;
+  /// L'ultima altezza chiesta con `fitHeight`.
+  #fitted: number | null = null;
+  /// Il grafico mostrato (T54): la proporzione del suo disegno, larghezza su
+  /// altezza; `null` senza disegno.
+  #chartAspect: number | null = null;
+  /// Le immagini lette; un grafico arriva in SVG e non le usa, ma
+  /// `drawObject` le chiede.
+  readonly #media = new GridMediaCache();
 
   constructor(port: SheetCardPort, host: HTMLElement, mode: CardMode, context: CardContext) {
     this.#port = port;
     this.#context = context;
     this.#mode = mode;
     this.#host = host;
+    this.#inNote = context.host === "note";
     this.#root = document.createElement("div");
     this.#root.className = "canvas-card-sheet";
     this.#root.dataset.cardKind = "sheet";
@@ -242,16 +361,52 @@ class SheetCard implements CardView {
     this.#freeze();
   }
 
+  /// La luce o il tema sono cambiati: la carta della nota è un'altra, e le
+  /// celle si ridipingono coi colori del file portati su di lei. Mentre si
+  /// scrive la griglia vera segue la luce da sé; la resa si rilegge
+  /// uscendo.
+  themeChanged(): void {
+    if (this.#destroyed) return;
+    this.#paper = this.#readPaper();
+    if (this.#editLife !== null) return;
+    if (this.#grid) this.#paint();
+    else if (this.#state === "content") markLook(this.#root, this.#paper ? "adattato" : "file");
+  }
+
+  /// La carta su cui portare i colori del file: quella che dà la porta (la
+  /// lavagna nell'aspetto adattato) o, nella nota, la carta della nota, su cui
+  /// la scheda sta comunque. Sulla carta scura della notte il rosso di un
+  /// file scenderebbe sotto 4,5:1; portato sulla carta tiene la tinta e
+  /// regge. `null`: le celle stanno sulla carta del file.
+  #readPaper(): Adapter | null {
+    const paper = this.#port.paper() ?? (this.#inNote ? themePaper(this.#host) : null);
+    return paper ? adapter(paper) : null;
+  }
+
   resize(): void {
     if (this.#destroyed) return;
     this.#origin = null;
+    if (this.#showsChart()) {
+      this.#fitChart();
+      return;
+    }
     if (this.#mode === "live" && this.#open) void this.#load();
   }
 
+  /// La proporzione del grafico mostrato (T54): l'inchiostro della lavagna
+  /// la segue. Le celle non ne hanno una.
+  contentAspect(): number | null {
+    return this.#showsChart() ? this.#chartAspect : null;
+  }
+
   enter(): boolean {
+    // Un grafico non ha celle da scegliere né da scrivere (T54).
+    if (this.#showsChart()) return false;
     if (this.#destroyed || this.#mode !== "live" || this.#state !== "content" || !this.#open) return false;
     this.#entered = true;
     this.#root.dataset.cardEntered = "true";
+    // Nella nota le lettere e i numeri si vedono da attiva.
+    if (this.#inNote && this.#grid) this.#paint();
     return true;
   }
 
@@ -260,7 +415,7 @@ class SheetCard implements CardView {
     this.#entered = false;
     this.#dragging = false;
     delete this.#root.dataset.cardEntered;
-    if (this.#selection) {
+    if (this.#selection || (this.#inNote && this.#grid && this.#state === "content")) {
       this.#selection = null;
       this.#paint();
     }
@@ -283,7 +438,7 @@ class SheetCard implements CardView {
     if (this.#editLife !== null) return true;
     const editors = this.#context.editors;
     if (this.#destroyed || this.#leaving !== null || this.#mode !== "live" || !editors) return false;
-    if (this.#state !== "content") return false;
+    if (this.#state !== "content" || this.#showsChart()) return false;
     // La cella sotto il doppio clic, o quella scelta sulla resa (Invio).
     const cell = this.#cellAt(from) ?? this.#selection?.focus ?? null;
     const life = openLifetime();
@@ -359,9 +514,18 @@ class SheetCard implements CardView {
     // prima volta che ci sono, la griglia mostra la cartella: allora si apre
     // la cella del doppio clic (o quella scelta sulla resa), una volta sola.
     let pending = cell;
+    // La griglia mostra il foglio attivo dall'inizio: la prima volta si porta
+    // alla parte (T43), alla cella del doppio clic o alla prima della parte.
+    const part = this.#part;
+    let landing = part === null ? null : { name: part.name, cell: cell ?? { row: part.range.rowStart, column: part.range.columnStart } };
     const tell = (): void => {
       if (this.#editLife !== life) return;
       const context = editor.context?.() ?? null;
+      if (landing !== null && context !== null) {
+        const at = landing;
+        landing = null;
+        editor.select?.(at.name, cellA1(at.cell));
+      }
       if (pending !== null && context !== null) {
         editCellIn(writer, pending);
         pending = null;
@@ -442,7 +606,7 @@ class SheetCard implements CardView {
     const x = point.x - origin.x;
     const y = point.y - origin.y;
     // Le intestazioni non sono celle.
-    if (!(x >= SHEET_CARD_ROW_HEADER) || !(y >= SHEET_CARD_COLUMN_HEADER)) return null;
+    if (!(x >= this.#rowHeader()) || !(y >= this.#columnHeader())) return null;
     const row = shown.rows.find((slot) => y >= slot.offset && y < slot.offset + slot.size);
     const column = shown.columns.find((slot) => x >= slot.offset && x < slot.offset + slot.size);
     if (!row || !column) return null;
@@ -565,27 +729,94 @@ class SheetCard implements CardView {
       return;
     }
     this.#open = opened;
-    this.#paper = (() => {
-      const paper = this.#port.paper();
-      return paper ? adapter(paper) : null;
-    })();
+    this.#paper = this.#readPaper();
     const session = opened.session;
     const hidden = new Set(session.hidden);
     const visible = session.sheets.filter((sheet) => !hidden.has(sheet.id));
-    const sheet = visible.find((candidate) => candidate.id === session.active) ?? visible[0]!;
-    if (sheet.id !== this.#sheet) {
-      this.#top = 0;
-      this.#left = 0;
+    let sheet = visible.find((candidate) => candidate.id === session.active) ?? visible[0]!;
+    const found = await this.#findPart(opened, current);
+    if (!current()) return;
+    if (found !== null && "parts" in found) {
+      this.#showLost(found);
+      return;
+    }
+    const partSheet = found === null ? undefined : session.sheets.find((candidate) => candidate.id === found.sheet);
+    const before = this.#part;
+    this.#part = partSheet && found ? { sheet: partSheet.id, name: partSheet.name, range: found.range, chart: found.chart } : null;
+    if (partSheet) sheet = partSheet;
+    const moved = before?.range.rowStart !== this.#part?.range.rowStart || before?.range.columnStart !== this.#part?.range.columnStart;
+    if (sheet.id !== this.#sheet || moved) {
+      this.#top = this.#part?.range.rowStart ?? 0;
+      this.#left = this.#part?.range.columnStart ?? 0;
       this.#selection = null;
     }
     this.#sheet = sheet.id;
-    this.#top = Math.min(this.#top, Math.max(0, sheet.row_count - 1));
-    this.#left = Math.min(this.#left, Math.max(0, sheet.column_count - 1));
+    const bounds = this.#bounds(sheet.row_count, sheet.column_count);
+    this.#top = clamp(this.#top, bounds.rowStart, Math.max(bounds.rowStart, bounds.rowEnd));
+    this.#left = clamp(this.#left, bounds.columnStart, Math.max(bounds.columnStart, bounds.columnEnd));
     // Le finestre di prima sono di un'altra sessione: la selezione, che ne
     // copierebbe le celle, si toglie con loro.
     this.#windows = [];
     this.#selection = null;
     await this.#load();
+  }
+
+  /// Dove sta la parte (T43), chiesto al provider con `fub.part`: soltanto
+  /// con un `subpath` o dentro una nota, e soltanto se la sessione serve il
+  /// comando. `null`: il foglio attivo intero, come prima; anche se la
+  /// domanda non riesce.
+  async #findPart(
+    opened: OpenSession,
+    current: () => boolean,
+  ): Promise<FoundPart | LostPart | null> {
+    const text = partText(this.#context.subpath);
+    const session = opened.session;
+    if (text === "" && !this.#inNote) return null;
+    if (!session.commands.some((command) => command.id === PART_COMMAND && command.enabled)) return null;
+    try {
+      const outcome = await this.#port.host.gridBytesCommand(opened.surface, opened.instance, {
+        revision: session.revision,
+        command: { id: PART_COMMAND, params: JSON.stringify({ part: text }), sheet: session.active, selection: "A1", active: "A1" },
+      });
+      if (!current()) return null;
+      const answer = sheetPartAnswer(outcome.result);
+      if (answer === null) return null;
+      return "parts" in answer ? { text, parts: answer.parts } : answer;
+    } catch (error) {
+      if (current()) console.warn(`canvas: la parte «${text}» di ${this.#context.path} non si legge`, error);
+      return null;
+    }
+  }
+
+  /// Le righe e le colonne che la scheda può mostrare: la parte (dentro il
+  /// foglio), o tutto il foglio.
+  #bounds(rows: number, columns: number): GridRange {
+    // Un foglio senza righe (o colonne) finisce prima di cominciare: -1.
+    const part = this.#part?.range;
+    const lastRow = rows - 1;
+    const lastColumn = columns - 1;
+    if (!part) return { rowStart: 0, rowEnd: lastRow, columnStart: 0, columnEnd: lastColumn };
+    return {
+      rowStart: Math.min(part.rowStart, Math.max(0, lastRow)),
+      rowEnd: Math.min(part.rowEnd, lastRow),
+      columnStart: Math.min(part.columnStart, Math.max(0, lastColumn)),
+      columnEnd: Math.min(part.columnEnd, lastColumn),
+    };
+  }
+
+  /// Lo spazio delle lettere (in alto) e dei numeri (a sinistra).
+  #columnHeader(): number {
+    return this.#inNote ? SHEET_NOTE_COLUMN_HEADER : SHEET_CARD_COLUMN_HEADER;
+  }
+
+  #rowHeader(): number {
+    return this.#inNote ? SHEET_NOTE_ROW_HEADER : SHEET_CARD_ROW_HEADER;
+  }
+
+  /// Se le lettere e i numeri si disegnano: sulla lavagna sempre, nella nota
+  /// a scheda attiva.
+  #showsHeaders(): boolean {
+    return !this.#inNote || this.#entered;
   }
 
   /// Apre la sessione: la porta, la superficie, `openGridBytes`. Una base
@@ -703,6 +934,11 @@ class SheetCard implements CardView {
     const current = () => !this.#destroyed && generation === this.#generation && this.#open === opened;
     const sheet = opened.session.sheets.find((candidate) => candidate.id === sheetId);
     if (!sheet) return;
+    const part = this.#part;
+    if (part !== null && part.chart !== null) {
+      await this.#readChart(opened, sheet.id, part, current);
+      return;
+    }
     try {
       for (let pass = 0; pass < MAX_WINDOW_PASSES; pass++) {
         this.#layout();
@@ -732,6 +968,91 @@ class SheetCard implements CardView {
     delete this.#root.dataset.cardStale;
     this.#layout();
     this.#paint();
+  }
+
+  /// Il grafico della parte (T54): una finestra sulle celle che copre, e di
+  /// quella soltanto il disegno del grafico. Il provider rifà il disegno sui
+  /// dati della sessione a ogni lettura.
+  async #readChart(opened: OpenSession, sheet: string, part: SheetPart, current: () => boolean): Promise<void> {
+    const range = part.range;
+    let window: GridBytesWindow;
+    try {
+      window = await this.#port.host.gridBytesWindow(opened.surface, opened.instance, {
+        revision: opened.session.revision,
+        sheet,
+        row_start: range.rowStart,
+        row_count: Math.max(1, Math.min(MAX_WINDOW_ROWS, range.rowEnd - range.rowStart + 1)),
+        column_start: range.columnStart,
+        column_count: Math.max(1, Math.min(MAX_WINDOW_COLUMNS, range.columnEnd - range.columnStart + 1)),
+        known_media: [],
+      });
+      if (!current()) return;
+      validateBytesWindow(window, opened.session);
+    } catch {
+      if (!current()) return;
+      this.#closeSession();
+      this.#showUnavailable();
+      return;
+    }
+    if (!current()) return;
+    delete this.#root.dataset.cardStale;
+    this.#windows = [window];
+    const chart = window.objects.find((object) => object.kind === "chart" && object.id === part.chart) ?? null;
+    if (chart === null || chart.missing !== null || chart.svg === null || chart.width <= 0 || chart.height <= 0) {
+      // Il file nomina il grafico, ma il disegno non arriva (troppo grande,
+      // una misura che non si disegna): lo si guarda nel foglio aperto.
+      this.#showUnavailable(t("canvas.card.chart_unavailable"));
+      return;
+    }
+    this.#paintChart(chart);
+  }
+
+  /// Il disegno del grafico, intero nella scheda e nella sua proporzione.
+  #paintChart(chart: GridObject): void {
+    const box = document.createElement("div");
+    box.className = "canvas-card-sheet-chart";
+    box.setAttribute("role", "img");
+    box.setAttribute("aria-label", objectLabel(chart));
+    box.style.position = "absolute";
+    box.style.inset = "0";
+    const font = getComputedStyle(this.#root).fontFamily ?? "";
+    const drawing = drawObject(chart, chart.width, chart.height, 1, this.#media, font);
+    if (drawing instanceof HTMLElement) drawing.style.objectFit = "contain";
+    box.append(drawing);
+    this.#grid = null;
+    this.#chartAspect = chart.width / chart.height;
+    markLook(this.#root, this.#paper ? "adattato" : "file");
+    this.#setState("content", [box]);
+    // Nessuna cella in vista: l'inchiostro di cella non si vede.
+    this.#showCells(null);
+    this.#fitChart();
+    this.#context.contentShown?.();
+  }
+
+  /// La scheda mostra un grafico (T54), non celle.
+  #showsChart(): boolean {
+    return this.#part !== null && this.#part.chart !== null;
+  }
+
+  /// Il disegno del grafico non si vede più: l'inchiostro della lavagna, che
+  /// ne seguiva la proporzione, si ridisegna.
+  #forgetChart(): void {
+    if (this.#chartAspect === null) return;
+    this.#chartAspect = null;
+    this.#context.contentShown?.();
+  }
+
+  /// Nella nota il grafico chiede l'altezza che la sua proporzione vuole alla
+  /// larghezza della scheda.
+  #fitChart(): void {
+    const aspect = this.#chartAspect;
+    if (!this.#inNote || !this.#context.fitHeight || aspect === null || this.#state !== "content") return;
+    const width = this.#context.size().width;
+    if (!(width > 0)) return;
+    const wanted = Math.round(clamp(width / aspect, MIN_CHART_HEIGHT, MAX_CHART_HEIGHT));
+    if (wanted === this.#fitted) return;
+    this.#fitted = wanted;
+    this.#context.fitHeight(wanted);
   }
 
   /// Tiene la finestra nuova. Si lasciano prima le più vecchie che la
@@ -793,6 +1114,14 @@ class SheetCard implements CardView {
     return sheet ? { rows: sheet.row_count, columns: sheet.column_count } : null;
   }
 
+  /// Un avviso al posto della griglia (parte persa, cartella che non si
+  /// legge) ha l'altezza sua: la scheda smette di chiedere quella delle righe.
+  #unfit(): void {
+    if (this.#fitted === null) return;
+    this.#fitted = null;
+    this.#context.fitHeight?.(null);
+  }
+
   /// Le righe e le colonne in vista, dalla prima in alto a sinistra fino a
   /// riempire la scheda, con le misure delle finestre lette o quelle di serie.
   #layout(): void {
@@ -812,8 +1141,27 @@ class SheetCard implements CardView {
     }
     this.#heights = heights;
     this.#widths = widths;
-    this.#rows = axisSlots(this.#top, size.rows, card.height - SHEET_CARD_COLUMN_HEADER, SHEET_CARD_COLUMN_HEADER, heights, SHEET_CARD_ROW_HEIGHT, MAX_WINDOW_ROWS);
-    this.#columns = axisSlots(this.#left, size.columns, card.width - SHEET_CARD_ROW_HEADER, SHEET_CARD_ROW_HEADER, widths, SHEET_CARD_COLUMN_WIDTH, MAX_WINDOW_COLUMNS);
+    const bounds = this.#bounds(size.rows, size.columns);
+    const columnHeader = this.#columnHeader();
+    const rowHeader = this.#rowHeader();
+    this.#fit(bounds, heights);
+    this.#rows = axisSlots(this.#top, bounds.rowEnd + 1, card.height - columnHeader, columnHeader, heights, SHEET_CARD_ROW_HEIGHT, MAX_WINDOW_ROWS);
+    this.#columns = axisSlots(this.#left, bounds.columnEnd + 1, card.width - rowHeader, rowHeader, widths, SHEET_CARD_COLUMN_WIDTH, MAX_WINDOW_COLUMNS);
+  }
+
+  /// Nella nota la scheda chiede di essere alta quanto le righe della parte
+  /// (fino a `MAX_FIT_ROWS` righe di serie), con lo spazio delle lettere.
+  #fit(bounds: GridRange, heights: ReadonlyMap<number, AxisMetric>): void {
+    if (!this.#inNote || !this.#context.fitHeight) return;
+    const most = MAX_FIT_ROWS * SHEET_CARD_ROW_HEIGHT;
+    let height = 0;
+    for (let row = bounds.rowStart; row <= bounds.rowEnd && height < most; row++) {
+      height += axisSize(heights.get(row), SHEET_CARD_ROW_HEIGHT);
+    }
+    const wanted = Math.ceil(this.#columnHeader() + Math.min(height, most));
+    if (wanted === this.#fitted) return;
+    this.#fitted = wanted;
+    this.#context.fitHeight(wanted);
   }
 
   /// Le righe e le colonne che la vista mostra, nascoste comprese; `null`
@@ -821,13 +1169,14 @@ class SheetCard implements CardView {
   #visibleRange(): GridRange | null {
     const size = this.#sheetSize();
     if (!size || size.rows === 0 || size.columns === 0) return null;
+    const bounds = this.#bounds(size.rows, size.columns);
     const lastRow = this.#rows[this.#rows.length - 1]?.index ?? this.#top;
     const lastColumn = this.#columns[this.#columns.length - 1]?.index ?? this.#left;
     return {
       rowStart: this.#top,
-      rowEnd: Math.min(size.rows - 1, Math.max(this.#top, lastRow)),
+      rowEnd: Math.min(bounds.rowEnd, Math.max(this.#top, lastRow)),
       columnStart: this.#left,
-      columnEnd: Math.min(size.columns - 1, Math.max(this.#left, lastColumn)),
+      columnEnd: Math.min(bounds.columnEnd, Math.max(this.#left, lastColumn)),
     };
   }
 
@@ -862,29 +1211,36 @@ class SheetCard implements CardView {
     grid.setAttribute("role", "grid");
     grid.style.position = "absolute";
     grid.style.inset = "0";
+    // Nella nota la carta è quella della nota adesso: alla prima apertura la
+    // scheda può non essere ancora nella pagina.
+    if (this.#inNote) this.#paper = this.#readPaper();
     const font = getComputedStyle(this.#root).fontFamily ?? "";
     const { cells, merges } = this.#cells();
     const rows = this.#rows;
     const columns = this.#columns;
     const range = this.#selectionRange(merges);
 
-    const corner = document.createElement("div");
-    corner.className = "grid-corner";
-    place(corner, 0, 0, SHEET_CARD_ROW_HEADER, SHEET_CARD_COLUMN_HEADER);
-    grid.append(corner);
-    for (const column of columns) {
-      const header = this.#header("grid-header grid-column-header", columnLabel(column.index), font);
-      header.dataset.column = String(column.index);
-      if (range && column.index >= range.columnStart && column.index <= range.columnEnd) header.classList.add("selected");
-      place(header, column.offset, 0, column.size, SHEET_CARD_COLUMN_HEADER);
-      grid.append(header);
-    }
-    for (const row of rows) {
-      const header = this.#header("grid-header grid-row-header", String(row.index + 1), font);
-      header.dataset.row = String(row.index);
-      if (range && row.index >= range.rowStart && row.index <= range.rowEnd) header.classList.add("selected");
-      place(header, 0, row.offset, SHEET_CARD_ROW_HEADER, row.size);
-      grid.append(header);
+    const columnHeader = this.#columnHeader();
+    const rowHeader = this.#rowHeader();
+    if (this.#showsHeaders()) {
+      const corner = document.createElement("div");
+      corner.className = "grid-corner";
+      place(corner, 0, 0, rowHeader, columnHeader);
+      grid.append(corner);
+      for (const column of columns) {
+        const header = this.#header("grid-header grid-column-header", columnLabel(column.index), font);
+        header.dataset.column = String(column.index);
+        if (range && column.index >= range.columnStart && column.index <= range.columnEnd) header.classList.add("selected");
+        place(header, column.offset, 0, column.size, columnHeader);
+        grid.append(header);
+      }
+      for (const row of rows) {
+        const header = this.#header("grid-header grid-row-header", String(row.index + 1), font);
+        header.dataset.row = String(row.index);
+        if (range && row.index >= range.rowStart && row.index <= range.rowEnd) header.classList.add("selected");
+        place(header, 0, row.offset, rowHeader, row.size);
+        grid.append(header);
+      }
     }
 
     const rowAt = new Map(rows.map((slot, at) => [slot.index, at] as const));
@@ -892,6 +1248,14 @@ class SheetCard implements CardView {
     const firstRow = rows[0]?.index ?? 0;
     const firstColumn = columns[0]?.index ?? 0;
     for (const row of rows) {
+      // La riga della griglia ARIA: non si disegna (`display: contents`), le
+      // celle restano posate sulla griglia. Entra solo con almeno una cella:
+      // una riga coperta da un'unione sopra di lei non ne ha.
+      const line = document.createElement("div");
+      line.className = "canvas-card-sheet-row";
+      line.setAttribute("role", "row");
+      line.setAttribute("aria-rowindex", String(row.index + 1));
+      line.style.display = "contents";
       for (const column of columns) {
         const merge = mergeAt(merges, { row: row.index, column: column.index });
         let lastRow = row;
@@ -916,13 +1280,27 @@ class SheetCard implements CardView {
         element.dataset.row = String(row.index);
         element.dataset.column = String(column.index);
         element.setAttribute("role", "gridcell");
+        element.setAttribute("aria-colindex", String(column.index + 1));
+        if (merge) {
+          // Le righe e le colonne in vista che l'unione copre.
+          const rowSpan = (rowAt.get(lastRow.index) ?? 0) - (rowAt.get(row.index) ?? 0) + 1;
+          const columnSpan = (columnAt.get(lastColumn.index) ?? 0) - (columnAt.get(column.index) ?? 0) + 1;
+          if (rowSpan > 1) element.setAttribute("aria-rowspan", String(rowSpan));
+          if (columnSpan > 1) element.setAttribute("aria-colspan", String(columnSpan));
+        }
         const text = document.createElement("span");
         text.className = "grid-cell-text";
         text.textContent = known?.cell.display ?? "";
         paintCell(element, text, known?.style, known?.cell, font, this.#paper);
+        // Un valore che Fub non ha ricalcolato porta il segno del foglio
+        // (`.stale`): è quello salvato nel file.
+        if (known?.cell.stale) {
+          element.classList.add("stale");
+          element.title = t("grid.workbook.stale");
+        }
         element.append(text);
         place(element, column.offset, row.offset, width, height);
-        grid.append(element);
+        line.append(element);
         const borders = known?.style?.borders;
         if (hasBorders(borders)) {
           const border = document.createElement("div");
@@ -930,9 +1308,10 @@ class SheetCard implements CardView {
           border.setAttribute("aria-hidden", "true");
           paintBorders(border, borders);
           place(border, column.offset - 1, row.offset - 1, width + 1, height + 1);
-          grid.append(border);
+          line.append(border);
         }
       }
+      if (line.querySelector('[role="gridcell"]')) grid.append(line);
     }
 
     if (range) {
@@ -1005,8 +1384,9 @@ class SheetCard implements CardView {
     const unit = event.deltaMode === 0 /* DOM_DELTA_PIXEL */ ? SHEET_CARD_ROW_HEIGHT : 1;
     const vertical = event.shiftKey ? 0 : event.deltaY;
     const horizontal = event.shiftKey ? event.deltaY || event.deltaX : event.deltaX;
-    const top = clamp(this.#top + steps(vertical, unit), 0, Math.max(0, size.rows - 1));
-    const left = clamp(this.#left + steps(horizontal, unit === 1 ? 1 : SHEET_CARD_COLUMN_WIDTH), 0, Math.max(0, size.columns - 1));
+    const bounds = this.#bounds(size.rows, size.columns);
+    const top = clamp(this.#top + steps(vertical, unit), bounds.rowStart, Math.max(bounds.rowStart, bounds.rowEnd));
+    const left = clamp(this.#left + steps(horizontal, unit === 1 ? 1 : SHEET_CARD_COLUMN_WIDTH), bounds.columnStart, Math.max(bounds.columnStart, bounds.columnEnd));
     if (top === this.#top && left === this.#left) return;
     this.#top = top;
     this.#left = left;
@@ -1118,12 +1498,14 @@ class SheetCard implements CardView {
   }
 
   /// Senza superficie o con un errore: il perché e «Apri».
-  #showUnavailable(): void {
+  #showUnavailable(reason: string = t("canvas.card.sheet_unavailable")): void {
     this.#grid = null;
     this.#windows = [];
+    this.#unfit();
     this.#entered = false;
     delete this.#root.dataset.cardEntered;
-    const children: Node[] = [this.#placeholder(), this.#message(t("canvas.card.sheet_unavailable"), "canvas-card-message")];
+    this.#forgetChart();
+    const children: Node[] = [this.#placeholder(), this.#message(reason, "canvas-card-message")];
     const open = this.#port.open;
     let life: Lifetime | null = null;
     if (open !== undefined) {
@@ -1141,6 +1523,47 @@ class SheetCard implements CardView {
       children.push(button);
     }
     this.#setState("unavailable", children, life);
+  }
+
+  /// La parte non c'è più (T43): «Intervallo non trovato: …», e «Scegli di
+  /// nuovo» con le parti che la cartella ha, dove la nota si scrive.
+  #showLost(lost: LostPart): void {
+    this.#grid = null;
+    this.#windows = [];
+    this.#part = null;
+    this.#forgetChart();
+    this.#entered = false;
+    delete this.#root.dataset.cardEntered;
+    this.#closeSession();
+    this.#unfit();
+    const box = document.createElement("div");
+    box.className = "canvas-card-lost";
+    const message = this.#message(t("canvas.card.part_lost", { part: lost.text }), "canvas-card-message");
+    message.title = message.textContent ?? "";
+    box.append(message);
+    const choose = this.#context.choosePart;
+    let life: Lifetime | null = null;
+    if (choose && lost.parts.length > 0) {
+      life = openLifetime();
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "kit-button";
+      button.dataset.kind = "primary";
+      button.dataset.cardAction = "choose-part";
+      button.textContent = t("canvas.card.part_choose");
+      button.setAttribute("aria-haspopup", "menu");
+      life.listen(button, "click", (event) => {
+        event.stopPropagation();
+        showContextMenu(button, lost.parts.map((part) => ({
+          label: part.kind === "sheet"
+            ? t("canvas.card.part_sheet", { name: part.name })
+            : part.kind === "chart" ? t("canvas.card.part_chart", { name: part.name }) : part.name,
+          run: () => choose(part.kind === "sheet" ? sheetRef(part.name) : part.name),
+        })));
+      });
+      box.append(button);
+    }
+    this.#setState("lost", [box], life);
   }
 
   #placeholder(): HTMLElement {

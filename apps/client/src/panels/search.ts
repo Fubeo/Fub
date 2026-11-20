@@ -248,7 +248,7 @@ async function runSearch(): Promise<void> {
       searchSummaryEl.textContent = t("search.syntax_incomplete", { reason: error.message });
       return;
     }
-    showSearchResults([], errorText(error), false, 0);
+    showSearchResults([], errorText(error, "specie"), false, 0);
     return;
   }
   // Caricamento: si mostra solo se il giro è ancora l'ultimo dopo
@@ -285,7 +285,7 @@ async function runSearch(): Promise<void> {
       const page = await expected(
         Promise.resolve()
           .then(() => loadHits(expression, 0))
-          .catch((e: unknown): SearchFailure => ({ error: errorText(e) })),
+          .catch((e: unknown): SearchFailure => ({ error: errorText(e, "specie") })),
       );
       if (isFailure(page)) {
         showSearchResults([], page.error, false, 0);
@@ -429,7 +429,7 @@ function showSearchResults(
         run: () => {
           void writeClipboardText(shownHits.map((hit) => hit.doc).join("\n"))
             .catch((err: unknown) => notify(
-              err instanceof ClipboardUnavailable ? t("search.clipboard_unavailable") : errorText(err),
+              err instanceof ClipboardUnavailable ? t("search.clipboard_unavailable") : errorText(err, "specie"),
               "guasto",
             ));
         },
@@ -703,7 +703,7 @@ function createRow(name: string): HTMLElement {
       .then((doc) => {
         if (doc) void openDocument(doc, { gesture: true });
       })
-      .catch((e: unknown) => notify(errorText(e), "guasto"));
+      .catch((e: unknown) => notify(t("search.create_failed", { name, reason: errorText(e, "specie") }), "guasto"));
   });
   li.appendChild(button);
   return li;
@@ -746,7 +746,7 @@ async function runSearchMore(knownTotal: number): Promise<void> {
       Promise.resolve()
         .then(() => loadHits(searchExpression(query, [...excluded], [...excludedFolders]), shown))
         .then((p) => ({ items: p.items, total: p.total }))
-        .catch((e: unknown) => ({ error: errorText(e) })),
+        .catch((e: unknown) => ({ error: errorText(e, "specie") })),
     );
     if ("error" in page) {
       showSearchResults([], page.error);

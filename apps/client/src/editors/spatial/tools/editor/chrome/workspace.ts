@@ -9,7 +9,7 @@
 import { textButton } from "../../../../../kit";
 import type { MenuItem } from "../../../../../ui/menu";
 import { t } from "../../../strings";
-import { featuresFor, type ToolId, type Workspace } from "../../registry";
+import type { ToolId, Workspace } from "../../registry";
 import { openToolbarDialog } from "../../toolbar-dialog";
 import type { EditorContext } from "../context";
 import { railLayout } from "./rail";
@@ -48,12 +48,22 @@ export function columnOf(ctx: EditorContext, toolbar: readonly ToolId[]): ToolId
 export function installWorkspace(ctx: EditorContext): void {
   const { options } = ctx;
   ctx.root.dataset.workspace = ctx.workspace;
-  // Nel Semplice le caselle sono bersagli da 44 px, anche col mouse.
-  ctx.rail.element.dataset.size = ctx.workspace === "simple" ? "large" : "normal";
+  // In una scheda (T46) gli strumenti sono sempre una fila sopra il foglio:
+  // la scheda è larga quanto la colonna del testo, e una colonna di lato le
+  // ruberebbe il disegno.
+  const compact = options.compact === true;
+  // Nel Semplice le caselle sono bersagli da 44 px, anche col mouse; non in
+  // una scheda, dove la fila deve stare accanto alla barra.
+  const sizeOf = (workspace: Workspace): string => (workspace === "simple" && !compact ? "large" : "normal");
+  ctx.rail.element.dataset.size = sizeOf(ctx.workspace);
+  if (compact) {
+    ctx.root.dataset.compact = "";
+    ctx.rail.setOrientation("horizontal");
+  }
 
   // Su uno schermo stretto, o in un riquadro molto stretto, la colonna va
   // sotto il foglio e scorre di lato.
-  if (typeof ResizeObserver !== "undefined") {
+  if (!compact && typeof ResizeObserver !== "undefined") {
     const narrowObserver = new ResizeObserver(() => {
       const width = ctx.root.clientWidth;
       if (width === 0) return;
@@ -66,10 +76,12 @@ export function installWorkspace(ctx: EditorContext): void {
     ctx.life.add(() => narrowObserver.disconnect());
   }
 
-  // «Completo» in fondo alla colonna, nello spazio Semplice.
+  // «Completo» in fondo alla colonna, nello spazio Semplice. Non in una
+  // scheda: lì il resto si trova aprendo il disegno.
   const full = textButton({ label: t("draw.workspace.full"), onPress: () => choose("full"), lifetime: ctx.life });
   full.classList.add("draw-rail-full");
-  full.hidden = ctx.workspace !== "simple";
+  const fullHidden = (workspace: Workspace): boolean => compact || workspace !== "simple";
+  full.hidden = fullHidden(ctx.workspace);
   ctx.railColumn.append(full);
   ctx.relabels.push(() => {
     full.textContent = t("draw.workspace.full");
@@ -81,9 +93,9 @@ export function installWorkspace(ctx: EditorContext): void {
     ctx.workspace = next;
     if (toolbar !== undefined) ctx.column = toolbar;
     ctx.root.dataset.workspace = next;
-    ctx.rail.element.dataset.size = next === "simple" ? "large" : "normal";
-    full.hidden = next !== "simple";
-    ctx.offer(featuresFor(next, ctx.profile));
+    ctx.rail.element.dataset.size = sizeOf(next);
+    full.hidden = fullHidden(next);
+    ctx.offer(ctx.featuresOf(next));
     ctx.syncRail(ctx.editable());
     ctx.syncPenOptions();
   };
@@ -96,7 +108,9 @@ export function installWorkspace(ctx: EditorContext): void {
     options.onWorkspace?.(next);
   };
 
-  ctx.workspaceItems = () => [
+  // In una scheda lo spazio e la colonna restano quelli dati: si cambiano
+  // nel disegno aperto, dove valgono per tutti i disegni.
+  ctx.workspaceItems = () => compact ? [] : [
     {
       label: t("draw.workspace"),
       separator: true,

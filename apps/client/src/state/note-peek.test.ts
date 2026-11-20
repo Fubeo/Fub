@@ -4,9 +4,11 @@
 // non perdono testo (prima l'editor porta il testo alla sessione, poi si
 // smonta; prima il riquadro prende la nota, poi la sbirciata la lascia).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CardEditor, CardEditorOptions, CardEditorState } from "../editors/canvas/cards";
+import type { CardEditor, CardEditorOptions, CardEditorState } from "../editors/core/cards/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import type { PeekLink } from "../editors/text/profiles/markdown/link-gesture";
+import { errorText } from "../host/errors";
+import "../i18n/strings";
 import { createNotePeek, linkClickOf, linkName, peekPlace, type NotePeekDeps, type PeekResolution, type PeekTarget } from "./note-peek";
 
 interface FakeEditor extends CardEditor {
@@ -186,6 +188,41 @@ describe("la sbirciata", () => {
     await peek.promote("here");
     expect(s.root()?.dataset.state).toBe("note");
     expect(s.deps.failed).toHaveBeenCalled();
+  });
+
+  // Le tre righe d'errore della sbirciata (aprire, creare, portare nel
+  // riquadro) dicono che cosa e la specie: mai «[object Object]» davanti a un
+  // errore tipizzato, mai l'id o la prosa del kernel.
+  it("un errore tipizzato dell'host si legge con la specie, nelle tre righe della sbirciata", async () => {
+    const refused = { kind: "internal", message: "parse failed: rich codec: invalid Zip archive" };
+    const said = (s: ReturnType<typeof setup>) => String((s.deps.failed as ReturnType<typeof vi.fn>).mock.calls.slice(-1)[0]?.[0]);
+    const expected = errorText(refused, "specie");
+
+    const resolving = setup({ kind: "note", doc: "Nota.md" });
+    resolving.deps.resolve = vi.fn(async () => { throw refused; });
+    await createNotePeek(resolving.deps).open(wiki("Nota"));
+    expect(said(resolving)).toContain(expected);
+    document.body.replaceChildren();
+
+    const creating = setup({ kind: "missing" });
+    creating.deps.create = vi.fn(async () => { throw refused; });
+    await creating.peek.open(wiki("Idea"));
+    creating.root()!.querySelector<HTMLButtonElement>(".note-peek-create")!.click();
+    await vi.waitFor(() => expect(creating.deps.failed).toHaveBeenCalled());
+    expect(said(creating)).toContain(expected);
+    expect(said(creating)).toContain("Idea");
+    document.body.replaceChildren();
+
+    const promoting = setup({ kind: "note", doc: "Nota.md" });
+    promoting.deps.openHere = vi.fn(async () => { throw refused; });
+    const peek = createNotePeek(promoting.deps);
+    await peek.open(wiki("Nota"));
+    await peek.promote("here");
+    expect(said(promoting)).toContain(expected);
+    for (const s of [resolving, creating, promoting]) {
+      expect(said(s)).not.toContain("[object");
+      expect(said(s)).not.toContain("parse failed");
+    }
   });
 
   it("una sbirciata nuova durante un «Apri qui» che poi fallisce non lascia la vecchia orfana", async () => {

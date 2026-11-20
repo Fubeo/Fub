@@ -18,7 +18,13 @@ const SETTINGS = [
   entry("proof.words", ["fubvault"]),
 ];
 
-type Check = { language: string; segments: string[]; words: string[]; options: Record<string, boolean> };
+type Check = {
+  language: string;
+  segments: string[];
+  words: string[];
+  options: Record<string, boolean>;
+  list_items?: number[];
+};
 
 /// Un host che risponde come la route: segna ogni «speling», in byte.
 function host(overrides: Partial<ProofPorts> = {}) {
@@ -102,6 +108,21 @@ describe("ProofClient", () => {
     const client = new ProofClient(ports);
     await client.check(["testo"], "en-GB");
     expect(checks[0].language).toBe("en");
+    client.dispose();
+  });
+
+  it("dice quali segmenti sono voci d'elenco, con gli indici della richiesta", async () => {
+    const { ports, checks } = host();
+    const client = new ProofClient(ports);
+    await client.check(["primo punto", "Un paragrafo.", "due"], null, [true, false, true]);
+    expect(checks[0].list_items).toEqual([0, 2]);
+    // Senza voci il campo non c'è: la richiesta resta quella di prima.
+    await client.check(["Un altro paragrafo."]);
+    expect(checks[1]).not.toHaveProperty("list_items");
+    // La stessa frase come voce e come paragrafo sono due domande diverse.
+    await client.check(["primo punto", "Un paragrafo."], null, [false, true]);
+    expect(checks[2].segments).toEqual(["primo punto", "Un paragrafo."]);
+    expect(checks[2].list_items).toEqual([1]);
     client.dispose();
   });
 

@@ -137,7 +137,7 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   a fuoco; si rifanno soltanto quando cambia quali sono, e la scelta si
   ricorda anche mentre manca. `onShow` ne chiede una (la barra apre
   Commenti); `covers` toglie le view che sostituiscono. Il disegno ne dà
-  cinque (`chrome/hosts.ts`), e nello `status` la vista e le misure;
+  cinque (`editors/spatial/tools/editor/chrome/hosts.ts`), e nello `status` la vista e le misure;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,
@@ -273,19 +273,19 @@ in `apps/client/src/editors/text/profiles/markdown/profile.ts`,
 `FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
 TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
-### Markdown: Source, Live e Reading
+### Markdown: Sorgente, Scrittura e Lettura
 
-Source, Live e Reading sono tre viste sullo stesso `TextEngine` e buffer della
-`DocumentSession`. Il cambio modo riusa la vista di scrittura; Reading ridisegna
+Sorgente (`source`), Scrittura (`live_preview`) e Lettura (`reading`) sono tre viste sullo stesso `TextEngine` e buffer della
+`DocumentSession`. Il cambio modo riusa la vista di scrittura; Lettura ridisegna
 dal buffer senza salvare, e in conflitto la fascia (`drawConflict`) lo dice.
 
-I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
+I blocchi inattivi di Scrittura e la Lettura condividono lo stesso renderer locale in
 `apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso
 montaggio in `apps/client/src/editors/text/profiles/markdown/mount.ts`; i blocchi selezionati mostrano
 la sorgente. Il task passa da normale modifica undoabile della sessione e `readOnly` disabilita l'input.
-Dopo una modifica la Live rende di nuovo i soli blocchi toccati ([la battuta](../product/performance-budget.md#la-battuta)).
+Dopo una modifica Scrittura rende di nuovo i soli blocchi toccati ([la battuta](../product/performance-budget.md#la-battuta)).
 
-Le tabelle GFM di primo livello fanno eccezione in Live: restano un widget
+Le tabelle GFM di primo livello fanno eccezione in Scrittura: restano un widget
 anche col cursore dentro, la griglia di `profiles/markdown/table-widget.ts`. Il
 modello puro (`table-model.ts`) legge la tabella dalla sorgente e calcola le
 modifiche: una cella cambia soltanto il proprio intervallo, un cambio di forma
@@ -309,7 +309,7 @@ Finché una risorsa è viva, il modulo è iscritto alle cache dei documenti
 (`apps/client/src/state/document-caches.ts`). Il pannello annuncia lì i
 documenti cambiati da fuori, tolti o rinominati, senza sapere quale profilo
 tenga quale cache. L'anteprima al passaggio legge il bersaglio dal contratto
-`data-wikilink-*`, che la Live posa come la Lettura.
+`data-wikilink-*`, che Scrittura posa come la Lettura.
 
 La risoluzione dei link resta del kernel tramite `resolvedReference`; per i
 percorsi il frontend invia `LinkTarget::Path`.
@@ -334,7 +334,7 @@ modalità del testo.
 
 I comandi `shell.mode.reading` (`Mod-E`), `shell.mode.live` e
 `shell.mode.source` cercano la modalità per `contextMode`, non per id
-(`apps/client/src/editors/core/surface-modes.ts`): Live sulla tela porta alla
+(`apps/client/src/editors/core/surface-modes.ts`): Scrittura sulla tela porta alla
 modalità `canvas`, e `Mod-E` trova la lettura di un profilo che la chiama
 `read`. Fra più modalità con lo stesso ruolo resta quella corrente, altrimenti
 vale la prima dichiarata. Un comando è disponibile soltanto dove cambierebbe

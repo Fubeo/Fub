@@ -26,6 +26,7 @@ import {
   type FilterDef, type SearchProblem, type ValueKind, type ValueTyping, type VisualCondition, type VisualOp,
 } from "./filter";
 import { useBaseIcons, viewIcon } from "./icons";
+import { errorText } from "../../host/errors";
 import { moveColumn, sameColumns, sameKey, sortValue, sortedBy, toggleColumn, withoutSort, type SortEntry } from "./sort";
 
 /// Perché il file `.base` non si riscrive da qui: la superficie è in sola
@@ -102,6 +103,8 @@ export interface BaseToolbar {
 
 const FOLDER = "\u0000folder";
 
+/// La colonna `file.name` del file: nella tabella è la colonna della nota.
+const NOTE_NAME = "file.name";
 const plain = (key: string): string => key.replace(/^prop\./, "");
 const labelOf = (plan: BasePlan, key: string): string =>
   plan.columnLabels[key] ?? plan.columnLabels[`prop.${plain(key)}`] ?? plain(key);
@@ -529,10 +532,44 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     const plan = model.plan!;
     const content = element("div", "base-columns");
     content.append(element("p", "base-pop-title", t("base.columns.title", { name: plan.view })));
-    const shown = plan.order.length ? plan.order : plan.columns;
+    // Le colonne della vista come la tabella le mostra. `file.name` è la
+    // colonna della nota, che la tabella mette sempre per prima e non
+    // nasconde: qui sta in cima, fissa, fuori da quelle che si spostano. Se il
+    // file la scrive, la riscrittura la lascia al suo posto.
+    const written = plan.order.length ? plan.order : plan.columns;
+    const noteAt = written.indexOf(NOTE_NAME);
+    const shown = written.filter((column) => column !== NOTE_NAME);
     const hidden = subjects(plan, []).filter((key) => !shown.some((column) => sameKey(column, key)));
     const list = element("ul", "base-column-list");
-    const write = (next: string[]) => { if (writable() && !sameColumns(next, shown)) actions.write("order", next.length ? next : null); };
+    const write = (moved: string[]) => {
+      const next = noteAt < 0 ? moved : [...moved.slice(0, noteAt), NOTE_NAME, ...moved.slice(noteAt)];
+      if (writable() && !sameColumns(next, written)) actions.write("order", next.length ? next : null);
+    };
+    // La colonna della nota: spuntata e inerte, come una casella in sola
+    // lettura. Si raggiunge col fuoco e dice perché non cambia.
+    const noteRow = (): HTMLLIElement => {
+      const item = element("li", "base-column base-column-fixed");
+      item.dataset.column = NOTE_NAME;
+      const grip = element("span", "base-column-grip");
+      grip.setAttribute("aria-hidden", "true");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = true;
+      box.id = identifier("base-column");
+      box.setAttribute("aria-disabled", "true");
+      const why = element("span", "base-column-fixed-note", t("base.columns.note_fixed"));
+      why.id = identifier("base-column-why");
+      box.setAttribute("aria-describedby", why.id);
+      box.addEventListener("click", (event) => event.preventDefault());
+      // Invio come Spazio, come le altre caselle: un clic, che non cambia niente.
+      box.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); box.click(); } });
+      box.addEventListener("focus", () => { focusedColumn = NOTE_NAME; });
+      const label = element("label", "base-column-label", plan.columnLabels[NOTE_NAME] ?? t("menu.file"));
+      label.htmlFor = box.id;
+      item.title = t("base.columns.note_fixed_hint");
+      item.append(grip, box, label, why);
+      return item;
+    };
     let dragged: number | null = null;
     const row = (key: string, index: number | null): HTMLLIElement => {
       const item = element("li", "base-column");
@@ -582,8 +619,11 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       item.append(grip, box, label);
       return item;
     };
-    list.append(...shown.map((key, index) => row(key, index)), ...hidden.map((key) => row(key, null)));
-    content.append(list, element("p", "base-pop-note", t("base.columns.hint")));
+    list.append(noteRow(), ...shown.map((key, index) => row(key, index)), ...hidden.map((key) => row(key, null)));
+    // Solo la colonna della nota: niente da spostare, e la nota dice da dove
+    // arrivano le altre invece di spiegare il trascinamento.
+    const alone = shown.length === 0 && hidden.length === 0;
+    content.append(list, element("p", "base-pop-note", t(alone ? "base.columns.no_properties" : "base.columns.hint")));
     return content;
   };
   // La colonna su cui stava il fuoco nel popover di Proprietà: ci torna
@@ -618,7 +658,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
         ? templates.map((each) => ({ label: each.label, icon: "template", run: () => actions.createFrom(each.path) }))
         : [{ label: t("base.new.no_templates"), disabled: true }];
     } catch (failure) {
-      items = [{ label: failure instanceof Error ? failure.message : String(failure), disabled: true }];
+      items = [{ label: t("base.new.templates_failed", { reason: errorText(failure, "specie") }), disabled: true }];
     }
     if (!lifetime.closed && templateButton.isConnected) showContextMenu(templateButton, items, { label: t("base.new.template") });
   };

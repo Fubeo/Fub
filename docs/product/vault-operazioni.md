@@ -119,6 +119,13 @@ Un collegamento per un altro vault noto apre quel vault dopo una conferma, con
 lo stesso flusso del pulsante. Se il vault non si apre, il collegamento si
 ferma. Un vault sconosciuto non si apre mai da un collegamento.
 
+Dal terminale, `fub --version` (o `-V`) scrive la versione e `fub --help` (o
+`-h`) un aiuto breve: le opzioni, le azioni dei collegamenti `fub://` e il
+rimando a `fub-cli`. Tutti e due escono subito, senza finestra e senza leggere
+la configurazione (`crates/fub-app/src/riga_di_comando.rs`). Un argomento che
+l'app non conosce lascia l'avvio normale. Su Windows l'app di rilascio non ha
+una console sua e scrive in quella del terminale che l'ha lanciata.
+
 ## Bozze
 
 Una bozza protegge testo che non è ancora diventato una scrittura riuscita sul

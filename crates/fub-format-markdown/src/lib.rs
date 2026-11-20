@@ -890,6 +890,61 @@ mod tests {
         assert!(!other.contains("fub-details"), "html: {other}");
     }
 
+    /// `<!-- pagina -->` (D17): sulla carta un segnaposto vuoto che volta
+    /// pagina, con lo span del commento; a schermo niente, nemmeno il testo.
+    /// Un commento che dice altro resta com'era.
+    #[test]
+    fn a_page_break_comment_turns_the_page_only_on_paper() {
+        let source =
+            "Prima.\n\n<!-- pagina -->\nDopo.\n\n<!--pagina-->\n\n<!-- pagina, forse -->\n";
+        let model = parse(source);
+        let render = |target| {
+            MarkdownProvider::new()
+                .render_html(
+                    &model,
+                    &RenderOptions {
+                        target,
+                        ..RenderOptions::preview()
+                    },
+                )
+                .unwrap()
+        };
+        let print = render(fub_abi::format::RenderTarget::Print);
+        let start = source.find("<!-- pagina -->").unwrap();
+        assert!(
+            print.contains(&format!(
+                "<div data-fub-source-start=\"{start}\" data-fub-source-end=\"{}\" \
+                 class=\"page-break\" data-page-break=\"mano\"></div><p",
+                start + "<!-- pagina -->".len()
+            )),
+            "print: {print}"
+        );
+        assert_eq!(
+            print.matches("data-page-break").count(),
+            2,
+            "print: {print}"
+        );
+        assert!(print.contains("Dopo."), "il blocco dopo resta suo: {print}");
+        assert!(print.contains("pagina, forse"), "print: {print}");
+        assert!(
+            render(fub_abi::format::RenderTarget::Pdf).contains("data-page-break"),
+            "anche il PDF volta pagina"
+        );
+        for target in [
+            fub_abi::format::RenderTarget::Screen,
+            fub_abi::format::RenderTarget::StaticSite,
+        ] {
+            let html = render(target);
+            assert!(!html.contains("page-break"), "{target:?}: {html}");
+            assert!(
+                !html.contains("&lt;!-- pagina --&gt;"),
+                "{target:?}: {html}"
+            );
+            assert!(!html.contains("&lt;!--pagina--&gt;"), "{target:?}: {html}");
+            assert!(html.contains("pagina, forse"), "{target:?}: {html}");
+        }
+    }
+
     #[test]
     fn a_block_without_children_does_not_lose_its_own_text() {
         let html = MarkdownProvider::new()

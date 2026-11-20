@@ -422,7 +422,10 @@ export class MathPalette {
     const t = liveStrings.t.bind(liveStrings);
     const source = this.options.source?.() ?? false;
     if (!symbol) {
-      const invite = t(source ? "live.math.palette.tip_source" : "live.math.palette.tip");
+      // Al tocco non c'è il passaggio del puntatore (T66): il nome si vede
+      // dopo il tocco, e l'invito dice di toccare.
+      const touch = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
+      const invite = t(touch ? "live.math.palette.tip_touch" : source ? "live.math.palette.tip_source" : "live.math.palette.tip");
       if (this.tip.dataset.empty === "true" && this.tip.textContent === invite) return;
       this.tip.dataset.empty = "true";
       this.tip.textContent = invite;

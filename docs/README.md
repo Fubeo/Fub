@@ -43,12 +43,12 @@ flowchart LR
 | [Operazioni sul vault](product/vault-operazioni.md) | note, cartelle, cattura, import/export |
 | [Recupero e versioni](product/vault-recupero-e-versioni.md) | cestino, rinomine, versioni, snapshot |
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
-| [Editor e anteprima](product/editor-and-preview.md) e [le formule in Live](product/editor-math.md) | le superfici di scrittura; la formula che si modifica toccandola |
-| [Scrittura](product/editor-writing.md) e [I commenti nel testo](product/editor-comments.md) | le modalità di una nota, i livelli di presenza e l'incolla degli indirizzi; il passo commentato |
-| [Blocchi](product/editor-blocks.md), [Sposta in…](product/editor-move-to.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; un blocco in un'altra nota; i gesti delle tabelle in note, documenti e fogli |
+| [Editor e anteprima](product/editor-and-preview.md), [la barra di formato](product/editor-toolbar.md) e [le formule](product/editor-math.md); [la griglia dei fogli](product/grid-editor.md) | le superfici di scrittura; la barra sopra il foglio e le sue forme; la formula che si modifica toccandola; le celle di una cartella di Excel |
+| [Scrittura](product/editor-writing.md), [Link, sbirciata e pagine incorporate](product/editor-links.md) e [I commenti nel testo](product/editor-comments.md) | le modalità di una nota, i livelli di presenza, la riga dei suggerimenti e la concentrazione; il clic su un link, la sbirciata, l'incolla degli indirizzi e le pagine web; il passo commentato |
+| [Blocchi](product/editor-blocks.md), [Colori, colonne, persone e date](product/editor-note-extras.md), [Sposta in…](product/editor-move-to.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; colori, ripiegabili, colonne, indice, persone e date nel file; un blocco in un'altra nota; i gesti delle tabelle in note, documenti e fogli |
 | [Tasto destro, mini-barra e «/»](product/editor-menus.md) e [i diagrammi](product/editor-diagrams.md) | i menu degli editor; il disegno Mermaid, il suo menu e i tasti del blocco |
-| [Basi (file `.base`)](product/bases.md), [il loro calendario](product/bases-calendar.md) e [la loro linea del tempo](product/bases-timeline.md) | le viste, i filtri, i limiti e che cosa si scrive sul file; il mese e le note trascinate fra i giorni; le barre fra due date |
-| [La testata](product/editor-header.md), [la riga dei dati](product/editor-note-facts.md) e [la trasclusione viva](product/editor-transclusion.md); [i tipi di nota](product/editor-note-types.md) | titolo, proprietà e copertina in cima alla nota; modifica, collegamenti ed etichette sotto il titolo; la sezione di un'altra nota che si scrive dove è riportata |
+| [Basi (file `.base`)](product/bases.md), [il loro calendario](product/bases-calendar.md) e [la loro linea del tempo](product/bases-timeline.md), [la cella in modifica](product/bases-cell-edit.md) | le viste, i filtri, i limiti e che cosa si scrive sul file; il mese e le note trascinate fra i giorni; le barre fra due date; il testo di una cella quando la nota cambia da fuori |
+| [La testata](product/editor-header.md), [la riga dei dati](product/editor-note-facts.md), [la trasclusione viva](product/editor-transclusion.md) e [le schede vive](product/live-cards.md), con [la tabella in foglio](product/editor-table-sheet.md) e [le misure e Obsidian](product/live-cards-measures.md); [i tipi di nota](product/editor-note-types.md) | titolo, proprietà e copertina in cima alla nota; modifica, collegamenti ed etichette sotto il titolo; la sezione di un'altra nota che si scrive dove è riportata; un PDF, un foglio o un file Craft usato dentro la nota, quante schede regge e che cosa ne vede Obsidian |
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
@@ -56,7 +56,7 @@ flowchart LR
 | [La lavagna](product/lavagna.md) | schede, fili, inchiostro ed estratti nei file `.canvas` |
 | [Ricerca, link e grafo](product/search-links-and-graph.md), [spazio comandi (Ctrl O)](product/command-space.md) | trovare, seguire e comandare dalla tastiera |
 | [Compiti](product/tasks-and-reminders.md) | i compiti del vault per scadenza, e come si spuntano |
-| [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
+| [Importare ed esportare](product/import-and-export.md) ed [Esporta in PDF](product/pdf-export.md) | dentro e fuori dal vault; le pagine vere di una nota e la stampa |
 | [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |
 | [Budget prestazionali](product/performance-budget.md) | i numeri e i gate della CI |
 | [Criteri di accettazione](product/acceptance.md) | quando una modifica è accettabile |
@@ -102,7 +102,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 - [Il formato della scena](reference/scene-format.md) con le sue
   pagine di dettaglio, e le
   [operazioni sulla scena](reference/scene-operations.md)
-- [Le annotazioni PDF](reference/annotation-format.md), la
+- [Le annotazioni PDF](reference/annotation-format.md), [l'esportazione in PDF](reference/pdf-export-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
 - Le porte del [disegno](reference/drawing-ipc.md), della [griglia](reference/grid-ipc.md) e dei [temi](reference/theme-ipc.md): l'IPC dei loro motori

@@ -27,8 +27,10 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
-import { t } from "../../../../i18n/strings";
+import { hidesPageBreak } from "../../../../rules/page-break";
+import { resolvedLanguage, t } from "../../../../i18n/strings";
 import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
+import { alarmFigure, projectedReminder, reminderLabel, reminderLong, reminderNotificationsOn, reminderPassed, reminderTimeOf } from "./task-reminder";
 import { isAllowedLink } from "../../../../ui/sanitize";
 import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
@@ -88,7 +90,7 @@ import {
   type NativeInline,
 } from "./render-inline";
 import { mediaKindOfId } from "../../../media/media-types";
-import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks } from "./table-widget";
+import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks, type TableSheetHost } from "./table-widget";
 import { propertiesExtension } from "./properties";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { withLineBreaks } from "../../line-breaks";
@@ -120,6 +122,8 @@ import {
   type LinkCardSource,
 } from "./link-card";
 import { markPresence } from "../../../core/presence";
+import { holdsLiveCard, liveCardEmbed, LiveCardWidget, type LiveCardEmbed, type LiveCards } from "./live-cards";
+import { cellShownAsValue, cellValueRef, CellValueWidget, onlyCellValues, type CellValues } from "./cell-value";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -148,6 +152,9 @@ export interface LivePreviewCallbacks {
   /// La griglia delle tabelle che ha il fuoco: chi monta l'editor la usa per
   /// la barra di formattazione. Assente, le griglie funzionano lo stesso.
   readonly tableGrid?: TableGridCallbacks;
+  /// «Trasforma in foglio» (T52): la nota e chi scrive il foglio. Assente, la
+  /// voce non c'è.
+  readonly tableSheet?: TableSheetHost;
   /// Il menu «/» c'è e si apre: il segnaposto della riga vuota lo nomina.
   slashEnabled?(): boolean;
   /// L'icona (`icon:`) della pagina che un wikilink nomina, mostrata prima del
@@ -161,6 +168,14 @@ export interface LivePreviewCallbacks {
   /// solo resta un link. Quando cambiano arriva [`linkCardsChanged`]. Con
   /// `note`, anche un wikilink da solo in un paragrafo è una scheda (E11).
   readonly linkCard?: LinkCardSource;
+  /// Le schede vive (E19, T41, `./live-cards`): un paragrafo che è soltanto
+  /// l'embed di un file (un PDF, un foglio, un file Craft) si mostra con
+  /// l'ospite delle schede. Senza, l'embed resta la resa di sempre.
+  readonly liveCards?: LiveCards;
+  /// I valori di cella nel testo (E23, T53, `./cell-value`): un embed di una
+  /// cella sola di un foglio in mezzo al testo si legge come il suo valore.
+  /// Senza, l'embed resta la resa di sempre.
+  readonly cellValues?: CellValues;
   /// La giornaliera aperta, per la pagina del giorno dopo l'ultima riga
   /// (E17, `./day-page`). Assente, o `null`, la pagina non c'è.
   readonly dayPage?: DayPageSource;
@@ -195,6 +210,9 @@ export type LiveDecoKind =
   | "math"
   // widget: immagine del vault in mezzo al testo, `data` è l'HTML della Lettura
   | "image"
+  // widget: il valore di una cella di un foglio in mezzo al testo (T53),
+  // `data` è il bersaglio dell'embed come sta scritto (`Conti.xlsx#Budget!C7`)
+  | "cell-value"
   // widget: la pastiglia di un collegamento col cursore dentro, con `mai`, al
   // posto di `](url)` o di `]]`; `data` è la destinazione
   | "link-pill"
@@ -221,6 +239,12 @@ export type LiveDecoKind =
   // passata (`data` "overdue"), arancio quando è vicina (`data` "near"),
   // segnata quando la data non si legge (`data` "bad"), grigia altrimenti
   | "task-due"
+  // il promemoria `⏰ AAAA-MM-GG HH:MM` di un compito (T36): fuori dal
+  // cursore una pastiglia blu con l'ora, al posto del testo; col cursore
+  // dentro il testo stesso, segnato. `data` è lo stato («open», «done»,
+  // «bad») e l'ora del muro
+  | "task-reminder"
+  | "task-reminder-source"
   | "quote-mark"
   | "sup"
   | "sub"
@@ -434,6 +458,7 @@ export function computeDecorations(
   from = 0,
   to = state.doc.length,
   forms?: readonly SyntaxForm[],
+  cells = false,
 ): LiveDeco[] {
   const out: LiveDeco[] = [];
   const declaredInline = inlineDelimiters(forms);
@@ -808,10 +833,15 @@ export function computeDecorations(
           exclusions.push({ from: node.from, to: node.to });
           return;
         case "HTMLBlock":
-        case "CommentBlock":
+        case "CommentBlock": {
           exclusions.push({ from: node.from, to: node.to });
           opaqueBlocks.push({ from: node.from, to: node.to });
+          // L'interruzione di pagina a mano (D17, `<!-- pagina -->`) non si
+          // vede, come in Lettura: la si ritrova sulla riga del cursore, per
+          // cancellarla.
+          if (node.name === "CommentBlock" && hidesPageBreak(doc, node.from, node.to, reveal)) out.push({ from: node.from, to: node.to, kind: "hide" });
           return false;
+        }
 
         case "Image": {
           // Un'immagine del vault fuori dalla riga attiva si vede come in
@@ -948,6 +978,15 @@ export function computeDecorations(
       // sezione — due risposte per lo stesso link (§4.4).
       const data = w.target;
       const embedImage = w.embed && !w.heading && !w.block && mediaKindOfId(w.page) === "image";
+      // Il valore di una cella in mezzo al testo (T53), fuori dal cursore come
+      // un'immagine; da solo nel paragrafo è la scheda di foglio, a meno che
+      // l'embed dica `|value`.
+      if (cells && w.embed && !w.block && cellValueRef(w.page, w.heading) !== null
+        && (!aloneAt(rangeStart, rangeEnd) || cellShownAsValue(w.alias))
+        && (reveal.policy === "mai" || !reveal.source(rangeStart, rangeEnd, rangeStart))) {
+        out.push({ from: rangeStart, to: rangeEnd, kind: "cell-value", data: w.target });
+        continue;
+      }
       if (reveal.policy !== "mai" && !(embedImage && imageShown(rangeStart, rangeEnd)) && reveal.source(rangeStart, rangeEnd, rangeStart)) {
         // Sorgente visibile ma link comunque cliccabile e stilato.
         out.push({ from: innerFrom, to: innerA, kind: "wikilink", data });
@@ -1070,7 +1109,24 @@ export function computeDecorations(
       const tree = syntaxTree(state);
       const taskEnd = liveTaskEnd(tree, boxFrom, row.to);
       const source = taskEnd > row.to ? doc.sliceString(row.from, taskEnd) : text;
-      const due = projectedDue(liveProjection(tree, source, row.from, paragraphEnd, taskEnd));
+      const projection = liveProjection(tree, source, row.from, paragraphEnd, taskEnd);
+      const due = projectedDue(projection);
+      // Il promemoria: una pastiglia al posto del testo, fuori dal cursore,
+      // quando il suo tratto è tutto testo del compito (niente segni in
+      // mezzo che un widget nasconderebbe) e non tocca altre decorazioni;
+      // altrimenti, e col cursore dentro, il testo resta e si segna.
+      const reminder = projectedReminder(projection);
+      if (reminder) {
+        const [from, to] = reminder.source;
+        const look = reminder.when === null ? "bad" : checked ? "done" : "open";
+        const data = `${look} ${reminder.when ?? ""}`;
+        const touched = out.some((d) => !LINE_KINDS.has(d.kind) && d.from < to && from < d.to);
+        if (reminder.when !== null && reminder.whole && !touched && !reveal.marks(from, to, from)) {
+          out.push({ from, to, kind: "task-reminder", data });
+        } else if (!touched) {
+          out.push({ from, to, kind: "task-reminder-source", data });
+        }
+      }
       if (due) {
         const look = dueLook(due, checked, today);
         pills.push({
@@ -1171,7 +1227,7 @@ export function wholePills(
   });
 }
 
-const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "link-pill", "footnote-back"]);
+const REPLACED: ReadonlySet<LiveDecoKind> = new Set(["hide", "math", "image", "cell-value", "link-pill", "footnote-back"]);
 
 /// La punteggiatura che non comincia una riga.
 const TRAILING_PUNCTUATION = /^[,.;:!?)\]»”’]+/;
@@ -1632,6 +1688,47 @@ const commentRangeOn = Decoration.mark({ class: "cm-fub-comment-range cm-fub-com
 const dueMark = Decoration.mark({ class: "cm-fub-due" });
 const dueNearMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-near" });
 const dueOverdueMark = Decoration.mark({ class: "cm-fub-due cm-fub-due-overdue" });
+
+/// La pastiglia del promemoria (T36): la sveglia e l'ora, col giorno se non
+/// è oggi. Il clic apre la scelta del giorno e dell'ora (`reminder-picker.ts`,
+/// dal gestore del `mousedown`); il passaggio dice quando suona, se è passato,
+/// se il compito è fatto e se le notifiche sono spente, letto al momento.
+class ReminderWidget extends WidgetType {
+  constructor(readonly data: string) { super(); }
+  eq(other: ReminderWidget) { return other.data === this.data; }
+  toDOM() {
+    const [look, ...rest] = this.data.split(" ");
+    const written = rest.join(" ");
+    const when = reminderTimeOf(written);
+    const el = document.createElement("span");
+    el.className = look === "done" ? "cm-fub-reminder cm-fub-reminder-done" : "cm-fub-reminder";
+    el.dataset.reminder = written;
+    const text = document.createElement("span");
+    text.textContent = when ? reminderLabel(when, new Date(), resolvedLanguage()) : written;
+    el.append(alarmFigure(), text);
+    const describe = () => {
+      el.title = reminderTitle(look === "done", when);
+    };
+    describe();
+    el.addEventListener("pointerenter", describe);
+    return el;
+  }
+  ignoreEvent() { return false; }
+}
+
+/// Ciò che il passaggio dice di un promemoria: quando suona (o che è
+/// passato, o che il compito è fatto) e, con le notifiche spente, che resta
+/// nella nota senza suonare.
+export function reminderTitle(done: boolean, when: { date: string; time: string } | null, now = new Date()): string {
+  if (!when) return liveStrings.t("reminder.unreadable");
+  const long = reminderLong(when, resolvedLanguage());
+  const head = done
+    ? liveStrings.t("reminder.title.done", { when: long })
+    : reminderPassed(when, now)
+      ? liveStrings.t("reminder.title.passed", { when: long })
+      : liveStrings.t("reminder.title", { when: long });
+  return done || reminderNotificationsOn() ? head : `${head} ${liveStrings.t("reminder.title.off")}`;
+}
 const taskMark = Decoration.mark({ class: "cm-fub-bullet cm-fub-bullet-task" });
 const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
   (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "sup", "sub", "code", "link", "highlight", "done", "quote-mark", "near", "nobreak", "footnote-label"] as const).map(
@@ -1651,6 +1748,13 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       return Decoration.replace({ widget: new InlineMathWidget(d.data ?? "") });
     case "image":
       return Decoration.replace({ widget: new InlineImageWidget(d.data ?? "", d.to - d.from, d.selected === true, callbacks) });
+    case "cell-value": {
+      const target = parseWikilinkInner(d.data ?? "");
+      const ref = cellValueRef(target.page, target.heading);
+      // Senza la porta `computeDecorations` non lo produce; un riferimento
+      // che non si rilegge resta nascosto come il resto dell'embed.
+      return ref && callbacks.cellValues ? Decoration.replace({ widget: new CellValueWidget(ref, callbacks.cellValues) }) : hidden;
+    }
     case "link-pill":
       return Decoration.replace({ widget: new LinkPillWidget(d.data ?? "") });
     case "footnote-back":
@@ -1714,6 +1818,14 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
           ...(target.block ? { "data-wikilink-block": target.block } : {}),
         },
       });
+    }
+    case "task-reminder":
+      return Decoration.replace({ widget: new ReminderWidget(d.data ?? "") });
+    case "task-reminder-source": {
+      const [look, ...rest] = (d.data ?? "").split(" ");
+      const when = reminderTimeOf(rest.join(" "));
+      const variant = look === "bad" ? " cm-fub-reminder-bad" : look === "done" ? " cm-fub-reminder-done" : "";
+      return Decoration.mark({ class: `cm-fub-reminder-text${variant}`, attributes: { title: reminderTitle(look === "done", when) } });
     }
     case "task-due":
       if (d.data === "near") return dueNearMark;
@@ -2294,6 +2406,8 @@ class CandidateMark extends RangeValue {
     /// Un paragrafo che è soltanto un indirizzo o un wikilink: la sua scheda
     /// (K8, E11).
     readonly linkCard: CardTarget | undefined,
+    /// Un paragrafo che è soltanto l'embed di un file: la sua scheda viva (T41).
+    readonly liveCard: LiveCardEmbed | undefined,
     /// La scelta che la selezione ha dettato: blocco reso o sorgente, righe
     /// vuote dopo nascoste o no. Uguale, il candidato resta quello di prima.
     readonly decision: string,
@@ -2301,7 +2415,7 @@ class CandidateMark extends RangeValue {
     super();
   }
   decided(decision: string): CandidateMark {
-    return new CandidateMark(this.block, this.offset, this.length, this.grid, this.linkCard, decision);
+    return new CandidateMark(this.block, this.offset, this.length, this.grid, this.linkCard, this.liveCard, decision);
   }
 }
 
@@ -2632,7 +2746,10 @@ export function livePreview(
     const origin = blockOrigin(block);
     let shape = shapes.get(origin);
     if (!shape) {
-      const media = block.kind === "paragraph" && onlyMedia(block.source);
+      // Un paragrafo di soli valori di cella (T53) è testo: i valori stanno
+      // in riga, come in mezzo a una frase.
+      const media = block.kind === "paragraph" && onlyMedia(block.source)
+        && !(callbacks.cellValues !== undefined && onlyCellValues(block.source));
       shape = { rendered: !INLINE_KINDS.has(block.kind) || media, grid: tableOfBlock(block) !== null };
       shapes.set(origin, shape);
     }
@@ -2678,13 +2795,14 @@ export function livePreview(
     const url = !rendered && callbacks.linkCard && block.kind === "paragraph" ? bareUrl(block.source) : null;
     const note = !rendered && !url && callbacks.linkCard?.note && block.kind === "paragraph" ? bareWikilink(block.source) : null;
     const card: CardTarget | undefined = url ? { kind: "web", url } : note ? { kind: "note", ...note } : undefined;
-    if (!card) {
+    const live = rendered && callbacks.liveCards && block.kind === "paragraph" ? liveCardEmbed(block.source) ?? undefined : undefined;
+    if (!card && !live) {
       if (!rendered) return null;
       if (policy !== "riga" && block.kind === "paragraph" && onlyImages(block.source)) return null;
     }
     const from = lineStart(source, block.from);
     const next = following ? lineStart(source, following.from) : source.length;
-    const mark = new CandidateMark(block, block.from - from, block.to - block.from, card ? false : grid, card, "");
+    const mark = new CandidateMark(block, block.from - from, block.to - block.from, card || live ? false : grid, card, live, "");
     return mark.range(from, Math.max(next, block.to));
   }
   /// La scelta di un candidato per la selezione di adesso, con le sue
@@ -2698,7 +2816,14 @@ export function livePreview(
   ): { decision: string; ranges: Range<Decoration>[] } {
     const ranges: Range<Decoration>[] = [];
     const to = from + mark.offset + mark.length;
-    const { linkCard, grid } = mark;
+    const { linkCard, grid, liveCard } = mark;
+    if (liveCard !== undefined && callbacks.liveCards) {
+      // Col cursore dentro l'embed si scrive com'è; scelta coi Blocchi la
+      // scheda resta scheda, come un diagramma (E19).
+      if (touched(state, from, to) && !choosingBlocks(state)) return { decision: "s", ranges };
+      ranges.push(Decoration.replace({ block: true, widget: new LiveCardWidget(liveCard, callbacks.liveCards) }).range(from, to));
+      return { decision: "c", ranges };
+    }
     if (linkCard !== undefined) {
       // Col cursore dentro, l'indirizzo (o il wikilink) si scrive com'è.
       if (touched(state, from, to) || !callbacks.linkCard) return { decision: "s", ranges };
@@ -2724,7 +2849,11 @@ export function livePreview(
     const mermaid = block.kind === "diagram" && /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/i.test(block.source);
     // Un diagramma scelto coi Blocchi si vede disegnato: si sceglie, non si
     // scrive (E26).
-    if (!grid && touched(state, from, to) && !(mermaid && choosingBlocks(state))) {
+    // Così le colonne (o una citazione) con dentro una scheda viva (T41): il
+    // testo si guarda solo se il blocco è toccato da una scelta di blocchi.
+    const chosenObject = (): boolean => choosingBlocks(state)
+      && (mermaid || (callbacks.liveCards !== undefined && holdsLiveCard(block.source)));
+    if (!grid && touched(state, from, to) && !chosenObject()) {
       // Un diagramma toccato si scrive come codice, e il disegno gli sta
       // accanto (C5, E26).
       if (mermaid) {
@@ -2870,7 +2999,7 @@ export function livePreview(
     const yaml = frontmatterRange(state.doc);
     for (const visible of ranges) {
       out.lines += state.doc.lineAt(visible.to).number - state.doc.lineAt(visible.from).number + 1;
-      for (const item of computeDecorations(state, active, visible.from, visible.to, forms)) {
+      for (const item of computeDecorations(state, active, visible.from, visible.to, forms, callbacks.cellValues !== undefined)) {
         if (keep && (item.from < keep.from || item.from >= keep.to)) continue;
         if (insideReplaced(replaced, item.from)) continue;
         if (yaml && item.from < yaml.to) continue;
@@ -2898,7 +3027,7 @@ export function livePreview(
           const range = decoration.range(item.from, item.to);
           out.decorations.push(range);
           if (item.kind === "hide" || item.kind === "hr" || item.kind === "checkbox" || item.kind === "math"
-            || item.kind === "image" || item.kind === "link-pill" || item.kind === "footnote-back"
+            || item.kind === "image" || item.kind === "cell-value" || item.kind === "link-pill" || item.kind === "footnote-back" || item.kind === "task-reminder"
             || item.kind === "code-header" || item.kind === "fence-close" || item.kind === "callout-type" || item.kind === "column-label") out.atomic.push(range);
           // Le righe dei recinti nascosti: la testata, e la chiusura raccolta.
           if (item.kind === "code-header") out.decorations.push(codeHeaderLine.range(state.doc.lineAt(item.from).from));
@@ -3058,6 +3187,14 @@ export function livePreview(
           opener(view);
           return true;
         }
+        // La pastiglia del promemoria apre la scelta del giorno e dell'ora.
+        const reminder = target?.closest<HTMLElement>(".cm-fub-reminder");
+        if (reminder && event.button === 0) {
+          event.preventDefault();
+          const at = view.posAtDOM(reminder);
+          void import("./reminder-picker").then((picker) => picker.openReminderPicker(view, at, reminder), () => {});
+          return true;
+        }
         // Il ↩ di una nota porta il cursore al suo primo rimando.
         const back = target?.closest<HTMLElement>(".cm-fub-footnote-back");
         if (back && event.button === 0) {
@@ -3212,6 +3349,7 @@ export function livePreview(
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
     commentEditing(forms), commentCopy(forms),
     callbacks.linkCard?.note ? noteCardGestures(callbacks) : [],
+    callbacks.liveCards ? callbacks.liveCards.extension() : [],
     noteHolds,
     diagramBlockKeys,
     callbacks.dayPage ? dayPage(callbacks.dayPage) : [],

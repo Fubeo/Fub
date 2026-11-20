@@ -305,6 +305,31 @@ describe("DocumentSurfaceRegistry", () => {
     failure.destroy();
   });
 
+  it("un documento che non si apre dice che non si apre, e il motivo tecnico resta in Dettagli (IMP-115)", () => {
+    const registry = createDocumentSurfaceRegistry({
+      onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    const parent = document.createElement("div");
+    const failure = registry.mount(
+      { formatId: null, sourceKind: "text", override: { family: "error" } },
+      {
+        paneId: "pane-docx",
+        documentId: "vuoto.docx",
+        parent,
+        errorReason: "parse failed: rich codec: not a valid zip package",
+      },
+    );
+    const alert = parent.querySelector<HTMLElement>('[role="alert"]')!;
+    expect(alert.getAttribute("aria-label")).toBe("Questo documento non si apre");
+    expect(alert.querySelector("p")?.textContent).toBe("Questo documento non si apre");
+    expect(alert.querySelector("summary")?.textContent).toBe("Dettagli");
+    expect(alert.querySelector("details")?.textContent).toContain("parse failed: rich codec");
+    expect(alert.textContent).not.toContain("[object Object]");
+    failure.destroy();
+  });
+
   it("closes a media handle when its surface closes during a pending read", async () => {
     let finishRead!: (bytes: ArrayBuffer) => void;
     const read = new Promise<ArrayBuffer>((resolve) => { finishRead = resolve; });

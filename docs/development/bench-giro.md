@@ -22,13 +22,15 @@ npm run bench:giro -- --solo=avvio --luce=light       # un gruppo, nella luce gi
 
 Il corridore è `bench/giro.mjs`; i gruppi, in ordine, sono in `bench/giro/elenco.mjs`, uno per file
 accanto che dice in testa che cosa prova. `avvio`: dal primo avvio senza vault all'albero, alla scrittura
-in Live e alle quattro modalità. `scrivere` (non al telefono): «/» e maniglia, tasto destro, palette, due
+in Live e alle tre modalità. `scrivere` (non al telefono): «/» e maniglia, tasto destro, palette, due
 riquadri, rinomina coi link, ricerca e «In entrata»; ricarica con `?formatbar=1&slash=1`, senza cui il
 finto non dà i comandi di formato. `editor` (non al telefono): una frase in un Word, formula e «Ordina» in
 un Excel, un rettangolo in un SVG, una ricerca in un PDF; `giro=editor` (`bench/giro-fixture.ts`) dà il
 PDF e un foglio che serve solo quei comandi. `lavagna` (non al telefono, `?lavagna=1`): schede, un filo,
 la penna (`pointerType: "pen"`, con la pressione) e la Gomma, visti nel `.canvas`. `guasti` (non al
-telefono): conflitti, errori, cestino, tastiera. Al primo compito che fallisce il giro si ferma, dice
+telefono): conflitti, errori, cestino, tastiera. `scrittura` (non al telefono): quarantasei compiti
+dell'editor, dal «/» alla Base, alla sbirciata e all'inglese, elencati in
+[Il giro della scrittura](giro-della-scrittura.md). Al primo compito che fallisce il giro si ferma, dice
 quale e perché, fotografa (`…-errore.png`) ed esce con 1. Foto e referto (`giro.json`) in `--out` (di
 serie `bench/.output/giro/`), porta da `FUB_BENCH_PORT` o `--port`.
 

@@ -6,8 +6,9 @@ Una riga per cartella di primo livello. La mappa completa con aree e prove è in
 
 ## Cartelle
 
-- `editors/` — un editor per formato: `base`, `core` (bootstrap e registro
-  delle superfici), `text` (CodeMirror), `rich`, `grid`, `canvas`, `spatial`,
+- `editors/` — un editor per formato: `base`, `core` (bootstrap, registro
+  delle superfici e, in `core/cards/`, l'ospite delle schede), `text`
+  (CodeMirror), `rich`, `grid`, `canvas`, `spatial`,
   `craft`, `media`.
 - `__fixtures__/` — dati di prova condivisi dai test (mirror JSON, fixture
   import/annotazioni/ink).

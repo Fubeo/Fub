@@ -96,7 +96,7 @@ Una nota Markdown sulla lavagna si scrive sul posto, con l'editor Live vero
 e sulla stessa `DocumentSession` di un riquadro (la porta è in
 [Scrivere dentro una scheda](canvas-cards.md#scrivere-dentro-una-scheda)). La
 tela chiede alla vista `edit()` prima di `enter()`; la nota
-(`cards/note.ts`) dice `true` solo per un `.md` viva, con la resa arrivata.
+(`editors/core/cards/kinds/note.ts`) dice `true` solo per un `.md` viva, con la resa arrivata.
 
 - **Entrare.** Invio con la nota scelta, o il doppio clic sulla nota (scelta,
   attiva per leggere o no). La scheda prima diventa attiva, poi la nota
@@ -106,7 +106,8 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
   fuoco va nel testo, e la tela mette `data-card-editing` sulla scheda:
   l'anello pieno e «Esc per uscire» pieno d'accento (prototipo T27). Con
   `Nota#Titolo` si scrive la nota intera, vista dal titolo. Un documento
-  Word o ODT resta in lettura (D-14 (a)). La sola lettura è della nota, non
+  Word o ODT resta in lettura (D-14 (a)): `kinds/document.ts` lo scrive solo
+  [nella nota](../product/live-cards.md#la-scheda-di-documento). La sola lettura è della nota, non
   della lavagna (T96): una lavagna che non si riscrive (il pannello, la
   chiave doppia, il prestito) non toglie la scrittura di una nota che si
   scrive, che è un altro file con la sua sessione.
@@ -137,7 +138,7 @@ tela chiede alla vista `edit()` prima di `enter()`; la nota
 - **Uscire.** Esc, un clic fuori o la scheda che si spegne: l'editor registra
   il testo e salva (`leave()`), poi si smonta e la nota rifà la resa col
   testo nuovo. Con Esc la scheda resta scelta, col fuoco. La shell monta
-  l'editor con `escapeLeaves` (`state/card-editors.ts`): in Scrittura Esc
+  l'editor con `escapeLeaves` (`editors/core/cards/editor-port.ts`): in Scrittura Esc
   sul testo non seleziona il blocco del cursore come in un riquadro, e una
   selezione di blocchi già fatta si chiude col primo Esc.
 

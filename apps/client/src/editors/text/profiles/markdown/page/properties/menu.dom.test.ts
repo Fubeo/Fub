@@ -107,6 +107,23 @@ describe("il menu della proprietà", () => {
     expect(text(view)).toBe(NOTE);
   });
 
+  it("un registro che rifiuta con un errore tipizzato lo dice con la specie, mai «[object Object]»", async () => {
+    const { view, notices } = mount(NOTE, {
+      setPropertyType: async () => {
+        throw { kind: "internal", message: "parse failed: yaml codec" };
+      },
+    });
+    keyButton(view, "luogo").click();
+    item("Tipo").click();
+    item("Data e ora").click();
+    await vi.waitFor(() => expect(notices.length).toBeGreaterThan(0));
+    const said = notices[notices.length - 1]!;
+    expect(said).toContain("luogo");
+    expect(said).toContain("si è verificato un problema imprevisto");
+    expect(said).not.toContain("[object");
+    expect(said).not.toContain("parse failed");
+  });
+
   it("senza chi scrive il registro, «Tipo» non c'è", () => {
     const { view } = mount(NOTE);
     keyButton(view, "luogo").click();

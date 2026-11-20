@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **2200 hook**, **7 stati** (984 assegnazioni su 291 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **2425 hook**, **7 stati** (1083 assegnazioni su 321 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -10,9 +10,9 @@ Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1645 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
-- **segno** (161 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (394 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **cornice** (1853 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **segno** (166 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
+- **contenuto** (406 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
@@ -63,13 +63,13 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 524 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 533 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
 base-eye-off base-filter base-grip base-group base-list base-map base-plus base-sigma base-sliders
-base-sort base-sort-asc base-sort-desc base-table base-timeline bell blocks book briefcase bulb
-calendar canvas-connect canvas-find-next canvas-find-previous canvas-finger canvas-lasso
+base-sort base-sort-asc base-sort-desc base-table base-timeline bell blocks board book briefcase
+bulb calendar canvas-connect canvas-find-next canvas-find-previous canvas-finger canvas-lasso
 canvas-ruler canvas-text caret-down check chevron chevron-up clock close cloud code collection
 command comment comment-check comment-send component compose copy copy-equation copy-html copy-image
 copy-latex copy-markdown copy-text cut dashboard diagram-down diagram-enlarge diagram-export
@@ -88,7 +88,8 @@ draw-text-strike draw-text-underline draw-tip-bar-end draw-tip-bar-start draw-ti
 draw-tip-circle-start draw-tip-diamond-end draw-tip-diamond-start draw-tip-none draw-tip-other-end
 draw-tip-other-start draw-tip-square-end draw-tip-square-start draw-tip-triangle-end
 draw-tip-triangle-start draw-tip-vee-end draw-tip-vee-start draw-tips-swap draw-to-shape draw-undo
-draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out eye flag fmt-bold
+draw-ungroup draw-unlink draw-unmark draw-zoom draw-zoom-in draw-zoom-out export-adjust export-back
+export-break export-goto export-open export-pick export-print eye flag fmt-alarm fmt-bold
 fmt-bullets fmt-callout fmt-chevron-down fmt-clear fmt-code fmt-codeblock fmt-color fmt-columns
 fmt-comment fmt-cover fmt-date fmt-details fmt-diagram fmt-embed fmt-expand fmt-footnote fmt-h1
 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight fmt-icon fmt-image fmt-indent fmt-italic

@@ -93,7 +93,7 @@ export async function renamePage(doc: string, name: string): Promise<string | nu
       return t("explorer.rename_failed", { doc: target.from, to: target.to, reason: t("explorer.destination_open") });
     }
   } catch (error) {
-    return t("explorer.rename_failed", { doc: target.from, to: target.to, reason: errorText(error) });
+    return t("explorer.rename_failed", { doc: target.from, to: target.to, reason: errorText(error, "specie") });
   }
   return null;
 }
@@ -120,7 +120,7 @@ export async function newSubpage(doc: string, name: string): Promise<string | nu
       });
     }
   } catch (error) {
-    return errorText(error);
+    return t("explorer.subpage_failed", { name: typed, reason: errorText(error) });
   }
   return null;
 }

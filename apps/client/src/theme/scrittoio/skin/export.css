@@ -1,0 +1,1856 @@
+/* ── Lo spazio «Esporta in PDF» ──────────────────────────────────────────
+   (T70, E28; il prototipo `.px`, `.px-top`, `.px-stage`, `.px-side`,
+   `.px-band`.) Prende la finestra sotto la barra del titolo: in alto la
+   barra con lo zoom, le viste, il profilo ed «Esporta»; sotto, le pagine
+   come usciranno su un fondo neutro e, a destra, le dieci sezioni che si
+   aprono e si chiudono; in fondo la banda coi numeri dell'impaginazione.
+   Sotto i 1040 px il pannello si stringe e il nome della nota sparisce;
+   sotto i 760 px (il telefono) il pannello va sotto le pagine. */
+
+.export-space {
+  position: absolute;
+  inset: var(--titlebar-h, 0px) 0 0 0;
+  z-index: calc(var(--z-drawer) + 5);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.export-space:focus {
+  outline: 0;
+}
+
+/* La barra in alto: a sinistra, come nel prototipo. */
+.export-top {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  min-width: 0;
+  padding: 0 12px 0 8px;
+  background: var(--sheet);
+  box-shadow: 0 1px 0 var(--border);
+}
+.export-spacer {
+  flex: none;
+}
+.export-icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+.export-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.export-icon-small,
+.export-icon-small svg {
+  width: 14px;
+  height: 14px;
+}
+.export-back,
+.export-profile,
+.export-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.export-back {
+  flex: none;
+  padding: 0 10px 0 6px;
+}
+.export-print {
+  flex: none;
+  padding: 0 10px 0 8px;
+}
+.export-back:hover,
+.export-profile:hover,
+.export-print:hover,
+.export-zoom-button:hover {
+  background: var(--overlay-hover);
+}
+.export-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 10px;
+  box-shadow: -1px 0 0 var(--border);
+}
+.export-title-name {
+  font-weight: 650;
+  white-space: nowrap;
+}
+.export-title-note {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-zoom {
+  display: flex;
+  flex: none;
+  align-items: center;
+  color: var(--muted);
+}
+.export-zoom-button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: 15px/1 var(--font-ui);
+  cursor: pointer;
+}
+.export-zoom-value {
+  min-width: 44px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.export-segments {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sheet-2);
+}
+.export-segment {
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 12.5px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.export-segment:hover {
+  color: var(--text);
+}
+.export-segment[aria-pressed="true"] {
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: var(--shadow-raise);
+}
+.export-profile {
+  min-width: 0;
+  max-width: 220px;
+  padding: 0 8px 0 10px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.export-profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-go {
+  flex: none;
+  height: 30px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: 600 13px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s, transform 0.1s;
+}
+/* Il prototipo schiarisce l'accento (`filter: brightness`), che la pelle non
+   ammette: qui il passaggio è quello dei pulsanti primari di Fub. */
+.export-go:hover {
+  background: var(--accent-soft);
+}
+.export-go:active {
+  transform: scale(0.98);
+}
+.export-space :is(button, input, [tabindex="0"]):focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* Le pagine, su un fondo neutro, e il pannello a destra. */
+.export-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.export-stage {
+  flex: 1;
+  min-width: 0;
+  padding: 24px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.export-doc {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  gap: 20px;
+}
+.export-slot {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--doc-bg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.07), 0 2px 6px rgba(0, 0, 0, 0.08), 0 16px 36px -16px rgba(0, 0, 0, 0.32);
+}
+.export-doc[data-view="tutte"] .export-slot {
+  cursor: pointer;
+}
+.export-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  transform-origin: 0 0;
+  user-select: none;
+}
+.export-page-body {
+  position: absolute;
+}
+.export-fascia {
+  position: absolute;
+  overflow: hidden;
+}
+/* Il clic su un blocco della pagina (T76; il prototipo `.px-it`): il blocco
+   sotto il puntatore si contorna, quello del menu aperto di più. Il contorno
+   sta fuori dalla fascia, che taglia solo ciò che ha dentro. */
+.export-doc:not([data-view="tutte"]) .export-fascia[data-block] {
+  border-radius: 2px;
+  cursor: pointer;
+}
+.export-doc:not([data-view="tutte"]) .export-fascia[data-block]:hover {
+  outline: 1.5px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 3px;
+}
+.export-doc:not([data-view="tutte"]) .export-fascia[data-block].is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.export-fascia-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+/* Il blocco copiato porta i contenitori della resa: la pagina di stampa non
+   ha più i suoi margini, il primo blocco non ha spazio sopra. */
+.export-fascia-content .print-page {
+  margin: 0;
+  padding: 0;
+}
+.export-fit {
+  position: absolute;
+  color: var(--muted);
+  font: 9px var(--font-ui);
+  white-space: nowrap;
+}
+
+.export-side {
+  flex: none;
+  width: 322px;
+  overflow-y: auto;
+  background: var(--sheet);
+  box-shadow: -1px 0 0 var(--border);
+  scrollbar-width: thin;
+}
+.export-section {
+  border-bottom: 1px solid var(--border);
+}
+.export-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: 13px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.export-section-head:hover {
+  background: var(--overlay-hover);
+}
+.export-section-name {
+  flex: none;
+  font-weight: 650;
+}
+.export-section-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-section-chevron {
+  color: var(--muted);
+  transition: transform 0.18s;
+}
+.export-section.is-open .export-section-chevron {
+  transform: rotate(180deg);
+}
+.export-section-body {
+  display: grid;
+  gap: 10px;
+  padding: 2px 14px 15px;
+}
+.export-section-body[hidden] {
+  display: none;
+}
+.export-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* La sezione Diagrammi (T75; il prototipo `.px-dgs`, `.px-cols`, `.px-tog`).
+   I sei stili in tre colonne, ognuno con la miniatura nei colori che lo
+   disegnano (`--export-dg-*`, da `sections/diagrams.ts`); Armonia sta sulla
+   carta della pagina. */
+.export-dg {
+  display: grid;
+  gap: 10px;
+}
+.export-dg-styles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 8px;
+}
+.export-dg-style {
+  display: grid;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: 11.5px var(--font-ui);
+  cursor: pointer;
+}
+.export-dg-style[aria-pressed="true"] {
+  color: var(--text);
+  font-weight: 600;
+}
+.export-dg-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 42px;
+  border-radius: 7px;
+  background: var(--export-dg-paper, var(--doc-bg));
+  box-shadow: 0 0 0 1px var(--border-strong);
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.14s;
+}
+.export-dg-swatch i {
+  display: block;
+  border: 1.3px solid;
+}
+.export-dg-swatch-node {
+  width: 17px;
+  height: 12px;
+  border-radius: 3px;
+  border-color: var(--export-dg-node-border, var(--border-strong));
+  background: var(--export-dg-node, var(--sheet-2));
+}
+.export-dg-swatch-choice {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  border-color: var(--export-dg-choice-border, var(--accent));
+  background: var(--export-dg-choice, var(--accent-wash));
+  transform: rotate(45deg);
+}
+.export-dg-swatch-pill {
+  width: 17px;
+  height: 12px;
+  border-radius: 6px;
+  border-color: var(--export-dg-pill-border, var(--accent));
+  background: var(--export-dg-pill, var(--accent));
+}
+.export-dg-style:hover .export-dg-swatch {
+  transform: translateY(-2px);
+}
+.export-dg-style[aria-pressed="true"] .export-dg-swatch {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.export-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-soft);
+  font: 12px/1.4 var(--font-ui);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.export-link-inline {
+  display: inline;
+  font-size: inherit;
+}
+
+/* I quattro colori dati a mano: una riga per parte, la tavolozza sotto la
+   riga aperta. */
+.export-dg-colors {
+  display: grid;
+  gap: 1px;
+  margin: 0 -6px;
+}
+.export-dg-color {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-radius: 8px;
+  transition: background 0.14s;
+}
+.export-dg-color.is-open {
+  background: var(--sheet-2);
+}
+.export-dg-color-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.export-dg-color-head:hover,
+.export-dg-reset:hover {
+  background: var(--overlay-hover);
+}
+.export-dg-color-head span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-dg-color-head em {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 600;
+}
+.export-dg-color-head code {
+  padding: 0;
+  background: none;
+  color: var(--muted);
+  font: 11px var(--font-mono);
+}
+.export-dg-chip {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.45);
+  transition: background 0.14s;
+}
+.export-dg-chip.is-none {
+  background: repeating-linear-gradient(45deg, var(--border-strong) 0 2px, transparent 2px 4px);
+}
+.export-dg-reset {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.export-dg-reset svg,
+.export-dg-pick svg {
+  width: 14px;
+  height: 14px;
+}
+.export-dg-palette {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 10px 31px;
+}
+.export-dg-ink {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.42);
+  cursor: pointer;
+  transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.export-dg-ink:hover {
+  transform: scale(1.18);
+}
+.export-dg-ink[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--sheet-2), 0 0 0 4px var(--accent);
+}
+.export-dg-pick {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--muted);
+  cursor: pointer;
+}
+.export-dg-pick input {
+  position: absolute;
+  inset: -6px;
+  width: 36px;
+  height: 36px;
+  opacity: 0;
+  cursor: pointer;
+}
+.export-dg-pick:focus-within {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+}
+.export-dg-hex {
+  width: 72px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  color: var(--text);
+  font: 11.5px var(--font-mono);
+}
+
+/* Il fondo del diagramma: un interruttore. */
+.export-dg-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.export-dg-toggle small {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.export-dg-toggle i {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border-strong);
+  transition: background 0.16s;
+}
+.export-dg-toggle i::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  content: "";
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.export-dg-toggle[aria-checked="true"] i {
+  background: var(--accent);
+}
+.export-dg-toggle[aria-checked="true"] i::after {
+  transform: translateX(12px);
+}
+
+/* Sulle pagine: una formula o un diagramma rimpiccioliti per starci lo
+   dicono sotto, piccolo, come un blocco troppo alto (`.export-fit`). La riga
+   sta nel blocco prima della misura: l'impaginatore la conta. */
+.export-fit-note {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font: 9px/1.2 var(--font-ui);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* La banda in fondo. */
+.export-band {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  height: 30px;
+  padding: 0 14px;
+  background: var(--sheet);
+  box-shadow: 0 -1px 0 var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.export-band-info {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+.export-band-pages {
+  color: var(--text);
+  font-weight: 600;
+}
+.export-band-ms {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.export-band-hint {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+}
+.export-band-hint[hidden] {
+  display: none;
+}
+
+/* ── Le pagine coi colori e i caratteri del tema di stampa (T71) ─────────
+   Le variabili `--print-*` le scrive lo spazio (`export/themes.ts`) sulla
+   resa che si misura (`.export-measure`) e sulle pagine (`.export-doc`, e su
+   ogni pagina che va alla stampa): queste regole valgono per tutte e due,
+   così la copia veste come la resa misurata. I colori dell'app che la
+   Lettura usa (`--accent`, `--border`, `--sheet-2`) li sostituisce il tema
+   di stampa: le pagine restano chiare anche al buio. */
+.export-page {
+  filter: var(--print-filter, none);
+}
+:is(.export-measure, .export-page) .print-page > h1,
+:is(.export-measure, .export-page) .print-page .markdown-rendered :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--doc-heading);
+  font-family: var(--print-font-headings, inherit);
+  text-align: var(--print-heading-align, start);
+}
+:is(.export-measure, .export-page) .print-page > h1,
+:is(.export-measure, .export-page) .print-page .markdown-rendered h1 {
+  font-size: var(--print-h1, 2.22em);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered h2 {
+  font-size: var(--print-h2, 1.39em);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered h3 {
+  font-size: var(--print-h3, 1.22em);
+}
+/* Il numero di un titolo, nell'accento: c'è sempre, si vede solo coi titoli
+   numerati. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered [data-print-number]::before {
+  content: attr(data-print-number);
+  display: var(--print-heading-numbers, none);
+  margin-right: 0.55em;
+  color: var(--print-accent);
+  font-variant-numeric: tabular-nums;
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered p {
+  text-align: var(--print-text-align, start);
+}
+/* La sillabazione (T72): nel testo sì, nel codice e nelle tabelle no, come
+   nel prototipo. Vale sulla resa misurata e sulle copie. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered {
+  hyphens: var(--print-hyphens, manual);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered :is(pre, code, table) {
+  hyphens: manual;
+}
+/* Col rientro i paragrafi si toccano: il margine sopra del secondo annulla
+   quello sotto del primo, e la prima riga rientra. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered > p + p {
+  margin-top: calc(var(--print-paragraph-pull, 0) * -1 * var(--text-reading) * var(--leading-relaxed));
+  text-indent: var(--print-indent, 0);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered blockquote {
+  border-left-color: var(--print-accent);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered .callout {
+  background: var(--print-callout);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered pre {
+  box-shadow: inset 0 0 0 1px var(--print-code-edge, transparent);
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered th {
+  background: var(--print-table-head);
+}
+
+/* Dove sta un colore: il passaggio su una riga dei Colori contorna sulle
+   pagine i punti che lo usano (il prototipo `.px-doc[data-hl]`). Ogni blocco
+   sta in una finestra alta quanto lui (`.export-fascia`), che taglia ciò che
+   esce: il contorno di un blocco sta dentro il suo bordo, quello di un pezzo
+   di riga appena fuori. */
+.export-doc[data-highlight="carta"] .export-slot {
+  box-shadow: 0 0 0 2px var(--focus-ring), 0 16px 36px -16px rgba(0, 0, 0, 0.32);
+}
+.export-doc[data-highlight="testo"] .export-page .markdown-rendered :is(p, li),
+.export-doc[data-highlight="titoli"] .export-page .print-page > h1,
+.export-doc[data-highlight="titoli"] .export-page .markdown-rendered :is(h1, h2, h3, h4, h5, h6),
+.export-doc[data-highlight="accento"] .export-page .markdown-rendered :is(blockquote, .callout-title),
+.export-doc[data-highlight="testo-secondario"] .export-page .markdown-rendered :is(blockquote, figcaption),
+.export-doc[data-highlight="linee"] .export-page .markdown-rendered :is(hr, table),
+.export-doc[data-highlight="riquadri"] .export-page .markdown-rendered .callout,
+.export-doc[data-highlight="codice"] .export-page .markdown-rendered pre,
+.export-doc[data-highlight="intestazioni-tabella"] .export-page .markdown-rendered th {
+  border-radius: 2px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.export-doc[data-highlight="accento"] .export-page .markdown-rendered [data-print-number]::before,
+.export-doc[data-highlight="link"] .export-page .markdown-rendered a,
+.export-doc[data-highlight="testo-secondario"] .export-page .markdown-rendered del,
+.export-doc[data-highlight="evidenziato"] .export-page .markdown-rendered mark,
+.export-doc[data-highlight="codice"] .export-page .markdown-rendered :not(pre) > code {
+  border-radius: 2px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ── La sezione «Tema» (T71; il prototipo `.px-themes`, `.px-th`) ─────── */
+.export-theme-section,
+.export-color-section {
+  display: grid;
+  gap: 10px;
+}
+.export-themes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px 8px;
+}
+.export-theme {
+  display: grid;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: 11.5px var(--font-ui);
+  text-align: center;
+  cursor: pointer;
+}
+/* La paginetta del tema, nei colori del tema (variabili scritte dalla
+   sezione): la carta, «Aa» nel carattere dei titoli, tre righe di testo, un
+   riquadro col filo d'accento. */
+.export-theme-preview {
+  position: relative;
+  display: block;
+  aspect-ratio: 5 / 6.3;
+  overflow: hidden;
+  padding: 8px 8px 0;
+  border-radius: 6px;
+  background: var(--export-theme-paper);
+  color: var(--export-theme-ink);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  text-align: left;
+  transition: box-shadow 0.14s, transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.export-theme-heading {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--export-theme-heading);
+  font-family: var(--export-theme-font);
+  font-size: 15px;
+  line-height: 1;
+}
+.export-theme-line {
+  display: block;
+  height: 2px;
+  margin-bottom: 3px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.45;
+}
+.export-theme-line-short {
+  width: 60%;
+}
+.export-theme-box {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--export-theme-fill);
+  box-shadow: inset 2.5px 0 0 var(--export-theme-accent), inset 0 0 0 0.5px var(--export-theme-rule);
+}
+.export-theme:hover .export-theme-preview {
+  box-shadow: 0 0 0 1px var(--muted), 0 8px 16px -8px rgba(0, 0, 0, 0.45);
+  transform: translateY(-2px);
+}
+.export-theme[aria-pressed="true"] {
+  color: var(--text);
+  font-weight: 600;
+}
+.export-theme[aria-pressed="true"] .export-theme-preview {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.export-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-soft);
+  font: 12px/1.4 var(--font-ui);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* ── La sezione «Colori» (T71; il prototipo `.px-cols`, `.px-col`) ────── */
+.export-colors {
+  display: grid;
+  gap: 1px;
+  margin: 0 -6px;
+}
+.export-color {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-radius: 8px;
+  transition: background 0.14s;
+}
+.export-color.is-open {
+  background: var(--sheet-2);
+}
+.export-color-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.export-color-head:hover,
+.export-color-reset:hover {
+  background: var(--overlay-hover);
+}
+.export-color-chip {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--export-color);
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.45);
+  transition: background 0.14s;
+}
+.export-color-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-color-own {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 600;
+}
+.export-color-code {
+  padding: 0;
+  background: none;
+  color: var(--muted);
+  font: 11px var(--font-mono);
+}
+.export-color-reset {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.export-palette {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 10px 31px;
+}
+.export-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--export-color);
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.42);
+  cursor: pointer;
+  transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.export-swatch:hover {
+  transform: scale(1.18);
+}
+.export-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--sheet-2), 0 0 0 4px var(--accent);
+}
+.export-pick {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--sheet);
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+}
+.export-pick-input {
+  position: absolute;
+  inset: -6px;
+  width: 36px;
+  height: 36px;
+  opacity: 0;
+  cursor: pointer;
+}
+.export-pick:focus-within {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.export-hex {
+  width: 72px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--text);
+  font: 11.5px var(--font-mono);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.export-hex[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.export-hex-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.export-hex-error[hidden] {
+  display: none;
+}
+.export-contrast {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.export-contrast b {
+  color: var(--text);
+  font-weight: 600;
+}
+.export-contrast.is-low,
+.export-contrast.is-low b {
+  color: var(--danger);
+}
+/* Gli interruttori (il prototipo `.px-tog`). */
+.export-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.export-toggle-hint {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.export-toggle-knob {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border-strong);
+  transition: background 0.16s;
+}
+.export-toggle-knob::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.export-toggle[aria-checked="true"] .export-toggle-knob {
+  background: var(--accent);
+}
+.export-toggle[aria-checked="true"] .export-toggle-knob::after {
+  transform: translateX(12px);
+}
+
+/* ── Testata e piè, frontespizio, indice (T73; il prototipo `.px-hfp`,
+   `.px-hfs`, `.px-hd`, `.px-ft`, `.pcover`, `.ptoc`, passo 29) ───────────
+   Nel pannello: i sei posti come sulla pagina, tre sopra e tre sotto una
+   paginetta finta; il campo del testo tuo; i tre interruttori; «Fin dove»
+   dell'indice. Sulle pagine: la testata nel margine alto e il piè nel
+   margine basso, coi caratteri dei titoli e il testo secondario del tema di
+   stampa; il frontespizio col filo d'accento sul bordo; l'indice coi puntini
+   e i numeri veri. Le misure sono quelle del prototipo, in em del corpo
+   (`--text-reading`), così seguono i caratteri della pagina. */
+.export-header-section,
+.export-front-section {
+  display: grid;
+  gap: 10px;
+}
+.export-header-grid {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 9px;
+  background: var(--sheet-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.export-header-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.export-slot-choice {
+  height: 26px;
+  padding: 0 5px;
+  overflow: hidden;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 11.5px var(--font-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.export-slot-choice:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.export-slot-choice.is-set {
+  border: 0;
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: var(--shadow-raise);
+}
+.export-header-lines {
+  display: grid;
+  gap: 5px;
+  padding: 5px 22px;
+}
+.export-header-line {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.export-header-line-short {
+  width: 55%;
+}
+/* Una riga con la scritta a sinistra e il controllo a destra (il prototipo
+   `.px-row`, `.px-in`, `.px-seg`). */
+.export-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+.export-row-label {
+  flex: none;
+  color: var(--text);
+}
+.export-input {
+  width: 150px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--text);
+  font: 12.5px var(--font-ui);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.export-choices {
+  display: inline-flex;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--sheet-2);
+}
+.export-choice {
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: 12.5px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.export-choice:hover {
+  color: var(--text);
+}
+.export-choice[aria-checked="true"] {
+  background: var(--sheet);
+  color: var(--text);
+  box-shadow: var(--shadow-raise);
+}
+
+/* La testata e il piè sulla pagina: tre celle, al centro quella di mezzo. */
+.export-header,
+.export-footer {
+  position: absolute;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1em;
+  min-height: 1.25em;
+  color: var(--muted);
+  font: calc(var(--text-reading) * 0.74) / 1.25 var(--print-font-headings, var(--font-ui));
+  font-variant-numeric: tabular-nums;
+}
+.export-header.has-rule {
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--doc-rule);
+}
+.export-header-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-header-cell:nth-child(2) {
+  max-width: 60ch;
+  text-align: center;
+}
+.export-header-cell:nth-child(3) {
+  text-align: right;
+}
+
+/* Il frontespizio. */
+.export-cover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  font-size: var(--text-reading);
+}
+.export-cover-band {
+  position: absolute;
+  width: 9mm;
+  background: var(--print-accent);
+}
+.export-cover-icon {
+  margin-bottom: 0.35em;
+  font-size: 3.2em;
+  line-height: 1;
+}
+.export-cover-icon[data-page-figure] svg {
+  width: 1em;
+  height: 1em;
+}
+.export-cover-title {
+  margin: 0 0 0.45em;
+  color: var(--doc-heading);
+  font: 700 3.1em / 1.06 var(--print-font-headings, var(--font-ui));
+  letter-spacing: -0.022em;
+}
+.export-cover-properties {
+  margin: 0;
+  color: var(--muted);
+  font: 1em / 1.5 var(--print-font-headings, var(--font-ui));
+}
+.export-cover-foot {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  gap: 0.15em;
+  color: var(--muted);
+  font: 0.9em / 1.4 var(--print-font-headings, var(--font-ui));
+}
+.export-cover-foot b {
+  color: var(--doc-fg);
+  font-weight: 650;
+}
+
+/* L'indice. */
+.export-toc {
+  font-size: var(--text-reading);
+}
+.export-toc-title {
+  margin: 0.6em 0 0.7em;
+  color: var(--doc-heading);
+  font: 650 var(--print-h2, 1.39em) / 1.25 var(--print-font-headings, var(--font-ui));
+}
+.export-toc-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  padding: 0.24em 0;
+  color: var(--doc-fg);
+  font: 1em / 1.4 var(--print-font-headings, var(--font-ui));
+}
+.export-toc-row[data-depth="1"],
+.export-toc-row[data-depth="2"] {
+  padding-left: 1.5em;
+  color: var(--muted);
+  font-size: 0.92em;
+}
+.export-toc-name {
+  min-width: 0;
+}
+.export-toc-number {
+  display: var(--print-heading-numbers, none);
+  margin-right: 0.6em;
+  color: var(--print-accent);
+  font-style: normal;
+}
+.export-toc-dots {
+  flex: 1;
+  min-width: 1em;
+  border-bottom: 1px dotted var(--muted);
+  opacity: 0.7;
+  transform: translateY(-0.24em);
+}
+.export-toc-page {
+  flex: none;
+  min-width: 1.2em;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+/* Dove sta un colore, anche fuori dalla nota. */
+.export-doc[data-highlight="titoli"] :is(.export-toc-title, .export-cover-title),
+.export-doc[data-highlight="accento"] :is(.export-cover-band, .export-toc-number),
+.export-doc[data-highlight="linee"] .export-header.has-rule,
+.export-doc[data-highlight="testo-secondario"] :is(.export-header, .export-footer, .export-cover-properties),
+.export-doc[data-highlight="testo"] .export-toc-row {
+  border-radius: 2px;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .export-slot-choice,
+  .export-choice {
+    transition: none;
+  }
+}
+:root[data-motion="reduced"] :is(.export-slot-choice, .export-choice) {
+  transition: none;
+}
+
+/* ── Le sezioni «Contenuto» e «Interruzioni» (T74; il prototipo, passo 29) ── */
+.export-content-section {
+  display: grid;
+  gap: 10px;
+}
+/* Una riga che non sta nel pannello (le tre scelte delle schede vive) porta
+   le scelte sotto il nome, invece di allargare il pannello. */
+.export-content-section .export-row {
+  flex-wrap: wrap;
+}
+
+/* ── Il contenuto sulle pagine (T74; il prototipo `.pprops`, `.pcm`,
+   `.pnote`, `.pnotes`, `.ptx-s`, `.plink`, `.ptab`, `.pcode.num`) ─────────
+   Valgono sulla resa che si misura e sulle pagine, come i colori del tema
+   di stampa: la copia veste come ciò che si è misurato. */
+
+/* Le proprietà sotto il titolo: una riga che va a capo, fra due fili. */
+:is(.export-measure, .export-page) .print-page > .export-properties {
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+  padding: 0.6em 0;
+  border-block: 1px solid var(--doc-rule);
+  font: 0.84em/1.4 var(--print-font-headings, var(--font-ui));
+}
+:is(.export-measure, .export-page) .export-properties dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em 1.6em;
+  margin: 0;
+}
+:is(.export-measure, .export-page) .export-properties dl > div {
+  display: flex;
+  gap: 0.5em;
+}
+:is(.export-measure, .export-page) .export-properties dt {
+  color: var(--muted);
+}
+:is(.export-measure, .export-page) .export-properties dd {
+  margin: 0;
+  color: var(--doc-fg);
+  font-weight: 600;
+}
+
+/* I link: colorati senza filo, sottolineati col filo pieno, o come il testo.
+   Restano link nel PDF. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered a {
+  color: var(--print-link-color, var(--doc-link));
+  text-decoration-line: var(--print-link-line, none);
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.16em;
+}
+
+/* Le tabelle a linee, a righe alterne, a griglia: i fili restano larghi uguali
+   (cambia il colore), così le misure non cambiano. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered :is(th, td) {
+  border-right-color: var(--print-table-vrule, var(--doc-rule-soft));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered td {
+  border-bottom-color: var(--print-table-hrule, var(--doc-rule-soft));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered tr > td:first-child {
+  border-left-color: var(--print-table-frame, var(--doc-rule));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered tr > td:last-child {
+  border-right-color: var(--print-table-frame, var(--doc-rule));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered table > :last-child > tr:last-child > td {
+  border-bottom-color: var(--print-table-end, var(--doc-rule));
+}
+:is(.export-measure, .export-page) .print-page .markdown-rendered tbody > tr:nth-child(even) > td {
+  background: var(--print-table-stripe, transparent);
+}
+
+/* Il codice numerato: lo spazio dei numeri a sinistra, i numeri fuori dal
+   testo, all'altezza della riga del sorgente. */
+:is(.export-measure, .export-page) .print-page .markdown-rendered pre[data-print-numbered] {
+  padding-left: calc(var(--space-6) + var(--print-code-digits, 2) * 1ch + 1em);
+}
+:is(.export-measure, .export-page) .export-code-numbers {
+  position: absolute;
+  top: 0;
+  left: var(--space-6);
+  width: calc(var(--print-code-digits, 2) * 1ch);
+  color: var(--muted);
+  line-height: normal;
+  text-align: right;
+  user-select: none;
+}
+:is(.export-measure, .export-page) .export-code-number {
+  position: absolute;
+  top: calc(var(--space-5) + var(--print-code-line, 0) * var(--leading-normal) * 1em);
+  right: 0;
+}
+
+/* La provenienza di una nota riportata, sotto il suo testo. */
+:is(.export-measure, .export-page) .export-source {
+  display: block;
+  margin-top: 0.35em;
+  color: var(--muted);
+  font: 0.76em/1.4 var(--print-font-headings, var(--font-ui));
+}
+:is(.export-measure, .export-page) .embed[data-print-told]::after {
+  content: none;
+}
+
+/* Le schede vive: il nome sotto l'anteprima, o il nome solo, coi link. */
+:is(.export-measure, .export-page) .export-card-caption {
+  display: block;
+  padding-top: 0.55em;
+  color: var(--muted);
+  font: 0.76em/1.4 var(--print-font-headings, var(--font-ui));
+  text-align: center;
+}
+:is(.export-measure, .export-page) .export-card-name {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45em;
+  align-items: center;
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+  color: var(--print-link-color, var(--doc-link));
+  font: 0.92em/1.4 var(--print-font-headings, var(--font-ui));
+}
+:is(.export-measure, .export-page) .export-card-name svg {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:is(.export-measure, .export-page) .export-card-note {
+  color: var(--muted);
+  font-size: 0.86em;
+}
+:is(.export-measure, .export-page) .export-appendix-page {
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+  text-align: center;
+}
+:is(.export-measure, .export-page) .export-appendix-page canvas {
+  display: block;
+  margin: 0 auto;
+  box-shadow: 0 0 0 1px var(--doc-rule);
+}
+:is(.export-measure, .export-page) .export-appendix-page figcaption,
+:is(.export-measure, .export-page) .export-appendix-more,
+:is(.export-measure, .export-page) .export-base-caption {
+  margin: 0;
+  padding-top: 0.55em;
+  color: var(--muted);
+  font: 0.76em/1.4 var(--print-font-headings, var(--font-ui));
+  text-align: center;
+}
+
+/* Una formula sulla pagina non scorre: la carta non ha barre. Ciò che non
+   sta nella colonna lo rimpicciolisce l'impaginazione (`vectors.ts`), il
+   resto si taglia, e il blocco non è una fermata del Tab senza niente. */
+.export-page .markdown-rendered .math-block {
+  overflow-x: hidden;
+}
+
+/* Una Base sulla carta: la tabella intera, senza la barra. */
+:is(.export-measure, .export-page) .print-page .base-surface {
+  border: 0;
+  box-shadow: none;
+}
+
+/* I commenti: il numero in apice nell'accento dopo il passo, e la nota. */
+:is(.export-measure, .export-page) .export-comment-mark {
+  margin-left: 0.1em;
+  color: var(--print-accent, var(--accent));
+  font: 600 0.7em var(--print-font-headings, var(--font-ui));
+}
+.export-comments {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+:is(.export-measure, .export-page) .export-comment {
+  box-sizing: border-box;
+  color: var(--muted);
+  font-family: var(--print-font-headings, var(--font-ui));
+  text-align: left;
+  hyphens: manual;
+}
+:is(.export-measure, .export-page) .export-comment sup {
+  margin-right: 0.25em;
+  color: var(--print-accent, var(--accent));
+  font: 600 0.7em var(--print-font-headings, var(--font-ui));
+}
+:is(.export-measure, .export-page) .export-comment b {
+  color: var(--doc-fg);
+  font-weight: 650;
+}
+/* Il conto delle risposte, piccolo: nel tono della nota, senza velarlo, che
+   sulla carta bianca scenderebbe sotto i 4,5:1. */
+:is(.export-measure, .export-page) .export-comment i {
+  font-style: normal;
+}
+/* Nel margine: piccola, col filo dell'evidenziato a sinistra. */
+:is(.export-measure, .export-page) .export-comment[data-shape="margine"] {
+  padding-left: 0.6em;
+  border-left: 0.2em solid var(--doc-highlight, var(--accent-wash));
+  font-size: calc(var(--text-reading) * 0.66);
+  line-height: 1.36;
+}
+/* In fondo: ogni messaggio della discussione, a corpo quasi pieno. */
+:is(.export-measure, .export-page) .export-comment[data-shape="fondo"] {
+  color: var(--doc-fg);
+  font-size: calc(var(--text-reading) * 0.88);
+  line-height: 1.45;
+}
+:is(.export-measure, .export-page) .export-comments-title {
+  margin: 0 0 0.6em;
+  color: var(--doc-heading);
+  font: 650 var(--print-h2, 1.39em) / 1.25 var(--print-font-headings, var(--font-ui));
+}
+.export-comment-placed {
+  position: absolute;
+  transform-origin: 0 0;
+}
+
+/* ── Le sezioni Caratteri e Pagina (T72) ─────────────────────────────────
+   Le righe col nome e il controllo (il prototipo `.px-row`), i caratteri
+   come pulsanti scritti nel loro carattere (`.px-fonts`), i cursori
+   (`.px-rng`), i millimetri (`.px-mm`). Le righe, le scelte fra pochi
+   valori e il campo della filigrana sono quelli comuni delle sezioni
+   (`.export-row`, `.export-choices`, `.export-input`, più sotto). */
+.export-row-stacked {
+  display: grid;
+  gap: 5px;
+  justify-content: stretch;
+}
+.export-fonts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.export-font {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+  transition: box-shadow 0.14s, background 0.14s;
+}
+.export-font:hover {
+  background: var(--overlay-hover);
+}
+.export-font[aria-checked="true"] {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+/* Un carattere del vault che la licenza non lascia incorporare: si vede,
+   tratteggiato, e sceglierlo dice perché non si può. */
+.export-font.is-closed {
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--border);
+  text-decoration: line-through;
+  text-decoration-color: var(--outline);
+}
+.export-fonts-status {
+  display: grid;
+  gap: 4px;
+}
+.export-fonts-status[hidden] {
+  display: none;
+}
+.export-fonts-warning {
+  color: var(--warning);
+}
+.export-range {
+  display: grid;
+  grid-template-columns: 104px 1fr 46px;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  color: var(--text);
+}
+.export-range input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.export-range output {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.export-mm {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.export-mm-paper {
+  grid-template-columns: repeat(2, 1fr);
+}
+.export-mm-field {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.export-mm-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 24px 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--text);
+  font: 12.5px var(--font-ui);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  appearance: textfield;
+}
+.export-mm-input::-webkit-inner-spin-button {
+  appearance: none;
+}
+.export-mm-input[aria-invalid="true"] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.export-mm-field em {
+  position: absolute;
+  right: 6px;
+  bottom: 7px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-style: normal;
+  pointer-events: none;
+}
+.export-page-error {
+  color: var(--danger);
+}
+.export-page-error[hidden] {
+  display: none;
+}
+
+/* Le guide dei margini (`.px-g`): una maniglia di 12 px sul bordo del testo,
+   un filo nell'accento al centro. Si vedono appena con la Pagina aperta,
+   piene al passaggio e mentre si trascina; nella vista «tutte» non ci sono. */
+.export-guide {
+  position: absolute;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.14s;
+}
+.export-guide::after {
+  content: "";
+  position: absolute;
+  background: var(--accent);
+}
+.export-guide[data-guide="sopra"],
+.export-guide[data-guide="sotto"] {
+  left: 0;
+  right: 0;
+  height: 12px;
+  cursor: row-resize;
+}
+.export-guide[data-guide="sopra"] {
+  top: calc(var(--export-margin-top) - 6px);
+}
+.export-guide[data-guide="sotto"] {
+  bottom: calc(var(--export-margin-bottom) - 6px);
+}
+.export-guide[data-guide="sopra"]::after,
+.export-guide[data-guide="sotto"]::after {
+  top: 5.5px;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.export-guide[data-guide="sinistra"],
+.export-guide[data-guide="destra"] {
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: col-resize;
+}
+.export-guide[data-guide="sinistra"] {
+  left: calc(var(--export-margin-left) - 6px);
+}
+.export-guide[data-guide="destra"] {
+  right: calc(var(--export-margin-right) - 6px);
+}
+.export-guide[data-guide="sinistra"]::after,
+.export-guide[data-guide="destra"]::after {
+  top: 0;
+  bottom: 0;
+  left: 5.5px;
+  width: 1px;
+}
+.export-doc[data-guides="true"] .export-guide {
+  opacity: 0.4;
+}
+.export-guide:hover,
+.export-space.is-dragging .export-guide {
+  opacity: 1;
+}
+.export-space.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+.export-doc[data-view="tutte"] .export-guide {
+  display: none;
+}
+.export-guide-tip {
+  position: fixed;
+  z-index: 5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--sheet);
+  font: 600 11.5px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.export-guide-tip[hidden] {
+  display: none;
+}
+/* La filigrana (`.px-wm`): in diagonale, sotto il testo, nel carattere dei
+   titoli e nel colore del testo appena accennato. */
+.export-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  color: var(--doc-fg);
+  font: 800 150px/1 var(--print-font-headings, var(--font-reading));
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  opacity: 0.055;
+  transform: rotate(-32deg);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-font,
+  .export-guide,
+  .export-segment,
+  .export-go,
+  .export-section-chevron,
+  .export-theme-preview,
+  .export-color,
+  .export-color-chip,
+  .export-swatch,
+  .export-toggle-knob,
+  .export-toggle-knob::after,
+  .export-dg-swatch,
+  .export-dg-ink,
+  .export-dg-toggle i,
+  .export-dg-toggle i::after {
+    transition: none;
+  }
+}
+:root[data-motion="reduced"] :is(.export-font, .export-guide, .export-segment, .export-go, .export-section-chevron, .export-theme-preview, .export-color, .export-color-chip, .export-swatch, .export-toggle-knob, .export-toggle-knob::after, .export-dg-swatch, .export-dg-ink, .export-dg-toggle i, .export-dg-toggle i::after) {
+  transition: none;
+}
+
+@media (max-width: 1040px) {
+  .export-band-hint,
+  .export-title-note {
+    display: none;
+  }
+  .export-side {
+    width: 300px;
+  }
+}
+
+/* Il telefono, e una finestra stretta: il pannello sotto le pagine. */
+@media (max-width: 760px) {
+  .export-main {
+    flex-direction: column;
+  }
+  .export-side {
+    width: auto;
+    height: 46%;
+    box-shadow: 0 -1px 0 var(--border);
+  }
+  .export-zoom,
+  .export-views,
+  .export-back-label,
+  .export-print-label,
+  .export-band-info > :nth-child(n + 3) {
+    display: none;
+  }
+  .export-stage {
+    padding: 14px;
+  }
+  .export-profile {
+    max-width: 120px;
+  }
+  .export-title {
+    padding-left: 0;
+    box-shadow: none;
+  }
+  /* Col pannello largo quanto la finestra, otto temi in una riga: quattro
+     paginette larghe un quarto sarebbero alte più delle pagine vere. */
+  .export-themes {
+    grid-template-columns: repeat(8, 1fr);
+  }
+}
+/* Sul telefono tornano quattro per riga. */
+@media (max-width: 520px) {
+  .export-themes {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

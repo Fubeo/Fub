@@ -543,6 +543,8 @@
   margin: calc(-1 * var(--space-3)) 0 0;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  /* Un sommario di più righe (gli avvisi di una copia) va a capo dove dice. */
+  white-space: pre-line;
 }
 .modale .palette-box:has(.palette-actions > .danger) > .palette-summary {
   color: var(--danger);
@@ -569,7 +571,8 @@
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.modale .palette-plan li + li {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.modale .palette-plan > li:where(:nth-child(n + 2)) {
   border-top: 1px solid var(--border);
 }
 

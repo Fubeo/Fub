@@ -77,4 +77,6 @@ Nuove decisioni usano il [template](template.md).
 | [0244 — La lavagna si scrive in operazioni con la forma breve](0244-la-lavagna-si-scrive-in-operazioni.md) | accolta | contratto | — |
 | [0245 — macOS e iOS sono in pausa](0245-macos-e-ios-in-pausa.md) | accolta | host | — |
 | [0246 — Fub emula il vblank che il driver non dà a WebKitGTK](0246-vblank-emulato-per-webkitgtk.md) | accolta | host | — |
+| [0247 — La prova del motore del PDF: la vista compone, Fub scrive](0247-la-prova-del-motore-del-pdf.md) | accettata | contratto | — |
+| [0248 — Il disegno incorporato in una nota si modifica sul posto](0248-il-disegno-nella-nota-si-modifica-sul-posto.md) | accolta | frontend | — |
 | [0249 — Fub porta l'orologio di GTK3 alla frequenza dello schermo nel modo GL](0249-orologio-gtk-allo-schermo.md) | accolta | host | — |

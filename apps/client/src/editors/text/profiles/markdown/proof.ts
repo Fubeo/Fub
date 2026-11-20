@@ -34,6 +34,7 @@ import {
 } from "../../../core/proof";
 import { inlineDelimiters, scanTags, spans, wikilink, type SyntaxForm } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
+import { errorText } from "../../../../host/errors";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { declaredLanguage, frontmatterRange } from "./render";
 
@@ -249,7 +250,7 @@ export function extractProse(
 ): ProseSegment[] {
   const declared = inlineDelimiters(forms);
   const front = frontmatterRange(state.doc);
-  const blocks: { from: number; to: number; name: string }[] = [];
+  const blocks: { from: number; to: number; listItem: boolean }[] = [];
   const seen = new Set<number>();
   for (const range of ranges) {
     syntaxTree(state).iterate({
@@ -260,7 +261,9 @@ export function extractProse(
         if (!PROSE_BLOCKS.has(node.name)) return undefined;
         if (!seen.has(node.from)) {
           seen.add(node.from);
-          blocks.push({ from: node.from, to: node.to, name: node.name });
+          // Una voce d'elenco: il suo paragrafo, o il compito, sta nel
+          // `ListItem`; un paragrafo in una citazione dentro la voce no.
+          blocks.push({ from: node.from, to: node.to, listItem: node.node.parent?.name === "ListItem" });
         }
         return false;
       },
@@ -275,7 +278,7 @@ export function extractProse(
     const label = FOOTNOTE_DEFINITION.exec(state.doc.sliceString(block.from, block.to));
     const from = block.from + (label ? label[0].length : 0);
     const segment = segmentOf(state, from, block.to, declared);
-    if (segment) out.push(segment);
+    if (segment) out.push(block.listItem ? { ...segment, listItem: true } : segment);
   }
   return out;
 }
@@ -357,7 +360,11 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
         const segments = extractProse(state, ranges, options.forms?.());
         let result;
         try {
-          result = await options.client.check(segments.map((segment) => segment.text), frontmatterLanguage(state));
+          result = await options.client.check(
+            segments.map((segment) => segment.text),
+            frontmatterLanguage(state),
+            segments.map((segment) => segment.listItem === true),
+          );
         } catch {
           // Un guasto del canale non deve rompere la scrittura: si riprova
           // alla prossima battuta.
@@ -421,7 +428,7 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
                 (message) => {
                   if (message) options.notify?.(message);
                 },
-                (error: unknown) => options.notify?.(error instanceof Error ? error.message : String(error)),
+                (error: unknown) => options.notify?.(t("proof.add_word_failed", { word: text, reason: errorText(error, "specie") })),
               );
             },
           });

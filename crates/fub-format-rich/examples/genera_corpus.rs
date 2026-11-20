@@ -35,6 +35,7 @@ fn main() {
         ("docx/stili-elenchi-tabelle.docx", stili_elenchi_tabelle()),
         ("docx/senza-perdite.docx", senza_perdite()),
         ("docx/segni-di-word.docx", segni_di_word()),
+        ("docx/stile-tabella.docx", stile_tabella()),
         ("docx/revisioni-testo.docx", revisioni_testo()),
         (
             "docx/revisioni-senza-perdite.docx",
@@ -240,12 +241,17 @@ fn with_styles(body: &str, settings_extra: &str) -> Package {
 }
 
 fn with_styles_of(body: &str, settings_extra: &str, lossless: bool) -> Package {
+    with_these_styles(body, settings_extra, styles(lossless))
+}
+
+/// Il pacchetto di un documento con gli stili `styles` e le impostazioni.
+fn with_these_styles(body: &str, settings_extra: &str, styles: String) -> Package {
     let mut package = Package::new(&document(body));
     package
         .part(
             "word/styles.xml",
             Some(&format!("{WML}.styles+xml")),
-            styles(lossless),
+            styles,
         )
         .rel("word/document.xml", "rIdStyles", "styles", "styles.xml")
         .part(
@@ -306,6 +312,47 @@ fn segni_di_word() -> Vec<u8> {
         )
         .rel("", "rId3", "extended-properties", "docProps/app.xml");
     package.bytes()
+}
+
+/// Le celle di una tabella «Table Grid», come la scrive Word: lo stile della
+/// tabella toglie lo spazio dopo e mette l'interlinea singola dei valori
+/// predefiniti (8 pt dopo, 1,08), fuori dalla tabella i paragrafi li tengono
+/// (ECMA-376 §17.7.2). In una cella uno stile di paragrafo che dice la sua
+/// spaziatura e la formattazione diretta battono lo stile della tabella; una
+/// tabella senza stile prende quello predefinito, che non ne dà.
+fn stile_tabella() -> Vec<u8> {
+    let cell = |para: String| {
+        format!(r#"<w:tc><w:tcPr><w:tcW w:w="4819" w:type="dxa"/></w:tcPr>{para}</w:tc>"#)
+    };
+    let grid = r#"<w:tblGrid><w:gridCol w:w="4819"/><w:gridCol w:w="4819"/></w:tblGrid>"#;
+    let table_grid = format!(
+        r#"<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr>{grid}<w:tr>{}{}</w:tr><w:tr>{}{}</w:tr><w:tr>{}{}</w:tr></w:tbl>"#,
+        cell(p("Prima cella")),
+        cell(p("Seconda cella, con il testo che va a capo una volta almeno.")),
+        cell(styled("Spaziato", "Stile con la sua spaziatura")),
+        cell(r#"<w:p><w:pPr><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:t>Spaziatura diretta</w:t></w:r></w:p>"#.to_string()),
+        cell(p("Terza riga")),
+        cell("<w:p/>".to_string()),
+    );
+    let plain = format!(
+        r#"<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr>{grid}<w:tr>{}{}</w:tr></w:tbl>"#,
+        cell(p("Senza stile")),
+        cell(p("Spazio dopo del paragrafo")),
+    );
+    let body = [
+        p("Un paragrafo prima della tabella, con lo spazio dopo dei valori predefiniti."),
+        table_grid,
+        p("Un paragrafo fra le due tabelle."),
+        plain,
+        p("Un paragrafo dopo le tabelle."),
+        SECT.to_string(),
+    ]
+    .concat();
+    let styles = styles(true).replace(
+        "</w:styles>",
+        r#"<w:style w:type="paragraph" w:customStyle="1" w:styleId="Spaziato"><w:name w:val="Spaziato"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240" w:line="360" w:lineRule="auto"/></w:pPr></w:style><w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/><w:uiPriority w:val="39"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style></w:styles>"#,
+    );
+    with_these_styles(&body, "", styles).bytes()
 }
 
 fn word_moderno(lossless: bool) -> Vec<u8> {

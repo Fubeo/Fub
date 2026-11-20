@@ -84,11 +84,14 @@ export const TRADUZIONE = {
   // I colori delle etichette (`.k-green`): `--c-<colore>` → `--doc-color-<colore>`
   // e il suo fondo `--doc-tint-<colore>`, come dice la tabella del piano. Per
   // ora il verde (le note del calendario, T17) e l'arancio (lo stato «In
-  // corso» della testata, T9), i due che un pezzo usa.
+  // corso» della testata, T9) e il blu (il promemoria, T36), quelli che un
+  // pezzo usa.
   "--c-green": ["--doc-color-green"],
   "--c-green-b": ["--doc-tint-green"],
   "--c-orange": ["--doc-color-orange"],
   "--c-orange-b": ["--doc-tint-orange"],
+  "--c-blue": ["--doc-color-blue"],
+  "--c-blue-b": ["--doc-tint-blue"],
 };
 
 /// La traduzione dei pezzi dentro la pagina del documento (`contesto:
@@ -121,6 +124,8 @@ export const TRADUZIONE_DOCUMENTO = {
   "--c-green-b": ["--doc-tint-green"],
   "--c-orange": ["--doc-color-orange"],
   "--c-orange-b": ["--doc-tint-orange"],
+  "--c-blue": ["--doc-color-blue"],
+  "--c-blue-b": ["--doc-tint-blue"],
 };
 
 /// Le traduzioni per contesto: ogni pezzo usa quella del suo `contesto`.
@@ -201,6 +206,19 @@ export const VISTE = {
       },
     },
     app: { scena: "tipi-01-nuova" },
+  },
+  /// Il promemoria di un compito (T36): il prototipo lo ha a riposo nel
+  /// compito «Chiedere il preventivo» (`remChip`, riga 2717); l'app dalla
+  /// Live coi promemoria, la prima pastiglia aperta.
+  promemoria: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.waitForSelector("#win .rem");
+      },
+    },
+    app: { scena: "live-28-promemoria" },
   },
   /// Le proposte dei simboli (T61): la formula in riga aperta, in fondo `+`
   /// e `\fr`. Il prototipo al passo «La formula si tocca», che apre la terza
@@ -441,7 +459,275 @@ export const VISTE = {
     },
     app: { scena: "trasclusione-viva-02-scrive" },
   },
+  /// Il foglio nella nota da attivo (T43): il prototipo al passo «Il foglio
+  /// nella nota» (`activateSheet(true)`, la cella C3 scelta), l'app dalla
+  /// scena col foglio attivo e la barra di formato, che aspetta la cella nel
+  /// gruppo «Foglio». A 700 px la cella del gruppo non c'è dai due lati
+  /// (riga 784 del prototipo), e i suoi pezzi stanno solo nei larghi.
+  "foglio-nella-nota": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il foglio nella nota");
+        await page.waitForSelector("#win .scard.active");
+      },
+    },
+    app: { scena: "schede-vive-02-attiva" },
+  },
+  /// La scheda di documento a riposo (T44): il prototipo al passo «Ogni
+  /// formato è una scheda» (la lettera in `.docx` accanto al PDF, che il passo
+  /// attiva), l'app dalla scena del verbale a riposo.
+  "scheda-documento": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="doc"] .docp p');
+      },
+    },
+    app: { scena: "scheda-documento-01-riposo" },
+  },
+  /// Le schede affiancate (T42): nel prototipo la coppia `.pair` del
+  /// documento d'apertura (il contratto e la lettera), nell'app il
+  /// `[!columns]` col contratto e i conti della scena `schede-misura`.
+  "schede-affiancate": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector("#win .pair .scard");
+      },
+    },
+    app: { scena: "schede-misura-01-affiancate" },
+  },
+  // La scheda PDF (T45): quella della coppia del prototipo, a riposo; nel
+  // banco il manuale del giro, dalla pagina 2.
+  "scheda-pdf": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win .pair .scard[data-kind="pdf"] .pdfn');
+      },
+    },
+    app: { scena: "schede-pdf-01-riposo" },
+  },
+  /// Lo spazio «Esporta in PDF» (T70): il prototipo al passo «Esporta in
+  /// PDF: le pagine vere» (le sezioni Tema e Colori aperte), l'app dalla
+  /// scena dello spazio (le sezioni chiuse). Le teste si confrontano su una
+  /// sezione chiusa dai due lati, la Pagina.
+  "esporta-pdf": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+      },
+    },
+    app: { scena: "esporta-pdf" },
+  },
+  /// La sezione Diagrammi dello spazio (T75): dai due lati aperta, la riga
+  /// dei nodi aperta col blu della tavolozza (`#1f4f8f`) scelto; lo stile
+  /// resta «Come nella nota», il fondo acceso.
+  "esporta-pdf-diagrammi": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="diagrammi"] .px-sh');
+        await page.click('#win .px-sec[data-sec="diagrammi"] [data-col="dgn"]');
+        await page.click('#win [data-colset="dgn"][data-v="#1f4f8f"]');
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-diagrammi" },
+  },
+  // I valori di cella nel testo (T53): nel prototipo il paragrafo `p-conti`
+  // del documento d'apertura («Finora abbiamo speso … su … previsti»), nel
+  // banco lo stesso paragrafo sulla cartella del banco.
+  "valori-cella": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win [data-id="p-conti"] .cellv');
+      },
+    },
+    app: { scena: "valori-cella-01-scrittura" },
+  },
+  // «Estrai» (T49): nel prototipo sulla scheda PDF attiva del passo «Ogni
+  // formato è una scheda», nell'app sul foglio attivo con delle celle scelte
+  // (sul PDF è spento finché non c'è il motore dei PDF: il piano, T49).
+  "estratti-estrai": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="pdf"].active #pdf-ex');
+      },
+    },
+    app: { scena: "estratti-01-estrai" },
+  },
+  // L'estratto (T49): nel prototipo quello che «Estrai» mette sotto la scheda
+  // PDF, nell'app il passo di PDF scritto come lo scrive Obsidian.
+  "estratti-passo": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="pdf"].active #pdf-ex');
+        await page.click("#win #pdf-ex");
+        await page.waitForSelector("#win .exc footer button");
+        await page.evaluate(() => document.querySelector("#win .exc")?.scrollIntoView({ block: "center" }));
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "estratti-03-passo" },
+  },
+  // La zona lavagna (T47): quella del prototipo a riposo, la lavagna intera
+  // nella sua zona; nel banco il percorso della visita, a riposo.
+  "scheda-lavagna": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win .scard[data-kind="canvas"] .cvz .cvn');
+      },
+    },
+    app: { scena: "scheda-lavagna-01-riposo" },
+  },
+  /// Le sezioni Tema e Colori aperte (T71): dai due lati la riga
+  /// dell'accento aperta, coi tondi, il selettore e il codice. A 700 px il
+  /// pannello sta sotto le pagine, e i pezzi si leggono dove sono.
+  "esporta-pdf-temi": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-cb[data-col="acc"]');
+        await page.waitForSelector("#win .px-pal");
+        await page.evaluate(() => {
+          const side = document.querySelector("#px-side");
+          if (side) side.scrollTop = 0;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-temi" },
+  },
+  /// Le sezioni Contenuto e Interruzioni aperte (T74): dai due lati i
+  /// commenti nel margine, le tabelle a griglia e il codice numerato.
+  "esporta-pdf-contenuto": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="contenuto"] .px-sh');
+        await page.click('#win .px-sec[data-sec="interruzioni"] .px-sh');
+        await page.click('#win .px-seg button[data-k="comments"][data-v="margine"]');
+        await page.click('#win .px-seg button[data-k="tab"][data-v="griglia"]');
+        await page.click('#win .px-tog[data-k="codeNum"]');
+        await page.waitForSelector('#win .px-tog[data-k="codeNum"][aria-checked="true"]');
+        await page.evaluate(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-contenuto" },
+  },
+  /// Le sezioni Caratteri e Pagina aperte (T72), con la filigrana «BOZZA»
+  /// scritta dai due lati: le righe, i caratteri come pulsanti, i cursori, i
+  /// segmenti, i millimetri, il campo della filigrana, le guide e la
+  /// filigrana sulla prima pagina.
+  "esporta-pdf-caratteri": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="caratteri"] .px-sh');
+        await page.click('#win .px-sec[data-sec="pagina"] .px-sh');
+        await page.fill('#win .px-in[data-k="wm"]', "BOZZA");
+        await page.waitForFunction(() => document.querySelector("#win .px-wm")?.textContent === "BOZZA");
+        await chiudiPannello(page, "#px-side");
+      },
+    },
+    app: {
+      scena: "esporta-pdf-caratteri",
+      prepara: async (page) => {
+        await page.fill("#export-page-watermark", "BOZZA");
+        await page.press("#export-page-watermark", "Tab");
+        await page.waitForSelector(".export-slot .export-watermark");
+        await chiudiPannello(page, ".export-side");
+      },
+    },
+  },
+  /// Testata e piè, frontespizio e indice (T73): il prototipo al passo
+  /// «Tutto il cambiabile, dal vivo» (il profilo «Relazione per il Comune»:
+  /// tema Relazione, frontespizio, indice, sezione e titolo in testata, data
+  /// e pagine nel piè, le sezioni Frontespizio e Testata aperte), l'app dalla
+  /// scena che porta lo spazio allo stesso profilo coi suoi controlli.
+  "esporta-pdf-testata": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Tutto il cambiabile, dal vivo");
+        await page.waitForSelector("#win .px:not([hidden]) .px-hfp");
+        await page.waitForSelector("#win .px:not([hidden]) .ptoc-r b");
+        await page.evaluate(() => {
+          const side = document.querySelector("#px-side");
+          if (side) side.scrollTop = 0;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-testata" },
+  },
+  /// Il menu dei profili (T79): il prototipo apre il pulsante del profilo
+  /// al passo «Esporta in PDF: le pagine vere»; l'app dalla scena coi
+  /// profili del vault, il menu aperto.
+  "esporta-pdf-profili": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click("#win #px-prof");
+        await page.waitForSelector("#win .pop .m-l > button.m-i");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-profili" },
+  },
+  /// Il clic sulla pagina (T76): dai due lati il primo paragrafo cliccato,
+  /// scelto, col suo menu aperto.
+  "esporta-pdf-blocco": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector('#win .px:not([hidden]) .px-it[data-t="p"]');
+        await page.click('#win .px:not([hidden]) .px-it[data-t="p"]');
+        await page.waitForSelector("#win .px-it.sel");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-blocco" },
+  },
 };
+
+/// Riporta in cima il pannello delle sezioni, toglie il fuoco e porta via il
+/// puntatore: gli stessi pezzi a riposo dai due lati.
+async function chiudiPannello(page, pannello) {
+  await page.evaluate((selector) => {
+    const side = document.querySelector(selector);
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  }, pannello);
+  await page.mouse.move(0, 0);
+}
 
 /// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
 /// della guida (ognuno ha il titolo «n. Nome del passo»): per nome, non per
@@ -1492,6 +1778,143 @@ export const PEZZI = [
     app: '.pane.focus .base-surface[data-embedded="true"]',
     proprieta: ["margin-right"],
   },
+  // ── le schede affiancate (T42) ──────────────────────────────────────────
+  // Alla pari, 14 px fra l'una e l'altra, 64 px oltre il testo dai due lati
+  // a tutta larghezza e nella colonna a 700.
+  {
+    id: "schede.affiancate",
+    vista: "schede-affiancate",
+    prototipo: ".pair",
+    app: '.pane.focus .pane-editor .fub-columns[data-live-cards="true"]',
+    proprieta: ["column-gap", "margin-left", "margin-right", "align-items"],
+  },
+  // ── la scheda PDF (T45) ───────────────────────────────────────────────────
+  // Il vassoio con 16 px intorno alla pagina (sotto, la fascia di 40 px del
+  // numero è una riga della griglia, non un padding), la pagina con le sue
+  // ombre, il numero e le frecce di 24 px, velate a riposo.
+  {
+    id: "schede.pdf.vassoio",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfw',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf',
+    proprieta: ["background-color", "padding-top", "padding-left", "padding-right"],
+  },
+  {
+    id: "schede.pdf.pagina",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfp',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-page',
+    proprieta: ["border-radius", "box-shadow", "filter"],
+  },
+  {
+    id: "schede.pdf.numero",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfn > span',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-status',
+    proprieta: ["font", "color", "font-variant-numeric"],
+  },
+  {
+    id: "schede.pdf.freccia",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] #pdf-prev',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-previous',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "opacity"],
+  },
+  // ── il valore di una cella nel testo (T53) ──────────────────────────────
+  // Il tratteggio d'accento sotto, le cifre tabellari, mai a capo, il
+  // puntatore della mano; al passaggio il velo d'accento con gli angoli di 3 px.
+  {
+    id: "valori-cella.valore",
+    vista: "valori-cella",
+    contesto: "documento",
+    prototipo: '[data-id="p-conti"] .cellv',
+    app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]',
+    // Il carattere è quello del paragrafo; l'interlinea è del corpo del testo
+    // (non di questo pezzo), e qui non si confronta.
+    proprieta: ["border-bottom-width", "border-bottom-style", "border-bottom-color", "cursor", "font-variant-numeric", "white-space", "color", "font-family", "font-size", "font-weight", "background-color"],
+  },
+  {
+    id: "valori-cella.passaggio",
+    vista: "valori-cella",
+    contesto: "documento",
+    prototipo: '[data-id="p-conti"] .cellv',
+    app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]',
+    gesto: { tipo: "hover", prototipo: '[data-id="p-conti"] .cellv', app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]' },
+    proprieta: ["background-color", "border-radius"],
+  },
+  // La zona lavagna: il fondo del vassoio al 60% sul foglio, alta 300 px
+  // (`|640x300`), col puntatore della scheda che si attiva con un clic. Le
+  // schede e i fili sono quelli della lavagna (eccezioni-editor.json).
+  {
+    id: "schede.lavagna.zona",
+    vista: "scheda-lavagna",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="canvas"] .cvz',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest .canvas-viewport',
+    proprieta: ["background-color", "height"],
+  },
+  {
+    id: "schede.lavagna.riposo",
+    vista: "scheda-lavagna",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="canvas"] .cvz',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest',
+    proprieta: ["cursor", "overflow"],
+  },
+  // ── gli estratti (T49) ────────────────────────────────────────────────────
+  // «Estrai» in testata: l'azione d'accento in grassetto, come gli altri
+  // pulsanti della testata per il resto.
+  {
+    id: "estratti.estrai",
+    vista: "estratti-estrai",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="pdf"].active #pdf-ex',
+    app: '.pane.focus .pane-editor .live-card[data-card-active="true"][data-card-extract="ready"] .live-card-extract',
+    proprieta: ["color", "font-weight", "display", "opacity"],
+  },
+  // L'estratto: la barra gialla a sinistra, i margini, il carattere del
+  // paragrafo (il `font` del prototipo nomina `--f-text`, che non c'è, e il
+  // testo eredita quello del paragrafo); sotto la fonte nel carattere
+  // dell'interfaccia, e il pulsante d'accento. L'interlinea è del corpo del
+  // testo (non di questo pezzo), e qui non si confronta, come per i valori
+  // di cella.
+  {
+    id: "estratti.citazione",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc",
+    app: ".pane.focus .pane-editor .live-card-excerpt",
+    proprieta: ["border-left-width", "border-left-style", "border-left-color", "padding", "margin-top", "margin-bottom", "font-style", "font-size", "font-family", "color"],
+  },
+  {
+    id: "estratti.fonte",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer",
+    app: ".pane.focus .pane-editor .live-card-excerpt-source",
+    proprieta: ["font-size", "font-style", "font-family", "color", "gap", "margin-top", ...ALLINEAMENTO],
+  },
+  {
+    id: "estratti.vai",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer button",
+    app: ".pane.focus .pane-editor .live-card-excerpt-go",
+    proprieta: ["color", "padding", "border-radius"],
+  },
+  {
+    id: "estratti.vai-passaggio",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer button",
+    app: ".pane.focus .pane-editor .live-card-excerpt-go",
+    gesto: { tipo: "hover", prototipo: ".exc footer button", app: ".pane.focus .pane-editor .live-card-excerpt-go" },
+    proprieta: ["background-color"],
+  },
   // ── la mini-barra (T12) ───────────────────────────────────────────────────
   {
     id: "mini-barra.superficie",
@@ -1561,11 +1984,1036 @@ export const PEZZI = [
     app: ".transclusion-band",
     proprieta: ["padding", "margin", "gap", "border-radius", "background-color", "font", "color", ...ALLINEAMENTO],
   },
+  // ── il foglio nella nota (T43) ──────────────────────────────────────────
+  // La cella attiva e la sua formula nel gruppo «Foglio» della barra (`.fxr`).
+  {
+    id: "foglio-nella-nota.cella",
+    vista: "foglio-nella-nota",
+    stati: LARGHI,
+    prototipo: "#fx-sheet",
+    app: ".format-bar-context .format-bar-context-cell",
+    proprieta: ["font", "color", "padding", "max-width", "white-space"],
+  },
+  // Le lettere delle colonne, che a scheda attiva compaiono piccole e senza fondo.
+  {
+    id: "foglio-nella-nota.lettere",
+    vista: "foglio-nella-nota",
+    contesto: "documento",
+    prototipo: ".scard .gr-let",
+    app: '.live-card[data-card-active="true"] .canvas-card-sheet .grid-column-header',
+    proprieta: ["font-size", "font-weight", "color"],
+  },
+  // ── il promemoria (T36) ───────────────────────────────────────────────────
+  // Il colore, il fondo, la forma e il peso della `.rem`. La misura (12 px,
+  // alta 21) no: nella pagina la pastiglia segue il testo in `em`, come la
+  // scadenza accanto (`.px-pg :is(.due, .pill-in)` del prototipo, riga 1090).
+  {
+    id: "promemoria.pastiglia",
+    vista: "promemoria",
+    contesto: "documento",
+    prototipo: ".rem",
+    app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done)",
+    proprieta: ["color", "background", "box-shadow", "border-radius", "font-weight", "font-family", "white-space", ...ALLINEAMENTO],
+  },
+  {
+    id: "promemoria.sveglia",
+    vista: "promemoria",
+    contesto: "documento",
+    prototipo: ".rem svg",
+    app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done) svg",
+    proprieta: ["color"],
+  },
+  // ── la scheda di documento (T44) ──────────────────────────────────────────
+  // Il margine del testo (`.docw`) e l'inchiostro e lo spazio dei paragrafi
+  // (`.docp`). Il carattere no: il prototipo lo scrive con `var(--f-text)`,
+  // un token che non dichiara, e la regola `font` intera cade (il testo
+  // eredita quello della nota); l'app tiene la misura scritta, 14/1,6.
+  {
+    id: "scheda-documento.testo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docw',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content',
+    proprieta: ["padding"],
+  },
+  {
+    id: "scheda-documento.paragrafo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docp p:not(.r)',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content > p',
+    proprieta: ["margin", "color"],
+  },
+
+  // ── lo spazio «Esporta in PDF» (T70) ────────────────────────────────────
+  // Il prototipo lo mette sopra tutta la sua finestra, l'app sotto la barra
+  // del titolo: si confrontano i pezzi, non dove sta lo spazio. Il foglio
+  // non confronta il fondo: è la carta del tema di stampa, non della pelle.
+  {
+    id: "esporta.spazio",
+    vista: "esporta-pdf",
+    prototipo: ".px",
+    app: ".export-space",
+    proprieta: ["color", "background", "display"],
+  },
+  {
+    id: "esporta.barra",
+    vista: "esporta-pdf",
+    prototipo: ".px-top",
+    app: ".export-top",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.indietro",
+    vista: "esporta-pdf",
+    prototipo: ".px-back",
+    app: ".export-back",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.titolo",
+    vista: "esporta-pdf",
+    prototipo: ".px-tt",
+    app: ".export-title",
+    proprieta: [...BASE, "display", "align-items"],
+  },
+  {
+    id: "esporta.titolo-nome",
+    vista: "esporta-pdf",
+    prototipo: ".px-tt b",
+    app: ".export-title-name",
+    proprieta: ["font", "color", "white-space"],
+  },
+  {
+    id: "esporta.titolo-nota",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-tt span",
+    app: ".export-title-note",
+    proprieta: ["font", "color", "white-space", "text-overflow"],
+  },
+  {
+    id: "esporta.zoom",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom",
+    app: ".export-zoom",
+    proprieta: ["color", "display", "align-items"],
+  },
+  {
+    id: "esporta.zoom-pulsante",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom button",
+    app: ".export-zoom-button",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "esporta.zoom-valore",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom output",
+    app: ".export-zoom-value",
+    proprieta: ["font", "color", "min-width", "text-align", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.viste",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-views",
+    app: ".export-views",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.vista",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: '.px-views button[aria-pressed="false"]',
+    app: '.export-segment[aria-pressed="false"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.vista-premuta",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: '.px-views button[aria-pressed="true"]',
+    app: '.export-segment[aria-pressed="true"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.profilo",
+    vista: "esporta-pdf",
+    prototipo: ".px-prof",
+    app: ".export-profile",
+    proprieta: [...BASE, "height", "max-width", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.esporta",
+    vista: "esporta-pdf",
+    prototipo: ".px-go",
+    app: ".export-go",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.palco",
+    vista: "esporta-pdf",
+    prototipo: ".px-stage",
+    app: ".export-stage",
+    proprieta: ["padding", "background", "overflow-y"],
+  },
+  {
+    id: "esporta.pagine",
+    vista: "esporta-pdf",
+    prototipo: ".px-doc",
+    app: ".export-doc",
+    proprieta: ["gap", ...ALLINEAMENTO, "flex-wrap"],
+  },
+  {
+    id: "esporta.foglio",
+    vista: "esporta-pdf",
+    prototipo: ".px-slot",
+    app: ".export-slot",
+    proprieta: ["border-radius", "box-shadow"],
+  },
+  {
+    id: "esporta.pannello",
+    vista: "esporta-pdf",
+    prototipo: ".px-side",
+    app: ".export-side",
+    proprieta: ["background", "box-shadow", "width"],
+  },
+  {
+    id: "esporta.sezione",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"]',
+    app: '.export-section[data-section="pagina"]',
+    proprieta: ["border", "background"],
+  },
+  {
+    id: "esporta.sezione-testa",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh',
+    app: '.export-section[data-section="pagina"] .export-section-head',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.sezione-nome",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh b',
+    app: '.export-section[data-section="pagina"] .export-section-name',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.sezione-riassunto",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh span',
+    app: '.export-section[data-section="pagina"] .export-section-summary',
+    proprieta: ["font", "color", "text-align", "white-space", "text-overflow"],
+  },
+  {
+    id: "esporta.banda",
+    vista: "esporta-pdf",
+    prototipo: ".px-band",
+    app: ".export-band",
+    proprieta: [...BASE, "height", "align-items", "white-space"],
+  },
+  {
+    id: "esporta.banda-pagine",
+    vista: "esporta-pdf",
+    prototipo: "#px-info b",
+    app: ".export-band-pages",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.banda-ms",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: "#px-info .ms",
+    app: ".export-band-ms",
+    proprieta: ["font", "color", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.banda-suggerimento",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-hint",
+    app: ".export-band-hint",
+    proprieta: ["font", "color", "text-overflow"],
+  },
+
+  // ── la sezione Diagrammi (T75) ──────────────────────────────────────────
+  // Le miniature hanno i colori della tavolozza che disegna ogni stile
+  // (`paletteFor`, come quelle del menu del diagramma): si confrontano forma
+  // e misure, non le tinte.
+  {
+    id: "esporta.dg-stili",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-dgs",
+    app: ".export-dg-styles",
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.dg-stile",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"]',
+    app: '.export-dg-style[data-dg="aurora"]',
+    proprieta: ["font", "color", "padding", "gap", "border-radius", "display"],
+  },
+  {
+    id: "esporta.dg-stile-scelto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[aria-pressed="true"]',
+    app: '.export-dg-style[aria-pressed="true"]',
+    proprieta: ["font", "color"],
+  },
+  // Il menu dei profili (T79): il menu di Fub coi profili del vault.
+  {
+    id: "esporta.profili-superficie",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop",
+    app: ".context-menu",
+    proprieta: [...BASE, "min-width"],
+  },
+  {
+    id: "esporta.profili-voce",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i:not(.act)",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit)",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.profili-icona",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i .ic",
+    app: '.context-menu .menu-items > button.kit-row[role="menuitem"] .menu-icon',
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "esporta.profili-nota",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i .lb small",
+    app: ".context-menu .menu-items > button.kit-row .menu-description",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.dg-miniatura",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch',
+    proprieta: ["height", "border-radius", "box-shadow", ...ALLINEAMENTO, "gap"],
+  },
+  {
+    id: "esporta.dg-miniatura-scelta",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[aria-pressed="true"] .px-dsw',
+    app: '.export-dg-style[aria-pressed="true"] .export-dg-swatch',
+    proprieta: ["box-shadow"],
+  },
+  {
+    id: "esporta.dg-miniatura-nodo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .n',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-node',
+    proprieta: [...DIMENSIONI, "border-radius", "border-width", "border-style"],
+  },
+  {
+    id: "esporta.dg-miniatura-scelta-rombo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .d',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-choice',
+    proprieta: [...DIMENSIONI, "border-radius", "transform"],
+  },
+  {
+    id: "esporta.dg-miniatura-pillola",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .p',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-pill',
+    proprieta: [...DIMENSIONI, "border-radius"],
+  },
+  {
+    id: "esporta.dg-nota",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-note',
+    app: '.export-section[data-section="diagrammi"] .export-note',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.dg-colori",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cols",
+    app: ".export-dg-colors",
+    proprieta: ["display", "gap", "margin"],
+  },
+  {
+    id: "esporta.dg-colore-aperto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col.open",
+    app: ".export-dg-color.is-open",
+    proprieta: ["background", "border-radius", "display"],
+  },
+  {
+    id: "esporta.dg-colore-testa",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-cb",
+    app: ".export-dg-color:not(.is-open) .export-dg-color-head",
+    proprieta: [...BASE, "height", "align-items", "text-align"],
+  },
+  {
+    id: "esporta.dg-colore-pallino",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col.open .px-chip",
+    app: ".export-dg-color.is-open .export-dg-chip",
+    proprieta: [...DIMENSIONI, "border-radius", "background-color", "box-shadow"],
+  },
+  {
+    id: "esporta.dg-colore-pallino-vuoto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-chip.none",
+    app: ".export-dg-color:not(.is-open) .export-dg-chip.is-none",
+    proprieta: [...DIMENSIONI, "border-radius", "box-shadow"],
+  },
+  {
+    id: "esporta.dg-colore-tuo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cb em",
+    app: ".export-dg-color-head em",
+    proprieta: ["font", "color", "background", "border-radius", "padding"],
+  },
+  {
+    id: "esporta.dg-colore-codice",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-cb code",
+    app: ".export-dg-color:not(.is-open) .export-dg-color-head code",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.dg-colore-torna",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cr",
+    app: ".export-dg-reset",
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background"],
+  },
+  {
+    id: "esporta.dg-tavolozza",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-pal",
+    app: ".export-dg-palette",
+    proprieta: ["display", "flex-wrap", "gap", "padding", "align-items"],
+  },
+  {
+    id: "esporta.dg-inchiostro",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-ps[data-v="#b3261e"]',
+    app: "#export-dg-ink-diagramma-nodi-b3261e",
+    proprieta: [...DIMENSIONI, "border-radius", "box-shadow", "background-color"],
+  },
+  {
+    id: "esporta.dg-inchiostro-scelto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-ps[aria-pressed="true"]',
+    app: '.export-dg-ink[aria-pressed="true"]',
+    proprieta: ["box-shadow", "background-color"],
+  },
+  {
+    id: "esporta.dg-qualsiasi",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-pick",
+    app: ".export-dg-pick",
+    proprieta: [...DIMENSIONI, "border-radius", "background", "box-shadow", "color"],
+  },
+  {
+    id: "esporta.dg-codice-campo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-hex",
+    app: ".export-dg-hex",
+    proprieta: [...DIMENSIONI, "font", "color", "background", "box-shadow", "border-radius", "padding"],
+  },
+  {
+    id: "esporta.dg-fondo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog',
+    app: "#export-dg-paper",
+    proprieta: ["font", "color", "min-height", "gap", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.dg-fondo-spiega",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog small',
+    app: "#export-dg-paper small",
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.dg-fondo-interruttore",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog i',
+    app: "#export-dg-paper i",
+    proprieta: [...DIMENSIONI, "border-radius", "background"],
+  },
+  // ── le sezioni Tema e Colori (T71) ──────────────────────────────────────
+  // La paginetta d'anteprima di un tema dipinge i colori del tema di stampa,
+  // uguali dai due lati (Fub e Notte); la cornice e le scritte sono della pelle.
+  {
+    id: "esporta.temi",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-themes',
+    app: '.export-themes',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.tema",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"]',
+    app: '.export-theme[data-theme="classico"]',
+    proprieta: [...BASE, "text-align"],
+  },
+  {
+    id: "esporta.tema-scelto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[aria-pressed="true"]',
+    app: '.export-theme[aria-pressed="true"]',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.tema-anteprima",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp',
+    app: '.export-theme[data-theme="classico"] .export-theme-preview',
+    proprieta: [...BASE, "position", "overflow", "text-align"],
+  },
+  {
+    id: "esporta.tema-anteprima-scelta",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[aria-pressed="true"] .px-thp',
+    app: '.export-theme[aria-pressed="true"] .export-theme-preview',
+    proprieta: ["box-shadow"],
+  },
+  {
+    id: "esporta.tema-notte",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="notte"] .px-thp',
+    app: '.export-theme[data-theme="notte"] .export-theme-preview',
+    proprieta: ["background", "color"],
+  },
+  {
+    id: "esporta.tema-aa",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp b',
+    app: '.export-theme[data-theme="classico"] .export-theme-heading',
+    proprieta: ["font-size", "line-height", "margin", "color", "display"],
+  },
+  {
+    id: "esporta.tema-riga",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp i:not(.s)',
+    app: '.export-theme[data-theme="classico"] .export-theme-line:not(.export-theme-line-short)',
+    proprieta: ["height", "margin", "border-radius", "opacity", "background"],
+  },
+  {
+    id: "esporta.tema-riquadro",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp u',
+    app: '.export-theme[data-theme="classico"] .export-theme-box',
+    proprieta: ["height", "border-radius", "background", "box-shadow", "position"],
+  },
+  {
+    id: "esporta.tema-nota",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-thd',
+    app: '#export-theme-about',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.colori",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-cols',
+    app: '.export-section[data-section="colori"] .export-colors',
+    proprieta: ["display", "gap", "margin"],
+  },
+  {
+    id: "esporta.colore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"]',
+    app: '.export-color[data-color="titoli"]',
+    proprieta: ["border-radius", "background", "display"],
+  },
+  {
+    id: "esporta.colore-aperto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col.open',
+    app: '.export-color.is-open',
+    proprieta: ["border-radius", "background"],
+  },
+  {
+    id: "esporta.colore-testa",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb',
+    app: '#export-color-titoli',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.colore-tondo",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-chip',
+    app: '#export-color-titoli .export-color-chip',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "background"],
+  },
+  {
+    id: "esporta.colore-nome",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb span',
+    app: '#export-color-titoli .export-color-name',
+    proprieta: ["font", "color", "text-overflow", "white-space"],
+  },
+  {
+    id: "esporta.colore-codice",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb code',
+    app: '#export-color-titoli .export-color-code',
+    proprieta: ["font", "color", "background", "padding"],
+  },
+  {
+    id: "esporta.colore-tavolozza",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-pal',
+    app: '#export-color-palette-accento',
+    proprieta: ["display", "gap", "padding", "align-items"],
+  },
+  {
+    id: "esporta.colore-pronto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-ps[aria-pressed="false"]',
+    app: '.export-swatch[aria-pressed="false"]',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "padding", "border"],
+  },
+  {
+    id: "esporta.colore-pronto-scelto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-ps[aria-pressed="true"]',
+    app: '.export-swatch[aria-pressed="true"]',
+    proprieta: ["box-shadow", "background"],
+  },
+  {
+    id: "esporta.colore-selettore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-pick',
+    app: '.export-pick',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "background", "color"],
+  },
+  {
+    id: "esporta.colore-esadecimale",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-hex',
+    app: '#export-hex-accento',
+    proprieta: ["width", "height", "border", "border-radius", "box-shadow", "background", "color", "font", "padding"],
+  },
+  {
+    id: "esporta.contrasto",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-con',
+    app: '#export-contrast',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.contrasto-numero",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-con b',
+    app: '#export-contrast b',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.interruttore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"]',
+    app: '#export-colors-gray',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.interruttore-nota",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] small',
+    app: '#export-colors-gray .export-toggle-hint',
+    proprieta: ["font", "color", "margin", "display"],
+  },
+  {
+    id: "esporta.interruttore-pallino",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] i',
+    app: '#export-colors-gray .export-toggle-knob',
+    proprieta: ["width", "height", "border-radius", "background"],
+  },
+  // ── le sezioni Contenuto e Interruzioni (T74) ───────────────────────────
+  // Le righe col nome e le scelte (`pxRow`, `pxSeg`), gli interruttori; sulla
+  // pagina il numero del commento e la sua nota nel margine.
+  {
+    id: "esporta.contenuto-riga",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2)',
+    app: '.export-row[data-row="export-content-comments"]',
+    proprieta: ["display", "min-height", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.contenuto-nome",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2) .px-rl',
+    app: '.export-row[data-row="export-content-comments"] .export-row-label',
+    proprieta: ["font", "color", "flex-shrink"],
+  },
+  {
+    id: "esporta.contenuto-scelte",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2) .px-seg',
+    app: '.export-row[data-row="export-content-comments"] .export-choices',
+    proprieta: ["display", "padding", "border-radius", "background", "gap"],
+  },
+  {
+    id: "esporta.contenuto-scelta",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-seg button[data-k="comments"][data-v="fondo"]',
+    app: "#export-content-comments-in-fondo",
+    proprieta: [...BASE, "height", "white-space"],
+  },
+  {
+    id: "esporta.contenuto-scelta-presa",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-seg button[data-k="comments"][data-v="margine"]',
+    app: "#export-content-comments-margine",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.contenuto-codice",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-tog[data-k="codeNum"]',
+    app: "#export-content-code",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.interruzioni-intestazione",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-tog[data-k="repeatHead"]',
+    app: "#export-breaks-header",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.commento-numero",
+    vista: "esporta-pdf-contenuto",
+    prototipo: ".pcm sup",
+    app: ".export-page .export-comment-mark",
+    proprieta: ["font-weight", "color"],
+  },
+  {
+    id: "esporta.commento-margine",
+    vista: "esporta-pdf-contenuto",
+    prototipo: ".pnote",
+    app: ".export-page .export-comment-placed",
+    proprieta: ["color", "border-left-style", "text-align"],
+  },
+  // ── le sezioni Caratteri e Pagina (T72) ─────────────────────────────────
+  {
+    id: "esporta.riga",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-row',
+    app: '.export-section[data-section="pagina"] .export-row',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.riga-nome",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-rl',
+    app: '.export-section[data-section="pagina"] .export-row-label',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.riga-caratteri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-row',
+    app: '.export-section[data-section="caratteri"] .export-row-stacked',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.caratteri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-fonts',
+    app: '.export-section[data-section="caratteri"] .export-fonts',
+    proprieta: ["display", "gap", "flex-wrap"],
+  },
+  {
+    id: "esporta.carattere",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-fonts button[data-k="fb"][data-v="hanken"]',
+    app: '#export-font-testo-hanken',
+    proprieta: [...BASE, "height", "font-size", "color", "background", "cursor"],
+  },
+  {
+    id: "esporta.carattere-scelto",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-fonts button[data-k="fb"][aria-checked="true"]',
+    app: '[id^="export-font-testo-"][aria-checked="true"]',
+    proprieta: ["box-shadow", "color", "background"],
+  },
+  {
+    id: "esporta.cursore",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng',
+    app: '.export-range:has(#export-fonts-size)',
+    proprieta: [...BASE, "display", "align-items", "min-height", "color"],
+  },
+  {
+    id: "esporta.cursore-barra",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng input',
+    app: '#export-fonts-size',
+    proprieta: ["margin", "accent-color", "cursor", "min-width"],
+  },
+  {
+    id: "esporta.cursore-valore",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng output',
+    app: '.export-range:has(#export-fonts-size) output',
+    proprieta: ["font-size", "color", "text-align", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.interruttore-sillabazione",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-tog[data-k="hyph"]',
+    app: '#export-fonts-hyphens',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.segmento-scelto",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-seg button[aria-checked="true"]',
+    app: '.export-section[data-section="pagina"] .export-choice[aria-checked="true"]',
+    proprieta: [...BASE, "height", "font", "color", "background"],
+  },
+  {
+    id: "esporta.millimetri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-mm',
+    app: '.export-section[data-section="pagina"] .export-mm',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.millimetro",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm label',
+    app: '.export-mm-field',
+    proprieta: ["display", "gap", "font-size", "color", "position"],
+  },
+  {
+    id: "esporta.millimetro-campo",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm input',
+    app: '.export-mm-input',
+    proprieta: [...BASE, "height", "font", "color", "background", "appearance"],
+  },
+  {
+    id: "esporta.millimetro-unita",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm em',
+    app: '.export-mm-field em',
+    proprieta: ["position", "right", "bottom", "font-size", "font-style", "color"],
+  },
+  {
+    id: "esporta.filigrana-campo",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-in[data-k="wm"]',
+    app: '#export-page-watermark',
+    proprieta: [...BASE, "width", "height", "font", "color", "background"],
+  },
+  {
+    id: "esporta.nota-guide",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-note',
+    app: '.export-section[data-section="pagina"] .export-note:not(.export-page-error)',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.guida",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-pg .px-g.g-t',
+    app: '.export-slot .export-guide[data-guide="sopra"]',
+    proprieta: ["position", "height", "opacity", "cursor", "z-index"],
+  },
+  {
+    id: "esporta.guida-lato",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-pg .px-g.g-l',
+    app: '.export-slot .export-guide[data-guide="sinistra"]',
+    proprieta: ["position", "width", "opacity", "cursor"],
+  },
+  {
+    id: "esporta.filigrana",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-wm',
+    app: '.export-slot .export-watermark',
+    proprieta: ["position", "display", "font-size", "font-weight", "line-height", "letter-spacing", "white-space", "opacity", "transform", "z-index"],
+  },
+  // ── Testata e piè, frontespizio e indice (T73, passo 29) ──────────────
+  // Il pannello: i sei posti sopra e sotto la paginetta finta, «Fin dove»
+  // dell'indice. Le pagine: testata, piè, frontespizio, indice, coi colori e
+  // i caratteri del tema di stampa (Relazione dai due lati).
+  {
+    id: "esporta.testata-posti",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfp",
+    app: ".export-header-grid",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.testata-fila",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfr",
+    app: ".export-header-row",
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.testata-posto",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfs:not(.on)",
+    app: ".export-slot-choice:not(.is-set)",
+    proprieta: [...BASE, "height", "text-overflow", "white-space"],
+  },
+  {
+    id: "esporta.testata-posto-scelto",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfs.on",
+    app: ".export-slot-choice.is-set",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.testata-paginetta",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfm",
+    app: ".export-header-lines",
+    proprieta: ["display", "gap", "padding"],
+  },
+  {
+    id: "esporta.testata-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfm i:not(.s)",
+    app: ".export-header-line:not(.export-header-line-short)",
+    proprieta: ["height", "border-radius", "background"],
+  },
+  {
+    id: "esporta.fronte-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-row',
+    app: '.export-section[data-section="fronte"] .export-row',
+    proprieta: ["display", "gap", "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.fronte-scritta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-rl',
+    app: '.export-section[data-section="fronte"] .export-row-label',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.fronte-scelte",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg',
+    app: ".export-choices",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.fronte-scelta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg button[aria-checked="false"]',
+    app: '.export-choice[aria-checked="false"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.fronte-scelta-premuta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg button[aria-checked="true"]',
+    app: '.export-choice[aria-checked="true"]',
+    proprieta: ["background", "color", "box-shadow"],
+  },
+  {
+    id: "esporta.pagina-testata",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hd.rule",
+    app: ".export-header.has-rule",
+    proprieta: ["display", "font-variant-numeric", "border-bottom"],
+  },
+  {
+    id: "esporta.pagina-pie",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-ft",
+    app: ".export-footer",
+    proprieta: ["display", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.frontespizio",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover",
+    app: ".export-cover",
+    proprieta: ["display", "flex-direction", "justify-content"],
+  },
+  {
+    id: "esporta.frontespizio-filo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover-band",
+    app: ".export-cover-band",
+    proprieta: ["position", "background"],
+  },
+  {
+    id: "esporta.frontespizio-titolo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover h1",
+    app: ".export-cover-title",
+    proprieta: ["font-weight", "letter-spacing", "color"],
+  },
+  {
+    id: "esporta.indice-titolo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-h",
+    app: ".export-toc-title",
+    proprieta: ["font-weight", "color"],
+  },
+  {
+    id: "esporta.indice-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r.l-h2",
+    app: '.export-toc-row[data-depth="0"]',
+    proprieta: ["display", "align-items", "gap"],
+  },
+  {
+    id: "esporta.indice-puntini",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r i",
+    app: ".export-toc-dots",
+    proprieta: ["flex-grow", "opacity", "border-bottom-style"],
+  },
+  {
+    id: "esporta.indice-numero",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r b",
+    app: ".export-toc-page",
+    proprieta: ["font-weight", "font-variant-numeric", "text-align"],
+  },
+
+  // ── il clic sulla pagina (T76) ──────────────────────────────────────────
+  // Il blocco scelto: il contorno dell'accento fuori dal blocco. Il menu è
+  // quello di tutta l'app, confrontato con le sue viste.
+  {
+    id: "esporta.blocco-scelto",
+    vista: "esporta-pdf-blocco",
+    prototipo: ".px-it.sel",
+    app: ".export-fascia.is-selected",
+    proprieta: ["outline-width", "outline-style", "outline-color", "outline-offset", "border-radius"],
+  },
 ];
 
 /// I pezzi che hanno ancora differenze, e chi li corregge. Non si
 /// confrontano finché non passano in `PEZZI`.
 export const DA_COPRIRE = [
+  {
+    id: "esporta.dg-togli-stili",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-link.in',
+    app: "#export-dg-clear-own",
+    perche: "«Togli lo stile dato a N» c'è solo con uno stile dato a un diagramma solo, e quello lo dà il clic sulla pagina (T76): nessuna vista lo apre ancora dai due lati",
+  },
   // ── pezzi che la mappa nomina ma non può ancora leggere ──────────────────
   {
     id: "compiti.ispettore",

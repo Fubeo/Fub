@@ -2,7 +2,7 @@
 // si legge ancora.
 //
 // - da `LIVE_ZOOM_MIN` (0,35) in su la scheda è come sempre (`live`): le
-//   schede vive le sceglie `liveCardIds` di `cards.ts`, qui non si tocca;
+//   schede vive le sceglie `liveCardIds` di `editors/core/cards/contract.ts`, qui non si tocca;
 // - fra `BLOCK_ZOOM_MAX` (0,15) e 0,35 (`far`) una scheda vista da vicino in
 //   questa seduta mostra l'ultima immagine ferma che ha avuto (`still`), le
 //   altre il titolo grande;
@@ -20,7 +20,7 @@
 // `docs/reference/canvas-view.md` («Da lontano»).
 
 import { textCardName } from "./card-name";
-import { LIVE_ZOOM_MIN } from "./cards";
+import { LIVE_ZOOM_MIN } from "../core/cards/contract";
 import type { CanvasNode } from "./model";
 
 /// Il livello di dettaglio di uno zoom.

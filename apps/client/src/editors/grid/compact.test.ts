@@ -78,7 +78,8 @@ describe("il foglio in una scheda", () => {
   it("dà la cella attiva e la sua formula come dati, e avvisa una volta per giro", async () => {
     const { host, engine, go, life } = await compactMounted();
     const source = activeCellSource(engine, host, life);
-    expect(source.read()).toEqual({ name: "A1", formula: "Voce" });
+    const sheet = engine.selectionRefs().sheet;
+    expect(source.read()).toEqual({ name: "A1", formula: "Voce", sheet, range: "A1" });
 
     const heard = vi.fn();
     const stop = source.subscribe(heard);
@@ -89,11 +90,11 @@ describe("il foglio in una scheda", () => {
     expect(heard).not.toHaveBeenCalled();
     await Promise.resolve();
     expect(heard).toHaveBeenCalledTimes(1);
-    expect(source.read()).toEqual({ name: "B4", formula: "=SUM(B2:B3)" });
+    expect(source.read()).toEqual({ name: "B4", formula: "=SUM(B2:B3)", sheet, range: "B4" });
 
     // Una formula con un errore la dice la cella, e qui c'è la formula com'è.
     go(3, 2);
-    expect(source.read()).toEqual({ name: "C4", formula: "#DIV/0!" });
+    expect(source.read()).toEqual({ name: "C4", formula: "#DIV/0!", sheet, range: "C4" });
 
     stop();
     source.changed();
@@ -114,8 +115,21 @@ describe("il foglio in una scheda", () => {
     const { host, engine } = await workbookMounted({ ...grid, host: compactGridHost(grid.host) });
     engine.destroy();
     life = openLifetime();
-    const fresh = { book: () => null, selectionRefs: () => engine.selectionRefs() };
+    const fresh = { book: () => null, selectionRefs: () => engine.selectionRefs(), command: () => true };
     expect(activeCellSource(fresh, host, life).read()).toBeNull();
+    expect(activeCellSource(fresh, host, life).select!("Budget", "A1")).toBe(false);
+  });
+
+  it("`select` porta la griglia a una cella di un foglio col solo `selection.set`, il nome fra apici", async () => {
+    const { host, engine } = await compactMounted();
+    life = openLifetime();
+    const command = vi.fn(() => true);
+    const source = activeCellSource({ book: () => engine.book(), selectionRefs: () => engine.selectionRefs(), command }, host, life);
+    expect(source.select!("Conti dell'anno", "C3")).toBe(true);
+    expect(command).toHaveBeenCalledWith("selection.set", JSON.stringify({ range: "'Conti dell''anno'!C3", active: "'Conti dell''anno'!C3" }));
+    life.close();
+    expect(source.select!("Conti", "C3")).toBe(false);
+    expect(command).toHaveBeenCalledTimes(1);
   });
 
   it("`editCellIn` apre la cella disegnata come il doppio clic, e dice no a una cella fuori vista", async () => {

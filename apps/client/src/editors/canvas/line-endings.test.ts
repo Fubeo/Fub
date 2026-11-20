@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // La tela su file CRLF e con BOM (#97): le modifiche fatte sulla tela vera non
-// spariscono, la sessione le accetta, il file tiene i suoi terminatori e il
-// suo BOM, e l'annulla torna alla lavagna di prima. I byte esatti di ogni
+// spariscono, la sessione le accetta e le salva, il testo salvato tiene i
+// terminatori e il BOM del file, e l'annulla torna alla lavagna di prima. I byte esatti di ogni
 // modifica sono nei vettori (`src/__fixtures__/canvas-patches/46-*`…`61-*`).
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
@@ -90,19 +90,24 @@ const GESTURES: Record<string, { run: (host: HTMLElement) => void; check: (text:
   },
 };
 
-async function session(original: string): Promise<DocumentSessionCollection> {
+/** La sessione del documento, e i testi che manda al disco, in ordine. */
+async function session(original: string): Promise<{ sessions: DocumentSessionCollection; written: string[] }> {
+  const written: string[] = [];
   const api: DocumentSessionApi = {
     readDocument: async () => ({ text: original, revision: "rev-1", format_id: "canvas", source_kind: "text", text_kind: "source" }),
     openDocument: async () => ({ text: original, revision: "rev-1", format_id: "canvas", source_kind: "text", text_kind: "source" }),
     documentClosed: async () => {},
-    writeDocument: async () => ({ revision: "rev-2" }) as never,
+    writeDocument: async (_id, text) => {
+      written.push(text);
+      return `rev-${written.length + 1}`;
+    },
     resourceWrite: async () => { throw new Error("non a byte"); },
     saveDraft: async () => {},
     discardDraft: async () => {},
   };
   const sessions = new DocumentSessionCollection(api);
   await sessions.read("board.canvas");
-  return sessions;
+  return { sessions, written };
 }
 
 /** Il file tiene il BOM e i terminatori di `original`, senza mescolarli. */
@@ -119,7 +124,7 @@ describe("la tela su CRLF e BOM", () => {
         const timer = vi.spyOn(window, "setTimeout").mockImplementation(() => 1);
         const { engine, host, changes } = mount(original);
         try {
-          const sessions = await session(original);
+          const { sessions, written } = await session(original);
           gesture.run(host);
           expect(changes).toHaveLength(1);
           const change = changes[0]!;
@@ -128,6 +133,12 @@ describe("la tela su CRLF e BOM", () => {
           expect(sessions.acceptSurfaceChange("board.canvas", "canvas-a", change)).toEqual({ kind: "accepted" });
           expect(sessions.inspect("board.canvas")).toMatchObject({ text: change.text, dirty: true });
           keepsTheFile(change.text, original);
+          // Il salvataggio manda al disco proprio quel testo: il gesto c'è, e
+          // BOM e terminatori sono quelli del file. L'host lo scrive byte per
+          // byte (`crates/fub-host/tests/canvas_line_endings.rs`).
+          expect(await sessions.flush("board.canvas")).toBe(false);
+          expect(written).toEqual([change.text]);
+          gesture.check(written[0]!);
           // L'annulla: una card tolta torna come oggetto, non con gli spazi
           // che aveva; il modello è quello di prima, e il file non mescola
           // terminatori.
@@ -137,6 +148,8 @@ describe("la tela su CRLF e BOM", () => {
           expect(model(back.text)).toBe(model(original));
           keepsTheFile(back.text, original);
           expect(sessions.acceptSurfaceChange("board.canvas", "canvas-a", back)).toEqual({ kind: "accepted" });
+          expect(await sessions.flush("board.canvas")).toBe(false);
+          expect(written).toEqual([change.text, back.text]);
         } finally {
           engine.destroy();
           host.remove();

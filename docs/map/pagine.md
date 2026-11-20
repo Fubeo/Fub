@@ -71,6 +71,7 @@
 - Come si misurano i tempi di Fub nella WebView vera? → [development/webview-measurements.md](../development/webview-measurements.md)
 - Come si misura la memoria dell'app vera (R1, raccolta forzata `bench-gc`)? → [development/webview-memory.md](../development/webview-memory.md)
 - Come si lancia il giro della pre-alpha sul banco, e che cosa non prova? → [development/bench-giro.md](../development/bench-giro.md)
+- Che cosa prova ciascun compito del gruppo `scrittura` del giro, e quali sono saltati? → [development/giro-della-scrittura.md](../development/giro-della-scrittura.md)
 - Quale stile deve avere ogni file Markdown canonico della repository? → [development/documentation-style.md](../development/documentation-style.md)
 - Quali versioni esistono, chi proteggono e come si prepara un rilascio? → [development/versioning-and-releases.md](../development/versioning-and-releases.md)
 
@@ -84,8 +85,12 @@
 - Come sono le superfici di scrittura (editor e anteprima)? → [product/editor-and-preview.md](../product/editor-and-preview.md)
 - Quali modalità ha una nota, e quando compare ciò che sta sul foglio? → [product/editor-writing.md](../product/editor-writing.md)
 - Come funzionano i blocchi di Scrittura? → [product/editor-blocks.md](../product/editor-blocks.md)
+- Come si scrivono colori, ripiegabili, colonne, indice, persone e date? → [product/editor-note-extras.md](../product/editor-note-extras.md)
+- Che cosa fa il clic su un link, come si sbircia una nota, che cosa succede incollando un indirizzo? → [product/editor-links.md](../product/editor-links.md)
 - Che cosa chiede «Nuova nota» e che cosa mostra la testata di una nota con un tipo? → [product/editor-note-types.md](../product/editor-note-types.md)
 - Come si scrive dentro una nota riportata (`![[Nota#Sezione]]`)? → [product/editor-transclusion.md](../product/editor-transclusion.md)
+- Come si usa un PDF, un foglio, un documento o un disegno dentro una nota? → [product/live-cards.md](../product/live-cards.md)
+- Quante schede vive regge una nota, quanto pesano e che cosa ne vede Obsidian? → [product/live-cards-measures.md](../product/live-cards-measures.md)
 - Come funzionano tasto destro, mini-barra e comando «/»? → [product/editor-menus.md](../product/editor-menus.md)
 - Che cosa mostra la barra di formato e come si sceglie la sua forma? → [product/editor-toolbar.md](../product/editor-toolbar.md)
 - Come lavora il correttore mentre si scrive? → [product/proofing.md](../product/proofing.md)
@@ -143,6 +148,7 @@
 
 - Qual è il contratto condiviso (ABI e WIT) fra core, provider nativi e componenti WASM? → [reference/abi-and-wit.md](../reference/abi-and-wit.md)
 - Qual è il confine JSON (contratto IPC) fra shell TypeScript e `fub-app`? → [reference/ipc-contract.md](../reference/ipc-contract.md)
+- Un documento scritto per nome nel campo «Documento» di un comando: chi vale, e quando è un errore? → [reference/document-by-name.md](../reference/document-by-name.md)
 - Come la shell deposita un file nel vault (`resource_write`, il riuso dello stesso contenuto)? → [reference/resource-write.md](../reference/resource-write.md)
 - Qual è il contratto delle due porte IPC dei componenti? → [reference/components-contract.md](../reference/components-contract.md)
 - Quali file Fub scrive a livello macchina e dentro un vault (layout su disco)? → [reference/on-disk-layout.md](../reference/on-disk-layout.md)

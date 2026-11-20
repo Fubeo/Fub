@@ -120,9 +120,9 @@ watcher conserva l'attore del proprio lotto e drena una volta alla fine. Il
 cestino elimina anche la bozza, registra la mossa nel journal e restituisce il
 nuovo `DocId` della voce cestinata.
 
-I compagni persistenti `.<nome>.lock`, riconosciuti dal protocollo dello storage,
-non sono voci cestinate: il catalogo e lo svuotamento li escludono senza
-rimuoverli. File utente come `Cargo.lock` e contenuti di directory con nomi
+I compagni `.<nome>.lock`, riconosciuti dal protocollo dello storage, non sono
+voci cestinate: il catalogo li esclude e non li conta. Lo svuotamento toglie
+quelli che nessuno tiene più (vedi «CAS cooperativa»). File utente come `Cargo.lock` e contenuti di directory con nomi
 simili restano invece visibili e conservano le normali regole del cestino.
 
 Svuotare il cestino distrugge soltanto le voci che al censimento avevano già
@@ -140,8 +140,53 @@ inter-processo sul vault che il kernel non ha.
 `RootedFsStorage` coordina i writer Fub tramite un file stabile
 `.<nome>.lock` accanto al target, aperto relativamente alla capability.
 La creazione è esclusiva; soltanto `AlreadyExists` conduce all'apertura del
-lock esistente, senza troncarlo. Il file non viene rimosso al rilascio:
-writer concorrenti devono continuare a riferirsi alla stessa identità.
+lock esistente, senza troncarlo.
+
+Il file non resta nel vault. Il detentore lo toglie al rilascio, mentre tiene
+ancora il lock, e chiude l'handle dopo; uno spostamento toglie entrambi i
+compagni, quello della sorgente e quello della destinazione, quindi il cestino,
+il ripristino, la rinomina e lo spostamento non lasciano niente accanto ai
+file. Chi acquisisce il lock controlla poi che il nome porti ancora al file
+che tiene (stessa identità: `dev`/`ino`, o volume e indice su Windows): chi
+aspettava su un compagno appena tolto ottiene un file senza nome, se ne
+accorge e riparte da capo. Così l'esclusione fra writer resta quella di un
+file stabile. Su Windows un compagno tolto ma ancora aperto risponde «accesso
+negato» finché l'ultimo handle non si chiude: l'apertura riprova per al più
+due secondi. Un compagno non vuoto non è nato da Fub, che nel lock non scrive,
+e non si toglie.
+
+Un processo che muore col lock in mano (un'uscita forzata durante un
+salvataggio) lascia il file, ma il sistema rilascia il lock. La scansione
+d'apertura raccoglie i compagni che attraversa e
+`VaultStorage::remove_abandoned_lock` toglie quelli che si riescono a prendere
+senza aspettare, vuoti e ancora con la stessa identità; lo svuotamento del
+cestino fa lo stesso dentro `.trash/`. Un compagno tenuto adesso, da questo
+processo o da un altro Fub, resta. Il criterio è il lock e non l'età o un pid,
+che su un vault condiviso fra macchine non dicono niente.
+
+La scansione non entra in `.fub/`, che non è contenuto dell'utente, ma il
+supporto del vault vi prende i lock delle impostazioni, dell'anagrafe, delle
+bozze, dei sidecar del cestino e dello stato per documento dei plugin.
+All'apertura `Vault::service_locks` cerca lì soltanto i compagni, senza
+produrre voci né seguire collegamenti, e la stessa pulizia toglie quelli vuoti
+e liberi. Dello spazio di un plugin (`.fub/plugins/<id>/`) si guardano solo gli
+spazi per documento (`doc/`, `doc~trash/`), che scrive il kernel: il resto può
+essere la cartella che `Workspace::plugin_data_dir` consegna a un motore
+nativo. L'indice di ricerca vi tiene `.tantivy-writer.lock` e
+`.tantivy-meta.lock`, che hanno la stessa forma ma seguono il protocollo di
+tantivy: sono stabili per costruzione, e prenderne uno anche solo per un
+istante farebbe fallire l'apertura del suo writer.
+
+`FsStorage`, usato fuori dal vault, segue ancora il protocollo del file stabile
+e non partecipa alla pulizia. Il cestino del sistema sposta la nota fuori dal
+vault con `FsStorage` e non lascia niente accanto a lei: su Linux la mossa è
+`renameat2` con `RENAME_NOREPLACE`, senza lock, e il ripiego per i filesystem
+che non la offrono prende il lock della destinazione, nel cestino del sistema.
+Su Windows e su macOS il backend non c'è e la nota va nel cestino del vault,
+con il supporto del vault. Un backend nuovo che spostasse con `FsStorage` su
+Windows, dove la mossa serializza la sorgente con il file stabile, lascerebbe
+il compagno nella cartella della nota: il passo dentro il vault va fatto con il
+supporto del vault.
 
 Il lock viene acquisito prima della rilettura e resta detenuto durante il
 confronto e la sostituzione atomica. Un errore di apertura o acquisizione

@@ -13,8 +13,9 @@ stesso, senza conversioni e senza copie a lato.
 I comandi stanno nella barra multifunzione sopra il foglio, come in Word: le
 schede **Home**, **Inserisci**, **Layout**, **Revisione** e **Visualizza**, e
 **Tabella** quando il cursore sta in una tabella; **Annulla** e **Ripeti**
-accanto alle schede. Alt o F10 mostrano le lettere di ogni scheda e di ogni
-comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
+accanto alle schede: la storia tiene 10 000 passi, e annullando tutto
+documento e contenuto del file tornano com'erano all'apertura. Alt o F10 mostrano le
+lettere di ogni scheda e di ogni comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
 si apre per un gesto. Stretta, la barra raccoglie prima Modifica, Stili e
 Paragrafo in un pulsante ciascuno, e per ultimo Carattere; un gruppo raccolto si apre sul posto,
 nella barra, e gli altri si raccolgono per fargli posto: Esc lo richiude e
@@ -228,7 +229,7 @@ lo stesso vale per un salvataggio che cambierebbe un blocco chiuso o una
 parte che l'utente non ha toccato, che duplicherebbe un'immagine o
 lascerebbe un riferimento senza relazione. Un documento cifrato o più grande
 di 256 MiB non si apre, e neppure uno vuoto o rotto: la scheda lo dice in
-una frase, e i pannelli accanto restano in piedi (le statistiche dicono che
+una frase, con il motivo tecnico in «Dettagli», chiuso; i pannelli accanto restano in piedi (le statistiche dicono che
 non c'è niente da contare); uno molto lungo (centomila paragrafi) si apre in
 qualche secondo, senza fermare l'interfaccia.
 
@@ -244,9 +245,9 @@ Limiti attuali:
 - l'interlinea «almeno» ed «esattamente» si mostra e si conserva, ma dalla
   barra si sceglie soltanto un multiplo. La carta disegna carattere, misura,
   colore, rientri, spazi e interlinea che il file scrive sul paragrafo o sul
-  tratto; quelli che vengono dallo stile non si disegnano (valgono i
-  predefiniti di Word), e un campo vuoto della spaziatura non dice quanto
-  valgono. I bordi delle tabelle del file non si disegnano;
+  tratto, e in una cella lo stile della tabella; quelli dello stile del
+  paragrafo no (valgono i predefiniti di Word), e un campo vuoto della
+  spaziatura non dice quanto valgono. I bordi delle tabelle non si disegnano;
 - un foglio il cui testo non ci sta si allunga e non si spezza, quindi le
   **Pagine** della banda di stato contano i fogli, non le pagine che Word
   stamperebbe. Una sezione che comincia a pagina pari o dispari apre un foglio
@@ -344,10 +345,10 @@ La scheda «Disegna» (`editors/rich/ink.ts`) mette un velo sopra la pagina
 quando è scelto uno strumento che disegna, e raccoglie i tratti con
 l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`). I tratti di una
 sessione diventano un oggetto `ink` davanti al testo, ancorato al paragrafo
-più vicino, in un passo di Annulla; la geometria pura (riquadro, gomma, lazo,
-contorno) sta in `editors/rich/ink-shape.ts`. In un documento OpenDocument la
-sessione entra come `drawing`. Un inchiostro del file che non si legge resta
-opaco, e il chip dello stato lo dice in «Che cosa manca?».
+più vicino, in un passo di Annulla, che toglie l'ultimo tratto anche a sessione
+aperta (`RichEngine.holdPending`); la geometria pura (riquadro, gomma, lazo,
+contorno) sta in `editors/rich/ink-shape.ts`. In OpenDocument è un `drawing`.
+Un inchiostro illeggibile resta opaco; il chip dello stato lo dice in «Che cosa manca?».
 
 Il menu **«Tipo di penna»** sceglie una delle sei penne del disegno
 ([penne](drawing-pen.md)); la penna di ogni tratto entra nel pennello come
@@ -412,22 +413,21 @@ apre.
 di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o XML
 (un `.docx` in un file XML solo, Flat OPC), con gli esportatori di WordCraft.
 Il documento non si tocca: la copia arriva nell'attività e si salva dove si
-vuole. Una copia nello stesso formato del documento (un `.rtf` in RTF, un
-`.odt` in OpenDocument) non si fa: sarebbe il file riscritto da un modello che
-ne porta meno.
+vuole. Una copia nello stesso formato (un `.rtf` in RTF) non si fa. Il
+documento si sceglie dall'elenco o si scrive per nome (nome, nome del file o
+percorso, senza distinzione di maiuscole) se un solo documento di
+videoscrittura lo porta; altrimenti il comando dice che non c'è o elenca gli
+omonimi.
 
 Accanto alla copia l'attività dice **cosa non porta**. La copia si rilegge con
 l'importatore del suo formato e si confronta con il documento: parole, titoli,
 voci d'elenco, tabelle, link, enfasi, note, commenti, intestazioni e piè di
 pagina, immagini, grafici, forme, equazioni, campi, segnalibri, revisioni e
 oggetti non interpretati. Ciò che manca o diminuisce è un avviso, con il
-numero. Impaginazione, caratteri, colori e stili dei paragrafi non si misurano,
-e l'avviso lo dice. Un documento letto da un importatore (`.rtf`, `.doc`,
-`.odt`) parte già da meno del file, e anche questo è un avviso. In HTML e nel
-testo semplice i commenti si possono mettere in fondo alla copia.
-
-`.html`, `.txt`, `.tex` e `.xml` restano file di testo: si aprono e si
-modificano come sorgente, anche quando sono nati da una copia.
+numero; impaginazione, caratteri, colori e stili non si misurano, e un avviso
+lo dice, come per un documento letto da un importatore (`.rtf`, `.doc`, `.odt`).
+In HTML e nel testo semplice i commenti vanno, a scelta, in fondo. **Anteprima…**
+dà gli avvisi. `.html`, `.txt`, `.tex` e `.xml` restano file di testo.
 
 ## Dove si trova
 

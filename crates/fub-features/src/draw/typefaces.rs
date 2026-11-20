@@ -65,6 +65,27 @@ const FUB_FILES: [&[u8]; 6] = [
     include_bytes!("../../fonts/jetbrains-mono-latin-wght-italic.woff2"),
 ];
 
+/// Il nome di ogni file di [`FUB_FILES`] fra quelli dell'app
+/// (`apps/client/public/fonts`), nello stesso ordine.
+const FUB_NAMES: [&str; 6] = [
+    "inter-latin-wght-normal.woff2",
+    "inter-latin-wght-italic.woff2",
+    "literata-latin-wght-normal.woff2",
+    "literata-latin-wght-italic.woff2",
+    "jetbrains-mono-latin-wght-normal.woff2",
+    "jetbrains-mono-latin-wght-italic.woff2",
+];
+
+/// I byte del file di Fub che l'app serve come `fonts/<nome>`, se è uno di
+/// quelli incorporati qui: l'export delle note in PDF li incorpora senza
+/// chiederli alla vista.
+pub(crate) fn fub_file(nome: &str) -> Option<&'static [u8]> {
+    FUB_NAMES
+        .iter()
+        .position(|n| *n == nome)
+        .map(|i| FUB_FILES[i])
+}
+
 /// Un file di Fub decodificato, con le sue facce.
 struct FubFile {
     sfnt: Vec<u8>,

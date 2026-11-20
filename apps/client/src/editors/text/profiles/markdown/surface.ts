@@ -26,6 +26,8 @@ import { api } from "../../../../host/ipc";
 import { keepTitle, retitleIn, retitleWaiting } from "./page/title";
 import { selectBlockThenAll, selectBody } from "./blocks/keys";
 import type { MoveBlockPort } from "./blocks/move-to";
+import type { TableSheetPort } from "./table-sheet";
+import type { BoardPort } from "./blocks/to-board";
 import type { SyncBlockPort } from "./blocks/sync-to";
 import { blocksPreferred, EDITOR_BLOCKS_KEY, rememberBlocks } from "../../../../state/editor-blocks";
 import { mountReadingHeader, type PageOptions } from "./page/header";
@@ -68,7 +70,7 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import { withLineBreaks } from "../../line-breaks";
 import type { CompletionSources } from "./completions";
-import { BASE_ACTION, SYNC_BLOCK_ACTION, createBaseHere, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
+import { BASE_ACTION, CANVAS_ACTION, REMINDER_ACTION, SYNC_BLOCK_ACTION, createBaseHere, createCanvasHere, reminderHere, reminderParams, cursorIsLiteral, openSlashAt, openSlashTransform, runSlashAction, slashAvailable, type NewBasePort, type SlashMenuSource } from "./slash";
 import { promptText } from "../../../../ui/dialogs";
 import { dailyLink } from "./completions";
 import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
@@ -76,12 +78,16 @@ import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
 export { cursorIsLiteral };
 import { createMarkdownProfile } from "./profile";
 import { Transclusions, type TransclusionDeps } from "./transclusion";
+import { LiveCards, liveCardEmbed, type LiveCardsPort } from "./live-cards";
+import { detachedTable } from "./table-sheet";
+import { CellValues, hostCellSlot, type CellValuePort } from "./cell-value";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
 import { foldable, foldAll, unfoldAll } from "@codemirror/language";
 import { foldLess, foldMore, toggleFold } from "../../fold-levels";
 import type { EditorView } from "@codemirror/view";
+import type { ReminderTime } from "./task-reminder";
 import type { EditorState, Extension, Transaction } from "@codemirror/state";
 import {
   ACTION_UNAVAILABLE,
@@ -122,7 +128,7 @@ import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource 
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
-import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup } from "./block-groups";
+import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup, sheetCardGroup, type DetachCard } from "./block-groups";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
@@ -209,6 +215,12 @@ export interface MarkdownSurfaceOptions {
   /// «Sposta in…» (T32): le note, i loro titoli e il comando che sposta il
   /// blocco. Senza, il menu del blocco non lo offre.
   moveBlock?: MoveBlockPort;
+  /// «Trasforma in foglio» (T52): il comando che scrive la tabella in un
+  /// foglio accanto alla nota. Senza, il menu della tabella non lo offre.
+  tableSheet?: TableSheetPort;
+  /// «Porta su una lavagna» (T48): il comando che fa dei blocchi le schede di
+  /// una lavagna. Senza, il menu del blocco non lo offre.
+  boardBlock?: BoardPort;
   /// Il blocco sincronizzato (T30): «Sincronizza in un'altra nota» nel menu
   /// del blocco e «Blocco di un'altra nota» nel «/». Senza, non ci sono.
   syncBlock?: SyncBlockPort;
@@ -225,6 +237,12 @@ export interface MarkdownSurfaceOptions {
   /// un riquadro, per scrivere dentro `![[Nota#^id]]`. Senza, le note
   /// riportate si leggono soltanto.
   transclusion?: TransclusionDeps;
+  /// Le schede vive (E19, T41): l'ospite delle schede della lavagna, caricato
+  /// alla prima scheda. Senza, l'embed di un file resta la resa di sempre.
+  liveCards?: LiveCardsPort;
+  /// I valori di cella nel testo (E23, T53): il lettore dei fogli, caricato
+  /// al primo valore. Senza, l'embed di una cella resta la resa di sempre.
+  cellValues?: CellValuePort;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
@@ -358,18 +376,21 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// colonna si chiedono per la nota di questo vault, non per lo stesso
   /// percorso in un altro.
   const vault = openVaultRoot();
-  /// Il documento di questa superficie, letto a ogni gesto: una rinomina lo
-  /// cambia mentre la superficie è montata. I link si risolvono da qui, non
-  /// dal riquadro col fuoco (una sbirciata, una scheda della lavagna).
-  const linkSource = (): string => resources?.documentId ?? documentId;
+  /// Il documento di questa superficie, letto a ogni gesto: una rinomina
+  /// cambia l'id della sessione mentre la superficie resta montata, e
+  /// `context.documentId` resta il nome di quando la nota si è aperta. Ogni
+  /// confronto col documento del riquadro (il «/», i link, la pagina) passa da
+  /// qui. I link si risolvono da qui, non dal riquadro col fuoco (una
+  /// sbirciata, una scheda della lavagna).
+  const docId = (): string => resources?.documentId ?? documentId;
   const openWikilink = (page: string, heading?: string | null, block?: string | null) =>
-    opts.onOpenWikilink(page, heading ?? null, block ?? null, linkSource());
+    opts.onOpenWikilink(page, heading ?? null, block ?? null, docId());
   /// Come si segue un link da questa superficie: aprire, sbirciare, e la
   /// regola del clic (`open-link.ts`).
   const follow: WikilinkFollow = {
     openWikilink: (page, heading, block) => openWikilink(page, heading, block),
-    openPath: (path) => opts.onOpenPath(path, linkSource()),
-    ...(opts.onPeekLink ? { peekLink: (link: PeekLink) => opts.onPeekLink!(link, linkSource()) } : {}),
+    openPath: (path) => opts.onOpenPath(path, docId()),
+    ...(opts.onPeekLink ? { peekLink: (link: PeekLink) => opts.onPeekLink!(link, docId()) } : {}),
     ...(opts.linkClick ? { linkClick: () => opts.linkClick!() } : {}),
   };
   /// Il clic su un link della resa (la Lettura, un blocco reso): Alt sbircia,
@@ -385,8 +406,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     view: (url) => cards.view(url),
     request: (url) => cards.request(url),
     watch: (changed) => cards.watch(changed),
-    ...(cards.note ? { note: (page: string) => cards.note!(page, linkSource()) } : {}),
-    ...(cards.holdNote ? { holdNote: (page: string) => cards.holdNote!(page, linkSource()) } : {}),
+    ...(cards.note ? { note: (page: string) => cards.note!(page, docId()) } : {}),
+    ...(cards.holdNote ? { holdNote: (page: string) => cards.holdNote!(page, docId()) } : {}),
   };
   /// La griglia di tabella che ha il fuoco: le azioni della barra agiscono
   /// sulle sue celle invece che sul cursore del testo.
@@ -397,7 +418,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const slashHost = opts.slash?.menu;
   const slashMenu: SlashMenuSource | undefined = slashHost && {
     enabled: () =>
-      slashHost.enabled() && !readOnly && mode !== "reading" && opts.slash?.currentDoc() === documentId && !tableGrid,
+      slashHost.enabled() && !readOnly && mode !== "reading" && opts.slash?.currentDoc() === docId() && !tableGrid,
     panel: (events, transform) => slashHost.panel({
       ...events,
       outline: () => engine.readState(outlineOf),
@@ -411,9 +432,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (entry.id === BASE_ACTION && !transform) {
         // Il «/base» resta finché il file non c'è: lo toglie l'embed.
         startBase(view, from, to);
+      } else if (entry.id === CANVAS_ACTION && !transform) {
+        // Come la Base: il «/lavagna» resta finché il file non c'è.
+        startCanvas(view, from, to);
       } else if (entry.id === SYNC_BLOCK_ACTION && !transform) {
         // Come la Base: il «/» resta finché la trasclusione non c'è.
         startSync(view, from, to);
+      } else if (entry.id === REMINDER_ACTION && !transform) {
+        startReminder(view, from, to, reminderParams(params));
       } else if (entry.action && transform) {
         const action = MARKDOWN_ACTIONS.get(entry.id);
         const command = action && (Object.keys(params).length > 0 ? action.withParams?.(params) : action.run);
@@ -429,28 +455,46 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// «Base» dal «/» o da un menu (E12): il file accanto alla nota, poi
   /// l'embed. Una alla volta: la seconda aspetta che la prima finisca.
   let creatingBase = false;
+  /// La porta per creare un file accanto alla nota dal «/»: la Base o la
+  /// lavagna (T47), con il loro titolo e la loro etichetta.
+  const newFilePort = (kind: "base" | "canvas"): NewBasePort => ({
+    note: docId(),
+    taken: async (file) =>
+      (await resolvedReference({ kind: "wiki", value: { page: file } }, docId()).catch(() => null)) !== null,
+    ask: (proposal, taken) => promptText({
+      title: liveStrings.t(kind === "base" ? "base.new.title" : "canvas.new.title"),
+      label: taken !== null
+        ? liveStrings.t("base.new.taken", { name: taken })
+        : liveStrings.t(kind === "base" ? "base.new.name" : "canvas.new.name"),
+      value: proposal,
+      okLabel: liveStrings.t("base.new.create"),
+    }),
+    create: async (id, text) => {
+      await api.resourceWrite(id, new TextEncoder().encode(text), null, vault);
+    },
+    writable: () => editable() && !tableGrid,
+    notify: (message) => {
+      if (!life.closed) notify(message, "guasto");
+    },
+  });
   const startBase = (view: EditorView, from: number, to: number): void => {
     if (creatingBase) return;
     creatingBase = true;
-    const port: NewBasePort = {
-      note: linkSource(),
-      taken: async (file) =>
-        (await resolvedReference({ kind: "wiki", value: { page: file } }, linkSource()).catch(() => null)) !== null,
-      ask: (proposal, taken) => promptText({
-        title: liveStrings.t("base.new.title"),
-        label: taken === null ? liveStrings.t("base.new.name") : liveStrings.t("base.new.taken", { name: taken }),
-        value: proposal,
-        okLabel: liveStrings.t("base.new.create"),
-      }),
-      create: async (id, text) => {
-        await api.resourceWrite(id, new TextEncoder().encode(text), null, vault);
-      },
-      writable: () => editable() && !tableGrid,
-      notify: (message) => {
-        if (!life.closed) notify(message, "guasto");
-      },
-    };
+    const port = newFilePort("base");
     void createBaseHere(view, from, to, port)
+      .catch((error: unknown) => port.notify(errorText(error)))
+      .finally(() => { creatingBase = false; });
+  };
+  /// «Lavagna» dal «/» (T47): come la Base, poi la zona lavagna si apre già
+  /// attiva appena la scheda si mostra.
+  const startCanvas = (view: EditorView, from: number, to: number): void => {
+    if (creatingBase) return;
+    creatingBase = true;
+    const port = newFilePort("canvas");
+    void createCanvasHere(view, from, to, port)
+      .then((line) => {
+        if (line !== null && !life.closed) liveCards?.activateWhenShown(view, line);
+      })
       .catch((error: unknown) => port.notify(errorText(error)))
       .finally(() => { creatingBase = false; });
   };
@@ -466,12 +510,29 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     };
     void import("./blocks/sync-to")
       .then((sync) => sync.syncedBlockHere(view, from, to, port, {
-        doc: linkSource(),
+        doc: docId(),
         writable: () => editable() && !tableGrid,
         notify: say,
       }))
       .catch((error: unknown) => say(errorText(error)))
       .finally(() => { syncing = false; });
+  };
+  /// «Promemoria» dal «/» o dal gruppo «Compito» (T36): la riga diventa un
+  /// compito se non lo è; col giorno detto («/promemoria venerdì 9») il
+  /// promemoria si scrive subito; senza, si apre la scelta, caricata al primo
+  /// uso.
+  const startReminder = (view: EditorView, from: number, to: number, when: ReminderTime | null): boolean => {
+    const at = reminderHere(view, from, to, when);
+    if (at === null) return false;
+    if (when) return true;
+    void import("./reminder-picker").then((picker) => {
+      if (life.closed || !view.dom.isConnected) return;
+      const end = view.state.doc.lineAt(Math.min(at, view.state.doc.length)).to;
+      picker.openReminderPicker(view, at, picker.caretAnchor(view, end));
+    }, (error: unknown) => {
+      if (!life.closed) notify(errorText(error), "guasto");
+    });
+    return true;
   };
   /// Gli argomenti di un'azione come li vuole il profilo: la data detta
   /// diventa il link alla sua giornaliera, che sa dove sta soltanto la shell.
@@ -493,7 +554,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   let currentTheme: Theme = getCurrentTheme();
   const transclusions = new Transclusions({
     deps: opts.transclusion ?? null,
-    hostDoc: linkSource,
+    hostDoc: docId,
     editable: () => editable(),
     open: (page, heading, block) => void openWikilink(page, heading, block),
     theme: () => currentTheme,
@@ -516,6 +577,59 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       completions: { searchNotes: opts.completions.searchNotes, listTags: opts.completions.listTags },
     }).extensions(),
   });
+  /// Le schede vive della nota (T41): una sola attiva, le vive contate.
+  const liveCards = opts.liveCards ? new LiveCards({
+    port: opts.liveCards,
+    hostDoc: docId,
+    editable: () => editable(),
+    // La cella attiva della scheda di foglio va al gruppo «Foglio» della
+    // barra di formato (T43), che la chiede dopo la sua pausa.
+    sheetChanged: () => actionsChanged(),
+    // Le schede dentro le colonne leggono il loro embed dal testo di adesso.
+    text: (from, to) => engine.readState((state) => (to <= state.doc.length ? state.sliceDoc(from, to) : null)),
+    // «Annota» (T49) crea la sua lavagna accanto alla nota con le porte della
+    // «Lavagna» del «/» (T47), senza chiedere il nome.
+    boards: {
+      taken: (file) => newFilePort("canvas").taken(file),
+      create: (id, text) => newFilePort("canvas").create(id, text),
+    },
+    notify: (message) => {
+      if (!life.closed) notify(message, "guasto");
+    },
+  }) : null;
+  /// I valori di cella della nota (T53): una lettura per cella, un ascolto per
+  /// file, in Scrittura e in Lettura.
+  const cellValues = opts.cellValues ? new CellValues({ port: opts.cellValues, hostDoc: docId }) : null;
+  /// «Stacca come tabella» (T52): la scheda di una parte di foglio diventa
+  /// una tabella coi valori che mostra adesso, con un passo d'annullamento
+  /// della nota. Le formule restano nel foglio, e il foglio non cambia.
+  const detachCard = async (card: DetachCard): Promise<void> => {
+    const port = opts.cellValues;
+    if (!port) return;
+    const before = engine.readState((state) => state.doc.lineAt(Math.min(card.start, state.doc.length)).text);
+    const locale = engine.readState((state) => declaredLanguage(state.doc)) ?? resolvedLanguage();
+    const result = await detachedTable(port, card.page, docId(), card.part, locale);
+    if (life.closed) return;
+    if ("failed" in result) {
+      notify(result.failed, "guasto");
+      return;
+    }
+    // La riga si rilegge: se l'embed è cambiato mentre si leggeva il foglio,
+    // non si scrive niente.
+    const done = editable() && engine.runViewCommand((view) => {
+      const line = view.state.doc.lineAt(Math.min(card.start, view.state.doc.length));
+      if (line.text !== before || !liveCardEmbed(line.text)) return false;
+      const indent = /^\s*/u.exec(line.text)![0];
+      const from = line.from + indent.length;
+      const insert = withLineBreaks(view.state, result.table.split("\n").join(`\n${indent}`));
+      view.dispatch({ changes: { from, to: line.to, insert }, selection: { anchor: from }, userEvent: "input", scrollIntoView: true });
+      return true;
+    });
+    notify(liveStrings.t(done ? "table_sheet.detached" : "table_sheet.detach.changed"), done ? "info" : "guasto");
+  };
+  const cellValueSlot = cellValues
+    ? { cellValue: (slot: HTMLElement, life: Lifetime) => hostCellSlot(slot, life, cellValues) }
+    : {};
   const profile = createMarkdownProfile({
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
@@ -527,7 +641,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // e un documento che non c'è lo dice invece di tacere.
       openPath: (path) => {
         void Promise.resolve()
-          .then(() => opts.onOpenPath(path, resources?.documentId ?? documentId))
+          .then(() => opts.onOpenPath(path, docId()))
           .catch((error: unknown) => {
             if (!life.closed) notify(t("preview.open_failed", { page: path, reason: errorText(error) }), "guasto");
           });
@@ -536,12 +650,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       pageIcon: opts.pageIcons?.icon,
       isPerson: opts.pageIcons?.isPerson,
       linkCard: linkCards,
+      ...(liveCards ? { liveCards } : {}),
+      ...(cellValues ? { cellValues } : {}),
       // La pagina del giorno (E17): in fondo alla giornaliera, se questa nota
       // lo è con la cartella e il formato di adesso.
       ...(opts.completions.dates?.dailyDate ? {
         dayPage: {
           current: () => {
-            const doc = resources?.documentId ?? documentId;
+            const doc = docId();
             const date = opts.completions.dates?.dailyDate?.(doc) ?? null;
             return date === null ? null : { doc, date };
           },
@@ -550,6 +666,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // La pagina del tipo (E5): in fondo alla nota di un tipo, quando il
       // core dice che lo è (`checkTypePage`).
       typePage: { current: () => typePageDoc },
+      ...(opts.tableSheet ? { tableSheet: { doc: docId, port: opts.tableSheet } } : {}),
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;
@@ -563,7 +680,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       },
       mountRendered: (container, html, actions) => mountMarkdown(container, html, {
         ...actions,
-        get documentId() { return resources?.documentId ?? documentId; },
+        get documentId() { return docId(); },
         resources,
         openWikilink: clickWikilink,
         openPath: clickPath,
@@ -573,6 +690,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         editFence: readOnly ? undefined : actions.editFence,
         importRemoteImage: readOnly ? undefined : importRemoteImage,
         transclude: readOnly ? undefined : transclusions.mount,
+        ...(liveCards ? { liveCard: (slot: HTMLElement, life: Lifetime) => liveCards.hostSlot(slot, life) } : {}),
+        ...cellValueSlot,
       }),
     },
     completions: slashMenu ? { ...opts.completions, slash: slashMenu } : opts.completions,
@@ -661,7 +780,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       // suo tratto: il `/` è testo.
       event.target.closest(".tb-frame, [data-transclusion-editing]")
     ) return;
-    if (slash.currentDoc() !== documentId) return;
+    if (slash.currentDoc() !== docId()) return;
     // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su
     // una selezione oppure a inizio parola, fuori da codice e link.
     const cursor = engine.cursorContext();
@@ -684,7 +803,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       parent,
       engine.selections().primary.text,
       () => !life.closed && parent.isConnected && engine.getDoc() === text &&
-        slash.currentDoc() === documentId,
+        slash.currentDoc() === docId(),
       slash,
       // Chiusa senza scelta, la palette restituisce la battuta.
       typed ? () => {
@@ -790,16 +909,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     },
   };
   const pageOptions: PageOptions = {
-    page: () => pageName(resources?.documentId ?? documentId),
+    page: () => pageName(docId()),
     notify: (message, tone) => notify(message, tone),
-    folderPage: () => isFolderPage(resources?.documentId ?? documentId),
-    renamedPage: (name) => renamedPageName(resources?.documentId ?? documentId, name),
+    folderPage: () => isFolderPage(docId()),
+    renamedPage: (name) => renamedPageName(docId(), name),
     // La rinomina riuscita riscrive l'H1 ripiegato (T7) sulla vista viva
     // della superficie: rinominare può rifare la vista, e quella che ha
     // aperto il campo del titolo non è più nella pagina.
     rename: opts.onRenamePage
       ? async (name) => {
-        const from = resources?.documentId ?? documentId;
+        const from = docId();
         const to = renamedPagePath(from, name);
         const problem = await opts.onRenamePage!(from, name);
         // La superficie che mostra la pagina adesso, in questo riquadro: se
@@ -812,7 +931,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // larghezza e «Sostituisci»: la resa non apre il suo.
     mountImage: (root, html) => mountMarkdown(root, html, { ...renderedOptions(), imageMenu: false }),
     subpage: opts.onNewSubpage
-      ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
+      ? (name) => opts.onNewSubpage!(docId(), name)
       : undefined,
     propertyTypes: () => propertyTypes,
     noteType: (raw) => {
@@ -821,7 +940,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return known;
     },
     listTypes: () => listNoteTypes(),
-    openType: (doc) => void Promise.resolve(opts.onOpenPath(doc, linkSource())).catch((error: unknown) => notify(errorText(error), "guasto")),
+    openType: (doc) => void Promise.resolve(opts.onOpenPath(doc, docId())).catch((error: unknown) => notify(errorText(error), "guasto")),
     featureInType: (type, key, on) => void featureTyped(type, key, on),
     // «Tipo» nel menu di una proprietà: vale per tutto il vault, ed è il
     // comando del registro (`property.type.set`) a scriverlo.
@@ -858,8 +977,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     ...pageOptions,
     // La nota e il suo vault: i bersagli fuori dalla colonna (T2b). Solo dei
     // Blocchi, la testata non li usa.
-    document: () => ({ documentId: resources?.documentId ?? documentId, vault }),
+    document: () => ({ documentId: docId(), vault }),
     ...(opts.moveBlock ? { move: opts.moveBlock } : {}),
+    ...(opts.boardBlock ? { board: opts.boardBlock } : {}),
     ...(opts.syncBlock ? { sync: opts.syncBlock } : {}),
     // In una scheda della lavagna Esc esce dalla scrittura: non seleziona il blocco.
     escapeLeaves: context.escapeLeaves === true,
@@ -928,7 +1048,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // torna in Scrittura.
   const titleKeeper = {
     root: parent,
-    documentId: () => resources?.documentId ?? documentId,
+    documentId: () => docId(),
     retitle: (before: string, after: string) => {
       if (life.closed) return;
       engine.runViewCommand((view) => retitleView(view, before, after));
@@ -967,7 +1087,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// sparisce. Una risposta vecchia non copre una più nuova.
   function checkTypePage(): void {
     const asked = ++typePageAsked;
-    const doc = resources?.documentId ?? documentId;
+    const doc = docId();
     void listNoteTypes().then((list) => {
       if (life.closed || asked !== typePageAsked) return;
       const next = list.types.some((type) => type.doc === doc) ? doc : null;
@@ -1026,7 +1146,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     placeReadingFacts();
   };
   if (opts.noteFacts) {
-    life.add(opts.noteFacts.follow(() => resources?.documentId ?? documentId, (next) => {
+    life.add(opts.noteFacts.follow(() => docId(), (next) => {
       facts = next;
       drawFacts();
     }));
@@ -1065,7 +1185,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   void readSurfaceSettings();
   checkTypePage();
   life.add(onEvent("document_renamed", (event) => {
-    if (event.to === (resources?.documentId ?? documentId)) checkTypePage();
+    if (event.to === (docId())) checkTypePage();
   }));
   life.add(onEvent("setting_changed", (event) => {
     if (event.key === TYPES_FOLDER_SETTING) checkTypePage();
@@ -1197,7 +1317,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const download = opts.onImportRemoteImage;
     if (readOnly || !download) return;
     try {
-      const link = await download(url, resources?.documentId ?? documentId);
+      const link = await download(url, docId());
       if (link === null || life.closed || readOnly) return;
       engine.runCommand(relinkImage(url, link));
     } catch (error) {
@@ -1239,7 +1359,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// a ogni richiesta: una rinomina lo cambia mentre la resa è montata.
   function renderedOptions(toggleTask?: (sourceOffset: number) => void): MarkdownMountOptions {
     return {
-      get documentId() { return resources?.documentId ?? documentId; },
+      get documentId() { return docId(); },
       resources,
       openWikilink: clickWikilink,
       openPath: clickPath,
@@ -1247,6 +1367,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       searchTag: opts.onSearchTag,
       toggleTask,
       importRemoteImage: toggleTask ? importRemoteImage : undefined,
+      ...cellValueSlot,
       imageActions: {
         ...(opts.onOpenDocument ? { open: (id: string) => void Promise.resolve(opts.onOpenDocument!(id)).catch(() => {}) } : {}),
         ...(opts.onShowFile
@@ -1429,13 +1550,19 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const editorActions: SurfaceEditorActions = {
     has: (id) =>
       MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id) || id === COMMENT_ACTION || id === BASE_ACTION || id === LINK_EDIT_ACTION ||
-      (id === SYNC_BLOCK_ACTION && opts.syncBlock !== undefined),
+      id === REMINDER_ACTION ||
+      (id === SYNC_BLOCK_ACTION && opts.syncBlock !== undefined) ||
+      // La lavagna dal «/» (T47) dove la nota ha le schede vive, che la
+      // mostrano.
+      (id === CANVAS_ACTION && liveCards !== null),
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
       if (FOLDS.has(id)) return { enabled: true, active: null };
       if (id === BASE_ACTION) return { enabled: !tableGrid && !creatingBase, active: null };
+      if (id === CANVAS_ACTION) return { enabled: !tableGrid && !creatingBase && liveCards !== null, active: null };
       if (id === SYNC_BLOCK_ACTION) return { enabled: !tableGrid && !syncing && opts.syncBlock !== undefined, active: null };
+      if (id === REMINDER_ACTION) return { enabled: !tableGrid, active: null };
       if (id === "text.undo" || id === "text.redo") {
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
@@ -1464,6 +1591,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           return true;
         });
       }
+      if (id === CANVAS_ACTION) {
+        if (tableGrid || creatingBase || !liveCards) return false;
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          startCanvas(view, at, at);
+          return true;
+        });
+      }
       if (id === SYNC_BLOCK_ACTION) {
         // Da un menu, al cursore: senza «/» da togliere.
         if (tableGrid || syncing || !opts.syncBlock) return false;
@@ -1471,6 +1606,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           const at = view.state.selection.main.head;
           startSync(view, at, at);
           return true;
+        });
+      }
+      if (id === REMINDER_ACTION) {
+        // Da un menu, al cursore: senza «/» da togliere.
+        if (tableGrid) return false;
+        const when = reminderParams(params);
+        return engine.runViewCommand((view) => {
+          const at = view.state.selection.main.head;
+          return startReminder(view, at, at, when);
         });
       }
       if (id === LINK_EDIT_ACTION) {
@@ -1504,8 +1648,13 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       };
     },
     // La bolla di selezione compare solo dove si scrive con la resa accanto:
-    // nella lettura la selezione non ha niente da formattare.
-    selectionBox: () => (editable() ? engine.selectionBox() : null),
+    // nella lettura la selezione non ha niente da formattare. Una scheda viva
+    // scelta è un oggetto, non testo: la sua riga di contesto basta (T41).
+    selectionBox: () => {
+      if (!editable()) return null;
+      if (liveCards && engine.runViewCommand((view) => liveCards.objectsChosen(view))) return null;
+      return engine.selectionBox();
+    },
   };
 
 
@@ -1587,8 +1736,6 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       engine.paste(text ?? "", plain ? null : html);
     }).catch(() => notify(t("editor_menu.paste_failed"), "guasto"));
   };
-
-  const docId = (): string => resources?.documentId ?? documentId;
 
   /// «Seleziona tutto» del tasto destro fa ciò che fa Mod-a, che la voce
   /// mostra: in Scrittura coi blocchi il blocco e poi tutti, senza il corpo
@@ -2385,8 +2532,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       currentTheme = theme;
       engine.setTheme(theme);
       transclusions.setTheme(theme);
+      liveCards?.themeChanged();
     },
     editorActions,
+    // Anche in Lettura, come Ctrl+Z sulla resa: la pila è dell'editor nascosto.
+    history: (step) => {
+      if (readOnly || life.closed) return false;
+      closeSlashPalette(parent);
+      return step === "undo" ? engine.undo() : engine.redo();
+    },
     panels: comments.panels,
     contextMenu: (at) => {
       if (life.closed) return null;
@@ -2396,6 +2550,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // barra la chiede dopo una pausa, non a ogni battuta (`block-groups.ts`).
     blockGroup: (at) => {
       if (life.closed || mode === "reading") return null;
+      // Con una scheda di foglio attiva il gruppo è suo (T43): «Apri» e la
+      // cella attiva con la sua formula.
+      const sheet = at ? null : liveCards?.activeSheet() ?? null;
+      if (sheet) return sheetCardGroup(sheet);
       const pos = at ? engine.posAtPoint(at.x, at.y) : null;
       if (at && pos === null) return null;
       return markdownBlockGroup({
@@ -2411,6 +2569,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         copy: (text) => copyText(text, t("editor_menu.copied")),
         openLink: (page, heading, block) => void openWikilink(page, heading, block),
         editHere: (start) => engine.runViewCommand((view) => transclusions.editAt(view, start)),
+        ...(liveCards ? {
+          activateCard: (start: number) => engine.runViewCommand((view) => liveCards.activateAt(view, start)),
+          annotateCard: (start: number) => engine.runViewCommand((view) => liveCards.annotateAt(view, start)),
+        } : {}),
+        ...(opts.cellValues ? { detachCard: (card: DetachCard) => void detachCard(card) } : {}),
       }, pos);
     },
     find: () => !life.closed && mode !== "reading" && engine.openFind(),
@@ -2437,6 +2600,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       unmountReading = null;
       reading.remove();
       engine.destroy();
+      // Dopo l'editor, che smonta i widget: le schede rimaste se ne vanno qui.
+      liveCards?.destroy();
+      cellValues?.destroy();
       resources?.release();
       delete parent.dataset.markdownMode;
     },

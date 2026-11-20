@@ -784,6 +784,35 @@
       "restart_required": false
     }
   ],
+  "ShellNotice": [
+    {
+      "event": {
+        "type": "document_changed",
+        "id": "Nota.md",
+        "changes": null
+      },
+      "origin": {
+        "actor": {
+          "kind": "watcher"
+        },
+        "batch": null
+      },
+      "vault": "/vault"
+    },
+    {
+      "event": {
+        "type": "setting_changed",
+        "key": "appearance.theme",
+        "scope": "machine"
+      },
+      "origin": {
+        "actor": {
+          "kind": "user"
+        },
+        "batch": null
+      }
+    }
+  ],
   "ResourceWriteReceipt": [
     {
       "id": "Allegati/foto.png",

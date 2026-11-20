@@ -16,11 +16,11 @@
 //! filtri, i caratteri oltre i quattordici del PDF) lo dice una nota a parte.
 
 use fub_abi::command::{
-    Choice, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind,
-    ParamSpec,
+    Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
+    CommandSpec, DocumentNameKeys, InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::model::DocId;
-use fub_abi::text::{StringCatalog, Text};
+use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi, ReadApi, VaultRead};
 use fub_abi::transfer::{
     copy_names, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportSelection,
@@ -307,6 +307,9 @@ const T_TITLE: &str = "cmd.xlsx.export-pdf.title";
 const T_DESC: &str = "cmd.xlsx.export-pdf.desc";
 const T_DOC: &str = "cmd.xlsx.export-pdf.doc";
 const T_SHEETS: &str = "cmd.xlsx.export-pdf.sheets";
+const T_PREVIEW: &str = "cmd.xlsx.export-pdf.preview";
+const T_DOC_MISSING: &str = "cmd.xlsx.export-pdf.doc.missing";
+const T_DOC_AMBIGUOUS: &str = "cmd.xlsx.export-pdf.doc.ambiguous";
 
 fn sheets_key(sheets: Sheets) -> String {
     format!("{T_SHEETS}.{}", sheets.key())
@@ -346,7 +349,7 @@ impl CommandProvider for XlsxCommands {
         &self,
         command: &str,
         args: serde_json::Value,
-        _mode: InvokeMode,
+        mode: InvokeMode,
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
         if command != EXPORT_PDF {
@@ -354,7 +357,7 @@ impl CommandProvider for XlsxCommands {
         }
         let spec = self.commands().remove(0);
         spec.validate_args(&args)?;
-        let doc = DocId::new(args["doc"].as_str().unwrap_or_default());
+        let doc = named_workbook(&*host, &args)?;
         if !is_workbook(&*host, &doc) {
             return Err(PluginError::BadArgs(
                 format!("`{doc}` is not an .xlsx workbook").into(),
@@ -364,16 +367,70 @@ impl CommandProvider for XlsxCommands {
             .get(OPTION_SHEETS)
             .and_then(serde_json::Value::as_str)
             .unwrap_or(Sheets::All.key());
-        let request = ExportRequest::new(TARGET_PDF, ExportSelection::Documents(vec![doc]))
+        let request = ExportRequest::new(TARGET_PDF, ExportSelection::Documents(vec![doc.clone()]))
             .with_options(serde_json::json!({ OPTION_SHEETS: sheets }));
         let request_json = serde_json::to_string(&request)
             .map_err(|error| PluginError::BadArgs(error.to_string().into()))?;
-        // Il modo (prova o esecuzione) è dell'host, e passa con l'invocazione.
-        host.run_command(
+        // Il modo (prova o esecuzione) è dell'host, e passa con l'invocazione:
+        // anche in prova `export.run` controlla la richiesta.
+        let queued = host.run_command(
             EXPORT_RUN,
             serde_json::json!({ "request_json": request_json }),
-        )
+        )?;
+        if !mode.is_dry_run() {
+            return Ok(queued);
+        }
+        // `validate_args` ha già controllato che la scelta sia una delle due.
+        preview(&*host, &doc, Sheets::of_key(sheets).unwrap_or(Sheets::All))
     }
+}
+
+/// La cartella che il campo «Cartella» nomina: l'id scelto dall'elenco, o il
+/// nome scritto a mano di una sola cartella `.xlsx`. Un nome che non c'è, o
+/// che hanno più cartelle, lo dice una frase del catalogo.
+fn named_workbook(host: &dyn HostApi, args: &serde_json::Value) -> Result<DocId, PluginError> {
+    let keys = DocumentNameKeys {
+        missing: T_DOC_MISSING,
+        ambiguous: T_DOC_AMBIGUOUS,
+    };
+    Args::new(args)
+        .named_document("doc", host, |doc| is_workbook(host, doc), keys)?
+        .ok_or_else(|| {
+            PluginError::BadArgs(Text::message(T_DOC_MISSING, vec![Arg::text("doc", "")]))
+        })
+}
+
+/// L'anteprima del comando: ciò che il modulo promette, cioè l'elenco di ciò
+/// che la stampa non porta. Il PDF si stampa in memoria e si conta come lo
+/// conta l'export; niente si accoda e niente si scrive. Il piano non tocca
+/// documenti: si approva il sommario.
+fn preview<H: VaultRead + ?Sized>(
+    host: &H,
+    doc: &DocId,
+    sheets: Sheets,
+) -> Result<CommandOutcome, PluginError> {
+    let bytes = host.read_document_bytes(doc)?;
+    let printed = print(&bytes, sheets, file_name(doc)).map_err(|error| {
+        PluginError::BadArgs(format!("`{doc}` cannot be printed: {error}").into())
+    })?;
+    // Un avviso per riga, come nell'attività: il sommario si mostra con i
+    // suoi a capo. La nota su ciò che un PDF non porta mai c'è sempre.
+    let losses = printed
+        .losses
+        .iter()
+        .map(|note| format!("– {}", note.message))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let summary = Text::message(
+        T_PREVIEW,
+        vec![Arg::text("doc", doc.as_str()), Arg::text("losses", losses)],
+    );
+    Ok(
+        CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+            summary,
+            Vec::new(),
+        ))),
+    )
 }
 
 /// Le stringhe del comando.
@@ -390,7 +447,21 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(T_DOC, "Cartella")
             .with(T_SHEETS, "Fogli")
             .with(sheets_key(Sheets::All), "Tutti i fogli visibili")
-            .with(sheets_key(Sheets::Active), "Il foglio attivo"),
+            .with(sheets_key(Sheets::Active), "Il foglio attivo")
+            .with(
+                T_PREVIEW,
+                "Il PDF di «{doc}» arriverà nell'attività, da salvare dove vuoi. Ciò che la \
+                 stampa non porta:\n{losses}",
+            )
+            .with(
+                T_DOC_MISSING,
+                "Nessuna cartella .xlsx si chiama «{doc}». Sceglila dall'elenco del campo.",
+            )
+            .with(
+                T_DOC_AMBIGUOUS,
+                "Più cartelle .xlsx si chiamano «{doc}»: {docs}. Scegli dall'elenco del campo \
+                 quella da esportare.",
+            ),
         StringCatalog::new("en")
             .with(T_TITLE, "Export to PDF")
             .with(
@@ -402,6 +473,20 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(T_DOC, "Workbook")
             .with(T_SHEETS, "Sheets")
             .with(sheets_key(Sheets::All), "All visible sheets")
-            .with(sheets_key(Sheets::Active), "The active sheet"),
+            .with(sheets_key(Sheets::Active), "The active sheet")
+            .with(
+                T_PREVIEW,
+                "The PDF of “{doc}” will appear in Activity, to save wherever you like. What \
+                 printing does not carry:\n{losses}",
+            )
+            .with(
+                T_DOC_MISSING,
+                "No .xlsx workbook is called “{doc}”. Pick it from the field's list.",
+            )
+            .with(
+                T_DOC_AMBIGUOUS,
+                "More than one .xlsx workbook is called “{doc}”: {docs}. Pick the one to export \
+                 from the field's list.",
+            ),
     ]
 }

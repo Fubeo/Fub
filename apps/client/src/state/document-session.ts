@@ -292,7 +292,15 @@ export function isDocumentDeletedDuringRead(error: unknown): boolean {
 export class DocumentSession implements DraftBuffer {
   #id: string;
   #state: SessionState;
+  /// La coda delle scritture del file e dei comandi distruttivi.
   #queue = new Queue();
+  /// La coda delle bozze, separata da quella del file (#485): una bozza parte
+  /// anche mentre una scrittura lenta è in volo, con la base che quella
+  /// scrittura conosce, così un crash in quei secondi ha comunque il testo.
+  /// Una sola scrittura o un solo scarto di bozza alla volta: l'host le riceve
+  /// nell'ordine in cui sono partite, e una risposta vecchia non passa sopra a
+  /// una bozza più nuova.
+  #draftQueue = new Queue();
   #saveTimer: number | undefined;
   #draftTimer: number | undefined;
   #draftGeneration = 0;
@@ -884,6 +892,17 @@ export class DocumentSession implements DraftBuffer {
     return true;
   }
 
+  /**
+   * La bozza di una sessione già chiusa da una rimozione arrivata da fuori: il
+   * testo resta per il recupero. Passa dalla coda delle bozze, dietro quelle
+   * già partite, così una bozza più vecchia ancora in volo non le arriva sopra.
+   */
+  saveDraftAfterClose(text: string, base: string | null): Promise<void> {
+    const id = this.#id;
+    this.#clearDraftTimer();
+    return this.#draftQueue.enqueue(() => this.#api.saveDraft(id, text, base));
+  }
+
   /** Drop a draft after an external deletion already closed this session. */
   discardDraftAfterClose(): Promise<void> {
     this.#clearDraftTimer();
@@ -1042,9 +1061,12 @@ export class DocumentSession implements DraftBuffer {
       return;
     }
     if (changed) {
-      // The newer dirty text now descends from the revision just written.
-      // Any draft queued before that write captured the old base.
+      // Il testo sporco di adesso discende dalla revisione appena scritta. La
+      // bozza scritta durante il salvataggio è quella giusta (non si toglie),
+      // ma porta la base vecchia: la prossima della cadenza la riscrive sulla
+      // nuova.
       this.#draftGeneration++;
+      this.scheduleDraft();
     } else {
       this.#state.dirty = false;
       this.#afterCleanSave();
@@ -1085,6 +1107,8 @@ export class DocumentSession implements DraftBuffer {
     if (next === "") {
       this.#state.dirty = false;
       this.#afterCleanSave();
+    } else {
+      this.scheduleDraft();
     }
     this.#emit({ kind: "saved", id: this.#id });
     this.#fanOut({ kind: "text", text: next });
@@ -1109,7 +1133,9 @@ export class DocumentSession implements DraftBuffer {
       return Promise.resolve();
     }
 
-    const promise = this.#queue.enqueue(async () => {
+    // La coda delle bozze, non quella del file: la bozza non aspetta una
+    // scrittura in volo, e porta la base che quella scrittura conosce ancora.
+    const promise = this.#draftQueue.enqueue(async () => {
       if (
         !this.#isOpen() ||
         this.#state.suspended ||
@@ -1195,9 +1221,11 @@ export class DocumentSession implements DraftBuffer {
     return [...this.#surfaces.values()].filter((surface) => this.#pendingSurfaces.has(surface.id));
   }
 
+  /// Lo scarto passa dalla coda delle bozze: arriva all'host dopo ogni bozza
+  /// partita prima, e una bozza partita dopo (testo nuovo) resta.
   #dropDraft(id: string): Promise<void> {
     if (this.#id !== id) return Promise.resolve();
-    return this.#queue.enqueue(async () => {
+    return this.#draftQueue.enqueue(async () => {
       if (this.#id !== id) return;
       try {
         await this.#api.discardDraft(id);
@@ -1724,7 +1752,9 @@ export class DocumentSessionCollection implements DraftBufferStore {
     // Il file non c'è più, il lavoro sì: resta in bozza (la ritrova il
     // recupero al prossimo avvio) e torna a chi può offrire di ricrearlo.
     const vault = this.#vaults.get(session) ?? null;
-    const saving = this.#api.saveDraft(session.id, text, base, ...vaultArg(vault)).catch(() => {
+    // Dalla coda delle bozze della sessione: l'host non le mette in fila da
+    // sé (#485), e una bozza della sessione ancora in volo è più vecchia.
+    const saving = session.saveDraftAfterClose(text, base).catch(() => {
       this.#emit({ kind: "draft-blind", id: session.id });
     });
     this.#removedDrafts.set(removedDraftKey(session.id, vault), { text, saving });
@@ -1745,7 +1775,18 @@ export class DocumentSessionCollection implements DraftBufferStore {
   async discardRemovedDraft(id: string, vault: string | null | undefined, text: string): Promise<void> {
     const key = removedDraftKey(id, vault ?? null);
     const entry = this.#removedDrafts.get(key);
-    if (!entry || entry.text !== text) return;
+    if (!entry) {
+      // La nota si è già riaperta e la bozza è passata a lei. Se è pulita,
+      // senza salvataggi in coda e mostra proprio il testo ricreato, la bozza
+      // sul disco non tiene niente che lei non abbia: alla riapertura dopo
+      // farebbe un conflitto falso, e si toglie.
+      const reopened = this.#sessions.get(id);
+      if (reopened && !reopened.dirty && !reopened.hasPending() && reopened.text() === text) {
+        await this.#api.discardDraft(id, ...vaultArg(vault));
+      }
+      return;
+    }
+    if (entry.text !== text) return;
     this.#removedDrafts.delete(key);
     await entry.saving;
     // Nell'attesa la nota si è riaperta, o è sparita un'altra volta con una

@@ -36,6 +36,7 @@ import type {
   DiagramContrast,
   DiagramFont,
   DiagramLight,
+  DiagramOwnColors,
   TokenReader,
 } from "./mermaid-styles";
 import { notify } from "./notify";
@@ -209,6 +210,23 @@ function themeTokens(): { signature: string; read: TokenReader } {
   return { signature: [...values.values()].join(","), read: (name) => values.get(name) ?? null };
 }
 
+/// Un aspetto imposto da chi monta il diagramma, sopra quello della nota:
+/// l'esportazione in PDF (E28, `export/vectors.ts`) che sceglie uno stile per
+/// tutti i diagrammi o per uno solo, quattro colori a mano e il fondo. Non
+/// scrive niente nel sorgente: `%% stile:` resta quello della nota.
+export interface DiagramLookOverride {
+  /// Lo stile che vince sullo `%% stile:` del sorgente e sulla preferenza;
+  /// assente, vale quello della nota.
+  readonly style?: DiagramStyleId;
+  /// I token che Armonia legge (`ARMONIA_TOKENS`), al posto di quelli del
+  /// tema montato: la carta del tema di stampa.
+  readonly tokens?: Readonly<Record<string, string>>;
+  readonly colors?: DiagramOwnColors;
+  /// `false`: senza la carta dello stile, sulla pagina (`ground`).
+  readonly paper?: boolean;
+  readonly ground?: string;
+}
+
 interface Look {
   readonly style: DiagramStyleId;
   readonly light: DiagramLight;
@@ -216,6 +234,7 @@ interface Look {
   /// Lo stile viene dal sorgente (`%% stile: …`), non dalla preferenza.
   readonly own: boolean;
   readonly read: TokenReader;
+  readonly override: DiagramLookOverride | null;
   readonly key: string;
 }
 
@@ -225,21 +244,36 @@ function themeLight(): DiagramLight {
 
 /// L'aspetto del diagramma: `preview`, lo stile in anteprima dal menu, vince
 /// su quello scritto e sulla preferenza finché dura.
-function lookOf(source: string, appearance: DiagramLight | undefined, preview: DiagramStyleId | null = null): Look {
+/// `override`, l'aspetto imposto da chi monta, vince sulla nota ma non
+/// sull'anteprima.
+function lookOf(
+  source: string,
+  appearance: DiagramLight | undefined,
+  preview: DiagramStyleId | null = null,
+  override: DiagramLookOverride | null = null,
+): Look {
   const own = ownDiagramStyle(source);
-  const style = preview ?? own ?? diagramStylePreference();
+  const style = preview ?? override?.style ?? own ?? diagramStylePreference();
   const light = appearance ?? themeLight();
   const contrast = document.documentElement.dataset.contrast === "high" ? "high" : "normal";
   // Armonia prende i colori dal tema, ma soltanto se il tema è nella stessa
   // luce del diagramma: la stampa chiara di un tema scuro usa i valori di serie.
-  const tokens = style === "armonia" && light === themeLight() ? themeTokens() : null;
+  // I token imposti (la carta di stampa) valgono in ogni luce.
+  const given = override?.tokens;
+  const tokens = style !== "armonia"
+    ? null
+    : given
+      ? { read: (name: string) => given[name] ?? null, signature: JSON.stringify(given) }
+      : light === themeLight() ? themeTokens() : null;
+  const changes = override ? JSON.stringify({ colors: override.colors ?? null, paper: override.paper ?? true, ground: override.ground ?? null }) : "";
   return {
     style,
     light,
     contrast,
     own: own !== null,
     read: tokens?.read ?? (() => null),
-    key: [style, light, contrast, tokens?.signature ?? ""].join("|"),
+    override,
+    key: [style, light, contrast, tokens?.signature ?? "", changes].join("|"),
   };
 }
 
@@ -837,6 +871,9 @@ export interface MermaidViewOptions {
   onResize?: () => void;
   /// La luce del diagramma, invece di quella del tema: la stampa è chiara.
   appearance?: DiagramLight;
+  /// L'aspetto imposto da chi monta (l'esportazione in PDF), sopra quello
+  /// della nota.
+  look?: DiagramLookOverride;
   /// Scrive nel sorgente una modifica del corpo: lo stile di questo diagramma,
   /// la direzione del flusso. C'è dove il sorgente si può modificare.
   editSource?: (edit: SourceEdit) => void;
@@ -917,7 +954,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   let accessibleDescription = "";
   /// Lo stile in anteprima dal menu, finché il puntatore ci sta sopra.
   let preview: DiagramStyleId | null = null;
-  let look = lookOf(source, options.appearance, preview);
+  let look = lookOf(source, options.appearance, preview, options.look ?? null);
   let shown: Rendered | null = null;
   const labels = () => {
     element.setAttribute("aria-label", t("mermaid.diagram"));
@@ -1025,7 +1062,10 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     generation++;
     linkItems.replaceChildren();
     linkList.hidden = true;
-    if (url) URL.revokeObjectURL(url);
+    if (url) {
+      URL.revokeObjectURL(url);
+      drawnBySource.delete(url);
+    }
     image.removeAttribute("src");
   });
 
@@ -1062,9 +1102,13 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     // Ogni vista ha il suo URL, anche quando la resa viene dalla cache: così
     // lo revoca da sola, senza contare chi altro lo mostra.
     const nextUrl = URL.createObjectURL(new Blob([rendered.view], { type: "image/svg+xml" }));
-    if (url) URL.revokeObjectURL(url);
+    if (url) {
+      URL.revokeObjectURL(url);
+      drawnBySource.delete(url);
+    }
     url = nextUrl;
     image.src = nextUrl;
+    drawnBySource.set(nextUrl, rendered.view);
     // Un SVG servito come immagine con `width="100%"` non ha una larghezza
     // propria, e un diagramma di due nodi si allargava a tutto il riquadro.
     // La larghezza naturale è quella che mermaid dichiara; `max-width: 100%`
@@ -1100,7 +1144,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   const render = (soft = false) => {
     const request = ++generation;
     const current = () => !life.closed && request === generation;
-    look = lookOf(source, options.appearance, preview);
+    look = lookOf(source, options.appearance, preview, options.look ?? null);
     const wanted = look;
     if (!soft || shown === null) {
       linkItems.replaceChildren();
@@ -1120,7 +1164,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     }
     const task = rendering.then(async () => {
       if (!current()) return;
-      const [{ default: mermaid }, { decorateSvg, fontFaceCss, mermaidStyleConfig }, { DIAGRAM_FONTS, paletteFor }] = await Promise.all([
+      const [{ default: mermaid }, { decorateSvg, fontFaceCss, mermaidStyleConfig }, { DIAGRAM_FONTS, changedPalette, paletteFor }] = await Promise.all([
         library ??= import("mermaid").catch((error) => {
           library = undefined;
           throw error;
@@ -1135,7 +1179,9 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
         throw new DiagramFailure({ line: null, text: t("mermaid.problem.unavailable") });
       });
       if (!current()) return;
-      const palette = paletteFor(wanted.style, wanted.light, wanted.contrast, wanted.read);
+      const base = paletteFor(wanted.style, wanted.light, wanted.contrast, wanted.read);
+      const change = wanted.override;
+      const palette = change ? changedPalette(base, { colors: change.colors, paper: change.paper, ground: change.ground }) : base;
       const face = DIAGRAM_FONTS[palette.font];
       const [font] = await Promise.all([embeddedFont(palette.font, face.file), fontReady(face)]);
       if (!current()) return;
@@ -1213,7 +1259,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   /// Ridisegna soltanto se l'aspetto è davvero cambiato: tema, contrasto,
   /// accento, stile scelto o in anteprima.
   const refresh = () => {
-    if (lookOf(source, options.appearance, preview).key === look.key && phase !== "error") return;
+    if (lookOf(source, options.appearance, preview, options.look ?? null).key === look.key && phase !== "error") return;
     render();
   };
   const observer = new MutationObserver(refresh);
@@ -1276,10 +1322,10 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
   };
 
   const setPreview = (style: DiagramStyleId | null): void => {
-    const next = style === lookOf(source, options.appearance, null).style ? null : style;
+    const next = style === lookOf(source, options.appearance, null, options.look ?? null).style ? null : style;
     if (next === preview) return;
     preview = next;
-    if (lookOf(source, options.appearance, preview).key !== look.key || phase === "error") render(true);
+    if (lookOf(source, options.appearance, preview, options.look ?? null).key !== look.key || phase === "error") render(true);
   };
 
   const choose = (style: DiagramStyleId, scope: DiagramScope): void => {
@@ -1326,7 +1372,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
 
   const showMenu = (parts: DiagramMenuPart, at: MenuPoint, pointer: boolean): void => {
     menu?.close("manual");
-    const base = lookOf(source, options.appearance, null);
+    const base = lookOf(source, options.appearance, null, options.look ?? null);
     const model = diagramMenuModel({
       source,
       style: base.style,
@@ -1426,6 +1472,20 @@ export function mermaidViewOf(element: Element): MermaidView | null {
   return views.get(element) ?? null;
 }
 
+/// Il disegno (l'SVG senza la carta) di ogni indirizzo `blob:` che una vista
+/// mostra, finché la vista non lo revoca.
+const drawnBySource = new Map<string, string>();
+
+/// L'SVG che l'immagine di un diagramma mostra adesso, o `null` se non è
+/// un diagramma disegnato: l'esportazione in PDF lo passa al core come
+/// vettore (`export/vectors.ts`), perché da un URL `blob:` la CSP non lascia
+/// rileggerlo. Lo ritrova anche una copia dell'immagine (le pagine dello
+/// spazio d'esportazione), che ha lo stesso indirizzo.
+export function drawnDiagramSvg(image: HTMLImageElement): string | null {
+  const src = image.getAttribute("src");
+  return src ? drawnBySource.get(src) ?? null : null;
+}
+
 /// Un `contextmenu` nato dal mouse e non dalla tastiera (il tasto Menu,
 /// Maiusc+F10), che ha un punto vero.
 function fromKeyboard(event: MouseEvent): boolean {
@@ -1453,11 +1513,15 @@ export interface MermaidBlockOptions {
   /// quello; `edit` è in offset di `body`.
   editFence?: (fenceOffset: number, body: string, edit: SourceEdit) => void;
   appearance?: DiagramLight;
+  /// L'aspetto imposto a ogni diagramma, per la sua posizione fra i diagrammi
+  /// del contenitore (da 0): l'esportazione in PDF (`export/vectors.ts`).
+  look?: (index: number) => DiagramLookOverride | null;
 }
 
 /** Hydrates the same inert diagram component in Live, Reading and embeds. */
 export function mountMermaidBlocks(container: HTMLElement, options: MermaidBlockOptions = {}): Teardown {
   const life = openLifetime();
+  let index = 0;
   for (const code of container.querySelectorAll<HTMLElement>("pre > code")) {
     if (code.closest("[data-ui-slot]")) continue;
     if (!Array.from(code.classList).some((name) => name.toLowerCase() === "language-mermaid")) continue;
@@ -1489,9 +1553,11 @@ export function mountMermaidBlocks(container: HTMLElement, options: MermaidBlock
         }
         : undefined,
       appearance: options.appearance,
+      look: options.look?.(index) ?? undefined,
       noteLinks: true,
       onResize: () => container.dispatchEvent(new Event("markdown-resize", { bubbles: true })),
     });
+    index++;
     // Preserve the coordinate space of the renderer that produced the fence.
     for (const attribute of Array.from(pre.attributes)) {
       if (attribute.name === "id" || attribute.name.startsWith("data-fub-source-") ||

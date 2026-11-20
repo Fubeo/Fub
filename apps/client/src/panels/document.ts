@@ -25,7 +25,7 @@ import { emit, on, state } from "../state/store";
 import { documentSessions } from "../state/document-session";
 import { lentTo, unlend } from "../state/lend";
 import { saveStateKey } from "../state/saving";
-import type { CardNotices } from "../state/card-editors";
+import type { CardNotices } from "../editors/core/cards/editor-port";
 import { appPreviewSubject, CRAFT_CONSENT_SETTING, craftServed, forgetConsent, peekPreview, previewOf, renderPreview, watchCraftPreviews } from "../state/craft-previews";
 import { openDocument as openRecreated, peekSurfaceIn } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";
@@ -92,6 +92,7 @@ import {
   paneBack,
   paneForward,
   paneOf,
+  presentExport,
   presentPrint,
   presentSlides,
   releaseTab,
@@ -1433,6 +1434,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   // come farebbe `available`: il menu si apre anche su un riquadro accanto.
   const sourceView = offeredSourceView(r);
   const sourceShown = tabOverride(activeTab(r.id)) !== null;
+  const markdownNote = surface?.family === "text" && surface.profile === "markdown";
   const exports: MenuItem[] = [
     ...offeredExports(r).map((format) => ({
       label: t("pane.menu.export_as", { what: format.label() }),
@@ -1441,6 +1443,12 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
         if (r.shown?.k === "doc") void runExport(r.shown.doc, format);
       },
     })),
+    // Il PDF di una nota Markdown è lo spazio «Esporta in PDF», con le pagine
+    // vere: «PDF…» lo apre, al posto del vecchio PDF di solo testo.
+    ...(doc && markdownNote && surface?.printable && offeredExports(r).length > 0 ? [{
+      label: t("pane.menu.export_as", { what: t("markdown.export.pdf") }),
+      run: () => void presentExport(r, doc),
+    }] : []),
     ...(exportWindow(r) ? [{
       label: t("pane.menu.export_other"),
       run: () => {
@@ -1467,7 +1475,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
       run: () => runCommand("shell.focus.toggle"),
     }] : []),
   ];
-  const writing: MenuItem[] = doc && surface?.family === "text" && surface.profile === "markdown" ? [{
+  const writing: MenuItem[] = doc && markdownNote ? [{
     label: t("pane.menu.blocks"),
     description: t(blocksOn ? "pane.menu.blocks.on" : "pane.menu.blocks.off", { chord: displayBinding("Mod-a") }),
     icon: "blocks",
@@ -1493,7 +1501,13 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
       },
     }] : []),
     ...(exports.length > 0 ? [{ separator: true, label: t("pane.menu.export"), items: exports }] : []),
-    ...(doc && surface?.printable ? [{ separator: exports.length === 0, label: t("pane.print"), run: () => void presentPrint(r, doc) }] : []),
+    // Una nota Markdown si stampa dallo spazio «Esporta in PDF», che ha le
+    // pagine vere e «Stampa…»: la voce ne prende il posto, e il menu resta
+    // nel bilancio di nove voci. Le altre superfici stampabili (la tela)
+    // tengono «Stampa».
+    ...(doc && surface?.printable ? [markdownNote
+      ? { separator: exports.length === 0, label: t("pane.export_pdf"), run: () => void presentExport(r, doc) }
+      : { separator: exports.length === 0, label: t("pane.print"), run: () => void presentPrint(r, doc) }] : []),
     ...(doc && surface?.mountPresentation ? [{ label: t("pane.slides"), run: () => presentSlides(r, doc) }] : []),
     ...(doc && surface?.insertReferences ? [{
       label: t(r.disposeRecorder ? "pane.recorder.close" : "pane.recorder.open"),

@@ -125,12 +125,10 @@ pub(super) fn notes_block_move(
     host: &mut dyn HostApi,
 ) -> Result<CommandOutcome, PluginError> {
     let context = host.active_context();
-    let doc = args
-        .document("doc")
+    let doc = crate::formats::document_with(&args, "doc", &*host, fub_abi::options::source::PROSE)?
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_OPEN_NOTES)))?;
-    let to = args
-        .document("to")
+    let to = crate::formats::document_with(&args, "to", &*host, fub_abi::options::source::PROSE)?
         .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
     let leave = match args.text("leave").map(str::trim).unwrap_or(LEAVE_LINK) {
         LEAVE_NONE => Leave::None,

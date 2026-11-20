@@ -49,6 +49,11 @@ pub(crate) const PASTE_FROM: &str = "fub.pasteFrom";
 /// Il testo e la tabella HTML di un intervallo, per gli appunti di sistema:
 /// legge soltanto.
 pub(crate) const COPY_HTML: &str = "fub.copyHtml";
+/// Dove sta una parte della cartella (T43: `![[Conti.xlsx#Budget!A1:E7]]`
+/// in una nota): un foglio, un intervallo, un nome definito o una tabella
+/// ([`crate::parts`]). Legge soltanto, senza portare la sessione nella
+/// modalità a comandi.
+pub(crate) const PART: &str = "fub.part";
 /// I comandi composti di Fub, fuori dal catalogo della facciata: id, se
 /// cambia la cartella, parametri.
 const COMPOSED: &[(&str, bool, &str)] = &[
@@ -58,6 +63,11 @@ const COMPOSED: &[(&str, bool, &str)] = &[
         "{source: \"A1:B2\", sourceSheet?: \"s1\", at?: \"C3\", what?: all|formulas|values|formats|comments|validation|allExceptBorders|columnWidths|formulasAndNumberFormats|valuesAndNumberFormats, move?: bool}",
     ),
     (COPY_HTML, false, "{range?} → {range, text, html?}"),
+    (
+        PART,
+        false,
+        "{part?: \"Budget!A1:E7\"} → {found: true, kind: active|sheet|range|name|table, sheet, range} | {found: false, parts: [{kind, name}]}",
+    ),
 ];
 
 /// I gruppi del catalogo che Fub non serve, ciascuno con il suo perché: file

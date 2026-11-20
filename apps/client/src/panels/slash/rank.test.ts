@@ -23,6 +23,12 @@ describe("la classifica del «/»", () => {
     expect(rank(entry("Elenco di attività"), "ea", NONE)).toMatchObject({ score: 1.5, why: "iniziali" });
   });
 
+  it("più parole: ognuna è l'inizio di una parola del nome o dei sinonimi", () => {
+    const task = entry("Elenco di attività", ["todo", "da", "fare"]);
+    expect(rank(task, "da fare", NONE)).toEqual({ score: 2.5, span: null });
+    expect(rank(task, "elenco tabella", NONE)).toBeNull();
+  });
+
   it("da tre lettere anche dentro le parole, da quattro un errore di battitura", () => {
     expect(rank(entry("Sottolineato"), "lin", NONE)).toEqual({ score: 2, span: [5, 8] });
     expect(rank(entry("Tabella"), "tabela", NONE)).toMatchObject({ score: 3, why: "forse" });

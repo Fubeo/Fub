@@ -81,6 +81,20 @@ describe("i gruppi", () => {
     expect(text()).toBe(doc);
   });
 
+  it("Compito: «Promemoria» porta il cursore in fondo al compito e apre la scelta del giorno e dell'ora", () => {
+    const doc = "- [ ] comprare il pane\naltro\n";
+    const { host, text } = hostOf(doc, 4);
+    const group = markdownBlockGroup(host, null);
+    expect(ids(group)).toEqual(["markdown.date", "markdown.reminder"]);
+    const reminder = item(group, "markdown.reminder");
+    expect(reminder.label).toBe("Promemoria");
+    expect(reminder.icon).toBe("fmt-alarm");
+    expect(reminder.action).toBe("markdown.reminder");
+    reminder.run?.();
+    expect(host.read((state) => state.selection.main.head)).toBe(doc.indexOf("\n"));
+    expect(text()).toBe(doc);
+  });
+
   it("Riquadro: il tipo si sceglie fra quelli noti, e «Ripiegabile» scrive e toglie il segno", () => {
     const doc = "> [!tip] Il punto\n> corpo\n";
     const { host, text } = hostOf(doc, doc.indexOf("corpo"));
@@ -123,8 +137,75 @@ describe("i gruppi", () => {
     expect(group?.label).toBe("Blocco sincronizzato");
     item(group, "markdown.link.open").run?.();
     expect(opened).toEqual([["Riunioni/2026-11-04", null, "decisioni"]]);
-    // Un PDF incorporato non è una trasclusione.
-    expect(markdownBlockGroup(hostOf("![[Atto.pdf]]\n", 3).host, null)).toBeNull();
+    // Un PDF incorporato non è una trasclusione: è una scheda viva (T41).
+    expect(markdownBlockGroup(hostOf("![[Atto.pdf]]\n", 3).host, null)?.id).toBe("card");
+    // Un'immagine non è né l'una né l'altra.
+    expect(markdownBlockGroup(hostOf("![[foto.png]]\n", 3).host, null)?.id).not.toBe("card");
+    // Un disegno SVG sì (T46): si disegna sul posto.
+    expect(markdownBlockGroup(hostOf("![[Schizzo.svg]]\n", 3).host, null)?.id).toBe("card");
+  });
+
+  it("Scheda: «Apri» alla parte, «Togli dalla nota» toglie l'embed e non il file", () => {
+    const { host, opened, text } = hostOf("Prima\n\n![[Conti.xlsx#Budget]]\n\nDopo\n", 8);
+    const group = markdownBlockGroup(host, null);
+    expect(group?.label).toBe("Scheda");
+    // T42: «Mostra come», la larghezza e «Affianca» prima di togliere; senza
+    // un'altezza scritta, niente «Altezza normale», e senza un'altra scheda
+    // vicina «Affianca» è spenta e dice perché.
+    expect(ids(group)).toEqual([
+      "markdown.link.open",
+      "markdown.card.show",
+      "markdown.card.width",
+      "markdown.card.beside",
+      "markdown.card.remove",
+    ]);
+    expect(item(group, "markdown.card.beside").enabled).toBe(false);
+    expect(item(group, "markdown.card.beside").description).toBe("Serve un'altra scheda subito sopra o sotto.");
+    item(group, "markdown.link.open").run?.();
+    expect(opened).toEqual([["Conti.xlsx", "Budget", null]]);
+    item(group, "markdown.card.remove").run?.();
+    expect(text()).toBe("Prima\n\nDopo\n");
+  });
+
+  it("Scheda di un intervallo di foglio: «Stacca come tabella» c'è dove la superficie la sa fare (T52)", () => {
+    const detached: unknown[] = [];
+    const withDetach = (doc: string) => {
+      const made = hostOf(doc, 8);
+      made.host.detachCard = (card) => detached.push(card);
+      return made.host;
+    };
+    const group = markdownBlockGroup(withDetach("Prima\n\n![[Conti.xlsx#'Conti 2025'!A1:C7]]\n\nDopo\n"), null);
+    expect(ids(group)).toContain("markdown.card.detach");
+    item(group, "markdown.card.detach").run?.();
+    expect(detached).toEqual([{ start: 7, page: "Conti.xlsx", part: "'Conti 2025'!A1:C7" }]);
+    // Un foglio intero, una cella sola, un PDF: niente.
+    for (const doc of ["Prima\n\n![[Conti.xlsx]]\n", "Prima\n\n![[Conti.xlsx#Budget!C7]]\n", "Prima\n\n![[Atto.pdf#A1:B2]]\n"]) {
+      expect(ids(markdownBlockGroup(withDetach(doc), null))).not.toContain("markdown.card.detach");
+    }
+    // Senza la superficie che legge i valori la voce non c'è.
+    expect(ids(markdownBlockGroup(hostOf("Prima\n\n![[Conti.xlsx#A1:B2]]\n", 8).host, null))).not.toContain("markdown.card.detach");
+  });
+
+  it("Scheda di una cella sola: «Mostra come» offre «Valore nel testo» e lo scrive (T53)", () => {
+    const { host, text } = hostOf("Prima\n\n![[Conti.xlsx#Budget!C7]]\n\nDopo\n", 8);
+    const group = markdownBlockGroup(host, null);
+    const show = (item(group, "markdown.card.show").items ?? []).filter((entry): entry is SurfaceMenuItem => typeof entry !== "string");
+    expect(show.map((entry) => entry.id)).toEqual([
+      "markdown.card.show.card",
+      "markdown.card.show.link",
+      "markdown.card.show.row",
+      "markdown.card.show.value",
+    ]);
+    expect(show[3]).toMatchObject({ label: "Valore nel testo", checked: false });
+    show[3]!.run?.();
+    expect(text()).toBe("Prima\n\n![[Conti.xlsx#Budget!C7|value]]\n\nDopo\n");
+    // Mostrata come valore: niente larghezza né «Affianca», ed è la voce scelta.
+    const shown = markdownBlockGroup(hostOf("Prima\n\n![[Conti.xlsx#Budget!C7|value]]\n\nDopo\n", 8).host, null);
+    expect(ids(shown)).toEqual(["markdown.link.open", "markdown.card.show", "markdown.card.remove"]);
+    expect((item(shown, "markdown.card.show").items ?? [])[3]).toMatchObject({ checked: true });
+    // Un intervallo non è una cella: niente «Valore nel testo».
+    const range = markdownBlockGroup(hostOf("![[Conti.xlsx#Budget!A1:C7]]\n", 3).host, null);
+    expect((item(range, "markdown.card.show").items ?? []).map((entry) => typeof entry === "string" ? entry : entry.id)).not.toContain("markdown.card.show.value");
   });
 
   it("Trasclusione: «Modifica qui» c'è per una sezione o un blocco, dove si scrive", () => {
@@ -161,6 +242,8 @@ describe("i gruppi", () => {
     expect(group?.id).toBe("table");
     expect(item(group, "markdown.table.row.after").action).toBe("markdown.table.row.after");
     expect(item(group, "markdown.table.column.after").action).toBe("markdown.table.column.after");
+    // «Trasforma in foglio» (T52): un'azione della tabella, spenta dove non si scrive.
+    expect(item(group, "markdown.table.sheet")).toMatchObject({ label: "Trasforma in foglio", action: "markdown.table.sheet" });
     const sort = item(group, "markdown.table.sort");
     expect(sort.items!.map((entry) => (typeof entry === "string" ? entry : entry.action))).toEqual([
       "markdown.table.sort.ascending",

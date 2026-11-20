@@ -7,6 +7,7 @@ import { openLifetime } from "../../ui/lifetime";
 import { adoptSheet } from "../../ui/stylesheets";
 import { writeClipboardText } from "../../platform/clipboard";
 import { t } from "../../i18n/strings";
+import { errorText } from "../../host/errors";
 
 export interface PrintOptions {
   title: string;
@@ -104,11 +105,168 @@ export async function settlePrint(container: HTMLElement, ready: Promise<void>, 
   }
 }
 
+/// Ciò che dopo l'attesa non è arrivato, o non si è lasciato decodificare:
+/// i segnaposti ancora in caricamento e le immagini senza i loro pixel.
+function undrawnElements(container: HTMLElement): HTMLElement[] {
+  const pending = Array.from(container.querySelectorAll<HTMLElement>(PENDING));
+  const outer = pending.filter((element) => !pending.some((other) => other !== element && other.contains(element)));
+  const images = Array.from(container.querySelectorAll<HTMLImageElement>("img"))
+    .filter((image) => !outer.some((element) => element.contains(image)) && (!image.complete || image.naturalWidth === 0));
+  return [...outer, ...images];
+}
+
+/// Il nome che il riquadro di un contenuto non disegnato dice: il file o il
+/// testo alternativo di un'immagine, se no la specie del blocco.
+function undrawnName(element: HTMLElement): string {
+  const image = element instanceof HTMLImageElement ? element : element.querySelector("img");
+  const file = element.dataset.vaultId ?? image?.dataset.vaultId ?? image?.getAttribute("src") ?? "";
+  const alt = image?.getAttribute("alt")?.trim();
+  if (alt) return alt;
+  const base = file.split(/[?#]/u)[0].split("/").pop() ?? "";
+  if (base && !file.startsWith("blob:") && !file.startsWith("data:")) {
+    try {
+      return decodeURIComponent(base);
+    } catch {
+      return base;
+    }
+  }
+  if (element.closest(".mermaid-diagram") || element.matches("[data-declared-fence], .mermaid-diagram")) return t("print.undrawn.diagram");
+  if (element.matches(".math-block, .katex-display")) return t("print.undrawn.formula");
+  if (image || element.hasAttribute("data-vault-media")) return t("print.undrawn.image");
+  return t("print.undrawn.content");
+}
+
+/// Mette al posto di ogni diagramma, formula o immagine che non è arrivato
+/// entro l'attesa (`PRINT_WAIT_MS`) il suo riquadro: il nome e «non
+/// disegnato». Il blocco vero resta fuori dal documento: se arriva tardi, non
+/// cambia le misure di una pagina già impaginata. Torna quanti riquadri ha
+/// messo.
+export function markUndrawn(container: HTMLElement): number {
+  const elements = undrawnElements(container);
+  for (const element of elements) {
+    const name = undrawnName(element);
+    const box = document.createElement("div");
+    box.className = "print-undrawn";
+    box.setAttribute("role", "img");
+    box.setAttribute("aria-label", t("print.undrawn.label", { name }));
+    for (const attribute of ["data-md-from", "data-md-to"]) {
+      const value = element.getAttribute(attribute);
+      if (value !== null) box.setAttribute(attribute, value);
+    }
+    const label = document.createElement("span");
+    label.className = "print-undrawn-name";
+    label.textContent = name;
+    const state = document.createElement("span");
+    state.className = "print-undrawn-state";
+    state.textContent = t("print.undrawn");
+    box.append(label, state);
+    element.replaceWith(box);
+  }
+  return elements.length;
+}
+
+/// Il riquadro di ciò che non è arrivato: la forma, alta e larga il giusto per
+/// leggerlo, col colore del testo che lo circonda. I colori del tema li dà la
+/// pelle di chi mostra le pagine (lo spazio dell'esportazione, T70).
+const UNDRAWN_CSS = `
+  .print-undrawn {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6em;
+    margin: 0.66em 0;
+    padding: 0.9em 1em;
+    border: 1px dashed color-mix(in srgb, currentColor 45%, transparent);
+    border-radius: 6px;
+    font-size: 0.9em;
+    line-height: 1.4;
+  }
+  .print-undrawn-name { font-weight: 600; overflow-wrap: anywhere; }
+  .print-undrawn-state { opacity: 0.72; }`;
+
+/// Una resa per la stampa montata in un contenitore: il titolo e il corpo,
+/// idratati da `mount` se c'è. `settled` si risolve quando ciò che arriva
+/// dopo è arrivato, o l'attesa è finita e il resto ha il suo riquadro
+/// (`markUndrawn`), col numero dei riquadri.
+export interface PrintSurface {
+  readonly page: HTMLElement;
+  readonly body: HTMLElement;
+  readonly settled: Promise<number>;
+  dispose(): void;
+}
+
+/// Monta la resa per la stampa perché la si misuri (l'impaginatore
+/// dell'esportazione, `export/paginate/slices.ts`): la stessa pagina che
+/// `printRendered` manda alla stampa, senza stamparla.
+export function mountPrintSurface(
+  container: HTMLElement,
+  options: { title: string; rendered: RenderedDocument; mount?: PrintMount; limit?: number },
+): PrintSurface {
+  const { page, body } = printPage(options.title);
+  const sheet = adoptSheet(UNDRAWN_CSS);
+  container.append(page);
+  let mounted: ReturnType<PrintMount> | null = null;
+  try {
+    if (options.mount) mounted = options.mount(body, options.rendered);
+    else setSanitizedHtml(body, options.rendered.html);
+  } catch (error) {
+    page.remove();
+    sheet.dispose();
+    throw error;
+  }
+  let disposed = false;
+  const settled = settlePrint(body, mounted?.ready ?? Promise.resolve(), options.limit).then(() => (disposed ? 0 : markUndrawn(body)));
+  return {
+    page,
+    body,
+    settled,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      mounted?.dispose();
+      page.remove();
+      sheet.dispose();
+    },
+  };
+}
+
+/// La carta della stampa: inchiostro scuro su bianco con i colori del foglio
+/// chiaro, qualunque sia il tema dell'app. La usano la stampa della nota
+/// (`PRINT_CSS`) e le pagine dello spazio «Esporta in PDF» (`export/`), che
+/// la scrivono come variabili sul loro contenitore: la carta si stampa chiara
+/// anche al buio.
+export const PRINT_PAPER: Readonly<Record<string, string>> = {
+  "--doc-bg": "#ffffff",
+  "--doc-fg": "#2a2826",
+  "--doc-heading": "#1f1d1b",
+  "--doc-link": "#145785",
+  "--doc-fill": "rgb(135 135 135 / 16%)",
+  "--doc-fill-soft": "rgb(135 135 135 / 10%)",
+  "--doc-rule": "rgb(135 135 135 / 45%)",
+  "--doc-rule-soft": "rgb(135 135 135 / 28%)",
+  "--doc-highlight": "rgb(240 200 80 / 38%)",
+  "--doc-danger": "#993836",
+  "--text": "#2a2826",
+  "--muted": "#605c56",
+  "--syn-keyword": "#744981",
+  "--syn-name": "#8c443a",
+  "--syn-function": "#2b5f92",
+  "--syn-literal": "#814f22",
+  "--syn-type": "#705a12",
+  "--syn-operator": "#236775",
+  "--syn-comment": "#6a635b",
+  "--syn-string": "#3e6840",
+  "--syn-heading": "#1f1d1b",
+  "--syn-invalid": "#9a2929",
+};
+
+function paperDeclarations(indent: string): string {
+  return Object.entries(PRINT_PAPER).map(([name, value]) => `${indent}${name}: ${value};`).join("\n");
+}
+
 /// Lo stile della stampa. A schermo la resa sta fuori dalla vista ma
 /// disposta, perché diagrammi e immagini si carichino; sulla carta resta solo
-/// lei. La carta ha una luce sola: inchiostro scuro su bianco con i colori
-/// del foglio chiaro, qualunque sia il tema, e i comandi dei blocchi
-/// (didascalie, sorgenti, copia) non si stampano.
+/// lei, con la carta di `PRINT_PAPER`; i comandi dei blocchi (didascalie,
+/// sorgenti, copia) non si stampano.
 const PRINT_CSS = `
   @media screen {
     .print-host {
@@ -133,28 +291,7 @@ const PRINT_CSS = `
     .print-host {
       display: block !important;
       position: static !important;
-      --doc-bg: #ffffff;
-      --doc-fg: #2a2826;
-      --doc-heading: #1f1d1b;
-      --doc-link: #145785;
-      --doc-fill: rgb(135 135 135 / 16%);
-      --doc-fill-soft: rgb(135 135 135 / 10%);
-      --doc-rule: rgb(135 135 135 / 45%);
-      --doc-rule-soft: rgb(135 135 135 / 28%);
-      --doc-highlight: rgb(240 200 80 / 38%);
-      --doc-danger: #993836;
-      --text: #2a2826;
-      --muted: #605c56;
-      --syn-keyword: #744981;
-      --syn-name: #8c443a;
-      --syn-function: #2b5f92;
-      --syn-literal: #814f22;
-      --syn-type: #705a12;
-      --syn-operator: #236775;
-      --syn-comment: #6a635b;
-      --syn-string: #3e6840;
-      --syn-heading: #1f1d1b;
-      --syn-invalid: #9a2929;
+${paperDeclarations("      ")}
       color: var(--doc-fg);
       background: var(--doc-bg);
     }
@@ -162,6 +299,7 @@ const PRINT_CSS = `
     .print-body pre, .print-body figure, .print-body table, .print-body img,
     .print-body .math-block, .print-body .callout { break-inside: avoid; }
     .print-body hr { break-after: page; visibility: hidden; }
+    .print-body .page-break { break-before: page; }
     .print-body img { max-width: 100%; height: auto; }
     .print-body .mermaid-diagram figcaption,
     .print-body .mermaid-diagram[data-state="ready"] details,
@@ -219,14 +357,105 @@ export async function printRendered(options: PrintOptions): Promise<() => void> 
   return teardown;
 }
 
+/// Lo stile delle pagine già impaginate: ogni pagina è un foglio della sua
+/// misura, senza i margini della stampante, perché i margini stanno già dentro
+/// la pagina. La misura arriva in pixel CSS e si scrive arrotondata al
+/// centesimo: nel foglio non entra altro che numeri.
+function pagesCss(size: { readonly width: number; readonly height: number }): string {
+  const length = (value: number): string => {
+    if (!Number.isFinite(value) || value <= 0) throw new RangeError(`misura di pagina non valida: ${value}`);
+    return `${Math.round(value * 100) / 100}px`;
+  };
+  return `
+  @media screen {
+    .print-host {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+      visibility: hidden;
+      pointer-events: none;
+    }
+  }
+  @page { size: ${length(size.width)} ${length(size.height)}; margin: 0; }
+  @media print {
+    html, body {
+      height: auto !important;
+      margin: 0 !important;
+      background: #ffffff !important;
+      color-scheme: light;
+    }
+    body > :not(.print-host) { display: none !important; }
+    .print-host {
+      display: block !important;
+      position: static !important;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      visibility: visible;
+    }
+    .print-host > .print-sheet {
+      position: relative !important;
+      transform: none !important;
+      break-inside: avoid;
+      break-after: page;
+      overflow: hidden;
+    }
+    .print-host > .print-sheet:last-child { break-after: auto; }
+  }`;
+}
+
+/**
+ * Manda alla stampa del sistema pagine già impaginate, così come sono: le
+ * stesse che lo spazio «Esporta in PDF» mostra («Stampa…»). Le pagine vanno
+ * in un contenitore fuori vista, `window.print` le stampa una per foglio, e su
+ * `afterprint` (che scatta anche quando la stampa si annulla) tutto si toglie.
+ * Torna il teardown, per chi chiude prima che `afterprint` arrivi.
+ */
+export function printPages(
+  pages: readonly HTMLElement[],
+  size: { readonly width: number; readonly height: number },
+  onAfterPrint?: () => void,
+): () => void {
+  if (typeof window.print !== "function") throw new Error(t("errors.print.unavailable"));
+  if (pages.length === 0) throw new Error(t("errors.print.no_pages"));
+  const life = openLifetime();
+  const stylesheet = adoptSheet(pagesCss(size));
+  life.add(() => stylesheet.dispose());
+  const host = document.createElement("div");
+  host.className = "print-host";
+  host.setAttribute("aria-hidden", "true");
+  for (const page of pages) {
+    page.classList.add("print-sheet");
+    host.append(page);
+  }
+  document.body.append(host);
+  life.add(() => host.remove());
+  let done = false;
+  function teardown(): void {
+    if (done) return;
+    done = true;
+    life.close();
+    onAfterPrint?.();
+  }
+  try {
+    life.listen(window, "afterprint", teardown);
+    window.print();
+  } catch (error) {
+    teardown();
+    throw error;
+  }
+  return teardown;
+}
+
 /** Copia testo negli appunti, con errore che dice cosa e' fallito. */
 export async function copyRenderedText(text: string): Promise<void> {
   if (!text) throw new Error(t("errors.print.nothing_to_copy"));
   try {
     await writeClipboardText(text);
   } catch (error) {
-    throw new Error(
-      `cannot copy ${text.length} characters: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new Error(t("errors.print.copy_failed", { reason: errorText(error, "specie") }));
   }
 }

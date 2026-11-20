@@ -8,6 +8,8 @@ import { cursorIsLiteral, mountMarkdownSurface, type EditorSlashHost, type Markd
 import { api } from "../../../../host/ipc";
 import { NOTE_TYPE_READS, withoutTypeReads } from "../../../../state/note-type-commands";
 import { state } from "../../../../state/store";
+import { documentSessions } from "../../../../state/document-session";
+import type { DocumentSource } from "../../../../host/contract";
 import { closeCommandPalette } from "../../../../ui/palette";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { trapFocus } from "../../../../ui/a11y";
@@ -469,6 +471,48 @@ describe("la superficie Markdown", () => {
       vi.restoreAllMocks();
     }
   });
+  it("dopo una rinomina il / si apre ancora: la superficie si confronta col nome nuovo della nota", async () => {
+    const previousDoc = state.currentDoc;
+    const source = (): DocumentSource => ({
+      text: "prima ", revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source",
+    });
+    vi.spyOn(api, "readDocument").mockImplementation(async () => source());
+    vi.spyOn(api, "openDocument").mockImplementation(async () => source());
+    vi.spyOn(api, "documentClosed").mockResolvedValue(undefined);
+    vi.spyOn(api, "listCommands").mockResolvedValue([]);
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "settings", value: [] });
+    await documentSessions.read("notes/current.md");
+    state.currentDoc = "notes/current.md";
+    const slash = {
+      currentDoc: vi.fn(() => state.currentDoc),
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+    } satisfies EditorSlashHost;
+    const { ed, parent, view } = editor(() => {}, slash);
+    const press = () => view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }),
+    );
+    try {
+      // La nota si rinomina dal titolo: la sessione e il riquadro passano al
+      // nome nuovo, la superficie resta montata.
+      expect(documentSessions.rename("notes/current.md", "notes/Viaggio.md").kind).toBe("renamed");
+      state.currentDoc = "notes/Viaggio.md";
+      ed.buffer.setDoc("prima ");
+      view().dispatch({ selection: { anchor: 6 } });
+      // Il «/» a inizio parola apre la palette: la battuta non resta testo.
+      expect(press()).toBe(false);
+      await vi.waitFor(() => expect(document.querySelector("#command-palette:not([data-shell-motion=exit]) input")).not.toBeNull());
+    } finally {
+      ed.destroy();
+      parent.remove();
+      closeCommandPalette();
+      documentSessions.get("notes/Viaggio.md")?.close(true);
+      state.currentDoc = previousDoc;
+      vi.restoreAllMocks();
+    }
+  });
   it("shows all P05 commands, collects template arguments and confirms a daily plan", async () => {
     const previousDoc = state.currentDoc;
     state.currentDoc = "notes/current.md";
@@ -621,6 +665,26 @@ describe("le azioni dell'editor della superficie", () => {
 
     expect(ed.editorActions.run("text.undo")).toBe(true);
     expect(ed.buffer.getDoc()).toBe("parola");
+    ed.destroy();
+  });
+
+  it("Ctrl+Z da un pannello: un passo della storia senza prendere il fuoco, e niente in sola lettura", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("parola");
+    view().dispatch({ selection: { anchor: 2 } });
+    expect(ed.editorActions.run("markdown.bold")).toBe(true);
+    const tab = document.createElement("button");
+    document.body.append(tab);
+    tab.focus();
+    expect(ed.history!("undo")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("parola");
+    expect(document.activeElement).toBe(tab);
+    expect(ed.history!("redo")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("**parola**");
+    ed.setReadOnly!(true);
+    expect(ed.history!("undo")).toBe(false);
+    expect(ed.buffer.getDoc()).toBe("**parola**");
+    tab.remove();
     ed.destroy();
   });
 
@@ -1407,7 +1471,7 @@ describe("i commenti nella superficie (T21)", () => {
 
   it("nella nota dentro una scheda della lavagna valgono le stesse regole", () => {
     // La scheda monta questa superficie, compatta e con Esc che esce
-    // (`state/card-editors.ts`).
+    // (`editors/core/cards/editor-port.ts`).
     const parent = document.createElement("div");
     document.body.appendChild(parent);
     const ed = mountMarkdownSurface({ paneId: "card:1", documentId: "notes/scheda.md", parent, compact: true, escapeLeaves: true }, {

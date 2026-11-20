@@ -145,11 +145,19 @@ consenso e non ripiega mai sul vault privato.
 Un file sconosciuto esiste anche se nessun provider lo riconosce. Non viene
 eliminato né escluso da un backup senza una scelta esplicita.
 
-I file `.<nome>.lock` sono compagni persistenti del protocollo di coordinamento
-dello storage, anche quando si trovano nella radice o nel cestino. Non sono
-contenuto utente né voci da svuotare e non vengono rimossi al rilascio del lock.
-La forma riservata riguarda i file: `Cargo.lock` e i contenuti di directory con
-nomi simili restano dati dell'utente.
+I file `.<nome>.lock` sono i compagni del protocollo di coordinamento dello
+storage, anche quando si trovano nella radice o nel cestino. Non sono contenuto
+utente né voci del cestino. Esistono solo mentre un'operazione li tiene: chi li
+tiene li toglie al rilascio, e quelli rimasti dopo un'uscita forzata o da una
+versione precedente di Fub, vuoti e non tenuti da nessuno, li tolgono
+l'apertura del vault e lo svuotamento del cestino. L'apertura li cerca anche
+in `.fub/`, senza trattarla come contenuto; nello spazio di un plugin
+(`.fub/plugins/<id>/`) guarda solo `doc/` e `doc~trash/`, perché il resto può
+essere la cartella di un motore nativo con lock propri: `.tantivy-writer.lock`
+e `.tantivy-meta.lock` dell'indice di ricerca restano, stabili per
+costruzione. La forma riservata riguarda i file: `Cargo.lock`, i contenuti di
+directory con nomi simili e un `.<nome>.lock` non vuoto restano dati
+dell'utente.
 
 ## Stato del vault
 
@@ -165,6 +173,7 @@ nomi simili restano dati dell'utente.
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 | `.fub/plugins/fub.commands/archive-recovery.json` | autorevole operativo | 1 | `fub.commands` |
+| `.fub/plugins/fub.draw/profili/*.json`, `.fub/plugins/fub.draw/predefinito.json`, `.fub/plugins/fub.draw/doc/*/profilo-pdf.json`, `.fub/plugins/fub.draw/doc/*/esportazione-pdf.json` | autorevole | 1 | profili, predefiniti (del vault e per tipo) e memoria per nota dell'esportazione in PDF ([il formato](pdf-export-format.md)) |
 | `.fub/data/plugins/fub.linkcard/cards/*.json`, `.fub/data/plugins/fub.craft/previews/*.json` | derivata | 1 | schede dei collegamenti (`fub.linkcard`), anteprime dei file Craft (`fub.craft`) |
 
 `properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore

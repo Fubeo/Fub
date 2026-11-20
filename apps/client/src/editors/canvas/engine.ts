@@ -1,6 +1,7 @@
 import type { Theme } from "../../theme/theme";
 import { nearFreeSpot } from "./free-spot";
 import type { SyntaxForm } from "../../host/contract";
+import { errorText } from "../../host/errors";
 import { t, onLanguage, plural, type Key } from "../../i18n/strings";
 import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
@@ -20,7 +21,7 @@ import { anchorAt, cellAnchorAt, pageAnchorAt, strokeBounds, StrokeBox, type Bou
 import { parseTsv } from "../core/tsv";
 import { DROP_GROUP_THRESHOLD, markdownTable, sortedDrop, type DropFile } from "./drop-layout";
 import { parsePageRanges } from "./page-ranges";
-import type { PdfPagesReader } from "./cards/pdf";
+import type { PdfPagesReader } from "../core/cards/kinds/pdf";
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../../ui/drag-types";
 import {
   cardKindOf,
@@ -43,7 +44,7 @@ import {
   type CardView,
   type CardWriting,
   type Rect,
-} from "./cards";
+} from "../core/cards/contract";
 import { textCardName } from "./card-name";
 import { boardReading, cardLabel, cardTitle, changeAnnouncement, nearestCard, stepInOrder, type BoardReading, type CardDirection } from "./a11y";
 import { applyCardDetails, cardDetail, detailLevel, farTitle, type CardDetail } from "./lod";
@@ -154,7 +155,8 @@ import { PARTS_KEY, cardParts, nodeParts, partsFit, writeParts, type CanvasParts
 import { cardTarget } from "./sources";
 import { WHOLE_ZONE, isWholeZone, openCropEditor, zoneOf, zoneParts, zoneRatio, type CropEditor, type CropPicture, type ImageZone } from "./crop";
 import { PARTS_PICKER_MIN_SECTIONS, openPartsPicker, partsSections, type PartsHeading, type PartsPickerHandle, type PartsPickerPlace, type PartsPickerPort } from "./parts-picker";
-import { noteHeadingOf } from "./cards/note";
+import { cardFormulaBar, type CardFormulaBar } from "../core/formula-bar";
+import { noteHeadingOf } from "../core/cards/kinds/note";
 import { excerptSourcePath, noteExcerptOf, noteSectionsText, sectionHeading, syncExcerptHead } from "./excerpt";
 import { READER_TAP_MS, READER_TAP_SLOP, openReader, type ReaderHandle } from "./reader";
 import { DEFAULT_PREFERENCES, currentPreferences, snapStepOf, readInkMouse, readPen, saveInkMouse, savePen, watchPreferences, type DragEmptyAction, type PenButtonAction, type WheelAction } from "./preferences";
@@ -1671,7 +1673,7 @@ export class CanvasEngine {
    * opzioni che lo mostra, aggiornato sul posto a ogni cambio.
    */
   #writingContext: CardEditorContext | null = null;
-  #formulaItem: { readonly cell: HTMLElement; readonly formula: HTMLElement } | null = null;
+  #formulaItem: CardFormulaBar | null = null;
   /** La scheda in cui si sta entrando: la scelta delle vive la accende con le altre. */
   #enteringId: string | null = null;
   /**
@@ -2799,6 +2801,21 @@ export class CanvasEngine {
 
   focus(): void {
     if (!this.#destroyed) this.#viewport.focus();
+  }
+
+  /**
+   * Tutta la lavagna nella vista, subito, senza volo e senza entrare nella
+   * storia di Indietro: la zona lavagna di una nota a riposo (T47), che si
+   * guarda sempre intera, anche dopo un cambio di misura o di testo.
+   * `margin`, in unità della lavagna per lato: la scheda ne vuole meno di
+   * un riquadro.
+   */
+  fitAll(margin = FIT_MARGIN): void {
+    if (this.#destroyed || !this.#doc) return;
+    this.#stopMotion(false);
+    this.#camera = this.#fitTarget(this.#doc.nodes, margin);
+    this.#applyCamera();
+    this.#refreshLive();
   }
 
   /**
@@ -5437,7 +5454,7 @@ export class CanvasEngine {
    * `spatial/camera.ts`): al centro, con `FIT_MARGIN` per lato, mai oltre il
    * 100%. Senza schede, il 100% con l'origine in alto a sinistra.
    */
-  #fitTarget(nodes: readonly CanvasNode[]): Viewport {
+  #fitTarget(nodes: readonly CanvasNode[], margin = FIT_MARGIN): Viewport {
     if (!nodes.length) return { x: 24, y: 24, zoom: 1 };
     let minX = Infinity;
     let minY = Infinity;
@@ -5453,10 +5470,10 @@ export class CanvasEngine {
     const view = { w: Math.max(1, rect.width || 800), h: Math.max(1, rect.height || 600) };
     // Il margine sta nei bordi, in unità della lavagna: il centro non cambia.
     const bounds = {
-      minX: minX - FIT_MARGIN,
-      minY: minY - FIT_MARGIN,
-      maxX: Math.max(minX + 1, maxX) + FIT_MARGIN,
-      maxY: Math.max(minY + 1, maxY) + FIT_MARGIN,
+      minX: minX - margin,
+      minY: minY - margin,
+      maxX: Math.max(minX + 1, maxX) + margin,
+      maxY: Math.max(minY + 1, maxY) + margin,
     };
     return fromCamera(fit(bounds, view, 0, 0, FIT_LIMITS));
   }
@@ -6122,7 +6139,10 @@ export class CanvasEngine {
 
   #showIntakeError(error: unknown): void {
     if (this.#destroyed) return;
-    this.#intakeError = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+    // Qui arrivano anche i messaggi che l'editor scrive di proposito (il
+    // deposito, un allegato troppo grande): `errorText` li tiene, e legge
+    // l'errore tipizzato dell'host senza «[object Object]».
+    this.#intakeError = errorText(error).slice(0, 300);
     this.#drawToolbar();
   }
 
@@ -12324,24 +12344,12 @@ export class CanvasEngine {
       const element = document.createElement("div");
       element.className = "canvas-options-item";
       element.dataset.option = "formula";
-      const bar = document.createElement("div");
-      bar.className = "grid-formula-bar";
-      const cell = document.createElement("span");
-      cell.className = "grid-cell-name";
-      const formula = document.createElement("div");
-      formula.className = "grid-formula-editor";
-      const text = document.createElement("span");
-      text.className = "canvas-formula-text";
-      formula.append(text);
-      bar.append(cell, formula);
-      element.append(bar);
-      item = { cell, formula: text };
+      item = cardFormulaBar();
+      element.append(item.element);
       this.#formulaItem = item;
       this.setCardOptions([{ id: "formula", element, priority: 1 }]);
     }
-    item.cell.textContent = context.cell;
-    item.formula.textContent = context.formula;
-    item.formula.title = context.formula;
+    item.show(context);
     // «Apri a lato su B3» segue la cella (T45).
     this.#canvasOptions.sync();
   }

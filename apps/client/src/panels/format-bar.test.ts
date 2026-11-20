@@ -727,6 +727,44 @@ describe("il gruppo del blocco", () => {
     expect(buttons(bar).filter((each) => each.tabIndex === 0)).toHaveLength(1);
   });
 
+  it("il gruppo «Foglio» mostra la cella attiva e la sua formula, e la cambia lì senza ridisegnarsi (T43)", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const fake = fakeActions(FOLLOW_KNOWN);
+    let cell: { cell: string; formula: string } | null = null;
+    const opened: number[] = [];
+    const sheet = (): SurfaceBlockGroup => ({
+      id: "sheet",
+      label: "Foglio",
+      context: cell,
+      items: [{ id: "markdown.card.open", label: "Apri", icon: "fmt-open", run: () => opened.push(1) }],
+    });
+    const surface: EditorSurface = { ...surfaceWith(fake.actions), blockGroup: () => sheet() };
+    const bar = mountFollowing(surface);
+    bar.update(FOLLOW_SPECS);
+    const box = context(bar);
+    const slot = box.querySelector<HTMLElement>(".format-bar-context-cell")!;
+    // Finché la griglia non c'è, la cella non si vede.
+    expect(slot.hidden).toBe(true);
+    // Il nome, la cella, poi «Apri».
+    expect([...box.children].map((each) => each.className.split(" ")[0])).toEqual([
+      "format-bar-context-name",
+      "grid-formula-bar",
+      "format-bar-button",
+    ]);
+    const open = box.querySelector<HTMLButtonElement>('[data-command="markdown.card.open"]')!;
+    cell = { cell: "C3", formula: "=B3*2" };
+    for (const listener of fake.listeners) listener();
+    vi.advanceTimersByTime(BLOCK_GROUP_PAUSE_MS);
+    expect(slot.hidden).toBe(false);
+    expect(slot.querySelector(".grid-cell-name")!.textContent).toBe("C3");
+    expect(slot.querySelector(".canvas-formula-text")!.textContent).toBe("=B3*2");
+    // Lo stesso gruppo: gli stessi elementi, solo il testo nuovo.
+    expect(box.querySelector(".format-bar-context-cell")).toBe(slot);
+    expect(box.querySelector('[data-command="markdown.card.open"]')).toBe(open);
+    open.click();
+    expect(opened).toEqual([1]);
+  });
+
   it("cambia soltanto dopo una pausa, e il gruppo nuovo si annuncia una volta", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const fake = fakeActions(FOLLOW_KNOWN);

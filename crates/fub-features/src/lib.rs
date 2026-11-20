@@ -54,6 +54,12 @@
 //!   di Fub; e le impostazioni dell'editor (livello, parti del Personalizzato,
 //!   cartella dei modelli, suggerimenti).
 //!   Fuori dal `default`, dietro la cargo feature `draw`.
+//! - `pdf_export` — l'esportazione delle note in PDF (ADR 0247): il PDF
+//!   scritto dagli elenchi di pagina che la vista misura, con testo vero,
+//!   caratteri incorporati in sotto-insieme, vettori, immagini, collegamenti e
+//!   segnalibri, e il comando `pdf.write_pages` che lo scrive nel vault con un
+//!   lavoro annullabile. Fuori dal `default`, dietro la cargo feature `draw`,
+//!   da cui prende i caratteri.
 //! - [`lavagna`] — la lavagna: il comando `canvas.apply`, che porta in un
 //!   file `.canvas` una lista di operazioni del nucleo (`fub-canvas-core`)
 //!   come una modifica sola, con anteprima e annulla.
@@ -101,11 +107,16 @@ pub mod inventory;
 pub mod lavagna;
 // I tipi di nota: i modelli ne creano le note, le proprietà ne cambiano il
 // tipo e dicono quando manca. Ognuna ne usa una parte.
-#[cfg(any(feature = "template", feature = "properties"))]
+// Anche il PDF delle note (coi disegni) li legge: il profilo predefinito per
+// tipo.
+#[cfg(any(feature = "template", feature = "properties", feature = "draw"))]
 #[allow(dead_code)]
 mod note_types;
 #[cfg(feature = "outline")]
 pub mod outline;
+// La prova del motore del PDF delle note (ADR 0247), coi disegni.
+#[cfg(feature = "draw")]
+pub mod pdf_export;
 #[cfg(feature = "proof")]
 pub mod proof;
 #[cfg(feature = "properties")]
@@ -145,6 +156,8 @@ pub use blocks::{
     COMMENTS_RULE, DIAGRAMS_RULE, DIAGRAM_NS, DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER,
     MATH_RULE,
 };
+#[cfg(all(feature = "commands", feature = "xlsx"))]
+pub use commands::NOTE_TABLE_SHEET;
 #[cfg(feature = "commands")]
 pub use commands::{
     occurrences, CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, NOTES_BLOCK_MOVE,
@@ -170,7 +183,9 @@ pub use draw::{
 pub use formatting::{FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
 pub use graph::{GraphCommands, GraphView, GRAPH_ID, GRAPH_NS, GRAPH_OPEN, GRAPH_VIEW};
-pub use inventory::{every_official_feature, every_official_view, HostWiring, OfficialFeature};
+pub use inventory::{
+    every_official_feature, every_official_view, HostWiring, Jobs, OfficialFeature,
+};
 #[cfg(feature = "lavagna")]
 pub use lavagna::{LavagnaCommands, CANVAS_APPLY, LAVAGNA_ID, LAVAGNA_NS};
 #[cfg(feature = "outline")]

@@ -70,6 +70,34 @@ describe("il menu contestuale", () => {
     });
   });
 
+  it("sta nell'area di lavoro, e nel dialogo modale quando l'area di lavoro è inerte sotto", () => {
+    const workspace = document.createElement("div");
+    workspace.id = "workspace";
+    const own = document.createElement("button");
+    workspace.append(own);
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const inside = document.createElement("button");
+    dialog.append(inside);
+    document.body.append(workspace, dialog);
+    showContextMenu(own, [{ label: "Uno", run: () => {} }]);
+    expect(document.getElementById("context-menu")?.parentElement).toBe(workspace);
+    closeContextMenu();
+    // Lo spazio «Esporta in PDF» rende inerte l'area di lavoro: un menu lì
+    // si vedrebbe e non si potrebbe cliccare.
+    workspace.inert = true;
+    showContextMenu(inside, [{ label: "Uno", run: () => {} }]);
+    expect(document.getElementById("context-menu")?.parentElement).toBe(dialog);
+    closeContextMenu();
+    // Aperto in un punto (il sottomenu del dito): il dialogo che sta lì.
+    const atPoint = vi.spyOn(document, "elementFromPoint").mockReturnValue(inside);
+    showContextMenu({ x: 30, y: 40 }, [{ label: "Uno", run: () => {} }]);
+    expect(atPoint).toHaveBeenCalledWith(30, 40);
+    expect(document.getElementById("context-menu")?.parentElement).toBe(dialog);
+    atPoint.mockRestore();
+  });
+
   it("un menu chiuso prima del tempo non porta via quello dopo", () => {
     // Il menu si apre e si chiude subito — è il gesto di chi preme Escape, o
     // sceglie una voce col ritorno a capo. Poi il timer scatta.
@@ -220,6 +248,54 @@ describe("tastiera e fuoco del menu", () => {
     expect(document.getElementById("context-menu")).toBeNull();
     expect(document.activeElement).toBe(opener);
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  // IMP-151: il clic nel testo con il menu aperto dava il fuoco all'editor, e
+  // la chiusura del menu lo riportava al pulsante che l'aveva aperto. Le
+  // battute dopo andavano al pulsante e si perdevano.
+  it("un clic fuori su ciò che prende il fuoco glielo lascia; su ciò che non lo prende torna al pulsante", async () => {
+    const opener = document.createElement("button");
+    opener.textContent = "Ordina";
+    const text = document.createElement("div");
+    text.contentEditable = "true";
+    text.tabIndex = 0;
+    const plain = document.createElement("p");
+    plain.textContent = "niente da mettere a fuoco";
+    document.body.append(opener, text, plain);
+
+    // Il menu col sottomenu aperto: nemmeno il sottomenu riporta il fuoco alla
+    // sua voce, che sta per sparire.
+    opener.focus();
+    showContextMenu(opener, [{ label: "Formato", items: [{ label: "Grassetto", run: () => {} }] }]);
+    vi.runAllTimers();
+    const parent = document.querySelector<HTMLButtonElement>("#context-menu [role=menuitem]")!;
+    parent.focus();
+    parent.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    // Il clic del puntatore: il `mousedown` dà il fuoco, poi arriva il `click`.
+    text.focus();
+    text.click();
+    vi.runAllTimers();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(document.activeElement, "il fuoco resta nel testo cliccato").toBe(text);
+
+    // Un clic su ciò che non prende il fuoco lo lascia al body: torna al pulsante.
+    opener.focus();
+    showContextMenu(opener, [{ label: "Esegui", run: () => {} }]);
+    vi.runAllTimers();
+    (document.activeElement as HTMLElement).blur();
+    plain.click();
+    vi.runAllTimers();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(document.activeElement, "nessuno l'ha preso: torna al pulsante").toBe(opener);
+
+    // Escape, dopo, torna al pulsante come sempre: la regola è del clic.
+    showContextMenu(opener, [{ label: "Esegui", run: () => {} }]);
+    vi.runAllTimers();
+    document.querySelector<HTMLElement>("#context-menu")!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement).toBe(opener);
   });
 });
 

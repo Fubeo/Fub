@@ -75,7 +75,7 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
-import { LIVE_DOC, liveCase } from "./live-fixture";
+import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
 import {
@@ -99,6 +99,7 @@ import { BASE_DOC, baseFixture } from "./base-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import { deskCase, deskScene } from "./desk-scene";
+import { EXPORT_FONTS, exportFontsOutcome, exportFontsWriter, VAULT_FONTS_COMMAND } from "./export-fonts-fixture";
 import { GiroWorkbook, giroResources } from "./giro-fixture";
 import {
   generateGraphFixture as graphFixture,
@@ -367,6 +368,9 @@ const BOARDS: Readonly<Record<string, string>> = params.get("lavagna") === "1"
 /// quando servono, cioè dopo che il finto è nato.
 const BASE_PARAM = params.get("base");
 const BASE_IN_NOTE = BASE_PARAM === "nota";
+/// Il menu «Esporta» del riquadro (`?esporta-menu=1`, T80): c'è solo con
+/// `export.run` nel kernel, che il banco di solito non ha.
+const EXPORT_MENU = params.get("esporta-menu") === "1";
 const BASE_VARIANT = BASE_IN_NOTE ? "1" : BASE_PARAM;
 const BASE = BASE_VARIANT === "1" || BASE_VARIANT === "venti" || BASE_VARIANT === "calendario" || BASE_VARIANT === "tempo"
   ? baseFixture(() => ({
@@ -771,6 +775,11 @@ const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
 };
 const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
 
+/// I caratteri del vault della scena «esporta-pdf-caratteri» (T72,
+/// `?esporta-caratteri=1`, vedi `export-fonts-fixture.ts`). Le altre scene
+/// hanno un vault senza caratteri.
+const EXPORT_FONTS_SCENE = params.get("esporta-caratteri") === "1";
+
 /// La foto delle scene `photo-*` (`?photo=xmp|senza`), col bundle `fub.craft`
 /// acceso: la riga dei dati di LightCraft sotto la foto. Soltanto le sue
 /// scene la hanno.
@@ -795,6 +804,24 @@ if (RAW_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null)) throw new Ra
 /// `draw` è accesa.
 const PDF_SCENE = pdfSceneCase(params.get("pdf-scena"));
 if (PDF_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null)) throw new RangeError("pdf-scena is a vault of its own");
+
+/// I profili d'esportazione delle scene `esporta-pdf-profili*`
+/// (`?profili-pdf=1`, T79): due profili salvati, «Relazione» predefinito del
+/// vault, come risponde `pdf.profiles` del core. Il finto non ha i comandi del
+/// PDF: senza il parametro, come senza `draw`, il comando non c'è.
+const PDF_PROFILES = params.get("profili-pdf") === "1"
+  ? {
+      profiles: [
+        { id: "relazione", name: "Relazione", same_name: false, future: false, error: null, profile: { versione: 1, nome: "Relazione", tema: "relazione" } },
+        { id: "tesi", name: "Tesi con commenti", same_name: false, future: false, error: null, profile: { versione: 1, nome: "Tesi con commenti", tema: "accademico", frontespizio: { frontespizio: true, indice: true, profondita_indice: 2, segnalibri: true } } },
+      ],
+      default_name: "Di serie",
+      vault_default: "relazione",
+      type_default: null,
+      note_type: null,
+      effective: { id: "relazione", from: "vault" },
+    }
+  : null;
 
 /// L'albero delle scene T26 (`?albero=miniature|xmp`, vedi
 /// `craft-fixture.ts`): le cartelle «Foto 2026» e «Progetti» con le miniature
@@ -834,10 +861,34 @@ const DAY_PAGE = params.get("giorno") === "1";
 /// `note_type_page` del componente delle proprietà.
 const TYPE_PAGE = params.get("live") === "tipo-pagina";
 
+/// «Svuota il cestino» in fondo al cestino, o la sua domanda al posto del
+/// bottone, nella forma del provider `trash` (fub-features, `trash.rs`): un
+/// nodo `fub.confirm` con la chiave del bottone, la domanda col conto delle
+/// voci, il sì e il no, e il no per Esc.
+function trashEmptyNode(count: number, asking: boolean): UiNode {
+  const key = "trash-empty";
+  if (!asking) {
+    return { node: "button", key, label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } };
+  }
+  const cancel = { action: "cancel", payload: null };
+  return {
+    node: "custom",
+    key,
+    ns: "fub.confirm",
+    payload: { cancel },
+    fallback: [
+      { node: "text", content: `Distruggo definitivamente ${count} voci del cestino? Non si torna indietro.` },
+      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty_confirm", payload: null } },
+      { node: "button", label: "Annulla", intent: "neutral", action: cancel },
+    ],
+  };
+}
+
 /// Il cestino pieno nella forma del provider `trash` (fub-features,
 /// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
-/// è stata cestinata e «Ripristina», e sotto «Svuota il cestino».
-function trashWithThree(): UiNode {
+/// è stata cestinata e «Ripristina», e sotto «Svuota il cestino» o, con
+/// `asking`, la sua domanda.
+function trashWithThree(asking = false): UiNode {
   const row = (id: string, original: string, when: string): UiNode => ({
     node: "stack",
     key: id,
@@ -845,7 +896,7 @@ function trashWithThree(): UiNode {
     gap: 1,
     children: [
       { node: "list_item", title: original, subtitle: `Cestinata il ${when}`, action: null, selected: false },
-      { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+      { node: "button", key: `restore:${id}`, label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
     ],
   });
   return {
@@ -861,10 +912,14 @@ function trashWithThree(): UiNode {
           row("3-Prima idea.md", "Prima idea", "12 agosto 2026, 11:05"),
         ],
       },
-      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+      trashEmptyNode(3, asking),
     ],
   };
 }
+
+/// Una Live con un disegno incorporato (la scheda di disegno, T46): il banco
+/// accende la feature `draw`, come l'host col componente dei disegni.
+const LIVE_DRAWS = Object.keys(LIVE?.files ?? {}).some((id) => /\.svg$/i.test(id));
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
@@ -1565,6 +1620,22 @@ const SETTINGS: SettingEntry[] = [
     value: 72,
     source: "default",
   },
+  // Il nome di chi scrive, come lo dichiara l'host (`profile_settings` in
+  // `crates/fub-host/src/settings.rs`): il primo commento lo chiede e lo
+  // salva qui, e le risposte dopo lo firmano.
+  {
+    spec: {
+      key: "profile.name",
+      label: "Il tuo nome",
+      description: "Firma i commenti che scrivi nelle note. Il nome finisce nel file della nota: chi lo apre, anche con un altro programma, lo legge. Cambiarlo vale per i commenti nuovi.",
+      group: "Profilo",
+      scope: "machine",
+      kind: { kind: "text", default: "" },
+      program_writable: false,
+    },
+    value: "",
+    source: "default",
+  },
   {
     spec: {
       key: "vault.daily_folder",
@@ -2016,8 +2087,9 @@ const ICONS: Record<string, string> =
     ? { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅" }
     : { Guida: "fub:book", Diario: "fub:calendar" };
 
-/// L'organizzazione del vault: due note appuntate, le icone, uno spazio. Il
-/// finto risponde tutto vuoto — che è onesto e invisibile.
+/// L'organizzazione del vault con cui il banco parte: due note appuntate, le
+/// icone, uno spazio. Il finto la tiene (`createFakeHost`) e la fa seguire alle
+/// rinomine come il kernel: un'appuntata rinominata resta appuntata.
 const ORGANIZATION: Organization = {
   icons: ICONS,
   pinned: ["Benvenuto.md", "Guida/Sintassi di Fub.md"],
@@ -2105,7 +2177,12 @@ function embedBlock(text: string, block: string): string {
 /// `OUTPUT`: titoli, paragrafi, elenchi (con le caselle dei compiti), blocchi
 /// di codice, collegamenti e grassetto. Non è il renderer vero, e non vuole
 /// esserlo: basta a non mostrare il sorgente grezzo, col suo `#`, nell'anteprima.
-function plainHtml(markdown: string): string {
+/// `fences`: un recinto dice la sua lingua (`language-mermaid`), come nella
+/// resa vera; serve alla resa per la stampa della Live (i diagrammi, T75).
+/// `print`: come la resa per la stampa del core, ogni blocco dice dove sta nel
+/// sorgente (`data-fub-source-start`/`-end`, in byte) e `<!-- pagina -->` è il
+/// segnaposto che volta pagina (il clic sulla pagina, T76).
+function plainHtml(markdown: string, fences = false, print = false): string {
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const inline = (s: string) => esc(s)
     .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
@@ -2113,20 +2190,38 @@ function plainHtml(markdown: string): string {
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  const encoder = new TextEncoder();
+  const lines = markdown.split("\n");
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    starts.push(offset);
+    offset += encoder.encode(line).length + 1;
+  }
+  /// Gli attributi della posizione di un blocco dalla riga `from` alla `to`.
+  const at = (from: number, to: number): string =>
+    print ? ` data-fub-source-start="${starts[from]}" data-fub-source-end="${starts[to]! + encoder.encode(lines[to]!).length}"` : "";
   const out: string[] = [];
   let paragraph: string[] = [];
+  let paragraphFrom = 0;
   let items: string[] = [];
+  let itemsFrom = 0;
   let fence: string[] | null = null;
+  let fenceFrom = 0;
+  let info = "";
+  let row = -1;
   const flush = (): void => {
-    if (paragraph.length > 0) out.push(`<p>${paragraph.map(inline).join(" ")}</p>`);
-    if (items.length > 0) out.push(`<ul>${items.join("")}</ul>`);
+    if (paragraph.length > 0) out.push(`<p${at(paragraphFrom, paragraphFrom + paragraph.length - 1)}>${paragraph.map(inline).join(" ")}</p>`);
+    if (items.length > 0) out.push(`<ul${at(itemsFrom, itemsFrom + items.length - 1)}>${items.join("")}</ul>`);
     paragraph = [];
     items = [];
   };
-  for (const line of markdown.split("\n")) {
+  for (const line of lines) {
+    row++;
     if (fence !== null) {
       if (line.startsWith("```")) {
-        out.push(`<pre><code>${esc(fence.join("\n"))}</code></pre>`);
+        const language = fences && /^[a-z]+$/u.test(info) ? ` class="language-${info}"` : "";
+        out.push(`<pre${at(fenceFrom, row)}><code${language}>${esc(fence.join("\n"))}</code></pre>`);
         fence = null;
       } else fence.push(line);
       continue;
@@ -2134,20 +2229,30 @@ function plainHtml(markdown: string): string {
     if (line.startsWith("```")) {
       flush();
       fence = [];
+      fenceFrom = row;
+      info = line.slice(3).trim().toLowerCase();
+      continue;
+    }
+    // `<!-- pagina -->` volta pagina sulla carta; a schermo non c'è, come
+    // nella resa vera.
+    if (/^\s*<!--\s*pagina\s*-->\s*$/u.test(line)) {
+      flush();
+      if (print) out.push(`<div${at(row, row)} class="page-break" data-page-break="mano"></div>`);
       continue;
     }
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       flush();
       const level = heading[1]!.length;
-      out.push(`<h${level}>${inline(heading[2]!)}</h${level}>`);
+      out.push(`<h${level}${at(row, row)}>${inline(heading[2]!)}</h${level}>`);
       continue;
     }
     const item = /^\s*[-*]\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(line);
     if (item) {
       if (paragraph.length > 0) flush();
+      if (items.length === 0) itemsFrom = row;
       const box = item[1] === undefined ? "" : `<input type="checkbox" disabled${item[1] === " " ? "" : " checked"}> `;
-      items.push(`<li>${box}${inline(item[2]!)}</li>`);
+      items.push(`<li${at(row, row)}>${box}${inline(item[2]!)}</li>`);
       continue;
     }
     if (line.trim() === "") {
@@ -2155,6 +2260,7 @@ function plainHtml(markdown: string): string {
       continue;
     }
     if (items.length > 0) flush();
+    if (paragraph.length === 0) paragraphFrom = row;
     paragraph.push(line);
   }
   if (fence !== null) out.push(`<pre><code>${esc(fence.join("\n"))}</code></pre>`);
@@ -2162,11 +2268,38 @@ function plainHtml(markdown: string): string {
   return out.join("\n");
 }
 
+/// I commenti di una discussione, come il kernel li porta nella resa per la
+/// stampa (`<template class="comment-note">`, inerti: la lettura non li ha).
+/// Servono alla sezione Contenuto dello spazio «Esporta in PDF» (T74): una
+/// discussione di due messaggi in un paragrafo, un commento in una cella.
+const PRINT_COMMENTS: Record<string, readonly (readonly [string, string])[]> = {
+  "Guida/Sintassi di Fub.md": [
+    [
+      "va a capo e continua sulla riga dopo.",
+      '<template class="comment-note" data-author="Anna Rossi" data-date="2026-11-04">Si può dire in meno parole?</template><template class="comment-note" data-author="Bruno Neri" data-date="2026-11-05">La lascerei: è l\'esempio del ritorno a capo.</template>',
+    ],
+    ["della scocca", '<template class="comment-note" data-author="Carla Bianchi" data-date="2026-11-06">Vale anche per le icone?</template>'],
+  ],
+};
+
+function printComments(doc: string, html: string): string {
+  let out = html;
+  for (const [after, notes] of PRINT_COMMENTS[doc] ?? []) out = out.replace(after, `${after}${notes}`);
+  return out;
+}
+
 const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResult>> = {
   render_preview: (q) => {
     const doc = (q as { doc: string }).doc;
     const html = OUTPUT[doc] ?? plainHtml(CORPUS[doc] ?? "");
     return { kind: "render_preview", value: { html, parts: [] } };
+  },
+  // La resa per la stampa (lo spazio «Esporta in PDF», T70; «Stampa»): la
+  // stessa resa della lettura, come la darebbe il kernel per la carta.
+  render_print: (q) => {
+    const doc = (q as { doc: string }).doc;
+    const html = printComments(doc, OUTPUT[doc] ?? (doc === LIVE_DOC && LIVE !== null ? plainHtml(LIVE.text, true, true) : plainHtml(CORPUS[doc] ?? "")));
+    return { kind: "render_print", value: { html, parts: [] } };
   },
   render_embed: (q) => {
     if (q.kind !== "render_embed") throw new Error("Richiesta embed non valida");
@@ -2183,6 +2316,17 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
           parts: [{ slot: 0, kind: "base", node: { node: "custom", ns: "fub:base", payload: { source, view: q.heading ?? null, container: q.page.includes("/") ? q.page : BASE_DOC }, fallback: [] } }],
         },
       };
+    }
+    // Un documento di videoscrittura che un caso della Live incorpora (la
+    // scheda di documento, T44): il modello comune reso, dalla proiezione che
+    // il vault ha adesso. Il kernel non regge una sezione di un documento:
+    // con un titolo dà lo stesso il documento intero, come la scheda chiede.
+    const richFile = /\.(docx|odt)$/i.test(q.page)
+      ? Object.keys(LIVE?.files ?? {}).find((id) => id === q.page || id.endsWith(`/${q.page}`))
+      : undefined;
+    if (richFile !== undefined && !q.block) {
+      const projection = host.files()[richFile] ?? LIVE!.files![richFile]!;
+      return { kind: "render_embed", value: { doc_id: richFile, html: documentEmbedHtml(projection), parts: [] } };
     }
     const page = q.page.endsWith(".md") ? q.page : `${q.page}.md`;
     // Una nota che un caso della Live riporta (la trasclusione viva): la
@@ -2235,7 +2379,6 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
     }
     return { kind: "outline", value };
   },
-  organization: () => ({ kind: "organization", value: ORGANIZATION }),
   jobs: () => ({ kind: "jobs", value: JOBS }),
 };
 
@@ -2537,8 +2680,10 @@ const options: Options = {
     ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
     // Con le Basi accese c'è `base.view.add`, e il «/» offre «Base».
     ...(BASE_IN_NOTE ? [command("base.view.add", "Aggiungi una vista", "Aggiunge una vista alla Base", null, true)] : []),
+    // Con `export.run` il riquadro di una nota ha «Esporta ▸»: HTML e PDF.
+    ...(EXPORT_MENU ? [command("export.run", "Export documents", "Run a registered export target", null)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(BASE === null ? {} : { customQueries: { "fub.base": (query: unknown) => BASE.query(query) } }),
   ...(WORKBOOK_DOC === null ? {} : {
@@ -2555,7 +2700,7 @@ const options: Options = {
       ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
   }),
-  ...(DRAWING === null && PDF_SCENE !== "annotato" ? {} : { draw: true }),
+  ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? {} : { draw: true }),
   // Il motore del disegno (`drawing`) c'è solo con `?drawing=`: senza, le
   // porte del disegno rispondono `unserved` come l'host senza il componente,
   // e gli strumenti del disegno restano quelli del client.
@@ -2575,6 +2720,8 @@ const options: Options = {
   }),
   // Il bundle `fub.craft` acceso: le miniature le dice `treeScenePreview`.
   ...(TREE_SCENE === null ? {} : { craft: { docs: {} } }),
+  // L'organizzazione con cui il vault si apre: il finto la tiene da qui in poi.
+  organization: ORGANIZATION,
   // La pagina «Componenti» non è scenografia: sono le risposte registrate
   // dall'host vero (vault di prova con «Studio»), le stesse dei test. Una
   // scelta che lo scenario non ha la porta la rifiuta, come nei test.
@@ -2585,6 +2732,7 @@ const options: Options = {
 };
 
 const host = createFakeHost(options);
+const writeExportFonts = exportFontsWriter((id, bytes) => host.module.api.resourceWrite(id, bytes, null));
 
 /// **Lo strato d'avvio fermo a uno stato**, per le scene che lo fotografano
 /// (`avvio-*` in `scene.mjs`). Si decide qui, alla nascita del fake, perché
@@ -2763,6 +2911,7 @@ function liveTrash(): UiNode | undefined {
   if (TRASH_FULL) return undefined;
   const entries = host.trash();
   if (entries.length === 0) return undefined;
+  const asking = trashAsking;
   return {
     node: "stack",
     dir: "column",
@@ -2777,14 +2926,18 @@ function liveTrash(): UiNode | undefined {
           gap: 1,
           children: [
             { node: "list_item", title: pageName(original), subtitle: null, action: null, selected: false },
-            { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+            { node: "button", key: `restore:${id}`, label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
           ],
         })),
       },
-      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+      trashEmptyNode(entries.length, asking),
     ],
   };
 }
+
+/// Se il cestino del finto sta chiedendo «Svuoto davvero?». Come nel provider
+/// vive in memoria, non nello stato di vista: ricaricare la pagina la chiude.
+let trashAsking = false;
 
 /// I comandi che possono cambiare il cestino del finto.
 const TRASH_COMMANDS: ReadonlySet<string> = new Set(["note.trash", "trash.os", "folder.trash", "trash.restore", "trash.empty"]);
@@ -2815,7 +2968,15 @@ async function liveTrashAction(action: string, payload: unknown): Promise<ViewUp
     const back = outcome.effect.kind === "navigate" ? outcome.effect.doc : original;
     return { kind: "navigate", doc_id: back };
   }
-  if (action === "empty") {
+  // Svuotare chiede prima, come il provider: «Svuota il cestino» apre la
+  // domanda, il sì passa dal comando `trash.empty`, il no (o Esc) la chiude.
+  if (action === "empty" || action === "cancel") {
+    trashAsking = action === "empty";
+    return { kind: "replace", root: liveTrash() ?? TREES.trash! };
+  }
+  if (action === "empty_confirm") {
+    if (!trashAsking) return { kind: "replace", root: liveTrash() ?? TREES.trash! };
+    trashAsking = false;
     await api.invokeCommand("trash.empty");
     return { kind: "replace", root: liveTrash() ?? TREES.trash! };
   }
@@ -2906,8 +3067,135 @@ async function timedQuery(q: IndexQuery, answer: () => Promise<IndexResult>): Pr
   return result;
 }
 
+/// Il grafico della cartella del banco nelle scene dei grafici (T54,
+/// `live=grafici`): la cartella generata non ne ha, e il finto lo aggiunge
+/// alle finestre che toccano le sue celle. Il disegno è quello che
+/// `fub-format-xlsx` dà per l'istogramma «Vendite» di
+/// `tests/objects.rs` (GridCraft, `chart_svg`), copiato com'è.
+const CHART_ID = 1;
+const CHART_RANGE = "A1:E14";
+const CHART_SCENE = params.get("live") === "grafici";
+const CHART_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="280" viewBox="0 0 320 280" font-family="Helvetica,Arial,sans-serif" style=""><rect x="0" y="0" width="320" height="280" fill="#ffffff" stroke="#d9d9d9" stroke-width="1"/><text x="160" y="20.92" font-size="14" text-anchor="middle" fill="#595959">Vendite</text><text x="17" y="256.55" font-size="9" text-anchor="end" fill="#595959">0</text><text x="17" y="220.73" font-size="9" text-anchor="end" fill="#595959">1</text><text x="17" y="184.92" font-size="9" text-anchor="end" fill="#595959">2</text><text x="17" y="149.1" font-size="9" text-anchor="end" fill="#595959">3</text><text x="17" y="113.28" font-size="9" text-anchor="end" fill="#595959">4</text><text x="17" y="77.47" font-size="9" text-anchor="end" fill="#595959">5</text><text x="17" y="41.65" font-size="9" text-anchor="end" fill="#595959">6</text><polyline points="21,253.4 306,253.4" fill="none" stroke="#bfbfbf" stroke-width="0.75"/><text x="68.5" y="263.42" font-size="9" text-anchor="middle" fill="#595959">1</text><text x="163.5" y="263.42" font-size="9" text-anchor="middle" fill="#595959">2</text><text x="258.5" y="263.42" font-size="9" text-anchor="middle" fill="#595959">3</text><rect x="49.5" y="145.95" width="38" height="107.45" fill="#156082"/><rect x="144.5" y="74.32" width="38" height="179.08" fill="#156082"/><rect x="239.5" y="181.77" width="38" height="71.63" fill="#156082"/></svg>';
+/// La finestra col grafico, se tocca le sue celle (A1:E14: il finto dà solo
+/// le finestre che partono da A1, e il grafico sta lì).
+function withChart<W extends { sheet: string; row_start: number; column_start: number; rows: unknown[]; columns: unknown[]; objects: unknown[] }>(window: W): W {
+  if (!CHART_SCENE || window.sheet !== "s1") return window;
+  const touches = window.row_start <= 13 && window.rows.length > 0
+    && window.column_start <= 4 && window.columns.length > 0;
+  if (!touches) return window;
+  const chart = {
+    kind: "chart", id: CHART_ID, row: 0, column: 0, dx: 0, dy: 0, width: 320, height: 280,
+    alt: "Vendite", svg: CHART_SVG, media: null, shape: null, missing: null,
+  };
+  return { ...window, objects: [...window.objects, chart] };
+}
+
+/// Le parti che le schede di foglio della nota chiedono (`fub.part`, T43),
+/// solo nella Live delle schede vive (`live=schede-vive`) e nella battuta con
+/// le schede (`live=battuta-schede-<n>`), e le celle dei valori nel testo (T53,
+/// `live=valori-cella` e `live=battuta-valori-100`) e negli estratti (T49,
+/// `live=estratti`): la risposta che
+/// `fub-format-xlsx/src/parts.rs` darebbe per la cartella del banco, che non
+/// ricalcola e non scrive. Una parte sconosciuta è persa, con le parti che la
+/// cartella ha.
+const SHEET_PARTS_CASES = new Set(["schede-vive", "valori-cella", "battuta-valori-100", "grafici", "estratti"]);
+const SHEET_PARTS_LIVE = params.get("live") ?? "";
+const SHEET_PARTS: Readonly<Record<string, unknown>> | null = SHEET_PARTS_CASES.has(SHEET_PARTS_LIVE) || SHEET_PARTS_LIVE.startsWith("battuta-schede-")
+  ? {
+      "": { found: true, kind: "active", sheet: "s1", range: "A1:F6" },
+      "Conti!A1:C4": { found: true, kind: "range", sheet: "s1", range: "A1:C4" },
+      // L'estratto che «Estrai» scrive dalle celle scelte (T49, `live=estratti`).
+      // (Il finto dà solo le finestre che partono da A1: l'estratto ci parte.)
+      "Conti!A1:B2": { found: true, kind: "range", sheet: "s1", range: "A1:B2" },
+      // Le celle dei valori nel testo: 800, -120, 680, 50.00%, la cella
+      // vuota D2 e l'errore #DIV/0! di C4.
+      ...Object.fromEntries(["B2", "B3", "B4", "C2", "D2", "C4"]
+        .map((cell) => [`Conti!${cell}`, { found: true, kind: "range", sheet: "s1", range: cell }])),
+      // Il grafico «Vendite» (T54, `live=grafici`): le celle che copre e il
+      // suo id nel file.
+      Vendite: { found: true, kind: "chart", sheet: "s1", range: CHART_RANGE, chart: CHART_ID },
+    }
+  : null;
+const SHEET_PARTS_LOST = {
+  found: false,
+  parts: XLSX_GRID.session.sheets.map((sheet) => ({ kind: "sheet", name: sheet.name })),
+};
+/// `selection.set` della griglia che si apre scrivendo (la scheda porta la
+/// selezione alla prima cella della parte): il provider la sposta e basta.
+function sheetSelection(params: string): { sheet: string; selection: string; active: string } {
+  const { range = "A1" } = JSON.parse(params || "{}") as { range?: string };
+  const bang = range.lastIndexOf("!");
+  const name = bang < 0 ? null : range.slice(0, bang).replace(/^'|'$/g, "").replaceAll("''", "'");
+  const sheet = BENCH_SESSION.sheets.find((each) => each.name === name)?.id ?? BENCH_SESSION.active;
+  const at = range.slice(bang + 1);
+  return { sheet, selection: at, active: at.split(":")[0]! };
+}
+/// Il finto dà a ogni apertura la stessa sessione (`i1`): con più schede
+/// della stessa cartella, quella che chiude (la parte persa) chiuderebbe
+/// anche le altre. Come l'host, qui ogni apertura ha la sua istanza; sotto,
+/// la sessione del finto si chiude quando se ne va l'ultima.
+const sheetInstances = new Map<string, string>();
+const sheetOpenCount = new Map<string, number>();
+let sheetOpens = 0;
+function sheetInstance(instance: string): string {
+  return sheetInstances.get(instance) ?? instance;
+}
+function sheetPartOutcome(text: string | null, selection = { sheet: BENCH_SESSION.active, selection: "A1", active: "A1" }) {
+  return {
+    commit: {
+      revision: BENCH_SESSION.revision,
+      edit: { from: 0, to: 0, deleted: "", inserted: "" },
+      invalidation: { kind: "cells", cells: [] },
+    },
+    sheets: BENCH_SESSION.sheets,
+    hidden: BENCH_SESSION.hidden,
+    selection,
+    result: text === null ? null : JSON.stringify(SHEET_PARTS?.[text] ?? SHEET_PARTS_LOST),
+    dialog: null,
+    commands: BENCH_SESSION.commands,
+    book: BENCH_SESSION.book,
+  };
+}
+
 export const api: typeof host.module.api = {
   ...behind,
+  ...(SHEET_PARTS === null ? {} : {
+    openGridBytes: async (...args: Parameters<typeof behind.openGridBytes>) => {
+      const session = await behind.openGridBytes(...args);
+      const instance = `${session.instance}.${++sheetOpens}`;
+      sheetInstances.set(instance, session.instance);
+      sheetOpenCount.set(session.instance, (sheetOpenCount.get(session.instance) ?? 0) + 1);
+      return { ...session, instance };
+    },
+    gridBytesWindow: async (surface: string, instance: string, request: Parameters<typeof behind.gridBytesWindow>[2]) =>
+      withChart(await behind.gridBytesWindow(surface, sheetInstance(instance), request)),
+    applyGridBytes: (surface: string, instance: string, request: Parameters<typeof behind.applyGridBytes>[2]) =>
+      behind.applyGridBytes(surface, sheetInstance(instance), request),
+    gridBytesCommands: (surface: string, instance: string, selection: Parameters<typeof behind.gridBytesCommands>[2]) =>
+      behind.gridBytesCommands(surface, sheetInstance(instance), selection),
+    closeGridBytes: async (surface: string, instance: string) => {
+      const real = sheetInstances.get(instance);
+      if (real === undefined) return behind.closeGridBytes(surface, instance);
+      sheetInstances.delete(instance);
+      const left = (sheetOpenCount.get(real) ?? 1) - 1;
+      if (left > 0) {
+        sheetOpenCount.set(real, left);
+        return;
+      }
+      sheetOpenCount.delete(real);
+      return behind.closeGridBytes(surface, real);
+    },
+    gridBytesCommand: (...args: Parameters<typeof behind.gridBytesCommand>) => {
+      args[1] = sheetInstance(args[1]);
+      const [, , request] = args;
+      if (request.command.id === "selection.set") {
+        return Promise.resolve(sheetPartOutcome(null, sheetSelection(request.command.params)) as Awaited<ReturnType<typeof behind.gridBytesCommand>>);
+      }
+      if (request.command.id !== "fub.part") return behind.gridBytesCommand(...args);
+      const asked = (JSON.parse(request.command.params || "{}") as { part?: string }).part ?? "";
+      return Promise.resolve(sheetPartOutcome(asked) as Awaited<ReturnType<typeof behind.gridBytesCommand>>);
+    },
+  }),
   ...(SIZES_ANSWER || CELLS_ANSWER ? {
     gridBytesCommand: async (surface, instance, request) => {
       // Le misure (e i riempimenti e gli incolla, con `?risposte=si`) le
@@ -2954,6 +3242,15 @@ export const api: typeof host.module.api = {
     if (TREE_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
       const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    if (PDF_PROFILES !== null && id === "pdf.profiles") {
+      return { notify: null, effect: { kind: "custom", ns: "fub.pdf.profiles", payload: PDF_PROFILES }, undo: null, partial: null };
+    }
+    // I caratteri del vault per la stampa: il finto non sa leggerli.
+    if (id === VAULT_FONTS_COMMAND) {
+      if (!EXPORT_FONTS_SCENE) return { ...exportFontsOutcome(), effect: { ...exportFontsOutcome().effect, payload: { ...EXPORT_FONTS, caratteri: [] } } };
+      await writeExportFonts();
+      return exportFontsOutcome();
     }
     // Il gesto della barra della Base delle scene `base-*`.
     const based = BASE?.invoke(id, args);
@@ -3042,11 +3339,20 @@ export const api: typeof host.module.api = {
     if (view === "desk" && DESK) return { kind: "replace" as const, root: DESK.act(instance ?? "main", action, payload) };
     const live = view === "trash" ? await liveTrashAction(action, payload) : undefined;
     if (live) return live;
+    // Il cestino della scenografia sa chiedere, e solo chiedere: il sì non
+    // distrugge le sue tre voci, che le foto conoscono.
+    if (view === "trash" && TRASH_FULL && (action === "empty" || action === "cancel" || action === "empty_confirm")) {
+      return { kind: "replace" as const, root: trashWithThree(action === "empty") };
+    }
     const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
     const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;
     return { kind: "replace" as const, root };
   },
+  // Il profilo di serie di un vault appena aperto, come lo dà l'host («Default»,
+  // `default_profile_name` del kernel): il pannello Profili si fotografa col suo
+  // stato vero, non con l'errore del finto che non ha un servizio di profili.
+  settingsProfiles: async () => ({ active: "Default", names: ["Default"] }),
   listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),
   // La cartella del gruppo «editor» del giro (`giro-fixture.ts`): risponde

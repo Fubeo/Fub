@@ -647,6 +647,25 @@ impl Instance {
         self.ids = ids_of(&self.sheets);
     }
 
+    /// Rimette ai fogli le righe e le colonne di `before`. Il `GridCommit` di
+    /// `apply` non porta i fogli, e la shell controlla ogni finestra sulla
+    /// misura che conosce: una formula scritta sotto l'ultima riga usata, che
+    /// in modalità a comandi farebbe crescere il margine, rendeva illeggibili
+    /// le finestre (IMP-142). La misura cresce al primo comando dopo, che
+    /// porta i fogli, o alla riapertura. `counted` resta quello di prima, così
+    /// quel conteggio non salta il foglio cambiato.
+    fn keep_counts(&mut self, before: Vec<SheetInfo>) {
+        let mut before: HashMap<String, SheetInfo> = before
+            .into_iter()
+            .map(|info| (info.id.clone(), info))
+            .collect();
+        for info in &mut self.sheets {
+            if let Some(old) = before.remove(&info.id) {
+                *info = old;
+            }
+        }
+    }
+
     /// L'indice nel file del foglio `id`.
     fn file_index(&self, id: &str) -> Option<usize> {
         if !self.editable {
@@ -1439,6 +1458,9 @@ impl Instance {
             return Err(stale_revision());
         }
         let command = &request.command;
+        if command.id == commands::PART {
+            return self.part(command);
+        }
         let before = self.journal.to_text();
         let was = self.commanding;
         let (ran, selection, prior) = self.transaction(|this| {
@@ -1479,6 +1501,40 @@ impl Instance {
             selection,
             result: ran.result,
             dialog: ran.dialog,
+            commands,
+            book: self.book(),
+        })
+    }
+
+    /// [`commands::PART`]: dove sta la parte `part` della cartella mostrata
+    /// ([`crate::parts`]), o le parti che ci sono. Legge soltanto: niente
+    /// facciata nuova, niente modalità a comandi, il giornale com'è.
+    fn part(&mut self, command: &GridCommand) -> Result<GridCommandOutcome, PluginError> {
+        let params: Json = serde_json::from_str(&command.params)
+            .map_err(|_| bad("grid command parameters are not JSON"))?;
+        let text = match params.get("part") {
+            None | Some(Json::Null) => "",
+            Some(Json::String(text)) => text.as_str(),
+            Some(_) => return Err(bad(format!("{}: `part` is not text", commands::PART))),
+        };
+        let result = crate::parts::answer(self.shown(), text, |index| {
+            self.sheets.get(index).map(|info| info.id.clone())
+        });
+        let journal = self.journal.to_text();
+        let selection = self.selection();
+        let (sheets, hidden) = self.sheet_list();
+        let commands = self.catalog(&selection);
+        Ok(GridCommandOutcome {
+            commit: GridCommit {
+                revision: self.revision.clone(),
+                edit: text_diff(&journal, &journal),
+                invalidation: GridInvalidation::Cells(Vec::new()),
+            },
+            sheets,
+            hidden,
+            selection,
+            result: Some(result.to_string()),
+            dialog: None,
             commands,
             book: self.book(),
         })
@@ -1754,6 +1810,7 @@ impl Instance {
     /// Le patch in modalità a comandi: ognuna è l'input della sua cella.
     fn apply_commands(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         let before = self.journal.to_text();
+        let counted = self.sheets.clone();
         self.transaction(|this| {
             this.enter()?;
             for patch in &request.patches {
@@ -1778,6 +1835,7 @@ impl Instance {
             }
             Ok(((), true))
         })?;
+        self.keep_counts(counted);
         let after = self.journal.to_text();
         Ok(GridCommit {
             revision: self.revision.clone(),

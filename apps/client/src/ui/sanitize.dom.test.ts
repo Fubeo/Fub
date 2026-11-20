@@ -172,3 +172,18 @@ describe("l'HTML scritto nella nota", () => {
     );
   });
 });
+
+describe("le caselle delle voci", () => {
+  it("prendono per nome il testo della loro voce, senza le sottovoci", () => {
+    const holder = document.createElement("div");
+    holder.append(sanitizeFragment(
+      '<ul><li class="task" data-task="x"><input type="checkbox" disabled checked> Comprare <b>il pane</b>' +
+        '<ul><li class="task"><input type="checkbox" disabled> integrale</li></ul></li>' +
+        '<li class="task"><input type="checkbox" disabled></li></ul>',
+    ));
+    const boxes = [...holder.querySelectorAll("input")];
+    expect(boxes.map((box) => box.getAttribute("aria-label"))).toEqual(["Comprare il pane", "integrale", null]);
+    // Restano caselle disabilitate: il nome non cambia ciò che sono.
+    expect(boxes.every((box) => box.type === "checkbox" && box.disabled)).toBe(true);
+  });
+});

@@ -844,6 +844,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-xlsx/src/parts.rs::name_key",
+            (
+                Family::ContextualCase,
+                "trova la parte che una nota incorpora (`fub.part`) fra i fogli, i nomi definiti e \
+                 le tabelle di una cartella: Excel tiene uguali due nomi che differiscono soltanto \
+                 per le maiuscole, anche fuori dall'ASCII («Città» e «CITTÀ»), e la piegatura \
+                 contestuale è quella che lo segue. Sono nomi dentro un file, non del vault, e la \
+                 risposta sceglie soltanto che cosa mostrare: non scrive niente.",
+            ),
+        ),
+        (
             "crates/fub-format-xlsx/src/package.rs::normalize",
             (
                 Family::AsciiCase,
@@ -1301,16 +1312,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  hash è esadecimale e la piegatura larga non inventa collisioni, si limita a \
                  tollerare la grafia del file. Diverge da `edit.rs::matches_bytes` perché là la \
                  tolleranza è la compatibilità dichiarata, qui è igiene d'importazione.",
-            ),
-        ),
-        (
-            "crates/fub-importers/src/export_pdf.rs::block",
-            (
-                Family::ContextualCase,
-                "va **verso l'alto** come `log.rs::compose`: i titoli stampati si alzano di caso \
-                 per tipografia, e nessuno li riconverte. Diverge da lei perché qui la sorgente è \
-                 il modello del documento dell'utente e non un livello di log, ma la direzione \
-                 resta decorativa e non d'identità.",
             ),
         ),
         (
@@ -2213,6 +2214,48 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  specie di un file ma ne deduce un altro, il PDF che un documento nuovo nomina in \
                  `fub:annotates` e che l'export cerca quando `fub:annotates` manca, e il resto del \
                  nome resta com'è.",
+            ),
+        ),
+        // -- Il PDF delle note (ADR 0247) --------------------------------------
+        (
+            "crates/fub-features/src/pdf_export/lavoro.rs::destinazione",
+            (
+                Family::AsciiCase,
+                "riconosce `.pdf` in fondo alla destinazione del PDF di una nota senza badare al \
+                 caso ASCII, come `print.rs::file_name`: `Bando.PDF` è già un PDF e non ne \
+                 riceve un secondo. Non decide l'identità del nome, che resta a \
+                 `path_policy::check` subito dopo.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/command.rs::esporta",
+            (
+                Family::AsciiCase,
+                "riconosce `.md` in fondo alla nota che `pdf.export_note` deve esportare senza \
+                 badare al caso ASCII, come `destinazione` fa con `.pdf`: `Nota.MD` è una nota \
+                 Markdown, la sola che la vista sa impaginare. Non decide l'identità del nome: \
+                 la nota la risolve l'host (`document_revision`) prima di questo controllo.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/lavoro.rs::carattere",
+            (
+                Family::FolderBoundary,
+                "toglie lo `/` iniziale dall'indirizzo di un carattere (`/fonts/<nome>`, come \
+                 l'app lo serve) per riconoscere i caratteri di Fub nel binario: è un indirizzo \
+                 della webview, non un path del vault, e ogni altro nome passa intero a \
+                 `path_policy::from_outside`.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/writer.rs::indirizzo_ammesso",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema di un link prima di scriverlo nel PDF e lo confronta con \
+                 `http`, `https` e `mailto`: gli schemi URI sono ASCII per la RFC 3986, e il \
+                 confronto è un cancello che tiene fuori `javascript:` e `file:`. Diverge da \
+                 `validate_callback` perché la lista è di ciò che si lascia passare in un file \
+                 che altri apriranno, non di dove richiamare.",
             ),
         ),
         // -- ConfineDiCartella: comporre cartella e nome ----------------------

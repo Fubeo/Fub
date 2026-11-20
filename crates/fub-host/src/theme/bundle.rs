@@ -92,7 +92,8 @@ impl std::fmt::Display for ThemeError {
             ThemeError::InvalidId(and) => write!(f, "invalid theme id: {and}"),
             ThemeError::Traversal { id, path } => write!(
                 f,
-                "`{id}` contains `{path}`, which escapes the theme folder: will not install"
+                "`{id}` contains `{}`, which escapes the theme folder: will not install",
+                plain_text(path)
             ),
             ThemeError::AlreadyInstalled(and) => {
                 write!(f, "theme already installed: {and}")
@@ -102,7 +103,8 @@ impl std::fmt::Display for ThemeError {
             }
             ThemeError::Changed(and) => write!(
                 f,
-                "the theme folder `{and}` changed after it was checked: check it again"
+                "the theme folder `{}` changed after it was checked: check it again",
+                plain_text(and)
             ),
             ThemeError::CatalogState { file } => write!(
                 f,

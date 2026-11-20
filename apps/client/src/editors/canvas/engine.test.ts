@@ -36,7 +36,7 @@ import {
   type CardTextEditor,
   type CardTextOptions,
   type CardView,
-} from "./cards";
+} from "../core/cards/contract";
 import { CardCache } from "./card-cache";
 import { declareClipboard } from "../../platform/clipboard";
 import { quantizeInk, type InkSample } from "../../ink/sample";
@@ -2731,6 +2731,17 @@ describe("CanvasEngine: trascinare e incollare (T15)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("un deposito che l'host rifiuta con un errore tipizzato dice il suo messaggio, mai «[object Object]»", async () => {
+    const deposit = vi.fn(async (): Promise<readonly string[]> => {
+      throw { kind: "io", message: "disco pieno" };
+    });
+    const { engine, host, changes } = mounted(canvasSource(), { attachments: { deposit } });
+    drop(host, transfer({}, { files: [new File(["x"], "x.png")] }));
+    await vi.waitFor(() => expect(host.querySelector(".canvas-intake-error")?.textContent).toBe("disco pieno"));
+    expect(changes).toHaveLength(0);
+    engine.destroy();
   });
 
   it("un deposito che l'host rifiuta lo dice nella barra, come prima", async () => {

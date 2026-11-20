@@ -3765,6 +3765,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         );
     }
 
+    // `trash.os` legge il campo «Documento» anche scritto per nome.
+    let (it, en) = crate::doc_names::speaking(crate::doc_names::CORE_KEYS, it, en);
     vec![it, en]
 }
 

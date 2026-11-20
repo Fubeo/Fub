@@ -80,13 +80,13 @@ l'IPC.
   `MAX_SHOWN_BYTES` in `projection.rs`): la superficie la disegna. Le altre
   restano segnaposti col nome e la misura. Il ritorno al documento ignora
   quei byte: vale l'immagine tenuta in `k`. Il codec ODT non li porta ancora.
-  L'enfasi (`m`) e l'aspetto
-  del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
-  sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;
-  il ritorno al documento ne fa formattazione diretta, o la toglie quando
-  basta toglierla. Allo stesso modo un paragrafo porta l'allineamento
-  risolto (`align`), la disposizione (`p`: rientri, prima riga, spazi,
-  interlinea, in punti) dove differisce da quella del suo stile, e lo stile
+  L'enfasi (`m`) e l'aspetto del carattere (`f`: tipo, dimensione, colore,
+  colore dell'evidenziatore) sono marche **risolte**, scritte soltanto dove
+  differiscono dal paragrafo; il ritorno al documento ne fa formattazione
+  diretta, o la toglie quando basta toglierla. Allo stesso modo un paragrafo
+  porta l'allineamento risolto (`align`), la disposizione (`p`: rientri, prima
+  riga, spazi, interlinea, in punti) dove differisce da quella del suo stile
+  (in una cella conta lo stile della tabella, ECMA-376 §17.7.2), e lo stile
   di un paragrafo di corpo (`s`). Il carattere del documento (`f` in testa)
   la galleria degli stili (`styles`) e l'aspetto di ogni ruolo (`roles`:
   titoli, citazione, elenco) sono suggerimenti di resa che il ritorno
@@ -399,12 +399,12 @@ Il correttore ha un motore e un client per tutte le superfici di prosa, e un
 adattatore per formato.
 
 - Il motore è la feature `fub.proof`, una route `query_index` custom chiusa e
-  versionata (`languages`, `check`). Riceve segmenti di testo, una lingua, le
-  opzioni e le parole del dizionario personale; risponde con rilievi in byte
-  UTF-8 dentro ogni segmento. Il dizionario personale è l'impostazione del
-  vault `proof.words`, scritta soltanto dai comandi `proof.word.add` e
-  `proof.word.remove`. I dizionari Hunspell della macchina li legge soltanto
-  il collegamento dell'host (`HostWiring::MachineDictionaries`).
+  versionata (`languages`, `check`). Riceve segmenti, lingua, opzioni, parole
+  del dizionario personale e, facoltativo, `list_items` (le voci d'elenco: la
+  prima parola non chiede la maiuscola); risponde con rilievi in byte UTF-8
+  dentro ogni segmento. Il dizionario personale è `proof.words` del vault,
+  scritto soltanto da `proof.word.add` e `proof.word.remove`; i dizionari
+  Hunspell della macchina li legge soltanto `HostWiring::MachineDictionaries`.
 - Il client, `apps/client/src/editors/core/proof.ts`, non conosce CodeMirror
   né formati. Legge le impostazioni, spezza le richieste entro i limiti della
   route, converte gli offset in code unit UTF-16 e scarta le risposte tardive;
@@ -413,11 +413,11 @@ adattatore per formato.
 - L'adattatore del formato estrae la prosa e tiene la mappa a pezzi verso il
   buffer. Quello Markdown
   (`apps/client/src/editors/text/profiles/markdown/proof.ts`) mette `U+FFFC`
-  al posto di codice, link, tag e formule, e offre una sostituzione soltanto
-  per un rilievo che sta in un pezzo copiato dal buffer. I segni sono
-  diagnostiche di `@codemirror/lint`; una correzione è una transazione
-  `input.proof`, quindi entra nella cronologia della superficie e nella coda
-  della `DocumentSession`.
+  al posto di codice, link, tag e formule, segna voce d'elenco il blocco in un
+  `ListItem` (paragrafo o compito), e offre una sostituzione soltanto per un
+  rilievo in un pezzo copiato dal buffer. I segni sono diagnostiche di
+  `@codemirror/lint`; una correzione è una transazione `input.proof`, quindi
+  entra nella cronologia della superficie e nella coda della `DocumentSession`.
 
 L'adattatore della superficie ricca (`apps/client/src/editors/rich/proof.ts`)
 usa lo stesso client e la stessa mappa a pezzi: un segmento per paragrafo, con

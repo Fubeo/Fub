@@ -28,6 +28,18 @@ Da fuori la si guida con `window.__fubProbe`: `start()`, `stop()`, che rende
 il referto, e `waitFor(nome, selettore, ms, testo?)`. Spenta, la sonda non
 ascolta niente e non chiede fotogrammi.
 
+## I tasti del driver
+
+Gli scenari, e le sonde che guidano l'app vera, parlano col driver attraverso
+`apps/client/bench/webview/driver.mjs`. `session.keys(testo)` segue l'«Element
+Send Keys» del W3C: un modificatore nel testo resta premuto fino alla fine,
+quindi `keys(KEY.control + "f")` è Ctrl+F (`keyActions`, provato da
+`driver.test.mjs`). Per un accordo con un ordine preciso di pressioni e
+rilasci si usa `session.actions`. I tasti speciali hanno un nome in `KEY`:
+attenzione ai tasti funzione, perché `` è F1 e F2 è ``. Se una
+scorciatoia sembra rotta solo sotto il driver, prima di cercare il difetto in
+Fub si guardano `key`, `code` e `ctrlKey` del `keydown` che arriva davvero.
+
 ## Gli scenari
 
 | Scenario | Gesto | Valore |
@@ -80,6 +92,30 @@ ferma va nel referto come `S3.apertura`, col buco più lungo fra due
 fotogrammi dentro l'apertura (`S3.apertura.buco`); non hanno soglia. Una
 lavagna che non si ferma entro 15 s dalla prima scheda fa fallire lo
 scenario, col buco più lungo visto.
+
+**La misura della finestra.** L'app chiede una finestra di 1280 × 840
+(`crates/fub-app/tauri.conf.json`), ma la misura la decide il gestore di
+finestre: sotto Xvfb è quella; un gestore a tessere (niri, sway) la cambia,
+per esempio in 800 × 1896 su una colonna di niri. Il gesto di S3 e S9 si
+calcola quindi sulla pagina vera (`bench/webview/gesture.mjs`, prova in
+`gesture.test.mjs`): può uscire dalla lavagna, che tiene il puntatore finché
+il pulsante è premuto, ma non dalla pagina, perché WebDriver rifiuta il
+punto. Parte dal centro della parte visibile di `.canvas-viewport` e va
+±400 px, come nella CI, se ci sta a 8 px dai bordi; altrimenti parte dal
+punto della vista più vicino al centro della pagina e va quanto ci sta
+(±391 px nella colonna di niri). Sotto i 100 px lo scenario fallisce col
+motivo. Il referto dà la pagina, la misura chiesta (`window`) e il gesto
+(`gesture`, con `reduced`); una pagina diversa o un gesto ridotto finiscono
+anche fra le note stampate: quei numeri non si confrontano uno a uno con
+quelli della CI.
+
+**Il selettore e l'indice.** Il primo avvio sul vault del banco indicizza
+diecimila note, e la shell risponde prima di aver finito. Il riscaldamento
+aspetta l'indice (`vault_status`) prima di cercare «Lunga», e una ricerca per
+nome preme Invio solo quando la prima voce è un documento: finché l'indice
+non lo conosce, la prima voce del selettore comune è «Crea questa nota», e
+Invio creava una `Lunga.md` vuota alla radice, che il selettore metteva poi
+davanti alla vera (riscaldamento e S1 scaduti).
 
 T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 (tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto

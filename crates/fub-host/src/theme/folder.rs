@@ -30,7 +30,8 @@ pub enum ThemeFolderRefusal {
     /// L'id è quello del tema di serie, riservato.
     Series,
     /// Un link simbolico, o un file che esce dalla cartella. `path` è
-    /// relativo alla cartella quando ci sta dentro.
+    /// relativo alla cartella quando ci sta dentro, altrimenti è il percorso
+    /// intero da mostrare (su Windows senza `\\?\`).
     Traversal { path: String },
     /// Un file che è stato del catalogo scritto da Fub (il puntatore alla
     /// versione, le generazioni): non viaggia con un tema.
@@ -96,7 +97,7 @@ pub(super) fn refusal(
                 .filter(|relative| !relative.is_empty())
                 .map(str::to_owned);
             ThemeFolderRefusal::Traversal {
-                path: relative.unwrap_or(path),
+                path: relative.unwrap_or_else(|| plain_text(&path).into_owned()),
             }
         }
         ThemeError::CatalogState { file } => ThemeFolderRefusal::CatalogState { file },
@@ -247,9 +248,9 @@ pub enum ThemeFolderInstall {
         version: String,
     },
     /// Ciò che c'è nella cartella dei temi di Fub non si tocca: `why` dice
-    /// perché, `path` è dove, da mostrare. `installed` dice se è il tema già
-    /// installato con lo stesso id (che resta com'era) o la cartella dei temi
-    /// stessa. Niente è stato toccato; il tema da installare è quello del
+    /// perché, `path` è dove, da mostrare (su Windows senza `\\?\`).
+    /// `installed` dice se è il tema già installato con lo stesso id (che
+    /// resta com'era) o la cartella dei temi stessa. Niente è stato toccato; il tema da installare è quello del
     /// controllo, che la shell conosce già.
     Blocked {
         why: ThemeBlock,
@@ -383,7 +384,7 @@ fn probe(
         Ok(metadata) if metadata.file_type().is_symlink() => {
             return Err(Box::new(ThemeFolderInstall::Blocked {
                 why: ThemeBlock::Link,
-                path: dest.to_string(),
+                path: plain_text(dest.as_str()).into_owned(),
                 installed: true,
             }))
         }
@@ -401,7 +402,7 @@ fn probe(
             Installed::Blocked(why) => {
                 return Err(Box::new(ThemeFolderInstall::Blocked {
                     why,
-                    path: dest.to_string(),
+                    path: plain_text(dest.as_str()).into_owned(),
                     installed: true,
                 }))
             }
@@ -519,7 +520,7 @@ fn blocked(error: ThemeError, at: &Utf8Path) -> Result<ThemeFolderInstall, Theme
     };
     Ok(ThemeFolderInstall::Blocked {
         why,
-        path: at.to_string(),
+        path: plain_text(at.as_str()).into_owned(),
         installed: false,
     })
 }

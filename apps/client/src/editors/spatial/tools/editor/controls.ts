@@ -478,6 +478,10 @@ export function installControls(ctx: EditorContext): void {
     const titleHome = has("properties") ? panel.lead : ctx.topEnd;
     if (ctx.titleField.parentElement !== titleHome) titleHome.prepend(ctx.titleField);
     if (titleHome !== panel.lead) ctx.titleField.hidden = false;
+    // Il foglietto di destra senza niente dentro (senza «Esporta», come in una
+    // scheda della nota, e col titolo nel pannello) non si vede: vuoto
+    // resterebbe una lista sottile in fondo alla barra.
+    ctx.topEnd.hidden = ![...ctx.topEnd.children].some((child) => !(child as HTMLElement).hidden);
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
     syncLayers();

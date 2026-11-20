@@ -82,4 +82,25 @@ describe("il cestino vero del finto", () => {
       .rejects.toMatchObject({ kind: "already_exists" });
     expect((await ipc.api.readDocument("Cestino/Tre.md")).text).toBe("# Tre nuova\n");
   });
+
+  // Come il provider (`trash.rs`): «Svuota il cestino» apre la domanda
+  // `fub.confirm` al posto del bottone, il no la chiude, solo il sì svuota.
+  it("Svuota chiede prima, e solo il sì svuota", async () => {
+    await ipc.api.writeDocument("Cestino/Quattro.md", "# Quattro\n", { kind: "dictated" });
+    await ipc.api.invokeCommand("note.trash", { doc: "Cestino/Quattro.md" });
+    const asked = await ipc.api.viewAction("trash", "trash-1", null, "empty", null, []);
+    const question = JSON.stringify(asked);
+    expect(question).toContain('"ns":"fub.confirm"');
+    expect(question).toContain('"key":"trash-empty"');
+    expect(await trashTitles()).toContain("Quattro");
+
+    const withdrawn = await ipc.api.viewAction("trash", "trash-1", null, "cancel", null, []);
+    expect(JSON.stringify(withdrawn)).not.toContain("fub.confirm");
+    await ipc.api.viewAction("trash", "trash-1", null, "empty_confirm", null, []);
+    expect(await trashTitles()).toContain("Quattro");
+
+    await ipc.api.viewAction("trash", "trash-1", null, "empty", null, []);
+    await ipc.api.viewAction("trash", "trash-1", null, "empty_confirm", null, []);
+    expect(await trashTitles()).toEqual([]);
+  });
 });

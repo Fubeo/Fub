@@ -23,7 +23,26 @@ import { calloutName } from "./callout";
 import { CALLOUT_TYPES } from "./kinds";
 import { parseImage, widthWritable, rewriteImage, openImageAt, type ImageSource } from "./image-live";
 import { codeBlockAt, linkAt, tableRowAt, taskAt } from "./menu";
+import { REMINDER_ACTION } from "./slash";
 import { liveStrings } from "./strings";
+import {
+  besideCardAt,
+  columnWidthOf,
+  embedRangeAtLine,
+  liveCardDisplay,
+  liveCardEmbed,
+  liveCardSize,
+  liveCardWidthOf,
+  liveCardWidthPx,
+  removeEmbedAt,
+  showEmbedAt,
+  sizeEmbedAt,
+  type LiveCardWidth,
+} from "./live-cards";
+import { cellShownAsValue, cellValueRef } from "./cell-value";
+import { TABLE_SHEET_ACTION } from "./table-grid";
+import { splitSheetPart } from "./table-sheet";
+import { formatKindOf } from "../../../../ui/format-kind";
 
 /// I linguaggi che «Linguaggio ▸» offre, col loro nome nel menu: gli altri si
 /// scrivono con «Altro…». Gli stessi nel menu del tasto destro e nella barra.
@@ -58,6 +77,7 @@ export type MarkdownBlock =
   | { readonly kind: "image"; readonly start: number; readonly from: number; readonly to: number; readonly image: ImageSource }
   | { readonly kind: "base"; readonly start: number; readonly page: string }
   | { readonly kind: "transclusion"; readonly start: number; readonly page: string; readonly heading: string | null; readonly block: string | null }
+  | { readonly kind: "card"; readonly start: number; readonly page: string; readonly subpath: string | null; readonly alias: string | null }
   | { readonly kind: "task"; readonly start: number; readonly end: number };
 
 export type BlockKind = MarkdownBlock["kind"];
@@ -86,11 +106,15 @@ export function blockAt(state: EditorState, pos: number): MarkdownBlock | null {
   }
   const trimmed = line.text.trim();
   const image = trimmed === "" ? null : parseImage(trimmed);
-  if (image && (image.syntax === "markdown" || IMAGE_FILE.test(image.file))) {
+  // Un disegno incorporato col wikilink è una scheda (T46), non un'immagine.
+  if (image && (image.syntax === "markdown" || (IMAGE_FILE.test(image.file) && !liveCardEmbed(trimmed)))) {
     const from = line.from + line.text.indexOf(trimmed);
     return { kind: "image", start: line.from, from, to: from + trimmed.length, image };
   }
   if (EMBED_LINE.test(line.text)) {
+    // Un file che si mostra come scheda viva (T41): il gruppo «Scheda».
+    const card = liveCardEmbed(line.text);
+    if (card) return { kind: "card", start: line.from, page: card.page, subpath: card.subpath, alias: card.alias };
     const link = linkAt(state, line.from + line.text.indexOf("!"));
     if (link?.kind === "wikilink" && link.embed && link.page !== "") {
       if (/\.base$/i.test(link.page)) return { kind: "base", start: line.from, page: link.page };
@@ -137,6 +161,14 @@ function setType(state: EditorState, start: number, type: string): TransactionSp
   return { changes: { from: line.from + head.typeText.from, to: line.from + head.typeText.to, insert: type }, userEvent: "input" };
 }
 
+/// La scheda da staccare come tabella (T52): dove comincia, il file com'è
+/// scritto e la parte (`Foglio1!A1:C3`).
+export interface DetachCard {
+  readonly start: number;
+  readonly page: string;
+  readonly part: string;
+}
+
 /// Ciò che i gesti dei gruppi chiedono alla superficie che li ospita.
 export interface BlockGroupHost {
   /// Legge lo stato del testo adesso.
@@ -154,6 +186,138 @@ export interface BlockGroupHost {
   /// «Modifica qui» sulla trasclusione del blocco che comincia in `start`
   /// (`transclusion.ts`): `false` se lì non si scrive. Senza, la voce non c'è.
   editHere?(start: number): boolean;
+  /// Attiva la scheda viva del blocco che comincia in `start` (`live-cards.ts`):
+  /// `false` se lì non c'è una scheda che si attiva. Senza, la voce non c'è.
+  activateCard?(start: number): boolean;
+  /// «Stacca come tabella» (T52): la parte di foglio della scheda che
+  /// comincia in `start` diventa una tabella coi valori mostrati. Senza, la
+  /// voce non c'è.
+  detachCard?(card: DetachCard): void;
+  /// «Annota» sulla scheda viva del blocco che comincia in `start` (T49): la
+  /// avvolge in una zona lavagna. `false` se lì non si annota. Senza, la voce
+  /// non c'è.
+  annotateCard?(start: number): boolean;
+}
+
+/// Il gruppo di una scheda di foglio attiva nella nota (T43, prototipo passo
+/// 16): «Foglio», la cella attiva con la sua formula (o niente, finché la
+/// griglia non c'è) e «Apri». Le righe, le colonne, i formati e i grafici
+/// stanno nel foglio aperto.
+export function sheetCardGroup(sheet: {
+  readonly open: () => void;
+  readonly context: { readonly cell: string; readonly formula: string } | null;
+}): SurfaceBlockGroup {
+  return {
+    id: "sheet",
+    label: liveStrings.t("blockgroup.sheet"),
+    context: sheet.context,
+    items: [{
+      id: "markdown.card.open",
+      label: liveStrings.t("blockgroup.card.open"),
+      icon: "fmt-open",
+      run: () => sheet.open(),
+    }],
+  };
+}
+
+/// Le voci della misura e del posto di una scheda (T42): «Mostra come»
+/// (scheda, link, riga), la larghezza (colonna, larga, tutta la pagina),
+/// l'altezza della specie quando ce n'è una scritta, «Affianca». Ogni gesto
+/// rilegge l'embed quando si usa, e scrive un passo d'annullamento.
+/// La cella sola di un foglio che la scheda nomina, se è una (T53).
+function cardCell(block: Extract<MarkdownBlock, { kind: "card" }>): boolean {
+  return cellValueRef(block.page, block.subpath === null ? null : block.subpath.slice(1)) !== null;
+}
+
+/// La scheda è una cella mostrata come valore nel testo (`|value`, T53).
+function shownAsValue(block: Extract<MarkdownBlock, { kind: "card" }>): boolean {
+  return cellShownAsValue(block.alias) && cardCell(block);
+}
+
+/// La parte di un intervallo di foglio che la scheda nomina (`Foglio1!A1:C3`),
+/// se è una: «Stacca come tabella» (T52) vale per lei, non per un foglio
+/// intero, un nome o una cella sola.
+function sheetRange(block: Extract<MarkdownBlock, { kind: "card" }>): string | null {
+  if (block.subpath === null || formatKindOf(block.page) !== "sheet" || cardCell(block)) return null;
+  const part = block.subpath.slice(1);
+  return splitSheetPart(part) === null ? null : part;
+}
+
+function cardLayout(block: Extract<MarkdownBlock, { kind: "card" }>, host: BlockGroupHost): SurfaceMenuEntry[] {
+  // Una cella sola di un foglio si mostra anche come valore nel testo (T53).
+  const cell = cardCell(block);
+  const display = shownAsValue(block) ? "value" : liveCardDisplay(block.alias);
+  const size = liveCardSize(block.alias);
+  const column = (): number => {
+    let width = 0;
+    host.view((view) => {
+      width = Math.round(columnWidthOf(view));
+      return true;
+    });
+    return width;
+  };
+  const write = (change: (state: EditorState, range: NonNullable<ReturnType<typeof embedRangeAtLine>>) => TransactionSpec | null) =>
+    void host.write((state) => {
+      const range = embedRangeAtLine(state, Math.min(block.start, state.doc.length));
+      return range ? change(state, range) : null;
+    });
+  const show = (as: "card" | "link" | "row" | "value"): SurfaceMenuItem => ({
+    id: `markdown.card.show.${as}`,
+    label: liveStrings.t(`blockgroup.card.show.${as}`),
+    radio: true,
+    checked: as === display,
+    run: () => write((state, range) => showEmbedAt(state, range, as)),
+  });
+  const width = (choice: LiveCardWidth, now: LiveCardWidth, columnPx: number): SurfaceMenuItem => ({
+    id: `markdown.card.width.${choice}`,
+    label: liveStrings.t(`blockgroup.card.width.${choice}`),
+    radio: true,
+    checked: choice === now,
+    run: () => write((state, range) => sizeEmbedAt(state, range, {
+      // La colonna senza altezza non scrive niente: è la scheda di sempre.
+      width: choice === "column" && size.height === null ? null : liveCardWidthPx(choice, columnPx),
+      height: size.height,
+    }, columnPx)),
+  });
+  const beside = host.read((state) => besideCardAt(state, Math.min(block.start, state.doc.length)));
+  return [
+    {
+      id: "markdown.card.show",
+      label: liveStrings.t("blockgroup.card.show"),
+      icon: "eye",
+      items: [show("card"), show("link"), show("row"), ...(cell ? [show("value")] : [])],
+    },
+    ...(display === "card" ? [{
+      id: "markdown.card.width",
+      label: liveStrings.t("blockgroup.card.width"),
+      // La colonna del testo si misura quando il menu si apre, come la
+      // larghezza di un'immagine.
+      load: async (): Promise<SurfaceMenuEntry[]> => {
+        const columnPx = column();
+        const now = liveCardWidthOf(size.width, columnPx);
+        return [width("column", now, columnPx), width("wide", now, columnPx), width("page", now, columnPx)];
+      },
+    }] : []),
+    ...(display === "card" && size.height !== null ? [{
+      id: "markdown.card.height",
+      label: liveStrings.t("blockgroup.card.height"),
+      run: () => write((state, range) => sizeEmbedAt(state, range, { width: size.width, height: null })),
+    }] : []),
+    // Un valore nel testo non si affianca: è una riga di testo.
+    ...(display === "value" ? [] : [{
+      id: "markdown.card.beside",
+      label: liveStrings.t("blockgroup.card.beside"),
+      icon: "fmt-columns",
+      ...(beside === null || beside === "full" ? {
+        enabled: false,
+        description: liveStrings.t(beside === "full" ? "blockgroup.card.beside.full" : "blockgroup.card.beside.none"),
+      } : {}),
+      run: () => void host.write((state) => {
+        const spec = besideCardAt(state, Math.min(block.start, state.doc.length));
+        return spec === null || spec === "full" ? null : spec;
+      }),
+    }]),
+  ];
 }
 
 /// I nomi dei gruppi, nella lingua dell'interfaccia.
@@ -162,6 +326,7 @@ const LABELS = {
   callout: "blockgroup.callout",
   base: "blockgroup.base",
   transclusion: "blockgroup.transclusion",
+  card: "blockgroup.card",
   table: "blockgroup.table",
   code: "blockgroup.code",
   image: "blockgroup.image",
@@ -173,17 +338,27 @@ type Build<K extends BlockKind> = (block: Extract<MarkdownBlock, { kind: K }>, h
 const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
   // La scadenza è la `@` del compito, che in un compito propone `📅` (il
   // comando `markdown.date`), scritta in fondo alla riga. Il promemoria
-  // arriva col suo task (T36).
-  task: (block, host, writable) => writable ? [{
-    id: "markdown.date",
-    label: liveStrings.t("blockgroup.task.due"),
-    icon: "fmt-date",
-    action: "markdown.date",
-    run: () => void host.write((state) => {
+  // (T36) apre la scelta del giorno e dell'ora sul compito (`REMINDER_ACTION`).
+  task: (block, host, writable) => {
+    if (!writable) return [];
+    const toEnd = () => void host.write((state) => {
       const line = state.doc.lineAt(Math.min(block.end, state.doc.length));
       return { selection: { anchor: line.to }, scrollIntoView: true };
-    }),
-  }] : [],
+    });
+    return [{
+      id: "markdown.date",
+      label: liveStrings.t("blockgroup.task.due"),
+      icon: "fmt-date",
+      action: "markdown.date",
+      run: toEnd,
+    }, {
+      id: REMINDER_ACTION,
+      label: liveStrings.t("blockgroup.task.reminder"),
+      icon: "fmt-alarm",
+      action: REMINDER_ACTION,
+      run: toEnd,
+    }];
+  },
   callout: (block, host, writable) => writable ? [
     {
       id: "markdown.callout.type",
@@ -227,9 +402,44 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
       run: () => void host.editHere?.(block.start),
     }] : []),
   ],
+  // La scheda viva (T41): «Apri» e «Attiva» come in testata, e «Togli dalla
+  // nota», che toglie l'embed e mai il file. Chi scrive ha anche (T42)
+  // «Mostra come», la larghezza, l'altezza della specie e «Affianca».
+  card: (block, host, writable) => [
+    {
+      id: "markdown.link.open",
+      label: liveStrings.t("blockgroup.card.open"),
+      icon: "fmt-open",
+      run: () => host.openLink(block.page, block.subpath === null ? null : block.subpath.slice(1), null),
+    },
+    ...(host.activateCard && !shownAsValue(block) ? [{
+      id: "markdown.card.activate",
+      label: liveStrings.t("blockgroup.card.activate"),
+      run: () => void host.activateCard?.(block.start),
+    }] : []),
+    // «Annota» (T49): la scheda in una zona lavagna, dove si disegna. Una
+    // lavagna è già una zona, e un valore nel testo non è una scheda.
+    ...(writable && host.annotateCard && !shownAsValue(block) && !/\.canvas$/i.test(block.page) ? [{
+      id: "markdown.card.annotate",
+      label: liveStrings.t("blockgroup.card.annotate"),
+      icon: "pen",
+      run: () => void host.annotateCard?.(block.start),
+    }] : []),
+    ...(writable ? cardLayout(block, host) : []),
+    ...(writable && host.detachCard && sheetRange(block) !== null ? [{
+      id: "markdown.card.detach",
+      label: liveStrings.t("blockgroup.card.detach"),
+      run: () => host.detachCard?.({ start: block.start, page: block.page, part: sheetRange(block)! }),
+    }] : []),
+    ...(writable ? [{
+      id: "markdown.card.remove",
+      label: liveStrings.t("blockgroup.card.remove"),
+      run: () => void host.write((state) => removeEmbedAt(state, block.start)),
+    }] : []),
+  ],
   // Le azioni della tabella, coi nomi corti della barra: le spegne la
   // superficie dove non c'è una tabella da cambiare.
-  table: () => [
+  table: (_block, _host, writable) => [
     { id: "markdown.table.row.after", label: liveStrings.t("blockgroup.table.row"), icon: "fmt-plus", action: "markdown.table.row.after" },
     { id: "markdown.table.column.after", label: liveStrings.t("blockgroup.table.column"), icon: "fmt-plus", action: "markdown.table.column.after" },
     {
@@ -241,6 +451,8 @@ const GROUPS: { readonly [K in BlockKind]: Build<K> } = {
         { id: "markdown.table.sort.descending", label: t("table.menu.sub.sort_descending"), action: "markdown.table.sort.descending" },
       ],
     },
+    // «Trasforma in foglio» (T52), come nel menu della griglia.
+    ...(writable ? [{ id: TABLE_SHEET_ACTION, label: liveStrings.t("table_sheet.menu"), action: TABLE_SHEET_ACTION }] : []),
   ],
   code: (block, host, writable) => {
     const current = block.language.toLowerCase();

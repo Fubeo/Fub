@@ -7,7 +7,7 @@
 // cui un pannello nuovo non poteva averle senza copiarle.
 
 import { t } from "../i18n/strings";
-import { focusReturnsInto, trapFocus } from "./a11y";
+import { focusReturnsInto, keepFocusWhereItIs, trapFocus } from "./a11y";
 import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
@@ -407,6 +407,23 @@ export function menuPointFor(box: { readonly left: number; readonly bottom: numb
 /// Apre il menu `items` nel punto del gesto `at`, o sotto il pulsante `at`
 /// che lo apre: allora gli sta allineato, e dove sotto non c'è posto si apre
 /// sopra, senza mai coprirlo.
+/// Dove si appende un menu: nell'area di lavoro, di solito. Quando l'area di
+/// lavoro è inerte sotto un dialogo modale (lo spazio «Esporta in PDF»), un
+/// menu lì dentro si vedrebbe e non si potrebbe cliccare né raggiungere coi
+/// tasti: va nel dialogo da cui è stato aperto.
+function menuHost(at: MouseEvent | HTMLElement | MenuPoint): HTMLElement {
+  const workspace = document.getElementById("workspace");
+  if (workspace && !workspace.inert) return workspace;
+  // Un menu aperto in un punto (il sottomenu che col dito prende il posto del
+  // menu) sta nel dialogo che occupa quel punto.
+  const from = at instanceof HTMLElement
+    ? at
+    : at instanceof MouseEvent
+      ? (at.target instanceof Element ? at.target : null)
+      : (document.elementFromPoint?.(at.x, at.y) ?? null);
+  return from?.closest<HTMLElement>('[aria-modal="true"]') ?? workspace ?? document.body;
+}
+
 export function showContextMenu(
   at: MouseEvent | HTMLElement | MenuPoint,
   items: readonly MenuItem[],
@@ -463,8 +480,7 @@ export function showContextMenu(
   if (root.field !== null) menu.querySelector(".menu-items")?.setAttribute("aria-labelledby", menu.id);
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
-  const workspace = document.getElementById("workspace");
-  (workspace ?? document.body).appendChild(menu);
+  menuHost(at).appendChild(menu);
   if (anchor === null) placeInViewport(menu, x, y);
   else placeBeside(menu, anchor, chrome.full);
   // WebKitGTK può terminare il processo web mentre fotografa in una View
@@ -500,7 +516,16 @@ export function showContextMenu(
   // quella di un sottomenu lo apre.
   const outside = (e: MouseEvent): void => {
     const target = e.target as Element | null;
-    if (target instanceof Element && target.closest(".context-menu, .context-strip, [data-menu-keep]")) return;
+    if (target instanceof Element && target.closest(SURFACE)) return;
+    // Il clic che ha dato il fuoco a qualcosa fuori (il testo della nota, un
+    // campo, un altro pulsante) glielo lascia: il menu e i suoi sottomenu non
+    // lo riportano al pulsante che li aveva aperti. Un clic su ciò che non
+    // prende il fuoco lo lascia al `body`, e allora torna al pulsante, come
+    // con Escape o una voce scelta da tastiera.
+    const taker = document.activeElement;
+    if (taker instanceof HTMLElement && taker !== document.body && !taker.closest(SURFACE)) {
+      keepFocusWhereItIs((root) => root.classList.contains("context-menu"));
+    }
     closeContextMenu();
   };
   setTimeout(() => lifetime.listen(document, "click", outside), 0);
@@ -1604,6 +1629,10 @@ function placeInViewport(menu: HTMLElement, x: number, y: number): void {
   menu.style.top = `${at.top}px`;
   growFrom(menu, at.left, at.top, x, y);
 }
+
+/// Ciò che conta come dentro il menu per un clic: il menu e i suoi sottomenu,
+/// la barra che gli sta accanto, e chi si dichiara suo (`data-menu-keep`).
+const SURFACE = ".context-menu, .context-strip, [data-menu-keep]";
 
 /// Quanto un menu sta staccato dal pulsante che lo apre.
 const ANCHOR_GAP = 4;

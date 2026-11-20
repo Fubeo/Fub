@@ -132,14 +132,22 @@ export interface Panel {
 
 const registry = new Map<string, Panel>();
 
+/// I pannelli che l'ultimo ridisegno ha lasciato rotti. Un pannello rotto si dice
+/// una volta sola: finché resta rotto, ogni ridisegno che fallisce di nuovo non
+/// aggiunge un avviso, e una guarigione lo rimette in pari (IMP-117).
+const failing = new Set<string>();
+
 /// Mette un pannello nel registro. Un id già presente viene sostituito: è ciò
 /// che serve a `mountDeclaredViews`, che riparte da zero a ogni vault aperto.
 export function registerPanel(panel: Panel): void {
   registry.set(panel.id, panel);
+  // Una registrazione nuova è un pannello nuovo: la sua prima rottura si dice.
+  failing.delete(panel.id);
 }
 
 export function unregisterPanel(id: string): void {
   registry.delete(id);
+  failing.delete(id);
 }
 
 /// L'inventario di ciò che è montato, per chi deve mostrarlo o contarlo.
@@ -155,6 +163,10 @@ export function registeredPanels(): Panel[] {
 /// un pannello che non si ridisegna lascia montato l'albero precedente, cioè un
 /// pannello stantio identico a uno vivo — il sintomo peggiore che ci sia, perché
 /// somiglia a uno che funziona.
+///
+/// Il motivo è la frase della specie, non il messaggio: quello di un documento
+/// rotto è prosa del codec, in inglese. Il titolo del pannello, se ce l'ha, dice
+/// quale è rotto; l'id interno no.
 export async function refreshPanel(id: string, notice?: KernelNotice): Promise<void> {
   const panel = registry.get(id);
   if (!panel) return;
@@ -162,8 +174,12 @@ export async function refreshPanel(id: string, notice?: KernelNotice): Promise<v
   try {
     await panel.render(notice);
   } catch (e) {
-    notify(t("panel.render_failed", { panel: id, reason: errorText(e) }), "guasto");
+    if (failing.has(id)) return;
+    failing.add(id);
+    notify(t("panel.render_failed", { panel: panel.title || id, reason: errorText(e, "specie") }), "guasto");
+    return;
   }
+  failing.delete(id);
 }
 
 /// Riconcilia tutto da zero.

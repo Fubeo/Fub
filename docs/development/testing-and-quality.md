@@ -197,12 +197,11 @@ Aree importanti:
 La [configurazione Vite](../../apps/client/vite.config.ts) separa i runtime
 riusabili e mantiene grafo, Mermaid, linguaggi opzionali e l'editor dei
 disegni su richiesta.
-Ogni chunk, cioè un blocco JavaScript emesso dalla build, ha un limite di
-500.000 byte minificati, prima della compressione di trasporto.
-Il solo parser precompilato di Mermaid ha un limite di 700.000 byte e non
-può appartenere alle dipendenze statiche degli ingressi applicativi.
-Il controllo misura il codice finale, dopo la riscrittura degli import di
-Vite, e interrompe la build in caso di superamento.
+Ogni chunk (un blocco JavaScript emesso dalla build) ha un limite di 500.000
+byte minificati, prima della compressione di trasporto; il solo parser
+precompilato di Mermaid ne ha 700.000 e non può essere una dipendenza statica
+degli ingressi applicativi. Il controllo misura il codice finale, dopo la
+riscrittura degli import di Vite, e ferma la build se si supera.
 Il limite non si alza per far passare un chunk: si toglie dal chunk ciò che
 non serve al suo primo uso. Il ponte dei documenti (`document-bridge`) e il
 chunk condiviso `search` si caricano all'avvio con solo ciò che serve per
@@ -222,12 +221,12 @@ d'avvio (l'elenco di ogni pagina è in `dist/startup-chunks.json`). Le prove
 col codice già lì aspettano `loadLazyParts()`; quelle del gesto in anticipo
 stanno in `ui/lazy-part.test.ts` e `markdown/math-live-lazy.dom.test.ts`.
 La pelle composta dello Scrittoio entra come testo (`?raw`, chunk
-`theme-skin`), che Vite non minimizza: nella build
+`theme-skin`), che Vite non minimizza:
 [`build/skin-minify.mjs`](../../apps/client/build/skin-minify.mjs) le toglie
-commenti, rientri e spazi che non contano, lasciando intatte stringhe, escape
-e `url(…)`. Il suo test confronta, sulla pelle vera, l'albero di postcss prima
-e dopo regola per regola e la fa passare dal cancello del tema; in sviluppo e
-al banco la pelle resta quella scritta.
+commenti, rientri e spazi inutili (stringhe, escape e `url(…)` intatti); il suo
+test confronta sulla pelle vera l'albero di postcss prima e dopo, regola per
+regola, e la fa passare dal cancello del tema. Sviluppo e banco usano la pelle
+scritta.
 Rollup non divide un modulo: [`build/skin-split.mjs`](../../apps/client/build/skin-split.mjs)
 taglia la pelle ai confini fra i pezzi di `skin/order.ts` in gruppi di circa
 300 000 byte (`theme-skin`, `theme-skin-2`, …), che il modulo della pelle
@@ -235,8 +234,13 @@ importa staticamente e rimette insieme: al tema arriva, byte per byte, la
 pelle minimizzata intera (la build si ferma se no), all'avvio come prima.
 Niente pelle a pezzi con la sua superficie: cascata, momento delle regole e
 temi d'autore non cambiano, e non c'è lampo senza stile da prevenire.
-Il chunk condiviso della shell (`search`) lascia le discussioni dei commenti
-della Live a `markdown-comments`; la build si ferma se questo fa un ciclo.
+Il chunk `search` lascia le discussioni dei commenti della Live a
+`markdown-comments` (la build si ferma se fa un ciclo) e i riquadri
+(`state/layout.ts`) a `shell-layout`; il ponte dei documenti lascia l'ospite
+Mermaid (`diagram-host`) e le tabelle Markdown (`markdown-tables`) a chunk che
+importano soltanto chunk condivisi; le stringhe hanno un chunk per lingua
+(`shell-strings`, `shell-strings-en`); la barra della formula
+(`editors/core/formula-bar.ts`) sta fuori dall'ospite delle schede.
 
 L'audit npm della supply chain
 ([`npm-audit.mjs`](../../.github/scripts/npm-audit.mjs)) è rosso per ogni
@@ -353,10 +357,9 @@ appena qualcuno inserisce un item nel mezzo.
   (20000 nella corsa settimanale e con `fuzz_completo`). Su Windows si
   dividono in tre job, `build + test (windows-latest, 1/3)` e seguenti: ognuno
   compila tutto e fa girare un terzo dei test (`--partition hash:<parte>/3`),
-  e i doctest girano nella prima parte. Il numero delle parti sta in
-  `PARTI_WINDOWS` di
-  [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs),
-  che la sua autoprova confronta con la matrice.
+  e i doctest girano nella prima parte. Il numero delle parti è `PARTI_WINDOWS`
+  di [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs),
+  che l'autoprova confronta con la matrice.
 - I test dei workspace in `vendor/` (WordCraft, GridCraft, VectorCraft) sono
   un job loro, `motori in vendor`: su una PR girano solo se tocca `vendor/`,
   `.cargo/`, una `rust-toolchain` o `ci.yml`, perché leggono soltanto quelli;
@@ -365,9 +368,8 @@ appena qualcuno inserisce un item nel mezzo.
 - La WebView vera gira in due job: R1 (la memoria) da sola, e gli altri
   scenari insieme. Non gira su una PR in bozza, né su una pronta che non tocca
   ciò che finisce nell'app (`webview` del job `cosa cambia`).
-- La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
-  riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
-  risalvano.
+- La cache Rust salva solo da `main` (budget di 10 GB); gli altri job leggono
+  la test cache di Linux (`shared-key: test`) senza risalvarla.
 - Il job supply chain scrive la SBOM Rust con `.github/scripts/sbom.mjs`, da
   `cargo metadata`, e fallisce se non corrisponde a `Cargo.lock`.
 - `motori-provenienza.yml` riscarica ogni copia di `vendor/` ogni settimana e
@@ -375,20 +377,18 @@ appena qualcuno inserisce un item nel mezzo.
   upstream della base: i motori di `motori.mjs` (`vendor.mjs verify-upstream`)
   e i dati di `dati.mjs` (`provenienza.mjs verify-upstream`, sha256 dell'URL
   contro il checkout); una cartella non dichiarata è rossa. Su una PR anche
-  l'elenco delle copie da verificare lo calcola lo strumento della base, prima
-  di eseguire codice della PR, e l'unione con quello della PR la fa un job
-  senza checkout.
-- Il gate di release è `.github/scripts/check-release-gate.mjs`: vuole verde
-  ogni job che un push su `main` fa girare, e aggiungere o rinominare un job
-  richiede di aggiornarlo.
+  l'elenco delle copie da verificare viene dallo strumento della base, prima
+  di eseguire codice della PR, e un job senza checkout lo unisce al suo.
+- Il gate di release (`.github/scripts/check-release-gate.mjs`) vuole verde ogni
+  job di un push su `main`: aggiungere o rinominare un job richiede di aggiornarlo.
 - Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un
   push più recente annulla la corsa precedente.
 - Un test noto come instabile ha un'issue aperta: rilancia una volta i job
   falliti; se un job resta rosso, indaga prima di dirlo instabile.
-- Per leggere una corsa: `gh run view <corsa> --json jobs`; il log di un job:
+- Una corsa: `gh run view <corsa> --json jobs`; il log di un job:
   `gh api repos/Fubeo/Fub/actions/jobs/<job>/logs`; un artefatto:
-  `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip`, perché `gh run
-  download` ne rifiuta alcuni.
+  `gh api repos/Fubeo/Fub/actions/artifacts/<id>/zip` (`gh run download` ne
+  rifiuta alcuni).
 
 ### Le baseline dal runner
 

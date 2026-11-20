@@ -434,6 +434,19 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 }
                 render_blocks(blocks, opts, out);
                 out.push_str("</div>");
+            } else if custom_kind == custom_kind::HTML && is_page_break(attrs) {
+                // L'interruzione di pagina messa a mano (D17): un commento
+                // `<!-- pagina -->` da solo sulla sua riga. Sulla carta è un
+                // segnaposto vuoto che volta pagina (lo spazio «Esporta in
+                // PDF» lo legge come interruzione, la stampa del sistema col
+                // suo `break-before`); altrove non c'è, come ogni commento.
+                if matches!(opts.target, RenderTarget::Print | RenderTarget::Pdf) {
+                    write!(
+                        out,
+                        "<div{html_attrs} class=\"page-break\" data-page-break=\"mano\"></div>"
+                    )
+                    .unwrap();
+                }
             } else if custom_kind == custom_kind::FRONTMATTER_UNPARSED {
                 // Il degrado generico qui non basterebbe: questo blocco non ha
                 // figli, e un `<div>` vuoto è di nuovo la sparizione muta —
@@ -928,6 +941,19 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
 /// §25.7, e oggi nessun plugin lo paga. «Sostituire il campione con niente»
 /// è ciò che la riga vecchia rifiutava: non è niente, è la **chiave
 /// dichiarata** in `rules::loads`, e chi la segue rende come prima.
+/// Se un blocco HTML è l'interruzione di pagina messa a mano (D17): il solo
+/// commento `<!-- pagina -->`, con gli spazi che si vogliono dentro e attorno,
+/// e niente altro. Un commento che dice altro resta un commento.
+fn is_page_break(attrs: &serde_json::Value) -> bool {
+    let Some(html) = attrs.get("html").and_then(|v| v.as_str()) else {
+        return false;
+    };
+    html.trim()
+        .strip_prefix("<!--")
+        .and_then(|rest| rest.strip_suffix("-->"))
+        .is_some_and(|inner| inner.trim() == "pagina")
+}
+
 fn text_content<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str> {
     loads::text_payload(kind, attrs)
 }

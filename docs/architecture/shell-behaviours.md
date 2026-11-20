@@ -13,6 +13,14 @@
 
 Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 
+- **Le finestre si aprono dall'inizio.** Le superfici modali (il dialogo del
+  kit, i dialoghi della shell, la palette, le preferenze) tengono il fuoco con
+  `trapFocus` di `ui/a11y.ts`: il fuoco iniziale va dove deve andare senza far
+  scorrere la superficie (`preventScroll`), anche quando quel comando sta in
+  fondo a un corpo lungo e resta fuori vista. Il giro del Tab invece scorre, e
+  alla chiusura il fuoco torna al comando che ha aperto la superficie. Le
+  guardie sono `ui/a11y.test.ts`, `kit/dialog.test.ts` e la scena
+  `dialog-long` del banco.
 - **Avvisi.** I toast si impilano (al più tre visibili), portano azioni e un
   «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
   centro attività tiene lo storico dei lavori. Ogni lavoro ha un nome nella
@@ -108,6 +116,15 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 - **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
   insieme di interruttori di visibilità per gruppo, che si compone con la
   maschera della linea del tempo.
+- **Una view principale per finestra.** Rail, palette, menu Vista e
+  `OpenView` aprono una view principale (il grafo) una volta sola: se è già
+  in un riquadro il fuoco va lì, anche dopo una nota aperta dal grafo nel
+  riquadro accanto (`openViewIn` in `state/layout.ts`). Indietro, Avanti e
+  «Riapri la scheda chiusa» seguono la stessa regola: se la view che
+  rimetterebbero nel riquadro sta già in un altro, il fuoco va lì (`goBack`,
+  `goForward`, `reopenClosedTab`, con lo stesso `paneHolding`). Lo specchio
+  di un riquadro collegato resta. Un layout salvato con due grafi dalle versioni di
+  prima si rilegge col solo primo, e le altre schede restano (`parseLayout`).
 - **Linguette.** Rilasciata sul corpo di un foglio, una linguetta si
   divide (quattro bordi) o si sposta in coda al riquadro (centro);
   `splitWithTab` in `state/layout.ts` è la regola pura. Fuori dalla finestra
@@ -147,6 +164,13 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   frecce si rifà a ogni passo e il fuoco passa a quello nuovo nello stesso
   posto (`layoutTree`). Il lanciatore, aprendosi, chiude il menu aperto
   sotto: un Esc lo chiude, e il fuoco torna a chi aveva aperto il menu.
+- **Fuoco dopo un clic fuori da un menu.** Un menu (`showContextMenu` di
+  `ui/menu.ts`: cartella, «Nuovo», «Ordina», vault, riquadro, «…») chiuso
+  da un clic su ciò che prende il fuoco (il testo di una nota, un campo, un
+  altro pulsante) lascia il fuoco lì: né il menu né i suoi sottomenu lo
+  riportano al pulsante d'origine (`keepFocusWhereItIs` in `ui/a11y.ts`).
+  Torna al pulsante con Esc, con una voce scelta e con un clic su ciò che il
+  fuoco non lo prende. Guardie: `ui/menu.test.ts` e `shell.e2e.test.ts`.
 - **Fuoco dopo un cambio di scheda da tastiera.** Un comando che cambia la
   scheda attiva (Ctrl+W, Ctrl+Tab e Ctrl+Maiusc+Tab, Ctrl+PagGiù/PagSu,
   Ctrl+1…9, Ctrl+Maiusc+T, Ctrl+\ e «Dividi sotto», Ctrl+Maiusc+W,
@@ -171,6 +195,27 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio non finisce nel documento. Se il fuoco sta già dentro il documento
   aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
   lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **Scorciatoie dietro una finestra modale.** Con una finestra modale aperta
+  (una superficie che intrappola il fuoco e si dichiara `aria-modal`: le
+  Impostazioni, un dialogo, la palette, un menu con la ricerca) le
+  scorciatoie globali tacciono: Ctrl+N non crea una nota e Ctrl+W non chiude
+  la scheda dietro la finestra (`modalOpen` in `ui/a11y.ts`, applicata da
+  `ui/keyboard.ts`). Escape e i tasti propri della finestra restano suoi.
+- **Tasti col fuoco fuori dal foglio.** Una regola sola, nell'unico `keydown`
+  della shell, dopo i gestori locali e i comandi (`ui/off-sheet-keys.ts`,
+  applicata da `ui/keyboard.ts`). Una lettera, un Backspace o un Canc premuti
+  su un controllo che non scrive (una linguetta, un pulsante, l'albero) e che
+  nessuno ha preso si fermano: WebKitGTK li manderebbe alla selezione rimasta
+  nel testo della nota, che li scriverebbe portandoci il fuoco. Il controllo
+  tiene le sue frecce, Home, Fine, lo spazio e Invio; un campo, una tendina e
+  chi apre un campo al primo tasto (una cella) tengono il tasto. Ctrl+Z,
+  Ctrl+Maiusc+Z e Ctrl+Y (⌘Z, ⇧⌘Z) premuti su un controllo di un riquadro di
+  documento o dell'ispettore (Trova e sostituisci, Revisioni, le linguette)
+  fanno un passo della storia della superficie del riquadro col fuoco
+  (`EditorSurface.history`, nel Markdown e nel ricco), senza spostare il
+  fuoco; il tasto è preso anche quando non c'è niente da annullare. In un
+  campo di testo (la casella Trova, un campo delle Proprietà) Ctrl+Z resta
+  del campo (`ui/field-history.ts`).
 - **Doppio clic nei pannelli.** In ogni albero dichiarativo (le view dei
   pannelli) il secondo clic di un doppio clic vale solo sulla voce del primo,
   con la stessa azione (`guardClickRuns` in `ui/node.ts`): la voce che
@@ -247,7 +292,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   limitata dei componenti, che è del vault. Quelli derivati dalla sessione
   durano quanto il suo stato; gli altri sono fatti del controllore
   (`state/sheet-notices.ts`) che restano finché non si chiudono, e un
-  salvataggio riuscito toglie «cambiato su disco» ma non la bozza. Una nota
+  salvataggio riuscito toglie «cambiato su disco»; la bozza ritrovata se ne
+  va col primo salvataggio riuscito che lascia il buffer pulito, cioè quando
+  il disco ha il testo ritrovato (anche dopo «Riprova»). Una nota
   rimossa da fuori chiude la sua linguetta: l'avviso resta sul riquadro che la
   mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude;
-  ricreata la nota, la bozza di quel testo se ne va.
+  ricreata la nota con quel testo, la bozza se ne va.

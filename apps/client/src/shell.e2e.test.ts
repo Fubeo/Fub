@@ -3454,6 +3454,32 @@ describe("il fuoco dopo un cambio di scheda da tastiera", () => {
     await lands("Riunione", "Appunti della riunione");
   });
 
+  // IMP-152: le scorciatoie globali non agiscono dietro una finestra modale.
+  it("con le Impostazioni aperte Ctrl+W e Ctrl+N tacciono, e dopo Esc tornano (IMP-152)", async () => {
+    await twoTabs();
+    const host = box.host!;
+    const panel = document.querySelector<HTMLElement>("#settings-panel")!;
+    press(",");
+    await waitFor("le Impostazioni si aprono", () => !panel.hidden);
+    await settle();
+    expect(panel.contains(document.activeElement)).toBe(true);
+    const files = Object.keys(host.files()).sort();
+
+    press("w");
+    press("n");
+    await settle();
+    expect(tabs(), "nessuna scheda chiusa dietro la finestra").toHaveLength(2);
+    expect(selected()).toBe("Riunione");
+    expect(Object.keys(host.files()).sort(), "nessuna nota creata dietro la finestra").toEqual(files);
+    expect(panel.hidden).toBe(false);
+
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await waitFor("le Impostazioni si chiudono", () => panel.hidden);
+    editorOf("Appunti della riunione").focus();
+    press("w");
+    await waitFor("chiusa la finestra, Ctrl+W torna a chiudere la scheda", () => tabs().length === 1);
+  });
+
   it("Ctrl+Maiusc+T riapre la scheda col fuoco nel suo editor (IMP-051)", async () => {
     await twoTabs();
     press("w");
@@ -3483,6 +3509,40 @@ describe("il fuoco dopo un cambio di scheda da tastiera", () => {
     expect(search.contains(document.activeElement)).toBe(true);
     press("PageDown");
     await lands("Benvenuto", "Il primo documento");
+  });
+});
+
+// Un clic nel testo con un menu aperto chiude il menu e lascia il fuoco nel
+// testo: la chiusura non lo riporta al pulsante che aveva aperto il menu, e la
+// battuta dopo arriva alla sessione del documento (IMP-151). Senza, il fuoco
+// tornava su «Ordina» e le battute si perdevano in silenzio.
+describe("il fuoco dopo un clic fuori da un menu", () => {
+  it("il clic nel testo con «Ordina» aperto lascia il fuoco nell'editor, e la battuta arriva alla sessione", async () => {
+    const host = await start(VAULT);
+    const sort = document.getElementById("explorer-sort") as HTMLButtonElement;
+    sort.focus();
+    sort.click();
+    await waitFor("il menu «Ordina» si apre", () => document.getElementById("context-menu") !== null);
+    await settle();
+    expect(sort.getAttribute("aria-expanded")).toBe("true");
+
+    // Il clic del puntatore nel testo: il `mousedown` dà il fuoco all'editor,
+    // poi il `click` arriva al documento e chiude il menu.
+    const view = editorViews().find((each) => each.state.doc.toString().includes("Il primo documento"))!;
+    view.contentDOM.focus();
+    view.contentDOM.click();
+    await settle();
+    expect(sort.getAttribute("aria-expanded"), "il menu si chiude").toBe("false");
+    const focused = editorViews().find((each) => each.contentDOM.contains(document.activeElement));
+    expect(focused, "il fuoco resta nel testo cliccato, non sul pulsante del menu").toBe(view);
+
+    // La battuta va all'editor col fuoco, e da lì alla sessione e al disco.
+    focused!.dispatch({ changes: { from: 0, insert: "QQ" }, userEvent: "input.type" });
+    await settle();
+    const { documentSessions } = await import("./state/document-session");
+    expect(documentSessions.text("Benvenuto.md")).toContain("QQIl primo documento");
+    await waitFor("il salvataggio arriva al disco", () =>
+      host.atGate("writeDocument").some((call) => call.args[0] === "Benvenuto.md" && String(call.args[1]).includes("QQIl primo")));
   });
 });
 
@@ -4236,7 +4296,162 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
       host.atGate("writeDocument").some((w) => w.args[0] === "Fuori.md" && String(w.args[1]).includes("dopo")));
     expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
   });
+
+  it("con il fuoco in un altro pannello, la rinomina non lo sposta (IMP-046)", async () => {
+    const host = await start(VAULT);
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    expect(document.activeElement).toBe(rail);
+
+    host.renameFromOutside("Benvenuto.md", "Fuori.md");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Fuori"));
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
+
+  it("cambiata l'estensione l'editor si rimonta, e fuoco e cursore tornano dov'erano (IMP-046)", async () => {
+    // `.md` → `.markdown`: un'altra estensione chiede un montaggio nuovo, ma
+    // per chi scrive la nota è la stessa: la battuta dopo deve entrarci.
+    const host = await start(VAULT);
+    const before = editorViews()[0]!;
+    before.focus();
+    before.dispatch({ selection: { anchor: 3 } });
+    typeInEditorAt(before, 3, "prima");
+
+    host.renameFromOutside("Benvenuto.md", "Benvenuto.markdown");
+    await waitFor("l'editor si rimonta sul nome nuovo", () => {
+      const now = editorViews();
+      return now.length === 1 && now[0] !== before;
+    });
+    await settle();
+    const after = editorViews()[0]!;
+    expect(document.activeElement?.closest(".cm-content")).toBe(after.contentDOM);
+    expect(after.state.selection.main.head).toBe(3 + "prima".length);
+
+    after.dispatch({ changes: { from: after.state.selection.main.head, insert: "dopo" }, userEvent: "input.type" });
+    await waitFor("tutto il testo arriva al nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Benvenuto.markdown" && String(w.args[1]).includes("primadopo")));
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+
+  it("cambiata l'estensione col fuoco altrove, il montaggio nuovo non lo prende (IMP-046)", async () => {
+    const host = await start(VAULT);
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    const before = editorViews()[0]!;
+
+    host.renameFromOutside("Benvenuto.md", "Benvenuto.markdown");
+    await waitFor("l'editor si rimonta sul nome nuovo", () => {
+      const now = editorViews();
+      return now.length === 1 && now[0] !== before;
+    });
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
 });
+
+describe("un documento Word rinominato da fuori", () => {
+  const RICH = JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, c: [{ t: "text", x: "ciao" }] }] });
+
+  /// Apre il Word dall'albero e aspetta che la pagina si possa scrivere.
+  async function openLetter(): Promise<FakeHost> {
+    const host = await start({ ...VAULT, "Lettera.docx": RICH });
+    const row = () => document.querySelector<HTMLElement>('#file-list li[data-path="Lettera.docx"] > .tree-row');
+    await waitFor("il Word è nell'albero", () => !!row());
+    row()!.click();
+    await waitFor("la pagina del Word si scrive", () =>
+      document.querySelector<HTMLElement>(".pane.focus .rich-page [contenteditable=true]") !== null);
+    await settle();
+    return host;
+  }
+
+  const richPage = () => document.querySelector<HTMLElement>(".pane.focus .rich-page [contenteditable=true]");
+
+  /// Il cursore all'inizio del testo della pagina, come dopo un clic lì.
+  function caretAtStart(page: HTMLElement): void {
+    const text = document.createTreeWalker(page, NodeFilter.SHOW_TEXT).nextNode()!;
+    window.getSelection()!.collapse(text, 0);
+    document.dispatchEvent(new Event("selectionchange"));
+  }
+
+  /// Una battuta come la dà il browser a una pagina scrivibile: il carattere
+  /// entra nel nodo di testo dove sta la selezione del documento, e il motore
+  /// lo legge dal DOM. Senza fuoco nella pagina (sul body) non entra da
+  /// nessuna parte, come nell'app.
+  function press(char: string): void {
+    const editable = document.activeElement?.closest<HTMLElement>("[contenteditable=true]");
+    if (!editable) return;
+    const selection = window.getSelection()!;
+    let node = selection.focusNode;
+    let offset = selection.focusOffset;
+    if (!node || !editable.contains(node)) return;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      const text = document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode();
+      if (!text) return;
+      node = text;
+      offset = 0;
+    }
+    (node as Text).insertData(offset, char);
+    selection.collapse(node, offset + char.length);
+  }
+
+  it("la pagina resta quella, col fuoco e il cursore, e la battuta dopo va sul nome nuovo (IMP-046)", async () => {
+    const host = await openLetter();
+    const page = richPage()!;
+    page.focus();
+    caretAtStart(page);
+    press("a");
+    await waitFor("la battuta entra", () => page.textContent?.includes("aciao") === true);
+
+    host.renameFromOutside("Lettera.docx", "Lettera nuova.docx");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Lettera nuova"));
+    await settle();
+
+    expect(richPage()).toBe(page);
+    expect(page.isConnected).toBe(true);
+    expect(page.contains(document.activeElement)).toBe(true);
+
+    press("b");
+    await waitFor("la battuta dopo entra al cursore di prima", () => page.textContent?.includes("abciao") === true);
+    await waitFor("il salvataggio va al nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Lettera nuova.docx" && String(w.args[1]).includes("abciao")));
+    expect(Object.keys(host.files())).not.toContain("Lettera.docx");
+  });
+
+  it("il testo non salvato prima della rinomina arriva sul disco col nome nuovo", async () => {
+    const host = await openLetter();
+    const unlock = host.throttle("writeDocument");
+    const page = richPage()!;
+    page.focus();
+    caretAtStart(page);
+    press("z");
+    await waitFor("la battuta entra", () => page.textContent?.includes("zciao") === true);
+
+    host.renameFromOutside("Lettera.docx", "Archivio.docx");
+    await settle();
+    unlock();
+    await waitFor("il testo arriva al nome nuovo", () => host.files()["Archivio.docx"]?.includes("zciao") === true);
+    expect(Object.keys(host.files())).not.toContain("Lettera.docx");
+  });
+
+  it("con il fuoco in un altro pannello, la rinomina non lo sposta", async () => {
+    const host = await openLetter();
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    host.renameFromOutside("Lettera.docx", "Lettera nuova.docx");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Lettera nuova"));
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
+});
+
+/// Scrive `text` a `at` come una battuta della persona, nella vista data.
+function typeInEditorAt(view: ReturnType<typeof editorViews>[number], at: number, text: string): void {
+  view.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length }, userEvent: "input.type" });
+}
 
 describe("una nota cancellata da fuori con testo non salvato", () => {
   it("«Ricrea la nota» riscrive il testo e toglie la bozza che lo teneva (IMP-047)", async () => {
@@ -4933,7 +5148,7 @@ describe("portare a schermo un punto", () => {
     const { openDocument } = await import("./panels/document");
     const { t } = await import("./i18n/strings");
     const { closeContextMenu } = await import("./ui/menu");
-    const gestures = [t("pane.recorder.open"), t("pane.slides"), t("pane.print")];
+    const gestures = [t("pane.recorder.open"), t("pane.slides"), t("pane.print"), t("pane.export_pdf")];
     const offered = async (): Promise<string[]> => {
       panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
       await settle();
@@ -4945,7 +5160,8 @@ describe("portare a schermo un punto", () => {
       return gestures.filter((gesture) => labels.includes(gesture));
     };
 
-    expect(await offered(), "la nota Markdown").toEqual(gestures);
+    // Una nota Markdown si stampa dallo spazio «Esporta in PDF».
+    expect(await offered(), "la nota Markdown").toEqual([t("pane.recorder.open"), t("pane.slides"), t("pane.export_pdf")]);
     await openDocument("lavagna.canvas");
     await settle();
     // La tela si stampa dal suo provider; non ha una resa da presentare né
@@ -4993,7 +5209,7 @@ describe("portare a schermo un punto", () => {
     }
   });
 
-  it("la stampa salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
+  it("la stampa dallo spazio «Esporta in PDF» salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
     const host = await start(VAULT);
     const { t } = await import("./i18n/strings");
     const previous = Object.getOwnPropertyDescriptor(window, "print");
@@ -5007,8 +5223,12 @@ describe("portare a schermo un punto", () => {
       panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
       await settle();
       const entry = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
-        .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.print"));
+        .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.export_pdf"));
       entry!.click();
+      await waitFor("lo spazio si apre", () => document.querySelector(".export-print") !== null);
+      // La resa che si impagina ha la riga: la nota è stata salvata prima.
+      await waitFor("la resa arriva", () => document.querySelector(".export-measure")?.textContent?.includes("Riga appena scritta.") === true);
+      document.querySelector<HTMLButtonElement>(".export-print")!.click();
       await waitFor("la stampa parte", () => print.mock.calls.length > 0);
 
       const written = host.calls.findIndex((call) => call.gate === "writeDocument");
@@ -5016,14 +5236,104 @@ describe("portare a schermo un punto", () => {
         call.gate === "queryIndex" && (call.args[0] as { kind?: string }).kind === "render_print");
       expect(written).toBeGreaterThanOrEqual(0);
       expect(rendered).toBeGreaterThan(written);
-      expect(document.querySelector(".print-host .print-body")?.textContent).toContain("Riga appena scritta.");
+      // Le stesse pagine dello spazio, senza zoom.
+      expect(document.querySelectorAll(".print-host > .print-sheet")).toHaveLength(document.querySelectorAll(".export-slot").length);
+      expect(document.querySelector(".print-host")?.textContent).toContain("Benvenuto");
 
       window.dispatchEvent(new Event("afterprint"));
       expect(document.querySelector(".print-host")).toBeNull();
+      document.querySelector(".export-space")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.querySelector(".export-space")).toBeNull();
     } finally {
       if (previous) Object.defineProperty(window, "print", previous);
       else Reflect.deleteProperty(window, "print");
     }
+  });
+
+  it("«Esporta in PDF…» salva, apre lo spazio sopra la nota, cambia vista e con Esc torna alla nota", async () => {
+    const host = await start(VAULT);
+    const { t } = await import("./i18n/strings");
+    typeInEditor("Riga per il PDF.");
+    expect(host.atGate("writeDocument")).toHaveLength(0);
+    const opener = panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!;
+    opener.focus();
+    opener.click();
+    await settle();
+    const labels = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].map((button) => button.querySelector(".menu-label")?.textContent);
+    // Al posto di «Stampa», che sta nello spazio.
+    expect(labels).toContain(t("pane.export_pdf"));
+    expect(labels).not.toContain(t("pane.print"));
+    [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
+      .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.export_pdf"))!.click();
+    await waitFor("lo spazio si apre", () => document.querySelector(".export-space") !== null);
+
+    const space = document.querySelector<HTMLElement>(".export-space")!;
+    expect(space.getAttribute("role")).toBe("dialog");
+    expect(document.getElementById("workspace")!.inert).toBe(true);
+    // La nota salvata prima della resa, che il core legge dal disco.
+    const written = host.calls.findIndex((call) => call.gate === "writeDocument");
+    const rendered = host.calls.findIndex((call) =>
+      call.gate === "queryIndex" && (call.args[0] as { kind?: string }).kind === "render_print");
+    expect(written).toBeGreaterThanOrEqual(0);
+    expect(rendered).toBeGreaterThan(written);
+    await waitFor("le pagine ci sono", () => space.querySelector(".export-slot") !== null);
+    expect(space.querySelector(".export-title-note")?.textContent).not.toBe("");
+
+    space.querySelector<HTMLButtonElement>('.export-segment[data-view="due"]')!.click();
+    expect(space.querySelector(".export-doc")?.getAttribute("data-view")).toBe("due");
+    expect(space.querySelector('.export-segment[data-view="due"]')?.getAttribute("aria-pressed")).toBe("true");
+
+    space.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.querySelector(".export-space")).toBeNull();
+    expect(document.querySelector(".export-measure")).toBeNull();
+    expect(document.getElementById("workspace")!.inert).toBe(false);
+    expect(panes()[0]!.contains(document.activeElement)).toBe(true);
+  });
+
+  it("lo spazio «Esporta in PDF» si apre anche dallo spazio dei comandi", async () => {
+    await start(VAULT);
+    const { allCommands } = await import("./ui/commands");
+    const command = allCommands().find((entry) => entry.id === "shell.doc.export_pdf")!;
+    expect(command.unavailable ?? null).toBeNull();
+    await command.run!();
+    await waitFor("lo spazio si apre", () => document.querySelector(".export-space") !== null);
+    document.querySelector<HTMLButtonElement>(".export-back")!.click();
+    expect(document.querySelector(".export-space")).toBeNull();
+  });
+
+  it("la nota resta byte per byte: aprire lo spazio, regolare, stampare e tornare non la riscrive", async () => {
+    // A capo di Windows, spazi in coda, l'interruzione a mano e nessun a capo
+    // finale: niente che una riscrittura lascerebbe com'è.
+    const note = "---\r\ntags: [prova]\r\n---\r\n# Strana  \r\n\r\nRiga con spazi in coda   \r\n\r\n<!-- pagina -->\r\n\r\n| a | b |\r\n|---|---|\r\n| 1 | 2 |\r\n\r\nSenza a capo finale";
+    const host = await start({ ...VAULT, "Strana.md": note });
+    const { openDocument } = await import("./panels/document");
+    const { allCommands } = await import("./ui/commands");
+    await openDocument("Strana.md");
+    await settle();
+    const previous = Object.getOwnPropertyDescriptor(window, "print");
+    const print = vi.fn();
+    Object.defineProperty(window, "print", { configurable: true, value: print });
+    try {
+      await allCommands().find((entry) => entry.id === "shell.doc.export_pdf")!.run!();
+      await waitFor("le pagine ci sono", () => document.querySelector(".export-space .export-slot") !== null);
+      const space = document.querySelector<HTMLElement>(".export-space")!;
+      space.querySelector<HTMLButtonElement>('.export-segment[data-view="tutte"]')!.click();
+      space.querySelector<HTMLButtonElement>('.export-section[data-section="tema"] .export-section-head')!.click();
+      await settle();
+      space.querySelector<HTMLButtonElement>("#export-theme-relazione")!.click();
+      await settle();
+      space.querySelector<HTMLButtonElement>(".export-print")!.click();
+      await waitFor("la stampa parte", () => print.mock.calls.length > 0);
+      window.dispatchEvent(new Event("afterprint"));
+      space.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.querySelector(".export-space")).toBeNull();
+      await settle();
+    } finally {
+      if (previous) Object.defineProperty(window, "print", previous);
+      else Reflect.deleteProperty(window, "print");
+    }
+    expect(host.atGate("writeDocument").filter((call) => call.args[0] === "Strana.md")).toEqual([]);
+    expect(host.files()["Strana.md"]).toBe(note);
   });
 });
 
