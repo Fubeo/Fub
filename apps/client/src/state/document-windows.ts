@@ -2,7 +2,7 @@ import { api } from "../host/ipc";
 import { activeDoc } from "./layout";
 import { state } from "./store";
 import { documentSessions, type DocumentSession } from "./document-session";
-import { attachRemoteSurface, DocumentWindowUnsupported, type RemoteSurfaceHandle } from "./document-bridge";
+import { attachRemoteSurface, DocumentWindowSilent, DocumentWindowUnsupported, FREEZE_WAIT_MS, type RemoteSurfaceHandle } from "./document-bridge";
 import { showsFileBytes, textProfileFor } from "./document-controller";
 import { pageName } from "../rules/mirrored";
 import { notify } from "../ui/notify";
@@ -194,34 +194,84 @@ function recoverClosed(entry: WindowEntry): void {
     // aver lasciato la finestra loro, salvando.
     await entry.closing?.catch(() => false);
     await rootDraining?.catch(() => false);
-    // Lasciata da loro, la finestra è uscita col salvataggio confermato. La
-    // nota sparita si guarda prima del rilascio: rilasciata, anche la sessione
-    // salvata di una finestra si chiude.
-    let saved = true;
-    let gone = false;
-    if (windows.get(entry.handle.surfaceId) === entry) {
-      gone = ownerGone(entry);
-      if (!gone) {
-        try {
-          saved = sameOwner(entry) && await saveConfirmed(entry);
-        } catch {
-          saved = false;
-        }
-      }
-      try {
-        await entry.handle.dispose();
-      } catch (error) {
-        // Il rilascio fallito tiene viva la sessione (con il suo prestito):
-        // il testo resta nella finestra principale. La finestra morta non
-        // tiene più niente, e si lascia comunque.
-        report(entry, error);
-      }
-      windows.delete(entry.handle.surfaceId);
-      releaseListenersIfIdle();
-    }
-    if (gone) notify(t("windows.closed_gone", { doc: pageName(docOf(entry)) }), "info");
-    else notify(t(saved ? "windows.closed_alone" : "windows.closed_alone_unsaved", { doc: pageName(docOf(entry)) }), "guasto");
+    // Lasciata da loro, la finestra è uscita col salvataggio confermato.
+    const outcome = windows.get(entry.handle.surfaceId) === entry ? await letGo(entry) : "saved";
+    if (outcome === "gone") notify(t("windows.closed_gone", { doc: pageName(docOf(entry)) }), "info");
+    else notify(t(outcome === "saved" ? "windows.closed_alone" : "windows.closed_alone_unsaved", { doc: pageName(docOf(entry)) }), "guasto");
   })().finally(() => { entry.recovering = null; });
+}
+/// Lascia una finestra che non può più confermare niente (morta, o muta e
+/// già distrutta): salva dalla sessione della finestra principale, o in bozza,
+/// e rilascia la superficie. Dice se la nota non c'era più, o se il
+/// salvataggio è confermato. La nota sparita si guarda prima del rilascio:
+/// rilasciata, anche la sessione salvata di una finestra si chiude.
+async function letGo(entry: WindowEntry): Promise<"gone" | "saved" | "unsaved"> {
+  const gone = ownerGone(entry);
+  let saved = true;
+  if (!gone) {
+    try {
+      saved = sameOwner(entry) && await saveConfirmed(entry);
+    } catch {
+      saved = false;
+    }
+  }
+  try {
+    await entry.handle.dispose();
+  } catch (error) {
+    // Il rilascio fallito tiene viva la sessione (con il suo prestito): il
+    // testo resta nella finestra principale. La finestra non tiene più
+    // niente, e si lascia comunque.
+    report(entry, error);
+  }
+  windows.delete(entry.handle.surfaceId);
+  releaseListenersIfIdle();
+  return gone ? "gone" : saved ? "saved" : "unsaved";
+}
+
+/// Quanto si aspetta una finestra che non risponde al congelamento prima di
+/// trattarla da appesa: tre richieste da `FREEZE_WAIT_MS` (5 s), 15 s in
+/// tutto. Una finestra occupata (un incollato enorme, l'impaginazione di una
+/// nota lunga) può tenere ferma la sua pagina qualche secondo, e dopo la prima
+/// richiesta mancata risponde; 15 s sono anche l'attesa più lunga che la
+/// finestra stessa concede alla principale (`KEEP_WAIT_MS` nel ponte). Oltre,
+/// chi chiude Fub non deve restare fermo davanti a una finestra che non dirà
+/// più niente.
+const HUNG_AFTER_MS = 15_000;
+const SILENT_FREEZES = Math.ceil(HUNG_AFTER_MS / FREEZE_WAIT_MS);
+
+/// Congela la finestra, riprovando finché tace entro `HUNG_AFTER_MS`. Il
+/// silenzio non è mai «coda vuota»: oltre il tempo limite la finestra è
+/// `hung`, e chi la svuota la lascia salvando dalla finestra principale e
+/// dicendo che le sue ultime battute non confermate possono mancare. Un
+/// rifiuto vero (sessione cambiata, vault chiuso) resta un rifiuto.
+async function freezeOrHung(entry: WindowEntry): Promise<"frozen" | "hung"> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await freeze(entry);
+      return "frozen";
+    } catch (error) {
+      if (!(error instanceof DocumentWindowSilent)) throw error;
+      if (attempt >= SILENT_FREEZES) return "hung";
+      if (attempt === 1) notify(t("windows.hung_waiting", { doc: pageName(docOf(entry)) }), "info");
+    }
+  }
+}
+/// La finestra muta si distrugge **prima** di salvare: da lì non arriva più
+/// niente, e il salvataggio dalla principale prende anche le battute in volo
+/// arrivate fino all'ultimo.
+async function abandonHung(entry: WindowEntry): Promise<void> {
+  if (!entry.closed) {
+    try {
+      await destroyNative(entry);
+    } catch (error) {
+      // Distrutta anche con un errore: si lascia lo stesso.
+      if (!entry.closed) throw error;
+    }
+  }
+  const outcome = await letGo(entry);
+  const doc = pageName(docOf(entry));
+  if (outcome === "gone") notify(t("windows.closed_gone", { doc }), "info");
+  else notify(t(outcome === "saved" ? "windows.hung_closed" : "windows.hung_closed_unsaved", { doc }), "guasto");
 }
 
 async function freeze(entry: WindowEntry): Promise<void> {
@@ -230,8 +280,10 @@ async function freeze(entry: WindowEntry): Promise<void> {
   await entry.handle.freeze(); // Child has stopped input and main has acknowledged its final seq.
   if (!sameOwner(entry)) throw new Error(t("windows.error.changed_draining"));
 }
-async function nativeClose(entry: WindowEntry): Promise<void> {
-  if (entry.closed) { await release(entry); return; }
+/// Chiede al guscio di distruggere la finestra e aspetta l'evento che lo
+/// conferma. Distruggere non chiede niente alla pagina della finestra: riesce
+/// anche se la pagina non risponde più.
+async function destroyNative(entry: WindowEntry): Promise<void> {
   if (!entry.label) throw new Error(t("windows.error.still_opening"));
   entry.initiatedClose = true;
   const destroyed = new Promise<void>((resolve, reject) => {
@@ -251,9 +303,17 @@ async function nativeClose(entry: WindowEntry): Promise<void> {
       entry.destruction = null;
     }
     if (!entry.closed) entry.initiatedClose = false;
+    throw error;
+  }
+}
+async function nativeClose(entry: WindowEntry): Promise<void> {
+  if (entry.closed) { await release(entry); return; }
+  try {
+    await destroyNative(entry);
+  } catch (error) {
     // Distrutta anche se la chiusura ha risposto con un errore: la finestra
     // non c'è più, e la si lascia come una finestra morta da sola.
-    else recoverClosed(entry);
+    if (entry.closed) recoverClosed(entry);
     throw error;
   }
   try {
@@ -266,7 +326,9 @@ async function nativeClose(entry: WindowEntry): Promise<void> {
   }
 }
 
-/** Freeze *all* surfaces before saving any document; never close on a timer. */
+/** Freeze *all* surfaces before saving any document. Silence is never an empty
+ * queue: a window mute past `HUNG_AFTER_MS` is destroyed and saved from the
+ * main session, and the person is told what it had not confirmed. */
 export async function drainDocumentWindows(): Promise<boolean> {
   if (rootDraining) return false;
   // Una finestra morta da sola si sta lasciando: si aspetta il suo
@@ -286,13 +348,20 @@ export async function drainDocumentWindows(): Promise<boolean> {
   rootDraining = new Promise<boolean>((resolve) => { finish = resolve; });
   let drained = false;
   try {
-    const barriers = await Promise.allSettled(entries.map(freeze));
+    const barriers = await Promise.allSettled(entries.map(freezeOrHung));
     const rejected = barriers.find((barrier): barrier is PromiseRejectedResult => barrier.status === "rejected");
     if (rejected) throw rejected.reason;
+    // Una finestra muta oltre il tempo limite si lascia dopo le altre, senza
+    // pretendere il salvataggio confermato: lo dice l'avviso.
+    const hung = entries.filter((_entry, index) => {
+      const barrier = barriers[index];
+      return barrier.status === "fulfilled" && barrier.value === "hung";
+    });
+    const frozen = entries.filter((entry) => !hung.includes(entry));
     // La finestra di una nota che non c'è più non ha niente da salvare. Si
     // guarda adesso: dopo il rilascio anche la sessione salvata si chiude.
-    const gone = entries.filter(ownerGone);
-    const live = entries.filter((entry) => !gone.includes(entry));
+    const gone = frozen.filter(ownerGone);
+    const live = frozen.filter((entry) => !gone.includes(entry));
     const saved = new Set<DocumentSession>();
     for (const entry of live) {
       if (saved.has(entry.owner)) continue;
@@ -303,7 +372,8 @@ export async function drainDocumentWindows(): Promise<boolean> {
     for (const entry of live) if (!ownerGone(entry) && (!sameOwner(entry) || documentSessions.isDirty(docOf(entry)))) {
       throw new Error(t("windows.error.changed_draining_doc", { doc: docOf(entry) }));
     }
-    for (const entry of entries) await nativeClose(entry);
+    for (const entry of frozen) await nativeClose(entry);
+    for (const entry of hung) await abandonHung(entry);
     for (const entry of gone) notify(t("windows.closed_gone", { doc: pageName(docOf(entry)) }), "info");
     drained = true;
     return true;
@@ -329,7 +399,10 @@ export async function closeDocumentWindowByLabel(label: string): Promise<boolean
         notify(t("windows.closed_gone", { doc: pageName(docOf(entry)) }), "info");
         return true;
       }
-      await freeze(entry);
+      if (await freezeOrHung(entry) === "hung") {
+        await abandonHung(entry);
+        return true;
+      }
       if (!await saveConfirmed(entry)) throw new Error(t("windows.error.save_unconfirmed"));
       await nativeClose(entry);
       return true;

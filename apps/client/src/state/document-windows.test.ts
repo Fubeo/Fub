@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { state } from "./store";
 import { closeDocumentWindowByLabel, drainDocumentWindows, openCurrentInNewWindow, pendingDocumentWindows } from "./document-windows";
-import { DocumentWindowUnsupported } from "./document-bridge";
+import { DocumentWindowSilent, DocumentWindowUnsupported } from "./document-bridge";
+import { mountCloseGuard } from "./close-guard";
 import { declareShell, DESKTOP_CAPABILITIES, MOBILE_CAPABILITIES, type ClientShell } from "../platform/capabilities";
 
 const MOBILE_SHELL: ClientShell = { id: "mobile", capabilities: MOBILE_CAPABILITIES };
@@ -24,14 +25,20 @@ const fixture = vi.hoisted(() => ({
   attach: vi.fn(),
   notify: vi.fn(),
   showsBytes: vi.fn(() => false),
+  onClose: vi.fn(),
+  flushBeforeClose: vi.fn(async (): Promise<string[]> => []),
 }));
-vi.mock("../host/ipc", () => ({ api: fixture.api }));
-vi.mock("./document-session", () => ({ documentSessions: fixture.sessions }));
+vi.mock("../host/ipc", () => ({ api: fixture.api, onClose: fixture.onClose }));
+vi.mock("./document-session", () => ({ documentSessions: fixture.sessions, flushBeforeClose: fixture.flushBeforeClose }));
 vi.mock("./document-bridge", () => ({
   attachRemoteSurface: fixture.attach,
   DocumentWindowUnsupported: class extends Error {},
+  DocumentWindowSilent: class extends Error {},
+  FREEZE_WAIT_MS: 5000,
 }));
-vi.mock("./document-controller", () => ({ showsFileBytes: fixture.showsBytes, textProfileFor: () => "markdown" }));
+vi.mock("./document-controller", () => ({
+  showsFileBytes: fixture.showsBytes, textProfileFor: () => "markdown", freezeDocumentSurfaces: () => {},
+}));
 vi.mock("./layout", () => ({ activeDoc: () => null }));
 vi.mock("../ui/notify", () => ({ notify: fixture.notify }));
 vi.mock("../i18n/strings", () => ({ t: (key: string) => key }));
@@ -284,5 +291,113 @@ describe("native document-window close barrier", () => {
     expect(freeze).not.toHaveBeenCalled();
     expect(fixture.sessions.flush).not.toHaveBeenCalled();
     expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  describe("una finestra che non risponde più", () => {
+    // La finestra è viva ma muta: nessun evento di chiusura, nessuna risposta
+    // al congelamento. Il ponte lo dice dopo 5 s per ogni richiesta.
+    const silentFreeze = (): Promise<void> => new Promise<void>((_resolve, reject) => {
+      globalThis.setTimeout(() => reject(new DocumentWindowSilent("muta")), 5000);
+    });
+    const destroyOnClose = (): void => {
+      fixture.api.closeDocumentWindow.mockImplementationOnce(async () => {
+        queueMicrotask(() => events.destroyed?.({ label, surface: "document" }));
+      });
+    };
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    // #513, residuo 1: chiudere Fub finisce entro il tempo limite. Il testo si
+    // salva dalla sessione della finestra principale, la finestra si chiude, e
+    // l'avviso dice che le ultime battute non confermate possono mancare.
+    it("chiudere Fub finisce entro il tempo limite, salvando dalla finestra principale", async () => {
+      await openCurrentInNewWindow();
+      freeze.mockImplementation(silentFreeze);
+      destroyOnClose();
+      let first: (() => Promise<boolean>) | null = null;
+      fixture.onClose.mockImplementationOnce(async (handler: () => Promise<boolean>) => {
+        first = handler;
+        return () => {};
+      });
+      const ports = { notify: vi.fn() };
+      const unmount = mountCloseGuard(ports);
+      await nextTurn();
+      expect(first).not.toBeNull();
+
+      let closed: boolean | null = null;
+      void first!().then((value) => { closed = value; });
+      await vi.advanceTimersByTimeAsync(14_999);
+      expect(closed).toBeNull();
+      expect(fixture.api.closeDocumentWindow).not.toHaveBeenCalled();
+      expect(fixture.notify).toHaveBeenCalledWith("windows.hung_waiting", "info");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(closed).toBe(true);
+      expect(freeze).toHaveBeenCalledTimes(3);
+      expect(fixture.sessions.flush).toHaveBeenCalled();
+      expect(fixture.api.closeDocumentWindow).toHaveBeenCalledTimes(1);
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(fixture.flushBeforeClose).toHaveBeenCalledOnce();
+      expect(fixture.notify).toHaveBeenCalledWith("windows.hung_closed", "guasto");
+      expect(fixture.notify).not.toHaveBeenCalledWith("windows.drain_failed", "guasto");
+      expect(ports.notify).not.toHaveBeenCalled();
+      expect(pendingDocumentWindows()).not.toContain(label);
+      unmount();
+    });
+
+    // Il salvataggio dalla principale non confermato: il testo va in bozza e
+    // resta nella sessione; la finestra muta si chiude lo stesso, dicendolo, e
+    // la guardia di chiusura decide poi sul buffer come per ogni altro.
+    it("con il salvataggio non confermato mette in bozza, chiude e lo dice", async () => {
+      await openCurrentInNewWindow();
+      freeze.mockImplementation(silentFreeze);
+      fixture.sessions.flush.mockResolvedValue(true);
+      destroyOnClose();
+      const drained = drainDocumentWindows();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await expect(drained).resolves.toBe(true);
+      expect(fixture.sessions.flushDraft).toHaveBeenCalled();
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(fixture.notify).toHaveBeenCalledWith("windows.hung_closed_unsaved", "guasto");
+    });
+
+    // Una finestra lenta che risponde prima del tempo limite si chiude come
+    // sempre: niente salvataggio di ripiego, niente avviso di battute perse.
+    it("una finestra lenta che risponde in tempo si chiude normalmente", async () => {
+      await openCurrentInNewWindow();
+      freeze.mockImplementationOnce(silentFreeze);
+      destroyOnClose();
+      const drained = drainDocumentWindows();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(drained).resolves.toBe(true);
+      expect(freeze).toHaveBeenCalledTimes(2);
+      expect(fixture.notify).toHaveBeenCalledWith("windows.hung_waiting", "info");
+      expect(fixture.notify).not.toHaveBeenCalledWith("windows.hung_closed", "guasto");
+      expect(dispose).toHaveBeenCalledOnce();
+    });
+
+    it("la X di una finestra muta la chiude dopo il tempo limite", async () => {
+      await openCurrentInNewWindow();
+      freeze.mockImplementation(silentFreeze);
+      destroyOnClose();
+      const closing = closeDocumentWindowByLabel(label);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await expect(closing).resolves.toBe(true);
+      expect(fixture.sessions.flush).toHaveBeenCalled();
+      expect(fixture.notify).toHaveBeenCalledWith("windows.hung_closed", "guasto");
+    });
+
+    // Il tempo limite vale solo per il silenzio: una finestra che risponde con
+    // un rifiuto resta aperta, come prima.
+    it("un rifiuto che non è silenzio tiene la finestra aperta", async () => {
+      await openCurrentInNewWindow();
+      freeze.mockRejectedValueOnce(new Error("rifiutato"));
+      await expect(drainDocumentWindows()).resolves.toBe(false);
+      expect(fixture.api.closeDocumentWindow).not.toHaveBeenCalled();
+      expect(pendingDocumentWindows()).toContain(label);
+      expect(thaw).toHaveBeenCalledOnce();
+      // Pulizia: la finestra si chiude davvero.
+      destroyOnClose();
+      await expect(drainDocumentWindows()).resolves.toBe(true);
+    });
   });
 });

@@ -4,7 +4,7 @@ import type * as SessionModule from "./document-session";
 import { operationFromText, type TextOperation } from "../editors/core/text-operation";
 import { state } from "./store";
 import { documentSessions } from "./document-session";
-import { attachChildBridge, attachRemoteSurface, DocumentWindowUnsupported, isRemoteMessage, setDocumentWindowKeeper, setDocumentWindowNavigation, type ChildBridge, type MirroredTheme, type RemoteSurfaceHandle } from "./document-bridge";
+import { attachChildBridge, attachRemoteSurface, DocumentWindowSilent, DocumentWindowUnsupported, FREEZE_WAIT_MS, isRemoteMessage, setDocumentWindowKeeper, setDocumentWindowNavigation, type ChildBridge, type MirroredTheme, type RemoteSurfaceHandle } from "./document-bridge";
 import { mount } from "../theme/loader";
 import { emit } from "./store";
 
@@ -391,6 +391,41 @@ describe("document-window protocol", () => {
     await second.handle.dispose();
     expect(documentSessions.get(doc)).toBeUndefined();
     expect(documentSessions.get(renamed)).toBeUndefined();
+  });
+
+  // #513, residuo 1: il silenzio ha il suo errore, distinto da un rifiuto, e
+  // non lascia il congelamento appeso: dopo, la finestra si può rilasciare.
+  it("una finestra che non risponde al congelamento finisce in DocumentWindowSilent", async () => {
+    const doc = `${number}-muta.md`;
+    const { handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    vi.useFakeTimers();
+    try {
+      const frozen = handle.freeze();
+      const outcome = frozen.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(FREEZE_WAIT_MS);
+      expect(await outcome).toBeInstanceOf(DocumentWindowSilent);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Una finestra ancora in caricamento quando si chiude Fub: il congelamento
+  // la aspetta e le arriva subito dopo la sua fotografia, invece di essere
+  // rifiutato.
+  it("una finestra che saluta dopo la richiesta di congelamento la riceve e risponde", async () => {
+    const doc = `${number}-in-arrivo.md`;
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    const frozen = handle.freeze();
+    let text = "";
+    const states: string[] = [];
+    children.push(attachChildBridge(request, (next) => { text = next; }, () => text, (change) => { states.push(change.kind); }));
+    await expect(frozen).resolves.toBeUndefined();
+    expect(text).toBe("abc");
+    expect(states).toContain("frozen");
+    handle.thaw();
+    await settle();
   });
 
   // Audit #513, scenario A: la nota della finestra sparisce. La finestra sa

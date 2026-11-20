@@ -81,6 +81,19 @@ export function setDocumentWindowKeeper(port: DocumentWindowKeeper | null): void
 }
 
 /** The document has no text surface: a separate window cannot show it. */
+/** How long the main window waits for the child to answer a freeze. */
+export const FREEZE_WAIT_MS = 5000;
+
+/// La finestra non ha risposto al congelamento entro `FREEZE_WAIT_MS`: né un
+/// sì né un no. Il silenzio non dice che la sua coda è vuota; chi svuota le
+/// finestre decide quanto aspettarla ancora (`document-windows.ts`).
+export class DocumentWindowSilent extends Error {
+  constructor(message = "La finestra non ha risposto: sessione mantenuta") {
+    super(message);
+    this.name = "DocumentWindowSilent";
+  }
+}
+
 export class DocumentWindowUnsupported extends Error {
   constructor(readonly doc: string) {
     super(`document ${doc} has no text surface for a separate window`);
@@ -304,6 +317,7 @@ export async function attachRemoteSurface(
           revision: authority.revision, appliedSeq: endpoint.lastSeq,
           diskRevision: snapshot.base.kind === "descends_from" ? snapshot.base.value : "" });
         sendTheme(endpoint);
+        if (endpoint.drain) reply({ ...identity(request), kind: "freeze", epoch: authority.epoch, token: endpoint.drain.token });
         return;
       }
       if (!endpoint.ready) return;
@@ -392,17 +406,19 @@ export async function attachRemoteSurface(
     return { request, handle: {
       channel: request.channel, surfaceId: request.surfaceId,
       freeze: () => {
-        if (!scoped() || !endpoint.ready) return Promise.reject(new Error("Finestra non connessa alla sessione"));
+        if (!scoped()) return Promise.reject(new Error("Finestra non connessa alla sessione"));
         if (endpoint.drain) return Promise.reject(new Error("Drain già in corso"));
         const token = unique();
         return new Promise<void>((resolve, reject) => {
           const timer = globalThis.setTimeout(() => {
             endpoint.drain = null;
-            reject(new Error("Timeout acknowledgement della finestra: sessione mantenuta"));
-          }, 5000);
+            reject(new DocumentWindowSilent());
+          }, FREEZE_WAIT_MS);
           endpoint.drain = { token, resolve, reject, timer };
           endpoint.frozenToken = token;
-          reply({ ...identity(request), kind: "freeze", epoch: authority.epoch, token });
+          // Una finestra che non ha ancora salutato riceve il congelamento
+          // subito dopo la sua fotografia; se non saluta mai, è silenzio.
+          if (endpoint.ready) reply({ ...identity(request), kind: "freeze", epoch: authority.epoch, token });
         });
       },
       thaw: () => {

@@ -329,6 +329,23 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   (`state/document-bridge.ts`) tiene un'autorità per sessione, non per nome:
   una nota nuova con il nome di una sparita o di una rinominata apre la sua
   finestra, e il rilascio della finestra vecchia non tocca la sessione nuova.
+  Anche il prestito della finestra è della sessione
+  (`documentSessions.retainSession`): dopo una rinomina chiudere la scheda col
+  nome nuovo non chiude la sessione che la finestra mostra, e il nome di
+  prima non resta prestato.
+- **Una finestra del documento che non risponde più.** Una finestra viva ma
+  muta (nessun evento di chiusura, nessuna risposta al congelamento) non
+  dice che la sua coda è vuota. Il ponte chiama il silenzio col suo nome
+  (`DocumentWindowSilent`, dopo 5 s per richiesta) e `document-windows.ts`
+  riprova fino a 15 s in tutto, avvisando alla prima richiesta mancata: una
+  finestra occupata per qualche secondo risponde e si chiude come sempre.
+  Oltre, la finestra si distrugge (la distruzione non chiede niente alla sua
+  pagina), si salva dalla sessione della finestra principale, o in bozza, e
+  l'avviso dice che le ultime modifiche non confermate possono mancare. Vale
+  per la chiusura dell'app, il cambio di vault e la X della finestra; un
+  rifiuto vero (sessione cambiata, salvataggio fallito di una finestra che
+  risponde) tiene la finestra aperta come prima, e la guardia di chiusura
+  decide poi sul buffer rimasto come per ogni altro.
 
 ## Invarianti
 

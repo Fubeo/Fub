@@ -3057,6 +3057,12 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "windows.closed_alone_unsaved":
     "The window for {doc} closed on its own and the save is not confirmed: the text stays in the main window. The last changes the window had not yet confirmed may be missing.",
   "windows.closed_gone": "{doc} no longer exists: its window closed without saving, because there was nothing to save.",
+  "windows.hung_waiting":
+    "The window for {doc} is not responding. Fub waits a few more seconds, then saves the text from the main window and closes it.",
+  "windows.hung_closed":
+    "The window for {doc} was not responding and has been closed. The text it had passed to the main window is saved; its last changes that were not yet confirmed may be missing.",
+  "windows.hung_closed_unsaved":
+    "The window for {doc} was not responding and has been closed, but the save is not confirmed: the text stays in the main window. The last changes the window had not yet confirmed may be missing.",
   "windows.error.session_gone": "The document session is no longer available",
   "windows.error.bad_identity": "The window identity is not valid",
   "windows.error.owner_changed": "The document changed hands: the session is kept",
