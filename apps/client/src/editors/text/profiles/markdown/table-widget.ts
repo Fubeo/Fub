@@ -510,6 +510,9 @@ function enter(view: EditorView, direction: 1 | -1): boolean {
   return false;
 }
 
+// La forma della tabella. Gli inchiostri delle testate, la scelta, la cella
+// attiva, il quadratino del riempimento e l'angolo di «+» sono della pelle
+// (`theme/scrittoio/skin/tabella.css`, issue #242).
 const theme = EditorView.baseTheme({
   ".tb-frame": { position: "relative", padding: "0.2em 0 0.4em" },
   ".tb-grid": { position: "relative", overflowX: "auto", outline: "none", padding: "2px" },
@@ -523,7 +526,6 @@ const theme = EditorView.baseTheme({
     border: "none",
     background: "transparent",
     padding: "0 0.4em",
-    color: "var(--doc-gutter-fg, var(--muted, #888))",
     fontSize: "0.72em",
     fontWeight: "500",
     textAlign: "center",
@@ -534,27 +536,15 @@ const theme = EditorView.baseTheme({
     opacity: "1",
   },
   ".tb-grid .tb-letter.is-selected, .tb-grid .tb-rowhead.is-selected": {
-    color: "var(--accent, #4a7dff)",
     fontWeight: "700",
   },
   ".tb-cell": { position: "relative", minWidth: "4em", cursor: "cell" },
-  ".tb-grid:focus-within .tb-cell.is-selected": {
-    background: "var(--doc-selection, rgba(74, 125, 255, 0.18))",
-  },
-  ".tb-grid:focus-within .tb-cell.is-active": {
-    boxShadow: "inset 0 0 0 2px var(--accent, #4a7dff)",
-  },
-  ".tb-grid:focus-within .tb-cell.is-fill": {
-    boxShadow: "inset 0 0 0 1px var(--accent, #4a7dff)",
-  },
   ".tb-fill": {
     position: "absolute",
     width: "7px",
     height: "7px",
     margin: "-4px 0 0 -4px",
     boxSizing: "border-box",
-    background: "var(--accent, #4a7dff)",
-    border: "1px solid var(--doc-bg, #fff)",
     cursor: "crosshair",
   },
   ".tb-fill[hidden]": { display: "none" },
@@ -579,7 +569,6 @@ const theme = EditorView.baseTheme({
     font: "inherit",
     fontSize: "0.8em",
     padding: "0.1em 0.4em",
-    borderRadius: "var(--radius-xs, 3px)",
     cursor: "pointer",
   },
   ".tb-frame:hover .tb-add, .tb-frame:focus-within .tb-add": { visibility: "visible" },

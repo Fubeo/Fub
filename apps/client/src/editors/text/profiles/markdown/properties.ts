@@ -797,22 +797,18 @@ export function canMoveProperty(direction: -1 | 1): (state: EditorState) => bool
   };
 }
 
+// La forma del riquadro. L'angolo, il fondo, l'interlinea e gli inchiostri
+// sono della pelle (`theme/scrittoio/skin/document.css`, issue #242).
 const theme = EditorView.baseTheme({
   ".cm-fub-properties": {
     cursor: "text",
     margin: "0 0 0.6em",
     padding: "0.5em 0.75em",
-    borderRadius: "var(--radius-sm, 4px)",
-    background: "var(--doc-fill-soft, rgba(135, 135, 135, 0.08))",
     fontSize: "0.9em",
-    lineHeight: "var(--leading-normal, 1.5)",
-  },
-  ".cm-fub-properties-hidden, .cm-fub-properties-empty": {
-    color: "var(--doc-muted, var(--doc-gutter-fg, inherit))",
   },
   ".cm-fub-properties dl": { margin: "0", display: "grid", gridTemplateColumns: "max-content 1fr", columnGap: "1em" },
   ".cm-fub-properties-row": { display: "contents" },
-  ".cm-fub-properties dt": { color: "var(--doc-muted, var(--doc-gutter-fg, inherit))", fontWeight: "500" },
+  ".cm-fub-properties dt": { fontWeight: "500" },
   ".cm-fub-properties dd": { margin: "0", overflowWrap: "anywhere" },
 });
 

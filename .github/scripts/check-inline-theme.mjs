@@ -18,7 +18,10 @@
 //
 // Vale anche per il tema di CodeMirror (`editors/text/theme.ts`): i colori
 // dell'editor di testo stanno nella pelle, sotto le classi `.cm-*`, e il tema
-// dell'editor dà solo le classi della sintassi e la luce (issue #242).
+// dell'editor dà solo le classi della sintassi e la luce (issue #242). Lo
+// stesso per i temi dei profili Markdown (`editors/text/profiles/markdown/`):
+// in `EditorView.theme` restano le misure, i colori e i caratteri sono nella
+// pelle.
 //
 // Parte con le righe di oggi, in `EXCEPTIONS`, contate per file: il conto può
 // solo scendere. Una riga nuova lo fa salire e la guardia fallisce; una riga
@@ -38,12 +41,6 @@ const EXCEPTIONS = new Map([
   // La stampa compone una pagina sua, fuori dalla pelle.
   [`${EDITORS}media/print-view.ts`, 2],
   [`${EDITORS}spatial/tools/accessibility-panel.ts`, 1],
-  // I profili Markdown passano ancora ruoli a `EditorView.theme`: in
-  // `livepreview.ts` la tipografia, negli altri anche dei colori (issue #242).
-  [`${EDITORS}text/profiles/markdown/livepreview.ts`, 7],
-  [`${EDITORS}text/profiles/markdown/profile.ts`, 9],
-  [`${EDITORS}text/profiles/markdown/properties.ts`, 5],
-  [`${EDITORS}text/profiles/markdown/table-widget.ts`, 9],
 ]);
 
 const rootArgument = process.argv.slice(2).find((argument) => !argument.startsWith("--"));

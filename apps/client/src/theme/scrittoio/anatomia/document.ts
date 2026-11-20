@@ -7,7 +7,7 @@ export const DOCUMENT: PartAnatomy = {
   components: [
     // La colonna di lettura e le due facce dello stesso testo: l'albero di
     // CodeMirror in Live e Sorgente, l'HTML reso in Lettura.
-    { name: "document-column", layers: { "pane-editor": "cornice", "pane-preview": "cornice" }, states: [S("rest"), S("focused")], hooks: ["pane-editor", "pane-preview", "markdown-preview", "markdown-rendered", "cm-editor", "cm-content", "cm-line", "cm-markdown-block", "cm-markdown-gap-lead", "markdown-table-scroll"] },
+    { name: "document-column", layers: { "pane-editor": "cornice", "pane-preview": "cornice" }, states: [S("rest"), S("focused")], hooks: ["pane-editor", "pane-preview", "markdown-preview", "markdown-rendered", "cm-editor", "cm-fub-markdown", "cm-content", "cm-line", "cm-markdown-block", "cm-markdown-gap-lead", "markdown-table-scroll"] },
     { name: "document-heading", states: REST, hooks: ["cm-fub-heading-line", "cm-fub-h1", "cm-fub-h2", "cm-fub-h3", "cm-fub-h4", "cm-fub-h5", "cm-fub-h6", "cm-fub-h1-line", "cm-fub-h2-line", "cm-fub-h3-line", "cm-fub-h4-line", "cm-fub-h5-line", "cm-fub-h6-line"] },
     { name: "document-inline", states: REST, hooks: ["cm-fub-near", "cm-fub-pending-mark", "cm-fub-ghost", "cm-fub-wavy", "cm-fub-placeholder", "cm-fub-heading-pill-button", "cm-fub-strong", "cm-fub-em", "cm-fub-strike", "cm-fub-highlight", "inline-highlight", "cm-fub-comment", "cm-fub-code", "math-inline"] },
     { name: "document-details", states: [S("rest"), S("focused")], hooks: ["fub-details", "cm-fub-details-arrow", "cm-fub-details-empty"] },
@@ -39,7 +39,7 @@ export const DOCUMENT: PartAnatomy = {
     { name: "document-comment-margin", layer: "segno", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["cm-fub-comment-margin", "cm-fub-comment-bubble", "cm-fub-comment-sign", "cm-fub-comment-avatar"] },
     { name: "document-comment-discussion", layer: "cornice", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["kit-popover", "cm-fub-comment-popover", "cm-fub-comment-discussion", "cm-fub-comment-quote", "cm-fub-comment-note", "cm-fub-comment-name", "cm-fub-comment-name-hint", "cm-fub-comment-message", "cm-fub-comment-write", "cm-fub-comment-input", "cm-fub-comment-send", "cm-fub-comment-actions", "cm-fub-comment-actions-end", "cm-fub-comment-action", "cm-fub-comment-foot"] },
     { name: "document-comments-panel", layer: "cornice", states: [S("rest"), S("hover"), S("selected"), S("focused")], hooks: ["cm-fub-comments-panel", "cm-fub-comments-head", "cm-fub-comments-card", "cm-fub-comments-quote", "cm-fub-comments-who", "cm-fub-comments-replies", "cm-fub-comments-archived", "cm-fub-comments-note", "cm-fub-comments-empty", "cm-fub-comments-clear"] },
-    { name: "document-properties", states: REST, hooks: ["cm-fub-frontmatter", "block-frontmatter-unparsed", "block-footnote-definition"] },
+    { name: "document-properties", states: REST, hooks: ["cm-fub-frontmatter", "cm-fub-properties", "cm-fub-properties-hidden", "cm-fub-properties-empty", "block-frontmatter-unparsed", "block-footnote-definition"] },
     { name: "declarative-slot", layer: "cornice", states: REST, hooks: ["ui-slot"] },
     { name: "declarative-node-content", layer: "cornice", states: REST, hooks: ["ui-heading", "empty-note"] },
     { name: "declarative-node-feedback", layer: "cornice", states: [S("rest"), S("hover"), S("pressed")], hooks: ["ui-list-item", "ui-list-item-title", "ui-list-item-subtitle", "clickable"] },
