@@ -1721,6 +1721,30 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
   })),
+  // **Il doppio clic con la barra di formato** (#411 A-05, #399): una parola
+  // scelta col doppio clic si dipinge come la parola, non fino a fine riga.
+  // A 1100 px, con la barra, la prima riga della panoramica va a capo dopo
+  // apici, pedici e marche nascoste: con CodeMirror fino alla 6.43.7 la
+  // selezione di «il», «bus» e «treno» si dipingeva come il resto della riga
+  // più la riga sotto (col caso seminato del banco, ogni volta). La scena
+  // sceglie due volte ogni parola della riga (non i link, che il clic segue)
+  // e lancia se un disegno non è la parola: col caso seminato quale parola
+  // cadeva cambiava con la luce, e con tutte almeno una cadeva sempre. La
+  // foto resta su «treno», la parola del collaudo.
+  {
+    id: "live-30-doppio-clic-barra",
+    title: "La Live con la barra di formato: «treno» scelto col doppio clic si dipinge come la parola",
+    query: "live=panoramica&formatbar=1",
+    viewport: { width: 1100, height: 800 },
+    prepare: async (page) => {
+      await openLive(page, [], "top");
+      await page.waitForSelector(".pane.focus .format-bar.kit-bar .kit-bar-button");
+      for (let round = 0; round < 2; round++) {
+        for (const word of LINE_WORDS) await expectWordPainted(page, word);
+      }
+      await settleBar(page);
+    },
+  },
   // La scelta del promemoria (T36): il clic sulla pastiglia la apre sotto di
   // lei, coi giorni vicini, il mese col giorno scelto e l'ora; il piede
   // toglie il promemoria. Ciò che non è un giorno resta scritto e lo dice.
@@ -4815,6 +4839,54 @@ async function touchBlocks(page, gesture) {
     await page.waitForSelector(".pane.focus .pane-editor .cm-fub-block-lift");
   }
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// Le parole della riga di «treno» che il doppio clic sceglie (i link no: il
+/// clic li segue), nell'ordine della riga; l'ultima è quella della foto.
+const LINE_WORDS = ["Il", "parte", "alle", "otto", "il", "bus", "no", "Energia", "acqua", "da", "ricordare", "codice", "treno"];
+
+/// Doppio clic su `word` nella riga di «treno» della panoramica: la selezione
+/// dev'essere la parola e il suo disegno un rettangolo solo, largo quanto la
+/// parola (#411 A-05). Se no lancia, con le larghezze viste.
+async function expectWordPainted(page, word) {
+  // La bolla della parola di prima può coprire questa: la selezione si
+  // chiude e la bolla se ne va prima di misurare.
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForSelector(".selection-bubble:not([hidden])", { state: "detached" });
+  // Il posto della parola si chiede alla vista per offset, non ai nodi di
+  // testo: le parole uguali a quella scelta si evidenziano e spezzano i nodi.
+  const target = await page.evaluate(async (wanted) => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    const doc = view.state.doc;
+    for (let n = 1; n <= doc.lines; n++) {
+      const line = doc.line(n);
+      if (!line.text.includes("treno")) continue;
+      const match = new RegExp(`(?<!\\p{L})${wanted}(?!\\p{L})`, "u").exec(line.text);
+      if (!match) return null;
+      const start = view.coordsAtPos(line.from + match.index, 1);
+      const end = view.coordsAtPos(line.from + match.index + wanted.length, -1);
+      if (!start || !end) return null;
+      return { x: (start.left + end.right) / 2, y: (start.top + start.bottom) / 2, width: end.right - start.left };
+    }
+    return null;
+  }, word);
+  if (!target) throw new Error(`la parola «${word}» non è nella riga di «treno»`);
+  await page.mouse.dblclick(target.x, target.y);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const seen = await page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    const { from, to } = view.state.selection.main;
+    const painted = [...document.querySelectorAll(".pane.focus .cm-selectionBackground")].map((b) => b.getBoundingClientRect().width);
+    return { chosen: view.state.sliceDoc(from, to), painted };
+  });
+  if (seen.chosen !== word) throw new Error(`il doppio clic su «${word}» ha scelto «${seen.chosen}»`);
+  // Un rettangolo solo, largo quanto la parola: il margine copre le marche
+  // nascoste attorno alla parola (`==…==`), che la vista conta nei bordi.
+  if (seen.painted.length !== 1 || Math.abs(seen.painted[0] - target.width) > 12) {
+    throw new Error(`«${word}» (${Math.round(target.width)} px) si dipinge come ${seen.painted.map(Math.round).join(" + ") || "niente"} px`);
+  }
 }
 
 async function settleLive(page, bottom) {
