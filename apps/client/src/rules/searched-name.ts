@@ -78,3 +78,48 @@ export function searchedName(text: string): string | null {
   // qualcosa sta chiedendo una nota che poi non vede nell'albero.
   return clean === "" || clean.startsWith(".") ? null : clean;
 }
+
+/// Il path di nota che il testo scritto nella ricerca rapida propone, o `null`
+/// se non ne propone uno.
+///
+/// È [`searchedName`] segmento per segmento: qui la barra `/` vuol dire
+/// **cartella**, come in ogni path del vault, e `Aree/Eventi/Idea` propone la
+/// nota `Idea` dentro `Aree/Eventi`, con le cartelle che mancano create dal
+/// kernel insieme alla nota. Un path esplicito conserva la sua cartella
+/// (`note.create` non gli antepone quella delle nuove note); un nome senza
+/// barre resta un nome, e il kernel lo mette nella cartella delle nuove note.
+/// Le superfici che chiedono un nome solo (il titolo di una nota, un estratto
+/// della lavagna) restano su [`searchedName`].
+///
+/// Le forme che un path del vault non ha:
+///
+/// - le barre in testa e quelle doppie si tolgono: i path del vault partono
+///   già dalla radice, e `/Idea` è `Idea`;
+/// - un segmento `.` si toglie: `./Idea` è `Idea`;
+/// - un segmento `..` uscirebbe dalla cartella che lo contiene: niente
+///   proposta, invece di un path riscritto che nessuno ha scritto;
+/// - una barra in coda nomina una cartella e non una nota: niente proposta,
+///   finché non si scrive il nome;
+/// - un segmento nascosto (`.obsidian/x`) non si propone, come un nome
+///   nascosto; uno fatto solo di caratteri vietati (`a/?/b`) si toglie come
+///   una barra doppia.
+///
+/// La barra rovescia resta un carattere vietato e non un separatore: nei path
+/// del vault il separatore è uno solo.
+export function searchedPath(text: string): string | null {
+  const raw = text.trim().split("/");
+  if (raw.length > 1 && raw[raw.length - 1]!.trim() === "") return null;
+  const segments: string[] = [];
+  for (const each of raw) {
+    const written = each.trim();
+    if (written === "" || written === ".") continue;
+    if (written === "..") return null;
+    const name = searchedName(written);
+    if (name !== null) {
+      segments.push(name);
+      continue;
+    }
+    if (written.replace(FORBIDDEN, "").trim().startsWith(".")) return null;
+  }
+  return segments.length === 0 ? null : segments.join("/");
+}
