@@ -951,7 +951,7 @@ describe("le azioni dell'editor della superficie", () => {
     expect(peeked).toEqual([{ kind: "path", path: "report_50%.md" }]);
     // Il nome codificato si decodifica come prima.
     run(menuAt("[Nota](Nota%20uno.md)\n"), "markdown.link.open");
-    expect(opened.at(-1)).toBe("Nota uno.md");
+    expect(opened[opened.length - 1]).toBe("Nota uno.md");
     ed.destroy();
     parent.remove();
   });
