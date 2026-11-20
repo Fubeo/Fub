@@ -6,6 +6,7 @@
 import { identifier } from "../ui/a11y";
 import { iconEl } from "../ui/icons";
 import type { Lifetime } from "../ui/lifetime";
+import { composingKey } from "./ime";
 
 export interface TextFieldOptions {
   /// Il nome del campo.
@@ -103,7 +104,7 @@ export function textField(options: TextFieldOptions): TextField {
     options.onInput?.(input.value);
   });
   listen(input, "keydown", (event) => {
-    if (event.key !== "Enter" || event.isComposing || !options.onSubmit) return;
+    if (event.key !== "Enter" || composingKey(event) || !options.onSubmit) return;
     event.preventDefault();
     options.onSubmit(input.value);
   });

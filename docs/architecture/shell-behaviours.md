@@ -209,6 +209,18 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Guardie: `editors/text/frame-command-focus.dom.test.ts` (con l'editor
   vero), `shells/scrittoio/frame/status-band.test.ts`,
   `kit/keep-focus.test.ts`.
+- **Invio ed Esc della composizione sono del metodo d'immissione.** Mentre si
+  compone (cinese, giapponese, coreano, accenti morti) Invio sceglie il
+  candidato ed Esc lo scarta: i campi che confermano o chiudono con quei tasti
+  li lasciano passare. Sono la rinomina in posto e la cartella nuova
+  dell'albero, il Quick Switcher, la palette dei comandi e quella del `/`, la
+  ricerca nel vault e nel documento, la rinomina del vault e del titolo, i
+  campi del kit e dei dialoghi, e l'Esc delle modali (`trapFocus`). La regola
+  sta in un punto solo, `composingKey` del kit (`kit/ime.ts`): vale
+  `isComposing` e anche il codice 229, perché WebKit chiude la composizione
+  prima del keydown del tasto che la conferma. Guardie: `kit/ime.test.ts`,
+  `panels/explorer.dom.test.ts`, `panels/quick-switcher.dom.test.ts`,
+  `ui/palette.dom.test.ts`, `kit/field.test.ts`.
 - **Scorciatoie dietro una finestra modale.** Con una finestra modale aperta
   (una superficie che intrappola il fuoco e si dichiara `aria-modal`: le
   Impostazioni, un dialogo, la palette, un menu con la ricerca) le

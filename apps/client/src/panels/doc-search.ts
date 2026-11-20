@@ -45,6 +45,7 @@ import { state } from "../state/store";
 import { highlighted } from "../ui/highlight";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { findInFocusedSurface, reveal } from "../state/document-controller";
+import { composingKey } from "../kit/ime";
 
 const OVERLAY_ID = "doc-search";
 
@@ -271,6 +272,7 @@ export function openInDocumentSearch(): void {
     }
   });
   input.addEventListener("keydown", (e) => {
+    if (composingKey(e)) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const items = [...list.querySelectorAll<HTMLButtonElement>(".search-result:not([disabled])")];

@@ -95,6 +95,7 @@ import type { ResourceKind } from "../host/contract";
 import { api } from "../host/ipc";
 import { engineExtension, engineWarmup, type EngineWarmup } from "./engine-warmup";
 import { primaryClicksOnly } from "../ui/primary-clicks";
+import { composingKey } from "../kit/ime";
 
 const fileListEl = $("#file-list");
 /// Il moto della cartella appena aperta o chiusa, finché l'albero non si
@@ -2317,6 +2318,8 @@ function startNewFolder(parent: string): void {
     }
   };
   field.addEventListener("keydown", (e) => {
+    // Invio ed Esc della composizione scelgono il candidato, non il nome.
+    if (composingKey(e)) return;
     if (e.key === "Enter") void confirm();
     else if (e.key === "Escape") close();
   });
@@ -2409,6 +2412,7 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
   };
 
   input.addEventListener("keydown", (e) => {
+    if (composingKey(e)) return;
     if (e.key === "Enter") void confirm();
     else if (e.key === "Escape") cancel();
   });
