@@ -5,33 +5,33 @@
 // ci resta.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorView } from "@codemirror/view";
-import { press, realClick } from "../../../kit/testing";
-import type { CommandEntry } from "../../../ui/commands";
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { press, realClick } from "../../kit/testing";
+import type { CommandEntry } from "../../ui/commands";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
 
 const LIGHT_COMMAND = "shell.light.toggle";
 
 const world = vi.hoisted(() => ({ started: [] as string[] }));
 
-vi.mock("../../../ui/commands", async (original) => ({
-  ...(await original<typeof import("../../../ui/commands")>()),
+vi.mock("../../ui/commands", async (original) => ({
+  ...(await original<typeof import("../../ui/commands")>()),
   allCommands: (): CommandEntry[] => [
     { id: "shell.light.toggle", title: "Luce", description: "", layer: "global", binding: null, declared: null, spec: null, run: () => {} },
   ],
 }));
 // Il comando cambia la luce montata, come fa quello vero a scena finita: il
 // bottone si ridisegna mentre il fuoco è altrove.
-vi.mock("../../../ui/palette", () => ({
+vi.mock("../../ui/palette", () => ({
   startCommand: (entry: { id: string }) => {
     world.started.push(entry.id);
     const root = document.documentElement;
     root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
   },
 }));
-vi.mock("../../../state/palette-host", () => ({ paletteHost: {} }));
-vi.mock("../../../host/ipc", () => ({ api: { setSetting: () => Promise.resolve() } }));
+vi.mock("../../state/palette-host", () => ({ paletteHost: {} }));
+vi.mock("../../host/ipc", () => ({ api: { setSetting: () => Promise.resolve() } }));
 
-import { mountLightSwitch } from "./light";
+import { mountLightSwitch } from "../../shells/scrittoio/frame/light";
 
 let lifetime: Lifetime;
 let view: EditorView;
