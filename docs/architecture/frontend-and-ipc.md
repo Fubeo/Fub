@@ -425,8 +425,8 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 - nuovi import Tauri fuori dal seam;
 - usi degli appunti della webview fuori da `platform/clipboard.ts`;
 - ascoltatori, timer e osservatori senza owner; attese di un giro di `Race`, o di
-  una funzione col parametro `Expected`, fuori dal cancello (`check-listeners.mjs`,
-  `check-races.mjs`: regole e limiti noti in testa, casi nella `--self-test`);
+  una funzione col parametro `Expected`, fuori dal cancello, e `Expected` fuori dai
+  parametri (`check-listeners.mjs`, `check-races.mjs`: regole e limiti in testa);
 - ruoli del tema scritti sull'elemento negli editor, oltre l'elenco delle eccezioni
   (`check-inline-theme.mjs`);
 - un `<style>` creato da uno script o uno `style` scritto come markup, che la

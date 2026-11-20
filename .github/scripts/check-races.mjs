@@ -18,6 +18,12 @@
 // parametro `Expected` di `ui/race`): la guardia non ne leggeva il corpo, e
 // da lì passavano il falso «ricerca non riuscita» del blocco query e
 // l'«immagine mancante» dei media di una resa smontata.
+// CANCELLO-DISEGNO ha chiuso i due limiti che restavano scritti come zone
+// cieche: un alias del tipo (`type Gate = Expected`) e un oggetto di opzioni
+// col tipo scritto altrove (`interface Opzioni { gate: Expected }`). Nel
+// codice non c'erano; ora il tipo del cancello si può nominare solo nei
+// parametri (e negli import coi nomi), e ogni altro posto è una violazione:
+// l'alias non nasce in silenzio.
 // Ciò che resta fuori, e perché, sta sopra `violations`.
 
 import fs from "node:fs";
@@ -320,6 +326,56 @@ function gateTypeNames(text, relative) {
   return names;
 }
 
+/// Le strade per cui il tipo del cancello prende un nome che
+/// `gateTypeNames` non vede: un re-export (`export type { Expected as Gate }
+/// from "../ui/race"`, `export * from "../ui/race"`), un import del modulo
+/// intero (`import * as race from "../ui/race"`, poi `e: race.Expected`) o
+/// un tipo importato sul posto (`e: import("../ui/race").Expected`). Ogni
+/// funzione che ricevesse il cancello con quel nome uscirebbe dalla guardia
+/// senza dirlo. Si legge dal testo vero, come gli import.
+function gateAliasImports(text, relative) {
+  const directory = path.posix.dirname(relative);
+  const isGate = (spec) => {
+    const target = spec.startsWith(".") ? path.posix.join(directory, spec) : spec;
+    return /(?:^|\/)ui\/race(?:\.ts)?$/.test(target);
+  };
+  const found = [];
+  const patterns = [
+    [/\bexport\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g, (match) => /(?:^|[\s,{])(?:type\s+)?Expected\b/.test(match[1]), "re-exports the gate type"],
+    [/\bexport\s+(?:type\s+)?\*(?:\s+as\s+[\w$]+)?\s+from\s*["']([^"']+)["']/g, () => true, "re-exports the whole gate module"],
+    [/\bimport\s+(?:type\s+)?\*\s+as\s+[\w$]+\s+from\s*["']([^"']+)["']/g, () => true, "imports the whole gate module"],
+    [/\bimport\s*\(\s*["']([^"']+)["']\s*\)\s*\.\s*Expected\b/g, () => true, "names the gate type through `import(…)`"],
+  ];
+  for (const [pattern, names, what] of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      if (!isGate(match[match.length - 1]) || !names(match)) continue;
+      found.push([match.index, what]);
+    }
+  }
+  return found;
+}
+
+/// Se la graffa aperta in `open` è quella di un import o di un export coi
+/// nomi (`import { type Expected } from …`, `export type { … }`).
+function importBraces(code, open) {
+  return /\b(?:import|export)\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?$/.test(code.slice(0, open));
+}
+
+/// La graffa aperta più vicina che racchiude `offset`, o -1 se la prima che
+/// lo racchiude è una tonda o una quadra.
+function enclosingBrace(code, offset) {
+  let depth = 0;
+  for (let index = offset - 1; index >= 0; index--) {
+    const char = code[index];
+    if (char === ")" || char === "]" || char === "}") depth++;
+    else if (char === "(" || char === "[" || char === "{") {
+      if (depth > 0) depth--;
+      else return char === "{" ? index : -1;
+    }
+  }
+  return -1;
+}
+
 /// Le parole dopo cui una parentesi tonda non apre i parametri di un metodo.
 const KEYWORDS = new Set([
   "if", "for", "while", "switch", "catch", "with", "return", "typeof", "await", "new", "void",
@@ -462,11 +518,23 @@ function gateOfParameter(parameter, typeName) {
 ///   forma al valore: anche lui corre a giro scaduto, e la guardia non lo
 ///   distingue da uno che scrive.
 ///
+/// Il tipo del cancello si nomina solo dentro una lista di parametri (di una
+/// funzione, di un tipo funzione, di una firma, di una chiamata) o negli
+/// import coi nomi. Altrove è una violazione, perché porterebbe il cancello
+/// dove la guardia non lo segue: un alias (`type Gate = Expected`), un campo
+/// di un oggetto di opzioni col tipo scritto altrove (`interface Opzioni {
+/// gate: Expected }`, `type Opzioni = { gate: Expected }`), un campo di una
+/// classe, una variabile, un generico, un tipo di ritorno. Così anche un
+/// re-export, un import del modulo intero e `import("…/ui/race").Expected`,
+/// che darebbero al tipo un nome che la guardia non conosce. Un tipo
+/// funzione che riceve il cancello (`type Corpo = (e: Expected) => …`) resta
+/// lecito.
+///
 /// Limiti noti, che senza un parser vero non si chiudono: un cancello
 /// passato a una funzione il cui parametro non nomina `Expected` (`p: <T>(x:
-/// Promise<T>) => Promise<T>`, un alias `type Gate = Expected`, un oggetto
-/// di opzioni col tipo scritto altrove) porta le attese di quella funzione
-/// fuori dalla guardia; un cancello rinominato in un nome locale
+/// Promise<T>) => Promise<T>`, il tipo scritto per intero) porta le attese di
+/// quella funzione fuori dalla guardia; così un corpo tipato da un tipo
+/// funzione (`const corpo: Corpo = async (e) => …`); un cancello rinominato in un nome locale
 /// (`const g = expected`) dà una violazione anche quando è giusto; un nome
 /// interno che copre il cancello (`const expected = (p) => p`) passa;
 /// `race["last"](…)` e `const { last } = race` non si vedono; un cancello
@@ -514,7 +582,18 @@ export function violations(text, relative) {
     const pattern = new RegExp(String.raw`(?<![\w$.#])${typeName.replace(/\$/g, "\\$")}(?![\w$])`, "g");
     for (const mention of code.matchAll(pattern)) {
       const open = enclosingParen(code, mention.index);
-      if (open === -1 || read.has(open) || heads.some(([from, to]) => open > from && open < to)) continue;
+      if (open === -1) {
+        // Fuori da una lista di parametri: lecito solo l'import coi nomi.
+        const brace = enclosingBrace(code, mention.index);
+        if (brace !== -1 && importBraces(code, brace)) continue;
+        found.push(
+          `${relative}:${lineOf(mention.index)}: the gate type \`${typeName}\` outside a parameter list ` +
+            "(an alias, a field of an options type, a variable): the guard reads only functions that name it in a parameter; " +
+            `write \`expected: ${typeName}\` (or \`{ gate }: { gate: ${typeName} }\`) there.`,
+        );
+        continue;
+      }
+      if (read.has(open) || heads.some(([from, to]) => open > from && open < to)) continue;
       const fn = functionAt(code, open);
       if (fn === null) continue;
       read.add(open);
@@ -537,6 +616,12 @@ export function violations(text, relative) {
       }
       found.push(...bodyViolations(code.slice(fn.start, fn.end), gate, (offset) => `${relative}:${lineOf(fn.start + offset)}`, "a function that takes the gate"));
     }
+  }
+  for (const [offset, what] of gateAliasImports(text, relative)) {
+    found.push(
+      `${relative}:${lineOf(offset)}: this ${what}, giving the gate a name the guard does not know; ` +
+        "import `Expected` by name from `ui/race` where it is used.",
+    );
   }
   return { found, races };
 }
@@ -650,6 +735,27 @@ function selfTest() {
     ["un try senza await nel giro", "r.last(async (e) => { try { f(); } catch { } await e(g()); });", 1, 0],
     ["un try con un await dopo una chiamata", "r.last(async (e) => { try { f(); await e(g()); } catch { } });", 1, 1],
     ["un try senza await in una funzione col cancello", `${GATE_IMPORT}async function f(e: Expected) { try { t(); } catch (x) { log(x); } await e(g()); }`, 1, 0],
+    // Il tipo del cancello fuori da una lista di parametri (CANCELLO-DISEGNO):
+    // un alias o un oggetto di opzioni col tipo scritto altrove portavano le
+    // attese fuori dalla guardia in silenzio.
+    ["un alias del tipo del cancello (sfuggiva)", `${GATE_IMPORT}type Gate = Expected;\nasync function f(g: Gate) { await h(); }`, 0, 1],
+    ["un alias esportato con un'unione (sfuggiva)", `${GATE_IMPORT}export type Gate = Expected | null;`, 0, 1],
+    ["un'interfaccia di opzioni col cancello (sfuggiva)", `${GATE_IMPORT}interface Opzioni { gate: Expected; n: number }\nasync function f(o: Opzioni) { await h(); }`, 0, 1],
+    ["un tipo di opzioni col cancello (sfuggiva)", `${GATE_IMPORT}type Opzioni = { readonly gate?: Expected };\nasync function f({ gate }: Opzioni) { await h(); }`, 0, 1],
+    ["un campo di una classe col cancello (sfuggiva)", `${GATE_IMPORT}class A { #gate: Expected | null = null; }`, 0, 1],
+    ["una variabile col cancello (sfuggiva)", `${GATE_IMPORT}let gate: Expected | undefined;`, 0, 1],
+    ["un generico col cancello (sfuggiva)", `${GATE_IMPORT}const gates = new Map<string, Expected>();`, 0, 1],
+    ["un tipo di ritorno col cancello (sfuggiva)", `${GATE_IMPORT}function gateOf(r: R): Expected { return r.g; }`, 0, 1],
+    ["l'alias del tipo importato con un altro nome (sfuggiva)", `import type { Expected as Gate } from "./ui/race";\ntype Porta = Gate;`, 0, 1],
+    ["un re-export del tipo del cancello (sfuggiva)", 'export type { Expected as Gate } from "./ui/race";', 0, 1],
+    ["un re-export di tutto il modulo (sfuggiva)", 'export * from "./ui/race";', 0, 1],
+    ["un import del modulo intero (sfuggiva)", 'import * as race from "./ui/race";\nasync function f(e: race.Expected) { await h(); }', 0, 1],
+    ["un tipo importato sul posto (sfuggiva)", 'async function f(e: import("./ui/race").Expected) { await h(); }', 0, 1],
+    ["l'import coi nomi non è un alias", 'import { Race, type Expected } from "./ui/race";\nexport type { Race };', 0, 0],
+    ["un re-export di un altro tipo dal modulo", 'export { Race } from "./ui/race";', 0, 0],
+    ["un alias di un Expected di un altro modulo", 'import type { Expected } from "./tools/recognize-corpus";\ntype E = Expected;', 0, 0],
+    ["un tipo di opzioni con un tipo funzione", `${GATE_IMPORT}interface Opzioni { run: (e: Expected) => Promise<void> }`, 0, 0],
+    ["un alias di un tipo funzione", `${GATE_IMPORT}export type Corpo = (expected: Expected) => Promise<void>;`, 0, 0],
   ];
   const failures = [];
   try {
