@@ -1098,8 +1098,10 @@ fn grid_surface_uses_only_named_typed_ports() {
     );
     // A synchronous Tauri command runs on the main thread, the one that
     // presents the frames: the byte ports run in the grid lane instead, in
-    // arrival order (`grid_port`, `domande::CORSIA_GRIGLIA`).
-    for command in &GRID[1..] {
+    // arrival order (`grid_port`, `domande::CORSIA_GRIGLIA`). The list of
+    // surfaces too: it reads the workspace, and on the main thread it would
+    // wait for whoever is writing it.
+    for command in GRID {
         let start = app
             .find(&format!("async fn {command}("))
             .unwrap_or_else(|| panic!("`{command}` must be async, off the main thread"));
@@ -1110,6 +1112,50 @@ fn grid_surface_uses_only_named_typed_ports() {
             "`{command}` must run in the grid lane through `grid_port`"
         );
     }
+}
+
+/// The ports that call a provider, write a file or wait for a workspace
+/// borrow are not synchronous: Tauri runs a synchronous command on the main
+/// thread, the one that presents the frames. Each runs in a lane that keeps
+/// the arrival order the main thread gave (`host_lane`, `domande`): two
+/// published contexts, two view-state writes or two commands sent back to
+/// back must land in that order, and a view action stays in line with the
+/// renders of the views.
+#[test]
+fn ports_that_can_work_run_off_the_main_thread_in_their_lane() {
+    const LANES: &[(&str, &str)] = &[
+        ("set_active_context", "CORSIA_CONTESTO"),
+        ("view_action", "CORSIA_VISTE"),
+        ("invoke_command", "CORSIA_COMANDI"),
+        ("view_state", "CORSIA_STATO"),
+        ("set_view_state", "CORSIA_STATO"),
+    ];
+    let app = include_str!("../src/lib.rs");
+    let body_of = |signature: &str| -> &str {
+        let start = app
+            .find(signature)
+            .unwrap_or_else(|| panic!("`{signature}` not found in lib.rs"));
+        let body = &app[start..];
+        &body[..body.find("\n}\n").expect("function body")]
+    };
+    for (command, lane) in LANES {
+        let command_body = body_of(&format!("async fn {command}("));
+        assert!(
+            command_body.contains(&format!("{command}_in_lane(")),
+            "`{command}` must be async and run through `{command}_in_lane`"
+        );
+        let lane_body = body_of(&format!("async fn {command}_in_lane("));
+        assert!(
+            lane_body.contains("host_lane(") && lane_body.contains(&format!("domande::{lane}")),
+            "`{command}` must run in the lane `{lane}` through `host_lane`"
+        );
+    }
+    // A read with no order to keep goes off the main thread without a lane.
+    let components = body_of("async fn components_map(");
+    assert!(
+        components.contains("spawn_blocking("),
+        "`components_map` must run off the main thread"
+    );
 }
 
 #[test]

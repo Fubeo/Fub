@@ -50,6 +50,24 @@ millisecondi, ma in fila sul thread principale fermavano la finestra per un
 centinaio di millisecondi. I disegni restano in fila fra loro; la shell tiene
 comunque l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
 
+Anche le porte che la shell chiama mentre si lavora e che chiamano un
+provider, scrivono un file o aspettano un prestito del workspace non sono
+comandi sincroni, perché Tauri li eseguirebbe sul thread principale. Ognuna ha
+una corsia fissa, fuori dalle 16, che tiene l'ordine d'arrivo come lo teneva
+il thread principale:
+
+| Corsia | Porte | Perché in fila |
+|---|---|---|
+| `viste` | `render_view`, `view_action` | un disegno chiesto dopo un'azione la vede, e le risposte escono nell'ordine in cui lo stato del provider è cambiato |
+| `contesto` | `set_active_context` | la shell pubblica senza aspettare la risposta di prima: l'ultima pubblicazione resta l'ultima |
+| `comandi` | `invoke_command` | due comandi mandati di fila si applicano in quell'ordine; un comando lungo (una pagina da catturare) non ferma contesto, viste e stato |
+| `stato` | `view_state`, `set_view_state` | la seconda scrittura di una chiave non è coperta dalla prima, e una lettura chiesta dopo una scrittura la vede |
+| `griglia` | `list_grid_surfaces` e le porte sui byte | [le porte della griglia](grid-ipc.md) |
+
+`components_map` è una lettura senza un ordine da tenere: gira fuori dal
+thread principale senza corsia. Il presidio è
+`crates/fub-app/tests/lean_ipc.rs`.
+
 ## La griglia
 
 I fogli di calcolo usano la famiglia Grid, con porte strettamente tipate:

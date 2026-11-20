@@ -1,5 +1,6 @@
-//! Le domande al canale dati (`query_index`) e i disegni delle view
-//! (`render_view`) fuori dal thread principale, **in fila**.
+//! Le domande al canale dati (`query_index`), i disegni delle view
+//! (`render_view`) e le altre porte che possono lavorare a lungo fuori dal
+//! thread principale, **in fila**.
 //!
 //! Un comando sincrono di Tauri gira sul thread principale, lo stesso che
 //! presenta i fotogrammi della finestra: una domanda lunga — il correttore che
@@ -40,6 +41,29 @@
 //! finestra chiesta prima di una modifica si legge prima della modifica, e il
 //! catalogo dei comandi chiesto dopo esce dopo. In parallelo non guadagnerebbe
 //! niente: il provider di una superficie risponde a una chiamata per volta.
+//! Anche l'elenco delle superfici (`list_grid_surfaces`) passa di lì: legge il
+//! workspace, e sul thread principale aspetterebbe chi lo sta scrivendo.
+//!
+//! Le altre porte che leggono o scrivono il workspace, chiamano un provider o
+//! toccano il disco hanno corsie loro, che ci sono sempre e tengono l'ordine
+//! d'arrivo che il thread principale dava:
+//!
+//! - `set_active_context` va nella corsia del contesto (`CORSIA_CONTESTO`).
+//!   La shell pubblica il contesto senza aspettare la risposta precedente (il
+//!   cursore, il cambio di nota): due pubblicazioni in parallelo potrebbero
+//!   arrivare invertite, e il kernel resterebbe sul contesto vecchio. In fila
+//!   vince l'ultima. Non sta con le viste perché non deve aspettare una
+//!   ventina di disegni per dire quali view sono invecchiate.
+//! - `view_action` va nella corsia delle viste, con i disegni: un'azione e il
+//!   disegno della stessa view chiesto dopo restano in quell'ordine, e le
+//!   risposte escono nell'ordine in cui lo stato del provider è cambiato.
+//! - `invoke_command` va nella corsia dei comandi (`CORSIA_COMANDI`): un
+//!   comando può durare secondi (una pagina web da catturare, un'esportazione
+//!   di cartella), e due comandi mandati di fila si applicano in quell'ordine.
+//! - `view_state` e `set_view_state` vanno nella corsia dello stato di vista
+//!   (`CORSIA_STATO`): ogni scrittura rilegge e riscrive un file. In fila la
+//!   seconda scrittura della stessa chiave non è mai coperta dalla prima, e
+//!   una lettura chiesta dopo una scrittura la vede.
 
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -60,8 +84,21 @@ pub(crate) const CORSIA_VISTE: &str = "viste";
 /// La corsia delle porte del foglio. Come quella delle viste, non è un
 /// prefisso che una domanda possa scegliere.
 pub(crate) const CORSIA_GRIGLIA: &str = "griglia";
+/// La corsia del contesto del pannello con il focus (`set_active_context`).
+pub(crate) const CORSIA_CONTESTO: &str = "contesto";
+/// La corsia dei comandi del registro (`invoke_command`).
+pub(crate) const CORSIA_COMANDI: &str = "comandi";
+/// La corsia dello stato di vista della shell (`view_state`,
+/// `set_view_state`).
+pub(crate) const CORSIA_STATO: &str = "stato";
 /// Le corsie che ci sono sempre e stanno fuori dal tetto delle domande.
-const CORSIE_FISSE: [&str; 2] = [CORSIA_VISTE, CORSIA_GRIGLIA];
+const CORSIE_FISSE: [&str; 5] = [
+    CORSIA_VISTE,
+    CORSIA_GRIGLIA,
+    CORSIA_CONTESTO,
+    CORSIA_COMANDI,
+    CORSIA_STATO,
+];
 
 type Lavoro = Box<dyn FnOnce() + Send + 'static>;
 
@@ -380,6 +417,98 @@ mod tests {
                 "l'indice e le viste hanno aspettato il foglio: {dopo:?}"
             );
         });
+    }
+
+    /// Come sul thread principale: un contesto pubblicato prima, anche se ci
+    /// mette di più, non copre quello pubblicato dopo.
+    #[test]
+    fn un_contesto_lento_pubblicato_prima_non_copre_quello_dopo() {
+        let corsie = Corsie::default();
+        let contesto = Arc::new(Mutex::new("nessuno"));
+        runtime().block_on(async {
+            let primo = {
+                let contesto = Arc::clone(&contesto);
+                corsie.chiedi("active context", CORSIA_CONTESTO.into(), move || {
+                    std::thread::sleep(Duration::from_millis(150));
+                    *contesto.lock().unwrap() = "Uno";
+                    Ok(())
+                })
+            };
+            let secondo = {
+                let contesto = Arc::clone(&contesto);
+                corsie.chiedi("active context", CORSIA_CONTESTO.into(), move || {
+                    *contesto.lock().unwrap() = "Due";
+                    Ok(())
+                })
+            };
+            let (a, b) = tokio::join!(primo, secondo);
+            a.unwrap();
+            b.unwrap();
+        });
+        assert_eq!(*contesto.lock().unwrap(), "Due");
+    }
+
+    /// Un comando lungo (una pagina da catturare) o un disegno lento non
+    /// fanno aspettare il contesto e lo stato di vista, né fra loro.
+    #[test]
+    fn comandi_viste_contesto_e_stato_non_si_aspettano() {
+        let corsie = Corsie::default();
+        runtime().block_on(async {
+            let partenza = Instant::now();
+            let comando = corsie.chiedi("command", CORSIA_COMANDI.into(), || {
+                std::thread::sleep(Duration::from_millis(400));
+                Ok(())
+            });
+            let disegno = corsie.chiedi("view render", CORSIA_VISTE.into(), || {
+                std::thread::sleep(Duration::from_millis(400));
+                Ok(())
+            });
+            let svelte = async {
+                let contesto = corsie
+                    .chiedi("active context", CORSIA_CONTESTO.into(), || Ok(()))
+                    .await;
+                let stato = corsie
+                    .chiedi("view state", CORSIA_STATO.into(), || Ok(()))
+                    .await;
+                (contesto, stato, partenza.elapsed())
+            };
+            let (_, _, (contesto, stato, dopo)) = tokio::join!(comando, disegno, svelte);
+            contesto.unwrap();
+            stato.unwrap();
+            assert!(
+                dopo < Duration::from_millis(300),
+                "contesto e stato hanno aspettato un comando o un disegno: {dopo:?}"
+            );
+        });
+    }
+
+    /// Due comandi mandati di fila si applicano in quell'ordine anche se il
+    /// primo è lento.
+    #[test]
+    fn due_comandi_di_fila_si_applicano_in_ordine() {
+        let corsie = Corsie::default();
+        let ordine = Arc::new(Mutex::new(Vec::new()));
+        runtime().block_on(async {
+            let primo = {
+                let ordine = Arc::clone(&ordine);
+                corsie.chiedi("command", CORSIA_COMANDI.into(), move || {
+                    std::thread::sleep(Duration::from_millis(150));
+                    ordine.lock().unwrap().push("rinomina");
+                    Ok(())
+                })
+            };
+            let secondo = {
+                let ordine = Arc::clone(&ordine);
+                corsie.chiedi("command", CORSIA_COMANDI.into(), move || {
+                    ordine.lock().unwrap().push("sposta");
+                    Ok(())
+                })
+            };
+            let (a, b) = tokio::join!(primo, secondo);
+            a.unwrap();
+            b.unwrap();
+        });
+        assert_eq!(*ordine.lock().unwrap(), ["rinomina", "sposta"]);
     }
 
     #[test]
