@@ -909,6 +909,7 @@ describe("le schede dell'ispettore (C1)", () => {
       const text = (id: string): string | undefined => status.items().find((item) => item.id === id)?.text;
       expect(ids()).toEqual(["zoom", "objects"]);
       expect(text("objects")).toBe("1 oggetto");
+      expect(status.items()[0]!.inPlace, "lo zoom torna al 100% sul posto: il fuoco resta al foglio").toBe(true);
       key(parent, { key: "a", ctrlKey: true });
       expect(told).toBeGreaterThan(0);
       expect(ids()).toEqual(["zoom", "size", "objects"]);

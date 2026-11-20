@@ -13,6 +13,9 @@ export interface DrawStatusItem {
   readonly text: string;
   readonly hint?: string;
   readonly open?: () => void;
+  /// Il clic agisce sul posto e non apre niente: il fuoco resta al foglio
+  /// (`SurfaceStatusItem.inPlace`).
+  readonly inPlace?: boolean;
 }
 
 export interface DrawStatus {
@@ -44,12 +47,12 @@ export function installStatus(ctx: EditorContext): void {
     if (ctx.disposed) return [];
     const list: DrawStatusItem[] = [];
     const zoom = ctx.zoomText();
-    list.push({ id: "zoom", text: zoom, hint: t("draw.zoom_reset", { zoom }), open: () => ctx.zoomBy(1 / ctx.camera.scale) });
+    list.push({ id: "zoom", text: zoom, hint: t("draw.zoom_reset", { zoom }), open: () => ctx.zoomBy(1 / ctx.camera.scale), inPlace: true });
     if (ctx.camera.angle !== 0) {
       const angle = ctx.turnText(ctx.camera.angle);
-      list.push({ id: "turn", text: t("draw.status.turn", { angle }), hint: t("draw.turn.button", { angle }), open: () => ctx.turnView(0) });
+      list.push({ id: "turn", text: t("draw.status.turn", { angle }), hint: t("draw.turn.button", { angle }), open: () => ctx.turnView(0), inPlace: true });
     }
-    if (ctx.outline) list.push({ id: "outline", text: t("draw.outlines"), hint: t("draw.status.outline.hint"), open: () => ctx.setOutline(false) });
+    if (ctx.outline) list.push({ id: "outline", text: t("draw.outlines"), hint: t("draw.status.outline.hint"), open: () => ctx.setOutline(false), inPlace: true });
     if (ctx.statusPointer !== null) {
       list.push({ id: "pointer", text: t("draw.status.pointer", { x: ctx.coordText(ctx.statusPointer[0]), y: ctx.coordText(ctx.statusPointer[1]) }), hint: t("draw.status.pointer.hint") });
     }

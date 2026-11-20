@@ -120,6 +120,7 @@ vi.mock("../../../ui/tooltip", () => ({
 
 import { openHintSource, resetHintSources } from "../../../editors/core/hints";
 import { HINTS_PAUSE_MS } from "./hints-row";
+import { realClick } from "../../../kit/testing";
 import { mountStatusBand } from "./status-band";
 
 let life: Lifetime;
@@ -1110,6 +1111,80 @@ describe("lo zoom", () => {
     for (const listener of world.settingListeners) listener({ key: "appearance.zoom" });
     await settle();
     expect(el("status-zoom").textContent).toBe("150%");
+  });
+});
+
+describe("il fuoco di chi scrive (IMP-6401)", () => {
+  /// Il documento che ha il fuoco: un campo basta, conta solo dove va il fuoco.
+  function writer(): HTMLTextAreaElement {
+    const note = document.createElement("textarea");
+    document.body.append(note);
+    note.focus();
+    return note;
+  }
+
+  it("lo zoom al 100% e la carta adattata sono comandi sul posto: il clic lascia il fuoco al documento", async () => {
+    world.settings = () => Promise.resolve([{ spec: { key: "appearance.zoom" }, value: 1.25 }]);
+    world.tab = { k: "doc" };
+    world.pane = {
+      surface: {
+        modes: [{ id: "document" }, { id: "writing" }],
+        paperFit: { offers: () => ["width", "page"], current: () => null, set: () => {}, subscribe: () => () => {} },
+      },
+      mode: { label: () => "Pagina" },
+    };
+    mountStatusBand(life);
+    await settle();
+    const note = writer();
+    realClick(el("status-zoom"));
+    expect(world.zoomed).toEqual([0]);
+    expect(document.activeElement).toBe(note);
+    realClick(el("status-fit-width"));
+    expect(document.activeElement).toBe(note);
+    realClick(el("status-fit-page"));
+    expect(document.activeElement).toBe(note);
+    // Con la tastiera il bottone prende il fuoco e lo tiene.
+    el("status-zoom").focus();
+    el("status-zoom").click();
+    expect(document.activeElement).toBe(el("status-zoom"));
+  });
+
+  it("una voce della superficie lascia il fuoco solo se agisce sul posto; quella che apre lo prende", async () => {
+    const done: string[] = [];
+    world.tab = { k: "doc" };
+    world.pane = {
+      surface: {
+        modes: [{ id: "a" }, { id: "b" }],
+        status: {
+          counts: false,
+          items: () => [
+            { id: "zoom", text: "100%", open: () => done.push("zoom"), inPlace: true },
+            { id: "words", text: "3 parole", open: () => done.push("words") },
+          ],
+          subscribe: () => () => {},
+        },
+      },
+      mode: { label: () => "Pagina" },
+    };
+    mountStatusBand(life);
+    await settle();
+    const button = (id: string) => document.querySelector<HTMLElement>(`[data-surface-item="${id}"]`)!;
+    const note = writer();
+    realClick(button("zoom"));
+    expect(document.activeElement).toBe(note);
+    realClick(button("words"));
+    expect(document.activeElement).toBe(button("words"));
+    expect(done).toEqual(["zoom", "words"]);
+  });
+
+  it("la modalità apre un menu: il clic dà il fuoco al bottone, e il menu lo prende da lì", async () => {
+    world.tab = { k: "doc" };
+    world.pane = surface(2);
+    mountStatusBand(life);
+    await settle();
+    writer();
+    realClick(el("status-mode"));
+    expect(document.activeElement).toBe(el("status-mode"));
   });
 });
 

@@ -195,6 +195,20 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   Invio non finisce nel documento. Se il fuoco sta già dentro il documento
   aperto (la superficie si monta prima che l'apertura finisca, e il Tab della
   lavagna vuota porta al suo primo pulsante), resta dov'è.
+- **I comandi sul posto non prendono il fuoco.** Un pulsante della cornice
+  che agisce sull'app senza aprire niente lascia il fuoco dov'era al clic
+  col mouse: chi scrive cambia luce e continua a scrivere nella nota. Sono la
+  luce nel piede del binario, lo zoom al 100% e «Adatta larghezza» / «Pagina
+  intera» nella banda di stato, e le voci della superficie che si dichiarano
+  `inPlace` (zoom, rotazione e contorni del disegno, le copie della lavagna). Lo
+  fa `keepFocusOnPress` del kit (`kit/keep-focus.ts`), che ferma l'azione di
+  serie del `mousedown`. Con la tastiera il fuoco arriva al pulsante col Tab
+  e ci resta. I pulsanti che aprono qualcosa (le icone dei pannelli, l'aiuto,
+  le impostazioni, «Configura», la modalità, «Si scrive», le voci che aprono
+  un menu o un pannello) prendono il fuoco e lo passano a ciò che aprono.
+  Guardie: `editors/text/frame-command-focus.dom.test.ts` (con l'editor
+  vero), `shells/scrittoio/frame/status-band.test.ts`,
+  `kit/keep-focus.test.ts`.
 - **Scorciatoie dietro una finestra modale.** Con una finestra modale aperta
   (una superficie che intrappola il fuoco e si dichiara `aria-modal`: le
   Impostazioni, un dialogo, la palette, un menu con la ricerca) le

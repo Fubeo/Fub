@@ -74,7 +74,9 @@ describe("le voci della banda", () => {
     const items = canvasStatusItems(fake({ chosenCount: () => 1, twins: () => ({ count: 3, frame }) }));
     expect(items.map((item) => item.id).slice(0, 3)).toEqual(["zoom", "chosen", "twins"]);
     const twins = items.find((item) => item.id === "twins")!;
-    expect(twins).toMatchObject({ text: t("canvas.status.twins", { n: 3 }), hint: t("canvas.status.twins.frame", { n: 3 }) });
+    expect(twins).toMatchObject({ text: t("canvas.status.twins", { n: 3 }), hint: t("canvas.status.twins.frame", { n: 3 }), inPlace: true });
+    // Lo zoom apre un menu e la cartella le Impostazioni: prendono il fuoco.
+    expect(items[0]!.inPlace).toBeUndefined();
     twins.open!();
     expect(frame).toHaveBeenCalledTimes(1);
   });
