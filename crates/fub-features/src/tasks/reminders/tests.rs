@@ -1,6 +1,7 @@
 use super::*;
 use fub_abi::format::ParseContext;
 use fub_abi::locale::days_from_civil;
+use fub_abi::traits::{DataRead, DataWrite};
 use fub_abi::FormatProvider;
 use fub_sdk::testing::MemoryHost;
 
@@ -768,5 +769,285 @@ fn misura_promemoria_su_un_vault_grande() {
     println!(
         "costruzione {built:?} · 10.000 domande di un minuto {minutes:?} ({rung} suonati) · \
          nota con 4.000 titoli {headings:?}"
+    );
+}
+
+// ---- Il file dei promemoria (#521) ----
+
+/// La voce del vault che il kernel mostra a `up_to_date`: una nota con la
+/// revisione che dichiara.
+fn entry(doc: &str, revision: Option<&str>) -> VaultEntry {
+    VaultEntry {
+        id: DocId::new(doc),
+        kind: EntryKind::Document,
+        size: 10,
+        mtime: 1,
+        fingerprint: revision.map(Revision::new),
+    }
+}
+
+fn ids(list: &[DocId]) -> Vec<&str> {
+    list.iter().map(DocId::as_str).collect()
+}
+
+fn shown(notes: &[(&str, &str, &str)]) -> Vec<VaultEntry> {
+    notes.iter().map(|(d, r, _)| entry(d, Some(r))).collect()
+}
+
+fn alive(entries: &[VaultEntry]) -> Vec<DocId> {
+    entries.iter().map(|e| e.id.clone()).collect()
+}
+
+/// Il giro freddo del kernel: chiede `up_to_date`, consegna le note che
+/// nessuno ha, riallinea, scrive con `flush`. Le note sono
+/// `(id, revisione, sorgente)`.
+fn cold(host: &mut MemoryHost, notes: &[(&str, &str, &str)]) -> ReminderIndex {
+    let mut index = ReminderIndex::new();
+    index.activate(host).expect("activates");
+    let entries = shown(notes);
+    assert!(
+        index.up_to_date(&entries).is_empty(),
+        "the first time it has nothing"
+    );
+    let models: Vec<DocumentModel> = notes.iter().map(|(d, _, s)| model(d, s)).collect();
+    index.on_documents_indexed(&models);
+    index.reconcile(&alive(&entries));
+    index.flush(host).expect("flushes");
+    index
+}
+
+const NOTES: &[(&str, &str, &str)] = &[
+    (
+        "a.md",
+        "sha256:a1",
+        "# Casa\n\n- [ ] Uno ⏰ 2026-11-13 09:00\n",
+    ),
+    ("b.md", "sha256:b1", "- [ ] Due ⏰ 2026-11-13 10:00\n"),
+    // La maggioranza: una nota senza promemoria, che va ricordata lo stesso.
+    ("c.md", "sha256:c1", "Solo testo.\n"),
+];
+
+#[test]
+fn a_reopened_index_has_what_it_saw_without_rereading() {
+    let mut host = MemoryHost::new();
+    let mut first = cold(&mut host, NOTES);
+    let before = first.between(None, None, REMINDER_LIMIT);
+    first.close(&mut host).expect("closes");
+
+    let mut again = ReminderIndex::new();
+    again.activate(&mut host).expect("activates");
+    let mut current = again.up_to_date(&shown(NOTES));
+    current.sort();
+    assert_eq!(ids(&current), vec!["a.md", "b.md", "c.md"]);
+    // Nessuna consegna: la risposta è quella di prima, sezione compresa.
+    assert_eq!(again.between(None, None, REMINDER_LIMIT), before);
+    assert_eq!(before.reminders.len(), 2);
+    assert_eq!(before.reminders[0].heading.as_deref(), Some("Casa"));
+}
+
+#[test]
+fn a_note_changed_while_closed_is_reread_and_its_new_revision_kept() {
+    let mut host = MemoryHost::new();
+    cold(&mut host, NOTES).close(&mut host).expect("closes");
+
+    let mut again = ReminderIndex::new();
+    again.activate(&mut host).expect("activates");
+    let entries = vec![
+        entry("a.md", Some("sha256:a2")),
+        entry("b.md", Some("sha256:b1")),
+        entry("c.md", Some("sha256:c1")),
+    ];
+    let mut current = again.up_to_date(&entries);
+    current.sort();
+    assert_eq!(ids(&current), vec!["b.md", "c.md"]);
+    again.on_documents_indexed(&[model("a.md", "- [ ] Nuovo ⏰ 2026-11-14 08:00\n")]);
+    again.reconcile(&alive(&entries));
+    again.flush(&mut host).expect("flushes");
+    assert_eq!(
+        whens(&again.between(None, None, REMINDER_LIMIT)),
+        vec![
+            ("b.md", "2026-11-13 10:00", "Due"),
+            ("a.md", "2026-11-14 08:00", "Nuovo"),
+        ]
+    );
+
+    // E la terza apertura ha la revisione nuova.
+    let mut third = ReminderIndex::new();
+    third.activate(&mut host).expect("activates");
+    assert_eq!(third.up_to_date(&entries).len(), 3);
+    assert_eq!(
+        third.between(None, None, REMINDER_LIMIT),
+        again.between(None, None, REMINDER_LIMIT)
+    );
+}
+
+#[test]
+fn a_delivery_nobody_announced_is_not_written_as_current() {
+    let mut host = MemoryHost::new();
+    let mut index = cold(&mut host, NOTES);
+    // Un salvataggio a sessione aperta: nessuna revisione dichiarata.
+    index.on_documents_indexed(&[model("b.md", "- [ ] Due bis ⏰ 2026-11-15 10:00\n")]);
+    index.close(&mut host).expect("closes");
+
+    let mut again = ReminderIndex::new();
+    again.activate(&mut host).expect("activates");
+    let mut current = again.up_to_date(&shown(NOTES));
+    current.sort();
+    // b.md non si salta con la revisione vecchia: si rilegge.
+    assert_eq!(ids(&current), vec!["a.md", "c.md"]);
+    assert!(again
+        .between(None, None, REMINDER_LIMIT)
+        .reminders
+        .iter()
+        .all(|r| r.doc.as_str() != "b.md"));
+}
+
+#[test]
+fn a_note_said_current_but_delivered_anyway_loses_its_revision() {
+    // Un altro indice non l'aveva: il kernel la consegna lo stesso. Il testo
+    // è quello della revisione detta, ma l'indice non può saperlo: la
+    // dimentica e la rilegge alla prossima apertura.
+    let mut host = MemoryHost::new();
+    cold(&mut host, NOTES).close(&mut host).expect("closes");
+    let mut again = ReminderIndex::new();
+    again.activate(&mut host).expect("activates");
+    assert_eq!(again.up_to_date(&shown(NOTES)).len(), 3);
+    again.on_documents_indexed(&[model("a.md", NOTES[0].2)]);
+    again.close(&mut host).expect("closes");
+
+    let mut third = ReminderIndex::new();
+    third.activate(&mut host).expect("activates");
+    let mut current = third.up_to_date(&shown(NOTES));
+    current.sort();
+    assert_eq!(ids(&current), vec!["b.md", "c.md"]);
+}
+
+#[test]
+fn without_a_declared_revision_or_for_an_asset_it_does_not_answer() {
+    let mut host = MemoryHost::new();
+    cold(&mut host, NOTES).close(&mut host).expect("closes");
+    let mut again = ReminderIndex::new();
+    again.activate(&mut host).expect("activates");
+    let mut folder = entry("a.md", Some("sha256:a1"));
+    folder.kind = EntryKind::Asset;
+    assert!(again.up_to_date(&[entry("b.md", None), folder]).is_empty());
+    fub_sdk::testing::conformance::up_to_date_only_reported_what_it_saw(&again);
+}
+
+#[test]
+fn a_note_gone_while_closed_leaves_the_file_with_the_reconcile() {
+    let mut host = MemoryHost::new();
+    cold(&mut host, NOTES).close(&mut host).expect("closes");
+    let mut again = ReminderIndex::new();
+    again.activate(&mut host).expect("activates");
+    again.up_to_date(&[entry("b.md", Some("sha256:b1"))]);
+    again.reconcile(&[DocId::new("b.md")]);
+    again.close(&mut host).expect("closes");
+
+    let mut third = ReminderIndex::new();
+    third.activate(&mut host).expect("activates");
+    assert!(third
+        .up_to_date(&[entry("a.md", Some("sha256:a1"))])
+        .is_empty());
+    assert_eq!(
+        whens(&third.between(None, None, REMINDER_LIMIT)),
+        vec![("b.md", "2026-11-13 10:00", "Due")]
+    );
+}
+
+#[test]
+fn an_unreadable_or_foreign_file_is_thrown_away_and_rebuilt() {
+    let good = {
+        let mut host = MemoryHost::new();
+        cold(&mut host, NOTES).close(&mut host).expect("closes");
+        host.data_read(stored::FILE).unwrap().expect("written")
+    };
+    let text = String::from_utf8(good.clone()).unwrap();
+    let old_schema = text.replacen(
+        &format!("\"schema\":{}", stored::SCHEMA),
+        &format!("\"schema\":{}", stored::SCHEMA + 1),
+        1,
+    );
+    let other_version = text.replacen(
+        &format!("\"producer\":\"{}\"", stored::PRODUCER),
+        "\"producer\":\"0.0.0-altro\"",
+        1,
+    );
+    assert_ne!(old_schema, text);
+    assert_ne!(other_version, text);
+    let bad: Vec<(&str, Vec<u8>)> = vec![
+        ("truncated", good[..good.len() / 2].to_vec()),
+        ("garbage", b"\xff\x00 non json".to_vec()),
+        ("old schema", old_schema.into_bytes()),
+        ("other version", other_version.into_bytes()),
+        (
+            "empty revision",
+            text.replacen("sha256:a1", "", 1).into_bytes(),
+        ),
+    ];
+    for (what, raw) in bad {
+        let mut host = MemoryHost::new();
+        host.data_write(stored::FILE, &raw).unwrap();
+        let mut index = ReminderIndex::new();
+        index
+            .activate(&mut host)
+            .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+        assert!(index.is_empty(), "{what}: starts empty");
+        let entries = shown(NOTES);
+        assert!(
+            index.up_to_date(&entries).is_empty(),
+            "{what}: asks for everything"
+        );
+        // Ricostruito dalle note, e il file torna buono.
+        let models: Vec<DocumentModel> = NOTES.iter().map(|(d, _, s)| model(d, s)).collect();
+        index.on_documents_indexed(&models);
+        index.flush(&mut host).unwrap();
+        let mut again = ReminderIndex::new();
+        again.activate(&mut host).unwrap();
+        assert_eq!(again.up_to_date(&entries).len(), 3, "{what}: rewritten");
+        assert_eq!(again.len(), 2, "{what}");
+    }
+}
+
+#[test]
+fn a_quiet_session_does_not_rewrite_the_file() {
+    let mut host = MemoryHost::new();
+    cold(&mut host, NOTES).close(&mut host).expect("closes");
+    assert_eq!(
+        host.writes_on(stored::FILE).0,
+        1,
+        "the cold opening writes once, flush and close together"
+    );
+
+    let mut again = ReminderIndex::new();
+    again.activate(&mut host).expect("activates");
+    let entries = shown(NOTES);
+    assert_eq!(again.up_to_date(&entries).len(), 3);
+    again.reconcile(&alive(&entries));
+    again.flush(&mut host).expect("flushes");
+    again.close(&mut host).expect("closes");
+    assert_eq!(
+        host.writes_on(stored::FILE).0,
+        1,
+        "nothing changed, nothing written"
+    );
+}
+
+#[test]
+fn a_failed_write_stays_to_write() {
+    let mut host = MemoryHost::new();
+    let mut index = ReminderIndex::new();
+    index.activate(&mut host).unwrap();
+    index.up_to_date(&[entry("a.md", Some("sha256:a1"))]);
+    index.on_documents_indexed(&[model("a.md", NOTES[0].2)]);
+    host.denies_write(stored::FILE);
+    assert!(index.flush(&mut host).is_err());
+    let mut other = MemoryHost::new();
+    index.flush(&mut other).expect("written on the next flush");
+    let mut again = ReminderIndex::new();
+    again.activate(&mut other).unwrap();
+    assert_eq!(
+        again.up_to_date(&[entry("a.md", Some("sha256:a1"))]).len(),
+        1
     );
 }
