@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+// Il file e non il pacchetto: `exports` di `@codemirror/view` non apre
+// `dist/`, e i test di `src/` non hanno i tipi di Node per leggerlo da disco.
+import esm from "../../../node_modules/@codemirror/view/dist/index.js?raw";
+import cjs from "../../../node_modules/@codemirror/view/dist/index.cjs?raw";
 
 // Ciò che l'editor di testo chiede a CodeMirror e che CodeMirror deve dare
 // sempre uguale, fissato sulla versione installata.
@@ -23,13 +24,9 @@ import { describe, expect, it } from "vitest";
 // Un banco col layout serve a vederlo; qui si tiene la condizione che lo
 // toglie, senza un browser: nessun `Math.random` nella vista di CodeMirror che
 // l'app impacchetta.
-const require = createRequire(import.meta.url);
-const dist = dirname(require.resolve("@codemirror/view"));
-
 describe("CodeMirror, la vista", () => {
   it("cerca la posizione sotto un punto senza caso (#399)", () => {
-    for (const file of ["index.js", "index.cjs"]) {
-      const source = readFileSync(join(dist, file), "utf8");
+    for (const [file, source] of [["index.js", esm], ["index.cjs", cjs]] as const) {
       expect(source, file).toContain("class InlineCoordsScan");
       expect(source.includes("Math.random"), `Math.random in ${file}`).toBe(false);
     }

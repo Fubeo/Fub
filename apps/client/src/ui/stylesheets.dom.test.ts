@@ -54,9 +54,9 @@ describe("cssomStyleChildren", () => {
     expect(svg.style.fill).toBe("red");
     // Un nipote, un elemento fuori dal contenitore e il prototipo restano com'erano.
     const inner = svg.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "g"));
-    expect(Object.hasOwn(inner, "setAttribute")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(inner, "setAttribute")).toBe(false);
     const outside = document.body.appendChild(document.createElement("div"));
-    expect(Object.hasOwn(outside, "setAttribute")).toBe(false);
-    expect(Object.hasOwn(document.body, "appendChild")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(outside, "setAttribute")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(document.body, "appendChild")).toBe(false);
   });
 });
