@@ -3,7 +3,7 @@ import { nearFreeSpot } from "./free-spot";
 import type { SyntaxForm } from "../../host/contract";
 import { errorText } from "../../host/errors";
 import { t, onLanguage, plural, type Key } from "../../i18n/strings";
-import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
+import { MENU_RULE, menuBelow, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import { idleSchedule } from "../../ink/dom/idle";
@@ -9611,7 +9611,7 @@ export class CanvasEngine {
       const nodes = this.#selectedNodes();
       const one = nodes.length === 1 ? nodes[0]! : null;
       const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
-      const at = box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined;
+      const at = box ? menuBelow(box) : undefined;
       // Copia, Taglia e Incolla portano le schede, i fili fra loro e l'inchiostro (T68).
       const clipboard: SurfaceMenuClipboard = {
         offers: { cut: writable, copy: true, paste: writable },
@@ -11814,7 +11814,7 @@ export class CanvasEngine {
   }
 
   #keydown(event: KeyboardEvent): void {
-    if (!this.#doc || event.defaultPrevented || this.#shellKeys.has(event)) return;
+    if (!this.#doc || event.defaultPrevented || composingKey(event) || this.#shellKeys.has(event)) return;
     // Col ritaglio aperto Invio lo scrive ed Esc lo chiude, da ogni punto della lavagna (T78).
     if (this.#crop?.editor?.key(event)) {
       event.preventDefault();

@@ -16,6 +16,7 @@ import { DURATION, enter, flip, motionLevel, stagger } from "../moto";
 import { createGroupLabel } from "../kit/group-label";
 import { createRow, markGlideHost, markLit, markPressed } from "../kit/row";
 import { createTile } from "../kit/tile";
+import { composingKey } from "../kit/ime";
 
 export interface MenuItem {
   label: string;
@@ -68,11 +69,22 @@ export interface MenuSample {
   readonly css: Readonly<Record<string, string>>;
 }
 
+/// Un riquadro della finestra, in pixel.
+export interface MenuBox {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
 /// Un punto della finestra da cui aprire il menu, quando non c'è un gesto del
-/// mouse: il tasto Menu, Maiusc+F10, un comando.
+/// mouse: il tasto Menu, Maiusc+F10, un comando. `avoid` è la cosa di cui il
+/// menu parla (la scheda scelta, la riga del cursore, la cella): il menu non
+/// la copre finché ha posto sotto, sopra o di lato a lei.
 export interface MenuPoint {
   readonly x: number;
   readonly y: number;
+  readonly avoid?: MenuBox;
 }
 
 export interface ContextMenuOptions {
@@ -399,9 +411,13 @@ export function aimsAt(from: Point, to: Point, target: DOMRectReadOnly): boolean
 }
 
 /// Il punto da cui aprire un menu che non nasce da un click: sotto la
-/// selezione o il cursore, allineato al suo inizio. Mai in 0,0.
-export function menuPointFor(box: { readonly left: number; readonly bottom: number }): MenuPoint {
-  return { x: Math.round(box.left), y: Math.round(box.bottom) + ANCHOR_GAP };
+/// selezione o il cursore, allineato al suo inizio. Mai in 0,0. Col riquadro
+/// intero il menu sa anche che cosa non coprire (`MenuPoint.avoid`).
+export function menuPointFor(box: { readonly left: number; readonly bottom: number } | MenuBox): MenuPoint {
+  const point = { x: Math.round(box.left), y: Math.round(box.bottom) + ANCHOR_GAP };
+  return "top" in box && "right" in box
+    ? { ...point, avoid: { left: box.left, top: box.top, right: box.right, bottom: box.bottom } }
+    : point;
 }
 
 /// Apre il menu `items` nel punto del gesto `at`, o sotto il pulsante `at`
@@ -481,7 +497,7 @@ export function showContextMenu(
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
   menuHost(at).appendChild(menu);
-  if (anchor === null) placeInViewport(menu, x, y);
+  if (anchor === null) placeInViewport(menu, x, y, at instanceof MouseEvent ? undefined : (at as MenuPoint).avoid);
   else placeBeside(menu, anchor, chrome.full);
   // WebKitGTK può terminare il processo web mentre fotografa in una View
   // Transition un menu fisso appena inserito. Conserviamo l'animazione CSS
@@ -1239,6 +1255,9 @@ function renderMenu(
     // vanno alla voce dopo o prima di quella accesa (dalla prima, ↑ fa il giro
     // in fondo), Invio sceglie quella accesa.
     if (field !== null && e.target === field) {
+      // A metà di una composizione Invio e le frecce sono del metodo
+      // d'immissione: scelgono il candidato, non la voce.
+      if (composingKey(e)) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         if (buttons.length === 0) return;
@@ -1329,7 +1348,7 @@ function renderMenu(
       window,
       "keydown",
       (e) => {
-        if (e.key !== "Escape" || query === "" || !(e.target instanceof Node) || !menu.contains(e.target)) return;
+        if (e.key !== "Escape" || composingKey(e) || query === "" || !(e.target instanceof Node) || !menu.contains(e.target)) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         search("");
@@ -1612,8 +1631,11 @@ function growFrom(menu: HTMLElement, left: number, top: number, x: number, y: nu
 }
 
 /// Un menu aperto vicino al bordo resta dentro la finestra: si ribalta a
-/// sinistra o in alto invece di uscire, e un elenco lungo scorre.
-function placeInViewport(menu: HTMLElement, x: number, y: number): void {
+/// sinistra o in alto invece di uscire, e un elenco lungo scorre. Con `avoid`
+/// (la cosa di cui parla, dalla tastiera) non la copre: se spinto dal bordo ci
+/// finirebbe sopra, va sopra di lei o di lato; dove non ha posto da nessuna
+/// parte resta dentro la finestra anche coprendola.
+function placeInViewport(menu: HTMLElement, x: number, y: number, avoid?: MenuBox): void {
   const margin = 8;
   const box = menu.getBoundingClientRect();
   const width = box.width;
@@ -1622,12 +1644,46 @@ function placeInViewport(menu: HTMLElement, x: number, y: number): void {
   let top = y;
   if (left + width > window.innerWidth - margin) left = Math.max(margin, x - width);
   if (top + height > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - margin - height);
+  left = Math.max(margin, left);
+  top = Math.max(margin, top);
+  let origin = { x, y };
+  if (avoid && overlaps({ left, top, right: left + width, bottom: top + height }, avoid)) {
+    const beside = besideBox(width, height, avoid, margin);
+    if (beside) ({ left, top, origin } = beside);
+  }
   // Al pixel intero: un menu posato su una frazione di pixel, dopo l'entrata a
   // scalare, il motore lo dipingerebbe un pixel più in là.
-  const at = { left: Math.round(Math.max(margin, left)), top: Math.round(Math.max(margin, top)) };
+  const at = { left: Math.round(left), top: Math.round(top) };
   menu.style.left = `${at.left}px`;
   menu.style.top = `${at.top}px`;
-  growFrom(menu, at.left, at.top, x, y);
+  growFrom(menu, at.left, at.top, origin.x, origin.y);
+}
+
+function overlaps(a: MenuBox, b: MenuBox): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+/// Il primo posto, fra sotto, sopra, a destra e a sinistra di `avoid`, dove
+/// un menu `width`×`height` sta intero nella finestra senza coprirla; `null`
+/// se non ce n'è. `origin` è il punto di `avoid` da cui il menu cresce.
+function besideBox(
+  width: number,
+  height: number,
+  avoid: MenuBox,
+  margin: number,
+): { left: number; top: number; origin: { x: number; y: number } } | null {
+  const maxLeft = window.innerWidth - margin - width;
+  const maxTop = window.innerHeight - margin - height;
+  if (maxLeft < margin || maxTop < margin) return null;
+  const alongX = Math.min(Math.max(margin, avoid.left), maxLeft);
+  const alongY = Math.min(Math.max(margin, avoid.top), maxTop);
+  const places = [
+    { left: alongX, top: avoid.bottom + ANCHOR_GAP, origin: { x: avoid.left, y: avoid.bottom } },
+    { left: alongX, top: avoid.top - ANCHOR_GAP - height, origin: { x: avoid.left, y: avoid.top } },
+    { left: avoid.right + ANCHOR_GAP, top: alongY, origin: { x: avoid.right, y: avoid.top } },
+    { left: avoid.left - ANCHOR_GAP - width, top: alongY, origin: { x: avoid.left, y: avoid.top } },
+  ];
+  return places.find((place) => place.left >= margin && place.left <= maxLeft && place.top >= margin && place.top <= maxTop) ?? null;
 }
 
 /// Ciò che conta come dentro il menu per un clic: il menu e i suoi sottomenu,
@@ -1790,6 +1846,7 @@ export function pickIcon(
   // ascolta non c'è mai stato.
   input.setAttribute("aria-label", t("icons.any"));
   input.addEventListener("keydown", (e) => {
+    if (composingKey(e)) return;
     if (e.key === "Enter" && input.value.trim()) apply(input.value.trim());
     else if (e.key === "Escape") close();
   });

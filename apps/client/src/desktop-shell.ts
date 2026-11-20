@@ -135,6 +135,7 @@ import { slowPhase, startupClock, type StartupPhase, type StartupTimes } from ".
 import { preferredPaneMode } from "./state/pane-mode";
 import { setSearchPort } from "./state/search-port";
 import { mountWheelTextSize, zoomBy } from "./state/zoom";
+import { composingKey } from "./kit/ime";
 
 /// Le impostazioni della macchina che ricordano i due pannelli laterali, e le
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
@@ -622,7 +623,7 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
     // Un Esc già gestito (il menu o il dialogo sopra il cassetto, che lo
     // chiudono in cattura con `preventDefault`) chiude solo loro: il cassetto
     // aspetta il prossimo.
-    if (e.key === "Escape" && !e.defaultPrevented) {
+    if (e.key === "Escape" && !e.defaultPrevented && !composingKey(e)) {
       if (
         layout.classList.contains("drawer-sidebar-open") ||
         layout.classList.contains("drawer-inspector-open")

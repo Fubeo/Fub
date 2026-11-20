@@ -70,6 +70,7 @@ import { pageMarksOf } from "./sections/page";
 import { numberHeadings } from "./themes";
 import { createToolbar, profileMenuItems, type ExportView, type Toolbar } from "./toolbar";
 import { DiagramMemory, diagramLookKey, diagramPrintLook, overrideFor, preparePrintVectors, type DiagramPrintLook } from "./vectors";
+import { composingKey } from "../kit/ime";
 
 /// Come si disegna un diagramma della resa montata: per la sua posizione fra
 /// i diagrammi della nota, `null` per quello di una nota trasclusa.
@@ -747,7 +748,7 @@ export function openExportSpace(options: ExportSpaceOptions): ExportSpace {
   lifetime.add(() => window.clearTimeout(followTimer));
 
   lifetime.listen(root, "keydown", (event) => {
-    if (event.defaultPrevented) return;
+    if (event.defaultPrevented || composingKey(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();

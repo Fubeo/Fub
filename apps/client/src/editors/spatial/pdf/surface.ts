@@ -51,6 +51,7 @@ import {
   writtenSize,
   type PdfFacts,
 } from "./pages";
+import { composingKey } from "../../../kit/ime";
 
 type PdfMode = "draw" | "read";
 
@@ -220,6 +221,7 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
   };
   life.listen(field, "change", fromField);
   life.listen(field, "keydown", (event) => {
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       fromField();

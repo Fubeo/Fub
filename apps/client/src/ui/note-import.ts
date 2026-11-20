@@ -48,6 +48,7 @@ import { actions, openFrame } from "./dialogs";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { buildPart, partName, planParts, readDirectory, type ZipEntry } from "./zip-parts";
 import type { PaletteHost } from "./palette";
+import { composingKey } from "../kit/ime";
 
 /// Il comando che apre la finestra: è quello che la palette mostra.
 export const IMPORT_PREPARE = "import.prepare";
@@ -717,7 +718,7 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
   life.listen(forgetToken, "click", () => void storeToken(""));
   life.listen(tokenInput, "keydown", (event) => {
     // Invio nel campo del token salva il token, non avvia l'anteprima.
-    if (event.key !== "Enter") return;
+    if (event.key !== "Enter" || composingKey(event)) return;
     event.preventDefault();
     saveToken.click();
   });

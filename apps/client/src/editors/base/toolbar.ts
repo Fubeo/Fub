@@ -28,6 +28,7 @@ import {
 import { useBaseIcons, viewIcon } from "./icons";
 import { errorText } from "../../host/errors";
 import { moveColumn, sameColumns, sameKey, sortValue, sortedBy, toggleColumn, withoutSort, type SortEntry } from "./sort";
+import { composingKey } from "../../kit/ime";
 
 /// Perché il file `.base` non si riscrive da qui: la superficie è in sola
 /// lettura, o la Base è scritta dentro una nota (un blocco ```base```), che i
@@ -452,7 +453,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       if (!sameFilter(next, plan.filters)) actions.write("filters", filterValue(next));
     };
     searchField.addEventListener("input", syncVisual);
-    searchField.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); applyFilter(); } });
+    searchField.addEventListener("keydown", (event) => { if (event.key === "Enter" && !composingKey(event)) { event.preventDefault(); applyFilter(); } });
     searchField.disabled = opaque;
     searchNote.hidden = true;
     if (draft !== null && initialSearch === null) { searchNote.textContent = t("base.filter.search_contains"); searchNote.hidden = false; }
@@ -676,7 +677,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
   });
   lifetime.listen(search, "input", () => actions.search());
   lifetime.listen(search, "keydown", (event) => {
-    if (event.key !== "Escape" || search.value === "") return;
+    if (event.key !== "Escape" || composingKey(event) || search.value === "") return;
     event.stopPropagation();
     search.value = "";
     actions.search();

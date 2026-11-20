@@ -23,6 +23,7 @@ import { appPreviewSubject, previewOf } from "../state/craft-previews";
 import { cancelScheduledPreview, hidePreview, schedulePreview } from "../state/preview";
 import { state } from "../state/store";
 import type { Lifetime } from "./lifetime";
+import { composingKey } from "../kit/ime";
 
 /// Quanto aspettare, uscito dal link, prima di chiudere: il tempo di arrivare
 /// col puntatore sulla scheda.
@@ -182,7 +183,7 @@ export function mountLinkPreview(life: Lifetime): void {
     leaveSoon();
   });
   life.listen(document, "keydown", (event) => {
-    if (event.key === "Escape" && box) close();
+    if (event.key === "Escape" && box && !composingKey(event)) close();
   });
   // Il link può sparire sotto la scheda (un ridisegno, una nota chiusa) senza
   // che arrivi un `pointerout`: un clic fuori o uno scorrimento la chiudono.

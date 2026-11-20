@@ -18,7 +18,7 @@ import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
 import type { RichRibbon } from "./ribbon";
 import type { RichSide } from "./side";
-import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem, SurfaceMiniBar } from "../core/editor-menu";
+import { menuBelow, type SurfaceMenu, type SurfaceMenuEntry, type SurfaceMenuItem, type SurfaceMiniBar } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { iconEl } from "../../ui/icons";
 import { closeContextMenu } from "../../ui/menu";
@@ -529,7 +529,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     const box = engine.selectionBox();
     return {
       target: { kind: target.href !== null ? "link" : target.table ? "table" : hasSelection ? "selection" : "text" },
-      at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined,
+      at: box ? menuBelow(box) : undefined,
       context,
       clipboard: {
         offers: { cut: writable && hasSelection, copy: hasSelection, paste: writable, "paste-plain": writable, "select-all": true },

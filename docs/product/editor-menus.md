@@ -125,7 +125,10 @@ destro su un link in Scrittura lascia il cursore dov'è, così la sintassi del l
 resta nascosta. Aperto col mouse, il menu tiene il fuoco su di sé e niente è
 acceso: la prima freccia sceglie la prima voce, o l'ultima con la freccia su.
 Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla prima voce, non alla
-barra.
+barra, e il menu si apre sotto il cursore, la cella o la scheda scelta senza
+coprirli: dove sotto non c'è posto va sopra, poi a destra o a sinistra, e
+solo se la finestra non ha posto da nessuna parte resta dentro di lei anche
+sopra la cosa scelta.
 
 Il menu nasce dal punto del clic, in meno di un quinto di secondo: testata,
 barra e voci arrivano una dopo l'altra, il sottomenu entra da destra, e

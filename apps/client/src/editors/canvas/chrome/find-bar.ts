@@ -237,7 +237,7 @@ export function createCanvasFindBar(port: CanvasFindPort): CanvasFindBar {
 
   port.lifetime.listen(input, "input", () => search());
   port.lifetime.listen(element, "keydown", (event: KeyboardEvent) => {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && !composingKey(event)) {
       event.preventDefault();
       event.stopPropagation();
       close();

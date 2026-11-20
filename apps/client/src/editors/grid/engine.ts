@@ -4184,6 +4184,9 @@ export class GridEngine {
     field.style.fontSize = `${(object.shape.font_size * (96 / 72) * WORKBOOK_SCALE * this.#frame.zoom).toFixed(2)}px`;
     field.addEventListener("keydown", (event) => {
       event.stopPropagation();
+      // Esc e Ctrl+Invio a metà di una composizione sono del metodo
+      // d'immissione: scartano o confermano il candidato, non il testo.
+      if (composingKey(event)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         this.#finishObjectText(false);

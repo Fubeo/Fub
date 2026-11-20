@@ -1204,7 +1204,7 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, pref
     void execute(spec, argsFromForm(spec, raw), box, host);
   });
   form.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeCommandPalette();
+    if (e.key === "Escape" && !composingKey(e)) closeCommandPalette();
   });
 
   (form.querySelector("input, select, textarea") as HTMLElement | null)?.focus();

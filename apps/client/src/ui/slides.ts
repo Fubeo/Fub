@@ -13,6 +13,7 @@
 import { openLifetime } from "./lifetime";
 import { t } from "../i18n/strings";
 import { setTooltip } from "./tooltip";
+import { composingKey } from "../kit/ime";
 
 /** Spezza il contenuto reso in slide sui soli `hr` di primo livello. */
 export function splitRenderedSlides(content: HTMLElement): HTMLElement[] {
@@ -132,7 +133,7 @@ export function mountSlideDeck(
   }
 
   function onKey(event: KeyboardEvent): void {
-    if (closed) return;
+    if (closed || composingKey(event)) return;
     const target = event.target;
     if (event.key !== "Escape" && event.key !== "Tab" && target instanceof HTMLElement &&
         (target.isContentEditable || target.matches("input,textarea,select"))) return;

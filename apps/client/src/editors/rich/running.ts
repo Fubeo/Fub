@@ -12,6 +12,7 @@ import { textButton } from "../../kit/button";
 import { t } from "../../i18n/strings";
 import { openLifetime } from "../../ui/lifetime";
 import { PAGE_FIELDS, writeRunning, type PageField, type Piece, type RunningText } from "./projection";
+import { composingKey } from "../../kit/ime";
 
 export interface RunningEditorOptions {
   /// Dove posare il campo: la scrivania.
@@ -142,7 +143,7 @@ export function openRunningEditor(options: RunningEditorOptions): RunningEditor 
     options.closed(back);
   };
   life.listen(area, "keydown", (event) => {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || composingKey(event)) return;
     event.preventDefault();
     event.stopPropagation();
     close(true, true);

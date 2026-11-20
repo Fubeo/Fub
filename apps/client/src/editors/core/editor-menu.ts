@@ -130,8 +130,10 @@ export interface SurfaceMenu {
   };
   /// Dove aprire il menu quando la richiesta non porta un punto (il tasto
   /// Menu, Maiusc+F10): sotto il cursore o la cosa scelta, in coordinate della
-  /// finestra. Senza, il menu si apre sul riquadro.
-  readonly at?: { readonly x: number; readonly y: number };
+  /// finestra (`menuBelow`). `avoid` è il riquadro di quella cosa, che il
+  /// menu non copre quando ha posto altrove. Senza, il menu si apre sul
+  /// riquadro.
+  readonly at?: { readonly x: number; readonly y: number; readonly avoid?: SelectionBox };
   /// Le voci per ciò che sta sotto il puntatore, in gruppi separati da
   /// `MENU_RULE`: al più nove voci e quattro gruppi.
   readonly context?: readonly SurfaceMenuEntry[];
@@ -287,4 +289,15 @@ export interface SlashMenuHost {
   /// La palette di tutti i comandi accanto al cursore, già filtrata da
   /// `query`.
   palette(query: string, owner: HTMLElement, anchor: SelectionBox | null): void;
+}
+
+/// Il punto `SurfaceMenu.at` per il riquadro `box` della cosa scelta (il
+/// cursore, la cella, la scheda): sotto di lei, allineato al suo inizio, e
+/// col riquadro da non coprire.
+export function menuBelow(box: SelectionBox): NonNullable<SurfaceMenu["at"]> {
+  return {
+    x: Math.round(box.left),
+    y: Math.round(box.bottom) + 4,
+    avoid: { left: box.left, top: box.top, right: box.right, bottom: box.bottom },
+  };
 }

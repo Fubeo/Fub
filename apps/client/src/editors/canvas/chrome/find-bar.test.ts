@@ -7,6 +7,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { boardFindIndex, type FindNotesPort, type FindTarget } from "../find";
 import type { CanvasDocument } from "../model";
 import { createCanvasFindBar, FIND_NOTES_DELAY_MS, type CanvasFindBar } from "./find-bar";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 const DOC: CanvasDocument = {
   nodes: [
@@ -164,6 +165,10 @@ describe("la barra «Cerca nella lavagna» (T60)", () => {
     bar.open();
     type("deviazione");
     key("Enter");
+    // Esc a metà di una composizione scarta il candidato, non chiude.
+    expect(key("Escape", WEBKIT_COMPOSING).defaultPrevented).toBe(false);
+    expect(key("Escape", { isComposing: true }).defaultPrevented).toBe(false);
+    expect(bar.isOpen()).toBe(true);
     const event = key("Escape");
     expect(event.defaultPrevented).toBe(true);
     expect(bar.isOpen()).toBe(false);

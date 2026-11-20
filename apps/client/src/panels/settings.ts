@@ -125,6 +125,7 @@ import {
   type Control,
   type NumberProblem,
 } from "./settings-model";
+import { composingKey } from "../kit/ime";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
 /// una chiave che ha composto invece di leggerla da un elenco.
@@ -3240,7 +3241,7 @@ function renderCatalogSearch(installed: InstalledPluginInfo[]): HTMLElement {
     });
   });
   search.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") { event.preventDefault(); run.click(); }
+    if (event.key === "Enter" && !composingKey(event)) { event.preventDefault(); run.click(); }
   });
   const form = document.createElement("div");
   form.className = "settings-actions";
