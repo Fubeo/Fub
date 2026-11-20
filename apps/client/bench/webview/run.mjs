@@ -1681,7 +1681,7 @@ async function main() {
   console.log(`· schermo: ${display.hz} Hz, P ${display.periodMs} ms (${display.source})`);
   for (const note of display.notes) console.log(`· schermo: ${note}`);
   // Le soglie in periodi chiedono il tetto del motore, cioè F1, prima degli
-  // scenari che misurano.
+  // scenari che le usano (l'ordine è più sotto, in `order`).
   if (hasPeriodLimits(limits) && !only.has("F1")) {
     only.add("F1");
     console.log("· F1 aggiunto: le soglie in periodi chiedono il rAF a vuoto");
@@ -1719,7 +1719,10 @@ async function main() {
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
     // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
     // fondo: cambia il profilo del vault, e lo lascia a «Tutto». F1 prima di
-    // ogni scenario con una soglia in periodi: decide il tetto del motore. F2
+    // ogni scenario con una soglia in periodi, perché decide il tetto del
+    // motore; R1 e I1 gli passano davanti perché in budgets.json hanno solo
+    // soglie in ms, e una soglia in periodi data a uno dei due chiede di
+    // spostare F1 davanti a lui. F2
     // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
     // note che gli avvii dopo riaprono.
     const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));

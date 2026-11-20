@@ -8,7 +8,7 @@
 // selettori di file e destinazione supporto vengono annullati senza aprire
 // risorse del sistema operativo.
 //
-// Non è la porta del kernel: quella è `ipc-finto.ts`. Sono due file di là e
+// Non è la porta del kernel: quella è `fake-ipc.ts`. Sono due file di là e
 // restano due di qua.
 
 import type { ConfirmOptions } from "../src/host/dialog";

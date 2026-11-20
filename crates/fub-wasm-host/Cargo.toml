@@ -5,7 +5,7 @@
 # crate esiste separato**: wasmtime sta qui e in nessun altro posto del
 # workspace. `fub-kernel` e `fub-abi` non lo nominano — il kernel vede
 # `dyn Trait` e non deve sapere che di là dal confine c'è una macchina virtuale.
-# Presidiata da `.github/scripts/check-cargo-versioni.mjs` (le versioni) e dal
+# Presidiata da `.github/scripts/check-cargo-versions.mjs` (le versioni) e dal
 # `deny.toml` (l'albero).
 [package]
 name = "fub-wasm-host"

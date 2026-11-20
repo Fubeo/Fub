@@ -44,7 +44,6 @@
   --avvio-fuoco: #53c48e;
   --avvio-velo: rgb(228 233 230 / 7%);
   --avvio-velo-forte: rgb(228 233 230 / 12%);
-  --avvio-ombra: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
   --avvio-cartella: #89cca8;
   --avvio-cartella-retro: #67ad88;
   --avvio-cartella-ombra: #77b493;
@@ -64,7 +63,6 @@
     --avvio-fuoco: #006e46;
     --avvio-velo: rgb(23 34 27 / 5%);
     --avvio-velo-forte: rgb(23 34 27 / 9%);
-    --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
     --avvio-cartella: #37996c;
     --avvio-cartella-retro: #267853;
     --avvio-cartella-ombra: #36805d;
@@ -84,7 +82,6 @@
   --avvio-fuoco: #006e46;
   --avvio-velo: rgb(23 34 27 / 5%);
   --avvio-velo-forte: rgb(23 34 27 / 9%);
-  --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
   --avvio-cartella: #37996c;
   --avvio-cartella-retro: #267853;
   --avvio-cartella-ombra: #36805d;
@@ -168,8 +165,8 @@ body:has(> .avvio) {
   place-items: center;
   width: 56px;
   height: 56px;
+  /* Senza tessera serve solo al bordo dei colori forzati, qui sotto. */
   border-radius: 16px;
-  background: none;
   opacity: 0;
   transform: scale(0.96);
   transition:

@@ -1,9 +1,10 @@
 // Il palco: il server, il browser, e **le otto cose che il banco tiene ferme**.
 //
-// Le usano in due — il fotografo (`foto.mjs`) e il controllo di accessibilità
-// (`a11y.mjs`) — e stanno qui perché una stabilità dichiarata in due posti è
-// una stabilità che divergerà: basterebbe che uno dei due scattasse in un altro
-// fuso, e metà delle sue misure smetterebbe di parlare delle stesse immagini.
+// Le usano tutti i banchi che aprono la pagina — il fotografo (`photos.mjs`),
+// il controllo di accessibilità (`a11y.mjs`), le misure di moto, di interazione
+// e gli altri — e stanno qui perché una stabilità dichiarata in più posti è una
+// stabilità che divergerà: basterebbe che uno scattasse in un altro fuso, e
+// metà delle sue misure smetterebbe di parlare delle stesse immagini.
 //
 // # La stabilità è una decisione, non un'impostazione (§31.1)
 //
@@ -41,7 +42,7 @@
 //    sulla macchina di chi l'ha scelto e sbagliato sul runner.
 //
 // La nona non sta qui perché non è del palco: le baseline sono **solo
-// Linux**. Il perché sta in `foto.mjs`, accanto alla soglia.
+// Linux**. Il perché sta in `photos.mjs`, accanto alla soglia.
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { fileURLToPath } from "node:url";

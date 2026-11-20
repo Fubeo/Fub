@@ -24,7 +24,6 @@ const RUOLI: Readonly<Record<string, string>> = {
   fuoco: "focus-ring",
   velo: "overlay-hover",
   "velo-forte": "overlay-active",
-  ombra: "shadow-2",
   cartella: "logo-cartella",
   "cartella-retro": "logo-cartella-retro",
   "cartella-ombra": "logo-cartella-ombra",

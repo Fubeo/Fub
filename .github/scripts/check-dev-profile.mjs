@@ -35,7 +35,7 @@
 // che leggesse il proprio `Cargo.toml` sarebbe questo script in un'altra lingua.
 //
 // Uso:
-//   node .github/scripts/check-profilo-dev.mjs [radice]
+//   node .github/scripts/check-dev-profile.mjs [radice]
 // Exit code 1 se c'è almeno una violazione, 0 altrimenti.
 //
 // Niente dipendenze npm, come gli altri presidi di questa cartella.
@@ -70,7 +70,7 @@ const ATTESE = new Map([
 /**
  * Le coppie chiave/valore dichiarate da `[profile.dev]`, e i dubbi.
  *
- * Parsing a righe come `check-cargo-versioni.mjs`, `check-cargo-feature-default.mjs`
+ * Parsing a righe come `check-cargo-versions.mjs`, `check-cargo-feature-default.mjs`
  * e `check-crate-type.mjs`, per la stessa ragione: un lettore TOML completo
  * sarebbe una dipendenza npm. Ciò che non si sa leggere non si indovina — si
  * dichiara, e un dubbio è rosso come una violazione.

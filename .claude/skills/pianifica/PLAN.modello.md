@@ -20,7 +20,7 @@ data · cosa cambia · perché · task toccati. All'inizio: «nessuna».>
 | Pezzo | Destinazione | Task |
 |---|---|---|
 | CSS del cassetto | `apps/client/src/theme/scrittoio/skin/drawers.css` | T4 |
-| classi nuove | `src/theme/scrittoio/anatomia/drawers.ts` | T4 |
+| classi nuove | `apps/client/src/theme/scrittoio/anatomia/drawers.ts` | T4 |
 | struttura | `apps/client/src/panels/<area>/` | T4 |
 | testi | `apps/client/src/i18n/strings.ts` | T4 |
 | stati vuoto/errore | `apps/client/bench/scene.mjs` | T5 |

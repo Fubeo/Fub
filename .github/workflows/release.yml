@@ -114,7 +114,7 @@ jobs:
         working-directory: apps/client
         run: npm ci
       # La stessa versione di `tauri` nel lockfile: la CLI legge la config con
-      # il suo schema, e dalla 2.12 chiede Rust 1.90, oltre il toolchain fissato.
+      # il suo schema, quindi resta alla versione della libreria.
       - name: Tauri CLI 2.11.5
         run: cargo install tauri-cli --version "=2.11.5" --locked
       # Authenticode: il certificato (PFX in base64) entra nell'archivio

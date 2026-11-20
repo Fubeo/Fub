@@ -78,7 +78,8 @@
 // Se una regola fallisce perché la coreografia non la rispetta, la voce resta
 // rossa: questo file non ha un elenco di debiti e non deve averne uno. Lo
 // script esce diverso da zero, e il referto in `bench/.output/moto/` porta il
-// fotogramma di metà corsa e i due scatti che non coincidono. Non sta nella CI.
+// fotogramma di metà corsa e i due scatti che non coincidono. Nella CI gira
+// nel job `benches`: sulle PR pronte che toccano il client e su `main`.
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PNG } from "pngjs";
