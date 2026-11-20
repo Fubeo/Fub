@@ -453,7 +453,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     const next = entries.find((entry) => entry.spec.key === FILES_LEGACY_FOLDER_PAGES)?.value === true;
     if (next === legacyPages) return;
     legacyPages = next;
-    await refreshFromKernel(true);
+    await expected(refreshFromKernel(true));
   });
   void readLegacyPages();
   // Gli XMP e le miniature nell'albero (T26): cambiano soltanto ciò che si
