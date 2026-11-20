@@ -267,7 +267,7 @@ prima dei moduli perché dipinga subito: il foglio `public/avvio/avvio.css`
 (un file e non un `<style>`, per la CSP: vedi
 [Permessi e sicurezza](../reference/permissions-and-security.md)),
 `luce.js` sceglie luce, contrasto, moto e colori, `stati.js` i tempi. Il fondo c'è dal primo
-fotogramma, il marchio entra a 120 ms (1 s al più), la fase (`data-fase`) a
+fotogramma, il marchio (un SVG, che non aspetta caratteri) entra a 120 ms, la fase (`data-fase`) a
 2 s, l'avvio è lento a 10 s e un guasto con Riprova a 30 s; sotto, l'app è
 `inert` e `aria-busy`. Lo consegna `avvio/consegna.ts` a fine avvio
 (`bootstrap.ts`, `mobile/compose.ts` col tema definitivo, 1,5 s al più;
