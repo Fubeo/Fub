@@ -578,7 +578,9 @@ function selfTest() {
       }
     });
 
-    const verdi = [CAMBIA, "invarianti (abi↔WIT, additività, dipendenze)", ...TEST, "la WebView vera (WebKitGTK, S1–S3)"].map(
+    // Il job del client, dove gira il presidio di `bench/scene.test.ts`.
+    const CLIENT = "client (type-check + test + build)";
+    const verdi = [CAMBIA, "invarianti (abi↔WIT, additività, dipendenze)", CLIENT, ...TEST, "la WebView vera (WebKitGTK, S1–S3)"].map(
       (name) => ({ name, status: "completed", conclusion: "success" }),
     );
     const job = [...verdi, { name: VISIVO, status: "completed", conclusion: "failure" }];
@@ -628,6 +630,41 @@ function selfTest() {
 
     prova("solo-banco: soltanto il banco rosso", () => soloBanco(job).length === 0);
     prova("solo-banco: rosso anche altro", () => soloBanco(job.map((j) => (j.name === TEST[0] ? { ...j, conclusion: "failure" } : j))).length === 1);
+    // I tre casi dell'issue #483, dalla corsa al commit: il bot committa se
+    // `solo-banco` dice sì e `convalida` trova almeno una foto da scrivere.
+    // Una scena nuova senza foto fa cadere il banco visivo e non il client
+    // (il presidio di `bench/scene.test.ts` guarda ogni scena da sola).
+    const commit = (jobs, voci) => {
+      if (soloBanco(jobs).length > 0) return null;
+      const e = classifica(zipDi(voci), ramo, principale);
+      return [...e.nuove.map((n) => `NUOVA ${n}`), ...e.cambiate.map((n) => `CAMBIATA ${n}`)];
+    };
+    prova("#483: soltanto scene nuove senza foto, il bot le committa", () => {
+      const fatto = commit(job, [
+        ["attuale/scena-nuova-dark.png", png()],
+        ["attuale/scena-nuova-light.png", png()],
+        ["attuale/uguale-dark.png", png(10, 10, 2)],
+      ]);
+      return fatto?.join() === "NUOVA scena-nuova-dark.png,NUOVA scena-nuova-light.png";
+    });
+    prova("#483: una scena vecchia cambiata e una nuova, il bot le committa tutte e due", () => {
+      const fatto = commit(job, [
+        ["attuale/scena-nuova-dark.png", png()],
+        ["attuale/cambiata-dark.png", png(10, 10, 3)],
+        ["differenze/cambiata-dark.png", png()],
+        ["attuale/uguale-dark.png", png(10, 10, 2)],
+      ]);
+      return fatto?.join() === "NUOVA scena-nuova-dark.png,CAMBIATA cambiata-dark.png";
+    });
+    prova("#483: un altro test del client rosso, nessun commit", () => {
+      const rosso = job.map((j) => (j.name === CLIENT ? { ...j, conclusion: "failure" } : j));
+      const motivi = soloBanco(rosso);
+      return (
+        commit(rosso, [["attuale/scena-nuova-dark.png", png()]]) === null &&
+        motivi.length === 1 &&
+        motivi[0].includes(CLIENT)
+      );
+    });
     prova("leggiJob: una riga per job", () => leggiJob('{"name":"a"}\n{"name":"b"}\n').length === 2);
     prova("leggiJob: { jobs }", () => leggiJob('{"jobs":[{"name":"a"}]}').length === 1);
 
@@ -640,6 +677,7 @@ function selfTest() {
     prova("ci.yml: i nomi dei job sono questi", () =>
       ci.includes(`name: ${VISIVO}\n`) &&
       ci.includes(`name: ${CAMBIA}\n`) &&
+      ci.includes(`name: ${CLIENT}\n`) &&
       ci.includes("name: build + test (${{ matrix.os }}${{ matrix.parti > 1 && format(', {0}/{1}', matrix.parte, matrix.parti) || '' }})\n") &&
       matrice !== undefined &&
       JSON.stringify(JSON.parse(matrice).map(nomeDi)) === JSON.stringify(TEST),
