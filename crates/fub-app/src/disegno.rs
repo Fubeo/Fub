@@ -22,11 +22,12 @@
 //! |---|---|---|---|
 //! | qualunque | modulo NVIDIA ≠ librerie NVIDIA, NVIDIA primaria | nessuna | «riavvia il computer» |
 //! | `auto` | NVIDIA < 555 primaria, sotto Wayland, driver allineato, nessuna variabile dell'utente | nessuna | proposta: disegno col processore, movimento calmo |
-//! | `auto`, `gpu` | NVIDIA ≥ 555 primaria, sotto Wayland, driver allineato, nessuna variabile dell'utente | `WEBKIT_FORCE_DMABUF_RENDERER=1` | nessuno |
+//! | `auto`, `gpu` | NVIDIA ≥ 555 primaria, sotto Wayland, driver allineato, nessuna variabile dell'utente | `WEBKIT_FORCE_DMABUF_RENDERER=1` e, se l'utente non l'ha messa, `GDK_RENDERING=recording` | nessuno |
 //! | `auto`, `gpu` | WebKitGTK dalla 2.53.0 alla 2.54.1, nessuna variabile dell'utente | `WEBKIT_USE_SKIA_FOR_COMPOSITION=0` | nessuno |
 //! | `auto` | ogni altro caso (X11, AMD, Intel, VM, nessuna GPU) | nessuna | nessuno |
 //! | `gpu` | ogni altro caso | nessuna | solo quello del driver disallineato |
 //! | `cpu` | qualunque | `WEBKIT_SKIA_ENABLE_CPU_RENDERING=1`, se l'utente non l'ha messa | solo quello del driver disallineato |
+//! | qualunque | qualunque, se l'utente non l'ha messa | `GTK_OVERLAY_SCROLLING=0` ([`barre_fisse`]) | nessuno |
 //!
 //! Perché `auto` non sceglie il renderer: col disegno software (llvmpipe)
 //! Skia CPU è pari al default di WebKit a PC scarico e peggiore sotto carico,
@@ -36,8 +37,8 @@
 //! VM senza 3D non ci sono misure, e senza misure non si cambia il percorso di
 //! nessuno.
 //!
-//! Le due variabili che Fub scrive da sé correggono due difetti misurati,
-//! senza cambiare renderer:
+//! Le variabili che Fub scrive da sé correggono difetti misurati, senza
+//! cambiare renderer:
 //!
 //! - `WEBKIT_FORCE_DMABUF_RENDERER=1` (misure del 19-11-2026, RTX 4070, 595,
 //!   niri): la patch NVIDIA di Debian (`disable-nvidia-dmabuf.patch`) fa
@@ -48,6 +49,16 @@
 //!   178. Dove la patch non c'è (la WebKitGTK di webkitgtk.org, il Flatpak)
 //!   la variabile non esiste e non cambia niente. Solo dal 555, il primo con
 //!   la sincronizzazione esplicita: prima la patch protegge davvero;
+//! - `GDK_RENDERING=recording`, insieme alla precedente (misure del
+//!   19-11-2026): nel modo GL GTK3 crea a ogni disegno della finestra
+//!   un'immagine grande quanto la finestra, la pulisce, ci dipinge lo sfondo
+//!   e poi la butta, anche se la webview copre tutto con GL. A tutto schermo
+//!   a scala 2 sono 41 MB a fotogramma, sopra la soglia oltre cui glibc li
+//!   chiede al kernel ogni volta: con la pagina che anima il thread
+//!   principale stava al 98% di un core, tre quarti nel kernel per i page
+//!   fault, e la pagina a 105 fotogrammi al secondo; fermo, al 20–30%. Con
+//!   la superficie che registra i comandi si rasterizza solo la parte che
+//!   GL non copre: 17% di un core e 172–174 fotogrammi, fermo 1–6%;
 //! - `WEBKIT_USE_SKIA_FOR_COMPOSITION=0` (dalla 2.53.0 alla 2.54.1): dopo
 //!   un'animazione la composizione di Skia rimette sullo schermo per un
 //!   istante pezzi di un fotogramma vecchio, corretto a monte nella 2.54.2.
@@ -208,6 +219,20 @@ const FORZA_DMABUF: &str = "WEBKIT_FORCE_DMABUF_RENDERER";
 /// La composizione con TextureMapper invece che con Skia.
 const SKIA_COMPOSIZIONE: &str = "WEBKIT_USE_SKIA_FOR_COMPOSITION";
 
+/// Le barre di scorrimento sovrapposte di GTK: `0` le tiene sempre visibili,
+/// senza la dissolvenza.
+const BARRE_SOVRAPPOSTE: &str = "GTK_OVERLAY_SCROLLING";
+
+/// Come GTK3 prepara la superficie di ogni disegno di una finestra. GTK la
+/// legge in `gdk_init` (`gdk/gdk.c`): `similar` (di serie), `image` o
+/// `recording`.
+const PITTURA_GTK: &str = "GDK_RENDERING";
+
+/// La superficie che registra i comandi invece di riempire pixel: nel modo GL
+/// GTK3 non alloca e non pulisce più un'immagine grande quanto la finestra a
+/// ogni fotogramma.
+const PITTURA_REGISTRATA: &str = "recording";
+
 /// **La prima WebKitGTK con i fotogrammi vecchi** della composizione di Skia,
 /// e con [`SKIA_DIFETTOSA_FINO_A`] l'unico posto in cui l'intervallo è
 /// scritto.
@@ -279,6 +304,9 @@ pub fn scegli(
             }
             if diagnosi.nvidia_dmabuf() && !scelto_a_mano {
                 scelta.variabili.push((FORZA_DMABUF, "1"));
+                if !gia_messa(PITTURA_GTK) {
+                    scelta.variabili.push((PITTURA_GTK, PITTURA_REGISTRATA));
+                }
             }
             if webkit.is_some_and(skia_difettosa) && !scelto_a_mano {
                 scelta.variabili.push((SKIA_COMPOSIZIONE, "0"));
@@ -290,6 +318,21 @@ pub fn scegli(
         .iter()
         .all(|(name, _)| !VIETATE.contains(name)));
     scelta
+}
+
+/// **Le barre di scorrimento sempre visibili**, su ogni Linux e in ogni modo,
+/// se l'utente non ha già scritto `GTK_OVERLAY_SCROLLING`. Le barre
+/// sovrapposte di WebKitGTK compaiono a ogni scorrimento, ridimensionamento o
+/// passaggio del puntatore e sfumano a 60 fotogrammi al secondo per circa
+/// 3 s: con Fub fermo e una nota aperta 35–37 ridisegni della finestra al
+/// secondo invece di 1,6, e il thread principale al 5–8% di un core invece
+/// dello 0–1% (misure del 19-11-2026). Le barre fisse prendono la loro
+/// larghezza alla colonna che scorre: è una scelta del maintainer del
+/// 20-11-2026, per un Fub fermo che non lavora, come su Windows.
+pub fn barre_fisse(scelta: &mut Scelta, gia_messa: &dyn Fn(&str) -> bool) {
+    if !gia_messa(BARRE_SOVRAPPOSTE) {
+        scelta.variabili.push((BARRE_SOVRAPPOSTE, "0"));
+    }
 }
 
 /// Scrive le variabili scelte nell'ambiente del processo.
@@ -669,7 +712,10 @@ mod tests {
     #[test]
     fn nvidia_dal_555_tiene_i_fotogrammi_sulla_scheda() {
         let sulla_scheda = Scelta {
-            variabili: vec![("WEBKIT_FORCE_DMABUF_RENDERER", "1")],
+            variabili: vec![
+                ("WEBKIT_FORCE_DMABUF_RENDERER", "1"),
+                ("GDK_RENDERING", "recording"),
+            ],
             avvisi: vec![],
         };
         for versione in ["555.42.02", "560.35.03", "595.112.07"] {
@@ -709,6 +755,96 @@ mod tests {
                 .env(nome, "0");
             assert!(m.scelta(Modo::Auto).variabili.is_empty(), "{nome}");
         }
+    }
+
+    /// La superficie registrata di GTK va con i fotogrammi sulla scheda, e
+    /// solo lì: dove GTK3 disegna la finestra con GL.
+    #[test]
+    fn la_pittura_registrata_solo_con_i_fotogrammi_sulla_scheda() {
+        let pc = Macchina::nuova()
+            .nvidia("595.112.07", "595.112.07")
+            .wayland();
+        for modo in [Modo::Auto, Modo::Gpu] {
+            assert!(
+                pc.scelta(modo)
+                    .variabili
+                    .contains(&("GDK_RENDERING", "recording")),
+                "{modo:?}"
+            );
+        }
+        assert!(
+            !pc.scelta(Modo::Cpu)
+                .variabili
+                .iter()
+                .any(|(n, _)| *n == PITTURA_GTK),
+            "col processore GTK non disegna con GL"
+        );
+        // Il valore dell'utente vince, qualunque sia, e la scheda resta.
+        for valore in ["similar", "image", "recording", ""] {
+            let utente = Macchina::nuova()
+                .nvidia("595.112.07", "595.112.07")
+                .wayland()
+                .env("GDK_RENDERING", valore);
+            assert_eq!(
+                utente.scelta(Modo::Auto).variabili,
+                [("WEBKIT_FORCE_DMABUF_RENDERER", "1")],
+                "{valore:?}"
+            );
+        }
+        // Senza fotogrammi sulla scheda decisi da Fub, niente.
+        let senza = [
+            Macchina::nuova()
+                .nvidia("550.163.01", "550.163.01")
+                .wayland(),
+            Macchina::nuova()
+                .nvidia("595.112.07", "595.112.07")
+                .env("XDG_SESSION_TYPE", "x11")
+                .env("DISPLAY", ":0"),
+            Macchina::nuova()
+                .scheda("card0", "0x1002", "amdgpu", true)
+                .nodo()
+                .wayland(),
+            Macchina::nuova().wayland(),
+        ];
+        for m in &senza {
+            for modo in [Modo::Auto, Modo::Gpu, Modo::Cpu] {
+                assert!(
+                    !m.scelta(modo)
+                        .variabili
+                        .iter()
+                        .any(|(n, _)| *n == PITTURA_GTK),
+                    "{modo:?} {:?}",
+                    m.diagnosi()
+                );
+            }
+        }
+    }
+
+    /// Le barre fisse valgono su ogni macchina e in ogni modo, e il valore
+    /// dell'utente vince.
+    #[test]
+    fn le_barre_fisse_ovunque_tranne_che_col_valore_dell_utente() {
+        for modo in [Modo::Auto, Modo::Gpu, Modo::Cpu] {
+            for pc in [
+                Macchina::nuova()
+                    .nvidia("595.112.07", "595.112.07")
+                    .wayland(),
+                Macchina::nuova().wayland(),
+                Macchina::nuova()
+                    .env("XDG_SESSION_TYPE", "x11")
+                    .env("DISPLAY", ":0"),
+            ] {
+                let mut scelta = pc.scelta(modo);
+                barre_fisse(&mut scelta, &|_| false);
+                assert!(
+                    scelta.variabili.contains(&("GTK_OVERLAY_SCROLLING", "0")),
+                    "{modo:?}"
+                );
+            }
+        }
+        let mut scelta = Scelta::default();
+        barre_fisse(&mut scelta, &|nome| nome == "GTK_OVERLAY_SCROLLING");
+        assert!(scelta.variabili.is_empty());
     }
 
     #[test]
@@ -754,6 +890,7 @@ mod tests {
             pc.scelta_con(Modo::Auto, Some((2, 54, 0))).variabili,
             [
                 ("WEBKIT_FORCE_DMABUF_RENDERER", "1"),
+                ("GDK_RENDERING", "recording"),
                 ("WEBKIT_USE_SKIA_FOR_COMPOSITION", "0")
             ]
         );
@@ -888,6 +1025,7 @@ mod tests {
                                 assert!(
                                     scelta.variabili.iter().all(|(n, _)| [
                                         FORZA_DMABUF,
+                                        PITTURA_GTK,
                                         SKIA_COMPOSIZIONE
                                     ]
                                     .contains(n)),
