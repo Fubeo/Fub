@@ -82,10 +82,13 @@ Shared files, in the orchestrator's skill:
    `DECISIONS.md`.
 4. **Haiku helpers.** At most **two per task** (`Agent` with
    `model: "haiku"`, `effort: "max"`), as in `coder.md`:
-   - the mechanical parts;
-   - a fairly demanding but plain piece of code (one function with its
-     tests, a repetitive change), chosen and designed by you, short,
-     needing no invention, and small enough for you to check line by line.
+   - you do the quick things yourself and every hard part;
+   - the helper does the long, laborious but plain work: a wide search in
+     the repo, a large but simple piece of code on well-known ground (a
+     base, a scaffold, a repetitive change, tests for cases you listed),
+     the mechanical parts;
+   - you choose and design each piece, know exactly what it does, and check
+     every line; never an endless session.
 
    They don't start agents, commit or touch git. You read every line they
    wrote, run their tests and make the commits.

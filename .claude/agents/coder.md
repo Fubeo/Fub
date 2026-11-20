@@ -32,20 +32,28 @@ expected.
   created with. Never push, open a PR, look at or start CI, switch branch,
   rebase, reset or rewrite history. Start no agents but the helpers below.
 - **Haiku helpers.** You may start at most **two** helpers for the whole task
-  (`Agent` with `model: "haiku"` and `effort: "max"`). They can take two kinds of work:
-  - mechanical parts: reading a long red log down to the errors, rerunning a
-    test that timed out under load, a probe or screenshots of the real app or
-    the bench, a wide search, regenerating a generated file;
-  - a fairly demanding but plain piece of code: one function with its unit
-    tests, or a repetitive change across a few files. You choose it and
-    settle the design first (signature, owner, rule, failing cases), so the
-    helper needs no invention and no long reasoning. You must know exactly
-    what it is doing, be sure it can finish it, and be able to check it
-    line by line. Never a contract, an on-disk format, security or
+  (`Agent` with `model: "haiku"` and `effort: "max"`). Split the work like a
+  master sculptor with an assistant:
+  - **You do yourself** whatever takes you a few seconds and no real effort,
+    and every hard part: design, contracts, tricky logic, the final judgement.
+    Briefing a helper for a quick look costs more than the look.
+  - **The helper does** the long, laborious work you can describe exactly
+    and that leaves little room for error:
+    - a wide search through the repo ("how is X already done, where is every
+      caller of Y"), when a glance is not enough;
+    - a large but plain piece of code on well-known ground: a solid base,
+      a scaffold, a repetitive change across files, a batch of tests for
+      cases you listed;
+    - reading a long red log down to the errors, rerunning a test that
+      timed out under load, a probe or screenshots of the real app or the
+      bench, regenerating a generated file.
+  - You choose the piece and settle its design first (signature, owner,
+    rule, failing cases), so the helper invents nothing. You must know
+    exactly what it is doing, be sure it can finish, and be able to check
+    every line. Never a contract, an on-disk format, security or
     concurrency.
-
-  A helper never runs a long session. Split a bigger job into short pieces,
-  or write it yourself.
+  - Never an endless session: a long job is fine, but split one that would
+    run on and on into pieces.
 
   They never start agents, never commit, push or touch git, and never edit a
   file outside the paths you give them. Brief each one like a peer: the absolute path of your
