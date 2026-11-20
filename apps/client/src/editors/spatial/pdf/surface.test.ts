@@ -21,6 +21,9 @@ const bando = Object.values(
 /// `sha256("test")`, l'impronta che `bando.fubann` porta.
 const TEST_DIGEST = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
+/// Ciò che l'avviso dice quando la pagina non ha una misura vera (#321).
+const SIZE_UNKNOWN = "Su questa pagina non si scrive finché non se ne conosce la misura: senza il PDF i segni potrebbero finire fuori dalla pagina vera.";
+
 const NEW = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="Bando.pdf">\n  <title>Bando.pdf</title>\n</svg>\n';
 
 const MOUSE = { pointerId: 1, pointerType: "mouse" } as const;
@@ -251,10 +254,88 @@ describe("senza il PDF", () => {
 
   it("senza pdf.js lo dice, e un file che non nomina un PDF anche", async () => {
     mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }) });
-    await vi.waitFor(() => expect(notices()).toEqual(["Il PDF «Bando.pdf» non si legge (Motore PDF non caricato.): le annotazioni si vedono su pagine bianche."]));
+    await vi.waitFor(() => expect(notices()).toEqual([
+      "Il PDF «Bando.pdf» non si legge (Motore PDF non caricato.): le annotazioni si vedono su pagine bianche.",
+      SIZE_UNKNOWN,
+    ]));
     mounted.pop()!.destroy();
     mount(NEW.replace(' fub:annotates="Bando.pdf"', ' fub:annotates="https://example.org/a.pdf"'), "Bando.pdf.fubann");
-    expect(notices()).toEqual(["Queste annotazioni non nominano un PDF del vault: si vedono su pagine bianche."]);
+    await vi.waitFor(() => expect(notices()).toEqual(["Queste annotazioni non nominano un PDF del vault: si vedono su pagine bianche.", SIZE_UNKNOWN]));
+  });
+
+  // #321: le annotazioni scritte sulla A4 di ripiego cadevano fuori dalla
+  // pagina quando poi il PDF si leggeva, più piccolo. Finché la misura vera
+  // non è nota il foglio non scrive, e lo dice.
+  it("senza la misura vera della pagina non si scrive, e l'avviso dice perché", async () => {
+    const { surface, changes } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }) });
+    await vi.waitFor(() => expect(notices()).toContain(SIZE_UNKNOWN));
+    for (const tool of ["p", "r", "c", "n"]) {
+      key(tool);
+      drag([[100, 100], [200, 120], [300, 140]]);
+    }
+    expect(changes).toEqual([]);
+    expect(surface.buffer!.getDoc()).toBe(NEW);
+    // Gli strumenti che scrivono sono spenti, non soltanto muti.
+    expect(parent.querySelector("[data-readonly]")).not.toBeNull();
+  });
+
+  it("mentre il PDF si legge non si scrive; letto, il segno nasce sulla pagina vera", async () => {
+    let ready!: () => void;
+    const waiting = new Promise<void>((resolve) => (ready = resolve));
+    const slow: PdfEngineLoader = async (bytes) => {
+      await waiting;
+      return loaderOf(1)(bytes);
+    };
+    const { surface, changes } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: slow });
+    key("p");
+    drag([[100, 100], [200, 120], [300, 140]]);
+    expect(changes).toEqual([]);
+    // Mentre aspetta non dice niente: non è un errore.
+    expect(notices()).toEqual([]);
+    ready();
+    await loaded("di 1");
+    await vi.waitFor(() => expect(parent.querySelector("[data-readonly]")).toBeNull());
+    key("p");
+    drag([[100, 100], [200, 120], [300, 140]]);
+    expect(changes).toHaveLength(1);
+    expect(surface.buffer!.getDoc()).toContain('fub:page-size="600 800"');
+  });
+
+  it("senza il PDF si scrive sulle pagine di cui il file dice la misura, non sulle altre", async () => {
+    const { surface, changes } = mount(bando, "bandi/Bando di gara.pdf.fubann", { transport: transportOf({}), loader: loaderOf(3) });
+    await vi.waitFor(() => expect(notices()).toEqual(["Il PDF «Bando di gara.pdf» non c’è: le annotazioni si vedono su pagine bianche."]));
+    // La pagina 2 non ha un gruppo, e la sua misura nessuno la sa.
+    key("PageDown");
+    await vi.waitFor(() => expect(field().value).toBe("2"));
+    await vi.waitFor(() => expect(notices()).toContain(SIZE_UNKNOWN));
+    key("p");
+    drag([[100, 100], [200, 120], [300, 140]]);
+    expect(changes).toEqual([]);
+    expect(surface.buffer!.getDoc()).not.toContain('fub:page="2"');
+    // La 3 ce l'ha: lì si scrive.
+    key("PageDown");
+    await vi.waitFor(() => expect(field().value).toBe("3"));
+    await vi.waitFor(() => expect(notices()).not.toContain(SIZE_UNKNOWN));
+    key("p");
+    drag([[100, 100], [200, 120], [300, 140]]);
+    expect(changes).toHaveLength(1);
+  });
+
+  // #321: la nota d'errore, con un perché lungo, era alta ~220 px: ogni riga
+  // dell'avviso prendeva 16rem di altezza nella colonna dei messaggi.
+  it("ogni riga dell'avviso sta su una riga: accorciata, col testo intero nel suggerimento", async () => {
+    const reason = "Invalid PDF structure. ".repeat(12).trim();
+    const broken: PdfEngineLoader = async () => {
+      throw new Error(reason);
+    };
+    mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: broken });
+    await vi.waitFor(() => expect(notices()[0]).toContain(reason));
+    for (const line of parent.querySelectorAll<HTMLElement>(".pdf-notice-messages p")) expect(line.title).toBe(line.textContent);
+    const rule = /\.pdf-notice-messages > \.vector-notice-text \{([^}]*)\}/.exec(structure)?.[1] ?? "";
+    expect(rule).toMatch(/flex: none;/);
+    expect(rule).toMatch(/white-space: nowrap;/);
+    expect(rule).toMatch(/overflow: hidden;/);
+    expect(rule).toMatch(/text-overflow: ellipsis;/);
   });
 
   it("ciò che sta fuori dalle pagine si conta", () => {

@@ -7355,6 +7355,17 @@ textarea.draw-properties-input {
   flex: 1 1 16rem;
   min-width: 0;
 }
+/* Ogni messaggio dell'avviso sta su una riga, accorciato coi puntini: il
+   testo intero è nel suggerimento e lo legge il lettore di schermo. Nella
+   colonna la base di 16rem di `.vector-notice-text` sarebbe un'altezza, e
+   un perché lungo faceva l'avviso alto ~220 px (#321). */
+.pdf-notice-messages > .vector-notice-text {
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+}
 .pdf-body {
   display: flex;
   flex: 1;

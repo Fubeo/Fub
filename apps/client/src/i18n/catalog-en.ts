@@ -3575,6 +3575,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "pdf.missing": "The PDF “{name}” is missing: the annotations are shown on blank pages.",
   "pdf.unreadable": "The PDF “{name}” cannot be read ({reason}): the annotations are shown on blank pages.",
   "pdf.unbound": "These annotations do not name a PDF in the vault: they are shown on blank pages.",
+  "pdf.size_unknown": "You cannot write on this page until its size is known: without the PDF, marks could end up outside the real page.",
   "pdf.outside.one": "{count} element is outside the pages: it is not shown here, but it is in the source.",
   "pdf.outside.other": "{count} elements are outside the pages: they are not shown here, but they are in the source.",
   "pdf.list": "Annotations",

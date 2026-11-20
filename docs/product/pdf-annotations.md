@@ -201,6 +201,18 @@ All'apertura l'editor confronta e non scrive niente.
 - **Il file non nomina un PDF del vault**, per esempio un URL esterno: le
   pagine sono bianche, come sopra.
 
+Si scrive solo su una pagina di cui si sa la misura vera: quella del PDF
+letto, o quella che il file ha scritto per quella pagina. Una pagina che
+nessuno dei due misura si vede, bianca, con la misura di un'altra pagina del
+file o A4, ma non si scrive: gli strumenti sono spenti e l'avviso dice
+perché. Anche mentre il PDF si sta leggendo non si scrive, senza avviso. Un
+segno nato su una misura di ripiego cadrebbe fuori dalla pagina quando poi il
+PDF si legge, più piccolo. Le annotazioni già scritte così da versioni
+precedenti si aprono come sono: niente le riporta sulla pagina.
+
+Ogni messaggio dell'avviso sta su una riga, accorciato coi puntini; il testo
+intero è nel suggerimento e lo legge il lettore di schermo.
+
 Un elemento fuori dalle pagine, scritto a mano o da un altro programma, non si
 vede sul foglio: un avviso li conta, e la sorgente li mostra.
 
