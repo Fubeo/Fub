@@ -1,6 +1,6 @@
 # Decisioni del lavoro a piani
 
-Questo file serve al workflow a piani (`/pianifica`, `/orchestra`, vedi
+Questo file serve al workflow a piani (`/pianifica`, `/fub-orchestrator`, vedi
 `CLAUDE.md`). Dice che cosa l'orchestratore decide da solo e che cosa chiede,
 e tiene il registro delle scelte fatte durante il lavoro, perché il piano dopo
 ne tenga conto. Le scelte di architettura vere vanno in un ADR

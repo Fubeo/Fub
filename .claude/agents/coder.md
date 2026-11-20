@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Implements exactly one task of PLAN.md in its own git worktree and closes only when `scripts/check.sh --rapido` is green, then returns a short fixed-form report. Launched by the /orchestra skill with a brief; not for open-ended work.
+description: Implements exactly one task of PLAN.md in its own git worktree and closes only when `scripts/check.sh --rapido` is green, then returns a short fixed-form report. Launched by the /fub-orchestrator skill with a brief; not for open-ended work.
 tools: Read, Edit, Write, Bash, Grep, Glob, Agent
 model: opus
 effort: medium
@@ -55,6 +55,13 @@ expected.
   with `BLOCCATO` (the question, the options, your recommendation first) only
   for what `DECISIONS.md` lists under "Chiede sempre", or when the brief and
   the code disagree on what the person using Fub sees.
+- **A design file.** When the brief names a `soluzione.md` from the
+  [`progettista`](progettista.md), read it first and follow it; where the
+  code proves it wrong, the code wins, and the report says where under
+  `DIFFERENZE DAL PIANO`.
+- **Your scratch space.** In a shared scratchpad, use only a subfolder named
+  after your task; never loose files with generic names (`check.log`,
+  `build.sh`) that another coder overwrites.
 - **Read narrowly.** The files in `Tocca`, their tests, what they import and
   who calls them. Don't map the repository.
 - **Graphic task.** Start from the prototype under `PLAN-ui/`. Move its CSS into
@@ -87,18 +94,28 @@ expected.
 
 ## Closing
 
-1. Run `scripts/check.sh --rapido --base <base>` with the base from the brief.
-   It prints one line per step and keeps full logs in `target/check/`; open a
-   log only for a red step, with `grep` or `tail`.
-2. At most **two** fix attempts on the same red step. Still red: stop and
+1. **Seconds first.** Before queueing the long check, run the guards that
+   take seconds on what your diff touches: the `.github/scripts/check-*.mjs`
+   guards on `docs/`, `cargo +1.95 fmt --check` for Rust, and
+   `npm run typecheck` for the client. A red guard found after 40 minutes of
+   queue is the case to avoid.
+2. Run `scripts/check.sh --rapido --base <base>` with the base from the brief,
+   through the machine's heavy-check queue and in the background (the brief
+   says how). It prints one line per step and keeps full logs in
+   `target/check/`; open a log only for a red step, with `grep` or `tail`.
+   After one red step whose fix touches no compiled code (a `docs/` page, a
+   timing test that passes alone), rerun only that step's command, which is at
+   the top of its log. In the report, say which full run was green and what you
+   reran apart.
+3. At most **two** fix attempts on the same red step. Still red: stop and
    report `ROSSO` with the step and what you tried. A step that is also red at
    the base commit is not yours: prove it (run that step at the base) and say
    so. A test that only times out on a loaded machine, and fails in a
    different file on each run, is load, not your change: rerun that file alone
    and report both runs. Never raise a threshold or a timeout to get green.
-3. A `SALTA` line means the step couldn't run on this machine: list it under
+4. A `SALTA` line means the step couldn't run on this machine: list it under
    `CHECK`, never call it green.
-4. Commit on your branch: `tipo(scope): frase in italiano`, no co-author or
+5. Commit on your branch: `tipo(scope): frase in italiano`, no co-author or
    session trailers. A few meaningful commits, no "wip".
 
 ## Report
