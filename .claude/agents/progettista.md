@@ -20,6 +20,9 @@ output path `<scratchpad>/<TASK>/soluzione.md`.
 
 - `CLAUDE.md` applies: read the canonical `docs/` page of the area and check
   in code that it still describes the present. Code and tests win over docs.
+- When the design changes what people see, read
+  [`../skills/pianifica/fub.md`](../skills/pianifica/fub.md) first: what Fub
+  is, how it looks and how to choose like Fub.
 - **Read-only.** No edits in any worktree, no commits, no branch changes, no
   agents, no network beyond what the repository's own read commands need. The
   only file you write is the output file.
