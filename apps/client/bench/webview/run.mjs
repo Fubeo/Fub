@@ -36,7 +36,7 @@ import { cpus, hostname, loadavg, release, tmpdir, totalmem, type as osType } fr
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
+import { BIG_SHEET, GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
 import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
 import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
 import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
@@ -53,7 +53,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 /// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
@@ -74,6 +74,8 @@ const ALT = "";
 const ESCAPE = "";
 
 const PAGE_DOWN = "\uE00F";
+const ARROW_UP = "\uE013";
+const ARROW_DOWN = "\uE015";
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -347,6 +349,35 @@ async function moveAndZoom(session, gesture) {
   await session.releaseActions();
   return zoomed;
 }
+
+/// S10: lo scorrimento del foglio grande, `S10_SCROLL_STEPS` fotogrammi in
+/// giù di `S10_SCROLL_PX` px e altrettanti in su, uno per fotogramma; poi le
+/// frecce (`S10_KEY_REPS` tasti, giù e su a turno) e la barra laterale aperta
+/// e chiusa (`S10_SIDEBAR_REPS`), che cambia la larghezza del foglio e fa
+/// rifare la misura alla barra multifunzione.
+const S10_SCROLL_STEPS = 150;
+const S10_SCROLL_PX = 60;
+const S10_KEY_REPS = 20;
+const S10_SIDEBAR_REPS = 6;
+const S10_VIEW = ".pane.focus .grid-viewport";
+
+/// S10: lo scorrimento dalla pagina, come lo fa la rotella: `scrollTop` cambia
+/// in un fotogramma, l'evento `scroll` arriva al fotogramma dopo e la griglia
+/// disegna le righe che entrano. Torna `false` se il foglio non c'è.
+const S10_SCROLL_SCRIPT = `
+  const [steps, px, view] = arguments;
+  const done = arguments[arguments.length - 1];
+  const viewport = document.querySelector(view);
+  if (!viewport) { done(false); return; }
+  let i = 0;
+  const step = () => {
+    if (i >= steps * 2) { requestAnimationFrame(() => requestAnimationFrame(() => done(true))); return; }
+    viewport.scrollTop += i < steps ? px : -px;
+    i += 1;
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+`;
 
 /// S9: lo zoom in cui si misura, fra 0,4 e 0,6 come chiede il cancello di N6
 /// e sopra `LIVE_ZOOM_MIN` (0,35), sotto cui le schede restano segnaposto.
@@ -963,6 +994,69 @@ const SCENARIOS = {
     };
   },
   /// Il grafo di 10.000 nodi, trascinato per tre secondi.
+  /// Il foglio grande (3000 × 20): lo scorrimento verticale, il cambio di
+  /// selezione con le frecce e la barra laterale aperta e chiusa, che cambia
+  /// la larghezza del foglio e rifà la misura della barra multifunzione.
+  async S10(session) {
+    await openByName(session, BIG_SHEET.name, "Riga 1");
+    await session.waitFor("return !!document.querySelector(arguments[0] + ' .grid-cell')", [S10_VIEW], 60_000);
+    await pause(2_000);
+    await session.execute(RECORDER_SCRIPT);
+    // Una volta giù e su fuori dalla misura: la prima volta il foglio chiede
+    // le finestre di righe all'host, e la misura è dello scorrimento.
+    if (!(await session.executeAsync(S10_SCROLL_SCRIPT, [S10_SCROLL_STEPS, S10_SCROLL_PX, S10_VIEW]))) throw new Error("il foglio grande non ha la griglia");
+    await pause(GESTURE_WAIT_MS);
+    await session.execute("window.__fubRec.start(); window.__fubRec.mark(); return true;");
+    const before = cpuTicks(driverPid);
+    const since = performance.now();
+    await session.executeAsync(S10_SCROLL_SCRIPT, [S10_SCROLL_STEPS, S10_SCROLL_PX, S10_VIEW]);
+    const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+    const recorded = await session.execute("return window.__fubRec.stop();");
+    const busy = recorded.gaps.map(([, gap]) => gap).sort((a, b) => a - b);
+    const tenth = (x) => Math.round(x * 10) / 10;
+    const scroll = {
+      frames: frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs),
+      // Il thread principale occupato: i buchi fra due giri del timer.
+      busy: {
+        count: busy.length,
+        p95: busy.length ? tenth(busy[Math.min(busy.length - 1, Math.floor(busy.length * 0.95))]) : 0,
+        max: busy.length ? tenth(busy.at(-1)) : 0,
+        totalMs: Math.round(busy.reduce((sum, gap) => sum + gap, 0)),
+      },
+      cpu,
+    };
+    // Le frecce: un clic su una cella, poi giù e su a turno.
+    await session.click(`${S10_VIEW} .grid-cell[data-row="4"][data-column="3"]`);
+    await pause(GESTURE_WAIT_MS);
+    let down = true;
+    const keys = await gesture(session, S10_KEY_REPS, async () => {
+      await session.keys(down ? ARROW_DOWN : ARROW_UP);
+      down = !down;
+    });
+    // La barra laterale: una volta avanti e indietro fuori dalla misura.
+    const sidebar = () => chord2(session, CTRL, ALT, "b");
+    await sidebar();
+    await pause(GESTURE_WAIT_MS);
+    await sidebar();
+    await pause(GESTURE_WAIT_MS);
+    const bar = await gesture(session, S10_SIDEBAR_REPS, sidebar);
+    return {
+      report: { scroll, keys, bar, steps: S10_SCROLL_STEPS * 2, px: S10_SCROLL_PX },
+      values: {
+        "S10.scroll.frameGap.p95": scroll.frames?.p95 ?? null,
+        "S10.scroll.frameGap.max": scroll.frames?.max ?? null,
+        "S10.scroll.busy.p95": scroll.busy.p95,
+        "S10.frecce.mainBlocked": keys.mainBlocked.median,
+        "S10.barra.mainBlocked": bar.mainBlocked.median,
+      },
+      samples: (scroll.frames?.count ?? 0) + S10_KEY_REPS + S10_SIDEBAR_REPS,
+      notes: [
+        `scorrimento: fotogrammi ${scroll.frames?.median ?? "—"}/${scroll.frames?.p95 ?? "—"}/${scroll.frames?.max ?? "—"} ms (mediana/p95/max), persi ${scroll.frames?.lost ?? "—"}; thread occupato p95 ${scroll.busy.p95} ms, max ${scroll.busy.max} ms, in tutto ${scroll.busy.totalMs} ms; CPU web ${cpu?.webview ?? "—"} %`,
+        `frecce: bloccato ${keys.mainBlocked.perRep.join("/")} ms, fotogrammi ${keys.frames?.median ?? "—"}/${keys.frames?.p90 ?? "—"} ms`,
+        `barra laterale: bloccato ${bar.mainBlocked.perRep.join("/")} ms, fotogrammi ${bar.frames?.median ?? "—"}/${bar.frames?.p90 ?? "—"} ms`,
+      ],
+    };
+  },
   async S4(session) {
     await session.click('#views-ribbon .rail-btn-main[data-panel="graph"]');
     await session.waitFor("return !!document.querySelector('canvas.graph-main')", [], 60_000);
@@ -1725,7 +1819,7 @@ async function main() {
     // spostare F1 davanti a lui. F2
     // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
     // note che gli avvii dopo riaprono.
-    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));
+    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S10", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // R1 con la raccolta forzata ha un driver suo, con il gancio acceso
       // nell'ambiente; lo scenario dopo torna su un driver senza.

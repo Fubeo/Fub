@@ -46,6 +46,18 @@
     "S9.keyToPaint.p95": {
       "periodi": 2
     },
+    "S10.scroll.frameGap.p95": {
+      "periodi": 1
+    },
+    "S10.scroll.frameGap.max": {
+      "periodi": 2
+    },
+    "S10.frecce.mainBlocked": {
+      "periodi": 1
+    },
+    "S10.barra.mainBlocked": {
+      "periodi": 1
+    },
     "I1.nota.p95": 50,
     "I1.tessera.p95": 50,
     "R1.residuo.MiB": 50,

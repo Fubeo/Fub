@@ -99,8 +99,8 @@ describe("budgets.json in periodi", () => {
 
   it("le soglie dei fotogrammi sono in periodi: p95 1 P, massimo 2 P, tasto 2 P", () => {
     const t = budgets.targets;
-    for (const key of ["S3.frameGap.p95", "S9.frameGap.p95"]) expect(t[key], key).toEqual({ periodi: 1 });
-    for (const key of ["S3.frameGap.max", "S5.penFrameGap.max", "S7.frameGap.max", "S8.penFrameGap.max", "S9.frameGap.max"]) expect(t[key], key).toEqual({ periodi: 2 });
+    for (const key of ["S3.frameGap.p95", "S9.frameGap.p95", "S10.scroll.frameGap.p95"]) expect(t[key], key).toEqual({ periodi: 1 });
+    for (const key of ["S3.frameGap.max", "S5.penFrameGap.max", "S7.frameGap.max", "S8.penFrameGap.max", "S9.frameGap.max", "S10.scroll.frameGap.max"]) expect(t[key], key).toEqual({ periodi: 2 });
     for (const key of ["S1.keyToPaint.p95", "S9.keyToPaint.p95"]) expect(t[key], key).toEqual({ periodi: 2 });
     // A 180 Hz il tasto a schermo deve stare in 11,1 ms; a 60 in 33,3.
     expect(resolveLimit(t["S1.keyToPaint.p95"], 5.56)).toBe(11.1);
