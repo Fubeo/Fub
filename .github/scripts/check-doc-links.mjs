@@ -2,9 +2,11 @@
 // I link relativi dei documenti puntano a file e titoli che esistono nella
 // repository. Le cartelle nascoste non sono documenti (`markdownUnder`), e
 // `.fub/` (i dati di un vault locale, ignorati da git) non è nemmeno un
-// target: un file lì dentro c'è solo su una macchina (P-35, #509).
+// target: un file lì dentro c'è solo su una macchina (P-35, #509). Fanno
+// eccezione i `.fub` che git traccia, i vault di prova delle fixture.
 // `--self-test` gira i casi su una cartella temporanea.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -94,15 +96,35 @@ function linksIn(text) {
   return links;
 }
 
-/// Vero se `resolved`, dentro `root`, passa per una cartella `.fub`: la radice
-/// dei dati di un vault (decisione 0048), ignorata da git. Le altre cartelle
-/// col punto (`.github/`, `.claude/`) sono nella repository e restano target.
-function insideVaultData(root, resolved) {
-  return path.relative(root, resolved).split(path.sep).includes(".fub");
+/// I file `.fub` che git traccia (i vault di prova delle fixture), letti una
+/// volta sola all'avvio. Senza git (un archivio scaricato) l'insieme è vuoto
+/// e ogni link in `.fub` è un errore: meglio un rosso da spiegare che un
+/// link che esiste solo su una macchina.
+function trackedVaultData(root) {
+  try {
+    const listed = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 64 << 20 });
+    return new Set(listed.split("\0").filter((file) => file.split("/").includes(".fub")));
+  } catch {
+    return new Set();
+  }
+}
+
+/// Vero se `resolved`, dentro `root`, passa per una cartella `.fub` che git
+/// non traccia: la radice dei dati di un vault locale (decisione 0048),
+/// ignorata da git. Un vault di prova tracciato (`tests/fixtures/…/.fub/`) è
+/// nella repository, e un link a un suo file o alla sua cartella resta
+/// valido. Le altre cartelle col punto (`.github/`, `.claude/`) restano
+/// target.
+function insideVaultData(root, resolved, tracked) {
+  const relative = path.relative(root, resolved).split(path.sep);
+  if (!relative.includes(".fub")) return false;
+  const file = relative.join("/");
+  for (const known of tracked) if (known === file || known.startsWith(`${file}/`)) return false;
+  return true;
 }
 
 /** Gli errori dei link di `files`, con i percorsi relativi a `root`. */
-function linkErrors(root, files) {
+function linkErrors(root, files, tracked) {
   const errors = [];
   const anchorCache = new Map();
 
@@ -130,7 +152,7 @@ function linkErrors(root, files) {
 
       // Un target nei dati di un vault esiste solo dove un vault locale l'ha
       // scritto: in CI e nelle altre copie il link è rotto.
-      if (insideVaultData(root, resolved)) {
+      if (insideVaultData(root, resolved, tracked)) {
         errors.push(`${relative}: il link punta nei dati di un vault (.fub), che non sono nella repository: ${target}`);
         continue;
       }
@@ -164,8 +186,11 @@ function selfTest() {
       "README.md": "# Fub\n\n[guida](docs/guida.md#come-si-fa)\n",
       "docs/guida.md": "# Guida\n\n## Come si fa\n\n[qui](#come-si-fa) [manca](assente.md) [titolo](#nessuno)\n",
       // Il file esiste, ma solo in questo vault locale.
-      "docs/vault.md": "# Vault\n\n[dati](.fub/data/indice.md) [ci](../.github/ci.yml)\n",
+      "docs/vault.md": "# Vault\n\n[dati](.fub/data/indice.md) [ci](../.github/ci.yml) " +
+        "[prova](../tests/drill/.fub/journal.jsonl) [cartella](../tests/drill/.fub)\n",
       ".github/ci.yml": "jobs: {}\n",
+      // Un vault di prova tracciato da git: i suoi dati sono un target vero.
+      "tests/drill/.fub/journal.jsonl": "{}\n",
       // Lasciato da un vault locale: non è un documento, il suo link rotto
       // non conta.
       "docs/.fub/data/indice.md": "# Indice\n\n[rotto](niente.md)\n",
@@ -174,7 +199,8 @@ function selfTest() {
       fs.mkdirSync(path.dirname(path.join(scratch, name)), { recursive: true });
       fs.writeFileSync(path.join(scratch, name), text);
     }
-    const errors = linkErrors(scratch, documentsOf(scratch)).sort();
+    const tracked = new Set(["tests/drill/.fub/journal.jsonl"]);
+    const errors = linkErrors(scratch, documentsOf(scratch), tracked).sort();
     const expected = [
       "docs/guida.md: anchor inesistente in #nessuno",
       "docs/guida.md: target inesistente: assente.md",
@@ -203,7 +229,7 @@ if (process.argv.includes("--self-test")) {
 
 const root = process.cwd();
 const files = documentsOf(root);
-const errors = linkErrors(root, files);
+const errors = linkErrors(root, files, trackedVaultData(root));
 
 if (errors.length) {
   console.error("Link documentali non validi:\n");
