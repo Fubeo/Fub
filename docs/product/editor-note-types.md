@@ -106,7 +106,8 @@ cartella dei tipi o la nota viene rinominata dentro o fuori.
 - Il cassetto: `apps/client/src/panels/explorer-types.ts`.
 - La pagina del tipo: la vista `note_type_page` in
   `crates/fub-features/src/properties/type_page.rs`, sopra
-  `note_types::typed_notes` (la stessa risoluzione dei conti); il posto in
+  `note_types::notes_of_type` (la stessa risoluzione dei conti di
+  `typed_notes`, ordinando solo le righe mostrate); il posto in
   fondo alla nota è `markdown/type-page.ts`, acceso da `markdown/surface.ts`.
 - Stile: `skin/document.css` (`.cm-fub-page-type-*`), `skin/drawers.css`
   (`.note-type-menu*`). Scene del banco `tipi-*` e `mobile-tipi-*`; prove in

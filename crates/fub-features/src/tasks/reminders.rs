@@ -53,7 +53,8 @@
 //! arretra (un viaggio verso ovest, l'ora legale che finisce) i promemoria di
 //! quell'ora ripetuta non suonano una seconda volta.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::ops::Bound;
 
 use fub_abi::error::PluginError;
 use fub_abi::locale::Locale;
@@ -219,10 +220,21 @@ struct Reminder {
     heading: Option<String>,
 }
 
-/// L'indice: i promemoria dei compiti aperti, per nota.
+/// L'indice: i promemoria dei compiti aperti, per nota, e gli stessi in
+/// ordine d'ora.
+///
+/// Il notificatore chiede un minuto alla volta, ogni minuto: la risposta
+/// esce da `by_minute` con un `range` e costa i promemoria dell'intervallo,
+/// non quelli del vault. Le due mappe dicono sempre la stessa cosa: ogni
+/// voce di `by_minute` è un promemoria di `by_doc`, e lo cambia soltanto
+/// [`ReminderIndex::put`] e [`ReminderIndex::drop_doc`].
 #[derive(Debug, Default)]
 pub struct ReminderIndex {
+    /// I promemoria di ogni nota, in ordine di posizione nel file.
     by_doc: BTreeMap<DocId, Vec<Reminder>>,
+    /// `(minuto, nota, posizione)` di ogni promemoria: l'ordine della
+    /// risposta.
+    by_minute: BTreeSet<(i64, DocId, usize)>,
 }
 
 impl ReminderIndex {
@@ -232,7 +244,7 @@ impl ReminderIndex {
 
     /// Quanti promemoria tiene, in tutto il vault.
     pub fn len(&self) -> usize {
-        self.by_doc.values().map(Vec::len).sum()
+        self.by_minute.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -241,41 +253,77 @@ impl ReminderIndex {
 
     /// Prende i promemoria di una nota, al posto di quelli che aveva.
     fn take(&mut self, model: &DocumentModel) {
-        let found = reminders_of(model);
+        self.put(model.id.clone(), reminders_of(model));
+    }
+
+    /// I promemoria `found` della nota `doc`, al posto di quelli che aveva.
+    fn put(&mut self, doc: DocId, found: Vec<Reminder>) {
+        self.drop_doc(&doc);
         if found.is_empty() {
-            self.by_doc.remove(&model.id);
-        } else {
-            self.by_doc.insert(model.id.clone(), found);
+            return;
+        }
+        for reminder in &found {
+            self.by_minute
+                .insert((reminder.minute, doc.clone(), reminder.at));
+        }
+        self.by_doc.insert(doc, found);
+    }
+
+    /// Toglie i promemoria della nota `doc`, da tutte e due le mappe.
+    fn drop_doc(&mut self, doc: &DocId) {
+        if let Some(old) = self.by_doc.remove(doc) {
+            for reminder in old {
+                self.by_minute
+                    .remove(&(reminder.minute, doc.clone(), reminder.at));
+            }
         }
     }
 
     /// I promemoria in `(after, until]`, in ordine d'ora, nota e posizione.
     pub fn between(&self, after: Option<i64>, until: Option<i64>, limit: usize) -> ReminderList {
-        let mut hits: Vec<(&DocId, &Reminder)> = self
-            .by_doc
-            .iter()
-            .flat_map(|(doc, list)| list.iter().map(move |reminder| (doc, reminder)))
-            .filter(|(_, r)| {
-                after.is_none_or(|a| r.minute > a) && until.is_none_or(|u| r.minute <= u)
-            })
-            .collect();
-        hits.sort_by(|(a_doc, a), (b_doc, b)| {
-            (a.minute, a_doc.as_str(), a.at).cmp(&(b.minute, b_doc.as_str(), b.at))
-        });
-        let more = hits.len() > limit;
-        hits.truncate(limit);
+        // Gli estremi come chiavi di `by_minute`: la nota vuota è la più
+        // piccola, quindi `(m, "", 0)` sta prima di ogni promemoria del minuto
+        // `m`. Un estremo oltre l'ultimo minuto rappresentabile non limita.
+        let first = |minute: i64| (minute, DocId::new(String::new()), 0);
+        let low = match after {
+            None => Bound::Unbounded,
+            Some(a) => match a.checked_add(1) {
+                Some(next) => Bound::Included(first(next)),
+                None => return ReminderList::default(),
+            },
+        };
+        let high = match until.and_then(|u| u.checked_add(1)) {
+            None => Bound::Unbounded,
+            Some(next) => Bound::Excluded(first(next)),
+        };
+        // `range` non accetta un intervallo rovesciato: è vuoto.
+        if let (Some(a), Some(u)) = (after, until) {
+            if a >= u {
+                return ReminderList::default();
+            }
+        }
+        let mut hits = self.by_minute.range((low, high));
+        let mut reminders = Vec::new();
+        for (minute, doc, at) in hits.by_ref().take(limit) {
+            let Some(reminder) = self.by_doc.get(doc).and_then(|list| {
+                list.binary_search_by_key(at, |r| r.at)
+                    .ok()
+                    .map(|found| &list[found])
+            }) else {
+                debug_assert!(false, "by_minute names a reminder that by_doc lacks");
+                continue;
+            };
+            reminders.push(ReminderEntry {
+                doc: doc.clone(),
+                at: *at,
+                when: reminder_text(*minute),
+                text: reminder.text.clone(),
+                heading: reminder.heading.clone(),
+            });
+        }
         ReminderList {
-            reminders: hits
-                .into_iter()
-                .map(|(doc, r)| ReminderEntry {
-                    doc: doc.clone(),
-                    at: r.at,
-                    when: reminder_text(r.minute),
-                    text: r.text.clone(),
-                    heading: r.heading.clone(),
-                })
-                .collect(),
-            more,
+            reminders,
+            more: hits.next().is_some(),
         }
     }
 
@@ -336,14 +384,22 @@ impl IndexProvider for ReminderIndex {
 
     fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         for id in ids {
-            self.by_doc.remove(id);
+            self.drop_doc(id);
         }
         Vec::new()
     }
 
     fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
-        let alive: std::collections::HashSet<&DocId> = ids.iter().collect();
-        self.by_doc.retain(|doc, _| alive.contains(doc));
+        let alive: HashSet<&DocId> = ids.iter().collect();
+        let gone: Vec<DocId> = self
+            .by_doc
+            .keys()
+            .filter(|doc| !alive.contains(doc))
+            .cloned()
+            .collect();
+        for doc in &gone {
+            self.drop_doc(doc);
+        }
         Vec::new()
     }
 
@@ -353,6 +409,7 @@ impl IndexProvider for ReminderIndex {
 
     fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
         self.by_doc.clear();
+        self.by_minute.clear();
         Ok(())
     }
 
@@ -423,14 +480,21 @@ fn reminders_of(model: &DocumentModel) -> Vec<Reminder> {
     }
     found.sort_by_key(|reminder| reminder.at);
     // La sezione di ogni compito: l'ultimo titolo che inizia prima del suo
-    // marcatore, dall'indice dei titoli del modello (in ordine di file).
+    // marcatore, dall'indice dei titoli del modello (in ordine di file). I
+    // compiti sono in ordine di file anche loro, quindi un cursore solo
+    // cammina i titoli una volta per tutta la nota.
+    let mut passed = 0;
     for reminder in &mut found {
-        reminder.heading = model
+        while model
             .outline
-            .iter()
-            .take_while(|heading| heading.span.start < reminder.at)
-            .last()
-            .map(|heading| heading.text.clone());
+            .get(passed)
+            .is_some_and(|heading| heading.span.start < reminder.at)
+        {
+            passed += 1;
+        }
+        reminder.heading = passed
+            .checked_sub(1)
+            .map(|last| model.outline[last].text.clone());
     }
     found
 }

@@ -432,36 +432,78 @@ pub(crate) enum Resolution {
 /// senza estensione), poi il percorso dentro la cartella dei tipi
 /// (`Lavoro/Progetto`), poi il solo nome, che deve essere di un tipo solo.
 pub(crate) fn resolve(types: &[TypeRef], folder: Option<&str>, wanted: &str) -> Resolution {
-    let key = fub_abi::rules::path::resolution_key;
-    let wanted = key(wanted);
-    let pick = |hits: Vec<&TypeRef>| match hits.as_slice() {
-        [] => None,
-        [one] => Some(Resolution::Found((*one).clone())),
-        many => Some(Resolution::Ambiguous(
-            many.iter().map(|t| t.doc.clone()).collect(),
-        )),
-    };
-    let full: Vec<&TypeRef> = types
-        .iter()
-        .filter(|t| key(&t.link) == wanted || key(t.doc.as_str()) == wanted)
-        .collect();
-    if let Some(found) = pick(full) {
-        return found;
-    }
-    if let Some(folder) = folder {
-        let inside = format!("{}/{wanted}", key(folder));
-        let hits: Vec<&TypeRef> = types.iter().filter(|t| key(&t.link) == inside).collect();
-        if let Some(found) = pick(hits) {
-            return found;
+    match Resolver::new(types, folder).position(wanted) {
+        Picked::Missing => Resolution::Missing,
+        Picked::Found(at) => Resolution::Found(types[at].clone()),
+        Picked::Ambiguous(many) => {
+            Resolution::Ambiguous(many.iter().map(|&at| types[at].doc.clone()).collect())
         }
     }
-    if !wanted.contains('/') {
-        let hits: Vec<&TypeRef> = types.iter().filter(|t| key(&t.name) == wanted).collect();
-        if let Some(found) = pick(hits) {
-            return found;
+}
+
+/// La risoluzione di [`resolve`] con le chiavi dei tipi calcolate una volta:
+/// chi risolve il `tipo` di tutte le note del vault non rifà la chiave di ogni
+/// tipo per ogni nota.
+pub(crate) struct Resolver {
+    /// Per ogni tipo, nello stesso ordine: la chiave del link, del percorso e
+    /// del nome.
+    keys: Vec<[String; 3]>,
+    /// La chiave della cartella dei tipi, se c'è.
+    folder: Option<String>,
+}
+
+/// A quale tipo porta un nome, per posizione in `types`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Picked {
+    Found(usize),
+    Missing,
+    Ambiguous(Vec<usize>),
+}
+
+impl Resolver {
+    pub(crate) fn new(types: &[TypeRef], folder: Option<&str>) -> Self {
+        let key = fub_abi::rules::path::resolution_key;
+        Resolver {
+            keys: types
+                .iter()
+                .map(|t| [key(&t.link), key(t.doc.as_str()), key(&t.name)])
+                .collect(),
+            folder: folder.map(key),
         }
     }
-    Resolution::Missing
+
+    /// Il tipo che `wanted` nomina: prima il percorso intero, poi quello
+    /// dentro la cartella dei tipi, poi il solo nome (vedi [`resolve`]).
+    pub(crate) fn position(&self, wanted: &str) -> Picked {
+        let wanted = fub_abi::rules::path::resolution_key(wanted);
+        let pick = |hits: Vec<usize>| match hits.as_slice() {
+            [] => None,
+            [one] => Some(Picked::Found(*one)),
+            _ => Some(Picked::Ambiguous(hits)),
+        };
+        let matching = |test: &dyn Fn(&[String; 3]) -> bool| -> Vec<usize> {
+            (0..self.keys.len())
+                .filter(|&at| test(&self.keys[at]))
+                .collect()
+        };
+        if let Some(found) = pick(matching(&|[link, doc, _]| {
+            *link == wanted || *doc == wanted
+        })) {
+            return found;
+        }
+        if let Some(folder) = &self.folder {
+            let inside = format!("{folder}/{wanted}");
+            if let Some(found) = pick(matching(&|[link, _, _]| *link == inside)) {
+                return found;
+            }
+        }
+        if !wanted.contains('/') {
+            if let Some(found) = pick(matching(&|[_, _, name]| *name == wanted)) {
+                return found;
+            }
+        }
+        Picked::Missing
+    }
 }
 
 /// Il tipo di una nota, com'è adesso.
@@ -610,8 +652,56 @@ pub(crate) fn typed_notes(
     extra: &[&str],
 ) -> Result<Vec<Vec<DocumentMatch>>, PluginError> {
     let mut out: Vec<Vec<DocumentMatch>> = vec![Vec::new(); types.len()];
+    for (at, row) in typed_rows(host, types, folder, extra)? {
+        out[at].push(row);
+    }
+    for rows in &mut out {
+        rows.sort_by(|a, b| a.doc.cmp(&b.doc));
+    }
+    Ok(out)
+}
+
+/// Le note di un tipo solo, `types[of]`, per chi ne mostra le prime `shown`
+/// (la pagina del tipo): quante sono in tutto e le prime in ordine di
+/// percorso, con le chiavi `extra`. Le stesse note che [`typed_notes`] dà a
+/// quel tipo, ma senza raccogliere e ordinare le note degli altri tipi: si
+/// ordinano soltanto le righe che si mostrano.
+pub(crate) fn notes_of_type(
+    host: &dyn ReadApi,
+    types: &[TypeRef],
+    folder: Option<&str>,
+    of: usize,
+    extra: &[&str],
+    shown: usize,
+) -> Result<(usize, Vec<DocumentMatch>), PluginError> {
+    let mut rows: Vec<DocumentMatch> = typed_rows(host, types, folder, extra)?
+        .into_iter()
+        .filter_map(|(at, row)| (at == of).then_some(row))
+        .collect();
+    let total = rows.len();
+    if rows.len() > shown {
+        if shown > 0 {
+            rows.select_nth_unstable_by(shown - 1, |a, b| a.doc.cmp(&b.doc));
+        }
+        rows.truncate(shown);
+    }
+    rows.sort_by(|a, b| a.doc.cmp(&b.doc));
+    Ok((total, rows))
+}
+
+/// Ogni nota col `tipo` e il tipo di `types` a cui porta, per posizione: una
+/// domanda sola all'indice (`tipo` presente, con il suo valore e le chiavi
+/// `extra`), poi la stessa risoluzione di [`state_of`]. Un valore che non
+/// porta a un tipo solo non va a nessuno. Lo stesso valore scritto in molte
+/// note si risolve una volta.
+fn typed_rows(
+    host: &dyn ReadApi,
+    types: &[TypeRef],
+    folder: Option<&str>,
+    extra: &[&str],
+) -> Result<Vec<(usize, DocumentMatch)>, PluginError> {
     if types.is_empty() {
-        return Ok(out);
+        return Ok(Vec::new());
     }
     let mut keys = vec![TYPE_KEY];
     keys.extend(extra.iter().copied().filter(|key| *key != TYPE_KEY));
@@ -629,6 +719,10 @@ pub(crate) fn typed_notes(
             excerpts: Excerpts::Omit,
         })?
         .documents()?;
+    let resolver = Resolver::new(types, folder);
+    let mut known: std::collections::HashMap<String, Option<usize>> =
+        std::collections::HashMap::new();
+    let mut out = Vec::with_capacity(typed.items.len());
     for row in typed.items {
         let Some(wanted) = row
             .properties
@@ -638,14 +732,20 @@ pub(crate) fn typed_notes(
         else {
             continue;
         };
-        if let Resolution::Found(found) = resolve(types, folder, &wanted) {
-            if let Some(at) = types.iter().position(|t| t.doc == found.doc) {
-                out[at].push(row);
+        let at = match known.get(&wanted) {
+            Some(at) => *at,
+            None => {
+                let at = match resolver.position(&wanted) {
+                    Picked::Found(at) => Some(at),
+                    Picked::Missing | Picked::Ambiguous(_) => None,
+                };
+                known.insert(wanted, at);
+                at
             }
+        };
+        if let Some(at) = at {
+            out.push((at, row));
         }
-    }
-    for rows in &mut out {
-        rows.sort_by(|a, b| a.doc.cmp(&b.doc));
     }
     Ok(out)
 }
@@ -1306,6 +1406,167 @@ mod tests {
             check_revision(&host, &found, Some("vecchia")),
             Err(PluginError::Conflict(_))
         ));
+    }
+
+    /// Un generatore piccolo e ripetibile (xorshift64*): seme fisso, così un
+    /// rosso si rifà uguale.
+    struct Dice(u64);
+
+    impl Dice {
+        fn roll(&mut self, faces: usize) -> usize {
+            self.0 ^= self.0 >> 12;
+            self.0 ^= self.0 << 25;
+            self.0 ^= self.0 >> 27;
+            (self.0.wrapping_mul(0x2545_F491_4F6C_DD1D) % faces as u64) as usize
+        }
+    }
+
+    /// La risoluzione com'era scritta prima delle chiavi calcolate una volta:
+    /// ogni chiave rifatta a ogni confronto.
+    fn resolve_by_hand(types: &[TypeRef], folder: Option<&str>, wanted: &str) -> Resolution {
+        let key = fub_abi::rules::path::resolution_key;
+        let wanted = key(wanted);
+        let pick = |hits: Vec<&TypeRef>| match hits.as_slice() {
+            [] => None,
+            [one] => Some(Resolution::Found((*one).clone())),
+            many => Some(Resolution::Ambiguous(
+                many.iter().map(|t| t.doc.clone()).collect(),
+            )),
+        };
+        let full = types
+            .iter()
+            .filter(|t| key(&t.link) == wanted || key(t.doc.as_str()) == wanted)
+            .collect();
+        if let Some(found) = pick(full) {
+            return found;
+        }
+        if let Some(folder) = folder {
+            let inside = format!("{}/{wanted}", key(folder));
+            if let Some(found) = pick(types.iter().filter(|t| key(&t.link) == inside).collect()) {
+                return found;
+            }
+        }
+        if !wanted.contains('/') {
+            if let Some(found) = pick(types.iter().filter(|t| key(&t.name) == wanted).collect()) {
+                return found;
+            }
+        }
+        Resolution::Missing
+    }
+
+    /// I tipi del vault a caso: omonimi in sottocartelle, maiuscole diverse.
+    const TYPE_PATHS: [&str; 6] = [
+        "Tipi/Libro.md",
+        "Tipi/Film.md",
+        "Tipi/Lavoro/Progetto.md",
+        "Tipi/Casa/Progetto.md",
+        "Tipi/Casa/Libro.md",
+        "Tipi/Quadro.md",
+    ];
+
+    /// Un valore di `tipo` a caso, nelle forme che una persona scrive.
+    fn random_wanted(dice: &mut Dice) -> String {
+        let names = [
+            "Libro",
+            "libro",
+            "LIBRO",
+            "Film",
+            "Progetto",
+            "Quadro",
+            "Statua",
+            "Casa/Libro",
+            "Lavoro/Progetto",
+            "Tipi/Libro",
+            "Tipi/Casa/Progetto.md",
+            "tipi/film",
+            "Altro/Libro",
+        ];
+        names[dice.roll(names.len())].to_string()
+    }
+
+    #[test]
+    fn the_resolver_names_the_type_the_hand_resolution_names() {
+        let types = refs(&TYPE_PATHS);
+        let mut dice = Dice(0x7E57_2026_1120_0001);
+        for folder in [Some("Tipi"), Some("tipi"), None] {
+            let resolver = Resolver::new(&types, folder);
+            for _ in 0..200 {
+                let wanted = random_wanted(&mut dice);
+                let expected = resolve_by_hand(&types, folder, &wanted);
+                assert_eq!(resolve(&types, folder, &wanted), expected, "{wanted}");
+                let picked = match resolver.position(&wanted) {
+                    Picked::Found(at) => Resolution::Found(types[at].clone()),
+                    Picked::Missing => Resolution::Missing,
+                    Picked::Ambiguous(many) => Resolution::Ambiguous(
+                        many.iter().map(|&at| types[at].doc.clone()).collect(),
+                    ),
+                };
+                assert_eq!(picked, expected, "{wanted}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_notes_of_one_type_are_those_the_full_scan_gives_it() {
+        let mut dice = Dice(0x7E57_2026_1120_0002);
+        for round in 0..6 {
+            let mut docs: Vec<(String, String)> = TYPE_PATHS
+                .iter()
+                .map(|path| ((*path).to_string(), LIBRO.to_string()))
+                .collect();
+            for i in 0..40 + round * 20 {
+                let tipo = match dice.roll(4) {
+                    0 => format!("\"[[{}]]\"", random_wanted(&mut dice)),
+                    1 => format!("\"{}\"", random_wanted(&mut dice)),
+                    2 => random_wanted(&mut dice),
+                    _ => "3".to_string(),
+                };
+                let autore = match dice.roll(3) {
+                    0 => String::new(),
+                    n => format!("autore: Autore {n}\n"),
+                };
+                docs.push((
+                    format!("Note/{}/N{}.md", dice.roll(4), dice.roll(1_000) * 100 + i),
+                    format!("---\ntipo: {tipo}\n{autore}letto: true\n---\n"),
+                ));
+            }
+            let pairs: Vec<(&str, &str)> =
+                docs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+            let host = vault(&pairs);
+            let types = type_refs(&host).unwrap();
+            let folder = types_folder(&host);
+            let extra = ["autore", "letto"];
+            let full = typed_notes(&host, &types, folder.as_deref(), &extra).unwrap();
+            for (of, all) in full.iter().enumerate() {
+                for shown in [0, 1, 3, 50] {
+                    let (total, rows) =
+                        notes_of_type(&host, &types, folder.as_deref(), of, &extra, shown).unwrap();
+                    assert_eq!(total, all.len(), "round {round}, type {of}");
+                    let expected: Vec<(String, Vec<(String, String)>)> = all
+                        .iter()
+                        .take(shown)
+                        .map(|row| (row.doc.as_str().to_string(), columns(row)))
+                        .collect();
+                    let got: Vec<(String, Vec<(String, String)>)> = rows
+                        .iter()
+                        .map(|row| (row.doc.as_str().to_string(), columns(row)))
+                        .collect();
+                    assert_eq!(got, expected, "round {round}, type {of}, shown {shown}");
+                }
+            }
+        }
+    }
+
+    /// Le colonne di una riga, in ordine di chiave: la pagina le cerca per
+    /// chiave, l'ordine in cui arrivano non conta.
+    fn columns(row: &DocumentMatch) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = row
+            .properties
+            .iter()
+            .map(|p| (p.key.clone(), format!("{:?}", p.value)))
+            .collect();
+        out.sort();
+        out
     }
 
     #[test]
