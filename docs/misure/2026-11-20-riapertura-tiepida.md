@@ -277,3 +277,50 @@ millisecondi.
   Caricarla resta la voce più cara della riapertura (140–300 ms su
   `ricche`), cioè #523.
 - `PROMEMORIA 0` su entrambi i vault è giusto: le loro note non hanno `⏰`.
+
+## Il commit della ricerca (#522)
+
+Il flush dopo poche note toccate costava perché tantivy ha tre worker, e
+ognuno tiene aperto il suo segmento fino al commit: anche 50 note diventavano
+tre segmenti, ognuno con i suoi file da scrivere e sincronizzare. Con #522
+aggiunte e cancellazioni aspettano in una coda e partono insieme al commit
+(o prima, sopra 4 MB di testo): un commit, un segmento.
+
+- sonda `crates/fub-host/examples/open_30k.rs` con
+  `FUB_APERTURA_TOCCATE=50`, cartelle temporanee su ext4 (su tmpfs il
+  `fsync` non costa niente e la misura non vale); prima `82421bfb1` (solo le
+  fasi `ricerca_*` in più), dopo `b5fe60f5a`; build di rilascio, 20 novembre
+  2026, misura di un agente;
+- quattro coppie alternate prima/dopo, dalla coda dei controlli pesanti con
+  `nice 19`; carico medio a un minuto fra 17 e 32 (un'altra corsa a 6–11
+  conferma).
+
+Mediana delle quattro coppie, in millisecondi.
+
+| Caso | Fase | Prima | Dopo |
+|---|---|---|---|
+| 5000, riapertura con 50 note toccate | `flush_indexes` | 213 | 126 |
+| | `ricerca_segmenti` (`prepare_commit`) | 137 | 77 |
+| | `ricerca_commit` | 43 | 18 |
+| | `ricerca_manifest` | 23 | 21 |
+| | `wait_indexed` | 364 | 251 |
+| 30000, a freddo | `wait_indexed` | 1619 | 1583 |
+| | `flush_indexes` | 208 | 442 |
+| 5000, a freddo | `wait_indexed` | 354 | 374 |
+
+- **La riapertura con poche note cambiate.** Il flush scende del 41 % (del
+  56 % nella corsa a carico basso, da 368 a 161): meno segmenti da chiudere
+  e un commit con meno file. `ricerca_reload` resta sotto il millisecondo.
+- **A freddo.** Il tempo totale resta quello di prima (mediana dei rapporti
+  per coppia 0,96 su 30000, 1,02 nella corsa a carico basso). Il lavoro si
+  sposta: sotto i 4 MB la coda parte solo al commit, quindi le fette costano
+  meno e il flush di più. Su 5000 note piccole tutto il testo sta sotto la
+  soglia e parte in un lotto unico, cioè con un worker solo: +6 % nella
+  prima corsa, +2 % in quella a carico basso, dentro il rumore.
+- **Le soglie provate e scartate.** Con 1 MB invece di 4 il freddo non
+  cambia in modo leggibile (corsa a carico 40–100). Una soglia anche sul
+  numero di documenti (256) ridà i worker al freddo ma riporta il commit
+  della riapertura a quello di prima (51 ms contro 22): scartata.
+- **Ciò che resta.** Su 30000 note il manifest (`ricerca_manifest`, 56–75
+  ms) riscrive le impronte di tutto il vault anche quando ne cambiano 50: è
+  ora la parte più grossa del flush di una riapertura.

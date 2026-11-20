@@ -254,6 +254,14 @@ classificazione è per proprietario:
 L'indice Tantivy di `fub.search` è derivato. Una versione incompatibile può
 essere eliminata e ricostruita dai documenti.
 
+Aggiunte e cancellazioni aspettano in una coda e partono insieme verso Tantivy
+al commit: al `flush`, alla chiusura o alla prima query con scritture in
+sospeso, oppure prima se la coda passa 4 MB di testo (#522). Così un commit
+scrive un segmento solo invece di uno per worker. Le cancellazioni passano
+dalla stessa coda: gli opstamp seguono l'ordine di arrivo, e una cancellazione
+arrivata dopo un'aggiunta la colpisce. Ciò che è in coda non è durevole: se
+l'app muore prima del commit, alla riapertura quei documenti si rileggono.
+
 ### Promemoria
 
 `fub.tasks` scrive in `.fub/data/plugins/fub.tasks/reminders.json` i

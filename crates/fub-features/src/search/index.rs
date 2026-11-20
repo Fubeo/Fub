@@ -21,8 +21,10 @@ use super::*;
 /// da `&mut self` — cioè, nel kernel, dal prestito esclusivo del workspace.
 /// Quindi:
 ///
-/// - il **writer** è l'unica cosa dietro un lock, perché `IndexWriter::commit`
-///   vuole `&mut self` mentre `add_document`/`delete_term` no;
+/// - il **writer** sta dietro un lock, perché `IndexWriter::commit` vuole
+///   `&mut self`; accanto c'è la **coda** delle scritture non ancora date a
+///   tantivy ([`Pending`]), che si svuota nel commit e quindi anche da una
+///   query. Si prende sempre **dopo** il writer, mai da sola prima;
 /// - `dirty` è un atomico, e una query che lo trova falso — il caso normale —
 ///   non tocca nessun lock: legge un `bool` e va a interrogare il reader;
 /// - `reader`, `index` e `fields` servono in sola lettura, e tantivy li dà per
@@ -41,6 +43,11 @@ pub struct SearchIndex {
     /// muoia. Vuoto = questo indice è chiuso, e ciò che arriva dopo non ha più
     /// dove andare.
     pub(super) writer: Mutex<Option<IndexWriter>>,
+    /// Le scritture accettate e non ancora date a tantivy (#522).
+    ///
+    /// **Ordine dei lock: `writer` → `pending`, sempre.** Chi la tocca tiene
+    /// già il writer: prenderla senza il writer in mano non è permesso.
+    pub(super) pending: Mutex<Pending>,
     pub(super) reader: IndexReader,
     pub(super) fields: Fields,
     pub(super) fingerprints: HashMap<DocId, u64>,
@@ -144,6 +151,7 @@ impl SearchIndex {
         Ok(SearchIndex {
             index,
             writer: Mutex::new(Some(writer)),
+            pending: Mutex::new(Pending::default()),
             reader,
             fields,
             fingerprints: HashMap::new(),
@@ -186,6 +194,43 @@ impl SearchIndex {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
+
+/// La coda delle scritture che aspettano il commit (#522).
+///
+/// # Perché c'è
+///
+/// Il writer di tantivy ha più worker (3 con [`WRITER_HEAP`]), e ognuno tiene
+/// aperto il suo segmento da un lotto all'altro fino al commit. Mandare i
+/// documenti uno per uno li spargeva su tutti i worker, e un commit chiudeva
+/// fino a 3 segmenti nuovi: circa 6 file ciascuno, ogni file con il suo
+/// fsync. Su una riapertura con 50 note toccate ad app chiusa era quasi tutto
+/// il costo del flush. Qui le scritture aspettano e partono **insieme** in un
+/// solo `IndexWriter::run`: le aggiunte di un `run` finiscono nello stesso
+/// segmento, e un commit ne chiude uno.
+///
+/// # Perché anche le cancellazioni passano di qui
+///
+/// tantivy ordina aggiunte e cancellazioni per opstamp, e l'opstamp lo dà il
+/// momento in cui l'operazione gli arriva. Un `delete_term` diretto dopo
+/// un'aggiunta ancora in coda prenderebbe un opstamp **più basso** di lei, non
+/// la colpirebbe, e un documento cancellato tornerebbe fra i risultati. In
+/// coda le operazioni restano nell'ordine in cui sono state accettate, e `run`
+/// le numera in quell'ordine.
+///
+/// Il contratto lo permette: un indice può accumulare fino al `flush`, purché
+/// chi interroga veda le proprie scritture, e una query passa dal commit, che
+/// svuota la coda (vedi [`SearchIndex::commit`]).
+#[derive(Default)]
+pub(super) struct Pending {
+    /// Le operazioni, nell'ordine in cui sono state accettate.
+    pub(super) ops: Vec<UserOperation<TantivyDocument>>,
+    /// Gli id delle aggiunte in coda: se tantivy rifiuta il lotto, sono loro
+    /// i documenti perduti, anche se arrivati con una chiamata precedente.
+    pub(super) added: Vec<DocId>,
+    /// Il testo in coda, in byte: quando passa [`PENDING_BYTES`] la coda parte
+    /// senza aspettare il commit.
+    pub(super) bytes: usize,
 }
 
 /// Apre un indice esistente, se c'è ed è ancora il nostro.
