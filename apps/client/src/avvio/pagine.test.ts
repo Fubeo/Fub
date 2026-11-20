@@ -143,3 +143,12 @@ describe("lo strato d'avvio nelle tre pagine", () => {
     }
   });
 });
+
+describe("i pulsanti delle tre pagine", () => {
+  // Un <button> senza `type` è un pulsante d'invio: dentro un modulo, domani,
+  // manderebbe il modulo invece di fare il suo gesto.
+  it.each(Object.entries(PAGINE))('%s: ogni pulsante dice type="button"', (_, html) => {
+    const senza = [...parse(html).querySelectorAll("button")].filter((b) => b.getAttribute("type") !== "button");
+    expect(senza.map((b) => b.id || b.outerHTML)).toEqual([]);
+  });
+});

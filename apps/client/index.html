@@ -404,6 +404,7 @@
           <span data-i18n="activity.title">Attività</span>
           <button
             id="activity-close"
+            type="button"
             class="link-button"
             data-i18n="app.close"
             data-i18n-title="app.close"
@@ -413,10 +414,11 @@
         </div>
         <ul id="activity-list" class="plain-list" role="list"></ul>
       </div>
-      <!-- Gli avvisi si **annunciano**: è l'unica superficie che dice qualcosa
-           che l'utente non ha chiesto, e `aria-live="polite"` è ciò che la fa
-           arrivare anche a chi non la sta guardando — al primo momento in cui
-           non sta leggendo altro, che è quello che «polite» significa. -->
+      <!-- Lo storico degli avvisi. Non è una regione viva: ogni avviso nuovo lo
+           annuncia `#notify-live` (`role="status"`, `aria-live="polite"`), che
+           `ui/notify.ts` crea una volta sola e a cui cambia soltanto il testo.
+           Così arriva anche a chi non guarda il pannello, al primo momento in
+           cui il lettore di schermo non sta leggendo altro. -->
       <div
         id="notify-panel"
         class="dock-panel dock-panel--notify"
@@ -429,6 +431,7 @@
           <span data-i18n="notices.title">Avvisi</span>
           <button
             id="notify-clear"
+            type="button"
             class="link-button"
             data-i18n="notices.clear"
             data-i18n-title="notices.clear.hint"
@@ -437,6 +440,7 @@
           </button>
           <button
             id="notify-close"
+            type="button"
             class="link-button"
             data-i18n="app.close"
             data-i18n-title="app.close"
