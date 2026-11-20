@@ -273,14 +273,6 @@ Il protocollo di view usa:
 La shell non interpreta il payload di un'azione. Lo rimanda al provider
 proprietario.
 
-Il contesto lo pubblica la shell con `set_active_context`, e il kernel lo
-tiene in accordo col vault: segue un rename, perde il documento quando questo
-sparisce. Se la shell nomina un documento che nel vault non c'è (la linguetta
-ripristinata di un file tolto ad app chiusa, la nota che un rename ha appena
-spostato), le view lo leggono senza documento né selezione e mostrano il loro
-stato vuoto, non un errore; il kernel lo scrive nel log (`fub.kernel`). Il
-contesto pubblicato resta: se il file torna, le view lo ritrovano.
-
 Una view può rispondere a un'azione con `ViewUpdate::Custom` di `ns`
 `fub.inspector.tab` (`fub_abi::ui::INSPECTOR_TAB_NS`) e payload
 `{ "view": "<id>" }`: la shell apre l'ispettore su quella scheda, o dice che
