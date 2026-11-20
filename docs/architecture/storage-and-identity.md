@@ -417,9 +417,8 @@ dell'anagrafe, senza parse; il resto si legge, si analizza e si consegna.
 - `fub.base`, `fub.draw` e `fub.proof` non tengono niente per documento e
   rispondono con tutti i documenti.
 - Un file degli indici illeggibile, di un altro schema o di un'altra versione
-  si butta: quell'indice risponde «niente», e si rilegge tutto. Lo stesso un
-  indice che va in panico (o un ospite WASM in trap) dentro la domanda:
-  l'apertura finisce e gli altri restano montati.
+  si butta: quell'indice risponde «niente», e si rilegge tutto; così anche un
+  indice in panico (o un ospite in trap) dentro la domanda.
 - Una riapertura ferma non riscrive l'anagrafe e non la ricompone: la tabella
   in memoria si confronta con quella del file al suo posto (#524).
 
