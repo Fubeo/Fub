@@ -166,7 +166,11 @@ impl PreparedGridBytesCall {
         journal.validate()?;
         // Chi chiama ha letto i byte e ne ha calcolato la revisione, una
         // volta sola (`GridBytesProvider::open`).
-        debug_assert_eq!(Revision::of_bytes(source), revision, "grid open: revision of other bytes");
+        debug_assert_eq!(
+            Revision::of_bytes(source),
+            revision,
+            "grid open: revision of other bytes"
+        );
         let expected = grid_bytes_revision(&revision, &journal.to_text());
         let session = self.invoke("grid open", |provider| {
             provider.open(surface, source, revision.clone(), journal)

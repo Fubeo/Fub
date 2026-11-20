@@ -400,7 +400,12 @@ fn la_sessione_nasce_alla_revisione_che_l_host_ha_calcolato() {
     let mut provider = XlsxGridProvider::new();
     let revision = Revision::of_bytes(&bytes);
     let session = provider
-        .open(XLSX_GRID_SURFACE, &bytes, revision.clone(), &GridJournal::new())
+        .open(
+            XLSX_GRID_SURFACE,
+            &bytes,
+            revision.clone(),
+            &GridJournal::new(),
+        )
         .unwrap();
     assert_eq!(session.revision, grid_bytes_revision(&revision, ""));
     provider.close(&session.instance).unwrap();

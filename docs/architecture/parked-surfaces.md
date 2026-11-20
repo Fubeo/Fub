@@ -32,7 +32,7 @@ la stessa superficie scelta, se è:
 - una superficie di testo (profili `markdown` e `plain-text`) di un file
   del nucleo: peso uno;
 - una superficie che lo dichiara (`EditorSurface.parking`, col suo peso):
-  oggi il foglio di Excel nel riquadro, peso due, perché tiene anche la
+  il foglio di Excel nel riquadro, peso due, perché tiene anche la
   sua sessione aperta nell'host. Il foglio compatto di una scheda della
   lavagna non lo dichiara: è della scheda.
 
