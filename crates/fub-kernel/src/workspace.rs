@@ -6130,6 +6130,7 @@ impl Workspace {
         // disco. A fette finiscono solo i documenti nuovi, modificati, o per cui
         // un indice plugin deve essere allineato.
         let mut to_index = Vec::new();
+        let restoring = tracing::info_span!(target: "fub.apertura", "restore").entered();
         for (entry, known) in documents.into_iter().zip(known_entries) {
             let metadata = if entry.fingerprint.is_some() && up_to_date.contains(&entry.id) {
                 known
@@ -6144,6 +6145,7 @@ impl Workspace {
                 to_index.push(entry);
             }
         }
+        drop(restoring);
         // Gli allegati non hanno metadati da ripristinare: la seconda fase ne
         // legge i byte e aggiorna la stessa impronta dei documenti.
         to_index.extend(assets);
@@ -6815,7 +6817,10 @@ impl Workspace {
         // «sparito» e «non ancora guardato» sono la stessa cosa.
         let mut rejoined = Vec::new();
         if !opening.interrupted {
-            let (pairs, suspended) = self.rejoin_renamed_while_closed();
+            let (pairs, suspended) = {
+                let _phase = tracing::info_span!(target: "fub.apertura", "rejoin").entered();
+                self.rejoin_renamed_while_closed()
+            };
             self.suspended_from_rejoin = suspended;
             if detach_rejoin {
                 rejoined = pairs;

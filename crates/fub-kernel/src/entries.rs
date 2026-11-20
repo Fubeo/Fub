@@ -305,7 +305,11 @@ impl EntryStore {
     /// (vedi il campo `unread`).
     pub(crate) fn open(root: &Utf8Path, storage: Arc<dyn VaultStorage>) -> Self {
         let path = data_root(root).join(FILE);
-        let (table, unread) = match load(&path, storage.as_ref()) {
+        let loaded = {
+            let _phase = tracing::info_span!(target: "fub.apertura", "entries_load").entered();
+            load(&path, storage.as_ref())
+        };
+        let (table, unread) = match loaded {
             Ok(table) => (table.unwrap_or_default(), None),
             Err(and) => {
                 tracing::warn!(target: "fub.kernel", %path, "anagrafe illeggibile: {and}");
@@ -546,6 +550,9 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEn
 /// §15.7, la verità non si rifiuta di aprire, si apre dicendo cosa non ha
 /// letto.
 fn decode(raw: &[u8]) -> Option<BTreeMap<DocId, StoredEntry>> {
+    // Conta anche la rilettura di `store` e della compattazione: la colonna
+    // `n` del banco d'apertura le distingue dalla lettura di `open`.
+    let _phase = tracing::info_span!(target: "fub.apertura", "entries_decode").entered();
     if !raw.starts_with(b"\n") {
         return None;
     }
