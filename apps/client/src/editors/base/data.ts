@@ -449,14 +449,22 @@ export interface BaseFetchWindow { readonly offset: number; readonly limit: numb
 // continuation cursor. Refuse a vault larger than the safe in-memory budget
 // rather than silently returning its first N rows as the complete answer.
 const MAX_DERIVE_ROWS = 20_000;
+/// Tutte le note che `matching` trova, a partire da `window.offset`. La prima
+/// domanda chiede `window.limit` righe e dice quante sono in tutto; se ce ne
+/// sono altre, la seconda le chiede tutte insieme. Ogni domanda costa
+/// all'indice un giro di tutto il vault (filtro e ordine), quindi due domande
+/// e non una ogni 256 righe; e la prima resta piccola, perché un vault oltre il
+/// budget si rifiuta senza trasferirlo. Se intanto il vault cresce, si chiede
+/// ancora ciò che manca.
 export async function fetchAllDocuments(deps: BaseSurfaceDeps, matching: QueryExpr = EVERY_DOCUMENT, select: PropertySelect = { kind: "all" }, window: BaseFetchWindow = { offset: 0, limit: 256 }, signal?: AbortSignal): Promise<{ rows: BaseRowInput[]; total: number }> {
   if (!Number.isSafeInteger(window.offset) || window.offset < 0 || !Number.isSafeInteger(window.limit) || window.limit < 1) throw new RangeError("base: pagina non valida");
   const rows: BaseRowInput[] = [];
   let offset = window.offset;
   let total = 0;
+  let limit = window.limit;
   do {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    const page = await matchingRows(deps, { matching, select, page: { offset, limit: window.limit }, excerpts: "omit" });
+    const page = await matchingRows(deps, { matching, select, page: { offset, limit }, excerpts: "omit" });
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     total = page.total;
     if (total - window.offset > MAX_DERIVE_ROWS) throw new Error(`base: ${total} documenti superano il budget di ${MAX_DERIVE_ROWS}; nessun risultato parziale`);
@@ -467,6 +475,8 @@ export async function fetchAllDocuments(deps: BaseSurfaceDeps, matching: QueryEx
     }
     offset += page.items.length;
     if (offset > total) throw new Error("base: pagina oltre il totale");
+    // Il resto in una domanda sola (un host può darne meno: si richiede).
+    limit = Math.max(window.limit, total - offset);
   } while (offset < total);
   return { rows, total };
 }
