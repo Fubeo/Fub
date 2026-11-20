@@ -750,6 +750,30 @@ fn verify_lease(
     Ok(())
 }
 
+/// Un timbro di cambiamento `change`, letto da una lease aperta quando
+/// l'orologio diceva `observed` ([`crate::storage::change_stamp_clock`],
+/// preso **prima** di aprirla), distingue ogni riscrittura che viene dopo?
+///
+/// Il timbro ha la grana dell'orologio del filesystem: una riscrittura dello
+/// stesso peso e della stessa data nella stessa grana del timbro di prima
+/// lascia il timbro uguale, e la formula della lease non la vede (#318).
+/// Ogni riscrittura dopo `observed` però ha un timbro di almeno
+/// `observed - grana`: se `change` sta almeno una grana prima di `observed`,
+/// la riscrittura ha per forza un timbro diverso. Chi ricorda qualcosa per
+/// una lease (una revisione) se ne fida solo allora; altrimenti la rifà dai
+/// byte. Senza orologio (`None`) non ci si fida.
+///
+/// Vale per l'orologio di questa macchina: un filesystem di rete con un
+/// orologio indietro di più della grana sfugge, come a ogni lease su `stat`.
+pub fn change_stamp_settled(change: Option<u64>, observed: Option<u64>) -> bool {
+    match (change, observed) {
+        (Some(change), Some(observed)) => change
+            .checked_add(crate::storage::CHANGE_STAMP_GRAIN)
+            .is_some_and(|settled| settled <= observed),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1252,5 +1276,51 @@ mod tests {
             matches!(opened, Err(PluginError::AlreadyExists(_))),
             "a name that may be a delivered artifact was opened as a new one"
         );
+    }
+
+    /// **Un timbro nella stessa grana della lettura non si ricorda.**
+    ///
+    /// Una riscrittura dello stesso peso e della stessa data nel tick del
+    /// timbro di prima lascia il timbro uguale (#318): ci si fida solo di un
+    /// timbro almeno una grana più vecchio dell'orologio preso prima della
+    /// lease, e mai senza timbro o senza orologio.
+    #[test]
+    fn a_change_stamp_is_settled_only_one_grain_before_the_read() {
+        use crate::storage::CHANGE_STAMP_GRAIN as GRAIN;
+        let change = 10 * GRAIN;
+        assert!(!change_stamp_settled(Some(change), Some(change)));
+        assert!(!change_stamp_settled(
+            Some(change),
+            Some(change + GRAIN - 1)
+        ));
+        assert!(change_stamp_settled(Some(change), Some(change + GRAIN)));
+        // Un orologio indietro rispetto al timbro (un file di rete, un
+        // orologio corretto) non si fida.
+        assert!(!change_stamp_settled(Some(change), Some(change - 1)));
+        assert!(!change_stamp_settled(None, Some(change + GRAIN)));
+        assert!(!change_stamp_settled(Some(change), None));
+        assert!(!change_stamp_settled(Some(u64::MAX), Some(u64::MAX)));
+    }
+
+    /// L'orologio è nella stessa unità del timbro che il filesystem dà: un
+    /// file appena scritto ha il timbro entro poco dall'orologio di adesso.
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn the_change_clock_speaks_the_unit_of_the_change_stamp() {
+        use crate::storage::{change_stamp_clock, VaultStorage, CHANGE_STAMP_GRAIN as GRAIN};
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(dir.path()).unwrap();
+        let path = root.join("a.txt");
+        let before = change_stamp_clock().unwrap();
+        std::fs::write(&path, b"a").unwrap();
+        let stamp = crate::storage::FsStorage
+            .change_stamp(&path)
+            .unwrap()
+            .unwrap();
+        let after = change_stamp_clock().unwrap();
+        // Il timbro del kernel può stare un tick indietro all'orologio fine.
+        assert!(stamp + GRAIN >= before, "timbro {stamp}, orologio {before}");
+        assert!(stamp <= after + GRAIN, "timbro {stamp}, orologio {after}");
+        assert!(!change_stamp_settled(Some(stamp), Some(after)));
     }
 }
