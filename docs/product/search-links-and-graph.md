@@ -384,8 +384,8 @@ fotogrammi. Col moto ridotto il passo è invece quello nominale (1/60 s): conta
 lo stato d'arrivo, e il grafo si ferma nello stesso punto a ogni ritmo. L'impostazione **Aspetto → Fotogrammi al secondo**
 (`appearance.frame-rate`) mette un tetto al ritmo; il default è il massimo
 dello schermo. Il livello della fisica dipende solo dal numero di nodi. Quando
-i fotogrammi durano stabilmente più del budget (il periodo del tetto, mai sotto
-i 60 fps), il grafo nasconde le etichette dei nodi di grado basso. Le rimette
+i fotogrammi durano stabilmente più del budget (il periodo dello schermo, o
+del tetto se è più lento), il grafo nasconde le etichette dei nodi di grado basso. Le rimette
 dopo cinque secondi di fotogrammi di nuovo nel budget.
 
 La modularizzazione del renderer è tracciata nell'issue

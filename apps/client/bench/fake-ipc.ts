@@ -1390,6 +1390,7 @@ const SETTINGS: SettingEntry[] = [
         options: [
           { value: "", label: "Massimo dello schermo" },
           { value: "240", label: "240 fps" },
+          { value: "180", label: "180 fps" },
           { value: "165", label: "165 fps" },
           { value: "144", label: "144 fps" },
           { value: "120", label: "120 fps" },

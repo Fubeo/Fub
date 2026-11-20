@@ -213,10 +213,13 @@ logica sta in `vblank.rs` ([ADR 0246](../decisions/0246-vblank-emulato-per-webki
   sono;
 - la frequenza è quella della modalità del CRTC (`drmModeGetResources`,
   `drmModeGetCrtc`, cercate nel processo con `dlsym`), arrotondata come la dà
-  GTK e riletta ogni secondo. Le scadenze sono assolute su `CLOCK_MONOTONIC`
-  (`clock_nanosleep` con `TIMER_ABSTIME`), quindi il ritmo non deriva; la
-  risposta ha il contatore a 32 bit e il tempo del vblank, come quella del
-  kernel;
+  GTK e riletta ogni secondo, con l'ioctl fuori dal lock dello stato (costa
+  0,3 µs, ma può aspettare il driver durante un cambio di modalità). Le
+  scadenze sono assolute su `CLOCK_MONOTONIC` (`clock_nanosleep` con
+  `TIMER_ABSTIME`), quindi il ritmo non deriva; il thread che dorme ha il
+  margine dei timer a 1 ns (`PR_SET_TIMERSLACK`: il ritardo mediano al
+  risveglio scende da 65 a 14 µs a 180 Hz). La risposta ha il contatore a 32
+  bit e il tempo del vblank, come quella del kernel;
 - fuori da 24–500 Hz, con il CRTC spento o con un'attesa oltre 3 s risponde
   come il driver (`-1`, `EOPNOTSUPP`): WebKit resta sul timer, come prima;
 - `FUB_VBLANK_EMULATO=0` la spegne, e fuori dall'intervallo di WebKitGTK
