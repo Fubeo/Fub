@@ -99,6 +99,7 @@ use sharing::{
     handle_invite, handle_invite_accept, handle_revoke, handle_vault_key_get,
     handle_vault_key_store,
 };
+pub use sharing::INITIAL_KEY_EPOCH;
 pub use vault_state::LEGACY_STATE_ASIDE;
 use vault_state::{adopt_legacy, already_folded, cap_seen, open_vault};
 
