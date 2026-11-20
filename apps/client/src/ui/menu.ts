@@ -10,7 +10,6 @@ import { t } from "../i18n/strings";
 import { focusReturnsInto, keepFocusWhereItIs, trapFocus } from "./a11y";
 import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
-import { swallowOpeningRelease } from "./menu-release";
 import { figureLabel, figureValue, PAGE_FIGURES } from "./page-mark";
 import { enterSurface, exitSurface } from "./motion";
 import { DURATION, enter, flip, motionLevel, stagger } from "../moto";
@@ -425,23 +424,12 @@ function menuHost(at: MouseEvent | HTMLElement | MenuPoint): HTMLElement {
   return from?.closest<HTMLElement>('[aria-modal="true"]') ?? workspace ?? document.body;
 }
 
-/// La voce su cui si alza il tasto trascinato dalla pressione che ha aperto il
-/// menu: un pulsante del menu, di un suo sottomenu o della barra.
-function pickOnRelease(target: Element): HTMLElement | null {
-  if (target.closest(SURFACE) === null) return null;
-  return target.closest<HTMLButtonElement>("button:not(:disabled)");
-}
-
 export function showContextMenu(
   at: MouseEvent | HTMLElement | MenuPoint,
   items: readonly MenuItem[],
   options: ContextMenuOptions = {},
 ): ContextMenuHandle {
   closeContextMenu();
-  // Su Linux il tasto destro apre il menu alla pressione: il suo rilascio, che
-  // arriva sopra il menu, non lo chiude e non sceglie la voce sotto il
-  // puntatore, a meno di esserci arrivato trascinando (`menu-release.ts`).
-  swallowOpeningRelease(at, pickOnRelease);
   const entry = nextEntry;
   nextEntry = null;
   const lifetime = openLifetime();

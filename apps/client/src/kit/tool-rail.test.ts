@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { accessibleName } from "../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
+import { mountMenuRelease } from "../ui/menu-release";
 import { listenerLedger, pointer, press } from "./testing";
 import { createToolRail, FLYOUT_HOLD_MS, toolTip, type RailGroup } from "./tool-rail";
 
@@ -179,8 +180,10 @@ describe("createToolRail", () => {
 
   it("su Linux il rilascio del tasto destro che apre la tendina non sceglie lo strumento mostrato", () => {
     // WebKitGTK: `contextmenu` alla pressione, poi `mouseup` e `click` col
-    // `button` del sinistro sulla casella (IMP-6201).
+    // `button` del sinistro sulla casella (IMP-6201). La guardia della shell
+    // (`ui/menu-release.ts`) vale anche per questa tendina.
     vi.useFakeTimers();
+    mountMenuRelease(life);
     const made = rail("eraser");
     const pen = slots(made.element)[2]!;
     pen.dispatchEvent(pointer("pointerdown", { button: 2, buttons: 2 }));

@@ -9,7 +9,8 @@
 // rilascio, e Chromium al rilascio manda `auxclick`, non `click`.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { closeContextMenu, showContextMenu } from "./menu";
-import { RELEASE_SLOP_PX } from "./menu-release";
+import { openLifetime, type Lifetime } from "./lifetime";
+import { mountMenuRelease, RELEASE_SLOP_PX } from "./menu-release";
 
 const AT = { x: 40, y: 30 };
 
@@ -33,9 +34,12 @@ describe("il rilascio del tasto destro che ha aperto il menu", () => {
   let rowClicks: number;
   let opened: string[];
   let closed: number;
+  let shell: Lifetime;
 
   beforeEach(() => {
     vi.useFakeTimers();
+    shell = openLifetime();
+    mountMenuRelease(shell);
     document.body.replaceChildren();
     Object.defineProperty(document, "startViewTransition", { configurable: true, value: undefined });
     workspace = document.createElement("main");
@@ -61,8 +65,7 @@ describe("il rilascio del tasto destro che ha aperto il menu", () => {
 
   afterEach(() => {
     closeContextMenu();
-    // Ogni prova finisce con la pressione chiusa: la guardia non passa alla dopo.
-    mouse(document.body, "mousedown", { button: 0, buttons: 1 });
+    shell.close();
     vi.runAllTimers();
     vi.useRealTimers();
   });
@@ -164,6 +167,44 @@ describe("il rilascio del tasto destro che ha aperto il menu", () => {
     mouse(row, "mouseup", { button: 0, buttons: 0 });
     mouse(row, "click", { button: 0, detail: 1 });
     expect(rowClicks).toBe(1);
+  });
+
+  it("vale anche per un menu aperto in un punto calcolato, e dopo un'attesa", async () => {
+    // L'editor apre il menu sotto il cursore (un punto, non l'evento), e
+    // altri menu dopo aver chiesto le voci.
+    const editor = document.createElement("div");
+    workspace.append(editor);
+    editor.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      void Promise.resolve().then(() => showContextMenu({ x: 12, y: 50 }, [{ label: "Incolla", run: () => opened.push("incolla") }]));
+    });
+    pointer(editor, "pointerdown", { button: 2, buttons: 2 });
+    mouse(editor, "mousedown", { button: 2, buttons: 2 });
+    mouse(editor, "contextmenu", { button: 2, buttons: 2 });
+    await Promise.resolve();
+    vi.advanceTimersByTime(300);
+    expect(menu()).not.toBeNull();
+    releaseLinux(menu()!);
+    expect(menu()).not.toBeNull();
+    expect(opened).toEqual([]);
+  });
+
+  it("dove nessun menu si apre, il rilascio del tasto destro non preme il pulsante sotto", () => {
+    const button = document.createElement("button");
+    let pressed = 0;
+    button.addEventListener("click", () => pressed++);
+    workspace.append(button);
+    mouse(button, "mousedown", { button: 2, buttons: 2 });
+    mouse(button, "contextmenu", { button: 2, buttons: 2 });
+    mouse(button, "mouseup", { button: 0, buttons: 2 });
+    mouse(button, "click", { button: 0, detail: 1 });
+    vi.runOnlyPendingTimers();
+    expect(pressed).toBe(0);
+    // Il clic sinistro dopo, invece, sì.
+    mouse(button, "mousedown", { button: 0, buttons: 1 });
+    mouse(button, "mouseup", { button: 0, buttons: 0 });
+    mouse(button, "click", { button: 0, detail: 1 });
+    expect(pressed).toBe(1);
   });
 
   it("su Windows il menu arriva dopo il rilascio e resta; il clic dopo è un clic vero", () => {

@@ -137,9 +137,11 @@ su Windows. Il rilascio che segue non lo chiude e non sceglie la voce che
 capita sotto il puntatore: il menu resta aperto e una voce si sceglie con un
 clic. Come nei menu di GTK, premere, scorrere fino a una voce e rilasciare la
 sceglie, se il puntatore si è mosso di più di 4 px dal punto della pressione.
-Vale per ogni menu che passa da `showContextMenu` e per la tendina degli
-strumenti dei disegni e della lavagna (`ui/menu-release.ts`). Il clic sinistro
-fuori, Esc e la scelta di una voce lo chiudono come sempre.
+La guardia è una, sulla finestra (`ui/menu-release.ts`, montata dalla shell):
+vale per ogni menu, anche aperto in un punto calcolato o fatto a parte come la
+tendina degli strumenti, e dove nessun menu si apre il rilascio del tasto
+destro non preme il pulsante sotto. Il clic sinistro fuori, Esc e la scelta di
+una voce lo chiudono come sempre.
 
 Dove Fub non ha un menu, il tasto destro non apre quello della WebView: resta
 nei campi di testo, sul testo scelto, sul lettore audio e video e con
