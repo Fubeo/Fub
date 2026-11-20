@@ -231,6 +231,47 @@ EGL, con due attese di fotogramma per fotogramma), e lo sfarfallio non è
 stato guardato: numeri e condizioni in
 [Il vblank emulato su NVIDIA](../misure/2026-11-17-linux-vblank-emulato.md#la-proposta).
 
+## Gli scorrevoli
+
+WebKitGTK 2.54 non sempre compone lo scorrimento di un contenitore con
+`overflow: auto`: per alcuni, che non sono un contesto di impilamento, a ogni
+passo ridipinge la parte visibile, e lo scorrimento perde la frequenza dello
+schermo appena la pagina pesa. Non dipende dal solo numero di discendenti
+posizionati: l'indice della finestra di comando ne ha più di 500 e scorre
+senza ridisegni, le impostazioni ne hanno meno e ridisegnavano tutto. Per
+questo la correzione si dà contenitore per contenitore, misurata.
+
+La correzione è `isolation: isolate` sullo scorrevole: lo fa diventare un
+piano a sé senza cambiare l'aspetto. Non crea un blocco contenitore per i
+discendenti `position: fixed` (lo farebbero `transform`, `contain: paint` o
+`will-change: transform`, che li taglierebbero), e i livelli `z-index` di
+dentro restano gli stessi fra loro. `will-change: scroll-position` e uno
+sfondo opaco non bastano.
+
+| Scorrevole | Dove | Ridisegni in 5 s, prima → dopo |
+|---|---|---|
+| Impostazioni (`.settings-scroll`) | pelle, `settings.css` | 16 544 → 1 037 |
+| Albero dei file (`#sidebar`) | struttura | 1 465 → 34 |
+| Risultati della ricerca (`#sidebar`) | struttura | 563 → 52 |
+
+Gli altri scorrevoli misurati non hanno il difetto e restano come sono:
+l'editor (`.cm-scroller`, già un piano per CodeMirror), la lettura
+(`.pane-preview`), la Struttura e gli altri pannelli dell'ispettore,
+l'indice delle impostazioni, il PDF e le sue miniature, la finestra di
+comando (già isolata). Il foglio e la lavagna ridipingono per un'altra
+ragione, che `isolation` non tocca: il foglio riscrive righe e stili a ogni
+passo verticale, la lavagna sposta centinaia di schede con `transform`.
+
+La misura: l'app vera, con vault, configurazione e cartelle XDG temporanei,
+l'ispettore remoto di WebKit (`WEBKIT_INSPECTOR_HTTP_SERVER`) e la
+`Timeline` per contare gli eventi `Paint`, mentre un `requestAnimationFrame`
+sposta `scrollTop` per 5 s; la proprietà si prova sullo stesso elemento con
+`style.setProperty`, prima e dopo nella stessa finestra. Chromium compone
+ogni scorrevole e non vede il difetto: il banco visivo controlla l'aspetto,
+non i ridisegni. Uno scorrevole nuovo e grande (un pannello, un elenco lungo)
+si misura così prima di dargli la proprietà; il presidio
+`src/theme/scrittoio/scorrevoli.test.ts` tiene quelli già corretti.
+
 ## Gli appunti senza proprietario
 
 Quando la pagina legge i tipi degli appunti (`clipboardData.types` di un

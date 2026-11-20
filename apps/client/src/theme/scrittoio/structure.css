@@ -628,6 +628,10 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden auto;
+  /* Un piano a sé: WebKitGTK compone lo scorrimento dell'albero e dei
+     risultati della ricerca invece di ridipingerli a ogni passo
+     (docs/architecture/desktop-webview.md, «Gli scorrevoli»). */
+  isolation: isolate;
   container-type: inline-size;
   container-name: drawer;
 }
