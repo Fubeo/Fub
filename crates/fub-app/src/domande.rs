@@ -30,6 +30,16 @@
 //! thread principale erano 100 ms in cui la finestra non presentava
 //! fotogrammi. In corsia i disegni restano in fila fra loro e non aspettano le
 //! domande dell'indice né il correttore.
+//!
+//! Anche le porte del foglio sui byte (`open_grid_bytes`, `grid_bytes_window`,
+//! `apply_grid_bytes`, `grid_bytes_commands`, `grid_bytes_command`,
+//! `close_grid_bytes`) hanno una corsia loro (`CORSIA_GRIGLIA`), che c'è
+//! sempre. Scorrendo il foglio la shell chiede una finestra a ogni blocco di
+//! righe nuove: sul thread principale ogni lettura toglieva fotogrammi allo
+//! scorrimento. La fila tiene l'ordine che il thread principale dava: una
+//! finestra chiesta prima di una modifica si legge prima della modifica, e il
+//! catalogo dei comandi chiesto dopo esce dopo. In parallelo non guadagnerebbe
+//! niente: il provider di una superficie risponde a una chiamata per volta.
 
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -40,13 +50,18 @@ use fub_abi::traits::IndexQuery;
 use fub_abi::PluginError;
 
 /// Quante corsie al più per le domande: l'indice, la comune delle altre e i
-/// plugin. Quella delle viste sta fuori dal conto.
+/// plugin. Quelle delle viste e del foglio stanno fuori dal conto.
 pub(crate) const MAX_CORSIE: usize = 16;
 const CORSIA_INDICE: &str = "indice";
 const CORSIA_ALTRE: &str = "altre";
 /// La corsia dei disegni delle view. Nessuna domanda ci finisce per errore:
 /// quelle dei plugin si chiamano `custom:…`.
 pub(crate) const CORSIA_VISTE: &str = "viste";
+/// La corsia delle porte del foglio. Come quella delle viste, non è un
+/// prefisso che una domanda possa scegliere.
+pub(crate) const CORSIA_GRIGLIA: &str = "griglia";
+/// Le corsie che ci sono sempre e stanno fuori dal tetto delle domande.
+const CORSIE_FISSE: [&str; 2] = [CORSIA_VISTE, CORSIA_GRIGLIA];
 
 type Lavoro = Box<dyn FnOnce() + Send + 'static>;
 
@@ -95,11 +110,15 @@ impl Corsie {
             .file
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let domande = file.len() - usize::from(file.contains_key(CORSIA_VISTE));
+        let fisse = CORSIE_FISSE
+            .iter()
+            .filter(|fissa| file.contains_key(**fissa))
+            .count();
+        let domande = file.len() - fisse;
         let nome = if file.contains_key(&nome)
             || domande < MAX_CORSIE - 1
             || nome == CORSIA_ALTRE
-            || nome == CORSIA_VISTE
+            || CORSIE_FISSE.contains(&nome.as_str())
         {
             nome
         } else {
@@ -275,6 +294,89 @@ mod tests {
         assert_eq!(file.len(), MAX_CORSIE + 1);
         assert!(file.contains_key(CORSIA_VISTE));
         assert!(file.contains_key(CORSIA_ALTRE));
+    }
+
+    #[test]
+    fn la_corsia_del_foglio_c_e_anche_a_tetto_pieno_e_non_toglie_posti() {
+        let corsie = Corsie::default();
+        runtime().block_on(async {
+            for fissa in CORSIE_FISSE {
+                corsie.chiedi("grid", fissa.into(), || Ok(())).await.unwrap();
+            }
+            for i in 0..MAX_CORSIE * 4 {
+                corsie
+                    .chiedi("index query", format!("custom:ns{i}"), || Ok(()))
+                    .await
+                    .unwrap();
+            }
+            assert_eq!(
+                corsie
+                    .chiedi("grid window", CORSIA_GRIGLIA.into(), || Ok(5))
+                    .await
+                    .unwrap(),
+                5
+            );
+        });
+        let file = corsie.file.lock().unwrap();
+        assert_eq!(file.len(), MAX_CORSIE + CORSIE_FISSE.len());
+        assert!(file.contains_key(CORSIA_GRIGLIA));
+        assert!(file.contains_key(CORSIA_ALTRE));
+    }
+
+    /// Come sul thread principale: una finestra entrata in corsia prima di
+    /// una modifica legge la revisione da cui la modifica parte, anche se è
+    /// lenta, e la modifica che segue non la scavalca.
+    #[test]
+    fn nel_foglio_una_finestra_chiesta_prima_di_una_modifica_si_legge_prima() {
+        let corsie = Corsie::default();
+        let revisione = Arc::new(Mutex::new(1u32));
+        runtime().block_on(async {
+            let finestra = {
+                let revisione = Arc::clone(&revisione);
+                corsie.chiedi("grid window", CORSIA_GRIGLIA.into(), move || {
+                    std::thread::sleep(Duration::from_millis(150));
+                    Ok(*revisione.lock().unwrap())
+                })
+            };
+            let modifica = {
+                let revisione = Arc::clone(&revisione);
+                corsie.chiedi("grid apply", CORSIA_GRIGLIA.into(), move || {
+                    let mut revisione = revisione.lock().unwrap();
+                    *revisione += 1;
+                    Ok(*revisione)
+                })
+            };
+            let (letta, scritta) = tokio::join!(finestra, modifica);
+            assert_eq!((letta.unwrap(), scritta.unwrap()), (1, 2));
+        });
+    }
+
+    #[test]
+    fn una_finestra_lenta_del_foglio_non_fa_aspettare_indice_e_viste() {
+        let corsie = Corsie::default();
+        runtime().block_on(async {
+            let partenza = Instant::now();
+            let lenta = corsie.chiedi("grid window", CORSIA_GRIGLIA.into(), || {
+                std::thread::sleep(Duration::from_millis(400));
+                Ok(())
+            });
+            let svelte = async {
+                let indice = corsie
+                    .chiedi("index query", "indice".into(), || Ok(()))
+                    .await;
+                let vista = corsie
+                    .chiedi("view render", CORSIA_VISTE.into(), || Ok(()))
+                    .await;
+                (indice, vista, partenza.elapsed())
+            };
+            let (_, (indice, vista, dopo)) = tokio::join!(lenta, svelte);
+            indice.unwrap();
+            vista.unwrap();
+            assert!(
+                dopo < Duration::from_millis(300),
+                "l'indice e le viste hanno aspettato il foglio: {dopo:?}"
+            );
+        });
     }
 
     #[test]

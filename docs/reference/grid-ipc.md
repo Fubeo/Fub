@@ -20,7 +20,9 @@ mirror: `list_grid_surfaces` elenca i binding, e una superficie con
 `grid_bytes_command` e `close_grid_bytes`. La shell
 negozia famiglia, versione e formato prima di aprire; un binding sconosciuto
 o incompatibile non viene chiamato e la superficie dice che il foglio non si
-apre. `query_index` non applica patch e non possiede lifecycle.
+apre. `query_index` non applica patch e non possiede lifecycle. Le sei porte
+sui byte girano fuori dal thread principale, in fila nella corsia del foglio
+e nell'ordine d'arrivo ([contratto IPC](ipc-contract.md)).
 
 `open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la shell non
 trasporta i byte, ma il giornale canonico delle celle cambiate (il testo
