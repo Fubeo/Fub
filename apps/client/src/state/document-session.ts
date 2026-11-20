@@ -4,6 +4,7 @@
 // l'origine della scrittura, la coda e i due debounce. Il pannello possiede le
 // superfici e osserva soltanto eventi e snapshot immutabili.
 import { api as defaultApi } from "../host/ipc";
+import { isErrorKind } from "../host/errors";
 import type { DocumentSource, DraftInfo, Origin, WriteBase } from "../host/contract";
 import type { SourceKind } from "../host/enums.generated";
 import { Queue } from "../ui/race";
@@ -1286,6 +1287,14 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// Le sessioni il cui testo è un giornale di celle (`text_kind`
   /// `grid_journal`), anche loro soltanto da una lettura riuscita.
   readonly #journals = new WeakSet<DocumentSession>();
+  /// Le sessioni che una lettura riuscita ha descritto (`#describe`). Una
+  /// sessione nata da una bozza non c'è finché non si legge che file è, e il
+  /// suo primo salvataggio lo chiede prima di scrivere (#514).
+  readonly #described = new WeakSet<DocumentSession>();
+  /// Le sorgenti che `withoutSuperseded` ha appena letto delle bozze che
+  /// restano, con il vault in cui le ha lette: `rejoin` le usa per descrivere
+  /// le sessioni che nascono dalle bozze senza rileggere il file, e le toglie.
+  readonly #draftSources = new Map<string, { readonly vault: string | null; readonly source: DocumentSource }>();
   readonly #listeners = new Set<SessionListener>();
   readonly #identityVersions = new Map<string, number>();
   /// Le scritture che un comando sta per fare su un documento, annunciate da
@@ -1616,15 +1625,21 @@ export class DocumentSessionCollection implements DraftBufferStore {
    */
   async withoutSuperseded(drafts: DraftInfo[]): Promise<DraftInfo[]> {
     const vault = this.#currentVault();
+    this.#draftSources.clear();
     const checked = await Promise.all(drafts.map(async (draft) => {
       if (!draft.exists || this.#sessions.has(draft.doc)) return draft;
-      let disk: string;
+      let source: DocumentSource;
       try {
-        disk = (await this.#api.readDocument(draft.doc, ...vaultArg(vault))).text;
+        source = await this.#api.readDocument(draft.doc, ...vaultArg(vault));
       } catch {
         return draft;
       }
-      if (disk !== draft.text) return draft;
+      if (source.text !== draft.text) {
+        // La bozza resta: che file è lo si sa già, e la sessione che ne
+        // nascerà non lo rilegge.
+        this.#draftSources.set(draft.doc, { vault, source });
+        return draft;
+      }
       // Nel frattempo il documento si è aperto, o il vault è cambiato: la
       // decisione non vale più per questa bozza.
       if (this.#sessions.has(draft.doc) || this.#currentVault() !== vault) return draft;
@@ -1638,9 +1653,27 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return checked.filter((draft): draft is DraftInfo => draft !== null);
   }
 
+  /**
+   * Le bozze rientrano nei loro documenti e i buffer si salvano. Una sessione
+   * nata qui dalla bozza (il documento non era aperto in nessuna scheda) si
+   * descrive prima del salvataggio con la sorgente che `withoutSuperseded` ha
+   * già letto: un giornale di celle si svuota dopo la scrittura invece di
+   * restare nel buffer (e la griglia lo riapplicherebbe sui byte che lo
+   * contengono già), un file senza formato si scrive a byte (#514). Senza
+   * quella lettura lo fa il primo salvataggio stesso (`#knowSource`).
+   */
   rejoin(drafts: DraftInfo[]): DraftInfo[] {
     const rejoined = rejoinDrafts(drafts, this);
-    for (const draft of rejoined) this.#sessions.get(draft.doc)?.scheduleSave();
+    for (const draft of rejoined) {
+      const session = this.#sessions.get(draft.doc);
+      if (!session) continue;
+      const read = this.#draftSources.get(draft.doc);
+      if (!this.#described.has(session) && read && read.vault === (this.#vaults.get(session) ?? null)) {
+        this.#describe(session, read.source);
+      }
+      session.scheduleSave();
+    }
+    this.#draftSources.clear();
     return rejoined;
   }
 
@@ -2102,6 +2135,26 @@ export class DocumentSessionCollection implements DraftBufferStore {
     else this.#formatless.delete(session);
     if (source.text_kind === "grid_journal") this.#journals.add(session);
     else this.#journals.delete(session);
+    this.#described.add(session);
+  }
+
+  /// Prima di scrivere, la sessione deve sapere che file salva: la porta
+  /// (byte o documento) e se il suo testo è un giornale di celle dipendono da
+  /// lì. Una sessione nata da una bozza non l'ha mai letto, e lo legge adesso
+  /// sotto la sua chiave. Un file che non c'è più si ricrea dalla porta dei
+  /// documenti, come una nota nuova; una lettura che fallisce per un altro
+  /// motivo fa fallire il salvataggio, e la bozza resta: un giornale scritto
+  /// alla cieca resterebbe nel buffer e si riapplicherebbe (#514).
+  async #knowSource(session: DocumentSession, id: string, vault: string | null): Promise<void> {
+    if (this.#described.has(session)) return;
+    let source: DocumentSource;
+    try {
+      source = await this.#underKey(session, (open) => this.#api.openDocument(id, open, ...vaultArg(vault)));
+    } catch (error) {
+      if (isErrorKind(error, "not_found")) return;
+      throw error;
+    }
+    this.#describe(session, source);
   }
 
   /// Il salvataggio di un file senza formato. `Revision::of(testo)` è
@@ -2146,10 +2199,14 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const api: SessionPort = {
       readDocument: (doc) =>
         this.#underKey(session, (key) => this.#api.openDocument(doc, key, ...vaultArg(vault))),
-      writeDocument: (doc, source, writeBase) =>
-        this.#formatless.has(session)
-          ? this.#writeFormatless(session, doc, source, writeBase, vault)
-          : this.#underKey(session, (key) => this.#api.writeDocument(doc, source, writeBase, vault, key)),
+      writeDocument: (doc, source, writeBase) => {
+        const write = (): Promise<string> =>
+          this.#formatless.has(session)
+            ? this.#writeFormatless(session, doc, source, writeBase, vault)
+            : this.#underKey(session, (key) => this.#api.writeDocument(doc, source, writeBase, vault, key));
+        // Una sessione già descritta scrive subito, senza un giro in più.
+        return this.#described.has(session) ? write() : this.#knowSource(session, doc, vault).then(write);
+      },
       saveDraft: (doc, source, draftBase) => this.#api.saveDraft(doc, source, draftBase, ...vaultArg(vault)),
       discardDraft: (doc) => this.#api.discardDraft(doc, ...vaultArg(vault)),
     };
