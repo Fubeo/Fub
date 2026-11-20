@@ -19,6 +19,9 @@
 // - `S9/Fogli vivi.canvas` e `S9/Conti-01.xlsx` … `S9/Conti-20.xlsx`: le
 //   trecento schede di S3, negli stessi posti, e in più venti fogli `.xlsx`
 //   in un blocco di 5 × 4 a sinistra della prima riga (S9);
+// - `S10/Registro.xlsx`: un foglio grande, 3000 righe per 20 colonne, da
+//   scorrere, da percorrere con le frecce e con la barra multifunzione che si
+//   rifà a ogni cambio di larghezza (S10);
 // - `F3/Cartella/`: trenta note e una sottocartella di dieci, la cartella che
 //   F3 apre e chiude;
 // - `config/settings.json`: le impostazioni di macchina con la sonda accesa.
@@ -108,6 +111,11 @@ export const SHEET_BOARD = {
   rows: 4,
 };
 export const SHEET_CARDS = SHEET_BOARD.columns * SHEET_BOARD.rows;
+
+/// S10: il foglio grande, il nome che si cerca col selettore rapido e la sua
+/// misura. Ogni colonna dopo la prima ha numeri: sono le celle che la griglia
+/// misura (`#fitCells`), il caso più pesante dello scorrimento.
+export const BIG_SHEET = { file: "S10/Registro.xlsx", name: "Registro", rows: 3_000, columns: 20 };
 
 /// Il foglio `i` di S9, da 1 a `SHEET_CARDS`.
 export const sheetName = (i) => `S9/Conti-${String(i).padStart(2, "0")}.xlsx`;
@@ -290,7 +298,7 @@ function inkBoard() {
 export function writeFixtures(root) {
   const vault = join(root, "vault");
   const config = join(root, "config");
-  for (const dir of ["S1", "S2", "S3", "S5", "S7", "S8", "S9", "R1", "T1"]) mkdirSync(join(vault, dir), { recursive: true });
+  for (const dir of ["S1", "S2", "S3", "S5", "S7", "S8", "S9", "S10", "R1", "T1"]) mkdirSync(join(vault, dir), { recursive: true });
   mkdirSync(config, { recursive: true });
   writeFileSync(join(vault, "S1", "Lunga.md"), longNote());
   for (let i = 1; i <= NOTES; i++) writeFileSync(join(vault, "S2", `${noteName(i)}.md`), note(i));
@@ -302,6 +310,7 @@ export function writeFixtures(root) {
   writeFileSync(join(vault, INK_BOARD.sheet), workbook(INK_TABLE.rows, INK_TABLE.columns));
   writeFileSync(join(vault, SHEET_BOARD.file), sheetBoard());
   for (let i = 1; i <= SHEET_CARDS; i++) writeFileSync(join(vault, sheetName(i)), workbook());
+  writeFileSync(join(vault, BIG_SHEET.file), workbook(BIG_SHEET.rows, BIG_SHEET.columns));
   writeFileSync(join(vault, "T1", "Tessere.png"), storedPng(FRAME.width, FRAME.height));
   for (const [name, from] of Object.entries(MODE_FILES)) copyFileSync(join(repo, from), join(vault, "R1", name));
   mkdirSync(join(vault, GESTURE_FOLDER, "Dentro"), { recursive: true });

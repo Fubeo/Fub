@@ -53,6 +53,7 @@ Fub si guardano `key`, `code` e `ctrlKey` del `keydown` che arriva davvero.
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
 | S8 | la penna sulla lavagna: dieci tratti da 300 ms sopra una scheda con una tabella di 100 × 100 celle, su una lavagna con un foglio `.xlsx` di 100 × 100 celle e 2.000 tratti già scritti; poi la scheda della tabella spostata coi suoi tratti per 2 s | massimo fra fotogrammi a penna (obiettivo 2 periodi, 33 ms a 60 Hz) e allo spostamento; path asciutti; sha256 del `.xlsx` prima e dopo |
 | S9 | la lavagna di S3 con venti fogli `.xlsx` vivi, la vista sul loro blocco a zoom 0,5: spostamento e zoom come S3; poi una nota di quella lavagna in scrittura, 200 caratteri come S1 (`S9.keyToPaint`) | numero dei fogli vivi; p95 e massimo fra fotogrammi; p95 tasto → fotogramma |
+| S10 | il foglio grande, `S10/Registro.xlsx` di 3.000 × 20 celle: 150 passi di `scrollTop` da 60 px in giù e 150 in su, uno per fotogramma come la rotella, dopo un giro a vuoto; poi un clic su una cella e venti frecce, giù e su a turno, che cambiano la scelta e fanno rileggere la barra dei comandi; poi la barra laterale aperta e chiusa dal comando, sei volte, che cambia la larghezza del foglio e della barra. Il job `webview` della CI non lo fa girare | p95 e massimo fra fotogrammi allo scorrimento (`S10.scroll.frameGap.*`); per frecce e barra (`S10.frecce.mainBlocked`, `S10.barra.mainBlocked`) la mediana del thread principale bloccato come F3; il thread occupato (`S10.scroll.busy.p95`) e la CPU nel referto |
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
@@ -165,8 +166,7 @@ tabella di testo, che resta sulla lavagna con i suoi tratti. Il fit della
 lavagna può stare sotto la soglia della scheda viva (zoom 0,35): in quel caso
 lo scenario la ingrandisce con cinque scatti di Ctrl+rotella mandati dalla
 pagina sulla scheda, fuori dalla misura, perché il Ctrl+rotella del driver non
-ingrandisce. Se la penna non
-scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
+ingrandisce. Se la penna non scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
 rifà i dieci tratti col mouse e D tenuto, e il referto lo dice (`input`).
 WebKitWebDriver sotto Xvfb manda il `pointerdown` della penna e poi niente:
 il tratto rimasto giù terrebbe la lavagna («un tratto alla volta»), quindi
@@ -252,10 +252,10 @@ la finestra. Le regole:
 
 | valore | soglia |
 |---|---|
-| fotogrammi, p95 (`S3`, `S9`) | 1 P |
-| fotogrammi, massimo (`S3`, `S5`, `S7`, `S8`, `S9`) | 2 P |
+| fotogrammi, p95 (`S3`, `S9`, `S10`) | 1 P |
+| fotogrammi, massimo (`S3`, `S5`, `S7`, `S8`, `S9`, `S10`) | 2 P |
 | tasto a schermo, p95 (`S1`, `S9`) | 2 P |
-| thread principale bloccato per gesto (`F3`) | 1 P |
+| thread principale bloccato per gesto (`F3`, `S10`) | 1 P |
 | rAF a vuoto, mediana (`F1`) | 1,1 P |
 
 A 180 Hz il tasto a schermo deve stare in 11,1 ms, a 60 Hz in 33,3. Le

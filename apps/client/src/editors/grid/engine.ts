@@ -511,13 +511,16 @@ interface TouchPress {
 type Drawing = Map<HTMLElement, HTMLElement[]>;
 /// Una cella disegnata in una riga che resta: l'elemento, il suo bordo, la
 /// firma di ciò che mostra (`#cellSignature`), il suo HTML senza la
-/// selezione e le classi senza la selezione.
+/// selezione e le classi senza la selezione. L'HTML si legge solo quando la
+/// firma cambia (`#drawRow`): una cella appena entrata non ce l'ha
+/// (`null`), perché serializzarla a ogni riga che lo scorrimento aggiunge
+/// costa e serve soltanto a un confronto che forse non verrà mai.
 interface DrawnCell {
   readonly cell: HTMLElement;
   border: HTMLElement | null;
   place: string;
   signature: string;
-  html: string;
+  html: string | null;
   base: string;
 }
 /// Le misure del riquadro lette una volta, prima di scrivere (`#renderRows`).
@@ -3168,11 +3171,15 @@ export class GridEngine {
         const fresh = this.#cellElement(position, merge, row);
         if (!fresh) return;
         if (!drawn) {
-          drawn = { cell: fresh.cell, border: fresh.border, place, signature, html: fresh.html, base: fresh.cell.className };
+          drawn = { cell: fresh.cell, border: fresh.border, place, signature, html: null, base: fresh.cell.className };
           state.cells.set(slot, drawn);
           if (fresh.measure) measures.push(fresh.cell);
         } else {
-          if (drawn.html !== fresh.html) {
+          // La cella nuova com'è, prima di ogni selezione e misura: se è
+          // uguale a quella disegnata, la disegnata resta com'è. Una cella
+          // senza HTML (mai confrontata) si rifà: il risultato è lo stesso.
+          const html = fresh.cell.outerHTML;
+          if (drawn.html !== html) {
             this.#refillCell(drawn.cell, fresh.cell);
             if (fresh.measure) measures.push(drawn.cell);
           }
@@ -3184,7 +3191,7 @@ export class GridEngine {
           }
           drawn.place = place;
           drawn.signature = signature;
-          drawn.html = fresh.html;
+          drawn.html = html;
           drawn.base = fresh.cell.className;
         }
       }
@@ -4228,7 +4235,7 @@ export class GridEngine {
     position: GridPosition,
     merge: GridMerge | null,
     hostRow: number,
-  ): { cell: HTMLElement; border: HTMLElement | null; measure: boolean; html: string } | null {
+  ): { cell: HTMLElement; border: HTMLElement | null; measure: boolean } | null {
     const { row, column } = position;
     const frame = this.#frame;
     const workbookCell = this.#workbookCell(position);
@@ -4332,9 +4339,7 @@ export class GridEngine {
       paintBorders(border, borders);
       put(border, this.#columnLeft(column) - 1, top - 1, width + 1, height + 1);
     }
-    // Ciò che la cella è senza la selezione: `#drawRow` tiene quella
-    // disegnata se è uguale, e le dà la selezione.
-    return { cell: element, border, measure, html: element.outerHTML };
+    return { cell: element, border, measure };
   }
 
   /// I bordi da disegnare attorno alla cella, o all'unione che finisce in
