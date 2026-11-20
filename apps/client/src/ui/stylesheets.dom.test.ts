@@ -135,6 +135,18 @@ describe("cssomStyleDescendants", () => {
     }
   });
 
+  it("l'attributo, che Mermaid serializza nel disegno, tiene ogni dichiarazione valida", () => {
+    const container = document.createElement("div");
+    cssomStyleDescendants(container);
+    const svg = container.appendChild(document.createElementNS(SVG_NS, "svg"));
+    const shape = svg.appendChild(document.createElementNS(SVG_NS, "rect"));
+    // `style A …` e `linkStyle` di Mermaid, coi doppioni che scrive.
+    shape.setAttribute("style", "fill:#f9f !important;stroke-dasharray:5 5;stroke-width:2;;;stroke-width:2");
+    const written = shape.getAttribute("style") ?? "";
+    for (const property of ["fill", "stroke-dasharray", "stroke-width"]) expect(written, property).toContain(property);
+    expect(shape.style.getPropertyPriority("fill")).toBe("important");
+  });
+
   it("non tocca il resto della pagina né i prototipi", () => {
     const container = document.createElement("div");
     document.body.append(container);

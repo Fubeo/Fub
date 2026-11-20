@@ -103,10 +103,13 @@ export function styledElement(
  * `style` scritto come attributo diventa CSSOM (`style.cssText`): lo stesso
  * stile, che la CSP lascia valere, senza allentarla. Le strade da cui un
  * elemento entra sono quelle di d3 e di Mermaid: `appendChild`,
- * `insertBefore` e `innerHTML` (il `.html()` di d3, con cui Mermaid scrive le
- * etichette HTML: un `<span style="…">` scritto da chi fa il diagramma
- * arriva come markup). Uno `style` che l'elemento portava già quando è
- * entrato, o che il markup gli ha scritto, si riscrive allo stesso modo.
+ * `insertBefore` e `innerHTML`. Quest'ultima è il `.html()` di d3: le
+ * etichette HTML dei flussi (`addHtmlSpan`, spente da `htmlLabels: false` in
+ * `mermaid.ts`), ma anche il testo a capo e le formule dei diagrammi di
+ * sequenza, le icone di architettura e degli alberi, che arrivano come markup
+ * e possono portare un `style="…"`. Uno `style` che l'elemento portava già
+ * quando è entrato, o che il markup gli ha scritto, si riscrive allo stesso
+ * modo.
  *
  * Il resto della pagina non cambia: niente prototipi toccati, soltanto
  * cinque proprietà proprie sugli elementi del contenitore, che spariscono
@@ -116,9 +119,13 @@ export function styledElement(
  *
  * Lo stile che passa da `cssText` torna nell'attributo come il motore lo
  * scrive (`fill: rgb(255, 153, 255)` per `fill:#f9f`): il disegno finale, che
- * Mermaid serializza da questi elementi, lo porta così. Una dichiarazione
- * che il motore non accetta sparisce anche dall'attributo, ma è la stessa
- * che l'immagine, disegnata dallo stesso motore, ignorerebbe.
+ * Mermaid serializza da questi elementi, lo porta così, e i doppioni che
+ * Mermaid scrive (`linkStyle`) diventano uno. Una dichiarazione che il
+ * motore non accetta sparisce anche dall'attributo, ma è la stessa che
+ * l'immagine, disegnata dallo stesso motore, ignorerebbe. Misurato nel banco
+ * (#528) su flussi con `style`, `classDef` e `linkStyle`, sequenza, gantt,
+ * stati e classi: fra prima e dopo, nel disegno finale cambia solo la forma
+ * del testo, e manca soltanto una proprietà inventata (`foo:bar`).
  */
 export function cssomStyleDescendants(element: Element): void {
   if (prepared.has(element)) return;
