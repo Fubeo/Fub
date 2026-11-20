@@ -194,3 +194,40 @@ describe("inserimenti con a capo nudi in una nota CRLF, fuori da Vim", () => {
     editor.done();
   });
 });
+
+/// Ciò che un evento "copy" mette negli appunti della vista.
+function copies(view: EditorView, from: number, to: number): string[] {
+  const copied: string[] = [];
+  view.focus();
+  view.dispatch({ selection: { anchor: from, head: to } });
+  const event = new Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: { clearData() {}, setData: (_: string, text: string) => copied.push(text) },
+  });
+  view.contentDOM.dispatchEvent(event);
+  return copied;
+}
+
+describe("l'a capo di una posizione vale \"\\n\" solo dove c'è Vim", () => {
+  // Il carattere sotto il cursore di Vim si legge dallo stato: la regola che
+  // fa dell'a capo un "\n" vale negli stati con Vim acceso, non per ogni
+  // editor della finestra.
+  it("in una nota CRLF senza Vim, con Vim acceso altrove, l'a capo si copia col separatore della nota", () => {
+    const withVim = vimEditor("uno\r\ndue\r\n");
+    expect(withVim.view.state.sliceDoc(3, 4), "con Vim l'a capo è un carattere").toBe("\n");
+
+    const plain = vimEditor("uno\r\ndue\r\n", false);
+    expect(copies(plain.view, 3, 4)).toEqual(["\r\n"]);
+    expect(plain.view.state.sliceDoc(3, 4)).toBe("\r\n");
+    plain.done();
+    withVim.done();
+  });
+
+  it("spento Vim, la stessa nota torna a copiare l'a capo intero", () => {
+    const editor = vimEditor("uno\r\ndue\r\n");
+    expect(editor.view.state.sliceDoc(3, 4)).toBe("\n");
+    editor.ed.setVim(false);
+    expect(copies(editor.view, 3, 4)).toEqual(["\r\n"]);
+    editor.done();
+  });
+});
