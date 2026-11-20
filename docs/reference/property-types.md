@@ -174,7 +174,10 @@ prima di rinominare, col nome vecchio, con la foglia `fub:property-link`
 corpo: si riscrive un link che arrivava per nome o per percorso, mai per
 alias; il nome resta un nome e il percorso un percorso, col percorso se il
 nome nuovo è ambiguo; cambia soltanto la pagina dentro `[[…]]` (titolo,
-blocco, testo mostrato, virgolette e resto dello YAML restano). Ogni nota
+blocco, testo mostrato, virgolette e resto dello YAML restano). Si riscrive
+esattamente ciò che l'indice conta come link: un `[[…]]` dentro altro testo,
+in un commento YAML o in una chiave resta com'è, e un `[[` letterale non
+chiuso non nasconde il link che lo segue. Ogni nota
 si scrive con la sua revisione, nello stesso annullamento della rinomina.
 Una nota cambiata nel frattempo, o un nome nuovo con caratteri che in una
 proprietà cambierebbero il link (`"`, `|`, `#`, `[`…), lascia il link col
