@@ -42,6 +42,13 @@ export function claimQueryBlocks(container: HTMLElement): { block: HTMLElement; 
   return claimed;
 }
 
+/// La ricerca del blocco. `async` perché un errore di sintassi di
+/// `searchExpression`, che si lancia subito, diventi un rigetto come quelli
+/// del kernel e passi dallo stesso cancello.
+async function lookUp(query: string): Promise<Awaited<ReturnType<typeof matchingDocuments>>> {
+  return matchingDocuments(searchExpression(query), { offset: 0, limit: QUERY_BLOCK_LIMIT }, "omit");
+}
+
 /// Riempie un blocco con le note trovate, come link che la resa sa già
 /// aprire (`a.internal-path`). Un errore di sintassi o del kernel si dice
 /// nel blocco, non altrove.
@@ -62,14 +69,15 @@ export async function fillQueryBlock(
     say(t("preview.query.empty"));
     return;
   }
-  let found;
-  try {
-    found = await expected(matchingDocuments(searchExpression(query), { offset: 0, limit: QUERY_BLOCK_LIMIT }, "omit"));
-  } catch (error) {
-    if (!life.closed) say(t("preview.query.failed", { reason: errorText(error) }));
+  // L'errore diventa un valore **prima** del cancello (`ui/race.ts`): un
+  // `try` attorno a `expected` ingoierebbe anche la scadenza del giro, e il
+  // giro vecchio scriverebbe «ricerca non riuscita» nel blocco.
+  const found = await expected(lookUp(query).catch((error: unknown) => ({ error })));
+  if (life.closed) return;
+  if ("error" in found) {
+    say(t("preview.query.failed", { reason: errorText(found.error) }));
     return;
   }
-  if (life.closed) return;
   if (found.items.length === 0) {
     say(t("preview.query.none"));
     return;
