@@ -28,6 +28,7 @@ test usano un fake.
 | eventi | ascolto del canale tipizzato |
 | sessione live | avviare, interrogare e fermare la sessione di un disegno, rispondere allo scrittore |
 | componenti | leggere la mappa dei componenti di un vault e applicare una scelta |
+| tessere delle mappe | `map_tile`, i byte di una tessera da un sito ammesso ([il contratto](map-tiles.md)) |
 
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
@@ -508,17 +509,6 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 `resource_write` deposita byte grezzi, coi parametri nella testata
 `x-fub-resource-write`; il contratto intero (campi, `reuse: "same-content"`,
 ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md).
-
-## Tessere delle mappe
-
-`map_tile(url, kind)` porta i byte di una tessera della vista Mappa di una
-Base come corpo binario (un `ArrayBuffer` in JS, mai un array JSON di
-numeri). `kind` è `"raster"` o `"vector"`, il genere del fornitore del
-`.base`. Nessuna porta generica porta byte che non stanno nel vault, e a chi
-chiedere non lo decide un vault ma la riga di macchina `map.tile-hosts`. La
-risponde soltanto una finestra locale fidata, fuori dal thread principale;
-regole ed errori sono in [Le tessere delle
-mappe](permissions-and-security.md#le-tessere-delle-mappe).
 
 ## Percorsi
 

@@ -46,7 +46,7 @@ facoltative:
 | `summaries` | i riepiloghi (conteggio, somma, media, minimo, massimo…) |
 | `limit` | quante righe al massimo, da 1 a 10000 |
 | `search` | un testo da cercare fra i valori delle righe |
-| `map` | le coordinate e il fornitore dei tasselli, per la vista mappa |
+| `map` | le coordinate e il fornitore dei tasselli, per [la vista mappa](bases-map.md) |
 | `fub` | il blocco di Fub per il calendario e la linea del tempo (vedi sotto) |
 
 ## Calendario e linea del tempo
@@ -340,24 +340,6 @@ oltre alle colonne, il filtro (`filters`), l'ordinamento (`sort`), le colonne
 scritte (`order`) e i riepiloghi (`summaries`, ognuno con `key`, `aggregate`,
 `expression`, `name` e la `label` con cui `derive` ne dà il valore) come il
 modello li legge; l'elenco delle viste (`op: "parse"`) porta il tipo di ognuna (`types`).
-
-### La mappa
-
-La vista Mappa mette un segnaposto per ogni riga con le coordinate (`lat_key`,
-`lon_key` della chiave `map`) su una griglia del mondo; un clic o Invio su un
-segnaposto apre la nota, `+` e `−` (o i tasti) ingrandiscono e le frecce la
-spostano. Di serie la mappa è offline e nessuna richiesta esce dal computer.
-
-Le tessere di sfondo arrivano soltanto se la Base dichiara un fornitore
-(`provider` con `url_template` https e `network: true`) **e** il suo sito sta
-in Impostazioni › Privacy › Tessere delle mappe (`map.tile-hosts`), una scelta
-di questo computer che un vault non può dare; OpenStreetMap si aggiunge con un
-clic. Allora sotto la mappa c'è «Attiva le mappe online»: è il consenso per
-quella vista, e le tessere le scarica l'host. Senza il sito nella lista la
-mappa dice «Tessere non ammesse» e offre «Apri le Impostazioni»; una tessera
-che non arriva si dice sotto la mappa, e il pulsante resta per riprovare.
-Quali tessere l'host accetta: [Le tessere delle
-mappe](../reference/permissions-and-security.md#le-tessere-delle-mappe).
 
 ### Una vista nuova
 
