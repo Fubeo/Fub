@@ -228,6 +228,16 @@ impl LinkGraph {
         self.backlinks.get(target).is_some_and(|v| !v.is_empty())
     }
 
+    /// Un'**altra** nota nomina `target` in un link di proprietà? La metà
+    /// della domanda dell'orfano che il corpo non vede: `progetto:
+    /// "[[Scorte]]"` porta a Scorte quanto un `[[Scorte]]` nel testo. La nota
+    /// che nomina sé stessa non la toglie dall'isolamento.
+    pub fn has_property_backlinks(&self, target: &DocId) -> bool {
+        self.property_backlinks
+            .get(target)
+            .is_some_and(|refs| refs.iter().any(|r| r.source != *target))
+    }
+
     pub fn backlinks(&self, target: &DocId) -> Vec<BacklinkRef> {
         let mut refs = self.backlinks.get(target).cloned().unwrap_or_default();
         // Ordinamento *stabile*: fra riferimenti dallo stesso sorgente resta
