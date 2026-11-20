@@ -43,11 +43,12 @@ Anche le altre porte che toccano disco, workspace o provider girano fuori dal
 thread principale, in corsie fisse fuori dalle 16, nell'ordine d'arrivo:
 `viste` (`render_view`, `view_action`: un disegno chiesto dopo un'azione la
 vede), `contesto` (`set_active_context`: vince l'ultima), `comandi`, `stato`
-(`view_state`, `set_view_state`) e `risorse` (`resource_*`: un pezzo chiesto
-prima della chiusura del prestito si legge). Le scritture dei dati che
-l'indice legge (impostazioni e profili, scorciatoie, organizzazione, vault
-aperto, corrente o conosciuto, demo) stanno nella corsia dell'indice: la
-domanda mandata dopo le vede. Le letture senza ordine (`list_views`,
+(`view_state`, `set_view_state`, il recupero di `view-state.json`) e `risorse`
+(`resource_*`: un pezzo chiesto prima della chiusura del prestito si legge).
+La corsia dell'indice, perché la domanda dopo li veda, scrive i dati che legge
+(impostazioni e profili, scorciatoie, organizzazione, vault aperto, corrente o
+conosciuto, demo) e serve la schermata di supporto (`support_*`, `config_health`,
+gli altri `recover_config`). Le letture senza ordine (`list_views`,
 `list_commands`, `components_map`, `list_bundles`, i temi) e `cancel_job`
 escono senza corsia; un comando sincrono resta solo nell'elenco motivato di
 `lean_ipc.rs`. La shell tiene l'ultima risposta di ogni pannello (`Race`).
@@ -514,8 +515,7 @@ ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md). I byt
 Il frontend invia path relativi o root di vault secondo la porta. Le regole di
 canonicalizzazione e recinzione vivono nel core.
 
-Non accettare un path assoluto in una porta generica per evitare la verifica del
-vault.
+Nessuna porta generica accetta un path assoluto che salti la verifica del vault.
 
 ## Import Tauri
 
