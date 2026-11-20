@@ -391,6 +391,19 @@ describe("gli strumenti", () => {
     expect(editor.engine.text).toMatch(/<ellipse id="o[a-z0-9]{8}" cx="30" cy="20" rx="20" ry="10" fill="none" stroke="#0072b2" stroke-width="8"\/>/);
   });
 
+  it("nel disegno si disegna anche fuori dalla pagina, che si allarga: il limite è solo delle annotazioni di un PDF", () => {
+    // La pagina è 100 × 100: il rettangolo comincia fuori e ci resta.
+    mount();
+    editor.setTool("rect");
+    drag([[150, 150], [200, 180], [250, 200]]);
+    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="150" y="150" width="100" height="50"/);
+    editor.setTool("pen");
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
+    expect(surface().hasAttribute("data-off-page")).toBe(false);
+    drag([[300, 300], [340, 300], [380, 310]]);
+    expect(changes).toHaveLength(2);
+  });
+
   it("un tocco con una forma non scrive niente", () => {
     mount();
     editor.setTool("line");
