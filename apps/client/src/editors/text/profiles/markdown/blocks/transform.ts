@@ -3,13 +3,14 @@
 // `>`, la testata del callout, i recinti, il `<details>` — e le righe dei
 // figli si spostano con il rientro nuovo. `Mod-Alt-0…8` fanno lo stesso da
 // tastiera, in Live e in Blocchi, come in Notion.
+import { ensureSyntaxTree } from "@codemirror/language";
 import { type ChangeSpec, type EditorState, EditorSelection, type StateCommand } from "@codemirror/state";
 import { type KeyBinding } from "@codemirror/view";
 import { backtickFence } from "../actions";
 import { calloutHead } from "../callout-head";
 import { blockGesture } from "../block-gesture";
 import { withLineBreaks } from "../../../line-breaks";
-import { blockModel, buildBlocks, subtreeEnd, type Block, type BlockKind } from "./model";
+import { blockModel, buildBlocks, subtreeEnd, WHOLE_TREE_MS, type Block, type BlockKind } from "./model";
 
 export type TransformTarget =
   | "paragraph"
@@ -233,8 +234,20 @@ export function touchedBlocks(state: EditorState, blocks: readonly Block[]): num
   return [...out].sort((a, b) => a - b);
 }
 
+/// Il modello su cui lavora un gesto: quello del campo, o letto ora senza.
+/// Su una nota lunga appena aperta l'albero dello stato può essere ancora a
+/// metà (il parser in sottofondo non è arrivato in fondo, su un PC carico ci
+/// mette di più), e il modello non ha i blocchi dopo il punto dove si è
+/// fermato: «Seleziona tutto» ne prenderebbe una parte, uno spostamento non
+/// vedrebbe il fratello dopo. Il gesto allora finisce l'albero e legge
+/// quello intero; `ensureSyntaxTree` porta avanti l'analisi condivisa, che la
+/// vista consegna al campo con la transazione del gesto stesso.
 export function modelOf(state: EditorState): readonly Block[] {
-  return (state.field(blockModel, false) ?? buildBlocks(state)).blocks;
+  const model = state.field(blockModel, false);
+  if (model && model.parsed >= state.doc.length) return model.blocks;
+  const tree = ensureSyntaxTree(state, state.doc.length, WHOLE_TREE_MS);
+  if (!tree && model) return model.blocks;
+  return buildBlocks(state, tree ?? undefined).blocks;
 }
 
 /// Il comando: ogni blocco toccato diventa `target`. Un passo di annulla; il

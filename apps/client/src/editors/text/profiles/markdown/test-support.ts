@@ -1,5 +1,5 @@
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
-import type { EditorState } from "@codemirror/state";
+import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { vi } from "vitest";
 
@@ -56,5 +56,19 @@ export function withStarvedParser<T>(create: () => T): T {
     return create();
   } finally {
     clock.mockRestore();
+  }
+}
+
+/// Esegue `run` con ogni stato nuovo nato col parser a corto di tempo: vale
+/// per gli stati che il codice crea da sé (una nota letta dal disco), che un
+/// test non può avvolgere uno per uno. Solo la nascita è affamata: chi poi
+/// finisce l'albero con `ensureSyntaxTree` ha l'orologio vero.
+export function withStarvedBirths<T>(run: () => T): T {
+  const create = EditorState.create.bind(EditorState);
+  const spy = vi.spyOn(EditorState, "create").mockImplementation((config) => withStarvedParser(() => create(config)));
+  try {
+    return run();
+  } finally {
+    spy.mockRestore();
   }
 }
