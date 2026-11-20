@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { EditorSelection, EditorState, Prec, type ChangeSpec, type Extension } from "@codemirror/state";
+import { EditorSelection, EditorState, Prec, Text, type ChangeSpec, type Extension } from "@codemirror/state";
 import { EditorView, type DecorationSet } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
 import { ensureSyntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import {
+  detectFrontmatter,
   firstLineOf,
+  frontmatterRange,
   freshBlocks,
   headAfter,
   PREFIX_RENDER_FROM,
@@ -448,6 +450,12 @@ describe("la prima riga e il frontmatter a ogni battuta", () => {
     ["una riga sola", "---"],
     ["vuoto", ""],
     ["regola dopo il testo", "Testo\n---\n"],
+    // Più lunghe della cima che la regola guarda (#528).
+    ["una riga sola lunga", "parola ".repeat(80)],
+    ["una prima riga lunga", `${"parola ".repeat(80)}\n---\na: 1\n---\n`],
+    ["--- fra tanti spazi", `---${" ".repeat(300)}\na: 1\n---\n`],
+    ["BOM e --- fra tanti spazi", `﻿${" ".repeat(300)}---\na: 1\n---\n`],
+    ["tanti spazi senza a capo", " ".repeat(300)],
   ];
   const EDITS: readonly ({ insert: string } | { remove: number })[] = [
     { insert: "x" }, { insert: "\n" }, { insert: "-" }, { insert: "---\n" }, { insert: "﻿" }, { remove: 1 }, { remove: 3 },
@@ -465,6 +473,33 @@ describe("la prima riga e il frontmatter a ogni battuta", () => {
         }
       }
     }
+  });
+
+  it("la regola è la stessa di frontmatterRange", () => {
+    for (const [name, text] of CASES) {
+      const doc = Text.of(text.split("\n"));
+      expect(frontmatterRange(doc) !== null, name).toBe(detectFrontmatter(text) !== null);
+      if (!opensBefore(text)) expect(frontmatterRange(doc), name).toBeNull();
+    }
+  });
+
+  it("un documento di una riga sola lunga non si scandisce tutto a ogni battuta", () => {
+    const text = "parola ".repeat(20_000);
+    const was = firstLineOf(text);
+    expect(was).toEqual({ end: -1, opens: false });
+    const next = `${text.slice(0, 70_000)}x${text.slice(70_000)}`;
+    let whole = 0;
+    const indexOf = String.prototype.indexOf;
+    const spy = vi.spyOn(String.prototype, "indexOf").mockImplementation(function (this: string, search: string, position?: number) {
+      if (this.length === next.length) whole++;
+      return indexOf.call(this, search, position);
+    });
+    try {
+      expect(headAfter(was, 70_000, next).opens).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(whole).toBe(0);
   });
 
   it("una battuta in un documento grande non rilegge la sorgente dall'inizio", () => {

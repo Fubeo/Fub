@@ -2409,6 +2409,10 @@ export const SCENE = touchLast(onPage("shell", [
     ["diagramma-04-menu-stretta", "diagramma", "Il menu del tasto destro nella finestra minima", "menu", { width: 800, height: 800 }],
     ["diagramma-05-stili", "diagramma-stili", "I cinque stili, uno per diagramma: Armonia sulla pagina, gli altri sulla loro carta"],
     ["diagramma-06-casi", "diagramma-casi", "Uno stile che non esiste (vale quello generale) e un diagramma con un errore"],
+    // Gli stili scritti nel diagramma (#528): Mermaid li scrive come
+    // attributo sui nodi dell'SVG dove misura, e la CSP li rifiuterebbe. Un
+    // `font-size` perso nelle misure fa uscire l'etichetta dal riquadro.
+    ["diagramma-09-nodi-con-stile", "diagramma-nodi", "Nodi e collegamenti con uno stile scritto nel diagramma: riempimento, bordo, linea rossa, classe, un'etichetta grande che sta nel suo riquadro"],
   ].map(([id, live, title, gesture, viewport]) => ({
     id,
     title,

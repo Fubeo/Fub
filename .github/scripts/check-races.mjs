@@ -52,31 +52,140 @@ function awaitedExpression(body, awaitIndex) {
   return rest.slice(0, closingOf(rest, opening) + 1);
 }
 
-/// Un giro: `.last(` seguito da una funzione freccia, con o senza `async`, col
-/// parametro fra parentesi (anche tipato) o nudo.
-const OPENING = /\.last\(\s*(?:async\s+)?(?:\(\s*([A-Za-z_$][\w$]*)\s*(?::[^)]*)?\)|([A-Za-z_$][\w$]*))\s*(?::[^=]*)?=>/g;
+/// Gli argomenti di primo livello fra `from` e `to`: le virgole dentro
+/// parentesi, quadre, graffe o le angolari di un tipo generico
+/// (`Gate<A, B>`) non contano. La `>` di `=>` non chiude niente, e le
+/// angolari non scendono sotto zero (`a > b, c` sono due argomenti). Un `<`
+/// di confronto (`a < b, c`) unisce due argomenti in uno: per la guardia è
+/// un giro che non sa leggere, cioè un errore che si vede, mai un giro
+/// saltato in silenzio. Il codice è già senza letterali.
+function topLevelArguments(code, from, to) {
+  const parts = [];
+  let depth = 0;
+  let angles = 0;
+  let start = from;
+  for (let index = from; index < to; index++) {
+    const char = code[index];
+    if (char === "(" || char === "[" || char === "{") depth++;
+    else if (char === ")" || char === "]" || char === "}") depth--;
+    else if (char === "<") angles++;
+    else if (char === ">" && code[index - 1] !== "=") angles = Math.max(0, angles - 1);
+    else if (char === "," && depth === 0 && angles === 0) {
+      parts.push(code.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(code.slice(start, to));
+  return parts.filter((part) => part.trim() !== "");
+}
+
+const IDENTIFIER = /^[A-Za-z_$][\w$]*/;
+
+/// Dove finisce lo spazio bianco da `index`.
+function skipSpace(code, index) {
+  while (index < code.length && /\s/.test(code[index])) index++;
+  return index;
+}
+
+/// La prima `=>` (o `{`, per una `function`) fuori da parentesi, quadre e
+/// angolari, a partire da `index`: salta il tipo di ritorno, che può
+/// contenere frecce e graffe (`: Promise<() => void>`, `: { a: T }`).
+function afterReturnType(code, index, stop) {
+  let depth = 0;
+  for (; index < code.length; index++) {
+    const char = code[index];
+    if (depth === 0 && stop === "=>" && code.startsWith("=>", index)) return index + 2;
+    if (depth === 0 && stop === "{" && char === "{" && !/:\s*$/.test(code.slice(0, index))) return index + 1;
+    if (char === "(" || char === "[" || char === "<" || (char === "{" && stop === "=>")) depth++;
+    else if (char === ")" || char === "]" || (char === "}" && stop === "=>")) depth--;
+    else if (char === ">" && code[index - 1] !== "=") depth--;
+  }
+  return -1;
+}
+
+/// La testa del corpo di un giro: dove comincia il corpo e il nome del
+/// cancello, o `null` se il corpo non si sa leggere. Una freccia (con o senza
+/// `async`, il parametro fra parentesi, nudo o assente) o un'espressione
+/// `function`. Il cancello è il primo parametro quando è un nome, anche
+/// tipato o con un valore di default (`(e: Gate<A, B>)`, `(e = id)`); un
+/// parametro destrutturato (`({ signal })`) non ne dà uno, e allora ogni
+/// `await` è un'attesa nascosta.
+function readHead(argument) {
+  let index = skipSpace(argument, 0);
+  const asyncWord = /^async\b/.exec(argument.slice(index));
+  if (asyncWord) index = skipSpace(argument, index + asyncWord[0].length);
+  let stop = "=>";
+  if (/^function\b/.test(argument.slice(index))) {
+    stop = "{";
+    index = skipSpace(argument, index + "function".length);
+    if (argument[index] === "*") index = skipSpace(argument, index + 1);
+    const name = IDENTIFIER.exec(argument.slice(index));
+    if (name) index = skipSpace(argument, index + name[0].length);
+    if (argument[index] !== "(") return null;
+  }
+  let parameters;
+  if (argument[index] === "(") {
+    const close = closingOf(argument, index);
+    if (close >= argument.length) return null;
+    parameters = argument.slice(index + 1, close);
+    index = close + 1;
+  } else {
+    const name = IDENTIFIER.exec(argument.slice(index));
+    if (name === null || stop !== "=>") return null;
+    parameters = name[0];
+    index += name[0].length;
+  }
+  const start = afterReturnType(argument, index, stop);
+  // Fra i parametri e la freccia ci può stare solo un tipo di ritorno.
+  if (start === -1 || !/^\s*(?::|=>|\{)/.test(argument.slice(index))) return null;
+  const first = topLevelArguments(parameters, 0, parameters.length)[0] ?? "";
+  const gate = /^\s*([A-Za-z_$][\w$]*)\s*\??\s*(?:[:=]|$)/.exec(first);
+  return { start, gate: gate ? gate[1] : null };
+}
 
 /// Le violazioni di un file e quanti giri ci ha letto.
+///
+/// Ogni chiamata `.last(` con un argomento solo è un giro (`Race.last` ne
+/// prende uno, il corpo; un altro `last` con più argomenti non è un giro). Il
+/// corpo deve essere scritto lì, come freccia o `function`: un nome o
+/// un'espressione che la guardia non sa leggere (`race.last(run)`, con `run`
+/// definita altrove) è una violazione, non un giro che sfugge in silenzio.
 export function violations(text, relative) {
   const code = codeOnly(text);
   const found = [];
   let races = 0;
-  for (const match of code.matchAll(OPENING)) {
+  for (const match of code.matchAll(/\.last\s*\(/g)) {
+    const call = match.index + match[0].length - 1;
+    const close = closingOf(code, call);
+    const args = topLevelArguments(code, call + 1, close);
+    if (args.length !== 1) continue;
     races++;
-    const gate = match[1] ?? match[2];
-    const call = match.index + match[0].indexOf("(");
-    const start = match.index + match[0].length;
-    const body = code.slice(start, closingOf(code, call));
-    const lineOf = (offset) => code.slice(0, start + offset).split("\n").length;
+    const argument = code.slice(call + 1, close);
+    const head = readHead(argument);
+    const lineOf = (offset) => code.slice(0, offset).split("\n").length;
+    if (head === null) {
+      found.push(
+        `${relative}:${lineOf(call)}: cannot read the body of this race (\`.last(${argument.trim()})\`); ` +
+          "write it inline as an arrow or a `function` expression.",
+      );
+      continue;
+    }
+    const gate = head.gate;
+    const start = call + 1 + head.start;
+    const body = code.slice(start, close);
     for (const awaited of body.matchAll(/\bawait\b/g)) {
       const expression = awaitedExpression(body, awaited.index);
-      if (new RegExp(`\\b${gate}\\b`).test(expression)) continue;
-      found.push(`${relative}:${lineOf(awaited.index)}: an \`await\` inside a race does not name \`${gate}\`.`);
+      if (gate !== null && new RegExp(`\\b${gate}\\b`).test(expression)) continue;
+      found.push(
+        gate === null
+          ? `${relative}:${lineOf(start + awaited.index)}: an \`await\` inside a race whose body takes no gate.`
+          : `${relative}:${lineOf(start + awaited.index)}: an \`await\` inside a race does not name \`${gate}\`.`,
+      );
     }
     for (const caught of body.matchAll(/\}\s*catch\b/g)) {
       found.push(
-        `${relative}:${lineOf(caught.index)}: a \`catch\` inside a race can swallow expiry; ` +
-          `use \`await ${gate}(promise.catch(…))\`.`,
+        `${relative}:${lineOf(start + caught.index)}: a \`catch\` inside a race can swallow expiry; ` +
+          `use \`await ${gate ?? "expected"}(promise.catch(…))\`.`,
       );
     }
   }
@@ -104,6 +213,31 @@ function selfTest() {
     ["dopo un template annidato", "const s = `a ${b ? `c${d}` : \"}\"} e`;\nr.last(async (e) => { await f(); });", 1, 1],
     ["dopo una regex con una virgoletta", "const q = /[\"'`]/g; x = a / b / c;\nr.last(async (e) => { await f(); });", 1, 1],
     ["una regex dopo return", "function g() { return /\"/.test(s); }\nr.last(async (e) => { await f(); });", 1, 1],
+    // La revisione #528: un corpo che la guardia non legge non deve sfuggire.
+    ["il corpo definito altrove", "const run = async (e) => { await f(); };\nr.last(run);", 1, 1],
+    ["il corpo preso da un oggetto", "r.last(this.#load.bind(this));", 1, 1],
+    ["una async function", "r.last(async function (e) { await f(); });", 1, 1],
+    ["una async function col cancello", "r.last(async function load(e: Expected) { await e(f()); });", 1, 0],
+    ["una freccia senza cancello", "r.last(async () => { await f(); });", 1, 1],
+    ["una freccia senza cancello né attese", "r.last(async () => 1);", 1, 0],
+    ["una freccia non async col cancello", "r.last((expected) => expected(f()));", 1, 0],
+    ["a capo dopo la parentesi", "r.last(\n  async (e) => {\n    await f();\n  },\n);", 1, 1],
+    ["una regex dopo un if, prima del giro", "if (x) /\"/.test(s);\nr.last(async (e) => { await f(); });", 1, 1],
+    // La seconda revisione #528: virgole nei tipi generici, teste con
+    // destrutturazione, default, tipi con parentesi e graffe.
+    ["una virgola in un generico del parametro", "r.last(async (e: Gate<A, B>) => { await f(); });", 1, 1],
+    ["una virgola in un generico, col cancello", "r.last(async (e: Gate<A, B>) => { await e(f()); });", 1, 0],
+    ["una virgola nel tipo di ritorno", "r.last(async (e): Promise<Map<K, V>> => { await f(); });", 1, 1],
+    ["un parametro destrutturato", "r.last(async ({ signal }) => { await f(signal); });", 1, 1],
+    ["un parametro destrutturato senza attese", "r.last(async ({ signal }) => signal);", 1, 0],
+    ["un parametro con un default", "r.last(async (expected = id) => { await expected(f()); });", 1, 0],
+    ["un default, attesa nascosta", "r.last(async (expected = id) => { await f(); });", 1, 1],
+    ["un tipo con parentesi", "r.last(async (e: (p: Promise<T>) => Promise<T>) => { await e(f()); });", 1, 0],
+    ["un tipo con graffe", "r.last(async (e: { (p: P): P }) => { await f(); });", 1, 1],
+    ["una freccia nel tipo di ritorno", "r.last(async (e): Promise<() => void> => { await e(f()); });", 1, 0],
+    ["una function col tipo di ritorno a graffe", "r.last(async function (e): Promise<{ a: T }> { await f(); });", 1, 1],
+    ["un confronto, letto come un giro solo", "x.last(a < b, c);", 1, 1],
+    ["un confronto all'altro verso, due argomenti", "x.last(a > b, c);", 0, 0],
   ];
   const failures = [];
   try {
