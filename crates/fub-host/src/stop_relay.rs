@@ -137,11 +137,29 @@ impl<'a> StopRelay<'a> {
                     std::thread::park_timeout(wait);
                 })
                 .map_err(|_| RelayUnavailable)?;
-            let result = work(&combined);
-            done.store(true, Ordering::Release);
-            guard.thread().unpark();
-            Ok(result)
+            // Il filo di guardia si congeda anche se `work` va in panico:
+            // `scope` aspetta il filo prima di propagare il panico, e senza
+            // scadenza né bandiere alzate lo aspetterebbe per sempre.
+            let _dismiss = Dismiss {
+                done: &done,
+                relay: guard.thread(),
+            };
+            Ok(work(&combined))
         })
+    }
+}
+
+/// Alla sua fine (ritorno o panico di chi lavora) dice al filo di guardia che
+/// il lavoro è finito e lo sveglia.
+struct Dismiss<'a> {
+    done: &'a AtomicBool,
+    relay: &'a std::thread::Thread,
+}
+
+impl Drop for Dismiss<'_> {
+    fn drop(&mut self) {
+        self.done.store(true, Ordering::Release);
+        self.relay.unpark();
     }
 }
 
@@ -242,6 +260,26 @@ mod tests {
             PluginError::from(RelayUnavailable),
             PluginError::Io(_)
         ));
+    }
+
+    /// Un lavoro che va in panico sveglia il filo di guardia: il panico arriva
+    /// a chi chiama anche con bandiere che nessuno alza e senza scadenza,
+    /// invece di aspettare per sempre. Il test gira in un filo con un tempo
+    /// limite, così un ritorno del difetto fallisce invece di appendere la corsa.
+    #[test]
+    fn a_panicking_work_reaches_the_caller_without_waiting_for_a_flag() {
+        let (sent, received) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let flags = [AtomicBool::new(false), AtomicBool::new(false)];
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                StopRelay::watching(&flags).run(|_| -> () { panic!("work failed") })
+            }));
+            let _ = sent.send(outcome.is_err());
+        });
+        let panicked = received
+            .recv_timeout(Duration::from_secs(2))
+            .expect("the panic must reach the caller within 2 s");
+        assert!(panicked);
     }
 
     /// Un filo con una pila più grande dello spazio di indirizzi: il sistema
