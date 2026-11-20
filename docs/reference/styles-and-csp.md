@@ -41,7 +41,8 @@ Lo stile passa da quattro strade, e nessun'altra:
   misura: `cssomStyleDescendants()` di `ui/stylesheets.ts` fa diventare CSSOM
   lo `style` che Mermaid scrive con `setAttribute` su ogni elemento che vi
   monta, a qualunque profondità (il `<div>` di misura, i nodi con `style`,
-  `linkStyle` o `classDef`), perché le misure delle etichette lo contino;
+  `linkStyle` o `classDef`), e quello del markup che scrive con `innerHTML`
+  (le etichette HTML), perché le misure delle etichette lo contino;
 - **il nonce della pagina**, per chi i suoi stili li mette in un `<style>` e un
   foglio costruito non lo sa usare: CodeMirror (`EditorView.cspNonce`) e
   Mermaid, che durante il disegno mette il foglio del diagramma in un

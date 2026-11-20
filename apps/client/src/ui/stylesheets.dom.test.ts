@@ -37,6 +37,11 @@ describe("cssomStyleDescendants", () => {
       if (!insideCssom) byScript.push(name);
       set.call(this, name, value);
     });
+    const setNS = Element.prototype.setAttributeNS;
+    vi.spyOn(Element.prototype, "setAttributeNS").mockImplementation(function (this: Element, namespace: string | null, name: string, value: string) {
+      if (!insideCssom) byScript.push(name);
+      setNS.call(this, namespace, name, value);
+    });
     return byScript;
   }
 
@@ -72,6 +77,10 @@ describe("cssomStyleDescendants", () => {
     // `setAttributeNS` senza spazio dei nomi è lo stesso attributo.
     const edge = svg.appendChild(document.createElementNS(SVG_NS, "path"));
     edge.setAttributeNS(null, "style", "stroke: red");
+    // Per il DOM uno spazio dei nomi vuoto è nessuno spazio dei nomi.
+    const other = svg.appendChild(document.createElementNS(SVG_NS, "path"));
+    other.setAttributeNS("", "style", "stroke: blue");
+    expect(other.style.stroke).toBe("blue");
     expect(shape.style.getPropertyValue("stroke-width")).toBe("4px");
     expect(shape.style.getPropertyPriority("fill")).toBe("important");
     expect(label.style.fontSize).toBe("30px");
@@ -94,6 +103,36 @@ describe("cssomStyleDescendants", () => {
     expect(inner.style.fill).toBe("blue");
     // Il frammento è entrato, e i suoi elementi sono preparati.
     expect(Object.prototype.hasOwnProperty.call(inner, "setAttribute")).toBe(true);
+  });
+
+  it("lo stile nel markup scritto con innerHTML diventa CSSOM, come le etichette HTML di Mermaid", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    cssomStyleDescendants(container);
+    // `addHtmlSpan`: d3 appende lo span, poi `.html(etichetta)` gli scrive
+    // dentro il markup di chi ha fatto il diagramma.
+    const span = container.appendChild(document.createElement("span"));
+    const css = vi.spyOn(CSSStyleDeclaration.prototype, "cssText", "set");
+    span.innerHTML = "<b style=\"color: red\">Rosso <i style=\"font-size: 30px\">grande</i></b>";
+    expect(css).toHaveBeenCalledWith("color: red");
+    expect(css).toHaveBeenCalledWith("font-size: 30px");
+    const big = span.querySelector("i")!;
+    expect(big.style.fontSize).toBe("30px");
+    // I nodi nuovi sono preparati: uno stile scritto dopo passa da CSSOM.
+    expect(Object.prototype.hasOwnProperty.call(big, "setAttribute")).toBe(true);
+    // Leggere `innerHTML` resta quello di sempre.
+    expect(span.innerHTML).toContain("grande");
+  });
+
+  it("tutti gli elementi preparati condividono le stesse funzioni", () => {
+    const container = document.createElement("div");
+    cssomStyleDescendants(container);
+    const svg = container.appendChild(document.createElementNS(SVG_NS, "svg"));
+    const rect = svg.appendChild(document.createElementNS(SVG_NS, "rect"));
+    for (const name of ["setAttribute", "setAttributeNS", "appendChild", "insertBefore"] as const) {
+      expect(Object.prototype.hasOwnProperty.call(rect, name), name).toBe(true);
+      expect(rect[name], name).toBe(svg[name]);
+    }
   });
 
   it("non tocca il resto della pagina né i prototipi", () => {
