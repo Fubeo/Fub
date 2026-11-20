@@ -354,3 +354,44 @@ fn a_note_restored_from_the_trash_is_back_in_the_property_links() {
         "---\nprogetto: \"[[Magazzino]]\"\n---\n\nVedi [[Magazzino]].\n"
     );
 }
+
+/// I `[[…]]` di una proprietà si risolvono come nel corpo: un allegato
+/// (`[[allegato.pdf]]`) e un titolo (`[[Nota#Titolo]]`) sono collegamenti
+/// anche lì, e seguono il file rinominato.
+#[test]
+fn an_attachment_and_a_heading_in_a_property_resolve_like_the_body() {
+    const FONTI: &str = "---\nfonte: \"[[allegato.pdf]]\"\nsezione: \"[[Nota#Titolo]]\"\n---\n\nVedi [[allegato.pdf]] e [[Nota#Titolo]].\n";
+    let vault = Vault::with(&[
+        ("Fonti.md", FONTI),
+        ("Nota.md", "# Nota\n\n## Titolo\n"),
+        ("Allegati/allegato.pdf", "%PDF-1.4\n"),
+    ]);
+    let mut ws = vault.open();
+
+    for target in ["Nota.md", "Allegati/allegato.pdf"] {
+        assert_eq!(
+            named_in_properties(&ws, target, None),
+            ["Fonti.md"],
+            "{target}"
+        );
+    }
+
+    run(
+        &mut ws,
+        NOTES_RENAME,
+        serde_json::json!({ "doc": "Allegati/allegato.pdf", "to": "Allegati/contratto.pdf" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    run(
+        &mut ws,
+        NOTES_RENAME,
+        serde_json::json!({ "doc": "Nota.md", "to": "Scheda.md" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert_eq!(
+        vault.read("Fonti.md"),
+        "---\nfonte: \"[[contratto.pdf]]\"\nsezione: \"[[Scheda#Titolo]]\"\n---\n\nVedi [[contratto.pdf]] e [[Scheda#Titolo]].\n"
+    );
+}
