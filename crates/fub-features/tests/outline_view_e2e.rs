@@ -202,3 +202,26 @@ fn the_caret_published_by_the_shell_reaches_the_view_through_the_kernel() {
         vec![false, false]
     );
 }
+
+/// La shell nomina una nota che sul disco non c'è più (la linguetta
+/// ripristinata di un file tolto ad app chiusa, la nota appena spostata da un
+/// rename prima che la shell lo sappia): struttura e note a piè di pagina
+/// mostrano il segnaposto invece di fallire con `NotFound`, che la shell
+/// diceva come «il pannello non si è ridisegnato: non esiste più» (IMP-1800).
+#[test]
+fn a_note_gone_from_disk_is_the_placeholder_not_an_error() {
+    let vault = Vault::new();
+    vault.put("Nota.md", "# Titolo\n\ntesto[^1]\n\n[^1]: nota\n");
+    let ws = vault.open();
+    ws.set_active_document(Some(DocId::new("Nota.md")));
+    std::fs::remove_file(vault.root.join("Nota.md")).unwrap();
+    for view in [OUTLINE_VIEW, fub_features::FOOTNOTES_VIEW] {
+        let tree = ws
+            .render_view(&ViewInstance::only(view))
+            .unwrap_or_else(|e| panic!("{view}: una nota sparita non è un pannello rotto: {e:?}"));
+        assert!(
+            titles(&tree).is_empty(),
+            "{view}: niente della nota sparita"
+        );
+    }
+}
