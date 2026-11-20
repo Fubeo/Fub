@@ -34,8 +34,11 @@ afterEach(() => {
 // scaldano i loro pezzi (`lazyPart`): `import()` che il caso non aspetta. Sotto
 // carico arrivavano dopo la fine del file, e il primo `console` di un modulo
 // arrivato tardi (l'avviso di KaTeX sul modo quirks) trovava il worker già in
-// chiusura: «Closing rpc while "onUserConsoleLog" was pending» (#444). Il file
-// li aspetta prima di finire: ciò che ha chiesto arriva dentro di lui.
+// chiusura: «Closing rpc while "onUserConsoleLog" was pending» (#444). Prima di
+// finire il file carica e aspetta KaTeX e ogni pezzo pigro creato dai moduli
+// che importa, chiesto o no da un caso: né `loadKatex` né `lazyPart` dicono
+// quali richieste sono già partite, e così ciò che i casi hanno chiesto
+// arriva di sicuro dentro il file.
 afterAll(async () => {
   await Promise.all([loadKatex(), loadLazyParts()]);
 });
