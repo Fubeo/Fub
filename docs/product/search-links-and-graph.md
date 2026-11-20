@@ -17,11 +17,11 @@ Il linguaggio è un albero di clausole in OR e letterali in AND con negazione
 per foglia. Le foglie testo, regex e task vivono nell'indice full-text;
 proprietà, tag, cartella, path, estensione e link usano i metadati e il grafo
 del kernel. Testo significa termini in AND o frase esatta, con tolleranza
-esatta o refusi che restringono invece di allargare; `case_sensitive` e le
-regex rileggono solo le note che l'indice dà con le parole intere della domanda,
-al più 2048 e 8 MiB di testo. La stessa espressione vale per ricerca globale, viste,
-query salvate e ricerca incorporata: il pianificatore instrada ogni foglia al
-proprietario e ricompone l'AND/OR senza divergenze.
+esatta o refusi che restringono; `case_sensitive` e le regex rileggono solo le
+note che l'indice dà con le parole intere della domanda, al più 2048 e 8 MiB di
+testo. L'ultima parola scritta è un prefisso di al più 10 000 parole. La stessa
+espressione vale per ricerca globale, viste, query salvate e ricerca incorporata:
+il pianificatore instrada ogni foglia al proprietario e ricompone l'AND/OR.
 
 «Vai alla nota» cerca le note per nome e per alias, perché l'indice tiene gli
 alias del frontmatter nello stesso campo del nome. Una nota trovata soltanto

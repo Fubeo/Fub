@@ -813,13 +813,26 @@ pub(super) fn term_query(field: Field, value: &str) -> Box<dyn Query> {
 /// termine è il prefisso nativo di tantivy: legge l'intervallo
 /// `[prefisso, prefisso successivo)` del dizionario, con lo stesso punteggio
 /// costante dell'automa e gli stessi (nessuno) termini per gli estratti. Il
-/// tetto di espansioni è tolto: di serie sono 50 termini, e la regex non ne
-/// aveva.
-fn prefix_query(term: &Term) -> Box<dyn Query> {
+/// tetto di espansioni è [`PREFIX_MAX_EXPANSIONS`]: di serie sono 50 termini,
+/// troppo pochi per un prefisso di due lettere.
+pub(super) fn prefix_query(term: &Term) -> Box<dyn Query> {
     let mut query = PhrasePrefixQuery::new(vec![term.clone()]);
-    query.set_max_expansions(u32::MAX);
+    query.set_max_expansions(PREFIX_MAX_EXPANSIONS);
     Box::new(query)
 }
+
+/// Quanti termini del dizionario un prefisso incompleto può abbracciare, per
+/// campo e per segmento (#518).
+///
+/// Il costo di un prefisso è lineare nei termini che apre: ognuno è una lista
+/// di documenti da leggere. Senza tetto, la prima lettera digitata in un vault
+/// grande apriva tutto il dizionario a ogni tasto: con 200 000 termini sotto la
+/// stessa lettera, misurati in debug, 480 ms senza tetto e 115 ms con questo.
+/// Diecimila termini coprono i prefissi di due lettere di un vault di migliaia
+/// di note; oltre, la ricerca prende i primi in ordine alfabetico e lascia
+/// fuori le note che hanno solo quelli dopo: il prezzo di una o due lettere,
+/// che la lettera seguente toglie (`a_prefix_stops_at_its_cap`).
+pub(super) const PREFIX_MAX_EXPANSIONS: u32 = 10_000;
 
 fn boosted(query: Box<dyn Query>, boost: f32) -> Box<dyn Query> {
     if boost == 1.0 {

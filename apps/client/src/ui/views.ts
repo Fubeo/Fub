@@ -100,12 +100,17 @@ interface Mounted {
   /// manderebbe al vault **corrente**, che cambia aprendone un altro mentre
   /// la view è ancora sullo schermo.
   vault: string | undefined;
-  /// L'albero più recente chiesto mentre la scheda dell'ispettore che lo ospita
-  /// era chiusa: lo disegna `drawOpenedTab` quando la scheda si apre. Una
-  /// scheda chiusa non ha DOM da aggiornare a ogni salvataggio, e una lista di
-  /// centinaia di righe (le uscite di una nota lunga) non ne occupa finché
-  /// nessuno la guarda.
+  /// Un albero arrivato mentre la view era nascosta — la risposta a una
+  /// richiesta partita quando si vedeva, o il `replace` di un'azione: lo
+  /// disegna `drawOpenedTab` quando la view torna in vista, se nel frattempo
+  /// non è invecchiata (`stale`).
   pending: UiNode | null;
+  /// La view è invecchiata mentre nessuno la guardava (#518): un invito a
+  /// ridisegnare arrivato a scheda chiusa, o a ispettore chiuso, non chiede
+  /// niente al kernel e si segna qui. La view che torna in vista chiede
+  /// l'albero una volta sola, anche dopo N inviti: è ciò che toglie le view
+  /// nascoste dal lavoro di ogni salvataggio automatico.
+  stale: boolean;
 }
 
 /// Le istanze montate, per **id di pannello**: il registro dei pannelli sa
@@ -335,6 +340,7 @@ export async function mountViewInPane(
       race: new Race(),
       vault: openVaultRoot(),
       pending: null,
+      stale: false,
     });
     registerPanel({
       id,
@@ -714,6 +720,7 @@ function mountSpec(spec: ViewSpec, host: HTMLElement): void {
     race: new Race(),
     vault: openVaultRoot(),
     pending: null,
+    stale: false,
   });
 
   registerPanel({
@@ -757,6 +764,15 @@ async function renderDeclaredView(id: string): Promise<void> {
   // evidentemente concorrente. Riparandola al posto nominato sarebbero rimasti
   // scoperti il ramo `replace` e ogni ridisegno che arriva da un evento, che
   // sono i più frequenti.
+  //
+  // Una view che nessuno vede non chiede l'albero (#518): si segna invecchiata
+  // e lo chiede `drawOpenedTab` quando torna in vista. Un giro già in volo non
+  // si annulla: se risponde a view nascosta, `draw` lo mette da parte.
+  if (!viewShown(mountedView)) {
+    mountedView.stale = true;
+    return;
+  }
+  mountedView.stale = false;
   await mountedView.race.last(async (expected) => {
     const tree = await expected(
       api.renderView(
@@ -785,35 +801,90 @@ async function renderDeclaredView(id: string): Promise<void> {
 /// dall'ispettore è sempre vero: le altre superfici non hanno schede, e la loro
 /// visibilità la decide chi le apre. Dentro l'ispettore, una scheda chiusa è un
 /// pannello con `hidden` (vedi `activateTab`).
+///
+/// Con l'ispettore chiuso non basta: lo dice `viewShown`.
 function inspectorTabOpen(mountedView: Mounted): boolean {
   const panel = mountedView.container.parentElement;
   if (panel === null || panel.parentElement !== viewsRightEl) return true;
   return !panel.hidden;
 }
 
-/// Disegna nella scheda che si apre l'albero che la view ha chiesto mentre era
-/// chiusa. Chiamata da `activateTab`, dopo che il pannello è diventato visibile.
+/// Vero se l'ispettore si vede: aperto (`hidden` è la preferenza, e un
+/// cassetto aperto lo toglie), oppure chiuso ma affacciato dal bordo
+/// (`peek-inspector` su `#layout`, vedi `frame/peek.ts`). La concentrazione lo
+/// ritira anche aperto. Senza `#right-pane` attorno conta solo la scheda.
+function inspectorShown(): boolean {
+  const pane = viewsRightEl.closest<HTMLElement>("#right-pane");
+  if (pane === null) return true;
+  if (pane.closest("#app")?.hasAttribute("data-focus-mode")) return false;
+  if (!pane.hidden) return true;
+  return pane.parentElement?.classList.contains("peek-inspector") ?? false;
+}
+
+/// Vero se qualcuno può vedere `mountedView`: le view fuori dall'ispettore
+/// sempre (la loro visibilità la decide chi le apre), quelle dell'ispettore
+/// solo con la loro scheda accesa e l'ispettore in vista.
+function viewShown(mountedView: Mounted): boolean {
+  return inspectorTabOpen(mountedView) && (!inRightSidebar(mountedView) || inspectorShown());
+}
+
+function inRightSidebar(mountedView: Mounted): boolean {
+  return mountedView.container.parentElement?.parentElement === viewsRightEl;
+}
+
+/// Porta in pari la view che torna in vista: chiede l'albero se è invecchiata
+/// mentre era nascosta, altrimenti disegna quello arrivato nel frattempo.
+/// Chiamata da `activateTab`, dopo che il pannello è diventato visibile, e
+/// quando l'ispettore stesso torna in vista (`watchInspectorShown`).
 function drawOpenedTab(panel: HTMLElement): void {
   const id = panel.dataset.viewId;
   if (id === undefined) return;
   const mountedView = mounted.get(id);
-  if (!mountedView || mountedView.pending === null) return;
+  if (!mountedView) return;
   if (mountedView.container.parentElement !== panel) return;
+  if (!viewShown(mountedView)) return;
+  if (mountedView.stale) {
+    // Passa dal registro come ogni ridisegno: un guasto si dice una volta.
+    void refreshPanel(id);
+    return;
+  }
+  if (mountedView.pending === null) return;
   draw(id, mountedView, mountedView.pending);
+}
+
+/// Osserva i tre interruttori di `inspectorShown` e, quando l'ispettore torna
+/// in vista, porta in pari la scheda accesa. Torna il disposer.
+function watchInspectorShown(current: () => HTMLElement | undefined): Teardown {
+  const pane = viewsRightEl.closest<HTMLElement>("#right-pane");
+  if (pane === null || typeof MutationObserver === "undefined") return () => {};
+  let shown = inspectorShown();
+  const observer = new MutationObserver(() => {
+    const now = inspectorShown();
+    if (now === shown) return;
+    shown = now;
+    const panel = current();
+    if (now && panel) drawOpenedTab(panel);
+  });
+  observer.observe(pane, { attributes: true, attributeFilter: ["hidden"] });
+  if (pane.parentElement) observer.observe(pane.parentElement, { attributes: true, attributeFilter: ["class"] });
+  const app = pane.closest("#app");
+  if (app) observer.observe(app, { attributes: true, attributeFilter: ["data-focus-mode"] });
+  return () => observer.disconnect();
 }
 
 /// Disegna un albero nel contenitore della sua istanza e chiude il giro
 /// azione→`ViewUpdate`: un click torna al provider via `view_action` con le sue
 /// due metà, e la risposta si interpreta qui.
 ///
-/// Una scheda chiusa dell'ispettore non si disegna: il suo albero resta in
-/// `pending` e si disegna quando la scheda si apre. Il provider continua a
-/// rispondere a ogni invito: si risparmia il disegno, non la richiesta. Un'azione
-/// parte da una scheda aperta, ma la risposta può arrivare a scheda chiusa: un
-/// `patch` allora chiede l'albero di nuovo (vedi sotto), un `replace` va in
-/// attesa come gli altri.
+/// Una view nascosta (scheda chiusa, ispettore chiuso) non si disegna: un
+/// albero che le arriva lo stesso — una risposta partita quando si vedeva — resta
+/// in `pending` e si disegna quando torna in vista, se nel frattempo un invito
+/// non l'ha invecchiata (allora si chiede di nuovo, vedi `drawOpenedTab`).
+/// Un'azione parte da una scheda aperta, ma la risposta può arrivare a scheda
+/// chiusa: un `patch` allora segna la view da ridisegnare (vedi sotto), un
+/// `replace` va in attesa come gli altri.
 function draw(id: string, mountedView: Mounted, tree: UiNode): void {
-  if (!inspectorTabOpen(mountedView)) {
+  if (!viewShown(mountedView)) {
     mountedView.pending = tree;
     return;
   }
@@ -879,7 +950,7 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
       // e la si ridisegna intera invece di lasciarla stantia. Una scheda chiusa
       // non ha un DOM da ritoccare, e il suo albero in attesa sarebbe rimasto
       // indietro: si chiede di nuovo, come per una chiave perduta.
-      if (!inspectorTabOpen(mountedView) || !patchTree(actionContainer, update.key, update.node)) {
+      if (!viewShown(mountedView) || !patchTree(actionContainer, update.key, update.node)) {
         if (!isAuthoritative()) return;
         await renderDeclaredView(id);
         return;
@@ -1118,9 +1189,11 @@ function buildInspector(): void {
   }
   const offLayout = on("layout", drawFollows);
   const offDoc = on("active-doc", drawFollows);
+  const offShown = watchInspectorShown(() => panels[active]);
   stopFollowing = () => {
     offLayout();
     offDoc();
+    offShown();
   };
 
   // Il tablist va in cima, prima dei pannelli — e il titolo sopra di lui.

@@ -127,6 +127,39 @@ fn a_prefix_expands_to_every_term() {
     assert_eq!(page_of(&idx, partial_text("parola7"), None).items.len(), 11);
 }
 
+/// …ma un tetto ce l'ha (#518): una prima lettera non apre tutto il
+/// dizionario. Un segmento solo, scritto da un thread solo, perché il tetto
+/// vale per segmento e l'indice vero ne fa quanti ne vuole.
+#[test]
+fn a_prefix_stops_at_its_cap() {
+    use crate::search::engine::{prefix_query, PREFIX_MAX_EXPANSIONS};
+    use tantivy::collector::Count;
+    use tantivy::schema::{Schema, TEXT};
+    use tantivy::{doc as tdoc, Index, IndexWriter, Term};
+
+    let mut schema = Schema::builder();
+    let body = schema.add_text_field("body", TEXT);
+    let index = Index::create_in_ram(schema.build());
+    let mut writer: IndexWriter = index.writer_with_num_threads(1, 50_000_000).unwrap();
+    // La prima nota riempie il tetto da sola; la seconda ha l'unico termine dopo.
+    let words: Vec<String> = (0..PREFIX_MAX_EXPANSIONS)
+        .map(|n| format!("pa{n:05}"))
+        .collect();
+    writer.add_document(tdoc!(body => words.join(" "))).unwrap();
+    writer.add_document(tdoc!(body => "pb")).unwrap();
+    writer.commit().unwrap();
+    let searcher = index.reader().unwrap().searcher();
+    assert_eq!(searcher.segment_readers().len(), 1);
+    let count = |prefix: &str| {
+        searcher
+            .search(&*prefix_query(&Term::from_field_text(body, prefix)), &Count)
+            .unwrap()
+    };
+    assert_eq!(count("p"), 1, "oltre il tetto il prefisso si ferma");
+    assert_eq!(count("pa"), 1);
+    assert_eq!(count("pb"), 1, "la lettera seguente la ritrova");
+}
+
 /// Le lettere cerchiate sono lettere anche per le maiuscole esatte, come lo
 /// sono per l'indice: «Ⓐfoo» non contiene la parola `foo`.
 #[test]
