@@ -20,8 +20,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use fub_abi::model::{parse_wikilink_inner, LinkTarget, PropertyScalar, PropertyValue};
-use fub_abi::query::QueryExpr;
+use fub_abi::query::{PropertyLinkPredicate, QueryExpr};
 use fub_abi::rules::path::{resolution_key, strip_ext};
+use fub_abi::rules::properties::lone_wikilink;
 use fub_abi::traits::{Excerpts, PropertySelect};
 
 use super::*;
@@ -46,11 +47,18 @@ pub(crate) fn property_links_to(
         return Ok(found);
     }
     let wanted: BTreeSet<&DocId> = targets.iter().collect();
-    // Nessun indice che legga le proprietà (un host ridotto): non c'è niente
-    // che si possa sapere, e quindi niente da riscrivere. Ogni altro errore
-    // ferma il comando prima che rinomini.
+    // Solo le note che nominano uno dei bersagli in una proprietà, dalla via
+    // inversa che il grafo del kernel tiene (#503): la domanda costa i link
+    // che arrivano, non le proprietà di tutto il vault. Nessun indice che la
+    // serva (un host ridotto): non c'è niente che si possa sapere, e quindi
+    // niente da riscrivere. Ogni altro errore ferma il comando prima che
+    // rinomini.
+    let leaf = PropertyLinkPredicate {
+        targets: targets.to_vec(),
+        key: None,
+    };
     let answer = match host.query_index(IndexQuery::Documents {
-        matching: QueryExpr::default(),
+        matching: QueryExpr::of(leaf.into_predicate()),
         sort: None,
         select: PropertySelect::All,
         page: None,
@@ -177,11 +185,6 @@ fn written_pages(value: &PropertyValue) -> Vec<String> {
             .collect(),
         _ => Vec::new(),
     }
-}
-
-fn lone_wikilink(s: &str) -> Option<LinkTarget> {
-    let inner = s.trim().strip_prefix("[[")?.strip_suffix("]]")?;
-    (!inner.contains("[[") && !inner.contains("]]")).then(|| parse_wikilink_inner(inner).target)
 }
 
 fn resolve(host: &dyn HostApi, page: &str, from: &DocId) -> Result<Option<DocId>, PluginError> {

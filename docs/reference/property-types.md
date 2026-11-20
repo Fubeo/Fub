@@ -167,10 +167,10 @@ nota e niente si scrive.
 Rinominare o spostare una nota legata (`note.rename`, e `folder.rename` per
 le voci di una cartella) riscrive anche i link delle proprietà che la
 nominano: un link solo, una lista di link, o un testo che è soltanto un
-`[[…]]`, in qualunque chiave. I link del frontmatter non sono archi del
-grafo dei link, quindi non li riscrive la rinomina del kernel: li cerca il
-comando prima di rinominare, col nome vecchio, e li riscrive dopo
-(`fub_features::commands::relink`). Le regole sono quelle dei link del
+`[[…]]`, in qualunque chiave. I link del frontmatter non sono link del
+corpo, quindi non li riscrive la rinomina del kernel: li cerca il comando
+prima di rinominare, col nome vecchio, con la foglia `fub:property-link`
+(sotto), e li riscrive dopo (`fub_features::commands::relink`). Le regole sono quelle dei link del
 corpo: si riscrive un link che arrivava per nome o per percorso, mai per
 alias; il nome resta un nome e il percorso un percorso, col percorso se il
 nome nuovo è ambiguo; cambia soltanto la pagina dentro `[[…]]` (titolo,
@@ -184,14 +184,35 @@ nome vecchio: la rinomina riesce, e l'esito nomina quelle note
 ### Collegata da
 
 La relazione inversa di una nota sono le note che la legano con una
-Relazione (`fub_features::properties::linked_from`). Si legge dai link
-delle Relazioni delle altre note, risolti con le regole dei link del vault
-(nome, path, alias), e non scrive niente in nessuna nota. I link nel
-frontmatter non sono archi del grafo dei link, quindi i backlink non
-bastano. Contano solo le chiavi dichiarate `relation`; un link rotto non
-lega; una nota che lega sé stessa compare fra chi la lega.
+Relazione (`fub_features::properties::linked_from`), e non scrive niente in
+nessuna nota. Contano solo le chiavi dichiarate `relation`; un link rotto
+non lega; una nota che lega sé stessa compare fra chi la lega.
 
-Nessuna porta la espone all'interfaccia: il client non la mostra.
+### I link nelle proprietà, all'indice
+
+Un link della proprietà è una stringa che è soltanto un `[[…]]`, come valore
+o come voce di un elenco, in qualunque chiave e con qualunque tipo
+dichiarato (`fub_abi::rules::properties::links`); un `[[…]]` dentro altro
+testo no. Il grafo dei link del kernel li risolve con le regole dei wikilink
+(nome, percorso anche parziale, alias) e li tiene in archi suoi, separati
+da backlink e uscenti del corpo, aggiornati a ogni scrittura come gli altri.
+
+`query_index` li chiede con la foglia custom `fub:property-link` dentro
+una domanda `documents`:
+
+```json
+{"kind": "custom", "ns": "fub:property-link",
+ "predicate": {"targets": ["Progetti/Scorte.md"], "key": "progetto"}}
+```
+
+Risponde le note che nominano uno dei `targets` in un link di proprietà,
+nella sola `key` se c'è (assente = ogni chiave); la nota che nomina sé
+stessa compare, un link rotto no, un payload diverso è `bad_args`. Il costo
+cresce coi link che arrivano ai bersagli, non col vault. È custom e non un
+caso nuovo di `query-predicate` perché da `0.2.0` la WIT non prende casi
+nuovi (ADR 0238), e così la foglia arriva anche ai plugin già compilati.
+«Collegata da» è questa foglia, una domanda per ogni Relazione dichiarata:
+il client la può chiedere da `query_index`, ma oggi non la mostra.
 
 ### Il riepilogo in una Base
 

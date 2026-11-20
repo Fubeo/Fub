@@ -5,9 +5,9 @@
 //! sembrava doverlo snellire. Contato in allocazioni e in byte allocati.
 //!
 //! Il dry-run di `note.rename` chiede `IndexQuery::Backlinks` per sapere quali
-//! note nominano il documento nel corpo (e, dall'IMP-2805, le proprietà di
-//! tutto il vault per sapere quali lo nominano in un link del frontmatter: vedi
-//! sotto), e di ogni riferimento riceve anche il `context`
+//! note nominano il documento nel corpo (e, dall'IMP-2805, la foglia
+//! `fub:property-link` per sapere quali lo nominano in un link del
+//! frontmatter: vedi sotto), e di ogni riferimento riceve anche il `context`
 //! — la finestra di testo attorno al link (§25.4, `fub_abi::rules::snippet`)
 //! — che poi butta via, perché ciò che costruisce è un elenco di path. Da
 //! fuori è una riga di prestazioni ovvia: `QueryPredicate::Linked` è la stessa
@@ -30,6 +30,8 @@
 //! | **il dry-run intero** sugli stessi 500, prima dell'IMP-2805 | 1 058 | **217 453** |
 //! | `Documents` con tutte le proprietà, 501 note (la seconda domanda) | — | 385 580 |
 //! | **il dry-run intero** sugli stessi 500, con le proprietà | 2 143 | **604 537** |
+//! | la foglia `fub:property-link` al posto delle proprietà, stessi 500 (#503) | — | 669 |
+//! | **il dry-run intero** sugli stessi 500, con la foglia | 1 105 | **219 632** |
 //! | `Documents` con la foglia `Linked`, stessi 500 | 1 728 | **686 078** |
 //! | `Backlinks` su 2000 backlink | 4 003 | 668 012 |
 //! | il dry-run intero sugli stessi 2000, prima dell'IMP-2805 | 4 062 | 865 909 |
@@ -71,8 +73,11 @@
 //! i link nelle proprietà, il piano pone una seconda domanda — le proprietà di
 //! tutto il vault, perché quei link non sono archi del grafo e l'indice non ne
 //! ha una più stretta — e il confronto si fa con la somma delle due: 604 537
-//! contro 167 012 + 385 580, cioè 1,09. Lo scambio qui sotto, applicato oggi,
-//! porterebbe il piano oltre il milione di byte e il banco resterebbe rosso. *Provato in rosso* applicando lo
+//! contro 167 012 + 385 580, cioè 1,09. Dalla #503 la seconda domanda è la
+//! foglia `fub:property-link`, che legge gli archi delle proprietà tenuti dal
+//! grafo e su questo vault risponde vuota: 219 632 byte contro 167 012 + 669,
+//! cioè 1,31, quasi la domanda sola di prima. Lo scambio qui sotto, applicato
+//! oggi, porterebbe il piano ben oltre il tetto. *Provato in rosso* applicando lo
 //! scambio per davvero dentro `note_rename`: il dry-run è passato a **672 535**
 //! byte, cioè 3,59 volte la domanda che aveva sostituito, e il banco si è
 //! acceso. (Il primo confronto scritto — «il piano intero costa meno della sola
@@ -88,7 +93,7 @@ use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
-use fub_abi::query::{QueryExpr, QueryPredicate};
+use fub_abi::query::{PropertyLinkPredicate, QueryExpr, QueryPredicate};
 use fub_abi::traits::{Excerpts, IndexQuery, IndexResult, LinkDirection, PropertySelect};
 use fub_features::{CoreCommands, COMMANDS_ID, NOTES_RENAME};
 use fub_format_markdown::MarkdownProvider;
@@ -238,14 +243,21 @@ fn for_the_backlink(ws: &Workspace) -> usize {
     }
 }
 
-/// La seconda domanda del dry-run, isolata: le proprietà di tutto il vault,
-/// per trovare chi nomina la nota in un link del frontmatter (IMP-2805). Quei
-/// link non sono archi del grafo, e l'indice non ha una domanda più stretta
-/// che li conosca: è la stessa che pone `commands::relink`.
+/// La seconda domanda del dry-run, isolata: chi nomina la nota in un link del
+/// frontmatter (IMP-2805), con la foglia `fub:property-link` che legge gli
+/// archi delle proprietà tenuti dal grafo (#503). È la stessa che pone
+/// `commands::relink`, e su questo vault, dove nessuna proprietà nomina il
+/// bersaglio, risponde vuota.
 fn for_the_properties(ws: &Workspace) -> usize {
     match ws
         .query_index(IndexQuery::Documents {
-            matching: QueryExpr::default(),
+            matching: QueryExpr::of(
+                PropertyLinkPredicate {
+                    targets: vec![DocId::new(TARGET)],
+                    key: None,
+                }
+                .into_predicate(),
+            ),
             sort: None,
             select: PropertySelect::All,
             page: None,
