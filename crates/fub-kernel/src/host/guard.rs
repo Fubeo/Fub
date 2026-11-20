@@ -12,7 +12,7 @@ use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, TaskMarker};
-use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::net::{HttpRequest, HttpResponse, LimitedFetchError};
 use fub_abi::options::permission;
 use fub_abi::rules::folders;
 use fub_abi::session::ViewContext;
@@ -1522,21 +1522,10 @@ impl<H: TransferRead, P: Policy> TransferRead for Guard<H, P> {
     }
 }
 
-impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
-    /// **Due cancelli, e il secondo è il primo parametro di permesso che questo
-    /// repo legge.** La famiglia dice *se*, l'allowlist dice *dove*, e senza il
-    /// secondo il permesso prometterebbe una cosa che non fa — che è la
-    /// differenza fra un recinto che perde e una frase falsa scritta dall'app.
-    ///
-    /// L'ordine conta e non è indifferente: prima la famiglia, così chi non ha
-    /// `fub:network` legge *«non hai dichiarato il permesso»* e non un elenco
-    /// di host che non lo riguarda.
-    ///
-    /// L'URL si legge **qui e una volta sola**. Non c'è un campo `host` accanto
-    /// nella richiesta apposta: due posti in cui è scritto dove si va sono due
-    /// posti che possono non essere d'accordo, e chi controlla ne guarderebbe
-    /// uno solo.
-    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+impl<H: HostNetwork, P: Policy> Guard<H, P> {
+    /// Il cancello di ogni richiesta di rete, qualunque sia il metodo: vedi
+    /// [`fetch`](HostNetwork::fetch) qui sotto per l'ordine dei controlli.
+    fn admit_request(&self, request: &HttpRequest) -> Result<(), PluginError> {
         let (scheme, host) = split_url(&request.url)?;
         self.check(Capability::Network, || format!("connecting to `{host}`"))?;
         if let Some(why) = self.policy.denies_host(&host) {
@@ -1557,6 +1546,26 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
                 .into(),
             ));
         }
+        Ok(())
+    }
+}
+
+impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
+    /// **Due cancelli, e il secondo è il primo parametro di permesso che questo
+    /// repo legge.** La famiglia dice *se*, l'allowlist dice *dove*, e senza il
+    /// secondo il permesso prometterebbe una cosa che non fa — che è la
+    /// differenza fra un recinto che perde e una frase falsa scritta dall'app.
+    ///
+    /// L'ordine conta e non è indifferente: prima la famiglia, così chi non ha
+    /// `fub:network` legge *«non hai dichiarato il permesso»* e non un elenco
+    /// di host che non lo riguarda.
+    ///
+    /// L'URL si legge **qui e una volta sola**. Non c'è un campo `host` accanto
+    /// nella richiesta apposta: due posti in cui è scritto dove si va sono due
+    /// posti che possono non essere d'accordo, e chi controlla ne guarderebbe
+    /// uno solo.
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.admit_request(&request)?;
         self.inner.fetch(request)
     }
 
@@ -1565,24 +1574,20 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
         request: HttpRequest,
         cancelled: &std::sync::atomic::AtomicBool,
     ) -> Result<HttpResponse, PluginError> {
-        let (scheme, host) = split_url(&request.url)?;
-        self.check(Capability::Network, || format!("connecting to `{host}`"))?;
-        if let Some(why) = self.policy.denies_host(&host) {
-            return Err(PluginError::PermissionDenied(
-                format!("connecting to `{host}`: {why}").into(),
-            ));
-        }
-        if scheme != "https" && !is_loopback(&host) {
-            return Err(PluginError::BadArgs(
-                format!(
-                    "`{scheme}` is not `https`: in plaintext the allowlist promises one \
-                     host and the network delivers another. The local loop is an \
-                     exception, because there is no network to traverse"
-                )
-                .into(),
-            ));
-        }
+        self.admit_request(&request)?;
         self.inner.fetch_cancelled(request, cancelled)
+    }
+
+    /// Lo stesso cancello, e il tetto di byte va al filo com'è: senza questo
+    /// inoltro il default scaricherebbe tutto e rifiuterebbe dopo.
+    fn fetch_limited(
+        &self,
+        request: HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        self.admit_request(&request)?;
+        self.inner.fetch_limited(request, cancelled, max_bytes)
     }
 }
 
@@ -2631,6 +2636,63 @@ mod tests {
     /// Prima della 0097 il parametro di un permesso non lo leggeva nessuno:
     /// `fub:network` con un elenco dentro concedeva esattamente quanto
     /// `fub:network` nudo.
+    /// Una rete che registra il tetto di byte ricevuto e non scarica niente:
+    /// se il cancello non inoltrasse `fetch_limited`, il default chiamerebbe
+    /// `fetch_cancelled` e qui non arriverebbe nessun tetto.
+    #[derive(Default)]
+    struct RecordsCap(std::sync::Mutex<Option<u64>>);
+
+    impl HostNetwork for RecordsCap {
+        fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
+            panic!("a capped request must reach the wire with its cap")
+        }
+
+        fn fetch_limited(
+            &self,
+            _request: HttpRequest,
+            _cancelled: &std::sync::atomic::AtomicBool,
+            max_bytes: u64,
+        ) -> Result<HttpResponse, LimitedFetchError> {
+            *self.0.lock().unwrap() = Some(max_bytes);
+            Err(LimitedFetchError::TooLarge {
+                limit: max_bytes,
+                status: 200,
+            })
+        }
+    }
+
+    /// Il tetto di byte attraversa il cancello, e il cancello resta un
+    /// cancello: un host fuori dall'allowlist non arriva al filo.
+    #[test]
+    fn the_byte_cap_crosses_the_gate() {
+        let guard = Guard::new(RecordsCap::default(), with_network(&["api.acme.com"]));
+        let flag = std::sync::atomic::AtomicBool::new(false);
+        let err = guard
+            .fetch_limited(HttpRequest::get("https://api.acme.com/x"), &flag, 1024)
+            .expect_err("the wire refuses");
+        assert_eq!(
+            err,
+            LimitedFetchError::TooLarge {
+                limit: 1024,
+                status: 200
+            }
+        );
+        assert_eq!(*guard.inner.0.lock().unwrap(), Some(1024));
+
+        let guard = Guard::new(RecordsCap::default(), with_network(&["api.acme.com"]));
+        let err = guard
+            .fetch_limited(HttpRequest::get("https://altrove.example/x"), &flag, 1024)
+            .expect_err("undeclared host");
+        assert!(
+            matches!(
+                err,
+                LimitedFetchError::Failed(PluginError::PermissionDenied(_))
+            ),
+            "{err:?}"
+        );
+        assert_eq!(*guard.inner.0.lock().unwrap(), None);
+    }
+
     #[test]
     fn the_manifest_says_where_and_it_is_true() {
         let guard = Guard::new(WithNetwork, with_network(&["api.acme.com"]));

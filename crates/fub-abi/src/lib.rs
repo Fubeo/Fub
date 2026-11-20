@@ -152,7 +152,7 @@ pub use model::{
     PropertyDate, PropertyOption, PropertyScalar, PropertyTime, PropertyType, PropertyTypes,
     PropertyValue, RelationTarget, Span, StatusGroup, TableCell, TableRow, Tag, TaskMarker,
 };
-pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
+pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse, LimitedFetchError};
 pub use options::{OptionMap, OptionStatus};
 pub use organization::Organization;
 pub use query::{
