@@ -225,7 +225,8 @@ Fuori dalla domanda dell'issue, ma misurati nello stesso giro:
 - **L'anagrafe da caricare.** `entries.json` pesa 22 MB su `ricche` e 27 MB
   su `trentamila`; caricarla costa 142 ms su `ricche` ed è il motivo per cui
   l'apertura di una riapertura (300 ms) costa più di quella a freddo
-  (173 ms).
+  (173 ms). Dopo #523 la lettura costa circa un terzo:
+  [L'anagrafe letta in un colpo](2026-11-20-anagrafe-lettura.md).
 - **L'anagrafe riscritta a ogni riapertura.** `store_entries` gira due volte
   anche quando niente è cambiato: 31 ms su `cinquemila`, 94 su `ricche`,
   255 su `trentamila`, e resta anche con la forzatura.
