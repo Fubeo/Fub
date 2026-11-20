@@ -66,8 +66,12 @@ pub fn sidecar_path(data_dir: &Path, site_id: &str) -> PathBuf {
     data_dir.join("sites").join(site_id).join("isolation.json")
 }
 
-/// Carica la configurazione; assente/invalida = `deny` (fail-closed).
+/// Carica la configurazione; assente/invalida = `deny` (fail-closed). Un
+/// `site_id` fuori dalla regola dei siti non apre nessun file.
 pub fn load_mode(data_dir: &Path, site_id: &str) -> IsolationConfig {
+    if crate::publish::manifest::check_site_id(site_id).is_err() {
+        return IsolationConfig::default();
+    }
     let path = sidecar_path(data_dir, site_id);
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
@@ -145,7 +149,8 @@ pub fn commit_has_custom_js(body: &[u8]) -> bool {
 }
 
 /// Preflight al commit: custom JS senza isolamento = 422 (fail-closed).
-/// Chiamato da `main.rs` prima del lock globale (solo file I/O, mai KDF).
+/// Chiamato da `publish::plan_commit` dopo autenticazione e autorizzazione:
+/// chi non può pubblicare sul sito non scopre come è configurato.
 pub fn preflight_commit(data_dir: &Path, body: &[u8]) -> Result<(), HttpResponse> {
     if !commit_has_custom_js(body) {
         return Ok(());
@@ -156,6 +161,9 @@ pub fn preflight_commit(data_dir: &Path, body: &[u8]) -> Result<(), HttpResponse
         .unwrap_or_default();
     if site_id.is_empty() {
         return Err(HttpResponse::err(400, "site id mismatch"));
+    }
+    if crate::publish::manifest::check_site_id(&site_id).is_err() {
+        return Err(HttpResponse::err(400, "bad site id"));
     }
     match load_mode(data_dir, &site_id) {
         IsolationConfig {

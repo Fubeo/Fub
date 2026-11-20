@@ -30,6 +30,12 @@ WASM, contenuto non fidato) è in [Permessi e sicurezza](permissions-and-securit
   `Writer` che pubblica resta `Writer` e non amministra il sito (niente
   ritiro, password, dominio o revoche: `403`)
   (`fub_services::publish::finish_commit`).
+- Commit di pubblicazione e richieste sync controllano il token prima di
+  leggere il corpo o prendere il lock del sito o del vault: senza una
+  sessione valida la risposta è sempre `401`. Il controllo del custom JS
+  (`422` senza isolamento) arriva soltanto dopo l'autorizzazione a
+  pubblicare, con un `site_id` valido: chi non può pubblicare non scopre come
+  è configurato un sito (`fub_services::site_isolation::preflight_commit`).
 - Login con password (`fub_services::mfa::LoginLimits`): 5 fallimenti in 5
   minuti bloccano quel nome da quell'origine, 20 fallimenti di un'origine su
   nomi qualunque bloccano l'origine, 50 fallimenti di un nome da tutte le

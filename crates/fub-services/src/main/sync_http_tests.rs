@@ -158,6 +158,65 @@ fn isolation_denies_missing_or_corrupt_sites_and_honours_persisted_admins() {
     );
 }
 
+/// A1: senza un token valido un commit è sempre 401, qualunque cosa porti
+/// il corpo: custom JS, un `site_id` con `../`, un sito in sandbox o in deny,
+/// JSON rotto. Prima il preflight leggeva il corpo e il sidecar del sito
+/// senza autenticazione, e la risposta (422 o 200) ne rivelava la modalità.
+/// Lo stesso per il sync: niente parse né lock del vault senza sessione.
+#[test]
+fn an_unauthenticated_commit_or_sync_is_always_401() {
+    use fub_services::publish::site;
+    let dir = TempDir::new();
+    let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+    site::create_site(&dir.0, "aperto", "owner", None).unwrap();
+    fub_services::site_isolation::save_mode(&dir.0, "aperto", "sandbox", None).unwrap();
+    site::create_site(&dir.0, "chiuso", "owner", None).unwrap();
+    std::fs::create_dir_all(dir.0.join("fuori")).unwrap();
+    std::fs::write(dir.0.join("fuori/isolation.json"), br#"{"mode":"sandbox"}"#).unwrap();
+    let commit = |site: &str| {
+        json!({
+            "protocol": "fub-publish/1",
+            "site_id": site,
+            "manifest": { "site_id": site },
+            "pages": [{ "path": "index.html", "html": "<script>alert(1)</script>" }],
+            "assets": [],
+        })
+    };
+    for auth in [None, Some("Bearer non-un-token")] {
+        for site in ["../fuori", "aperto", "chiuso", "nuovo"] {
+            let (status, body) = request(
+                &state,
+                &dir.0,
+                "POST",
+                "/v1/publish/commit",
+                auth,
+                commit(site),
+            );
+            assert_eq!(status, 401, "{auth:?} {site}: {body}");
+        }
+        let (status, body) = request(
+            &state,
+            &dir.0,
+            "POST",
+            "/v1/publish/commit",
+            auth,
+            json!("non un commit"),
+        );
+        assert_eq!(status, 401, "{auth:?} malformed: {body}");
+        let (status, body) = request(
+            &state,
+            &dir.0,
+            "POST",
+            "/v1/sync/push",
+            auth,
+            json!({ "ops": [{ "vault_id": "../fuori" }] }),
+        );
+        assert_eq!(status, 401, "{auth:?} push: {body}");
+    }
+    assert!(state.lock().site_locks.is_empty(), "no site lock taken");
+    assert!(state.lock().vault_locks.is_empty(), "no vault lock taken");
+}
+
 #[test]
 fn a_new_site_drops_an_orphan_isolation_sidecar() {
     use fub_services::publish::site;
