@@ -26,7 +26,7 @@ dubbio su una scelta tecnica si decide, non si chiede.
   larghe nel repo, pezzi di codice grandi ma su terreno noto e con poco
   margine d'errore), scelto e disegnato dal coder Opus, che lo tiene d'occhio
   riga per riga e fa da sé le cose rapide e quelle difficili (regola
-  dell'utente: lo scultore e il suo assistente). Mai una sessione senza fine
+  dell'utente). Mai una sessione senza fine
   per un Haiku. I controlli pesanti passano dalla coda della macchina (vedi
   `CLAUDE_DEVICE.md`);
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una

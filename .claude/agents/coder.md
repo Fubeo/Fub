@@ -32,8 +32,7 @@ expected.
   created with. Never push, open a PR, look at or start CI, switch branch,
   rebase, reset or rewrite history. Start no agents but the helpers below.
 - **Haiku helpers.** You may start at most **two** helpers for the whole task
-  (`Agent` with `model: "haiku"` and `effort: "max"`). Split the work like a
-  master sculptor with an assistant:
+  (`Agent` with `model: "haiku"` and `effort: "max"`). Split the work this way:
   - **You do yourself** whatever takes you a few seconds and no real effort,
     and every hard part: design, contracts, tricky logic, the final judgement.
     Briefing a helper for a quick look costs more than the look.
