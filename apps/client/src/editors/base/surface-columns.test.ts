@@ -196,6 +196,36 @@ describe("il piede coi riepiloghi del core", () => {
     } finally { done(); }
   });
 
+  // #445: lo scorrimento di lato della tabella lo decide chi guarda. Il
+  // riepilogo scelto dal menu ridisegna la tabella: quella nuova riparte da
+  // dove era scorsa la vecchia, e nessuno la porta in vista da sé. (Nel banco
+  // la tabella a 700 px restava scorsa di 11 px per il `page.click` di
+  // Playwright, che porta in vista l'intestazione prima di premerla; col
+  // puntatore vero, in Chromium e in WebKitGTK, non scorre niente.)
+  it("il riepilogo scelto dal menu della colonna lascia la tabella scorsa di lato dov'era", async () => {
+    const { host, invokeCommand, done } = mount([{ name: "Tabella", type: "table", keys: { order: ["stato", "valore"] } }]);
+    const reveal = vi.spyOn(Element.prototype, "scrollIntoView");
+    try {
+      await ready(host);
+      const before = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      before.scrollLeft = 37;
+      const head = host.querySelector<HTMLButtonElement>('th[data-column="valore"] .base-head')!;
+      head.click();
+      pick("Riepilogo");
+      await vi.waitFor(() => expect(document.querySelector(".context-submenu button")).not.toBeNull());
+      const sum = [...document.querySelectorAll<HTMLButtonElement>(".context-submenu button")].find((each) => each.querySelector(".menu-label")?.textContent === "Somma")!;
+      reveal.mockClear();
+      sum.click();
+      await vi.waitFor(() => expect(invokeCommand).toHaveBeenCalledWith("base.view.set", expect.objectContaining({ key: "summaries" })));
+      await vi.waitFor(() => expect(host.querySelector('tfoot td[data-column="valore"] .base-foot-value')).not.toBeNull());
+      await settled(host);
+      const after = host.querySelector<HTMLElement>(".base-table-viewport")!;
+      expect(after).not.toBe(before);
+      expect(after.scrollLeft).toBe(37);
+      expect(reveal.mock.contexts.filter((element) => host.contains(element as Node))).toEqual([]);
+    } finally { reveal.mockRestore(); done(); }
+  });
+
   it("le schede hanno il piede in fila", async () => {
     const { host, done } = mount([{ name: "Schede", type: "cards", keys: { summaries: [{ key: "valore", aggregate: "sum" }] } }]);
     try {
@@ -401,6 +431,41 @@ describe("venti viste", () => {
       if (width) Object.defineProperty(HTMLElement.prototype, "scrollWidth", width);
       else delete (HTMLElement.prototype as { scrollWidth?: number }).scrollWidth;
     }
+  });
+});
+
+describe("la barra al telefono (#470)", () => {
+  it("se nemmeno la vista scelta sta accanto agli strumenti, la barra va su due file e le linguette restano", async () => {
+    // happy-dom non misura: in una fila le linguette non stanno mai (al
+    // telefono ogni strumento è largo un dito), sulla fila tutta loro sì.
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get(this: HTMLElement) {
+      if (!this.classList.contains("base-tabs")) return 0;
+      return this.closest(".base-bar")?.classList.contains("stacked") ? 0 : 2000;
+    } });
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: {} }, { name: "Schede", type: "cards", keys: {} }]);
+    try {
+      await ready(host);
+      const bar = host.querySelector(".base-bar")!;
+      await vi.waitFor(() => expect(bar.classList.contains("stacked")).toBe(true));
+      const tabs = bar.querySelector(".base-tabs")!;
+      // Sulla fila loro le linguette stanno tutte, col nome com'è.
+      expect(tabs.classList.contains("compact")).toBe(false);
+      expect([...tabs.querySelectorAll<HTMLElement>(".base-tab[data-view]")].filter((tab) => !tab.hidden).map((tab) => tab.dataset.view)).toEqual(["Tabella", "Schede"]);
+      expect(tabs.querySelector<HTMLElement>(".base-tab-more")!.hidden).toBe(true);
+    } finally {
+      done();
+      if (width) Object.defineProperty(HTMLElement.prototype, "scrollWidth", width);
+      else delete (HTMLElement.prototype as { scrollWidth?: number }).scrollWidth;
+    }
+  });
+
+  it("dove le linguette stanno nella fila, la barra resta una", async () => {
+    const { host, done } = mount([{ name: "Tabella", type: "table", keys: {} }]);
+    try {
+      await ready(host);
+      expect(host.querySelector(".base-bar")!.classList.contains("stacked")).toBe(false);
+    } finally { done(); }
   });
 });
 
