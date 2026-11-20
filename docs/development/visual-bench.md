@@ -20,6 +20,17 @@ La soglia colore resta `0.01` e una foto passa soltanto con al massimo lo
 `0.1%` di pixel diversi. Una diversa rasterizzazione del sistema non è
 una motivazione per alzare questi limiti.
 
+Una foto diversa dalla baseline, o una scena che non arriva allo scatto (un
+tempo scaduto, una scena che non sta ferma), si rifà una volta sola in una
+pagina nuova; mai su `--update`. Se il secondo scatto è uguale, l'esito è
+«instabile ma ripresa»: il banco non cade, ma la foto ha una riga nel
+riepilogo, nella pagina della corsa e nel foglio di contatto (col primo
+scatto e la sua differenza), ed è elencata in `.output/instabili.json`, perché
+va aperta una issue. Il primo scatto sta in `.output/instabili/`, fuori da
+`attuale/` e `differenze/`, quindi `baseline.yml` non lo committa. Se anche il
+secondo scatto è diverso, la foto resta «cambiata». `--only=<id>,…` fotografa
+soltanto le scene chieste.
+
 Un confronto locale fuori da questo ambiente può superare il limite per
 rasterizzazione di testo o canvas pur senza una regressione applicativa. Va
 esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale

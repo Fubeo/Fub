@@ -1634,6 +1634,11 @@ export const SCENE = touchLast(onPage("shell", [
       await selectWords(page, "Questa è la nota");
       await page.waitForSelector(".selection-bubble:not([hidden]) .mini-bar [data-command='markdown.bold']");
       if (colors) {
+        // La bolla ferma prima del clic (#511): con un suo menu aperto la bolla
+        // non si riposa più (`selection-bubble.ts`, `holding`), e un clic che
+        // arrivava mentre un riposizionamento era ancora in coda la lasciava,
+        // col pannello dei colori, 2 px più in là in una corsa su tante.
+        await settleBar(page);
         await page.click(".selection-bubble .mini-bar [data-command='mini-bar.color']");
         await page.waitForSelector(".mini-bar-colors .mini-bar-swatch");
       }
