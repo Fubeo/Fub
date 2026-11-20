@@ -2034,13 +2034,6 @@ export const SCENE = touchLast(onPage("shell", [
       if (scroll === "lost") {
         await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .canvas-card-lost")?.closest(".live-card")?.scrollIntoView({ block: "end" }));
       }
-      // Le violazioni di Mermaid fuori vista: come nelle scene dei diagrammi.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       if (menu) {
         await page.click('.pane.focus .pane-editor .tb-grid [data-row="1"][data-col="0"]', { button: "right" });
@@ -2427,17 +2420,6 @@ export const SCENE = touchLast(onPage("shell", [
         const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
         return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
       });
-      // Mermaid scrive `style="font-family: …"` sul `<div>` dove misura
-      // (`appendDivSvgG`), e la CSP lo rifiuta: succede a ogni disegno, da
-      // prima di queste scene, dentro il contenitore fuori vista che
-      // `ui/mermaid.ts` toglie subito. Quelle violazioni si tolgono dal conto;
-      // ogni altra resta.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       // Il sorgente di un diagramma disegnato è nascosto, col suo «Copia»:
       // conta ciò che si vede. Con un errore il sorgente c'è, ed è suo.
@@ -2482,14 +2464,6 @@ export const SCENE = touchLast(onPage("shell", [
         const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
         return all.length > 0 && all.every((figure) => figure.dataset.state === "ready");
       });
-      // Lo stile in linea del contenitore dove Mermaid misura (#473), come
-      // nelle scene qui sopra.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),
@@ -2515,13 +2489,6 @@ export const SCENE = touchLast(onPage("shell", [
         return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
       });
       await ready();
-      // Lo stesso stile in linea di Mermaid delle scene qui sopra (#473).
-      const forgetMermaidStyle = () => page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       if (gesture === "ingrandisci") {
         // Dal menu del tasto destro: in Scrittura il clic porta il cursore nel recinto.
         const box = await page.locator(".pane.focus .pane-editor .mermaid-diagram img").first().boundingBox();
@@ -2531,7 +2498,6 @@ export const SCENE = touchLast(onPage("shell", [
         await page.click(".diagram-menu [data-action='enlarge']");
         await page.waitForSelector(".lightbox.lightbox-diagram");
         await page.waitForFunction(() => document.getAnimations().length === 0);
-        await forgetMermaidStyle();
         return;
       }
       await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .mermaid-diagram[data-state='ready']");
@@ -2553,7 +2519,6 @@ export const SCENE = touchLast(onPage("shell", [
       });
       await page.waitForFunction(() => document.getAnimations().length === 0);
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      await forgetMermaidStyle();
     },
   })),
   // I commenti (T22): il segno nel margine con le iniziali e il numero dei
@@ -3764,14 +3729,6 @@ async function openExportBlockMenu(page, text) {
     return drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
       && document.querySelector(".export-space .export-fascia .mermaid-diagram img") !== null;
   }, null, { timeout: 15_000 });
-  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
-  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
-  await page.evaluate(() => {
-    const found = globalThis.__fubCsp;
-    for (let i = found.length - 1; i >= 0; i--) {
-      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-    }
-  });
   const band = text === null
     ? page.locator(".export-space .export-fascia:has(.mermaid-diagram)").first()
     : page.locator(".export-space .export-fascia", { hasText: text }).first();
@@ -3799,14 +3756,6 @@ async function openExportDiagrams(page) {
     return /^\d/.test(pages) && drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
       && document.querySelector(".export-space .export-slot .export-fascia") !== null;
   }, null, { timeout: 15_000 });
-  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
-  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
-  await page.evaluate(() => {
-    const found = globalThis.__fubCsp;
-    for (let i = found.length - 1; i >= 0; i--) {
-      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-    }
-  });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 

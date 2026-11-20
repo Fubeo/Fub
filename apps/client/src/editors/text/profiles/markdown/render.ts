@@ -1099,6 +1099,8 @@ interface DocumentState {
   readonly tops: TopList;
   readonly frontmatter: { readonly from: number; readonly to: number } | null;
   readonly frontmatterBlock: LazyBlock | null;
+  /// La prima riga della sorgente: una modifica più in basso non la rilegge.
+  readonly head: FirstLine;
   readonly collected: Collected;
   readonly dependencies: string;
   readonly forms: readonly SyntaxForm[] | undefined;
@@ -1577,6 +1579,7 @@ function wholeDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
     tops: TopList.of(entries),
     frontmatter,
     frontmatterBlock,
+    head: firstLineOf(source),
     collected,
     dependencies,
     forms,
@@ -1641,11 +1644,27 @@ const inert = (top: { readonly name: string; readonly toc: boolean; readonly fou
   top.name !== "HTMLBlock" && !top.toc
   && top.found.defs.length === 0 && top.found.headings.length === 0 && top.found.references.length === 0;
 
-/// Se la prima riga è `---`: il frontmatter potrebbe cominciare qui.
-function opensFrontmatter(source: string): boolean {
+/// La prima riga di una sorgente: dove finisce (l'indice del suo `\n`, -1 se
+/// il testo è una riga sola) e se è `---`, cioè se il frontmatter potrebbe
+/// cominciare qui.
+export interface FirstLine {
+  readonly end: number;
+  readonly opens: boolean;
+}
+
+export function firstLineOf(source: string): FirstLine {
   const start = source.startsWith("﻿") ? 1 : 0;
   const end = source.indexOf("\n", start);
-  return end !== -1 && source.slice(start, end).trim() === "---";
+  return { end, opens: end !== -1 && source.slice(start, end).trim() === "---" };
+}
+
+/// La prima riga dopo una modifica che comincia a `fromA`: quella di prima se
+/// la modifica sta tutta dopo il suo a capo, riletta soltanto quando la
+/// modifica la tocca. Così una battuta in un documento grande non rilegge la
+/// sorgente nuova dall'inizio, che il motore JavaScript, per una stringa
+/// incollata a pezzi (`sourceOf`), dovrebbe prima ricomporre tutta.
+export function headAfter(was: FirstLine, fromA: number, source: string): FirstLine {
+  return was.end !== -1 && fromA > was.end ? was : firstLineOf(source);
 }
 
 /// La resa di una modifica che lavora soltanto vicino alle posizioni del
@@ -1672,7 +1691,8 @@ function patchDocument(source: string, tree: Tree, forms: readonly SyntaxForm[] 
   const tops = was.tops;
   if (fromA < 0 || tops.size === 0) return null;
   const { frontmatter } = was;
-  if (frontmatter ? fromA < frontmatter.to : opensFrontmatter(source)) return null;
+  const head = headAfter(was.head, fromA, source);
+  if (frontmatter ? fromA < frontmatter.to : head.opens) return null;
   const delta = source.length - was.source.length;
   // Si comincia dal nodo prima del primo che la modifica tocca: una riga
   // scritta sotto un paragrafo può farne un titolo o una tabella.
@@ -1776,6 +1796,7 @@ function patchDocument(source: string, tree: Tree, forms: readonly SyntaxForm[] 
     tops: tops.replace(low, index, added, delta),
     frontmatter,
     frontmatterBlock: was.frontmatterBlock,
+    head,
     collected,
     dependencies: was.dependencies,
     forms,

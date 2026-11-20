@@ -24,7 +24,9 @@
 //   `style.cssText` sono stile scritto da uno script, e la CSP non lo guarda.
 //   `styledElement` la offre a chi descrive un elemento invece di crearlo
 //   (il `toDOM` di uno schema ProseMirror, che un `style` fra gli attributi
-//   lo scriverebbe con `setAttribute`).
+//   lo scriverebbe con `setAttribute`), e `cssomStyleChildren` al
+//   contenitore dove una libreria scrive lo `style` dei figli con
+//   `setAttribute` (Mermaid, dove misura).
 //
 // `.github/scripts/check-inline-styles.mjs` impedisce che torni un
 // `<style>` creato da uno script o un `style` scritto come markup; il banco
@@ -85,6 +87,50 @@ export function styledElement(
   for (const [name, value] of Object.entries(attrs)) dom.setAttribute(name, value);
   for (const [name, value] of Object.entries(style)) dom.style.setProperty(name, value);
   return { dom, contentDOM: dom };
+}
+
+/**
+ * Un contenitore dove una libreria monta un elemento e poi gli scrive lo stile
+ * con `setAttribute("style", …)`, che la CSP rifiuta: Mermaid, sul `<div>`
+ * dove misura (`appendDivSvgG` scrive lì `font-family`). Per ogni elemento
+ * che si aggiunge come figlio diretto del contenitore, lo `style` scritto come
+ * attributo diventa CSSOM (`style.cssText`): lo stesso stile, che la CSP lascia
+ * valere, senza allentarla. Il resto della pagina non cambia: niente prototipi
+ * toccati, soltanto le proprietà dei due elementi.
+ */
+export function cssomStyleChildren(container: HTMLElement): void {
+  const append = Node.prototype.appendChild;
+  Object.defineProperty(container, "appendChild", {
+    configurable: true,
+    writable: true,
+    value: function appendChild<T extends Node>(this: HTMLElement, child: T): T {
+      if (child instanceof HTMLElement || child instanceof SVGElement) styleAttributeAsCssom(child);
+      return append.call(this, child) as T;
+    },
+  });
+}
+
+function styleAttributeAsCssom(element: HTMLElement | SVGElement): void {
+  const set = Element.prototype.setAttribute;
+  // Un DOM che riflette `cssText` sull'attributo chiamando `setAttribute`
+  // (happy-dom, nei test) torna qui: quella volta l'attributo si scrive e basta.
+  let reflecting = false;
+  Object.defineProperty(element, "setAttribute", {
+    configurable: true,
+    writable: true,
+    value: function setAttribute(this: HTMLElement | SVGElement, name: string, value: string): void {
+      if (reflecting || name.toLowerCase() !== "style") {
+        set.call(this, name, value);
+        return;
+      }
+      reflecting = true;
+      try {
+        this.style.cssText = String(value);
+      } finally {
+        reflecting = false;
+      }
+    },
+  });
 }
 
 let stamping = 0;

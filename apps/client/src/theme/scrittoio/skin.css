@@ -15665,6 +15665,18 @@ input.canvas-toolbar-item {
   .base-cal-undated {
     display: none;
   }
+  /* Accanto al mese e ai tre bottoni la scelta della data non ci sta: il
+     menu si stringeva fino a «cons…». Va a capo su una riga sua, con
+     l'etichetta allineata alle frecce e il menu largo quanto il suo nome. */
+  .base-cal-head {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+  .base-cal-head > .base-view-key {
+    flex: 1 0 100%;
+    margin-left: 0;
+    padding-left: var(--space-6);
+  }
 }
 /* La linea del tempo (T34): le righe del prototipo (`.tl`, `.tl-a`, `.tl-s`,
    `.tl-r`, `.tl-t`, `.tl-b`). La testa è quella del calendario, con la scala
