@@ -47,8 +47,8 @@ vede), `contesto` (`set_active_context`: vince l'ultima), `comandi`, `stato`
 (`resource_*`: un pezzo chiesto prima della chiusura del prestito si legge).
 La corsia dell'indice, perché la domanda dopo li veda, scrive i dati che legge
 (impostazioni e profili, scorciatoie, organizzazione, vault aperto, corrente o
-conosciuto, demo) e serve la schermata di supporto (`support_*`, `config_health`,
-gli altri `recover_config`). Le letture senza ordine (`list_views`,
+conosciuto, demo) e serve la schermata di supporto (`support_preview`,
+`support_export`, `config_health`, gli altri `recover_config`). Le letture senza ordine (`list_views`,
 `list_commands`, `components_map`, `list_bundles`, i temi) e `cancel_job`
 escono senza corsia; un comando sincrono resta solo nell'elenco motivato di
 `lean_ipc.rs`. La shell tiene l'ultima risposta di ogni pannello (`Race`).
