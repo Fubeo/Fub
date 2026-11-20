@@ -48,7 +48,7 @@ members = [
     "crates/fub-live",
     "crates/fub-app",
     # M5: host wasmtime per plugin di terzi. La riga era commentata da M1 e
-    # `.github/scripts/membri-del-workspace.mjs` la nominava come il caso a un
+    # `.github/scripts/workspace-members.mjs` la nominava come il caso a un
     # passo — «una cartella in `crates/` che nessun membro dichiara»: adesso la
     # cartella c'è, e la riga con lei.
     "crates/fub-wasm-host",
@@ -124,7 +124,7 @@ camino = { version = "1", features = ["serde1"] }
 # la versione scritta a mano in cinque `Cargo.toml`, e cinque posti da toccare
 # per un `cargo update` sono quattro di troppo: la prima riga dimenticata
 # diventa una seconda versione di `tempfile` nell'albero senza che nessuno lo
-# scelga. Presidiata da `.github/scripts/check-cargo-versioni.mjs`.
+# scelga. Presidiata da `.github/scripts/check-cargo-versions.mjs`.
 tempfile = "3.27.0"
 # Accesso filesystem ancorato a handle: il vault di produzione non risolve
 # nuovamente path ambientali dopo il mount.
@@ -256,7 +256,7 @@ image = { version = "0.25.10", default-features = false }
 # caratteri del sistema.
 resvg = { version = "0.45.1", default-features = false }
 # Il YAML del frontmatter. Era scritta a mano in due crate con la stessa
-# versione, ed è la coppia che `check-cargo-versioni.mjs` esiste per
+# versione, ed è la coppia che `check-cargo-versions.mjs` esiste per
 # prendere: due `Cargo.toml` da toccare per un `cargo update` sono uno di
 # troppo, e la prima riga dimenticata diventa un secondo parser YAML
 # nell'albero che nessuno ha scelto — con due grafie del frontmatter che
@@ -339,7 +339,7 @@ fub-wasm-host = { path = "crates/fub-wasm-host", version = "0.1.0" }
 fub-live = { path = "crates/fub-live", version = "0.1.0" }
 
 # Il profilo di chi lavora. Ogni chiave qui dentro è una decisione, e accanto
-# c'è chi la paga: `.github/scripts/check-profilo-dev.mjs` pretende che siano
+# c'è chi la paga: `.github/scripts/check-dev-profile.mjs` pretende che siano
 # queste e non altre.
 [profile.dev]
 # compilazione più veloce mantenendo debug info utile

@@ -17,7 +17,7 @@
 // piattaforma invece delle radici imbarcate. Con la riga tolta, `ws.set_network`
 // in `mount.rs` non c'è più e ogni `fetch` risponde `unserved`. E il resto della
 // CI **non se ne accorge**: le righe `test result: ok` restano 119, `clippy`
-// resta a zero, `check-cargo-versioni` resta verde. Nessuno dei presidi esistenti
+// resta a zero, `check-cargo-versions` resta verde. Nessuno dei presidi esistenti
 // guarda questa domanda, perché nessuno di loro conta i test.
 //
 // La regola, allora, è che il `default` di un crate sia la chiusura di ciò che
@@ -90,7 +90,7 @@ const FUORI_DAL_DEFAULT = new Map([
 /**
  * Le feature dichiarate da un `Cargo.toml`: `nome -> [cosa accende]`.
  *
- * Parsing a righe come `check-cargo-versioni.mjs`, e per la stessa ragione: un
+ * Parsing a righe come `check-cargo-versions.mjs`, e per la stessa ragione: un
  * lettore TOML completo sarebbe una dipendenza npm. Un elenco può stare su più
  * righe (`default` e `feature-ufficiali` di `fub-host` ci stanno), quindi le
  * quadre si richiudono qui. Ciò che non si sa leggere non si indovina: si
@@ -219,7 +219,7 @@ function main() {
   );
 
   // Un presidio che non ha guardato niente non è verde: è spento. Stessa
-  // disciplina di `check-cargo-versioni.mjs`, e per la stessa ragione.
+  // disciplina di `check-cargo-versions.mjs`, e per la stessa ragione.
   if (dichiarate === 0) {
     console.log(
       "\nnessuna feature letta: qui il presidio non sta guardando niente.\n" +
