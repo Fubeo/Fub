@@ -31,6 +31,11 @@ pub(super) struct JobCursor {
     pub(super) applied: BTreeSet<String>,
     #[serde(default)]
     pub(super) synced: BTreeMap<String, Revision>,
+    /// Un pull ha cominciato ad applicare op e non ha ancora finito: sul
+    /// disco possono esserci file scaricati che `synced` non nomina. Assente
+    /// quando è falso, così il cursore di sempre resta quello.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(super) pulling: bool,
 }
 
 pub(super) fn read_cursor(root: &Path) -> Result<JobCursor, PluginError> {
@@ -49,32 +54,14 @@ pub(super) fn write_cursor(root: &Path, cursor: &JobCursor) -> Result<(), Plugin
     super::atomic_state_write(root, "cursor.json", &bytes)
 }
 
-pub(super) fn mark_applied(root: &Path, op_id: &str) -> Result<(), PluginError> {
-    let mut cursor = read_cursor(root)?;
-    cursor.applied.insert(op_id.to_string());
-    write_cursor(root, &cursor)
-}
-
-pub(super) fn mark_synced(
-    root: &Path,
-    doc_id: &str,
-    revision: Revision,
-) -> Result<(), PluginError> {
-    let mut cursor = read_cursor(root)?;
-    cursor.synced.insert(doc_id.to_string(), revision);
-    write_cursor(root, &cursor)
-}
-
-pub(super) fn advance_cursor(
-    root: &Path,
-    server_vv: &BTreeMap<String, u64>,
-) -> Result<(), PluginError> {
-    let mut cursor = read_cursor(root)?;
-    for (replica, counter) in server_vv {
-        let current = cursor.server_vv.entry(replica.clone()).or_insert(0);
-        *current = (*current).max(*counter);
+impl JobCursor {
+    /// Porta avanti il vettore del server fino a `server_vv`, mai indietro.
+    pub(super) fn advance(&mut self, server_vv: &BTreeMap<String, u64>) {
+        for (replica, counter) in server_vv {
+            let current = self.server_vv.entry(replica.clone()).or_insert(0);
+            *current = (*current).max(*counter);
+        }
     }
-    write_cursor(root, &cursor)
 }
 
 pub(super) fn read_outbox(root: &Path) -> Result<Vec<serde_json::Value>, PluginError> {

@@ -57,17 +57,20 @@ mod actions;
 mod apply;
 mod pass;
 mod state;
+mod sweep;
 
 use actions::{clear_conflict, percent_encode, run_share_action, store_versions};
 pub(crate) use actions::{mark_retry, pause_policy, request_restore};
 #[cfg(test)]
 use apply::conflict_copy_id;
 use apply::{apply_remote_op, read_conflicts, read_versions, report_conflicts, ApplyOutcome};
+#[doc(hidden)]
+pub use pass::crash_next_pull_after;
 pub(crate) use pass::run_pass_on;
 use state::{
-    accepted_key_json, advance_cursor, append_outbox, drain_outbox, ensure_job_vdk, mark_applied,
-    mark_synced, prior_accepted_key_file, read_cursor, read_id_file, read_outbox,
-    retire_accepted_key, write_cursor, ACCEPTED_KEY_FILE,
+    accepted_key_json, append_outbox, drain_outbox, ensure_job_vdk, prior_accepted_key_file,
+    read_cursor, read_id_file, read_outbox, retire_accepted_key, write_cursor, JobCursor,
+    ACCEPTED_KEY_FILE,
 };
 
 /// Direction is explicit for this process. Read-only consumes server writes
@@ -521,7 +524,8 @@ struct JobDoc {
     revision: Revision,
 }
 
-/// I documenti da spedire, e quelli che non stanno in una sola op.
+/// I documenti da spedire, quelli che non stanno in una sola op e tutti i
+/// file che l'indice elenca.
 ///
 /// Un file oltre il limite resta fuori **da solo**: fermare il passaggio per
 /// lui fermerebbe anche push e pull di tutto il resto del vault, finché
@@ -531,17 +535,30 @@ struct JobDoc {
 struct Collected {
     docs: Vec<JobDoc>,
     too_large: Vec<String>,
+    /// Ogni path elencato dall'indice, anche se escluso o in coda: chi cerca
+    /// i file spariti chiede al disco soltanto per quelli che qui mancano.
+    listed: BTreeSet<String>,
 }
 
+/// I file cambiati dall'ultima sincronizzazione, senza leggere quelli fermi.
+///
+/// Un file è fermo quando l'impronta che l'indice del workspace tiene per lui
+/// è quella sincronizzata: l'indice la toglie quando misura, data, timbro di
+/// cambio o identità del file cambiano, anche per un file cambiato ad app
+/// chiusa (la scansione d'apertura li confronta). Un file senza impronta
+/// nell'indice si legge. Con `sweep` (il giro di verifica, vedi [`sweep`]) non
+/// ci si fida dell'indice e si legge tutto.
 fn collect_job_docs(
     host: &mut dyn HostApi,
     user_exclude: &[String],
     synced: &BTreeMap<String, Revision>,
     blocked_docs: &BTreeSet<String>,
-    queued: &[serde_json::Value],
+    queued: &BTreeSet<String>,
+    sweep: bool,
 ) -> Result<Collected, PluginError> {
     let mut out = Vec::new();
     let mut too_large = Vec::new();
+    let mut listed = BTreeSet::new();
     let mut offset: u32 = 0;
     loop {
         let page = host.query_index(IndexQuery::Entries {
@@ -560,14 +577,11 @@ fn collect_job_docs(
         let n = items.len() as u32;
         for entry in &items {
             let path = entry.id.0.clone();
+            listed.insert(path.clone());
             if !super::is_syncable_entry(&path) || super::is_user_excluded(user_exclude, &path) {
                 continue;
             }
-            if blocked_docs.contains(&path)
-                || queued
-                    .iter()
-                    .any(|row| row["op"]["doc_id"].as_str() == Some(&path))
-            {
+            if blocked_docs.contains(&path) || queued.contains(&path) {
                 continue;
             }
             // La dimensione prima dell'impronta: un file che resta fuori non
@@ -576,12 +590,16 @@ fn collect_job_docs(
                 too_large.push(path);
                 continue;
             }
+            let prior = synced.get(&path);
+            if !sweep && prior.is_some() && entry.fingerprint.as_ref() == prior {
+                continue;
+            }
             let before = match host.document_revision(&entry.id) {
                 Ok(revision) => revision,
                 Err(PluginError::NotFound(_)) => continue,
                 Err(e) => return Err(e),
             };
-            if synced.get(&path) == Some(&before) {
+            if prior == Some(&before) {
                 continue;
             }
             match host.read_document_bytes(&entry.id) {
@@ -610,6 +628,7 @@ fn collect_job_docs(
     Ok(Collected {
         docs: out,
         too_large,
+        listed,
     })
 }
 
@@ -751,8 +770,15 @@ mod collect_tests {
             .with_document("Nota.md", "# Nota\n")
             .with_binary_document("video.mp4", &vec![0; MAX_DOC_BYTES + 1])
             .with_binary_document("foto.png", &vec![0; MAX_DOC_BYTES]);
-        let collected =
-            collect_job_docs(&mut host, &[], &BTreeMap::new(), &BTreeSet::new(), &[]).unwrap();
+        let collected = collect_job_docs(
+            &mut host,
+            &[],
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+            false,
+        )
+        .unwrap();
         let sent: Vec<&str> = collected.docs.iter().map(|doc| doc.id.as_str()).collect();
         assert_eq!(sent, ["Nota.md", "foto.png"]);
         assert_eq!(collected.too_large, ["video.mp4"]);
@@ -947,7 +973,8 @@ mod apply_tests {
         let dir = tempfile::tempdir().unwrap();
         let mut host = MemoryHost::new().with_document("a.md", "vecchio");
         let revision = host.document_revision(&DocId::new("a.md")).unwrap();
-        mark_synced(dir.path(), "a.md", revision).unwrap();
+        let mut cursor = JobCursor::default();
+        cursor.synced.insert("a.md".into(), revision);
         let value = op(
             WireKind::Rename {
                 from: "a.md".into(),
@@ -956,11 +983,15 @@ mod apply_tests {
             "a.md",
             b"nuovo",
         );
-        let outcome = apply_remote_op(&mut host, &state(dir.path()), &VDK, &value).unwrap();
+        let outcome =
+            apply_remote_op(&mut host, &state(dir.path()), &VDK, &value, &mut cursor).unwrap();
         assert!(matches!(outcome, ApplyOutcome::Applied { .. }));
         assert_eq!(host.read_document(&DocId::new("b.md")).unwrap(), "nuovo");
         assert!(host.read_document(&DocId::new("a.md")).is_err());
-        let cursor = read_cursor(dir.path()).unwrap();
+        assert!(
+            !dir.path().join("cursor.json").exists(),
+            "the pass writes the cursor, not the apply"
+        );
         assert_eq!(
             cursor.synced.get("b.md"),
             Some(&host.document_revision(&DocId::new("b.md")).unwrap())
@@ -975,17 +1006,25 @@ mod apply_tests {
         let dir = tempfile::tempdir().unwrap();
         let mut host = MemoryHost::new().with_document("n.md", "uno");
         let id = DocId::new("n.md");
-        mark_synced(dir.path(), "n.md", host.document_revision(&id).unwrap()).unwrap();
+        let mut cursor = JobCursor::default();
+        cursor
+            .synced
+            .insert("n.md".into(), host.document_revision(&id).unwrap());
         let value = op(WireKind::Delete, "n.md", b"");
         host.write_document_bytes(&id, b"due", Some(host.document_revision(&id).unwrap()))
             .unwrap();
-        let held = apply_remote_op(&mut host, &state(dir.path()), &VDK, &value).unwrap();
+        let held =
+            apply_remote_op(&mut host, &state(dir.path()), &VDK, &value, &mut cursor).unwrap();
         assert!(matches!(held, ApplyOutcome::Held));
         assert_eq!(host.read_document(&id).unwrap(), "due");
 
-        mark_synced(dir.path(), "n.md", host.document_revision(&id).unwrap()).unwrap();
-        let applied = apply_remote_op(&mut host, &state(dir.path()), &VDK, &value).unwrap();
+        cursor
+            .synced
+            .insert("n.md".into(), host.document_revision(&id).unwrap());
+        let applied =
+            apply_remote_op(&mut host, &state(dir.path()), &VDK, &value, &mut cursor).unwrap();
         assert!(matches!(applied, ApplyOutcome::Applied { .. }));
         assert!(host.read_document(&id).is_err());
+        assert!(!cursor.synced.contains_key("n.md"));
     }
 }

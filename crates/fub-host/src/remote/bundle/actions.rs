@@ -242,12 +242,16 @@ pub(super) fn run_share_action(
             let status = http_get(host, &base, &auth, &status_path)?;
             // Il passaggio salta un file troppo grande; la nuova chiave invece
             // deve cifrare tutto, quindi qui quel file ferma il rekey.
-            let Collected { docs, too_large } = collect_job_docs(
+            // Con niente di sincronizzato si legge ogni file.
+            let Collected {
+                docs, too_large, ..
+            } = collect_job_docs(
                 host,
                 &state.user_exclude,
                 &BTreeMap::new(),
                 &BTreeSet::new(),
-                &[],
+                &BTreeSet::new(),
+                true,
             )?;
             if !too_large.is_empty()
                 || docs
@@ -466,18 +470,43 @@ pub(super) fn percent_encode(value: &str) -> String {
     encoded
 }
 
-pub(super) fn store_versions(root: &Path, response: &serde_json::Value) -> Result<(), PluginError> {
-    let rows = response
-        .get("versions")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| PluginError::Internal("sync versions missing array".into()))?;
-    let mut all = read_versions(root)?;
-    for value in rows {
-        let row: super::views::SnapshotVersion = serde_json::from_value(value.clone())
-            .map_err(|_| PluginError::Internal("sync version metadata invalid".into()))?;
-        all.retain(|prior| prior.doc_id != row.doc_id || prior.version != row.version);
-        all.push(row);
+/// Aggiunge a `versions.json` le storie risposte dal servizio, in una sola
+/// scrittura; niente da aggiungere, niente da scrivere.
+pub(super) fn store_versions(
+    root: &Path,
+    responses: &[serde_json::Value],
+) -> Result<(), PluginError> {
+    let mut fresh = Vec::new();
+    for response in responses {
+        let rows = response
+            .get("versions")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| PluginError::Internal("sync versions missing array".into()))?;
+        for value in rows {
+            let row: super::views::SnapshotVersion = serde_json::from_value(value.clone())
+                .map_err(|_| PluginError::Internal("sync version metadata invalid".into()))?;
+            fresh.push(row);
+        }
     }
+    if fresh.is_empty() {
+        return Ok(());
+    }
+    // Una versione già nota si sostituisce con quella nuova, in coda, come
+    // prima; l'ultima risposta vince sulle precedenti.
+    let keys: BTreeSet<(String, u64)> = fresh
+        .iter()
+        .map(|row| (row.doc_id.clone(), row.version))
+        .collect();
+    let mut all = read_versions(root)?;
+    all.retain(|prior| !keys.contains(&(prior.doc_id.clone(), prior.version)));
+    let mut seen = BTreeSet::new();
+    for row in fresh.into_iter().rev() {
+        if seen.insert((row.doc_id.clone(), row.version)) {
+            all.push(row);
+        }
+    }
+    let start = all.len() - seen.len();
+    all[start..].reverse();
     super::atomic_state_write(
         root,
         "versions.json",
