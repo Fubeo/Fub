@@ -15,7 +15,10 @@ use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::event::Actor;
 use fub_abi::PluginError;
-use fub_features::{CoreCommands, COMMANDS_ID, FOLDER_RENAME, NOTES_RENAME, VAULT_UNDO};
+use fub_features::{
+    CoreCommands, COMMANDS_ID, FOLDER_RENAME, NOTES_RENAME, NOTES_TRASH, TRASH_RESTORE,
+    VAULT_ARCHIVE, VAULT_UNDO,
+};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace};
 
@@ -263,5 +266,132 @@ fn query_index_answers_who_names_a_note_in_its_properties() {
             "Riunioni/Elenco.md",
             "Riunioni/Verbale 1.md"
         ]
+    );
+}
+
+/// L'archiviazione sposta la nota con la rinomina del kernel, che riscrive i
+/// link del corpo: quelli delle proprietà seguono con la stessa regola, e
+/// l'annullamento li rimette come stavano.
+#[test]
+fn archiving_a_note_rewrites_its_property_links_like_the_body() {
+    const INDICE: &str =
+        "---\nprogetto: \"[[Progetti/Scorte]]\"\n---\n\nVedi [[Progetti/Scorte]].\n";
+    let vault = Vault::with(&[("Progetti/Scorte.md", "# Scorte\n"), ("Indice.md", INDICE)]);
+    let mut ws = vault.open();
+    let done = run(
+        &mut ws,
+        VAULT_ARCHIVE,
+        serde_json::json!({ "docs": ["Progetti/Scorte.md"] }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert!(
+        done.partial.as_ref().is_none_or(|p| p.failures.is_empty()),
+        "{:?}",
+        done.partial
+    );
+    assert_eq!(
+        vault.read("Indice.md"),
+        "---\nprogetto: \"[[Archivio/Scorte]]\"\n---\n\nVedi [[Scorte]].\n"
+    );
+    run(
+        &mut ws,
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    // Il percorso della proprietà torna com'era; il corpo lo riscrive il
+    // kernel col nome, che ora basta.
+    assert_eq!(
+        vault.read("Indice.md"),
+        INDICE.replace("Vedi [[Progetti/Scorte]]", "Vedi [[Scorte]]")
+    );
+}
+
+/// Dal cestino la nota torna nel grafo con i suoi link di proprietà, nei due
+/// versi: chi la nominava la ritrova, e lei ritrova chi nomina. Una rinomina
+/// dopo il ripristino li riscrive come prima del cestino.
+#[test]
+fn a_note_restored_from_the_trash_is_back_in_the_property_links() {
+    let vault = Vault::with(&[
+        ("Scorte.md", "---\nrif: \"[[Altro]]\"\n---\n\n# Scorte\n"),
+        ("Altro.md", ALTRO),
+        (
+            "Indice.md",
+            "---\nprogetto: \"[[Scorte]]\"\n---\n\nVedi [[Scorte]].\n",
+        ),
+    ]);
+    let mut ws = vault.open();
+    run(
+        &mut ws,
+        NOTES_TRASH,
+        serde_json::json!({ "doc": "Scorte.md" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert!(named_in_properties(&ws, "Altro.md", None).is_empty());
+    let entry = ws.list_trash().unwrap()[0].id.clone();
+    run(
+        &mut ws,
+        TRASH_RESTORE,
+        serde_json::json!({ "entry": entry.as_str() }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert_eq!(named_in_properties(&ws, "Scorte.md", None), ["Indice.md"]);
+    assert_eq!(named_in_properties(&ws, "Altro.md", None), ["Scorte.md"]);
+    let done = run(
+        &mut ws,
+        NOTES_RENAME,
+        serde_json::json!({ "doc": "Scorte.md", "to": "Magazzino.md" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert!(done.partial.is_none(), "{:?}", done.partial);
+    assert_eq!(
+        vault.read("Indice.md"),
+        "---\nprogetto: \"[[Magazzino]]\"\n---\n\nVedi [[Magazzino]].\n"
+    );
+}
+
+/// I `[[…]]` di una proprietà si risolvono come nel corpo: un allegato
+/// (`[[allegato.pdf]]`) e un titolo (`[[Nota#Titolo]]`) sono collegamenti
+/// anche lì, e seguono il file rinominato.
+#[test]
+fn an_attachment_and_a_heading_in_a_property_resolve_like_the_body() {
+    const FONTI: &str = "---\nfonte: \"[[allegato.pdf]]\"\nsezione: \"[[Nota#Titolo]]\"\n---\n\nVedi [[allegato.pdf]] e [[Nota#Titolo]].\n";
+    let vault = Vault::with(&[
+        ("Fonti.md", FONTI),
+        ("Nota.md", "# Nota\n\n## Titolo\n"),
+        ("Allegati/allegato.pdf", "%PDF-1.4\n"),
+    ]);
+    let mut ws = vault.open();
+
+    for target in ["Nota.md", "Allegati/allegato.pdf"] {
+        assert_eq!(
+            named_in_properties(&ws, target, None),
+            ["Fonti.md"],
+            "{target}"
+        );
+    }
+
+    run(
+        &mut ws,
+        NOTES_RENAME,
+        serde_json::json!({ "doc": "Allegati/allegato.pdf", "to": "Allegati/contratto.pdf" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    run(
+        &mut ws,
+        NOTES_RENAME,
+        serde_json::json!({ "doc": "Nota.md", "to": "Scheda.md" }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert_eq!(
+        vault.read("Fonti.md"),
+        "---\nfonte: \"[[contratto.pdf]]\"\nsezione: \"[[Scheda#Titolo]]\"\n---\n\nVedi [[contratto.pdf]] e [[Scheda#Titolo]].\n"
     );
 }

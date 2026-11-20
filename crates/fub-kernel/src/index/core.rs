@@ -343,10 +343,7 @@ impl QueryEvaluator for CoreIndex {
             QueryPredicate::Custom { ns, predicate } if ns == PROPERTY_LINK_PREDICATE_NS => {
                 let leaf = PropertyLinkPredicate::from_payload(predicate)?;
                 Ok(Matches::of_docs(
-                    self.graph
-                        .property_linked(&leaf.targets, leaf.key.as_deref())
-                        .into_iter()
-                        .filter(|id| self.metas.contains_key(id)),
+                    self.property_linked(&leaf.targets, leaf.key.as_deref()),
                 ))
             }
             // Ciò che il pianificatore ha già risolto per conto di qualcun

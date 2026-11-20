@@ -172,6 +172,8 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   // stats, tags, trash, graph).
   "In entrata · 2": "Incoming · 2",
   "In entrata · 3": "Incoming · 3",
+  "Dalle proprietà · 1": "From properties · 1",
+  "Proprietà: guida, vedi": "Properties: guida, vedi",
   "In uscita · 2": "Outgoing · 2",
   "Menzioni non collegate · 1": "Unlinked mentions · 1",
   Collega: "Link",
