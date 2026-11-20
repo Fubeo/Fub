@@ -93,9 +93,15 @@ Files of this skill:
      bench port and the machine block;
    - set the task's `Stato` to `[~] in corso · coder · base <sha>`.
 
-   **A hard task gets a design pass first**, when you judge it needs one: it
-   touches a contract (ABI, WIT, IPC), an on-disk format, concurrency or
-   security, or its cause is unclear after a first look. Launch the
+   **A task that deserves more depth gets a design pass first, and only
+   then.** Call it when you notice that the plan or the issue covers thinly a
+   part that deserves more thought: a complex part with many pitfalls
+   (interactions, failure modes, races) worked out in too little detail, even
+   if nothing is strictly missing; or when the task touches a contract (ABI,
+   WIT, IPC), an on-disk format, concurrency or security, or its cause is
+   still unclear after a first look. When the work is relatively simple and
+   the plan or the issue already covers it well enough, brief the coder
+   directly: no design pass, no planner. Launch the
    [`progettista`](../../agents/progettista.md) agent
    (`subagent_type: "progettista"`, `run_in_background: true`,
    `effort: "xhigh"` for a contract, an on-disk format or security, its
@@ -107,12 +113,18 @@ Files of this skill:
 
    A graphic task also adds its pieces to the prototype map in
    `apps/client/bench/conformita/`, and passes `npm run bench:conformita`
-   through the heavy-check queue; say so in its brief. When the user names an
-   artifact or prototype as the reference, the brief says:
+   through the heavy-check queue; say so in its brief. Whenever an approved
+   prototype or artifact exists for the look (a plan's `PLAN-ui/`, or one the
+   user approved anywhere else, whoever made it), the brief names it and says:
 
+   - save its HTML with `Artifact read` and give the coder the file's path;
+   - its HTML and CSS are moved, not rewritten: only what the app forces
+     changes, and every such difference goes into the conformity exceptions
+     with its reason;
    - its code is the reference: markup, CSS, and computed styles measured from
      prototype to app in both lights;
-   - screenshots are only the final confirmation.
+   - screenshots are only the final confirmation: tried, working from them
+     drifts from the approved design.
 3. **While they work**, don't poll, and don't message a coder to inform it.
    A message to a busy coder can send its foreground command to the
    background, and the coder may end its turn "waiting" and never resume.

@@ -89,7 +89,11 @@ expected.
   `build.sh`) that another coder overwrites.
 - **Read narrowly.** The files in `Tocca`, their tests, what they import and
   who calls them. Don't map the repository.
-- **Graphic task.** Start from the prototype under `PLAN-ui/`. Move its CSS into
+- **Graphic task.** Start from the approved prototype under `PLAN-ui/`, or from
+  the approved artifact the brief names, whose saved HTML file the brief gives.
+  Read its code in full first: the planner built it that way for a reason.
+  Its HTML and CSS are moved, not rewritten: change only what the app forces,
+  each change with its reason in the conformity exceptions. Move its CSS into
   the skin file the task names, its structure into the component, its strings
   into `src/i18n/`, its states into the bench scene if the task says so. Don't
   redesign it. **The prototype's code is the reference, not its pictures**: a

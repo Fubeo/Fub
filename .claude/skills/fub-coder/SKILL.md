@@ -60,10 +60,13 @@ Shared files, in the orchestrator's skill:
    `Dipende da` is `[x]`; phases are not gates. Prefer the one that unblocks
    the most others. Set its `Stato` to `[~] in corso · base <sha>`, commit and
    push the plan branch.
-2. **Hard tasks get a design pass.** The session runs at Opus effort medium.
-   A task that touches a contract (ABI, WIT, IPC), an on-disk format,
-   concurrency or security, or whose cause is still unclear after a first
-   look, first goes to the [`progettista`](../../agents/progettista.md) agent
+2. **Tasks that deserve more depth get a design pass, and only those.** The
+   session runs at Opus effort medium. A task whose plan or issue covers
+   thinly a part that deserves more thought (a complex part with many
+   pitfalls worked out in too little detail, even if nothing is strictly
+   missing), or that touches a contract (ABI, WIT, IPC), an on-disk format, concurrency or
+   security, or whose cause is still unclear after a first look, first goes
+   to the [`progettista`](../../agents/progettista.md) agent
    (`subagent_type: "progettista"`, `run_in_background: true`,
    `effort: "xhigh"` for a contract, an on-disk format or security, its
    default `high` otherwise). Its brief: the task's section, what you already
@@ -73,7 +76,8 @@ Shared files, in the orchestrator's skill:
    check in the code the claims that decide the outcome, and implement it
    yourself. If the design is wrong or thin, fix it yourself; never a second
    design pass for the same task. It doesn't count toward the two Haiku
-   helpers.
+   helpers. A relatively simple task that the plan or the issue already
+   covers well enough gets no design pass.
 3. **Implement** as a coder would: reproduce first with a test that fails,
    fix in the owning layer, update the canonical `docs/` page. Decide the
    technical how yourself; ask only what `DECISIONS.md` lists under "Chiede
