@@ -235,7 +235,7 @@ Ognuno merita la sua issue, misurata dopo la strada c.
 ## Dopo la correzione
 
 La strada c è entrata con #521: Base, Disegni e Prove rispondono con tutti i
-documenti, i promemoria si ricordano ciò che hanno visto in `reminders.json`,
+documenti, i promemoria si ricordano ciò che hanno visto nella cache `reminders.json`,
 e il kernel chiede `up_to_date` a ogni indice anche quando l'intersezione è
 già vuota (senza, la riapertura diventava tiepida solo dalla terza apertura).
 Per #524 l'anagrafe di una riapertura ferma si confronta con quella del file

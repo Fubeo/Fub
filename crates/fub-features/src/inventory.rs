@@ -374,7 +374,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         view: Some(|| Box::new(TasksView)),
         commands: None,
         // I promemoria: un indice derivato dalle note, che si ricorda ciò che
-        // ha visto in `reminders.json` nel suo spazio dati (#521).
+        // ha visto in `reminders.json`, una cache che si può perdere (#521).
         index: Some(|| Box::new(tasks::reminders::ReminderIndex::new())),
         // Il recinto ```tasks```: dichiararlo è ciò che lo fa leggere reso, e
         // col componente spento resta codice.

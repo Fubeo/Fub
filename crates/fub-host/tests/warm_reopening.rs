@@ -376,9 +376,9 @@ fn session(seen: &Arc<Seen>, root: &Utf8Path) -> (Answers, Vec<String>) {
     (answers, opened)
 }
 
-/// Il file dei promemoria, dove l'host tiene i dati di `fub.tasks`.
+/// Il file dei promemoria, nella cache di `fub.tasks` (un derivato, non un dato).
 fn reminders_file(root: &Utf8Path) -> Utf8PathBuf {
-    let path = root.join(".fub/plugins/fub.tasks/reminders.json");
+    let path = root.join(".fub/data/plugins/fub.tasks/reminders.json");
     assert!(path.exists(), "the reminders file is at {path}");
     path
 }

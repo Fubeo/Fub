@@ -194,9 +194,9 @@ dell'utente.
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 | `.fub/plugins/fub.commands/archive-recovery.json` | autorevole operativo | 1 | `fub.commands` |
-| `.fub/plugins/fub.tasks/reminders.json` | derivata | 1 | promemoria per nota con la revisione del sorgente (`fub.tasks`, [sotto](#promemoria)) |
 | `.fub/plugins/fub.draw/profili/*.json`, `.fub/plugins/fub.draw/predefinito.json`, `.fub/plugins/fub.draw/doc/*/profilo-pdf.json`, `.fub/plugins/fub.draw/doc/*/esportazione-pdf.json` | autorevole | 1 | profili, predefiniti (del vault e per tipo) e memoria per nota dell'esportazione in PDF ([il formato](pdf-export-format.md)) |
 | `.fub/data/plugins/fub.linkcard/cards/*.json`, `.fub/data/plugins/fub.craft/previews/*.json` | derivata | 1 | schede dei collegamenti (`fub.linkcard`), anteprime dei file Craft (`fub.craft`) |
+| `.fub/data/plugins/fub.tasks/reminders.json` | derivata | 1 | promemoria per nota con la revisione del sorgente (`fub.tasks`, [sotto](#promemoria)) |
 
 `properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore
 ha uno schema JSON suo, [`{ "version": 1, "types": … }`](property-types.md): separa la
@@ -256,16 +256,33 @@ essere eliminata e ricostruita dai documenti.
 
 ### Promemoria
 
-`fub.tasks` scrive in `reminders.json` i promemoria che ha ricavato da ogni
-nota, con la revisione del sorgente da cui li ha ricavati: è ciò che gli
-permette di dire «questa nota ce l'ho» alla riapertura senza rileggerla
+`fub.tasks` scrive in `.fub/data/plugins/fub.tasks/reminders.json` i
+promemoria che ha ricavato da ogni nota, con la revisione del sorgente da cui
+li ha ricavati: è ciò che gli permette di dire «questa nota ce l'ho» alla
+riapertura senza rileggerla
 ([la riapertura tiepida](../architecture/storage-and-identity.md#la-riapertura-tiepida)).
-Il file è derivato e porta la versione di schema (`schema`, 1) e la versione di Fub
-che l'ha scritto (`producer`): un file illeggibile, di un altro schema o di
-un'altra versione si butta senza errore, e l'indice rilegge ogni nota. Una
-nota presa a sessione aperta senza una revisione dichiarata non si scrive,
-quindi si rilegge alla prossima apertura. Si scrive al flush e alla chiusura,
-solo se qualcosa è cambiato, in modo atomico (file temporaneo e rinomina).
+Il file è una cache (`HostApi::cache_write`): sta fuori dal backup e dallo
+spazio dati del plugin, e perderlo costa solo una rilettura.
+
+Porta la versione di schema (`schema`, 1) e la versione della **regola di
+lettura** (`rule`, 1). La regola si alza a mano quando cambia ciò che il
+modulo ricava da una nota (sintassi, ora, testo, titolo); un test lega la
+versione a un'impronta di ciò che si ricava da un corpus fisso, quindi una
+lettura cambiata senza alzare la regola fa fallire la CI. La versione di Fub
+non c'entra: un rilascio che non tocca la lettura non costa una rilettura di
+tutto il vault, e uno che la tocca la paga anche fra due build della stessa
+versione. Nella chiave non c'è la configurazione: le opzioni del parser sono
+fisse, e le regole di sintassi montate non si vedono in modo affidabile da un
+indice (lo stesso limite dell'anagrafe e del manifesto della ricerca).
+
+Un file illeggibile, di un altro schema o di un'altra regola si butta senza
+errore, e l'indice rilegge ogni nota. Una nota presa a sessione aperta senza
+una revisione dichiarata non si scrive, quindi si rilegge alla prossima
+apertura. Si scrive al flush e alla chiusura, solo se qualcosa è cambiato, in
+modo atomico (file temporaneo e rinomina). Un vault vuoto non ha il file. Se
+la scrittura fallisce (un vault in sola lettura, un disco pieno) il flush non
+dà errore: un avviso nel log, nessun altro tentativo nella sessione, e alla
+prossima apertura si rilegge.
 
 ### Versioning
 

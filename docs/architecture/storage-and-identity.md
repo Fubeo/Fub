@@ -409,12 +409,19 @@ saprebbe che revisione scrivere (#521). Il core rimette i metadati dalla riga
 dell'anagrafe, senza parse; il resto si legge, si analizza e si consegna.
 
 - `fub.search` e `fub.tasks` (i promemoria) si ricordano fra due aperture ciò
-  che hanno visto, con la revisione del sorgente: l'indice Tantivy e
+  che hanno visto, con la revisione del sorgente: l'indice Tantivy e la cache
   `reminders.json` ([la mappa del disco](../reference/on-disk-layout.md#promemoria)).
+- Un indice che dice «questa ce l'ho» si prende la revisione che il core
+  annuncia, anche se la nota gli arriva lo stesso perché un altro indice non
+  l'aveva: così la riapertura dopo resta ferma. Una voce senza impronta ritira
+  l'annuncio, e un'apertura interrotta ritira quelli delle note che non ha
+  consegnato.
 - `fub.base`, `fub.draw` e `fub.proof` non tengono niente per documento e
   rispondono con tutti i documenti.
 - Un file degli indici illeggibile, di un altro schema o di un'altra versione
-  si butta: quell'indice risponde «niente», e si rilegge tutto.
+  si butta: quell'indice risponde «niente», e si rilegge tutto. Lo stesso un
+  indice che va in panico (o un ospite WASM in trap) dentro la domanda:
+  l'apertura finisce e gli altri restano montati.
 - Una riapertura ferma non riscrive l'anagrafe e non la ricompone: la tabella
   in memoria si confronta con quella del file al suo posto (#524).
 
