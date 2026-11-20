@@ -1728,6 +1728,35 @@ fn the_vault_quota_counts_history_and_every_replica_queue() {
     );
 }
 
+/// M1: una coda già oltre il tetto risponde 507 prima di scrivere: il 507
+/// dice il vero, nessuno stato del vault è stato riscritto.
+#[test]
+fn a_full_queue_refuses_the_push_before_writing() {
+    let dir = temp_data_dir("queue-full-first");
+    let mut state = open_state(dir.path());
+    state.config.quotas.max_vault_bytes = 64 * 1024;
+    let auth = auth_for(&mut state, "queue-full-user");
+    let mut a = Replica::new("a");
+    let op = a.op("notes/a.md", OpKind::Update, &"x".repeat(4 * 1024));
+    let id = a.id.clone();
+    push(&mut state, &auth, &id, std::slice::from_ref(&op));
+    // L'operatore abbassa la quota: la coda non ancora confermata la supera.
+    state.config.quotas.max_vault_bytes = 1024;
+    let sync_dir = vault_sync_dir(dir.path());
+    let state_file = sync::versions::state_path(&sync_dir);
+    let before = std::fs::metadata(&state_file).unwrap().modified().unwrap();
+    let queue_before = sync::queue::vault_queue_bytes(&sync_dir);
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let resp = push_raw(&mut state, &auth, &id, &[op]);
+    assert_eq!(resp.status, 507, "{}", String::from_utf8_lossy(&resp.body));
+    assert_eq!(
+        std::fs::metadata(&state_file).unwrap().modified().unwrap(),
+        before,
+        "a refused push rewrites nothing"
+    );
+    assert_eq!(sync::queue::vault_queue_bytes(&sync_dir), queue_before);
+}
+
 /// Una quota di 0 byte è una quota: il vault non tiene niente, come per i
 /// siti pubblicati. Prima 0 spegneva il controllo del push, della coda e
 /// degli allegati.
