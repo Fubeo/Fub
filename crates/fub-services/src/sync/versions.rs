@@ -150,7 +150,8 @@ pub fn save(sync_dir: &Path, state: &SyncState) -> Result<(), String> {
 ///
 /// Il JSON è compatto, non più indentato: lo schema è lo stesso campo per
 /// campo, e [`load`] legge allo stesso modo i file indentati scritti prima.
-/// Su una storia lunga l'indentazione era un quinto del file.
+/// Con testi cifrati da 4 KB l'indentazione pesava solo il 3% (46,0 → 44,5 MB
+/// su 10.000 versioni), ma è lavoro e disco in meno a ogni push.
 pub(super) fn write(sync_dir: &Path, state: &SyncState) -> Result<(), String> {
     let bytes = serde_json::to_vec(state).map_err(|e| format!("sync state encode: {e}"))?;
     atomic_write(&state_path(sync_dir), &bytes).map_err(|e| format!("sync state write: {e}"))
