@@ -35,6 +35,8 @@ as a line under `Assunzioni` in the plan that the user has seen.
 
 `DECISIONS.md`, the part of `CLAUDE.md` for the area, the canonical `docs/`
 page, and the code to be touched: the files, their tests, who calls them.
+Before designing anything people will see, read [fub.md](fub.md): what Fub is,
+how it looks, and how to choose like Fub.
 For a wide search use read-only Explore subagents and keep their conclusions,
 not their dumps.
 
