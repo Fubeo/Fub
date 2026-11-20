@@ -32,24 +32,25 @@ test usano un fake.
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
 
-`query_index` gira fuori dal thread principale dell'app: una domanda può
-durare centinaia di millisecondi (il correttore su una nota lunga, una
-ricerca su un vault grande), e sul thread principale la finestra smetterebbe
-di presentare fotogrammi finché non risponde. Le domande non girano in
-parallelo ma in **corsie** (`crates/fub-app/src/domande.rs`): una per l'indice
-e una per ogni spazio dei nomi di `IndexQuery::Custom`, al più 16. In una
-corsia le risposte escono nell'ordine in cui le domande sono entrate, come
-quando giravano sul thread principale; due corsie non si aspettano, così il
-controllo lungo del correttore non ferma la ricerca. Due domande mandate nello
-stesso istante possono entrare in un ordine qualsiasi.
+`query_index` gira fuori dal thread principale dell'app, che presenta i
+fotogrammi: una domanda può durare centinaia di millisecondi. Le domande girano
+in **corsie** (`crates/fub-app/src/domande.rs`): una per l'indice e una per
+ogni spazio dei nomi di `IndexQuery::Custom`, al più 16. In una corsia le
+risposte escono nell'ordine d'entrata; due corsie non si aspettano, e due
+domande mandate nello stesso istante entrano in ordine qualsiasi.
 
-Anche `render_view`, `view_action`, `set_active_context`, `invoke_command`,
-`view_state` e `set_view_state` girano fuori dal thread principale, in corsie
-fisse fuori dalle 16 che tengono l'ordine d'arrivo: `viste` (un disegno chiesto
-dopo un'azione la vede), `contesto` (vince l'ultima pubblicazione), `comandi` e
-`stato` (nell'ordine in cui partono). `list_views`, `list_commands` e
-`components_map`, letture senza ordine, escono senza corsia. La shell tiene
-l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
+Anche le altre porte che toccano disco, workspace o provider girano fuori dal
+thread principale, in corsie fisse fuori dalle 16, nell'ordine d'arrivo:
+`viste` (`render_view`, `view_action`: un disegno chiesto dopo un'azione la
+vede), `contesto` (`set_active_context`: vince l'ultima), `comandi`, `stato`
+(`view_state`, `set_view_state`) e `risorse` (`resource_*`: un pezzo chiesto
+prima della chiusura del prestito si legge). Le scritture dei dati che
+l'indice legge (impostazioni e profili, scorciatoie, organizzazione, vault
+aperto, corrente o conosciuto, demo) stanno nella corsia dell'indice: la
+domanda mandata dopo le vede. Le letture senza ordine (`list_views`,
+`list_commands`, `components_map`, `list_bundles`, i temi) e `cancel_job`
+escono senza corsia; un comando sincrono resta solo nell'elenco motivato di
+`lean_ipc.rs`. La shell tiene l'ultima risposta di ogni pannello (`Race`).
 
 ## La griglia
 
@@ -70,7 +71,6 @@ del file. Forme, limiti e chi le usa: [le porte del disegno](drawing-ipc.md).
 o non c'è in questa build, all'apertura come a metà sessione; `internal` che
 il motore si è fermato o non si costruisce, e si può riprovare. I dettagli
 stanno [nella stessa pagina](drawing-ipc.md).
-
 
 ## Sessione live
 

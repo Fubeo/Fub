@@ -37,18 +37,15 @@ pub fn demo_root() -> Option<String> {
 }
 
 /// Apre la demo isolata (`<config>/demo-vault`) e dice da dove si veniva.
-pub fn open_demo(
-    host: State<Host>,
-    windows: State<DocumentWindows>,
-) -> Result<DemoOpened, PluginError> {
+pub fn open_demo(host: &Host, windows: &DocumentWindows) -> Result<DemoOpened, PluginError> {
     let dir = config_dir();
     let root = support::demo_root(dir.as_deref()).ok_or_else(|| {
         PluginError::Unserved("demo non disponibile senza una cartella di configurazione".into())
     })?;
-    let opened = document_windows::with_vault_transition(&host, &windows, &host_key(&root), || {
-        support::open_demo(&host, dir.as_deref())
+    let opened = document_windows::with_vault_transition(host, windows, &host_key(&root), || {
+        support::open_demo(host, dir.as_deref())
     });
-    crate::for_the_shell(&host, None, opened)
+    crate::for_the_shell(host, None, opened)
 }
 
 /// Il risultato della chiusura: gli eventuali errori di flush e il vault
@@ -61,8 +58,8 @@ pub struct DemoClosed {
 
 /// Chiude la demo e torna al vault precedente quando e` ancora aperto.
 pub fn close_demo(
-    host: State<Host>,
-    windows: State<DocumentWindows>,
+    host: &Host,
+    windows: &DocumentWindows,
     return_to: Option<String>,
 ) -> Result<DemoClosed, PluginError> {
     let Some(dir) = config_dir() else {
@@ -72,31 +69,28 @@ pub fn close_demo(
     };
     let root = host_key(&dir.join(support::DEMO_DIR_NAME));
     let prev = return_to.map(Utf8PathBuf::from);
-    let closed = document_windows::with_vault_transition(&host, &windows, &root, || {
-        let errors = support::close_demo(&host, dir.as_path(), prev.as_deref())?;
+    let closed = document_windows::with_vault_transition(host, windows, &root, || {
+        let errors = support::close_demo(host, dir.as_path(), prev.as_deref())?;
         Ok(DemoClosed {
             errors,
             current: host.current().map(|path| path.to_string()),
         })
     });
-    crate::for_the_shell(&host, None, closed)
+    crate::for_the_shell(host, None, closed)
 }
 
 /// Azzera la demo (solo `<config>/demo-vault`, mai un vault utente).
-pub fn reset_demo(
-    host: State<Host>,
-    windows: State<DocumentWindows>,
-) -> Result<String, PluginError> {
+pub fn reset_demo(host: &Host, windows: &DocumentWindows) -> Result<String, PluginError> {
     let Some(dir) = config_dir() else {
         return Err(PluginError::Unserved(
             "demo non disponibile senza una cartella di configurazione".into(),
         ));
     };
     let root = host_key(&dir.join(support::DEMO_DIR_NAME));
-    let reset = document_windows::with_vault_transition(&host, &windows, &root, || {
-        support::reset_demo(&host, dir.as_path()).map(|root| host_key(&root))
+    let reset = document_windows::with_vault_transition(host, windows, &root, || {
+        support::reset_demo(host, dir.as_path()).map(|root| host_key(&root))
     });
-    crate::for_the_shell(&host, None, reset)
+    crate::for_the_shell(host, None, reset)
 }
 
 /// Diagnostica tipizzata dell'apertura corrente.

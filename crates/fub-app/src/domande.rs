@@ -65,9 +65,26 @@
 //!   seconda scrittura della stessa chiave non è mai coperta dalla prima, e
 //!   una lettura chiesta dopo una scrittura la vede.
 //!
+//! - Le scritture dei dati che le domande dell'indice leggono vanno nella
+//!   corsia dell'indice (`CORSIA_INDICE`): le impostazioni (`set_setting`,
+//!   `reset_setting`, i profili, le scorciatoie), l'organizzazione del vault
+//!   (`set_icon`, `set_pinned`, `set_space`, `set_order`) e il vault corrente
+//!   (`open_vault`, `set_current_vault`, `close_vault`, con l'elenco dei vault
+//!   conosciuti che l'apertura aggiorna). Sul thread principale una scrittura
+//!   finiva prima che la domanda mandata dopo entrasse in fila, anche se la
+//!   shell non aspettava la risposta: nella stessa corsia è ancora così, e
+//!   due scritture di fila (un cursore trascinato) lasciano l'ultima.
+//! - Le porte dei byte delle risorse (`resource_open`, `resource_read_chunk`,
+//!   `resource_close`, `resource_write`) vanno nella corsia delle risorse
+//!   (`CORSIA_RISORSE`): un PDF che scorre ne chiede un pezzo dopo l'altro, e
+//!   un pezzo chiesto prima della chiusura del prestito si legge prima che il
+//!   prestito si chiuda.
+//!
 //! Le letture senza un ordine da tenere (`list_views`, `list_commands`,
-//! `components_map`) escono dal thread principale senza corsia
-//! (`host_read` in `lib.rs`).
+//! `components_map`, `list_bundles`, `list_themes`, `read_theme`) e
+//! `cancel_job`, che annulla allo stesso modo un lavoro in volo, finito o non
+//! ancora partito, escono dal thread principale senza corsia (`host_read` in
+//! `lib.rs`).
 
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -80,7 +97,9 @@ use fub_abi::PluginError;
 /// Quante corsie al più per le domande: l'indice, la comune delle altre e i
 /// plugin. Quelle delle viste e del foglio stanno fuori dal conto.
 pub(crate) const MAX_CORSIE: usize = 16;
-const CORSIA_INDICE: &str = "indice";
+/// La corsia delle domande dell'indice e delle scritture dei dati che quelle
+/// domande leggono (impostazioni, organizzazione, vault corrente).
+pub(crate) const CORSIA_INDICE: &str = "indice";
 const CORSIA_ALTRE: &str = "altre";
 /// La corsia dei disegni delle view. Nessuna domanda ci finisce per errore:
 /// quelle dei plugin si chiamano `custom:…`.
@@ -95,13 +114,16 @@ pub(crate) const CORSIA_COMANDI: &str = "comandi";
 /// La corsia dello stato di vista della shell (`view_state`,
 /// `set_view_state`).
 pub(crate) const CORSIA_STATO: &str = "stato";
+/// La corsia delle porte dei byte delle risorse (`resource_*`).
+pub(crate) const CORSIA_RISORSE: &str = "risorse";
 /// Le corsie che ci sono sempre e stanno fuori dal tetto delle domande.
-const CORSIE_FISSE: [&str; 5] = [
+const CORSIE_FISSE: [&str; 6] = [
     CORSIA_VISTE,
     CORSIA_GRIGLIA,
     CORSIA_CONTESTO,
     CORSIA_COMANDI,
     CORSIA_STATO,
+    CORSIA_RISORSE,
 ];
 
 type Lavoro = Box<dyn FnOnce() + Send + 'static>;

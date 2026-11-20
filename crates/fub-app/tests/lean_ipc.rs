@@ -1159,6 +1159,258 @@ fn ports_that_can_work_run_off_the_main_thread_in_their_lane() {
     }
 }
 
+/// The other ports that touch the disk or the vault run off the main thread
+/// too, each through the helper that names its lane: `data_port` and
+/// `vault_port` (the index lane, where the data they write is read back),
+/// `resource_port` (the resource lane, so a chunk asked before the lease
+/// closes is read before it closes), or `host_read` for a read, or a cancel,
+/// with no order to keep.
+#[test]
+fn disk_and_vault_ports_run_off_the_main_thread_through_their_lane() {
+    const PORTS: &[(&str, &str)] = &[
+        ("open_vault", "open_vault_in_lane("),
+        ("set_current_vault", "host_lane("),
+        ("close_vault", "vault_port("),
+        ("open_demo", "vault_port("),
+        ("close_demo", "vault_port("),
+        ("reset_demo", "vault_port("),
+        ("set_icon", "data_port("),
+        ("set_pinned", "data_port("),
+        ("set_space", "data_port("),
+        ("set_order", "data_port("),
+        ("set_setting", "data_port("),
+        ("reset_setting", "data_port("),
+        ("settings_profiles", "data_port("),
+        ("export_settings_profile", "data_port("),
+        ("import_settings_profile", "data_port("),
+        ("duplicate_settings_profile", "data_port("),
+        ("switch_settings_profile", "data_port("),
+        ("reset_settings_profile", "data_port("),
+        ("known_vaults", "data_port("),
+        ("set_vault_favorite", "data_port("),
+        ("set_vault_look", "data_port("),
+        ("forget_vault", "data_port("),
+        ("pending_keybindings", "data_port("),
+        ("adopt_keybindings", "data_port("),
+        ("discard_keybindings", "data_port("),
+        ("resource_open", "resource_port("),
+        ("resource_read_chunk", "resource_port("),
+        ("resource_close", "resource_port("),
+        ("resource_write", "resource_port("),
+        ("cancel_job", "host_read("),
+        ("list_bundles", "host_read("),
+        ("list_themes", "host_read("),
+        ("read_theme", "host_read("),
+    ];
+    let app = include_str!("../src/lib.rs");
+    let body_of = |signature: &str| -> Option<&str> {
+        let start = app.find(signature)?;
+        let body = &app[start..];
+        Some(&body[..body.find("\n}\n").expect("function body")])
+    };
+    for (command, helper) in PORTS {
+        let command_body = body_of(&format!("async fn {command}("))
+            .unwrap_or_else(|| panic!("`{command}` must be async, off the main thread"));
+        let through_lane = body_of(&format!("async fn {command}_in_lane("))
+            .filter(|_| command_body.contains(&format!("{command}_in_lane(")));
+        assert!(
+            command_body.contains(helper) || through_lane.is_some_and(|body| body.contains(helper)),
+            "`{command}` must run off the main thread through `{helper}`"
+        );
+    }
+    // `open_vault` reaches the lane through its own function.
+    assert!(body_of("async fn open_vault_in_lane(")
+        .is_some_and(|body| body.contains("domande::CORSIA_INDICE")));
+    assert!(body_of("async fn set_current_vault_in_lane(")
+        .is_some_and(|body| body.contains("domande::CORSIA_INDICE")));
+    for (helper, lane) in [
+        ("data_port", "domande::CORSIA_INDICE"),
+        ("vault_port", "domande::CORSIA_INDICE"),
+        ("resource_port", "domande::CORSIA_RISORSE"),
+    ] {
+        let body = body_of(&format!("async fn {helper}<"))
+            .unwrap_or_else(|| panic!("`{helper}` not found in lib.rs"));
+        assert!(body.contains(lane), "`{helper}` must use the lane `{lane}`");
+    }
+}
+
+/// **A synchronous command runs on the main thread**, the one that presents
+/// the frames of the window: Tauri calls a `fn` command there, and an `async
+/// fn` on its runtime. A command that reads the disk, waits for a workspace
+/// borrow or calls a provider freezes the window for as long as it lasts.
+/// So a synchronous command is allowed only in this list, with the reason it
+/// can stay: it reads memory, or it works on a native window (and Tauri
+/// would bring that work back to the main thread anyway), or it is a mobile
+/// boundary the desktop never calls. Both directions are checked: a new
+/// synchronous command fails here by name, and so does a name that is no
+/// longer synchronous.
+#[test]
+fn every_synchronous_command_says_why_it_stays_on_the_main_thread() {
+    const SYNCHRONOUS: &[(&str, &str)] = &[
+        ("list_vaults", "reads the open sessions in memory"),
+        (
+            "initial_vault",
+            "an env var and the remembered vaults, once at startup before any frame matters",
+        ),
+        ("session_notice", "takes a notice kept in memory"),
+        ("set_system_locale", "publishes the locale in memory"),
+        ("frame_capabilities", "reads the machine settings in memory"),
+        (
+            "setting_requires_reopen",
+            "looks the key up in the schema in memory",
+        ),
+        (
+            "discard_theme_folder",
+            "forgets a permission kept in memory",
+        ),
+        (
+            "viewer_control",
+            "only native window work (history, close, focus) that Tauri runs on the main thread",
+        ),
+        ("plugin_budget_snapshot", "reads atomic counters"),
+        ("plugin_limited_mode", "clones a value read at startup"),
+        (
+            "demo_root",
+            "builds a path, no disk access beyond canonicalize",
+        ),
+        (
+            "startup_diagnostics",
+            "support screen: reads the diagnostics kept by the open session",
+        ),
+        (
+            "support_preview",
+            "support screen, one click: a redacted summary of a few KB",
+        ),
+        (
+            "support_export",
+            "support screen, one click after consent: writes one redacted archive",
+        ),
+        (
+            "config_health",
+            "support screen, one click: stats a few configuration files",
+        ),
+        (
+            "recover_config",
+            "support screen, one click after a confirmation: rewrites one configuration file",
+        ),
+        (
+            "close_document_window",
+            "native window lifecycle: destroys a window",
+        ),
+        (
+            "finish_main_close",
+            "native window lifecycle: destroys the main window",
+        ),
+        (
+            "live_send",
+            "hands a message to the live session channel in memory",
+        ),
+        ("live_status", "reads the live session state in memory"),
+        (
+            "mobile_validate_capture",
+            "mobile boundary: validates a payload in memory",
+        ),
+        (
+            "mobile_submit_capture",
+            "mobile boundary, never invoked on the desktop",
+        ),
+        (
+            "mobile_storage_roots",
+            "mobile boundary, never invoked on the desktop",
+        ),
+        (
+            "mobile_storage_preference",
+            "mobile boundary, never invoked on the desktop",
+        ),
+        (
+            "mobile_set_storage_preference",
+            "mobile boundary, never invoked on the desktop",
+        ),
+        ("mobile_wasm_report", "mobile boundary: a static report"),
+        (
+            "mobile_classify_opened_url",
+            "mobile boundary: parses a string",
+        ),
+        (
+            "mobile_register_tree_grant",
+            "mobile boundary: validates a grant in memory",
+        ),
+    ];
+    let allowed: BTreeMap<&str, &str> = SYNCHRONOUS.iter().copied().collect();
+    assert_eq!(allowed.len(), SYNCHRONOUS.len(), "a name is listed twice");
+    let found = synchronous_commands(SOURCE);
+    let new: Vec<_> = found
+        .iter()
+        .filter(|name| !allowed.contains_key(*name))
+        .collect();
+    assert!(
+        new.is_empty(),
+        "synchronous commands not in the list: {new:?}.\n\
+         A synchronous Tauri command runs on the main thread, the one that presents\n\
+         the frames. Make it `async` and run its work in a lane (`host_lane`, `domande`)\n\
+         or through `host_read`; list it here only if it reads memory or works on a\n\
+         native window, with that reason."
+    );
+    let gone: Vec<_> = allowed
+        .keys()
+        .filter(|name| !found.contains(*name))
+        .collect();
+    assert!(
+        gone.is_empty(),
+        "listed as synchronous but no longer synchronous commands: {gone:?}: remove them"
+    );
+}
+
+/// The synchronous commands: the names after a real `#[tauri::command]`
+/// whose signature is a `fn` and not an `async fn`.
+fn synchronous_commands(src: &str) -> BTreeSet<&str> {
+    let mut out = BTreeSet::new();
+    let mut after_attribute = false;
+    for line in src.lines() {
+        if is_prose(line) {
+            continue;
+        }
+        let t = line.trim();
+        if t.starts_with("#[tauri::command") {
+            after_attribute = true;
+            continue;
+        }
+        if !after_attribute || t.starts_with("#[") {
+            continue;
+        }
+        after_attribute = false;
+        let sig = t.strip_prefix("pub ").unwrap_or(t);
+        if let Some(rest) = sig.strip_prefix("fn ") {
+            let name = rest
+                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .next()
+                .expect("a name after `fn`");
+            out.insert(name);
+        }
+    }
+    out
+}
+
+#[test]
+fn the_synchronous_extractor_skips_async_commands_and_prose() {
+    let src = "\
+// #[tauri::command]
+// fn in_prose() {}
+#[tauri::command]
+async fn off_main(app: AppHandle) {}
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+fn on_main(host: State<Host>) {}
+#[tauri::command]
+pub fn also_on_main() {}
+fn not_a_command() {}
+";
+    assert_eq!(
+        synchronous_commands(src),
+        BTreeSet::from(["on_main", "also_on_main"])
+    );
+}
+
 #[test]
 fn drawing_uses_only_named_typed_ports() {
     const DRAWING: &[&str] = &[
