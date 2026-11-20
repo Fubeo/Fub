@@ -112,6 +112,7 @@ import { blockPrefixes } from "./block-prefix";
 import { linkDialogOpener } from "./link-dialog";
 import { liveStrings } from "./strings";
 import { topChanges } from "./top-changes";
+import { Coverage, grownSpan, RowSweep, SpanIndex } from "./live-spans";
 import {
   bareUrl,
   bareWikilink,
@@ -484,10 +485,12 @@ export function computeDecorations(
   // `==` da base64, un `#frammento` o un `#id` in un attributo non sono
   // sintassi Obsidian). I blocchi di codice escludono righe intere, quindi
   // viaggiano come numeri di riga.
+  // Il giro sull'albero le raccoglie in fila; il secondo strato le legge da un
+  // indice ordinato (`SpanIndex`), a cui aggiunge i wikilink che trova.
   const exclusions: { from: number; to: number }[] = [];
+  let excluded: SpanIndex | null = null;
   const codeRows = new Set<number>();
-  const isFree = (a: number, b: number) =>
-    exclusions.every((r) => b <= r.from || a >= r.to);
+  const isFree = (a: number, b: number) => !(excluded ??= new SpanIndex(exclusions)).overlaps(a, b);
   // Dedupe delle decorazioni di riga: blocchi annidati (citazione dentro
   // citazione) non devono impilare due volte la stessa classe.
   const quoteRows = new Set<number>();
@@ -509,10 +512,29 @@ export function computeDecorations(
   // Le formule del contenitore in cui sta l'iterazione: i contenitori non si
   // annidano, e ogni nodo in riga sta nell'ultimo aperto.
   let around: readonly DollarMath[] = [];
+  // Le formule di un contenitore vengono in fila e separate, come le legge
+  // `scanDollarMath`: allora quelle che toccano un nodo si trovano con una
+  // ricerca binaria. Se no, si guardano tutte.
+  let aroundOrdered = true;
+  const crossesFormula = (node: { from: number; to: number }): boolean => {
+    const crosses = (math: DollarMath) =>
+      math.from < node.to && node.from < math.to && (math.from < node.from || node.to < math.to);
+    if (!aroundOrdered) return around.some(crosses);
+    let low = 0;
+    let high = around.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (around[middle]!.to <= node.from) low = middle + 1;
+      else high = middle;
+    }
+    for (let at = low; at < around.length && around[at]!.from < node.to; at++) if (crosses(around[at]!)) return true;
+    return false;
+  };
   const collectFormulas = (container: SyntaxNode): string => {
     const text = doc.sliceString(container.from, container.to);
     const found = containerMath(text, container);
     around = found.formulas;
+    aroundOrdered = around.every((math, at) => math.from <= math.to && (at === 0 || around[at - 1]!.to <= math.from));
     if (found.formulas.length === 0) return text;
     const block = container.name === "Paragraph" && container.parent?.name === "Document"
       && paragraphMathBlock(found, text) !== null;
@@ -540,6 +562,17 @@ export function computeDecorations(
   // accesa: i loro messaggi, dove l'albero non si decora.
   const commentsOn = commentsDeclared(forms);
   const messages: { from: number; to: number }[] = [];
+  // I messaggi che possono ancora contenere un nodo: l'albero si visita per
+  // inizio crescente, e un messaggio finito prima del nodo non ne conterrà
+  // più nessuno.
+  let liveMessages: { from: number; to: number }[] = [];
+  let messagesSeen = 0;
+  const inMessage = (from: number, to: number): boolean => {
+    for (; messagesSeen < messages.length; messagesSeen++) liveMessages.push(messages[messagesSeen]!);
+    if (liveMessages.length === 0) return false;
+    liveMessages = liveMessages.filter((message) => message.to > from);
+    return liveMessages.some((message) => message.from <= from && to <= message.to);
+  };
   const sliceDoc = (from: number, to: number) => doc.sliceString(from, to);
   const liveLink = (link: SyntaxNode): NativeInline | null => writtenLink(sliceDoc, link);
 
@@ -624,8 +657,7 @@ export function computeDecorations(
     enter(node) {
       // Ciò che sta dentro un messaggio di un commento non è testo della nota:
       // né enfasi né link né codice, e sparisce col messaggio.
-      if (messages.length > 0 && node.from < node.to
-        && messages.some((message) => message.from <= node.from && node.to <= message.to)) return false;
+      if (messages.length > 0 && node.from < node.to && inMessage(node.from, node.to)) return false;
       if (isMathContainer(node.name)) {
         const text = collectFormulas(node.node);
         const found = nativeInlines(node.node, node.from, node.to, liveLink, around);
@@ -647,8 +679,7 @@ export function computeDecorations(
       // una senza contenerla il provider non lo legge: come in Lettura non si
       // decora, e se ne visitano i figli. Un marcatore segue il suo nodo.
       const owner = INLINE_MARKS.has(node.name) ? node.node.parent : node.node;
-      if (owner && INLINE_SYNTAX.has(owner.name) && around.some((math) =>
-        math.from < owner.to && owner.from < math.to && (math.from < owner.from || owner.to < math.to))) return;
+      if (owner && INLINE_SYNTAX.has(owner.name) && around.length > 0 && crossesFormula(owner)) return;
       const heading = /^(ATX|Setext)Heading([1-6])$/.exec(node.name);
       if (heading) {
         const marks = node.node.getChildren("HeaderMark");
@@ -925,6 +956,22 @@ export function computeDecorations(
   // sull'albero perché le esclusioni (codice, URL) devono già esserci tutte.
   const beforeRow = doc.lineAt(from).number;
   const lastLine = doc.lineAt(to).number;
+  // Gli inline nativi e i blocchi opachi di ogni riga, con un cursore che
+  // scende con le righe invece di filtrare tutta la vista a ogni riga.
+  const nativeRows = new RowSweep(natives);
+  const opaqueRows = new RowSweep(opaqueBlocks);
+  // I segni già posati, per il promemoria di un compito: un indice che si
+  // aggiorna con ciò che è arrivato dall'ultima volta.
+  let marked: SpanIndex | null = null;
+  let markedUpTo = 0;
+  const touchesMark = (a: number, b: number): boolean => {
+    if (!marked) {
+      marked = new SpanIndex(out.filter((d) => !LINE_KINDS.has(d.kind)));
+      markedUpTo = out.length;
+    }
+    for (; markedUpTo < out.length; markedUpTo++) if (!LINE_KINDS.has(out[markedUpTo]!.kind)) marked.add(out[markedUpTo]!);
+    return marked.overlaps(a, b);
+  };
   for (let n = beforeRow; n <= lastLine; n++) {
     if (codeRows.has(n)) continue;
     const row = doc.line(n);
@@ -961,10 +1008,9 @@ export function computeDecorations(
     // Ciò che della riga non è testo del modello, in offset della riga: gli
     // inline nativi, le formule che restano, i marcatori delle note in riga che
     // reggono, e poi wikilink e tag man mano che si trovano.
-    const rowNatives: NativeInline[] = natives.filter((native) => native.from < row.to && row.from < native.to);
+    const rowNatives: NativeInline[] = nativeRows.at(row.from, row.to);
     for (const { math } of rowFormulas) if (!lostFormulas.has(math)) rowNatives.push(math);
-    const rowCuts = [...nativeCuts(rowNatives), ...opaqueBlocks]
-      .filter((cut) => cut.from < row.to && row.from < cut.to)
+    const rowCuts = [...nativeCuts(rowNatives).filter((cut) => cut.from < row.to && row.from < cut.to), ...opaqueRows.at(row.from, row.to)]
       .map((cut) => ({ from: cut.from - row.from, to: cut.to - row.from }));
     for (const note of scanInlineFootnotes(text)) {
       if (!footnoteStands({ from: row.from + note.from, to: row.from + note.to }, rowNatives)) continue;
@@ -978,7 +1024,7 @@ export function computeDecorations(
       const rangeStart = row.from + w.from;
       const rangeEnd = row.from + w.to;
       if (!isFree(rangeStart, rangeEnd) || inFormula(rangeStart)) continue;
-      exclusions.push({ from: rangeStart, to: rangeEnd });
+      excluded!.add({ from: rangeStart, to: rangeEnd });
       rowCuts.push({ from: w.from, to: w.to });
       if (!namesSomething(w)) continue;
       const innerFrom = row.from + w.innerFrom;
@@ -1131,7 +1177,7 @@ export function computeDecorations(
         const [from, to] = reminder.source;
         const look = reminder.when === null ? "bad" : checked ? "done" : "open";
         const data = `${look} ${reminder.when ?? ""}`;
-        const touched = out.some((d) => !LINE_KINDS.has(d.kind) && d.from < to && from < d.to);
+        const touched = touchesMark(from, to);
         if (reminder.when !== null && reminder.whole && !touched && !reveal.marks(from, to, from)) {
           out.push({ from, to, kind: "task-reminder", data });
         } else if (!touched) {
@@ -1178,28 +1224,12 @@ export function wholePill(pill: LiveDeco, others: readonly LiveDeco[]): LiveDeco
   let { from, to } = pill;
   const marks = others.filter((d) => d !== pill && !LINE_KINDS.has(d.kind) && d.from < d.to);
   const hides = marks.filter((d) => d.kind === "hide");
-  const hidden = (a: number, b: number) => {
-    for (let at = a; at < b; at++) {
-      if (!hides.some((d) => d.from <= at && at < d.to)) return false;
-    }
-    return true;
-  };
-  const grow = () => {
-    for (let grown = true; grown; ) {
-      grown = false;
-      for (const other of marks) {
-        const inside = other.from <= from && to <= other.to;
-        const around = from <= other.from && other.to <= to;
-        if (other.to <= from || to <= other.from || inside || around) continue;
-        from = Math.min(from, other.from);
-        to = Math.max(to, other.to);
-        grown = true;
-      }
-    }
-  };
+  // I tratti nascosti uniti: un tratto è nascosto se uno solo lo copre.
+  const hidden = new Coverage(hides);
+  const grow = () => ({ from, to } = grownSpan(from, to, marks));
   grow();
   const covered = marks.some((other) => other.kind !== "hide" && other.from <= from && to <= other.to
-    && hidden(other.from, from) && hidden(to, other.to));
+    && hidden.covers(other.from, from) && hidden.covers(to, other.to));
   if (covered) {
     for (let moved = true; moved; ) {
       moved = false;
@@ -1248,6 +1278,11 @@ const TRAILING_PUNCTUATION = /^[,.;:!?)\]»”’]+/;
 /// del pezzo, il pezzo e la punteggiatura stanno sotto un `cm-fub-nobreak`.
 function keepPunctuation(doc: EditorState["doc"], out: LiveDeco[]): void {
   const glued: LiveDeco[] = [];
+  // Letti una volta: i pezzi sostituiti, e dove finisce uno stile. Una
+  // lettera `letter = d.from - 1` sta sotto uno stile che finisce entro
+  // `d.from` soltanto se lo stile finisce proprio lì e non è vuoto.
+  let replaced: SpanIndex | null = null;
+  let styleEnds: Set<number> | null = null;
   for (const d of out) {
     if (!REPLACED.has(d.kind)) continue;
     if (d.from === d.to) continue;
@@ -1259,9 +1294,11 @@ function keepPunctuation(doc: EditorState["doc"], out: LiveDeco[]): void {
     // stile finisce su di lei: uno stile tagliato in due mostra il suo fondo
     // e il suo margine due volte («ricordar e»).
     const letter = d.from - 1;
+    replaced ??= new SpanIndex(out.filter((o) => REPLACED.has(o.kind)));
+    styleEnds ??= new Set(out.filter((o) => !REPLACED.has(o.kind) && o.kind !== "nobreak" && o.from < o.to).map((o) => o.to));
     const free = letter >= line.from && !/\s/.test(doc.sliceString(letter, d.from))
-      && !out.some((o) => o !== d && REPLACED.has(o.kind) && o.from <= letter && letter < o.to)
-      && !out.some((o) => !REPLACED.has(o.kind) && o.kind !== "nobreak" && o.from <= letter && letter < o.to && o.to <= d.from);
+      && !replaced.covers(letter)
+      && !styleEnds.has(d.from);
     const before = free ? letter : d.from;
     glued.push({ from: before, to: d.to + after[0].length, kind: "nobreak" });
   }
