@@ -82,6 +82,10 @@ sulla cornice di oggi (vedi «Aggiornamento del 2026-11-21», punto 14).
   regole dell'ambiente e ondate corretti; T31 scritto; D1–D8 e D10–D12
   decise dall'orchestratore · K5, K3, Scrittoio 2 e N6 sono fusi, e il
   codice è cambiato dal 2026-11-05 · T1, T3–T8, T27–T31, Regole, Cancello
+- 2026-11-21 · T1 scrive il disegno completo in una pagina sua,
+  `docs/architecture/disegno-completo.md`, e non dentro `disegno.md`, che è al
+  tetto di righe: T3 e T5 scrivono le loro sezioni lì e tolgono le note
+  «(arriva con T…)» dei loro pezzi · il tetto di `check-doc-size` · T1, T3, T5
 
 ## Aggiornamento del 2026-11-21
 
