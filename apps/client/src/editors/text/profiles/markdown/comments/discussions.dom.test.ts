@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, redo, undo, undoDepth } from "@codemirror/commands";
 import { markdownGrammar } from "../grammar";
 import { livePreview } from "../livepreview";
 import { renderMarkdown } from "../render";
 import { forgetSigner } from "./author";
 import { markdownComments, type MarkdownComments } from "./discussions";
+import { parsedView } from "../test-support";
 
 // I gesti dei commenti sulla vista vera: il primo messaggio, la risposta,
 // Risolvi, Elimina, «Svuota i risolti», ciascuno un passo d'annullamento; il
@@ -72,7 +72,7 @@ function mount(doc: string, from = 0, to = from): Harness {
       extensions: [history(), markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), comments.extension()],
     }),
   });
-  if (ensureSyntaxTree(view.state, view.state.doc.length, 10_000)) view.dispatch({});
+  parsedView(view);
   const harness: Harness = {
     view,
     comments,
@@ -357,12 +357,12 @@ describe("la discussione", () => {
     expect(comments.snapshot().open.map((each) => each.quote)).toEqual(["passo"]);
     // Raddoppiato: la stessa riga incollata sotto.
     view.dispatch({ changes: { from: view.state.doc.length, insert: `\n${NOTE}` } });
-    ensureSyntaxTree(view.state, view.state.doc.length, 5_000);
+    parsedView(view);
     expect(comments.snapshot().open.map((each) => each.quote)).toEqual(["passo", "passo"]);
     // Tagliato: via tutto il secondo paragrafo, commento compreso.
     const second = view.state.doc.toString().lastIndexOf("Il {==");
     view.dispatch({ changes: { from: second, to: view.state.doc.length } });
-    ensureSyntaxTree(view.state, view.state.doc.length, 5_000);
+    parsedView(view);
     expect(comments.snapshot().open).toHaveLength(1);
     // La discussione si apre ancora dal passo, dov'è adesso.
     comments.open(view.state.doc.toString().indexOf("passo"));

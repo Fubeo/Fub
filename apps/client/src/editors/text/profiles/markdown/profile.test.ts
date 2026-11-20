@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { currentCompletions, startCompletion } from "@codemirror/autocomplete";
-import { ensureSyntaxTree, foldable, syntaxTree } from "@codemirror/language";
+import { foldable, syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { createTextEngine, type TextEngine } from "../../engine";
 import { createMarkdownProfile, type MarkdownProfile } from "./profile";
 import { liveReveal } from "../../live-reveal";
+import { parsed } from "./test-support";
 
 function mounted(profile: MarkdownProfile): { engine: TextEngine; view: () => EditorView } {
   const parent = document.createElement("div");
@@ -188,8 +189,7 @@ describe("le piegature", () => {
   it("stanno su frontmatter, titoli, voci e codice, non su paragrafi, citazioni e tabelle", () => {
     const { engine, view } = mounted(profile());
     engine.setDoc(DOC);
-    const state = view().state;
-    ensureSyntaxTree(state, state.doc.length, 5000);
+    const state = parsed(view().state);
     const folds = (number: number): boolean => {
       const line = state.doc.line(number);
       return foldable(state, line.from, line.to) !== null;

@@ -1,15 +1,11 @@
 // Le letture del menu del tasto destro: che cosa sta in un punto della nota.
 import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "./test-support";
 import { EditorState } from "@codemirror/state";
 import { codeBlockAt, headingText, listItemAt, sectionAt, tagAt } from "./menu";
 
-const stateOf = (doc: string): EditorState => {
-  const state = EditorState.create({ doc, extensions: [markdown()] });
-  ensureSyntaxTree(state, state.doc.length, 1000);
-  return state;
-};
+const stateOf = (doc: string): EditorState => parsed(EditorState.create({ doc, extensions: [markdown()] }));
 
 describe("il punto sotto il tasto destro", () => {
   it("una voce di lista sa se può rientrare e uscire", () => {

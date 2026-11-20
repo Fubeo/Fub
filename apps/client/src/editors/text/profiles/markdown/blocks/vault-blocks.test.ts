@@ -5,10 +5,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { undo, history } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
+import { syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdownGrammar } from "../grammar";
 import { blocksOfNotes, linkVaultBlock, type VaultBlockPort } from "./vault-blocks";
+import { buildBlocks } from "./model";
+import { stateOfSource } from "./sync-to";
+import { parsedView, withStarvedBirths } from "../test-support";
 
 const RIUNIONE = "# Riunione\n\n## Chiavi\n\nLe chiavi le tiene Sara.\n\n- Chiavi di riserva ^riserva\n  - Nel cassetto\n- Altro\n";
 
@@ -26,7 +30,9 @@ function port(overrides: Partial<VaultBlockPort> = {}): VaultBlockPort {
 function editor(doc: string): EditorView {
   const parent = document.createElement("div");
   document.body.append(parent);
-  return new EditorView({ parent, state: EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), history()] }) });
+  const view = new EditorView({ parent, state: EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), history()] }) });
+  parsedView(view);
+  return view;
 }
 
 const writable = { name: "Riunione", writable: () => true };
@@ -41,6 +47,16 @@ describe("i blocchi trovati", () => {
     expect(blocksOfNotes([{ doc: "Riunione.md", text: RIUNIONE }], "riserva", 50)[0]!.own).toBe("- Chiavi di riserva");
     expect(blocksOfNotes([{ doc: "Città.md", text: "La città è là.\n" }], "citta LA", 50)).toHaveLength(1);
     expect(blocksOfNotes([{ doc: "Riunione.md", text: RIUNIONE }], "chiavi", 1)).toHaveLength(1);
+  });
+
+  it("una nota lunga letta dal disco col parser lento: si trovano tutti i suoi blocchi, anche l'ultimo", () => {
+    // Oltre i 3000 caratteri che il parser legge di sicuro alla nascita (#529).
+    const lunga = Array.from({ length: 400 }, (_, n) => `Paragrafo numero ${n}.`).join("\n\n") + "\n\nIl paragrafo finale.\n";
+    const hits = withStarvedBirths(() => blocksOfNotes([{ doc: "Lunga.md", text: lunga }], "finale", 50));
+    expect(hits.map((hit) => hit.label)).toEqual(["Il paragrafo finale."]);
+    const state = withStarvedBirths(() => stateOfSource(lunga));
+    expect(syntaxTree(state).length, "lo stato della nota letta ha l'albero intero").toBe(lunga.length);
+    expect(buildBlocks(state).blocks).toHaveLength(401);
   });
 });
 

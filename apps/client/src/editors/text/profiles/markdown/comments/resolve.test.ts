@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { EditorState, Text } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "../grammar";
 import { allDiscussions } from "./model";
 import { archiveEscape, archiveUnescape, clearArchiveChanges, deleteChanges, readArchive, resolveChanges } from "./resolve";
 import { archiveRuns } from "./margin";
+import { parsed } from "../test-support";
 
 // Risolvi, Elimina e l'archivio dei risolti in fondo alla nota (D12 C).
 
 const WHEN = "2026-11-16 14:02";
 
 function stateOf(doc: string): EditorState {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
-  ensureSyntaxTree(state, doc.length, 5_000);
+  const state = parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] }));
   return state;
 }
 

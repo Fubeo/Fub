@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { liveReveal, mathClassic, type RevealPolicy } from "../../live-reveal";
 import { blockTex, blockTexRange, setTex } from "./math-live";
+import { parsedView } from "./test-support";
 
 vi.mock("katex", () => ({ default: { render(tex: string, el: HTMLElement) { el.textContent = `«${tex}»`; } } }));
 vi.mock("katex/dist/katex.min.css", () => ({}));
@@ -32,8 +32,7 @@ function mount(doc: string, anchor: number, policy: RevealPolicy = "mai", classi
       extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy)), mathClassic.of(classic)],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

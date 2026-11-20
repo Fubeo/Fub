@@ -4,12 +4,12 @@ import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { cursorCharLeft } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { createTextEngine } from "../../engine";
 import { livePreview } from "./livepreview";
 import { blockPrefixAt } from "./block-prefix";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
+import { parsed } from "./test-support";
 
 function mount(doc: string, cursor: number, policy: RevealPolicy = "mai") {
   const parent = document.createElement("div");
@@ -35,8 +35,7 @@ function mount(doc: string, cursor: number, policy: RevealPolicy = "mai") {
 }
 
 function prefixOf(doc: string, line = 1) {
-  const state = EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) });
-  ensureSyntaxTree(state, state.doc.length, 1000);
+  const state = parsed(EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) }));
   const prefix = blockPrefixAt(state, state.doc.line(line));
   return prefix && { text: prefix.textFrom - state.doc.line(line).from, last: prefix.lastFrom - state.doc.line(line).from };
 }

@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history } from "@codemirror/commands";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
@@ -18,6 +17,7 @@ import { loadLazyParts } from "../../../../../ui/lazy-part";
 import type { MarkdownResourceChange, MarkdownResources } from "../../../../../ui/markdown-resources";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 import skin from "../../../../../theme/scrittoio/skin.css?raw";
+import { parsedView } from "../test-support";
 
 // La testata della pagina (T6, E3): la stessa in Scrittura e in Lettura.
 // Copertina, icona, titolo, proprietà in evidenza, «Altre N», «Aggiungi una
@@ -75,8 +75,7 @@ function mount(doc: string, display: PropertiesDisplay = "visible", readOnly = f
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

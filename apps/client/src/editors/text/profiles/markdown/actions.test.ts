@@ -4,6 +4,7 @@ import { EditorSelection, EditorState, type Transaction } from "@codemirror/stat
 import { loadDiagramTemplates, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
 import { markdownKeymap } from "./commands";
 import { t } from "../../../../i18n/strings";
+import { parsed } from "./test-support";
 
 // Stesse convenzioni di `commands.test.ts`: `|` è il cursore, `‹…›` la
 // selezione, e i comandi si provano su un `EditorState` senza view.
@@ -13,18 +14,18 @@ function mk(spec: string): EditorState {
   if (open !== -1) {
     const stripped = spec.replace("‹", "");
     const close = stripped.indexOf("›");
-    return EditorState.create({
+    return parsed(EditorState.create({
       doc: stripped.replace("›", ""),
       selection: EditorSelection.single(open, close),
       extensions: [markdown({ base: markdownLanguage })],
-    });
+    }));
   }
   const bar = spec.indexOf("|");
-  return EditorState.create({
+  return parsed(EditorState.create({
     doc: spec.replace("|", ""),
     selection: EditorSelection.single(bar === -1 ? 0 : bar),
     extensions: [markdown({ base: markdownLanguage })],
-  });
+  }));
 }
 
 function show(state: EditorState): string {

@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap, runScopeHandlers } from "@codemirror/view";
 import { defaultKeymap, history, indentWithTab, undo, undoDepth } from "@codemirror/commands";
@@ -10,6 +9,7 @@ import { livePreview } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { parseImage, rewriteImage, writeImage } from "./image-live";
 import { mountMarkdown } from "./mount";
+import { parsedView } from "./test-support";
 
 // L'immagine in Live: selezione, riquadro e maniglia (D8, D9).
 
@@ -27,8 +27,7 @@ function mount(doc: string, policy: RevealPolicy = "mai"): EditorView {
       extensions: [history(), markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy))],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -168,8 +167,7 @@ describe("i pulsanti dentro un'immagine (#454)", () => {
         ],
       }),
     });
-    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-    view.dispatch({});
+    parsedView(view);
     views.push(view);
     return view;
   }

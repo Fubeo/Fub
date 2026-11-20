@@ -12,13 +12,13 @@
 import { describe, expect, it } from "vitest";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { computeDecorations, footnoteLabelsField, revealOf } from "./livepreview";
 import type { RevealPolicy } from "../../live-reveal";
 import { CORPUS } from "../../../../../bench/corpus";
 import { LIVE_CASES, longNote, typingCardsNote, typingNote, typingValuesNote } from "../../../../../bench/live-fixture";
 import golden from "../../../../__fixtures__/live-decorations.json";
+import { parsed, withStarvedParser } from "./test-support";
 
 /// La nota di S1 (`bench/webview/fixtures.mjs`): 5.000 righe, un paragrafo
 /// ogni quaranta, e in ogni riga un grassetto e un wikilink seguito dal punto.
@@ -137,8 +137,7 @@ function fingerprint(value: unknown): string {
 /// Le impronte di un campione: per ogni cursore (nessuno, quello del caso, un
 /// terzo, due terzi, la fine) e politica, il testo intero o le sue finestre.
 function prints(sample: Sample): Record<string, string> {
-  const base = EditorState.create({ doc: sample.text, extensions: [markdown({ base: markdownGrammar }), footnoteLabelsField] });
-  ensureSyntaxTree(base, base.doc.length, 60_000);
+  const base = parsed(withStarvedParser(() => EditorState.create({ doc: sample.text, extensions: [markdown({ base: markdownGrammar }), footnoteLabelsField] })));
   const length = base.doc.length;
   const cursors: { name: string; selection: EditorSelection }[] = [
     { name: "zero", selection: EditorSelection.single(0) },
@@ -181,8 +180,9 @@ describe("le decorazioni della Live restano byte per byte", () => {
   }
   it("la nota ricca ha i segni che gli indici leggono", () => {
     const rich = all["ricca"]!;
-    const state = EditorState.create({ doc: rich.text, selection: { anchor: rich.cursor ?? 0 }, extensions: [markdown({ base: markdownGrammar }), footnoteLabelsField] });
-    ensureSyntaxTree(state, state.doc.length, 60_000);
+    // Lo stato nasce con il parser a corto di tempo, come sotto carico: il
+    // confronto deve reggere perché l'albero completo viene consegnato prima.
+    const state = parsed(withStarvedParser(() => EditorState.create({ doc: rich.text, selection: { anchor: rich.cursor ?? 0 }, extensions: [markdown({ base: markdownGrammar }), footnoteLabelsField] })));
     const kinds = new Set<string>();
     for (const policy of POLICIES) for (const d of computeDecorations(state, revealOf(state, policy))) kinds.add(d.kind);
     expect([...kinds].sort()).toEqual(expect.arrayContaining([

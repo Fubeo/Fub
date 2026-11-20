@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
+import { syntaxTree } from "@codemirror/language";
 import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -11,18 +11,11 @@ import { PLACEHOLDER, ProofClient, sharedProofCache, type ProofPorts } from "../
 import { createMarkdownProfile } from "./profile";
 import { markdownGrammar } from "./grammar";
 import { extractProse, frontmatterLanguage, locate, markdownProof, proofTheme } from "./proof";
+import { parsed, parsedView } from "./test-support";
 
-/// Uno stato con l'albero completo. Il parser di CodeMirror lavora a tempo
-/// (20 ms per transazione): sotto carico lo stato appena creato ha un albero
-/// a metà, e `ensureSyntaxTree` completa l'analisi senza consegnarla a
-/// `syntaxTree(state)`; la transazione vuota la consegna, come fa l'editor
-/// quando il parser in sottofondo avanza.
+/// Uno stato con l'albero completo e già consegnato (`parsed`).
 function state(doc: string): EditorState {
-  const created = EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) });
-  ensureSyntaxTree(created, created.doc.length, 5000);
-  const next = created.update({}).state;
-  expect(syntaxTreeAvailable(next), "l'albero deve coprire tutto il documento").toBe(true);
-  return next;
+  return parsed(EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) }));
 }
 
 function prose(doc: string): string[] {
@@ -229,7 +222,9 @@ function mount(text: string, client: ProofClient, options: { slowParser?: boolea
   engine.setDoc(text);
   slow?.mockRestore();
   const view = EditorView.findFromDOM(parent)!;
-  if (!options.slowParser) ensureSyntaxTree(view.state, view.state.doc.length, 5000);
+  // Senza `slowParser` l'albero completo arriva alla vista prima del test,
+  // come quando il parser in sottofondo ha già finito.
+  if (!options.slowParser) parsedView(view);
   return { engine, view, changes, parent };
 }
 

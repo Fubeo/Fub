@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorSelection, EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap, runScopeHandlers } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { cursorCharLeft, cursorCharRight, defaultKeymap, deleteCharBackward, history, undo } from "@codemirror/commands";
 import { getCM, vim, Vim } from "@replit/codemirror-vim";
 import { markdownGrammar } from "../grammar";
@@ -16,6 +15,7 @@ import { elementsTouching, toggleFormat } from "../format-toggle";
 import { obsidianKeymap } from "../commands";
 import { copiedMarkdown } from "./copy";
 import { commentSource } from "./source";
+import { parsedView } from "../test-support";
 
 // I commenti in Scrittura, nella vista vera: i segni non si vedono, il cursore
 // li salta, scrivere nel passo è scrivere nella nota, e cancellare tutto il
@@ -56,7 +56,7 @@ function liveView(doc: string, anchor: number, policy: RevealPolicy = "mai", hea
     }),
   });
   views.push(view);
-  if (ensureSyntaxTree(view.state, view.state.doc.length, 10_000)) view.dispatch({});
+  parsedView(view);
   return view;
 }
 
@@ -188,7 +188,7 @@ function keyedView(doc: string, selection: EditorSelection, extra: Extension[] =
     }),
   });
   views.push(view);
-  if (ensureSyntaxTree(view.state, view.state.doc.length, 10_000)) view.dispatch({});
+  parsedView(view);
   return view;
 }
 
@@ -322,7 +322,7 @@ describe("i commenti fra gli elementi in riga", () => {
     document.body.append(parent);
     const view = new EditorView({ parent, state: EditorState.create({ doc: NOTE, extensions: [markdown({ base: markdownGrammar }), commentSource()] }) });
     views.push(view);
-    if (ensureSyntaxTree(view.state, view.state.doc.length, 10_000)) view.dispatch({});
+    parsedView(view);
     expect(visibleLine(view)).toBe(NOTE.slice(0, NOTE.indexOf("\n")));
     expect(view.contentDOM.querySelector(".cm-fub-comment-source")?.textContent).toBe(NOTE.slice(OPEN, END));
   });

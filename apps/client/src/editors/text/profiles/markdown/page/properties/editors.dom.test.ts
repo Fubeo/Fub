@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -15,6 +14,7 @@ import { parsePropertyTypes } from "./kind";
 import { parseDateInput } from "./editors";
 import { loadLazyParts } from "../../../../../../ui/lazy-part";
 import "../../../../../../i18n/strings";
+import { parsedView } from "../../test-support";
 
 // I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
 // come dopo il riscaldamento: i gesti si guardano col loro codice.
@@ -60,8 +60,7 @@ function mount(doc: string, options: Partial<BlocksOptions> & { readOnly?: boole
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return { view, notices };
 }

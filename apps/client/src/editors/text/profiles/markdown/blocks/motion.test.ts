@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history } from "@codemirror/commands";
 import { EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
@@ -14,6 +13,7 @@ import { blocksMode } from "./index";
 import { blockModel } from "./model";
 import { moveSiblings, siblingsOf } from "./move";
 import { blockAt, gesturePhrase, inferGesture, pageArrives } from "./motion";
+import { parsedView } from "../test-support";
 
 // Il blocco vivo (N13): che cosa si muove, quando, e che cosa si dice.
 
@@ -64,8 +64,7 @@ function mount(doc: string, anchor = 0, extra: Extension = []): EditorView {
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
@@ -17,6 +16,7 @@ import { firstHeading } from "./title";
 import { renamedPageName } from "../../../../../state/page-rename";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 import "../../../../../i18n/strings";
+import { parsedView } from "../test-support";
 
 // Il titolo e il primo H1 (T7): il titolo è il nome del file, e un primo H1
 // che dice la stessa cosa si ripiega nel titolo, in Scrittura e in Lettura.
@@ -70,8 +70,7 @@ function mount(
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

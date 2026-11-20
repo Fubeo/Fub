@@ -205,9 +205,14 @@ function attachAnchors(blocks: Block[], doc: Text): Block[] {
   return out;
 }
 
-/// Il modello rifatto da capo: la regola, e il confronto della prova.
-export function buildBlocks(state: EditorState): BlockModel {
-  const tree = syntaxTree(state);
+/// Quanto si aspetta, al più, che il parser finisca una nota intera quando
+/// serve il modello di tutti i suoi blocchi.
+export const WHOLE_TREE_MS = 5000;
+
+/// Il modello rifatto da capo: la regola, e il confronto della prova. `tree`
+/// è l'albero dello stato, o uno più avanti sullo stesso testo (quello che
+/// rende `ensureSyntaxTree`), quando l'albero dello stato è ancora a metà.
+export function buildBlocks(state: EditorState, tree: Tree = syntaxTree(state)): BlockModel {
   const doc = state.doc;
   const out: Block[] = [];
   const front = frontmatterRange(doc);

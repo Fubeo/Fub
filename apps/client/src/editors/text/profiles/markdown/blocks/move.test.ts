@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { history, redo, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "../test-support";
 import { EditorSelection, EditorState, type StateCommand } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { blockModel } from "./model";
@@ -13,13 +13,11 @@ import { deleteRun, duplicateRun } from "./selection";
 // Spostare, duplicare ed eliminare blocchi (H5, H7, H8), a byte esatti.
 
 function stateOf(doc: string, cursor = 0): EditorState {
-  const state = EditorState.create({
+  return parsed(EditorState.create({
     doc,
     selection: { anchor: cursor },
     extensions: [markdown({ base: markdownGrammar }), blockModel, history()],
-  });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  }));
 }
 
 const blocksOf = (state: EditorState) => state.field(blockModel).blocks;
@@ -90,12 +88,11 @@ describe("spostare", () => {
   it("le voci numerate si rinumerano dopo lo spostamento", async () => {
     const { renumberLists } = await import("../renumber");
     const { smartLists } = await import("../../../smart-lists");
-    const state = EditorState.create({
+    const state = parsed(EditorState.create({
       doc: "1. uno\n2. due\n3. tre",
       selection: { anchor: 14 },
       extensions: [markdown({ base: markdownGrammar }), blockModel, renumberLists, smartLists.of(true)],
-    });
-    ensureSyntaxTree(state, state.doc.length, 5000);
+    }));
     let next = state;
     moveBlockBy(-1)({ state, dispatch: (tr) => { next = tr.state; } });
     expect(next.doc.toString()).toBe("1. uno\n2. tre\n3. due");
@@ -256,9 +253,8 @@ describe("il link al blocco", () => {
     const state = stateOf("```\nx\n```\n\nDopo");
     const anchor = blockAnchor(state, blocksOf(state), 0, random);
     const next = state.update({ changes: anchor.changes! }).state;
-    ensureSyntaxTree(next, next.doc.length, 5000);
     expect(next.doc.toString()).toBe(`\`\`\`\nx\n\`\`\`\n\n${anchor.fragment}\n\nDopo`);
-    const settled = next.update({}).state;
+    const settled = parsed(next);
     expect(blocksOf(settled).map((block) => block.kind)).toEqual(["code", "paragraph"]);
     expect(blockAnchor(settled, blocksOf(settled), 0, random)).toEqual({ fragment: anchor.fragment, changes: null });
   });

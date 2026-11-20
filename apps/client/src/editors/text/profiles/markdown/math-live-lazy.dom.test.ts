@@ -1,13 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { liveReveal, mathClassic } from "../../live-reveal";
 import { mathEditing } from "./math-live";
+import { parsedView } from "./test-support";
 
 // Il riquadro che modifica una formula arriva con un `import()`
 // (`math-editing.ts`). Qui il suo arrivo lo decide la prova (`gate`): i gesti
@@ -50,8 +50,7 @@ function mount(doc: string, anchor: number): EditorView {
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

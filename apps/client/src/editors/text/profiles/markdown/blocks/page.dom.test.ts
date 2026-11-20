@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
@@ -12,6 +11,7 @@ import { propertyList, setProperty } from "../properties";
 import { blocksMode, type BlocksOptions } from "./index";
 import "../../../../../i18n/strings";
 import { pageClassesWith, pageData, subpageLink } from "./page";
+import { parsedView } from "../test-support";
 
 // La testata della pagina in Blocchi (H12) e il suo menu «…» (H13).
 
@@ -36,8 +36,7 @@ function mount(doc: string, options: BlocksOptions = {}, readOnly = false): Edit
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

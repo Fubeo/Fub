@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +7,7 @@ import { closeTooltip } from "../../../../ui/tooltip";
 import { liveReveal, mathClassic } from "../../live-reveal";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
+import { parsedView } from "./test-support";
 
 // La formula rotta nel riquadro classico di Vim (`mathClassic`): la sua
 // anteprima dice l'errore con la frase di `explain`, come in lettura, e non il
@@ -37,8 +37,7 @@ function mount(doc: string, anchor: number): EditorView {
       extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of("mai")), mathClassic.of(true)],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

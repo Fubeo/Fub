@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import { type ChangeSpec, EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { liveReveal } from "../../live-reveal";
 import { markdownGrammar } from "./grammar";
 import { blockIdMarks } from "./block-id";
+import { parsed } from "./test-support";
 
 // Gli id di blocco si ricalcolano soltanto sulle righe toccate: il risultato
 // deve essere quello di un calcolo da capo, dopo ogni modifica.
@@ -15,15 +15,6 @@ import { blockIdMarks } from "./block-id";
 // codice in fondo non ancora riconosciuto. Il campo si ricalcola quando
 // l'albero nuovo arriva; il confronto quindi si fa sempre su stati con
 // l'albero completo e già consegnato al campo, mai su uno stato appena creato.
-
-/// Finisce l'analisi e la consegna ai campi con una transazione vuota, come
-/// fa l'editor vero quando il parser in sottofondo avanza.
-function parsed(state: EditorState): EditorState {
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  const next = state.update({}).state;
-  expect(syntaxTreeAvailable(next), "l'albero deve coprire tutto il documento").toBe(true);
-  return next;
-}
 
 function stateOf(doc: string): EditorState {
   return parsed(EditorState.create({

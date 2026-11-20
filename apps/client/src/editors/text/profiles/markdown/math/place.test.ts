@@ -2,17 +2,13 @@
 // nota resta byte per byte.
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "../grammar";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "../test-support";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { formulaAt } from "../menu";
 import { toBlock, toInline } from "./place";
 
-const stateOf = (doc: string): EditorState => {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
-  ensureSyntaxTree(state, state.doc.length, 1000);
-  return state;
-};
+const stateOf = (doc: string): EditorState => parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] }));
 
 function apply(doc: string, at: string, display: boolean): string | null {
   const state = stateOf(doc);

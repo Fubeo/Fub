@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ChangeSpec, EditorState } from "@codemirror/state";
 import { type DecorationSet, EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { syntaxTree } from "@codemirror/language";
 import type { NoteFacts, NoteFactsSource } from "../../../../state/note-facts";
 import { openLifetime } from "../../../../ui/lifetime";
 import { markdownGrammar } from "./grammar";
@@ -17,6 +17,7 @@ import {
   type NoteFactsActions,
 } from "./note-facts";
 import { mountMarkdownSurface, type MarkdownSurface } from "./surface";
+import { parsed } from "./test-support";
 
 const setLanguage = (language: string) => vi.stubGlobal("navigator", { language });
 
@@ -154,10 +155,7 @@ describe("in Live", () => {
 describe("il posto della riga a ogni battuta", () => {
   function factsState(doc: string): EditorState {
     const extensions = noteFactsExtensions({ current: () => FACTS, actions: actions() });
-    const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), extensions.field, extensions.live] });
-    ensureSyntaxTree(state, doc.length, 10_000);
-    // Una transazione porta l'albero finito nello stato.
-    return state.update({}).state;
+    return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), extensions.field, extensions.live] }));
   }
 
   /// Dove la Live ha messo la riga: il widget fra le decorazioni dello stato.
@@ -176,8 +174,7 @@ describe("il posto della riga a ogni battuta", () => {
   function apply(state: EditorState, changes: ChangeSpec): { state: EditorState; counted: boolean } {
     const next = state.update({ changes, userEvent: "input.type" }).state;
     if (syntaxTree(next).length === next.doc.length) return { state: next, counted: true };
-    ensureSyntaxTree(next, next.doc.length, 10_000);
-    return { state: next.update({}).state, counted: false };
+    return { state: parsed(next), counted: false };
   }
 
   it("una battuta nel testo non scorre la nota, con o senza titolo", () => {

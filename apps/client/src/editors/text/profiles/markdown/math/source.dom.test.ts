@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { Compartment, EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
@@ -11,6 +10,7 @@ import { livePreview } from "../livepreview";
 import { MathEditor, type MathPreferences } from "./editor";
 import { attachPalette } from "./palette";
 import { drawn, MATH_READY_MS, mathReady } from "./test-drawn";
+import { parsedView } from "../test-support";
 
 // KaTeX e i pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci
 // sono già, come dopo il riscaldamento: i gesti si guardano col loro codice.
@@ -380,8 +380,7 @@ function mount(doc: string, anchor: number, source: boolean, help: MathHelp, com
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
