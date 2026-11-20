@@ -44,10 +44,11 @@ env:
 
 jobs:
   # Una PR in bozza è lavoro in corso: riceve la CI corta (Linux, niente
-  # banchi). Segnata pronta riceve tutto, e i banchi solo se tocca il client.
-  # Su `main`, sul cron e a mano gira sempre tutto. Questo job dice ai banchi
-  # se il client è toccato, e a tutti i job tranne il banco visivo se la corsa
-  # riusa l'esito di una precedente (`riuso`): allora si saltano.
+  # banchi). Segnata pronta riceve tutto, i banchi solo se tocca il client, e
+  # la WebView vera solo se tocca ciò che finisce nell'app (`webview`). Su
+  # `main`, sul cron e a mano gira sempre tutto. Questo job dice ai banchi
+  # se il client o l'app sono toccati, e a tutti i job tranne il banco visivo
+  # se la corsa riusa l'esito di una precedente (`riuso`): allora si saltano.
   changes:
     name: cosa cambia
     runs-on: ubuntu-latest
@@ -59,6 +60,7 @@ jobs:
     outputs:
       client: ${{ steps.diff.outputs.client }}
       motori: ${{ steps.diff.outputs.motori }}
+      webview: ${{ steps.diff.outputs.webview }}
       riuso: ${{ steps.riuso.outputs.riuso }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -73,15 +75,21 @@ jobs:
       # rifarebbe sugli stessi byte di `main`, dove girano sempre. I test del
       # workspace invece non hanno un filtro: leggono anche `apps/client/` e
       # `docs/` (i mirror TS, le fixture, i contratti).
-      - name: il client o i motori in vendor sono toccati?
+      # La WebView vera compila l'app intera e la misura: la tocca ogni cosa
+      # che ci finisce dentro (le app, i crate, `vendor/`, gli asset, gli
+      # esempi, i manifest e la toolchain di Cargo) o che cambia il job.
+      # Documenti, script e altri workflow no.
+      - name: il client, l'app o i motori in vendor sono toccati?
         id: diff
         env:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
         run: |
+          set -euo pipefail
           if [ "$EVENT" != "pull_request" ]; then
             echo "client=true" >> "$GITHUB_OUTPUT"
             echo "motori=true" >> "$GITHUB_OUTPUT"
+            echo "webview=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git diff --name-only "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/cambiati"
@@ -94,6 +102,11 @@ jobs:
             echo "motori=true" >> "$GITHUB_OUTPUT"
           else
             echo "motori=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '^(apps/|crates/|vendor/|assets/|esempi/|Cargo\.(toml|lock)$|\.cargo/|rust-toolchain|\.github/workflows/ci\.yml$)' "$RUNNER_TEMP/cambiati"; then
+            echo "webview=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "webview=false" >> "$GITHUB_OUTPUT"
           fi
       # Dopo il commit delle baseline fatto da `baseline.yml`, la corsa lanciata
       # a mano rifà soltanto il banco visivo: gli altri job contano come nella
@@ -121,10 +134,17 @@ jobs:
             echo "Nessun riuso chiesto: gira la CI completa." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          # `riuso_di` arriva da chi lancia la corsa: si scrive nel riepilogo
+          # soltanto se è l'id numerico di una corsa.
+          if ! [[ "$RIUSO_DI" =~ ^[0-9]+$ ]]; then
+            echo "riuso=false" >> "$GITHUB_OUTPUT"
+            echo "Nessun riuso: \`riuso_di\` non è l'id numerico di una corsa. Gira la CI completa." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           d="$RUNNER_TEMP/riuso"
           mkdir -p "$d"
           raccogli() {
-            [[ "$RIUSO_DI" =~ ^[0-9]+$ ]] && [ "$REF_TYPE" = branch ] &&
+            [ "$REF_TYPE" = branch ] &&
               gh api "repos/$REPO/actions/runs/$RIUSO_DI" > "$d/corsa.json" &&
               gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .workflow_id > "$d/workflow" &&
               gh api --paginate "repos/$REPO/actions/runs/$RIUSO_DI/jobs?filter=latest&per_page=100" \
@@ -148,7 +168,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Il bersaglio della WebView serve al nucleo della lavagna e al varco
+      # del contratto, più sotto.
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -161,9 +185,7 @@ jobs:
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fub-abi --test dependency_invariant
       - name: il nucleo della lavagna compila per la WebView (wasm32-unknown-unknown)
-        run: |
-          rustup target add wasm32-unknown-unknown
-          cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked
+        run: cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked
       - name: la shell raggiunge il workspace solo dalle porte strette dell'host
         run: node .github/scripts/check-host-workspace-boundary.mjs
       - name: soltanto gli adattatori nominano WordCraft, GridCraft e VectorCraft, nei sorgenti e nei Cargo.toml
@@ -192,8 +214,6 @@ jobs:
         run: node .github/scripts/baseline-dal-runner.mjs --self-test
       - name: i commenti di Rust restano attaccati a ciò che descrivono
         run: node .github/scripts/check-rust-comments.mjs
-      - name: aggiungi il bersaglio del confine
-        run: rustup target add wasm32-unknown-unknown
       - name: il contratto attraversa il confine
         run: cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
       - name: le versioni delle dipendenze si scrivono in un posto solo
@@ -457,6 +477,12 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      # Il render dei diagrammi usa il Mermaid e il Playwright del lockfile
+      # del client: lo stesso Mermaid dell'app, niente scaricato a parte.
+      - run: npm ci
+        working-directory: apps/client
       - name: Link interni dei documenti
         run: node .github/scripts/check-doc-links.mjs
       - name: Ogni pagina canonica è raggiungibile
@@ -469,7 +495,7 @@ jobs:
       # accesa (audit del 2026-10-30, B19). Ubuntu 24.04 chiude gli user
       # namespace ai programmi senza un profilo AppArmor: il Chrome del runner
       # ha il profilo `chrome` della distribuzione, quindi si usa lui e non si
-      # scarica il Chromium di puppeteer. Se non partisse con la sandbox, gli
+      # scarica il Chromium di Playwright. Se non partisse con la sandbox, gli
       # si dà un profilo mirato che concede gli user namespace a quel solo
       # binario; se nemmeno così, il passo è rosso.
       - name: Chrome del runner, con la sandbox
@@ -485,8 +511,7 @@ jobs:
             sudo apparmor_parser -r /etc/apparmor.d/fub-ci-chrome
             prova || { tail -n 20 "$RUNNER_TEMP/chrome.log"; exit 1; }
           fi
-          echo "PUPPETEER_EXECUTABLE_PATH=$chrome" >> "$GITHUB_ENV"
-          echo "PUPPETEER_SKIP_DOWNLOAD=true" >> "$GITHUB_ENV"
+          echo "FUB_MERMAID_CHROME=$chrome" >> "$GITHUB_ENV"
       - name: Ogni diagramma Mermaid è valido e renderizzabile
         run: node .github/scripts/check-mermaid.mjs --render
       - name: Il controllo della prosa riconosce riferimenti legacy, cronaca e checklist chiuse
@@ -537,7 +562,9 @@ jobs:
       - run: npm run build
         working-directory: apps/client
       - name: il confine CodeMirror resta nel package testuale
-        run: node .github/scripts/check-codemirror-boundary.mjs
+        run: |
+          node .github/scripts/check-codemirror-boundary.mjs --self-test
+          node .github/scripts/check-codemirror-boundary.mjs
       - name: ProseMirror resta in Scrittura e nei documenti
         run: |
           node .github/scripts/check-prosemirror-boundary.mjs --self-test
@@ -765,6 +792,7 @@ jobs:
         with:
           name: banco-moto-${{ github.sha }}
           path: apps/client/bench/.output/moto/
+          include-hidden-files: true
       - name: i disegni si vedono uguali sul foglio, in Lettura e nell'export
         id: bench_fidelity
         if: ${{ !cancelled() }}
@@ -815,9 +843,14 @@ jobs:
     # artefatto passato da un job all'altro metterebbe la compilazione in
     # fila davanti a entrambe. Una macchina sola per R1 è anche una misura
     # della memoria senza altri scenari prima.
+    #
+    # Due compilazioni di release e 27 minuti: come i banchi, non su una PR in
+    # bozza, e su una PR pronta soltanto se tocca ciò che finisce nell'app
+    # (`webview` di `cosa cambia`). Su `main` gira sempre, e il cancello del
+    # rilascio lo vuole verde.
     name: la WebView vera (WebKitGTK, ${{ matrix.gruppo }})
     needs: changes
-    if: needs.changes.outputs.riuso != 'true'
+    if: needs.changes.outputs.riuso != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.webview == 'true'))
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

@@ -108,6 +108,7 @@
 | le baseline visuali | solo dal runner Linux: `npm run bench:update` |
 | `apps/client/bench/conformita/<prototipo>.json` (gli stili attesi del prototipo) | `git fetch`, poi `node bench/conformita/estrai.mjs <prototipo>` da `apps/client/`; la chiave `_intestazione` nomina ramo, commit e file del prototipo |
 | `vendor/<motore>/` | `node tools/vendor-craft/vendor.mjs <motore> update --rev <sha>` |
+| `packaging/flatpak/requisiti-generatori.txt` (i moduli Python dei generatori, con le impronte) | il comando `uv pip compile` scritto in testa al file, da `packaging/flatpak/requisiti-generatori.in` |
 | `vendor/whatwg-entities/entities.json` | riscaricato a mano, con i passi del suo `UPSTREAM.md`; lo sha256 atteso sta in `tools/vendor-craft/dati.mjs` |
 
 La regola vale per tutti: mai a mano. Il primo commento di ogni file generato

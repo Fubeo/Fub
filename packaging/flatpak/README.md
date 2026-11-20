@@ -12,6 +12,7 @@ resta fuori. I permessi, e perché sono questi, stanno in
 | `io.github.Fubeo.Fub.desktop` | la voce del menu delle applicazioni, con i link `fub://` |
 | `io.github.Fubeo.Fub.metainfo.xml` | i metadati AppStream |
 | `genera-sorgenti.sh` | genera in `generated/` le sorgenti offline di Cargo e npm |
+| `fontconfig-local.conf` | scarta i caratteri dell'host che il runtime legge senza famiglia (`.woff`, `.woff2`): con loro il processo web di WebKitGTK gira all'infinito e la finestra resta vuota |
 
 ## Costruirlo
 
@@ -21,7 +22,7 @@ manifest, generate dai lockfile. Da una copia pulita del repository (un
 la rallenterebbe):
 
 ```bash
-# 1. le sorgenti offline (Python 3.10+ con aiohttp, tomlkit e PyYAML)
+# 1. le sorgenti offline (Python 3.10+ con i moduli di requisiti-generatori.txt)
 packaging/flatpak/genera-sorgenti.sh
 
 # 2. runtime, SDK ed estensione di Node, da Flathub

@@ -3238,7 +3238,25 @@ export const SCENE = touchLast(onPage("shell", [
         await page.waitForSelector(card);
         // Il PDF ha la sua pagina sulla carta prima della foto.
         if (focus === "pdf") await page.waitForSelector(`${card} .canvas-card-pdf[data-card-state="content"]`);
-        await page.evaluate(([selector, block]) => document.querySelector(selector)?.scrollIntoView({ block }), [card, focus === "unsupported" ? "end" : "center"]);
+        if (focus !== "unsupported") {
+          await page.evaluate((selector) => document.querySelector(selector)?.scrollIntoView({ block: "center" }), card);
+          return;
+        }
+        // Le schede sopra crescono anche dopo il salto: si riporta la scheda
+        // in fondo a ogni fotogramma finché altezza e posto restano gli
+        // stessi per dieci fotogrammi di fila (prima la foto cambiava di
+        // corsa in corsa).
+        await page.waitForFunction((selector) => {
+          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+          const target = document.querySelector(selector);
+          if (!scroller || !target) return false;
+          target.scrollIntoView({ block: "end" });
+          const firma = `${scroller.scrollHeight}:${scroller.scrollTop}:${Math.round(target.getBoundingClientRect().bottom)}`;
+          const fermo = window.__finoFirma === firma ? (window.__finoFermo ?? 0) + 1 : 0;
+          window.__finoFirma = firma;
+          window.__finoFermo = fermo;
+          return fermo >= 10;
+        }, card, { polling: "raf" });
       },
     })),
     // Lo spazio «Esporta in PDF» (T70) sul telefono: la prima forma, col

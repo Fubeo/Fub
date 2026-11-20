@@ -92,6 +92,9 @@ objc2 = "0.6"
 # è la feature che wry stesso accende.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+# La stessa GTK 3 che webkit2gtk e wry portano già: l'orologio dei fotogrammi
+# della finestra (`src/orologio.rs`).
+gtk = "0.18"
 # Il vblank emulato (`vblank.rs`): `dlsym`, `clock_nanosleep`, `fstat` e la
 # disposizione di `timespec` e `stat`. È la versione del workspace, già
 # nell'albero (tokio, mio, …): il lock non cresce.

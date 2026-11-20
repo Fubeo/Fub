@@ -128,11 +128,16 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           if (-not $env:WINDOWS_CERTIFICATE) { exit 0 }
+          # La chiave decodificata resta su disco il meno possibile: si toglie
+          # anche quando l'importazione fallisce.
           $pfx = Join-Path $env:RUNNER_TEMP "fub-signing.pfx"
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
-          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
-          Remove-Item $pfx
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+            $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password -ErrorAction Stop
+          } finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+          }
           $config = @{ bundle = @{ windows = @{
             certificateThumbprint = $cert.Thumbprint
             digestAlgorithm = "sha256"
@@ -201,8 +206,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
-      - name: i moduli dei generatori, alle versioni fissate
-        run: python -m pip install aiohttp==3.14.5 tomlkit==0.15.2 PyYAML==6.0.3
+      # Ogni modulo, anche quelli che i tre si portano dietro, alla versione e
+      # all'impronta del file di requisiti: un pacchetto cambiato su PyPI non
+      # entra.
+      - name: i moduli dei generatori, alle versioni e impronte fissate
+        run: python -m pip install --require-hashes --only-binary ":all:" -r packaging/flatpak/requisiti-generatori.txt
       - name: genera le sorgenti offline
         run: packaging/flatpak/genera-sorgenti.sh
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -306,12 +314,24 @@ jobs:
       - name: digest, provenienza e commit di ogni installer
         env:
           GH_TOKEN: ${{ github.token }}
+        # Ogni file della bozza: un installer ha il suo `.sha256`, che nomina
+        # proprio lui, e la sua attestazione; un `.sha256` ha il suo
+        # installer. Un file in più senza `.sha256` è rosso, non saltato.
         run: |
+          set -euo pipefail
+          shopt -s nullglob
           mkdir assets && cd assets
           gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
           count=0
-          for sum in *.sha256; do
-            file="${sum%.sha256}"
+          for file in *; do
+            if [[ "$file" == *.sha256 ]]; then
+              [ -f "${file%.sha256}" ] || { echo "::error::$file non ha il suo installer"; exit 1; }
+              continue
+            fi
+            sum="$file.sha256"
+            [ -f "$sum" ] || { echo "::error::$file non ha il suo .sha256"; exit 1; }
+            read -r _ nominato < "$sum"
+            [ "${nominato#\*}" = "$file" ] || { echo "::error::$sum nomina «$nominato», non $file"; exit 1; }
             sha256sum --check "$sum"
             gh attestation verify "$file" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \

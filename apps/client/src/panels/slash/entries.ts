@@ -228,9 +228,9 @@ function sectionOrder(use: SlashUse): readonly SlashSection[] {
   return [...new Set([...chosen, ...SECTION_ORDER])];
 }
 
-// «Oggi» si legge a ogni uso: preso una volta sola al caricamento del modulo
-// restava fermo al giorno dell'avvio (e i test con l'orologio finto lo
-// vedevano reale).
+// `today` si legge a ogni apertura, non al caricamento del modulo: un'app
+// aperta oltre la mezzanotte (o un test con l'orologio finto) vedrebbe se no
+// il giorno in cui il modulo è nato.
 const NO_USE: SlashUse = {
   recent: [],
   favorites: [],

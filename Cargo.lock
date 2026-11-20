@@ -2049,6 +2049,7 @@ dependencies = [
  "fub-live",
  "fub-wasm-host",
  "gethostname",
+ "gtk",
  "libc",
  "notify-rust",
  "objc2",
