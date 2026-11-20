@@ -244,11 +244,17 @@ riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
 nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
 la vista porta il focus sulla superficie montata al posto della precedente.
 
-Una scheda chiusa dell'ispettore non disegna la sua view: il provider risponde
-comunque a ogni invito, e l'albero più recente aspetta (`ui/views.ts`, `pending`).
-Aprendo la scheda si disegna subito, con quell'albero. Così le liste lunghe di
-una scheda che nessuno guarda (i collegamenti in uscita di una nota con migliaia
-di link) non pesano sul DOM né a ogni salvataggio.
+Una view dell'ispettore che nessuno vede (scheda chiusa, ispettore chiuso o
+ritirato dalla concentrazione) non chiede `render_view`: un invito
+(`view_invalidated`, `stale-views`, un evento della sua maschera) la segna
+soltanto da ridisegnare (`ui/views.ts`, `stale`). Quando torna in vista (la
+scheda si apre, l'ispettore si apre o si affaccia dal bordo) chiede l'albero una
+volta sola, anche dopo molti inviti; fino alla risposta resta l'albero di prima.
+Una risposta arrivata a view nascosta aspetta in `pending` e si disegna
+all'apertura, a meno che un invito venuto dopo non l'abbia invecchiata. Così le
+view nascoste non lavorano nel kernel a ogni salvataggio automatico, e le liste
+lunghe di una scheda che nessuno guarda non pesano sul DOM. Le view fuori
+dall'ispettore si ridisegnano sempre.
 
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
