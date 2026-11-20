@@ -92,7 +92,7 @@ describe("il riepilogo", () => {
     const { lines, exitCode } = verifySummary(report, { updateHint: HINT });
     expect(exitCode).toBe(1);
     expect(lines[0]).toBe("2/5 foto uguali alle baseline · 3 da guardare");
-    expect(lines.at(-1)).toContain(HINT);
+    expect(lines[lines.length - 1]).toContain(HINT);
   });
 
   it("tutto uguale: una riga sola, nessun file delle instabili", () => {
