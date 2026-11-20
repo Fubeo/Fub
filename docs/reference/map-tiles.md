@@ -44,7 +44,10 @@ Impostazioni e non chiede niente. La `connect-src` della webview resta chiusa a
 - soltanto `https` sulla porta 443, senza credenziali, query o frammento, e
   l'host **esattamente** nella lista (un sottodominio è un sito a parte);
 - nessun redirect: un `3xx` è un rifiuto, anche verso un sito ammesso;
-- al più 1 MiB per tessera, entro 15 secondi;
+- al più 1 MiB per tessera, entro 15 secondi: il tetto va al filo
+  (`HostNetwork::fetch_limited`), che smette di leggere appena il corpo lo
+  supera, o non lo legge affatto se la `Content-Length` lo supera già; un
+  server rotto o ostile non fa scaricare i 16 MiB del tetto generale;
 - PNG, JPEG o WebP per un fornitore raster, controllati sul `Content-Type`
   **e** sui primi byte; SVG soltanto per un fornitore vettoriale, testo con la
   radice `<svg` e senza DOCTYPE, mostrato come `<image>` di un SVG, dove script

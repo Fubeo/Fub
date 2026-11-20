@@ -17,7 +17,9 @@
 //! - l'host esattamente fra quelli di [`MAP_TILE_HOSTS`] (niente sottodomini
 //!   impliciti);
 //! - nessun redirect: il filo non li segue e un `3xx` è un rifiuto;
-//! - al più [`MAX_TILE_BYTES`] byte, entro [`TILE_TIMEOUT`];
+//! - al più [`MAX_TILE_BYTES`] byte, entro [`TILE_TIMEOUT`]: il tetto va alla
+//!   rete (`HostNetwork::fetch_limited`), che smette di leggere appena lo
+//!   supera, e si ricontrolla dopo per un filo che non lo sa applicare;
 //! - PNG, JPEG o WebP per un fornitore raster, controllati sul tipo dichiarato
 //!   **e** sui primi byte; SVG soltanto per un fornitore vettoriale, testo
 //!   UTF-8 con una radice `<svg` e senza DOCTYPE (le entità di un DOCTYPE sono
@@ -36,7 +38,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use fub_abi::net::HttpRequest;
+use fub_abi::net::{HttpRequest, LimitedFetchError};
 use fub_abi::settings::SettingValue;
 use fub_abi::text::{Arg, Text};
 use fub_abi::PluginError;
@@ -312,15 +314,23 @@ impl Host {
                     TileKind::Vector => "image/svg+xml",
                 },
             );
+        // Il tetto va alla rete, che smette di leggere appena lo supera: un
+        // server rotto o ostile non fa scaricare il tetto generale dell'host
+        // per ogni tessera.
         let response = with_deadline(TILE_TIMEOUT, |cancelled| {
-            network.fetch_cancelled(request, cancelled)
+            network.fetch_limited(request, cancelled, MAX_TILE_BYTES as u64)
         })
         .map_err(|error| match error {
-            PluginError::Cancelled(_) => {
+            LimitedFetchError::TooLarge { .. } => {
+                failed("host.map.tile.too_large", vec![Arg::text("site", &site)])
+            }
+            LimitedFetchError::Failed(PluginError::Cancelled(_)) => {
                 failed("host.map.tile.timeout", vec![Arg::text("site", &site)])
             }
-            PluginError::Io(_) => failed("host.map.tile.network", vec![Arg::text("site", &site)]),
-            other => other,
+            LimitedFetchError::Failed(PluginError::Io(_)) => {
+                failed("host.map.tile.network", vec![Arg::text("site", &site)])
+            }
+            LimitedFetchError::Failed(other) => other,
         })?;
         if (300..400).contains(&response.status) {
             return Err(refused(
