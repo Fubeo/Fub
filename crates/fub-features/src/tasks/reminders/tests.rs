@@ -1155,14 +1155,19 @@ fn a_failed_write_is_not_an_error_and_is_not_retried() {
     index
         .flush(&mut host)
         .expect("a derivative not written is no error");
-    index.on_documents_indexed(&[model("b.md", NOTES[1].2)]);
+    // Due modifiche dopo il primo fallimento, ognuna col suo flush, su un
+    // host che adesso scriverebbe: se l'indice ci riprovasse, la scrittura
+    // riuscirebbe e si vedrebbe.
     let mut other = MemoryHost::new();
+    index.on_documents_indexed(&[model("b.md", NOTES[1].2)]);
+    index.flush(&mut other).expect("still no error");
+    index.on_documents_indexed(&[model("a.md", NOTES[1].2)]);
     index.flush(&mut other).expect("still no error");
     index.close(&mut other).expect("closes");
     assert_eq!(
         other.writes_on(stored::FILE).0,
         0,
-        "given up for the session: no attempt on every flush"
+        "given up until the next opening: no attempt after any change"
     );
 
     // La prossima apertura rilegge le note e ci riprova.
