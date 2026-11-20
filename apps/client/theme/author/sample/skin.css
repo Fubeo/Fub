@@ -29151,10 +29151,14 @@ h6.ui-heading {
   white-space: nowrap;
 }
 
+/* Lo scorrevole è un piano a sé (`isolation`): senza, WebKitGTK ridipinge la
+ * parte visibile a ogni passo e lo scorrimento perde la frequenza dello
+ * schermo (docs/architecture/desktop-webview.md, «Gli scorrevoli»). */
 .settings-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  isolation: isolate;
   padding: var(--space-8) var(--space-9) var(--space-10);
   border-top: 1px solid var(--border);
   scrollbar-width: thin;
