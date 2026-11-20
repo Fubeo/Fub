@@ -136,7 +136,7 @@ fn definition_at(slice: &str, pos: usize, base: usize) -> Option<RawDef> {
 }
 
 /// `[etichetta]` — il contenuto è rifilato, come in comrak.
-fn label_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
+pub(super) fn label_at(slice: &str, pos: usize) -> Option<(usize, &str)> {
     let b = slice.as_bytes();
     if b.get(pos) != Some(&b'[') {
         return None;
