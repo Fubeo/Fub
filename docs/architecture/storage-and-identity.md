@@ -411,11 +411,9 @@ dell'anagrafe, senza parse; il resto si legge, si analizza e si consegna.
 - `fub.search` e `fub.tasks` (i promemoria) si ricordano fra due aperture ciò
   che hanno visto, con la revisione del sorgente: l'indice Tantivy e la cache
   `reminders.json` ([la mappa del disco](../reference/on-disk-layout.md#promemoria)).
-- Un indice che dice «questa ce l'ho» si prende la revisione che il core
-  annuncia, anche se la nota gli arriva lo stesso perché un altro indice non
-  l'aveva: così la riapertura dopo resta ferma. Una voce senza impronta ritira
-  l'annuncio, e un'apertura interrotta ritira quelli delle note che non ha
-  consegnato.
+- Chi dice «questa ce l'ho» si prende la revisione annunciata anche se la
+  nota gli arriva lo stesso; una voce senza impronta ritira l'annuncio, e lo
+  stesso fa un'apertura interrotta per le note che non ha consegnato.
 - `fub.base`, `fub.draw` e `fub.proof` non tengono niente per documento e
   rispondono con tutti i documenti.
 - Un file degli indici illeggibile, di un altro schema o di un'altra versione

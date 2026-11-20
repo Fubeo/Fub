@@ -1218,9 +1218,7 @@ fn the_reading_rule_is_bound_to_what_it_reads() {
         ));
     }
     // FNV-1a 64: stabile fra versioni di Rust, a differenza di `DefaultHasher`.
-    let print = rendered.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
-    });
+    let print = fub_abi::edit::Fnv1a::hash(rendered.as_bytes());
     let (last_rule, last_print) = *RULE_HISTORY.last().expect("history");
     assert_eq!(
         last_rule,
