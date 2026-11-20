@@ -3,10 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ChangeSpec, EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { type DecorationSet, EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { syntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { liveGapLines, liveInlineVisited, livePreview, pageIconsChanged } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
+import { parsedView } from "./test-support";
 
 // Le decorazioni in riga della Live (segni nascosti, stili, pastiglie) si
 // rifanno soltanto nei nodi di primo livello che una battuta, la selezione o i
@@ -39,7 +40,7 @@ function liveView(doc: string, policy: RevealPolicy, anchor = 0): EditorView {
 
 /// L'albero in fondo, portato nello stato da una transazione.
 function finish(view: EditorView): void {
-  if (ensureSyntaxTree(view.state, view.state.doc.length, 10_000)) view.dispatch({});
+  parsedView(view);
 }
 
 /// Le decorazioni dei plugin della vista (le funzioni del facet), come testo.

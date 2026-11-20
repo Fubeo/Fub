@@ -5,11 +5,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { undo, history } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdownGrammar } from "../grammar";
 import { blocksOfNotes, linkVaultBlock, type VaultBlockPort } from "./vault-blocks";
+import { parsedView } from "../test-support";
 
 const RIUNIONE = "# Riunione\n\n## Chiavi\n\nLe chiavi le tiene Sara.\n\n- Chiavi di riserva ^riserva\n  - Nel cassetto\n- Altro\n";
 
@@ -28,8 +28,7 @@ function editor(doc: string): EditorView {
   const parent = document.createElement("div");
   document.body.append(parent);
   const view = new EditorView({ parent, state: EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), history()] }) });
-  ensureSyntaxTree(view.state, view.state.doc.length, 60_000);
-  view.dispatch({});
+  parsedView(view);
   return view;
 }
 

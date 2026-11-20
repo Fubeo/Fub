@@ -4,12 +4,11 @@
 // una specie finta che conta i suoi montaggi, i suoi modi e i suoi ascolti.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { undo } from "@codemirror/commands";
 import { markdownGrammar } from "./grammar";
-import { parsed } from "./test-support";
+import { parsed, parsedView } from "./test-support";
 import { createTextEngine, type TextEngine } from "../../engine";
 import { livePreview } from "./livepreview";
 import {
@@ -229,8 +228,7 @@ function rig(text: string, options: {
   });
   engine.setDoc(text);
   const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
-  ensureSyntaxTree(view.state, view.state.doc.length, 60_000);
-  view.dispatch({});
+  parsedView(view);
   const made: Rig = {
     parent, engine, view, cards, species, opened,
     destroy() {

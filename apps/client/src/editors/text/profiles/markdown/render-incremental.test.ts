@@ -20,6 +20,7 @@ import {
 import { livePreview, liveBlocksVisited, liveGapLines } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import type { MarkdownDocument } from "./render-types";
+import { parsed } from "./test-support";
 
 // La Live rende di nuovo soltanto i blocchi che una modifica tocca: gli altri
 // tornano dalla resa di prima, spostati. Qui si prova che il risultato è quello
@@ -305,10 +306,8 @@ function liveState(doc: string, selection: EditorSelection, policy: RevealPolicy
     Prec.highest(liveReveal.of(policy)),
     livePreview({ openWikilink() {}, searchTag() {} }),
   ];
-  const state = EditorState.create({ doc, selection, extensions });
-  ensureSyntaxTree(state, doc.length, 10_000);
-  // Una transazione porta l'albero nello stato, e la resa a metà si completa.
-  return state.update({}).state;
+  // La transazione vuota porta l'albero nello stato, e la resa a metà si completa.
+  return parsed(EditorState.create({ doc, selection, extensions }));
 }
 
 /// Le decorazioni che i campi dello stato danno alla vista, come testo: un

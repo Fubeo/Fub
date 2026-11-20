@@ -5,7 +5,6 @@
 // lingua inglese, e il plugin che apre la fonte col fuoco e la chiude con sé.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorSelection, EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { currentHints, resetHintSources, type HintContext, type HintItem } from "../../../core/hints";
@@ -16,6 +15,7 @@ import { liveHints, markdownHints, type HintFocus } from "./hints";
 import { livePreview } from "./livepreview";
 import { openSlashAt, openSlashMenu, slashMenuExtension, type SlashMenuSource } from "./slash";
 import { setConcentrating } from "../../../../state/concentration";
+import { parsedView } from "./test-support";
 
 const views: EditorView[] = [];
 afterEach(() => {
@@ -43,8 +43,7 @@ function mount(spec: string, extra: Extension = []): EditorView {
       extensions: [markdown({ base: markdownGrammar }), slashMenuExtension(slashMenu), extra],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

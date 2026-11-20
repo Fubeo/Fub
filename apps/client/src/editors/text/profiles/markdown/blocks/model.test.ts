@@ -200,6 +200,10 @@ describe("le modifiche", () => {
           floor = point + remove + 1;
         }
         const tr = state.update({ changes });
+        // Voluto: il modello seguito e quello rifatto leggono lo stesso albero
+        // di `tr.state`, anche se a metà, e devono coincidere comunque.
+        // `ensureSyntaxTree` non lo cambia: porta avanti l'analisi condivisa,
+        // così il passo dopo nasce, di solito, con l'albero intero.
         ensureSyntaxTree(tr.state, tr.state.doc.length, 5000);
         model = updateBlocks(model, tr);
         state = tr.state;

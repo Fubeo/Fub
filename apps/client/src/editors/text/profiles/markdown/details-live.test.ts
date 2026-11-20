@@ -1,20 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { type ChangeSpec, EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { syntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { detailsLive, detailsOf, detailsVisited } from "./details-live";
 import { pairDetails, type TopBlock } from "./details";
+import { parsed } from "./test-support";
 
 // I ripiegabili si seguono battuta per battuta: una modifica rilegge i nodi
 // di primo livello vicini, non tutta la nota, e il risultato è quello di una
 // lettura da capo dello stesso albero.
 
 function stateOf(doc: string): EditorState {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), detailsLive()] });
-  ensureSyntaxTree(state, doc.length, 10_000);
-  // Una transazione porta l'albero finito nello stato.
-  return state.update({}).state;
+  return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), detailsLive()] }));
 }
 
 /// La lettura da capo: tutti i blocchi HTML di primo livello dell'albero.
@@ -53,8 +51,7 @@ describe("i ripiegabili a ogni battuta", () => {
         expect(detailsVisited(state), label).toBeLessThanOrEqual(6);
         checked++;
       } else {
-        ensureSyntaxTree(state, state.doc.length, 10_000);
-        state = state.update({}).state;
+        state = parsed(state);
       }
     };
     let at = text.indexOf("Testo 100.") + "Testo".length;
@@ -92,8 +89,7 @@ describe("i ripiegabili a ogni battuta", () => {
         // Su una macchina carica il parser può non finire nel suo tempo: si
         // finisce l'albero, e il campo lo rilegge da capo.
         if (syntaxTree(state).length !== state.doc.length) {
-          ensureSyntaxTree(state, state.doc.length, 10_000);
-          state = state.update({}).state;
+          state = parsed(state);
         }
         expect(detailsOf(state), `seme ${seed}, passo ${step}`).toEqual(scanned(state));
         steps++;

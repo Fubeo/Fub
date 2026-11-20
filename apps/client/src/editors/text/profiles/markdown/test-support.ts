@@ -13,24 +13,36 @@ import { vi } from "vitest";
 
 /// Finisce l'analisi e la consegna a `syntaxTree` con una transazione vuota,
 /// come fa l'editor vero quando il parser in sottofondo avanza. Fallisce se
-/// l'albero, anche dopo 60 s di lavoro, non arriva in fondo al documento.
+/// l'albero, anche dopo 60 s di lavoro, non arriva in fondo al documento, o
+/// se la transazione vuota cambia testo o selezione (un filtro o un
+/// estensore che reagisce anche a lei): il test partirebbe da un altro stato.
 /// Conta la lunghezza e non `syntaxTreeAvailable`: un blocco di codice in una
 /// lingua caricata in modo asincrono resta da analizzare anche ad albero
 /// completo.
 export function parsed(state: EditorState): EditorState {
   ensureSyntaxTree(state, state.doc.length, 60_000);
   const next = state.update({}).state;
-  if (syntaxTree(next).length < next.doc.length) throw new Error("l'albero sintattico non copre tutto il documento");
+  sameStart(state, next);
   return next;
 }
 
-/// Lo stesso per la vista montata in `parent`: finisce l'analisi e la consegna
-/// con una transazione vuota, così le decorazioni si rifanno sull'albero intero.
-export function parsedView(parent: HTMLElement): EditorView {
-  const view = EditorView.findFromDOM(parent);
+/// Lo stesso per una vista, o per la vista montata in `parent`: la
+/// transazione vuota passa dalla vista, così anche le decorazioni si rifanno
+/// sull'albero intero.
+export function parsedView(target: EditorView | HTMLElement): EditorView {
+  const view = target instanceof EditorView ? target : EditorView.findFromDOM(target);
   if (!view) throw new Error("l'editor non è montato");
-  if (ensureSyntaxTree(view.state, view.state.doc.length, 60_000)) view.dispatch({});
+  const before = view.state;
+  ensureSyntaxTree(before, before.doc.length, 60_000);
+  view.dispatch({});
+  sameStart(before, view.state);
   return view;
+}
+
+function sameStart(before: EditorState, after: EditorState): void {
+  if (syntaxTree(after).length < after.doc.length) throw new Error("l'albero sintattico non copre tutto il documento");
+  if (!after.doc.eq(before.doc)) throw new Error("la transazione vuota ha cambiato il testo");
+  if (!after.selection.eq(before.selection)) throw new Error("la transazione vuota ha cambiato la selezione");
 }
 
 /// Esegue `create` con il parser a corto di tempo, come su un PC molto

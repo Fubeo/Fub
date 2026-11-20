@@ -9,6 +9,7 @@ import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemir
 import { highlightTree } from "@lezer/highlight";
 import { editorTheme, highlightVisible, syntaxStyle } from "./theme";
 import editorsSkin from "../../theme/scrittoio/skin/editors.css?raw";
+import { parsed } from "./profiles/markdown/test-support";
 
 // L'evidenziatore della sintassi lavora sui tratti visibili in una passata:
 // le classi che dà devono essere quelle che dava `syntaxHighlighting` di
@@ -51,9 +52,7 @@ function sample(sections: number): string {
 }
 
 function stateOf(doc: string, extensions: Extension = []): EditorState {
-  const state = EditorState.create({ doc, extensions: [markdown({ codeLanguages }), extensions] });
-  ensureSyntaxTree(state, doc.length, 5_000);
-  return state;
+  return parsed(EditorState.create({ doc, extensions: [markdown({ codeLanguages }), extensions] }));
 }
 
 /// Le classi come le dava CodeMirror: una chiamata a `highlightTree` per tratto.

@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { history, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
@@ -10,6 +9,7 @@ import { pendingGuide, spaceClosing } from "./pending";
 import { markdownEditingExtensions } from "./commands";
 import { headingPillOff, liveHints } from "./hints";
 import { blocksMode } from "./blocks";
+import { parsedView } from "./test-support";
 
 // I gesti della guida nella vista (B2, B3): → e Tab accettano, Esc spegne,
 // Backspace toglie la chiusura appena scritta. `|` è il cursore.
@@ -29,8 +29,7 @@ function mount(spec: string): EditorView {
       extensions: [markdown({ base: markdownGrammar }), history(), pendingGuide()],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -123,10 +122,9 @@ describe("i cenni (B5, B6)", () => {
         extensions: [markdown({ base: markdownGrammar }), liveHints(() => true)],
       }),
     });
-    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
     views.push(view);
     view.focus();
-    view.dispatch({});
+    parsedView(view);
     return view;
   }
 
@@ -158,9 +156,8 @@ describe("i cenni (B5, B6)", () => {
       }),
     });
     views.push(view);
-    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
     view.focus();
-    view.dispatch({});
+    parsedView(view);
     expect(view.state.facet(headingPillOff)).toBe(true);
     expect(document.querySelector(".cm-fub-heading-pill-button")).toBeNull();
     view.dispatch({ effects: blocks.reconfigure([]) });

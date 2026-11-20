@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { setDetailsDefault, setDetailsOpen } from "./details-live";
+import { parsedView } from "./test-support";
 
 // Il ripiegabile in Live (K2): la freccia e il sommario, i tag nascosti, il
 // contenuto rientrato; aperto o chiuso è della vista.
@@ -34,8 +34,7 @@ function mount(doc: string, anchor = 0, policy: RevealPolicy = "mai", lineBreak 
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
@@ -12,6 +11,7 @@ import { editFormulaAt, placeFormulaAt } from "../math-live";
 import { MathEditor, type MathPreferences } from "./editor";
 import { formulaPaste } from "./paste";
 import { drawn, MATH_READY_MS, mathReady } from "./test-drawn";
+import { parsedView } from "../test-support";
 
 // Copia e incolla, Invio che allinea, il posto della formula (T65, E27), col
 // riquadro vero e KaTeX vero.
@@ -169,8 +169,7 @@ function mount(doc: string, anchor = 0): EditorView {
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }

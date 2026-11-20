@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorSelection, EditorState, Prec, Transaction } from "@codemirror/state";
 import { Decoration, EditorView, runScopeHandlers, WidgetType } from "@codemirror/view";
@@ -22,6 +21,7 @@ import { createManualDriver, liveState, setMotionDriver } from "../../../../../m
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 import { propertiesDisplay } from "../../../properties-display";
 import { dropOffersChanged, offerDropTargets } from "../../../../core/registry";
+import { parsedView } from "../test-support";
 
 // I Blocchi nell'editor vero: maniglie, menu, selezione di blocchi, tasti.
 
@@ -48,8 +48,7 @@ function mount(doc: string, anchor = 0, notify = vi.fn(), extra: Extension = [],
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -1692,8 +1691,7 @@ describe("i gesti ai bordi (E2): due riquadri sulla stessa nota", () => {
       },
     });
     views.push(view);
-    ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-    view.dispatch({});
+    parsedView(view);
     rowsOf20(view);
     const hand = grab(view, 0, 10);
     hand.move(60);

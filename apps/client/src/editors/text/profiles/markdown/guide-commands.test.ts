@@ -1,20 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, type Transaction } from "@codemirror/state";
 import { markdownGrammar } from "./grammar";
 import { closeFenceEnter, taskShortcut } from "./commands";
+import { parsed } from "./test-support";
 
 // Il recinto che si chiude da solo (B7) e `[]` a inizio riga (B8). `|` è il
 // cursore.
 
 function mk(spec: string): EditorState {
-  const state = EditorState.create({
+  const state = parsed(EditorState.create({
     doc: spec.replace("|", ""),
     selection: { anchor: spec.indexOf("|") },
     extensions: markdown({ base: markdownGrammar }),
-  });
-  ensureSyntaxTree(state, state.doc.length, 1000);
+  }));
   return state;
 }
 

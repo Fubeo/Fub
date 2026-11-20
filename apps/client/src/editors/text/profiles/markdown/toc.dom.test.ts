@@ -3,12 +3,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { liveReveal } from "../../live-reveal";
 import { renderMarkdown } from "./render";
 import { tocLevels } from "./toc";
+import { parsedView } from "./test-support";
 
 // L'indice (K4): i titoli della nota al posto del recinto ```toc```.
 
@@ -75,7 +75,7 @@ describe("l'indice in Live", () => {
       }),
     });
     views.push(view);
-    const settle = () => { ensureSyntaxTree(view.state, view.state.doc.length, 1000); view.dispatch({}); };
+    const settle = () => { parsedView(view); };
     settle();
     const items = () => [...view.dom.querySelectorAll(".fub-toc-item")].map((item) => `${item.getAttribute("data-depth")}:${item.textContent}`);
     expect(items()).toEqual(["0:Uno", "0:Due"]);

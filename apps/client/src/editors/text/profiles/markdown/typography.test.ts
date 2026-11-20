@@ -2,12 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { history, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { getCM, vim, Vim } from "@replit/codemirror-vim";
 import { markdownGrammar } from "./grammar";
 import { italianTypography, TYPOGRAPHY_KEY, type TypographyOptions } from "./typography";
+import { parsedView } from "./test-support";
 
 // La tipografia italiana (T38): una prova per regola e per ogni luogo dove
 // non vale. `|` è il cursore; `type` batte i caratteri uno alla volta come la
@@ -50,7 +50,7 @@ function mount(spec: string, options: TypographyOptions = ON, extra: Extension =
 
 /// Un tasto: se nessun gestore lo prende, lo scrive il browser.
 function key(view: EditorView, text: string): void {
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
+  parsedView(view);
   const { from, to } = view.state.selection.main;
   const handled = view.state.facet(EditorView.inputHandler).some((handler) => handler(view, from, to, text, () => view.state.update({})));
   if (!handled) view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length }, userEvent: "input.type" });

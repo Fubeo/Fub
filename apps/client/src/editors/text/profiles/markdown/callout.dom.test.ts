@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdownGrammar } from "./grammar";
@@ -9,6 +8,7 @@ import { livePreview } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { calloutHead, CALLOUT_HEAD } from "./callout-head";
 import { setCalloutType, toggleCalloutFold } from "./callout";
+import { parsedView } from "./test-support";
 
 // Il callout resta un riquadro col cursore dentro (D1).
 
@@ -26,8 +26,7 @@ function mount(doc: string, anchor: number, policy: RevealPolicy = "mai"): Edito
       extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy))],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
