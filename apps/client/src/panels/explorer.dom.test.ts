@@ -199,6 +199,22 @@ describe("«Tutte le note» sopra l'albero", () => {
     expect(countOf("Guida")?.textContent).toBe("3");
   });
 
+  it("un file nuovo scritto da fuori entra nell'albero e nel totale, senza riaprire (IMP-6501)", async () => {
+    const host = await start();
+    expect(allCount().textContent).toBe("6");
+    // Il lotto del rilevatore, come lo consegna il ponte vero: il documento
+    // nuovo e poi `index_updated` (fuori da un lotto non arriva `batch_ended`).
+    host.writeFromOutside("Nuova fuori.md", "# Nuova fuori\n");
+    host.emit({ type: "index_updated" });
+    await waitFor("la riga nuova", () => row("Nuova fuori.md") !== null);
+    expect(allCount().textContent).toBe("7");
+    // Anche dentro una cartella aperta che ancora non c'era.
+    host.writeFromOutside("Cartella fuori/Dentro.md", "# Dentro\n");
+    host.emit({ type: "index_updated" });
+    await waitFor("la cartella nuova", () => row("Cartella fuori") !== null);
+    expect(allCount().textContent).toBe("8");
+  });
+
   it("un vault senza note: il titolo c'è, il numero no", async () => {
     await start({ file: {}, resources: {} });
     await waitFor("l'albero vuoto", () => document.querySelector("#file-list .tree-empty") !== null);
