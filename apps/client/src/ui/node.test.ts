@@ -319,6 +319,36 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
     expect(newItem).toEqual(["tocca"]);
     expect(old).toEqual([]);
   });
+  it("un widget custom non si ridisegna con un payload uguale in un oggetto nuovo", () => {
+    // Il payload di un grafo vero: ogni render del provider ne fa uno nuovo,
+    // con gli stessi dati. Una chiave `undefined` non conta (come in JSON),
+    // l'ordine delle chiavi sì, e un dato cambiato in fondo rifà il widget.
+    const NS = "prova.grafo";
+    const drawn: unknown[] = [];
+    registerCustomRenderer(NS, (_host, payload) => {
+      drawn.push(payload);
+    });
+    const graph = (last: string, extra?: Record<string, unknown>): UiNode => {
+      const nodes = Array.from({ length: 300 }, (_, i) => `Note/n${i}.md`);
+      nodes.push(last);
+      const edges = nodes.slice(1).map((to, i) => ({ from: nodes[i], to }));
+      return { node: "custom", ns: NS, payload: { nodes, edges, query: "", group_by: "folder", ...extra }, fallback: [] } as UiNode;
+    };
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const noop = async () => {};
+    mountTree(host, graph("Note/z.md"), noop);
+    const el = host.querySelector(".ui-custom");
+    mountTree(host, graph("Note/z.md"), noop);
+    mountTree(host, graph("Note/z.md", { local: undefined }), noop);
+    expect(drawn).toHaveLength(1);
+    expect(host.querySelector(".ui-custom")).toBe(el);
+
+    mountTree(host, graph("Note/y.md"), noop);
+    expect(drawn).toHaveLength(2);
+    unmountTree(host);
+    host.remove();
+  });
   it("un renderer custom riceve il contesto del montaggio e si rifà quando cambia", () => {
     const NS = "prova.contesto";
     const drawn: Array<string | null> = [];
