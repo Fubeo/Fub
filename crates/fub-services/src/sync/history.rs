@@ -33,10 +33,11 @@ pub(super) fn admit_versions(
 }
 
 pub(super) fn run_versions(scope: &VaultScope, doc_id: String) -> HttpResponse {
-    let folded = match load_folded(&scope.dir) {
-        Ok(folded) => folded,
+    let vault = match open_vault(&scope.dir) {
+        Ok(vault) => vault,
         Err(response) => return response,
     };
+    let folded = vault.state();
     let versions: Vec<serde_json::Value> = folded
         .versions
         .get(&doc_id)
@@ -94,10 +95,11 @@ pub(super) fn admit_trash(
 
 pub(super) fn run_trash(scope: &VaultScope, doc_id: String) -> HttpResponse {
     let dir = &scope.dir;
-    let mut folded = match load_folded(dir) {
-        Ok(folded) => folded,
+    let mut vault = match open_vault(dir) {
+        Ok(vault) => vault,
         Err(response) => return response,
     };
+    let folded = vault.state();
     if folded
         .versions
         .get(&doc_id)
@@ -108,10 +110,10 @@ pub(super) fn run_trash(scope: &VaultScope, doc_id: String) -> HttpResponse {
     let now = schema::now_ms();
     // Trash without content: snapshot the current server vector so a later
     // restore is still a new write, never an old vector replayed.
-    let mut vv = folded.server_vv.clone();
+    let mut vv = vault.state().server_vv.clone();
     vv_inc(&mut vv, "server");
-    move_to_trash(&mut folded, &doc_id, vv, &scope.account, now);
-    if let Err(e) = versions::save(dir, &folded) {
+    move_to_trash(vault.state_mut(), &doc_id, vv, &scope.account, now);
+    if let Err(e) = vault.save() {
         return HttpResponse::err(500, &e);
     }
     HttpResponse::json(200, &serde_json::json!({ "trashed": doc_id }))
@@ -161,10 +163,11 @@ pub(super) fn run_restore(
     requested_version: Option<u64>,
 ) -> HttpResponse {
     let dir = &scope.dir;
-    let mut folded = match load_folded(dir) {
-        Ok(folded) => folded,
+    let mut vault = match open_vault(dir) {
+        Ok(vault) => vault,
         Err(response) => return response,
     };
+    let folded = vault.state();
     if folded
         .versions
         .get(&doc_id)
@@ -207,13 +210,13 @@ pub(super) fn run_restore(
         return HttpResponse::err(409, "restore source version expired; trash left intact");
     };
     let source_op_id = source.op_id.clone();
-    match restore_from_trash(&mut folded, &doc_id) {
+    match restore_from_trash(vault.state_mut(), &doc_id) {
         Err(e) => HttpResponse::err(404, &e),
         Ok(version) => {
             // A replica is not a backup: restore only drops the trash marker.
             // The client must push a FRESH op with a bumped counter carrying
             // the restored bytes; the old vector is never replayed.
-            if let Err(e) = versions::save(dir, &folded) {
+            if let Err(e) = vault.save() {
                 return HttpResponse::err(500, &e);
             }
             HttpResponse::json(
