@@ -527,7 +527,9 @@ fn decoded(text: &str) -> String {
     while let Some(at) = rest.find('&') {
         out.push_str(&rest[..at]);
         rest = &rest[at..];
-        let Some(semi) = rest[..rest.len().min(12)].find(';') else {
+        // Il `;` si cerca nei primi 12 byte senza tagliare `rest`: il
+        // dodicesimo byte può cadere dentro una lettera di più byte.
+        let Some(semi) = rest.bytes().take(12).position(|b| b == b';') else {
             out.push('&');
             rest = &rest[1..];
             continue;
@@ -779,6 +781,11 @@ mod tests {
         assert_eq!(page.description.as_deref(), Some("x"));
         assert_eq!(clipped(&"a".repeat(10), 4), "aaaa…");
         assert_eq!(decoded("a & b &bogus; &amp;"), "a & b &bogus; &");
+        // Il dodicesimo byte dopo `&` può cadere dentro una lettera di più
+        // byte: la ricerca del `;` non deve tagliarla (prima andava in panico).
+        assert_eq!(decoded("&abcdefghijà;"), "&abcdefghijà;");
+        assert_eq!(decoded("Tom &amp; Jerry — à"), "Tom & Jerry — à");
+        assert_eq!(decoded("&àà&amp;"), "&àà&");
     }
 
     #[test]
