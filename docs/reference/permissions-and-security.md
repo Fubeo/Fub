@@ -285,6 +285,13 @@ usano solo immagini. La webview non chiede mai l'immagine alla rete. Una nota
 nella radice con una cartella relativa alla nota (`./`) non ha dove scaricarla
 e lo dice.
 
+Un `<img src>` scritto in HTML dentro la nota segue la stessa strada di
+un'immagine Markdown: dei `data-*` dell'autore il sanitizzatore dell'HTML della
+nota tiene soltanto `data-vault-src` e `data-remote-src`, e soltanto quando li
+ha scritti lui dal `src` che ha giudicato; scritti a mano cadono. «Copia come
+HTML» rimette il `src` alle sole immagini remote `https` (le carica chi
+incolla); un'immagine del vault resta il suo testo alternativo.
+
 ## Visore web
 
 Una pagina web non entra mai nella webview della shell. Si apre nella finestra

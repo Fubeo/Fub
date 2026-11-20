@@ -34,6 +34,7 @@ import { mountReadingHeader, type PageOptions } from "./page/header";
 import type { RelationPort } from "./page/properties/values";
 import { propertiesDisplay } from "../../properties-display";
 import { liveStrings } from "./strings";
+import { decodeHref } from "./link-syntax";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
@@ -1918,9 +1919,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ? [{ id: "markdown.link.web", label: t("editor_menu.link.browser"), chord: "Alt-Enter", run: () => openWebLink(link.url, false) }]
           : [
             ...(opts.onPeekLink
-              ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), icon: "eye", chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "path", path: decodeURI(link.url) }, docId()) }]
+              ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), icon: "eye", chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "path", path: decodeHref(link.url) }, docId()) }]
               : []),
-            { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void Promise.resolve(opts.onOpenPath(decodeURI(link.url), docId())).catch(() => {}) },
+            { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void Promise.resolve(opts.onOpenPath(decodeHref(link.url), docId())).catch(() => {}) },
           ]),
         { id: "markdown.link.copy", label: t(external ? "editor_menu.link.copy_url" : "editor_menu.link.copy"), icon: "copy", run: () => copyText(link.url, t("editor_menu.copied")) },
         ...edit,
@@ -1948,10 +1949,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const file = image.file;
     const open = (): void => {
       if (image.syntax === "wiki") void openWikilink(file, null, null);
-      else void Promise.resolve(opts.onOpenPath(decodeURI(file), docId())).catch(() => {});
+      else void Promise.resolve(opts.onOpenPath(decodeHref(file), docId())).catch(() => {});
     };
     const show = (where: "app" | "explorer"): void => {
-      const target: SystemTarget = image.syntax === "wiki" ? { kind: "wiki", value: file } : { kind: "path", value: decodeURI(file) };
+      const target: SystemTarget = image.syntax === "wiki" ? { kind: "wiki", value: file } : { kind: "path", value: decodeHref(file) };
       void Promise.resolve(opts.onShowFile?.(target, docId(), where)).catch((error: unknown) => notify(errorText(error), "guasto"));
     };
     const width = (value: number | null): SurfaceMenuItem => ({
