@@ -95,11 +95,11 @@ use pull::{admit_ack, admit_pull, admit_status, run_ack, run_pull, run_status};
 use push::{admit_push, op_from_parsed_version, op_from_version, run_push};
 use shares::{load_shares, merge_grants, save_shares};
 pub use shares::{vault_resource, StoredInvite, SyncShares};
+pub use sharing::INITIAL_KEY_EPOCH;
 use sharing::{
     handle_invite, handle_invite_accept, handle_revoke, handle_vault_key_get,
     handle_vault_key_store,
 };
-pub use sharing::INITIAL_KEY_EPOCH;
 pub use vault_state::LEGACY_STATE_ASIDE;
 use vault_state::{adopt_legacy, already_folded, cap_seen, open_vault};
 

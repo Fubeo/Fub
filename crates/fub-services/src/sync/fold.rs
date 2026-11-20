@@ -70,15 +70,19 @@ pub(super) fn fold_op(
             latest_any(state, to).is_some_and(|latest| covered(&parse_vv_text(&latest.vv_text)));
         let from_covered = latest_any(state, from)
             .is_some_and(|latest| covered(&parse_vv_text(&latest.vv_text)))
-            || state.tombstones.get(from).is_some_and(|tomb| covered(&tomb.vv));
+            || state
+                .tombstones
+                .get(from)
+                .is_some_and(|tomb| covered(&tomb.vv));
         match (from_covered, to_covered) {
             (true, true) => return FoldOutcome::Applied(None),
             (false, false) => {}
             _ => {
                 return FoldOutcome::Held(ConflictInfo {
                     doc_id: if to_covered { from.clone() } else { to.clone() },
-                    reason: "stale rename overtaken on one end: preserve both versions before retry"
-                        .to_string(),
+                    reason:
+                        "stale rename overtaken on one end: preserve both versions before retry"
+                            .to_string(),
                     replicas: vec![op.replica_id.clone()],
                 })
             }

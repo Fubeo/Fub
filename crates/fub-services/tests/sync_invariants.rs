@@ -562,7 +562,10 @@ fn a_dominated_rename_is_a_no_op() {
     );
     assert!(!folded.trash.contains_key("notes/from.md"));
     assert_eq!(
-        folded.versions["notes/from.md"].last().unwrap().ciphertext_b64,
+        folded.versions["notes/from.md"]
+            .last()
+            .unwrap()
+            .ciphertext_b64,
         "CT:ricreata dopo"
     );
     let to = &folded.versions["notes/to.md"];
