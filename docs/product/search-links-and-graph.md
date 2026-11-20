@@ -271,7 +271,7 @@ Due altri filtri, spenti di default, aggiungono nodi che non sono file:
   wikilink. Un allegato mancante segue il filtro degli allegati.
 
 Spento, il grafo mostra solo i file che esistono; non è orfana una nota legata a un tag o in una proprietà.
-Tag e note mancanti non hanno cartella né data: linea del tempo e legenda li nascondono con le note che li scrivono.
+Tag e note mancanti non hanno cartella né data: linea del tempo e legenda li nascondono con le note che li scrivono, e uno senza note segue la regola di tutti; un allegato che c'è ha cartella e data sue.
 
 Il campo **Filtro** della barra accetta la sintassi della barra di ricerca:
 restano le note che la ricerca trova, gli allegati collegati a loro e il seme

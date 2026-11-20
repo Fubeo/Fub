@@ -492,3 +492,22 @@ fn a_missing_note_named_only_in_a_property_comes_with_its_edge() {
         }
     }
 }
+
+/// Un allegato che c'è è un file come una nota: ha la sua cartella e la sua
+/// data, e linea del tempo e legenda lo trattano con quelle. Uno che manca non
+/// ha né l'una né l'altra, e sta fra le note mancanti, appeso a chi lo scrive.
+#[test]
+fn an_attachment_has_its_own_folder_and_date_a_missing_one_hangs() {
+    let vault = Vault::new();
+    vault.put("A.md", "![[foto.png]] ![[manca.png]]\n");
+    vault.put("foto.png", "xx");
+    let mut ws = vault.open();
+    toggle(&mut ws, "show_attachments");
+    let p = toggle(&mut ws, "show_missing");
+    assert_eq!(nodes(&p), ["A.md", "foto.png", "manca.png"]);
+    assert_eq!(p["groups"]["foto.png"], "");
+    assert!(p["modified"]["foto.png"].is_string(), "{p}");
+    assert!(p["groups"].get("manca.png").is_none());
+    assert!(p["modified"].get("manca.png").is_none());
+    assert_eq!(p["missing"], serde_json::json!(["manca.png"]));
+}
