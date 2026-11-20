@@ -597,6 +597,17 @@ pub trait IndexProvider: Send + Sync {
     /// documenti che quella fetta non nomina. Azzerarla a ogni chiamata è la
     /// scorciatoia che sembra pulizia e butta via ciò che un'altra fetta stava
     /// ancora aspettando.
+    ///
+    /// # Una voce senza impronta ritira ciò che si era preso
+    ///
+    /// A una voce senza impronta non si risponde: chi non sa di che revisione
+    /// è un file non può dire che è la sua. Chi si prende nota della revisione
+    /// dichiarata, per la consegna che arriverà, la **toglie** quando la
+    /// stessa voce torna senza impronta. Il kernel lo usa quando un'apertura
+    /// si interrompe: non c'è `reconcile` a chiudere il giro, e ripete la
+    /// domanda senza impronta su ogni documento che aveva chiesto, così che
+    /// la prima consegna a sessione aperta non si prenda la revisione di un
+    /// testo che non è il suo.
     fn up_to_date(&self, _entries: &[VaultEntry]) -> Vec<DocId> {
         Vec::new()
     }

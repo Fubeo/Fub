@@ -127,7 +127,8 @@ use crate::index::plan::{QueryCore, QueryPlan};
 use crate::index::{
     feed_handles as feed_index_handles, reconcile_handles as reconcile_index_handles,
     release_handles as release_index_handles, up_to_date_handles as up_to_date_index_handles,
-    CompletedIndexQuery, Indexes, PreparedIndexQuery, SharedIndexProvider,
+    withdraw_handles as withdraw_index_handles, CompletedIndexQuery, Indexes, PreparedIndexQuery,
+    SharedIndexProvider,
 };
 use crate::journal::{Journal, JournalOp, JournalRead};
 use crate::locale::SystemLocale;
@@ -3386,6 +3387,9 @@ pub struct PreparedIndexFinish {
     work: Indexing,
     graph: BuiltGraph,
     ids: Vec<DocId>,
+    /// I documenti di cui ritirare le dichiarazioni, se l'apertura si è
+    /// interrotta ([`Workspace::withdrawn_ids`]); vuoto se è finita.
+    withdrawn: Vec<DocId>,
     providers: Vec<(String, SharedIndexProvider)>,
 }
 
@@ -3401,11 +3405,13 @@ impl PreparedIndexFinish {
             work,
             graph,
             ids,
+            withdrawn,
             providers,
         } = self;
         let mut external_losses = if work.finished() {
             reconcile_index_handles(&providers, &ids)
         } else {
+            withdraw_index_handles(&providers, &withdrawn);
             Vec::new()
         };
         if let Err(error) = release_index_handles(providers) {
@@ -6573,6 +6579,7 @@ impl Workspace {
         let external_losses = if work.finished() {
             reconcile_index_handles(&self.indexes.feed_handles(), &ids)
         } else {
+            withdraw_index_handles(&self.indexes.feed_handles(), &self.withdrawn_ids(&work));
             Vec::new()
         };
         let (opening, _) = self.close_indexing(work, external_losses, false);
@@ -6594,10 +6601,12 @@ impl Workspace {
         graph: BuiltGraph,
     ) -> PreparedIndexFinish {
         let ids = self.reconcile_ids(&work);
+        let withdrawn = self.withdrawn_ids(&work);
         PreparedIndexFinish {
             work,
             graph,
             ids,
+            withdrawn,
             providers: self.indexes.feed_handles(),
         }
     }
@@ -6662,6 +6671,27 @@ impl Workspace {
                 .discarded
                 .iter()
                 .map(|discard| discard.id.clone()),
+        );
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    /// I documenti a cui un'apertura interrotta può aver lasciato una
+    /// dichiarazione di revisione in volo: tutti quelli che la scansione ha
+    /// chiesto agli indici, cioè i documenti già in memoria (anche quelli
+    /// saltati perché ogni indice li aveva) e quelli ancora da esaminare.
+    /// Vuoto per un'apertura finita: lì chiude `reconcile`.
+    fn withdrawn_ids(&self, work: &Indexing) -> Vec<DocId> {
+        if work.finished() {
+            return Vec::new();
+        }
+        let mut ids: Vec<DocId> = self.documents();
+        ids.extend(
+            work.from_do
+                .iter()
+                .filter(|entry| entry.kind == EntryKind::Document)
+                .map(|entry| entry.id.clone()),
         );
         ids.sort();
         ids.dedup();
@@ -6876,35 +6906,39 @@ impl Workspace {
     pub fn store_entries(&self) {
         let _phase = tracing::info_span!(target: "fub.apertura", "store_entries").entered();
         let core = &self.indexes.core;
-        let rows = || {
-            core.entries
-                .values()
-                .filter(|entry| !core.observed_at_the_same_instant(&entry.id))
-                .map(|entry| (entry, self.stored_witness(entry)))
-        };
+        // I testimoni si chiedono **una volta**, qui, fuori dal lucchetto
+        // dell'anagrafe: il confronto e la tabella nuova vengono dalle stesse
+        // risposte. Chiederli due volte raddoppiava le domande al supporto
+        // proprio sulla riapertura che scrive, e un file cambiato fra le due
+        // avrebbe dato una tabella diversa da quella confrontata.
+        let rows: Vec<_> = core
+            .entries
+            .values()
+            .filter(|entry| !core.observed_at_the_same_instant(&entry.id))
+            .map(|entry| (entry, self.stored_witness(entry)))
+            .collect();
         // Una riapertura ferma compone la stessa tabella che il file ha già:
         // la si confronta al suo posto, senza copiare i metadati di ogni
         // documento per buttarli via in fondo a `store` (#524). Il confronto
         // è lo stesso di `store`, campo per campo, e ogni dubbio scrive.
         let unchanged = self.entry_store.already_holds(|known| {
-            let mut count = 0;
-            let same = rows().all(|(entry, (now, fingerprint))| {
-                count += 1;
-                known.get(&entry.id).is_some_and(|stored| {
-                    stored.size == entry.size
-                        && stored.mtime == entry.mtime
-                        && stored.change_stamp == now.change_stamp
-                        && stored.identity == now.identity
-                        && stored.fingerprint.as_ref() == fingerprint
-                        && core.stores_metadata_as(&entry.id, stored.metadata.as_ref())
+            rows.len() == known.len()
+                && rows.iter().all(|(entry, (now, fingerprint))| {
+                    known.get(&entry.id).is_some_and(|stored| {
+                        stored.size == entry.size
+                            && stored.mtime == entry.mtime
+                            && stored.change_stamp == now.change_stamp
+                            && stored.identity == now.identity
+                            && stored.fingerprint.as_ref() == *fingerprint
+                            && core.stores_metadata_as(&entry.id, stored.metadata.as_ref())
+                    })
                 })
-            });
-            same && count == known.len()
         });
         if unchanged {
             return;
         }
-        let table = rows()
+        let table = rows
+            .into_iter()
             .map(|(entry, (now, fingerprint))| {
                 (
                     entry.id.clone(),

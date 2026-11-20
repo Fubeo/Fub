@@ -253,10 +253,6 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 reminders::E_ANSWER,
                 "Non sono riuscito a scrivere la risposta dei promemoria: {detail}.",
-            )
-            .with(
-                reminders::E_STORE,
-                "Non sono riuscito a preparare il file dei promemoria: {detail}.",
             ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Tasks")
@@ -330,10 +326,6 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 reminders::E_ANSWER,
                 "Could not write the reminders answer: {detail}.",
-            )
-            .with(
-                reminders::E_STORE,
-                "Could not prepare the reminders file: {detail}.",
             ),
     ]
 }

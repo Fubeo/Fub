@@ -35,7 +35,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fub_abi::model::{DocId, DocumentModel};
-use fub_abi::traits::{IndexLoss, IndexProvider, IndexQuery, IndexResult, VaultEntry};
+use fub_abi::traits::{EntryKind, IndexLoss, IndexProvider, IndexQuery, IndexResult, VaultEntry};
 use fub_abi::PluginError;
 
 pub(crate) use core::CoreIndex;
@@ -289,6 +289,47 @@ pub(crate) fn up_to_date_handles(
         agreed.retain(|doc| theirs.contains(doc));
     }
     agreed
+}
+
+/// **Ritira le dichiarazioni** di un'apertura che non arriva in fondo.
+///
+/// La domanda di [`up_to_date_handles`] dichiara a un indice persistente di
+/// che revisione è ogni documento, e la dichiarazione aspetta la consegna.
+/// Un'apertura finita le chiude con `reconcile`; una interrotta non
+/// riconcilia (un insieme bucato non si dichiara completo), e senza questo
+/// ritiro una dichiarazione restata lì veniva presa dalla prima consegna a
+/// sessione aperta: un salvataggio con il testo nuovo, scritto con la
+/// revisione di quello vecchio, che alla riapertura faceva saltare la nota
+/// con l'indice indietro.
+///
+/// Il ritiro è la stessa domanda **senza impronta**: il contratto dice che
+/// a una voce senza revisione un indice non risponde, e chi tiene
+/// dichiarazioni la toglie (`IndexProvider::up_to_date`). La risposta non
+/// serve e si butta; un indice che non si può interrogare non ha niente da
+/// ritirare che il kernel possa raggiungere.
+pub(crate) fn withdraw_handles(providers: &[(String, SharedIndexProvider)], docs: &[DocId]) {
+    if docs.is_empty() {
+        return;
+    }
+    let entries: Vec<VaultEntry> = docs
+        .iter()
+        .map(|id| VaultEntry {
+            id: id.clone(),
+            kind: EntryKind::Document,
+            size: 0,
+            mtime: 0,
+            fingerprint: None,
+        })
+        .collect();
+    for (id, index) in providers {
+        let Ok(_call) = IndexCall::enter(id, index) else {
+            continue;
+        };
+        let index = index.read();
+        let _ = crate::safety::calling(id, Gate::IndexUpToDate, "", || {
+            Ok(index.up_to_date(&entries))
+        });
+    }
 }
 
 /// Chi non è riuscito ad allinearsi lo dice, e **nomina i morti che si
