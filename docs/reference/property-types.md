@@ -212,7 +212,7 @@ cresce coi link che arrivano ai bersagli, non col vault. È custom e non un
 caso nuovo di `query-predicate` perché da `0.2.0` la WIT non prende casi
 nuovi (ADR 0238), e così la foglia arriva anche ai plugin già compilati.
 «Collegata da» è questa foglia, una domanda per ogni Relazione dichiarata:
-il client la può chiedere da `query_index`, ma oggi non la mostra.
+il client la può chiedere da `query_index`, ma non la mostra ancora.
 
 ### Il riepilogo in una Base
 

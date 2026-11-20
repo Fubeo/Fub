@@ -111,10 +111,8 @@ file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
 Heading e blocchi condividono slug e ancore canoniche; un punto rinominato apre
 la nota senza inventare una destinazione. Completamento e cambio rapido
 propongono nomi per pertinenza senza riordinare nella shell, e la rinomina
-riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
-Un `[[…]]` scritto da solo in una proprietà si risolve con le stesse regole,
-segue la rinomina e si chiede all'indice con la foglia `fub:property-link`
-([tipi delle proprietà](../reference/property-types.md)); non è un backlink.
+riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta,
+anche nelle proprietà ([`fub:property-link`](../reference/property-types.md)).
 Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
 due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
 nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,
