@@ -454,13 +454,7 @@ pub fn serve_headers(
     match config.mode {
         IsolationMode::IsolatedOrigin => match config.origin {
             Some(want) => {
-                let got = req_host
-                    .unwrap_or("")
-                    .split(':')
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_ascii_lowercase();
+                let got = crate::server::host_name(req_host.unwrap_or("")).to_ascii_lowercase();
                 if got != want {
                     ServeDecision::DenyOrigin
                 } else {

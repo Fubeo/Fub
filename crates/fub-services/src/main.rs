@@ -93,12 +93,7 @@ fn main() {
             _ => usage(),
         }
     }
-    let host_part = bind
-        .rsplit(':')
-        .nth(1)
-        .unwrap_or(&bind)
-        .trim_matches(['[', ']']);
-    if !matches!(host_part, "127.0.0.1" | "::1" | "localhost") {
+    if !is_loopback_bind(&bind) {
         eprintln!("refusing non-loopback bind in cleartext (production needs TLS in front)");
         std::process::exit(2);
     }
@@ -142,6 +137,18 @@ fn main() {
                 }
             }
             Err(_) => continue,
+        }
+    }
+}
+
+/// `--bind` in chiaro solo su loopback: `127.0.0.1:7749`, `[::1]:7749`,
+/// `localhost:7749`. L'IPv6 va tra parentesi, come in ogni `host:porta`.
+fn is_loopback_bind(bind: &str) -> bool {
+    match bind.parse::<std::net::SocketAddr>() {
+        Ok(address) => address.ip().is_loopback(),
+        Err(_) => {
+            let host = fub_services::server::host_name(bind);
+            host != bind.trim() && host.eq_ignore_ascii_case("localhost")
         }
     }
 }
@@ -268,6 +275,11 @@ fn read_request(stream: &mut TcpStream, accepted: Instant) -> Result<Parsed, Htt
             "transfer-encoding" => has_te = true,
             "expect" if value.to_ascii_lowercase().contains("100-continue") => {
                 has_continue = true;
+            }
+            // Un solo Host (RFC 9112 §3.2): con due, proxy e servizio
+            // potrebbero leggere siti diversi.
+            "host" if req_host.is_some() => {
+                return Err(HttpResponse::err(400, "duplicate host"));
             }
             "host" => req_host = Some(value.clone()),
             _ => {}
@@ -480,7 +492,7 @@ fn handle_static(
     }
     if let Some(tls) = &record.tls {
         if req_host
-            .and_then(|host| host.split(':').next())
+            .map(fub_services::server::host_name)
             .is_some_and(|host| host.eq_ignore_ascii_case(&tls.domain))
         {
             let intent = site_api::TlsConfig {

@@ -898,6 +898,16 @@ fn sync_http_rejects_unauthorized_unmatched_and_oversized_requests() {
     let (status, body) = exchange(&state, &dir.0, duplicate);
     assert_eq!(status, 400);
     assert_eq!(body["error"], "duplicate content-length");
+    // A2: due Host, uguali o diversi, sono ambigui come due Content-Length.
+    for hosts in [
+        "Host: localhost\r\nHost: evil.test\r\n",
+        "Host: localhost\r\nhost: localhost\r\n",
+    ] {
+        let wire = format!("GET /v1/sync/status HTTP/1.1\r\n{hosts}\r\n");
+        let (status, body) = exchange(&state, &dir.0, wire.as_bytes());
+        assert_eq!(status, 400, "{hosts:?}");
+        assert_eq!(body["error"], "duplicate host");
+    }
     let oversized_pull =
         b"POST /v1/sync/pull HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048577\r\n\r\n";
     let (status, body) = exchange(&state, &dir.0, oversized_pull);

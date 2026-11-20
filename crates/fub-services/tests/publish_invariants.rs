@@ -1368,3 +1368,37 @@ fn an_admin_cannot_revoke_or_demote_another_admin() {
         left
     });
 }
+
+/// A2: l'origine isolata confronta il nome dell'host senza porta e senza
+/// distinguere le maiuscole; un IPv6 tra parentesi non si spezza ai `:`.
+#[test]
+fn isolated_origin_matches_the_host_name_without_its_port() {
+    use fub_services::site_isolation::{save_mode, serve_headers, ServeDecision};
+    let data = temp_data_dir("isolated-host");
+    create_site(&data, "blog", "alice", None).unwrap();
+    save_mode(&data, "blog", "isolated-origin", Some("blog.example.test")).unwrap();
+    let allowed = |host: Option<&str>| {
+        matches!(
+            serve_headers(&data, "blog", host, "text/html", b"<p>ciao</p>"),
+            ServeDecision::Allow(_)
+        )
+    };
+    for host in [
+        "blog.example.test",
+        "Blog.Example.TEST:8443",
+        " blog.example.test:80 ",
+    ] {
+        assert!(allowed(Some(host)), "{host}");
+    }
+    for host in [
+        "example.test",
+        "blog.example.test.evil.test",
+        "[::1]:7749",
+        "[blog.example.test]:80",
+        "blog.example.test:",
+        "",
+    ] {
+        assert!(!allowed(Some(host)), "{host}");
+    }
+    assert!(!allowed(None));
+}
