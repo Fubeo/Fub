@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Gli oggetti CodeMirror appartengono al package testuale: nessun altro modulo
-// della shell deve poterli importare direttamente.
+// della shell deve poterli importare direttamente, né i parser Lezer né i
+// tasti di Vim che gli stanno attorno.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -57,13 +58,22 @@ function parseSource(typescript, fileName, text) {
   return source;
 }
 
+// CodeMirror è anche ciò che gli sta sotto e accanto: i parser Lezer
+// (`@lezer/*`) e i tasti di Vim (`@replit/codemirror-vim`).
 function codeMirrorSpecifier(specifier) {
   return /^@codemirror\/[^/]+(?:\/.*)?$/.test(specifier) ||
-    /^codemirror(?:\/.*)?$/.test(specifier);
+    /^codemirror(?:\/.*)?$/.test(specifier) ||
+    /^@lezer\/[^/]+(?:\/.*)?$/.test(specifier) ||
+    /^@replit\/codemirror-vim(?:\/.*)?$/.test(specifier);
 }
 
+// L'inizio noto di uno specificatore con una parte calcolata: basta che possa
+// diventare uno dei pacchetti sopra.
 function codeMirrorPrefix(prefix) {
-  return /^@codemirror(?:\/|$)/.test(prefix) || /^codemirror(?:\/|$)/.test(prefix);
+  return /^@codemirror(?:\/|$)/.test(prefix) || /^codemirror(?:\/|$)/.test(prefix) ||
+    /^@lezer(?:\/|$)/.test(prefix) ||
+    (prefix.startsWith("@replit") && "@replit/codemirror-vim".startsWith(prefix)) ||
+    /^@replit\/codemirror-vim(?:\/|$)/.test(prefix);
 }
 
 function unwrapExpression(typescript, node) {
@@ -221,6 +231,11 @@ function selfTest(typescript) {
     const globalAlias = runtimeGlobal.require("codemirror");
     const windowAlias = window.requireAlias("codemirror");
     const aliasRequire = localRequire("codemirror");
+    import { tags } from "@lezer/highlight";
+    import { Vim } from "@replit/codemirror-vim";
+    const nearLezer = import("@lezerish/common");
+    const otherReplit = import("@replit/other");
+    const nearVim = require("@replit/codemirror-vimish");
   `;
   const forbidden = `
     // import { fake } from "@codemirror/fake";
@@ -281,6 +296,13 @@ function selfTest(typescript) {
     const windowRequire = window.require(\`@codemirror/\${segment}\`);
     const globalBracket = globalThis["require"]("codemirror");
     const windowBracket = window["re" + "quire"]("@codemirror/view");
+    import { tags } from "@lezer/highlight";
+    import type { SyntaxNode } from "@lezer/common";
+    const lezerTree = import(\`@lezer/\${segment}\`);
+    import { Vim } from "@replit/codemirror-vim";
+    const vimDeep = require("@replit/codemirror-vim/dist/index.js");
+    const vimTemplate = import(\`@replit/codemirror-vim\${suffix}\`);
+    const replitTemplate = import(\`@replit/\${segment}\`);
   `;
   const tsx = `
     export const nested = <Widget>{module.require(\`@codemirror/\${segment}\`)}</Widget>;
@@ -290,9 +312,9 @@ function selfTest(typescript) {
   const forbiddenFindings = findings(`${SOURCE_ROOT}/panels/self-test.ts`, forbidden, typescript);
   const tsxFindings = findings(`${SOURCE_ROOT}/panels/self-test.tsx`, tsx, typescript);
   if (
-    permittedImports.length !== 12 ||
+    permittedImports.length !== 14 ||
     permittedFindings.length !== 0 ||
-    forbiddenFindings.length !== 52 ||
+    forbiddenFindings.length !== 59 ||
     tsxFindings.length !== 1
   ) {
     throw new Error(

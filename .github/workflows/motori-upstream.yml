@@ -23,24 +23,58 @@ jobs:
         motore: [wordcraft, gridcraft, vectorcraft]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+      # Un errore di rete non è un upstream nuovo: un secondo tentativo, poi
+      # rosso e nessuna issue. Il tag e lo sha arrivano dall'upstream: si
+      # controllano prima di usarli, e ai passi dopo arrivano per `env`, mai
+      # scritti dentro lo script.
       - name: l'ultimo tag dell'upstream
         id: tag
+        env:
+          MOTORE: ${{ matrix.motore }}
         run: |
-          lock="vendor/${{ matrix.motore }}/upstream.lock"
+          set -euo pipefail
+          lock="vendor/$MOTORE/upstream.lock"
           url=$(sed -n 's/^repository = "\(.*\)"$/\1/p' "$lock")
           rev=$(sed -n 's/^rev = "\(.*\)"$/\1/p' "$lock")
-          tag=$(git ls-remote --tags --refs --sort=-v:refname "$url" | head -n 1 | sed 's|.*refs/tags/||')
-          sha=$(git ls-remote --tags "$url" "refs/tags/$tag^{}" | cut -f1)
-          [ -n "$sha" ] || sha=$(git ls-remote --tags "$url" "refs/tags/$tag" | cut -f1)
+          if [ -z "$url" ] || [ -z "$rev" ]; then
+            echo "::error file=$lock::manca repository o rev"
+            exit 1
+          fi
+          remoto() {
+            git ls-remote "$@" && return 0
+            echo "::warning::git ls-remote di $url non è riuscito, un secondo tentativo fra 30 s"
+            sleep 30
+            git ls-remote "$@"
+          }
+          tags=$(remoto --tags --refs --sort=-v:refname "$url")
+          tag=$(printf '%s\n' "$tags" | awk 'NR == 1 { sub(/^.*refs\/tags\//, ""); print }')
+          if ! [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._+/-]*$ ]]; then
+            echo "::error::$url non ha un ultimo tag leggibile: «$tag»"
+            exit 1
+          fi
+          sha=$(remoto --tags "$url" "refs/tags/$tag^{}" | cut -f1)
+          [ -n "$sha" ] || sha=$(remoto --tags "$url" "refs/tags/$tag" | cut -f1)
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::il tag $tag di $url non dà uno sha di 40 cifre: «$sha»"
+            exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [ "$sha" = "$rev" ]; then echo "nuovo=no" >> "$GITHUB_OUTPUT"; else echo "nuovo=si" >> "$GITHUB_OUTPUT"; fi
       - name: report a vuoto
         if: steps.tag.outputs.nuovo == 'si'
         id: report
+        env:
+          MOTORE: ${{ matrix.motore }}
+          SHA: ${{ steps.tag.outputs.sha }}
         run: |
           set +e
-          node tools/vendor-craft/vendor.mjs ${{ matrix.motore }} report --rev ${{ steps.tag.outputs.sha }} > report.txt 2>&1
+          node tools/vendor-craft/vendor.mjs "$MOTORE" report --rev "$SHA" > report.txt 2>&1
           echo "esito=$?" >> "$GITHUB_OUTPUT"
           cat report.txt
       - name: apre o aggiorna la issue
@@ -52,6 +86,7 @@ jobs:
           SHA: ${{ steps.tag.outputs.sha }}
           ESITO: ${{ steps.report.outputs.esito }}
         run: |
+          set -euo pipefail
           title="motori: $MOTORE upstream"
           if [ "$ESITO" = "0" ]; then stato="la pila si applica"; else stato="prima di \`update\` c'è da fare (vedi il report)"; fi
           {
@@ -65,7 +100,9 @@ jobs:
             echo
             echo "La copia si aggiorna soltanto con una PR (ADR 0213 e 0221); vedi \`vendor/$MOTORE/UPSTREAM.md\`."
           } > body.md
-          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+          # Il titolo arriva a jq come argomento, non dentro il filtro.
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title \
+            | jq -r --arg title "$title" 'first(.[] | select(.title == $title) | .number) // empty')
           if [ -n "$number" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$number" -F body=@body.md > /dev/null
           else

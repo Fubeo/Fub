@@ -46,12 +46,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Su una PR il codice della PR non sceglie che cosa si verifica. L'elenco
+  # della base lo calcola lo strumento della base, nel primo passo, prima che
+  # giri un byte della PR. Quello della PR (le copie nuove e le cartelle non
+  # dichiarate) nel passo dopo, che importa `motori.mjs` e `dati.mjs` della PR.
+  # L'unione la fa il job `matrice`, su un'altra macchina e senza checkout: un
+  # passo della PR può scrivere `GITHUB_ENV` o `GITHUB_PATH` per i passi che lo
+  # seguono nello stesso job, ma non l'esito di un passo già chiuso né un altro
+  # job.
   motori:
     name: i motori di vendor
     runs-on: ubuntu-latest
     outputs:
-      elenco: ${{ steps.elenco.outputs.elenco }}
-      dati: ${{ steps.elenco.outputs.dati }}
+      base: ${{ steps.base.outputs.elenco }}
+      pr: ${{ steps.elenco.outputs.elenco }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -59,31 +67,76 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
+      # Lo strumento, `motori.mjs` e `dati.mjs` della base, estratti in una
+      # cartella a parte: nessun file della PR viene eseguito. Le cartelle di
+      # `vendor/` le controlla il passo dopo, sulla PR.
+      - name: elenco della base, con lo strumento della base
+        id: base
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet --no-tags --depth=1 origin "$BASE"
+          if ! git cat-file -e "$BASE:tools/vendor-craft/provenienza.mjs" 2>/dev/null; then
+            echo "::error::la base non ha tools/vendor-craft/provenienza.mjs: l'elenco non ha uno strumento fidato"
+            exit 1
+          fi
+          base="$RUNNER_TEMP/base"
+          mkdir -p "$base/vuota"
+          git archive "$BASE" tools/vendor-craft | tar -x -C "$base"
+          elenco=$(node "$base/tools/vendor-craft/provenienza.mjs" elenco --vendor "$base/vuota")
+          echo "elenco=$elenco" >> "$GITHUB_OUTPUT"
+          echo "base: $elenco"
       # Gli elenchi vengono da `motori.mjs` e `dati.mjs`, gli stessi di
       # `vendor.mjs check` e `provenienza.mjs check`: una copia nuova entra qui
-      # senza toccare questo file. Su una PR sono l'unione con quelli della
-      # base, così togliere una voce dall'elenco non la toglie dalla verifica;
-      # e ogni cartella di `vendor/` deve essere un motore o un dato.
+      # senza toccare questo file. Su una PR lo strumento è quello della base e
+      # i file sono quelli della PR più quelli della base, così togliere una
+      # voce dall'elenco non la toglie dalla verifica; e ogni cartella di
+      # `vendor/` deve essere un motore o un dato.
       - name: elenco da motori.mjs e dati.mjs
         id: elenco
         env:
           EVENTO: ${{ github.event_name }}
-          BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
+          strumento=tools/vendor-craft/provenienza.mjs
           argomenti=(--motori tools/vendor-craft/motori.mjs --dati tools/vendor-craft/dati.mjs)
           if [ "$EVENTO" = pull_request ]; then
-            git fetch --quiet --no-tags --depth=1 origin "$BASE"
-            if git show "$BASE:tools/vendor-craft/motori.mjs" > "$RUNNER_TEMP/motori-base.mjs" 2>/dev/null; then
-              argomenti+=(--motori "$RUNNER_TEMP/motori-base.mjs")
-            fi
-            if git show "$BASE:tools/vendor-craft/dati.mjs" > "$RUNNER_TEMP/dati-base.mjs" 2>/dev/null; then
-              argomenti+=(--dati "$RUNNER_TEMP/dati-base.mjs")
-            fi
+            base="$RUNNER_TEMP/base/tools/vendor-craft"
+            strumento="$base/provenienza.mjs"
+            argomenti+=(--motori "$base/motori.mjs" --dati "$base/dati.mjs")
           fi
-          uscita=$(node tools/vendor-craft/provenienza.mjs elenco "${argomenti[@]}")
-          elenco=$(printf '%s' "$uscita" | node -e 'let t = ""; process.stdin.on("data", (c) => (t += c)).on("end", () => console.log(JSON.stringify(JSON.parse(t).motori)))')
-          dati=$(printf '%s' "$uscita" | node -e 'let t = ""; process.stdin.on("data", (c) => (t += c)).on("end", () => console.log(JSON.stringify(JSON.parse(t).dati)))')
+          elenco=$(node "$strumento" elenco --vendor "$PWD/vendor" "${argomenti[@]}")
+          echo "elenco=$elenco" >> "$GITHUB_OUTPUT"
+          echo "elenco: $elenco"
+
+  # L'unione degli elenchi, senza checkout e senza codice del repository. Un
+  # nome che non può essere una cartella di `vendor/` è rosso.
+  matrice:
+    name: le matrici della verifica
+    needs: motori
+    runs-on: ubuntu-latest
+    outputs:
+      elenco: ${{ steps.unione.outputs.elenco }}
+      dati: ${{ steps.unione.outputs.dati }}
+    steps:
+      - name: unione della base e della PR
+        id: unione
+        env:
+          BASE: ${{ needs.motori.outputs.base }}
+          PR: ${{ needs.motori.outputs.pr }}
+        run: |
+          set -euo pipefail
+          vuoto='{"motori":[],"dati":[]}'
+          unione() {
+            jq -cn --argjson a "${BASE:-$vuoto}" --argjson b "${PR:-$vuoto}" --arg campo "$1" '
+              [$a, $b] | map(.[$campo] // error("manca " + $campo)) | add | unique
+              | if all(.[]; type == "string" and test("^[a-z0-9][a-z0-9._-]*$")) then .
+                else error("un nome di " + $campo + " non è una cartella di vendor") end'
+          }
+          elenco=$(unione motori)
+          dati=$(unione dati)
           echo "elenco=$elenco" >> "$GITHUB_OUTPUT"
           echo "dati=$dati" >> "$GITHUB_OUTPUT"
           echo "motori: $elenco"
@@ -91,13 +144,13 @@ jobs:
 
   verifica:
     name: provenienza di ${{ matrix.motore }}
-    needs: motori
+    needs: matrice
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        motore: ${{ fromJSON(needs.motori.outputs.elenco) }}
+        motore: ${{ fromJSON(needs.matrice.outputs.elenco) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -151,15 +204,15 @@ jobs:
 
   dati:
     name: provenienza del dato ${{ matrix.dato }}
-    needs: motori
+    needs: matrice
     # Una matrice vuota è un errore di GitHub, non una verifica.
-    if: needs.motori.outputs.dati != '[]'
+    if: needs.matrice.outputs.dati != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        dato: ${{ fromJSON(needs.motori.outputs.dati) }}
+        dato: ${{ fromJSON(needs.matrice.outputs.dati) }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -176,28 +229,43 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          url() { node --input-type=module -e "import { DATI } from '$1'; console.log(DATI[process.argv[1]]?.url ?? '')" "$DATO"; }
-          if [ "$EVENTO" = pull_request ]; then
-            if [ ! -d "vendor/$DATO" ]; then
-              echo "$DATO non c'è più nella PR: niente da verificare"
-              exit 0
-            fi
-            git fetch --quiet --no-tags --depth=1 origin "$BASE"
-            base=""
-            if git show "$BASE:tools/vendor-craft/dati.mjs" > "$RUNNER_TEMP/dati-base.mjs" 2>/dev/null \
-              && git cat-file -e "$BASE:tools/vendor-craft/provenienza.mjs" 2>/dev/null; then
-              base=$(url "$RUNNER_TEMP/dati-base.mjs")
-            fi
-            if [ -z "$base" ]; then
-              echo "::warning::$DATO non c'è nella base: si verifica con lo strumento e l'elenco della PR"
-            else
-              if [ "$(url "$PWD/tools/vendor-craft/dati.mjs")" != "$base" ]; then
-                echo "::error file=tools/vendor-craft/dati.mjs::la PR cambia l'URL di $DATO: la provenienza si verifica contro la base ($base)"
-                exit 1
-              fi
-              # Lo strumento e l'URL della base, sulla copia della PR.
-              rm -rf tools/vendor-craft
-              git checkout "$BASE" -- tools/vendor-craft
-            fi
+          # Il percorso e il nome passano come argomenti, mai dentro il codice.
+          url() {
+            node --input-type=module -e '
+              import { pathToFileURL } from "node:url";
+              const { DATI } = await import(pathToFileURL(process.argv[1]).href);
+              console.log(DATI[process.argv[2]]?.url ?? "");
+            ' "$1" "$DATO"
+          }
+          if [ "$EVENTO" != pull_request ]; then
+            node tools/vendor-craft/provenienza.mjs "$DATO" verify-upstream
+            exit 0
           fi
-          node tools/vendor-craft/provenienza.mjs "$DATO" verify-upstream
+          if [ ! -d "vendor/$DATO" ]; then
+            echo "$DATO non c'è più nella PR: niente da verificare"
+            exit 0
+          fi
+          git fetch --quiet --no-tags --depth=1 origin "$BASE"
+          base=""
+          if git show "$BASE:tools/vendor-craft/dati.mjs" > "$RUNNER_TEMP/dati-base.mjs" 2>/dev/null \
+            && git cat-file -e "$BASE:tools/vendor-craft/provenienza.mjs" 2>/dev/null; then
+            base=$(url "$RUNNER_TEMP/dati-base.mjs")
+          fi
+          if [ -z "$base" ]; then
+            echo "::warning::$DATO non c'è nella base: si verifica con lo strumento e l'elenco della PR"
+            node tools/vendor-craft/provenienza.mjs "$DATO" verify-upstream
+            exit 0
+          fi
+          # Lo strumento e l'URL della base, sulla copia della PR. Il
+          # `dati.mjs` della PR è codice della PR: gira soltanto dopo la
+          # verifica, così non può toccare lo strumento prima che parta.
+          cp tools/vendor-craft/dati.mjs "$RUNNER_TEMP/dati-pr.mjs"
+          rm -rf tools/vendor-craft
+          git checkout "$BASE" -- tools/vendor-craft
+          esito=0
+          node tools/vendor-craft/provenienza.mjs "$DATO" verify-upstream || esito=$?
+          if [ "$(url "$RUNNER_TEMP/dati-pr.mjs")" != "$base" ]; then
+            echo "::error file=tools/vendor-craft/dati.mjs::la PR cambia l'URL di $DATO: la provenienza si verifica contro la base ($base)"
+            exit 1
+          fi
+          exit "$esito"
