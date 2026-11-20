@@ -352,6 +352,12 @@ describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
     expect(formula?.querySelector(".canvas-formula-text")?.textContent).toBe("800");
 
     const before = host.atGate("openGridBytes").length;
+    // Il salvataggio automatico (400 ms dopo la scrittura) si tiene in volo
+    // finché il riquadro non mostra 900: il finto, salvando, non innesta il
+    // giornale nei byte, e il riquadro riaperto sui byte nuovi mostrerebbe
+    // di nuovo 800. Con la macchina carica la riapertura col giornale durava
+    // più di quei 400 ms e la prova cadeva (#477).
+    const releaseSave = host.throttle("writeDocument");
     const editor = findTextEditorOrThrow(cardWriter()!.querySelector<HTMLElement>(".grid-cell-editor")!);
     editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "900" }, userEvent: "input" });
     editor.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
@@ -368,6 +374,7 @@ describe("scrivere nelle celle di una scheda di foglio (T42)", () => {
       host.atGate("openGridBytes").slice(before).some((call) => call.args[2] === JOURNAL_900));
     expect(host.atGate("openDocument").filter((call) => call.args[0] === SHEET), "nessuna rilettura dal disco").toHaveLength(1);
     await waitFor("il riquadro mostra 900", () => cellIn(paneGrid(), 1, 1)?.textContent === "900");
+    releaseSave();
 
     // Il secondo Esc (non c'è una cella aperta) esce dalla scrittura, e il giornale va al file.
     cardWriter()!.querySelector<HTMLElement>(".grid-viewport")!

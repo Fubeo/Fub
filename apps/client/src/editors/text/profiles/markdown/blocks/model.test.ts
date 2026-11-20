@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { type ChangeSpec, EditorState } from "@codemirror/state";
@@ -13,6 +13,17 @@ function stateOf(doc: string): EditorState {
   const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] });
   ensureSyntaxTree(state, state.doc.length, 5000);
   return state;
+}
+
+/// `run` con `Date.now()` fermo: il tempo che CodeMirror concede all'analisi
+/// di una transazione non scade mai, qualunque sia il carico.
+function withStoppedClock<T>(run: () => T): T {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    return run();
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 const shape = (blocks: readonly Block[]) => blocks.map((b) => `${b.kind}${b.level || ""}@${b.depth}:${b.from}-${b.to}^${b.parent}`);
@@ -159,7 +170,11 @@ describe("le modifiche", () => {
     const first = start.update({ changes: { from: 3, insert: "a" } });
     model = updateBlocks(model, first);
     ensureSyntaxTree(first.state, first.state.doc.length, 5000);
-    const second = first.state.update({ changes: { from: 4, insert: "b" } });
+    // Lo stato nuovo rianalizza la nota nei 20 ms che CodeMirror concede a
+    // ogni transazione, misurati con `Date.now()`: con la macchina carica non
+    // bastano, l'albero resta a metà e la prova guarderebbe un altro caso
+    // (#451). Con l'orologio fermo l'analisi arriva sempre in fondo.
+    const second = withStoppedClock(() => first.state.update({ changes: { from: 4, insert: "b" } }));
     expect(syntaxTree(second.state).length).toBe(second.state.doc.length);
     model = updateBlocks(model, second);
     expect(shape(model.blocks)).toEqual(shape(buildBlocks(second.state).blocks));
