@@ -52,31 +52,74 @@ function awaitedExpression(body, awaitIndex) {
   return rest.slice(0, closingOf(rest, opening) + 1);
 }
 
-/// Un giro: `.last(` seguito da una funzione freccia, con o senza `async`, col
-/// parametro fra parentesi (anche tipato) o nudo.
-const OPENING = /\.last\(\s*(?:async\s+)?(?:\(\s*([A-Za-z_$][\w$]*)\s*(?::[^)]*)?\)|([A-Za-z_$][\w$]*))\s*(?::[^=]*)?=>/g;
+/// Gli argomenti di primo livello fra `from` e `to` (le virgole dentro
+/// parentesi, quadre o graffe non contano). Il codice è già senza letterali.
+function topLevelArguments(code, from, to) {
+  const parts = [];
+  let depth = 0;
+  let start = from;
+  for (let index = from; index < to; index++) {
+    const char = code[index];
+    if (char === "(" || char === "[" || char === "{") depth++;
+    else if (char === ")" || char === "]" || char === "}") depth--;
+    else if (char === "," && depth === 0) {
+      parts.push(code.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(code.slice(start, to));
+  return parts.filter((part) => part.trim() !== "");
+}
+
+/// Il corpo di un giro scritto come funzione freccia, con o senza `async`, col
+/// parametro fra parentesi (anche tipato), nudo o assente.
+const ARROW = /^\s*(?:async\s+)?(?:\(\s*(?:([A-Za-z_$][\w$]*)\s*(?::[^)]*)?)?\)|([A-Za-z_$][\w$]*))\s*(?::[^=]*)?=>/;
+/// …o come espressione `function`, anche `async` e con un nome.
+const FUNCTION = /^\s*(?:async\s+)?function\b\s*\*?\s*(?:[A-Za-z_$][\w$]*)?\s*\(\s*(?:([A-Za-z_$][\w$]*)\s*(?::[^)]*)?)?\)\s*(?::[^{]*)?\{/;
 
 /// Le violazioni di un file e quanti giri ci ha letto.
+///
+/// Ogni chiamata `.last(` con un argomento solo è un giro (`Race.last` ne
+/// prende uno, il corpo; un altro `last` con più argomenti non è un giro). Il
+/// corpo deve essere scritto lì, come freccia o `function`: un nome o
+/// un'espressione che la guardia non sa leggere (`race.last(run)`, con `run`
+/// definita altrove) è una violazione, non un giro che sfugge in silenzio.
 export function violations(text, relative) {
   const code = codeOnly(text);
   const found = [];
   let races = 0;
-  for (const match of code.matchAll(OPENING)) {
+  for (const match of code.matchAll(/\.last\s*\(/g)) {
+    const call = match.index + match[0].length - 1;
+    const close = closingOf(code, call);
+    const args = topLevelArguments(code, call + 1, close);
+    if (args.length !== 1) continue;
     races++;
-    const gate = match[1] ?? match[2];
-    const call = match.index + match[0].indexOf("(");
-    const start = match.index + match[0].length;
-    const body = code.slice(start, closingOf(code, call));
-    const lineOf = (offset) => code.slice(0, start + offset).split("\n").length;
+    const argument = code.slice(call + 1, close);
+    const head = ARROW.exec(argument) ?? FUNCTION.exec(argument);
+    const lineOf = (offset) => code.slice(0, offset).split("\n").length;
+    if (head === null) {
+      found.push(
+        `${relative}:${lineOf(call)}: cannot read the body of this race (\`.last(${argument.trim()})\`); ` +
+          "write it inline as an arrow or a `function` expression.",
+      );
+      continue;
+    }
+    const gate = head[1] ?? head[2] ?? null;
+    const start = call + 1 + head.index + head[0].length;
+    const body = code.slice(start, close);
     for (const awaited of body.matchAll(/\bawait\b/g)) {
       const expression = awaitedExpression(body, awaited.index);
-      if (new RegExp(`\\b${gate}\\b`).test(expression)) continue;
-      found.push(`${relative}:${lineOf(awaited.index)}: an \`await\` inside a race does not name \`${gate}\`.`);
+      if (gate !== null && new RegExp(`\\b${gate}\\b`).test(expression)) continue;
+      found.push(
+        gate === null
+          ? `${relative}:${lineOf(start + awaited.index)}: an \`await\` inside a race whose body takes no gate.`
+          : `${relative}:${lineOf(start + awaited.index)}: an \`await\` inside a race does not name \`${gate}\`.`,
+      );
     }
     for (const caught of body.matchAll(/\}\s*catch\b/g)) {
       found.push(
-        `${relative}:${lineOf(caught.index)}: a \`catch\` inside a race can swallow expiry; ` +
-          `use \`await ${gate}(promise.catch(…))\`.`,
+        `${relative}:${lineOf(start + caught.index)}: a \`catch\` inside a race can swallow expiry; ` +
+          `use \`await ${gate ?? "expected"}(promise.catch(…))\`.`,
       );
     }
   }
@@ -104,6 +147,16 @@ function selfTest() {
     ["dopo un template annidato", "const s = `a ${b ? `c${d}` : \"}\"} e`;\nr.last(async (e) => { await f(); });", 1, 1],
     ["dopo una regex con una virgoletta", "const q = /[\"'`]/g; x = a / b / c;\nr.last(async (e) => { await f(); });", 1, 1],
     ["una regex dopo return", "function g() { return /\"/.test(s); }\nr.last(async (e) => { await f(); });", 1, 1],
+    // La revisione #528: un corpo che la guardia non legge non deve sfuggire.
+    ["il corpo definito altrove", "const run = async (e) => { await f(); };\nr.last(run);", 1, 1],
+    ["il corpo preso da un oggetto", "r.last(this.#load.bind(this));", 1, 1],
+    ["una async function", "r.last(async function (e) { await f(); });", 1, 1],
+    ["una async function col cancello", "r.last(async function load(e: Expected) { await e(f()); });", 1, 0],
+    ["una freccia senza cancello", "r.last(async () => { await f(); });", 1, 1],
+    ["una freccia senza cancello né attese", "r.last(async () => 1);", 1, 0],
+    ["una freccia non async col cancello", "r.last((expected) => expected(f()));", 1, 0],
+    ["a capo dopo la parentesi", "r.last(\n  async (e) => {\n    await f();\n  },\n);", 1, 1],
+    ["una regex dopo un if, prima del giro", "if (x) /\"/.test(s);\nr.last(async (e) => { await f(); });", 1, 1],
   ];
   const failures = [];
   try {

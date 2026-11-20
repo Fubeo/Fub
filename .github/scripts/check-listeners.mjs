@@ -37,12 +37,13 @@ function quoted(value) {
 
 /// Le righe logiche del codice: una catena spezzata da Prettier
 /// (`window` a capo `.addEventListener(…)`) torna una riga sola, col numero
-/// della riga dove comincia.
+/// della riga dove comincia. Una riga che comincia con `...` (uno spread) non
+/// è una catena: resta una riga sua, come ogni altro argomento a capo.
 function logicalLines(code) {
   const lines = [];
   for (const [index, line] of code.split("\n").entries()) {
     const trimmed = line.trim();
-    if (lines.length && /^\??\./.test(trimmed)) {
+    if (lines.length && /^(?:\?\.|\.(?!\.\.))/.test(trimmed)) {
       lines[lines.length - 1].code += trimmed;
     } else {
       lines.push({ line: index + 1, code: trimmed });
@@ -157,6 +158,13 @@ function selfTest() {
     ["una sottoscrizione col disposer", "const stop = bus.subscribe(f);", 0],
     ["un osservatore senza disconnect", "new ResizeObserver(f);", 1],
     ["un osservatore col disconnect", "const o = new ResizeObserver(f);\no.disconnect();", 0],
+    // Uno spread a capo è un argomento come gli altri, non una catena da
+    // incollare alla riga prima (revisione #528): incollato, prendeva il
+    // disposer nominato là e la sua sottoscrizione anonima spariva.
+    ["un argomento a capo", "const stop = merge(\n  parts.map((p) => p.subscribe(f)),\n);", 1],
+    ["uno spread a capo (sfuggiva)", "const stop = merge(\n  ...parts.map((p) => p.subscribe(f)),\n);", 1],
+    ["la catena opzionale a capo", "const stop = bus\n  ?.subscribe(f);", 0],
+    ["la catena a capo", "const stop = bus\n  .subscribe(f);", 0],
   ];
   const failures = [];
   try {

@@ -21,6 +21,12 @@ export function codeOnly(text) {
   let index = 0;
   // L'ultimo pezzo di codice non bianco: dice se una `/` apre una regex.
   let previous = "";
+  // L'ultima parola di codice, e per ogni `(` aperta se apre la condizione di
+  // un `if`, `while`, `for` o `with`: dopo la sua `)` comincia un'istruzione,
+  // e una `/` apre una regex (`if (x) /"/.test(s)`); dopo ogni altra `)` è una
+  // divisione (`f(x) / 2`).
+  let word = "";
+  const parens = [];
   const template = () => {
     // Da dopo il backtick (o la `}` di un segnaposto) fino al backtick o a `${`.
     const from = index;
@@ -94,12 +100,28 @@ export function codeOnly(text) {
       }
     } else if (/\s/.test(char)) {
       index++;
+    } else if ((char === "+" || char === "-") && text[index + 1] === char) {
+      // `i++ / 2`: dopo un incremento (o un decremento) che chiude un
+      // operando, una `/` è una divisione.
+      index += 2;
+      previous = ")";
+      word = pair;
+    } else if (char === "(") {
+      parens.push(/^(?:if|while|for|with)$/.test(word));
+      index++;
+      previous = "(";
+      word = "(";
+    } else if (char === ")") {
+      previous = parens.pop() ? "(" : ")";
+      index++;
+      word = ")";
     } else {
       // Dopo `return`, `typeof` e simili una `/` apre una regex, dopo un nome
       // o una parentesi chiusa è una divisione.
-      const word = /[\w$]/.test(char) ? text.slice(index).match(/^[\w$]+/)[0] : char;
-      previous = /^(?:return|typeof|case|do|else|in|of|void|yield|await)$/.test(word) ? "(" : word.at(-1);
-      index += word.length;
+      const token = /[\w$]/.test(char) ? text.slice(index).match(/^[\w$]+/)[0] : char;
+      previous = /^(?:return|typeof|case|do|else|in|of|void|yield|await)$/.test(token) ? "(" : token.at(-1);
+      index += token.length;
+      word = token;
     }
   }
   return out.join("");
@@ -116,6 +138,14 @@ export function selfTestCode() {
     ["una divisione non è una regex", "x = a / b / c; i();", "x = a / b / c; i();"],
     ["una regex dopo return", "return /\"/.test(s); j();", "return / /.test(s); j();"],
     ["gli a capo restano", "/* a\nb */ k();", "    \n     k();"],
+    // Le due letture sbagliate della revisione #528: una regex dopo la `)` di
+    // un `if` presa per divisione (la virgoletta apriva una stringa fino a fine
+    // riga), e una divisione dopo `++` presa per regex.
+    ["una regex dopo la condizione di un if", "if (x) /\"/.test(s); m(\"}\");", "if (x) / /.test(s); m(\" \");"],
+    ["una regex dopo la condizione di un while annidato", "while (f(a)) /'/.exec(s); n('{');", "while (f(a)) / /.exec(s); n(' ');"],
+    ["una divisione dopo una chiamata", "y = f(x) / 2; z = \"/\";", "y = f(x) / 2; z = \" \";"],
+    ["una divisione dopo ++", "j = i++ / 2; w = \"/\";", "j = i++ / 2; w = \" \";"],
+    ["una divisione dopo --", "j = i-- / 2 / 3; w = '{';", "j = i-- / 2 / 3; w = ' ';"],
   ];
   for (const [label, source, expected] of cases) {
     const actual = codeOnly(source);
