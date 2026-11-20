@@ -3037,13 +3037,17 @@ button.cm-fub-page-icon:focus-visible {
 }
 .ui-list-item-subtitle {
   /* Due righe al massimo: il contesto di un link si legge, ma non si prende il
-     pannello. */
+     pannello, e i puntini dicono che il testo continua. */
+  display: -webkit-box;
   overflow: hidden;
   max-height: calc(2em * var(--leading-tight));
   margin-top: var(--space-1);
   color: var(--muted);
   font-size: var(--text-sm);
   line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 /* Il cestino e la cronologia non hanno regole proprie: sono due view dichiarate
    (§1.2), e le disegnano i componenti generici dell'albero. */
