@@ -21,6 +21,15 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/// Le dichiarazioni di `structure.css` per `selector`, da tutte le regole
+/// che lo nominano da solo nella loro lista di selettori.
+function structureOf(selector: string): string {
+  return [...structureCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, selectors]) => selectors!.replace(/\/\*[\s\S]*?\*\//g, "").split(",").map((part) => part.trim()).includes(selector))
+    .map(([, , body]) => body!)
+    .join("\n");
+}
+
 /// Il provider con il foglio che cambia sotto la griglia: ogni finestra letta
 /// passa da `read`, che la riscrive come farebbe un file cambiato altrove.
 function reshaped(grid: ReturnType<typeof bytesHost>, read: (window: GridBytesWindow) => GridBytesWindow): GridHost {
@@ -171,13 +180,26 @@ describe("GridEngine", () => {
     expect(plane.querySelector(".grid-paper")).toBeNull();
     expect(paper.style.height).toBe("300px");
     expect(paper.style.marginBottom).toBe("-300px");
-    const rules = [...structureCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({
-      selectors: selectors!.replace(/\/\*[\s\S]*?\*\//g, "").split(",").map((selector) => selector.trim()),
-      body: body!,
-    }));
-    const of = (selector: string) => rules.filter((rule) => rule.selectors.includes(selector)).map((rule) => rule.body).join("\n");
-    expect(of(".grid-paper")).toMatch(/position:\s*sticky/);
-    expect(of(".grid-paper")).toMatch(/pointer-events:\s*none/);
+    expect(structureOf(".grid-paper")).toMatch(/position:\s*sticky/);
+    expect(structureOf(".grid-paper")).toMatch(/pointer-events:\s*none/);
+    engine.destroy();
+  });
+
+  // IMP-6600: WebKit, quando un figlio entra o esce, ridipinge tutto il
+  // riquadro del genitore. Con il corpo grande quanto il foglio, ogni riga
+  // aggiunta o tolta ai bordi dello scorrimento ridipingeva il foglio intero.
+  // Il corpo è senza misura, come i livelli dei segni: entra ed esce solo la
+  // riga, posata dal corpo con `top` e `left`.
+  it("le righe che lo scorrimento aggiunge e toglie stanno in un corpo senza misura", async () => {
+    const { engine, host } = await mounted();
+    const body = host.querySelector<HTMLElement>(".grid-plane > .grid-rows")!;
+    const rows = [...body.children].filter((element): element is HTMLElement => element.classList.contains("grid-row"));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row.style.position).toBe("absolute");
+    const rule = structureOf(".grid-rows");
+    expect(rule).toMatch(/position:\s*relative/);
+    expect(rule).toMatch(/(^|[;\s])width:\s*0(px)?\s*;/);
+    expect(rule).toMatch(/(^|[;\s])height:\s*0(px)?\s*;/);
     engine.destroy();
   });
 
