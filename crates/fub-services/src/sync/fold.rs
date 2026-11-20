@@ -63,6 +63,18 @@ pub(super) fn fold_op(
                 });
             }
         }
+        // A deleted destination comes back only from a rename that saw its
+        // deletion, as for a write; one that did not is held, not stacked on
+        // the tombstone.
+        if let Some(tomb) = state.tombstones.get(to) {
+            if !can_resurrect(tomb, &op.vv) {
+                return FoldOutcome::Held(ConflictInfo {
+                    doc_id: to.clone(),
+                    reason: "rename onto a deleted document needs a newer counter".to_string(),
+                    replicas: vec![op.replica_id.clone(), tomb.replica_id.clone()],
+                });
+            }
+        }
         for endpoint in [from, to] {
             if let Some(latest) = latest_any(state, endpoint) {
                 if vv_compare(&op.vv, &parse_vv_text(&latest.vv_text)) == VvOrder::Concurrent {
@@ -75,6 +87,9 @@ pub(super) fn fold_op(
                 }
             }
         }
+        // The destination lives again: its old tombstone would bury the next
+        // writes to it, which follow the rename, not the deletion.
+        state.tombstones.remove(to);
         state.tombstones.insert(
             from.clone(),
             Tombstone {

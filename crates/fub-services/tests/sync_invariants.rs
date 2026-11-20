@@ -444,6 +444,60 @@ fn concurrent_edit_delete_and_rename() {
     assert!(!conflicts.is_empty(), "routing mismatch must surface");
 }
 
+/// M2: un rinomina su un documento cancellato, che ha visto la
+/// cancellazione, lo fa rivivere e ne toglie la tombstone. Una scrittura
+/// concorrente di un'altra replica diventa una copia di conflitto, non una
+/// scrittura sepolta sotto la cancellazione di prima.
+#[test]
+fn a_rename_onto_a_deleted_document_clears_its_tombstone() {
+    let dir = temp_data_dir("rename-tombstone");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-tomb-user");
+    let mut a = Replica::new("a");
+    let mut b = Replica::new("b");
+    let created = a.op("notes/meta.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    let seen = pull(&mut state, &auth, &b.id, &BTreeMap::new());
+    learn(&mut b, &seen.ops);
+
+    let deleted = a.op("notes/meta.md", OpKind::Delete, "");
+    let source = a.op("notes/fonte.md", OpKind::Create, "fonte");
+    let renamed = a.op(
+        "notes/fonte.md",
+        OpKind::Rename {
+            from: "notes/fonte.md".to_string(),
+            to: "notes/meta.md".to_string(),
+        },
+        "fonte",
+    );
+    let r = push(&mut state, &auth, &a.id, &[deleted, source, renamed]);
+    assert_eq!(r.ack.len(), 3, "{:?}", r.conflicts);
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(
+        !folded.tombstones.contains_key("notes/meta.md"),
+        "the destination lives again"
+    );
+    assert!(folded.tombstones.contains_key("notes/fonte.md"));
+
+    // B saw only the creation: its edit is concurrent with the rename.
+    let edit = b.op("notes/meta.md", OpKind::Update, "modifica di B");
+    let edit_id = edit.op_id.clone();
+    let r = push(&mut state, &auth, &b.id, &[edit]);
+    assert!(
+        r.ack.contains(&edit_id),
+        "kept as a version: {:?}",
+        r.conflicts
+    );
+    assert!(
+        r.conflicts
+            .iter()
+            .all(|conflict| !conflict.reason.contains("tombstone")),
+        "{:?}",
+        r.conflicts
+    );
+}
+
 // ---------------------------------------------------------------------------
 // 4. Divergent clocks: ts_ms never decides; vv decides (settings LWW only).
 // ---------------------------------------------------------------------------
@@ -1394,6 +1448,29 @@ fn user_exclude_is_additive_never_subtractive() {
     assert!(truncated);
 }
 
+/// M3: un nome senza punto, o con il solo punto iniziale, non ha
+/// estensione: `ext:makefile` non esclude il file `Makefile`, e una lista di
+/// estensioni ammesse non lo scambia per un'estensione.
+#[test]
+fn a_name_without_a_dot_has_no_extension() {
+    let (sel, _) = sync::parse_user_exclude(&[
+        "ext:makefile".to_string(),
+        "ext:gitignore".to_string(),
+        "ext:md".to_string(),
+    ]);
+    assert!(sync::is_selected(&sel, "notes/Makefile"));
+    assert!(sync::is_selected(&sel, "notes/.gitignore"));
+    assert!(!sync::is_selected(&sel, "notes/a.MD"));
+    assert!(!sync::is_selected(&sel, "notes/build.makefile"));
+    let only_md = sync::SyncSelection {
+        include_ext: vec!["md".to_string()],
+        ..Default::default()
+    };
+    assert!(sync::is_selected(&only_md, "notes/a.md"));
+    assert!(!sync::is_selected(&only_md, "notes/md"));
+    assert!(!sync::is_selected(&only_md, "notes/.md"));
+}
+
 #[test]
 fn no_secret_in_persisted_state() {
     // Passwords, KEKs, VDK cleartext and session tokens must never appear in
@@ -1726,6 +1803,35 @@ fn the_vault_quota_counts_history_and_every_replica_queue() {
         folded.versions["notes/a.md"].last().unwrap().ciphertext_b64,
         last
     );
+}
+
+/// M1: una coda già oltre il tetto risponde 507 prima di scrivere: il 507
+/// dice il vero, nessuno stato del vault è stato riscritto.
+#[test]
+fn a_full_queue_refuses_the_push_before_writing() {
+    let dir = temp_data_dir("queue-full-first");
+    let mut state = open_state(dir.path());
+    state.config.quotas.max_vault_bytes = 64 * 1024;
+    let auth = auth_for(&mut state, "queue-full-user");
+    let mut a = Replica::new("a");
+    let op = a.op("notes/a.md", OpKind::Update, &"x".repeat(4 * 1024));
+    let id = a.id.clone();
+    push(&mut state, &auth, &id, std::slice::from_ref(&op));
+    // L'operatore abbassa la quota: la coda non ancora confermata la supera.
+    state.config.quotas.max_vault_bytes = 1024;
+    let sync_dir = vault_sync_dir(dir.path());
+    let state_file = sync::versions::state_path(&sync_dir);
+    let before = std::fs::metadata(&state_file).unwrap().modified().unwrap();
+    let queue_before = sync::queue::vault_queue_bytes(&sync_dir);
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let resp = push_raw(&mut state, &auth, &id, &[op]);
+    assert_eq!(resp.status, 507, "{}", String::from_utf8_lossy(&resp.body));
+    assert_eq!(
+        std::fs::metadata(&state_file).unwrap().modified().unwrap(),
+        before,
+        "a refused push rewrites nothing"
+    );
+    assert_eq!(sync::queue::vault_queue_bytes(&sync_dir), queue_before);
 }
 
 /// Una quota di 0 byte è una quota: il vault non tiene niente, come per i

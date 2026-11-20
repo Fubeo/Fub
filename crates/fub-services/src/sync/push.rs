@@ -174,6 +174,39 @@ pub(super) fn run_push(scope: &VaultScope, req: PushRequest) -> HttpResponse {
             FoldOutcome::Held(info) => conflicts.push(info),
         }
     }
+    // Backpressure, never silent drop: a full authority queue reports
+    // QueueFull so the caller resyncs explicitly instead of reading current.
+    // Checked before anything is written, so a 507 means nothing of this
+    // request was stored; the batch itself is bounded below (op count in
+    // `append_lines`, bytes by the vault quota), so a push that passes here
+    // and there is a success.
+    match queue::enforce_cap(dir, &req.replica_id, &scope.quotas, now) {
+        Err(queue::QueueError::QueueFull { pending }) => {
+            return HttpResponse::json(
+                507,
+                &serde_json::json!({
+                    "error": "queue full",
+                    "pending": pending,
+                    "resync": "drain via pull+ack before pushing",
+                }),
+            );
+        }
+        Err(queue::QueueError::RecoveryNeeded {
+            quarantined,
+            preserved,
+        }) => {
+            return HttpResponse::json(
+                500,
+                &serde_json::json!({
+                    "error": "recovery needed",
+                    "quarantined": quarantined,
+                    "preserved": preserved,
+                }),
+            );
+        }
+        Err(queue::QueueError::Io(e)) => return HttpResponse::err(500, &e),
+        Ok(_) => {}
+    }
     if !accepted.is_empty() {
         let lines: Vec<String> = match accepted
             .iter()
@@ -234,35 +267,6 @@ pub(super) fn run_push(scope: &VaultScope, req: PushRequest) -> HttpResponse {
     versions::prune_retention(&mut folded, now, scope.quotas.retention_days);
     if let Err(e) = versions::save(dir, &folded) {
         return HttpResponse::err(500, &e);
-    }
-    // Backpressure, never silent drop: a full authority queue reports
-    // QueueFull so the caller resyncs explicitly instead of reading current.
-    match queue::enforce_cap(dir, &req.replica_id, &scope.quotas, now) {
-        Err(queue::QueueError::QueueFull { pending }) => {
-            return HttpResponse::json(
-                507,
-                &serde_json::json!({
-                    "error": "queue full",
-                    "pending": pending,
-                    "resync": "drain via pull+ack before pushing",
-                }),
-            );
-        }
-        Err(queue::QueueError::RecoveryNeeded {
-            quarantined,
-            preserved,
-        }) => {
-            return HttpResponse::json(
-                500,
-                &serde_json::json!({
-                    "error": "recovery needed",
-                    "quarantined": quarantined,
-                    "preserved": preserved,
-                }),
-            );
-        }
-        Err(queue::QueueError::Io(e)) => return HttpResponse::err(500, &e),
-        Ok(_) => {}
     }
     HttpResponse::json(
         200,

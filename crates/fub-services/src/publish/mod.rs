@@ -651,7 +651,8 @@ pub fn run_commit(plan: &CommitPlan) -> Result<(site::SiteRecord, u64), site::Si
     )
 }
 
-/// Ultima metà, di nuovo sotto il lock globale e breve: proprietario e grant.
+/// Ultima metà, di nuovo sotto il lock globale e breve: proprietario e grant
+/// `Owner`, che spetta soltanto al proprietario del record.
 pub fn finish_commit(
     state: &mut ServiceState,
     plan: CommitPlan,
@@ -668,9 +669,14 @@ pub fn finish_commit(
                     return HttpResponse::err(500, "record write failed");
                 }
             }
-            state
-                .acl_mut(&site_resource(&site_id))
-                .grant(&account, crate::acl::Role::Owner);
+            // Owner only to the site's owner (who created it, or already owned
+            // it): a Writer who publishes stays a Writer and cannot
+            // administer the site afterwards.
+            if record.owner == account {
+                state
+                    .acl_mut(&site_resource(&site_id))
+                    .grant(&account, crate::acl::Role::Owner);
+            }
             HttpResponse::json(200, &manifest::CommitResponse { site_id, version })
         }
     }

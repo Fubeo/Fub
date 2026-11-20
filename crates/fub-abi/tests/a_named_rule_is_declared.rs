@@ -1528,6 +1528,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-services/src/main.rs::is_loopback_bind",
+            (
+                Family::AsciiCase,
+                "riconosce `localhost` in `--bind` senza distinguere le maiuscole: un nome DNS è \
+                 ASCII e non distingue le maiuscole. Diverge da `handle_static` perché qui la \
+                 domanda è «l'indirizzo d'ascolto è loopback», decisa all'avvio, non quale sito \
+                 serve una richiesta.",
+            ),
+        ),
+        (
             "crates/fub-services/src/main.rs::handle_static",
             (
                 Family::AsciiCase,
@@ -1741,10 +1751,19 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-services/src/site_isolation.rs::html5_doctype",
+            (
+                Family::AsciiCase,
+                "riconosce `<!doctype html>` in qualunque grafia: parola chiave e nome sono ASCII \
+                 e HTML non distingue le maiuscole. Diverge da `html_has_script` perché qui si \
+                 lascia passare l'unica dichiarazione `<!` innocua, là si giudicano i tag.",
+            ),
+        ),
+        (
             "crates/fub-services/src/site_isolation.rs::commit_has_custom_js",
             (
                 Family::AsciiCase,
-                "abbassa il path per riconoscere il suffisso `.js`: le estensioni dei file serviti \
+                "abbassa il path per riconoscere i suffissi `.js`, `.mjs` e `.cjs`: le estensioni dei file serviti \
                  sono ASCII e la domanda è «porta codice eseguibile». Diverge da `html_has_script` \
                  perché qui il segnale è nel nome del file, là nel suo contenuto.",
             ),

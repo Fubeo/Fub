@@ -706,7 +706,9 @@ fn trace_points(text: &str) -> Result<Vec<Vec<Read>>, InkmlError> {
             if token.is_empty() || token == "-" || token == "+" {
                 return Err(InkmlError::Unsupported(format!(
                     "valore «{}» in una traccia",
-                    &raw[start..(start + 1).min(raw.len())]
+                    // The whole character, not its first byte: a cut
+                    // inside a multibyte letter would panic (A7).
+                    raw[start..].chars().next().unwrap_or(' ')
                 )));
             }
             let value: f64 = token
@@ -1152,6 +1154,17 @@ mod tests {
             from_inkml("<ink><trace>1 ? 2</trace></ink>"),
             Err(InkmlError::Unsupported(_))
         ));
+        // Una lettera di più byte nel valore è un errore, non un panico sul
+        // taglio del testo (A7).
+        for trace in ["1 \u{e9} 2", "1 -\u{e9}", "\u{1f600}"] {
+            assert!(
+                matches!(
+                    from_inkml(&format!("<ink><trace>{trace}</trace></ink>")),
+                    Err(InkmlError::Unsupported(_))
+                ),
+                "{trace:?}"
+            );
+        }
         assert!(matches!(
             from_inkml(
                 r##"<ink><context xml:id="c"><traceFormat><channel name="X" units="parsec"/><channel name="Y"/></traceFormat></context><trace contextRef="#c">1 2</trace></ink>"##
