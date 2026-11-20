@@ -32,6 +32,9 @@ cssclasses: [wide, sans]
   barra: in `Progetti/Tesi` il titolo `Progetti/Tesi/Villa` resta in
   `Progetti/Tesi`, senza annidare la cartella una seconda volta. Lo stesso
   vale per la pagina di una cartella. Invio dal titolo porta al testo.
+  Nel titolo senza una modifica sua Ctrl+Z (Cmd+Z) annulla la nota, un passo
+  per tasto, e Ctrl+Maiusc+Z o Ctrl+Y ripetono; con un nome scritto nel campo
+  annullano prima quello.
   In sola lettura non si modifica.
 - **Il primo H1.** Se la prima riga che si legge dopo il frontmatter (righe
   vuote e commenti `%%` o `<!-- -->` a parte) è un H1 che, a parte maiuscole,

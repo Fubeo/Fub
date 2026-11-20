@@ -37,6 +37,7 @@ import { liveStrings } from "./strings";
 export type SlashPanelCore = Pick<SlashPanelEvents, "choose" | "dismiss" | "active">;
 import type { ContextMatch } from "./completions";
 import { loadDiagramTemplates, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { closeFenceEnter } from "./commands";
 import { CALLOUT_TYPES, CODE_LANGUAGES } from "./kinds";
 import { reminderTaskAt, reminderTimeOf, writeReminder, type ReminderTime } from "./task-reminder";
 
@@ -1094,12 +1095,22 @@ export function codeLanguageSource(): CompletionSource {
       label: language,
       type: "keyword",
       apply: (view, _completion, from, to) => {
-        const here = view.state.doc.lineAt(from);
-        const below = here.number < view.state.doc.lines ? view.state.doc.line(here.number + 1) : null;
-        const shift = language.length - (to - from);
+        // Scelto il linguaggio si scende nel corpo come con Invio, che con il
+        // menu aperto è il tasto della scelta: un recinto ancora senza
+        // chiusura la riceve (`closeFenceEnter`), in un passo d'annullamento
+        // solo. Prima il cursore restava in fondo all'apertura, e ciò che si
+        // scriveva dopo si attaccava al linguaggio (IMP-6107).
+        const chosen = view.state.update({ changes: { from, to, insert: language } });
+        const end = chosen.state.doc.lineAt(from).to;
+        const entered: Transaction[] = [];
+        closeFenceEnter({ state: chosen.state.update({ selection: EditorSelection.cursor(end) }).state, dispatch: (tr) => entered.push(tr) });
+        const opened = entered[0] ?? null;
+        const here = chosen.state.doc.lineAt(from);
+        const below = here.number < chosen.state.doc.lines ? chosen.state.doc.line(here.number + 1).from : end;
         view.dispatch({
-          changes: { from, to, insert: language },
-          selection: EditorSelection.cursor(below ? below.from + shift : from + language.length),
+          changes: opened ? chosen.changes.compose(opened.changes) : chosen.changes,
+          selection: opened ? opened.selection : EditorSelection.cursor(below),
+          scrollIntoView: true,
           userEvent: "input.complete",
         });
       },

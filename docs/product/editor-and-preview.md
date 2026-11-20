@@ -172,7 +172,8 @@ segno per segno resta grassetto; la `]` battuta subito dopo una casella è quell
 messa (niente `- [ ]]`); sulla voce che Invio ha appena aperto, `- `, `* ` o `1. `
 cambiano il segno della voce invece di annidarne una a vista; un blocco `$$…$$`
 scritto su una riga resta testo, chiusura compresa, finché il cursore non ne esce, e
-poi si disegna.
+poi si disegna. Invio sul menu dei linguaggi di ` ```mermaid ` va nel corpo, e la
+` ``` ` scritta sopra la chiusura già messa è quella; `[!tip]` è sorgente finché si scrive.
 
 In un elenco Invio continua la voce (puntata, numerata o compito, rinumerando
 quelle dopo). Invio su una voce vuota esce dall'elenco con un paragrafo vero:

@@ -333,6 +333,10 @@ export interface Reveal {
   /// Un cursore tocca l'elemento: con `mai` è quando un collegamento mostra
   /// la sua pastiglia.
   near(from: number, to: number): boolean;
+  /// Un capo di una selezione sta dentro `from..to`, non su un suo bordo: in
+  /// ogni politica un widget non vi va, perché il browser non tiene un
+  /// cursore dentro un widget e lo rimetterebbe dopo, mentre si scrive.
+  inside(from: number, to: number): boolean;
 }
 
 /// La rivelazione di uno stato. `ranges` sono le selezioni che contano: quelle
@@ -347,15 +351,16 @@ export function revealOf(
   const rowOf = (at: number) => row(state.doc.lineAt(at).number);
   const touches = (from: number, to: number) => ranges.some((r) => r.from <= to && r.to >= from);
   const inPrefix = (from: number, to: number) => ranges.some((r) => r.from < to && (r.to > from || r.from === from));
+  const inside = (from: number, to: number) => ranges.some((r) => (r.from > from && r.from < to) || (r.to > from && r.to < to));
   if (policy === "riga") {
     return {
-      policy, row, marks: (_f, _t, at) => rowOf(at), prefix: (from) => rowOf(from), source: (_f, _t, at) => rowOf(at), near: touches,
+      policy, row, marks: (_f, _t, at) => rowOf(at), prefix: (from) => rowOf(from), source: (_f, _t, at) => rowOf(at), near: touches, inside,
     };
   }
   if (policy === "elemento") {
-    return { policy, row, marks: touches, prefix: inPrefix, source: touches, near: touches };
+    return { policy, row, marks: touches, prefix: inPrefix, source: touches, near: touches, inside };
   }
-  return { policy, row, marks: () => false, prefix: () => false, source: touches, near: touches };
+  return { policy, row, marks: () => false, prefix: () => false, source: touches, near: touches, inside };
 }
 
 /// La politica `riga` sulle righe date: la forma dei test, e di chi chiama
@@ -369,6 +374,9 @@ function lineReveal(state: EditorState, lines: ReadonlySet<number>): Reveal {
     prefix: (from) => rowOf(from),
     source: (_f, _t, at) => rowOf(at),
     near: (from) => rowOf(from),
+    // Senza le selezioni non c'è un capo da tenere fuori dai widget; con
+    // `riga` la sorgente della riga del cursore si vede comunque.
+    inside: () => false,
   };
 }
 
@@ -771,7 +779,9 @@ export function computeDecorations(
           if (open.from >= from && open.from <= to) {
             const markFrom = open.from + head.mark.from;
             const markTo = open.from + head.mark.to;
-            if (reveal.prefix(open.from, open.from + head.title.from)) out.push({ from: markFrom, to: markTo, kind: "near" });
+            // Col cursore fra `[!` e `]` il tipo si sta scrivendo: resta
+            // sorgente finché la `]` non lo chiude (IMP-6108).
+            if (reveal.prefix(open.from, open.from + head.title.from) || reveal.inside(markFrom, open.from + head.title.from)) out.push({ from: markFrom, to: markTo, kind: "near" });
             else out.push({ from: markFrom, to: open.from + head.title.from, kind: "callout-type", data: `${head.type}${head.fold ?? ""}` });
             if (head.title.to > head.title.from) out.push({ from: open.from + head.title.from, to: open.from + head.title.to, kind: "callout-title" });
           }

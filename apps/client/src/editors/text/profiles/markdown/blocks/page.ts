@@ -6,7 +6,7 @@
 // La testata vera, il suo DOM e i suoi riquadri sono gli stessi della Lettura.
 import { EditorSelection, EditorState, type Extension, Prec, StateEffect, StateField, Transaction, type TransactionSpec } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
-import { isolateHistory } from "@codemirror/commands";
+import { isolateHistory, redo, undo } from "@codemirror/commands";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { propertiesDisplay } from "../../../properties-display";
 import {
@@ -286,6 +286,8 @@ function hostFor(view: EditorView, root: HTMLElement): PageHost {
     toBody: () => toBody(view),
     focusText: () => view.focus(),
     refresh: () => view.dispatch({ effects: refreshPage.of(null) }),
+    undo: () => void undo({ state: view.state, dispatch: (transaction) => view.dispatch(transaction) }),
+    redo: () => void redo({ state: view.state, dispatch: (transaction) => view.dispatch(transaction) }),
     measure: () => view.requestMeasure(),
     more: {
       get open() { return view.state.field(pageMore, false) ?? false; },
