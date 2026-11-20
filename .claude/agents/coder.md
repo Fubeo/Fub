@@ -92,7 +92,8 @@ expected.
 - **Graphic task.** Start from the approved prototype under `PLAN-ui/`, or from
   the approved artifact the brief names, whose saved HTML file the brief gives.
   Read its code in full first: the planner built it that way for a reason.
-  Port its HTML and CSS as they are, as far as the app allows. Move its CSS into
+  Its HTML and CSS are moved, not rewritten: change only what the app forces,
+  each change with its reason in the conformity exceptions. Move its CSS into
   the skin file the task names, its structure into the component, its strings
   into `src/i18n/`, its states into the bench scene if the task says so. Don't
   redesign it. **The prototype's code is the reference, not its pictures**: a

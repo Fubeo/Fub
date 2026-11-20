@@ -25,7 +25,7 @@ output path `<scratchpad>/<TASK>/soluzione.md`.
   is, how it looks and how to choose like Fub. Never describe a new look in
   prose for the coder to draw: if an approved prototype or artifact exists,
   name it and say which pieces of its HTML and CSS go into which files (the
-  coder ports them as they are); if none exists and the look is new, say so
+  coder moves them, not rewrites them); if none exists and the look is new, say so
   in «Rischi e scartato»: a prototype must be made and approved first
   (`../skills/pianifica/prototipo.md`). Your file is read in full: code,
   pseudocode and signatures you write are what the coder follows.

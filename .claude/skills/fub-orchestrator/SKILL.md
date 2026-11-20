@@ -112,8 +112,9 @@ Files of this skill:
    user approved anywhere else, whoever made it), the brief names it and says:
 
    - save its HTML with `Artifact read` and give the coder the file's path;
-   - port its HTML and CSS as they are, as far as the app allows; every
-     deliberate difference goes into the conformity exceptions with its reason;
+   - its HTML and CSS are moved, not rewritten: only what the app forces
+     changes, and every such difference goes into the conformity exceptions
+     with its reason;
    - its code is the reference: markup, CSS, and computed styles measured from
      prototype to app in both lights;
    - screenshots are only the final confirmation: tried, working from them
