@@ -168,7 +168,10 @@ describe("le decorazioni della Live restano byte per byte", () => {
   const all = samples();
   if (update) {
     it("rigenera l'impronta", async () => {
-      const result: Record<string, Record<string, string>> = {};
+      const result: Record<string, string | Record<string, string>> = {
+        $generato: "File generato da apps/client/src/editors/text/profiles/markdown/livepreview-identica.test.ts, non modificare a mano; "
+          + "rigenera con UPDATE_MIRROR=1 npx vitest run src/editors/text/profiles/markdown/livepreview-identica.test.ts da apps/client",
+      };
       for (const [name, sample] of Object.entries(all)) result[name] = prints(sample);
       const fs = await import(/* @vite-ignore */ "node:" + "fs");
       const path = new URL("../../../../__fixtures__/live-decorations.json", import.meta.url);
@@ -189,7 +192,7 @@ describe("le decorazioni della Live restano byte per byte", () => {
   });
   for (const [name, sample] of Object.entries(all)) {
     it(name, () => {
-      expect(prints(sample)).toEqual((golden as Record<string, Record<string, string>>)[name]);
+      expect(prints(sample)).toEqual((golden as Record<string, string | Record<string, string>>)[name]);
     });
   }
 });

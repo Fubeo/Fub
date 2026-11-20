@@ -1,4 +1,5 @@
 {
+ "$generato": "File generato da apps/client/src/editors/text/profiles/markdown/livepreview-identica.test.ts, non modificare a mano; rigenera con UPDATE_MIRROR=1 npx vitest run src/editors/text/profiles/markdown/livepreview-identica.test.ts da apps/client",
  "live/commenti": {
   "zero/riga/1-12": "6bb1d295a97f36a2",
   "zero/elemento/1-12": "6bb1d295a97f36a2",
