@@ -301,7 +301,10 @@ mod tests {
         let corsie = Corsie::default();
         runtime().block_on(async {
             for fissa in CORSIE_FISSE {
-                corsie.chiedi("grid", fissa.into(), || Ok(())).await.unwrap();
+                corsie
+                    .chiedi("grid", fissa.into(), || Ok(()))
+                    .await
+                    .unwrap();
             }
             for i in 0..MAX_CORSIE * 4 {
                 corsie

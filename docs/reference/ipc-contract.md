@@ -49,17 +49,7 @@ view e la shell le ridisegna nello stesso giro: ognuna costa pochi
 millisecondi, ma in fila sul thread principale fermavano la finestra per un
 centinaio di millisecondi. I disegni restano in fila fra loro; la shell tiene
 comunque l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
-
-Le porte del foglio sui byte (`open_grid_bytes`, `grid_bytes_window`,
-`apply_grid_bytes`, `grid_bytes_commands`, `grid_bytes_command`,
-`close_grid_bytes`) girano anche loro fuori dal thread principale, nella
-corsia del foglio, che c'è sempre e non conta fra le 16: scorrendo, la shell
-chiede una finestra a ogni blocco di righe nuove, e sul thread principale
-ogni lettura toglieva fotogrammi allo scorrimento. La corsia tiene l'ordine
-d'arrivo: una finestra chiesta prima di una modifica si legge alla revisione
-da cui la modifica parte, e una chiusura arriva dopo le richieste partite
-prima. `list_grid_surfaces`, che legge soltanto il registro, resta sul thread
-principale. La shell scarta comunque una finestra di una revisione superata.
+Le porte del foglio sui byte hanno la loro corsia ([griglia](grid-ipc.md)).
 
 ## La griglia
 
