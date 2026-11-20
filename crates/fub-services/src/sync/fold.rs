@@ -54,6 +54,35 @@ pub(super) fn fold_op(
                 replicas: vec![op.replica_id.clone()],
             });
         }
+        // A rename the state already covers is a no-op, as for a write or a
+        // delete: on both ends there is the rename itself or a version that
+        // saw it (a late delivery, or a retransmission after the dedup set
+        // forgot the op). Covered on one end only, applying it would bury a
+        // newer write or overwrite one; dropping it would lose the other
+        // end: it is held, nothing changes.
+        let covered = |version: &VersionVector| {
+            matches!(
+                vv_compare(&op.vv, version),
+                VvOrder::Dominated | VvOrder::Equal
+            )
+        };
+        let to_covered =
+            latest_any(state, to).is_some_and(|latest| covered(&parse_vv_text(&latest.vv_text)));
+        let from_covered = latest_any(state, from)
+            .is_some_and(|latest| covered(&parse_vv_text(&latest.vv_text)))
+            || state.tombstones.get(from).is_some_and(|tomb| covered(&tomb.vv));
+        match (from_covered, to_covered) {
+            (true, true) => return FoldOutcome::Applied(None),
+            (false, false) => {}
+            _ => {
+                return FoldOutcome::Held(ConflictInfo {
+                    doc_id: if to_covered { from.clone() } else { to.clone() },
+                    reason: "stale rename overtaken on one end: preserve both versions before retry"
+                        .to_string(),
+                    replicas: vec![op.replica_id.clone()],
+                })
+            }
+        }
         if let Some(tomb) = state.tombstones.get(from) {
             if !can_resurrect(tomb, &op.vv) {
                 return FoldOutcome::Held(ConflictInfo {
