@@ -121,6 +121,36 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
     }
   });
 
+  it("il trascinamento da un blocco reso lascia il documento al rilascio e alla chiusura", () => {
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
+    const listeners = (spy: typeof added, type: string) =>
+      spy.mock.calls.filter(([name]) => name === type).map(([, listener]) => listener);
+    const press = (parent: HTMLElement) => parent.querySelector<HTMLElement>(".cm-markdown-block")!
+      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    const { parent, engine, cleanup } = editorWith("Testo sopra\n\n![Schema](schema.png)\n\nTesto sotto\n", "riga");
+    try {
+      press(parent);
+      expect(listeners(added, "mousemove")).toHaveLength(1);
+      document.dispatchEvent(new MouseEvent("mouseup"));
+      expect(listeners(removed, "mousemove")).toEqual(listeners(added, "mousemove"));
+      expect(listeners(removed, "mouseup")).toEqual(listeners(added, "mouseup"));
+
+      // Un trascinamento ancora aperto quando l'editor si chiude (il clic ha
+      // portato il cursore nel blocco: lo si riporta in cima perché torni reso).
+      engine.revealByteOffset(0);
+      press(parent);
+      expect(listeners(added, "mousemove")).toHaveLength(2);
+      engine.destroy();
+      expect(listeners(removed, "mousemove")).toEqual(listeners(added, "mousemove"));
+      expect(listeners(removed, "mouseup")).toEqual(listeners(added, "mouseup"));
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
+      cleanup();
+    }
+  });
+
   it("il cursore che entra, gira ed esce da un blocco reso lo segue ogni volta", () => {
     const { parent, engine, cleanup } = editorWith("Testo sopra\n\n![Schema](schema.png)\n\nTesto sotto\n", "riga");
     const blocks = () => parent.querySelectorAll(".cm-markdown-block").length;

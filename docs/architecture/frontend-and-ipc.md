@@ -424,18 +424,17 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 
 - nuovi import Tauri fuori dal seam;
 - usi degli appunti della webview fuori da `platform/clipboard.ts`;
-- listener globali senza owner;
+- ascoltatori, timer e osservatori senza owner e attese di un giro di `Race` fuori
+  dal suo cancello (`check-listeners.mjs`, `check-races.mjs`: regole e limiti
+  noti in testa a ciascuno, casi nella sua `--self-test`);
 - ruoli del tema scritti sull'elemento negli editor, oltre l'elenco delle eccezioni
   (`check-inline-theme.mjs`);
 - un `<style>` creato da uno script o uno `style` scritto come markup, che la
   CSP rifiuterebbe (`check-inline-styles.mjs`);
-- attese concorrenti senza il cancello di `Race` (`check-races.mjs`: regole
-  e limiti noti in testa alla sua funzione `violations`);
 - mirror TypeScript non aggiornati;
 - parole del codice nei testi italiani dell'interfaccia: il glossario in
-  `apps/client/src/i18n/gergo.ts` dà per ognuna la parola da usare (per
-  esempio «copia completa» invece di «snapshot», «vista» invece di «view»), e
-  `gergo.test.ts` la cerca nel catalogo.
+  `apps/client/src/i18n/gergo.ts` dà per ognuna la parola da usare («copia
+  completa» per «snapshot»), e `gergo.test.ts` la cerca nel catalogo.
 
 ## Dove si trova
 

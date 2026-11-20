@@ -2,6 +2,12 @@
 // Ogni listener su un target globale e ogni primitiva asincrona con una
 // cancellazione devono dichiarare un proprietario. La guardia legge i sorgenti
 // del client unificato e lascia liberi i test, che costruiscono casi negativi.
+//
+// Limiti noti, senza un parser vero (#509): un globale che arriva da una
+// funzione (`const mq = ensureMedia()`) o da un parametro non è riconosciuto;
+// un disposer nominato conta come usato se il nome torna nel file, anche
+// dove non lo chiama nessuno; un timer conta come cancellato se il suo nome
+// compare in un `clear…`, senza guardare se quel ramo gira.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -31,6 +37,16 @@ const ALLOWED_TIMER_FILES = new Set([
   "apps/client/src/test-wait.ts",
 ]);
 
+/// `const nome = <un globale>`: la finestra, il documento e i loro figli
+/// fissi, il documento o la finestra di un nodo, una `matchMedia(…)`.
+const GLOBAL_ALIAS = new RegExp(
+  String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]+)?=\s*` +
+    String.raw`(?:(?:window|document|globalThis)(?:\s*\.\s*(?:body|documentElement|defaultView|visualViewport))?` +
+    String.raw`|[\w$.#]*\.\s*(?:ownerDocument|defaultView)(?:\s*\??\.\s*defaultView)?` +
+    String.raw`|(?:window\s*\.\s*)?matchMedia\s*\([^()]*\))\s*[;,\n)]`,
+  "g",
+);
+
 function quoted(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -57,10 +73,16 @@ export function violations(text, relative) {
   const globalListener = new RegExp(
     String.raw`(?<![.\w])(${names})\s*\??\.\s*addEventListener\b`,
   );
-  const mediaListener = /matchMedia[\s\S]*?\??\.\s*addEventListener\b/;
+  const mediaListener = /matchMedia[\s\S]*?\??\.\s*(?:addEventListener|addListener)\b/;
+  // Un globale raggiunto per una catena di proprietà (`window.visualViewport`,
+  // `document.fonts`), o il documento e la finestra di un nodo
+  // (`el.ownerDocument`, `doc.defaultView`): sfuggivano (#509).
+  const deepGlobal = /(?<![.\w$])(?:window|document|globalThis)(?:\s*\??\.\s*[A-Za-z_$][\w$]*)+?\s*\??\.\s*addEventListener\b/;
+  const nodeGlobal = /\.\s*(?:ownerDocument|defaultView)(?:\s*\??\.\s*[A-Za-z_$][\w$]*)*?\s*\??\.\s*addEventListener\b/;
   const subscription = /\??\.\s*subscribe\s*\(/;
-  const timer = /\b(?:window\s*\.\s*)?(?:setTimeout|setInterval|requestAnimationFrame)\s*\(/;
-  const observer = /\bnew\s+(?:MutationObserver|ResizeObserver|IntersectionObserver)\s*\(/;
+  // `requestIdleCallback` sfuggiva (#509): si cancella con `cancelIdleCallback`.
+  const timer = /\b(?:window\s*\.\s*)?(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback)\s*\(/;
+  const observer = /\bnew\s+(?:MutationObserver|ResizeObserver|IntersectionObserver|PerformanceObserver)\s*\(/;
   const found = [];
   // Commenti e letterali svuotati (`ts-code.mjs`): un commento descrive il
   // primitivo sorvegliato e non è una violazione, ma non deve nemmeno
@@ -68,12 +90,24 @@ export function violations(text, relative) {
   // `clearTimeout(id)` scritto in un commento non rende proprietario nessuno.
   const source = codeOnly(text);
   const original = text.split("\n");
+  // I nomi locali dati a un globale o a una `MediaQueryList`
+  // (`const doc = document`, `const mq = matchMedia(q)`): un ascoltatore
+  // attaccato al nome è un ascoltatore globale (#509). Un globale che arriva
+  // da una funzione (`const mq = ensureMedia()`) resta fuori: senza un
+  // parser la guardia non sa che cosa torna.
+  const aliases = [...source.matchAll(GLOBAL_ALIAS)].map((match) => match[1]);
+  const aliasListener = aliases.length
+    ? new RegExp(String.raw`(?<![.\w$])(?:${aliases.map(quoted).join("|")})\s*\??\.\s*(?:addEventListener|addListener)\b`)
+    : null;
   for (const { line: number, code } of logicalLines(source)) {
     if (!code) continue;
     const index = number - 1;
     const line = original[index];
 
-    if (globalListener.test(code) || mediaListener.test(code)) {
+    if (
+      globalListener.test(code) || mediaListener.test(code) || deepGlobal.test(code) || nodeGlobal.test(code) ||
+      aliasListener?.test(code)
+    ) {
       found.push({ line: index + 1, kind: "global listener", text: line.trim() });
       continue;
     }
@@ -81,8 +115,14 @@ export function violations(text, relative) {
     if (subscription.test(code)) {
       // Un disposer nominato e assegnato è la forma strutturale minima di
       // ownership: una sottoscrizione anonima non ha una porta di uscita.
-      const owned = /(?:const|let|var)\s+\w*(?:stop|dispose|unsubscribe)\w*\s*=\s*[\s\S]*\.subscribe\s*\(/i.test(code) ||
-        /\b\w*(?:stop|dispose|unsubscribe)\w*\s*=\s*[\s\S]*\.subscribe\s*\(/i.test(code) ||
+      // Il nome deve servire a qualcosa: un `const stop = bus.subscribe(f)`
+      // che nessuno chiama, passa o restituisce era verde (#509). Basta che
+      // il nome torni altrove nel file; che la chiamata arrivi davvero lo
+      // dicono i test del modulo.
+      const named = /(?<![\w$])(#?\w*(?:stop|dispose|unsubscribe)\w*)\s*=\s*[\s\S]*\.subscribe\s*\(/i.exec(code);
+      const used = named !== null &&
+        (source.match(new RegExp(String.raw`(?<![\w$])${quoted(named[1])}(?![\w$])`, "g"))?.length ?? 0) > 1;
+      const owned = used ||
         // Il disposer consegnato a un `Lifetime` che lo chiude allo smontaggio.
         /\b(?:this\s*\.\s*#?)?\w*life\w*\s*\.\s*add\s*\(\s*[\w$.#]+\.subscribe\s*\(/i.test(code) ||
         // Un metodo che inoltra la sottoscrizione ne restituisce il disposer a
@@ -95,14 +135,19 @@ export function violations(text, relative) {
     }
 
     if (timer.test(code)) {
-      const assignment = /(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*(?:\.#[\w$]+|\.[\w$]+)?)\s*=\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?(?:setTimeout|setInterval|requestAnimationFrame)\s*\(/.exec(code);
-      const ownedByLifetime = /\blifetime\s*\.\s*listen\b/.test(code);
+      const assignment = /(?:(?:const|let|var)\s+)?([A-Za-z_$][\w$]*(?:\.#[\w$]+|\.[\w$]+)?)\s*=\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback)\s*\(/.exec(code);
+      // Un timer che non fa altro che registrare su una `Lifetime`
+      // (`setTimeout(() => lifetime.listen(…))`): su una vita chiusa quella
+      // riga non fa niente. Prima bastava che `lifetime.listen` stesse sulla
+      // stessa riga, anche col timer dentro l'ascoltatore, che scatta a vita
+      // chiusa (#509).
+      const ownedByLifetime = /\b(?:setTimeout|requestAnimationFrame)\s*\(\s*\(\s*\)\s*=>\s*\{?\s*lifetime\s*\.\s*listen\b/.test(code);
       const ownedBySchedule = /\boptions\s*\.\s*schedule\b/.test(code);
       let owned = ownedByLifetime || ownedBySchedule || ALLOWED_TIMER_FILES.has(relative);
       if (assignment) {
         const id = quoted(assignment[1]);
         owned ||= new RegExp(
-          String.raw`\b(?:clearTimeout|clearInterval|cancelAnimationFrame)\s*\(\s*${id}\s*\)`,
+          String.raw`\b(?:clearTimeout|clearInterval|cancelAnimationFrame|cancelIdleCallback)\s*(?:\?\.\s*)?\(\s*${id}\s*\)`,
         ).test(source);
         // Il timeout di un'attesa conservato nel suo record (`{ …, timer }`) e
         // cancellato da chi consuma quel record (`clearTimeout(x.timer)`).
@@ -155,7 +200,7 @@ function selfTest() {
     ["il listener di una Vita", 'lifetime.listen(window, "x", f);', 0],
     ["il timer col suo clear", "const t = setTimeout(f, 1);\nclearTimeout(t);", 0],
     ["una sottoscrizione anonima", "bus.subscribe(f);", 1],
-    ["una sottoscrizione col disposer", "const stop = bus.subscribe(f);", 0],
+    ["una sottoscrizione col disposer", "const stop = bus.subscribe(f);\nlife.add(stop);", 0],
     ["un osservatore senza disconnect", "new ResizeObserver(f);", 1],
     ["un osservatore col disconnect", "const o = new ResizeObserver(f);\no.disconnect();", 0],
     // Uno spread a capo è un argomento come gli altri, non una catena da
@@ -163,8 +208,27 @@ function selfTest() {
     // disposer nominato là e la sua sottoscrizione anonima spariva.
     ["un argomento a capo", "const stop = merge(\n  parts.map((p) => p.subscribe(f)),\n);", 1],
     ["uno spread a capo (sfuggiva)", "const stop = merge(\n  ...parts.map((p) => p.subscribe(f)),\n);", 1],
-    ["la catena opzionale a capo", "const stop = bus\n  ?.subscribe(f);", 0],
-    ["la catena a capo", "const stop = bus\n  .subscribe(f);", 0],
+    ["la catena opzionale a capo", "const stop = bus\n  ?.subscribe(f);\nstop();", 0],
+    ["la catena a capo", "const stop = bus\n  .subscribe(f);\nstop();", 0],
+    // Il giro di #509: forme che passavano ancora.
+    ["il documento di un nodo (sfuggiva)", 'el.ownerDocument.addEventListener("x", f);', 1],
+    ["la finestra di un documento (sfuggiva)", 'doc.defaultView?.addEventListener("x", f);', 1],
+    ["un figlio fisso della finestra (sfuggiva)", 'window.visualViewport?.addEventListener("resize", f);', 1],
+    ["i caratteri del documento (sfuggiva)", 'document.fonts.addEventListener("loadingdone", f);', 1],
+    ["un elemento trovato nel documento", 'document.getElementById("a").addEventListener("x", f);', 0],
+    ["la finestra in un nome locale (sfuggiva)", 'const w = window;\nw.addEventListener("x", f);', 1],
+    ["il documento di un nodo in un nome locale (sfuggiva)", 'const doc = el.ownerDocument;\ndoc.addEventListener("x", f);', 1],
+    ["una matchMedia in un nome locale (sfuggiva)", 'const mq = window.matchMedia(q);\nmq.addEventListener("change", f);', 1],
+    ["il vecchio addListener (sfuggiva)", "matchMedia(q).addListener(f);", 1],
+    ["il nome locale passato a una Vita", 'const mq = matchMedia(q);\nlifetime.listen(mq, "change", f);', 0],
+    ["un nome locale per altro", 'const doc = document;\nconst p = doc.createElement("p");', 0],
+    ["un disposer che nessuno usa (sfuggiva)", "const stop = bus.subscribe(f);", 1],
+    ["un disposer privato usato", "this.#stopBus = bus.subscribe(f);\nthis.#stopBus();", 0],
+    ["requestIdleCallback senza cancel (sfuggiva)", "const h = requestIdleCallback(f);", 1],
+    ["requestIdleCallback col cancel opzionale", "const h = scope.requestIdleCallback(f);\nscope.cancelIdleCallback?.(h);", 0],
+    ["un timer dentro un ascoltatore di una Vita (sfuggiva)", 'lifetime.listen(el, "x", () => setTimeout(f, 100));', 1],
+    ["un timer che registra su una Vita", 'setTimeout(() => lifetime.listen(document, "click", f), 0);', 0],
+    ["un PerformanceObserver senza disconnect (sfuggiva)", "new PerformanceObserver(f).observe(o);", 1],
   ];
   const failures = [];
   try {
