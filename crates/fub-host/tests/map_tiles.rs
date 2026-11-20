@@ -70,6 +70,7 @@ fn host_with(network: Arc<Tiles>, allowed: &[&str]) -> Host {
 /// ricevuto. Ricorda il tetto e quanti byte ha chiesto al server.
 struct Capped {
     body: u64,
+    status: u16,
     cap_seen: Mutex<Option<u64>>,
     read_from_server: Mutex<u64>,
 }
@@ -95,12 +96,15 @@ impl HostNetwork for Capped {
             read += piece;
             *self.read_from_server.lock().unwrap() = read;
             if read > max_bytes {
-                return Err(LimitedFetchError::TooLarge { limit: max_bytes });
+                return Err(LimitedFetchError::TooLarge {
+                    limit: max_bytes,
+                    status: self.status,
+                });
             }
         }
         body.resize(read as usize, 0);
         Ok(HttpResponse {
-            status: 200,
+            status: self.status,
             headers: vec![HttpHeader::new("Content-Type", "image/png")],
             body,
         })
@@ -108,8 +112,13 @@ impl HostNetwork for Capped {
 }
 
 fn capped(body: u64) -> Arc<Capped> {
+    capped_with_status(body, 200)
+}
+
+fn capped_with_status(body: u64, status: u16) -> Arc<Capped> {
     Arc::new(Capped {
         body,
+        status,
         cap_seen: Mutex::new(None),
         read_from_server: Mutex::new(0),
     })
@@ -278,6 +287,29 @@ fn a_tile_over_one_mebibyte_stops_the_download_at_the_cap() {
         read <= MAX_TILE_BYTES as u64 + SERVER_CHUNK,
         "read {read} bytes for a cap of {MAX_TILE_BYTES}"
     );
+}
+
+/// Lo stato prima del tetto: un redirect con un corpo enorme è ancora il
+/// rifiuto del redirect, un `404` enorme è ancora l'errore di stato, non
+/// «troppo grande».
+#[test]
+fn an_oversized_redirect_or_error_keeps_its_own_refusal() {
+    let oversized = 16 * MAX_TILE_BYTES as u64;
+    let redirect = host_with_capped(capped_with_status(oversized, 302))
+        .map_tile(&url("redirect-enorme"), TileKind::Raster)
+        .unwrap_err();
+    let PluginError::PermissionDenied(Text::Message(message)) = &redirect else {
+        panic!("{redirect:?}");
+    };
+    assert_eq!(message.key, "host.map.tile.redirect");
+
+    let missing = host_with_capped(capped_with_status(oversized, 404))
+        .map_tile(&url("assente-enorme"), TileKind::Raster)
+        .unwrap_err();
+    let PluginError::Io(Text::Message(message)) = &missing else {
+        panic!("{missing:?}");
+    };
+    assert_eq!(message.key, "host.map.tile.status");
 }
 
 /// Il confine è incluso: una tessera di un mebibyte esatto passa.

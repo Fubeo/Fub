@@ -445,7 +445,10 @@ pub trait HostNetwork: Send + Sync {
     ) -> Result<crate::net::HttpResponse, crate::net::LimitedFetchError> {
         let response = self.fetch_cancelled(request, cancelled)?;
         if response.body.len() as u64 > max_bytes {
-            return Err(crate::net::LimitedFetchError::TooLarge { limit: max_bytes });
+            return Err(crate::net::LimitedFetchError::TooLarge {
+                limit: max_bytes,
+                status: response.status,
+            });
         }
         Ok(response)
     }

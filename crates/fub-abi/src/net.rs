@@ -209,6 +209,11 @@ pub enum LimitedFetchError {
     TooLarge {
         /// Il tetto che il chiamante aveva passato.
         limit: u64,
+        /// Lo stato della risposta il cui corpo era troppo grande: chi chiama
+        /// lo guarda prima del tetto, perché un `3xx` o un `404` con un corpo
+        /// enorme restano un redirect e un errore di stato, non «troppo
+        /// grande».
+        status: u16,
     },
     /// Ogni altro esito: gli stessi errori di
     /// [`fetch_cancelled`](crate::traits::HostNetwork::fetch_cancelled),
@@ -227,9 +232,10 @@ impl From<crate::PluginError> for LimitedFetchError {
 impl std::fmt::Display for LimitedFetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LimitedFetchError::TooLarge { limit } => {
-                write!(f, "response body above the caller limit of {limit} bytes")
-            }
+            LimitedFetchError::TooLarge { limit, status } => write!(
+                f,
+                "response body (status {status}) above the caller limit of {limit} bytes"
+            ),
             LimitedFetchError::Failed(error) => error.fmt(f),
         }
     }

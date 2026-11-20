@@ -275,6 +275,28 @@ fn failed(key: &str, args: Vec<Arg>) -> PluginError {
     PluginError::Io(Text::message(key, args))
 }
 
+/// Il rifiuto per lo stato della risposta: un `3xx` è un redirect che non si
+/// segue, ogni altro stato fuori da `2xx` un errore del sito. Vale sia per la
+/// risposta letta sia per quella fermata dal tetto di byte.
+fn status_refusal(status: u16, site: &str) -> Result<(), PluginError> {
+    if (300..400).contains(&status) {
+        return Err(refused(
+            "host.map.tile.redirect",
+            vec![Arg::text("site", site)],
+        ));
+    }
+    if !(200..300).contains(&status) {
+        return Err(failed(
+            "host.map.tile.status",
+            vec![
+                Arg::text("site", site),
+                Arg::text("status", status.to_string()),
+            ],
+        ));
+    }
+    Ok(())
+}
+
 impl Host {
     /// Una tessera della vista Mappa, se questa macchina ammette l'host
     /// dell'indirizzo. Vedi la testa del modulo per le regole.
@@ -321,9 +343,12 @@ impl Host {
             network.fetch_limited(request, cancelled, MAX_TILE_BYTES as u64)
         })
         .map_err(|error| match error {
-            LimitedFetchError::TooLarge { .. } => {
-                failed("host.map.tile.too_large", vec![Arg::text("site", &site)])
-            }
+            // Lo stato prima del tetto: un redirect o un `404` con un corpo
+            // enorme restano un redirect e un errore di stato.
+            LimitedFetchError::TooLarge { status, .. } => match status_refusal(status, &site) {
+                Err(refusal) => refusal,
+                Ok(()) => failed("host.map.tile.too_large", vec![Arg::text("site", &site)]),
+            },
             LimitedFetchError::Failed(PluginError::Cancelled(_)) => {
                 failed("host.map.tile.timeout", vec![Arg::text("site", &site)])
             }
@@ -332,21 +357,7 @@ impl Host {
             }
             LimitedFetchError::Failed(other) => other,
         })?;
-        if (300..400).contains(&response.status) {
-            return Err(refused(
-                "host.map.tile.redirect",
-                vec![Arg::text("site", &site)],
-            ));
-        }
-        if !(200..300).contains(&response.status) {
-            return Err(failed(
-                "host.map.tile.status",
-                vec![
-                    Arg::text("site", &site),
-                    Arg::text("status", response.status.to_string()),
-                ],
-            ));
-        }
+        status_refusal(response.status, &site)?;
         if response.body.len() > MAX_TILE_BYTES {
             return Err(failed(
                 "host.map.tile.too_large",
