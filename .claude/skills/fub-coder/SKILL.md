@@ -22,6 +22,12 @@ you too: "Rules" (except that you own the branch and the push) and "Closing".
 This skill adds what a coder doesn't do: choosing tasks, pushing, CI, merging
 and the state.
 
+Follow the approved plan to the letter: its tasks, their order of
+dependencies, `Fatto quando` and `Prova`, and `DECISIONS.md`. Re-read the plan
+at the start of every session and after a compaction. When plan and code
+disagree on a fact, the code wins: write the difference in the `Registro` of
+`DECISIONS.md`, never silently.
+
 Shared files, in the orchestrator's skill:
 
 - [sentinelle.sh](../fub-orchestrator/sentinelle.sh): the machine checks;

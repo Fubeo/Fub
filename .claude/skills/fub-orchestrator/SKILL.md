@@ -24,6 +24,12 @@ one state file.
 `CLAUDE.md` otherwise forbids: coder subagents that write, each in its own
 worktree. Only you push, and you merge under the rule in `CLAUDE.md`.
 
+Follow the approved plan to the letter: its tasks, their order of
+dependencies, `Fatto quando` and `Prova`, and `DECISIONS.md`. Re-read the plan
+at the start of every session and after a compaction. When plan and code
+disagree on a fact, the code wins: write the difference in the `Registro` of
+`DECISIONS.md`, never silently.
+
 Files of this skill:
 
 - [brief.md](brief.md): a coder's brief;
