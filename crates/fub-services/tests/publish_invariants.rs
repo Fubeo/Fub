@@ -150,6 +150,42 @@ fn unsafe_hrefs_are_refused() {
     assert_eq!(escape_html("<&>"), "&lt;&amp;&gt;");
 }
 
+/// M4: i due punti dopo `/`, `?` o `#` non fanno uno schema: ancore e path
+/// relativi con `:` passano, gli schemi veri restano giudicati per nome.
+#[test]
+fn a_colon_after_the_path_starts_is_not_a_scheme() {
+    for safe in [
+        "#nota:1",
+        "#h:2:3",
+        "cartella/a:b.html",
+        "./nota:1.html",
+        "/s/blog/ore-10:30.html",
+        "pagina.html?ora=10:30",
+        "pagina.html#sez:1",
+        "%6Aavascript:alert(1)",
+        "HTTPS://example.com/a",
+        "mailto:chi@example.com",
+    ] {
+        assert!(is_safe_href(safe), "{safe}");
+    }
+    for unsafe_href in [
+        "javascript:alert(1)",
+        "JavaScript:alert(1)",
+        " javascript:alert(1)",
+        "jav\tascript:alert(1)",
+        "vbscript:x",
+        "data:text/html,x",
+        "nota:1",
+        "ftp://example.com",
+        "x-custom+app.v1:open",
+        ":senza-schema",
+        "//evil.test/x",
+        "\\\\evil\\x",
+    ] {
+        assert!(!is_safe_href(unsafe_href), "{unsafe_href}");
+    }
+}
+
 // --- manifest: linked closure needs explicit allow ------------------------
 
 #[test]

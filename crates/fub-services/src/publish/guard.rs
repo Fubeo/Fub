@@ -144,11 +144,31 @@ pub fn is_safe_href(href: &str) -> bool {
     {
         return false;
     }
-    if let Some((scheme, _)) = target.split_once(':') {
-        return matches!(
-            scheme.to_ascii_lowercase().as_str(),
-            "http" | "https" | "mailto"
-        ) && !scheme.is_empty();
+    // A scheme exists only as the URL parser sees it: a letter, then letters,
+    // digits, `+`, `-` or `.`, up to a `:` that comes before any `/`, `?` or
+    // `#`. `#nota:1` and `cartella/a:b.html` are relative; `nota:1` is a
+    // scheme (unknown, so refused), as a browser would read it.
+    let end = target
+        .find(|c: char| matches!(c, ':' | '/' | '?' | '#'))
+        .unwrap_or(target.len());
+    if target[end..].starts_with(':') {
+        let scheme = &target[..end];
+        let is_scheme = scheme
+            .bytes()
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic())
+            && scheme
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'));
+        if is_scheme {
+            return matches!(
+                scheme.to_ascii_lowercase().as_str(),
+                "http" | "https" | "mailto"
+            );
+        }
+        // `:` first but not a scheme (`:x`, `%6a:`): the parser reads a
+        // relative path, which is safe; an empty prefix is refused anyway.
+        return !scheme.is_empty();
     }
     true
 }
