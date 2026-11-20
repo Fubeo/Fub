@@ -81,6 +81,10 @@ modules:
       - install -Dm644 crates/fub-app/icons/128x128@2x.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/${FLATPAK_ID}.png
       - install -Dm644 packaging/flatpak/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
       - install -Dm644 packaging/flatpak/${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
+      # Scarta i caratteri dell'host che il fontconfig del runtime legge senza
+      # famiglia: su di loro il processo web di WebKitGTK gira all'infinito
+      # (il perché nel file).
+      - install -Dm644 packaging/flatpak/fontconfig-local.conf ${FLATPAK_DEST}/etc/fonts/local.conf
     sources:
       # Il repository com'è, senza ciò che una build locale lascia accanto:
       # `.flatpak-builder`, `flatpak_app` e `repo` sono le cartelle che

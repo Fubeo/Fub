@@ -78,6 +78,10 @@ mod domande;
 mod frame_rate;
 mod live;
 mod mobile;
+/// L'orologio dei fotogrammi di GTK3 alla frequenza dello schermo nel modo
+/// GL (`docs/architecture/desktop-webview.md`).
+#[cfg(target_os = "linux")]
+mod orologio;
 mod print;
 #[cfg(not(mobile))]
 mod promemoria;
@@ -3152,9 +3156,11 @@ fn forward_mobile_opened(app: &AppHandle, raw: &str) {
 /// Legge `appearance.rendering` e la macchina, sceglie e scrive le variabili.
 /// Va chiamata quando il processo ha ancora un thread solo
 /// ([`disegno::applica`]). Il log non c'è ancora: chi chiama lo scrive dopo.
+/// `webkit` è la versione della WebKitGTK caricata ([`declare_the_webview`]).
 #[cfg(target_os = "linux")]
 fn percorso_di_disegno(
     config_dir: Option<&Utf8Path>,
+    webkit: Option<&str>,
 ) -> (disegno::Modo, disegno::Diagnosi, disegno::Scelta) {
     use fub_host::settings::{APPEARANCE_MOTION, APPEARANCE_RENDERING};
     let valori = fub_host::settings::startup_machine_texts(
@@ -3168,9 +3174,13 @@ fn percorso_di_disegno(
     );
     let ambiente = |nome: &str| std::env::var_os(nome).map(|v| v.to_string_lossy().into_owned());
     let diagnosi = disegno::leggi(std::path::Path::new("/"), &ambiente);
+    let webkit = webkit
+        .and_then(fub_host::settings::Webview::webkitgtk)
+        .map(|fub_host::settings::Webview::WebKitGtk(a, b, c)| (a, b, c));
     let scelta = disegno::scegli(
         modo,
         &diagnosi,
+        webkit,
         &|nome| std::env::var_os(nome).is_some(),
         movimento_calmo,
     );
@@ -3244,13 +3254,23 @@ pub fn run() {
         std::env::var_os(vblank::INTERRUTTORE).as_deref(),
     );
     #[cfg(target_os = "linux")]
-    let percorso = percorso_di_disegno(config_dir.as_deref());
+    let orologio = orologio::prepara(std::env::var_os(orologio::INTERRUTTORE).as_deref());
+    #[cfg(target_os = "linux")]
+    let percorso = percorso_di_disegno(
+        config_dir.as_deref(),
+        webview
+            .as_ref()
+            .and_then(|letta| letta.as_ref().ok())
+            .map(String::as_str),
+    );
     let (levels, warning) = fub_host::install_logging(config_dir.as_deref());
     log_the_webview(webview);
     #[cfg(target_os = "linux")]
     vblank::scrivi_nel_log(&vblank);
     #[cfg(target_os = "linux")]
     appunti_gtk::scrivi_nel_log();
+    #[cfg(target_os = "linux")]
+    orologio::scrivi_nel_log(&orologio);
     let installed_availability = match config_dir.as_deref() {
         Some(dir) => {
             tracing::info!(
@@ -3464,6 +3484,15 @@ pub fn run() {
             if payload.event() == tauri::webview::PageLoadEvent::Started {
                 let machine = webview.app_handle().state::<Host>().machine_settings();
                 frame_rate::apply(webview, frame_rate::beyond_60(&machine));
+                // L'orologio dei fotogrammi della finestra alla frequenza
+                // dello schermo: una volta per finestra, anche se la pagina
+                // si ricarica.
+                #[cfg(target_os = "linux")]
+                if let Err(error) =
+                    webview.with_webview(|platform| orologio::aggancia(&platform.inner()))
+                {
+                    tracing::debug!(%error, "GTK frame clock not reached");
+                }
                 let sessions = webview.app_handle().state::<live::LiveSessions>();
                 if let Some(closing) =
                     sessions.close_owned_by(webview.label(), "the page is reloading")
