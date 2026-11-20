@@ -183,7 +183,10 @@ si scrive con la sua revisione, nello stesso annullamento della rinomina.
 Una nota cambiata nel frattempo, o un nome nuovo con caratteri che in una
 proprietà cambierebbero il link (`"`, `|`, `#`, `[`…), lascia il link col
 nome vecchio: la rinomina riesce, e l'esito nomina quelle note
-(`partial`), che l'app mostra come un avviso di guasto.
+(`partial`), che l'app mostra come un avviso di guasto. Un'archiviazione
+interrotta dopo lo spostamento, ripresa al lancio seguente, cerca i link
+di proprietà rimasti al percorso vecchio e li riscrive allo stesso modo
+(una nota già riscritta non cambia due volte).
 
 ### Collegata da
 
@@ -207,8 +210,10 @@ allegati, e così la rinomina dell'allegato riscrive anche le proprietà. Una
 nota tornata dal cestino rientra negli archi da sola, perché il grafo
 risolve di nuovo i link che la nominano. I controlli di salute contano
 questi link come quelli del corpo: una nota nominata solo in una proprietà
-non è orfana, una che nomina solo in una proprietà non è un vicolo cieco, e
-un allegato nominato in una proprietà è usato.
+non è orfana, una che nomina solo in una proprietà non è un vicolo cieco,
+un allegato nominato in una proprietà è usato, e un link di proprietà che
+non porta a niente è fra i link rotti, senza span e con la destinazione
+scritta come `detail`. Il filtro «orfane» del grafo usa la stessa regola.
 
 `query_index` li chiede con la foglia custom `fub:property-link` dentro
 una domanda `documents`:
