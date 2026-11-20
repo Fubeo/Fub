@@ -41,9 +41,21 @@ la pagina di prima resta finché la nuova non c'è. Il worker nasce alla prima
 pagina chiesta, e quella pagina, finché il worker apre il PDF, si disegna nel
 thread principale. Una pagina che il worker non disegna si disegna nel thread
 principale; una WebView senza `OffscreenCanvas` o `bitmaprenderer`, un worker
-senza font, che non apre il PDF entro 20 secondi o che cade lasciano tutto al
-thread principale, come prima. Miniature, schede vive, lavagna, stampa ed
-esportazione disegnano ancora nel thread principale.
+senza font, che non apre il PDF entro 20 secondi, che tiene una pagina più di
+10 secondi o che cade lasciano tutto al thread principale, come prima. Una
+WebView che non sa disegnare nel worker lo scopre una volta: fino al riavvio
+gli altri PDF non aprono il worker. Chiuso il PDF, il worker si chiude subito,
+anche a metà apertura, e una pagina arrivata tardi si butta.
+
+Il worker costa memoria: tiene una sua copia dei byte e un secondo pdf.js che
+li analizza, da due a due volte e mezza il file in più (126 MB diventano 451
+MB invece di 180). Per questo un PDF oltre 64 MiB non apre il worker e si
+disegna nel thread principale: lì il prezzo sarebbe di centinaia di MB, mentre
+fino a quella misura resta intorno ai 170 MB e compra la fluidità delle pagine,
+che serve soprattutto alle scansioni. Le misure sono in
+[La pagina del PDF disegnata in un worker](../misure/2026-11-20-linux-pdf-pagina-worker.md#la-memoria).
+Miniature, schede vive, lavagna, stampa ed esportazione disegnano ancora nel
+thread principale.
 
 ### Le annotazioni nel visore
 

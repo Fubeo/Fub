@@ -15,7 +15,7 @@ import { showContextMenu, type MenuItem } from "../../ui/menu";
 import { attachTooltip } from "../../ui/tooltip";
 import { useMediaIcons } from "./icons";
 import { pdfWhereText, type PdfWhere } from "./pdf-ids";
-import { openPdfRenderWorker, PdfRenderUnavailable, type PdfRenderWorker, type RenderWorkerLike } from "./pdf-render-client";
+import { openPdfRenderWorker, PDF_RENDER_WORKER_MAX_BYTES, PdfRenderUnavailable, type PdfRenderWorker, type RenderWorkerLike } from "./pdf-render-client";
 
 /// Required local pdf.js version. Composition installs/bundles the dependency
 /// and worker; this module never fetches a CDN or fabricates a loader.
@@ -169,6 +169,10 @@ export function makePdfJsLoader(
   workerUrl: string,
   makeRenderWorker?: () => RenderWorkerLike,
 ): PdfEngineLoader {
+  // Il caricatore è uno per l'app: una WebView che non sa disegnare nel
+  // worker (niente OffscreenCanvas 2d o font nei worker) lo dice una volta, e
+  // i PDF dopo non aprono un worker solo per sentirselo ridire.
+  const support = { unsupported: false };
   return async (bytes) => {
     if (!workerUrl) throw new Error("PDF worker must be bundled locally");
     const worker = new URL(workerUrl, location.href);
@@ -180,6 +184,8 @@ export function makePdfJsLoader(
       throw new Error(`pdf.js ${pdfjs.version} does not match required ${PDFJS_VERSION}`);
     }
     pdfjs.GlobalWorkerOptions.workerSrc = worker.href;
+    // Letta prima di `getDocument`, che dà i byte al worker di pdf.js.
+    const size = bytes.byteLength;
     const loading = pdfjs.getDocument({ data: bytes });
     let document: Awaited<typeof loading.promise>;
     try {
@@ -199,8 +205,10 @@ export function makePdfJsLoader(
     const TextLayer = "TextLayer" in pdfjs ? pdfjs.TextLayer : undefined;
     // Le pagine in immagine: dal worker quando ha aperto il PDF, intanto (o
     // se non può) dal thread principale, in un canvas staccato.
-    const bitmaps = makeRenderWorker && typeof OffscreenCanvas === "function" && typeof createImageBitmap === "function" && document.getData
-      ? bitmapRenderer(makeRenderWorker, document as PdfJsDocument & { getData(): Promise<Uint8Array> }, worker.href, () => destroyed)
+    // Oltre `PDF_RENDER_WORKER_MAX_BYTES` il worker costerebbe troppa memoria:
+    // le pagine si disegnano qui, come senza worker.
+    const bitmaps = makeRenderWorker && !support.unsupported && size <= PDF_RENDER_WORKER_MAX_BYTES && typeof OffscreenCanvas === "function" && typeof createImageBitmap === "function" && document.getData
+      ? bitmapRenderer(makeRenderWorker, document as PdfJsDocument & { getData(): Promise<Uint8Array> }, worker.href, () => destroyed, support)
       : null;
     // La pagina di una destinazione: per nome o già scritta, il cui primo
     // elemento è il riferimento alla pagina. Una che non si risolve non porta
@@ -385,11 +393,12 @@ function bitmapRenderer(
   document: PdfJsDocument & { getData(): Promise<Uint8Array> },
   workerSrc: string,
   closed: () => boolean,
+  support: { unsupported: boolean },
 ) {
   let state: "idle" | "opening" | "ready" | "off" = "idle";
   let renderer: PdfRenderWorker | null = null;
-  /// Il worker che sta aprendo il PDF: chiuso il documento, si chiude anche lui.
-  let opening: RenderWorkerLike | null = null;
+  /// Chiuso il documento, l'apertura del worker rifiuta subito e lo chiude.
+  const closing = new AbortController();
   let generation = 0;
   let running: { cancel(): void } | null = null;
   let scratch: HTMLCanvasElement | null = null;
@@ -397,20 +406,23 @@ function bitmapRenderer(
   async function start(): Promise<void> {
     state = "opening";
     try {
+      // Il PDF di un altro documento ha già scoperto che il worker non sa
+      // disegnare: questo non ci prova.
+      if (support.unsupported) throw new PdfRenderUnavailable("unsupported");
       const bytes = await document.getData();
       if (closed()) return;
-      opening = makeWorker();
-      const opened = await openPdfRenderWorker(opening, { bytes, workerSrc, version: PDFJS_VERSION });
-      opening = null;
+      // `bytes` è la copia di pdf.js, solo per il worker: passa a lui intera
+      // (`transfer`), e qui non ne resta niente.
+      const opened = await openPdfRenderWorker(makeWorker(), { bytes, workerSrc, version: PDFJS_VERSION }, { signal: closing.signal });
       if (closed()) {
         opened.destroy();
         return;
       }
       renderer = opened;
       state = "ready";
-    } catch {
+    } catch (error) {
       // Niente worker: le pagine restano al thread principale, come prima.
-      opening = null;
+      if (error instanceof PdfRenderUnavailable && error.reason === "unsupported") support.unsupported = true;
       state = "off";
     }
   }
@@ -435,7 +447,17 @@ function bitmapRenderer(
       if (running === task) running = null;
     }
     if (closed() || mine !== generation) return null;
-    return createImageBitmap(scratch);
+    return fresh(await createImageBitmap(scratch), mine);
+  }
+
+  /// La pagina, se è ancora quella chiesta per ultima a documento aperto;
+  /// altrimenti si chiude e non c'è.
+  function fresh(bitmap: ImageBitmap | null, mine: number): ImageBitmap | null {
+    if (bitmap && (closed() || mine !== generation)) {
+      bitmap.close();
+      return null;
+    }
+    return bitmap;
   }
 
   return {
@@ -445,10 +467,10 @@ function bitmapRenderer(
       if (state === "idle") void start();
       if (state === "ready" && renderer) {
         try {
-          return await renderer.render(index, scale);
+          return fresh(await renderer.render(index, scale), mine);
         } catch (error) {
-          // Il worker è caduto (e allora non si usa più) o non sa disegnare
-          // questa pagina: la si disegna qui.
+          // Il worker è caduto, bloccato oltre il tempo (e allora non si usa
+          // più) o non sa disegnare questa pagina: la si disegna qui.
           if (error instanceof PdfRenderUnavailable) {
             renderer = null;
             state = "off";
@@ -463,7 +485,7 @@ function bitmapRenderer(
       running?.cancel();
       renderer?.destroy();
       renderer = null;
-      opening?.terminate();
+      closing.abort();
       state = "off";
     },
   };
@@ -611,6 +633,9 @@ export function mountPdfView(
   /// «Adatta alla larghezza»: la pagina prende la larghezza del piano invece
   /// della sua misura in punti.
   let fit = false;
+  /// L'ultima pagina chiesta in immagine (`paint`): una risposta a una
+  /// richiesta più vecchia non tocca il canvas.
+  let bitmapPaints = 0;
   let fitWidth = 0;
   /// Due pagine affiancate, come un libro aperto: la dispari a sinistra.
   let spread = false;
@@ -650,11 +675,17 @@ export function mountPdfView(
     if (bitmapTarget) {
       // La pagina arriva fatta dal worker: il canvas tiene quella di prima
       // finché la nuova non c'è, e il thread principale la mette e basta.
+      // Ogni attesa può far vecchia la richiesta (un'altra pagina, lo zoom
+      // cambiato): una richiesta vecchia non chiede niente e non mette niente.
+      const ticket = ++bitmapPaints;
+      const fitted = fit;
+      const stale = () => destroyed || page !== clamped || fit !== fitted || ticket !== bitmapPaints;
       const [width, height] = await engine.pageSize(index);
+      if (stale()) return;
       const zoom = fit && width > 0 && room > 0 ? room / width : 1;
       const bitmap = await engine.renderBitmap!(index, ratio * zoom);
       if (!bitmap) return;
-      if (destroyed || page !== clamped) {
+      if (stale()) {
         bitmap.close();
         return;
       }

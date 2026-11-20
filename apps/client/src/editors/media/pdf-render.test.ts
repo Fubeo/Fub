@@ -5,8 +5,9 @@
 // il worker non c'è, se non sa disegnare o se cade; il visore mette la pagina
 // in un canvas `bitmaprenderer`, e senza resta a `renderPage`.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { t } from "../../i18n/strings";
 import { Lifetime } from "../../ui/lifetime";
-import { openPdfRenderWorker, PdfRenderUnavailable, type RenderWorkerLike } from "./pdf-render-client";
+import { openPdfRenderWorker, PDF_RENDER_WORKER_MAX_BYTES, PdfRenderUnavailable, type RenderWorkerLike } from "./pdf-render-client";
 import { pdfRenderer, type PdfRenderReply, type PdfRenderRequest, type RenderCanvas, type RendererPdfJs } from "./pdf-render-serve";
 import { makePdfJsLoader, mountPdfView, PDFJS_VERSION, type PdfEngine, type PdfJsModule } from "./pdf-view";
 
@@ -206,11 +207,49 @@ describe("il lato principale del worker", () => {
 
   it("un worker che non risponde si lascia perdere dopo l'attesa", async () => {
     const silent = { postMessage: vi.fn(), addEventListener: vi.fn(), terminate: vi.fn() };
-    await expect(openPdfRenderWorker(silent, { bytes: new Uint8Array([1]), workerSrc: "/w.mjs", version: PDFJS_VERSION }, 5))
+    await expect(openPdfRenderWorker(silent, { bytes: new Uint8Array([1]), workerSrc: "/w.mjs", version: PDFJS_VERSION }, { openTimeoutMs: 5 }))
       .rejects.toBeInstanceOf(PdfRenderUnavailable);
     expect(silent.terminate).toHaveBeenCalled();
   });
+
+  it("una pagina che il worker non manda entro il tempo lo chiude: la richiesta rifiuta", async () => {
+    const fake = made();
+    const renderer = await openPdfRenderWorker(fake.worker, { bytes: new Uint8Array([1]), workerSrc: "/w.mjs", version: PDFJS_VERSION }, { pageTimeoutMs: 5 });
+    // La resa non finisce mai e il worker non dà errore: è bloccato.
+    await expect(renderer.render(0, 1)).rejects.toMatchObject({ name: "PdfRenderUnavailable", reason: "timeout" });
+    expect(fake.terminate).toHaveBeenCalled();
+    await expect(renderer.render(1, 1)).rejects.toBeInstanceOf(PdfRenderUnavailable);
+  });
+
+  it("chiuso il documento, l'apertura rifiuta subito, senza aspettare il tempo", async () => {
+    const silent = { postMessage: vi.fn(), addEventListener: vi.fn(), terminate: vi.fn() };
+    const closing = new AbortController();
+    const bytes = new Uint8Array([1, 2, 3]);
+    const opening = openPdfRenderWorker(silent, { bytes, workerSrc: "/w.mjs", version: PDFJS_VERSION }, { signal: closing.signal, openTimeoutMs: 60_000 });
+    // I byte vanno al worker spostati, non copiati.
+    expect(silent.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: "open", bytes }), [bytes.buffer]);
+    closing.abort();
+    await expect(opening).rejects.toMatchObject({ reason: "closed" });
+    expect(silent.terminate).toHaveBeenCalled();
+  });
 });
+
+/// Un worker che risponde solo quando lo dice il test, in modo sincrono.
+function manualWorker() {
+  const listeners = new Map<string, ((event: { data: PdfRenderReply }) => void)[]>();
+  const posted: PdfRenderRequest[] = [];
+  const worker = {
+    postMessage: (message: PdfRenderRequest) => void posted.push(message),
+    addEventListener(type: string, listener: (event: { data: PdfRenderReply }) => void) {
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+    },
+    terminate: vi.fn(),
+  };
+  const reply = (data: PdfRenderReply) => {
+    for (const listener of listeners.get("message") ?? []) listener({ data });
+  };
+  return { worker: worker as unknown as RenderWorkerLike, posted, reply, terminate: worker.terminate };
+}
 
 /// Il pdf.js del thread principale, finto: le rese finiscono subito e si contano.
 function mainPdfJs() {
@@ -304,6 +343,54 @@ describe("il motore e le pagine in immagine", () => {
     engine.destroy();
   });
 
+  it("un PDF oltre il limite non apre il worker: la sua memoria non raddoppia", async () => {
+    offscreenWebView();
+    const makeWorker = vi.fn(() => made().worker);
+    const load = makePdfJsLoader(async () => mainPdfJs().pdfjs, "/pdf.worker.mjs", makeWorker);
+    const big = await load(new Uint8Array(PDF_RENDER_WORKER_MAX_BYTES + 1));
+    expect(big.renderBitmap).toBeUndefined();
+    const fits = await load(new Uint8Array(PDF_RENDER_WORKER_MAX_BYTES));
+    expect(fits.renderBitmap).toBeTypeOf("function");
+    big.destroy();
+    fits.destroy();
+    expect(makeWorker).not.toHaveBeenCalled();
+  });
+
+  it("una WebView che non sa disegnare nel worker lo dice una volta: i PDF dopo non aprono il worker", async () => {
+    offscreenWebView();
+    const fake = made({ fonts: false });
+    const makeWorker = vi.fn(() => fake.worker);
+    const load = makePdfJsLoader(async () => mainPdfJs().pdfjs, "/pdf.worker.mjs", makeWorker);
+    const first = await load(new Uint8Array([1]));
+    await first.renderBitmap!(0, 1);
+    await vi.waitFor(() => expect(fake.terminate).toHaveBeenCalled());
+    await settle();
+    const second = await load(new Uint8Array([1]));
+    expect(second.renderBitmap).toBeUndefined();
+    expect(makeWorker).toHaveBeenCalledTimes(1);
+    first.destroy();
+    second.destroy();
+  });
+
+  it("una pagina del worker arrivata a documento chiuso si chiude, e il motore dà `null`", async () => {
+    offscreenWebView();
+    const manual = manualWorker();
+    const engine = await makePdfJsLoader(async () => mainPdfJs().pdfjs, "/pdf.worker.mjs", () => manual.worker)(new Uint8Array([1]));
+    await engine.renderBitmap!(0, 1);
+    await vi.waitFor(() => expect(manual.posted).toHaveLength(1));
+    manual.reply({ type: "opened", pageCount: 3 });
+    await settle();
+    const pending = engine.renderBitmap!(1, 1);
+    await vi.waitFor(() => expect(manual.posted).toHaveLength(2));
+    const late = bitmap(600, 800);
+    const id = (manual.posted[1] as { id: number }).id;
+    // La pagina arriva, e nello stesso giro il documento si chiude.
+    manual.reply({ type: "rendered", id, bitmap: late });
+    engine.destroy();
+    await expect(pending).resolves.toBeNull();
+    expect(late.close).toHaveBeenCalled();
+  });
+
   it("chiuso il PDF mentre il worker lo apre, il worker si chiude", async () => {
     offscreenWebView();
     const silent = { postMessage: vi.fn(), addEventListener: vi.fn(), terminate: vi.fn() };
@@ -366,6 +453,75 @@ describe("il visore e le pagine in immagine", () => {
     const canvas = await mount(engine({ renderBitmap: vi.fn(async () => null) }));
     expect(transfer).not.toHaveBeenCalled();
     expect(canvas.style.width).toBe("");
+  });
+
+  /// Un motore che tiene in mano misure e pagine: le si danno quando lo dice il test.
+  function heldEngine(slowSize: number | null) {
+    let releaseSize!: () => void;
+    const sizeGate = new Promise<void>((resolve) => { releaseSize = resolve; });
+    const asked: { index: number; scale: number; give(image: ImageBitmap | null): void }[] = [];
+    const loaded = engine({
+      pageCount: 5,
+      pageSize: async (index: number) => {
+        if (index === slowSize) await sizeGate;
+        return [600, 800] as const;
+      },
+      renderBitmap: vi.fn((index: number, scale: number) => new Promise<ImageBitmap | null>((give) => asked.push({ index, scale, give }))),
+    });
+    return { loaded, asked, releaseSize };
+  }
+
+  async function mountView(loaded: PdfEngine) {
+    const life = new Lifetime();
+    lives.push(life);
+    const view = mountPdfView({ id: "manuale.pdf", mime: "application/pdf" } as never, new Uint8Array([1]), { loader: async () => loaded }, life);
+    document.body.append(view.element);
+    await settle();
+    await settle();
+    return view;
+  }
+
+  it("una pagina lasciata mentre si misura non chiede l'immagine e non scavalca quella dopo", async () => {
+    const transfer = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((kind: string) =>
+      kind === "bitmaprenderer" ? { transferFromImageBitmap: transfer } : null) as never);
+    const { loaded, asked, releaseSize } = heldEngine(4);
+    const view = await mountView(loaded);
+    await vi.waitFor(() => expect(asked).toHaveLength(1));
+    asked[0]!.give(bitmap(600, 800));
+    // La 5 misura piano; intanto si va alla 3, che si misura subito.
+    void view.goToPage(5);
+    const third = view.goToPage(3);
+    await vi.waitFor(() => expect(asked).toHaveLength(2));
+    releaseSize();
+    await settle();
+    await settle();
+    expect(asked.map((ask) => ask.index)).toEqual([0, 2]);
+    const image = bitmap(600, 800);
+    asked[1]!.give(image);
+    await third;
+    expect(transfer).toHaveBeenLastCalledWith(image);
+  });
+
+  it("una pagina fatta con lo zoom di prima non si mette nel canvas", async () => {
+    const transfer = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((kind: string) =>
+      kind === "bitmaprenderer" ? { transferFromImageBitmap: transfer } : null) as never);
+    const { loaded, asked } = heldEngine(null);
+    const view = await mountView(loaded);
+    await vi.waitFor(() => expect(asked).toHaveLength(1));
+    // «Adatta alla larghezza» mentre la pagina a zoom 1 è ancora nel worker.
+    view.element.querySelector<HTMLButtonElement>(`button[aria-label="${t("media.pdf.fit_width")}"]`)!.click();
+    await vi.waitFor(() => expect(asked).toHaveLength(2));
+    const fitted = bitmap(900, 1200);
+    asked[1]!.give(fitted);
+    await settle();
+    const old = bitmap(600, 800);
+    asked[0]!.give(old);
+    await settle();
+    expect(transfer).toHaveBeenCalledTimes(1);
+    expect(transfer).toHaveBeenLastCalledWith(fitted);
+    expect(old.close).toHaveBeenCalled();
   });
 
   it("senza `bitmaprenderer` disegna con `renderPage`", async () => {

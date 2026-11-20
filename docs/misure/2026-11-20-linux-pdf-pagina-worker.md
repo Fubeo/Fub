@@ -7,6 +7,8 @@ Quanto blocca il thread principale una pagina del visore dei PDF sfogliata
 > **Risultato:** la mediana del thread bloccato per pagina scende da 21–26 ms
 > a 8–9 ms; resta sopra un periodo dello schermo a 180 Hz (5,56 ms), quindi
 > S11 resta senza soglie in `budgets.json`.
+> Il worker costa da due a due volte e mezza la misura del PDF in memoria:
+> sopra 64 MiB non si apre.
 
 Il disegno nel worker è descritto in
 [Il visore dei PDF](../product/pdf-annotations.md#il-visore-dei-pdf); lo
@@ -44,3 +46,28 @@ dello schermo, consegnata al compositor; il secondo giro "dopo", con carico
 
 Alcuni giri hanno buchi isolati da 0,1 a 7,7 s su una pagina, prima e dopo:
 cadono quando il carico della macchina passa 100 e non spostano la mediana.
+
+## La memoria
+
+Quanta memoria prende in più il worker, che tiene una sua copia dei byte (da
+`getData()`, passata al worker spostata, non copiata) e un suo pdf.js.
+
+- PDF generati in una cartella temporanea, mai nel repo: una pagina con del
+  testo e un flusso di byte casuali che nessuno disegna, di 60 e 126 MB;
+- Chromium headless di Playwright (non la WebView di Tauri: la build di
+  rilascio non espone la sua memoria per processo), pagina servita dal Vite
+  del banco, il caricatore vero di `pdf-view.ts` con e senza il worker;
+- PSS dei processi `renderer` (`/proc/PID/smaps_rollup`), prima di aprire il
+  PDF, 10 s dopo la seconda pagina chiesta (il worker ha aperto il PDF e
+  disegnato), e 8 s dopo la chiusura.
+
+| PDF | senza worker | con il worker | in più |
+|---|---|---|---|
+| 60 MB | +114 MB | +270 MB | 156 MB, 2,6 volte il file |
+| 126 MB, senza limite | +180 MB | +451 MB | 271 MB, 2,2 volte il file |
+| 126 MB, con il limite a 64 MiB | +180 MB | +175 MB | nessuno: il worker non si apre |
+
+Il raddoppio resta grande, quindi `PDF_RENDER_WORKER_MAX_BYTES`
+(`pdf-render-client.ts`) lascia nel thread principale i PDF sopra 64 MiB.
+Chiuso il PDF, la memoria scende da sé (112 MB senza worker, 177 MB con il
+worker dopo 8 s, il resto al giro di raccolta dopo).
