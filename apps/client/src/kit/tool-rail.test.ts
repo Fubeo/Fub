@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { accessibleName } from "../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
+import { mountMenuRelease } from "../ui/menu-release";
 import { listenerLedger, pointer, press } from "./testing";
 import { createToolRail, FLYOUT_HOLD_MS, toolTip, type RailGroup } from "./tool-rail";
 
@@ -175,6 +176,29 @@ describe("createToolRail", () => {
     const corner = slots(made.element)[0]!.querySelector(".kit-rail-corner")!;
     corner.dispatchEvent(pointer("pointerdown"));
     expect(document.querySelector(".kit-rail-flyout")).not.toBeNull();
+  });
+
+  it("su Linux il rilascio del tasto destro che apre la tendina non sceglie lo strumento mostrato", () => {
+    // WebKitGTK: `contextmenu` alla pressione, poi `mouseup` e `click` col
+    // `button` del sinistro sulla casella (IMP-6201). La guardia della shell
+    // (`ui/menu-release.ts`) vale anche per questa tendina.
+    vi.useFakeTimers();
+    mountMenuRelease(life);
+    const made = rail("eraser");
+    const pen = slots(made.element)[2]!;
+    pen.dispatchEvent(pointer("pointerdown", { button: 2, buttons: 2 }));
+    pen.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 2, buttons: 2 }));
+    pen.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, buttons: 2 }));
+    expect(document.querySelector(".kit-rail-flyout")).not.toBeNull();
+    pen.dispatchEvent(pointer("pointerup", { button: 2, buttons: 0 }));
+    pen.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, buttons: 2 }));
+    pen.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+    vi.runOnlyPendingTimers();
+    expect(chosen).toEqual([]);
+    expect(document.querySelector(".kit-rail-flyout")).not.toBeNull();
+    // Il clic dopo, su una voce della tendina, sceglie.
+    document.querySelector<HTMLElement>(".kit-rail-flyout [role=menuitemradio]:last-child")!.click();
+    expect(chosen).toEqual(["highlighter"]);
   });
 
   it("una pressione breve sceglie lo strumento mostrato", () => {

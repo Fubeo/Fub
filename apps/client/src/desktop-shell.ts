@@ -65,6 +65,7 @@ import { openPrimaryView, opensWithoutParams, primaryViews } from "./ui/primary-
 import { mountTitlebar } from "./ui/titlebar";
 import { mountLongPressMenus } from "./ui/long-press";
 import { mountSystemMenuGuard } from "./ui/system-menu";
+import { mountMenuRelease } from "./ui/menu-release";
 import { mountPerfProbe } from "./perf/mount";
 import { platformSupports } from "./platform/capabilities";
 import { mountAppMenu } from "./ui/app-menu";
@@ -898,6 +899,9 @@ async function init(): Promise<Teardown> {
   mountLongPressMenus(pageWindowLifetime);
   // Dove Fub non ha un menu, il tasto destro non apre quello della WebView.
   mountSystemMenuGuard(pageWindowLifetime);
+  // Su Linux il tasto destro apre i menu alla pressione: il suo rilascio non
+  // li chiude e non sceglie la voce sotto il puntatore.
+  mountMenuRelease(pageWindowLifetime);
   // La sonda delle prestazioni, se l'impostazione di macchina la vuole: presto,
   // perché l'avvio a freddo si misura fino alla prima nota.
   mountPerfProbe(pageWindowLifetime);
