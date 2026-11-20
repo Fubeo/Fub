@@ -25,6 +25,11 @@ WASM, contenuto non fidato) è in [Permessi e sicurezza](permissions-and-securit
 - Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
   Owner concede, toglie o cambia soltanto ruoli sotto il proprio
   (`fub_services::acl::may_grant`, `check_revoke`).
+- Pubblicare un sito non cambia il ruolo: il grant `Owner` sul sito va
+  soltanto a chi lo crea con il primo commit o ne è già il proprietario. Un
+  `Writer` che pubblica resta `Writer` e non amministra il sito (niente
+  ritiro, password, dominio o revoche: `403`)
+  (`fub_services::publish::finish_commit`).
 - Login con password (`fub_services::mfa::LoginLimits`): 5 fallimenti in 5
   minuti bloccano quel nome da quell'origine, 20 fallimenti di un'origine su
   nomi qualunque bloccano l'origine, 50 fallimenti di un nome da tutte le

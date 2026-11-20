@@ -694,6 +694,71 @@ fn handle_revoked_collaborator_cannot_publish() {
     assert_eq!(response.status, 200);
 }
 
+/// A `Writer` from the live ACL may publish, and publishing does not make
+/// it an owner: after its own commit it still cannot administer (C1). The
+/// owner keeps its grant.
+#[test]
+fn a_writer_who_commits_stays_a_writer() {
+    let data = temp_data_dir("writer-commit");
+    let (mut state, auth, alice) = authed_state(&data);
+    let bob_id = state.accounts.create_account("bob", "password123").unwrap();
+    let bob_token = state.accounts.issue_session_token(&bob_id).unwrap();
+    let bob_auth = format!("Bearer {bob_token}");
+
+    let (manifest, pages) = manifest_v1();
+    let commit = CommitRequest {
+        protocol: "fub-publish/1".to_string(),
+        site_id: "blog".to_string(),
+        manifest,
+        pages,
+        assets: vec![],
+        excluded_private: vec![],
+    };
+    let body = serde_json::to_vec(&commit).unwrap();
+    let response =
+        fub_services::publish::handle(&mut state, "POST", COMMIT_PATH, Some(&auth), &body);
+    assert_eq!(response.status, 200);
+    state
+        .acl_mut("site:blog")
+        .grant(&bob_id, fub_services::acl::Role::Writer);
+
+    let mut next = commit;
+    next.manifest.version = 2;
+    let body = serde_json::to_vec(&next).unwrap();
+    let response =
+        fub_services::publish::handle(&mut state, "POST", COMMIT_PATH, Some(&bob_auth), &body);
+    assert_eq!(response.status, 200, "a Writer publishes");
+    assert_eq!(
+        state
+            .acls
+            .get("site:blog")
+            .and_then(|acl| acl.role_of(&bob_id)),
+        Some(fub_services::acl::Role::Writer),
+        "the commit does not promote the Writer"
+    );
+    assert_eq!(
+        fub_services::publish::authorize_administer(&state, "blog", &bob_id)
+            .unwrap_err()
+            .status,
+        403
+    );
+    let unpublish = serde_json::to_vec(&serde_json::json!({
+        "protocol": "fub-publish/1",
+        "site_id": "blog",
+    }))
+    .unwrap();
+    let response = fub_services::publish::handle(
+        &mut state,
+        "POST",
+        UNPUBLISH_PATH,
+        Some(&bob_auth),
+        &unpublish,
+    );
+    assert_eq!(response.status, 403, "a Writer cannot unpublish");
+    assert_eq!(load_record(&data, "blog").unwrap().owner, alice);
+    assert!(fub_services::publish::authorize_administer(&state, "blog", &alice).is_ok());
+}
+
 #[test]
 fn handle_locked_site_needs_password_or_grant() {
     let data = temp_data_dir("locked-handle");
