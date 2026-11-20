@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { t } from "../../../../i18n/strings";
+import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
@@ -297,8 +298,13 @@ describe("la superficie Markdown", () => {
   it("in Lettura il link a questo punto è del punto cliccato, non del cursore di scrittura", () => {
     const { ed, view, reading } = editor();
     ed.buffer.setDoc("# Uno\n\ntesto\n\n# Due\n");
+    ensureSyntaxTree(view().state, view().state.doc.length, 60_000);
+    view().dispatch({});
     view().dispatch({ selection: { anchor: 2 } });
     ed.setMode("reading");
+    // Il passaggio alla Lettura ricrea l'albero (riconfigura lo stato): va consegnato di nuovo.
+    ensureSyntaxTree(view().state, view().state.doc.length, 60_000);
+    view().dispatch({});
     const second = [...reading().querySelectorAll<HTMLElement>("[data-md-from]")].find((el) => el.textContent?.includes("Due"));
     expect(second, "la Lettura segna la sorgente dei suoi blocchi").toBeTruthy();
     const point = vi.spyOn(document, "elementFromPoint").mockReturnValue(second!);
@@ -782,6 +788,8 @@ describe("le azioni dell'editor della superficie", () => {
     const { ed, view } = editor();
     const text = "# Uno\n\ntesto\n\n# Due\n\naltro\n";
     ed.buffer.setDoc(text);
+    ensureSyntaxTree(view().state, view().state.doc.length, 60_000);
+    view().dispatch({});
     expect(ed.editorActions.has("text.fold.all")).toBe(true);
     expect(ed.editorActions.state("text.fold.all")).toEqual({ enabled: true, active: null });
     expect(ed.editorActions.run("text.fold.all")).toBe(true);
@@ -817,6 +825,8 @@ describe("le azioni dell'editor della superficie", () => {
     const { ed, view } = editor();
     const text = "# Uno\n\n## Sotto\n\ntesto\n\n# Due\n\naltro\n";
     ed.buffer.setDoc(text);
+    ensureSyntaxTree(view().state, view().state.doc.length, 60_000);
+    view().dispatch({});
     const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
     expect(ed.editorActions.state("text.fold.more")).toEqual({ enabled: true, active: null });
     expect(ed.editorActions.run("text.fold.more")).toBe(true);

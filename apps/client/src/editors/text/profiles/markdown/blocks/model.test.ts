@@ -3,6 +3,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { type ChangeSpec, EditorState } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
+import { parsed } from "../test-support";
 import { blockAt, blockModel, buildBlocks, updateBlocks, type Block } from "./model";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 
@@ -10,9 +11,7 @@ import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 // che segue le modifiche e quello rifatto da capo.
 
 function stateOf(doc: string): EditorState {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] }));
 }
 
 /// `run` con `Date.now()` fermo: il tempo che CodeMirror concede all'analisi
@@ -134,9 +133,8 @@ describe("le modifiche", () => {
     it(`segue «${edit.name}» come il modello rifatto`, () => {
       const state = stateOf(base);
       const next = state.update({ changes: edit.at(base) }).state;
-      ensureSyntaxTree(next, next.doc.length, 5000);
       // Un passo vuoto prende l'albero finito, se l'analisi era rimasta a metà.
-      const settled = next.update({}).state;
+      const settled = parsed(next);
       expect(shape(settled.field(blockModel).blocks)).toEqual(shape(buildBlocks(settled).blocks));
       checkRule(settled.doc.toString(), settled.field(blockModel).blocks);
     });
@@ -152,9 +150,7 @@ describe("le modifiche", () => {
       const from = Math.floor(random() * (length + 1));
       const remove = random() < 0.3 ? Math.min(length - from, Math.floor(random() * 4)) : 0;
       const insert = remove > 0 && random() < 0.5 ? "" : pieces[Math.floor(random() * pieces.length)]!;
-      state = state.update({ changes: { from, to: from + remove, insert } }).state;
-      ensureSyntaxTree(state, state.doc.length, 5000);
-      state = state.update({}).state;
+      state = parsed(state.update({ changes: { from, to: from + remove, insert } }).state);
       expect(shape(state.field(blockModel).blocks), `passo ${step}`).toEqual(shape(buildBlocks(state).blocks));
     }
   });

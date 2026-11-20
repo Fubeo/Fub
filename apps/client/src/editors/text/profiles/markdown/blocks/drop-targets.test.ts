@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { history, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "../test-support";
 import { EditorState } from "@codemirror/state";
 import { dropOffers, offerDropTargets, type SurfaceBoardOffer, type SurfaceNoteOffer, type SurfacePlaceOffer } from "../../../../core/registry";
 import { markdownGrammar } from "../grammar";
@@ -12,9 +12,7 @@ import { blockModel } from "./model";
 // I bersagli fuori dalla colonna (E2): i titoli della Struttura, «In fondo a …».
 
 function stateOf(doc: string): EditorState {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel, history()] });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel, history()] }));
 }
 
 const blocksOf = (state: EditorState) => state.field(blockModel).blocks;
@@ -125,11 +123,10 @@ describe("il titolo di un posto della Struttura", () => {
     // cadrebbe oltre il secondo «A», a due righe da lì, e vincerebbe quello.
     const filler = Array.from({ length: 40 }, (_, i) => [`riga ${i}`, ""]).flat();
     const disk = [...filler, "## A", "", "uno", "", "## A", "", "due", "", "## B", "", "tre"].join("\r\n");
-    const state = EditorState.create({
+    const state = parsed(EditorState.create({
       doc: disk,
       extensions: [EditorState.lineSeparator.of("\r\n"), markdown({ base: markdownGrammar }), blockModel, history()],
-    });
-    ensureSyntaxTree(state, state.doc.length, 5000);
+    }));
     const blocks = blocksOf(state);
     expect(state.sliceDoc(), "la sorgente esce coi suoi a capo").toBe(disk);
     const first = bytes(disk.slice(0, disk.indexOf("## A")));
@@ -203,8 +200,7 @@ describe("le note del cassetto (E13)", () => {
 
   it("i byte del blocco sono quelli del file: i `\\r` e i caratteri di più byte contano", () => {
     const disk = "Città\r\n\r\n- uno\r\n  - figlio\r\n\r\nFine";
-    const state = EditorState.create({ doc: disk, extensions: [EditorState.lineSeparator.of("\r\n"), markdown({ base: markdownGrammar }), blockModel] });
-    ensureSyntaxTree(state, state.doc.length, 5000);
+    const state = parsed(EditorState.create({ doc: disk, extensions: [EditorState.lineSeparator.of("\r\n"), markdown({ base: markdownGrammar }), blockModel] }));
     const blocks = blocksOf(state);
     const item = blocks.findIndex((block) => block.depth === 0 && state.sliceDoc(block.from, block.to).startsWith("- uno"));
     const { at, text } = blockBytes(state, blocks, { first: item, last: item });

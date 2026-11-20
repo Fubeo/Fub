@@ -4,10 +4,12 @@
 // una specie finta che conta i suoi montaggi, i suoi modi e i suoi ascolti.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
+import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { undo } from "@codemirror/commands";
 import { markdownGrammar } from "./grammar";
+import { parsed } from "./test-support";
 import { createTextEngine, type TextEngine } from "../../engine";
 import { livePreview } from "./livepreview";
 import {
@@ -227,6 +229,8 @@ function rig(text: string, options: {
   });
   engine.setDoc(text);
   const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
+  ensureSyntaxTree(view.state, view.state.doc.length, 60_000);
+  view.dispatch({});
   const made: Rig = {
     parent, engine, view, cards, species, opened,
     destroy() {
@@ -754,7 +758,7 @@ function applied(state: EditorState, spec: ReturnType<typeof sizeEmbedAt>): stri
 
 /// Uno stato col Markdown letto e il modello dei blocchi, come nella Scrittura.
 function mdState(doc: string): EditorState {
-  return EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] });
+  return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] }));
 }
 
 /// Quattro (o `names.length`) colonne con una scheda ciascuna.

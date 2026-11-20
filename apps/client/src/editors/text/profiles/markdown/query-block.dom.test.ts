@@ -8,6 +8,7 @@ import { createTextEngine } from "../../engine";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { embedTasksBlocks, markTaskDues, TASKS_QUERY_VIEW } from "./query-block";
+import { parsedView } from "./test-support";
 
 /// Chi monta le view, finto: ricorda cosa gli si chiede.
 let known: Set<string>;
@@ -282,6 +283,7 @@ describe("la pastiglia della scadenza", () => {
         "- [ ] Un [link](https://esempio.it/📅/2026-11-15) non è una data",
         "- Non un compito 📅 2026-11-16",
       ].join("\n"));
+      parsedView(parent);
       const pills = [...parent.querySelectorAll<HTMLElement>(".cm-fub-due")];
       expect(pills.map((pill) => [pill.textContent, pill.className.replace(/\s+/g, " ").trim()])).toEqual([
         ["📅 2026-11-16", "cm-fub-due cm-fub-due-near"],
@@ -322,6 +324,7 @@ describe("la pastiglia della scadenza", () => {
         "  ```",
         "",
       ].join("\n"));
+      parsedView(parent);
       const pills = [...parent.querySelectorAll<HTMLElement>(".cm-fub-due")];
       expect(pills.map((pill) => [pill.textContent, pill.className.replace(/\s+/g, " ").trim()])).toEqual([
         ["📅 2026-11-16", "cm-fub-due cm-fub-due-near"],

@@ -10,6 +10,7 @@ import { EditorView } from "@codemirror/view";
 const dialogs = vi.hoisted(() => ({ pickFromList: vi.fn() }));
 vi.mock("../../../../../ui/dialogs", () => dialogs);
 
+import { parsed } from "../test-support";
 import { buildBlocks } from "./model";
 import { stateOfSource, syncCandidates, syncedBlockHere, syncReference, syncWithQuestions, type SyncBlockPort } from "./sync-to";
 
@@ -49,7 +50,7 @@ afterEach(() => {
 
 describe("i blocchi che si sincronizzano", () => {
   it("niente proprietà né titoli; le voci con la loro prima riga, senza id", () => {
-    const state = stateOfSource(OTHER);
+    const state = parsed(stateOfSource(OTHER));
     const labels = syncCandidates(state, buildBlocks(state).blocks).map((candidate) => candidate.label);
     expect(labels).toEqual(["Le chiavi le tiene Sara.", "Prima voce", "Seconda voce", "```"]);
     expect(syncReference("Riunioni/Riunione.md")).toBe("Riunioni/Riunione");

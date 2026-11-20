@@ -29,13 +29,14 @@ import {
   wikilinkSource,
 } from "./completions";
 import type { VaultBlockNote, VaultBlockPort } from "./blocks/vault-blocks";
+import { parsed } from "./test-support";
 
 // Niente `EditorView` qui (vitest gira in node, senza DOM): le sorgenti CM6 si
 // esercitano headless con un `CompletionContext` costruito su un
 // `EditorState`, che è pura struttura dati.
 function ctxAt(doc: string, pos: number, explicit = false): CompletionContext {
   return new CompletionContext(
-    EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] }),
+    parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] })),
     pos,
     explicit,
   );

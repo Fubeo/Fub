@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "../grammar";
 import { threadsIn } from "./threads";
 import { commentLevels, scanComments, threadCuts, threadTail, type CommentThread } from "./syntax";
+import { parsed } from "../test-support";
 
 // La grammatica dei commenti della shell, gemella di `parse/comments.rs`: i
 // casi della convenzione (`docs/reference/note-conventions.md`). Il corpus (`corpus.test.ts`) tiene le
@@ -23,8 +23,7 @@ function shape(text: string, thread: CommentThread): { passage: string | null; m
 
 /// I commenti di una nota intera, dall'albero di uno stato.
 function inNote(doc: string): { passage: string | null; messages: string[] }[] {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
-  ensureSyntaxTree(state, doc.length, 5_000);
+  const state = parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] }));
   return threadsIn(state, 0, doc.length).map((thread) => shape(doc, thread));
 }
 
@@ -148,8 +147,7 @@ describe("i commenti nella nota", () => {
 
   it("senza la sintassi `fub:comments` non c'è niente", () => {
     const doc = "{==a==}{>>m<<}\n";
-    const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
-    ensureSyntaxTree(state, doc.length, 5_000);
+    const state = parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] }));
     expect(threadsIn(state, 0, doc.length, [])).toEqual([]);
   });
 });

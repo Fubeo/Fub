@@ -3,6 +3,7 @@
 // profilo intero e la sua mappa dei tasti: una prova per ogni riga della
 // tabella dei gesti, coi blocchi accesi e spenti, e i casi limite del piano.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { getCM } from "@replit/codemirror-vim";
@@ -66,6 +67,8 @@ async function note(doc: string, blocks: boolean, anchor = 0, extra: { vim?: boo
   await settle();
   await settle();
   const view = EditorView.findFromDOM(parent)!;
+  ensureSyntaxTree(view.state, view.state.doc.length, 60_000);
+  view.dispatch({});
   view.dispatch({ selection: { anchor } });
   const made = { ed, view, parent };
   mounted.push(made);

@@ -28,6 +28,7 @@ import {
   toggleStrikethrough,
   toggleWikilink,
 } from "./commands";
+import { parsed } from "./test-support";
 
 // I comandi sono `StateCommand` puri: si testano creando un `EditorState` e
 // catturando la transazione dal dispatch, senza mai istanziare una view (i
@@ -39,18 +40,18 @@ function mk(spec: string): EditorState {
   if (open !== -1) {
     const stripped = spec.replace("‹", "");
     const close = stripped.indexOf("›");
-    return EditorState.create({
+    return parsed(EditorState.create({
       doc: stripped.replace("›", ""),
       selection: EditorSelection.single(open, close),
       extensions: [markdown({ base: markdownLanguage })],
-    });
+    }));
   }
   const bar = spec.indexOf("|");
-  return EditorState.create({
+  return parsed(EditorState.create({
     doc: spec.replace("|", ""),
     selection: EditorSelection.single(bar === -1 ? 0 : bar),
     extensions: [markdown({ base: markdownLanguage })],
-  });
+  }));
 }
 
 function show(state: EditorState): string {
@@ -565,7 +566,7 @@ describe("operazioni tabella", () => {
       if (from < 0) throw new Error(`missing selection: ${text}`);
       return EditorSelection.cursor(from);
     });
-    let state = EditorState.create({
+    let state = parsed(EditorState.create({
       doc,
       selection: EditorSelection.create(locations),
       extensions: [
@@ -573,7 +574,7 @@ describe("operazioni tabella", () => {
         EditorState.allowMultipleSelections.of(true),
         history(),
       ],
-    });
+    }));
     let transactions = 0;
     const dispatch = (tr: Transaction) => {
       state = tr.state;

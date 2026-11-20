@@ -2,16 +2,14 @@
 // cursore, e che cosa fanno i gesti di ciascuno sul testo.
 import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorSelection, EditorState, type TransactionSpec } from "@codemirror/state";
 import type { SurfaceBlockGroup } from "../../../core/registry";
 import type { SurfaceMenuEntry, SurfaceMenuItem } from "../../../core/editor-menu";
 import { blockAt, markdownBlockGroup, selectionBlock, toggleCalloutFoldable, type BlockGroupHost } from "./block-groups";
+import { parsed } from "./test-support";
 
 const stateOf = (doc: string, anchor = 0, head = anchor): EditorState => {
-  const state = EditorState.create({ doc, selection: EditorSelection.single(anchor, head), extensions: [markdown()] });
-  ensureSyntaxTree(state, state.doc.length, 1000);
-  return state;
+  return parsed(EditorState.create({ doc, selection: EditorSelection.single(anchor, head), extensions: [markdown()] }));
 };
 
 /// Una superficie finta: tiene lo stato, applica le modifiche, ricorda copie e
@@ -26,8 +24,7 @@ function hostOf(doc: string, at: number, { editable = true } = {}) {
       if (!editable) return false;
       const spec: TransactionSpec | null = change(state);
       if (!spec) return false;
-      state = state.update(spec).state;
-      ensureSyntaxTree(state, state.doc.length, 1000);
+      state = parsed(state.update(spec).state);
       return true;
     },
     view: () => false,

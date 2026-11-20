@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "../grammar";
 import {
   allDiscussions,
@@ -19,14 +18,13 @@ import {
   signature,
   stamp,
 } from "./model";
+import { parsed } from "../test-support";
 
 // Le discussioni lette dal buffer e il testo che un gesto ci scrive: chi ha
 // scritto, dove va un commento nuovo, come si firma.
 
 function stateOf(doc: string, from = 0, to = from): EditorState {
-  const state = EditorState.create({ doc, selection: EditorSelection.single(from, to), extensions: [markdown({ base: markdownGrammar })] });
-  ensureSyntaxTree(state, doc.length, 5_000);
-  return state;
+  return parsed(EditorState.create({ doc, selection: EditorSelection.single(from, to), extensions: [markdown({ base: markdownGrammar })] }));
 }
 
 describe("l'intestazione di un messaggio, come il provider", () => {

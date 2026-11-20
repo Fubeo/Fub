@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "../test-support";
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { blockModel } from "./model";
@@ -10,16 +10,13 @@ import { targetOf, transformTo, unwrap, type TransformTarget } from "./transform
 // una e di più righe.
 
 function stateOf(doc: string, cursor = 0): EditorState {
-  const state = EditorState.create({ doc, selection: { anchor: cursor }, extensions: [markdown({ base: markdownGrammar }), blockModel] });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  return parsed(EditorState.create({ doc, selection: { anchor: cursor }, extensions: [markdown({ base: markdownGrammar }), blockModel] }));
 }
 
 function run(state: EditorState, target: TransformTarget): EditorState {
   let next = state;
   transformTo(target)({ state, dispatch: (tr) => { next = tr.state; } });
-  ensureSyntaxTree(next, next.doc.length, 5000);
-  return next.update({}).state;
+  return parsed(next);
 }
 
 const SOURCES: Record<string, string> = {
@@ -95,12 +92,11 @@ describe("il resto", () => {
   });
 
   it("due cursori nello stesso blocco lo trasformano una volta", () => {
-    const state = EditorState.create({
+    const state = parsed(EditorState.create({
       doc: "Una frase lunga",
       selection: EditorSelection.create([EditorSelection.cursor(1), EditorSelection.cursor(8)]),
       extensions: [EditorState.allowMultipleSelections.of(true), markdown({ base: markdownGrammar }), blockModel],
-    });
-    ensureSyntaxTree(state, state.doc.length, 5000);
+    }));
     expect(run(state, "bullet").doc.toString()).toBe("- Una frase lunga");
   });
 

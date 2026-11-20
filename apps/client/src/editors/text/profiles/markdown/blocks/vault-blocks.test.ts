@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { undo, history } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
+import { ensureSyntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdownGrammar } from "../grammar";
@@ -26,7 +27,10 @@ function port(overrides: Partial<VaultBlockPort> = {}): VaultBlockPort {
 function editor(doc: string): EditorView {
   const parent = document.createElement("div");
   document.body.append(parent);
-  return new EditorView({ parent, state: EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), history()] }) });
+  const view = new EditorView({ parent, state: EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), history()] }) });
+  ensureSyntaxTree(view.state, view.state.doc.length, 60_000);
+  view.dispatch({});
+  return view;
 }
 
 const writable = { name: "Riunione", writable: () => true };

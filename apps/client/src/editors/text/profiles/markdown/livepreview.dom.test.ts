@@ -11,6 +11,7 @@ import { livePreview, pageIconsChanged } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { closeContextMenu } from "../../../../ui/menu";
 import { loadLazyParts } from "../../../../ui/lazy-part";
+import { parsedView } from "./test-support";
 
 // I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
 // come dopo il riscaldamento: i gesti si guardano col loro codice.
@@ -94,6 +95,7 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
       ],
     });
     engine.setDoc(source);
+    parsedView(parent);
     return { parent, engine, cleanup: () => { engine.destroy(); parent.remove(); } };
   }
   it("con «mai» un paragrafo di sole immagini resta testo, con l'immagine figura in riga (D8, K10)", () => {
@@ -273,6 +275,7 @@ describe("wikilink in Live", () => {
     });
     try {
       engine.setDoc('Primo\n\nUn <span class="fub-color-red">rosso</span> e <mark class="fub-bg-blue fub-color-gray">blu</mark> e <span class="altro">x</span>');
+      parsedView(parent);
       const red = parent.querySelector<HTMLElement>("span.fub-color-red");
       expect(red?.textContent).toBe("rosso");
       const blue = parent.querySelector<HTMLElement>("mark.fub-bg-blue");

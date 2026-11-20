@@ -4,17 +4,13 @@
 import katex from "katex";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "../grammar";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "../test-support";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { readOptions } from "../math";
 import { notePaste, pastedFormulas, unwrapFormula, equationMathml } from "./paste";
 
-const stateOf = (doc: string): EditorState => {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
-  ensureSyntaxTree(state, state.doc.length, 1000);
-  return state;
-};
+const stateOf = (doc: string): EditorState => parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] }));
 
 describe("una formula incollata entra senza i suoi delimitatori", () => {
   it.each([

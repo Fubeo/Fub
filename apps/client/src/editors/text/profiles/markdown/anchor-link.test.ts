@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
+import { parsed } from "./test-support";
 
 function state(doc: string, head: number) {
-  const s = EditorState.create({ doc, selection: { anchor: head }, extensions: markdown({ base: markdownGrammar }) });
-  ensureSyntaxTree(s, s.doc.length, 5000);
-  return s;
+  return parsed(EditorState.create({ doc, selection: { anchor: head }, extensions: markdown({ base: markdownGrammar }) }));
 }
 
 const fixed = () => 0.5;
@@ -43,12 +41,11 @@ describe("anchorAtCursor", () => {
         ["uno\ndue\n\nTre", "uno\ndue ^ssssss\n\nTre"],
         ["uno\ndue", "uno\ndue ^ssssss"],
       ]) {
-        const s = EditorState.create({
+        const s = parsed(EditorState.create({
           doc: doc!.replace(/\n/g, nl),
           selection: { anchor: 1 },
           extensions: [markdown({ base: markdownGrammar }), ...(nl === "\n" ? [] : [EditorState.lineSeparator.of(nl)])],
-        });
-        ensureSyntaxTree(s, s.doc.length, 5000);
+        }));
         let next = s;
         writeAnchor(anchorAtCursor(s, fixed)!)({ state: s, dispatch: (tr) => { next = tr.state; } });
         expect(next.sliceDoc()).toBe(expected!.replace(/\n/g, nl));

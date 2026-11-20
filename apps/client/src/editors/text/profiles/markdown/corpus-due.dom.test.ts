@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
+import { parsed } from "./test-support";
 import { computeDecorations, type LiveDeco } from "./livepreview";
 import { renderMarkdown } from "./render";
 import { markTaskDues } from "./query-block";
@@ -48,7 +49,7 @@ describe("la scadenza: modello, Live e Lettura dicono la stessa cosa", () => {
       const expected = testCase.due.map((due) => [due.span, due.date === null]);
 
       // La Live, con nessuna riga attiva: i segni nascosti non si vedono.
-      const state = EditorState.create({ doc: testCase.source, extensions: [markdown({ base: markdownGrammar })] });
+      const state = parsed(EditorState.create({ doc: testCase.source, extensions: [markdown({ base: markdownGrammar })] }));
       const decorations = computeDecorations(state, new Set());
       const live = decorations
         .filter((d) => d.kind === "task-due")

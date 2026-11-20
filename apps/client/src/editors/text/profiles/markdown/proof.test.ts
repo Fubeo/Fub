@@ -229,7 +229,9 @@ function mount(text: string, client: ProofClient, options: { slowParser?: boolea
   engine.setDoc(text);
   slow?.mockRestore();
   const view = EditorView.findFromDOM(parent)!;
-  if (!options.slowParser) ensureSyntaxTree(view.state, view.state.doc.length, 5000);
+  // Senza `slowParser` l'albero completo arriva alla vista prima del test,
+  // come quando il parser in sottofondo ha già finito.
+  if (!options.slowParser && ensureSyntaxTree(view.state, view.state.doc.length, 60_000)) view.dispatch({});
   return { engine, view, changes, parent };
 }
 

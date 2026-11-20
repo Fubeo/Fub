@@ -11,6 +11,7 @@ import { toggleFormat } from "./format-toggle";
 import { keepMarks } from "./keep-marks";
 import { addProperty, moveProperty, propertiesExtension, setProperty } from "./properties";
 import { retitled } from "./page/title";
+import { parsed } from "./test-support";
 
 // Gli inserimenti dell'editor Markdown in una nota tutta CRLF (#394). L'editor
 // la apre col separatore `\r\n` (engine.ts), e CodeMirror divide il testo
@@ -29,7 +30,7 @@ function mk(spec: string, separator: string | null, extensions: Extension = []):
   const selection = open === -1
     ? EditorSelection.single(Math.max(0, spec.indexOf("|")))
     : EditorSelection.single(open, spec.replace("‹", "").indexOf("›"));
-  return EditorState.create({
+  return parsed(EditorState.create({
     doc: separator === null ? stripped : stripped.replace(/\n/g, separator),
     selection,
     extensions: [
@@ -37,7 +38,7 @@ function mk(spec: string, separator: string | null, extensions: Extension = []):
       markdown({ base: markdownLanguage }),
       extensions,
     ],
-  });
+  }));
 }
 
 function show(state: EditorState): string {
