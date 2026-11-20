@@ -12,6 +12,7 @@ import type { DrawKey } from "../strings";
 import type { Mark, Step } from "./history";
 import { createHistoryPanel, type HistoryPanel, type HistoryView } from "./history-panel";
 import { ROW_PX } from "./objects";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 const LABELS: readonly DrawKey[] = ["draw.action.stroke", "draw.action.move", "draw.action.fill", "draw.action.delete"];
 
@@ -375,6 +376,11 @@ describe("i segni", () => {
     key("ArrowUp", {}, input);
     expect(active()?.dataset.key).toBe("m1");
     input.value = "  Prima \n bozza ";
+    // A metà di una composizione (WebKit: codice 229) Invio ed Esc sono del
+    // metodo d'immissione, non del campo.
+    for (const name of ["Enter", "Escape"]) expect(key(name, WEBKIT_COMPOSING, input).defaultPrevented).toBe(false);
+    expect(calls).toEqual([]);
+    expect(field()).toBe(input);
     key("Enter", {}, input);
     expect(calls).toEqual(["rename 1 Prima bozza"]);
     expect(field()).toBeNull();

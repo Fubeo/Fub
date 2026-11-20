@@ -548,6 +548,49 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
     }
 }
 
+/// L'orologio di sistema di adesso, nella stessa unità del timbro di
+/// cambiamento che il filesystem dà su questa piattaforma: nanosecondi dal
+/// 1970 su unix, centinaia di nanosecondi dal 1601 su Windows (il
+/// `ChangeTime`). `None` dove il timbro non c'è.
+///
+/// Serve a dire se un timbro letto può ancora essere quello di una
+/// riscrittura che verrà: vedi [`crate::transfer::change_stamp_settled`].
+pub fn change_stamp_clock() -> Option<u64> {
+    #[cfg(any(unix, windows))]
+    {
+        let since = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?;
+        #[cfg(unix)]
+        let stamp = unix_change_stamp(
+            i64::try_from(since.as_secs()).ok()?,
+            i64::from(since.subsec_nanos()),
+        );
+        #[cfg(windows)]
+        let stamp = {
+            // Fra il 1601 e il 1970 ci sono 11 644 473 600 secondi.
+            let ticks = since.as_nanos() / 100 + 116_444_736_000_000_000;
+            u64::try_from(ticks).ok()?
+        };
+        Some(stamp)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        None
+    }
+}
+
+/// La grana più grossa che si assume per il timbro di cambiamento, nella
+/// sua unità: due secondi. Su Linux `ctime` prende l'orologio grossolano del
+/// kernel (un tick, 1–10 ms), ma FAT ha due secondi e HFS+ uno: chi si fida
+/// di un timbro ricordato lo fa solo quando la lettura è venuta almeno una
+/// grana dopo di lui.
+#[cfg(unix)]
+pub const CHANGE_STAMP_GRAIN: u64 = 2_000_000_000;
+/// Vedi la versione unix: qui l'unità sono centinaia di nanosecondi.
+#[cfg(not(unix))]
+pub const CHANGE_STAMP_GRAIN: u64 = 20_000_000;
+
 #[cfg(unix)]
 pub(crate) fn unix_change_stamp(seconds: i64, nanos: i64) -> u64 {
     let ticks = (seconds as i128)

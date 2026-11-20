@@ -19,6 +19,7 @@ import { imageMime } from "./schema";
 import { check, choice, labelled, remark } from "./form";
 import { formatLength, parseLength } from "./page";
 import { findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery } from "./review";
+import { composingKey } from "../../kit/ime";
 
 /// Ciò che la barra chiede alla shell.
 export interface RichMedia {
@@ -373,13 +374,16 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     own.listen(matchCase, "change", refind);
     own.listen(wholeWord, "change", refind);
     own.listen(findBar, "keydown", (event) => {
+      // Invio ed Esc che chiudono una composizione sono del metodo
+      // d'immissione: non cercano e non chiudono la barra.
+      if (composingKey(event)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
         done();
         return;
       }
-      if (event.key !== "Enter" || event.isComposing) return;
+      if (event.key !== "Enter") return;
       if (event.target === what) {
         event.preventDefault();
         step(event.shiftKey ? -1 : 1);

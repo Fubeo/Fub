@@ -5,6 +5,7 @@ import { openLifetime } from "../ui/lifetime";
 import { activeMotions, animate, launch, liveState } from "./animate";
 import { createManualDriver, setMotionDriver, type ManualDriver, type MotionDriver } from "./driver";
 import { setMotionPreference } from "./level";
+import { createFramePacer, resetScreenPeriod } from "../theme/frame-rate";
 import { DURATION, SAMPLE_MS, SPRINGS, sampleSpring } from "./spring";
 
 let driver: ManualDriver;
@@ -471,3 +472,52 @@ describe("uno pseudo-elemento", () => {
     expect(activeMotions()).toBe(0);
   });
 });
+
+describe("su uno schermo a 180 Hz", () => {
+  beforeEach(() => {
+    const pacer = createFramePacer(() => 0);
+    for (let k = 0; k < 20; k++) pacer.admit((k * 1000) / 180);
+  });
+  afterEach(() => resetScreenPeriod());
+
+  /// Il valore dei fotogrammi chiave a `time` ms, come lo interpola il browser.
+  function keyframesAt(keyframes: readonly Keyframe[], duration: number, time: number): number {
+    const at = time / duration;
+    let index = 0;
+    while (index < keyframes.length - 2 && Number(keyframes[index + 1].offset) <= at) index++;
+    const [a, b] = [keyframes[index], keyframes[index + 1]];
+    const [from, to] = [Number(a.offset), Number(b.offset)];
+    return xOf(a) + ((xOf(b) - xOf(a)) * (at - from)) / (to - from);
+  }
+
+  it.each(["snap", "soft", "elastic", "jelly"] as const)(
+    "%s: la corsa segue la curva fitta, con non più fotogrammi chiave che a 60 Hz",
+    (spring) => {
+      const travel = { from: 300, to: 0, precision: 0.05 };
+      const fine = sampleSpring(SPRINGS[spring], travel, 1000 / 180);
+      const coarse = sampleSpring(SPRINGS[spring], travel, SAMPLE_MS);
+      animate(el, { from: { x: 300 }, spring });
+      const { keyframes, timing } = driver.plays[0];
+      expect(timing.duration).toBeCloseTo(fine.duration, 9);
+      expect(keyframes[0]).toEqual({ transform: "translate(300px, 0px)", offset: 0 });
+      expect(last(keyframes)).toEqual({ transform: "translate(0px, 0px)", offset: 1 });
+      expect(keyframes.length).toBeLessThanOrEqual(coarse.values.length);
+      for (let k = 0; k < fine.values.length; k++) {
+        expect(Math.abs(keyframesAt(keyframes, timing.duration, k * fine.period) - fine.values[k])).toBeLessThan(0.51);
+      }
+    },
+  );
+
+  it("a metà corsa la posa e la velocità sono quelle della curva fitta", () => {
+    const motion = animate(el, { from: { x: 300 }, spring: "soft" });
+    driver.advance(52);
+    const state = liveState(el)!;
+    const fine = sampleSpring(SPRINGS.soft, { from: 300, to: 0, precision: 0.05 }, 1000 / 180);
+    const index = Math.floor(52 / fine.period);
+    const step = fine.values[index + 1] - fine.values[index];
+    expect(state.pose.x).toBeCloseTo(fine.values[index] + (step * (52 - index * fine.period)) / fine.period, 6);
+    expect(state.velocity.x).toBeCloseTo(step / fine.period, 6);
+    motion.cancel();
+  });
+});
+

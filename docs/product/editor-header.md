@@ -25,7 +25,16 @@ cssclasses: [wide, sans]
   il nome della cartella. In Scrittura si scrive in riga: Invio o l'uscita dal
   campo rinominano il file, o la cartella, coi link; Esc torna al nome di
   prima; una rinomina che non riesce (un nome preso, caratteri che il file
-  system rifiuta) lo dice e il titolo torna. Invio dal titolo porta al testo.
+  system rifiuta) lo dice e il titolo torna. Un titolo con delle cartelle
+  sposta il file: `Archivio/Nuova` parte dalla cartella della nota, mentre
+  uno «/» in testa (`/Archivio/Nuova`) parte dalla radice del vault, e così
+  il percorso che comincia con la cartella della nota, come lo mostra la
+  barra: in `Progetti/Tesi` il titolo `Progetti/Tesi/Villa` resta in
+  `Progetti/Tesi`, senza annidare la cartella una seconda volta. Lo stesso
+  vale per la pagina di una cartella. Invio dal titolo porta al testo.
+  Nel titolo senza una modifica sua Ctrl+Z (Cmd+Z) annulla la nota, un passo
+  per tasto, e Ctrl+Maiusc+Z o Ctrl+Y ripetono; con un nome scritto nel campo
+  annullano prima quello.
   In sola lettura non si modifica.
 - **Il primo H1.** Se la prima riga che si legge dopo il frontmatter (righe
   vuote e commenti `%%` o `<!-- -->` a parte) è un H1 che, a parte maiuscole,

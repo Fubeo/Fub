@@ -10,6 +10,7 @@
 import { springValue } from "../moto";
 import { identifier } from "../ui/a11y";
 import type { Lifetime } from "../ui/lifetime";
+import { composingKey } from "./ime";
 
 export type ListRole = "listbox" | "menu";
 export type ListFocus = "activedescendant" | "roving";
@@ -277,7 +278,7 @@ export function createList<T>(options: ListOptions<T>): ListHandle<T> {
   };
 
   lifetime.listen(owner, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       if (!active) return;
       event.preventDefault();

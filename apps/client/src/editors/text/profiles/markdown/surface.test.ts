@@ -617,6 +617,96 @@ describe("la superficie Markdown", () => {
   });
 });
 
+describe("il «/» nell'editor di una scheda della lavagna", () => {
+  /// Monta la superficie come la porta delle schede (`editor-port.ts`): il
+  /// documento del riquadro è la lavagna, non quello della superficie.
+  function card(hosted: boolean, documentId: string) {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const panels: { scope: unknown; palette: boolean; dom: HTMLElement }[] = [];
+    const slash = {
+      currentDoc: () => "Lavagne/Statistica.canvas",
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+      menu: {
+        enabled: () => true,
+        panel: (events: { palette?: unknown }, _has: unknown, scope?: unknown) => {
+          const dom = document.createElement("div");
+          panels.push({ scope, palette: typeof events.palette === "function", dom });
+          return { dom, listId: "lista", update() {}, key: () => false, placed() {}, close() {} };
+        },
+        chosen: vi.fn(),
+        palette: vi.fn(),
+      },
+    } satisfies EditorSlashHost;
+    const ed = mountMarkdownSurface({ paneId: "card-editor:1", documentId, parent, compact: true, escapeLeaves: true, ...(hosted ? { hosted: true } : {}) }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: () => {},
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+      slash,
+    });
+    const view = EditorView.findFromDOM(parent)!;
+    const type = (text: string) => {
+      for (const char of text) {
+        const at = view.state.selection.main.head;
+        view.dispatch({ changes: { from: at, insert: char }, selection: { anchor: at + 1 }, userEvent: "input.type" });
+      }
+    };
+    return { ed, parent, view, type, panels, slash };
+  }
+
+  for (const [kind, documentId] of [
+    ["scheda di testo", "Lavagne/Statistica.canvas#card-editor:1"],
+    ["scheda di una nota", "Benvenuto.md"],
+  ] as const) {
+    it(`apre il menu con le sole azioni dell'editor (${kind})`, () => {
+      const { ed, parent, view, type, panels, slash } = card(true, documentId);
+      try {
+        ed.buffer.setDoc("Perché il quadrato?\n");
+        view.dispatch({ selection: { anchor: ed.buffer.getDoc().length } });
+        type("/");
+        expect(panels).toHaveLength(1);
+        // Niente comandi del vault né palette: agirebbero sulla lavagna.
+        expect(panels[0]).toMatchObject({ scope: { commands: false }, palette: false });
+        // Il pannello galleggia sopra la finestra, fuori dalla scheda che lo
+        // zoom trasforma e che taglia ai bordi.
+        expect(panels[0]!.dom.parentElement).toBe(document.body);
+        expect(panels[0]!.dom.style.position).toBe("fixed");
+        expect(parent.contains(panels[0]!.dom)).toBe(false);
+        // Il tasto «/» non apre la palette dei comandi sulla lavagna.
+        view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
+        expect(slash.menu.palette).not.toHaveBeenCalled();
+        // Il «/» cancellato chiude il pannello, che lascia la finestra.
+        const end = view.state.doc.length;
+        view.dispatch({ changes: { from: end - 1, to: end }, userEvent: "delete.backward" });
+        expect(panels[0]!.dom.isConnected).toBe(false);
+      } finally {
+        ed.destroy();
+        parent.remove();
+      }
+    });
+  }
+
+  it("in un riquadro su un altro documento il «/» resta testo, come prima", () => {
+    const { ed, parent, view, type, panels } = card(false, "Benvenuto.md");
+    try {
+      ed.buffer.setDoc("");
+      view.dispatch({ selection: { anchor: 0 } });
+      type("/");
+      expect(panels).toHaveLength(0);
+      expect(ed.buffer.getDoc()).toBe("/");
+    } finally {
+      ed.destroy();
+      parent.remove();
+    }
+  });
+});
+
 describe("il cursore letterale della palette slash", () => {
   it("è deciso dal profilo sui nodi Markdown che il motore gli dà", () => {
     const parent = document.createElement("div");
@@ -828,6 +918,63 @@ describe("le azioni dell'editor della superficie", () => {
     expect(ed.contextMenu!({ x: 1, y: 1 })?.target.kind).toBe("wikilink");
     expect(view().state.selection.main.head, "in Sorgente il cursore va lì, come il clic").toBe(8);
     point.mockRestore();
+    ed.destroy();
+  });
+
+  it("un link con un «%» che non codifica niente si apre col nome com'è scritto, senza URIError", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const opened: string[] = [];
+    const peeked: unknown[] = [];
+    const ed = mountMarkdownSurface({ paneId: "riquadro", documentId: "notes/current.md", parent }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: (path) => { opened.push(path); },
+      onPeekLink: (link) => { peeked.push(link); },
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    const view = EditorView.findFromDOM(parent)!;
+    ed.setMode("source");
+    const menuAt = (doc: string) => {
+      ed.buffer.setDoc(doc);
+      view.dispatch({ selection: { anchor: 3 } });
+      return ed.contextMenu!(null);
+    };
+    const run = (menu: ReturnType<NonNullable<MarkdownSurface["contextMenu"]>>, id: string) =>
+      ((menu?.context ?? []).find((entry) => typeof entry !== "string" && entry.id === id) as { run: () => void }).run();
+    const broken = menuAt("[Rapporto](report_50%.md)\n");
+    expect(() => run(broken, "markdown.link.open")).not.toThrow();
+    expect(() => run(broken, "markdown.link.peek")).not.toThrow();
+    expect(opened).toEqual(["report_50%.md"]);
+    expect(peeked).toEqual([{ kind: "path", path: "report_50%.md" }]);
+    // Il nome codificato si decodifica come prima.
+    run(menuAt("[Nota](Nota%20uno.md)\n"), "markdown.link.open");
+    expect(opened[opened.length - 1]).toBe("Nota uno.md");
+    ed.destroy();
+    parent.remove();
+  });
+
+  it("caretAt mette il cursore sotto il punto, senza scrivere; fuori dal riquadro o in Lettura non tocca niente (IMP-3808)", () => {
+    const { ed, view } = editor();
+    ed.setMode("live_preview");
+    ed.buffer.setDoc("Kant e Locke\n");
+    view().dispatch({ selection: { anchor: 13 } });
+    const original = view().posAtCoords.bind(view());
+    view().posAtCoords = ((_coords: { x: number; y: number }) => 4) as typeof original;
+    const box = vi.spyOn(view().scrollDOM, "getBoundingClientRect")
+      .mockReturnValue({ left: 10, top: 20, right: 210, bottom: 120, width: 200, height: 100, x: 10, y: 20, toJSON: () => ({}) });
+    expect(ed.caretAt({ x: 60, y: 40 })).toBe(true);
+    expect(view().state.selection.main.head).toBe(4);
+    expect(ed.buffer.getDoc()).toBe("Kant e Locke\n");
+    // La testata della scheda, sopra il riquadro dell'editor: il cursore resta.
+    view().dispatch({ selection: { anchor: 13 } });
+    expect(ed.caretAt({ x: 60, y: 5 })).toBe(false);
+    expect(view().state.selection.main.head).toBe(13);
+    ed.setMode("reading");
+    expect(ed.caretAt({ x: 60, y: 40 })).toBe(false);
+    box.mockRestore();
     ed.destroy();
   });
 
@@ -1215,6 +1362,22 @@ describe("i disegni incorporati nella Lettura", () => {
       vi.restoreAllMocks();
     }
     expect(host.closed).toHaveLength(10);
+  });
+
+  it("un <img src> scritto in HTML nella nota si risolve come l'immagine Markdown", async () => {
+    drawingHost(() => "Ciclo");
+    const { ed, reading } = editor();
+    try {
+      ed.setMode("reading");
+      ed.buffer.setDoc('<img src="../disegni/acqua.svg" alt="scritta">\n');
+      await vi.waitFor(() => expect(reading().querySelector("img")?.getAttribute("src")).toMatch(/^fub-asset:/));
+      const img = reading().querySelector<HTMLImageElement>("img")!;
+      expect(img.dataset.vaultId).toBe(ACQUA);
+      expect(img.getAttribute("data-vault-src")).toBe("../disegni/acqua.svg");
+    } finally {
+      ed.destroy();
+      vi.restoreAllMocks();
+    }
   });
 });
 

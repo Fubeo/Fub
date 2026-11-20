@@ -361,10 +361,10 @@ describe("l'inspector a tab", () => {
     expect(follows.hidden).toBe(true);
   });
 
-  it("una scheda chiusa non disegna le sue righe finché non si apre", async () => {
-    // Le uscite di una nota lunga sono centinaia di righe, ognuna con la sua
-    // icona. Chiusa, la scheda non le mette nel DOM a ogni giro: le mette quando
-    // si apre, con l'albero più recente che il provider ha dato.
+  /// #518: le sette view dell'ispettore ricevono un invito a ogni salvataggio
+  /// automatico. Una scheda chiusa non chiede niente al kernel — né al
+  /// montaggio né agli inviti — e chiede l'albero una volta sola quando si apre.
+  it("una scheda chiusa non chiede l'albero finché non si apre, e poi una volta sola", async () => {
     const rows = (count: number): UiNode => ({
       node: "list",
       items: Array.from({ length: count }, (_, i) => ({
@@ -389,17 +389,25 @@ describe("l'inspector a tab", () => {
       const right = document.getElementById("views-right")!;
       const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
       const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
-      // La scheda è chiusa: il provider è stato interrogato, le righe no.
-      expect(renderView.mock.calls.map((call) => call[0])).toContain("backlinks");
+      const asked = () => renderView.mock.calls.filter((call) => call[0] === "backlinks").length;
+      // La scheda è chiusa: il provider non è stato interrogato.
+      expect(asked()).toBe(0);
       expect(content.querySelectorAll(".ui-list-item")).toHaveLength(0);
 
-      // Mentre è chiusa, il giro più nuovo sostituisce quello che aspetta.
+      // N inviti a scheda chiusa: ancora nessuna richiesta.
       renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(5) : emptyTree("vuoto")));
-      await panelHost.refreshPanel("backlinks");
-      expect(content.querySelectorAll(".ui-list-item")).toHaveLength(0);
+      for (let i = 0; i < 4; i++) await panelHost.refreshPanel("backlinks");
+      expect(asked()).toBe(0);
 
+      // Aperta: una richiesta, e l'albero di adesso.
       tabs[1]!.click();
-      expect(content.querySelectorAll(".ui-list-item")).toHaveLength(5);
+      await vi.waitFor(() => expect(content.querySelectorAll(".ui-list-item")).toHaveLength(5));
+      expect(asked()).toBe(1);
+      // Richiusa e riaperta senza inviti in mezzo: niente da chiedere.
+      tabs[0]!.click();
+      tabs[1]!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(asked()).toBe(1);
 
       // Aperta, un giro si disegna subito.
       renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(7) : emptyTree("vuoto")));
@@ -442,7 +450,7 @@ describe("l'inspector a tab", () => {
       const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
       const shownRows = () => content.querySelectorAll<HTMLElement>(".ui-list-item");
       tabs[1]!.click();
-      expect(shownRows()).toHaveLength(3);
+      await vi.waitFor(() => expect(shownRows()).toHaveLength(3));
 
       let answer!: (update: ViewUpdate) => void;
       viewAction.mockImplementationOnce(() => new Promise<ViewUpdate>((resolve) => (answer = resolve)));
@@ -461,8 +469,99 @@ describe("l'inspector a tab", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       tabs[1]!.click();
-      expect(shownRows()).toHaveLength(6);
+      await vi.waitFor(() => expect(shownRows()).toHaveLength(6));
       expect([...shownRows()].some((row) => row.textContent?.includes("Ritoccata"))).toBe(false);
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
+  it("una risposta arrivata a scheda chiusa non copre l'albero di un invito venuto dopo", async () => {
+    // La richiesta parte a scheda aperta; la scheda si chiude; un invito la
+    // invecchia; poi la vecchia risposta arriva. All'apertura si vede l'albero
+    // dell'invito, non quello della risposta tardiva.
+    let label = "primo";
+    renderView.mockImplementation(async (view) => (view === "backlinks" ? emptyTree(label) : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([spec("outline", "right_sidebar"), spec("backlinks", "right_sidebar")]);
+      const views = await loadViews();
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(content.textContent).toContain("primo"));
+
+      let answer!: (tree: UiNode) => void;
+      renderView.mockImplementationOnce(() => new Promise<UiNode>((resolve) => (answer = resolve)));
+      const late = panelHost.refreshPanel("backlinks");
+      tabs[0]!.click();
+      label = "nuovo";
+      await panelHost.refreshPanel("backlinks");
+      answer(emptyTree("tardivo"));
+      await late;
+
+      renderView.mockClear();
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(content.textContent).toContain("nuovo"));
+      expect(content.textContent).not.toContain("tardivo");
+      expect(renderView).toHaveBeenCalledTimes(1);
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
+  it("a ispettore chiuso nessuna scheda chiede l'albero; riaperto, chiede quella accesa", async () => {
+    let label = "primo";
+    renderView.mockImplementation(async (view) => (view === "backlinks" ? emptyTree(label) : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([spec("backlinks", "right_sidebar"), spec("outline", "right_sidebar")]);
+      const views = await loadViews();
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+      const pane = document.getElementById("right-pane")!;
+      const layout = document.getElementById("layout")!;
+      const app = document.getElementById("app")!;
+      const content = document.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
+      await vi.waitFor(() => expect(content.textContent).toContain("primo"));
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Chiuso: gli inviti non chiedono niente.
+      pane.hidden = true;
+      await settle();
+      renderView.mockClear();
+      label = "chiuso";
+      for (let i = 0; i < 3; i++) await panelHost.refreshPanel("backlinks");
+      expect(renderView).not.toHaveBeenCalled();
+
+      // Affacciato dal bordo si vede: una richiesta.
+      layout.classList.add("peek-inspector");
+      await vi.waitFor(() => expect(content.textContent).toContain("chiuso"));
+      expect(renderView).toHaveBeenCalledTimes(1);
+      layout.classList.remove("peek-inspector");
+      await settle();
+
+      // Riaperto dopo altri inviti: una richiesta sola, per la scheda accesa.
+      renderView.mockClear();
+      label = "riaperto";
+      for (let i = 0; i < 3; i++) await panelHost.refreshPanel("backlinks");
+      await panelHost.refreshPanel("outline");
+      expect(renderView).not.toHaveBeenCalled();
+      pane.hidden = false;
+      await vi.waitFor(() => expect(content.textContent).toContain("riaperto"));
+      expect(renderView.mock.calls.map((call) => call[0])).toEqual(["backlinks"]);
+
+      // La concentrazione ritira l'ispettore anche aperto.
+      app.toggleAttribute("data-focus-mode", true);
+      await settle();
+      renderView.mockClear();
+      await panelHost.refreshPanel("backlinks");
+      expect(renderView).not.toHaveBeenCalled();
+      label = "uscito";
+      app.toggleAttribute("data-focus-mode", false);
+      await vi.waitFor(() => expect(content.textContent).toContain("uscito"));
+      expect(renderView).toHaveBeenCalledTimes(1);
     } finally {
       renderView.mockImplementation(async () => emptyTree("vuoto"));
     }
@@ -992,7 +1091,7 @@ describe("la Cronologia con un testo conservato", () => {
       const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
       const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="history"]')!;
       tabs[1]!.click();
-      expect(content.textContent).toContain("Nessuna versione.");
+      await vi.waitFor(() => expect(content.textContent).toContain("Nessuna versione."));
 
       // Aperta durante il conflitto: si ridisegna all'invito.
       current = tree;
@@ -1007,10 +1106,16 @@ describe("la Cronologia con un testo conservato", () => {
       tabs[0]!.click();
       current = tree;
       renderView.mockClear();
-      await invite();
+      forwardNotice({
+        event: { type: "view_invalidated", view: "history", instance: null },
+        origin: { actor: { kind: "kernel" }, batch: null },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(renderView, "chiusa, non si chiede").not.toHaveBeenCalled();
       expect(content.textContent, "chiusa, non si disegna").toContain("Nessuna versione.");
       tabs[1]!.click();
-      expect(content.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+      await vi.waitFor(() => expect(content.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026"));
+      expect(renderView).toHaveBeenCalledTimes(1);
       lifetime.close();
     } finally {
       renderView.mockImplementation(async () => emptyTree("vuoto"));

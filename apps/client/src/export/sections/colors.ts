@@ -30,6 +30,7 @@ import {
 } from "../themes";
 import type { ExportProfile } from "../profile";
 import type { SectionContext } from "./index";
+import { composingKey } from "../../kit/ime";
 
 export const COLOR_NAMES: Readonly<Record<PageColor, Key>> = {
   carta: "pdf_export.color.carta",
@@ -266,7 +267,7 @@ export function colorsBody(context: SectionContext): HTMLElement {
       mark(false);
     });
     hex.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || hex.value === value) return;
+      if (event.key !== "Escape" || composingKey(event) || hex.value === value) return;
       // Esc nel campo rimette il colore di prima, senza chiudere lo spazio.
       event.preventDefault();
       event.stopPropagation();

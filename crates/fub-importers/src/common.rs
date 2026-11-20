@@ -126,6 +126,49 @@ pub fn yaml_scalar(raw: &str) -> String {
     }
 }
 
+/// A property name as a YAML key that reads back as the same text: bare when
+/// it is a plain name (`Stato di lettura`, `Città`), JSON-quoted when a `:`,
+/// a `#`, a leading special character or a typed look (`2021`, `true`) would
+/// change what YAML reads.
+pub fn yaml_key(raw: &str) -> String {
+    if is_ident(raw) {
+        return raw.to_string();
+    }
+    let scalar = yaml_scalar(raw);
+    if scalar == raw && !raw.contains('#') && !raw.chars().any(char::is_control) {
+        raw.to_string()
+    } else {
+        serde_json::to_string(raw).expect("UTF-8 string is JSON-serializable")
+    }
+}
+
+/// A row title as a file stem: the characters a path cannot hold (`/`, `\`,
+/// controls) become `-` or a space, the rest stays, so «Fattura 2026/031»
+/// becomes `Fattura 2026-031` instead of losing its name. `None` when
+/// nothing namable remains.
+pub fn title_file_stem(title: &str) -> Option<String> {
+    let stem: String = title
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' => '-',
+            '\0' => ' ',
+            c if c.is_control() => ' ',
+            c => c,
+        })
+        .collect();
+    let stem = stem.split_whitespace().collect::<Vec<_>>().join(" ");
+    // The same bounds as `sanitize_component`: cut instead of refusing.
+    let mut cut = String::new();
+    for c in stem.chars() {
+        if cut.chars().count() >= 120 || cut.len() + c.len_utf8() > 200 {
+            break;
+        }
+        cut.push(c);
+    }
+    let stem = cut.trim_end().to_string();
+    sanitize_component(&stem)
+}
+
 /// One component of a vault path: trimmed, no empty / `.` / `..`, no
 /// separators, no controls, bounded length. `None` = not namable.
 pub fn sanitize_component(raw: &str) -> Option<String> {

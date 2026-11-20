@@ -73,7 +73,10 @@ Con un testo Tutto mostra tre gruppi, nell'ordine:
   e i file si aggiungono quando arrivano, senza spostare la riga scelta con le
   frecce. Per questi conta il nome con l'estensione (`pdf` trova i PDF), e un
   file che si chiama proprio come si è scritto sale subito dopo i documenti che
-  si chiamano così. Un documento che non è una nota porta l'icona del suo
+  si chiamano così. Il nome intero di un file con la sua estensione
+  (`Esami.base`, `Capitolo 3.pdf`, `Spese.xlsx`, o la coda del suo path come
+  `Esami/Esami.base`) porta quel file in cima al gruppo, di qualunque tipo, prima
+  delle note che lo citano nel testo; maiuscole e minuscole non contano. Un documento che non è una nota porta l'icona del suo
   formato, un file quella della sua specie (un libro per un PDF, un'immagine,
   una nota musicale, uno schermo per un video); una nota porta l'icona delle
   note. Ogni riga, non solo quelle dei file, ha davanti l'icona della sua specie
@@ -121,12 +124,20 @@ Questi bottoni non sono fermate del Tab. Al telefono l'anteprima non c'è.
 Maiusc-Invio, o **Crea la nota**, crea una nota solo quando la risposta che si
 vede lo offre: nessuna riga da scegliere, l'indice fermo, nessuna sintassi a
 metà e nessun guasto. La nota nasce nello spazio attivo, col nome scritto, e il
-fuoco va nell'editor.
+fuoco va nell'editor; senza uno spazio attivo nasce nella cartella delle nuove
+note ([Destinazione delle nuove note](vault-operazioni.md#destinazione-delle-nuove-note)).
 
-- Un nome che il file non accetta (barre, due punti, caratteri di controllo) si
-  corregge da solo: quei caratteri diventano spazi. Il nome proposto è quello
-  che la frase mostra.
+- Un percorso (`Aree/Eventi/Idea`) crea la nota in quella cartella, e le
+  cartelle che mancano nascono con lei: un percorso conserva la sua cartella.
+  Le barre in testa, quelle doppie e i segmenti `.` si tolgono; un segmento
+  `..`, una barra in coda (che nomina una cartella e non una nota) o un segmento
+  nascosto (`.obsidian/…`) non propongono niente.
+- Un nome che il file non accetta (barra rovescia, due punti, caratteri di
+  controllo) si corregge da solo, segmento per segmento: quei caratteri
+  diventano spazi. Il nome proposto è quello che la frase mostra.
 - Un nome già preso non crea una seconda nota: apre quella che c'è e lo dice.
+  Per un percorso conta il percorso intero: una nota con lo stesso nome in
+  un'altra cartella non lo ferma.
 - Mentre la risposta non è ancora arrivata, Maiusc-Invio non crea niente: aspetta
   che si veda la risposta. Vale anche per la risposta che si rifà quando i
   documenti cambiano: la nota che l'indice ha appena trovato non nasce doppia.

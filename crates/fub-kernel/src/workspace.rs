@@ -2854,6 +2854,37 @@ pub struct PreparedDocumentWrite {
     expected_source: Option<String>,
     parser: PreparedParse,
     before_write: Vec<(String, BeforeWriteHook)>,
+    /// Il vault su cui posare i byte: la scrittura sul disco
+    /// ([`PreparedDocumentWrite::place`]) gira senza prestito del workspace.
+    vault: crate::vault::Vault,
+}
+
+/// Una scrittura testuale **già sul disco**, che aspetta soltanto di entrare
+/// nelle tabelle del workspace ([`Workspace::commit_placed_document_write`]).
+///
+/// Esiste perché la scrittura sul disco è la parte lunga di un salvataggio: un
+/// `fsync` su un disco occupato da altri programmi dura secondi, e tenerla
+/// dentro il prestito esclusivo fermava ogni lettura del vault per tutto quel
+/// tempo (IMP-1805). La CAS sul disco resta la stessa e resta sotto il turno di
+/// scrittura, che serializza i writer di Fub fra la base preparata e la
+/// pubblicazione; il prestito esclusivo serve soltanto alle tabelle.
+pub struct PlacedDocumentWrite {
+    id: DocId,
+    existed: bool,
+    from: Option<Revision>,
+    revision: Revision,
+    size: u64,
+    mtime: u64,
+}
+
+/// Come [`PlacedDocumentWrite`], per la via a byte.
+pub struct PlacedDocumentBytesWrite {
+    id: DocId,
+    from: Option<Revision>,
+    rewrote: bool,
+    revision: Revision,
+    size: u64,
+    mtime: u64,
 }
 
 /// Scrittura raw preparata senza eseguire provider. La preimmagine resta quella
@@ -2865,6 +2896,8 @@ pub struct PreparedDocumentBytesWrite {
     expected_bytes: Option<Vec<u8>>,
     parser: Option<PreparedParse>,
     before_write: Vec<(String, BeforeWriteHook)>,
+    /// Il supporto su cui posare i byte, senza prestito del workspace.
+    storage: Arc<dyn crate::storage::VaultStorage>,
 }
 
 /// Apertura metadata sullo storage attivo, eseguibile senza custodia workspace.
@@ -3433,6 +3466,131 @@ pub struct DeferredEvents<T> {
     journal: Option<JournalOp>,
 }
 
+/// **La riga del registro di un epilogo**, da appendere fuori dal prestito
+/// esclusivo ([`Workspace::finish_deferred_events_detached`]).
+///
+/// Appendere al registro è scrivere sul disco, e su un disco occupato da altri
+/// programmi una scrittura dura secondi: dentro il prestito esclusivo fermava
+/// ogni lettura del vault per tutto quel tempo (IMP-1805). L'origine si fissa
+/// qui, sotto il prestito, com'era nell'epilogo; l'ordine fra le righe lo tiene
+/// il turno di scrittura, che chi la appende deve tenere ancora: un altro
+/// writer non può registrare la sua riga prima di questa.
+#[must_use = "la riga va appesa con `append`, o il registro perde un'operazione"]
+pub struct PendingJournalRecord {
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
+    op: JournalOp,
+}
+
+/// Un'appendice del registro che non è riuscita: si riconsegna a
+/// [`Workspace::report_journal_failure`], che la dice come l'epilogo l'ha
+/// sempre detta.
+pub struct JournalFailure(String);
+
+/// **Le rinomine fatte ad app chiusa**, riconosciute alla fine di
+/// un'indicizzazione, con i dati per-documento da portare dietro **fuori** dal
+/// prestito esclusivo ([`Workspace::finalize_finish_index_detached`]).
+///
+/// Spostare l'organizzazione, lo stato per-documento e le bozze è scrivere sul
+/// disco, una volta per ogni rinomina: dopo una riorganizzazione fatta con un
+/// altro programma sono decine di scritture, e dentro il prestito ognuna
+/// fermava le letture del vault (IMP-1805). Va eseguita sotto lo stesso turno
+/// di scrittura della chiusura, e prima della raccolta degli spazi orfani
+/// (`collect_doc_data`): prima si riconosce, poi si raccoglie.
+#[must_use = "i dati delle rinomine vanno spostati con `invoke` e poi detti con `finish_rejoin`"]
+pub struct PendingRejoin {
+    pairs: Vec<(DocId, DocId)>,
+    organization: Arc<OrganizationStore>,
+    drafts: Arc<Drafts>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Le rinomine di un [`PendingRejoin`] con i dati già spostati: restano da
+/// dire ([`Workspace::finish_rejoin`]).
+#[must_use = "le rinomine vanno dette con `finish_rejoin`"]
+pub struct CompletedRejoin {
+    pairs: Vec<(DocId, DocId)>,
+    doc_data_warnings: Vec<String>,
+}
+
+impl PendingRejoin {
+    /// Nessuna rinomina da portare dietro.
+    pub fn is_empty(&self) -> bool {
+        self.pairs.is_empty()
+    }
+
+    /// Sposta i dati di ogni rinomina, senza prestito del workspace: gli
+    /// stessi tre canali, con gli stessi avvisi, di
+    /// [`Workspace::migrate_side_data`].
+    pub fn invoke(self) -> CompletedRejoin {
+        let PendingRejoin {
+            pairs,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        } = self;
+        let mut doc_data_warnings = Vec::new();
+        for (from, to) in &pairs {
+            migrate_side_data_on(
+                &organization,
+                &drafts,
+                storage.as_ref(),
+                &doc_data_roots,
+                from,
+                to,
+                &mut doc_data_warnings,
+            );
+        }
+        CompletedRejoin {
+            pairs,
+            doc_data_warnings,
+        }
+    }
+}
+
+/// Il corpo di [`Workspace::migrate_side_data`] sugli handle posseduti: lo
+/// usano la via con il workspace in mano e [`PendingRejoin::invoke`], così i
+/// canali che seguono una rinomina restano scritti in un posto solo.
+fn migrate_side_data_on(
+    organization: &OrganizationStore,
+    drafts: &Drafts,
+    storage: &dyn crate::storage::VaultStorage,
+    doc_data_roots: &[Utf8PathBuf],
+    from: &DocId,
+    to: &DocId,
+    doc_data_warnings: &mut Vec<String>,
+) {
+    if let Err(and) = organization.migrate(from.as_str(), to.as_str()) {
+        organization.warn(format!(
+            "l'organizzazione di {from} non ha potuto seguire la rinomina in \
+             {to}: {and}"
+        ));
+    }
+    for error in crate::docdata::migrate_data(storage, doc_data_roots, from, to) {
+        doc_data_warnings.push(format!(
+            "lo stato per-documento di {from} non ha potuto seguire la rinomina \
+             in {to} — {error}"
+        ));
+    }
+    if let Err(and) = drafts.migrate(from, to) {
+        organization.warn(format!(
+            "la bozza non salvata di {from} non ha potuto seguire la \
+             rinomina in {to}: {and}"
+        ));
+    }
+}
+
+impl PendingJournalRecord {
+    /// Appende la riga, senza prestito del workspace.
+    pub fn append(self) -> std::result::Result<(), JournalFailure> {
+        self.journal
+            .append(self.origin, self.op)
+            .map_err(JournalFailure)
+    }
+}
+
 /// Diritto monouso a completare una chiusura già annunciata.
 ///
 /// [`Workspace::prepare_close`] alza la generazione terminale del workspace
@@ -3602,6 +3760,57 @@ impl PreparedDocumentWrite {
     pub fn before_write(&self) -> impl Iterator<Item = BeforeWriteCall<'_>> {
         before_write_calls(&self.before_write, &self.id)
     }
+
+    /// **Posa i byte sul disco**, senza prestito del workspace.
+    ///
+    /// Va chiamata sotto il turno di scrittura, dopo il parse e i ganci, e il
+    /// risultato va consegnato a [`Workspace::commit_placed_document_write`]:
+    /// fra le due il disco ha già il testo nuovo e le tabelle ancora il
+    /// vecchio, come durante la fase degli indici. La CAS è quella di sempre:
+    /// con `DescendsFrom` scrive solo se il disco ha ancora la base verificata
+    /// (altrimenti `Stale`), una creazione solo se il path è ancora libero
+    /// (altrimenti `AlreadyExists`). Un gancio che ha detto di no ferma la
+    /// scrittura prima del disco.
+    pub fn place(
+        self,
+        source: &str,
+        before_write: std::result::Result<(), PluginError>,
+    ) -> Result<PlacedDocumentWrite> {
+        let PreparedDocumentWrite {
+            id,
+            existed,
+            from,
+            expected_source,
+            vault,
+            ..
+        } = self;
+        if let Err(and) = before_write {
+            return Err(Workspace::before_write_error(&id, and));
+        }
+        let (size, mtime) = if let Some(expected) = expected_source.as_deref() {
+            vault
+                .write_if_unchanged(&id, expected, source)?
+                .ok_or_else(|| KernelError::Stale(id.to_string()))?
+        } else if !existed {
+            // La preparazione ha visto il path libero, e il registro dirà
+            // `Created`, il cui inverso è cestinare. Un file posato nel frattempo
+            // da un altro programma non è nostro: la scrittura resta una
+            // creazione fino alla pubblicazione, come nella via a byte.
+            vault
+                .write_if_absent(&id, source)?
+                .ok_or_else(|| KernelError::AlreadyExists(id.to_string()))?
+        } else {
+            vault.write(&id, source)?
+        };
+        Ok(PlacedDocumentWrite {
+            id,
+            existed,
+            from,
+            revision: Revision::of(source),
+            size,
+            mtime,
+        })
+    }
 }
 impl PreparedDocumentBytesWrite {
     /// Produce il modello attraverso la stessa pipeline dei salvataggi testuali.
@@ -3630,6 +3839,52 @@ impl PreparedDocumentBytesWrite {
     /// I ganci esterni fra parse e disco, come nella via testuale.
     pub fn before_write(&self) -> impl Iterator<Item = BeforeWriteCall<'_>> {
         before_write_calls(&self.before_write, &self.id)
+    }
+
+    /// **Posa i byte sul disco** senza prestito del workspace: la stessa
+    /// `write_if_unchanged` di sempre (`None` = solo creazione, `Some` = CAS),
+    /// da consegnare poi a [`Workspace::commit_placed_document_bytes_write`].
+    /// Vedi [`PreparedDocumentWrite::place`] per perché sta fuori.
+    pub fn place(
+        self,
+        bytes: &[u8],
+        before_write: std::result::Result<(), PluginError>,
+    ) -> Result<PlacedDocumentBytesWrite> {
+        let PreparedDocumentBytesWrite {
+            id,
+            path,
+            from,
+            expected_bytes,
+            storage,
+            ..
+        } = self;
+        if let Err(error) = before_write {
+            return Err(Workspace::before_write_error(&id, error));
+        }
+        let stored = storage
+            .write_if_unchanged(&path, expected_bytes.as_deref(), bytes)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        let stat = match stored {
+            crate::storage::ConditionalWrite::Written(stat) => stat,
+            crate::storage::ConditionalWrite::Changed => {
+                return Err(if expected_bytes.is_some() {
+                    KernelError::Stale(id.to_string())
+                } else {
+                    KernelError::AlreadyExists(id.to_string())
+                });
+            }
+        };
+        Ok(PlacedDocumentBytesWrite {
+            id,
+            from,
+            rewrote: expected_bytes.is_some(),
+            revision: Revision::of_bytes(bytes),
+            size: stat.size,
+            mtime: stat.mtime,
+        })
     }
 }
 
@@ -6320,7 +6575,7 @@ impl Workspace {
         } else {
             Vec::new()
         };
-        let opening = self.close_indexing(work, external_losses);
+        let (opening, _) = self.close_indexing(work, external_losses, false);
         // Gli errori di flush non fanno fallire l'apertura del vault: un
         // indice è stato derivato, il vault è la verità (M4: notifica).
         {
@@ -6350,6 +6605,27 @@ impl Workspace {
     /// Installa grafo e stato soltanto dopo che `reconcile` dei provider è
     /// tornato. Questa fase non attraversa codice esterno.
     pub fn finalize_finish_index(&mut self, completed: CompletedIndexFinish) -> Opening {
+        self.finalize_finish_index_with(completed, false).0
+    }
+
+    /// Come [`finalize_finish_index`](Self::finalize_finish_index), ma i dati
+    /// delle rinomine fatte ad app chiusa **non** si spostano qui: tornano in
+    /// un [`PendingRejoin`] che chi chiama esegue dopo aver lasciato il
+    /// prestito esclusivo, sotto lo stesso turno, e consegna poi a
+    /// [`finish_rejoin`](Self::finish_rejoin). Gli eventi `DocumentRenamed`
+    /// escono lì, dopo i dati spostati.
+    pub fn finalize_finish_index_detached(
+        &mut self,
+        completed: CompletedIndexFinish,
+    ) -> (Opening, PendingRejoin) {
+        self.finalize_finish_index_with(completed, true)
+    }
+
+    fn finalize_finish_index_with(
+        &mut self,
+        completed: CompletedIndexFinish,
+        detach_rejoin: bool,
+    ) -> (Opening, PendingRejoin) {
         let CompletedIndexFinish {
             work,
             graph,
@@ -6360,7 +6636,7 @@ impl Workspace {
         } else {
             self.indexes.core.rebuild_graph();
         }
-        self.close_indexing(work, external_losses)
+        self.close_indexing(work, external_losses, detach_rejoin)
     }
 
     /// Come [`finish_index`], col grafo già costruito fuori dal prestito
@@ -6392,7 +6668,12 @@ impl Workspace {
         ids
     }
 
-    fn close_indexing(&mut self, work: Indexing, external_losses: Vec<IndexLoss>) -> Opening {
+    fn close_indexing(
+        &mut self,
+        work: Indexing,
+        external_losses: Vec<IndexLoss>,
+        detach_rejoin: bool,
+    ) -> (Opening, PendingRejoin) {
         let mut opening = work.opening;
         if work.cursor >= work.from_do.len() {
             // **Gli scarti entrano nell'insieme completo**, e non è un
@@ -6444,8 +6725,15 @@ impl Workspace {
         //
         // Solo se l'apertura è arrivata in fondo: da un'anagrafe parziale
         // «sparito» e «non ancora guardato» sono la stessa cosa.
+        let mut rejoined = Vec::new();
         if !opening.interrupted {
-            self.suspended_from_rejoin = self.rejoin_renamed_while_closed();
+            let (pairs, suspended) = self.rejoin_renamed_while_closed();
+            self.suspended_from_rejoin = suspended;
+            if detach_rejoin {
+                rejoined = pairs;
+            } else {
+                self.rejoin_now(pairs);
+            }
         }
 
         self.as_actor(Actor::Kernel, |ws| {
@@ -6468,7 +6756,14 @@ impl Workspace {
             ws.emit_event(Event::IndexUpdated);
             ws.dispatch_pending();
         });
-        opening
+        let rejoin = PendingRejoin {
+            pairs: rejoined,
+            organization: Arc::clone(&self.organization),
+            drafts: Arc::clone(&self.drafts),
+            storage: Arc::clone(self.docs.vault.storage()),
+            doc_data_roots: self.docs.plugin_data_roots(),
+        };
+        (opening, rejoin)
     }
 
     /// Rimette in anagrafe un file che è appena cambiato, chiedendo al disco
@@ -6929,6 +7224,7 @@ impl Workspace {
             expected_source,
             parser,
             before_write: self.before_write.clone(),
+            vault: self.docs.vault.clone(),
         })
     }
 
@@ -6945,9 +7241,12 @@ impl Workspace {
         self.prepare_document_write(&id, WriteBase::Dictated)
     }
 
-    /// Finalizza una scrittura già parsata e con il gancio già tornato. La CAS
-    /// resta qui, sotto il writer turn: nessun writer Fub può infilarsi fra la
-    /// base preparata e la sostituzione, mentre il provider gira senza RwLock.
+    /// Finalizza una scrittura già parsata e con il gancio già tornato, disco
+    /// compreso: è [`PreparedDocumentWrite::place`] seguita da
+    /// [`commit_placed_document_write`](Self::commit_placed_document_write),
+    /// per chi tiene già il workspace intero (la via breve, i banchi). L'host
+    /// le chiama separate, sotto il turno di scrittura, per non tenere il
+    /// prestito esclusivo durante la scrittura sul disco.
     pub fn commit_document_write(
         &mut self,
         prepared: PreparedDocumentWrite,
@@ -6956,36 +7255,34 @@ impl Workspace {
         before_write: std::result::Result<(), PluginError>,
     ) -> Result<PreparedDocumentFeed> {
         self.indexes.ensure_mutation_available()?;
-        let PreparedDocumentWrite {
+        let placed = prepared.place(source, before_write)?;
+        Ok(self.commit_placed_document_write(placed, model))
+    }
+
+    /// Porta nelle tabelle una scrittura **già posata sul disco**
+    /// ([`PreparedDocumentWrite::place`]): anagrafe, indice centrale, journal
+    /// e consegna agli indici. Non tocca il disco, quindi il prestito
+    /// esclusivo che la chiama dura il tempo di aggiornare la memoria.
+    ///
+    /// Non ripete il controllo di rientro degli indici: l'ha fatto
+    /// [`prepare_document_write`](Self::prepare_document_write) sullo stesso
+    /// thread, e fallire qui lascerebbe sul disco un testo che le tabelle non
+    /// conoscono.
+    pub fn commit_placed_document_write(
+        &mut self,
+        placed: PlacedDocumentWrite,
+        model: DocumentModel,
+    ) -> PreparedDocumentFeed {
+        let PlacedDocumentWrite {
             id,
             existed,
             from,
-            expected_source,
-            ..
-        } = prepared;
-        if let Err(and) = before_write {
-            return Err(Self::before_write_error(&id, and));
-        }
-        let placed = if let Some(expected) = expected_source.as_deref() {
-            self.docs
-                .vault
-                .write_if_unchanged(&id, expected, source)?
-                .ok_or_else(|| KernelError::Stale(id.to_string()))?
-        } else if !existed {
-            // La preparazione ha visto il path libero, e il registro dirà
-            // `Created`, il cui inverso è cestinare. Un file posato nel frattempo
-            // da un altro programma non è nostro: la scrittura resta una
-            // creazione fino alla pubblicazione, come nella via a byte.
-            self.docs
-                .vault
-                .write_if_absent(&id, source)?
-                .ok_or_else(|| KernelError::AlreadyExists(id.to_string()))?
-        } else {
-            self.docs.vault.write(&id, source)?
-        };
-        let revision = Revision::of(source);
+            revision,
+            size,
+            mtime,
+        } = placed;
         let changes = self.indexes.core.changes_for(&model, &revision);
-        self.set_entry(&id, placed.0, placed.1, Some(revision.clone()));
+        self.set_entry(&id, size, mtime, Some(revision.clone()));
         let losses = self
             .indexes
             .core
@@ -7003,7 +7300,7 @@ impl Workspace {
                 to: revision.clone(),
             }
         };
-        Ok(PreparedDocumentFeed {
+        PreparedDocumentFeed {
             id,
             model: Some(model),
             changes,
@@ -7011,7 +7308,7 @@ impl Workspace {
             journal,
             providers,
             losses,
-        })
+        }
     }
 
     /// Come `commit_document_write`, conservando però la semantica di journal
@@ -7025,14 +7322,28 @@ impl Workspace {
         base: Revision,
         report: &EditReport,
     ) -> Result<PreparedDocumentFeed> {
-        let mut pending = self.commit_document_write(prepared, source, model, before_write)?;
+        self.indexes.ensure_mutation_available()?;
+        let placed = prepared.place(source, before_write)?;
+        Ok(self.commit_placed_document_edit(placed, model, base, report))
+    }
+
+    /// Come [`commit_placed_document_write`](Self::commit_placed_document_write),
+    /// con la semantica di journal dell'edit chirurgico.
+    pub fn commit_placed_document_edit(
+        &mut self,
+        placed: PlacedDocumentWrite,
+        model: DocumentModel,
+        base: Revision,
+        report: &EditReport,
+    ) -> PreparedDocumentFeed {
+        let mut pending = self.commit_placed_document_write(placed, model);
         pending.journal = JournalOp::Edited {
             doc: pending.id.clone(),
             from: base,
             to: pending.revision.clone(),
             footprint: crate::journal::EditFootprint::of(&report.applied),
         };
-        Ok(pending)
+        pending
     }
 
     /// Chiude la fase indici senza consegnare eventi. Il journal resta nel
@@ -7129,13 +7440,16 @@ impl Workspace {
             expected_bytes,
             parser,
             before_write: self.before_write.clone(),
+            storage: Arc::clone(self.docs.vault.storage()),
         })
     }
 
     /// Commit atomico raw: UNICA `write_if_unchanged(path, None|Some, bytes)` —
     /// `None` = create-only atomico (`Changed` => `AlreadyExists`), `Some` = CAS
     /// (`Changed` => `Stale`). Mai `exists` + `write`. Il modello arriva dal
-    /// parse detached; qui solo anagrafe/journal/feed.
+    /// parse detached. È [`PreparedDocumentBytesWrite::place`] seguita da
+    /// [`commit_placed_document_bytes_write`](Self::commit_placed_document_bytes_write),
+    /// per chi tiene già il workspace intero; l'host le chiama separate.
     pub fn commit_document_bytes_write(
         &mut self,
         prepared: PreparedDocumentBytesWrite,
@@ -7144,36 +7458,26 @@ impl Workspace {
         before_write: std::result::Result<(), PluginError>,
     ) -> Result<PreparedDocumentFeed> {
         self.indexes.ensure_mutation_available()?;
-        let PreparedDocumentBytesWrite {
+        let placed = prepared.place(bytes, before_write)?;
+        Ok(self.commit_placed_document_bytes_write(placed, model))
+    }
+
+    /// Porta nelle tabelle una scrittura a byte **già posata sul disco**:
+    /// anagrafe, journal e feed, senza I/O. Vedi
+    /// [`commit_placed_document_write`](Self::commit_placed_document_write).
+    pub fn commit_placed_document_bytes_write(
+        &mut self,
+        placed: PlacedDocumentBytesWrite,
+        model: Option<DocumentModel>,
+    ) -> PreparedDocumentFeed {
+        let PlacedDocumentBytesWrite {
             id,
-            path,
             from,
-            expected_bytes,
-            ..
-        } = prepared;
-        if let Err(error) = before_write {
-            return Err(Self::before_write_error(&id, error));
-        }
-        let stored = self
-            .docs
-            .vault
-            .storage()
-            .write_if_unchanged(&path, expected_bytes.as_deref(), bytes)
-            .map_err(|source| KernelError::Io {
-                path: path.clone(),
-                source,
-            })?;
-        let stat = match stored {
-            crate::storage::ConditionalWrite::Written(stat) => stat,
-            crate::storage::ConditionalWrite::Changed => {
-                return Err(if expected_bytes.is_some() {
-                    KernelError::Stale(id.to_string())
-                } else {
-                    KernelError::AlreadyExists(id.to_string())
-                });
-            }
-        };
-        let revision = Revision::of_bytes(bytes);
+            rewrote,
+            revision,
+            size,
+            mtime,
+        } = placed;
         let (changes, losses, providers) = match &model {
             Some(model) => (
                 self.indexes.core.changes_for(model, &revision),
@@ -7184,8 +7488,8 @@ impl Workspace {
             ),
             None => (DocChanges::default(), Vec::new(), Vec::new()),
         };
-        self.set_entry(&id, stat.size, stat.mtime, Some(revision.clone()));
-        let journal = if expected_bytes.is_some() {
+        self.set_entry(&id, size, mtime, Some(revision.clone()));
+        let journal = if rewrote {
             JournalOp::Written {
                 doc: id.clone(),
                 from,
@@ -7197,7 +7501,7 @@ impl Workspace {
                 to: revision.clone(),
             }
         };
-        Ok(PreparedDocumentFeed {
+        PreparedDocumentFeed {
             id,
             model,
             changes,
@@ -7205,7 +7509,7 @@ impl Workspace {
             journal,
             providers,
             losses,
-        })
+        }
     }
 
     /// Via breve raw: prepara detached, parsa fuori lock, committa atomico,
@@ -7364,12 +7668,7 @@ impl Workspace {
     fn record(&mut self, op: JournalOp) {
         let origin = self.dispatch.origin();
         if let Err(and) = self.journal.append(origin, op) {
-            self.report_trouble(
-                Severity::Failure,
-                None,
-                PluginError::Internal(format!("registro: {and}").into()),
-                None,
-            );
+            self.report_journal_failure(JournalFailure(and));
         }
     }
 
@@ -9947,42 +10246,32 @@ impl Workspace {
     fn migrate_side_data(&mut self, from: &DocId, to: &DocId) {
         // **L'organizzazione segue l'identità** (§11.3): icona, pin e posto
         // nell'ordinamento sono attaccati alla nota, non al suo vecchio path.
-        //
         // Qui e non sull'evento `DocumentRenamed`, che pure lo direbbe: la coda
         // ha un budget e può troncare (decisione 0034), e l'organizzazione è un
-        // dato **autorevole** — perso, non si ricostruisce da niente. Un dato
-        // così non può dipendere da una consegna dichiaratamente best-effort.
-        // Ne segue il guadagno che si vede: passando di qui migra anche la
-        // rinomina fatta da **un'altra app** mentre Fub è aperto, perché
-        // `sync_renamed_path` arriva allo stesso punto.
-        if let Err(and) = self.organization.migrate(from.as_str(), to.as_str()) {
-            self.organization.warn(format!(
-                "l'organizzazione di {from} non ha potuto seguire la rinomina in \
-                 {to}: {and}"
-            ));
-        }
-        // **E lo stesso vale per lo stato per-documento di chiunque altro**
-        // (§13.2). Sta accanto all'organizzazione perché è la stessa cosa vista
-        // in generale: quella è lo stato per-documento *del kernel*, questo è
-        // quello di tutti gli altri, e finché il kernel non lo migrava ognuno se
-        // lo migrava da sé ascoltando l'evento — cioè nessuno lo migrava per il
-        // rename fatto ad app chiusa o da un'altra applicazione.
+        // dato **autorevole** — perso, non si ricostruisce da niente. Passando
+        // di qui migra anche la rinomina fatta da **un'altra app** mentre Fub è
+        // aperto, perché `sync_renamed_path` arriva allo stesso punto.
         //
-        // Cammina il **disco** e non i plugin montati, di proposito: chi è
-        // spento oggi non deve riaccendersi domani con le chiavi di ieri, ed è
-        // esattamente chi non può accorgersene da solo.
-        self.migrate_doc_data(from, to);
-        // **E la bozza non salvata** (§15.2), che sta accanto ai due di sopra
-        // per la ragione dei due di sopra e con un motivo in più: una bozza è
-        // l'**unica** copia di ciò che l'utente ha scritto. Se `to` ne ha già
-        // una sua, quella di `from` prende un nome di recupero e si elenca
-        // come orfana: niente si sovrascrive, e niente resta sotto l'id morto.
-        if let Err(and) = self.drafts.migrate(from, to) {
-            self.organization.warn(format!(
-                "la bozza non salvata di {from} non ha potuto seguire la \
-                 rinomina in {to}: {and}"
-            ));
-        }
+        // **E lo stesso vale per lo stato per-documento di chiunque altro**
+        // (§13.2), cercato sul **disco** e non fra i plugin montati: chi è
+        // spento oggi non deve riaccendersi domani con le chiavi di ieri.
+        //
+        // **E la bozza non salvata** (§15.2), che è l'**unica** copia di ciò che
+        // l'utente ha scritto: se `to` ne ha già una sua, quella di `from`
+        // prende un nome di recupero e si elenca come orfana.
+        let roots = self.docs.plugin_data_roots();
+        let storage = Arc::clone(self.docs.vault.storage());
+        let mut warnings = Vec::new();
+        migrate_side_data_on(
+            &self.organization,
+            &self.drafts,
+            storage.as_ref(),
+            &roots,
+            from,
+            to,
+            &mut warnings,
+        );
+        self.doc_data_warnings.extend(warnings);
     }
 
     /// Sincronizza un **rename accoppiato** riferito dal filesystem (`from` →
@@ -10763,9 +11052,18 @@ impl Workspace {
         // Il taglio del §8.1 passa qui: la sessione dice *cosa* è cambiato, il
         // workspace traduce la maschera in id di view. È deliberato che il
         // componente non sappia che le view esistono.
+        let named = context.as_ref().and_then(|c| c.doc.clone());
         let changed = self.session.publish(context);
         if changed.is_empty() {
             return Vec::new();
+        }
+        // Una riga per pubblicazione che cambia qualcosa, non per lettura: le
+        // view lo leggono senza documento (vedi `active_context`).
+        if let Some(doc) = named.filter(|doc| !self.docs.vault.exists(doc)) {
+            tracing::info!(
+                target: "fub.kernel",
+                "contesto su un documento che non è nel vault ({doc}): le view lo leggono senza documento"
+            );
         }
         // `views()` risolve già le due maschere sull'esemplare unico (§22.3):
         // qui non serve una seconda strada per la stessa domanda, e averla
@@ -10799,8 +11097,32 @@ impl Workspace {
     }
 
     /// Il contesto del pannello con il focus, se la shell ne ha pubblicato uno.
+    ///
+    /// **Un documento che non è nel vault non si serve.** La shell pubblica di
+    /// suo e in ritardo (il cursore aspetta 150 ms): può nominare la nota che
+    /// un rename dal titolo ha appena spostato, quella che un altro programma
+    /// ha appena tolto, o la linguetta ripristinata di un file sparito ad app
+    /// chiusa. Servito così, ogni view che legge il documento attivo —
+    /// struttura, note a piè di pagina, proprietà, statistiche — falliva con
+    /// `NotFound`, e la shell lo diceva come un pannello rotto (IMP-1800). È la
+    /// stessa verità di [`Session::invalidate`] con `Gone`, letta dall'altro
+    /// lato: il documento cade, la selezione con lui (i suoi offset erano di
+    /// quel testo), riquadro e modalità restano. Il contesto pubblicato non si
+    /// riscrive: se il file torna, la stessa domanda lo ritrova senza aspettare
+    /// che la shell ripubblichi. Il fatto si scrive nel log quando la shell lo
+    /// pubblica ([`set_active_context`](Workspace::set_active_context)), non a
+    /// ogni lettura.
     pub fn active_context(&self) -> Option<ViewContext> {
-        self.session.context()
+        let mut context = self.session.context()?;
+        if context
+            .doc
+            .as_ref()
+            .is_some_and(|doc| !self.docs.vault.exists(doc))
+        {
+            context.doc = None;
+            context.selections = None;
+        }
+        Some(context)
     }
 
     /// Il documento del contesto attivo: la lettura che il kernel usa dove il
@@ -13006,6 +13328,37 @@ impl Workspace {
         deferred.outcome
     }
 
+    /// Come [`finish_deferred_events`](Self::finish_deferred_events), ma la
+    /// riga del registro **non** si scrive qui: torna a chi chiama, che la
+    /// appende dopo aver lasciato il prestito esclusivo e prima di lasciare il
+    /// turno di scrittura ([`PendingJournalRecord`]).
+    pub fn finish_deferred_events_detached<T>(
+        &mut self,
+        deferred: DeferredEvents<T>,
+    ) -> (T, Option<PendingJournalRecord>) {
+        let record = deferred.journal.map(|op| PendingJournalRecord {
+            journal: Arc::clone(&self.journal),
+            origin: self.dispatch.origin(),
+            op,
+        });
+        if let Some(previous_actor) = deferred.previous_actor {
+            self.dispatch.restore_actor(previous_actor);
+        }
+        (deferred.outcome, record)
+    }
+
+    /// Dice un'appendice del registro non riuscita, con la stessa riga di
+    /// [`record`](Self::record): un guasto del registro non annulla
+    /// l'operazione, che è già avvenuta.
+    pub fn report_journal_failure(&mut self, failure: JournalFailure) {
+        self.report_trouble(
+            Severity::Failure,
+            None,
+            PluginError::Internal(format!("registro: {}", failure.0).into()),
+            None,
+        );
+    }
+
     /// Prepara una sola consegna del drenaggio `drain` senza eseguire callback.
     ///
     /// Dopo `Some`, chi chiama deve rilasciare il guard, invocare
@@ -14386,7 +14739,7 @@ impl Workspace {
     ///   rotto): niente ieri, niente spariti, nessuna rinomina da vedere. Il
     ///   ricongiungimento è una capacità di un **derivato**, e perso il derivato
     ///   si perde anche lei — per un giro, e in silenzio.
-    fn rejoin_renamed_while_closed(&mut self) -> BTreeSet<DocId> {
+    fn rejoin_renamed_while_closed(&self) -> (Vec<(DocId, DocId)>, BTreeSet<DocId>) {
         // Qui il cestino è una cautela in più, non la guardia: l'accoppiamento
         // chiede lo stesso file (identità e impronta), e un file che sta nel
         // cestino non è una voce del vault di oggi.
@@ -14409,7 +14762,7 @@ impl Workspace {
             }
         }
         if disappeared.is_empty() {
-            return BTreeSet::new();
+            return (Vec::new(), BTreeSet::new());
         }
 
         // Oggi c'è, ieri non c'era. Si guardano solo le impronte per cui
@@ -14451,29 +14804,53 @@ impl Workspace {
 
         for (from, to) in &pairs {
             // Il pavimento e la porta insieme (0062): una riga nel log per chi
-            // fa assistenza, e l'evento qui sotto per chi sta dentro l'app.
+            // fa assistenza, e l'evento di `announce_rejoin` per chi sta dentro
+            // l'app.
             tracing::info!(
                 target: "fub.kernel",
                 "rinomina fatta ad app chiusa riconosciuta dall'impronta: {from} → {to}"
             );
+        }
+        (pairs, suspended)
+    }
+
+    /// Le rinomine riconosciute, portate dietro **subito**: è la via di chi
+    /// tiene il workspace intero (`finish_index`, `reindex`).
+    fn rejoin_now(&mut self, pairs: Vec<(DocId, DocId)>) {
+        for (from, to) in &pairs {
             self.migrate_side_data(from, to);
         }
-        if !pairs.is_empty() {
-            // **E poi si dice**, con lo stesso evento della rinomina vista: chi
-            // tiene stato per-documento fuori dallo spazio dichiarato — il
-            // versioning, che ha uno store suo perché deve sopravvivere alla
-            // cancellazione (0044) — non ha altro modo di saperlo, e questo è
-            // l'unico posto in cui qualcuno lo sa. Che la coda possa troncare
-            // (0034) è la ragione per cui i tre dati autorevoli che il kernel sa
-            // spostare li ha spostati **prima**, e non aspettando che qualcuno
-            // ascoltasse.
-            self.as_actor(Actor::Kernel, |ws| {
-                for (from, to) in pairs {
-                    ws.emit_event(Event::DocumentRenamed { from, to });
-                }
-            });
+        self.announce_rejoin(pairs);
+    }
+
+    /// **E poi si dice**, con lo stesso evento della rinomina vista: chi tiene
+    /// stato per-documento fuori dallo spazio dichiarato — il versioning, che
+    /// ha uno store suo perché deve sopravvivere alla cancellazione (0044) —
+    /// non ha altro modo di saperlo. Che la coda possa troncare (0034) è la
+    /// ragione per cui i tre dati autorevoli che il kernel sa spostare sono
+    /// stati spostati **prima**, e non aspettando che qualcuno ascoltasse.
+    fn announce_rejoin(&mut self, pairs: Vec<(DocId, DocId)>) {
+        if pairs.is_empty() {
+            return;
         }
-        suspended
+        self.as_actor(Actor::Kernel, |ws| {
+            for (from, to) in pairs {
+                ws.emit_event(Event::DocumentRenamed { from, to });
+            }
+        });
+    }
+
+    /// Dice le rinomine di un [`PendingRejoin`] già eseguito: gli avvisi dei
+    /// dati che non hanno seguito, e un `DocumentRenamed` per ognuna. Non
+    /// tocca il disco.
+    pub fn finish_rejoin(&mut self, completed: CompletedRejoin) {
+        let CompletedRejoin {
+            pairs,
+            doc_data_warnings,
+        } = completed;
+        self.doc_data_warnings.extend(doc_data_warnings);
+        self.announce_rejoin(pairs);
+        self.dispatch_pending();
     }
 
     /// Cosa è andato storto **leggendo** la configurazione: un file malformato,

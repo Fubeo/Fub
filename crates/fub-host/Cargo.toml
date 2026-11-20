@@ -260,6 +260,9 @@ craft = ["dep:fub-format-craft", "fub-features/craft"]
 [dev-dependencies]
 # Il banco del lato host (§16.2).
 fub-testkit = { workspace = true }
+# Il servizio di sync vero, per il primo passaggio end-to-end
+# (`tests/sync_first_pass.rs`).
+fub-services = { workspace = true }
 fub-sdk = { workspace = true }
 # Gli `.odt` dei test dei documenti di videoscrittura, scritti dall'esportatore
 # di WordCraft: l'host non lo usa.

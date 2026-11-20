@@ -1590,3 +1590,25 @@ fn add_without_a_key_says_what_is_missing_in_words() {
     assert!(!shown.contains("invalid arguments"), "{shown}");
     assert_eq!(vault.read("a.md"), "---\ntitle: Ciao\n---\ncorpo\n");
 }
+
+/// La shell nomina una nota che sul disco non c'è più: la linguetta
+/// ripristinata di un file tolto ad app chiusa, o tolto da un altro programma
+/// prima che il kernel lo sappia. Il pannello mostra lo stato vuoto invece di
+/// fallire con `NotFound`, che la shell diceva come «il pannello «Proprietà»
+/// non si è ridisegnato: non esiste più» (IMP-1800).
+#[test]
+fn a_note_gone_from_disk_is_the_empty_state_not_an_error() {
+    let vault = Vault::new();
+    vault.put("a.md", MISTA);
+    let ws = vault.open();
+    open_notes(&ws, "a.md");
+    std::fs::remove_file(vault.root.join("a.md")).unwrap();
+    let tree = ws
+        .render_view(&instance())
+        .expect("una nota sparita non è un pannello rotto");
+    assert!(and_empty_state(&tree));
+    let status = ws
+        .render_view(&ViewInstance::only(PROPERTIES_STATUS_VIEW))
+        .expect("nemmeno nella barra di stato");
+    assert!(status.children().is_empty());
+}

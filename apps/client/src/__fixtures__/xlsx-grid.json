@@ -1,5 +1,5 @@
 {
-  "document_revision": "sha256:8e0c0837542db1b2aa1375f7a696a2bc8c409ae70bba5f276d6bc9cd8db4a03c",
+  "document_revision": "sha256:b19cd23dc526f629a015efcd58cfca35c3fcabb6d654019f21ad49e5b701f9b9",
   "surface": {
     "id": "fub.grid.xlsx",
     "format": "xlsx",
@@ -8,7 +8,7 @@
   },
   "session": {
     "instance": "xlsx-1",
-    "revision": "sha256:56d3050597c00c3f49611d3ee90173680438e0b152a21b4f849e5c0a32b077c6",
+    "revision": "sha256:836fdeb4184c4df7d7a53f4fd9d3424c32d92fc6b9560565b6908b1fc1a292b6",
     "sheets": [
       {
         "id": "s1",
@@ -1596,7 +1596,7 @@
   },
   "windows": [
     {
-      "revision": "sha256:56d3050597c00c3f49611d3ee90173680438e0b152a21b4f849e5c0a32b077c6",
+      "revision": "sha256:836fdeb4184c4df7d7a53f4fd9d3424c32d92fc6b9560565b6908b1fc1a292b6",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -3049,7 +3049,7 @@
       ]
     },
     {
-      "revision": "sha256:56d3050597c00c3f49611d3ee90173680438e0b152a21b4f849e5c0a32b077c6",
+      "revision": "sha256:836fdeb4184c4df7d7a53f4fd9d3424c32d92fc6b9560565b6908b1fc1a292b6",
       "sheet": "s2",
       "row_start": 0,
       "column_start": 0,
@@ -3852,11 +3852,32 @@
           "input": "=A1&\"!\"",
           "style": 1,
           "value": {
+            "kind": "text",
+            "value": "Una nota!"
+          },
+          "display": "Una nota!",
+          "lock": null,
+          "stale": false,
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
+        },
+        {
+          "key": {
+            "sheet": "s2",
+            "row": "r0",
+            "column": "c2"
+          },
+          "input": "=_xludf.CALCOLA(A1)",
+          "style": 1,
+          "value": {
             "kind": "blank"
           },
           "display": "",
           "lock": null,
-          "stale": false,
+          "stale": true,
           "conflict": false,
           "data_bar": null,
           "icon": null,
@@ -3938,7 +3959,7 @@
   ],
   "edit": {
     "request": {
-      "revision": "sha256:56d3050597c00c3f49611d3ee90173680438e0b152a21b4f849e5c0a32b077c6",
+      "revision": "sha256:836fdeb4184c4df7d7a53f4fd9d3424c32d92fc6b9560565b6908b1fc1a292b6",
       "patches": [
         {
           "cell": {
@@ -3952,7 +3973,7 @@
       ]
     },
     "commit": {
-      "revision": "sha256:49ce78563942c0f2489510960d92148a70debf3aa2f6586a6460fb1fda72579e",
+      "revision": "sha256:b762b9b487ff91d505f0d8a019a4504493eb51fa628fe9eb62f9a806672e02ad",
       "edit": {
         "from": 0,
         "to": 0,
@@ -3981,7 +4002,7 @@
       }
     },
     "window": {
-      "revision": "sha256:49ce78563942c0f2489510960d92148a70debf3aa2f6586a6460fb1fda72579e",
+      "revision": "sha256:b762b9b487ff91d505f0d8a019a4504493eb51fa628fe9eb62f9a806672e02ad",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -5003,11 +5024,11 @@
           "style": 2,
           "value": {
             "kind": "number",
-            "value": -0.15
+            "value": -0.15384615384615385
           },
-          "display": "-15.00%",
+          "display": "-15.38%",
           "lock": null,
-          "stale": true,
+          "stale": false,
           "conflict": false,
           "data_bar": null,
           "icon": null,
@@ -5066,11 +5087,11 @@
           "style": 6,
           "value": {
             "kind": "number",
-            "value": 680.0
+            "value": 780.0
           },
-          "display": "680",
+          "display": "780",
           "lock": null,
-          "stale": true,
+          "stale": false,
           "conflict": false,
           "data_bar": null,
           "icon": null,
@@ -5438,7 +5459,7 @@
     "journal": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r1\",\"column\":\"c1\",\"before\":\"700\",\"after\":\"900\"}]}",
     "session": {
       "instance": "xlsx-2",
-      "revision": "sha256:7778f3ea659fcafcee21ddffec1b0408b0050a124b0b8cfc9aeb6bb30b0eab8e",
+      "revision": "sha256:f4389dd859fa0e1d2865be960a87bbd87083aeeb00a7e4ecf089689ecb33f684",
       "sheets": [
         {
           "id": "s1",
@@ -7031,7 +7052,7 @@
       }
     },
     "window": {
-      "revision": "sha256:7778f3ea659fcafcee21ddffec1b0408b0050a124b0b8cfc9aeb6bb30b0eab8e",
+      "revision": "sha256:f4389dd859fa0e1d2865be960a87bbd87083aeeb00a7e4ecf089689ecb33f684",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -8053,11 +8074,11 @@
           "style": 2,
           "value": {
             "kind": "number",
-            "value": -0.15
+            "value": -0.15384615384615385
           },
-          "display": "-15.00%",
+          "display": "-15.38%",
           "lock": null,
-          "stale": true,
+          "stale": false,
           "conflict": false,
           "data_bar": null,
           "icon": null,
@@ -8116,11 +8137,11 @@
           "style": 6,
           "value": {
             "kind": "number",
-            "value": 680.0
+            "value": 780.0
           },
-          "display": "680",
+          "display": "780",
           "lock": null,
-          "stale": true,
+          "stale": false,
           "conflict": false,
           "data_bar": null,
           "icon": null,

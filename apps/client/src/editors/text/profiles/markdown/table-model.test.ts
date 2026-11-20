@@ -20,6 +20,7 @@ import {
   setCell,
   sortRows,
   tableChanges,
+  tableChangesSince,
   toggleWrap,
   type ParsedTable,
   type TableData,
@@ -132,6 +133,27 @@ describe("la scrittura", () => {
   it("nessuna modifica, nessun cambiamento", () => {
     const source = "| a |\n| --- |\n| 1 |";
     expect(tableChanges(parsed(source), parsed(source))).toEqual([]);
+  });
+});
+
+describe("le battute di una cella aperta", () => {
+  it("riscrivono la cella da com'era prima: gli spazi di un valore a metà non restano", () => {
+    const base = parsed("| A | B |\n| --- | --- |\n|  |  |\n");
+    // Dopo «Prova » la sorgente ha la cella con lo spazio in coda.
+    const middle = "| A | B |\n| --- | --- |\n| Prova  |  |\n";
+    const next = setCell(base, 1, 0, "Prova c");
+    const changes = tableChangesSince(base, middle, next);
+    let out = middle;
+    for (const change of [...changes].reverse()) out = out.slice(0, change.from) + change.insert + out.slice(change.to);
+    expect(out).toBe("| A | B |\n| --- | --- |\n| Prova c |  |\n");
+  });
+
+  it("tornate al valore di prima rimettono la sorgente di prima", () => {
+    const base = parsed("| A | B |\n| --- | --- |\n|  |  |\n");
+    const changes = tableChangesSince(base, "| A | B |\n| --- | --- |\n| x |  |\n", base);
+    let out = "| A | B |\n| --- | --- |\n| x |  |\n";
+    for (const change of [...changes].reverse()) out = out.slice(0, change.from) + change.insert + out.slice(change.to);
+    expect(out).toBe(base.source);
   });
 });
 

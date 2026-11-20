@@ -8,6 +8,7 @@ mod command_service_lock;
 mod concurrency;
 mod draft_without_turn;
 mod event_handler_lock;
+mod exclusive_hold_budget;
 mod flush_is_its_own_phase;
 mod format_source;
 mod headless;
@@ -40,6 +41,7 @@ mod the_watcher_batch;
 mod the_watcher_window;
 mod unlinked_mentions;
 mod view_provider_stale;
+mod watcher_echo_window;
 mod watcher_factory_lock;
 
 use std::sync::RwLockReadGuard;

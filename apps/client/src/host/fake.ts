@@ -384,6 +384,10 @@ export interface Options {
   draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
+  /// Chi serve le tessere della vista Mappa da un sito che la riga
+  /// `map.tile-hosts` ammette. Il finto rifiuta da solo, come l'host, i siti
+  /// che la riga non ha; senza questa porta un sito ammesso risponde `io`.
+  mapTile?: (url: string, kind: "raster" | "vector") => Promise<ArrayBuffer>;
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
   /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
   revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
@@ -493,6 +497,9 @@ export interface FakeHost {
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
   renameFromOutside(from: string, to: string): void;
+  /// Cancella una nota **senza che la shell l'abbia chiesto** (`rm` da
+  /// terminale, il sync): il file sparisce e l'evento arriva.
+  removeFromOutside(id: string): void;
   /// Riscrive un file **senza che la shell l'abbia chiesto**: l'altra
   /// applicazione, il sync, un merge. I byte cambiano e l'evento arriva dal
   /// watcher, come succede davvero.
@@ -538,6 +545,9 @@ export interface FakeHost {
 
   /// Simula la chiusura nativa di una finestra documento ancora aperta.
   requestDocumentWindowClose(label: string): void;
+  /// Simula una finestra documento che muore da sola (un crash, il sistema
+  /// che la chiude): sparisce senza passare da `closeDocumentWindow`.
+  destroyDocumentWindow(label: string): void;
   /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
   ///
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
@@ -1864,6 +1874,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const to = String(args?.to);
         const before = docs.get(from);
         if (!before) throw new Error(`host fake: «${from}» non esiste`);
+        // Come il kernel, una destinazione occupata è un rifiuto e mai una
+        // sovrascrittura: la nota che c'era resta, e quella spostata pure.
+        if (to !== from && docs.has(to)) throw { kind: "already_exists", message: `«${to}» c'è già` } satisfies PluginError;
         // Come il kernel, la rinomina si porta dietro i wikilink che la
         // nominavano (anche quelli della nota stessa): le note toccate
         // cambiano revisione e lo dicono con `document_changed`.
@@ -2236,6 +2249,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       viewerSave: (url, title, allowlist, attachmentFolder, vault) =>
         gate("viewerSave", [url, title, allowlist, attachmentFolder, vault], Promise.reject(new Error("host fake: viewer download is unavailable"))),
+      mapTile: (url, kind) => gate("mapTile", [url, kind], Promise.resolve().then(() => {
+        // La regola dell'host (`Host::map_tile`): soltanto un sito della riga.
+        const row = settings.find((entry) => entry.spec.key === "map.tile-hosts");
+        const hosts = Array.isArray(row?.value) ? row.value : [];
+        let site = "";
+        try { site = new URL(url).hostname.toLowerCase(); } catch { /* non è un indirizzo */ }
+        if (!url.startsWith("https://") || !hosts.some((host) => host.trim().toLowerCase() === site)) {
+          throw { kind: "permission_denied", message: `Le tessere di ${site || url} non sono ammesse su questo computer.` } satisfies PluginError;
+        }
+        if (!options.mapTile) throw { kind: "io", message: "host fake: nessuno serve le tessere" } satisfies PluginError;
+        return options.mapTile(url, kind);
+      })),
       viewerControl: (action) =>
         gate("viewerControl", [action], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       // Il finto non ha una finestra del visore: niente da raccontare.
@@ -2910,6 +2935,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       const kind = entryKind(from);
       emit(kind === "document" ? { type: "document_renamed", from, to } : { type: "entry_renamed", from, to, kind });
     },
+    removeFromOutside: (id) => {
+      if (!docs.delete(id)) throw new Error(`host fake: «${id}» non esiste`);
+      emit({ type: "document_removed", id });
+    },
     writeFromOutside: (id, text) => {
       write(id, text);
       const kind = entryKind(id);
@@ -2928,6 +2957,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!request) throw new Error(`host fake: finestra «${label}» non aperta`);
       for (const handler of windowCloseRequested) handler({ label, surface: "document" });
     },
+    destroyDocumentWindow: (label) => {
+      if (!documentWindows.delete(label)) throw new Error(`host fake: finestra «${label}» non aperta`);
+      for (const handler of windowClosed) handler({ label, surface: "document" });
+    },
     files: () => Object.fromEntries([...docs].map(([id, d]) => [id, d.text])),
     trash: () => [...trash].map(([id, d]) => ({ id, original: d.original })),
     calls,
@@ -2936,7 +2969,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!onClose) throw new Error("host finto: nessuno ascolta la chiusura della finestra");
       try {
         if (await onClose()) {
-          await gate("finishMainClose", [], Promise.resolve());
+          // Come `finish_main_close` dell'host vero: con una finestra
+          // documento ancora registrata la finestra principale non si chiude.
+          await gate("finishMainClose", [], documentWindows.size
+            ? Promise.reject(new Error("document windows or a vault close have not finished"))
+            : Promise.resolve());
           if (!mainClosed) {
             mainClosed = true;
             window.dispatchEvent(new Event("pagehide"));

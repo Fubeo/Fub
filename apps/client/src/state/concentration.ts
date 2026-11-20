@@ -6,6 +6,8 @@
 // editor di testo, che segnano il blocco del cursore
 // (`editors/text/cursor-block.ts`).
 
+import { composingKey } from "../kit/ime";
+
 let on = false;
 const listeners = new Set<(on: boolean) => void>();
 
@@ -35,6 +37,6 @@ export function onConcentration(listener: (on: boolean) => void): () => void {
 /// cattura), l'editor lo prende per i suoi tasti (Vim compreso). Senza
 /// modificatori e fuori da una composizione.
 export function escapeLeavesConcentration(event: KeyboardEvent): boolean {
-  if (!on || event.key !== "Escape" || event.defaultPrevented || event.isComposing) return false;
+  if (!on || event.key !== "Escape" || event.defaultPrevented || composingKey(event)) return false;
   return !(event.ctrlKey || event.metaKey || event.altKey || event.shiftKey);
 }

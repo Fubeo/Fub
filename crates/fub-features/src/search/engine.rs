@@ -477,9 +477,7 @@ impl SearchIndex {
                     .dfa_size_limit(1 << 20)
                     .build()
                     .map_err(|err| PluginError::BadArgs(format!("invalid regex: {err}").into()))?;
-                self.scan_fields(fields, |values| {
-                    values.iter().any(|value| regex.is_match(value))
-                })
+                self.exact_regex(pattern, &regex, fields)
             }
             QueryPredicate::Scoped { scope, text } => {
                 // I candidati li trova l'indice, col corpo e le sue regole; qui
@@ -598,52 +596,9 @@ impl SearchIndex {
         text: &TextQuery,
         wanted: Vec<(Field, f32)>,
     ) -> Result<Option<Box<dyn Query>>, PluginError> {
-        if text.case_sensitive && text.text.len() > MAX_REGEX_BYTES {
-            return Err(PluginError::BadArgs(
-                "case-sensitive text exceeds 256 bytes".into(),
-            ));
-        }
         if text.case_sensitive {
-            // Ogni parte è un letterale col suo confine ai lati, e il confine
-            // c'è solo dove la parte comincia o finisce con una lettera: attorno
-            // a un'emoji `\b` non c'è mai, e la frase non combaciava (vedi
-            // `words`). L'ultima parte, mentre si scrive, resta aperta in coda.
-            let parts: Vec<&str> = match text.mode {
-                TextMode::Phrase => Some(text.text.trim())
-                    .filter(|phrase| !phrase.is_empty())
-                    .into_iter()
-                    .collect(),
-                TextMode::Terms => words::words(&text.text),
-            };
-            if parts.is_empty() {
-                return Ok(None);
-            }
-            let last = parts.len() - 1;
-            let expressions = parts
-                .iter()
-                .enumerate()
-                .map(|(at, part)| {
-                    let open = at == last && text.partial_last_term;
-                    let starts = part.chars().next().is_some_and(words::is_word_char);
-                    let ends = part.chars().next_back().is_some_and(words::is_word_char);
-                    format!(
-                        "{}{}{}",
-                        if starts { words::BEFORE } else { "" },
-                        regex::escape(part),
-                        if ends && !open { words::AFTER } else { "" },
-                    )
-                })
-                .map(|pattern| {
-                    regex::Regex::new(&pattern)
-                        .expect("escaped literal has a valid regular expression")
-                })
-                .collect::<Vec<_>>();
             let stored: Vec<Field> = wanted.iter().map(|(field, _)| *field).collect();
-            return self.scan_stored(&stored, |values| {
-                expressions
-                    .iter()
-                    .all(|regex| values.iter().any(|value| regex.is_match(value)))
-            });
+            return self.exact_text(text, &stored);
         }
         if text.text.trim().is_empty() {
             return Ok(None);
@@ -704,7 +659,7 @@ impl SearchIndex {
                             terms[0].clone(),
                             IndexRecordOption::WithFreqs,
                         )),
-                        (1, true) => self.prefix_query(field, &terms[0])?,
+                        (1, true) => prefix_query(&terms[0]),
                         // Una frase il cui ultimo termine è incompleto è
                         // esattamente ciò che `PhrasePrefixQuery` esprime: la
                         // sequenza, e in coda un prefisso.
@@ -718,7 +673,7 @@ impl SearchIndex {
                 TextMode::Terms => {
                     for (at, term) in terms.into_iter().enumerate() {
                         let q: Box<dyn Query> = if at == last && text.partial_last_term {
-                            self.prefix_query(field, &term)?
+                            prefix_query(&term)
                         } else {
                             Box::new(TermQuery::new(term, IndexRecordOption::WithFreqs))
                         };
@@ -752,79 +707,9 @@ impl SearchIndex {
         }
     }
 
-    /// Il raw stored è la fonte di verità per regex e grafia case-sensitive:
-    /// l'indice tokenizzato ha già dimenticato punteggiatura e maiuscole. Oltre
-    /// al tetto dichiarato rifiutiamo la domanda, mai una pagina parziale.
-    fn scan_fields(
-        &self,
-        requested: &[TextField],
-        matches: impl FnMut(&[&str]) -> bool,
-    ) -> Result<Option<Box<dyn Query>>, PluginError> {
-        let fields = if requested.is_empty() {
-            &ALL_TEXT_FIELDS[..]
-        } else {
-            requested
-        };
-        let stored: Vec<Field> = fields
-            .iter()
-            .map(|field| match field {
-                TextField::Name => self.fields.page_name,
-                TextField::Body => self.fields.body,
-                TextField::Tags => self.fields.tags,
-                TextField::Heading => self.fields.headings,
-            })
-            .collect();
-        self.scan_stored(&stored, matches)
-    }
-
-    /// [`Self::scan_fields`] sui campi memorizzati dello schema.
-    fn scan_stored(
-        &self,
-        stored: &[Field],
-        mut matches: impl FnMut(&[&str]) -> bool,
-    ) -> Result<Option<Box<dyn Query>>, PluginError> {
-        self.commit()?;
-        let searcher = self.reader.searcher();
-        if searcher.num_docs() > MAX_SCAN_DOCS {
-            return Err(PluginError::BadArgs(
-                "regex/case-sensitive search is limited to 2048 indexed documents".into(),
-            ));
-        }
-        let mut docs = Vec::new();
-        let mut scanned = 0usize;
-        let candidates = searcher
-            .search(
-                &AllQuery,
-                &tantivy::collector::TopDocs::with_limit(MAX_SCAN_DOCS as usize).order_by_score(),
-            )
-            .map_err(|err| PluginError::Internal(reason(SEARCH, err)))?;
-        for (_, address) in candidates {
-            let doc: TantivyDocument = searcher
-                .doc(address)
-                .map_err(|err| PluginError::Internal(reason(DOC_READ, err)))?;
-            let Some(id) = doc.get_first(self.fields.doc_id).and_then(|v| v.as_str()) else {
-                continue;
-            };
-            let mut values = Vec::new();
-            for field in stored {
-                values.extend(doc.get_all(*field).filter_map(|value| value.as_str()));
-            }
-            scanned = scanned.saturating_add(values.iter().map(|s| s.len()).sum::<usize>());
-            if scanned > MAX_SCAN_BYTES {
-                return Err(PluginError::BadArgs(
-                    "regex/case-sensitive search exceeds 8 MiB of indexed text".into(),
-                ));
-            }
-            if matches(&values) {
-                docs.push((Occur::Should, term_query(self.fields.doc_id, id)));
-            }
-        }
-        Ok((!docs.is_empty()).then(|| Box::new(BooleanQuery::new(docs)) as Box<dyn Query>))
-    }
-
     /// I documenti di `candidates` la cui forma (`layout`) passa `matches`.
     ///
-    /// Gli stessi tetti di [`Self::scan_fields`], ma sui soli candidati: chi
+    /// Gli stessi tetti della verifica delle maiuscole esatte (`exact`): chi
     /// cerca in una riga ha già detto quali parole ci devono stare.
     fn scan_layouts(
         &self,
@@ -865,23 +750,6 @@ impl SearchIndex {
             }
         }
         Ok((!docs.is_empty()).then(|| Box::new(BooleanQuery::new(docs)) as Box<dyn Query>))
-    }
-
-    /// Un termine **incompleto**: tutto ciò che comincia così.
-    ///
-    /// È un automa sul dizionario dei termini — cioè un intervallo aperto nella
-    /// term dictionary, che è il costo vero di una ricerca mentre si digita
-    /// (§21.9 lo dice per iscritto: un prefisso apre un intervallo). Il testo
-    /// arriva già passato dal tokenizer del campo, quindi qui non ci sono
-    /// maiuscole né punteggiatura da normalizzare; l'escape c'è lo stesso,
-    /// perché ciò che entra in un motore di regex viene da chi digita e non da
-    /// noi.
-    fn prefix_query(&self, field: Field, term: &Term) -> Result<Box<dyn Query>, PluginError> {
-        let value = term.value();
-        let pattern = format!("{}.*", escape_regex(value.as_str().unwrap_or_default()));
-        let query = RegexQuery::from_pattern(&pattern, field)
-            .map_err(|and| PluginError::Internal(reason(TOKENIZER, and)))?;
-        Ok(Box::new(query))
     }
 
     /// Il testo della query tokenizzato una volta sola, col tokenizer che
@@ -926,24 +794,45 @@ pub(super) fn item_due(blocks: &[Block]) -> Option<String> {
     fub_abi::rules::tasks::task_due(&text)?.iso()
 }
 
-fn term_query(field: Field, value: &str) -> Box<dyn Query> {
+pub(super) fn term_query(field: Field, value: &str) -> Box<dyn Query> {
     Box::new(TermQuery::new(
         Term::from_field_text(field, value),
         IndexRecordOption::Basic,
     ))
 }
 
-/// I metacaratteri di regex resi letterali, e **soltanto** quelli.
+/// Un termine **incompleto**: tutto ciò che comincia così.
 ///
-/// Una fuga davanti a ogni carattere non alfanumerico sembrava la scelta
-/// prudente e non lo è: la sintassi delle regex rifiuta la fuga davanti a un
-/// carattere che non è un metacarattere ASCII (`\🗺` è «unrecognized escape
-/// sequence», e la ricerca di un'emoji falliva tutta), e ne dà un significato
-/// ad altri (`\<` è un confine di parola). La lista giusta è quella di chi
-/// scrive la sintassi.
-fn escape_regex(text: &str) -> String {
-    regex::escape(text)
+/// È un intervallo aperto nella term dictionary, che è il costo vero di una
+/// ricerca mentre si digita (§21.9 lo dice per iscritto: un prefisso apre
+/// un intervallo). Il testo arriva già passato dal tokenizer del campo,
+/// quindi qui non ci sono maiuscole né punteggiatura da normalizzare.
+///
+/// Prima era una `RegexQuery` su `{prefisso}.*`, cioè un automa compilato a
+/// ogni tasto per dire la stessa cosa. Una `PhrasePrefixQuery` di un solo
+/// termine è il prefisso nativo di tantivy: legge l'intervallo
+/// `[prefisso, prefisso successivo)` del dizionario, con lo stesso punteggio
+/// costante dell'automa e gli stessi (nessuno) termini per gli estratti. Il
+/// tetto di espansioni è [`PREFIX_MAX_EXPANSIONS`]: di serie sono 50 termini,
+/// troppo pochi per un prefisso di due lettere.
+pub(super) fn prefix_query(term: &Term) -> Box<dyn Query> {
+    let mut query = PhrasePrefixQuery::new(vec![term.clone()]);
+    query.set_max_expansions(PREFIX_MAX_EXPANSIONS);
+    Box::new(query)
 }
+
+/// Quanti termini del dizionario un prefisso incompleto può abbracciare, per
+/// campo e per segmento (#518).
+///
+/// Il costo di un prefisso è lineare nei termini che apre: ognuno è una lista
+/// di documenti da leggere. Senza tetto, la prima lettera digitata in un vault
+/// grande apriva tutto il dizionario a ogni tasto: con 200 000 termini sotto la
+/// stessa lettera, misurati in debug, 480 ms senza tetto e 115 ms con questo.
+/// Diecimila termini coprono i prefissi di due lettere di un vault di migliaia
+/// di note; oltre, la ricerca prende i primi in ordine alfabetico e lascia
+/// fuori le note che hanno solo quelli dopo: il prezzo di una o due lettere,
+/// che la lettera seguente toglie (`a_prefix_stops_at_its_cap`).
+pub(super) const PREFIX_MAX_EXPANSIONS: u32 = 10_000;
 
 fn boosted(query: Box<dyn Query>, boost: f32) -> Box<dyn Query> {
     if boost == 1.0 {

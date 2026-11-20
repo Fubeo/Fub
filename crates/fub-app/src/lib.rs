@@ -368,32 +368,62 @@ impl EventSink for WebviewEvents {
     }
 }
 
+/// Apre un vault e lo rende corrente. Fuori dal thread principale, nella
+/// corsia dell'indice (`domande::CORSIA_INDICE`): aprire monta i provider e
+/// legge il disco, e una domanda mandata dopo deve trovare il vault nuovo.
 #[tauri::command]
-fn open_vault(app: AppHandle, host: State<Host>, path: String) -> Result<VaultInfo, PluginError> {
+async fn open_vault(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+    path: String,
+) -> Result<VaultInfo, PluginError> {
     // Su mobile si monta il vault privato, che il backend risolve da sé nella
     // sandbox, o la cartella condivisa che il codice nativo ha consegnato per
     // un grant verificato (`mobile_open_shared`): nessun altro path.
     #[cfg(mobile)]
-    return for_the_shell(
-        &host,
-        None,
-        mobile::open_mobile_vault(
-            &host,
-            mobile::private_vault_root(&app).as_deref(),
-            app.try_state::<tree_access::TreeAccess>()
-                .and_then(|tree| tree.shared_root())
-                .as_deref(),
-            &path,
-        ),
-    );
+    return host_lane(
+        app.clone(),
+        &corsie,
+        "vault open",
+        domande::CORSIA_INDICE,
+        move |host| {
+            for_the_shell(
+                host,
+                None,
+                mobile::open_mobile_vault(
+                    host,
+                    mobile::private_vault_root(&app).as_deref(),
+                    app.try_state::<tree_access::TreeAccess>()
+                        .and_then(|tree| tree.shared_root())
+                        .as_deref(),
+                    &path,
+                ),
+            )
+        },
+    )
+    .await;
+    #[cfg(not(mobile))]
+    open_vault_in_lane(app, &corsie, path).await
+}
+
+// Su mobile `open_vault` apre da sé: questa resta per il desktop e le prove.
+#[cfg_attr(mobile, allow(dead_code))]
+async fn open_vault_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    path: String,
+) -> Result<VaultInfo, PluginError> {
     // Il lock di scrittura fra processi lo prende l'host aprendo, e lo lascia
     // chiudendo: qui non c'è niente da tenere. Un altro scrittore è un
     // conflitto con la sua chiave, che la shell legge come frase.
-    #[cfg(not(mobile))]
-    {
-        let _ = app;
-        for_the_shell(&host, None, host.open(Utf8Path::new(&path)))
-    }
+    host_lane(
+        source,
+        corsie,
+        "vault open",
+        domande::CORSIA_INDICE,
+        move |host| for_the_shell(host, None, host.open(Utf8Path::new(&path))),
+    )
+    .await
 }
 
 // --- i vault aperti (§9.6) -------------------------------------------------
@@ -414,10 +444,30 @@ fn list_vaults(host: State<Host>) -> OpenVaults {
 }
 
 /// Rende corrente un vault già aperto. Aprirne uno nuovo lo fa `open_vault`,
-/// che lo rende corrente da sé.
+/// che lo rende corrente da sé. Nella corsia dell'indice: una domanda senza
+/// vault mandata dopo parla con quello scelto qui.
 #[tauri::command]
-fn set_current_vault(host: State<Host>, path: String) -> Result<(), PluginError> {
-    host.set_current(&Utf8PathBuf::from(path))
+async fn set_current_vault(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+    path: String,
+) -> Result<(), PluginError> {
+    set_current_vault_in_lane(app, &corsie, path).await
+}
+
+async fn set_current_vault_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    path: String,
+) -> Result<(), PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "current vault",
+        domande::CORSIA_INDICE,
+        move |host| host.set_current(&Utf8PathBuf::from(path)),
+    )
+    .await
 }
 
 /// Chiude un vault: flush, `close` degli indici, disattivazione dei plugin
@@ -429,13 +479,46 @@ fn set_current_vault(host: State<Host>, path: String) -> Result<(), PluginError>
 /// cui può ramificare.
 /// Una finestra documento attiva trattiene quel vault: chiuderlo prima della
 /// conferma di distruzione nativa perderebbe la sessione autorevole.
+/// Nella corsia dell'indice, in fila con l'apertura: chiudere e riaprire lo
+/// stesso vault di fila lo lascia aperto.
 #[tauri::command]
-fn close_vault(
-    host: State<Host>,
-    windows: State<document_windows::DocumentWindows>,
+async fn close_vault(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     path: String,
 ) -> Result<Vec<PluginError>, PluginError> {
-    document_windows::close_vault(&host, &windows, &path)
+    close_vault_in_lane(app, &corsie, path).await
+}
+
+async fn close_vault_in_lane(
+    source: impl WindowsSource,
+    corsie: &domande::Corsie,
+    path: String,
+) -> Result<Vec<PluginError>, PluginError> {
+    vault_port(source, corsie, "vault close", move |host, windows| {
+        document_windows::close_vault(host, windows, &path)
+    })
+    .await
+}
+
+/// Il lavoro di un comando che chiude o cambia un vault davanti alle finestre
+/// documento (`close_vault`, la demo), nella corsia dell'indice, in fila con
+/// `open_vault` e `set_current_vault`.
+async fn vault_port<T, F>(
+    source: impl WindowsSource,
+    corsie: &domande::Corsie,
+    cosa: &'static str,
+    work: F,
+) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host, &document_windows::DocumentWindows) -> Result<T, PluginError> + Send + 'static,
+{
+    corsie
+        .chiedi(cosa, domande::CORSIA_INDICE.into(), move || {
+            source.with_windows(work)
+        })
+        .await
 }
 
 /// Path del vault da aprire all'avvio: l'override di ambiente (`FUB_VAULT`)
@@ -593,72 +676,140 @@ async fn document_closed(
     .await
 }
 
-/// Apre un lease sui byte di una risorsa. Il label e l'origin provengono dalla
-/// finestra nativa, non dagli argomenti JavaScript.
+/// La finestra che chiede una porta delle risorse: il label e l'origin che
+/// il recinto controlla vengono dalla finestra nativa, non dagli argomenti
+/// JavaScript. Si leggono nel comando; il lavoro va in corsia.
+struct ResourceCaller {
+    label: String,
+    origin: String,
+}
+
+fn resource_caller(window: &tauri::WebviewWindow) -> Result<ResourceCaller, PluginError> {
+    let origin = window.url().map_err(|and| {
+        PluginError::Internal(format!("resource window URL unavailable: {and}").into())
+    })?;
+    Ok(ResourceCaller {
+        label: window.label().to_owned(),
+        origin: origin.to_string(),
+    })
+}
+
+/// Il lavoro di una porta delle risorse, fuori dal thread principale, nella
+/// corsia delle risorse (`domande::CORSIA_RISORSE`). Un PDF che scorre chiede
+/// un pezzo dopo l'altro: sul thread principale ogni lettura dal disco
+/// toglieva fotogrammi alla finestra. La fila tiene l'ordine che il thread
+/// principale dava: un pezzo chiesto prima della chiusura del prestito si
+/// legge prima che il prestito si chiuda.
+async fn resource_port<T, F>(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    cosa: &'static str,
+    work: F,
+) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    host_lane(source, corsie, cosa, domande::CORSIA_RISORSE, work).await
+}
+
+/// Apre un lease sui byte di una risorsa.
 #[tauri::command]
-fn resource_open(
-    host: State<Host>,
+async fn resource_open(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     id: String,
     vault: Option<String>,
 ) -> Result<fub_host::resources::ResourceDescriptor, PluginError> {
-    let origin = window.url().map_err(|and| {
-        PluginError::Internal(format!("resource window URL unavailable: {and}").into())
-    })?;
-    resources::resource_open_cmd(
-        &*host,
-        window.label(),
-        origin.as_str(),
-        &id,
-        vault.as_deref(),
-    )
+    let caller = resource_caller(&window)?;
+    resource_open_in_lane(app, &corsie, caller, id, vault).await
+}
+
+async fn resource_open_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    caller: ResourceCaller,
+    id: String,
+    vault: Option<String>,
+) -> Result<fub_host::resources::ResourceDescriptor, PluginError> {
+    resource_port(source, corsie, "resource open", move |host| {
+        resources::resource_open_cmd(host, &caller.label, &caller.origin, &id, vault.as_deref())
+    })
+    .await
 }
 
 /// Serve un chunk come corpo IPC binario, senza array JSON o base64.
 #[tauri::command]
-fn resource_read_chunk(
-    host: State<Host>,
+async fn resource_read_chunk(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     handle: fub_host::resources::ResourceHandle,
     offset: u64,
     len: u32,
 ) -> Result<tauri::ipc::Response, PluginError> {
-    let origin = window.url().map_err(|and| {
-        PluginError::Internal(format!("resource window URL unavailable: {and}").into())
-    })?;
-    resources::resource_read_chunk_cmd(&*host, window.label(), origin.as_str(), handle, offset, len)
+    let caller = resource_caller(&window)?;
+    resource_read_chunk_in_lane(app, &corsie, caller, handle, offset, len).await
+}
+
+async fn resource_read_chunk_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    caller: ResourceCaller,
+    handle: fub_host::resources::ResourceHandle,
+    offset: u64,
+    len: u32,
+) -> Result<tauri::ipc::Response, PluginError> {
+    resource_port(source, corsie, "resource read", move |host| {
+        resources::resource_read_chunk_cmd(host, &caller.label, &caller.origin, handle, offset, len)
+    })
+    .await
 }
 
 /// Rilascia il lease; la chiusura ripetuta resta idempotente.
 #[tauri::command]
-fn resource_close(
-    host: State<Host>,
+async fn resource_close(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     handle: fub_host::resources::ResourceHandle,
 ) -> Result<(), PluginError> {
-    let origin = window.url().map_err(|and| {
-        PluginError::Internal(format!("resource window URL unavailable: {and}").into())
-    })?;
-    resources::resource_close_cmd(&*host, window.label(), origin.as_str(), handle)
+    let caller = resource_caller(&window)?;
+    resource_close_in_lane(app, &corsie, caller, handle).await
 }
-/// Binary IPC body; metadata lives only in the bounded, strict header.
+
+async fn resource_close_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    caller: ResourceCaller,
+    handle: fub_host::resources::ResourceHandle,
+) -> Result<(), PluginError> {
+    resource_port(source, corsie, "resource close", move |host| {
+        resources::resource_close_cmd(host, &caller.label, &caller.origin, handle)
+    })
+    .await
+}
+
+/// Binary IPC body; metadata lives only in the bounded, strict header. Il
+/// corpo si copia per entrare in corsia, perché la richiesta di Tauri vive
+/// solo quanto il comando; il tetto si controlla prima della copia.
 #[tauri::command]
-fn resource_write(
-    host: State<Host>,
+async fn resource_write(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     request: tauri::ipc::Request<'_>,
 ) -> Result<fub_host::resources::ResourceWriteReceipt, PluginError> {
-    let origin = window.url().map_err(|error| {
-        PluginError::Internal(format!("resource window URL unavailable: {error}").into())
-    })?;
+    let caller = resource_caller(&window)?;
     let bytes = resources::resource_write_body(&request)?;
-    resources::resource_write_cmd(
-        &*host,
-        window.label(),
-        origin.as_str(),
-        request.headers(),
-        bytes,
-    )
+    resources::check_inline_limit(bytes.len() as u64)?;
+    let bytes = bytes.to_vec();
+    let headers = request.headers().clone();
+    resource_port(app, &corsie, "resource write", move |host| {
+        resources::resource_write_cmd(host, &caller.label, &caller.origin, &headers, &bytes)
+    })
+    .await
 }
 
 struct ViewerConfig(Option<Utf8PathBuf>);
@@ -761,14 +912,177 @@ async fn viewer_save(
     for_the_shell(&host, vault.as_deref(), saved)
 }
 
-/// Superfici grid dichiarate dai provider montati. La shell negozia famiglia e
-/// versione prima di aprire una sessione.
+/// Una tessera della vista Mappa di una Base, come corpo IPC binario: la
+/// scarica l'host, soltanto da un host che `map.tile-hosts` ammette su questa
+/// macchina (`Host::map_tile`, dove stanno tutte le regole). La webview non
+/// apre connessioni: la sua CSP non ammette `https:` in `connect-src`.
+/// Fuori dal thread principale: una tessera aspetta la rete.
 #[tauri::command]
-fn list_grid_surfaces(
-    host: State<Host>,
+async fn map_tile(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    url: String,
+    kind: fub_host::map_tiles::TileKind,
+) -> Result<tauri::ipc::Response, PluginError> {
+    let origin = window
+        .url()
+        .map_err(|error| resources::viewer_failed("host.viewer.url_unavailable", error));
+    let label = window.label().to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        let tile = origin
+            .and_then(|origin| resources::guard_trusted_local(&label, origin.as_str()))
+            .and_then(|()| host.map_tile(&url, kind));
+        for_the_shell(&host, None, tile).map(|tile| tauri::ipc::Response::new(tile.bytes.to_vec()))
+    })
+    .await
+    .map_err(|error| unfinished("map tile", error))?
+}
+
+/// Superfici grid dichiarate dai provider montati. La shell negozia famiglia e
+/// versione prima di aprire una sessione. Legge il workspace: nella corsia del
+/// foglio, perché sul thread principale aspetterebbe chi lo sta scrivendo.
+#[tauri::command]
+async fn list_grid_surfaces(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     vault: Option<String>,
 ) -> Result<Vec<GridSurfaceSpec>, PluginError> {
-    host.grid_surfaces(vault.as_deref())
+    grid_port(app, &corsie, "grid surfaces", move |host| {
+        host.grid_surfaces(vault.as_deref())
+    })
+    .await
+}
+
+/// Chi dà l'host al lavoro di una corsia: l'app, e nei test un `Arc<Host>`,
+/// così le prove dell'ordine passano per le stesse funzioni dei comandi.
+trait HostSource: Send + 'static {
+    fn with_host<T>(&self, work: impl FnOnce(&Host) -> T) -> T;
+}
+
+impl HostSource for AppHandle {
+    fn with_host<T>(&self, work: impl FnOnce(&Host) -> T) -> T {
+        work(&self.state::<Host>())
+    }
+}
+
+#[cfg(test)]
+impl HostSource for Arc<Host> {
+    fn with_host<T>(&self, work: impl FnOnce(&Host) -> T) -> T {
+        work(self)
+    }
+}
+
+/// Chi dà al lavoro di una corsia l'host e il registro delle finestre
+/// documento (`close_vault`): l'app, e nei test una coppia di `Arc`.
+trait WindowsSource: Send + 'static {
+    fn with_windows<T>(
+        &self,
+        work: impl FnOnce(&Host, &document_windows::DocumentWindows) -> T,
+    ) -> T;
+}
+
+impl WindowsSource for AppHandle {
+    fn with_windows<T>(
+        &self,
+        work: impl FnOnce(&Host, &document_windows::DocumentWindows) -> T,
+    ) -> T {
+        work(
+            &self.state::<Host>(),
+            &self.state::<document_windows::DocumentWindows>(),
+        )
+    }
+}
+
+#[cfg(test)]
+impl WindowsSource for (Arc<Host>, Arc<document_windows::DocumentWindows>) {
+    fn with_windows<T>(
+        &self,
+        work: impl FnOnce(&Host, &document_windows::DocumentWindows) -> T,
+    ) -> T {
+        work(&self.0, &self.1)
+    }
+}
+
+/// Gli effetti nativi di un'impostazione scritta: lo zoom della finestra che
+/// l'ha scritta e il tetto dei fotogrammi di tutte. Li applica la corsia,
+/// subito dopo la scrittura riuscita: Tauri li porta al thread principale
+/// nell'ordine in cui partono, così due zoom scritti di fila lasciano la
+/// finestra sull'ultimo. Nei test un registro prende il loro posto.
+trait NativeSettings: Send + 'static {
+    fn set_zoom(&self, scale: f64) -> Result<(), String>;
+    fn set_frame_rate(&self, beyond_60: bool);
+}
+
+impl NativeSettings for tauri::WebviewWindow {
+    fn set_zoom(&self, scale: f64) -> Result<(), String> {
+        tauri::WebviewWindow::set_zoom(self, scale).map_err(|and| and.to_string())
+    }
+
+    fn set_frame_rate(&self, beyond_60: bool) {
+        frame_rate::apply_all(self.app_handle(), beyond_60);
+    }
+}
+
+/// Il lavoro di una porta dell'host fuori dal thread principale, in fondo
+/// alla corsia `corsia` (`domande`). Un comando sincrono di Tauri gira sul
+/// thread che presenta i fotogrammi: una chiamata a un provider, una
+/// scrittura su disco o l'attesa di un prestito del workspace tenuto da un
+/// salvataggio fermavano la finestra per tutto quel tempo. La corsia tiene
+/// l'ordine d'arrivo che il thread principale dava; gli errori restano quelli
+/// dell'host, e un panico risponde `Internal`.
+async fn host_lane<S, T, F>(
+    source: S,
+    corsie: &domande::Corsie,
+    cosa: &'static str,
+    corsia: &'static str,
+    work: F,
+) -> Result<T, PluginError>
+where
+    S: HostSource,
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    corsie
+        .chiedi(cosa, corsia.into(), move || source.with_host(work))
+        .await
+}
+
+/// Una lettura dell'host senza un ordine da tenere (gli elenchi di view, di
+/// comandi, di componenti e di temi, la mappa dei componenti, un tema) fuori
+/// dal thread principale, senza corsia: prende il workspace in prestito
+/// condiviso o legge il disco, e sul thread principale aspetterebbe chi lo
+/// sta scrivendo. Chi la chiede la aspetta prima di usarla, e due letture
+/// uguali rispondono la stessa cosa in qualunque ordine escano. Ci passa
+/// anche `cancel_job`, che vale lo stesso in qualunque momento arrivi.
+async fn host_read<T, F>(app: AppHandle, cosa: &'static str, work: F) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || work(&app.state::<Host>()))
+        .await
+        .map_err(|error| unfinished(cosa, error))?
+}
+
+/// Il lavoro di una porta del foglio sui byte, fuori dal thread principale,
+/// nella corsia del foglio (`domande::CORSIA_GRIGLIA`). Scorrendo, la shell
+/// chiede una finestra a ogni blocco di righe nuove: sul thread principale,
+/// lo stesso che presenta i fotogrammi, ogni lettura li fermava. La corsia
+/// tiene l'ordine d'arrivo che il thread principale dava, così una finestra
+/// chiesta prima di una modifica si legge alla revisione da cui la modifica
+/// parte. Gli errori restano quelli dell'host, come prima.
+async fn grid_port<T, F>(
+    app: AppHandle,
+    corsie: &domande::Corsie,
+    cosa: &'static str,
+    work: F,
+) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    host_lane(app, corsie, cosa, domande::CORSIA_GRIGLIA, work).await
 }
 
 /// Apre una superficie grid della versione 2 sui byte di un documento. La
@@ -776,8 +1090,9 @@ fn list_grid_surfaces(
 /// della sessione documento) e la revisione dei byte da cui parte; l'host li
 /// legge e rifiuta con `Conflict` se nel frattempo sono cambiati.
 #[tauri::command]
-fn open_grid_bytes(
-    host: State<Host>,
+async fn open_grid_bytes(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     surface: String,
     doc: String,
     journal: String,
@@ -785,63 +1100,88 @@ fn open_grid_bytes(
     vault: Option<String>,
 ) -> Result<GridBytesSession, PluginError> {
     let doc = doc_id(&doc)?;
-    host.grid_bytes_open(vault.as_deref(), &surface, &doc, &journal, Revision(base))
+    grid_port(app, &corsie, "grid open", move |host| {
+        host.grid_bytes_open(vault.as_deref(), &surface, &doc, &journal, Revision(base))
+    })
+    .await
 }
 
 #[tauri::command]
-fn grid_bytes_window(
-    host: State<Host>,
+async fn grid_bytes_window(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     surface: String,
     instance: String,
     request: GridWindowRequest,
     vault: Option<String>,
 ) -> Result<GridBytesWindow, PluginError> {
-    host.grid_bytes_window(vault.as_deref(), &surface, &instance, request)
+    grid_port(app, &corsie, "grid window", move |host| {
+        host.grid_bytes_window(vault.as_deref(), &surface, &instance, request)
+    })
+    .await
 }
 
 #[tauri::command]
-fn apply_grid_bytes(
-    host: State<Host>,
+async fn apply_grid_bytes(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     surface: String,
     instance: String,
     request: GridApplyRequest,
     vault: Option<String>,
 ) -> Result<GridCommit, PluginError> {
-    host.grid_bytes_apply(vault.as_deref(), &surface, &instance, request)
+    grid_port(app, &corsie, "grid apply", move |host| {
+        host.grid_bytes_apply(vault.as_deref(), &surface, &instance, request)
+    })
+    .await
 }
 
 /// Il catalogo dei comandi di una sessione grid sulla selezione.
 #[tauri::command]
-fn grid_bytes_commands(
-    host: State<Host>,
+async fn grid_bytes_commands(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     surface: String,
     instance: String,
     selection: GridSelection,
     vault: Option<String>,
 ) -> Result<Vec<GridCommandState>, PluginError> {
-    host.grid_bytes_commands(vault.as_deref(), &surface, &instance, selection)
+    grid_port(app, &corsie, "grid commands", move |host| {
+        host.grid_bytes_commands(vault.as_deref(), &surface, &instance, selection)
+    })
+    .await
 }
 
 /// Un comando del catalogo (ADR 0219): l'esito porta il diff del giornale.
 #[tauri::command]
-fn grid_bytes_command(
-    host: State<Host>,
+async fn grid_bytes_command(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     surface: String,
     instance: String,
     request: GridCommandRequest,
     vault: Option<String>,
 ) -> Result<GridCommandOutcome, PluginError> {
-    host.grid_bytes_command(vault.as_deref(), &surface, &instance, request)
+    grid_port(app, &corsie, "grid command", move |host| {
+        host.grid_bytes_command(vault.as_deref(), &surface, &instance, request)
+    })
+    .await
 }
 
+/// In corsia anche la chiusura: dopo le finestre e le modifiche chieste
+/// prima, che altrimenti troverebbero l'istanza già chiusa.
 #[tauri::command]
-fn close_grid_bytes(
-    host: State<Host>,
+async fn close_grid_bytes(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     surface: String,
     instance: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.grid_bytes_close(vault.as_deref(), &surface, &instance)
+    grid_port(app, &corsie, "grid close", move |host| {
+        host.grid_bytes_close(vault.as_deref(), &surface, &instance)
+    })
+    .await
 }
 
 // Il disegno sul motore (K5, `docs/reference/drawing-ipc.md`): sei porte
@@ -1089,13 +1429,34 @@ async fn discard_draft(
 /// non la shell perché la regola deve essere una sola: la shell sa *quando*
 /// pubblicare, non *chi* segue cosa. `None` = nessun pannello (all'avvio, o
 /// dopo che l'ultima nota è stata chiusa).
+///
+/// Gira nella corsia del contesto (`domande::CORSIA_CONTESTO`): la shell
+/// pubblica senza aspettare la risposta di prima, e in fila l'ultima
+/// pubblicazione resta l'ultima anche fuori dal thread principale.
 #[tauri::command]
-fn set_active_context(
-    host: State<Host>,
+async fn set_active_context(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     context: Option<ViewContext>,
     vault: Option<String>,
 ) -> Result<Vec<String>, PluginError> {
-    host.set_active_context(vault.as_deref(), context)
+    set_active_context_in_lane(app, &corsie, context, vault).await
+}
+
+async fn set_active_context_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    context: Option<ViewContext>,
+    vault: Option<String>,
+) -> Result<Vec<String>, PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "active context",
+        domande::CORSIA_CONTESTO,
+        move |host| host.set_active_context(vault.as_deref(), context),
+    )
+    .await
 }
 
 /// La shell riporta cosa il **sistema** dice: lingua, fuso, calendario (§12.3).
@@ -1118,9 +1479,10 @@ fn set_system_locale(host: State<Host>, locale: Locale) -> bool {
 /// È la metà "discovery" del protocollo: la shell non cabla gli id — monta
 /// ogni view nel contenitore del suo `placement` e la ridisegna quando arriva
 /// un evento della sua maschera `refresh`. Una view di plugin compare da sola.
+/// Fuori dal thread principale (`host_read`).
 #[tauri::command]
-fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
-    host.views(vault.as_deref())
+async fn list_views(app: AppHandle, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
+    host_read(app, "view list", move |host| host.views(vault.as_deref())).await
 }
 
 /// Rende l'albero `UiNode` di **un'istanza** di view. Il render è una lettura:
@@ -1162,10 +1524,16 @@ async fn render_view(
 /// dei campi di input che la shell ha raccolto. Sono due cose con due
 /// proprietari (§2.7), e il fatto che arrivino come due argomenti distinti è
 /// ciò che impedisce alla shell di riscrivere il primo.
+///
+/// Chiama il provider della view, che può essere un plugin: gira nella corsia
+/// delle viste, con i disegni (`domande::CORSIA_VISTE`). Un disegno chiesto
+/// dopo l'azione la vede, come sul thread principale, e le risposte escono
+/// nell'ordine in cui lo stato del provider è cambiato.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-fn view_action(
-    host: State<Host>,
+async fn view_action(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
@@ -1174,15 +1542,30 @@ fn view_action(
     fields: Option<Vec<FieldValue>>,
     vault: Option<String>,
 ) -> Result<ViewUpdate, PluginError> {
-    host.view_action(
-        vault.as_deref(),
-        &view_instance(view, instance, params),
-        UiAction {
-            action: ActionId(action),
-            payload: payload.unwrap_or(serde_json::Value::Null),
-            fields: fields.unwrap_or_default(),
-        },
+    let instance = view_instance(view, instance, params);
+    let action = UiAction {
+        action: ActionId(action),
+        payload: payload.unwrap_or(serde_json::Value::Null),
+        fields: fields.unwrap_or_default(),
+    };
+    view_action_in_lane(app, &corsie, instance, action, vault).await
+}
+
+async fn view_action_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    instance: ViewInstance,
+    action: UiAction,
+    vault: Option<String>,
+) -> Result<ViewUpdate, PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "view action",
+        domande::CORSIA_VISTE,
+        move |host| host.view_action(vault.as_deref(), &instance, action),
     )
+    .await
 }
 
 /// L'istanza che la shell nomina, con i due default dell'esemplare unico.
@@ -1211,12 +1594,16 @@ fn view_instance(
 /// la spec dichiara e decide se chiedere conferma dal raggio dichiarato. Sono
 /// le stesse informazioni che leggerebbero una CLI (27.1) o un chiamante
 /// programmatico (22.4) — questo comando IPC è solo il primo dei suoi clienti.
+/// Fuori dal thread principale (`host_read`).
 #[tauri::command]
-fn list_commands(
-    host: State<Host>,
+async fn list_commands(
+    app: AppHandle,
     vault: Option<String>,
 ) -> Result<Vec<CommandSpec>, PluginError> {
-    host.commands(vault.as_deref())
+    host_read(app, "command list", move |host| {
+        host.commands(vault.as_deref())
+    })
+    .await
 }
 
 /// Esegue — o simula — un comando.
@@ -1236,20 +1623,46 @@ fn list_commands(
 /// Anche `trash.os` passa da qui: la scelta è esplicita nel comando e
 /// l'esito `effect.custom` distingue cestino OS e fallback interno, senza
 /// introdurre un'altra porta Tauri o un writer della shell.
+///
+/// Un comando può durare secondi (la pagina web da catturare, l'esportazione
+/// di una cartella, un plugin): gira nella corsia dei comandi
+/// (`domande::CORSIA_COMANDI`), e due comandi mandati di fila si applicano in
+/// quell'ordine, come sul thread principale.
 #[tauri::command]
-fn invoke_command(
-    host: State<Host>,
+async fn invoke_command(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     command: String,
     args: Option<serde_json::Value>,
     mode: Option<InvokeMode>,
     vault: Option<String>,
 ) -> Result<CommandOutcome, PluginError> {
-    host.invoke_user_command(
-        vault.as_deref(),
-        &command,
-        args.unwrap_or(serde_json::Value::Null),
-        mode.unwrap_or(InvokeMode::Apply),
+    invoke_command_in_lane(app, &corsie, command, args, mode, vault).await
+}
+
+async fn invoke_command_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    command: String,
+    args: Option<serde_json::Value>,
+    mode: Option<InvokeMode>,
+    vault: Option<String>,
+) -> Result<CommandOutcome, PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "command",
+        domande::CORSIA_COMANDI,
+        move |host| {
+            host.invoke_user_command(
+                vault.as_deref(),
+                &command,
+                args.unwrap_or(serde_json::Value::Null),
+                mode.unwrap_or(InvokeMode::Apply),
+            )
+        },
     )
+    .await
 }
 
 /// Il canale dati, **generico**: il gemello di `render_view`/`view_action`.
@@ -1279,10 +1692,19 @@ async fn query_index(
     query: IndexQuery,
     vault: Option<String>,
 ) -> Result<IndexResult, PluginError> {
+    query_index_in_lane(app, &corsie, query, vault).await
+}
+
+async fn query_index_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    query: IndexQuery,
+    vault: Option<String>,
+) -> Result<IndexResult, PluginError> {
     let corsia = domande::corsia(&query);
     corsie
         .chiedi("index query", corsia, move || {
-            app.state::<Host>().query_index(vault.as_deref(), query)
+            source.with_host(|host| host.query_index(vault.as_deref(), query))
         })
         .await
 }
@@ -1299,12 +1721,19 @@ async fn query_index(
 /// job un istante prima che parta deve valere quanto annullarne uno in volo, e
 /// un pulsante premuto quando il lavoro è appena finito non è un errore da
 /// mostrare — è la cosa più normale che l'utente faccia.
+///
+/// Per la stessa ragione non ha un ordine da tenere, ed esce dal thread
+/// principale senza corsia (`host_read`): trovare la sessione risolve il
+/// percorso del vault, e non deve aspettare dietro un'apertura in corsia.
 #[tauri::command]
-fn cancel_job(host: State<Host>, id: String, vault: Option<String>) -> Result<(), PluginError> {
+async fn cancel_job(app: AppHandle, id: String, vault: Option<String>) -> Result<(), PluginError> {
     let id = id
         .parse::<u64>()
         .map_err(|_| PluginError::BadArgs(format!("invalid job id: `{id}`").into()))?;
-    host.cancel_job(vault.as_deref(), JobId(id))
+    host_read(app, "job cancel", move |host| {
+        host.cancel_job(vault.as_deref(), JobId(id))
+    })
+    .await
 }
 
 // --- versioning ------------------------------------------------------------
@@ -1335,49 +1764,98 @@ fn cancel_job(host: State<Host>, id: String, vault: Option<String>) -> Result<()
 // delle due se ne accorge. Sono comandi IPC e non capacità dell'`HostApi`
 // perché nessun plugin le chiede ancora: una capacità concessa a nessuno è
 // superficie da mantenere e sandboxare per sempre.
+//
+// Le quattro scritture girano nella corsia dell'indice (`data_port`), dove
+// l'organizzazione si legge: due clic di fila sulla puntina lasciano
+// l'ultimo, e la lettura chiesta dopo li vede.
+
+/// Il lavoro di una scrittura dei dati che le domande dell'indice leggono
+/// (impostazioni, organizzazione, vault corrente e conosciuti), fuori dal
+/// thread principale, nella corsia dell'indice (`domande::CORSIA_INDICE`).
+/// Sul thread principale la scrittura finiva prima che la domanda mandata
+/// dopo entrasse in fila, anche se la shell non aspettava la risposta: nella
+/// stessa corsia è ancora così.
+async fn data_port<T, F>(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    cosa: &'static str,
+    work: F,
+) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    host_lane(source, corsie, cosa, domande::CORSIA_INDICE, work).await
+}
 
 /// L'emoji accanto a una nota o a una cartella (`None` la toglie).
 #[tauri::command]
-fn set_icon(
-    host: State<Host>,
+async fn set_icon(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     path: String,
     icon: Option<String>,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.set_icon(vault.as_deref(), &path, icon)
+    data_port(app, &corsie, "organization", move |host| {
+        host.set_icon(vault.as_deref(), &path, icon)
+    })
+    .await
 }
 
 /// Appunta o spunta una nota.
 #[tauri::command]
-fn set_pinned(
-    host: State<Host>,
+async fn set_pinned(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     id: String,
     pinned: bool,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.set_pinned(vault.as_deref(), &id, pinned)
+    set_pinned_in_lane(app, &corsie, id, pinned, vault).await
+}
+
+async fn set_pinned_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    id: String,
+    pinned: bool,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    data_port(source, corsie, "organization", move |host| {
+        host.set_pinned(vault.as_deref(), &id, pinned)
+    })
+    .await
 }
 
 /// Registra o toglie una cartella dagli spazi.
 #[tauri::command]
-fn set_space(
-    host: State<Host>,
+async fn set_space(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     path: String,
     space: bool,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.set_space(vault.as_deref(), &path, space)
+    data_port(app, &corsie, "organization", move |host| {
+        host.set_space(vault.as_deref(), &path, space)
+    })
+    .await
 }
 
 /// L'ordine scelto a mano dei figli di una cartella (vuoto = alfabetico).
 #[tauri::command]
-fn set_order(
-    host: State<Host>,
+async fn set_order(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     folder: String,
     names: Vec<String>,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.set_order(vault.as_deref(), &folder, names)
+    data_port(app, &corsie, "organization", move |host| {
+        host.set_order(vault.as_deref(), &folder, names)
+    })
+    .await
 }
 
 // --- impostazioni, componenti, vault conosciuti (§11.1) --------------------
@@ -1395,53 +1873,74 @@ fn set_order(
 // fossero la stessa strada, o l'utente non potrebbe cambiare le proprie
 // impostazioni di privacy, o un plugin potrebbe.
 
-/// Scrive un'impostazione **per conto dell'utente**.
+/// Scrive un'impostazione **per conto dell'utente**. Nella corsia
+/// dell'indice (`data_port`): un cursore trascinato manda una scrittura a
+/// ogni passo senza aspettare la risposta, e in fila vince l'ultima, sia nel
+/// file sia nello zoom della finestra.
 #[tauri::command]
-fn set_setting(
-    host: State<Host>,
+async fn set_setting(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     key: String,
     value: SettingValue,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    let zoom = (key == fub_host::settings::APPEARANCE_ZOOM)
-        .then(|| value.as_number())
-        .flatten();
-    // Il side effect nativo segue una scrittura riuscita: un valore rifiutato
-    // non deve lasciare la finestra in uno stato che il livello macchina nega.
-    host.set_setting_for_user(vault.as_deref(), &key, value)?;
-    if let Some(scale) = zoom {
-        window.set_zoom(scale).map_err(|and| {
-            PluginError::Internal(format!("native zoom not applied: {and}").into())
-        })?;
-    }
-    if key == fub_host::settings::APPEARANCE_FRAME_RATE {
-        let beyond_60 = frame_rate::beyond_60(&host.machine_settings());
-        frame_rate::apply_all(window.app_handle(), beyond_60);
-    }
-    Ok(())
+    set_setting_in_lane(app, &corsie, window, key, value, vault).await
+}
+
+async fn set_setting_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    native: impl NativeSettings,
+    key: String,
+    value: SettingValue,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    data_port(source, corsie, "setting", move |host| {
+        let zoom = (key == fub_host::settings::APPEARANCE_ZOOM)
+            .then(|| value.as_number())
+            .flatten();
+        // Il side effect nativo segue una scrittura riuscita: un valore
+        // rifiutato non deve lasciare la finestra in uno stato che il livello
+        // macchina nega.
+        host.set_setting_for_user(vault.as_deref(), &key, value)?;
+        if let Some(scale) = zoom {
+            native.set_zoom(scale).map_err(|and| {
+                PluginError::Internal(format!("native zoom not applied: {and}").into())
+            })?;
+        }
+        if key == fub_host::settings::APPEARANCE_FRAME_RATE {
+            native.set_frame_rate(frame_rate::beyond_60(&host.machine_settings()));
+        }
+        Ok(())
+    })
+    .await
 }
 
 /// Dimentica ciò che era stato deciso per una chiave: torna a valere il livello
 /// sotto.
 #[tauri::command]
-fn reset_setting(
-    host: State<Host>,
+async fn reset_setting(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     key: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.reset_setting_for_user(vault.as_deref(), &key)?;
-    if key == fub_host::settings::APPEARANCE_ZOOM {
-        window
-            .set_zoom(fub_host::settings::DEFAULT_ZOOM)
-            .map_err(|and| PluginError::Internal(format!("native zoom not reset: {and}").into()))?;
-    }
-    if key == fub_host::settings::APPEARANCE_FRAME_RATE {
-        let beyond_60 = frame_rate::beyond_60(&host.machine_settings());
-        frame_rate::apply_all(window.app_handle(), beyond_60);
-    }
-    Ok(())
+    data_port(app, &corsie, "setting", move |host| {
+        host.reset_setting_for_user(vault.as_deref(), &key)?;
+        if key == fub_host::settings::APPEARANCE_ZOOM {
+            NativeSettings::set_zoom(&window, fub_host::settings::DEFAULT_ZOOM).map_err(|and| {
+                PluginError::Internal(format!("native zoom not reset: {and}").into())
+            })?;
+        }
+        if key == fub_host::settings::APPEARANCE_FRAME_RATE {
+            window.set_frame_rate(frame_rate::beyond_60(&host.machine_settings()));
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[derive(serde::Serialize)]
@@ -1450,85 +1949,124 @@ struct SettingsProfiles {
     names: Vec<String>,
 }
 
+// I profili delle impostazioni stanno in fila con le scritture delle chiavi
+// (`data_port`): passare a un profilo e scrivere una chiave subito dopo
+// scrive nel profilo nuovo, come sul thread principale.
+
 #[tauri::command]
-fn settings_profiles(
-    host: State<Host>,
+async fn settings_profiles(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     scope: SettingScope,
     vault: Option<String>,
 ) -> Result<SettingsProfiles, PluginError> {
-    let (active, names) = host.settings_profiles(vault.as_deref(), scope)?;
-    Ok(SettingsProfiles { active, names })
+    data_port(app, &corsie, "settings profile", move |host| {
+        let (active, names) = host.settings_profiles(vault.as_deref(), scope)?;
+        Ok(SettingsProfiles { active, names })
+    })
+    .await
 }
 
 #[tauri::command]
-fn export_settings_profile(
-    host: State<Host>,
+async fn export_settings_profile(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     scope: SettingScope,
     name: String,
     vault: Option<String>,
 ) -> Result<String, PluginError> {
-    host.export_settings_profile(vault.as_deref(), scope, &name)
+    data_port(app, &corsie, "settings profile", move |host| {
+        host.export_settings_profile(vault.as_deref(), scope, &name)
+    })
+    .await
 }
 
 #[tauri::command]
-fn import_settings_profile(
-    host: State<Host>,
+async fn import_settings_profile(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     scope: SettingScope,
     json: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.import_settings_profile(vault.as_deref(), scope, &json)?;
-    reapply_native(&host, &window)
+    data_port(app, &corsie, "settings profile", move |host| {
+        host.import_settings_profile(vault.as_deref(), scope, &json)?;
+        reapply_native(host, &window)
+    })
+    .await
 }
 
 #[tauri::command]
-fn duplicate_settings_profile(
-    host: State<Host>,
+async fn duplicate_settings_profile(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     scope: SettingScope,
     source: String,
     name: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.duplicate_settings_profile(vault.as_deref(), scope, &source, &name)
+    data_port(app, &corsie, "settings profile", move |host| {
+        host.duplicate_settings_profile(vault.as_deref(), scope, &source, &name)
+    })
+    .await
 }
 
 #[tauri::command]
-fn switch_settings_profile(
-    host: State<Host>,
+async fn switch_settings_profile(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     scope: SettingScope,
     name: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.switch_settings_profile(vault.as_deref(), scope, &name)?;
-    reapply_native(&host, &window)
+    switch_settings_profile_in_lane(app, &corsie, window, scope, name, vault).await
+}
+
+async fn switch_settings_profile_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    native: impl NativeSettings,
+    scope: SettingScope,
+    name: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    data_port(source, corsie, "settings profile", move |host| {
+        host.switch_settings_profile(vault.as_deref(), scope, &name)?;
+        reapply_native(host, &native)
+    })
+    .await
 }
 
 #[tauri::command]
-fn reset_settings_profile(
-    host: State<Host>,
+async fn reset_settings_profile(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     window: tauri::WebviewWindow,
     scope: SettingScope,
     name: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.reset_settings_profile(vault.as_deref(), scope, &name)?;
-    reapply_native(&host, &window)
+    data_port(app, &corsie, "settings profile", move |host| {
+        host.reset_settings_profile(vault.as_deref(), scope, &name)?;
+        reapply_native(host, &window)
+    })
+    .await
 }
 
 /// Zoom e tetto dei fotogrammi sono side effect nativi: un profilo cambiato,
 /// importato o azzerato cambia il valore di macchina, e le finestre devono
 /// seguirlo subito come dopo `set_setting`, non al prossimo avvio.
-fn reapply_native(host: &Host, window: &tauri::WebviewWindow) -> Result<(), PluginError> {
+fn reapply_native(host: &Host, native: &impl NativeSettings) -> Result<(), PluginError> {
     let machine = host.machine_settings();
-    frame_rate::apply_all(window.app_handle(), frame_rate::beyond_60(&machine));
+    native.set_frame_rate(frame_rate::beyond_60(&machine));
     let zoom = machine
         .iter()
         .find(|entry| entry.spec.key == fub_host::settings::APPEARANCE_ZOOM)
         .and_then(|entry| entry.value.as_number())
         .unwrap_or(fub_host::settings::DEFAULT_ZOOM);
-    window
+    native
         .set_zoom(zoom)
         .map_err(|and| PluginError::Internal(format!("native zoom not applied: {and}").into()))
 }
@@ -1569,47 +2107,100 @@ const SHELL_INSTANCE: &str = "window";
 ///
 /// `None` è il caso normale del primo avvio, non un errore: chi non ha mai
 /// salvato niente disegna il proprio default.
+///
+/// Gira nella corsia dello stato di vista (`domande::CORSIA_STATO`), la stessa
+/// delle scritture: una lettura chiesta dopo una scrittura la vede.
 #[tauri::command]
-fn view_state(
-    host: State<Host>,
+async fn view_state(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     key: String,
     vault: Option<String>,
 ) -> Result<Option<serde_json::Value>, PluginError> {
-    host.view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key)
+    view_state_in_lane(app, &corsie, key, vault).await
+}
+
+async fn view_state_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    key: String,
+    vault: Option<String>,
+) -> Result<Option<serde_json::Value>, PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "view state",
+        domande::CORSIA_STATO,
+        move |host| host.view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key),
+    )
+    .await
 }
 
 /// Salva (`Some`) o dimentica (`None`) lo stato di vista della shell.
+///
+/// Ogni scrittura rilegge e riscrive un file: fuori dal thread principale,
+/// nella corsia dello stato di vista (`domande::CORSIA_STATO`). La shell
+/// scrive anche senza aspettare (la scheda scelta nell'ispettore, a ogni
+/// clic), e in fila la seconda scrittura della stessa chiave non è mai
+/// coperta dalla prima.
 #[tauri::command]
-fn set_view_state(
-    host: State<Host>,
+async fn set_view_state(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     key: String,
     value: Option<serde_json::Value>,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.set_view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key, value)
+    set_view_state_in_lane(app, &corsie, key, value, vault).await
+}
+
+async fn set_view_state_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    key: String,
+    value: Option<serde_json::Value>,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "view state write",
+        domande::CORSIA_STATO,
+        move |host| host.set_view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key, value),
+    )
+    .await
 }
 
 /// Chi questo host sa montare, e chi è acceso in questo vault. Non è
 /// `VaultInfo.plugins`: quello elenca chi è **dichiarato nel kernel**, e un
 /// componente spento non lo è — «spento» e «non c'è» sono due stati diversi.
+/// Fuori dal thread principale (`host_read`): legge il workspace.
 #[tauri::command]
-fn list_bundles(host: State<Host>, vault: Option<String>) -> Result<Vec<BundleInfo>, PluginError> {
-    host.bundles(vault.as_deref())
+async fn list_bundles(
+    app: AppHandle,
+    vault: Option<String>,
+) -> Result<Vec<BundleInfo>, PluginError> {
+    host_read(app, "bundle list", move |host| {
+        host.bundles(vault.as_deref())
+    })
+    .await
 }
-/// Elenca i temi installati che l'host ha verificato caricabili.
+/// Elenca i temi installati che l'host ha verificato caricabili. Fuori dal
+/// thread principale (`host_read`): legge e controlla le cartelle dei temi.
 #[tauri::command]
-fn list_themes(host: State<Host>) -> Result<Vec<ThemeInfo>, PluginError> {
-    host.themes()
+async fn list_themes(app: AppHandle) -> Result<Vec<ThemeInfo>, PluginError> {
+    host_read(app, "theme list", |host| host.themes()).await
 }
 
 /// Legge una sola luce del tema richiesto; il filesystem non attraversa l'IPC.
+/// Fuori dal thread principale (`host_read`): legge un file del tema.
 #[tauri::command]
-fn read_theme(
-    host: State<Host>,
+async fn read_theme(
+    app: AppHandle,
     id: String,
     light: ThemeLight,
 ) -> Result<ThemePayload, PluginError> {
-    host.read_theme(&id, light)
+    host_read(app, "theme read", move |host| host.read_theme(&id, light)).await
 }
 
 /// La scelta di una cartella di tema arriva da qui.
@@ -2303,10 +2894,18 @@ pub fn components_apply_for(
     for_the_shell(host, vault, result)
 }
 
-/// La mappa dei componenti di un vault, con lo stato e i profili (A7).
+/// La mappa dei componenti di un vault, con lo stato e i profili (A7). Fuori
+/// dal thread principale (`host_read`), come `components_apply`: la pagina
+/// rilegge la mappa dopo aver aspettato la scelta.
 #[tauri::command]
-fn components_map(host: State<Host>, vault: Option<String>) -> Result<ComponentsMap, PluginError> {
-    components_map_for(&host, vault.as_deref())
+async fn components_map(
+    app: AppHandle,
+    vault: Option<String>,
+) -> Result<ComponentsMap, PluginError> {
+    host_read(app, "component map", move |host| {
+        components_map_for(host, vault.as_deref())
+    })
+    .await
 }
 
 /// Applica una scelta sui componenti (A7). Senza `apply` è una prova: dice
@@ -2329,15 +2928,30 @@ async fn components_apply(
     .map_err(|error| unfinished("component choice", error))?
 }
 
+// I vault conosciuti e le scorciatoie proposte da un vault stanno nella
+// corsia dell'indice (`data_port`): l'elenco lo aggiorna anche `open_vault`,
+// e le scorciatoie adottate sono impostazioni che le domande leggono.
+
 /// I vault che questa macchina conosce: preferiti, poi recenti.
 #[tauri::command]
-fn known_vaults(host: State<Host>) -> Vec<VaultEntry> {
-    host.known_vaults()
+async fn known_vaults(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+) -> Result<Vec<VaultEntry>, PluginError> {
+    data_port(app, &corsie, "known vaults", |host| Ok(host.known_vaults())).await
 }
 
 #[tauri::command]
-fn set_vault_favorite(host: State<Host>, path: String, favorite: bool) -> Result<(), PluginError> {
-    host.set_vault_favorite(&Utf8PathBuf::from(path), favorite)
+async fn set_vault_favorite(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+    path: String,
+    favorite: bool,
+) -> Result<(), PluginError> {
+    data_port(app, &corsie, "known vaults", move |host| {
+        host.set_vault_favorite(&Utf8PathBuf::from(path), favorite)
+    })
+    .await
 }
 
 /// L'aspetto con cui un vault compare nell'elenco: **tutto quanto**, nelle
@@ -2346,41 +2960,70 @@ fn set_vault_favorite(host: State<Host>, path: String, favorite: bool) -> Result
 /// l'unica lettura possibile della firma, che è ciò che un `null` sul nome non
 /// sarebbe stato.
 #[tauri::command]
-fn set_vault_look(
-    host: State<Host>,
+async fn set_vault_look(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     path: String,
     icon: Option<String>,
     name: String,
 ) -> Result<(), PluginError> {
-    host.set_vault_look(&Utf8PathBuf::from(path), icon, name)
+    data_port(app, &corsie, "known vaults", move |host| {
+        host.set_vault_look(&Utf8PathBuf::from(path), icon, name)
+    })
+    .await
 }
 
 /// Toglie un vault dall'elenco dei conosciuti. **Non lo cancella dal disco.**
 #[tauri::command]
-fn forget_vault(host: State<Host>, path: String) -> Result<(), PluginError> {
-    host.forget_vault(&Utf8PathBuf::from(path))
+async fn forget_vault(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+    path: String,
+) -> Result<(), PluginError> {
+    data_port(app, &corsie, "known vaults", move |host| {
+        host.forget_vault(&Utf8PathBuf::from(path))
+    })
+    .await
 }
 
 /// Le scorciatoie che questo vault propone e che nessuno ha ancora guardato
 /// (§23.13): chiave d'impostazione → accordo.
 #[tauri::command]
-fn pending_keybindings(
-    host: State<Host>,
+async fn pending_keybindings(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     vault: Option<String>,
 ) -> Result<std::collections::BTreeMap<String, String>, PluginError> {
-    host.pending_keybindings(vault.as_deref())
+    data_port(app, &corsie, "keybindings", move |host| {
+        host.pending_keybindings(vault.as_deref())
+    })
+    .await
 }
 
 /// «Usa le sue»: le scorciatoie del vault valgono da adesso.
 #[tauri::command]
-fn adopt_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), PluginError> {
-    host.adopt_keybindings(vault.as_deref())
+async fn adopt_keybindings(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    data_port(app, &corsie, "keybindings", move |host| {
+        host.adopt_keybindings(vault.as_deref())
+    })
+    .await
 }
 
 /// «Tieni le mie»: le scorciatoie del vault escono dal suo file.
 #[tauri::command]
-fn discard_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), PluginError> {
-    host.discard_keybindings(vault.as_deref())
+async fn discard_keybindings(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    data_port(app, &corsie, "keybindings", move |host| {
+        host.discard_keybindings(vault.as_deref())
+    })
+    .await
 }
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -2689,29 +3332,34 @@ fn demo_root() -> Option<String> {
     support::demo_root()
 }
 
+// La demo apre, chiude e azzera un vault: nella corsia dell'indice
+// (`vault_port`), in fila con `open_vault` e `close_vault`.
 #[tauri::command]
-fn open_demo(
-    host: State<Host>,
-    windows: State<document_windows::DocumentWindows>,
+async fn open_demo(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
 ) -> Result<fub_host::support::DemoOpened, PluginError> {
-    support::open_demo(host, windows)
+    vault_port(app, &corsie, "demo open", support::open_demo).await
 }
 
 #[tauri::command]
-fn close_demo(
-    host: State<Host>,
-    windows: State<document_windows::DocumentWindows>,
+async fn close_demo(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     return_to: Option<String>,
 ) -> Result<support::DemoClosed, PluginError> {
-    support::close_demo(host, windows, return_to)
+    vault_port(app, &corsie, "demo close", move |host, windows| {
+        support::close_demo(host, windows, return_to)
+    })
+    .await
 }
 
 #[tauri::command]
-fn reset_demo(
-    host: State<Host>,
-    windows: State<document_windows::DocumentWindows>,
+async fn reset_demo(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
 ) -> Result<String, PluginError> {
-    support::reset_demo(host, windows)
+    vault_port(app, &corsie, "demo reset", support::reset_demo).await
 }
 
 #[tauri::command]
@@ -2722,35 +3370,99 @@ fn startup_diagnostics(
     support::startup_diagnostics(host, vault)
 }
 
+// La schermata di supporto legge e scrive i dati che la corsia dell'indice
+// scrive: l'anteprima conta le impostazioni e i vault conosciuti, l'export
+// rifiuta una destinazione dentro un vault aperto o conosciuto, la salute e
+// il recupero leggono e riscrivono i file di macchina. Girano fuori dal
+// thread principale (l'export scrive un archivio, l'anteprima conta le righe
+// di tutto il log, il recupero copia e riscrive un file) e in fila con le
+// scritture di quei dati: un vault aperto subito prima dell'export è già
+// escluso, e la salute chiesta dopo un'impostazione scritta la vede. Il
+// recupero di `view-state.json` sta nella corsia dello stato di vista, dove
+// quel file si scrive (`support::recover_lane`).
 #[tauri::command]
-fn support_preview(
-    host: State<Host>,
+async fn support_preview(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     vault: Option<String>,
     log_lines: Option<usize>,
 ) -> Result<fub_host::support::SupportPreview, PluginError> {
-    support::support_preview(host, vault, log_lines)
+    support_preview_in_lane(app, &corsie, vault, log_lines).await
+}
+
+async fn support_preview_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    vault: Option<String>,
+    log_lines: Option<usize>,
+) -> Result<fub_host::support::SupportPreview, PluginError> {
+    data_port(source, corsie, "support preview", move |host| {
+        support::support_preview(host, vault.as_deref(), log_lines)
+    })
+    .await
 }
 
 #[tauri::command]
-fn support_export(
-    host: State<Host>,
+async fn support_export(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     preview: fub_host::support::SupportPreview,
     consent: fub_host::support::ExportConsent,
 ) -> Result<String, PluginError> {
-    support::support_export(host, preview, consent)
+    support_export_in_lane(app, &corsie, preview, consent).await
+}
+
+async fn support_export_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    preview: fub_host::support::SupportPreview,
+    consent: fub_host::support::ExportConsent,
+) -> Result<String, PluginError> {
+    data_port(source, corsie, "support export", move |host| {
+        support::support_export(host, &preview, &consent)
+    })
+    .await
 }
 
 #[tauri::command]
-fn config_health() -> Vec<fub_host::support::ConfigReport> {
-    support::config_health()
+async fn config_health(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+) -> Result<Vec<fub_host::support::ConfigReport>, PluginError> {
+    config_health_in_lane(app, &corsie).await
+}
+
+async fn config_health_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+) -> Result<Vec<fub_host::support::ConfigReport>, PluginError> {
+    data_port(source, corsie, "config health", |host| {
+        Ok(support::config_health(host))
+    })
+    .await
 }
 
 #[tauri::command]
-fn recover_config(
+async fn recover_config(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     path: String,
     action: fub_host::support::RecoverAction,
 ) -> Result<fub_host::support::RecoverOutcome, PluginError> {
-    support::recover_config(path, action)
+    recover_config_in_lane(app, &corsie, path, action).await
+}
+
+async fn recover_config_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    path: String,
+    action: fub_host::support::RecoverAction,
+) -> Result<fub_host::support::RecoverOutcome, PluginError> {
+    let corsia = source.with_host(|host| support::recover_lane(host, &path));
+    host_lane(source, corsie, "config recovery", corsia, move |host| {
+        support::recover_config(host, &path, action)
+    })
+    .await
 }
 
 // --- superficie IPC da `document_windows` (finestre documento) ---------------
@@ -3602,6 +4314,7 @@ pub fn run() {
             viewer_open,
             viewer_control,
             viewer_save,
+            map_tile,
             list_grid_surfaces,
             open_grid_bytes,
             grid_bytes_window,
@@ -3826,6 +4539,636 @@ mod drawing_ipc_tests {
                 .is_some_and(|text| !text.is_empty()),
             "{wire}"
         );
+    }
+}
+
+/// Le porte uscite dal thread principale tengono l'ordine che lui dava: le
+/// prove passano per le stesse funzioni dei comandi, con un host vero su un
+/// vault temporaneo.
+#[cfg(test)]
+mod lane_ipc_tests {
+    use super::*;
+    use fub_abi::session::ViewContext;
+
+    struct Banco {
+        host: Arc<Host>,
+        root: Utf8PathBuf,
+        _dirs: (tempfile::TempDir, tempfile::TempDir),
+    }
+
+    fn banco() -> Banco {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
+        std::fs::write(root.join("Uno.md"), "# Uno\n\n[[Due]]\n").unwrap();
+        std::fs::write(root.join("Due.md"), "# Due\n").unwrap();
+        let config = tempfile::tempdir().expect("config");
+        let host = Host::without_watcher()
+            .with_config_dir(&Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap());
+        host.open(&root).expect("il vault si apre");
+        Banco {
+            host: Arc::new(host),
+            root,
+            _dirs: (dir, config),
+        }
+    }
+
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+    }
+
+    fn contesto(doc: &str) -> Option<ViewContext> {
+        Some(ViewContext::new("main").with_doc(Some(doc_id(doc).unwrap())))
+    }
+
+    /// Due pubblicazioni mandate senza aspettare (il cursore, poi il cambio
+    /// di nota) lasciano nel kernel l'ultima: ripubblicarla non cambia niente,
+    /// mentre ripubblicare la prima sì.
+    #[test]
+    fn due_contesti_mandati_di_fila_lasciano_l_ultimo() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            for _ in 0..20 {
+                let (a, b) = tokio::join!(
+                    set_active_context_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        contesto("Uno.md"),
+                        vault.clone()
+                    ),
+                    set_active_context_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        contesto("Due.md"),
+                        vault.clone()
+                    ),
+                );
+                a.unwrap();
+                b.unwrap();
+                let ancora = set_active_context_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    contesto("Due.md"),
+                    vault.clone(),
+                )
+                .await
+                .unwrap();
+                assert!(ancora.is_empty(), "il kernel è rimasto su Uno: {ancora:?}");
+                let indietro = set_active_context_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    contesto("Uno.md"),
+                    vault.clone(),
+                )
+                .await
+                .unwrap();
+                assert!(
+                    !indietro.is_empty(),
+                    "nessuna view segue il documento: la prova non direbbe niente"
+                );
+            }
+        });
+    }
+
+    /// Le scritture della stessa chiave mandate senza aspettare (la scheda
+    /// dell'ispettore, a ogni clic) arrivano in ordine, e la lettura chiesta
+    /// dopo le vede.
+    #[test]
+    fn lo_stato_di_vista_scritto_di_fila_resta_l_ultimo_e_si_rilegge() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            let scrivi = |valore: u32| {
+                set_view_state_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    "inspector.tab".into(),
+                    Some(serde_json::json!(valore)),
+                    vault.clone(),
+                )
+            };
+            let (a, b, c, letto) = tokio::join!(
+                scrivi(1),
+                scrivi(2),
+                scrivi(3),
+                view_state_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    "inspector.tab".into(),
+                    vault.clone()
+                ),
+            );
+            a.unwrap();
+            b.unwrap();
+            c.unwrap();
+            assert_eq!(letto.unwrap(), Some(serde_json::json!(3)));
+        });
+        // E la porta dell'host, fuori dalla corsia, legge lo stesso valore.
+        assert_eq!(
+            banco
+                .host
+                .view_state(
+                    Some(banco.root.as_str()),
+                    SHELL_OWNER,
+                    SHELL_INSTANCE,
+                    "inspector.tab"
+                )
+                .unwrap(),
+            Some(serde_json::json!(3))
+        );
+    }
+
+    /// Gli errori dei comandi e delle azioni restano quelli tipizzati
+    /// dell'host: la corsia non li fa diventare `Internal`.
+    #[test]
+    fn in_corsia_gli_errori_restano_tipizzati() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            let diretto = banco
+                .host
+                .invoke_user_command(
+                    vault.as_deref(),
+                    "fub.nessuno",
+                    serde_json::Value::Null,
+                    InvokeMode::Apply,
+                )
+                .unwrap_err();
+            let in_corsia = invoke_command_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                "fub.nessuno".into(),
+                None,
+                None,
+                vault.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(
+                serde_json::to_value(&in_corsia).unwrap(),
+                serde_json::to_value(&diretto).unwrap()
+            );
+            assert!(
+                !matches!(in_corsia, PluginError::Internal(_)),
+                "{in_corsia:?}"
+            );
+
+            let azione = view_action_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                view_instance("fub.nessuna".into(), None, None),
+                UiAction {
+                    action: ActionId("apri".into()),
+                    payload: serde_json::Value::Null,
+                    fields: Vec::new(),
+                },
+                vault.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert!(!matches!(azione, PluginError::Internal(_)), "{azione:?}");
+
+            let senza_vault = set_active_context_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                contesto("Uno.md"),
+                Some("/non/esiste".into()),
+            )
+            .await
+            .unwrap_err();
+            assert!(
+                !matches!(senza_vault, PluginError::Internal(_)),
+                "{senza_vault:?}"
+            );
+        });
+    }
+
+    /// Gli effetti nativi registrati al posto della finestra.
+    #[derive(Clone, Default)]
+    struct Finestra(Arc<std::sync::Mutex<Vec<String>>>);
+
+    impl NativeSettings for Finestra {
+        fn set_zoom(&self, scale: f64) -> Result<(), String> {
+            self.0.lock().unwrap().push(format!("zoom {scale}"));
+            Ok(())
+        }
+
+        fn set_frame_rate(&self, beyond_60: bool) {
+            self.0
+                .lock()
+                .unwrap()
+                .push(format!("fotogrammi {beyond_60}"));
+        }
+    }
+
+    fn zoom_letto(risposta: IndexResult) -> Option<f64> {
+        match risposta {
+            IndexResult::Settings(voci) => voci
+                .into_iter()
+                .find(|voce| voce.spec.key == fub_host::settings::APPEARANCE_ZOOM)
+                .and_then(|voce| voce.value.as_number()),
+            altro => panic!("non sono impostazioni: {altro:?}"),
+        }
+    }
+
+    /// Un cursore dello zoom trascinato manda le scritture senza aspettare,
+    /// e la shell rilegge le impostazioni subito dopo: come sul thread
+    /// principale la domanda vede l'ultima scrittura, e la finestra resta
+    /// sull'ultimo zoom.
+    #[test]
+    fn le_impostazioni_scritte_di_fila_lasciano_l_ultima_nel_file_e_nella_finestra() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let finestra = Finestra::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            for _ in 0..10 {
+                let scrivi = |valore: f64| {
+                    set_setting_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        finestra.clone(),
+                        fub_host::settings::APPEARANCE_ZOOM.into(),
+                        SettingValue::Number(valore),
+                        vault.clone(),
+                    )
+                };
+                let (a, b, c, letta) = tokio::join!(
+                    scrivi(1.1),
+                    scrivi(1.2),
+                    scrivi(1.3),
+                    query_index_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        IndexQuery::Settings { plugin: None },
+                        vault.clone()
+                    ),
+                );
+                a.unwrap();
+                b.unwrap();
+                c.unwrap();
+                assert_eq!(zoom_letto(letta.unwrap()), Some(1.3));
+            }
+        });
+        let effetti = finestra.0.lock().unwrap();
+        assert_eq!(effetti.len(), 30);
+        for giro in effetti.chunks(3) {
+            assert_eq!(giro, ["zoom 1.1", "zoom 1.2", "zoom 1.3"]);
+        }
+    }
+
+    /// Passare a un profilo riporta lo zoom del profilo nella finestra, in
+    /// fila con le scritture: lo zoom scritto dopo il passaggio resta.
+    #[test]
+    fn uno_zoom_scritto_dopo_il_cambio_di_profilo_resta_nella_finestra() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let finestra = Finestra::default();
+        let vault = Some(banco.root.to_string());
+        let (attivo, _) = banco
+            .host
+            .settings_profiles(vault.as_deref(), SettingScope::Machine)
+            .unwrap();
+        runtime().block_on(async {
+            let (cambio, scritta) = tokio::join!(
+                switch_settings_profile_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    finestra.clone(),
+                    SettingScope::Machine,
+                    attivo.clone(),
+                    vault.clone(),
+                ),
+                set_setting_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    finestra.clone(),
+                    fub_host::settings::APPEARANCE_ZOOM.into(),
+                    SettingValue::Number(1.4),
+                    vault.clone(),
+                ),
+            );
+            cambio.unwrap();
+            scritta.unwrap();
+        });
+        let effetti = finestra.0.lock().unwrap();
+        assert_eq!(
+            effetti.last().map(String::as_str),
+            Some("zoom 1.4"),
+            "{effetti:?}"
+        );
+    }
+
+    /// Tre clic di fila sulla puntina e la sidebar che rilegge subito:
+    /// la lettura vede l'ultimo clic.
+    #[test]
+    fn l_organizzazione_scritta_di_fila_si_rilegge_con_l_ultimo_clic() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            for _ in 0..10 {
+                let appunta = |sì: bool| {
+                    set_pinned_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        "Uno.md".into(),
+                        sì,
+                        vault.clone(),
+                    )
+                };
+                let (a, b, c, letta) = tokio::join!(
+                    appunta(true),
+                    appunta(false),
+                    appunta(true),
+                    query_index_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        IndexQuery::Organization,
+                        vault.clone()
+                    ),
+                );
+                a.unwrap();
+                b.unwrap();
+                c.unwrap();
+                let IndexResult::Organization(organizzazione) = letta.unwrap() else {
+                    panic!("non è l'organizzazione");
+                };
+                assert_eq!(organizzazione.pinned, ["Uno.md"]);
+                appunta(false).await.unwrap();
+            }
+        });
+    }
+
+    /// Il vault corrente scelto due volte di fila resta l'ultimo, e chiudere
+    /// e riaprire lo stesso vault di fila lo lascia aperto.
+    #[test]
+    fn i_vault_cambiati_di_fila_restano_nell_ordine_in_cui_partono() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let altro = tempfile::tempdir().expect("tempdir");
+        let secondo = Utf8PathBuf::from_path_buf(altro.path().canonicalize().unwrap()).unwrap();
+        std::fs::write(secondo.join("Tre.md"), "# Tre\n").unwrap();
+        let finestre = Arc::new(document_windows::DocumentWindows::default());
+        runtime().block_on(async {
+            open_vault_in_lane(Arc::clone(&banco.host), &corsie, secondo.to_string())
+                .await
+                .expect("il secondo vault si apre");
+            for _ in 0..10 {
+                let (a, b) = tokio::join!(
+                    set_current_vault_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        secondo.to_string()
+                    ),
+                    set_current_vault_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        banco.root.to_string()
+                    ),
+                );
+                a.unwrap();
+                b.unwrap();
+                assert_eq!(banco.host.current().as_ref(), Some(&banco.root));
+            }
+            for _ in 0..3 {
+                let (chiuso, aperto) = tokio::join!(
+                    close_vault_in_lane(
+                        (Arc::clone(&banco.host), Arc::clone(&finestre)),
+                        &corsie,
+                        secondo.to_string()
+                    ),
+                    open_vault_in_lane(Arc::clone(&banco.host), &corsie, secondo.to_string()),
+                );
+                assert!(chiuso.unwrap().is_empty());
+                aperto.unwrap();
+                assert!(banco.host.vaults().contains(&secondo));
+            }
+        });
+    }
+
+    fn shell() -> ResourceCaller {
+        ResourceCaller {
+            label: "main".into(),
+            origin: "tauri://localhost/".into(),
+        }
+    }
+
+    /// Un PDF che si chiude mentre l'ultimo pezzo è in volo: il pezzo chiesto
+    /// prima della chiusura si legge, e dopo la chiusura il prestito non c'è
+    /// più.
+    #[test]
+    fn un_pezzo_chiesto_prima_della_chiusura_del_prestito_si_legge() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            for _ in 0..20 {
+                let aperta = resource_open_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    shell(),
+                    "Uno.md".into(),
+                    vault.clone(),
+                )
+                .await
+                .expect("la risorsa si apre");
+                let (letto, chiuso) = tokio::join!(
+                    resource_read_chunk_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        shell(),
+                        aperta.handle,
+                        0,
+                        4
+                    ),
+                    resource_close_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        shell(),
+                        aperta.handle
+                    ),
+                );
+                letto.expect("il pezzo chiesto prima della chiusura si legge");
+                chiuso.unwrap();
+                let dopo = resource_read_chunk_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    shell(),
+                    aperta.handle,
+                    0,
+                    4,
+                )
+                .await;
+                assert!(dopo.is_err(), "il prestito chiuso si legge ancora");
+            }
+        });
+    }
+
+    /// Il recinto delle risorse e gli errori dell'host restano quelli
+    /// tipizzati anche in corsia.
+    #[test]
+    fn in_corsia_le_risorse_e_i_vault_rispondono_con_gli_errori_di_prima() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            let visore = resource_open_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                ResourceCaller {
+                    label: "fub-viewer".into(),
+                    origin: "tauri://localhost/".into(),
+                },
+                "Uno.md".into(),
+                vault.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert!(
+                matches!(visore, PluginError::PermissionDenied(_)),
+                "{visore:?}"
+            );
+
+            let diretto = banco
+                .host
+                .set_current(Utf8Path::new("/non/esiste"))
+                .unwrap_err();
+            let in_corsia =
+                set_current_vault_in_lane(Arc::clone(&banco.host), &corsie, "/non/esiste".into())
+                    .await
+                    .unwrap_err();
+            assert_eq!(
+                serde_json::to_value(&in_corsia).unwrap(),
+                serde_json::to_value(&diretto).unwrap()
+            );
+            assert!(
+                !matches!(in_corsia, PluginError::Internal(_)),
+                "{in_corsia:?}"
+            );
+        });
+    }
+
+    /// Un vault aperto e un export di supporto mandati di fila, con la
+    /// destinazione dentro quel vault: l'export lo vede già aperto e rifiuta,
+    /// e il rapporto non entra nelle note. Fuori fila l'export poteva
+    /// partire prima dell'apertura e scrivere nel vault.
+    #[test]
+    fn l_export_di_supporto_vede_il_vault_aperto_subito_prima() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        runtime().block_on(async {
+            let anteprima = support_preview_in_lane(Arc::clone(&banco.host), &corsie, None, None)
+                .await
+                .expect("l'anteprima si raccoglie");
+            for giro in 0..10 {
+                let altro = tempfile::tempdir().expect("tempdir");
+                let secondo =
+                    Utf8PathBuf::from_path_buf(altro.path().canonicalize().unwrap()).unwrap();
+                let destinazione = secondo.join(format!("supporto-{giro}.json"));
+                let (aperto, esportato) = tokio::join!(
+                    open_vault_in_lane(Arc::clone(&banco.host), &corsie, secondo.to_string()),
+                    support_export_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        anteprima.clone(),
+                        fub_host::support::ExportConsent {
+                            acknowledged_preview: true,
+                            include_log: false,
+                            destination: destinazione.to_string(),
+                        },
+                    ),
+                );
+                aperto.expect("il vault si apre");
+                let rifiuto = esportato.expect_err("dentro un vault aperto non si scrive");
+                assert!(matches!(rifiuto, PluginError::BadArgs(_)), "{rifiuto:?}");
+                assert!(!destinazione.exists(), "il rapporto è entrato nel vault");
+                let chiusi = banco
+                    .host
+                    .close_vault(&secondo)
+                    .expect("il vault si chiude");
+                assert!(chiusi.is_empty(), "{chiusi:?}");
+            }
+        });
+    }
+
+    /// Un recupero e la salute chiesta subito dopo, senza aspettare: la
+    /// salute vede il file già riscritto. Gli errori del recupero restano
+    /// quelli dell'host anche in corsia.
+    #[test]
+    fn la_salute_chiesta_dopo_un_recupero_lo_vede() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let config = banco
+            .host
+            .configuration_root()
+            .expect("il banco ha una cartella di configurazione")
+            .to_owned();
+        let impostazioni = fub_host::config::machine_settings_path(&config);
+        let sana = |rapporti: &[fub_host::support::ConfigReport]| {
+            rapporti
+                .iter()
+                .find(|rapporto| rapporto.path == impostazioni.as_str())
+                .map(|rapporto| matches!(rapporto.status, fub_host::support::ConfigStatus::Healthy))
+                .expect("la salute elenca le impostazioni")
+        };
+        runtime().block_on(async {
+            for _ in 0..10 {
+                std::fs::write(&impostazioni, b"{ non json").unwrap();
+                let prima = config_health_in_lane(Arc::clone(&banco.host), &corsie)
+                    .await
+                    .unwrap();
+                assert!(!sana(&prima), "il file guasto risulta sano");
+                let (recupero, salute) = tokio::join!(
+                    recover_config_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        impostazioni.to_string(),
+                        fub_host::support::RecoverAction::ResetEmpty,
+                    ),
+                    config_health_in_lane(Arc::clone(&banco.host), &corsie),
+                );
+                assert!(recupero.unwrap().backup.is_some());
+                assert!(sana(&salute.unwrap()), "la salute non vede il recupero");
+            }
+            let estraneo = recover_config_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                config.join("altro.json").to_string(),
+                fub_host::support::RecoverAction::ResetEmpty,
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(estraneo, PluginError::BadArgs(_)), "{estraneo:?}");
+        });
+    }
+
+    /// Il recupero di un file va nella corsia dove quel file si scrive: lo
+    /// stato di vista con `set_view_state`, il resto con l'indice.
+    #[test]
+    fn il_recupero_va_nella_corsia_dove_il_file_si_scrive() {
+        let banco = banco();
+        let config = banco.host.configuration_root().unwrap().to_owned();
+        let corsia = |path: Utf8PathBuf| support::recover_lane(&banco.host, path.as_str());
+        assert_eq!(
+            corsia(fub_host::config::view_states_path(&config)),
+            domande::CORSIA_STATO
+        );
+        assert_eq!(
+            corsia(fub_host::config::machine_settings_path(&config)),
+            domande::CORSIA_INDICE
+        );
+        assert_eq!(
+            corsia(fub_host::config::vault_registry_path(&config)),
+            domande::CORSIA_INDICE
+        );
+        assert_eq!(corsia(config.join("altro.json")), domande::CORSIA_INDICE);
     }
 }
 

@@ -3,7 +3,7 @@ import { nearFreeSpot } from "./free-spot";
 import type { SyntaxForm } from "../../host/contract";
 import { errorText } from "../../host/errors";
 import { t, onLanguage, plural, type Key } from "../../i18n/strings";
-import { MENU_RULE, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
+import { MENU_RULE, menuBelow, type SurfaceClipboardOp, type SurfaceMenu, type SurfaceMenuClipboard, type SurfaceMenuEntry, type SurfaceMenuItem } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import { idleSchedule } from "../../ink/dom/idle";
@@ -138,6 +138,7 @@ import { mountInkLayer, type InkGuide, type InkGuideStart, type InkLayer, type I
 import { createCanvasRuler, type CanvasRuler } from "./ink-ruler";
 import { HOLD_MS, shapeKind, StrokeGuide } from "./ink-shapes";
 import { cutInkStroke, fadeInkStroke, fadeInkStrokes, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
+import { inkReflowWidth, syncInkReflow } from "./ink-reflow";
 import { createPenMenu, pickerText as canvasPickerText, type PenMenu } from "./pen-menu";
 // I colori delle schede e dei fili (T47).
 import {
@@ -218,6 +219,7 @@ import {
   type CanvasIntentOp,
   type CanvasSourceEdit,
 } from "./wasm/core";
+import { composingKey } from "../../kit/ime";
 
 export const CANVAS_SNAP = 8;
 /** I bottoni di allineamento e di distribuzione: `align` coi sei lati, `distribute` con i due assi. */
@@ -426,6 +428,12 @@ interface CardEditor {
   readonly born: CanvasStep | null;
   /** La misura a cui la scheda di testo è cresciuta mentre ci si scrive (T44); `null` finché non cresce. */
   grown: { readonly width: number; readonly height: number } | null;
+  /**
+   * Il punto della finestra del doppio clic che ha aperto la scheda di testo:
+   * l'editor delle note ci mette il cursore, come ogni editor di testo
+   * (IMP-3808). `null` senza un punto (Invio, una scheda nuova).
+   */
+  readonly point: { readonly x: number; readonly y: number } | null;
 }
 
 /** L'ultimo incolla scritto: il testo, il punto sulla griglia e quante volte di fila lì. */
@@ -702,6 +710,24 @@ function isInkKey(event: KeyboardEvent): boolean {
 
 /** I comandi della vista che cambiano lo zoom: valgono anche fuori dalla vista (IMP-040). */
 const VIEW_ZOOM_COMMANDS: ReadonlySet<string> = new Set(["canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset", "canvas.fit"]);
+
+/** I comandi della storia: valgono anche col fuoco su un pulsante fuori dalla vista (IMP-6300). */
+const HISTORY_COMMANDS: ReadonlySet<string> = new Set(["canvas.undo", "canvas.redo"]);
+
+/** Il tasto Menu o Maiusc+F10: il menu del tasto destro dalla tastiera (IMP-6301). */
+function isMenuKey(event: KeyboardEvent): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  return (event.key === "ContextMenu" && !event.shiftKey) || (event.key === "F10" && event.shiftKey);
+}
+
+/** I campi senza testo: Ctrl+Z lì non ha niente da annullare, e va alla lavagna. */
+const NO_TEXT_INPUTS: ReadonlySet<string> = new Set(["button", "checkbox", "color", "radio", "range", "reset", "submit"]);
+
+/** Un campo che ha il suo annulla (il testo che si scrive): Ctrl+Z resta a lui. */
+function keepsItsUndo(target: EventTarget | null): boolean {
+  if (target instanceof HTMLInputElement) return !NO_TEXT_INPUTS.has(target.type);
+  return isTextTarget(target);
+}
 
 /** Un campo dove i tasti scrivono. */
 function isTextTarget(target: EventTarget | null): boolean {
@@ -1633,6 +1659,15 @@ export class CanvasEngine {
   #undo: CanvasStep[] = [];
   #redo: CanvasStep[] = [];
   /**
+   * I passi dei gesti d'inchiostro fatti col fuoco dentro una scheda che
+   * scrive (un campo, l'editor di una nota), dall'ultimo tasto premuto: i
+   * tasti sono del campo, ma Ctrl+Z subito dopo un tratto annulla il tratto,
+   * e Ctrl+Maiusc+Z (Ctrl+Y) lo rifà (`#inkUndoKey`). Un altro tasto li
+   * lascia: da lì Ctrl+Z torna al campo.
+   */
+  #inkOverField: CanvasStep[] = [];
+  #inkOverFieldRedo: CanvasStep[] = [];
+  /**
    * La versione del testo di adesso. Un testo nuovo (un gesto, un annulla
    * passato dalle toppe, `setDoc`, una `syncDoc` che cambia il testo) ne
    * prende una mai usata da `#versions`; l'annulla e il ripeti che rimettono
@@ -2427,6 +2462,9 @@ export class CanvasEngine {
     // I tasti dello zoom valgono anche fuori dalla vista (la riga, la colonna, il
     // navigatore), come Ctrl+.: col fuoco su un pulsante dello zoom «+» zooma (IMP-040).
     this.#life.listen(this.#root, "keydown", (event) => this.#zoomKeydown(event));
+    // Ctrl+Z e Ctrl+Y anche dopo un clic su un pulsante della colonna, della riga
+    // o della barra della scelta (IMP-6300); in un campo vero restano del campo.
+    this.#life.listen(this.#root, "keydown", (event) => this.#historyKeydown(event));
     const signal = this.#abort.signal;
     // Le dita giù, prima dello strato della penna (T64): in cattura e prima di
     // lui, che si monta dopo. Un dito che lo strato prende per scrivere non
@@ -2521,6 +2559,9 @@ export class CanvasEngine {
       this.#keydown(event);
       this.#statusSettle();
     }, { signal });
+    // Prima delle schede che scrivono: Ctrl+Z subito dopo un tratto fatto
+    // sopra un campo aperto annulla il tratto, non il testo.
+    this.#viewport.addEventListener("keydown", (event) => this.#inkUndoKey(event), { signal, capture: true });
     // D lasciato ovunque, la finestra che perde il fuoco o si nasconde: il
     // mouse torna a selezionare.
     this.#life.listen(window, "keyup", (event) => {
@@ -2590,6 +2631,14 @@ export class CanvasEngine {
     }, { signal, capture: true });
     this.#viewport.addEventListener("pointerleave", (event) => {
       if (event.pointerType === "pen") this.#setVeilPointer(false);
+    }, { signal });
+    // «Torna a N px» dell'avviso dei tratti sul testo (`ink-reflow.ts`).
+    this.#viewport.addEventListener("click", (event) => {
+      const back = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-ink-reflow]") : null;
+      const id = back?.closest<HTMLElement>(".canvas-node")?.dataset.node;
+      if (!back || id === undefined) return;
+      event.stopPropagation();
+      this.#restoreInkWidth(id, Number(back.dataset.inkReflow));
     }, { signal });
     // «×N» illumina le gemelle al passaggio e col fuoco (C14, T22); si
     // spengono quando li perde tutti e due.
@@ -2723,6 +2772,8 @@ export class CanvasEngine {
     this.#edgeSelection = [];
     this.#undo = [];
     this.#redo = [];
+    this.#inkOverField = [];
+    this.#inkOverFieldRedo = [];
     this.#statusSettle();
     this.#syncEmpty();
     if (!document) {
@@ -4009,7 +4060,82 @@ export class CanvasEngine {
     this.#inkChain = null;
     this.#paintInk();
     if (this.#intakeError) this.#showNotice("");
+    this.#inkGestureDone();
     return true;
+  }
+
+  /**
+   * Un gesto d'inchiostro è appena diventato l'ultimo passo d'annulla. La
+   * penna non prende il fuoco (un tratto non chiude il campo che si scrive):
+   * perché Ctrl+Z, subito dopo, tolga il tratto, il fuoco dentro una scheda
+   * che scrive ricorda il passo (`#inkUndoKey`); ogni altro fuoco (un
+   * pulsante della colonna o della riga, un'altra parte della finestra,
+   * nessuno) passa alla vista, come dopo un clic sulla lavagna.
+   */
+  #inkGestureDone(): void {
+    const step = this.#undo[this.#undo.length - 1];
+    if (!step || this.#destroyed) return;
+    const active = document.activeElement;
+    const inCard = active instanceof Element && active !== this.#viewport && this.#viewport.contains(active)
+      ? active.closest(".canvas-node") : null;
+    if (inCard && inCard !== active) {
+      this.#inkOverField.push(step);
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    this.#inkOverField = [];
+    this.#inkOverFieldRedo = [];
+    // Una scheda o la vista col fuoco: i tasti arrivano già alla tela.
+    if (active instanceof Element && this.#viewport.contains(active)) return;
+    this.#viewport.focus({ preventScroll: true });
+  }
+
+  /**
+   * Ctrl+Z (Ctrl+Maiusc+Z, Ctrl+Y) col fuoco in una scheda che scrive,
+   * subito dopo uno o più gesti d'inchiostro (`#inkOverField`): annulla (o
+   * rifà) il gesto, e il campo resta aperto col suo testo. Ogni altro tasto
+   * li lascia, e da lì i tasti sono del campo.
+   */
+  #inkUndoKey(event: KeyboardEvent): void {
+    if (event.key === "Control" || event.key === "Meta" || event.key === "Shift" || event.key === "Alt") return;
+    const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
+    const letter = event.key.toLowerCase();
+    const chord = mod && letter === "z" ? (event.shiftKey ? "redo" : "undo") : mod && letter === "y" && !event.shiftKey ? "redo" : null;
+    if (chord === null || composingKey(event)) {
+      this.#inkOverField = [];
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    if (event.defaultPrevented || this.#penDown || this.#pending !== null || this.#readOnly) return;
+    const from = chord === "undo" ? this.#inkOverField : this.#inkOverFieldRedo;
+    const history = chord === "undo" ? this.#undo : this.#redo;
+    const step = from[from.length - 1];
+    if (!step) return;
+    if (history[history.length - 1] !== step) {
+      // La storia è cambiata sotto (un annulla dal menu, una modifica): i
+      // passi ricordati non sono più gli ultimi.
+      this.#inkOverField = [];
+      this.#inkOverFieldRedo = [];
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    from.pop();
+    history.pop();
+    const done = chord === "undo"
+      ? this.#replay(step, "undo", (again) => {
+        this.#redo.push(again);
+        this.#inkOverFieldRedo.push(again);
+      })
+      : this.#replay(step, "redo", (again) => {
+        this.#pushUndo(again, false);
+        this.#inkOverField.push(again);
+      });
+    if (done !== true) {
+      history.push(step);
+      from.push(step);
+    }
+    this.#statusSettle();
   }
 
   /**
@@ -4311,7 +4437,10 @@ export class CanvasEngine {
     if (dry) this.#paintStroke(holder, dry);
     if (this.#intakeError) this.#showNotice("");
     // Il pezzo di un tratto spezzato non si annuncia: lo dice l'ultimo.
-    if (!stroke.split) this.#sayInkHolder(holder);
+    if (!stroke.split) {
+      this.#sayInkHolder(holder);
+      this.#inkGestureDone();
+    }
     if (shape !== null) this.#writeShape(stroke, shape, record, ref, holder, page ?? cell);
   }
 
@@ -4502,6 +4631,20 @@ export class CanvasEngine {
       ? (sheet: string, cell: string) => this.#cellRectOf(node.id, sheet, cell)
       : null;
     paintCard(element, drys, mode, drys.length > 0 ? this.#pageBoxOf(node.id) : null, aspect, cells);
+    syncInkReflow(element, inkReflowWidth(node, drys), !this.#readOnly);
+  }
+
+  /**
+   * «Torna a N px» dell'avviso dei tratti sul testo (`ink-reflow.ts`): la
+   * scheda `id` riprende la larghezza `width` in cui i tratti sono stati
+   * scritti, col lato sinistro fermo e la sua altezza, in un passo d'annulla.
+   */
+  #restoreInkWidth(id: string, width: number): void {
+    const node = this.#doc?.nodes.find((entry) => entry.id === id);
+    if (!node || this.#readOnly || this.#isSceneOversized() || !(width > 0) || node.width === width) return;
+    // La misura l'ha scelta chi usa: scrivendo la scheda non si allarga più (T44).
+    this.#sizedByHand.add(id);
+    this.#writeOps([{ op: "resize", id, width, height: node.height }]);
   }
 
   /**
@@ -9468,7 +9611,7 @@ export class CanvasEngine {
       const nodes = this.#selectedNodes();
       const one = nodes.length === 1 ? nodes[0]! : null;
       const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
-      const at = box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined;
+      const at = box ? menuBelow(box) : undefined;
       // Copia, Taglia e Incolla portano le schede, i fili fra loro e l'inchiostro (T68).
       const clipboard: SurfaceMenuClipboard = {
         offers: { cut: writable, copy: true, paste: writable },
@@ -9708,6 +9851,8 @@ export class CanvasEngine {
     if (event.button === 0 && modifier && this.#cardLinkAt(target) !== null) return;
     // ↗ di un estratto (T75) prende il suo clic, anche con Ctrl (Cmd).
     if (event.button === 0 && target instanceof Element && target.closest("[data-excerpt-open]")) return;
+    // Anche «Torna a N px» dell'avviso dei tratti sul testo.
+    if (event.button === 0 && target instanceof Element && target.closest("[data-ink-reflow]")) return;
     // Spazio tenuto: il tasto principale sposta la vista, con qualsiasi
     // strumento e sopra ogni cosa (T53).
     if (event.button === 0 && this.#spaceHeld) {
@@ -10033,7 +10178,9 @@ export class CanvasEngine {
    * alla Selezione, salvo con `keepTool` (il doppio tocco, T63).
    */
   #placeText(clientX?: number, clientY?: number, link?: CardLink, keepTool = false): void {
-    const at = clientX === undefined || clientY === undefined ? this.#freeTextSpot() : this.#screenToWorld(clientX, clientY);
+    const at = clientX === undefined || clientY === undefined
+      ? this.#freeTextSpot()
+      : link ? this.#screenToWorld(clientX, clientY) : this.#freeTextSpotAt(this.#screenToWorld(clientX, clientY));
     const placed = this.#addNode("text", undefined, at, link);
     if (!placed) return;
     // Il passo che l'ha messa: lasciata vuota, se ne va con lui (T44).
@@ -10055,6 +10202,21 @@ export class CanvasEngine {
     const rect = this.#viewport.getBoundingClientRect();
     const center = this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
     const spot = nearFreeSpot(doc.nodes, { x: snap(center.x - 160), y: snap(center.y - 80), width: 320, height: TEXT_CARD_HEIGHT });
+    return { x: spot.x, y: spot.y };
+  }
+
+  /**
+   * L'angolo in alto a sinistra di una scheda di testo nuova nel punto `at`
+   * (del mondo) scelto da chi usa (il doppio clic, il doppio tocco, il menu):
+   * lì, se la scheda ci sta senza coprirne un'altra; se no al posto libero più
+   * vicino, con la regola di «Aggiungi testo» (IMP-042). Una scheda che nasce
+   * sopra quelle accanto le nasconde, e il clic dopo cade su di loro
+   * (IMP-3808).
+   */
+  #freeTextSpotAt(at: { x: number; y: number }): { x: number; y: number } {
+    const doc = this.#doc;
+    if (!doc) return at;
+    const spot = nearFreeSpot(doc.nodes, { x: snap(at.x), y: snap(at.y), width: 320, height: TEXT_CARD_HEIGHT });
     return { x: spot.x, y: spot.y };
   }
 
@@ -11652,7 +11814,7 @@ export class CanvasEngine {
   }
 
   #keydown(event: KeyboardEvent): void {
-    if (!this.#doc || event.defaultPrevented || this.#shellKeys.has(event)) return;
+    if (!this.#doc || event.defaultPrevented || composingKey(event) || this.#shellKeys.has(event)) return;
     // Col ritaglio aperto Invio lo scrive ed Esc lo chiude, da ogni punto della lavagna (T78).
     if (this.#crop?.editor?.key(event)) {
       event.preventDefault();
@@ -11703,6 +11865,14 @@ export class CanvasEngine {
         event.preventDefault();
         this.#openCommandSearch();
       }
+      return;
+    }
+    // Il tasto Menu o Maiusc+F10 su una scheda o sulla lavagna: il menu del
+    // tasto destro, sulla scelta e accanto a lei (IMP-6301). In un campo resta
+    // quello del campo.
+    if (isMenuKey(event) && !isTextTarget(event.target)) {
+      event.preventDefault();
+      this.#keyboardMenu(event.target);
       return;
     }
     this.#recordPending();
@@ -11764,6 +11934,39 @@ export class CanvasEngine {
   }
 
   /**
+   * Annulla e Ripeti fuori dalla vista (la colonna, la riga delle opzioni, la
+   * barra della scelta, il navigatore), come i tasti dello zoom (IMP-6300). Un
+   * campo che scrive tiene il suo Ctrl+Z; dentro la vista lo prende `#keydown`.
+   */
+  #historyKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented || composingKey(event) || !this.#doc || this.#isSceneOversized()) return;
+    if (event.target instanceof Node && this.#viewport.contains(event.target)) return;
+    if (keepsItsUndo(event.target)) return;
+    const history = this.commands().filter((command) => HISTORY_COMMANDS.has(command.id));
+    const command = commandForKey(history, event, { writing: false, onBoard: false });
+    if (command) this.#runKey(event, command);
+  }
+
+  /**
+   * Il menu del tasto destro aperto dalla tastiera (IMP-6301): lo stesso
+   * `contextmenu` che il riquadro apre col tasto destro, ma senza un punto
+   * (`clientX`/`clientY` a zero, nessun tasto del mouse), così il menu va sulla
+   * scelta e si apre accanto a lei. Un `contextmenu` che il sistema mandasse
+   * subito dopo per lo stesso tasto non ne apre un secondo.
+   */
+  #keyboardMenu(target: EventTarget | null): void {
+    const from = target instanceof Element && this.#viewport.contains(target) ? target : this.#viewport;
+    const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, composed: true, button: 0 });
+    this.#ownMenu = menu;
+    try {
+      from.dispatchEvent(menu);
+    } finally {
+      this.#ownMenu = null;
+    }
+    this.#menuEchoUntil = performance.now() + MENU_ECHO_MS;
+  }
+
+  /**
    * Un tasto col fuoco sulla colonna: gli strumenti e la ricerca dei comandi
    * valgono anche qui; frecce, Invio e Spazio restano della colonna (il kit).
    */
@@ -11807,6 +12010,8 @@ export class CanvasEngine {
         el.style.width = `${node.width}px`;
         el.style.height = `${this.#shownHeight(node)}px`;
         markHandles(el, node, this.#camera.zoom);
+        // L'avviso dei tratti sul testo si vede già mentre si tira il bordo.
+        syncInkReflow(el, inkReflowWidth(node, this.#inkCards.get(id) ?? []), !this.#readOnly);
       }
     }
     this.#drawEdges();
@@ -12753,7 +12958,7 @@ export class CanvasEngine {
       // Una scheda di file prende il gesto anche senza vista, se manca o non si mostra (T93).
       const takesGesture = entry.node.type === "file" || (kind !== null && DOUBLE_CLICK_ENTERS.has(kind));
       if (takesGesture) this.#enterOrEdit(entry.node, from);
-      else this.#beginCardEdit(entry.node);
+      else this.#beginCardEdit(entry.node, null, { x: e.clientX, y: e.clientY });
     });
     return entry;
   }
@@ -13221,7 +13426,7 @@ export class CanvasEngine {
    * messa per scriverci (lo strumento Testo, Ctrl+Invio): lasciata vuota, se
    * ne va con lui (T44).
    */
-  #beginCardEdit(target: CanvasNode, born: CanvasStep | null = null): void {
+  #beginCardEdit(target: CanvasNode, born: CanvasStep | null = null, point: { x: number; y: number } | null = null): void {
     if (this.#readOnly || !this.#doc) return;
     const node = this.#doc.nodes.find((candidate) => candidate.id === target.id);
     if (!node) return;
@@ -13247,7 +13452,7 @@ export class CanvasEngine {
     const lifetime = new AbortController();
     const editor: CardEditor = {
       id: node.id, field, input, place: input, live: null, article, lifetime, composing: false, recordOnInput: false,
-      born, grown: null,
+      born, grown: null, point,
     };
     this.#editor = editor;
     // Mentre si scrive nella scheda la barra della selezione non c'è (T51).
@@ -13269,7 +13474,7 @@ export class CanvasEngine {
       if (passesToShell(event)) this.#shellKeys.add(event);
       else event.stopPropagation();
       editor.recordOnInput = false;
-      if (event.isComposing || editor.composing) return;
+      if (composingKey(event) || editor.composing) return;
       if (isCommandSearchKey(event)) {
         // Ctrl+/ si apre anche mentre si scrive; Esc torna nel campo.
         event.preventDefault();
@@ -13509,9 +13714,11 @@ export class CanvasEngine {
       if (!(event instanceof KeyboardEvent)) return;
       editor.recordOnInput = false;
       escapeForEditor = false;
-      if (event.isComposing || editor.composing) return;
+      if (composingKey(event) || editor.composing) return;
       if (event.key === "Escape") {
-        escapeForEditor = host.querySelector('[role="listbox"]') !== null;
+        // Il menu «/» galleggia fuori dalla scheda: lo dice l'editor stesso
+        // (`aria-haspopup`), finché è aperto.
+        escapeForEditor = host.querySelector('[role="listbox"], [aria-haspopup="listbox"]') !== null;
       } else if (isCommandSearchKey(event)) {
         event.preventDefault();
         event.stopPropagation();
@@ -13532,7 +13739,7 @@ export class CanvasEngine {
       // e la tela lo lascia passare.
       if (event instanceof KeyboardEvent && passesToShell(event)) this.#shellKeys.add(event);
       else event.stopPropagation();
-      if (!(event instanceof KeyboardEvent) || event.isComposing || editor.composing) return;
+      if (!(event instanceof KeyboardEvent) || composingKey(event) || editor.composing) return;
       if (event.key === "Escape" && !escapeForEditor) {
         event.preventDefault();
         this.#leaveField(true, true);
@@ -13557,7 +13764,10 @@ export class CanvasEngine {
     }, { signal });
     input.remove();
     host.hidden = false;
-    if (focused) live.focus(caret);
+    // Il cursore dove era il doppio clic, se nel campo non si è ancora scritto
+    // niente; se no (o fuori dal testo) dov'era nel campo (IMP-3808).
+    const untouched = input.value === (node.text ?? "");
+    if (focused && !(untouched && editor.point && live.focusAtPoint?.(editor.point))) live.focus(caret);
   }
 }
 
@@ -13655,7 +13865,7 @@ const FIELD_CHORDS: ReadonlySet<string> = new Set(["a", "c", "v", "x", "y", "z"]
  * annulla, ripeti). Ctrl+W chiude la linguetta anche mentre si scrive.
  */
 function passesToShell(event: KeyboardEvent): boolean {
-  if (!(event.ctrlKey || event.metaKey) || event.defaultPrevented || event.isComposing) return false;
+  if (!(event.ctrlKey || event.metaKey) || event.defaultPrevented || composingKey(event)) return false;
   if (event.key === "Enter" || event.key === "Escape") return false;
   return !FIELD_CHORDS.has(event.key.toLowerCase());
 }

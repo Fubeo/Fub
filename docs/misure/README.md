@@ -35,6 +35,7 @@ resta **non provato**.
 | 2026-11-17 | Debian 13, niri su Wayland, schermo a 180 Hz, RTX 4070 | WebKitGTK 2.54 | [Il tetto dei 60 Hz su NVIDIA](2026-11-17-linux-webkitgtk-tetto-60hz.md) |
 | 2026-11-17 | Debian 13, niri su Wayland, schermo a 180 Hz, RTX 4070 | WebKitGTK 2.54 | [Il vblank emulato su NVIDIA](2026-11-17-linux-vblank-emulato.md) |
 | 2026-11-19 | Debian 13, niri su Wayland, schermo a 180 Hz, RTX 4070 | WebKitGTK 2.54.0 e 2.54.3 (Flatpak) | [Il ritmo dello schermo su NVIDIA](2026-11-19-linux-ritmo-schermo.md) |
+| 2026-11-20 | Debian 13, niri su Wayland, schermo a 180 Hz, RTX 4070 | WebKitGTK 2.54.0 | [La doppia attesa di EGL su NVIDIA](2026-11-20-linux-egl-doppia-attesa.md) |
 | 2026-11-17 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI: il tasto di S1 e la lavagna piccola](2026-11-17-banco-webview-s1-l1-runner.md) |
 
 ## I motori
@@ -147,3 +148,12 @@ comune: versioni, librerie doppie e che cosa manca per allinearle.
 | Data | Motore | Pagina |
 |---|---|---|
 | 2026-11-02 | VectorCraft `cfb30d81` | [Le versioni in comune](disegno-versioni-2026-11.md) |
+
+## L'apertura del vault
+
+Quanto costa riaprire un vault già aperto, diviso per fasi, e quanto si
+risparmierebbe se i documenti non toccati non si rileggessero (issue #521).
+
+| Data | Vault | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-20 | 5000 e 30000 note, generati | Intel Core i5-13600KF, build di rilascio | [La riapertura tiepida che non scatta](2026-11-20-riapertura-tiepida.md) |

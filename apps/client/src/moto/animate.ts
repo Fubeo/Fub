@@ -19,7 +19,7 @@ import type { Lifetime, Teardown } from "../ui/lifetime";
 import { motionDriver, type DriverRun } from "./driver";
 import { curveOf } from "./easing";
 import { motionLevel, type MotionLevel } from "./level";
-import { DURATION, SAMPLE_MS, sampleSpring, springFor, type Spring, type SpringName } from "./spring";
+import { DURATION, SAMPLE_MS, samplePeriodMs, sampleSpring, springFor, type Spring, type SpringName } from "./spring";
 import { frameListeners } from "./ticker";
 
 /// Una posa rispetto al riposo: px, gradi, fattori di scala. Ciò che manca
@@ -97,13 +97,20 @@ const STILL: readonly number[] = [0, 0, 0, 0, 0, 0];
 /// Sotto queste differenze un canale è fermo: px, px, scala, scala, gradi,
 /// opacità.
 const PRECISION: readonly number[] = [0.05, 0.05, 0.0005, 0.0005, 0.02, 0.002];
+/// Quanto la retta fra due fotogrammi chiave può scostarsi da un campione che
+/// salta (px, px, scala, scala, gradi, opacità): mezzo pixel, contro i 4 px
+/// di una corsa di 300 px della molla Scatto campionata a 60 Hz. Vale solo
+/// sopra i 60 Hz, dove i campioni sono più fitti dei fotogrammi chiave che
+/// servono.
+const SLACK: readonly number[] = [0.5, 0.5, 0.002, 0.002, 0.2, 0.008];
 
 interface Run {
   readonly el: Element;
   /// Lo pseudo-elemento che si muove; vuoto per l'elemento stesso.
   readonly pseudo: string;
-  /// Una tabella di campioni per canale in corsa, a `SAMPLE_MS` l'uno.
+  /// Una tabella di campioni per canale in corsa, a `period` ms l'uno.
   tracks: (number[] | null)[];
+  period: number;
   delay: number;
   handle: DriverRun | null;
   alive: boolean;
@@ -114,6 +121,8 @@ interface Run {
 
 interface Plan {
   tracks: (number[] | null)[];
+  /// Il periodo dei campioni (ms): quello dello schermo, per tutti i canali.
+  period: number;
   frames: number;
   duration: number;
   easing: string;
@@ -152,13 +161,13 @@ function poseOf(vector: readonly number[]): Pose {
 }
 
 /// Valore e pendenza (al millisecondo) di una tabella a `time` ms dall'avvio.
-function sampleAt(track: readonly number[], time: number): [number, number] {
+function sampleAt(track: readonly number[], period: number, time: number): [number, number] {
   const last = track.length - 1;
-  const position = Math.max(0, time / SAMPLE_MS);
+  const position = Math.max(0, time / period);
   if (position >= last) return [track[last], 0];
   const index = Math.floor(position);
   const slope = track[index + 1] - track[index];
-  return [track[index] + slope * (position - index), slope / SAMPLE_MS];
+  return [track[index] + slope * (position - index), slope / period];
 }
 
 const round = (value: number, steps: number): number => Math.round(value * steps) / steps;
@@ -182,6 +191,42 @@ function keyframe(tracks: readonly (number[] | null)[], index: number): Keyframe
   if (parts.length > 0) frame.transform = parts.join(" ");
   if (tracks[OPACITY]) frame.opacity = round(Math.min(1, Math.max(0, at(OPACITY))), 1000);
   return frame;
+}
+
+/// I campioni che diventano fotogrammi chiave, sui primi `frames`. A 60 Hz
+/// tutti, come sempre. Più fitti, il browser pagava ogni fotogramma chiave al
+/// primo fotogramma (in Chromium circa 110 µs per 24 e 320 µs per 70 a ogni
+/// `animate`): si tiene un campione solo dove la retta fra i due tenuti
+/// attorno se ne scosterebbe oltre `SLACK`: la curva resta quella dei
+/// campioni fitti, e le molle di serie non hanno più fotogrammi chiave che a
+/// 60 Hz, perché la coda e le parti dritte ne vogliono pochi.
+function keyIndices(tracks: readonly (number[] | null)[], frames: number, period: number): number[] {
+  const all = Array.from({ length: frames }, (_, index) => index);
+  if (period >= SAMPLE_MS - 1e-9 || frames <= 2) return all;
+  const value = (track: readonly number[], index: number): number => track[Math.min(index, track.length - 1)];
+  // Ogni campione fra `from` e `to` sta entro `SLACK` dalla retta che li unisce?
+  const straight = (from: number, to: number): boolean => {
+    for (let channel = 0; channel < tracks.length; channel++) {
+      const track = tracks[channel];
+      if (!track) continue;
+      const start = value(track, from);
+      const step = (value(track, to) - start) / (to - from);
+      for (let index = from + 1; index < to; index++) {
+        if (Math.abs(value(track, index) - (start + step * (index - from))) > SLACK[channel]) return false;
+      }
+    }
+    return true;
+  };
+  const kept = [0];
+  let anchor = 0;
+  for (let index = 2; index < frames; index++) {
+    if (!straight(anchor, index)) {
+      anchor = index - 1;
+      kept.push(anchor);
+    }
+  }
+  kept.push(frames - 1);
+  return kept;
 }
 
 /// Una presenza: una corsa che fa apparire o sparire, perché una delle due
@@ -212,23 +257,28 @@ function plot(
   let sample: (start: number, target: number, channel: number) => number[];
   let easing = "linear";
   let frames = 0;
+  const period = samplePeriodMs();
   if (timed) {
     const curve = curveOf(spec.easing);
-    const count = Math.ceil(duration / SAMPLE_MS) + 1;
+    const count = Math.ceil(duration / period) + 1;
     easing = curve.css;
     sample = (start, target) =>
       Array.from({ length: count }, (_, index) => {
-        return start + (target - start) * curve.at(Math.min(1, (index * SAMPLE_MS) / duration));
+        return start + (target - start) * curve.at(Math.min(1, (index * period) / duration));
       });
   } else {
     const spring = springFor(spec.spring ?? "soft", level === "calm", presence);
     sample = (start, target, channel) =>
-      sampleSpring(spring, {
-        from: start,
-        to: target,
-        velocity: speed[channel],
-        precision: PRECISION[channel],
-      }).values;
+      sampleSpring(
+        spring,
+        {
+          from: start,
+          to: target,
+          velocity: speed[channel],
+          precision: PRECISION[channel],
+        },
+        period,
+      ).values;
   }
 
   const tracks = from.map((start, channel) => {
@@ -243,8 +293,9 @@ function plot(
   if (frames === 0) return null;
   return {
     tracks,
+    period,
     frames,
-    duration: timed ? duration : (frames - 1) * SAMPLE_MS,
+    duration: timed ? duration : (frames - 1) * period,
     easing,
     sampled: !timed,
   };
@@ -308,7 +359,7 @@ export function liveState(el: Element, pseudo = ""): MotionState | null {
   const state: MotionState = { pose: {}, velocity: {} };
   run.tracks.forEach((track, channel) => {
     if (!track) return;
-    const [value, slope] = sampleAt(track, time);
+    const [value, slope] = sampleAt(track, run.period, time);
     state.pose[KEYS[channel]] = value;
     state.velocity[KEYS[channel]] = slope;
   });
@@ -356,6 +407,7 @@ export function launch(el: Element, spec: MotionSpec, extras: LaunchExtras = {})
     el,
     pseudo,
     tracks: [],
+    period: samplePeriodMs(),
     delay: 0,
     handle: null,
     alive: true,
@@ -404,18 +456,25 @@ export function launch(el: Element, spec: MotionSpec, extras: LaunchExtras = {})
   let { frames, duration } = plan;
   if (delay + duration > limit) {
     // Troncata: i campioni restano quelli, la corsa finisce prima.
-    frames = Math.floor((limit - delay) / SAMPLE_MS) + 1;
-    duration = plan.sampled ? (frames - 1) * SAMPLE_MS : limit - delay;
+    frames = Math.floor((limit - delay) / plan.period) + 1;
+    duration = plan.sampled ? (frames - 1) * plan.period : limit - delay;
   }
   if (!(duration > 0)) {
     end(run);
     return motion;
   }
-  const keyframes = plan.sampled
-    ? Array.from({ length: frames }, (_, index) => keyframe(plan.tracks, index))
-    : [keyframe(plan.tracks, 0), keyframe(plan.tracks, Infinity)];
+  let keyframes: Keyframe[];
+  if (!plan.sampled) keyframes = [keyframe(plan.tracks, 0), keyframe(plan.tracks, Infinity)];
+  else {
+    const kept = keyIndices(plan.tracks, frames, plan.period);
+    keyframes =
+      kept.length === frames
+        ? kept.map((index) => keyframe(plan.tracks, index))
+        : kept.map((index) => ({ ...keyframe(plan.tracks, index), offset: index / (frames - 1) }));
+  }
 
   run.tracks = plan.tracks;
+  run.period = plan.period;
   run.delay = delay;
   hold(run);
   if (spec.lifetime) run.release = adopt(spec.lifetime, run);

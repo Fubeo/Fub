@@ -54,11 +54,56 @@ pub(super) fn fold_op(
                 replicas: vec![op.replica_id.clone()],
             });
         }
+        // A rename the state already covers is a no-op, as for a write or a
+        // delete: on both ends there is the rename itself or a version that
+        // saw it (a late delivery, or a retransmission after the dedup set
+        // forgot the op). Covered on one end only, applying it would bury a
+        // newer write or overwrite one; dropping it would lose the other
+        // end: it is held, nothing changes.
+        let covered = |version: &VersionVector| {
+            matches!(
+                vv_compare(&op.vv, version),
+                VvOrder::Dominated | VvOrder::Equal
+            )
+        };
+        let to_covered =
+            latest_any(state, to).is_some_and(|latest| covered(&parse_vv_text(&latest.vv_text)));
+        let from_covered = latest_any(state, from)
+            .is_some_and(|latest| covered(&parse_vv_text(&latest.vv_text)))
+            || state
+                .tombstones
+                .get(from)
+                .is_some_and(|tomb| covered(&tomb.vv));
+        match (from_covered, to_covered) {
+            (true, true) => return FoldOutcome::Applied(None),
+            (false, false) => {}
+            _ => {
+                return FoldOutcome::Held(ConflictInfo {
+                    doc_id: if to_covered { from.clone() } else { to.clone() },
+                    reason:
+                        "stale rename overtaken on one end: preserve both versions before retry"
+                            .to_string(),
+                    replicas: vec![op.replica_id.clone()],
+                })
+            }
+        }
         if let Some(tomb) = state.tombstones.get(from) {
             if !can_resurrect(tomb, &op.vv) {
                 return FoldOutcome::Held(ConflictInfo {
                     doc_id: from.clone(),
                     reason: "rename buried under tombstone".to_string(),
+                    replicas: vec![op.replica_id.clone(), tomb.replica_id.clone()],
+                });
+            }
+        }
+        // A deleted destination comes back only from a rename that saw its
+        // deletion, as for a write; one that did not is held, not stacked on
+        // the tombstone.
+        if let Some(tomb) = state.tombstones.get(to) {
+            if !can_resurrect(tomb, &op.vv) {
+                return FoldOutcome::Held(ConflictInfo {
+                    doc_id: to.clone(),
+                    reason: "rename onto a deleted document needs a newer counter".to_string(),
                     replicas: vec![op.replica_id.clone(), tomb.replica_id.clone()],
                 });
             }
@@ -75,6 +120,9 @@ pub(super) fn fold_op(
                 }
             }
         }
+        // The destination lives again: its old tombstone would bury the next
+        // writes to it, which follow the rename, not the deletion.
+        state.tombstones.remove(to);
         state.tombstones.insert(
             from.clone(),
             Tombstone {

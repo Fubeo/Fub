@@ -3,6 +3,12 @@
 //
 //     node bench/photos.mjs              # verifica: rosso se qualcosa è cambiato
 //     node bench/photos.mjs --update   # riscrive le baseline
+//     node bench/photos.mjs --only=kit,mini-barra-colore   # solo quelle scene
+//
+// Una foto diversa dalla baseline, o una scena che non arriva allo scatto, si
+// rifà una volta in una pagina nuova: se il secondo scatto è uguale, è
+// «instabile ma ripresa» e il banco non cade (`photos-outcomes.mjs` spiega
+// perché, e perché una volta sola).
 //
 // # Perché le baseline stanno in repo
 //
@@ -43,12 +49,12 @@
 //
 // Quindi:
 //
-// - `SOGLIA_COLORE` è 0,01. Sta trenta volte sopra il rumore misurato e
+// - `COLOR_THRESHOLD` è 0,01. Sta trenta volte sopra il rumore misurato e
 //   quattromila volte sotto il segnale di un cambio di tavolozza. Non serve che
 //   sia zero: due corse identiche non danno immagini identiche al bit, e
 //   pretenderlo renderebbe rosso il banco per il motivo per cui i banchi visivi
 //   si spengono.
-// - `SOGLIA_DIVERSI` resta un millesimo dei pixel — circa mille su 1280×800.
+// - `DIFF_THRESHOLD` resta un millesimo dei pixel — circa mille su 1280×800.
 //   Adesso ha sotto di sé un rumore di trenta pixel invece di uno ignoto, ed è
 //   la prima volta che quel millesimo vuol dire qualcosa.
 //
@@ -70,7 +76,7 @@
 // `ubuntu-24.04` perché `ubuntu-latest` cambia immagine senza avvisare.
 // Un esito locale diverso su una distribuzione o build di ripiego è drift
 // ambientale da diagnosticare, non un motivo per riscrivere i PNG.
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { PNG } from "pngjs";
@@ -85,16 +91,39 @@ import {
   OUTPUT,
   WINDOW,
 } from "./stage.mjs";
+import {
+  OUTCOMES,
+  combineShots,
+  needsSecondShot,
+  stepSummary,
+  unstableRecord,
+  verifySummary,
+} from "./photos-outcomes.mjs";
 
 const COLOR_THRESHOLD = 0.01;
 const DIFF_THRESHOLD = 0.001;
 
 const update = process.argv.includes("--update");
 
+/// Le scene chieste con `--only=a,b`: per riprovare una scena sola senza
+/// fotografarle tutte. Un id sconosciuto ferma tutto, invece di dare un verde
+/// su zero foto.
+const only = process.argv
+  .find((arg) => arg.startsWith("--only="))
+  ?.slice("--only=".length)
+  .split(",")
+  .filter(Boolean);
+const chosen = only ? SCENE.filter((scene) => only.includes(scene.id)) : SCENE;
+if (only && chosen.length !== only.length) {
+  const known = new Set(SCENE.map((scene) => scene.id));
+  console.error(`scena sconosciuta: ${only.filter((id) => !known.has(id)).join(", ")}`);
+  process.exit(2);
+}
+
 /// Che cosa si fotografa, dove sta il termine di paragone, dove va il referto.
 const SET = {
   name: "banco di Fub",
-  scenes: SCENE,
+  scenes: chosen,
   baseline: BASELINE,
   baselineLabel: "bench/baseline/",
   output: OUTPUT,
@@ -103,19 +132,12 @@ const SET = {
 
 const CURRENT = join(SET.output, "attuale");
 const DIFFERENCES = join(SET.output, "differenze");
+/// Il primo scatto di una foto rifatta, e la sua differenza. Fuori da
+/// `attuale/` e `differenze/`: `baseline-dal-runner.mjs` committa soltanto da
+/// lì, e il primo scatto di una scena instabile non deve diventare baseline.
+const UNSTABLE = join(SET.output, "instabili");
+const UNSTABLE_RECORD = join(SET.output, "instabili.json");
 const SHEET = join(SET.output, "foglio-di-contatto.html");
-
-/// Cosa è successo a una foto. Sono cinque e sono tutte diverse fra loro: un
-/// «manca la baseline» che si confondesse con un «è cambiata» renderebbe
-/// `--aggiorna` la risposta a tutti e due, e la prima volta che qualcuno la
-/// desse per la seconda ragione le baseline smetterebbero di essere un presidio.
-const OUTCOMES = {
-  equal: "uguale",
-  changed: "cambiata",
-  withoutBaseline: "senza baseline",
-  written: "scritta",
-  unstable: "instabile",
-};
 
 async function main() {
   // Si cancella ciò che è del fotografo, non tutta `.output`: là dentro scrive
@@ -123,6 +145,8 @@ async function main() {
   // in quale ordine vanno lanciati due comandi.
   await rm(CURRENT, { recursive: true, force: true });
   await rm(DIFFERENCES, { recursive: true, force: true });
+  await rm(UNSTABLE, { recursive: true, force: true });
+  await rm(UNSTABLE_RECORD, { force: true });
   await mkdir(CURRENT, { recursive: true });
   await mkdir(DIFFERENCES, { recursive: true });
   if (update) await mkdir(SET.baseline, { recursive: true });
@@ -137,7 +161,10 @@ async function main() {
         // La finestra è della scena: chi ne chiede una stretta non la lascia
         // in eredità a quella dopo.
         await page.setViewportSize(scene.viewport ?? WINDOW);
-        report.push(await aPhoto(page, scene, light, stage.base));
+        const first = await aPhoto(page, scene, light, stage.base);
+        report.push(
+          needsSecondShot(first, { update }) ? await secondShot(stage, scene, light, first) : first,
+        );
       }
       await page.context().close();
     }
@@ -147,6 +174,43 @@ async function main() {
 
   await sideBySide(report);
   return summary(report);
+}
+
+/// Rifà una foto una volta, in una pagina nuova (`photos-outcomes.mjs` dice
+/// quando e perché). Il primo scatto e la sua differenza passano in
+/// `instabili/`; se a valere è il primo (il secondo non è arrivato allo
+/// scatto), tornano dov'erano.
+async function secondShot(stage, scene, light, first) {
+  const name = first.name;
+  const moved = [];
+  await mkdir(UNSTABLE, { recursive: true });
+  for (const [from, to] of [
+    [join(CURRENT, name), join(UNSTABLE, name)],
+    [join(DIFFERENCES, name), join(UNSTABLE, `differenza-${name}`)],
+  ]) {
+    if (!existsSync(from)) continue;
+    await rename(from, to);
+    moved.push([from, to]);
+  }
+  console.error(`↻ ${name}: secondo scatto in una pagina nuova`);
+  const page = await openPage(stage.browser, light);
+  let second;
+  try {
+    await page.setViewportSize(scene.viewport ?? WINDOW);
+    second = await aPhoto(page, scene, light, stage.base);
+  } finally {
+    await page.context().close();
+  }
+  const row = combineShots(first, second);
+  if (row === first) {
+    for (const [from, to] of moved) await rename(to, from);
+  } else if (row.outcome !== OUTCOMES.recovered) {
+    // Vale il secondo, ed è diverso anche lui: il primo non serve a nessuno.
+    for (const [, to] of moved) await rm(to, { force: true });
+  } else {
+    console.error(`⚠ ${name}: instabile ma ripresa (al primo scatto ${first.reason ?? first.outcome})`);
+  }
+  return row;
 }
 
 async function aPhoto(page, scene, light, base) {
@@ -176,7 +240,7 @@ async function aPhoto(page, scene, light, base) {
 
   if (!existsSync(whereBefore)) {
     row.outcome = OUTCOMES.withoutBaseline;
-    console.error(`✗ ${name}: nessuna baseline (è una scena newItem? «${SET.updateHint}»)`);
+    console.error(`✗ ${name}: nessuna baseline (è una scena nuova? «${SET.updateHint}»)`);
     return row;
   }
 
@@ -240,23 +304,45 @@ async function sideBySide(report) {
             r.outcome === OUTCOMES.unstable
               ? `<p class="guasto">${esc(r.reason ?? "non fotografata")}</p>`
               : `<img loading="lazy" src="attuale/${r.name}" alt="${esc(scene.title)} — ${r.light}">`;
+          const reason =
+            r.outcome === OUTCOMES.recovered
+              ? ` · al primo scatto ${esc(r.first.reason ?? r.first.outcome)}`
+              : r.reason && r.outcome !== OUTCOMES.unstable
+                ? ` · ${esc(r.reason)}`
+                : "";
+          // Di una foto ripresa si vede anche il primo scatto, con la sua
+          // differenza: è ciò che va spiegato nella issue.
+          const firstShot =
+            r.outcome === OUTCOMES.recovered
+              ? [
+                  [r.name, "primo scatto"],
+                  [`differenza-${r.name}`, "differenza del primo scatto"],
+                ]
+                  .filter(([file]) => existsSync(join(UNSTABLE, file)))
+                  .map(([file, alt]) => `<img loading="lazy" class="primo" src="instabili/${file}" alt="${alt}">`)
+                  .join("\n")
+              : "";
           return `<figure class="luce-${r.light}">
-        <figcaption>${r.light === "dark" ? "scuro" : "chiaro"} · <span class="esito esito-${slug(r.outcome)}">${esc(r.outcome)}</span>${
-          r.reason && r.outcome !== OUTCOMES.unstable ? ` · ${esc(r.reason)}` : ""
-        }</figcaption>
+        <figcaption>${r.light === "dark" ? "scuro" : "chiaro"} · <span class="esito esito-${slug(r.outcome)}">${esc(r.outcome)}</span>${reason}</figcaption>
         ${image}
         ${difference ? `<img loading="lazy" class="differenza" src="differenze/${r.name}" alt="differenza">` : ""}
+        ${firstShot}
       </figure>`;
         })
         .join("\n");
       return `<section>
-      <h2>${esc(scene.title)} <code>${esc(scene.id)}</code></h2>
+      <h2>${esc(scene.title)} <code>${esc(scene.id)}</code>${
+        scene.viewport ? ` · ${scene.viewport.width}×${scene.viewport.height}` : ""
+      }</h2>
       <div class="coppia">${columns}</div>
     </section>`;
     })
     .join("\n");
 
-  const changedItems = report.filter((r) => r.outcome !== OUTCOMES.equal && r.outcome !== OUTCOMES.written);
+  const recovered = report.filter((r) => r.outcome === OUTCOMES.recovered);
+  const changedItems = report.filter(
+    (r) => r.outcome !== OUTCOMES.equal && r.outcome !== OUTCOMES.written && r.outcome !== OUTCOMES.recovered,
+  );
   const html = `<!doctype html>
 <html lang="it">
 <head>
@@ -279,9 +365,11 @@ async function sideBySide(report) {
                font-family: ui-monospace, monospace; }
   img { width: 100%; height: auto; display: block; border: 1px solid #2a2f37; border-radius: 6px; }
   img.differenza { margin-top: 8px; border-color: #b4453f; }
-  .result-uguale { color: #66b98a; }
-  .result-cambiata, .result-senza-baseline, .result-instabile { color: #e0776f; }
-  .failure { color: #e0776f; font-family: ui-monospace, monospace; font-size: 13px;
+  img.primo { margin-top: 8px; border-color: #c9a227; }
+  .esito-uguale, .esito-scritta { color: #66b98a; }
+  .esito-cambiata, .esito-senza-baseline, .esito-instabile { color: #e0776f; }
+  .esito-instabile-ma-ripresa { color: #e0b84f; }
+  .guasto { color: #e0776f; font-family: ui-monospace, monospace; font-size: 13px;
             border: 1px dashed #b4453f; border-radius: 6px; padding: 24px; margin: 0; }
 </style>
 </head>
@@ -290,7 +378,8 @@ async function sideBySide(report) {
   <h1>Foglio di contatto</h1>
   <p class="sommario"><b>${SET.scenes.length}</b> scene · <b>${report.length}</b> foto ·
      ${changedItems.length === 0 ? "tutte uguali alle baseline" : `<b>${changedItems.length}</b> da guardare`}
-     · finestra 1280×800 · soglia ${DIFF_THRESHOLD * 100}% dei pixel</p>
+     ${recovered.length ? ` · <b>${recovered.length}</b> instabili ma riprese al secondo scatto (instabili.json)` : ""}
+     · finestra ${WINDOW.width}×${WINDOW.height} se la scena non ne chiede un'altra · soglia ${DIFF_THRESHOLD * 100}% dei pixel</p>
 </header>
 ${sections}
 </body>
@@ -315,30 +404,31 @@ async function summary(report) {
     // il lavoro sa quale delle due è stata. Il presidio (`scene.test.ts`) le
     // rende rosse comunque.
     const expected = new Set(report.map((r) => r.name));
-    const orphans = (await readdir(SET.baseline))
+    const orphans = only ? [] : (await readdir(SET.baseline))
       .filter((f) => f.endsWith(".png"))
       .filter((f) => !expected.has(basename(f)));
     console.log(`\n${count(OUTCOMES.written)} baseline scritte in ${SET.baselineLabel}`);
     if (orphans.length) {
       console.log(`${orphans.length} baseline non corrispondono a nessuna scena: ${orphans.join(", ")}`);
     }
-    console.log(`Il sheet di contatto: ${sheet}`);
+    console.log(`Il foglio di contatto: ${sheet}`);
     return count(OUTCOMES.unstable) > 0 ? 1 : 0;
   }
 
-  const errors =
-    count(OUTCOMES.changed) + count(OUTCOMES.withoutBaseline) + count(OUTCOMES.unstable);
-  console.log(
-    `\n${count(OUTCOMES.equal)}/${report.length} foto uguali alle baseline` +
-      (errors ? ` · ${errors} da guardare` : ""),
-  );
-  console.log(`Il sheet di contatto: ${sheet}`);
-  if (errors) {
-    console.log(
-      `Se il cambiamento è quello che volevi, il gesto è «${SET.updateHint}» — dopo aver guardato il foglio.`,
-    );
+  const record = unstableRecord(report);
+  if (record.length) await writeFile(UNSTABLE_RECORD, `${JSON.stringify(record, null, 2)}\n`);
+  // Sulla pagina della corsa di GitHub, dove si guarda prima del log.
+  const step = stepSummary(report);
+  if (step && process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, step);
+  if (process.env.GITHUB_ACTIONS) {
+    for (const r of record) console.log(`::warning title=Banco visivo instabile::${r.foto} è uguale solo al secondo scatto`);
   }
-  return errors ? 1 : 0;
+
+  const { lines, exitCode } = verifySummary(report, { updateHint: SET.updateHint });
+  console.log(`\n${lines[0]}`);
+  console.log(`Il foglio di contatto: ${sheet}`);
+  for (const line of lines.slice(1)) console.log(line);
+  return exitCode;
 }
 
 process.exitCode = await main();

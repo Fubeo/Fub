@@ -1,7 +1,8 @@
 //! La pagina del tipo (E5): sotto la nota di un tipo, resa e mai scritta, le
 //! note di quel tipo, con le sue proprietà in evidenza.
 //!
-//! Le note sono quelle che [`note_types::typed_notes`] dà al tipo: la stessa
+//! Le note sono quelle che [`note_types::notes_of_type`] dà al tipo (le stesse
+//! di [`note_types::typed_notes`], senza ordinare quelle degli altri tipi): la stessa
 //! risoluzione dei conteggi del cassetto e della testata (`tipo` come link,
 //! percorso o nome, senza distinguere maiuscole), quindi la pagina, il
 //! cassetto e la testata dicono la stessa cosa. La vista non scrive niente e
@@ -76,9 +77,8 @@ pub(super) fn type_page(
     };
     let extra: Vec<&str> = featured.iter().map(String::as_str).collect();
     let folder = note_types::types_folder(host);
-    let mut notes = note_types::typed_notes(host, &types, folder.as_deref(), &extra)?;
-    let notes = std::mem::take(&mut notes[at]);
-    let total = notes.len();
+    let (total, notes) =
+        note_types::notes_of_type(host, &types, folder.as_deref(), at, &extra, TYPE_PAGE_ROWS)?;
     let children = if total == 0 {
         vec![UiNode::empty_state(Text::message(
             TYPE_PAGE_NONE,
@@ -187,7 +187,7 @@ pub(super) fn type_page_strings_en(catalog: StringCatalog) -> StringCatalog {
 mod tests {
     use super::*;
     use crate::note_types::{vault, with_types_folder, LIBRO};
-    use fub_abi::traits::{VaultRead, ViewProvider};
+    use fub_abi::traits::{HostQuery, VaultRead, ViewProvider};
     use fub_sdk::testing::MemoryHost;
 
     fn page(host: &MemoryHost, doc: &str) -> serde_json::Value {
@@ -353,5 +353,131 @@ mod tests {
         let tree = page(&vault(&refs), "Tipi/Libro.md");
         assert_eq!(opened(&tree).len(), TYPE_PAGE_ROWS);
         assert!(drawn(&tree).contains(TYPE_PAGE_MORE));
+    }
+
+    /// La strada di prima, per la misura: tutte le note con `tipo`, ognuna
+    /// risolta da capo (le chiavi dei tipi rifatte per ogni nota), ogni tipo
+    /// ordinato.
+    fn before_the_index(
+        host: &MemoryHost,
+        types: &[TypeRef],
+        folder: Option<&str>,
+        extra: &[&str],
+    ) -> Vec<Vec<fub_abi::traits::DocumentMatch>> {
+        let mut keys = vec!["tipo"];
+        keys.extend_from_slice(extra);
+        let typed = host
+            .query_index(IndexQuery::Documents {
+                matching: fub_abi::query::QueryExpr::of(fub_abi::query::QueryPredicate::Property {
+                    filter: fub_abi::traits::PropertyFilter {
+                        key: "tipo".into(),
+                        test: fub_abi::traits::PropertyTest::Exists,
+                    },
+                }),
+                sort: None,
+                select: fub_abi::traits::PropertySelect::keys(&keys),
+                page: None,
+                excerpts: fub_abi::traits::Excerpts::Omit,
+            })
+            .unwrap()
+            .documents()
+            .unwrap();
+        let mut out = vec![Vec::new(); types.len()];
+        for row in typed.items {
+            let Some(wanted) = row
+                .properties
+                .iter()
+                .find(|p| p.key == "tipo")
+                .and_then(|p| note_types::wanted_of_value(&p.value))
+            else {
+                continue;
+            };
+            if let note_types::Resolution::Found(found) =
+                note_types::resolve(types, folder, &wanted)
+            {
+                if let Some(at) = types.iter().position(|t| t.doc == found.doc) {
+                    out[at].push(row);
+                }
+            }
+        }
+        for rows in &mut out {
+            rows.sort_by(|a, b| a.doc.cmp(&b.doc));
+        }
+        out
+    }
+
+    /// La misura della pagina su un vault grande: 10.000 note divise fra 40
+    /// tipi, scritti nelle tre forme di `tipo`. Non è una prova (il tempo
+    /// dipende dalla macchina): la si lancia a mano con `cargo test -p
+    /// fub-features --release --lib -- --ignored misura_pagina --nocapture`.
+    #[test]
+    #[ignore = "misura, non prova: si lancia a mano"]
+    fn misura_pagina_del_tipo_su_un_vault_grande() {
+        use std::time::{Duration, Instant};
+        let mut docs: Vec<(String, String)> = Vec::new();
+        for t in 0..40 {
+            docs.push((format!("Tipi/Tipo{t:02}.md"), LIBRO.into()));
+        }
+        for i in 0..10_000 {
+            let t = i % 40;
+            let tipo = match i % 3 {
+                0 => format!("\"[[Tipi/Tipo{t:02}]]\""),
+                1 => format!("tipo{t:02}"),
+                _ => format!("\"[[Tipo{t:02}]]\""),
+            };
+            docs.push((
+                format!("Note/N{:05}.md", 10_000 - i),
+                format!("---\ntipo: {tipo}\nautore: Autore {i}\nletto: true\n---\nTesto.\n"),
+            ));
+        }
+        let refs: Vec<(&str, &str)> = docs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let host = vault(&refs);
+        let types = note_types::type_refs(&host).unwrap();
+        let folder = note_types::types_folder(&host);
+        let at = types.iter().position(|t| t.name == "Tipo07").unwrap();
+        let extra = ["autore"];
+        // A turno, perché il carico della macchina pesi uguale sulle tre: la
+        // sola domanda all'indice delle note con `tipo` (il pavimento: la
+        // risoluzione dei nomi non è un filtro dell'indice), la strada di
+        // prima (tutte le note di tutti i tipi, ordinate, poi un tipo) e
+        // quella di adesso.
+        let (mut floor, mut before, mut after) = (Duration::ZERO, Duration::ZERO, Duration::ZERO);
+        for _ in 0..20 {
+            let clock = Instant::now();
+            host.query_index(IndexQuery::Documents {
+                matching: fub_abi::query::QueryExpr::of(fub_abi::query::QueryPredicate::Property {
+                    filter: fub_abi::traits::PropertyFilter {
+                        key: "tipo".into(),
+                        test: fub_abi::traits::PropertyTest::Exists,
+                    },
+                }),
+                sort: None,
+                select: fub_abi::traits::PropertySelect::keys(&["tipo"]),
+                page: None,
+                excerpts: fub_abi::traits::Excerpts::Omit,
+            })
+            .unwrap();
+            floor += clock.elapsed();
+            let clock = Instant::now();
+            let all = before_the_index(&host, &types, folder.as_deref(), &extra);
+            before += clock.elapsed();
+            let clock = Instant::now();
+            let (total, rows) = note_types::notes_of_type(
+                &host,
+                &types,
+                folder.as_deref(),
+                at,
+                &extra,
+                TYPE_PAGE_ROWS,
+            )
+            .unwrap();
+            after += clock.elapsed();
+            assert_eq!(total, all[at].len());
+            assert_eq!(rows.len(), TYPE_PAGE_ROWS);
+        }
+        println!(
+            "20 volte le note di un tipo su 10.000: prima {before:?}, adesso {after:?} \
+             (la sola domanda all'indice: {floor:?})"
+        );
     }
 }

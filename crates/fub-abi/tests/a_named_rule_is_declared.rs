@@ -478,6 +478,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
         (
+            "crates/fub-kernel/src/locale.rs::language_base",
+            (
+                Family::AsciiCase,
+                "prende la lingua di un tag BCP 47 (`it-IT` → `it`) per sapere se la lingua \
+                 scelta è quella del sistema, e se il primo giorno della settimana del sistema \
+                 vale anche per lei (IMP-4801). I sottotag BCP 47 sono ASCII e non badano al \
+                 maiuscolo per definizione (RFC 5646 §2.1.1): non è il nome di una nota, di un \
+                 tag Fub o di un path.",
+            ),
+        ),
+        (
             "crates/fub-format-markdown/src/render.rs::html_tag",
             (
                 Family::AsciiCase,
@@ -588,6 +599,41 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 Family::AsciiCase,
                 "legge i nomi degli attributi di un tag HTML (`property`, `content`, `rel`, `href`) \
                  senza badare al maiuscolo, come il browser: sono ASCII. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::tile_host",
+            (
+                Family::AsciiCase,
+                "riconosce lo schema `https://` e abbassa l'host DNS di una tessera della vista \
+                 Mappa: è la domanda di `web_clip.rs::viewer_host`, ma qui l'indirizzo vuole anche \
+                 un percorso e rifiuta query e frammento, perché una tessera non ne ha bisogno.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::allowed_hosts",
+            (
+                Family::AsciiCase,
+                "abbassa i siti di `map.tile-hosts` per confrontarli con l'host della tessera, come \
+                 `web_clip.rs::approved` fa con `viewer.hosts`: i nomi DNS sono ASCII e senza \
+                 maiuscole. È un'altra lista perché scaricare tessere non è aprire pagine.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::sniffed",
+            (
+                Family::AsciiCase,
+                "cerca `<svg`, `<!doctype` e `<!entity` in una tessera vettoriale senza badare al \
+                 maiuscolo, come il parser XML del browser per i nomi dei tag: sono ASCII. Non è \
+                 un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::declared",
+            (
+                Family::AsciiCase,
+                "legge il `Content-Type` di una tessera scaricata: i tipi MIME sono ASCII e senza \
+                 distinzione di maiuscole per RFC 9110. Non è un nome di Fub.",
             ),
         ),
         (
@@ -793,6 +839,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  nell'impostazione `files.new-note-extension`: le chiavi di `by_ext` sono già \
                  minuscole, e una nota nuova deve nascere con l'estensione nella forma in cui \
                  verrà poi ricercata. È la stessa regola di `new_notes_id` nel kernel.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/base.rs::is_base_definition",
+            (
+                Family::AsciiCase,
+                "riconosce un file di definizione di una Base (`.base`, anche `.BASE`) per toglierlo \
+                 dalle righe di ogni Base (IMP-1804). L'estensione è un letterale ASCII fisso \
+                 scritto qui, non testo di un provider né un nome di nota: non chiede «chi lo sa \
+                 parsare» come `documents.rs::extension_of`, chiede solo se il file è una Base, e \
+                 piega come `media.rs::kind_of` per la specie di un file.",
             ),
         ),
         (
@@ -1506,6 +1563,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-services/src/main.rs::is_loopback_bind",
+            (
+                Family::AsciiCase,
+                "riconosce `localhost` in `--bind` senza distinguere le maiuscole: un nome DNS è \
+                 ASCII e non distingue le maiuscole. Diverge da `handle_static` perché qui la \
+                 domanda è «l'indirizzo d'ascolto è loopback», decisa all'avvio, non quale sito \
+                 serve una richiesta.",
+            ),
+        ),
+        (
             "crates/fub-services/src/main.rs::handle_static",
             (
                 Family::AsciiCase,
@@ -1719,10 +1786,19 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-services/src/site_isolation.rs::html5_doctype",
+            (
+                Family::AsciiCase,
+                "riconosce `<!doctype html>` in qualunque grafia: parola chiave e nome sono ASCII \
+                 e HTML non distingue le maiuscole. Diverge da `html_has_script` perché qui si \
+                 lascia passare l'unica dichiarazione `<!` innocua, là si giudicano i tag.",
+            ),
+        ),
+        (
             "crates/fub-services/src/site_isolation.rs::commit_has_custom_js",
             (
                 Family::AsciiCase,
-                "abbassa il path per riconoscere il suffisso `.js`: le estensioni dei file serviti \
+                "abbassa il path per riconoscere i suffissi `.js`, `.mjs` e `.cjs`: le estensioni dei file serviti \
                  sono ASCII e la domanda è «porta codice eseguibile». Diverge da `html_has_script` \
                  perché qui il segnale è nel nome del file, là nel suo contenuto.",
             ),
@@ -1928,6 +2004,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 "abbassa il nome per riconoscere il formato dell'archivio da importare: il \
                  vocabolario dei formati è chiuso e ASCII. Diverge dalle due precedenti perché qui \
                  la domanda è sul contenitore, là sul contenuto.",
+            ),
+        ),
+        (
+            "crates/fub-importers/src/notion_export.rs::has_extension",
+            (
+                Family::AsciiCase,
+                "confronta l'estensione di una voce di un export di Notion (`md`, `markdown`, \
+                 `csv`) per riconoscere pagine e database: token di formato, ASCII per \
+                 definizione. Diverge da `route_entry` perché qui la risposta decide come si \
+                 legge l'export intero (quali voci si uniscono), là la strada di una voce sola; \
+                 gli id e i titoli dell'export si confrontano come sono scritti.",
             ),
         ),
         (

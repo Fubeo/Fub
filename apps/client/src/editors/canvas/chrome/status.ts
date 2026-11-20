@@ -123,6 +123,8 @@ export function canvasStatusItems(port: CanvasStatusPort): SurfaceStatusItem[] {
       text: t("canvas.status.twins", { n: twins.count }),
       hint: t("canvas.status.twins.frame", { n: twins.count }),
       open: () => twins.frame(),
+      // Inquadrare le copie è sul posto: il fuoco resta alla lavagna.
+      inPlace: true,
     });
   }
   const why = port.readOnlyWhy();

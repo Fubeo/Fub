@@ -1,6 +1,6 @@
 // Inserisci funzione: si cerca per nome o descrizione, si sceglie una
 // categoria, e la funzione scelta comincia la formula nella cella attiva
-// (`SOMMA(`), come la galleria della scheda Formule.
+// (`SUM(`), come la galleria della scheda Formule.
 //
 // Il catalogo si legge una volta all'apertura; cercare e cambiare categoria
 // filtrano qui, senza tornare dal provider a ogni lettera.

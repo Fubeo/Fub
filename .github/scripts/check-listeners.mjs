@@ -5,6 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { codeOnly, selfTestCode } from "./ts-code.mjs";
 
 const GATE = "apps/client/src/ui/lifetime.ts";
 const SOURCES = "apps/client/src";
@@ -34,26 +35,42 @@ function quoted(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function violations(text, relative) {
-  const names = GLOBAL_TARGETS.map((target) => target.replace(".", "\\s*\\.\\s*")).join("|");
+/// Le righe logiche del codice: una catena spezzata da Prettier
+/// (`window` a capo `.addEventListener(…)`) torna una riga sola, col numero
+/// della riga dove comincia.
+function logicalLines(code) {
+  const lines = [];
+  for (const [index, line] of code.split("\n").entries()) {
+    const trimmed = line.trim();
+    if (lines.length && /^\??\./.test(trimmed)) {
+      lines[lines.length - 1].code += trimmed;
+    } else {
+      lines.push({ line: index + 1, code: trimmed });
+    }
+  }
+  return lines;
+}
+
+export function violations(text, relative) {
+  const names = GLOBAL_TARGETS.map((target) => target.replace(".", "\\s*\\??\\.\\s*")).join("|");
   const globalListener = new RegExp(
-    String.raw`(?<![.\w])(${names})\s*\.\s*addEventListener\b`,
+    String.raw`(?<![.\w])(${names})\s*\??\.\s*addEventListener\b`,
   );
-  const mediaListener = /matchMedia[\s\S]*?\.\s*addEventListener\b/;
-  const subscription = /\.\s*subscribe\s*\(/;
+  const mediaListener = /matchMedia[\s\S]*?\??\.\s*addEventListener\b/;
+  const subscription = /\??\.\s*subscribe\s*\(/;
   const timer = /\b(?:window\s*\.\s*)?(?:setTimeout|setInterval|requestAnimationFrame)\s*\(/;
   const observer = /\bnew\s+(?:MutationObserver|ResizeObserver|IntersectionObserver)\s*\(/;
   const found = [];
-  const lines = text.split("\n");
-  const source = lines.join("\n");
-  for (const [index, line] of lines.entries()) {
-    // I commenti descrivono spesso il primitivo sorvegliato: non sono codice
-    // eseguibile e non devono diventare violazioni della guardia.
-    const code = line.replace(/\/\/.*$/, "").trim();
+  // Commenti e letterali svuotati (`ts-code.mjs`): un commento descrive il
+  // primitivo sorvegliato e non è una violazione, ma non deve nemmeno
+  // nascondere il codice accanto (`/* … */ window.addEventListener(…)`), e un
+  // `clearTimeout(id)` scritto in un commento non rende proprietario nessuno.
+  const source = codeOnly(text);
+  const original = text.split("\n");
+  for (const { line: number, code } of logicalLines(source)) {
     if (!code) continue;
-    // Anche le righe di un commento a blocco (`/** … */`) descrivono, non
-    // eseguono.
-    if (code.startsWith("*") || code.startsWith("/*")) continue;
+    const index = number - 1;
+    const line = original[index];
 
     if (globalListener.test(code) || mediaListener.test(code)) {
       found.push({ line: index + 1, kind: "global listener", text: line.trim() });
@@ -114,14 +131,58 @@ function sourceFiles(directory, found = []) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const candidate = path.join(directory, entry.name);
     if (entry.isDirectory()) sourceFiles(candidate, found);
-    else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+    else if (/\.(?:ts|tsx|mts)$/.test(entry.name) && !/\.test\.(?:ts|tsx|mts)$/.test(entry.name)) {
       found.push(candidate);
     }
   }
   return found;
 }
 
-const root = process.argv[2] ?? ".";
+/// I casi che la guardia deve vedere e quelli che deve lasciare. Le righe
+/// segnate «sfuggiva» passavano verdi con la lettura riga per riga di prima
+/// (audit del 20/11, P-25).
+function selfTest() {
+  const cases = [
+    ["un listener globale", 'window.addEventListener("x", f);', 1],
+    ["la catena spezzata da Prettier (sfuggiva)", 'window\n  .addEventListener("x", f);', 1],
+    ["un commento a blocco prima del codice (sfuggiva)", '/* nota */ window.addEventListener("x", f);', 1],
+    ["la catena opzionale (sfuggiva)", 'window?.addEventListener("x", f);', 1],
+    ["una URL prima del timer (sfuggiva)", 'const u = "http://x"; setTimeout(f, 1);', 1],
+    ["il clear scritto solo in un commento (sfuggiva)", "const t = setTimeout(f, 1);\n// clearTimeout(t)", 1],
+    ["il listener in un commento", "// window.addEventListener(…)", 0],
+    ["il listener in una stringa", 'const s = "window.addEventListener(";', 0],
+    ["il listener di una Vita", 'lifetime.listen(window, "x", f);', 0],
+    ["il timer col suo clear", "const t = setTimeout(f, 1);\nclearTimeout(t);", 0],
+    ["una sottoscrizione anonima", "bus.subscribe(f);", 1],
+    ["una sottoscrizione col disposer", "const stop = bus.subscribe(f);", 0],
+    ["un osservatore senza disconnect", "new ResizeObserver(f);", 1],
+    ["un osservatore col disconnect", "const o = new ResizeObserver(f);\no.disconnect();", 0],
+  ];
+  const failures = [];
+  try {
+    selfTestCode();
+  } catch (error) {
+    failures.push(error.message);
+  }
+  for (const [label, source, count] of cases) {
+    const found = violations(source, "apps/client/src/caso.ts").length;
+    if (found !== count) failures.push(`${label}: attese ${count} violazioni, trovate ${found}`);
+  }
+  if (failures.length) {
+    console.error("Autoprova di check-listeners fallita:");
+    for (const failure of failures) console.error(`- ${failure}`);
+    process.exit(1);
+  }
+  console.log(`Autoprova di check-listeners riuscita (${cases.length} casi).`);
+}
+
+// L'autoprova gira anche prima di ogni controllo vero: costa pochi
+// millisecondi, e così la CI e `scripts/check.sh` la eseguono senza un passo
+// in più.
+selfTest();
+if (process.argv.includes("--self-test")) process.exit(0);
+
+const root = process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? ".";
 const sourceRoot = path.join(root, SOURCES);
 if (!fs.existsSync(sourceRoot)) {
   console.error(`cannot find ${sourceRoot}: pass the repo root as an argument.`);

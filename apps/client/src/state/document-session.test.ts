@@ -1671,15 +1671,27 @@ describe("il salvataggio di un file senza formato", () => {
     await sessions.flush("nota.md");
     expect(api.writeDocument).toHaveBeenCalledTimes(1);
 
-    // Una bozza ripristinata di un file che non si lascia più leggere: la
-    // superficie la mostra come testo, ma chi non sa che file sia non passa
-    // ai byte — scriverli a un formato vorrebbe dire saltarne il provider.
+    // Una bozza ripristinata di un file che non c'è più: la superficie la
+    // mostra come testo, ma chi non sa che file sia non passa ai byte —
+    // scriverli a un formato vorrebbe dire saltarne il provider. Si ricrea
+    // dalla porta dei documenti, come una nota nuova.
     sessions.restore("sparito.svg", "<svg/>", null);
-    vi.mocked(api.readDocument).mockRejectedValue(new Error("non c'è"));
+    vi.mocked(api.readDocument).mockRejectedValue({ kind: "not_found", message: "non c'è" });
     await expect(sessions.readForSurface("sparito.svg")).resolves.toMatchObject({ formatId: null });
     await sessions.resolveConflict("sparito.svg", "mine");
     expect(api.writeDocument).toHaveBeenCalledTimes(2);
     expect(api.resourceWrite).not.toHaveBeenCalled();
+  });
+
+  it("una bozza di un file che c'è ma non si lascia leggere non si scrive alla cieca (#514)", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    sessions.restore("rotto.svg", "<svg/>", null);
+    vi.mocked(api.readDocument).mockRejectedValue({ kind: "io", message: "permesso negato" });
+    await expect(sessions.readForSurface("rotto.svg")).resolves.toMatchObject({ formatId: null });
+    await sessions.resolveConflict("rotto.svg", "mine");
+    expect(api.writeDocument).not.toHaveBeenCalled();
+    expect(api.resourceWrite).not.toHaveBeenCalled();
+    expect(sessions.inspect("rotto.svg")).toMatchObject({ text: "<svg/>", dirty: true, result: "fallito" });
   });
 });
 

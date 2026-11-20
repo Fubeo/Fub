@@ -176,6 +176,14 @@ fn model(path: &str, links: &[&str], dests: &[&str], aliases: &[&str]) -> Docume
             .0
             .insert("aliases".into(), serde_json::json!(aliases));
     }
+    // Gli stessi wikilink scritti anche in una proprietà (#503): i loro archi
+    // stanno in mappe a parte, e l'incrementale deve tenerle come il rebuild.
+    if !links.is_empty() {
+        let written: Vec<String> = links.iter().map(|k| format!("[[{k}]]")).collect();
+        m.frontmatter
+            .0
+            .insert("rif".into(), serde_json::json!(written));
+    }
     m
 }
 
@@ -190,6 +198,8 @@ struct Observed {
     resolved_from: BTreeMap<String, Option<DocId>>,
     backlinks: BTreeMap<DocId, Vec<(DocId, Option<String>)>>,
     outgoing: BTreeMap<DocId, Vec<DocId>>,
+    /// Chi nomina il documento in una proprietà.
+    property_linked: BTreeMap<DocId, std::collections::BTreeSet<DocId>>,
 }
 
 fn observe(graph: &LinkGraph) -> Observed {
@@ -222,6 +232,7 @@ fn observe(graph: &LinkGraph) -> Observed {
 
     let mut backlinks = BTreeMap::new();
     let mut outgoing = BTreeMap::new();
+    let mut property_linked = BTreeMap::new();
     for path in PATHS {
         let id = DocId::new(*path);
         let refs: Vec<(DocId, Option<String>)> = graph
@@ -234,7 +245,11 @@ fn observe(graph: &LinkGraph) -> Observed {
         }
         let out = graph.outgoing(&id);
         if !out.is_empty() {
-            outgoing.insert(id, out);
+            outgoing.insert(id.clone(), out);
+        }
+        let named = graph.property_linked(std::slice::from_ref(&id), Some("rif"));
+        if !named.is_empty() {
+            property_linked.insert(id, named);
         }
     }
 
@@ -243,6 +258,7 @@ fn observe(graph: &LinkGraph) -> Observed {
         resolved_from,
         backlinks,
         outgoing,
+        property_linked,
     }
 }
 

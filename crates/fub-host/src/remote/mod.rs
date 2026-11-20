@@ -53,6 +53,11 @@ pub(crate) fn networked_manifest(id: &str, name: &str) -> fub_abi::PluginManifes
 /// Versione wire attesa dal server (`GET /v1/hello`).
 pub const SYNC_PROTOCOL: &str = "fub-sync/1";
 
+/// Epoca della prima chiave di un vault (mirror di
+/// `fub_services::sync::INITIAL_KEY_EPOCH`, senza dipendenza dal server).
+/// Zero nel file `key-epoch` vuol dire «nessuna chiave adottata ancora».
+pub const INITIAL_KEY_EPOCH: u32 = 1;
+
 /// KDF vault lato host (mirror di `fub_services::crypto`, senza dipendenza
 /// dal server): PBKDF2-HMAC-SHA256 ver=2, 600_000 iterazioni, sale unico
 /// 16 B; le buste di ver=1 (210_000) si riaprono ancora. La KEK deriva dalla

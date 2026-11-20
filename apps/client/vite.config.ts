@@ -59,6 +59,11 @@ const UNDER_THE_RENDER: ReadonlySet<string> = new Set([
   "ui-views",
 ]);
 
+/// I chunk che i gesti di formato della Live (`markdown-format`) possono
+/// importare: quelli sotto la resa e le discussioni dei commenti (`threads`,
+/// che Rollup nomina dal primo modulo).
+const UNDER_THE_FORMAT: ReadonlySet<string> = new Set([...UNDER_THE_RENDER, "threads"]);
+
 /// Un id di modulo detto a partire dal client: `src/...` o `node_modules/...`.
 function shortId(id: string): string {
   const clean = id.replace(/\?.*$/, "");
@@ -235,19 +240,23 @@ export default defineConfig({
           if (chunk.name === "markdown-comments" && reaches(chunk.fileName, "markdown-comments")) {
             this.error(`${chunk.fileName}: i commenti delle note importano un chunk che li importa; un loro modulo importa qualcosa fuori dalla loro regola in \`manualChunks\``);
           }
-          // La resa delle note e il renderer delle viste stanno sotto il
-          // ponte dei documenti e importano soltanto i chunk sotto di loro.
+          // La resa delle note, il renderer delle viste e i gesti di formato
+          // stanno sotto il ponte dei documenti e importano soltanto i chunk
+          // sotto di loro.
           // Un chunk nuovo fra i loro import vuol dire un modulo che importano
           // e che la loro regola in `manualChunks` non nomina: Rollup lo ha
           // estratto a parte (all'avvio, un file in più) o lo ha lasciato nel
           // ponte (un ciclo). Va aggiunto alla regola. Se invece un chunk
           // condiviso ha soltanto cambiato nome, va cambiato qui.
-          if (chunk.name === "markdown-render" || chunk.name === "ui-views") {
+          const expected = chunk.name === "markdown-render" || chunk.name === "ui-views"
+            ? UNDER_THE_RENDER
+            : chunk.name === "markdown-format" ? UNDER_THE_FORMAT : undefined;
+          if (expected) {
             const strays = chunk.imports
               .map((file) => bundle[file])
-              .filter((next): next is Rollup.OutputChunk => next?.type === "chunk" && !UNDER_THE_RENDER.has(next.name));
+              .filter((next): next is Rollup.OutputChunk => next?.type === "chunk" && !expected.has(next.name));
             if (strays.length) {
-              this.error(`${chunk.fileName}: ${chunk.name} importa ${strays.map((next) => next.fileName).join(", ")}, fuori dai chunk attesi (${[...UNDER_THE_RENDER].join(", ")}); un modulo che importa manca dalla sua regola in \`manualChunks\``);
+              this.error(`${chunk.fileName}: ${chunk.name} importa ${strays.map((next) => next.fileName).join(", ")}, fuori dai chunk attesi (${[...expected].join(", ")}); un modulo che importa manca dalla sua regola in \`manualChunks\``);
             }
           }
           const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
@@ -487,10 +496,11 @@ export default defineConfig({
           // Il renderer delle viste dichiarative (`UiNode`) con il suo
           // riconciliatore, i `ns` che sa disegnare e i piccoli aiuti che
           // importa: la specie di un file, i tipi dei trascinamenti, i tasti
-          // delle linguette, le icone delle pagine. Lo montano la shell, i
-          // pannelli e la resa delle note; cambia col protocollo delle viste,
-          // non con l'editor. Chiuso verso il basso come la resa.
-          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$/.test(id)) return "ui-views";
+          // delle linguette, le icone delle pagine, il confronto dei payload
+          // (`kit/json-equal`, che usa anche l'editor ricco). Lo montano la
+          // shell, i pannelli e la resa delle note; cambia col protocollo delle
+          // viste, non con l'editor. Chiuso verso il basso come la resa.
+          if (/\/src\/ui\/(node|format-kind|drag-types|custom|tab-keys)\.ts$|\/src\/state\/page-icons\.ts$|\/src\/kit\/json-equal\.ts$/.test(id)) return "ui-views";
           // L'ospite dei diagrammi Mermaid (`ui/mermaid.ts`): carica la
           // libreria con un `import()`, disegna, apre il menu e l'anteprima.
           // Lo montano la shell e la Live; cambia coi diagrammi, non con
@@ -508,6 +518,18 @@ export default defineConfig({
           // importano soltanto moduli che stanno nei loro chunk (`tabella/`,
           // `ui/`, le stringhe), nessuno del ponte.
           if (/\/src\/editors\/text\/profiles\/markdown\/table-(model|grid)\.ts$/.test(id)) return "markdown-tables";
+          // I gesti di formato in riga della Live (`format-toggle.ts`:
+          // grassetto, corsivo, apice… come in Word), la coppia vuota che
+          // aprono (`empty-pair.ts`) e gli elementi che contengono il cursore,
+          // cioè i pulsanti «premuti» (`cursor-elements.ts`). Li montano la
+          // superficie Markdown e i suoi comandi fin dall'apertura, con un
+          // import statico: il chunk arriva insieme al ponte, non dopo.
+          // Cambiano coi gesti di formato, non col ponte, e da soli lo tengono
+          // sotto il budget. Chiusi verso il basso: importano soltanto
+          // CodeMirror, la grammatica, la resa, i commenti e la sintassi, che
+          // stanno nei loro chunk; il plugin `bundle-size-budgets` ferma la
+          // build se importano un chunk fuori da `UNDER_THE_FORMAT`.
+          if (/\/src\/editors\/text\/profiles\/markdown\/(format-toggle|empty-pair|cursor-elements)\.ts$/.test(id)) return "markdown-format";
           // La disposizione dei riquadri e delle schede (`state/layout.ts`):
           // il modello che la shell salva e rilegge, letto da quasi ogni
           // pannello, anche da quelli che si caricano dopo. Cambia con la

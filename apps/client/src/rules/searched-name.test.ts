@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchedName } from "./searched-name";
+import { searchedName, searchedPath } from "./searched-name";
 
 // Dal testo cercato al nome della nota che non c'era (§21.7). Si prova qui e
 // non aprendo l'app perché è una funzione di una stringa in una stringa, e le
@@ -49,5 +49,55 @@ describe("searchedName", () => {
     const long = searchedName("x".repeat(300));
     expect(long).not.toBeNull();
     expect(long?.length).toBe(80);
+  });
+});
+
+// Il path che la ricerca rapida propone (IMP-6200): la barra è una cartella,
+// e le forme che un path del vault non ha non diventano un path inventato.
+describe("searchedPath", () => {
+  it("la barra è una cartella: il path resta com'è scritto", () => {
+    expect(searchedPath("Aree/Eventi/prova caccia")).toBe("Aree/Eventi/prova caccia");
+  });
+
+  it("un nome senza barre resta un nome, come per searchedName", () => {
+    expect(searchedPath("Riunione con Anna")).toBe("Riunione con Anna");
+    expect(searchedPath("e adesso.")).toBe("e adesso");
+  });
+
+  it("ogni segmento passa la pulizia del nome", () => {
+    expect(searchedPath("Aree / Eventi: 2026 /idea?")).toBe("Aree/Eventi 2026/idea");
+    expect(searchedPath("Lavoro./Bozza.")).toBe("Lavoro/Bozza");
+  });
+
+  it("le barre in testa, quelle doppie e i segmenti «.» si tolgono", () => {
+    expect(searchedPath("/Aree/Eventi/x")).toBe("Aree/Eventi/x");
+    expect(searchedPath("Aree//Eventi/x")).toBe("Aree/Eventi/x");
+    expect(searchedPath("./Idea")).toBe("Idea");
+    expect(searchedPath("Aree/./Idea")).toBe("Aree/Idea");
+    expect(searchedPath("a/?/b")).toBe("a/b");
+  });
+
+  it("«..» non propone niente: non si esce dalla cartella", () => {
+    expect(searchedPath("../Idea")).toBeNull();
+    expect(searchedPath("Aree/../Idea")).toBeNull();
+  });
+
+  it("la barra in coda nomina una cartella, non una nota", () => {
+    expect(searchedPath("Aree/Eventi/")).toBeNull();
+    expect(searchedPath("///")).toBeNull();
+  });
+
+  it("un segmento nascosto non si propone", () => {
+    expect(searchedPath(".obsidian/Idea")).toBeNull();
+    expect(searchedPath("Aree/.nascosta")).toBeNull();
+  });
+
+  it("la barra rovescia non è un separatore", () => {
+    expect(searchedPath("Aree\\Idea")).toBe("Aree Idea");
+  });
+
+  it("senza testo non propone niente", () => {
+    expect(searchedPath("")).toBeNull();
+    expect(searchedPath("  /  ")).toBeNull();
   });
 });

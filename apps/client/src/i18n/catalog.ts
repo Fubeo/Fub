@@ -87,6 +87,16 @@ export const IT = { // --- la scocca -------------------------------------------
   "sync.kind.video": "Non replicare i video",
   "sync.kind.pdf": "Non replicare i PDF",
   "sync.kind.others": "Altre esclusioni: {list}",
+  "map.hosts.none": "Nessun sito: le mappe restano offline.",
+  "map.hosts.placeholder": "Nome del sito, per esempio tile.example.org",
+  "map.hosts.add": "Aggiungi",
+  "map.hosts.remove": "Rimuovi",
+  "map.hosts.remove.hint": "Rimuovi {site} dai siti delle mappe",
+  "map.hosts.empty": "Scrivi il nome di un sito.",
+  "map.hosts.invalid": "«{value}» non è un nome di sito: scrivi soltanto il nome, senza porta o percorso.",
+  "map.hosts.duplicate": "{site} è già nell’elenco.",
+  "map.hosts.osm": "Aggiungi OpenStreetMap",
+  "map.hosts.osm.note": "Tessere © OpenStreetMap contributors, da tile.openstreetmap.org. Fub ne chiede poche alla volta, si presenta come Fub e le tiene in memoria, come chiede la loro policy.",
   "incoming.allow.daily": "Giornaliera (fub://daily)",
   "incoming.allow.unique": "Nota unica (fub://unique)",
 "incoming.refused": "{count} collegamenti fub:// sono arrivati mentre la coda era piena e non sono stati presi.",
@@ -594,6 +604,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "proof.add_word_failed": "Non ho potuto aggiungere «{word}» al dizionario: {reason}",
 "proof.ignore": "Ignora",
 "proof.ignore_here": "Ignora in questa nota",
+"proof.missing_dictionary": "Manca sul computer il dizionario di una lingua del correttore: {language} ({dictionary}). Senza, il correttore segna la grammatica ma non i refusi. Installa il dizionario Hunspell della lingua (dal gestore dei pacchetti, o quello di LibreOffice) e riavvia Fub.",
 "grid.surface": "Foglio di calcolo",
 "grid.a11y.superficie": "Foglio di calcolo",
 "grid.workbook.macros": "Le macro della cartella non si eseguono, e restano nel file come sono.",
@@ -1222,6 +1233,8 @@ export const IT = { // --- la scocca -------------------------------------------
 "explorer.selection.move": "Sposta in…",
 "explorer.selection.group": "In una cartella nuova",
 "explorer.selection.group_menu": "In una cartella nuova…",
+"explorer.selection.group_where": "Nuova cartella in {folder}",
+"explorer.selection.group_where_root": "Nuova cartella nella radice",
 "explorer.selection.trash": "Sposta nel cestino",
 "explorer.selection.clear": "Deseleziona",
 "explorer.new_note_here": "Nuova nota qui",
@@ -1281,6 +1294,10 @@ export const IT = { // --- la scocca -------------------------------------------
 "explorer.no_viewer": "Fub non ha un visualizzatore per {name}: il file resta sul disco com'è.",
 "explorer.new_folder_failed": "Non riesco a creare la cartella {folder}: {reason}",
 "explorer.move_failed": "Non riesco a spostare {doc} in {folder}: {reason}",
+"explorer.moving_many": "Sposto {n} note in {folder}: {done} di {n}…",
+"explorer.moved_many": "{n} note spostate in {folder}",
+"explorer.moved_some": "{done} note su {n} spostate in {folder}; {left} restano dove sono, ognuna col suo avviso",
+"explorer.move_in_flight": "si sta già spostando",
 "explorer.folder_move_failed": "Non riesco a spostare la cartella {folder} in {to}: {reason}",
 "explorer.folder_unsaved": "una nota aperta non è ancora salvata",
 "explorer.folder_moved": "Cartella {folder} spostata in {to}",
@@ -1923,7 +1940,11 @@ export const IT = { // --- la scocca -------------------------------------------
 "base.map.tiles_failed": "Mappe online non disponibili: {reason}",
 "base.map.offline": "Offline. Mappe online: {provider}",
 "base.map.enable": "Attiva le mappe online",
-"base.map.tiles_denied": "Mappe online non disponibili: servono il permesso di rete esplicito e un host HTTPS fidato",
+"base.map.tiles_denied": "Mappe online non disponibili: la Base non chiede la rete, o l'indirizzo delle tessere non è https.",
+"base.map.tiles_not_allowed": "Tessere non ammesse: {site} non è fra i siti delle mappe di questo computer.",
+"base.map.open_settings": "Apri le Impostazioni",
+"base.map.offline_only": "Coordinate senza mappa di sfondo",
+"base.map.tiles_loading": "Scarico le tessere da {provider}…",
 // La barra della Base: viste, filtro, ordine, colonne.
 "base.bar": "Barra della Base",
 "base.views": "Viste",
@@ -1996,7 +2017,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "base.view.kind.map": "Mappa",
 "base.view.kind.calendar": "Calendario",
 "base.view.kind.timeline": "Linea del tempo",
-"base.view.needs_lanes": "Serve una proprietà mostrata per le corsie.",
+"base.view.needs_lanes": "Serve una proprietà di testo nelle note, per le corsie.",
 "base.view.needs_coordinates": "Servono le proprietà lat e lon nelle note.",
 "base.view.needs_date": "Serve una proprietà data nelle note.",
 // Il calendario della Base (T17).
@@ -2017,6 +2038,11 @@ export const IT = { // --- la scocca -------------------------------------------
 "base.calendar.no_date_key": "Questo calendario non sa ancora quale proprietà è la sua data.",
 "base.calendar.no_date_props": "Nessuna nota della Base ha una proprietà data: aggiungine una, per esempio «scadenza: 2026-11-20».",
 "base.calendar.choose_date": "Scegli la proprietà data",
+"base.calendar.date_key": "Data",
+"base.view_key.choose": "Scegli…",
+"base.kanban.lanes_by": "Corsie per",
+"base.kanban.no_lanes": "Questa bacheca non sa ancora quale proprietà fa le corsie: sceglila qui sopra.",
+"base.kanban.no_lanes_locked": "Questa bacheca non sa ancora quale proprietà fa le corsie.",
 // La linea del tempo della Base (T34).
 "base.timeline.previous": "Indietro",
 "base.timeline.next": "Avanti",
@@ -2223,6 +2249,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "tabmenu.pinned": "Appuntata",
 "tabmenu.stack": "Pila {stack}",
 "document.attachment_failed": "Deposito dell'allegato non riuscito: {reason}",
+"document.link_drop_failed": "Il collegamento alla nota non è entrato nel documento: {reason}",
 "document.anchor_none": "Qui non c'è un titolo o un paragrafo a cui collegarsi.",
 "document.anchor_copied": "Link copiato: {link}",
 "document.viewer_unavailable": "Visualizzatore isolato non disponibile: {reason}",
@@ -2896,8 +2923,11 @@ export const IT = { // --- la scocca -------------------------------------------
 // il documento né una bozza: chi legge deve sapere che è ancora soltanto qui.
 "document.close_unprotected":
   "Chiusura annullata: {docs} non si è potuto salvare né mettere in bozza, e il testo esiste soltanto in questa finestra. Riprova quando il disco risponde, oppure copialo altrove.",
+// Il file c'è: sono le ultime modifiche a non esserci ancora. «{doc} non è sul
+// disco» si leggeva come un file sparito (IMP-4806), e la ragione nominava uno
+// spostamento anche quando il gesto era un comando che non sposta niente.
 "document.unsaved_blocks":
-  "{doc} non è sul disco: l'operazione si ferma qui, perché spostare il file lascerebbe indietro il testo non salvato.",
+  "Le ultime modifiche di {doc} non sono ancora salvate: l'operazione si ferma qui, così il file resta com'è e il testo non salvato non va perso. Riprova quando il salvataggio è finito.",
 // Dice **che non è stato scritto niente**, e non è un dettaglio tecnico: è la
 // sola frase che distingue questo caso da «non ci sono riuscito», e senza di
 // essa chi legge crede di aver perso il proprio testo.
@@ -3173,13 +3203,16 @@ export const IT = { // --- la scocca -------------------------------------------
   "windows.discard.keep_failed":
     "Il testo di questa finestra non è entrato nella Cronologia, quindi non è stato scartato: {reason}. Riprova, oppure conserva le tue modifiche.",
   "windows.not_text": "{doc} non si apre in una finestra a parte: la finestra mostra soltanto note e file di testo.",
+  "windows.closed_alone":
+    "La finestra di {doc} si è chiusa da sola. Ciò che aveva già passato alla finestra principale è salvato; le ultime modifiche che non aveva ancora confermato potrebbero mancare.",
+  "windows.closed_alone_unsaved":
+    "La finestra di {doc} si è chiusa da sola e il salvataggio non è confermato: il testo resta nella finestra principale. Le ultime modifiche che la finestra non aveva ancora confermato potrebbero mancare.",
+  "windows.closed_gone": "{doc} non esiste più: la sua finestra si è chiusa senza salvare, perché non c'era niente da salvare.",
   "windows.error.session_gone": "Sessione documento non più disponibile",
   "windows.error.bad_identity": "Identità finestra non valida",
-  "windows.error.closed_while_opening": "Finestra disconnessa durante l'apertura; sessione conservata",
   "windows.error.owner_changed": "Autorità documento cambiata: sessione mantenuta",
   "windows.error.owner_changed_saving": "Autorità documento cambiata durante il salvataggio",
   "windows.error.changed_closing": "Documento modificato durante la chiusura: sessione conservata",
-  "windows.error.disconnected": "Disconnessione prima che le modifiche fossero in salvo; sessione conservata",
   "windows.error.session_changed": "Sessione o vault cambiati: finestra mantenuta",
   "windows.error.changed_draining": "Sessione cambiata mentre le modifiche si mettevano in salvo",
   "windows.error.still_opening": "Finestra ancora in apertura",
@@ -3622,6 +3655,10 @@ export const IT = { // --- la scocca -------------------------------------------
   "canvas.ink.attach": "Si attacca a {name}",
   "canvas.ink.attach_card": "Si attacca alla scheda",
   "canvas.ink.free": "Libero sulla lavagna",
+  // La scheda di testo allargata o ristretta dopo i tratti: il testo rifluisce, i tratti no.
+  "canvas.ink.reflow": "La larghezza è cambiata: le sottolineature e i disegni sul testo potrebbero non stare più sulle parole, e andranno rifatti.",
+  "canvas.ink.reflow_back": "Torna a {px} px",
+  "canvas.ink.reflow_back_label": "Torna alla larghezza in cui sono stati scritti i tratti, {px} px",
   // Il lazo (T86): i tratti scelti, passati a un'altra scheda.
   "canvas.ink.moved_to": "Ora fa parte di {name}",
   "canvas.ink.moved_card": "Ora fa parte della scheda",
@@ -3842,7 +3879,6 @@ export const IT = { // --- la scocca -------------------------------------------
   "errors.mobile.storage_choice": "Scelta dello spazio mobile non riconosciuta",
   "errors.bridge.vault_gone": "Vault del documento non disponibile",
   "errors.bridge.session_changed": "Sessione del documento cambiata",
-  "errors.bridge.windows_open": "La sessione precedente ha ancora finestre aperte",
   "errors.bridge.not_ready": "Finestra non pronta alla modifica",
   "errors.bridge.bad_operation": "Operazione locale incoerente",
   "errors.bridge.drain_conflict": "Conflitto non recuperabile mentre si salvano le modifiche in sospeso",
@@ -3866,6 +3902,7 @@ export const IT = { // --- la scocca -------------------------------------------
   "errors.zip.directory_large": "ZIP: directory centrale troppo grande",
   "errors.zip.bad_entry": "ZIP: voce della directory illeggibile",
   "errors.zip.truncated_entry": "ZIP: voce della directory troncata",
+  "errors.zip.bad_extra": "ZIP: campo esteso della voce «{name}» illeggibile",
   "errors.zip.overlap": "ZIP: la voce «{name}» si sovrappone alla seguente",
   "errors.zip.bad_local": "ZIP: intestazione locale di «{name}» illeggibile",
   "errors.zip.data_outside": "ZIP: i dati di «{name}» escono dall'archivio",

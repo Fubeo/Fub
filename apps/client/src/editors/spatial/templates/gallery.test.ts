@@ -612,7 +612,7 @@ describe("i tasti e il fuoco", () => {
     document.querySelector<HTMLButtonElement>(".palette-actions button[type=button]")!.click();
     await until("la finestra chiusa", () => dialog() === null);
     await open();
-    dialog()!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    dialog()!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
     await until("la finestra chiusa", () => dialog() === null);
     expect(document.activeElement).toBe(opener);
   });

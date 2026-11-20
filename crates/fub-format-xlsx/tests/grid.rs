@@ -1,6 +1,7 @@
 //! La superficie della griglia sul protocollo a byte: le finestre mostrano i
 //! valori del file e quelli del giornale, le formule che leggono una cella
-//! cambiata sono segnate, e salvare è l'innesto.
+//! cambiata si ricalcolano (quelle che il motore non sa calcolare sono
+//! segnate), e salvare è l'innesto, con i valori nuovi delle formule.
 
 mod common;
 
@@ -162,7 +163,7 @@ fn la_sessione_mostra_i_fogli_e_i_valori_del_file() {
 }
 
 #[test]
-fn una_modifica_entra_nel_giornale_e_segna_le_formule_che_la_leggono() {
+fn una_modifica_entra_nel_giornale_e_ricalcola_le_formule_che_la_leggono() {
     let bytes = one_sheet(BODY);
     let (mut provider, session) = open(&bytes, &GridJournal::new());
     let commit = apply(
@@ -189,11 +190,13 @@ fn una_modifica_entra_nel_giornale_e_segna_le_formule_che_la_leggono() {
     let a2 = find(&cells, "A2");
     assert_eq!((a2.input.as_str(), a2.display.as_str()), ("0.25", "25.00%"));
     assert!(!a2.stale);
-    // Le dipendenti mostrano il valore del file, segnato.
-    for a1 in ["B2", "C2"] {
-        assert!(find(&cells, a1).stale, "{a1}");
+    // Le dipendenti, anche a catena, mostrano il valore ricalcolato.
+    for (a1, value) in [("B2", 0.5), ("C2", 1.5)] {
+        let cell = find(&cells, a1);
+        assert!(!cell.stale, "{a1}");
+        assert_eq!(cell.value, GridValue::Number(value), "{a1}");
+        assert_eq!(cell.input, if a1 == "B2" { "=A2*2" } else { "=B2+1" });
     }
-    assert_eq!(find(&cells, "B2").value, GridValue::Number(1.0));
     assert!(!find(&cells, "B1").stale);
 
     // La cella che torna al suo input esce dal giornale.
@@ -209,8 +212,13 @@ fn una_modifica_entra_nel_giornale_e_segna_le_formule_che_la_leggono() {
         (text, "")
     );
     assert_eq!(back.revision, session.revision);
+    let GridInvalidation::Cells(invalid) = &back.invalidation else {
+        panic!("{:?}", back.invalidation);
+    };
+    assert_eq!(invalid, &vec![key("A2"), key("B2"), key("C2")]);
     let cells = window(&mut provider, &session, &back.revision);
     assert!(!find(&cells, "B2").stale);
+    assert_eq!(find(&cells, "B2").value, GridValue::Number(1.0));
 
     // Sopra una formula si scrive un valore, e annullarlo riscrive la
     // formula del file: l'unica che si può scrivere, perché toglie la voce.
@@ -298,7 +306,7 @@ fn le_modifiche_che_non_si_scrivono_si_rifiutano() {
 }
 
 #[test]
-fn salvare_innesta_il_giornale_e_chiede_di_ricalcolare() {
+fn salvare_innesta_il_giornale_con_i_valori_ricalcolati() {
     let bytes = one_sheet(BODY);
     let (mut provider, session) = open(&bytes, &GridJournal::new());
     let commit = apply(
@@ -314,9 +322,19 @@ fn salvare_innesta_il_giornale_e_chiede_di_ricalcolare() {
     assert_eq!(value(&saved, "A2"), Value::Number(0.25));
     assert_eq!(value(&saved, "A3"), Value::text("12"));
     assert_eq!(value(&saved, "E5"), Value::Bool(true));
-    // Niente si ricalcola: la dipendente ha il valore salvato, e il file
-    // chiede di ricalcolare a chi lo apre.
-    assert_eq!(value(&saved, "B2"), Value::Number(1.0));
+    // Le dipendenti salvano il valore ricalcolato e tengono la formula; il
+    // file chiede comunque di ricalcolare a chi ha un suo motore.
+    assert_eq!(value(&saved, "B2"), Value::Number(0.5));
+    assert_eq!(value(&saved, "C2"), Value::Number(1.5));
+    let read = fub_format_xlsx::read(&saved).unwrap();
+    let formula = |a1: &str| {
+        read.workbook.sheets[0]
+            .cell(CellRef::parse(a1).unwrap())
+            .and_then(|cell| cell.formula.as_ref())
+            .map(|formula| formula.text.clone())
+    };
+    assert_eq!(formula("B2").as_deref(), Some("A2*2"));
+    assert_eq!(formula("C2").as_deref(), Some("B2+1"));
     assert!(workbook_xml(&saved).contains("fullCalcOnLoad=\"1\""));
     assert!(matches!(
         provider.bytes_to_write(&session.instance, session.revision.clone()),
@@ -372,19 +390,31 @@ fn una_cella_cambiata_sul_disco_e_un_conflitto_che_il_salvataggio_scrive() {
     assert_eq!(value(&saved, "A1"), Value::Number(3.0));
 }
 
+/// La revisione dei byte la calcola l'host, una volta, prima di aprire
+/// (`GridBytesProvider::open`): i byte vecchi rispetto alla base li rifiuta
+/// lui (`fub-host`, `tests/xlsx_workbooks.rs`). Il provider apre la sessione
+/// alla revisione che riceve, senza un secondo SHA-256 della cartella.
 #[test]
-fn una_sorgente_che_non_e_la_sua_revisione_non_si_apre() {
+fn la_sessione_nasce_alla_revisione_che_l_host_ha_calcolato() {
     let bytes = one_sheet(BODY);
     let mut provider = XlsxGridProvider::new();
-    assert!(matches!(
-        provider.open(
+    let revision = Revision::of_bytes(&bytes);
+    let session = provider
+        .open(
             XLSX_GRID_SURFACE,
             &bytes,
-            Revision("altra".into()),
-            &GridJournal::new()
-        ),
-        Err(PluginError::Conflict(_))
-    ));
+            revision.clone(),
+            &GridJournal::new(),
+        )
+        .unwrap();
+    assert_eq!(session.revision, grid_bytes_revision(&revision, ""));
+    provider.close(&session.instance).unwrap();
+}
+
+#[test]
+fn una_superficie_che_non_c_e_non_si_apre() {
+    let bytes = one_sheet(BODY);
+    let mut provider = XlsxGridProvider::new();
     assert!(matches!(
         provider.open(
             "altra",
@@ -481,4 +511,551 @@ fn una_formula_sotto_le_righe_usate_non_cambia_la_misura_dei_fogli() {
     assert_eq!(outcome.sheets[0].row_count, 10 + 100);
     let grown = whole_window(&mut provider, &session, &outcome.commit.revision);
     assert_eq!(grown.total_rows, 10 + 100);
+}
+
+#[test]
+fn una_formula_entra_anche_dopo_un_innesto_che_chiede_di_ricalcolare() {
+    // IMP-617: l'innesto di una costante letta da una formula scrive
+    // `fullCalcOnLoad="1"`; la riscrittura per la formula di dopo non deve
+    // contarlo come una perdita, e il file salvato chiede ancora di
+    // ricalcolare.
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![patch("A2", "0.25")],
+    )
+    .unwrap();
+    let grafted = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    assert!(workbook_xml(&grafted).contains("fullCalcOnLoad=\"1\""));
+
+    let (mut provider, session) = open(&grafted, &GridJournal::new());
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![patch("D3", "=SUM(A1:A2)"), patch("E3", "=B1*C1")],
+    )
+    .unwrap();
+    let saved = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    let read = fub_format_xlsx::read(&saved).unwrap();
+    let sheet = &read.workbook.sheets[0];
+    let formula = |a1: &str| {
+        sheet
+            .cell(CellRef::parse(a1).unwrap())
+            .and_then(|cell| cell.formula.as_ref())
+            .map(|formula| formula.text.clone())
+    };
+    assert_eq!(formula("D3").as_deref(), Some("SUM(A1:A2)"));
+    assert_eq!(formula("E3").as_deref(), Some("B1*C1"));
+    assert_eq!(value(&saved, "D3"), Value::Number(1.25));
+    assert_eq!(value(&saved, "A2"), Value::Number(0.25));
+    assert!(workbook_xml(&saved).contains("fullCalcOnLoad=\"1\""));
+}
+
+#[test]
+fn cinque_righe_scritte_di_fila_coi_salvataggi_in_mezzo_arrivano_tutte_nel_file() {
+    // La prova di IMP-310, IMP-414, IMP-512 e IMP-617 sul provider vero:
+    // una cartella nuova di Fub, 5 righe per 4 colonne scritte una cella
+    // alla volta (testi ripetuti, numeri, prodotti e somme su intervalli),
+    // un salvataggio e una riapertura dopo ogni cella o dopo ogni riga, come
+    // il salvataggio automatico con chi scrive piano o svelto; poi una
+    // quantità corretta (l'innesto chiede di ricalcolare) e una formula
+    // dopo. Si rilegge il file cella per cella.
+    let rows: [[&str; 4]; 5] = [
+        ["Voce", "Quantità", "Prezzo", "Totale"],
+        ["Farina", "2", "3", "=B2*C2"],
+        ["Farina integrale", "3", "4", "=B3*C3"],
+        ["Farina", "4", "5", "=B4*C4"],
+        ["Totale", "=SUM(B2:B4)", "Fari", "=SUM(D2:D4)"],
+    ];
+    let columns = ["A", "B", "C", "D", "E"];
+    // Scrive le celle date in una sessione nuova sui byte, e salva.
+    let write = |bytes: &[u8], cells: &[(usize, usize, &str)]| -> Vec<u8> {
+        let (mut provider, session) = open(bytes, &GridJournal::new());
+        let sheet = session.sheets[0].id.clone();
+        let mut revision = session.revision.clone();
+        for &(r, c, input) in cells {
+            let cell = GridCellKey {
+                sheet: sheet.clone(),
+                row: format!("r{r}"),
+                column: format!("c{c}"),
+            };
+            let patch = GridCellPatch {
+                cell,
+                before: None,
+                after: input.into(),
+            };
+            revision = apply(&mut provider, &session, &revision, vec![patch])
+                .unwrap_or_else(|error| panic!("{}{}: {error:?}", columns[c], r + 1))
+                .revision;
+        }
+        provider
+            .bytes_to_write(&session.instance, revision)
+            .unwrap_or_else(|error| panic!("salvataggio: {error:?}"))
+    };
+    let cells: Vec<(usize, usize, &str)> = rows
+        .iter()
+        .enumerate()
+        .flat_map(|(r, row)| row.iter().enumerate().map(move |(c, input)| (r, c, *input)))
+        .collect();
+    let blank = fub_format_xlsx::blank("Conti.xlsx", "Foglio1").unwrap();
+    let per_cell = cells
+        .iter()
+        .fold(blank.clone(), |bytes, cell| write(&bytes, &[*cell]));
+    let per_row = cells.chunks(4).fold(blank, |bytes, row| write(&bytes, row));
+
+    for bytes in [per_cell, per_row] {
+        check_rows(&rows, &columns, &bytes);
+        for (a1, expected) in [
+            ("D2", 6.0),
+            ("D3", 12.0),
+            ("D4", 20.0),
+            ("B5", 9.0),
+            ("D5", 38.0),
+        ] {
+            assert_eq!(value(&bytes, a1), Value::Number(expected), "{a1}");
+        }
+        let corrected = write(&bytes, &[(2, 1, "6")]);
+        assert!(workbook_xml(&corrected).contains("fullCalcOnLoad=\"1\""));
+        let bytes = write(&corrected, &[(1, 4, "=SUM(D2:D4)")]);
+        let mut rows = rows;
+        rows[2][1] = "6";
+        check_rows(&rows, &columns, &bytes);
+        let read = fub_format_xlsx::read(&bytes).unwrap();
+        let formula = read.workbook.sheets[0]
+            .cell(CellRef::parse("E2").unwrap())
+            .and_then(|cell| cell.formula.as_ref())
+            .map(|formula| formula.text.clone());
+        assert_eq!(formula.as_deref(), Some("SUM(D2:D4)"));
+        // I valori in cache delle formule di prima restano quelli del file:
+        // il segno dice a chi apre di ricalcolarli.
+        assert!(workbook_xml(&bytes).contains("fullCalcOnLoad=\"1\""));
+    }
+}
+
+#[test]
+fn il_giornale_convertito_durante_un_salvataggio_di_celle_si_salva_sui_byte_nuovi() {
+    // IMP-512: il salvataggio automatico scrive le voci di A1 e B1; mentre
+    // scrive, una formula converte il giornale in comandi, che rimettono
+    // anche A1 e B1. Il giornale che resta da salvare (`rebase`) riparte dai
+    // byte nuovi: le celle che hanno già non sono un conflitto.
+    let blank = fub_format_xlsx::blank("Conti.xlsx", "Foglio1").unwrap();
+    let (mut provider, session) = open(&blank, &GridJournal::new());
+    let sheet = session.sheets[0].id.clone();
+    let cell = |r: u32, c: u32, after: &str| GridCellPatch {
+        cell: GridCellKey {
+            sheet: sheet.clone(),
+            row: format!("r{r}"),
+            column: format!("c{c}"),
+        },
+        before: None,
+        after: after.into(),
+    };
+    // Il giornale della sessione dopo `commit`, come lo tiene la shell.
+    fn take(journal: &mut String, commit: fub_abi::GridCommit) -> Revision {
+        let edit = commit.edit;
+        let (from, to) = (edit.from as usize, edit.to as usize);
+        *journal = format!("{}{}{}", &journal[..from], edit.inserted, &journal[to..]);
+        commit.revision
+    }
+    let mut journal = String::new();
+    let revision = take(
+        &mut journal,
+        apply(
+            &mut provider,
+            &session,
+            &session.revision,
+            vec![cell(0, 0, "Voce")],
+        )
+        .unwrap(),
+    );
+    let revision = take(
+        &mut journal,
+        apply(&mut provider, &session, &revision, vec![cell(0, 1, "2")]).unwrap(),
+    );
+    let written = GridJournal::parse(&journal).unwrap();
+    let saved = provider
+        .bytes_to_write(&session.instance, revision.clone())
+        .unwrap();
+    take(
+        &mut journal,
+        apply(
+            &mut provider,
+            &session,
+            &revision,
+            vec![cell(0, 3, "=B1*2")],
+        )
+        .unwrap(),
+    );
+    let converted = GridJournal::parse(&journal).unwrap();
+    assert!(!converted.commands().is_empty());
+
+    let rest = converted.rebase(&written);
+    let (mut provider, session) = open(&saved, &rest);
+    let bytes = provider
+        .bytes_to_write(&session.instance, session.revision.clone())
+        .unwrap();
+    assert_eq!(value(&bytes, "A1"), Value::from("Voce"));
+    assert_eq!(value(&bytes, "B1"), Value::Number(2.0));
+    assert_eq!(value(&bytes, "D1"), Value::Number(4.0));
+}
+
+/// Ogni cella di `rows` nel file: la formula scritta, o il numero o il testo.
+fn check_rows(rows: &[[&str; 4]; 5], columns: &[&str], bytes: &[u8]) {
+    let read = fub_format_xlsx::read(bytes).unwrap();
+    let sheet = &read.workbook.sheets[0];
+    for (r, row) in rows.iter().enumerate() {
+        for (c, input) in row.iter().enumerate() {
+            let a1 = format!("{}{}", columns[c], r + 1);
+            let at = CellRef::parse(&a1).unwrap();
+            match input.strip_prefix('=') {
+                Some(formula) => assert_eq!(
+                    sheet
+                        .cell(at)
+                        .and_then(|cell| cell.formula.as_ref())
+                        .map(|f| f.text.as_str()),
+                    Some(formula),
+                    "formula in {a1}"
+                ),
+                None => match input.parse::<f64>() {
+                    Ok(expected) => assert_eq!(sheet.value(at), Value::Number(expected), "{a1}"),
+                    Err(_) => assert_eq!(sheet.value(at), Value::from(*input), "{a1}"),
+                },
+            }
+        }
+    }
+}
+
+/// La chiave di una cella del foglio `sheet`.
+fn key_in(sheet: &str, a1: &str) -> GridCellKey {
+    GridCellKey {
+        sheet: sheet.into(),
+        ..key(a1)
+    }
+}
+
+/// Le celle della finestra del foglio `sheet`.
+fn sheet_window(
+    provider: &mut XlsxGridProvider,
+    session: &GridBytesSession,
+    revision: &Revision,
+    sheet: &str,
+) -> Vec<GridBytesCell> {
+    provider
+        .window(
+            &session.instance,
+            GridWindowRequest {
+                revision: revision.clone(),
+                sheet: sheet.into(),
+                row_start: 0,
+                row_count: 20,
+                column_start: 0,
+                column_count: 8,
+                known_media: Vec::new(),
+            },
+        )
+        .unwrap()
+        .cells
+}
+
+fn find_in<'a>(cells: &'a [GridBytesCell], sheet: &str, a1: &str) -> &'a GridBytesCell {
+    let key = key_in(sheet, a1);
+    cells
+        .iter()
+        .find(|cell| cell.key == key)
+        .unwrap_or_else(|| panic!("{sheet}!{a1} is not in the window"))
+}
+
+fn number_of(value: &GridValue) -> f64 {
+    match value {
+        GridValue::Number(number) => *number,
+        other => panic!("{other:?} is not a number"),
+    }
+}
+
+/// Il valore e la formula di una cella del foglio `index` nel file.
+fn stored(bytes: &[u8], index: usize, a1: &str) -> (Value, Option<String>) {
+    let read = fub_format_xlsx::read(bytes).unwrap();
+    let cell = read.workbook.sheets[index].cell(CellRef::parse(a1).unwrap());
+    (
+        cell.map(|cell| cell.value.clone()).unwrap_or(Value::Empty),
+        cell.and_then(|cell| cell.formula.as_ref())
+            .map(|formula| formula.text.clone()),
+    )
+}
+
+fn stored_number(bytes: &[u8], index: usize, a1: &str) -> f64 {
+    match stored(bytes, index, a1).0 {
+        Value::Number(number) => number,
+        other => panic!("{a1}: {other:?} is not a number"),
+    }
+}
+
+const VOTI: &str = r#"<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Esame</t></is></c><c r="E1"><f>FUNZIONEIGNOTA(C2)</f><v>5</v></c></row><row r="2"><c r="B2"><v>6</v></c><c r="C2"><v>27</v></c><c r="E2"><f>E1+1</f><v>6</v></c></row><row r="3"><c r="B3"><v>9</v></c><c r="C3"><v>25</v></c></row><row r="4"><c r="B4"><v>12</v></c><c r="C4"><v>28</v></c></row><row r="11"><c r="B11" s="6"><f>SUMPRODUCT(B2:B4,C2:C4)/SUM(B2:B4)</f><v>26.778</v></c></row><row r="12"><c r="C12" s="6"><f>AVERAGE(C2:C4)</f><v>26.667</v></c><c r="D12"><f>C12*2</f><v>53.333</v></c></row></sheetData>"#;
+const RIEPILOGO: &str = r#"<sheetData><row r="1"><c r="A1"><f>Voti!B11</f><v>26.778</v></c><c r="B1" t="str"><f>IF(A1&gt;27,"sopra","sotto")</f><v>sotto</v></c></row><row r="2"><c r="A2"><f>A1*10</f><v>267.78</v></c></row></sheetData>"#;
+
+/// IMP-2804: cambiare un valore ricalcola, a schermo e nel file, ogni formula
+/// che lo legge, anche a catena e su un altro foglio. Una formula che il
+/// motore non sa calcolare tiene il valore del file, segnata, con chi la legge.
+#[test]
+fn cambiare_un_valore_ricalcola_le_formule_a_schermo_e_nel_file() {
+    let bytes = Package {
+        sheets: vec![sheet("Voti", VOTI), sheet("Riepilogo", RIEPILOGO)],
+        ..Package::default()
+    }
+    .bytes();
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![patch("C2", "30")],
+    )
+    .unwrap();
+    let GridInvalidation::Cells(invalid) = &commit.invalidation else {
+        panic!("{:?}", commit.invalidation);
+    };
+    for cell in [
+        key("C2"),
+        key("B11"),
+        key("C12"),
+        key("D12"),
+        key_in("s2", "A1"),
+        key_in("s2", "B1"),
+        key_in("s2", "A2"),
+    ] {
+        assert!(invalid.contains(&cell), "{cell:?} in {invalid:?}");
+    }
+
+    let weighted = (6.0 * 30.0 + 9.0 * 25.0 + 12.0 * 28.0) / 27.0;
+    let average = (30.0 + 25.0 + 28.0) / 3.0;
+    let voti = sheet_window(&mut provider, &session, &commit.revision, "s1");
+    for (a1, expected) in [("B11", weighted), ("C12", average), ("D12", average * 2.0)] {
+        let cell = find_in(&voti, "s1", a1);
+        assert!(!cell.stale, "{a1}");
+        assert!(
+            (number_of(&cell.value) - expected).abs() < 1e-9,
+            "{a1}: {:?}",
+            cell.value
+        );
+    }
+    // La funzione che il motore non conosce: il valore del file, segnato, e
+    // così la formula che la legge.
+    for (a1, kept) in [("E1", 5.0), ("E2", 6.0)] {
+        let cell = find_in(&voti, "s1", a1);
+        assert!(cell.stale, "{a1}");
+        assert_eq!(cell.value, GridValue::Number(kept), "{a1}");
+    }
+    let riepilogo = sheet_window(&mut provider, &session, &commit.revision, "s2");
+    let a1 = find_in(&riepilogo, "s2", "A1");
+    assert!(!a1.stale && (number_of(&a1.value) - weighted).abs() < 1e-9);
+    let a2 = find_in(&riepilogo, "s2", "A2");
+    assert!((number_of(&a2.value) - weighted * 10.0).abs() < 1e-9);
+    assert_eq!(
+        find_in(&riepilogo, "s2", "B1").value,
+        GridValue::Text("sopra".into())
+    );
+
+    let saved = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    assert_eq!(stored(&saved, 0, "C2").0, Value::Number(30.0));
+    for (index, a1, expected, formula) in [
+        (0, "B11", weighted, "SUMPRODUCT(B2:B4,C2:C4)/SUM(B2:B4)"),
+        (0, "C12", average, "AVERAGE(C2:C4)"),
+        (0, "D12", average * 2.0, "C12*2"),
+        (1, "A1", weighted, "Voti!B11"),
+        (1, "A2", weighted * 10.0, "A1*10"),
+    ] {
+        assert!(
+            (stored_number(&saved, index, a1) - expected).abs() < 1e-9,
+            "{index}!{a1}"
+        );
+        assert_eq!(stored(&saved, index, a1).1.as_deref(), Some(formula));
+    }
+    assert_eq!(stored(&saved, 1, "B1").0, Value::text("sopra"));
+    assert_eq!(stored(&saved, 0, "E1").0, Value::Number(5.0));
+    assert_eq!(stored(&saved, 0, "E2").0, Value::Number(6.0));
+    // Lo stile delle formule resta, e chi ha un suo motore ricalcola.
+    let before = fub_format_xlsx::read(&bytes).unwrap().workbook;
+    let after = fub_format_xlsx::read(&saved).unwrap().workbook;
+    for a1 in ["B11", "C12"] {
+        let at = CellRef::parse(a1).unwrap();
+        assert_eq!(
+            after.styles.get(after.sheets[0].style_id(at)),
+            before.styles.get(before.sheets[0].style_id(at)),
+            "{a1}"
+        );
+    }
+    assert!(workbook_xml(&saved).contains("fullCalcOnLoad=\"1\""));
+
+    // La sessione sui byte salvati mostra i valori salvati, senza segni.
+    let journal = GridJournal::parse(&commit.edit.inserted).unwrap();
+    let (mut again, reopened) = open(&saved, &journal);
+    let voti = sheet_window(&mut again, &reopened, &reopened.revision, "s1");
+    let b11 = find_in(&voti, "s1", "B11");
+    assert!(!b11.stale && (number_of(&b11.value) - weighted).abs() < 1e-9);
+}
+
+const FOGLIO1: &str = r#"<sheetData><row r="1"><c r="A1"><v>4</v></c><c r="B1"><f>Dati!A1*3</f><v>15</v></c><c r="C1"><f>B1+1</f><v>16</v></c></row></sheetData>"#;
+const DATI: &str = r#"<sheetData><row r="1"><c r="A1"><v>5</v></c></row></sheetData>"#;
+
+/// IMP-2804 fra fogli, come la prova del tester: il valore cambia sul
+/// secondo foglio, e la formula che lo legge sta sul primo, con una formula
+/// a catena dopo di lei.
+#[test]
+fn cambiare_un_valore_su_un_altro_foglio_ricalcola_chi_lo_legge() {
+    let bytes = Package {
+        sheets: vec![sheet("Foglio1", FOGLIO1), sheet("Dati", DATI)],
+        workbook_tail: r#"<calcPr fullCalcOnLoad="1"/>"#,
+        ..Package::default()
+    }
+    .bytes();
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![GridCellPatch {
+            cell: key_in("s2", "A1"),
+            before: None,
+            after: "7".into(),
+        }],
+    )
+    .unwrap();
+    let foglio1 = sheet_window(&mut provider, &session, &commit.revision, "s1");
+    for (a1, expected) in [("B1", 21.0), ("C1", 22.0)] {
+        let cell = find_in(&foglio1, "s1", a1);
+        assert!(!cell.stale, "{a1}");
+        assert_eq!(cell.value, GridValue::Number(expected), "{a1}");
+    }
+    let saved = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    assert_eq!(stored(&saved, 1, "A1").0, Value::Number(7.0));
+    assert_eq!(stored(&saved, 0, "B1").0, Value::Number(21.0));
+    assert_eq!(stored(&saved, 0, "C1").0, Value::Number(22.0));
+}
+
+const ORE: &str = r#"<sheetData><row r="2"><c r="A2"><v>8</v></c><c r="B2"><v>40</v></c><c r="C2"><f>A2*B2</f></c></row><row r="3"><c r="A3"><v>5</v></c><c r="B3"><v>50</v></c><c r="C3"><f>A3*B3</f></c></row><row r="4"><c r="C4"><f>SUM(C2:C3)</f></c></row></sheetData>"#;
+const FATTURE: &str = r#"<sheetData><row r="1"><c r="A1"><f>Ore!C4</f></c><c r="B1"><f>FUNZIONEIGNOTA(A1)</f></c></row></sheetData>"#;
+const TOTALE: &str = r#"<sheetData><row r="1"><c r="A1"><f>Fatture!A1*2</f></c></row></sheetData>"#;
+
+/// IMP-3803: le formule che un altro programma ha salvato senza valore si
+/// calcolano all'apertura, su ogni foglio; il file non cambia finché nessuno
+/// lo modifica, e alla prima modifica salva anche i loro valori.
+#[test]
+fn le_formule_senza_valore_si_calcolano_all_apertura() {
+    let bytes = Package {
+        sheets: vec![
+            sheet("Ore", ORE),
+            sheet("Fatture", FATTURE),
+            sheet("Totale", TOTALE),
+        ],
+        ..Package::default()
+    }
+    .bytes();
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    // Resta vuota soltanto la funzione che il motore non conosce.
+    let notices: Vec<_> = session
+        .notices
+        .iter()
+        .map(|notice| (notice.code.as_str(), notice.count))
+        .collect();
+    assert_eq!(notices, [("uncomputed", 1)]);
+    let ore = sheet_window(&mut provider, &session, &session.revision, "s1");
+    for (a1, expected) in [("C2", 320.0), ("C3", 250.0), ("C4", 570.0)] {
+        let cell = find_in(&ore, "s1", a1);
+        assert_eq!(cell.value, GridValue::Number(expected), "{a1}");
+        assert!(!cell.stale, "{a1}");
+    }
+    let fatture = sheet_window(&mut provider, &session, &session.revision, "s2");
+    assert_eq!(
+        find_in(&fatture, "s2", "A1").value,
+        GridValue::Number(570.0)
+    );
+    let unknown = find_in(&fatture, "s2", "B1");
+    assert_eq!((&unknown.value, unknown.stale), (&GridValue::Blank, true));
+    let totale = sheet_window(&mut provider, &session, &session.revision, "s3");
+    assert_eq!(
+        find_in(&totale, "s3", "A1").value,
+        GridValue::Number(1140.0)
+    );
+
+    // Senza modifiche il file resta i suoi byte.
+    assert_eq!(
+        provider
+            .bytes_to_write(&session.instance, session.revision.clone())
+            .unwrap(),
+        bytes
+    );
+
+    // Una modifica che nessuna formula legge salva anche i valori calcolati.
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![patch("E9", "nota")],
+    )
+    .unwrap();
+    let saved = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    assert_eq!(
+        stored(&saved, 0, "C4"),
+        (Value::Number(570.0), Some("SUM(C2:C3)".into()))
+    );
+    assert_eq!(stored(&saved, 1, "A1").0, Value::Number(570.0));
+    assert_eq!(stored(&saved, 2, "A1").0, Value::Number(1140.0));
+    assert_eq!(stored(&saved, 1, "B1").0, Value::Empty);
+
+    // Una modifica che le formule leggono le ricalcola tutte.
+    let commit = apply(
+        &mut provider,
+        &session,
+        &commit.revision,
+        vec![patch("A2", "10")],
+    )
+    .unwrap();
+    let totale = sheet_window(&mut provider, &session, &commit.revision, "s3");
+    assert_eq!(
+        find_in(&totale, "s3", "A1").value,
+        GridValue::Number(1300.0)
+    );
+    let saved = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .unwrap();
+    assert_eq!(stored(&saved, 0, "C2").0, Value::Number(400.0));
+    assert_eq!(stored(&saved, 2, "A1").0, Value::Number(1300.0));
+}
+
+/// Con il calcolo manuale della cartella niente si ricalcola, come in Excel:
+/// le formule che leggono la cella cambiata restano segnate.
+#[test]
+fn con_il_calcolo_manuale_le_formule_restano_segnate() {
+    let bytes = Package {
+        sheets: vec![sheet("Primo", BODY)],
+        workbook_tail: r#"<calcPr calcMode="manual"/>"#,
+        ..Package::default()
+    }
+    .bytes();
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let commit = apply(
+        &mut provider,
+        &session,
+        &session.revision,
+        vec![patch("A2", "0.25")],
+    )
+    .unwrap();
+    let cells = window(&mut provider, &session, &commit.revision);
+    let b2 = find(&cells, "B2");
+    assert!(b2.stale);
+    assert_eq!(b2.value, GridValue::Number(1.0));
 }

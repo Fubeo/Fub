@@ -53,6 +53,8 @@ Fub si guardano `key`, `code` e `ctrlKey` del `keydown` che arriva davvero.
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
 | S8 | la penna sulla lavagna: dieci tratti da 300 ms sopra una scheda con una tabella di 100 × 100 celle, su una lavagna con un foglio `.xlsx` di 100 × 100 celle e 2.000 tratti già scritti; poi la scheda della tabella spostata coi suoi tratti per 2 s | massimo fra fotogrammi a penna (obiettivo 2 periodi, 33 ms a 60 Hz) e allo spostamento; path asciutti; sha256 del `.xlsx` prima e dopo |
 | S9 | la lavagna di S3 con venti fogli `.xlsx` vivi, la vista sul loro blocco a zoom 0,5: spostamento e zoom come S3; poi una nota di quella lavagna in scrittura, 200 caratteri come S1 (`S9.keyToPaint`) | numero dei fogli vivi; p95 e massimo fra fotogrammi; p95 tasto → fotogramma |
+| S10 | il foglio grande, `S10/Registro.xlsx` di 3.000 × 20 celle: 150 passi di `scrollTop` da 60 px in giù e 150 in su, uno per fotogramma come la rotella, dopo un giro a vuoto; poi un clic su una cella e venti frecce, giù e su a turno, che cambiano la scelta e fanno rileggere la barra dei comandi; poi la barra laterale aperta e chiusa dal comando, sei volte, che cambia la larghezza del foglio e della barra. Il job `webview` della CI non lo fa girare | p95 e massimo fra fotogrammi allo scorrimento (`S10.scroll.frameGap.*`); per frecce e barra (`S10.frecce.mainBlocked`, `S10.barra.mainBlocked`) la mediana del thread principale bloccato come F3; il thread occupato (`S10.scroll.busy.p95`) e la CPU nel referto |
+| S11 | il PDF `S11/Dispense.pdf` di quaranta pagine larghe come un A4 e alte due, scritto dalle prove (`multipagePdf` in `fixtures.mjs`) con testo e tracciati, adattato alla larghezza: la pagina che si vede percorsa giù e su in 60 passi di `scrollTop` per verso, il passo dato dall'altezza che scorre, dopo un giro a vuoto; poi dodici pagine sfogliate con «Pagina successiva» e dodici indietro, ognuna una resa nuova del motore. Il job `webview` della CI non lo fa girare; senza soglie in `budgets.json` | p95 e massimo fra fotogrammi allo scorrimento (`S11.scroll.frameGap.*`), il thread occupato (`S11.scroll.busy.p95`), la mediana del thread bloccato per pagina come F3 (`S11.pagina.mainBlocked`); la CPU e la pagina dopo il ritorno nel referto |
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
@@ -61,6 +63,7 @@ Fub si guardano `key`, `code` e `ctrlKey` del `keydown` che arriva davvero.
 | F1 | rAF a vuoto: 5 s di `requestAnimationFrame` sulla shell ferma, a indice pronto | mediana fra fotogrammi confrontata col periodo dello schermo; tetto del motore; percorso di disegno |
 | F2 | quiete: 20 s senza gesti | richieste di fotogramma della pagina; CPU dei processi della WebView, in % di un core |
 | F3 | thread principale per gesto: la barra laterale dal comando (Ctrl+Alt+B, sei volte), il cambio scheda fra la nota lunga e una corta (Ctrl+PagGiù, otto volte), una cartella di trenta note aperta e chiusa nell'albero (otto volte) | per gesto, la mediana delle ripetizioni del tempo di thread principale bloccato; fotogrammi persi e CPU nel referto |
+| F4 | il cambio scheda fra una nota e un foglio `.xlsx` (`F4/Bilancio.xlsx`, 1.000 righe × 12 colonne) nello stesso riquadro: un giro a vuoto, poi sei andate e ritorni col clic sulla scheda | per lato (`F4.foglio`, `F4.nota`), la mediana dal primo `pointerdown` sulla scheda al fotogramma dopo la prima cella con `Riga 1` (o la riga della nota), in ms, senza soglie, e del thread principale bloccato (l'anello di F3): buco più lungo (`mainBlocked`) e somma dei buchi (`mainTotal`) |
 
 S1 scrive i 200 caratteri in cinque giri (`S1_ROUNDS` in `typing.mjs`), ognuno
 su una riga nuova, e dà la mediana dei p95 dei giri, come L1
@@ -100,15 +103,13 @@ per esempio in 800 × 1896 su una colonna di niri. Il gesto di S3 e S9 si
 calcola quindi sulla pagina vera (`bench/webview/gesture.mjs`, prova in
 `gesture.test.mjs`): può uscire dalla lavagna, che tiene il puntatore finché
 il pulsante è premuto, ma non dalla pagina, perché WebDriver rifiuta il
-punto. Parte dal centro della parte visibile di `.canvas-viewport` e va
-±400 px, come nella CI, se ci sta a 8 px dai bordi; altrimenti parte dal
-punto della vista più vicino al centro della pagina e va quanto ci sta
-(±391 px nella colonna di niri). Sotto i 100 px lo scenario fallisce col
-motivo. Il referto dà la pagina, la misura chiesta (`window`) e il gesto
-(`gesture`, con `reduced`); una pagina diversa o un gesto ridotto finiscono
-anche fra le note stampate: quei numeri non si confrontano uno a uno con
-quelli della CI.
-
+punto. Parte dal centro della parte visibile di `.canvas-viewport` e va ±400
+px, come nella CI, se ci sta a 8 px dai bordi; altrimenti parte dal punto
+della vista più vicino al centro della pagina e va quanto ci sta (±391 px
+nella colonna di niri). Sotto i 100 px lo scenario fallisce col motivo. Il
+referto dà la pagina, la misura chiesta (`window`) e il gesto (`gesture`, con
+`reduced`); una pagina diversa o un gesto ridotto finiscono anche fra le note
+stampate: quei numeri non si confrontano uno a uno con quelli della CI.
 **Il selettore e l'indice.** Il primo avvio sul vault del banco indicizza
 diecimila note, e la shell risponde prima di aver finito. Il riscaldamento
 aspetta l'indice (`vault_status`) prima di cercare «Lunga», e una ricerca per
@@ -165,8 +166,7 @@ tabella di testo, che resta sulla lavagna con i suoi tratti. Il fit della
 lavagna può stare sotto la soglia della scheda viva (zoom 0,35): in quel caso
 lo scenario la ingrandisce con cinque scatti di Ctrl+rotella mandati dalla
 pagina sulla scheda, fuori dalla misura, perché il Ctrl+rotella del driver non
-ingrandisce. Se la penna non
-scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
+ingrandisce. Se la penna non scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
 rifà i dieci tratti col mouse e D tenuto, e il referto lo dice (`input`).
 WebKitWebDriver sotto Xvfb manda il `pointerdown` della penna e poi niente:
 il tratto rimasto giù terrebbe la lavagna («un tratto alla volta»), quindi
@@ -252,10 +252,10 @@ la finestra. Le regole:
 
 | valore | soglia |
 |---|---|
-| fotogrammi, p95 (`S3`, `S9`) | 1 P |
-| fotogrammi, massimo (`S3`, `S5`, `S7`, `S8`, `S9`) | 2 P |
+| fotogrammi, p95 (`S3`, `S9`, `S10`) | 1 P |
+| fotogrammi, massimo (`S3`, `S5`, `S7`, `S8`, `S9`, `S10`) | 2 P |
 | tasto a schermo, p95 (`S1`, `S9`) | 2 P |
-| thread principale bloccato per gesto (`F3`) | 1 P |
+| thread principale bloccato per gesto (`F3`, `S10`) | 1 P |
 | rAF a vuoto, mediana (`F1`) | 1,1 P |
 
 A 180 Hz il tasto a schermo deve stare in 11,1 ms, a 60 Hz in 33,3. Le
@@ -401,7 +401,7 @@ esce con 1 se un valore supera la soglia scelta.
 Il job `webview` della CI fa lo stesso sotto Xvfb e senza scheda grafica, in
 due macchine che compilano l'app ognuna per sé: una fa S1–S3, S7, T1, I1, L1
 e C1 e carica il referto come artifact `webview-scenari-<sha>`, l'altra fa
-soltanto R1, che da sola durava 17 minuti, e lo carica come
+soltanto R1, la [memoria](webview-memory.md), e lo carica come
 `webview-memoria-<sha>`.
 
 Una macchina con la scheda grafica non vede ciò che costa alla CI dipingere:
@@ -441,8 +441,7 @@ secondo, su un iPad, un tablet Android e un PC con tavoletta:
 1. Apri un disegno in Fub e, accanto, l'app di disegno nativa del sistema.
 2. Riprendi da vicino la punta e il tratto, con la stessa luce, per dieci
    tratti veloci in ciascuna app.
-3. Conta i fotogrammi fra la punta e l'inchiostro: ogni fotogramma vale
-   4,17 ms.
+3. Conta i fotogrammi fra la punta e l'inchiostro (ognuno vale 4,17 ms).
 4. Scrivi mediana e massimo di Fub e dell'app nativa, col dispositivo, la
    versione del sistema e il commit.
 

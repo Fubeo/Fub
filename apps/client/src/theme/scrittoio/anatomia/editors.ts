@@ -42,13 +42,13 @@ export const EDITORS: PartAnatomy = {
     // La barra della Base (T15): le linguette delle viste, gli strumenti,
     // «+» (una vista nuova), «Nuova», la riga di «Cerca», le etichette e «Nel
     // file .base».
-    { name: "base-bar", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["base-bar", "base-tabs", "base-tab", "base-tab-label", "base-tab-more", "base-tab-more-count", "base-bar-space", "base-tool", "base-tool-count", "base-tool-new-view", "compact", "on", "base-new", "base-search-row", "base-search", "base-strip", "base-chips", "base-chip", "base-note", "base-written", "base-written-lines", "base-written-where", "base-written-added", "base-written-removed"] },
+    { name: "base-bar", states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")], hooks: ["base-bar", "base-tabs", "base-tab", "base-tab-label", "base-tab-more", "base-tab-more-count", "base-bar-space", "base-tool", "base-tool-count", "base-tool-new-view", "compact", "stacked", "on", "base-new", "base-search-row", "base-search", "base-strip", "base-chips", "base-chip", "base-note", "base-written", "base-written-lines", "base-written-where", "base-written-added", "base-written-removed"] },
     // I popover della barra: Filtro, Ordina (con «Raggruppa»), Proprietà, e
     // «Rinomina la proprietà» del menu della colonna.
     { name: "base-popover", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["base-popover", "base-pop-title", "base-pop-note", "base-pop-foot", "base-filter-rows", "base-filter-row", "base-filter-value", "base-filter-search", "base-filter-remove", "base-filter-add", "base-sort-rows", "base-sort-row", "base-sort-name", "base-sort-add", "base-sort-remove", "base-grouping", "base-column-list", "base-column", "base-column-grip", "base-column-hidden", "base-column-label", "base-column-fixed", "base-column-fixed-note", "dragging", "base-rename", "base-rename-field"] },
     { name: "base-table", layer: "contenuto", states: [S("rest"), S("hover"), S("focused")], hooks: ["base-table", "base-table-viewport", "base-cell", "base-cell-error", "base-head", "base-head-icon", "base-head-label", "base-head-sort", "base-title", "base-add-row", "base-add-row-button", "base-foot-count", "base-foot-summary", "base-foot-value", "base-foot-error", "base-foot-dimmed"] },
     { name: "base-cards", layer: "contenuto", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["base-cards", "base-list", "base-card", "base-field"] },
-    { name: "base-kanban", layer: "contenuto", states: DRAGGABLE, hooks: ["base-kanban", "base-kanban-column", "base-kanban-card"] },
+    { name: "base-kanban", layer: "contenuto", states: DRAGGABLE, hooks: ["base-kanban", "base-kanban-column", "base-kanban-card", "base-kanban-head", "base-kanban-empty", "base-view-key", "base-view-key-select"] },
     // Il calendario (T17): la testa col mese e i passi, la griglia dei
     // giorni, le note che si trascinano e «+N»; il vuoto senza la data.
     { name: "base-calendar", layer: "contenuto", states: DRAGGABLE, hooks: ["base-calendar", "base-cal-head", "base-cal-title", "base-cal-nav", "base-cal-prev", "base-cal-today", "base-cal-undated", "base-cal-scroll", "base-cal-grid", "base-cal-week", "base-cal-dow", "base-cal-day", "base-cal-num", "base-cal-weekday", "base-cal-event", "base-cal-more", "base-cal-empty"] },
@@ -152,6 +152,9 @@ export const EDITORS: PartAnatomy = {
     // cosa si attaccherà il tratto, e il bordo tratteggiato attorno alla
     // scheda, che è un segno di Fub sulla lavagna.
     { name: "canvas-ink-target", layers: { "canvas-ink-frame": "segno" }, states: REST, hooks: ["canvas-ink-label", "canvas-ink-frame"] },
+    // L'avviso sotto una scheda di testo allargata o ristretta dopo i tratti:
+    // il testo rifluisce, i tratti no; il pulsante rimette la larghezza.
+    { name: "canvas-ink-reflow", layers: { "canvas-ink-reflow": "segno" }, states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["canvas-ink-reflow", "canvas-ink-reflow-back"] },
     // Il Lazo (T86): il giro, la cornice dei tratti scelti e il loro
     // contorno, segni di Fub sulla lavagna.
     { name: "canvas-lasso", layers: { "canvas-lasso-path": "segno", "canvas-lasso-frame": "segno", "canvas-lasso-chosen": "segno" }, states: REST, hooks: ["canvas-lasso-path", "canvas-lasso-frame", "canvas-lasso-chosen"] },

@@ -9,6 +9,7 @@
 import { t } from "../i18n/strings";
 import { openLifetime } from "./lifetime";
 import type { MenuItem } from "./menu";
+import { composingKey } from "../kit/ime";
 
 export interface SearchableEntry {
   /// Il nome del menu che la contiene, già tradotto.
@@ -136,6 +137,7 @@ export function openMenuSearch(options: {
 
   lifetime.listen(input, "input", render);
   lifetime.listen(input, "keydown", (event) => {
+    if (composingKey(event)) return;
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();

@@ -86,6 +86,21 @@ export function systemLocale(): Locale {
   };
 }
 
+// Il primo giorno della settimana «come il sistema» per chi legge in
+// `language`: quello del sistema se la lingua è la sua, il lunedì di ISO 8601
+// se l'utente ne ha scelta un'altra. Il giorno che il sistema riporta viene
+// dalla **sua** lingua: un sistema `en-US` con Fub in italiano darebbe la
+// domenica a chi legge in italiano (IMP-4801). È la stessa regola di
+// `resolve` in `crates/fub-kernel/src/locale.rs`, che compone il locale dei
+// componenti: le due metà devono contare le settimane allo stesso modo.
+export function systemFirstDayFor(language: string, system: Locale = systemLocale()): Weekday {
+  return languageBase(language) === languageBase(system.language) ? system.first_day_of_week : "monday";
+}
+
+function languageBase(tag: string): string {
+  return (tag.split(/[-_]/)[0] ?? tag).toLowerCase();
+}
+
 // Riporta al kernel cosa il sistema dice. Rende `true` se è cambiato qualcosa.
 export async function publishSystemLocale(): Promise<boolean> {
   try {

@@ -32,6 +32,7 @@ import { setTooltip } from "../../../ui/tooltip";
 import { boardMatches, searchBoardNotes, type BoardFindIndex, type FindNotesPort, type FindTarget } from "../find";
 import { displayCanvasKey } from "./commands";
 import { ensureCanvasIcons } from "./icons";
+import { composingKey } from "../../../kit/ime";
 
 /** Quanto aspetta la richiesta delle note dopo l'ultimo tasto, in ms. */
 export const FIND_NOTES_DELAY_MS = 200;
@@ -236,13 +237,13 @@ export function createCanvasFindBar(port: CanvasFindPort): CanvasFindBar {
 
   port.lifetime.listen(input, "input", () => search());
   port.lifetime.listen(element, "keydown", (event: KeyboardEvent) => {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && !composingKey(event)) {
       event.preventDefault();
       event.stopPropagation();
       close();
       return;
     }
-    if (event.key === "Enter" && event.target === input && !event.isComposing) {
+    if (event.key === "Enter" && event.target === input && !composingKey(event)) {
       event.preventDefault();
       event.stopPropagation();
       step(event.shiftKey ? -1 : 1);

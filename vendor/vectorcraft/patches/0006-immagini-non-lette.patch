@@ -1,0 +1,17 @@
+diff --git a/crates/render/src/tests.rs b/crates/render/src/tests.rs
+--- a/crates/render/src/tests.rs
++++ b/crates/render/src/tests.rs
+@@ -890,7 +890,12 @@ fn opacity_mask_with_undecodable_image_leaves_out_object() {
+     use vectorcraft_doc::{Effect, ImageBlob, ImageObject, NodeKind, OpacityMask};
+ 
+     let mut d = Document::new(100.0, 100.0);
+-    d.images.insert("broken-mask-image".into(), ImageBlob::new("image/png", b"not a PNG".to_vec()));
++    // Patch di Fub (`0006-immagini-non-lette`, issue #425): the images known not to decode are kept
++    // for the whole process by their content ([`crate::images`]), and the first frame below needs
++    // this one still unknown. Bytes of its own: with the same bytes as another test's image, that
++    // test, run first beside this one, had it noted undecodable and the first frame left the
++    // object out.
++    d.images.insert("broken-mask-image".into(), ImageBlob::new("image/png", b"not a PNG: blurred mask image".to_vec()));
+     let mut object = rect_node(&mut d, Rect::new(10.0, 10.0, 90.0, 90.0), Paint::solid(Color::rgb(1.0, 0.0, 0.0)), Paint::None, 0.0);
+     let image = ImageObject {
+         key: "broken-mask-image".into(),

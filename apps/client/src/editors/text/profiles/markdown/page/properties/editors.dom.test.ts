@@ -101,6 +101,12 @@ describe("testo e numero, in riga", () => {
     const input = row(view, "luogo").querySelector<HTMLInputElement>("input.cm-fub-prop-input")!;
     expect(document.activeElement).toBe(input);
     input.value = "Milano: centro";
+    // Invio ed Esc che chiudono una composizione (WebKit: codice 229) restano
+    // del metodo d'immissione: il campo resta aperto e non scrive.
+    expect(key(input, "Enter", { keyCode: 229 }).defaultPrevented).toBe(false);
+    expect(key(input, "Escape", { keyCode: 229 }).defaultPrevented).toBe(false);
+    expect(text(view)).toBe("---\nluogo: Torino\n---\nTesto");
+    expect(document.activeElement).toBe(input);
     key(input, "Enter");
     expect(text(view)).toBe("---\nluogo: \"Milano: centro\"\n---\nTesto");
     expect(row(view, "luogo").querySelector("input")).toBeNull();
@@ -221,6 +227,8 @@ describe("la data", () => {
     expect(popover().querySelector(".cm-fub-prop-note")!.textContent).toContain("Non capisco «31/2/2026» come data");
     expect(text(view)).toBe("---\nscadenza: 2026-04-10\n---\nTesto");
     type(input, "5/5/2026");
+    expect(key(input, "Enter", { keyCode: 229 }).defaultPrevented).toBe(false);
+    expect(text(view)).toBe("---\nscadenza: 2026-04-10\n---\nTesto");
     key(input, "Enter");
     expect(text(view)).toBe("---\nscadenza: 2026-05-05\n---\nTesto");
   });
@@ -404,6 +412,8 @@ describe("elenco ed etichette", () => {
     const input = popover().querySelector<HTMLInputElement>(".cm-fub-prop-list-input")!;
     expect(document.activeElement).toBe(input);
     input.value = "Milano, Roma";
+    expect(key(input, "Enter", { keyCode: 229 }).defaultPrevented).toBe(false);
+    expect(text(view)).toBe("---\nluoghi:\n  - Torino\n---\nTesto");
     key(input, "Enter");
     expect(text(view)).toBe("---\nluoghi:\n  - Torino\n  - Milano\n  - Roma\n---\nTesto");
     expect(input.value).toBe("");

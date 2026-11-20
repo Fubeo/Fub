@@ -13,6 +13,7 @@ import { doc } from "../scene/test-support";
 import { createAccessPanel, type AccessPanel, type AccessView } from "./accessibility-panel";
 import { readingOrder, type Problem } from "./audit";
 import { LAYER } from "./test-support";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 const SOURCE = doc(
   `${LAYER}<rect id="oa1a1a1a1" x="0" y="0" width="5" height="5"/><g id="og1g1g1g1"><rect id="ob2b2b2b2" x="10" y="0" width="5" height="5"/>` +
@@ -188,6 +189,11 @@ describe("i problemi", () => {
     expect(document.activeElement).toBe(field());
     expect(field()!.getAttribute("aria-label")).toBe("Descrizione di Nome ob2b2b2b2");
     field()!.value = "  Il porto   al tramonto ";
+    // A metà di una composizione (WebKit: codice 229) Invio ed Esc sono del
+    // metodo d'immissione, non del campo.
+    for (const name of ["Enter", "Escape"]) expect(key(name, WEBKIT_COMPOSING, field()!).defaultPrevented).toBe(false);
+    expect(calls).toEqual([]);
+    expect(field()).not.toBeNull();
     expect(key("Enter", {}, field()!).defaultPrevented).toBe(true);
     expect(calls).toEqual(["describe ob2b2b2b2 Il porto al tramonto"]);
     expect(field()).toBeNull();

@@ -5,7 +5,7 @@ import { activeMotions, createManualDriver, setMotionDriver, setMotionPreference
 import { checkAccessibility, formatIssues } from "../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { TYPEAHEAD_MS, createList, type ListOptions } from "./list";
-import { measure, pointer, press } from "./testing";
+import { measure, pointer, press, WEBKIT_COMPOSING } from "./testing";
 
 interface Fruit {
   id: string;
@@ -208,6 +208,9 @@ describe("il fuoco di un campo", () => {
     list({ owner: field });
     expect(press(field, "ArrowDown", { isComposing: true }).defaultPrevented).toBe(false);
     expect(press(field, "Enter", { isComposing: true }).defaultPrevented).toBe(false);
+    // WebKit: il tasto che conferma la composizione ha il codice 229.
+    expect(press(field, "ArrowDown", WEBKIT_COMPOSING).defaultPrevented).toBe(false);
+    expect(press(field, "Enter", WEBKIT_COMPOSING).defaultPrevented).toBe(false);
     expect(activeRow()).toBe(rows()[0]);
     expect(activated).toEqual([]);
   });

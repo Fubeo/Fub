@@ -148,6 +148,13 @@ Schema, atomicità e rimozione sono descritti nel
 
 - Wasmtime resta in `fub-wasm-host`;
 - il kernel non distingue il backend;
+- `active_context` non nomina mai un documento che nel vault non c'è: la
+  shell pubblica il contesto con `set_active_context` e può nominare la
+  linguetta ripristinata di un file tolto ad app chiusa, o la nota che un
+  rename ha appena spostato; il provider lo riceve senza documento né
+  selezione e mostra il suo stato vuoto, non un errore. Il kernel lo scrive
+  nel log (`fub.kernel`) e tiene il contesto pubblicato: se il file torna, la
+  view lo ritrova;
 - un solo `Guard` applica la policy;
 - nessuna famiglia host è concessa implicitamente;
 - mount parziale e teardown incompleto sono errori;

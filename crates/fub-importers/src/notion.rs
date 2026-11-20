@@ -1068,14 +1068,16 @@ pub fn url_file_name(url: &str) -> Option<String> {
     (!decoded.trim().is_empty()).then_some(decoded)
 }
 
-fn percent_decode(text: &str) -> String {
+pub(crate) fn percent_decode(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
+        // Le due cifre si leggono dai byte, non da una fetta di `&str`: dopo `%`
+        // può esserci una lettera di più byte, e tagliarla manda in panico.
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
-                out.push(byte);
+            if let (Some(hi), Some(lo)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2])) {
+                out.push(hi << 4 | lo);
                 i += 3;
                 continue;
             }
@@ -1084,6 +1086,13 @@ fn percent_decode(text: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Il valore di una cifra esadecimale ASCII.
+fn hex_digit(byte: u8) -> Option<u8> {
+    char::from(byte)
+        .to_digit(16)
+        .and_then(|digit| u8::try_from(digit).ok())
 }
 
 /// Ogni riga dopo la prima, rientrata di `width` spazi.
@@ -1143,6 +1152,23 @@ fn join_blocks(parts: &[String]) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn percent_decode_non_taglia_dentro_una_lettera() {
+        // Un `%` seguito da una lettera di più byte non è una sequenza: resta com'è.
+        assert_eq!(percent_decode("%à.pdf"), "%à.pdf");
+        assert_eq!(percent_decode("%aà"), "%aà");
+        assert_eq!(percent_decode("%🚀"), "%🚀");
+        assert_eq!(percent_decode("a%2"), "a%2");
+        assert_eq!(percent_decode("%2"), "%2");
+        assert_eq!(percent_decode("%zz"), "%zz");
+        assert_eq!(percent_decode("%"), "%");
+        assert_eq!(percent_decode("%20"), " ");
+        assert_eq!(percent_decode("a%20b%2Fc"), "a b/c");
+        assert_eq!(percent_decode("caff%C3%A8"), "caffè");
+        assert_eq!(url_file_name("https://x/%à.pdf").as_deref(), Some("%à.pdf"));
+        assert_eq!(url_file_name("https://x/%🚀").as_deref(), Some("%🚀"));
+    }
 
     fn conventions() -> Conventions {
         Conventions {

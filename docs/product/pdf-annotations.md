@@ -135,6 +135,16 @@ La copertura non toglie niente dal PDF: il contenuto sotto resta nel file e si
 copia, si cerca e si stampa. Non è una redazione, e non si chiama così: toglie
 il contenuto soltanto il [PDF redatto](#esportare).
 
+Si scrive solo sulla pagina. Un tratto, una forma o una nota che comincia nel
+margine fuori dalla pagina non crea niente, e lì gli strumenti che scrivono
+hanno il cursore normale invece della mira; un tratto o una forma che comincia
+sulla pagina ed esce si ferma al bordo, e una forma tenuta diritta con
+`Maiusc` si accorcia restando quadrata o sul suo angolo. Gomma e Selezione
+lavorano anche fuori. Le annotazioni già scritte fuori dalla pagina, da
+versioni precedenti o da un altro programma, si aprono e si vedono come
+sono: niente le sposta o le toglie da sé. Il disegno libero non ha questo
+limite: lì la pagina si allarga.
+
 Con la tastiera, Invio sul foglio aggiunge un oggetto dello strumento al
 centro della vista, dentro la pagina, e lo lascia scelto: le frecce lo
 spostano. Evidenziatore e copertura ricordano ciascuno il proprio colore,

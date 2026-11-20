@@ -171,6 +171,25 @@ describe("l'HTML scritto nella nota", () => {
         '<u>d</u><table><tbody><tr><td style="text-align: center;">e</td></tr></tbody></table>',
     );
   });
+
+  it("un <img src> scritto nella nota tiene il canale dell'immagine; scritto a mano il canale cade", async () => {
+    const { sanitizeMarkdownHtml, VAULT_SRC_ATTRIBUTE, REMOTE_SRC_ATTRIBUTE } = await import("./sanitize");
+    const fragment = sanitizeMarkdownHtml(
+      '<img src="foto.png" alt="f" data-x="1"><img src="https://x.it/b.png" alt="b">' +
+        '<img data-vault-src="../../segreto.png" alt="c"><img data-remote-src="https://spia.it/p.gif" alt="d">' +
+        '<span data-vault-src="a.png">e</span>',
+    );
+    const [local, remote, forgedVault, forgedRemote] = Array.from(fragment.querySelectorAll("img"));
+    expect(local!.getAttribute(VAULT_SRC_ATTRIBUTE)).toBe("foto.png");
+    expect(local!.hasAttribute("data-x")).toBe(false);
+    expect(local!.hasAttribute("src")).toBe(false);
+    expect(remote!.getAttribute(REMOTE_SRC_ATTRIBUTE)).toBe("https://x.it/b.png");
+    expect(remote!.hasAttribute("src")).toBe(false);
+    const names = (element: Element) => element.getAttributeNames().filter((name) => name.startsWith("data-"));
+    expect(names(forgedVault!), "un canale scritto a mano non passa").toEqual([]);
+    expect(names(forgedRemote!)).toEqual([]);
+    expect(names(fragment.querySelector("span")!)).toEqual([]);
+  });
 });
 
 describe("le caselle delle voci", () => {

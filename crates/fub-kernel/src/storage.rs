@@ -95,11 +95,11 @@ pub(crate) use fs_storage::unix_change_stamp;
 use fs_storage::unix_writable;
 #[cfg(windows)]
 pub(crate) use fs_storage::windows_change_stamp;
-use fs_storage::{change_stamp_of_file, lock_path, stat_of, stat_with, tmp_path, TMP_SEQ};
 pub use fs_storage::{
-    file_names, how_to_write, identity_of_the_file, what_c_and, FileNames, FsStorage, Identity,
-    WriteMode,
+    change_stamp_clock, file_names, how_to_write, identity_of_the_file, what_c_and, FileNames,
+    FsStorage, Identity, WriteMode, CHANGE_STAMP_GRAIN,
 };
+use fs_storage::{change_stamp_of_file, lock_path, stat_of, stat_with, tmp_path, TMP_SEQ};
 pub(crate) use fs_storage::{
     is_write_lock, is_write_temporary, refuse_read_only, temp_name, ReadOnlyFile, WriteBits,
     TEMP_FILE_EXPIRY_MS,

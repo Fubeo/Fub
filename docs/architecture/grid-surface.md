@@ -41,7 +41,11 @@ alla sessione e lo consegna al provider, che controlla le preimmagini, rifiuta l
 celle bloccate e risponde con le celle da rileggere; le modifiche in coda partono
 in fila. Su una cartella annulla e ripeti sono del provider, celle e comandi in
 una pila anche oltre il salvataggio
-([contratto](../reference/ipc-contract.md#cartelle-di-excel)); senza provider
+([contratto](../reference/ipc-contract.md#cartelle-di-excel)). Annulla e ripeti
+dati mentre il giornale si scrive aspettano la scrittura
+(`DocumentSession.writing`), con le modifiche dopo di loro in fila, e vanno
+alla sessione riaperta sui byte scritti: un comando tolto da un giornale che il
+disco ha già non si potrebbe più riportare sul file; senza provider
 l'undo è locale, e si svuota con avviso se altri cambiano una sua cella. Un
 giornale cambiato altrove riapre la sessione; la bozza resta col cursore e il
 fuoco e segue la sua riga. Se la sua cella è cambiata sotto, un avviso chiede
@@ -97,7 +101,17 @@ più tre righe nuove del margine (`GRID_FRAME_NEW_ROWS`), rifà al più 48 celle
 nei fotogrammi. Sotto c'è la carta (`.grid-paper`, copiata nelle fasce
 ferme), grande e ferma quanto il riquadro: fili delle righe sull'altezza di
 serie (`--grid-row`), un filo per colonna, celle opache, e la griglia vuota
-dove lo scorrimento precede il disegno. In G2 (quattro giri) la fascia
+dove lo scorrimento precede il disegno. La carta sta nel riquadro prima del
+piano, non dentro: WebKitGTK dà un livello del compositore a un elemento
+`sticky` e uno suo a ogni elemento posato che lo copre nello stesso contesto,
+e con la carta nel piano ogni riga aggiunta ai bordi ridipingeva migliaia di
+celle a ogni passo (IMP-6600). Le fasce ferme del piano stanno sopra le
+celle; uno scorrimento scrive solo le righe che entrano ed escono e la fase
+della carta, mai un attributo uguale (`setAttributeIfChanged`). Il corpo
+delle righe (`.grid-rows`) non ha misura, come i livelli dei segni: WebKit,
+quando un figlio entra o esce, ridipinge tutto il riquadro del genitore, e
+con un corpo grande quanto il foglio ogni riga entrata ai bordi ridipingeva
+il foglio intero, testo compreso (IMP-6600). In G2 (quattro giri) la fascia
 uniforme più alta è 1 px; p90 (peggiore) del gestore 6–9 ms (17–20), del
 fotogramma 11–13 ms (15–17).
 

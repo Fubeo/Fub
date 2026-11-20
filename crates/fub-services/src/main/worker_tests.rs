@@ -29,3 +29,30 @@ fn a_panicking_request_leaves_the_worker_alive() {
         "dopo il panic il worker ha servito anche la seconda connessione"
     );
 }
+
+/// A8: `--bind` in chiaro accetta ogni loopback, IPv6 tra parentesi
+/// compreso, e nient'altro.
+#[test]
+fn only_a_loopback_bind_is_accepted() {
+    for bind in [
+        "127.0.0.1:7749",
+        "127.0.0.2:7749",
+        "[::1]:7749",
+        "localhost:7749",
+        "LocalHost:80",
+    ] {
+        assert!(is_loopback_bind(bind), "{bind}");
+    }
+    for bind in [
+        "0.0.0.0:7749",
+        "[::]:7749",
+        "192.168.1.10:7749",
+        "[2001:db8::1]:7749",
+        "esempio.it:7749",
+        "::1:7749",
+        "localhost",
+        "1:7749",
+    ] {
+        assert!(!is_loopback_bind(bind), "{bind}");
+    }
+}

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { accessibleName } from "../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { numberField, SCRUB_PX, type NumberFieldOptions } from "./number-field";
-import { listenerLedger, pointer, press } from "./testing";
+import { listenerLedger, pointer, press, WEBKIT_COMPOSING } from "./testing";
 
 let life: Lifetime;
 let commits: number[];
@@ -74,6 +74,18 @@ describe("il campo numerico del kit", () => {
     input.blur();
     expect(commits).toEqual([25]);
     expect(input.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("Invio ed Esc che chiudono una composizione restano del metodo d'immissione", () => {
+    const { input } = field();
+    type(input, "40");
+    press(input, "Enter", { isComposing: true });
+    press(input, "Enter", WEBKIT_COMPOSING);
+    press(input, "Escape", WEBKIT_COMPOSING);
+    expect(commits).toEqual([]);
+    expect(input.value).toBe("40");
+    press(input, "Enter");
+    expect(commits).toEqual([40]);
   });
 
   it("ciò che non si legge resta scritto e dice perché", () => {

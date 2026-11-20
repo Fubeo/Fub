@@ -22,7 +22,7 @@
 //
 // Gli stati che il DOM porta e il contratto no — `:hover`, `:focus-visible`,
 // `:disabled` — non sono qui: non si dichiarano, si **provocano**, e a
-// provocarli è il fotografo (`foto.mjs`) sulla scena `componenti-fuoco`.
+// provocarli è il fotografo (`photos.mjs`) sulla scena `componenti-fuoco`.
 import type { UiKind, UiNode } from "../../host/contract";
 
 /// La specie di un nodo, cioè il tag del contratto.

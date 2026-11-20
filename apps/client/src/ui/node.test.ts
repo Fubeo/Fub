@@ -21,6 +21,7 @@ import type { ActionRef, FieldValue, UiNode } from "../host/contract";
 import { pair, activeFields, LIST_PAGE, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 import { registerIcon } from "./icons";
+import { WEBKIT_COMPOSING } from "../kit/testing";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
 //
@@ -147,6 +148,14 @@ describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => 
     const { input, mandate } = reconciled(search("prima"), search("dopo"));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     expect(mandate).toEqual(["dopo"]);
+  });
+
+  it("l'Invio a metà di una composizione non manda l'azione: sceglie il candidato", () => {
+    const { input, mandate } = reconciled(search("prima"), search("dopo"));
+    for (const composing of [{ isComposing: true }, WEBKIT_COMPOSING]) {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, ...composing }));
+    }
+    expect(mandate).toEqual([]);
   });
 
   it("l'Invio manda l'azione nuova, non quella del primo disegno", () => {
@@ -309,6 +318,36 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
     handlers[0]!({ action: "tocca", payload: null }, []);
     expect(newItem).toEqual(["tocca"]);
     expect(old).toEqual([]);
+  });
+  it("un widget custom non si ridisegna con un payload uguale in un oggetto nuovo", () => {
+    // Il payload di un grafo vero: ogni render del provider ne fa uno nuovo,
+    // con gli stessi dati. Una chiave `undefined` non conta (come in JSON),
+    // l'ordine delle chiavi sì, e un dato cambiato in fondo rifà il widget.
+    const NS = "prova.grafo";
+    const drawn: unknown[] = [];
+    registerCustomRenderer(NS, (_host, payload) => {
+      drawn.push(payload);
+    });
+    const graph = (last: string, extra?: Record<string, unknown>): UiNode => {
+      const nodes = Array.from({ length: 300 }, (_, i) => `Note/n${i}.md`);
+      nodes.push(last);
+      const edges = nodes.slice(1).map((to, i) => ({ from: nodes[i], to }));
+      return { node: "custom", ns: NS, payload: { nodes, edges, query: "", group_by: "folder", ...extra }, fallback: [] } as UiNode;
+    };
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const noop = async () => {};
+    mountTree(host, graph("Note/z.md"), noop);
+    const el = host.querySelector(".ui-custom");
+    mountTree(host, graph("Note/z.md"), noop);
+    mountTree(host, graph("Note/z.md", { local: undefined }), noop);
+    expect(drawn).toHaveLength(1);
+    expect(host.querySelector(".ui-custom")).toBe(el);
+
+    mountTree(host, graph("Note/y.md"), noop);
+    expect(drawn).toHaveLength(2);
+    unmountTree(host);
+    host.remove();
   });
   it("un renderer custom riceve il contesto del montaggio e si rifà quando cambia", () => {
     const NS = "prova.contesto";
@@ -945,6 +984,43 @@ describe("controlli statici e righe valide", () => {
   it("una riga senza celle resta una riga HTML valida", () => {
     const host = mount({ node: "row", cells: [], action: null } as UiNode);
     expect(host.querySelectorAll("tr > td")).toHaveLength(1);
+  });
+
+  it("una tabella ridisegnata tiene ogni cella nella sua colonna, senza una seconda griglia", () => {
+    // IMP-4801: il mese della Scrivania, al secondo disegno, aveva i bottoni dei
+    // giorni attaccati alla riga fuori dalle celle, accanto a quelle vecchie.
+    const day = (n: number, intent: "neutral" | "primary" = "neutral"): UiNode =>
+      ({ node: "button", label: String(n), intent, action: { action: "giorno", payload: n }, key: `d${n}` }) as UiNode;
+    const table = (today: number): UiNode =>
+      ({
+        node: "table",
+        columns: [{ title: "lun", align: "center" }, { title: "mar", align: "center" }],
+        rows: [
+          { node: "row", key: "w1", action: null, cells: [day(1, today === 1 ? "primary" : "neutral"), day(2, today === 2 ? "primary" : "neutral")] },
+          { node: "row", key: "w2", action: null, cells: [day(8), { node: "text", text: "" }] },
+        ],
+      }) as UiNode;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, table(1), async () => {});
+    const firstRow = host.querySelector("tbody > tr");
+    mountTree(host, table(2), async () => {});
+    const rows = Array.from(host.querySelectorAll("tbody > tr"));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(Array.from(row.children).map((c) => c.tagName)).toEqual(["TD", "TD"]);
+    }
+    expect(host.querySelectorAll("button")).toHaveLength(3);
+    // La riga si riusa, e la cella porta il disegno nuovo.
+    expect(host.querySelector("tbody > tr")).toBe(firstRow);
+    expect(host.querySelector('[data-key="d2"]')!.className).toContain("primary");
+    // Una riga che perde celle le perde davvero, una che ne prende le prende.
+    mountTree(host, {
+      node: "table",
+      columns: [{ title: "lun", align: "center" }],
+      rows: [{ node: "row", key: "w1", action: null, cells: [day(1)] }],
+    } as UiNode, async () => {});
+    expect(Array.from(host.querySelectorAll("tbody > tr > *")).map((c) => c.tagName)).toEqual(["TD"]);
   });
 });
 
@@ -1857,6 +1933,12 @@ describe("la domanda prima di un gesto distruttivo (fub.confirm)", () => {
     };
     mountTree(host, asking(), handler);
     await Promise.resolve();
+    // Esc che chiude una composizione (WebKit: codice 229) non risponde.
+    const composing = new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(composing);
+    await Promise.resolve();
+    expect(composing.defaultPrevented).toBe(false);
+    expect(sent).toEqual([]);
     const outside = vi.fn();
     document.addEventListener("keydown", outside);
     const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });

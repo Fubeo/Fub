@@ -334,6 +334,57 @@ describe("document-window protocol", () => {
     expect(documentSessions.get(renamed)).toBeUndefined();
   });
 
+  // Audit #513, scenario C: dopo A→B il nome A è libero. Una nota nuova che si
+  // chiama A apre la sua finestra, con una sessione sua, e le battute di
+  // ciascuna finestra vanno alla sua nota.
+  it("dopo una rinomina il nome di prima apre la finestra di una nota nuova", async () => {
+    const doc = `${number}-vecchia.md`;
+    const renamed = `${number}-spostata.md`;
+    const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(first.handle);
+    let moved = "";
+    children.push(attachChildBridge(first.request, (next) => { moved = next; }, () => moved, observeState));
+    await settle();
+    expect(documentSessions.rename(doc, renamed)).toMatchObject({ kind: "renamed" });
+
+    const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(second.handle);
+    expect(second.request.session).not.toBe(first.request.session);
+    let fresh = "";
+    children.push(attachChildBridge(second.request, (next) => { fresh = next; }, () => fresh, observeState));
+    await settle();
+
+    const edit = operationFromText(fresh, "abc nuova");
+    fresh = "abc nuova";
+    children[1].sendEdit(fresh, edit);
+    await second.handle.freeze();
+    second.handle.thaw();
+    expect(documentSessions.text(doc)).toBe("abc nuova");
+    expect(documentSessions.text(renamed)).toBe("abc");
+    expect(first.handle.ownerClosed()).toBe(false);
+  });
+
+  // Audit #513, scenario A: la nota della finestra sparisce. La finestra sa
+  // che la sua sessione è chiusa per sempre; chiusa, non tocca la sessione
+  // nuova che nel frattempo ha preso lo stesso nome.
+  it("una finestra rimasta senza nota lo sa, e chiudendo non rilascia la nota nuova con lo stesso nome", async () => {
+    const doc = `${number}-cancellata.md`;
+    const orphan = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(orphan.handle);
+    const closedBefore = orphan.handle.ownerClosed?.();
+    expect(documentSessions.handleExternalRemoval(doc)).toMatchObject({ kind: "removed" });
+    const closedAfter = orphan.handle.ownerClosed?.();
+
+    await documentSessions.readForSurface(doc);
+    const reborn = documentSessions.get(doc);
+    expect(reborn?.snapshot().lifecycle).toBe("open");
+    await orphan.handle.dispose();
+    handles.pop();
+    expect(documentSessions.get(doc)).toBe(reborn);
+    expect([closedBefore, closedAfter]).toEqual([false, true]);
+    expect((await documentSessions.release(doc)).kind).toBe("closed");
+  });
+
   it("porta il profilo risolto e rifiuta un documento che non è testo", async () => {
     const board = `${number}-lavagna.canvas`;
     await expect(attachRemoteSurface(board, state.vaultRoot, () => null)).rejects.toBeInstanceOf(DocumentWindowUnsupported);

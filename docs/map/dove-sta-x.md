@@ -100,6 +100,7 @@
 | `apps/client/src/rules/syntax.generated.ts` | `UPDATE_MIRROR=1 cargo test -p fub-abi --test rules_mirror` |
 | `apps/client/src/editors/rich/paper.generated.ts` | `UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_projection` |
 | le fixture dei mirror (in `src/__fixtures__/`) | lo stesso giro di `UPDATE_MIRROR=1` del test che le cita |
+| `apps/client/src/__fixtures__/live-decorations.json` (l'impronta delle decorazioni della Live) | `UPDATE_MIRROR=1 npx vitest run src/editors/text/profiles/markdown/livepreview-identica.test.ts` da `apps/client/`, soltanto per un cambio voluto di ciò che la Live disegna |
 | la pelle del tema di serie | `npm run theme:generate` da `apps/client/` |
 | `apps/client/src/editors/text/profiles/markdown/html-entities.generated.ts` | `npm run entities:generate` da `apps/client/` (verifica: `npm run entities:verify`, e `npm test`) |
 | il catalogo dei comandi serviti dei fogli | `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib catalogo_servito` |

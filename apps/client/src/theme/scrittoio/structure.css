@@ -258,6 +258,17 @@
   white-space: nowrap;
 }
 
+/* Una tabella di bottoni (i giorni di un mese: il calendario del cassetto, il
+   mese della Scrivania) sta nella larghezza che ha: colonne uguali, nessuna
+   spinta fuori dal bordo dalla misura dei bottoni. Con la disposizione
+   automatica otto colonne volevano 423 px in un cassetto di 240, e giovedì,
+   venerdì e sabato restavano fuori, senza clic (IMP-2802). È una garanzia e
+   non una veste: un tema può stringere o allargare le celle, non far uscire
+   un giorno dal calendario. */
+.ui-table:has(td > .ui-button) {
+  table-layout: fixed;
+}
+
 .ui-webview-frame {
   display: inline-block;
   line-height: 0;
@@ -617,6 +628,10 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden auto;
+  /* Un piano a sé: WebKitGTK compone lo scorrimento dell'albero e dei
+     risultati della ricerca invece di ridipingerli a ogni passo
+     (docs/architecture/desktop-webview.md, «Gli scorrevoli»). */
+  isolation: isolate;
   container-type: inline-size;
   container-name: drawer;
 }
@@ -1253,9 +1268,24 @@ body {
   contain: size layout;
 }
 
+/* In Scrittura i numeri di riga non si vedono, ma la colonna resta nella
+   disposizione, larga zero e senza disegno. CodeMirror le dà come altezza
+   minima quella del testo (`minHeight`): mentre ridisegna una riga, togliendo
+   il blocco d'altezza del contenuto, il fondo dello scorrimento resta dov'è.
+   Tolta del tutto (`display: none`), WebKit accorcia lo scorrimento per un
+   attimo e, a fondo nota, la prima lettera su una riga vuota (il «/» che apre
+   il menu) fa scendere la vista di una riga. */
 .pane-editor[data-markdown-mode="live_preview"] .cm-gutters,
 .pane-editor[data-markdown-mode="blocks"] .cm-gutters {
-  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden;
+  visibility: hidden;
+  content-visibility: hidden;
+  pointer-events: none;
 }
 
 .pane-editor[data-markdown-mode] > .pane-preview {
@@ -1812,10 +1842,18 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   width: var(--grid-w, 0px);
   height: var(--grid-top-h, 0px);
 }
+/* Il corpo: le righe vi stanno posate (`top`, `left`), e lui non ha misura,
+   come i livelli dei segni. WebKit, quando un figlio entra o esce, ridipinge
+   tutto il riquadro del genitore: con un corpo grande quanto il foglio ogni
+   riga aggiunta o tolta ai bordi ridipingeva il foglio intero, testo di
+   ogni cella compreso, uno o due fotogrammi su tre dello scorrimento
+   (IMP-6600). Senza misura entra e esce solo la riga. Le righe danno
+   comunque la misura da scorrere al riquadro, che la prende anche dal
+   piano. */
 .grid-rows {
   position: relative;
-  width: var(--grid-w, 0px);
-  height: var(--grid-h, 0px);
+  width: 0;
+  height: 0;
 }
 /* Nella riga, ciò che sta fermo a sinistra (l'intestazione, le celle delle
    colonne bloccate) è nel flusso senza occuparvi posto; il resto è
@@ -1834,7 +1872,17 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
    griglia vuota, mai il bianco. La carta è grande quanto il riquadro e sta
    ferma nel riquadro (`sticky`): così il browser l'ha sempre già dipinta,
    anche quando lo scorrimento salta più in là delle righe dipinte, dove una
-   carta grande quanto il foglio sarebbe ancora da dipingere. I suoi fili
+   carta grande quanto il foglio sarebbe ancora da dipingere. Sta nel
+   riquadro, prima del piano, non dentro: WebKitGTK dà un livello del
+   compositore a un elemento `sticky` che scorre, e uno suo a ogni elemento
+   posato che si dipinge dopo di lui nello stesso contesto e lo copre. Nel
+   piano erano tutte le celle, e ogni riga aggiunta o tolta ai bordi faceva
+   ridipingere migliaia di livelli a ogni passo dello scorrimento (IMP-6600).
+   Fuori, sopra la carta c'è solo il piano, che è un contesto suo
+   (`isolation`) e prende un livello solo, con le celle dentro. Il margine
+   sotto la carta, negativo quanto lei, non le fa occupare posto nel
+   riquadro. Le fasce ferme del piano stanno sopra le celle (`z-index`
+   positivo), e non trascinano altri livelli. I suoi fili
    seguono lo scorrimento: le righe con la fase che la griglia scrive
    (`background-position`) sull'altezza di serie (`--grid-row`), le colonne
    in `.grid-paper-rules`, spostato di lato, un elemento sottile dove ogni
@@ -1851,8 +1899,11 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   left: 0;
   overflow: hidden;
 }
+/* Fuori dal piano non eredita il suo `pointer-events`: dove non c'è una
+   riga, il puntatore va al riquadro, non alla carta. */
 .grid-paper {
   z-index: 0;
+  pointer-events: none;
 }
 .grid-paper-rules {
   position: absolute;
@@ -2017,6 +2068,15 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: hidden;
   padding: 0.3rem 0.45rem;
   white-space: nowrap;
+  /* Ogni cella ha larghezza e altezza scritte dalla griglia (`#place`,
+     `#stickLeft`; `card.ts` per la scheda della lavagna) e taglia ciò che
+     ha dentro: ciò che cambia in una cella non tocca le altre, e le righe
+     che lo scorrimento aggiunge si impaginano da sole. Nella WebKitGTK lo
+     scorrimento del foglio grande passa da 5,7 a 5,4 s di thread occupato
+     in 300 passi (banco WebView, S10). Fra i discendenti di una cella
+     nessuno ha uno `z-index`: il contesto di sovrapposizione che `paint`
+     le dà non cambia l'ordine di niente. */
+  contain: strict;
 }
 
 /* Il testo sta sopra la barra di dati, e si taglia dove la cella finisce.
@@ -2085,6 +2145,8 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .grid-cell.spill {
   overflow: visible;
   z-index: 1;
+  /* Il testo che passa nelle celle accanto si vede: niente `paint`. */
+  contain: size layout style;
 }
 
 .grid-cell.spill > .grid-cell-text {
@@ -3962,6 +4024,35 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: visible;
 }
 
+/* L'avviso dei tratti sul testo che rifluisce: sotto la scheda, fuori dal
+   testo e dall'inchiostro. Si legge a ogni zoom: le sue misure si dividono
+   per lo zoom della lavagna (`--canvas-ink-reflow-k`) fino a metà, sotto
+   rimpicciolisce con le schede. La scheda che lo porta sta sopra le vicine,
+   come quella che scrive, perché nessuna lo copra. */
+.canvas-node[data-ink-reflowed] {
+  z-index: 1;
+}
+.canvas-ink-reflow {
+  --canvas-ink-reflow-k: max(var(--canvas-zoom, 1), 0.5);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  width: max(100%, calc(280px / var(--canvas-ink-reflow-k)));
+  pointer-events: auto;
+}
+.canvas-ink-reflow-text {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+}
+.canvas-ink-reflow-back {
+  flex: 0 0 auto;
+}
+
 /* Il Lazo della lavagna (T86): sopra l'inchiostro libero dello stage, il giro
    in corso, il contorno dei tratti scelti e la cornice attorno a loro, in
    coordinate della lavagna. I segni restano sottili a ogni zoom; il colore è
@@ -5749,6 +5840,11 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 /* Sopra la punta che si vede, il cursore è la punta. */
 .draw-surface[data-nib] {
   cursor: none;
+}
+/* Sul foglio delle annotazioni, fuori dalla pagina non si scrive: gli
+   strumenti che scrivono lasciano la mira per il cursore normale. */
+.draw-surface[data-off-page]:is([data-tool="pen"], [data-tool="highlighter"], [data-tool="note"], [data-tool="rect"], [data-tool="ellipse"], [data-tool="line"], [data-tool="arrow"], [data-tool="cover"], [data-tool="text"]) {
+  cursor: default;
 }
 /* La Mano prende e trascina la vista; Spazio tenuto la presta a ogni
    strumento. La Lente ingrandisce. */

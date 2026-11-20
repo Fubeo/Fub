@@ -234,11 +234,11 @@ importa staticamente e rimette insieme: al tema arriva, byte per byte, la
 pelle minimizzata intera (la build si ferma se no), all'avvio come prima.
 Niente pelle a pezzi con la sua superficie: cascata, momento delle regole e
 temi d'autore non cambiano, e non c'è lampo senza stile da prevenire.
-Il chunk `search` lascia le discussioni dei commenti della Live a
-`markdown-comments` (la build si ferma se fa un ciclo) e i riquadri
-(`state/layout.ts`) a `shell-layout`; il ponte dei documenti lascia l'ospite
-Mermaid (`diagram-host`) e le tabelle Markdown (`markdown-tables`) a chunk che
-importano soltanto chunk condivisi; le stringhe hanno un chunk per lingua
+Il chunk `search` lascia i commenti della Live a `markdown-comments` (la build
+si ferma se fa un ciclo) e i riquadri (`state/layout.ts`) a `shell-layout`; il
+ponte dei documenti lascia `diagram-host` (Mermaid), `markdown-tables` e
+`markdown-format` (solo chunk attesi, come la resa, o la build si ferma) a chunk
+che importano soltanto chunk condivisi; le stringhe hanno un chunk per lingua
 (`shell-strings`, `shell-strings-en`); la barra della formula
 (`editors/core/formula-bar.ts`) sta fuori dall'ospite delle schede.
 
@@ -365,8 +365,8 @@ appena qualcuno inserisce un item nel mezzo.
   `.cargo/`, una `rust-toolchain` o `ci.yml`, perché leggono soltanto quelli;
   su `main` sempre. I test del workspace non hanno un filtro così: leggono
   anche `apps/client/` e `docs/`.
-- La WebView vera gira in due job: R1 (la memoria) da sola, e gli altri
-  scenari insieme. Non gira su una PR in bozza, né su una pronta che non tocca
+- La WebView vera gira in due job: R1 (la memoria, quindici giri) da sola, e
+  gli altri scenari insieme. Non gira su una PR in bozza, né su una pronta che non tocca
   ciò che finisce nell'app (`webview` del job `cosa cambia`).
 - La cache Rust salva solo da `main` (budget di 10 GB); gli altri job leggono
   la test cache di Linux (`shared-key: test`) senza risalvarla.
@@ -401,9 +401,9 @@ predefinito, se il ramo è andato avanti o se la PR ha l'etichetta
 `baseline-a-mano`; non esegue codice della PR e convalida l'artefatto prima di
 scrivere un file. Le regole e le loro prove stanno in
 [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs).
-Una scena nuova ancora senza foto non fa cadere il client: il presidio di
-`bench/scene.test.ts` vuole solo che ogni scena abbia tutte le sue luci o
-nessuna, e il rosso lo dà il banco visivo, che fa partire il bot.
+Una scena nuova senza foto fa cadere solo il banco visivo (che non lascia
+unire la PR e fa partire il bot): `bench/scene.test.ts` vuole che ogni scena
+abbia tutte le sue luci o nessuna, e l'autoprova copre anche questo caso.
 
 Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
 ha per unico genitore la testa della corsa `riuso_di`, cambia solo

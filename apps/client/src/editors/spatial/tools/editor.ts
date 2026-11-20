@@ -248,7 +248,8 @@ export interface DrawPlace {
 /// Il foglio di un profilo che annota una pagina alla volta su un fondo che
 /// non è del documento: la pagina di un PDF.
 export interface DrawSheet {
-  /// La pagina di adesso, nelle coordinate della scena.
+  /// La pagina di adesso, nelle coordinate della scena: un segno nasce solo
+  /// lì, e un gesto che ne esce si ferma al bordo (`page-bounds.ts`).
   page(): Page;
   /// I gruppi della pagina di adesso: si disegnano e si toccano solo loro.
   scope(model: DocumentModel): readonly ContainerNode[];

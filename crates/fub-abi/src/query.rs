@@ -156,6 +156,62 @@ pub enum QueryPredicate {
     },
 }
 
+/// Il predicato dei **link nelle proprietà**: un [`QueryPredicate::Custom`]
+/// con questo `ns` e per `predicate` un [`PropertyLinkPredicate`]. Lo serve
+/// l'indice del kernel, che ha in memoria il frontmatter e il grafo che
+/// risolve i link.
+///
+/// È custom per la stessa ragione di `fub:comment`
+/// ([`COMMENT_PREDICATE_NS`](crate::rules::search_syntax::COMMENT_PREDICATE_NS)):
+/// da `0.2.0` il `variant query-predicate` della WIT non prende casi nuovi
+/// (ADR 0238), e la foglia deve arrivare anche ai plugin già compilati.
+pub const PROPERTY_LINK_PREDICATE_NS: &str = "fub:property-link";
+
+/// **Le note che nominano una delle note `targets` in un link del
+/// frontmatter**, in una chiave qualunque o nella sola `key`.
+///
+/// I link delle proprietà non sono archi del grafo dei link (il formato li
+/// estrae dal corpo), quindi [`QueryPredicate::Linked`] non li vede. Questa
+/// foglia è la loro via inversa: una rinomina chiede chi la nomina senza
+/// leggere le proprietà di tutto il vault, e «Collegata da» è la stessa
+/// domanda ristretta a una Relazione, chiave per chiave.
+///
+/// Un link conta con la regola di
+/// [`rules::properties::links`](crate::rules::properties::links) e si
+/// risolve con le regole dei wikilink del grafo (nome, percorso anche
+/// parziale, alias). Un link rotto non nomina niente; una nota
+/// che nomina sé stessa combacia.
+///
+/// I bersagli sono un insieme perché lo spostamento di una cartella chiede di
+/// tutte le sue note insieme: una foglia per nota sarebbe un giro del vault
+/// per nota. Vuoto = nessuna nota.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PropertyLinkPredicate {
+    pub targets: Vec<DocId>,
+    /// La chiave del frontmatter in cui cercare; assente = ogni chiave.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+}
+
+impl PropertyLinkPredicate {
+    /// La foglia, pronta per una [`QueryExpr`].
+    pub fn into_predicate(self) -> QueryPredicate {
+        QueryPredicate::Custom {
+            ns: PROPERTY_LINK_PREDICATE_NS.to_string(),
+            predicate: serde_json::to_value(self).expect("un record di stringhe si serializza"),
+        }
+    }
+
+    /// Il payload di una foglia custom di questo `ns`. Un payload che non è
+    /// questo record è un errore di chi chiede, non una foglia vuota.
+    pub fn from_payload(payload: &serde_json::Value) -> Result<Self, PluginError> {
+        Self::deserialize(payload).map_err(|error| {
+            PluginError::BadArgs(format!("{PROPERTY_LINK_PREDICATE_NS}: {error}").into())
+        })
+    }
+}
+
 /// La foglia di testo: cosa cercare, come, e dove.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TextQuery {

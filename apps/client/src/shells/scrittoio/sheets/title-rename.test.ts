@@ -123,6 +123,22 @@ function type(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+/// Una tastiera: ogni battuta va all'elemento col fuoco in quel momento, e
+/// dove nessuno la prende un campo la scrive al posto della selezione, come fa
+/// il browser. Un bottone non scrive niente.
+function keyboard(text: string): void {
+  for (const key of text) {
+    const target = (document.activeElement ?? document.body) as HTMLElement;
+    const event = press(target, key);
+    if (event.defaultPrevented || !(target instanceof HTMLInputElement) || target.readOnly) continue;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? start;
+    target.value = target.value.slice(0, start) + key + target.value.slice(end);
+    target.setSelectionRange(start + key.length, start + key.length);
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
 /// Una promessa che si scioglie quando lo dice il banco.
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void; reject(error: unknown): void } {
   let resolve!: (value: T) => void;
@@ -299,6 +315,37 @@ describe("aprire il campo", () => {
     dblclick(crumbOf(view));
     press(crumbOf(view), "F2");
     expect(inputOf(view)).toBeNull();
+  });
+
+  // IMP-3806: un clic sul titolo e poi il nome scritto di getto. Le lettere
+  // prima del primo spazio cadevano sul bottone, lo Spazio apriva il campo col
+  // nome selezionato e il resto lo sostituiva: «Progetto scorte» diventava
+  // «scorte». Ogni battuta va al nome, la prima compresa.
+  it("dopo un clic sul titolo, scrivere apre il campo e nessuna lettera va persa", async () => {
+    const bar = pane("main", "Progetto Gestione Scorte.md");
+    mountTitleRename(lifetime);
+    const title = crumbOf(bar);
+    title.focus();
+    title.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    expect(inputOf(bar)).toBeNull();
+    keyboard("Progetto scorte Ferramenta Bosco");
+    const input = inputOf(bar)!;
+    expect(input.value).toBe("Progetto scorte Ferramenta Bosco");
+    expect(document.activeElement).toBe(input);
+    press(input, "Enter");
+    await settled();
+    expect(renames).toEqual([{ from: "Progetto Gestione Scorte.md", to: "Progetto scorte Ferramenta Bosco.md" }]);
+  });
+
+  it("le scorciatoie e i tasti che non scrivono, col fuoco sul titolo, non aprono il campo", () => {
+    const bar = pane("main", "Guida/Nota.md");
+    mountTitleRename(lifetime);
+    crumbOf(bar).focus();
+    for (const [key, init] of [["a", { ctrlKey: true }], ["k", { metaKey: true }], ["x", { altKey: true }], ["Shift", {}], ["Tab", {}], ["Dead", {}]] as const) {
+      const event = press(crumbOf(bar), key, init);
+      expect(event.defaultPrevented).toBe(false);
+      expect(inputOf(bar)).toBeNull();
+    }
   });
 
   it("un campo solo alla volta", () => {

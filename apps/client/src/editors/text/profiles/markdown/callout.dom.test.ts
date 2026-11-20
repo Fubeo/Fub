@@ -62,6 +62,13 @@ describe("in Live", () => {
     expect(document.querySelector(".cm-content")!.textContent).not.toContain("[!tip]");
   });
 
+  it("col cursore fra `[!` e `]` il tipo si sta scrivendo e resta sorgente (IMP-6108)", () => {
+    const doc = "Prima\n\n> [!t]";
+    mount(doc, doc.length - 1);
+    expect(document.querySelector(".cm-fub-callout-type")).toBeNull();
+    expect(document.querySelector(".cm-content")!.textContent).toContain("[!t]");
+  });
+
   it("il menu dei tipi riscrive il tipo, e la freccia la ripiegatura", () => {
     const view = mount(SOURCE, SOURCE.indexOf("tram"));
     document.querySelector<HTMLButtonElement>(".cm-fub-callout-type")!.click();

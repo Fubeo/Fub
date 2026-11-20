@@ -17,6 +17,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
 import { dismissTooltip } from "../ui/tooltip";
 import { dismissChildren, isTopLayer, layerHolds, openLayer } from "./layers";
 import { adopt } from "./owned";
+import { composingKey } from "./ime";
 
 export type PopoverPlacement = "top" | "bottom" | "left" | "right";
 export type PopoverAlign = "start" | "center" | "end";
@@ -322,7 +323,7 @@ export function openPopover(options: PopoverOptions): PopoverHandle {
       (view ?? doc) as EventTarget,
       "keydown",
       (event: KeyboardEvent) => {
-        if (event.key !== "Escape" || event.isComposing || !isTopLayer(layer)) return;
+        if (event.key !== "Escape" || composingKey(event) || !isTopLayer(layer)) return;
         event.preventDefault();
         event.stopPropagation();
         close("escape");

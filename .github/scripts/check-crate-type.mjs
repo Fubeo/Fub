@@ -63,7 +63,7 @@ const CONSUMATORI = new Map([
  * I `crate-type` dichiarati da un `Cargo.toml`: una voce per sezione che ne
  * porta uno.
  *
- * Parsing a righe come `check-cargo-versioni.mjs` e
+ * Parsing a righe come `check-cargo-versions.mjs` e
  * `check-cargo-feature-default.mjs`, e per la stessa ragione: un lettore TOML
  * completo sarebbe una dipendenza npm. L'elenco può stare su più righe, quindi
  * le quadre si richiudono qui. Ciò che non si sa leggere non si indovina: si
@@ -161,7 +161,7 @@ function main() {
   );
 
   // Un presidio che non ha guardato niente non è verde: è spento. Stessa
-  // disciplina di `check-cargo-versioni.mjs`, e per la stessa ragione — qui
+  // disciplina di `check-cargo-versions.mjs`, e per la stessa ragione — qui
   // però il caso «nessuno dichiara niente» è **legittimo** (un workspace di
   // sole librerie normali non scrive mai `crate-type`), quindi ciò che si
   // pretende è di aver letto dei manifest, non delle forme.

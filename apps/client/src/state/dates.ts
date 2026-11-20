@@ -5,13 +5,13 @@
 // quando cambiano; il nome della giornaliera è il gemello di `daily_name` in
 // `crates/fub-features/src/template.rs`.
 
-import { resolvedLanguage, catalogLanguage } from "../i18n/strings";
+import { resolvedLanguage, catalogLanguage, languageCurrent } from "../i18n/strings";
 import { settings } from "../host/query";
 import type { Weekday } from "../host/contract";
 import { Race } from "../ui/race";
 import type { Lifetime } from "../ui/lifetime";
 import { onEvent } from "./kernel";
-import { systemLocale } from "./locale";
+import { systemFirstDayFor, systemLocale } from "./locale";
 import { on, openVaultRoot } from "./store";
 
 const TEMPLATE_PLUGIN = "fub.template";
@@ -178,7 +178,7 @@ export function dailyDate(path: string): string | null {
 
 /// Il primo giorno della settimana: 1 = lunedì … 7 = domenica.
 export function firstWeekday(): number {
-  const chosen = firstDay ?? systemLocale().first_day_of_week;
+  const chosen = firstDay ?? systemFirstDayFor(languageCurrent(), systemLocale());
   return WEEKDAYS.indexOf(chosen) + 1 || 1;
 }
 

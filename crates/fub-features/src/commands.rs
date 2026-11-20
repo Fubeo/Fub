@@ -58,7 +58,7 @@ use fub_abi::traits::{
 };
 use serde::{Deserialize, Serialize};
 
-mod recurrence;
+pub(crate) mod recurrence;
 
 /// Id del provider: lo spazio dati e la registrazione, come per le view.
 pub const COMMANDS_ID: &str = "fub.commands";
@@ -189,6 +189,33 @@ fn archive(key: &str, n: usize, folder: &str, failed: Option<String>) -> Text {
     Text::message(key, args)
 }
 
+/// L'esito di un'archiviazione: le note non spostate e le note i cui
+/// collegamenti nelle proprietà sono rimasti col nome vecchio, ognuna detta
+/// per nome; nessuna delle due tace.
+fn archive_done(n: usize, folder: &str, failed: &[Failure], links: &[Failure]) -> Text {
+    match (failed.is_empty(), links.is_empty()) {
+        (true, true) => archive(D_ARCHIVE, n, folder, None),
+        (false, true) => archive(D_ARCHIVE_PARTIAL, n, folder, Some(why(failed))),
+        (true, false) => Text::message(
+            D_ARCHIVE_RELINK,
+            vec![
+                Arg::int(A_COUNT, n as i64),
+                Arg::text(A_FOLDER, folder),
+                Arg::text(A_LINKS, why(links)),
+            ],
+        ),
+        (false, false) => Text::message(
+            D_ARCHIVE_PARTIAL_RELINK,
+            vec![
+                Arg::int(A_COUNT, n as i64),
+                Arg::text(A_FOLDER, folder),
+                Arg::text(A_FAILED, why(failed)),
+                Arg::text(A_LINKS, why(links)),
+            ],
+        ),
+    }
+}
+
 /// Le chiavi delle righe che i comandi scrivono **mentre girano**: gli errori,
 /// i riassunti di un piano, e ciò che si dice quando è andata.
 ///
@@ -226,6 +253,10 @@ const AND_NOT_A_NUMBER: &str = "err.not_a_number";
 const E_EMPTY_FOLDER: &str = "err.empty_folder";
 const E_FOLDER_INTO_ITSELF: &str = "err.folder_into_itself";
 const E_FOLDER_ROLLBACK: &str = "err.folder_rollback";
+const E_RELINK_CHANGED: &str = "err.relink_changed";
+const E_RELINK_UNREACHABLE: &str = "err.relink_unreachable";
+const E_RELINK_UNWRITABLE: &str = "err.relink_unwritable";
+const E_RELINK_INDEX: &str = "err.relink_index";
 const E_UNDECLARED_KEY: &str = "err.undeclared_key";
 const E_NOT_PROGRAM_WRITABLE: &str = "err.not_program_writable";
 const E_NOT_JSON: &str = "err.not_json";
@@ -257,11 +288,16 @@ const D_REPLACE: &str = "done.replace";
 const D_REPLACE_PARTIAL: &str = "done.replace_partial";
 const D_CREATE: &str = "done.create";
 const D_RENAME: &str = "done.rename";
+const D_RENAME_RELINK: &str = "done.rename_relink";
 const D_TRASH: &str = "done.trash";
 const D_RESTORE: &str = "done.restore";
 const D_EMPTY_TRASH: &str = "done.empty_trash";
 const D_ARCHIVE: &str = "done.archive";
 const D_ARCHIVE_PARTIAL: &str = "done.archive_partial";
+/// Archiviate tutte, con dei collegamenti nelle proprietà rimasti vecchi.
+const D_ARCHIVE_RELINK: &str = "done.archive_relink";
+/// Qualcuna non spostata, e dei collegamenti nelle proprietà rimasti vecchi.
+const D_ARCHIVE_PARTIAL_RELINK: &str = "done.archive_partial_relink";
 const D_FOLDER_RENAME: &str = "done.folder_rename";
 const D_FOLDER_RENAME_PARTIAL: &str = "done.folder_rename_partial";
 const D_FOLDER_TRASH: &str = "done.folder_trash";
@@ -310,6 +346,8 @@ const A_SKIPPED: &str = "skipped";
 const A_OCCURRENCES: &str = "occurrences";
 const A_NOTES: &str = "notes";
 const A_FAILED: &str = "failed";
+/// Le note i cui collegamenti nelle proprietà sono rimasti vecchi.
+const A_LINKS: &str = "links";
 const A_FOLDER: &str = "folder";
 const A_AT: &str = "at";
 /// La revisione che chi chiede una spunta ha letto (`note.task.toggle`).
@@ -326,6 +364,7 @@ mod folders;
 mod move_block;
 mod notes;
 mod provider;
+mod relink;
 mod rewrite;
 mod sync_block;
 #[cfg(feature = "xlsx")]
@@ -387,6 +426,10 @@ enum ArchiveStatus {
 pub struct ArchiveRecovery {
     pub done: Vec<DocId>,
     pub failures: Vec<Failure>,
+    /// Note spostate i cui collegamenti nelle proprietà non si sono riscritti
+    /// tutti: la nota è archiviata, il link nomina ancora il posto vecchio.
+    #[serde(default)]
+    pub link_failures: Vec<Failure>,
 }
 
 fn archive_store(host: &mut dyn HostApi, batch: &ArchiveBatch) -> Result<(), PluginError> {
@@ -466,15 +509,53 @@ pub fn recover_archive_batch(host: &mut dyn HostApi) -> Result<ArchiveRecovery, 
                 continue;
             }
             ArchiveStatus::Pending => match archive_position(host, item)? {
-                ArchivePosition::Moved => ArchiveStatus::Done,
+                ArchivePosition::Moved => {
+                    // Spostata prima del crollo, e lo stato non si era scritto:
+                    // i link delle proprietà possono essere rimasti al posto
+                    // vecchio. Il nome vecchio non si risolve più, quindi si
+                    // cercano fra le proprietà (stessa regola, nessun link
+                    // riscritto due volte); una domanda che fallisce li dice
+                    // da guardare.
+                    let moved = [(item.from.clone(), item.to.clone())];
+                    match relink::property_links_left_behind(&*host, &item.from, &item.to) {
+                        Ok(found) => report
+                            .link_failures
+                            .extend(relink::rewrite_property_links(host, &found, &moved)),
+                        Err(error) => report
+                            .link_failures
+                            .push(Failure::of(item.from.clone(), error)),
+                    }
+                    ArchiveStatus::Done
+                }
                 ArchivePosition::Conflict => ArchiveStatus::Failed(archive_conflict(item)),
                 ArchivePosition::Ready => {
+                    // I link delle proprietà si cercano col nome vecchio, prima
+                    // della rinomina, e si riscrivono dopo: la stessa regola di
+                    // `note.rename` (IMP-2805). Una domanda che fallisce non
+                    // ferma l'archiviazione: la nota si sposta, e i suoi link
+                    // da guardare si dicono.
+                    let found =
+                        match relink::property_links_to(&*host, std::slice::from_ref(&item.from)) {
+                            Ok(found) => found,
+                            Err(error) => {
+                                report
+                                    .link_failures
+                                    .push(Failure::of(item.from.clone(), error));
+                                Default::default()
+                            }
+                        };
                     let result = host.rename_document(&item.from, &item.to);
                     // A backlink update may fail *after* the underlying rename.
                     // Reclassification, not the returned error, decides whether
                     // this move belongs to the completed batch.
                     match archive_position(host, item)? {
-                        ArchivePosition::Moved => ArchiveStatus::Done,
+                        ArchivePosition::Moved => {
+                            let moved = [(item.from.clone(), item.to.clone())];
+                            report
+                                .link_failures
+                                .extend(relink::rewrite_property_links(host, &found, &moved));
+                            ArchiveStatus::Done
+                        }
                         ArchivePosition::Conflict => ArchiveStatus::Failed(archive_conflict(item)),
                         ArchivePosition::Ready => ArchiveStatus::Failed(
                             result.err().unwrap_or_else(|| archive_conflict(item)),
@@ -559,12 +640,7 @@ fn vault_archive(
     if !previous.failures.is_empty() {
         let made = previous.done.len();
         let total = made + previous.failures.len();
-        let notify = archive(
-            D_ARCHIVE_PARTIAL,
-            made,
-            &folder,
-            Some(why(&previous.failures)),
-        );
+        let notify = archive_done(made, &folder, &previous.failures, &previous.link_failures);
         return Ok(CommandOutcome::notify(notify).partially(Partial::of(
             total,
             made,
@@ -627,12 +703,15 @@ fn vault_archive(
 
     // A bad member rejects the *entire* fresh batch; the failures still name
     // every invalid member, while successful members remain untouched.
-    let report = if failed.is_empty() && !batch.items.is_empty() {
+    let mut report = if failed.is_empty() && !batch.items.is_empty() {
         archive_store(host, &batch)?;
         recover_archive_batch(host)?
     } else {
         ArchiveRecovery::default()
     };
+    // I link rimasti vecchi di un lotto di prima, finito senza conflitti
+    // adesso, si dicono con questo esito invece di sparire.
+    report.link_failures.splice(0..0, previous.link_failures);
     let made = report.done.len();
     failed.extend(report.failures);
     let mut back = Vec::with_capacity(made);
@@ -644,11 +723,7 @@ fn vault_archive(
             args: serde_json::json!({ "doc": to, "to": doc.as_str() }),
         });
     }
-    let notify = if failed.is_empty() {
-        archive(D_ARCHIVE, made, &folder, None)
-    } else {
-        archive(D_ARCHIVE_PARTIAL, made, &folder, Some(why(&failed)))
-    };
+    let notify = archive_done(made, &folder, &failed, &report.link_failures);
     let count = Partial::of(docs.len(), made, failed);
     Ok(CommandOutcome::notify(notify)
         .undoable(Undo {

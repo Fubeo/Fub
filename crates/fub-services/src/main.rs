@@ -93,12 +93,7 @@ fn main() {
             _ => usage(),
         }
     }
-    let host_part = bind
-        .rsplit(':')
-        .nth(1)
-        .unwrap_or(&bind)
-        .trim_matches(['[', ']']);
-    if !matches!(host_part, "127.0.0.1" | "::1" | "localhost") {
+    if !is_loopback_bind(&bind) {
         eprintln!("refusing non-loopback bind in cleartext (production needs TLS in front)");
         std::process::exit(2);
     }
@@ -146,6 +141,18 @@ fn main() {
     }
 }
 
+/// `--bind` in chiaro solo su loopback: `127.0.0.1:7749`, `[::1]:7749`,
+/// `localhost:7749`. L'IPv6 va tra parentesi, come in ogni `host:porta`.
+fn is_loopback_bind(bind: &str) -> bool {
+    match bind.parse::<std::net::SocketAddr>() {
+        Ok(address) => address.ip().is_loopback(),
+        Err(_) => {
+            let host = fub_services::server::host_name(bind);
+            host != bind.trim() && host.eq_ignore_ascii_case("localhost")
+        }
+    }
+}
+
 /// Un worker del pool: serve connessioni finché la coda resta aperta.
 ///
 /// Un panic dentro una richiesta chiude **quella** connessione, non il worker.
@@ -186,6 +193,17 @@ struct Parsed {
     peer: Option<std::net::IpAddr>,
 }
 
+/// Una lettura scaduta senza byte (il client tace da `IO_SLICE`): si ritenta
+/// entro la scadenza della fase, non è un errore della richiesta.
+fn is_read_pause(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::WouldBlock
+            | std::io::ErrorKind::TimedOut
+            | std::io::ErrorKind::Interrupted
+    )
+}
+
 /// Legge e valida testata+corpo con `httparse`. Errori = risposta immediata.
 fn read_request(stream: &mut TcpStream, accepted: Instant) -> Result<Parsed, HttpResponse> {
     stream
@@ -200,19 +218,13 @@ fn read_request(stream: &mut TcpStream, accepted: Instant) -> Result<Parsed, Htt
         if buf.len() > MAX_HEAD {
             return Err(HttpResponse::err(431, "headers too large"));
         }
-        let n = stream.read(&mut tmp).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::WouldBlock
-                || e.kind() == std::io::ErrorKind::TimedOut
-            {
-                if Instant::now().saturating_duration_since(accepted) > HEAD_DEADLINE {
-                    HttpResponse::err(408, "header timeout")
-                } else {
-                    HttpResponse::err(400, "header read failed")
-                }
-            } else {
-                HttpResponse::err(400, "header read failed")
-            }
-        })?;
+        // `IO_SLICE` è il passo dell'attesa, non il tetto: una pausa del
+        // client si ritenta finché vale `HEAD_DEADLINE` (controllata in cima).
+        let n = match stream.read(&mut tmp) {
+            Ok(n) => n,
+            Err(e) if is_read_pause(&e) => continue,
+            Err(_) => return Err(HttpResponse::err(400, "header read failed")),
+        };
         if n == 0 {
             return Err(HttpResponse::err(400, "connection closed"));
         }
@@ -268,6 +280,11 @@ fn read_request(stream: &mut TcpStream, accepted: Instant) -> Result<Parsed, Htt
             "transfer-encoding" => has_te = true,
             "expect" if value.to_ascii_lowercase().contains("100-continue") => {
                 has_continue = true;
+            }
+            // Un solo Host (RFC 9112 §3.2): con due, proxy e servizio
+            // potrebbero leggere siti diversi.
+            "host" if req_host.is_some() => {
+                return Err(HttpResponse::err(400, "duplicate host"));
             }
             "host" => req_host = Some(value.clone()),
             _ => {}
@@ -329,9 +346,13 @@ fn read_request(stream: &mut TcpStream, accepted: Instant) -> Result<Parsed, Htt
         if Instant::now().saturating_duration_since(accepted) > BODY_DEADLINE {
             return Err(HttpResponse::err(408, "body timeout"));
         }
-        let n = stream
-            .read(&mut tmp)
-            .map_err(|_| HttpResponse::err(400, "body read failed"))?;
+        // Un upload lento si aspetta fino a `BODY_DEADLINE`, non per un solo
+        // `IO_SLICE`.
+        let n = match stream.read(&mut tmp) {
+            Ok(n) => n,
+            Err(e) if is_read_pause(&e) => continue,
+            Err(_) => return Err(HttpResponse::err(400, "body read failed")),
+        };
         if n == 0 {
             return Err(HttpResponse::err(400, "body truncated"));
         }
@@ -480,7 +501,7 @@ fn handle_static(
     }
     if let Some(tls) = &record.tls {
         if req_host
-            .and_then(|host| host.split(':').next())
+            .map(fub_services::server::host_name)
             .is_some_and(|host| host.eq_ignore_ascii_case(&tls.domain))
         {
             let intent = site_api::TlsConfig {

@@ -3,7 +3,7 @@
 // finora da cui l'elenco parte, e le miniature.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { pickFromList, type PickItem } from "./dialogs";
+import { openFrame, pickFromList, type PickItem } from "./dialogs";
 import type { Lifetime } from "./lifetime";
 
 const ITEMS: readonly PickItem<string>[] = [
@@ -23,6 +23,31 @@ const press = (key: string): void => {
 
 afterEach(() => {
   for (const modal of document.querySelectorAll(".modale")) modal.remove();
+});
+
+describe("il clic fuori", () => {
+  it("chiude la finestra col `pointerdown` sullo sfondo, non dentro", () => {
+    const dismissed = vi.fn();
+    const frame = openFrame("Domanda", dismissed);
+    frame.box.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
+    expect(dismissed).not.toHaveBeenCalled();
+    frame.overlay.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "touch" }));
+    expect(dismissed).toHaveBeenCalledTimes(1);
+  });
+
+  it("gli eventi del mouse di un tocco che l'ha aperta non la chiudono (IMP-3807)", () => {
+    // Un dito che si alza manda `mousedown`, `mouseup` e `click` dopo,
+    // su ciò che sta sotto: lo sfondo della finestra appena aperta.
+    const dismissed = vi.fn();
+    const frame = openFrame("Domanda", dismissed);
+    const events = ["mousemove", "mousedown", "mouseup", "click"].map((type) => new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 }));
+    for (const event of events) frame.overlay.dispatchEvent(event);
+    expect(dismissed).not.toHaveBeenCalled();
+    // Il `mousedown` non porta il fuoco sullo sfondo, via dal campo scelto.
+    expect(events[1]!.defaultPrevented).toBe(true);
+    expect(frame.overlay.isConnected).toBe(true);
+    frame.close();
+  });
 });
 
 describe("la scelta in un elenco", () => {

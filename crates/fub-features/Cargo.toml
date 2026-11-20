@@ -47,7 +47,7 @@ default = [
     "lavagna",
     "craft",
 ]
-search = ["dep:tantivy", "dep:regex"]
+search = ["dep:tantivy", "dep:regex", "dep:regex-syntax"]
 versioning = []
 backlinks = []
 outline = []
@@ -85,7 +85,10 @@ base = ["dep:fub-format-base", "properties"]
 # la vista non può leggere senza `search`: è una dipendenza di funzionamento,
 # come quella di `trash` da `commands`. Nel manifest non è un `requires` perché
 # `search` non offre un servizio; se il vault spegne la ricerca, la vista lo dice.
-tasks = ["search"]
+# La domanda del compito successivo (`tasks/reminders.rs`) applica la regola
+# della ricorrenza di `note.task.toggle`, che sta in `commands::recurrence`:
+# dipendenza di compilazione.
+tasks = ["search", "commands"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
@@ -192,6 +195,7 @@ tantivy = { version = "0.26", optional = true, default-features = false, feature
     "stemmer",
 ] }
 regex = { workspace = true, optional = true }
+regex-syntax = { workspace = true, optional = true }
 # Dietro `draw`, e solo lì. `resvg` senza i default (lo dice la radice), che sono `system-fonts` e
 # `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.
 # Restano il testo e la decodifica delle immagini raster, incorporate come

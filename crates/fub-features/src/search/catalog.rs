@@ -31,6 +31,10 @@ pub(super) const SELECT_UNSUPPORTED: &str = "select_unsupported";
 /// soltanto dentro un numero limitato di candidati.
 pub(super) const SCOPE_TOO_MANY: &str = "scope_too_many";
 pub(super) const SCOPE_TOO_LARGE: &str = "scope_too_large";
+/// I due tetti delle maiuscole esatte e delle espressioni regolari: le note
+/// da rileggere, e il testo letto in tutto (vedi `exact`).
+pub(super) const SCAN_TOO_MANY: &str = "scan_too_many";
+pub(super) const SCAN_TOO_LARGE: &str = "scan_too_large";
 /// Il predicato di `comment:` non porta un `TextQuery`.
 pub(super) const COMMENT_QUERY_SHAPE: &str = "comment_query_shape";
 /// I nomi degli argomenti.
@@ -199,6 +203,17 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "line:, block: e section: leggono al massimo 8 MiB di testo: \
                  aggiungi una parola o un filtro.",
             )
+            .with(
+                SCAN_TOO_MANY,
+                "Le maiuscole esatte e le espressioni regolari rileggono al \
+                 massimo 2048 note, e qui sarebbero di più: cerca anche una \
+                 parola intera più rara.",
+            )
+            .with(
+                SCAN_TOO_LARGE,
+                "Le maiuscole esatte e le espressioni regolari leggono al \
+                 massimo 8 MiB di testo: cerca anche una parola intera più rara.",
+            )
             .with(S_GROUP, "Ricerca")
             .with(S_NAME, "Peso del nome della nota")
             .with(
@@ -274,6 +289,16 @@ pub fn catalog() -> Vec<StringCatalog> {
                 SCOPE_TOO_LARGE,
                 "line:, block: and section: read 8 MiB of text at most: \
                  add a word or a filter.",
+            )
+            .with(
+                SCAN_TOO_MANY,
+                "Exact case and regular expressions reread 2048 notes at most, \
+                 and here there would be more: also look for a rarer whole word.",
+            )
+            .with(
+                SCAN_TOO_LARGE,
+                "Exact case and regular expressions read 8 MiB of text at most: \
+                 also look for a rarer whole word.",
             )
             .with(S_GROUP, "Search")
             .with(S_NAME, "Note name weight")

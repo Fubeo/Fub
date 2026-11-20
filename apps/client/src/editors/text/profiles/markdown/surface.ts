@@ -34,12 +34,14 @@ import { mountReadingHeader, type PageOptions } from "./page/header";
 import type { RelationPort } from "./page/properties/values";
 import { propertiesDisplay } from "../../properties-display";
 import { liveStrings } from "./strings";
+import { decodeHref } from "./link-syntax";
 import { pageIconsChanged } from "./livepreview";
 import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
 import { followPath, followWikilink, type PeekLink, type WikilinkFollow, type WikilinkGesture } from "./link-gesture";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { resolvedReference, settings } from "../../../../host/query";
+import { nextTaskOccurrence } from "../../../../host/tasks";
 import { onEvent } from "../../../../state/kernel";
 import { openVaultRoot } from "../../../../state/store";
 import { featureInType, listNoteTypes, noteTypeOf, type NoteType, type NoteTypeState } from "../../../../state/note-types";
@@ -122,13 +124,15 @@ import { loadKatex, readOptions } from "./math";
 import { editFormulaAt, placeFormulaAt } from "./math-live";
 import { mathmlHtml, equationMathml } from "./math/paste";
 import { toBlock, toInline } from "./math/place";
-import { MENU_RULE, type SurfaceMenuClipboard } from "../../../core/editor-menu";
+import { MENU_RULE, menuBelow, type SurfaceMenuClipboard } from "../../../core/editor-menu";
 import { linkDialogOpener } from "./link-dialog";
 import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource } from "./image-live";
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
 import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup, sheetCardGroup, type DetachCard } from "./block-groups";
+import { dispatchTaskToggles } from "./task-toggle";
+import { composingKey } from "../../../../kit/ime";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
@@ -266,6 +270,7 @@ export interface MarkdownSurface extends BufferedSurface {
   setTheme(theme: Theme): void;
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   insertReferences(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
+  caretAt(at: SurfacePoint): boolean;
   anchorHere(): SurfaceAnchor | null;
   readonly scrollLink: SurfaceScrollLink;
   mountPresentation(host: HTMLElement): () => void;
@@ -415,16 +420,24 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // Il menu «/» nel testo: le voci le dà la shell, la superficie le esegue.
   // Spento (`editor.slash`), in lettura, in sola lettura o su un documento
   // che non è più quello del riquadro, non ha voci e il «/» resta testo.
+  // Nell'editor di una scheda della lavagna (`hosted`) il documento del
+  // riquadro è la lavagna: il «/» offre le azioni dell'editor, che scrivono
+  // nel testo della scheda, e né i comandi del vault né la palette, che
+  // agirebbero sulla lavagna.
+  const hosted = context.hosted === true;
   const slashHost = opts.slash?.menu;
   const slashMenu: SlashMenuSource | undefined = slashHost && {
+    // Nella scheda lo zoom della tela e il taglio della scheda non toccano
+    // il pannello: galleggia sopra la finestra.
+    ...(hosted ? { hosted: true } : {}),
     enabled: () =>
-      slashHost.enabled() && !readOnly && mode !== "reading" && opts.slash?.currentDoc() === docId() && !tableGrid,
+      slashHost.enabled() && !readOnly && mode !== "reading" && (hosted || opts.slash?.currentDoc() === docId()) && !tableGrid,
     panel: (events, transform) => slashHost.panel({
       ...events,
       outline: () => engine.readState(outlineOf),
-      palette: (query) => slashHost.palette(query, parent, engine.anchorBox()),
+      ...(hosted ? {} : { palette: (query: string) => slashHost.palette(query, parent, engine.anchorBox()) }),
       ...(transform ? { transform: engine.readState(transformOf) } : {}),
-    }, (id) => editorActions.has(id) && editorActions.state(id).enabled),
+    }, (id) => editorActions.has(id) && editorActions.state(id).enabled, { commands: !hosted }),
     choose: (view, choice, from, to, transform) => {
       const { entry } = choice;
       const params = actionParams(entry.id, choice.params);
@@ -559,6 +572,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     open: (page, heading, block) => void openWikilink(page, heading, block),
     theme: () => currentTheme,
     extensions: (doc) => createMarkdownProfile({
+      nextOccurrence: nextTaskOccurrence,
       callbacks: {
         openWikilink: (page, heading, block) => void opts.onOpenWikilink(page, heading, block, doc),
         searchTag: opts.onSearchTag,
@@ -631,6 +645,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     ? { cellValue: (slot: HTMLElement, life: Lifetime) => hostCellSlot(slot, life, cellValues) }
     : {};
   const profile = createMarkdownProfile({
+    nextOccurrence: nextTaskOccurrence,
     ...(opts.noteFacts ? { noteFacts: noteFactsExtensions({ current: () => facts, actions: factsActions }) } : {}),
     callbacks: {
       openWikilink,
@@ -773,14 +788,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   life.listen(parent, "keydown", (event) => {
     const slash = opts.slash;
     if (
-      !slash || event.key !== "/" || event.defaultPrevented || event.isComposing ||
+      !slash || event.key !== "/" || event.defaultPrevented || composingKey(event) ||
       event.altKey || event.ctrlKey || event.metaKey || readOnly || mode === "reading" ||
       !(event.target instanceof Element) || !event.target.closest(".cm-content") ||
       // Una griglia di tabella scrive le sue celle, una trasclusione viva il
       // suo tratto: il `/` è testo.
       event.target.closest(".tb-frame, [data-transclusion-editing]")
     ) return;
-    if (slash.currentDoc() !== docId()) return;
+    if (!hosted && slash.currentDoc() !== docId()) return;
     // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su
     // una selezione oppure a inizio parola, fuori da codice e link.
     const cursor = engine.cursorContext();
@@ -794,6 +809,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       event.stopPropagation();
       return;
     }
+    // La palette agirebbe sul documento del riquadro, non sulla scheda.
+    if (hosted) return;
     event.preventDefault();
     event.stopPropagation();
     const text = engine.getDoc();
@@ -1302,11 +1319,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     if (!/^\[[^\]\r\n]\]$/u.test(text.slice(symbolOffset - 1, symbolOffset + 2))) return;
     const symbol = text[symbolOffset] ?? "";
-    engine.applyUserEdit(
-      symbolOffset,
-      symbolOffset + 1,
-      taskChecked(symbol) ? " " : "x",
-    );
+    // Dalla ricorrenza come la casella in Scrittura (`task-toggle.ts`).
+    engine.runCommand((target) => {
+      dispatchTaskToggles(target, [{ symbol: symbolOffset, insert: taskChecked(symbol) ? " " : "x" }], { userEvent: "input" });
+      return true;
+    });
     reading.focus({ preventScroll: true });
   }
 
@@ -1903,9 +1920,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           ? [{ id: "markdown.link.web", label: t("editor_menu.link.browser"), chord: "Alt-Enter", run: () => openWebLink(link.url, false) }]
           : [
             ...(opts.onPeekLink
-              ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), icon: "eye", chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "path", path: decodeURI(link.url) }, docId()) }]
+              ? [{ id: "markdown.link.peek", label: t("editor_menu.link.peek"), icon: "eye", chord: "Alt-Enter", run: () => void opts.onPeekLink!({ kind: "path", path: decodeHref(link.url) }, docId()) }]
               : []),
-            { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void Promise.resolve(opts.onOpenPath(decodeURI(link.url), docId())).catch(() => {}) },
+            { id: "markdown.link.open", label: t("editor_menu.link.open_note"), ...(opts.onPeekLink ? {} : { chord: "Alt-Enter" }), run: () => void Promise.resolve(opts.onOpenPath(decodeHref(link.url), docId())).catch(() => {}) },
           ]),
         { id: "markdown.link.copy", label: t(external ? "editor_menu.link.copy_url" : "editor_menu.link.copy"), icon: "copy", run: () => copyText(link.url, t("editor_menu.copied")) },
         ...edit,
@@ -1933,10 +1950,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const file = image.file;
     const open = (): void => {
       if (image.syntax === "wiki") void openWikilink(file, null, null);
-      else void Promise.resolve(opts.onOpenPath(decodeURI(file), docId())).catch(() => {});
+      else void Promise.resolve(opts.onOpenPath(decodeHref(file), docId())).catch(() => {});
     };
     const show = (where: "app" | "explorer"): void => {
-      const target: SystemTarget = image.syntax === "wiki" ? { kind: "wiki", value: file } : { kind: "path", value: decodeURI(file) };
+      const target: SystemTarget = image.syntax === "wiki" ? { kind: "wiki", value: file } : { kind: "path", value: decodeHref(file) };
       void Promise.resolve(opts.onShowFile?.(target, docId(), where)).catch((error: unknown) => notify(errorText(error), "guasto"));
     };
     const width = (value: number | null): SurfaceMenuItem => ({
@@ -2152,7 +2169,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     const menu = writingMenuAt(pos, element);
     const box = engine.anchorBox();
-    return { ...menu, at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined };
+    return { ...menu, at: box ? menuBelow(box) : undefined };
   }
 
   /// Le proprietà rese: aggiungere, copiare, svuotare.
@@ -2268,7 +2285,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
             label: t(task.checked ? "editor_menu.task.undone" : "editor_menu.task.done"),
             icon: "check",
             chord: "Mod-Enter",
-            run: () => void engine.applyUserEdit(task.symbol, task.symbol + 1, task.checked ? " " : "x"),
+            run: () => void engine.runCommand((target) => {
+              dispatchTaskToggles(target, [{ symbol: task.symbol, insert: task.checked ? " " : "x" }], { userEvent: "input" });
+              return true;
+            }),
           }] : []),
           MENU_RULE,
           ...indents,
@@ -2505,6 +2525,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const text = references.map(markdownReference).join("\n");
       return at ? engine.insertAtPoint(at.x, at.y, text) : engine.insertAtCursor(text);
     },
+    // In lettura il testo a schermo non è quello dell'editor: niente cursore.
+    caretAt: (at) => mode !== "reading" && engine.caretAtPoint(at.x, at.y),
     mountPresentation(host) {
       // In lettura la resa è già a schermo, embed compresi: se ne porta una
       // copia. Negli altri modi si rende il buffer corrente.

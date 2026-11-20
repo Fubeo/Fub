@@ -284,6 +284,53 @@ impl CoreIndex {
         refs
     }
 
+    /// **Chi nomina una delle note o degli allegati `targets` in un link di
+    /// proprietà**, nella sola chiave `key` se c'è: la foglia
+    /// `fub:property-link`.
+    ///
+    /// Le note si leggono dagli archi del grafo; un allegato (una voce senza
+    /// modello, come `[[allegato.pdf]]`) il grafo non lo tiene, e si risolve
+    /// come nel corpo ([`attachments_of`](Self::attachments_of)): prima il
+    /// grafo, poi l'anagrafe con la cartella degli allegati. Quella parte
+    /// passa le proprietà del vault, e si paga solo se un bersaglio è un
+    /// allegato, come [`attachment_backlinks`](Self::attachment_backlinks).
+    pub(super) fn property_linked(&self, targets: &[DocId], key: Option<&str>) -> BTreeSet<DocId> {
+        let mut found = self.graph.property_linked(targets, key);
+        let attachments: BTreeSet<&DocId> = targets
+            .iter()
+            .filter(|t| !self.metas.contains_key(*t) && self.entries.contains_key(*t))
+            .collect();
+        if !attachments.is_empty() {
+            let folder = self.attachment_folder();
+            for (source, metadata) in &self.metas {
+                let hit = crate::graph::property_links_of(&metadata.frontmatter)
+                    .into_iter()
+                    .filter(|(written, _)| key.is_none_or(|key| written == key))
+                    .any(|(_, target)| {
+                        let LinkTarget::Wiki { page, .. } = &target else {
+                            return false;
+                        };
+                        if page.is_empty() || self.graph.resolve_wiki(page).is_some() {
+                            return false;
+                        }
+                        resolve_entry_in_folder(
+                            &self.entries,
+                            &self.names,
+                            source,
+                            &target,
+                            folder.as_deref(),
+                        )
+                        .is_some_and(|entry| attachments.contains(&entry))
+                    });
+                if hit {
+                    found.insert(source.clone());
+                }
+            }
+        }
+        found.retain(|id| self.metas.contains_key(id));
+        found
+    }
+
     /// Mette (o aggiorna) una voce dell'anagrafe.
     /// **Cosa cambia** se questo modello sostituisce quello che c'è (§22.2,
     /// decisione 0069).

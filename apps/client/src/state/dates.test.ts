@@ -7,6 +7,8 @@ const world = vi.hoisted(() => ({
   template: [] as { spec: { key: string }; value: unknown }[],
   host: [] as { spec: { key: string }; value: unknown }[],
   events: new Map<string, ((event: { key: string }) => void)[]>(),
+  system: "en-US",
+  language: "en-US",
 }));
 
 vi.mock("../host/query", () => ({
@@ -22,7 +24,14 @@ vi.mock("./store", async (original) => ({
   ...(await original<typeof import("./store")>()),
   openVaultRoot: () => "/vault",
 }));
-vi.mock("./locale", () => ({ systemLocale: () => ({ first_day_of_week: "sunday" }) }));
+vi.mock("./locale", async (original) => ({
+  ...(await original<typeof import("./locale")>()),
+  systemLocale: () => ({ language: world.system, first_day_of_week: "sunday" }),
+}));
+vi.mock("../i18n/strings", async (original) => ({
+  ...(await original<typeof import("../i18n/strings")>()),
+  languageCurrent: () => world.language,
+}));
 
 import { dailyDateIn, dailyFolder, dailyFormat, dailyName, dailyPath, firstWeekday, mountDates } from "./dates";
 import { Lifetime } from "../ui/lifetime";
@@ -33,6 +42,8 @@ beforeEach(() => {
   world.template = [];
   world.host = [];
   world.events.clear();
+  world.system = "en-US";
+  world.language = "en-US";
 });
 
 describe("dailyName", () => {
@@ -88,6 +99,13 @@ describe("mountDates", () => {
     await settle();
     expect(dailyPath("2026-11-04")).toBe("Diario/2026/2026-11-04");
     // Vuoto è «come il sistema».
+    expect(firstWeekday()).toBe(7);
+    // IMP-4801: Fub in italiano su un sistema in inglese americano. La domenica
+    // è della lingua del sistema; chi legge in italiano comincia dal lunedì,
+    // come conta il kernel. La stessa lingua con un'altra regione resta sua.
+    world.language = "it";
+    expect(firstWeekday()).toBe(1);
+    world.language = "en-GB";
     expect(firstWeekday()).toBe(7);
 
     world.host = [{ spec: { key: "locale.first-day-of-week" }, value: "monday" }];

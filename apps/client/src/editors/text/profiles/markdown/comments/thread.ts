@@ -9,6 +9,7 @@ import type { Lifetime } from "../../../../../ui/lifetime";
 import { textField, type TextField } from "../../../../../kit";
 import { liveStrings } from "../strings";
 import { authorSlot, initials, shortName, type Discussion, type MessageHeader } from "./model";
+import { composingKey } from "../../../../../kit/ime";
 
 /// Le figure dei commenti, sulla griglia di 24 del set della shell (quelle
 /// del prototipo, da 16, per una volta e mezza).
@@ -118,7 +119,7 @@ function writer(me: string | null, placeholder: string, label: string, sendLabel
   send.disabled = true;
   life.listen(input, "input", grow);
   life.listen(input, "keydown", (event) => {
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.isComposing) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !composingKey(event)) {
       event.preventDefault();
       if (input.value.trim() !== "") onSend();
     }

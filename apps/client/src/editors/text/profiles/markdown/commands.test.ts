@@ -422,8 +422,16 @@ describe("trasforma in lista (Mod-Shift-8/7)", () => {
     expect(run(toggleBulletList, "riga|").out).toBe("- riga|");
   });
 
-  it("solo righe vuote → default", () => {
-    expect(run(toggleBulletList, "|").handled).toBe(false);
+  it("la riga vuota del cursore diventa voce, col cursore dopo il segno (IMP-6104)", () => {
+    expect(run(toggleBulletList, "|").out).toBe("- |");
+    expect(run(toggleOrderedList, "a\n|").out).toBe("a\n1. |");
+    expect(run(toggleBulletList, "  |").out).toBe("  - |");
+    // Il cursore a inizio di una riga piena resta sul testo, dopo il segno.
+    expect(run(toggleBulletList, "|riga").out).toBe("- |riga");
+  });
+
+  it("solo righe vuote selezionate → default", () => {
+    expect(run(toggleBulletList, "‹\n\n›").handled).toBe(false);
   });
 });
 
@@ -511,6 +519,25 @@ describe("autoPairDecision", () => {
     expect(decide("$|", "$")).toEqual({ action: "insert", text: "$$$", cursor: 1 });
     expect(decide("$x|$", "$")).toEqual({ action: "skip" });
     expect(decide("costa 5$ e poi |$", "$")).toBeNull();
+  });
+
+  it("la chiusura `$$` di un blocco scritto su una riga scavalca tutte e due le `$`", () => {
+    expect(decide("$$x^2|$$", "$")).toEqual({ action: "skip" });
+    expect(decide("$$x^2$|$", "$")).toEqual({ action: "skip" });
+    // Una `\$` scritta è un segno, non la chiusura.
+    expect(decide("$$5\\$|$", "$")).toBeNull();
+    // `$$` da solo non ha ancora una formula da chiudere.
+    expect(decide("$$|$", "$")).toBeNull();
+  });
+
+  it("la `]` battuta subito dopo una casella è quella della casella (`- [ ]]`)", () => {
+    expect(decide("- [ ]|", "]")).toEqual({ action: "absorb" });
+    expect(decide("1. [x]|", "]")).toEqual({ action: "absorb" });
+    expect(decide("> - [ ]|", "]")).toEqual({ action: "absorb" });
+    // Fuori da una voce la `]` è una lettera.
+    expect(decide("testo [ ]|", "]")).toBeNull();
+    // Dopo la casella, nel testo della voce, sì.
+    expect(decide("- [ ] a]|", "]")).toBeNull();
   });
 
   it("niente auto-pair con selezione attiva o input multi-carattere", () => {

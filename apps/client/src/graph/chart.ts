@@ -50,8 +50,8 @@ const ACTIVE_THRESHOLD = 0.02;
 /// differito al momento in cui c'è davvero una superficie — questo chiude
 /// strutturalmente il bug 2-1 (la sim non parte con k = 0 e scala 1).
 const MIN_VIEW_SIZE = 50;
-/// Fattore dell'EMA dei millisecondi per frame: un filtro lento, perché il
-/// tier non deve oscillare a ogni capriccio del GC.
+/// Fattore dell'EMA del carico (durata del frame sul budget): un filtro
+/// lento, perché il tier non deve oscillare a ogni capriccio del GC.
 const EMA_ALPHA = 0.1;
 /// Un campione dell'EMA non supera questi budget: una pausa (scheda nascosta)
 /// non vale mille frame lenti.
@@ -246,7 +246,9 @@ export function createChart(options: ChartOptions = {}): Chart {
   // L'hover letto dai nostri listener sul canvas: l'interazione non lo espone,
   // e il pittore lo vuole per il focus. −1 = nessuno.
   let hovered = -1;
-  let emaFrameMs = 1000 / 60;
+  /// Il carico: l'EMA della durata dei frame divisa per il budget del
+  /// fotogramma. 1 è un frame esattamente nel budget.
+  let emaLoad = 1;
   /// Il tier di resa e da quando (ms) vale: il gradino economico tiene un
   /// minimo prima di risalire.
   let tier: Tier = 1;
@@ -584,12 +586,11 @@ export function createChart(options: ChartOptions = {}): Chart {
       initialFitDone = true;
     }
 
-    const capMs = pacer.capPeriodMs();
     if (!woke) {
-      const budget = Math.max(capMs, 1000 / 60);
-      emaFrameMs = emaFrameMs * (1 - EMA_ALPHA) + Math.min(intervalMs, budget * EMA_CEILING) * EMA_ALPHA;
+      const load = Math.min(intervalMs / pacer.budgetMs(), EMA_CEILING);
+      emaLoad = emaLoad * (1 - EMA_ALPHA) + load * EMA_ALPHA;
     }
-    const nextTier = calculateTier(s.n, tier, emaFrameMs, capMs, t - tierSince);
+    const nextTier = calculateTier(s.n, tier, emaLoad, t - tierSince);
     if (nextTier !== tier) {
       tier = nextTier;
       tierSince = t;
@@ -668,7 +669,7 @@ export function createChart(options: ChartOptions = {}): Chart {
         tier = base;
         tierSince = t;
       }
-      emaFrameMs = 1000 / 60;
+      emaLoad = 1;
     }
 
     const state: DrawState = {

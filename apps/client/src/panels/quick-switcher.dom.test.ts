@@ -147,6 +147,20 @@ describe("combobox del quick switcher", () => {
     expect(fake.rememberSearch).toHaveBeenCalledWith("");
   });
 
+  it("Invio ed Esc della composizione (IME) non aprono, non creano e non chiudono", async () => {
+    const { input } = await openSwitcher();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, isComposing: true, bubbles: true, cancelable: true }));
+    // WebKit: la composizione è già chiusa, il keydown arriva col codice 229.
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true, cancelable: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", isComposing: true, bubbles: true, cancelable: true }));
+    await settleSearch();
+
+    expect(fake.openDocument).not.toHaveBeenCalled();
+    expect(fake.createNote).not.toHaveBeenCalled();
+    expect(document.getElementById("quick-switcher")).not.toBeNull();
+  });
+
   it("Maiusc+Invio crea la nota col nome scritto anche se qualcosa combacia", async () => {
     fake.createNote.mockResolvedValue("Riunione.md");
     const { input, list } = await openSwitcher(["notes/Riunione di marzo.md"]);

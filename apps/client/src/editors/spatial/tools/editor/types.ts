@@ -21,6 +21,7 @@ import type { ShapeTool } from "../shapes";
 import type { Recognized } from "../recognize";
 import type { DrawingPointer, DrawingTool } from "../../../../host/contract";
 import type { DrawKey } from "../../strings";
+import type { Page } from "../../painter/paint";
 
 /// Un'istanza da cui si è entrati nel suo simbolo isolato: la chiave e il
 /// posto con cui ritrovarla, come il contenitore isolato.
@@ -64,6 +65,11 @@ export interface GestureBase {
   /// tratto nuovo al limite dei campioni.
   stroke: number;
   readonly pointer: InkPointerType;
+  /// Sul foglio delle annotazioni, la pagina dove comincia un gesto che
+  /// scrive un segno: cominciato fuori non scrive niente, e i suoi punti
+  /// restano dentro (`../page-bounds.ts`). `null` nel disegno libero, e per
+  /// i gesti che non scrivono, come la gomma e la Selezione.
+  readonly page: Page | null;
 }
 
 export interface InkGesture extends GestureBase {

@@ -2,6 +2,7 @@
 // La griglia su una cartella di Excel: i gesti del puntatore.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTextEditorOrThrow } from "../text/test-support";
+import { parseGridJournal } from "../../state/grid-journal";
 import { settle, shownRanges, workbookHost, workbookMounted } from "./test-support";
 
 afterEach(() => {
@@ -82,6 +83,72 @@ describe("GridEngine con una cartella di Excel", () => {
       expect(engine.selection().focus).toEqual({ row: 0, column: 0 });
       expect(engine.selection().anchor.row).toBeGreaterThan(3);
       press(viewport, "pointerup", 10, 10);
+      engine.destroy();
+    });
+
+    /// Scrive `text` nella cella attiva e conferma con Invio.
+    const write = (host: HTMLElement, viewport: HTMLElement, text: string) => {
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: text[0], bubbles: true }));
+      const editor = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-cell-editor")!);
+      if (text.length > 1) editor.dispatch({ changes: { from: editor.state.doc.length, insert: text.slice(1) }, userEvent: "input" });
+      host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    };
+    const click = (target: HTMLElement, point: { x: number; y: number }) => {
+      press(target, "pointerdown", point.x, point.y);
+      press(target, "pointerup", point.x, point.y, { buttons: 0 });
+    };
+    /// La cartella con «Studio Dentistico Bruni» in A8 e le celle accanto
+    /// vuote: il testo passa sopra di loro.
+    const NAME = "Studio Dentistico Bruni";
+    const spilling = async () => {
+      const mounted = await workbookMounted(workbookHost({
+        window: (window) => {
+          if (window.sheet !== "s1") return;
+          window.cells.push({ ...structuredClone(window.cells[4]!), key: { sheet: "s1", row: "r7", column: "c0" }, input: NAME, display: NAME, value: { kind: "text", value: NAME } });
+        },
+      }));
+      const text = mounted.cell(7, 0)!.querySelector<HTMLElement>(".grid-cell-text")!;
+      expect(mounted.cell(7, 0)!.classList.contains("spill")).toBe(true);
+      return { ...mounted, text };
+    };
+    const after = (journal: string, row: string, column: string) =>
+      parseGridJournal(journal).entries.find((entry) => entry.row === row && entry.column === column)?.after;
+
+    it("un clic sulla cella vuota dove deborda il testo della vicina sceglie la cella cliccata (IMP-512)", async () => {
+      const { engine, host, viewport, cell, text } = await spilling();
+      // Il browser dà il clic al testo che deborda, ma vale il punto.
+      click(text, at(cell, 7, 1));
+      expect(engine.selection()).toMatchObject({ anchor: { row: 7, column: 1 }, focus: { row: 7, column: 1 } });
+      write(host, viewport, "1500");
+      await settle();
+      expect(after(engine.getDoc(), "r7", "c1")).toBe("1500");
+      // Il testo resta dov'era.
+      expect(after(engine.getDoc(), "r7", "c0")).toBeUndefined();
+      // Sul testo, dentro la sua cella, il clic sceglie lei.
+      click(text, at(cell, 7, 0));
+      expect(engine.selection()).toMatchObject({ anchor: { row: 7, column: 0 }, focus: { row: 7, column: 0 } });
+      engine.destroy();
+    });
+
+    it("tasto destro e doppio clic dove deborda un testo valgono per la cella sotto il punto (IMP-512)", async () => {
+      const { engine, host, cell, text } = await spilling();
+      const beside = at(cell, 7, 2);
+      const pointing = vi.spyOn(document, "elementFromPoint").mockReturnValue(text);
+      expect(engine.pointAt(beside.x, beside.y)).toBe("cell");
+      expect(engine.selection()).toMatchObject({ anchor: { row: 7, column: 2 }, focus: { row: 7, column: 2 } });
+      pointing.mockRestore();
+      // Il doppio clic in quel punto apre la cella cliccata, vuota, non quella del testo.
+      click(text, beside);
+      text.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: beside.x, clientY: beside.y }));
+      const editor = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-cell-editor")!);
+      expect(editor.state.doc.toString()).toBe("");
+      editor.dispatch({ changes: { from: 0, insert: "9" }, userEvent: "input" });
+      host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      await settle();
+      expect(after(engine.getDoc(), "r7", "c2")).toBe("9");
+      expect(after(engine.getDoc(), "r7", "c0")).toBeUndefined();
       engine.destroy();
     });
 

@@ -68,6 +68,12 @@ impl IndexProvider for CoreIndex {
             QueryRoute::Predicate(PredicateKind::Path),
             QueryRoute::Predicate(PredicateKind::File),
             QueryRoute::Predicate(PredicateKind::Linked),
+            // I link nelle proprietà (`fub:property-link`): una foglia custom
+            // perché la WIT non prende casi nuovi, servita qui perché i
+            // metadati e il grafo che risolve sono del kernel.
+            QueryRoute::Predicate(PredicateKind::Custom(
+                fub_abi::query::PROPERTY_LINK_PREDICATE_NS.to_string(),
+            )),
         ]
     }
 

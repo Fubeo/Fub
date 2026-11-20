@@ -394,3 +394,379 @@ fn a_reminder_knows_the_section_it_opens_on() {
         .collect();
     assert_eq!(headings, vec![None, Some("Lavoro"), Some("Casa")]);
 }
+
+#[test]
+fn the_route_answers_the_next_occurrence_with_the_toggle_rule() {
+    // L'indice vuoto risponde lo stesso: la domanda non legge le note.
+    let index = ReminderIndex::new();
+    let next = |line: &str, today: &str| {
+        index
+            .query(RemindersQuery::next_occurrence(line, today).to_index_query())
+            .map(|answer| match answer {
+                IndexResult::Custom(value) => {
+                    serde_json::from_value::<NextOccurrence>(value).expect("reads")
+                }
+                other => panic!("not a custom answer: {other:?}"),
+            })
+    };
+    assert_eq!(
+        next(
+            "- [ ] 1:1 del giovedì 🔁 every week 📅 2026-11-19",
+            "2026-11-19"
+        )
+        .expect("answers")
+        .line
+        .as_deref(),
+        Some("- [ ] 1:1 del giovedì 🔁 every week 📅 2026-11-26")
+    );
+    assert_eq!(
+        next(
+            "- [ ] F24 mensile 🔁 every month 📅 2026-11-16",
+            "2026-11-19"
+        )
+        .expect("answers")
+        .line
+        .as_deref(),
+        Some("- [ ] F24 mensile 🔁 every month 📅 2026-12-16")
+    );
+    assert_eq!(
+        next(
+            "- [ ] Taglio 🔁 every 3 weeks when done 📅 2026-09-01",
+            "2026-10-19"
+        )
+        .expect("answers")
+        .line
+        .as_deref(),
+        Some("- [ ] Taglio 🔁 every 3 weeks when done 📅 2026-11-09"),
+        "`when done` counts from the day of who asks"
+    );
+    assert_eq!(
+        next("- [ ] Senza ricorrenza 📅 2026-11-19", "2026-11-19")
+            .expect("answers")
+            .line,
+        None,
+        "a line that does not recur answers no line, not an error"
+    );
+
+    let ask = |query: serde_json::Value| {
+        index.query(IndexQuery::Custom {
+            ns: TASKS_ID.into(),
+            query,
+        })
+    };
+    let long = format!(
+        "- [ ] {} 🔁 every day 📅 2026-11-19",
+        "x".repeat(NEXT_OCCURRENCE_MAX_LINE)
+    );
+    for bad in [
+        serde_json::json!({"kind": "next_occurrence", "version": 2, "line": "- [ ] a", "today": "2026-11-19"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a", "today": "domani"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a", "today": "2026-02-30"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a\n- [ ] b", "today": "2026-11-19"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": long, "today": "2026-11-19"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a"}),
+        serde_json::json!({"kind": "next_occurrence", "version": 1, "line": "- [ ] a", "today": "2026-11-19", "extra": 1}),
+    ] {
+        assert!(
+            matches!(ask(bad.clone()), Err(PluginError::BadArgs(_))),
+            "{bad} is refused"
+        );
+    }
+}
+
+#[test]
+fn a_reminder_moved_renamed_or_rebuilt_answers_from_its_new_place() {
+    let mut index = indexed(&[
+        (
+            "a.md",
+            "- [ ] Uno ⏰ 2026-11-13 09:00\n- [ ] Due ⏰ 2026-11-13 09:00\n",
+        ),
+        ("b.md", "- [ ] Tre ⏰ 2026-11-13 09:00\n"),
+    ]);
+    let nine = minute("2026-11-13 09:00");
+    // Spostato d'ora: il minuto vecchio non lo dà più, quello nuovo sì.
+    index.on_documents_indexed(&[model(
+        "a.md",
+        "- [ ] Uno ⏰ 2026-11-13 10:00\n- [ ] Due ⏰ 2026-11-13 09:00\n",
+    )]);
+    assert_eq!(
+        whens(&index.between(Some(nine - 1), Some(nine), REMINDER_LIMIT)),
+        vec![
+            ("a.md", "2026-11-13 09:00", "Due"),
+            ("b.md", "2026-11-13 09:00", "Tre")
+        ]
+    );
+    assert_eq!(
+        whens(&index.between(Some(nine), None, REMINDER_LIMIT)),
+        vec![("a.md", "2026-11-13 10:00", "Uno")]
+    );
+    // Rinominata: il kernel toglie il nome vecchio e indicizza il nuovo.
+    index.on_documents_removed(&[DocId::new("b.md")]);
+    index.on_documents_indexed(&[model("z.md", "- [ ] Tre ⏰ 2026-11-13 09:00\n")]);
+    assert_eq!(
+        whens(&index.between(Some(nine - 1), Some(nine), REMINDER_LIMIT)),
+        vec![
+            ("a.md", "2026-11-13 09:00", "Due"),
+            ("z.md", "2026-11-13 09:00", "Tre")
+        ]
+    );
+    assert_eq!(index.len(), 3);
+    // Chiuso il vault non resta niente; riaperto, le note lo rifanno uguale.
+    let mut host = MemoryHost::new();
+    index.close(&mut host).unwrap();
+    assert!(index.is_empty());
+    assert_eq!(index.len(), 0);
+    assert_eq!(
+        index.between(None, None, REMINDER_LIMIT),
+        ReminderList::default()
+    );
+    index.on_documents_indexed(&[
+        model(
+            "a.md",
+            "- [ ] Uno ⏰ 2026-11-13 10:00\n- [ ] Due ⏰ 2026-11-13 09:00\n",
+        ),
+        model("z.md", "- [ ] Tre ⏰ 2026-11-13 09:00\n"),
+    ]);
+    assert_eq!(index.len(), 3);
+    // Un intervallo rovesciato, vuoto o agli estremi dei minuti è vuoto,
+    // senza far cadere niente.
+    assert!(index
+        .between(Some(nine), Some(nine), REMINDER_LIMIT)
+        .reminders
+        .is_empty());
+    assert!(index
+        .between(Some(nine + 5), Some(nine), REMINDER_LIMIT)
+        .reminders
+        .is_empty());
+    assert!(index
+        .between(Some(i64::MAX), None, REMINDER_LIMIT)
+        .reminders
+        .is_empty());
+    assert_eq!(
+        index
+            .between(Some(i64::MIN), Some(i64::MAX), REMINDER_LIMIT)
+            .reminders
+            .len(),
+        3
+    );
+    // Un limite a zero non porta niente ma dice che ce ne sono.
+    let none = index.between(None, None, 0);
+    assert!(none.reminders.is_empty() && none.more);
+}
+
+/// Un generatore piccolo e ripetibile: le prove a caso hanno un seme fisso,
+/// così un rosso si rifà uguale.
+struct Dice(u64);
+
+impl Dice {
+    fn roll(&mut self, faces: u64) -> u64 {
+        // xorshift64*
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_F491_4F6C_DD1D) % faces
+    }
+}
+
+/// Una nota a caso: titoli, compiti aperti e spuntati, citazioni e liste
+/// annidate, con le ore strette in pochi minuti perché si scontrino.
+fn random_note(dice: &mut Dice, doc: &str) -> DocumentModel {
+    let mut source = String::new();
+    for line in 0..dice.roll(12) {
+        let when = format!("2026-11-13 09:{:02}", dice.roll(6));
+        match dice.roll(8) {
+            0 => source.push_str(&format!("# Titolo {line}\n\n")),
+            1 => source.push_str(&format!("## Sotto {line}\n\n")),
+            2 | 3 => source.push_str(&format!("- [ ] Compito {line} ⏰ {when}\n")),
+            4 => source.push_str(&format!("- [x] Fatto {line} ⏰ {when}\n")),
+            5 => source.push_str(&format!("> - [ ] Citato {line} ⏰ {when}\n\n")),
+            6 => source.push_str(&format!(
+                "- Voce {line}\n  - [ ] Annidato {line} ⏰ {when}\n"
+            )),
+            _ => source.push_str(&format!("Testo {line}.\n\n")),
+        }
+    }
+    model(doc, &source)
+}
+
+/// La risposta dell'implementazione semplice, quella di prima dell'indice
+/// ordinato: tutti i promemoria del vault, filtrati e ordinati a ogni domanda,
+/// con il titolo cercato da capo per ognuno.
+fn scanned(
+    vault: &BTreeMap<DocId, DocumentModel>,
+    after: Option<i64>,
+    until: Option<i64>,
+    limit: usize,
+) -> ReminderList {
+    let mut hits: Vec<ReminderEntry> = Vec::new();
+    for (doc, model) in vault {
+        for reminder in reminders_of(model) {
+            let heading = model
+                .outline
+                .iter()
+                .take_while(|heading| heading.span.start < reminder.at)
+                .last()
+                .map(|heading| heading.text.clone());
+            assert_eq!(
+                heading, reminder.heading,
+                "the section of {doc}@{}",
+                reminder.at
+            );
+            if after.is_none_or(|a| reminder.minute > a)
+                && until.is_none_or(|u| reminder.minute <= u)
+            {
+                hits.push(ReminderEntry {
+                    doc: doc.clone(),
+                    at: reminder.at,
+                    when: reminder_text(reminder.minute),
+                    text: reminder.text,
+                    heading,
+                });
+            }
+        }
+    }
+    hits.sort_by(|a, b| {
+        (minute(&a.when), a.doc.as_str(), a.at).cmp(&(minute(&b.when), b.doc.as_str(), b.at))
+    });
+    let more = hits.len() > limit;
+    hits.truncate(limit);
+    ReminderList {
+        reminders: hits,
+        more,
+    }
+}
+
+#[test]
+fn the_ordered_index_answers_like_the_full_scan() {
+    let base = minute("2026-11-13 09:00");
+    let mut dice = Dice(0x5EED_F0B0_2026_1120);
+    let mut index = ReminderIndex::new();
+    let mut vault: BTreeMap<DocId, DocumentModel> = BTreeMap::new();
+    let mut host = MemoryHost::new();
+    for step in 0..600 {
+        let doc = DocId::new(format!("n{}.md", dice.roll(12)));
+        match dice.roll(10) {
+            // Aggiunta o modifica: la nota rientra col modello nuovo.
+            0..=4 => {
+                let note = random_note(&mut dice, doc.as_str());
+                index.on_documents_indexed(std::slice::from_ref(&note));
+                vault.insert(doc, note);
+            }
+            // Cancellazione.
+            5 => {
+                index.on_documents_removed(std::slice::from_ref(&doc));
+                vault.remove(&doc);
+            }
+            // Rinomina: via il nome vecchio, dentro il nuovo con lo stesso testo.
+            6 => {
+                if let Some(old) = vault.remove(&doc) {
+                    let to = DocId::new(format!("r{}.md", dice.roll(12)));
+                    let mut moved = old.clone();
+                    moved.id = to.clone();
+                    index.on_documents_removed(std::slice::from_ref(&doc));
+                    index.on_documents_indexed(std::slice::from_ref(&moved));
+                    vault.insert(to, moved);
+                }
+            }
+            // Riallineamento dopo la scansione: resta solo una parte.
+            7 => {
+                let alive: Vec<DocId> = vault
+                    .keys()
+                    .filter(|_| dice.roll(4) != 0)
+                    .cloned()
+                    .collect();
+                index.reconcile(&alive);
+                vault.retain(|doc, _| alive.contains(doc));
+            }
+            // Riavvio: chiuso e rifatto dalle note.
+            8 => {
+                index.close(&mut host).unwrap();
+                let models: Vec<DocumentModel> = vault.values().cloned().collect();
+                index.on_documents_indexed(&models);
+            }
+            // Una nota rientrata uguale: niente cambia.
+            _ => {
+                if let Some(same) = vault.get(&doc) {
+                    index.on_documents_indexed(std::slice::from_ref(same));
+                }
+            }
+        }
+        for _ in 0..4 {
+            let bound = |dice: &mut Dice| match dice.roll(8) {
+                0 => None,
+                n => Some(base + n as i64 - 2),
+            };
+            let (after, until) = (bound(&mut dice), bound(&mut dice));
+            let limit = dice.roll(7) as usize;
+            assert_eq!(
+                index.between(after, until, limit),
+                scanned(&vault, after, until, limit),
+                "step {step}: ({after:?}, {until:?}] limit {limit}"
+            );
+        }
+        assert_eq!(
+            index.len(),
+            scanned(&vault, None, None, usize::MAX).reminders.len(),
+            "step {step}"
+        );
+        assert_eq!(
+            index.is_empty(),
+            vault.values().all(|note| reminders_of(note).is_empty()),
+            "step {step}"
+        );
+    }
+}
+
+/// La misura dell'indice su un vault grande: 10.000 note, 5.000 promemoria
+/// sparsi su un anno, e il notificatore che chiede un minuto alla volta.
+/// Non è una prova (il tempo dipende dalla macchina): la si lancia a mano con
+/// `cargo test -p fub-features --release --lib -- --ignored
+/// misura_promemoria --nocapture`.
+#[test]
+#[ignore = "misura, non prova: si lancia a mano"]
+fn misura_promemoria_su_un_vault_grande() {
+    use std::time::Instant;
+    let start = minute("2026-01-01 00:00");
+    let mut models = Vec::new();
+    for i in 0..10_000i64 {
+        let source = if i % 2 == 0 {
+            let at = reminder_text(start + (i * 7_919) % 525_600);
+            format!("# Nota {i}\n\n- [ ] Compito {i} ⏰ {at}\n")
+        } else {
+            format!("# Nota {i}\n\nTesto.\n")
+        };
+        models.push(model(&format!("n{i:05}.md"), &source));
+    }
+    let mut index = ReminderIndex::new();
+    let clock = Instant::now();
+    index.on_documents_indexed(&models);
+    let built = clock.elapsed();
+    assert_eq!(index.len(), 5_000);
+    let clock = Instant::now();
+    let mut rung = 0;
+    for step in 0..10_000i64 {
+        let now = start + step * 37;
+        rung += index
+            .between(Some(now - 1), Some(now), REMINDER_LIMIT)
+            .reminders
+            .len();
+    }
+    let minutes = clock.elapsed();
+    // Una nota sola con molti titoli e molti promemoria: l'abbinamento dei
+    // titoli.
+    let mut source = String::new();
+    for i in 0..4_000 {
+        source.push_str(&format!(
+            "# Sezione {i}\n\n- [ ] Compito {i} ⏰ {}\n\n",
+            reminder_text(start + i)
+        ));
+    }
+    let big = model("grande.md", &source);
+    let clock = Instant::now();
+    index.on_documents_indexed(std::slice::from_ref(&big));
+    let headings = clock.elapsed();
+    println!(
+        "costruzione {built:?} · 10.000 domande di un minuto {minutes:?} ({rung} suonati) · \
+         nota con 4.000 titoli {headings:?}"
+    );
+}

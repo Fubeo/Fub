@@ -491,6 +491,8 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         ...(options.compact ? { compact: true } : {}),
         // Esc è della scheda: ne esce (canvas-input.md).
         escapeLeaves: true,
+        // Il documento del riquadro è la lavagna, non questo (il «/»).
+        hosted: true,
         formatId: source.formatId,
         ...(source.revision !== undefined ? { revision: source.revision } : {}),
       });
@@ -672,6 +674,7 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
         escapeLeaves: true,
         // Il testo della scheda non è una pagina: solo il corpo (IMP-044).
         pageless: true,
+        hosted: true,
         formatId: TEXT_CARD_FORMAT,
       });
       mounted = surface;
@@ -705,6 +708,11 @@ export function createCardEditorPort(deps: CardEditorDeps): CardEditorHub {
             console.error(error);
           }
           surface.focus?.();
+        },
+        focusAtPoint: (point) => {
+          if (editor.destroyed || !surface.caretAt?.(point)) return false;
+          surface.focus?.();
+          return true;
         },
         text: () => (editor.destroyed ? editor.last : buffer.getDoc()),
         destroy,

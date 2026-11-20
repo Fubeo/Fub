@@ -1,7 +1,7 @@
 # VectorCraft vendorizzato
 
 Questa cartella contiene il motore di
-[VectorCraft](https://github.com/storytold/vectorcraft), copiato con le cinque
+[VectorCraft](https://github.com/storytold/vectorcraft), copiato con le sette
 patch elencate qui sotto. Fub non dipende da VectorCraft via Git: `deny.toml`
 ammette soltanto crates.io, e i crate non sono pubblicati là.
 
@@ -33,7 +33,7 @@ sono copiati: l'interfaccia (`ui-egui`), il server MCP (`mcp`), le app
 |---|---|---|
 | `crates/geom/`, `color/`, `doc/`, `pathops/`, `brush/`, `trace/`, `text/`, `plugins/`, `three-d/`, `format/`, `cad/`, `metafile/`, `affinity/`, `scriptcheck/`, `tools/`, `testkit/` | gli stessi | nessuna |
 | `crates/effects/` | `crates/effects/` | `0001` (`Cargo.toml`, `src/catalog.rs`, `src/geometry.rs`, `src/params.rs`) |
-| `crates/render/` | `crates/render/` | `0001` (`Cargo.toml`, una dipendenza dei test); `0003` (`src/tests/placed_document.rs`); `0005` (`src/pattern/tests.rs`, `src/addons/halftone/tests.rs`) |
+| `crates/render/` | `crates/render/` | `0001` (`Cargo.toml`, una dipendenza dei test); `0003`, `0007` (`src/tests/placed_document.rs`); `0005` (`src/pattern/tests.rs`, `src/addons/halftone/tests.rs`); `0006` (`src/tests.rs`) |
 | `crates/svg/` | `crates/svg/` | `0004` (`src/import/convert.rs`, `tests/it/prop_svg.rs`) |
 | `crates/engine/` | `crates/engine/` | `0001` (22 file: `Cargo.toml`, 12 di `src/`, 9 di test); `0002` (85 file: `Cargo.toml`, 23 di `src/`, 61 di test) |
 | `xtask/src/sha256.rs`, `xtask/affinity-corpus.sha256` | gli stessi | nessuna |
@@ -82,8 +82,8 @@ l'upstream, non una copia.
 
 Le prime due patch spengono parti del motore che il disegno di Fub non usa,
 perché non entrino nella build né nel lock. Entrambe sono **UPSTREAM-API**:
-una feature in più, che l'upstream terrebbe accesa di serie. La terza e la
-quinta correggono test instabili dell'upstream, la quarta un difetto
+una feature in più, che l'upstream terrebbe accesa di serie. La terza, la
+quinta, la sesta e la settima correggono test instabili dell'upstream, la quarta un difetto
 dell'importazione SVG che un test a caso trovava (**UPSTREAM-BUGFIX**).
 
 | Patch | Tipo | File | Cosa fa | Upstream | Quando cade |
@@ -93,6 +93,8 @@ dell'importazione SVG che un test a caso trovava (**UPSTREAM-BUGFIX**).
 | `0003-bitmap-trattenute` | UPSTREAM-BUGFIX | 1, in `render` (`src/tests/placed_document.rs`), +42 −1 | il test `a_ready_bitmap_draws_again_where_its_file_shows` cadeva a caso sui runner carichi (issue #382): il lavoratore in background poteva finire i bitmap fra `schedule` e la rilettura della cache in `draw_placed_bitmap`, e il primo disegno, che deve mostrare i segnaposto, li mostrava già. Il caricatore finto del test trattiene i file `held…` finché il primo disegno non è finito; l'asserzione resta la stessa | da proporre a monte | quando l'upstream rende il test deterministico |
 | `0004-ellissi-importate` | UPSTREAM-BUGFIX | 2, in `svg` (`src/import/convert.rs`, `tests/it/prop_svg.rs`), +141 −1 | il proptest `plain_art_survives_visually` cadeva a caso in CI (issue #407): un `<ellipse>` scritto dall'esportazione tornava come le cubiche che usvg fa degli archi (quattro, otto o più, in `f32`, con due ancore `Corner`), non come l'ellisse di quattro ancore `Smooth` di partenza; uguale entro lo 0,03% dei raggi, ma vello appiattisce ogni curva con corde sue (0,25 px), e su un'ellisse stretta, con le punte più curve di mezzo pixel, i bordi vicino alle punte venivano diversi (0,400% di pixel > 0,200%). L'importazione riconosce dalla forma il tracciato di un'ellisse intera (`<circle>`, `<ellipse>` o un `<path>` con gli stessi archi, anche ruotato) e lo rifà come `shapes::ellipse`, partendo da ore 3 come in SVG; ogni altro tracciato resta com'è. Due test nuovi: il caso minimo trovato in CI e i cerchi e le ellissi importati | da proporre a monte | quando l'upstream legge le ellissi come le scrive |
 | `0005-test-paralleli` | UPSTREAM-BUGFIX | 2, in `render` (`src/pattern/tests.rs`, `src/addons/halftone/tests.rs`), +41 −12 | due test cadevano soltanto sotto carico estremo, per un dato globale che un altro test cambiava in parallelo (issue #407; i contatori, già per thread, non c'entrano). `kept_tiles_count_the_images_they_could_not_decode`: la piastrella di un motivo che mostra immagini resta valida finché non cambiano i caratteri di `FontDb::global()`, e altri test dello stesso binario ne aggiungono; se capita fra due disegni, la piastrella si rifà (giustamente) e il conto viene 2: una misura presa mentre i caratteri cambiano si ripete con un documento nuovo. `unchanged_art_is_not_sampled_again`: i retini sono tenuti in una cache unica del processo di 8 voci, e `the_settings_change_the_dots` da solo ne fa 9; i cinque test dei retini ora girano uno alla volta (`serial()`, come in `placed_document.rs`). Le asserzioni restano le stesse | da proporre a monte | quando l'upstream rende i test indipendenti |
+| `0006-immagini-non-lette` | UPSTREAM-BUGFIX | 1, in `render` (`src/tests.rs`), +6 −1 | `opacity_mask_with_undecodable_image_leaves_out_object` cadeva a caso sotto carico (issue #425): le immagini che non si leggono sono annotate per tutto il processo secondo il loro contenuto (`images.rs`, `set_undecodable`), e il suo primo disegno vuole la sua immagine ancora sconosciuta; `undecodable_image_in_mask_art_root_mask_leaves_out_outer_object` usava gli stessi byte (`not a PNG`) e, girato prima su un altro thread, la faceva già annotare. Ora l'immagine ha byte suoi, come le altre immagini rotte dei test; l'asserzione resta la stessa | da proporre a monte | quando l'upstream rende il test indipendente |
+| `0007-attesa-dei-bitmap` | UPSTREAM-BUGFIX | 1, in `render` (`src/tests/placed_document.rs`), +14 −4 | i test di `placed_document` cadevano a caso sotto carico forte (`bitmaps still coming`, e a cascata `both files' bitmaps` nel test dopo): `settle()` aspettava i bitmap in background al più 10 s dall'inizio, e su una macchina carica ben oltre i suoi core i nove bitmap grandi di `nine_large_bitmaps_on_screen_are_not_made_again` arrivano uno dopo l'altro in più di 10 s. Ora si arrende solo se per 10 s non ne arriva nessuno (`generation()` fermo): un lavoratore bloccato fa ancora cadere il test | da proporre a monte | quando l'upstream aspetta i bitmap senza un tetto al tempo totale |
 
 La feature `pdf` non è dichiarata nel `Cargo.toml` di `engine`: dichiararla
 vorrebbe le dipendenze `vectorcraft-pdf` ed `vectorcraft-eps`, che il lock

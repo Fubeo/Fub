@@ -4,7 +4,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorSelection, EditorState, Prec, Transaction } from "@codemirror/state";
-import { EditorView, runScopeHandlers } from "@codemirror/view";
+import { Decoration, EditorView, runScopeHandlers, WidgetType } from "@codemirror/view";
 import { type Extension } from "@codemirror/state";
 import { getCM, Vim, vim } from "@replit/codemirror-vim";
 import { markdownGrammar } from "../grammar";
@@ -16,7 +16,7 @@ import { blockSelection, selectCursorBlock } from "./selection";
 import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
-import { dragPose, LIFT_SCALE } from "./motion";
+import { dragPose, LIFT_SCALE, selectedMarkers } from "./motion";
 import { closeContextMenu } from "../../../../../ui/menu";
 import { createManualDriver, liveState, setMotionDriver } from "../../../../../moto";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
@@ -104,6 +104,38 @@ describe("la selezione di blocchi", () => {
     expect(view.state.doc.toString()).toBe("Due\n\nTre\n\nUno");
     expect(view.state.field(blockSelection)).not.toBeNull();
     expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("Due\n\nTre");
+  });
+
+  it("Esc sceglie soltanto il blocco del cursore, mai il frontmatter, e Canc toglie solo lui (IMP-6106)", () => {
+    const doc = "---\ntags: [a]\n---\nParagrafo uno.\n\nParagrafo due da cancellare.";
+    const view = mount(doc, doc.length);
+    expect(press(view, "Escape")).toBe(true);
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("Paragrafo due da cancellare.");
+    press(view, "Backspace");
+    expect(view.state.doc.toString()).toBe("---\ntags: [a]\n---\nParagrafo uno.");
+    // Nel frontmatter, o su una riga vuota, Esc non sceglie niente.
+    for (const at of [5, doc.indexOf("\n\n") + 1]) {
+      const other = mount(doc, at);
+      expect(press(other, "Escape")).toBe(false);
+      expect(other.state.field(blockSelection)).toBeNull();
+      expect(other.state.selection.main.empty).toBe(true);
+    }
+  });
+
+  it("il velo della selezione copre la riga del blocco, non la testata attaccata sopra (IMP-6106)", () => {
+    class Tall extends WidgetType {
+      override get estimatedHeight() { return 300; }
+      toDOM() { return document.createElement("div"); }
+    }
+    const header = EditorView.decorations.of(Decoration.set([Decoration.widget({ widget: new Tall(), block: true, side: -1 }).range(0)]));
+    const view = mount("Paragrafo uno.\nParagrafo due da cancellare.", 30, vi.fn(), header);
+    press(view, "Escape");
+    const markers = selectedMarkers(view) as unknown as readonly { top: number; height: number }[];
+    expect(markers).toHaveLength(1);
+    const text = view.lineBlockAt(0);
+    expect(markers[0]!.top).toBeGreaterThanOrEqual(300);
+    expect(markers[0]!.top + markers[0]!.height).toBeCloseTo(view.lineBlockAt(view.state.doc.length).bottom, 5);
+    expect(markers[0]!.height).toBeLessThan(text.bottom);
   });
 
   it("con più cursori Esc non fa una selezione di blocchi da uno solo", () => {

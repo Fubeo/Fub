@@ -176,6 +176,42 @@ function outOfPrefix(transaction: Transaction): Transaction | readonly [Transact
   return [transaction, { selection: EditorSelection.create(ranges, state.selection.mainIndex), sequential: true }];
 }
 
+const LIST_SHORTCUT = /^(?:[-*+]|\d{1,9}[.)])$/;
+
+/// La scorciatoia di una voce scritta all'inizio di un'altra voce, col
+/// prefisso nascosto: su `- [ ] |`, che l'Invio dopo una voce da fare ha già
+/// aperto, `-` e spazio cambiano la voce in un elenco puntato invece di
+/// annidarne uno a vista (`- [ ] - `). Chi scrive `- [ ] ` come in un editor
+/// di Markdown, riga dopo riga, ottiene così la voce che ha scritto. `null`
+/// se la battuta non è questa scorciatoia.
+export function listShortcutOverPrefix(state: EditorState, from: number, to: number, typed: string): TransactionSpec | null {
+  if (typed !== " " || from !== to || state.facet(liveReveal) === "riga") return null;
+  if (state.selection.ranges.length !== 1) return null;
+  const line = state.doc.lineAt(from);
+  const prefix = blockPrefixAt(state, line);
+  if (!prefix || prefix.textFrom >= from) return null;
+  const entry = listItem(line.text);
+  if (!entry || entry.kind === "quote" || line.from + entry.markerEnd !== prefix.textFrom) return null;
+  const marker = state.sliceDoc(prefix.textFrom, from);
+  if (!LIST_SHORTCUT.test(marker)) return null;
+  const markFrom = line.from + entry.quote.length + entry.indent.length;
+  const insert = `${marker} `;
+  return {
+    changes: { from: markFrom, to: from, insert },
+    selection: EditorSelection.cursor(markFrom + insert.length),
+    userEvent: "input.type",
+    scrollIntoView: true,
+  };
+}
+
+const listOverPrefix = EditorView.inputHandler.of((view, from, to, text) => {
+  if (view.compositionStarted || view.state.readOnly) return false;
+  const spec = listShortcutOverPrefix(view.state, from, to, text);
+  if (!spec) return false;
+  view.dispatch(spec);
+  return true;
+});
+
 /// Home: all'inizio del testo; con `elemento`, da lì, nel prefisso.
 function home(extend: boolean) {
   return (view: EditorView): boolean => {
@@ -212,6 +248,7 @@ export function blockPrefixes(): Extension {
   return [
     typedShortcut,
     EditorState.transactionFilter.of(outOfPrefix),
+    Prec.high(listOverPrefix),
     Prec.highest(keymap.of([
       { key: "Home", run: home(false), shift: home(true) },
       { key: "Backspace", run: backspace },

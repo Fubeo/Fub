@@ -21,7 +21,11 @@ disegno», descritte in [Vault e file](vault-and-files.md):
 - un nome occupato è un errore e mai una sovrascrittura, e prima di scrivere
   il nome passa la regola dei nomi nuovi.
 
-Il `.docx` lo scrive il codec dei documenti da un documento senza paragrafi.
+Il `.docx` lo scrive il codec dei documenti da un documento senza paragrafi,
+che dichiara come lingua del testo quella di chi lo crea (`it`, o la lingua di
+ripiego dell'host se l'utente non ne ha detta una): il
+[correttore](proofing.md) e Word controllano ciò che vi si scrive in quella
+lingua, non in inglese.
 Il `.xlsx` lo scrive GridCraft, con un foglio solo che si chiama come lo
 chiama Excel nella lingua di chi lo crea: «Foglio1», «Sheet1». Tutti e due i
 file si rileggono col loro codec prima di entrare nel vault, e si scrivono

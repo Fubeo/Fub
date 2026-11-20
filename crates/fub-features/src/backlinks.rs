@@ -26,7 +26,8 @@ use fub_abi::model::{DocId, PropertyScalar, PropertyValue};
 mod mentions;
 use fub_abi::options::source::PROSE;
 use fub_abi::query::{
-    QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField, TextMode, TextQuery,
+    PropertyLinkPredicate, QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextField,
+    TextMode, TextQuery,
 };
 use fub_abi::session::ContextMask;
 use fub_abi::text::{Arg, StringCatalog, Text};
@@ -189,6 +190,12 @@ impl ViewProvider for BacklinksView {
                     other => Err(unexpected("backlinks", other)),
                 }),
         );
+        let from_properties = part(
+            PROPERTY_LINKS,
+            PROPERTY_LINKS_COUNT,
+            property_links(host, &active)
+                .map(|rows| (rows.len(), build_property_links_view(&rows))),
+        );
         let outgoing = part(
             OUTGOING,
             OUTGOING_COUNT,
@@ -271,6 +278,7 @@ impl ViewProvider for BacklinksView {
             4,
             vec![
                 incoming,
+                from_properties,
                 outgoing,
                 unlinked,
                 outbound_unlinked,
@@ -390,6 +398,13 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(VIEW_TITLE, "Collegamenti")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
             .with(INCOMING, "In entrata")
+            .with(PROPERTY_LINKS, "Dalle proprietà")
+            .with(PROPERTY_LINKS_COUNT, "Dalle proprietà · {count}")
+            .with(PROPERTY_LINK_KEYS, "Proprietà: {keys}")
+            .with(
+                EMPTY_PROPERTY_LINKS,
+                "Nessuna nota la nomina in una proprietà.",
+            )
             .with(OUTGOING, "In uscita")
             .with(UNLINKED, "Menzioni non collegate")
             .with(OUTBOUND_UNLINKED, "Menzioni uscenti non collegate")
@@ -493,6 +508,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(VIEW_TITLE, "Links")
             .with(NO_ACTIVE_DOC, "No note open.")
             .with(INCOMING, "Incoming")
+            .with(PROPERTY_LINKS, "From properties")
+            .with(PROPERTY_LINKS_COUNT, "From properties · {count}")
+            .with(PROPERTY_LINK_KEYS, "Properties: {keys}")
+            .with(EMPTY_PROPERTY_LINKS, "No note names it in a property.")
             .with(OUTGOING, "Outgoing")
             .with(UNLINKED, "Unlinked mentions")
             .with(OUTBOUND_UNLINKED, "Outgoing unlinked mentions")
@@ -604,6 +623,12 @@ const EMPTY: &str = "empty";
 const A_COUNT: &str = "count";
 const INCOMING: &str = "incoming";
 const INCOMING_COUNT: &str = "incoming_count";
+/// Le note che nominano quella aperta in una proprietà (#503).
+const PROPERTY_LINKS: &str = "property_links";
+const PROPERTY_LINKS_COUNT: &str = "property_links_count";
+const PROPERTY_LINK_KEYS: &str = "property_link_keys";
+const EMPTY_PROPERTY_LINKS: &str = "empty_property_links";
+const A_KEYS: &str = "keys";
 const OUTGOING: &str = "outgoing";
 const UNLINKED: &str = "unlinked";
 const OUTBOUND_UNLINKED_COUNT: &str = "outbound_unlinked_count";
@@ -670,6 +695,122 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
             // la riga si trascina come la nota che nomina: nell'editor
             // diventa un link, sulla striscia delle schede si apre.
             .dragging_document(r.source.clone())
+        })
+        .collect();
+    UiNode::list(items)
+}
+
+/// Una nota che nomina quella aperta in una o più proprietà
+/// (`progetto: "[[Scorte]]"`), con le chiavi in cui la nomina.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PropertyLinkRow {
+    pub source: DocId,
+    pub keys: Vec<String>,
+}
+
+/// Le note che nominano `target` in una proprietà, in ordine di documento,
+/// ognuna con le sue chiavi in ordine alfabetico.
+///
+/// Chi e in quale chiave lo dicono gli archi del grafo (la foglia
+/// [`PropertyLinkPredicate`]): il pannello non risolve link da sé. Prima la
+/// domanda senza chiave, che dà le note; poi una per ogni chiave che in quelle
+/// note porta un link, che dice dove. Costa i link che arrivano alla nota.
+pub fn property_links(
+    host: &dyn ReadApi,
+    target: &DocId,
+) -> Result<Vec<PropertyLinkRow>, PluginError> {
+    let ask = |key: Option<&str>, select: PropertySelect| {
+        let leaf = PropertyLinkPredicate {
+            targets: vec![target.clone()],
+            key: key.map(str::to_string),
+        };
+        match host.query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(leaf.into_predicate()),
+            sort: None,
+            select,
+            page: None,
+            excerpts: Excerpts::Omit,
+        }) {
+            Ok(IndexResult::Documents(rows)) => Ok(rows.items),
+            // Nessun indice che tenga i link delle proprietà (un host
+            // ridotto): non c'è niente che si possa sapere, e la sezione è
+            // vuota, non rotta.
+            Err(PluginError::Unserved(_)) => Ok(Vec::new()),
+            Ok(other) => Err(unexpected("documents", &other)),
+            Err(error) => Err(error),
+        }
+    };
+    let rows = ask(None, PropertySelect::All)?;
+    let mut keys: BTreeSet<&str> = BTreeSet::new();
+    for row in &rows {
+        for property in &row.properties {
+            if holds_link(&property.value) {
+                keys.insert(property.key.as_str());
+            }
+        }
+    }
+    let mut out: Vec<PropertyLinkRow> = rows
+        .iter()
+        .map(|row| PropertyLinkRow {
+            source: row.doc.clone(),
+            keys: Vec::new(),
+        })
+        .collect();
+    for key in keys {
+        let sources: BTreeSet<DocId> = ask(Some(key), PropertySelect::None)?
+            .into_iter()
+            .map(|row| row.doc)
+            .collect();
+        for row in out.iter_mut().filter(|row| sources.contains(&row.source)) {
+            row.keys.push(key.to_string());
+        }
+    }
+    out.sort_by(|a, b| a.source.cmp(&b.source));
+    Ok(out)
+}
+
+/// Un valore che può portare un link di proprietà: un link, un elenco con un
+/// link, o un testo che è soltanto un `[[…]]`. È solo il filtro delle chiavi
+/// da chiedere: dove il link arriva lo dice il grafo.
+fn holds_link(value: &PropertyValue) -> bool {
+    let text = |s: &str| fub_abi::rules::properties::lone_wikilink(s).is_some();
+    match value {
+        PropertyValue::Link(_) => true,
+        PropertyValue::Text(s) => text(s),
+        PropertyValue::List(items) => items.iter().any(|item| match item {
+            PropertyScalar::Link(_) => true,
+            PropertyScalar::Text(s) => text(s),
+            _ => false,
+        }),
+        _ => false,
+    }
+}
+
+/// Le righe di «Dalle proprietà»: una per nota, con le chiavi accanto, che si
+/// aprono e si trascinano come le righe in entrata.
+pub fn build_property_links_view(rows: &[PropertyLinkRow]) -> UiNode {
+    if rows.is_empty() {
+        return placeholder(EMPTY_PROPERTY_LINKS);
+    }
+    let items = rows
+        .iter()
+        .map(|row| {
+            let context = (!row.keys.is_empty()).then(|| {
+                Text::message(
+                    PROPERTY_LINK_KEYS,
+                    vec![Arg::text(A_KEYS, row.keys.join(", "))],
+                )
+            });
+            UiNode::list_item(
+                row.source.page_name(),
+                context,
+                Some(ActionRef::with(
+                    OPEN,
+                    serde_json::json!({ DOC: row.source.as_str() }),
+                )),
+            )
+            .with_key(row.source.as_str())
+            .dragging_document(row.source.clone())
         })
         .collect();
     UiNode::list(items)
@@ -1724,5 +1865,64 @@ mod tests {
         // sta chiuso in fondo.
         assert_eq!(sections.first(), Some(&(Some(INCOMING), false)));
         assert_eq!(sections.last(), Some(&(Some(FILTER_SECTION), true)));
+    }
+
+    /// «Dalle proprietà» (#503): sotto «In entrata», una riga per nota che
+    /// nomina quella aperta in una proprietà, con le chiavi accanto. Un link
+    /// dentro altro testo non conta, e nemmeno un link a un'altra nota.
+    #[test]
+    fn the_notes_naming_this_one_in_a_property_have_their_section() {
+        use fub_abi::format::FormatProvider as _;
+        let notes = [
+            ("Scorte.md", "# Scorte\n"),
+            (
+                "Indice.md",
+                "---\nprogetto: \"[[Scorte]]\"\nrif:\n  - \"[[Scorte#Fasi]]\"\n  - \"[[Altro]]\"\n---\n\nTesto.\n",
+            ),
+            ("Diario.md", "---\nnota: \"vedi [[Scorte]]\"\n---\n"),
+            ("Altro.md", "---\nprogetto: \"[[Indice]]\"\n---\n"),
+        ];
+        let mut host = MemoryHost::new();
+        for (id, source) in notes {
+            let model = fub_format_markdown::MarkdownProvider::new()
+                .parse(&source.into(), &fub_abi::format::ParseContext::obsidian(id))
+                .unwrap();
+            host = host.with_document(id, source).with_model(id, model);
+        }
+        host.set_active(Some("Scorte.md"));
+
+        let rows = property_links(&host, &DocId::new("Scorte.md")).unwrap();
+        assert_eq!(
+            rows,
+            vec![PropertyLinkRow {
+                source: DocId::new("Indice.md"),
+                keys: vec!["progetto".into(), "rif".into()],
+            }]
+        );
+
+        let tree = BacklinksView.render_view(&instance(), &host).unwrap();
+        let UiKind::Stack { children, .. } = &tree.kind else {
+            panic!("the panel is a column");
+        };
+        let keys: Vec<Option<&str>> = children.iter().map(|c| c.key.as_deref()).collect();
+        assert_eq!(&keys[..2], &[Some(INCOMING), Some(PROPERTY_LINKS)]);
+        let UiKind::Section {
+            title,
+            collapsed,
+            children: body,
+        } = &children[1].kind
+        else {
+            panic!("the part is a section");
+        };
+        assert_eq!(
+            *title,
+            Text::message(PROPERTY_LINKS_COUNT, vec![Arg::int(A_COUNT, 1)])
+        );
+        assert!(!collapsed);
+        let json = serde_json::to_string(&body[0]).unwrap();
+        assert!(
+            json.contains("Indice") && json.contains(PROPERTY_LINK_KEYS),
+            "{json}"
+        );
     }
 }

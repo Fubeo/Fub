@@ -13,6 +13,7 @@
 // chiede: *una promessa senza presidio meccanico decade*, e questa decadrebbe
 // alla prima view nuova.
 import { openLifetime, type Teardown } from "./lifetime";
+import { composingKey } from "../kit/ime";
 
 /// Un id unico nel documento, per legare due elementi (`for`, `aria-labelledby`,
 /// `aria-controls`).
@@ -239,6 +240,8 @@ export function trapFocus(root: HTMLElement, close: () => void, options: TrapOpt
   const onKey = (e: KeyboardEvent) => {
     // Aperta ma non in cima: c'è una superficie sopra questa, e il tasto è suo.
     if (trapStack[trapStack.length - 1] !== io) return;
+    // Esc durante la composizione (IME) scarta il candidato, non la modale.
+    if (composingKey(e)) return;
     if (e.key === "Escape") {
       e.preventDefault();
       // Un campo di ricerca pieno si svuota prima: è l'Escape che il campo ha

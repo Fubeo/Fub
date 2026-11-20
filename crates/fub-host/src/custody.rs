@@ -99,7 +99,7 @@
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::ThreadId;
 use std::time::{Duration, Instant};
@@ -172,6 +172,12 @@ struct Inner<T> {
     /// lentezza è un fatto e ne può capitare un altro. Vedi
     /// [`Custody::slow_count`].
     slow_count: AtomicU32,
+    /// **Il prestito esclusivo più lungo** che questa custodia ha visto, in
+    /// microsecondi. È la misura dietro [`Custody::longest_hold`]: il conto
+    /// dei lenti dice *quante volte*, questa dice *quanto*, ed è ciò che un
+    /// banco confronta con la soglia senza dipendere da quanto è carica la
+    /// macchina — si misura il tempo dentro il prestito, non quello totale.
+    longest_hold_micros: AtomicU64,
     /// Quanti thread aspettano adesso un prestito condiviso o il turno di
     /// scrittura. Lo guarda [`Custody::make_way`].
     waiting: AtomicU32,
@@ -236,6 +242,7 @@ impl<T> Custody<T> {
                 reports: AtomicU32::new(0),
                 threshold,
                 slow_count: AtomicU32::new(0),
+                longest_hold_micros: AtomicU64::new(0),
                 waiting: AtomicU32::new(0),
             }),
         }
@@ -384,6 +391,22 @@ impl<T> Custody<T> {
             .is_some()
     }
 
+    /// Il turno di scrittura è di **questo** thread?
+    ///
+    /// Serve a chi vuole fare I/O fuori dal prestito esclusivo contando sul
+    /// turno per l'ordine (la riga del registro di un epilogo,
+    /// `jobs::finish_events`): se il turno non è suo, l'ordine non è garantito
+    /// e il lavoro resta dentro il prestito, com'era.
+    pub fn holds_turn(&self) -> bool {
+        let me = std::thread::current().id();
+        self.inside
+            .writer_turn
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .owner
+            == Some(me)
+    }
+
     /// Come [`write_turn`](Self::write_turn), ma senza mettersi in fila.
     fn try_write_turn(&self) -> Option<WriteTurn<'_, T>> {
         let me = std::thread::current().id();
@@ -463,6 +486,31 @@ impl<T> Custody<T> {
     /// [`reports`](Custody::denunce) si può chiedere.
     pub fn slow_count(&self) -> u32 {
         self.inside.slow_count.load(Ordering::Relaxed)
+    }
+
+    /// **Il prestito esclusivo più lungo** tenuto finora su questa custodia.
+    ///
+    /// Il conto di [`slow_count`](Custody::slow_count) risponde a «è successo?»;
+    /// questa risponde a «di quanto?», che è la domanda di chi prova che
+    /// un'operazione lunga non tiene il vault per tutta la sua durata
+    /// (IMP-1805): il tempo dentro il prestito, misurato da chi lo scioglie.
+    #[cfg(test)]
+    pub fn longest_hold(&self) -> Duration {
+        Duration::from_micros(self.inside.longest_hold_micros.load(Ordering::Relaxed))
+    }
+
+    /// Quanti thread sono in fila adesso per un prestito condiviso o per il
+    /// turno: un banco lo guarda per sapere che un altro thread aspetta.
+    #[cfg(test)]
+    pub fn queued(&self) -> u32 {
+        self.inside.waiting.load(Ordering::Acquire)
+    }
+
+    /// Ricomincia la misura di [`longest_hold`](Custody::longest_hold), per
+    /// misurare un gesto solo.
+    #[cfg(test)]
+    pub fn forget_longest_hold(&self) {
+        self.inside.longest_hold_micros.store(0, Ordering::Relaxed);
     }
 
     /// La frase, e — la prima volta soltanto — la riga nel log.
@@ -622,6 +670,10 @@ impl<T> Drop for Hold<'_, T> {
         let duration = self.taken.elapsed();
         drop(self.guard.take());
         drop(self.turn.take());
+        let micros = u64::try_from(duration.as_micros()).unwrap_or(u64::MAX);
+        self.inside
+            .longest_hold_micros
+            .fetch_max(micros, Ordering::Relaxed);
         if duration >= self.inside.threshold {
             self.inside.slowness(duration);
         }

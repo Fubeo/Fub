@@ -236,6 +236,24 @@ pub(crate) fn speaking(mut catalogs: Vec<StringCatalog>) -> Vec<StringCatalog> {
 /// estensione: è una regola sola, non due convenzioni.
 pub(crate) const NEW_NOTE_EXTENSION: &str = "files.new-note-extension";
 
+/// La chiave del core che sceglie la cartella delle note nuove. La legge anche
+/// il kernel quando crea una nota (`Workspace::create_notes`): la regola è la
+/// stessa, e la scrive [`fub_abi::rules::folders::for_note`].
+pub(crate) const NEW_NOTE_FOLDER: &str = "files.new-note-folder";
+
+/// La cartella in cui nasce una nota quando chi la crea non ne sceglie una:
+/// quella di [`NEW_NOTE_FOLDER`], letta senza una nota in mano (un `./` è la
+/// radice: la nota aperta la conosce la shell, che la passa come cartella).
+/// `""` è la radice, anche su un host che non dichiara la chiave.
+pub(crate) fn new_note_folder(host: &(impl fub_abi::traits::SettingsRead + ?Sized)) -> String {
+    match host.setting(NEW_NOTE_FOLDER) {
+        Ok(fub_abi::settings::SettingValue::Text(folder)) => {
+            fub_abi::rules::folders::for_note(&folder, "")
+        }
+        _ => String::new(),
+    }
+}
+
 /// Il default che il core dichiara per [`NEW_NOTE_EXTENSION`]. Vale soltanto
 /// su un host che non dichiara la chiave, come un banco senza il bundle core.
 const DECLARED_DEFAULT: &str = "md";

@@ -8,6 +8,10 @@ const world = vi.hoisted(() => {
     vault: "/vault" as string | null,
     recent: [] as string[],
     names: [] as string[],
+    /// I documenti il cui file si chiama come il testo, estensione compresa
+    /// (`documentsByFileName`), e se quella domanda cade.
+    byFile: [] as string[],
+    byFileFails: false,
     matches: { items: [] as { doc: string; snippet?: string; highlights?: unknown[]; occurrences?: { span: { start: number; end: number } }[] }[], total: 0 },
     asked: [] as unknown[],
     /// Il vault con cui è arrivata ogni domanda all'indice (FUB-001).
@@ -65,6 +69,10 @@ vi.mock("../../../host/query", () => ({
     return world.matches;
   },
   notesByName: async () => world.names,
+  documentsByFileName: async () => {
+    if (world.byFileFails) throw new Error("host fake: predicato file rifiutato");
+    return world.byFile;
+  },
   vaultEntries: async (window: { offset: number; limit: number }, kind: string) => {
     world.entryPages.push(window);
     const gate = world.entryGates.shift();
@@ -158,6 +166,8 @@ beforeEach(() => {
   world.vault = "/vault";
   world.recent = [];
   world.names = [];
+  world.byFile = [];
+  world.byFileFails = false;
   world.matches = { items: [], total: 0 };
   world.asked.length = 0;
   world.askedVault.length = 0;
@@ -248,6 +258,48 @@ describe("Tutto con un testo", () => {
     ]);
     // Il nome conta con l'estensione: «pdf» trova i PDF.
     expect(keys((await ask("all", "pdf")).rows)).toEqual(["g:files", "n:R1/Stampa.pdf"]);
+  });
+
+  // IMP-2803: il nome intero di un file, estensione compresa, porta quel file in
+  // cima, prima delle note che lo citano nel testo; di qualunque tipo.
+  it("«Esami.base» porta la Base in cima, prima delle note che la citano", async () => {
+    world.byFile = ["Area/Esami/Esami.base"];
+    world.matches = { items: [{ doc: "Home.md", snippet: "![[Esami.base]]" }], total: 1 };
+    expect(keys((await ask("all", "Esami.base")).rows)).toEqual(["g:files", "n:Area/Esami/Esami.base", "g:text", "n:Home.md"]);
+  });
+
+  it("il nome intero di un PDF lo porta in cima, prima delle sue annotazioni", async () => {
+    // L'indice dei nomi dà le annotazioni (il loro nome di pagina finisce in
+    // «.pdf»); il PDF lo dà l'anagrafe dei file.
+    world.names = ["Tesi/Capitolo 3 - Analisi.pdf.fubann"];
+    world.files = ["Tesi/Capitolo 3 - Analisi.pdf"];
+    expect(keys((await ask("all", "Capitolo 3 - Analisi.pdf")).rows)).toEqual([
+      "g:files",
+      "n:Tesi/Capitolo 3 - Analisi.pdf",
+      "n:Tesi/Capitolo 3 - Analisi.pdf.fubann",
+    ]);
+  });
+
+  it("vale per ogni tipo di file e per la coda di un path, senza ripetere il file", async () => {
+    world.names = ["Mare.md"];
+    world.files = ["Foto/Mare.jpg"];
+    expect(keys((await ask("all", "mare.JPG")).rows)).toEqual(["g:files", "n:Foto/Mare.jpg", "n:Mare.md"]);
+    // L'indice dei nomi dà anche il documento: in cima resta uno solo.
+    world.names = ["Spese.md", "Finanze/Spese e voti.xlsx"];
+    world.byFile = ["Finanze/Spese e voti.xlsx"];
+    expect(keys((await ask("all", "Finanze/Spese e voti.xlsx")).rows)).toEqual(["g:files", "n:Finanze/Spese e voti.xlsx", "n:Spese.md"]);
+  });
+
+  it("un file trovato per nome intero non si ripete fra le note del testo", async () => {
+    world.byFile = ["Lavoro/Relazione.docx"];
+    world.matches = { items: [{ doc: "Lavoro/Relazione.docx" }, { doc: "Note.md" }], total: 2 };
+    expect(keys((await ask("all", "Relazione.docx")).rows)).toEqual(["g:files", "n:Lavoro/Relazione.docx", "g:text", "n:Note.md"]);
+  });
+
+  it("se la domanda per nome di file cade, le note per nome restano", async () => {
+    world.byFileFails = true;
+    world.names = ["Esami.md"];
+    expect(keys((await ask("all", "Esami.base")).rows)).toEqual(["g:files", "n:Esami.md"]);
   });
 
   it("un file che si chiama come si è scritto sale dopo i documenti che si chiamano così", async () => {
@@ -427,6 +479,15 @@ describe("Tutto con un testo", () => {
     const answer = await ask("all", "Idea nuova");
     expect(answer.note).toBe('launcher.note.all.create {"query":"Idea nuova","name":"Idea nuova"}');
     expect(answer.create).toBe("Idea nuova");
+  });
+
+  it("un percorso scritto propone la nota in quella cartella, con le barre e non appiattito (IMP-6200)", async () => {
+    const answer = await ask("all", "Aree/Eventi/prova caccia");
+    expect(answer.note).toBe('launcher.note.all.create {"query":"Aree/Eventi/prova caccia","name":"Aree/Eventi/prova caccia"}');
+    expect(answer.create).toBe("Aree/Eventi/prova caccia");
+    expect((await ask("all", "/Aree//Eventi/./x")).create).toBe("Aree/Eventi/x");
+    expect((await ask("all", "Aree/../x")).create).toBeUndefined();
+    expect((await ask("all", "Aree/Eventi/")).create).toBeUndefined();
   });
 
   it("con l'indice in corso, una sintassi a metà o un nome impossibile non offre di creare", async () => {

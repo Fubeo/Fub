@@ -125,6 +125,12 @@ export interface GridEngineOptions {
   /// su quelli, come li scriverebbe «Tieni il mio testo», invece di restare
   /// bianca.
   readonly diskRevision?: () => Promise<string | null>;
+  /// La scrittura del giornale in volo, o `null`: si compie quando la
+  /// sessione ha il suo esito e la griglia il testo sui byte nuovi. Annulla e
+  /// ripeti la aspettano, poi vanno alla sessione riaperta su quei byte: un
+  /// comando annullato mentre il giornale si scrive non si toglierebbe più
+  /// dal file (IMP-6400).
+  readonly writing?: () => Promise<void> | null;
   readonly onChange: (change: GridChange) => void;
   readonly onSelectionChange: () => void;
   /// Il catalogo dei comandi è cambiato (`GridEngine.commands`).

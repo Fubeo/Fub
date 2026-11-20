@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IndexQuery, IndexResult } from "../../host/contract";
 import {
-  allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments, linkedNotes,
+  allowedBaseTileUrl, baseRowsToCsv, baseTileUrl, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments, linkedNotes,
   parseBaseEmbed, parseBaseViews, planBaseView, prepareBaseMutations,
   persistBaseView, restoreBaseView, setBaseViewKey, writtenLines, type BaseSurfaceDeps,
 } from "./data";
@@ -55,20 +55,47 @@ describe("Base contract", () => {
     await expect(deriveBaseRows(answer([{ start: "ieri", end: null, inverted: false }, undefined]), source, "Lin", rows)).rejects.toThrow("intervallo malformato");
   });
 
-  it("consumes every page beyond the former 2,000-row cutoff", async () => {
-    const queryIndex = vi.fn(async (query: IndexQuery): Promise<IndexResult> => {
-      if (query.kind !== "documents") throw new Error("unexpected query");
-      const offset = query.page?.offset ?? 0;
-      const count = Math.min(query.page?.limit ?? 0, 2001 - offset);
-      return { kind: "documents", value: {
-        offset, total: 2001,
-        items: Array.from({ length: count }, (_, i) => ({ doc: `${offset + i}.md`, properties: [] })),
-      } };
-    });
+  // Un indice finto di `total` note che dà al più `cap` righe per domanda.
+  const vaultOf = (total: number, cap = Infinity) => vi.fn(async (query: IndexQuery): Promise<IndexResult> => {
+    if (query.kind !== "documents") throw new Error("unexpected query");
+    const offset = query.page?.offset ?? 0;
+    const count = Math.max(0, Math.min(query.page?.limit ?? 0, cap, total - offset));
+    return { kind: "documents", value: {
+      offset, total,
+      items: Array.from({ length: count }, (_, i) => ({ doc: `${offset + i}.md`, properties: [] })),
+    } };
+  });
+
+  it("consumes every row beyond the former 2,000-row cutoff", async () => {
+    const queryIndex = vaultOf(2001);
     const result = await fetchAllDocuments(deps(queryIndex));
     expect(result.rows[result.rows.length - 1]?.doc).toBe("2000.md");
     expect(result.total).toBe(2001);
-    expect(queryIndex).toHaveBeenCalledTimes(8);
+    expect(queryIndex).toHaveBeenCalledTimes(2);
+  });
+
+  // #520: ogni domanda costa all'indice un giro del vault. Con 5000 note
+  // erano 20 domande da 256 righe in fila; ora la prima dice il totale e la
+  // seconda chiede il resto.
+  it("reads a vault of thousands of notes in two questions, not one every 256 rows", async () => {
+    const queryIndex = vaultOf(5000);
+    const result = await fetchAllDocuments(deps(queryIndex));
+    expect(result.rows.map((row) => row.doc)).toEqual(Array.from({ length: 5000 }, (_, i) => `${i}.md`));
+    expect(queryIndex.mock.calls.map(([query]) => (query as { page: unknown }).page)).toEqual([{ offset: 0, limit: 256 }, { offset: 256, limit: 4744 }]);
+  });
+
+  it("asks again for what is missing when the index answers with fewer rows than asked", async () => {
+    const queryIndex = vaultOf(1000, 300);
+    const result = await fetchAllDocuments(deps(queryIndex));
+    expect(result.rows).toHaveLength(1000);
+    expect(new Set(result.rows.map((row) => row.doc)).size).toBe(1000);
+    expect(queryIndex).toHaveBeenCalledTimes(4);
+  });
+
+  it("reads a small vault in one question", async () => {
+    const queryIndex = vaultOf(40);
+    expect((await fetchAllDocuments(deps(queryIndex))).rows).toHaveLength(40);
+    expect(queryIndex).toHaveBeenCalledTimes(1);
   });
 
   it("rejects an oversized result instead of silently presenting its first page as complete", async () => {
@@ -189,6 +216,10 @@ describe("Base contract", () => {
     expect(allowedBaseTileUrl(template, "vector", ["tiles.example.test"], 1, 0, 0)).toBeNull();
     expect(allowedBaseTileUrl(template, "raster", ["tiles.example.test"], 1, 0, 0)).toBe("https://tiles.example.test/1/0/0.png");
     expect(allowedBaseTileUrl("https://tiles.example.test/{z}/{x}/{y}.svg", "vector", ["tiles.example.test"], 1, 1, 1)).toBe("https://tiles.example.test/1/1/1.svg");
+    // Come l'host (`Host::map_tile`): niente query, che può portare una chiave.
+    expect(allowedBaseTileUrl("https://tiles.example.test/{z}/{x}/{y}.png?key=x", "raster", ["tiles.example.test"], 1, 0, 0)).toBeNull();
+    // Il sito del modello si legge anche senza host ammessi, per dire quale manca.
+    expect(baseTileUrl(template, "raster", 1, 0, 0)?.hostname).toBe("tiles.example.test");
   });
 });
 

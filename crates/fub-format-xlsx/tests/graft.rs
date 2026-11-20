@@ -7,7 +7,9 @@ use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 
 use common::{one_sheet, sheet, soffice, Package};
-use fub_format_xlsx::graft::{graft, CellEdit, GraftError, Grafted};
+use fub_format_xlsx::graft::{
+    graft, graft_with_values, CellEdit, FormulaValue, GraftError, Grafted,
+};
 use fub_format_xlsx::input::NewValue;
 use fub_format_xlsx::locks::Lock;
 use gridcraft_core::{CellRef, Value};
@@ -571,4 +573,82 @@ fn un_attributo_fra_apici_resta_i_suoi_byte() {
     assert!(xml.contains(r#"x:nota='dice "ciao"'"#), "{xml}");
     assert!(!xml.contains("spans="), "{xml}");
     assert_eq!(value(&grafted.bytes, "C1"), Value::Number(3.0));
+}
+
+fn formula_value(a1: &str, value: Value) -> FormulaValue {
+    FormulaValue {
+        sheet: 0,
+        cell: cell(a1),
+        value,
+    }
+}
+
+/// Il valore nuovo di una formula cambia soltanto il suo `<v>` e il suo tipo:
+/// la formula, condivisa o no, lo stile e gli altri attributi restano i loro
+/// byte, e una formula senza `<v>` lo prende dopo la sua `<f>`.
+#[test]
+fn il_valore_nuovo_di_una_formula_tiene_i_byte_della_formula() {
+    let body = r#"<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1" s="1"><f t="shared" ref="B1:B2" si="0">A1*2</f><v>2</v></c><c r="C1" t="str"><f>"x"&amp;A1</f><v>x1</v></c><c r="D1" t="b"><f>A1&gt;5</f><v>0</v></c><c r="E1"><f>A1/0</f><v/></c><c r="F1"><f>A1+1</f></c></row><row r="2"><c r="A2"><v>3</v></c><c r="B2" s="1"><f t="shared" si="0"/><v>6</v></c></row></sheetData>"#;
+    let original = one_sheet(body);
+    let model = fub_format_xlsx::read(&original).unwrap().workbook;
+    let grafted = graft_with_values(
+        &original,
+        &model,
+        &[edit("A1", number(10.0))],
+        &[
+            formula_value("B1", Value::Number(20.0)),
+            formula_value("C1", Value::text("x10 & <y>")),
+            formula_value("D1", Value::Bool(true)),
+            formula_value("E1", Value::Error(gridcraft_core::CellError::Div0)),
+            formula_value("F1", Value::Number(11.0)),
+        ],
+        true,
+    )
+    .unwrap();
+    assert!(grafted.recalc);
+    let xml = sheet_xml(&grafted.bytes);
+    for expected in [
+        r#"<c r="A1"><v>10</v></c>"#,
+        r#"<c r="B1" s="1"><f t="shared" ref="B1:B2" si="0">A1*2</f><v>20</v></c>"#,
+        r#"<c t="str" r="C1"><f>"x"&amp;A1</f><v>x10 &amp; &lt;y&gt;</v></c>"#,
+        r#"<c t="b" r="D1"><f>A1&gt;5</f><v>1</v></c>"#,
+        r#"<c t="e" r="E1"><f>A1/0</f><v>#DIV/0!</v></c>"#,
+        r#"<c r="F1"><f>A1+1</f><v>11</v></c>"#,
+        // La riga che nessun valore tocca resta i suoi byte.
+        r#"<row r="2"><c r="A2"><v>3</v></c><c r="B2" s="1"><f t="shared" si="0"/><v>6</v></c></row>"#,
+    ] {
+        assert!(xml.contains(expected), "{expected} in {xml}");
+    }
+    assert_eq!(value(&grafted.bytes, "C1"), Value::text("x10 & <y>"));
+    assert_eq!(value(&grafted.bytes, "F1"), Value::Number(11.0));
+}
+
+/// Un valore per una cella senza formula, per una cella cambiata o per una
+/// cella che l'innesto non riscrive non si scrive.
+#[test]
+fn un_valore_di_formula_fuori_posto_si_rifiuta() {
+    let original = one_sheet(BODY);
+    let model = fub_format_xlsx::read(&original).unwrap().workbook;
+    let lone = [formula_value("A1", Value::Number(1.0))];
+    assert!(matches!(
+        graft_with_values(&original, &model, &[], &lone, false),
+        Err(GraftError::Edit(_))
+    ));
+    let twice = [formula_value("B2", Value::Number(1.0))];
+    assert!(matches!(
+        graft_with_values(&original, &model, &[edit("B2", number(1.0))], &twice, false),
+        Err(GraftError::Edit(_))
+    ));
+    let array = one_sheet(
+        r#"<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f t="array" ref="B1:B2">A1:A2*2</f><v>2</v></c></row><row r="2"><c r="B2"><v>0</v></c></row></sheetData>"#,
+    );
+    let model = fub_format_xlsx::read(&array).unwrap().workbook;
+    let held = [formula_value("B1", Value::Number(4.0))];
+    assert!(matches!(
+        graft_with_values(&array, &model, &[], &held, true),
+        Err(GraftError::Locked {
+            lock: Lock::Array,
+            ..
+        })
+    ));
 }

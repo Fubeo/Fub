@@ -113,6 +113,8 @@ pub mod jobs;
 /// La scheda di un collegamento: titolo e icona di un URL, soltanto su richiesta.
 #[cfg(feature = "http-client")]
 pub mod link_card;
+/// Le tessere della vista Mappa di una Base, dagli host che questa macchina ammette.
+pub mod map_tiles;
 pub mod mount;
 /// Il filo verso fuori (§23.3), dietro la cargo feature `http-client` per la
 /// ragione del watcher: il trait esiste anche per i montaggi che una rete non

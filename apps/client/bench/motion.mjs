@@ -78,12 +78,12 @@
 // Se una regola fallisce perché la coreografia non la rispetta, la voce resta
 // rossa: questo file non ha un elenco di debiti e non deve averne uno. Lo
 // script esce diverso da zero, e il referto in `bench/.output/moto/` porta il
-// fotogramma di metà corsa e i due scatti che non coincidono. Non sta nella CI.
+// fotogramma di metà corsa e i due scatti che non coincidono. Nella CI gira
+// nel job `benches`: sulle PR pronte che toccano il client e su `main`.
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
-import { createServer } from "vite";
 import { GESTURE_SCENE, SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, prepareScene, stillShot, watchCsp, MOMENT, OUTPUT, WINDOW } from "./stage.mjs";
 import {
@@ -975,11 +975,9 @@ await rm(REPORT, { recursive: true, force: true });
 await mkdir(REPORT, { recursive: true });
 
 // Una corsa dura minuti: un file salvato intanto non deve ricaricare la pagina
-// sotto la misura. Il server non guarda il disco e non manda aggiornamenti.
-const stage = await openStage({
-  createServer: (options) => createServer({ ...options, server: { hmr: false, watch: null } }),
-  browserArgs: BROWSER_ARGS,
-});
+// sotto la misura. Il server non guarda il disco e non manda aggiornamenti
+// (`watch: false` di `openStage`: un `watch: null` in linea Vite lo ignora).
+const stage = await openStage({ watch: false, browserArgs: BROWSER_ARGS });
 const report = [];
 try {
   for (const choreography of chosen) {

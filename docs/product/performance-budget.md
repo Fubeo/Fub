@@ -121,9 +121,9 @@ Il contratto operativo per cardinalità è:
 Il tier della fisica dipende solo dalla cardinalità, a ogni refresh. Il tier
 della resa parte da lì e scende di un gradino quando il frame time medio supera
 1,3 volte il budget; risale sotto 1,1 volte, dopo almeno 5 s. Il budget è il
-periodo del tetto `appearance.frame-rate`, mai sotto 1000/60 ms. Il gradino
-economico nasconde le etichette di grado basso, e solo nel moto: il grafo fermo
-si disegna al tier della cardinalità e la media dei frame riparte da 1000/60 ms.
+periodo più corto dello schermo (`FramePacer.budgetMs`), o del tetto
+`appearance.frame-rate` se è più lento. Il gradino economico nasconde le
+etichette di grado basso nel moto; da fermo torna il tier della cardinalità.
 
 Un quadtree con nodi clustered o coincidenti può avvicinarsi al caso peggiore
 `O(n²)`. Il risultato a 10k è quindi soltanto quello della fixture deterministica

@@ -114,7 +114,9 @@ volta ([entrare e uscire](../reference/canvas-input.md#entrare-e-uscire)).
 
 Un clic su una scheda, dopo un pulsante della colonna o della riga delle
 opzioni, riporta il fuoco sulla lavagna: Canc, Ctrl+Z e gli altri tasti
-valgono subito.
+valgono subito. Ctrl+Z e Ctrl+Y annullano e ripetono anche col fuoco rimasto
+su un pulsante della colonna, della riga o della barra della scelta; in un
+campo di testo restano del campo.
 
 ## Spostare e agganciare
 
@@ -142,14 +144,22 @@ disco ([scrivere dentro una scheda](../reference/canvas-cards.md#scrivere-dentro
 
 - **Una scheda di testo** si scrive col doppio clic, o con Invio, nel Live
   delle note: solo il testo, senza il titolo, le proprietà, l'icona e la
-  copertina di una pagina. Il testo resta nel `.canvas`. La scheda cresce col testo fino a
+  copertina di una pagina. Il doppio clic sul testo mette il cursore lì, come
+  in ogni editor; fuori dal testo, e con Invio, il cursore va in fondo. Il
+  doppio clic nel vuoto fa nascere una scheda di testo lì, o al posto libero
+  più vicino se coprirebbe un'altra scheda. Il testo resta nel `.canvas`. La scheda cresce col testo fino a
   480 px di larghezza, poi va a capo; Ctrl+Invio apre una scheda nuova sotto,
   Ctrl+Maiusc+Invio a destra con un filo. «Aggiungi testo» (la riga delle
-  opzioni, il menu, Ctrl+/) apre la scheda già in scrittura in un posto libero
+  opzioni, il menu, o cercato per nome con Ctrl+/) apre la scheda già in scrittura in un posto libero
   vicino al centro della vista. Una scheda nuova lasciata vuota se ne va
   uscendo, anche con Esc, e non lascia niente da annullare. Mentre si scrive,
   Ctrl+W chiude la linguetta come fuori
   ([la scheda di testo](../reference/canvas-input.md#scrivere-in-una-scheda-di-testo)).
+- **Il «/»** in una scheda di testo o di nota apre il menu dei blocchi
+  dell'editor, lo stesso dei riquadri, sopra la lavagna alla sua misura
+  qualunque sia lo zoom. Offre solo ciò che scrive nel testo della scheda:
+  niente comandi del vault né «Cerca fra tutti i comandi», che agirebbero
+  sulla lavagna.
 - **Una nota** si scrive col doppio clic o con Invio: l'editor Live prende il
   posto della resa, la barra di formato va nella riga delle opzioni e la
   riga del titolo dice «Salvato», «Non salvato», «Cambiato su disco»… come la
@@ -272,6 +282,18 @@ libero. Un tratto attaccato segue la scheda quando si sposta o si
 ridimensiona; su un PDF segue la pagina, su un foglio la cella. Una penna
 tenuta ferma alla fine diventa una forma, Maiusc tira dritto, il righello
 guida il tratto, il Lazo sceglie e sposta schede e tratti insieme.
+Ogni tratto è un passo della cronologia: Ctrl+Z subito dopo lo toglie,
+anche col fuoco sul pulsante della Penna o in una scheda che si sta
+scrivendo (lì prima i tratti, poi il testo).
+
+Su una scheda di testo o una nota Markdown i tratti restano dove sono stati
+scritti, ma il testo va a capo con la larghezza della scheda. Allargata o
+ristretta dopo i tratti, la scheda lo dice con un avviso sotto di lei: «La
+larghezza è cambiata: le sottolineature e i disegni sul testo potrebbero non
+stare più sulle parole, e andranno rifatti.» L'avviso compare già mentre si
+tira il bordo e resta finché la scheda non torna larga come quando si è
+scritto l'ultimo tratto; «Torna a N px» la rimette così, e Ctrl+Z lo annulla.
+Allungarla in altezza non cambia niente.
 
 L'inchiostro sta nel `.canvas`, nei campi `fub:ink`: Obsidian non lo disegna
 ma lo conserva quando riscrive il file. Il formato sta
@@ -354,8 +376,8 @@ scrive. L'elenco completo sta in [comandi e tasti](../reference/canvas-input.md#
 
 Sulla tastiera italiana `Ctrl+[` si preme con `Ctrl+è`; Porta davanti si fa
 dal menu o da `Ctrl+/`. Da tastiera e col lettore di schermo: F6 passa fra la
-lavagna, il navigatore, la colonna e la riga; Maiusc+F10 apre il menu della
-scheda ([da tastiera](../reference/canvas-view.md#da-tastiera-e-col-lettore-di-schermo)).
+lavagna, il navigatore, la colonna e la riga; Maiusc+F10 o il tasto Menu
+aprono il menu della scheda scelta, accanto a lei ([da tastiera](../reference/canvas-view.md#da-tastiera-e-col-lettore-di-schermo)).
 
 ## Per chi cambia la lavagna
 

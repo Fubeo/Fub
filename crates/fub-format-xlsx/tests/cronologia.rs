@@ -276,6 +276,75 @@ fn ordinare_si_annulla_dopo_il_salvataggio() {
     assert_eq!(doc.disk_value("B1"), Value::Text("tre".into()));
 }
 
+/// IMP-6400, come la prova del tester: le righe scritte con una formula che
+/// legge la sua riga (salvate prima o no), ordinate, salvate, annullate e
+/// salvate di nuovo. Il disco torna all'ordine di prima, con le formule al
+/// loro posto.
+#[test]
+fn righe_scritte_ordinate_e_annullate_tornano_com_erano_sul_disco() {
+    ordina_e_annulla(true);
+    ordina_e_annulla(false);
+}
+
+fn ordina_e_annulla(salva_prima: bool) {
+    let mut doc = Documento::new(one_sheet(r#"<dimension ref="A1"/><sheetData/>"#));
+    for (a1, input) in [
+        ("A1", "Nome"),
+        ("B1", "Q"),
+        ("C1", "Totale"),
+        ("A2", "gamma"),
+        ("B2", "7"),
+        ("C2", "=B2*2"),
+        ("A3", "beta"),
+        ("B3", "5"),
+        ("C3", "=B3*2"),
+        ("A4", "alfa"),
+        ("B4", "3"),
+        ("C4", "=B4*2"),
+    ] {
+        doc.write(a1, input);
+    }
+    if salva_prima {
+        doc.save();
+    }
+    let column = |doc: &Documento| -> Vec<Value> {
+        ["A2", "A3", "A4", "C2", "C4"]
+            .iter()
+            .map(|a1| doc.disk_value(a1))
+            .collect()
+    };
+    let text = |s: &str| Value::Text(s.into());
+    let before = vec![
+        text("gamma"),
+        text("beta"),
+        text("alfa"),
+        Value::Number(14.0),
+        Value::Number(6.0),
+    ];
+    if salva_prima {
+        assert_eq!(column(&doc), before);
+    }
+
+    doc.give("data.sortAscending", "{}", "A2:C4");
+    doc.save();
+    assert_eq!(
+        column(&doc),
+        [
+            text("alfa"),
+            text("beta"),
+            text("gamma"),
+            Value::Number(6.0),
+            Value::Number(14.0)
+        ]
+    );
+
+    doc.undo();
+    assert_eq!(doc.shown("A2"), "gamma");
+    assert_eq!(doc.shown("C2"), "=B2*2");
+    doc.save();
+    assert_eq!(column(&doc), before);
+}
+
 #[test]
 fn grassetto_e_formato_si_annullano_dopo_il_salvataggio() {
     let mut doc = Documento::new(one_sheet(BODY));

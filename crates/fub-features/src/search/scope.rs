@@ -154,7 +154,11 @@ impl Matcher {
             return None;
         }
         let flags = if text.case_sensitive { "" } else { "(?i)" };
-        let (before, after, gap) = (super::words::BEFORE, super::words::AFTER, super::words::GAP);
+        let (before, after, gap) = (
+            super::words::BEFORE.as_str(),
+            super::words::AFTER.as_str(),
+            super::words::GAP.as_str(),
+        );
         let tail = if text.partial_last_term { "" } else { after };
         let patterns: Vec<String> = match text.mode {
             TextMode::Phrase => {

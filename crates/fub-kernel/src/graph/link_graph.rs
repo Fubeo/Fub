@@ -10,7 +10,8 @@ use fub_abi::rules::path::{exact_key, resolution_key, resolve_against, strip_ext
 
 use super::{
     changed_keys, dep_keys, file_name, first_of, insert_sorted, names_an_attachment, precedence,
-    remove_sorted, DocKeys, GraphSource, LinkGraph, LinkRef, ProseFormats, RefKind, ResolvedDoc,
+    remove_sorted, DocKeys, GraphSource, LinkGraph, LinkRef, PropertyRef, ProseFormats, RefKind,
+    ResolvedDoc,
 };
 
 impl LinkGraph {
@@ -53,6 +54,9 @@ impl LinkGraph {
             backlinks: HashMap::with_capacity(docs.len()),
             outgoing: HashMap::with_capacity(docs.len()),
             links: HashMap::with_capacity(docs.len()),
+            property_links: HashMap::new(),
+            property_backlinks: HashMap::new(),
+            property_outgoing: HashMap::new(),
             keys: HashMap::with_capacity(docs.len()),
             watchers: HashMap::with_capacity(docs.len()),
             refs_by_key: HashMap::with_capacity(docs.len()),
@@ -120,6 +124,10 @@ impl LinkGraph {
                     }
                 }
             }
+            // I link delle proprietà sono pochi: si cuciono qui, in fila.
+            for id in &doc_ids {
+                graph.link_properties(id);
+            }
         } else {
             for id in &doc_ids {
                 graph.link_document(id);
@@ -170,6 +178,8 @@ impl LinkGraph {
         self.unregister_links(id);
         self.unlink_document(id);
         self.links.remove(id);
+        self.property_links.remove(id);
+        self.property_backlinks.remove(id);
         // Nessuno può più puntare a un documento che non esiste: le voci
         // residue sarebbero comunque tolte dal relink dei sorgenti, ma è più
         // onesto non lasciarle in giro nemmeno per un istante.
@@ -218,6 +228,16 @@ impl LinkGraph {
         self.backlinks.get(target).is_some_and(|v| !v.is_empty())
     }
 
+    /// Un'**altra** nota nomina `target` in un link di proprietà? La metà
+    /// della domanda dell'orfano che il corpo non vede: `progetto:
+    /// "[[Scorte]]"` porta a Scorte quanto un `[[Scorte]]` nel testo. La nota
+    /// che nomina sé stessa non la toglie dall'isolamento.
+    pub fn has_property_backlinks(&self, target: &DocId) -> bool {
+        self.property_backlinks
+            .get(target)
+            .is_some_and(|refs| refs.iter().any(|r| r.source != *target))
+    }
+
     pub fn backlinks(&self, target: &DocId) -> Vec<BacklinkRef> {
         let mut refs = self.backlinks.get(target).cloned().unwrap_or_default();
         // Ordinamento *stabile*: fra riferimenti dallo stesso sorgente resta
@@ -232,6 +252,22 @@ impl LinkGraph {
     /// Chi vuole l'insieme chiami [`linked`](Self::linked).
     pub fn outgoing(&self, source: &DocId) -> Vec<DocId> {
         self.outgoing.get(source).cloned().unwrap_or_default()
+    }
+
+    /// **Chi nomina una delle note `targets` in un link di proprietà**, nella
+    /// sola chiave `key` se c'è; una volta ciascuno.
+    ///
+    /// Legge gli archi inversi già tenuti, quindi costa i link di proprietà
+    /// che arrivano a quelle note, non il vault. Una nota che nomina sé
+    /// stessa compare: è un fatto della nota, come in una Relazione.
+    pub fn property_linked(&self, targets: &[DocId], key: Option<&str>) -> BTreeSet<DocId> {
+        targets
+            .iter()
+            .filter_map(|target| self.property_backlinks.get(target))
+            .flatten()
+            .filter(|r| key.is_none_or(|key| r.key == key))
+            .map(|r| r.source.clone())
+            .collect()
     }
 
     /// Risolve un link già registrato, con le stesse regole Obsidian di
@@ -629,13 +665,50 @@ impl LinkGraph {
             });
         }
         self.links.insert(id.clone(), refs);
+
+        // I link delle proprietà: wikilink come gli altri, con la loro chiave.
+        let mut property_refs = Vec::new();
+        for (written, target) in doc.graph_property_links() {
+            let LinkTarget::Wiki { page, .. } = &target else {
+                continue;
+            };
+            let key = resolution_key(page);
+            if key.is_empty() {
+                continue;
+            }
+            for dep in dep_keys(&key) {
+                self.watchers.entry(dep).or_default().insert(key.clone());
+            }
+            self.refs_by_key
+                .entry(key.clone())
+                .or_default()
+                .insert(id.clone());
+            property_refs.push((
+                written,
+                LinkRef {
+                    exact: exact_key(page),
+                    key,
+                    kind: RefKind::Wiki,
+                    context: None,
+                },
+            ));
+        }
+        if property_refs.is_empty() {
+            self.property_links.remove(id);
+        } else {
+            self.property_links.insert(id.clone(), property_refs);
+        }
     }
 
     fn unregister_links(&mut self, id: &DocId) {
-        let Some(refs) = self.links.get(id) else {
-            return;
-        };
-        let keys: BTreeSet<String> = refs.iter().map(|r| r.key.clone()).collect();
+        let body = self.links.get(id).into_iter().flatten();
+        let properties = self
+            .property_links
+            .get(id)
+            .into_iter()
+            .flatten()
+            .map(|(_, r)| r);
+        let keys: BTreeSet<String> = body.chain(properties).map(|r| r.key.clone()).collect();
         for key in keys {
             let Some(sources) = self.refs_by_key.get_mut(&key) else {
                 continue;
@@ -683,8 +756,20 @@ impl LinkGraph {
         }
     }
 
-    /// Toglie tutti gli archi uscenti da `id` (e i backlink che ne derivano).
+    /// Toglie tutti gli archi uscenti da `id` (e i backlink che ne derivano),
+    /// quelli del corpo e quelli delle proprietà.
     fn unlink_document(&mut self, id: &DocId) {
+        if let Some(targets) = self.property_outgoing.remove(id) {
+            for target in targets.into_iter().collect::<BTreeSet<_>>() {
+                let Some(refs) = self.property_backlinks.get_mut(&target) else {
+                    continue;
+                };
+                refs.retain(|r| &r.source != id);
+                if refs.is_empty() {
+                    self.property_backlinks.remove(&target);
+                }
+            }
+        }
         let Some(targets) = self.outgoing.remove(id) else {
             return;
         };
@@ -699,8 +784,10 @@ impl LinkGraph {
         }
     }
 
-    /// Risolve i link di `id` e ricrea archi uscenti e backlink.
+    /// Risolve i link di `id` e ricrea archi uscenti e backlink, del corpo e
+    /// delle proprietà.
     fn link_document(&mut self, id: &DocId) {
+        self.link_properties(id);
         let Some(refs) = self.links.get(id).cloned() else {
             return;
         };
@@ -723,5 +810,37 @@ impl LinkGraph {
         if !out.is_empty() {
             self.outgoing.insert(id.clone(), out);
         }
+    }
+
+    /// Risolve i link delle proprietà di `id` e ricrea i loro archi inversi.
+    /// Una chiave che nomina due volte la stessa nota la nomina una volta.
+    fn link_properties(&mut self, id: &DocId) {
+        let Some(refs) = self.property_links.get(id) else {
+            return;
+        };
+        let mut found: Vec<(DocId, String)> = Vec::new();
+        for (written, link) in refs {
+            let Some(target) = self.resolve_ref(link) else {
+                continue;
+            };
+            if !found.iter().any(|(t, k)| *t == target && k == written) {
+                found.push((target, written.clone()));
+            }
+        }
+        if found.is_empty() {
+            return;
+        }
+        let mut out = Vec::with_capacity(found.len());
+        for (target, key) in found {
+            self.property_backlinks
+                .entry(target.clone())
+                .or_default()
+                .push(PropertyRef {
+                    source: id.clone(),
+                    key,
+                });
+            out.push(target);
+        }
+        self.property_outgoing.insert(id.clone(), out);
     }
 }

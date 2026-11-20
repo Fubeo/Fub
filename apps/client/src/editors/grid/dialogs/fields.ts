@@ -15,6 +15,7 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import type { Lifetime } from "../../../ui/lifetime";
 import { t } from "./strings";
+import { composingKey } from "../../../kit/ime";
 
 /// I valori di una finestra, per chiave.
 export type Values = Record<string, unknown>;
@@ -86,7 +87,7 @@ function text(value: unknown): string {
 /// Invio su una casella o una scelta la preme, come Spazio.
 function pressOnEnter(input: HTMLInputElement, life: Lifetime): void {
   life.listen(input, "keydown", (event) => {
-    if (event.key !== "Enter" || event.repeat || event.isComposing) return;
+    if (event.key !== "Enter" || event.repeat || composingKey(event)) return;
     event.preventDefault();
     input.click();
   });

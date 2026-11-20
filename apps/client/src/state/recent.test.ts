@@ -228,3 +228,25 @@ describe("chi segue l'interruttore", () => {
     }
   });
 });
+
+describe("il cambio di vault veloce", () => {
+  it("la lettura del vault di prima che arriva tardi non copre quella del vault nuovo", async () => {
+    let old!: (value: unknown) => void;
+    let fresh!: (value: unknown) => void;
+    viewState.mockClear();
+    viewState
+      .mockReturnValueOnce(new Promise((resolve) => { old = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { fresh = resolve; }));
+    // Vault A, poi subito vault B: lo stesso giro dell'evento `vault`.
+    forgetRecent();
+    const first = loadHistory();
+    forgetRecent();
+    const second = loadHistory();
+    await vi.waitFor(() => expect(viewState).toHaveBeenCalledTimes(2));
+    fresh({ note: ["b.md"], searches: ["di B"] });
+    await second;
+    old({ note: ["a.md"], searches: ["di A"] });
+    await first;
+    expect(recentSearches()).toEqual(["di B"]);
+  });
+});

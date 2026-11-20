@@ -21,6 +21,7 @@ vi.mock("../../../state/document-controller", () => ({
 }));
 
 import { mountDrawerPeek, PEEK_DWELL_MS, PEEK_LEAVE_MS } from "./peek";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 const layout = (): HTMLElement => document.getElementById("layout") as HTMLElement;
 const sidebar = (): HTMLElement => document.getElementById("sidebar") as HTMLElement;
@@ -356,6 +357,9 @@ describe("ritirarsi", () => {
     await settled();
     expect(layout().classList.contains("peek-sidebar")).toBe(true);
 
+    // Esc a metà di una composizione nel filtro è del metodo d'immissione.
+    filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true, ...WEBKIT_COMPOSING }));
+    expect(sidebar().hasAttribute("inert")).toBe(false);
     filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(world.focused).toBe(1);
     expect(sidebar().hasAttribute("inert")).toBe(true);

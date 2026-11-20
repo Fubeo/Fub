@@ -36,10 +36,10 @@ import { cpus, hostname, loadavg, release, tmpdir, totalmem, type as osType } fr
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
-import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
+import { BIG_PDF, BIG_SHEET, GESTURE_FOLDER, INK_BOARD, SWITCH_SHEET, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
+import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, quiet, settled } from "./memory.mjs";
 import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
-import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
+import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, SWITCH_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, medianMs, switchBlocked, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
 import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
@@ -53,7 +53,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,S8,S9,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "F1,F2,F3,F4,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 /// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
@@ -74,6 +74,8 @@ const ALT = "";
 const ESCAPE = "";
 
 const PAGE_DOWN = "\uE00F";
+const ARROW_UP = "\uE013";
+const ARROW_DOWN = "\uE015";
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -105,6 +107,8 @@ const QUIET_MS = 20_000;
 /// di partenza) e quanto si aspetta dopo ognuno.
 const GESTURE_REPS = { barra: 6, scheda: 8, cartella: 8 };
 const GESTURE_WAIT_MS = 700;
+/// F4: i giri nota → foglio → nota misurati, dopo uno di riscaldamento.
+const SWITCH_ROUNDS = 6;
 
 /// Quanto si aspetta prima di leggere la memoria: che l'app abbia finito di
 /// disegnare e di indicizzare ciò che ha appena aperto.
@@ -113,13 +117,23 @@ const MEMORY_QUIET_MS = 3_000;
 /// quando si rilegge per vedere se la memoria torna col tempo.
 const R1_SETTLE_MS = 10_000;
 const R1_LATE_MS = 60_000;
-/// I giri di apri tutto e chiudi tutto dopo la prima chiusura. Trenta e non
-/// dieci: sul runner la pendenza di dieci giri andava da -25 a 70 MiB per giro
-/// sullo stesso albero (#284), con un errore di circa ±16 MiB; con trenta circa ±3.
-const R1_ROUNDS = 30;
-/// Ogni quanto si rilegge la memoria di un giro, fra `R1_SETTLE_MS` e
-/// `R1_LATE_MS` dalla chiusura.
-const R1_POLL_MS = 5_000;
+/// I giri di apri tutto e chiudi tutto dopo la prima chiusura. Con la
+/// raccolta forzata prima di ogni lettura (#284) la pendenza di quindici giri
+/// sul runner è andata da 3,8 a 9,5 MiB per giro in dieci corse di `main`
+/// (dal 18 al 20 novembre 2026), quella di trenta da 3,4 a 11,0: quindici
+/// giri lasciano alla soglia di 20 lo stesso margine, in metà tempo.
+const R1_ROUNDS = 15;
+/// La quiete di un giro dopo la chiusura (`quiet` in `memory.mjs`): la prima
+/// lettura dopo `R1_QUIET_FIRST_MS`, poi una ogni `R1_QUIET_STEP_MS` finché
+/// due di fila restano entro `R1_STILL_MIB` l'una dall'altra, al più fino a
+/// `R1_SETTLE_MS` dalla chiusura. Prima era un minuto intero per giro, con la
+/// più bassa delle letture: sul runner la pendenza della lettura a 10 s e
+/// quella della più bassa del minuto differivano di meno di mezzo MiB per
+/// giro in ognuna delle dieci corse, e il minuto costava 25 dei 40 minuti
+/// di R1.
+const R1_QUIET_FIRST_MS = 2_000;
+const R1_QUIET_STEP_MS = 1_000;
+const R1_STILL_MIB = 4;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina. Il lanciatore
@@ -347,6 +361,56 @@ async function moveAndZoom(session, gesture) {
   await session.releaseActions();
   return zoomed;
 }
+
+/// S10: lo scorrimento del foglio grande, `S10_SCROLL_STEPS` fotogrammi in
+/// giù di `S10_SCROLL_PX` px e altrettanti in su, uno per fotogramma; poi le
+/// frecce (`S10_KEY_REPS` tasti, giù e su a turno) e la barra laterale aperta
+/// e chiusa (`S10_SIDEBAR_REPS`), che cambia la larghezza del foglio e fa
+/// rifare la misura alla barra multifunzione.
+const S10_SCROLL_STEPS = 150;
+const S10_SCROLL_PX = 60;
+const S10_KEY_REPS = 20;
+const S10_SIDEBAR_REPS = 6;
+const S10_VIEW = ".pane.focus .grid-viewport";
+
+/// S11: il PDF di più pagine adattato alla larghezza. Lo scorrimento percorre
+/// la pagina che si vede, giù e su in `S11_SCROLL_STEPS` fotogrammi per verso
+/// (il passo lo dà l'altezza che scorre: il visore mostra una pagina alla
+/// volta); poi `S11_PAGE_REPS` pagine sfogliate col pulsante «Pagina
+/// successiva» e altrettante indietro, ognuna una resa nuova del motore.
+const S11_SCROLL_STEPS = 60;
+const S11_PAGE_REPS = 12;
+/// Sotto quest'altezza da scorrere, in px, la pagina adattata quasi non
+/// scorre (una finestra molto alta) e il referto lo dice.
+const S11_MIN_RANGE_PX = 200;
+const S11_VIEW = ".pane.focus .media-pdf-page";
+const S11_CANVAS = `${S11_VIEW} canvas`;
+/// I pulsanti della barra del visore (`pdf-view.ts`): il primo gruppo è
+/// «Pagina precedente» e «Pagina successiva»; quello con tre interruttori è
+/// «Adatta alla larghezza», «Due pagine» e «Colori scuri», in quest'ordine.
+/// Per posto e non per nome: il nome è nella lingua dell'interfaccia.
+const S11_NEXT = ".pane.focus .media-pdf-toolbar > .media-pdf-group:first-child > button:nth-child(2)";
+const S11_PREVIOUS = ".pane.focus .media-pdf-toolbar > .media-pdf-group:first-child > button:nth-child(1)";
+const S11_FIT = ".pane.focus .media-pdf-toolbar > .media-pdf-group:has(> button[aria-pressed]:nth-child(3)) > button:first-child";
+
+/// Lo scorrimento dalla pagina, come lo fa la rotella: `scrollTop` cambia in
+/// un fotogramma, l'evento `scroll` arriva al fotogramma dopo e la vista
+/// disegna ciò che entra (le righe del foglio in S10, la pagina del PDF in
+/// S11). Torna `false` se la vista non c'è.
+const SCROLL_SCRIPT = `
+  const [steps, px, view] = arguments;
+  const done = arguments[arguments.length - 1];
+  const viewport = document.querySelector(view);
+  if (!viewport) { done(false); return; }
+  let i = 0;
+  const step = () => {
+    if (i >= steps * 2) { requestAnimationFrame(() => requestAnimationFrame(() => done(true))); return; }
+    viewport.scrollTop += i < steps ? px : -px;
+    i += 1;
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+`;
 
 /// S9: lo zoom in cui si misura, fra 0,4 e 0,6 come chiede il cancello di N6
 /// e sopra `LIVE_ZOOM_MIN` (0,35), sotto cui le schede restano segnaposto.
@@ -731,6 +795,34 @@ async function gesture(session, reps, act) {
   };
 }
 
+/// Lo scorrimento misurato di S10 e S11 (`SCROLL_SCRIPT`), col registratore
+/// già montato: un giro giù e su a vuoto, perché la prima volta la vista
+/// chiede all'host ciò che le manca e la misura è dello scorrimento, poi lo
+/// stesso giro registrato. Fotogrammi, thread principale occupato (i buchi
+/// fra due giri del timer) e CPU; `null` se la vista non c'è.
+async function measuredScroll(session, steps, px, view) {
+  if (!(await session.executeAsync(SCROLL_SCRIPT, [steps, px, view]))) return null;
+  await pause(GESTURE_WAIT_MS);
+  await session.execute("window.__fubRec.start(); window.__fubRec.mark(); return true;");
+  const before = cpuTicks(driverPid);
+  const since = performance.now();
+  await session.executeAsync(SCROLL_SCRIPT, [steps, px, view]);
+  const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+  const recorded = await session.execute("return window.__fubRec.stop();");
+  const busy = recorded.gaps.map(([, gap]) => gap).sort((a, b) => a - b);
+  const tenth = (x) => Math.round(x * 10) / 10;
+  return {
+    frames: frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs),
+    busy: {
+      count: busy.length,
+      p95: busy.length ? tenth(busy[Math.min(busy.length - 1, Math.floor(busy.length * 0.95))]) : 0,
+      max: busy.length ? tenth(busy.at(-1)) : 0,
+      totalMs: Math.round(busy.reduce((sum, gap) => sum + gap, 0)),
+    },
+    cpu,
+  };
+}
+
 const SCENARIOS = {
   /// Il rAF a vuoto: 5 s su una pagina ferma, la mediana confrontata col
   /// periodo dello schermo. Decide il tetto del motore per gli scenari dopo.
@@ -803,6 +895,74 @@ const SCENARIOS = {
     }
     const rows = Object.entries(gestures).map(([name, g]) => `${name}: bloccato ${g.mainBlocked.perRep.join("/")} ms, fotogrammi ${g.frames?.median ?? "—"}/${g.frames?.p90 ?? "—"} ms, persi ${g.frames?.lost ?? "—"}, CPU web ${g.cpu?.webview ?? "—"} %, long task ${Array.isArray(g.longtasks) ? g.longtasks.length : g.longtasks}`);
     return { report: { gestures, timerGapMs: TIMER_GAP_MS }, values, samples: Object.values(GESTURE_REPS).reduce((a, b) => a + b, 0), notes: rows };
+  },
+  /// Il cambio scheda fra una nota e un foglio Excel di 1.000 × 12 celle,
+  /// col clic sulla linguetta: dalla pressione alla prima cella dipinta, e
+  /// dalla pressione al testo della nota dipinto al ritorno; il thread
+  /// principale (il buco più lungo e la somma dei buchi) per ogni direzione.
+  async F4(session) {
+    const note = { doc: "S2/Nota 00001.md", selector: ".pane.focus .pane-editor .cm-content", text: noteMark(1) };
+    const sheet = { doc: SWITCH_SHEET.file, selector: ".pane.focus .pane-editor .grid-cell-text", text: "Riga 1" };
+    await openByName(session, noteName(1), noteMark(1));
+    await openByName(session, SWITCH_SHEET.name, sheet.text);
+    await session.execute(SWITCH_SCRIPT);
+    await session.execute(RECORDER_SCRIPT);
+    // La linguetta di un documento si cerca a ogni clic: l'indice cambia se
+    // il ripristino della sessione ha portato altre schede.
+    const go = async (target) => {
+      const index = await session.execute(`
+        for (const tab of document.querySelectorAll(".pane.focus .tab")) {
+          try { if (JSON.parse(tab.dataset.key).doc === arguments[0]) return tab.dataset.index; } catch {}
+        }
+        return null;`, [target.doc]);
+      if (index === null) throw new Error(`nessuna linguetta per ${target.doc}`);
+      await session.execute("window.__fubSwitchWait = window.__fubSwitch.arm(arguments[0], arguments[1]); return true;", [target.selector, target.text]);
+      await session.click(`.pane.focus .tab[data-index="${index}"]`);
+      return session.executeAsync("const done = arguments[arguments.length - 1]; window.__fubSwitchWait.then(done);");
+    };
+    // Un giro fuori dalla misura: il primo ritorno carica ciò che serve.
+    await go(note);
+    await pause(GESTURE_WAIT_MS);
+    await go(sheet);
+    await pause(GESTURE_WAIT_MS);
+    await go(note);
+    await pause(GESTURE_WAIT_MS);
+    const toSheet = [];
+    const toNote = [];
+    await session.execute("window.__fubRec.start(); return true;");
+    const before = cpuTicks(driverPid);
+    const since = performance.now();
+    for (let round = 0; round < SWITCH_ROUNDS; round++) {
+      await session.execute("window.__fubRec.mark(); return true;");
+      toSheet.push(await go(sheet));
+      await pause(GESTURE_WAIT_MS);
+      await session.execute("window.__fubRec.mark(); return true;");
+      toNote.push(await go(note));
+      await pause(GESTURE_WAIT_MS);
+    }
+    const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+    const recorded = await session.execute("return window.__fubRec.stop();");
+    const blocked = switchBlocked(recorded);
+    const values = {
+      "F4.foglio.ms": medianMs(toSheet),
+      "F4.nota.ms": medianMs(toNote),
+      "F4.foglio.mainBlocked": blocked.sheet.longestMedian,
+      "F4.foglio.mainTotal": blocked.sheet.totalMedian,
+      "F4.nota.mainBlocked": blocked.note.longestMedian,
+      "F4.nota.mainTotal": blocked.note.totalMedian,
+    };
+    const frames = frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs);
+    return {
+      report: { toSheet, toNote, blocked, frames, cpu, sheet: SWITCH_SHEET, timerGapMs: TIMER_GAP_MS },
+      values,
+      samples: toSheet.filter((ms) => ms !== null).length,
+      notes: [
+        `al foglio ${toSheet.join("/")} ms, alla nota ${toNote.join("/")} ms`,
+        `thread principale, buco più lungo: foglio ${blocked.sheet.longest.join("/")} ms, nota ${blocked.note.longest.join("/")} ms`,
+        `thread principale, somma dei buchi: foglio ${blocked.sheet.total.join("/")} ms, nota ${blocked.note.total.join("/")} ms`,
+        `fotogrammi ${frames?.median ?? "—"}/${frames?.p90 ?? "—"} ms, persi ${frames?.lost ?? "—"}, CPU web ${cpu?.webview ?? "—"} %`,
+      ],
+    };
   },
   /// Scrivere 200 caratteri in una nota di 5.000 righe, `S1_ROUNDS` giri: il
   /// valore è la mediana dei p95 dei giri (`s1Values`, #293).
@@ -963,6 +1123,98 @@ const SCENARIOS = {
     };
   },
   /// Il grafo di 10.000 nodi, trascinato per tre secondi.
+  /// Il foglio grande (3000 × 20): lo scorrimento verticale, il cambio di
+  /// selezione con le frecce e la barra laterale aperta e chiusa, che cambia
+  /// la larghezza del foglio e rifà la misura della barra multifunzione.
+  async S10(session) {
+    await openByName(session, BIG_SHEET.name, "Riga 1");
+    await session.waitFor("return !!document.querySelector(arguments[0] + ' .grid-cell')", [S10_VIEW], 60_000);
+    await pause(2_000);
+    await session.execute(RECORDER_SCRIPT);
+    // Una volta giù e su fuori dalla misura: la prima volta il foglio chiede
+    // le finestre di righe all'host, e la misura è dello scorrimento.
+    const scroll = await measuredScroll(session, S10_SCROLL_STEPS, S10_SCROLL_PX, S10_VIEW);
+    if (!scroll) throw new Error("il foglio grande non ha la griglia");
+    // Le frecce: un clic su una cella, poi giù e su a turno.
+    await session.click(`${S10_VIEW} .grid-cell[data-row="4"][data-column="3"]`);
+    await pause(GESTURE_WAIT_MS);
+    let down = true;
+    const keys = await gesture(session, S10_KEY_REPS, async () => {
+      await session.keys(down ? ARROW_DOWN : ARROW_UP);
+      down = !down;
+    });
+    // La barra laterale: una volta avanti e indietro fuori dalla misura.
+    const sidebar = () => chord2(session, CTRL, ALT, "b");
+    await sidebar();
+    await pause(GESTURE_WAIT_MS);
+    await sidebar();
+    await pause(GESTURE_WAIT_MS);
+    const bar = await gesture(session, S10_SIDEBAR_REPS, sidebar);
+    return {
+      report: { scroll, keys, bar, steps: S10_SCROLL_STEPS * 2, px: S10_SCROLL_PX },
+      values: {
+        "S10.scroll.frameGap.p95": scroll.frames?.p95 ?? null,
+        "S10.scroll.frameGap.max": scroll.frames?.max ?? null,
+        "S10.scroll.busy.p95": scroll.busy.p95,
+        "S10.frecce.mainBlocked": keys.mainBlocked.median,
+        "S10.barra.mainBlocked": bar.mainBlocked.median,
+      },
+      samples: (scroll.frames?.count ?? 0) + S10_KEY_REPS + S10_SIDEBAR_REPS,
+      notes: [
+        `scorrimento: fotogrammi ${scroll.frames?.median ?? "—"}/${scroll.frames?.p95 ?? "—"}/${scroll.frames?.max ?? "—"} ms (mediana/p95/max), persi ${scroll.frames?.lost ?? "—"}; thread occupato p95 ${scroll.busy.p95} ms, max ${scroll.busy.max} ms, in tutto ${scroll.busy.totalMs} ms; CPU web ${scroll.cpu?.webview ?? "—"} %`,
+        `frecce: bloccato ${keys.mainBlocked.perRep.join("/")} ms, fotogrammi ${keys.frames?.median ?? "—"}/${keys.frames?.p90 ?? "—"} ms`,
+        `barra laterale: bloccato ${bar.mainBlocked.perRep.join("/")} ms, fotogrammi ${bar.frames?.median ?? "—"}/${bar.frames?.p90 ?? "—"} ms`,
+      ],
+    };
+  },
+  /// Il PDF di quaranta pagine adattato alla larghezza: lo scorrimento della
+  /// pagina e le pagine sfogliate. Ogni pagina nuova è una resa del motore
+  /// (pdf.js) sulla tela, che non deve fermare il thread principale.
+  async S11(session) {
+    // Il PDF non ha un testo da aspettare: si aspetta la tela della pagina.
+    await openByName(session, BIG_PDF.name, "");
+    await session.waitFor("const canvas = document.querySelector(arguments[0]); return !!canvas && canvas.width > 0;", [S11_CANVAS], 60_000);
+    await session.click(S11_FIT);
+    await session.waitFor("return document.querySelector(arguments[0])?.getAttribute('aria-pressed') === 'true';", [S11_FIT], 15_000);
+    await pause(2_000);
+    const range = await session.execute("const view = document.querySelector(arguments[0]); return view ? view.scrollHeight - view.clientHeight : 0;", [S11_VIEW]);
+    // Il passo che porta in fondo alla pagina in `S11_SCROLL_STEPS` fotogrammi.
+    const px = Math.max(1, Math.ceil(range / S11_SCROLL_STEPS));
+    await session.execute(RECORDER_SCRIPT);
+    const scroll = await measuredScroll(session, S11_SCROLL_STEPS, px, S11_VIEW);
+    if (!scroll) throw new Error("il PDF non ha la pagina");
+    // Le pagine: una avanti e una indietro fuori dalla misura (il motore
+    // carica i caratteri alla prima resa), poi avanti e indietro misurate.
+    await session.click(S11_NEXT);
+    await pause(GESTURE_WAIT_MS);
+    await session.click(S11_PREVIOUS);
+    await pause(GESTURE_WAIT_MS);
+    let turned = 0;
+    const pages = await gesture(session, S11_PAGE_REPS * 2, async () => {
+      await session.click(turned < S11_PAGE_REPS ? S11_NEXT : S11_PREVIOUS);
+      turned += 1;
+    });
+    // La riga di stato dice «Pagina n di N» nella lingua dell'interfaccia:
+    // se ne legge solo il primo numero, che dopo il ritorno è di nuovo 1.
+    const back = await session.execute("const status = document.querySelector('.pane.focus .media-pdf [role=status]'); return Number(/\\d+/.exec(status?.textContent ?? '')?.[0] ?? NaN);");
+    const notes = [
+      `scorrimento: ${range} px di pagina in ${S11_SCROLL_STEPS} passi da ${px} px per verso; fotogrammi ${scroll.frames?.median ?? "—"}/${scroll.frames?.p95 ?? "—"}/${scroll.frames?.max ?? "—"} ms (mediana/p95/max), persi ${scroll.frames?.lost ?? "—"}; thread occupato p95 ${scroll.busy.p95} ms, max ${scroll.busy.max} ms, in tutto ${scroll.busy.totalMs} ms; CPU web ${scroll.cpu?.webview ?? "—"} %`,
+      `pagine: bloccato ${pages.mainBlocked.perRep.join("/")} ms, fotogrammi ${pages.frames?.median ?? "—"}/${pages.frames?.p90 ?? "—"} ms; dopo il ritorno la pagina ${Number.isFinite(back) ? back : "—"}`,
+    ];
+    if (range < S11_MIN_RANGE_PX) notes.push(`la pagina adattata scorre solo ${range} px: la finestra è più alta della pagina, lo scorrimento misura poco`);
+    if (back !== 1) notes.push("le pagine sfogliate non sono tornate alla prima: i clic su «Pagina successiva» e «Pagina precedente» non hanno girato tutte le pagine");
+    return {
+      report: { scroll, pages, range, steps: S11_SCROLL_STEPS * 2, px, back },
+      values: {
+        "S11.scroll.frameGap.p95": scroll.frames?.p95 ?? null,
+        "S11.scroll.frameGap.max": scroll.frames?.max ?? null,
+        "S11.scroll.busy.p95": scroll.busy.p95,
+        "S11.pagina.mainBlocked": pages.mainBlocked.median,
+      },
+      samples: (scroll.frames?.count ?? 0) + S11_PAGE_REPS * 2,
+      notes,
+    };
+  },
   async S4(session) {
     await session.click('#views-ribbon .rail-btn-main[data-panel="graph"]');
     await session.waitFor("return !!document.querySelector('canvas.graph-main')", [], 60_000);
@@ -1260,9 +1512,9 @@ const SCENARIOS = {
   /// 3. **chiuse**: chiuse tutte le schede, una lettura dopo `R1_SETTLE_MS` e
   ///    una dopo `R1_LATE_MS`, per vedere se la memoria torna col tempo;
   /// 4. **giri**: `R1_ROUNDS` volte tutti i file aperti e poi chiusi; dopo
-  ///    ogni chiusura una lettura a `R1_SETTLE_MS` e poi una ogni
-  ///    `R1_POLL_MS` fino a `R1_LATE_MS`, e il giro vale la più bassa; alla
-  ///    fine la lettura «tardi», `R1_LATE_MS` dopo l'ultima chiusura.
+  ///    ogni chiusura le letture della quiete (`R1_QUIET_FIRST_MS`,
+  ///    `R1_QUIET_STEP_MS`, `R1_STILL_MIB`, al più `R1_SETTLE_MS`), e il
+  ///    giro vale la più bassa.
   ///
   /// Ogni lettura è PSS in MiB, per processo: l'app (l'host Rust e la
   /// finestra), i processi della WebView, la rete, la GPU se c'è.
@@ -1280,6 +1532,7 @@ const SCENARIOS = {
   /// avanti senza.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
+    const started = Date.now();
     const gc = { asked: gcAsked, on: null, absent: null, did: null, calls: 0, ms: 0, skipped: collector.skipped ?? null, openDocument: null };
     const read = async () => {
       if (gc.asked && !gc.skipped && gc.on !== false) {
@@ -1334,6 +1587,7 @@ const SCENARIOS = {
     const late = await read();
     const rounds = [];
     for (let round = 1; round <= R1_ROUNDS; round++) {
+      const roundStart = Date.now();
       for (const [name] of MODES) {
         await openByName(session, name, "");
         await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
@@ -1341,30 +1595,30 @@ const SCENARIOS = {
       await pause(MEMORY_QUIET_MS);
       const open = await settled(driverPid, pause);
       const remained = await closeAll(session);
-      const roundClosedAt = Date.now();
-      await pause(R1_SETTLE_MS);
       // La WebView raccoglie quando vuole ciò che la lavagna lascia aprendosi
-      // (sul runner 300–400 MiB): una lettura sola a 10 s lo trova raccolto o
-      // no a caso, e la retta dei giri misurava questo invece di ciò che resta
-      // (#284). Si rilegge fino a un minuto dalla chiusura, come «tardi», e
-      // vale la lettura più bassa: ciò che ogni giro lascia davvero non scende,
-      // e la pendenza lo vede ancora.
-      const soon = await read();
-      let closed = soon;
-      let lowestAt = Date.now() - roundClosedAt;
-      while (Date.now() - roundClosedAt < R1_LATE_MS) {
-        await pause(Math.min(R1_POLL_MS, Math.max(0, R1_LATE_MS - (Date.now() - roundClosedAt))));
-        const again = await read();
-        if (again && closed && again.pss < closed.pss) {
-          closed = again;
-          lowestAt = Date.now() - roundClosedAt;
-        }
-      }
-      rounds.push({ round, open, left: remained, soon, closed, lowestAtMs: lowestAt });
+      // (sul runner 300–400 MiB): senza la raccolta forzata una lettura sola
+      // lo trovava raccolto o no a caso (#284). Con la raccolta davanti a ogni
+      // lettura basta che la memoria si fermi: la quiete rilegge finché due
+      // letture di fila restano vicine, e il giro vale la più bassa; ciò che
+      // ogni giro lascia davvero non scende, e la pendenza lo vede.
+      const settle = await quiet(read, pause, {
+        since: Date.now(),
+        firstMs: R1_QUIET_FIRST_MS,
+        stepMs: R1_QUIET_STEP_MS,
+        maxMs: R1_SETTLE_MS,
+        stillMiB: R1_STILL_MIB,
+      });
+      rounds.push({
+        round,
+        open,
+        left: remained,
+        soon: settle.soon,
+        closed: settle.lowest,
+        stillAtMs: settle.stillAtMs,
+        reads: settle.reads,
+        ms: Date.now() - roundStart,
+      });
     }
-    // «Tardi» resta un minuto dopo l'ultima chiusura: l'ultimo giro lo ha già
-    // aspettato.
-    const roundsLate = rounds.length > 0 ? await read() : null;
     if (!gc.asked) console.log("· R1: raccolta forzata spenta (--gc=no)");
     else if (gc.skipped) console.log(`✗ R1: raccolta forzata non disponibile, ${gc.skipped} (--gc=no per misurare senza)`);
     else if (gc.on) console.log(`· R1: raccolta forzata prima di ogni lettura a schede chiuse (${gc.calls}, ${gc.ms} ms in tutto)`);
@@ -1395,10 +1649,15 @@ const SCENARIOS = {
       values[`${key}.primo.MiB`] = ys[0] ?? null;
       values[`${key}.ultimo.MiB`] = ys.at(-1) ?? null;
       values[`${key}.pendenza.MiB`] = pendenza(ys);
-      values[`${key}.tardi.MiB`] = residue(roundsLate, group);
     }
     return {
-      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, pollMs: R1_POLL_MS, quietMs: MEMORY_QUIET_MS, rounds: R1_ROUNDS },
+      procedure: {
+        settleMs: R1_SETTLE_MS,
+        lateMs: R1_LATE_MS,
+        quietMs: MEMORY_QUIET_MS,
+        rounds: R1_ROUNDS,
+        roundQuiet: { firstMs: R1_QUIET_FIRST_MS, stepMs: R1_QUIET_STEP_MS, maxMs: R1_SETTLE_MS, stillMiB: R1_STILL_MIB },
+      },
       gc,
       restored,
       empty,
@@ -1408,9 +1667,9 @@ const SCENARIOS = {
       closed,
       late,
       rounds,
-      roundsLate,
       trend,
       values,
+      durationMs: Date.now() - started,
       samples: 3,
     };
   },
@@ -1681,7 +1940,7 @@ async function main() {
   console.log(`· schermo: ${display.hz} Hz, P ${display.periodMs} ms (${display.source})`);
   for (const note of display.notes) console.log(`· schermo: ${note}`);
   // Le soglie in periodi chiedono il tetto del motore, cioè F1, prima degli
-  // scenari che misurano.
+  // scenari che le usano (l'ordine è più sotto, in `order`).
   if (hasPeriodLimits(limits) && !only.has("F1")) {
     only.add("F1");
     console.log("· F1 aggiunto: le soglie in periodi chiedono il rAF a vuoto");
@@ -1719,10 +1978,13 @@ async function main() {
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
     // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
     // fondo: cambia il profilo del vault, e lo lascia a «Tutto». F1 prima di
-    // ogni scenario con una soglia in periodi: decide il tetto del motore. F2
+    // ogni scenario con una soglia in periodi, perché decide il tetto del
+    // motore; R1 e I1 gli passano davanti perché in budgets.json hanno solo
+    // soglie in ms, e una soglia in periodi data a uno dei due chiede di
+    // spostare F1 davanti a lui. F2
     // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
-    // note che gli avvii dopo riaprono.
-    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));
+    // note che gli avvii dopo riaprono, e F4 dopo F3 per la stessa ragione.
+    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S10", "S11", "S4", "S5", "S7", "S8", "F3", "F4", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // R1 con la raccolta forzata ha un driver suo, con il gancio acceso
       // nell'ambiente; lo scenario dopo torna su un driver senza.

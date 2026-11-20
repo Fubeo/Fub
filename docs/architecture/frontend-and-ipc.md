@@ -244,11 +244,11 @@ riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
 nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
 la vista porta il focus sulla superficie montata al posto della precedente.
 
-Una scheda chiusa dell'ispettore non disegna la sua view: il provider risponde
-comunque a ogni invito, e l'albero più recente aspetta (`ui/views.ts`, `pending`).
-Aprendo la scheda si disegna subito, con quell'albero. Così le liste lunghe di
-una scheda che nessuno guarda (i collegamenti in uscita di una nota con migliaia
-di link) non pesano sul DOM né a ogni salvataggio.
+Una view dell'ispettore nascosta (scheda o ispettore chiusi, concentrazione)
+non chiede `render_view`: un invito la segna da ridisegnare (`ui/views.ts`,
+`stale`) e tornando in vista chiede l'albero una volta sola; una risposta giunta
+a view nascosta aspetta in `pending`, se nessun invito l'ha invecchiata. Niente
+lavoro nel kernel a ogni salvataggio per ciò che nessuno guarda.
 
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
@@ -267,7 +267,7 @@ prima dei moduli perché dipinga subito: il foglio `public/avvio/avvio.css`
 (un file e non un `<style>`, per la CSP: vedi
 [Permessi e sicurezza](../reference/permissions-and-security.md)),
 `luce.js` sceglie luce, contrasto, moto e colori, `stati.js` i tempi. Il fondo c'è dal primo
-fotogramma, il marchio entra a 120 ms (1 s al più), la fase (`data-fase`) a
+fotogramma, il marchio (un SVG, che non aspetta caratteri) entra a 120 ms, la fase (`data-fase`) a
 2 s, l'avvio è lento a 10 s e un guasto con Riprova a 30 s; sotto, l'app è
 `inert` e `aria-busy`. Lo consegna `avvio/consegna.ts` a fine avvio
 (`bootstrap.ts`, `mobile/compose.ts` col tema definitivo, 1,5 s al più;
@@ -318,25 +318,25 @@ pannelli) lo Scrittoio compone:
   `theme/scrittoio/skin/kit.css`; il vassoio è il ruolo facoltativo
   `--bar-tray` della ricetta (ripiego `--sheet-2`); `appearance.bars`
   «marcate» mette `data-bars="marked"` sulla radice e il vassoio su `--sheet-2`;
-- `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
-  chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
-  e la preferenza del sistema decidono quanto movimento esiste, e lo stato
-  finale è lo stesso con e senza movimento. Nel livello calmo le molle non
-  superano il bersaglio; ciò che entra o esce fa metà strada, con una molla
-  critica più rigida che non dura più di quella piena. Menu, modali,
-  pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`, sopra
-  `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
+- `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi chiave
+  WAAPI di sola `transform` e `opacity`. Le molle si campionano al ritmo dello
+  schermo (60–240 Hz, `samplePeriodMs`), con chiavi diradate sopra i 60 Hz. Il
+  livello `appearance.motion` e la preferenza del sistema decidono quanto
+  movimento esiste, e lo stato finale è lo stesso con e senza movimento. Nel
+  livello calmo le molle non superano il bersaglio; ciò che entra o esce fa metà
+  strada, con una molla critica più rigida che non dura più di quella piena.
+  Menu, modali, pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`,
+  sopra `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
   un'uscita è un'immagine che se ne va in 140 ms al più. Il default di
   `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`):
-  `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che
-  dopo un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`.
-  La versione è quella della libreria caricata, che l'app dichiara per prima
-  cosa, prima del percorso di disegno e dell'host (`declare_the_webview` in
-  `crates/fub-app/src/lib.rs`);
-  l'intervallo difettoso è la costante `WEBKITGTK_FLICKER_FROM`, aperta in
-  alto finché una versione corretta non è verificata. Un valore scritto,
-  anche `""`, vale sempre; sotto la riga Animazioni le Impostazioni dicono
-  perché il valore di partenza è «ridotte»;
+  `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che dopo
+  un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`. La versione
+  è quella della libreria caricata, che l'app dichiara per prima cosa, prima del
+  percorso di disegno e dell'host (`declare_the_webview` in
+  `crates/fub-app/src/lib.rs`); l'intervallo difettoso è la costante
+  `WEBKITGTK_FLICKER_FROM`, aperta in alto finché una versione corretta non è
+  verificata. Un valore scritto, anche `""`, vale sempre; sotto la riga
+  Animazioni le Impostazioni dicono perché il valore di partenza è «ridotte»;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.

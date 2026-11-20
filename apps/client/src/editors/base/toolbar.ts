@@ -28,6 +28,7 @@ import {
 import { useBaseIcons, viewIcon } from "./icons";
 import { errorText } from "../../host/errors";
 import { moveColumn, sameColumns, sameKey, sortValue, sortedBy, toggleColumn, withoutSort, type SortEntry } from "./sort";
+import { composingKey } from "../../kit/ime";
 
 /// Perché il file `.base` non si riscrive da qui: la superficie è in sola
 /// lettura, o la Base è scritta dentro una nota (un blocco ```base```), che i
@@ -452,7 +453,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       if (!sameFilter(next, plan.filters)) actions.write("filters", filterValue(next));
     };
     searchField.addEventListener("input", syncVisual);
-    searchField.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); applyFilter(); } });
+    searchField.addEventListener("keydown", (event) => { if (event.key === "Enter" && !composingKey(event)) { event.preventDefault(); applyFilter(); } });
     searchField.disabled = opaque;
     searchNote.hidden = true;
     if (draft !== null && initialSearch === null) { searchNote.textContent = t("base.filter.search_contains"); searchNote.hidden = false; }
@@ -676,7 +677,7 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
   });
   lifetime.listen(search, "input", () => actions.search());
   lifetime.listen(search, "keydown", (event) => {
-    if (event.key !== "Escape" || search.value === "") return;
+    if (event.key !== "Escape" || composingKey(event) || search.value === "") return;
     event.stopPropagation();
     search.value = "";
     actions.search();
@@ -731,15 +732,16 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     moreTabs.title = label;
   };
   const overflowing = (): boolean => tabs.scrollWidth > tabs.clientWidth + 1;
-  const fitTabs = (): void => {
+  // Vero se le linguette stanno nello spazio che la barra lascia loro.
+  const fitInRow = (): boolean => {
     const all = [...tabs.querySelectorAll<HTMLElement>(".base-tab[data-view]")];
     for (const tab of all) tab.hidden = false;
     hiddenViews = [];
     moreTabs.hidden = true;
     tabs.classList.remove("compact");
-    if (!overflowing()) return;
+    if (!overflowing()) return true;
     tabs.classList.add("compact");
-    if (!overflowing()) return;
+    if (!overflowing()) return true;
     moreTabs.hidden = false;
     labelMore();
     for (const tab of all.reverse()) {
@@ -749,6 +751,18 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       hiddenViews.unshift(tab.dataset.view!);
       labelMore();
     }
+    return !overflowing();
+  };
+  // Se nemmeno la vista scelta e «Altre N viste» stanno accanto agli
+  // strumenti (al telefono, dove ogni bottone è largo un dito), la barra va
+  // su due file (`stacked`): le linguette e «+» sopra, gli strumenti e
+  // «Nuova» sotto (#470). La scelta si rifà ogni volta dalla barra in una
+  // fila, così dipende solo dalla sua larghezza e non oscilla.
+  const fitTabs = (): void => {
+    bar.classList.remove("stacked");
+    if (fitInRow()) return;
+    bar.classList.add("stacked");
+    fitInRow();
   };
   lifetime.listen(moreTabs, "click", () => {
     const items = hiddenViews.map((name): MenuItem => {

@@ -65,7 +65,11 @@ export function installGestureBegin(ctx: EditorContext): void {
   };
 
   const begin = (start: StrokeStart): Gesture => {
-    const base = { stroke: start.id, pointer: start.pointerType };
+    const base = { stroke: start.id, pointer: start.pointerType, page: null };
+    // Sul foglio delle annotazioni un segno resta sulla pagina dove il gesto
+    // comincia: la pipeline lo rifiuta se comincia fuori, e ne tiene dentro
+    // i punti (`curvature-tool.ts`).
+    const marking = { ...base, page: ctx.folio?.page() ?? null };
     // La penna girata cancella con qualunque strumento; il tasto laterale fa
     // ciò che chi disegna ha scelto in «Penna e dita». Il menu radiale lo
     // apre il suo ascolto (`curvature-tool.ts`), non il tratto.
@@ -99,7 +103,7 @@ export function installGestureBegin(ctx: EditorContext): void {
         const brush = tool.brush(width, { pressure: start.pressure, continued: start.continued }, ctx.penId);
         const edge = ctx.rulerEdgeAt(base.pointer, brush, to);
         return {
-          ...base,
+          ...marking,
           kind: "ink",
           tool: ctx.tool,
           color,
@@ -133,7 +137,7 @@ export function installGestureBegin(ctx: EditorContext): void {
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
         const { color, width } = style();
-        return { ...base, kind: "shape", tool: ctx.tool, color, width, to, ids, from: null, end: null };
+        return { ...marking, kind: "shape", tool: ctx.tool, color, width, to, ids, from: null, end: null };
       }
       case "text": {
         // Con il motore del disegno, il testo lo scrive lui; senza, la
@@ -142,12 +146,12 @@ export function installGestureBegin(ctx: EditorContext): void {
         if (motore !== null) return motore;
         // Un livello che non lo riceve rifiuta il clic subito, come le forme.
         if (target(newIds()) === null) return { ...base, kind: "refused" };
-        return { ...base, kind: "text", at: null };
+        return { ...marking, kind: "text", at: null };
       }
       case "eraser":
         return eraseGesture(base);
       case "note":
-        return { ...base, kind: "note", at: null };
+        return { ...marking, kind: "note", at: null };
       case "select": {
         const motore = ctx.motoreBegin(base);
         if (motore !== null) return motore;

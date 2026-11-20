@@ -14,7 +14,7 @@
 //!
 //! [`IndexQuery::VaultHealth`]: fub_abi::traits::IndexQuery::VaultHealth
 
-use fub_abi::model::{DateFormats, DocId, Frontmatter, Link, LinkTarget};
+use fub_abi::model::{DateFormats, DocId, Frontmatter, Link, LinkTarget, Span};
 use fub_abi::rules::health::{broken_target, unrecognized_dates, LinkResolver};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::traits::{HealthCheck, HealthIssue};
@@ -91,10 +91,10 @@ pub(crate) fn run<'a>(
         // è la ragione per cui questi due controlli non condividono l'elenco su
         // cui camminano.
         HealthCheck::UnrecognizedDates => dates(docs.map(|(id, _, fm)| (id, fm)), formats),
-        HealthCheck::DeadEnds => dead_ends(docs.map(|(id, links, _)| (id, links))),
+        HealthCheck::DeadEnds => dead_ends(docs),
         // I link di tutti i documenti dicono dove si arriva, l'anagrafe dice
         // quali allegati ci sono: servono tutt'e due.
-        HealthCheck::UnusedAttachments => unused(docs.map(|(id, links, _)| (id, links)), view),
+        HealthCheck::UnusedAttachments => unused(docs, view),
     }
 }
 
@@ -105,13 +105,19 @@ pub(crate) fn run<'a>(
 /// scritto voleva andare da qualche parte, e il guasto lo dice già
 /// [`HealthCheck::BrokenLinks`]: dirlo due volte, con due nomi, sarebbe
 /// rumore.
-fn dead_ends<'a>(docs: impl Iterator<Item = (&'a DocId, &'a [Link])>) -> Vec<HealthIssue> {
-    docs.filter(|(_, links)| {
-        !links
-            .iter()
-            .any(|link| !matches!(link.target, LinkTarget::Url(_)) && !link.target.names_host())
+///
+/// Un link scritto in una proprietà (`progetto: "[[Scorte]]"`) è un'uscita
+/// come quello del corpo.
+fn dead_ends<'a>(
+    docs: impl Iterator<Item = (&'a DocId, &'a [Link], &'a Frontmatter)>,
+) -> Vec<HealthIssue> {
+    let leaves =
+        |target: &LinkTarget| !matches!(target, LinkTarget::Url(_)) && !target.names_host();
+    docs.filter(|(_, links, frontmatter)| {
+        !links.iter().any(|link| leaves(&link.target))
+            && !property_links(frontmatter).any(|target| leaves(&target))
     })
-    .map(|(id, _)| HealthIssue {
+    .map(|(id, _, _)| HealthIssue {
         doc: id.clone(),
         check: HealthCheck::DeadEnds,
         // Come l'orfana: il problema è la nota, non un punto del sorgente.
@@ -128,14 +134,21 @@ fn dead_ends<'a>(docs: impl Iterator<Item = (&'a DocId, &'a [Link])>) -> Vec<Hea
 /// [`EntryKind::Asset`]: un file che nessuno sa cosa sia (`.DS_Store`, una
 /// configurazione) non è un allegato dimenticato. L'ordine è quello
 /// dell'anagrafe, come per le collisioni.
+///
+/// Un allegato nominato in una proprietà (`fonte: "[[manuale.pdf]]"`) è usato
+/// come quello nominato nel corpo.
 fn unused<'a>(
-    docs: impl Iterator<Item = (&'a DocId, &'a [Link])>,
+    docs: impl Iterator<Item = (&'a DocId, &'a [Link], &'a Frontmatter)>,
     view: &VaultView<'_>,
 ) -> Vec<HealthIssue> {
     let mut used: HashSet<DocId> = HashSet::new();
-    for (id, links) in docs {
-        for link in links {
-            if let Some(target) = view.resolve_entry(id, &link.target) {
+    for (id, links, frontmatter) in docs {
+        let targets = links
+            .iter()
+            .map(|link| link.target.clone())
+            .chain(property_links(frontmatter));
+        for target in targets {
+            if let Some(target) = view.resolve_entry(id, &target) {
                 used.insert(target);
             }
         }
@@ -158,7 +171,7 @@ fn broken_links<'a>(
     doc_extensions: &[String],
 ) -> Vec<HealthIssue> {
     let mut issues = Vec::new();
-    for (id, links, _) in docs {
+    for (id, links, frontmatter) in docs {
         for link in links {
             let Some(written) = broken_target(id, link, doc_extensions, graph) else {
                 continue;
@@ -170,12 +183,44 @@ fn broken_links<'a>(
                 span: Some(link.span),
             });
         }
+        // Un link scritto in una proprietà (`progetto: "[[Sparita]]"`) si
+        // rompe come quello del corpo, con lo stesso giudizio e lo stesso
+        // dettaglio (la destinazione come era scritta, che il grafo e la
+        // scrivania leggono così). Il frontmatter non ha span nel modello:
+        // senza punto, dopo i link del corpo, nell'ordine del frontmatter.
+        for (_, target) in crate::graph::property_links_of(frontmatter) {
+            let link = Link {
+                target,
+                embed: false,
+                span: Span::new(0, 0),
+                context: None,
+            };
+            let Some(written) = broken_target(id, &link, doc_extensions, graph) else {
+                continue;
+            };
+            issues.push(HealthIssue {
+                doc: id.clone(),
+                check: HealthCheck::BrokenLinks,
+                detail: Some(written),
+                span: None,
+            });
+        }
     }
     issues
 }
 
+/// I link scritti nelle proprietà di una nota, con le regole del grafo
+/// ([`fub_abi::rules::properties::links`]).
+fn property_links(frontmatter: &Frontmatter) -> impl Iterator<Item = LinkTarget> {
+    crate::graph::property_links_of(frontmatter)
+        .into_iter()
+        .map(|(_, target)| target)
+}
+
+/// Le note che nessun'altra nomina, né nel corpo né in una proprietà: gli
+/// archi delle proprietà sono del grafo come i backlink.
 fn orphans<'a>(docs: impl Iterator<Item = &'a DocId>, graph: &LinkGraph) -> Vec<HealthIssue> {
-    docs.filter(|id| !graph.has_backlinks(id))
+    docs.filter(|id| !graph.has_backlinks(id) && !graph.has_property_backlinks(id))
         .map(|id| HealthIssue {
             doc: id.clone(),
             check: HealthCheck::OrphanDocuments,
@@ -275,7 +320,7 @@ fn dates<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fub_abi::model::{DocumentModel, Span};
+    use fub_abi::model::DocumentModel;
 
     fn md() -> Vec<String> {
         vec!["md".to_string()]
@@ -498,6 +543,82 @@ mod tests {
             "orphan = zero incoming references; linking does not save from orphanhood"
         );
         assert!(found[0].detail.is_none() && found[0].span.is_none());
+    }
+
+    /// Un link nelle proprietà (`progetto: "[[Scorte]]"`) collega come quello
+    /// del corpo: la nota nominata non è orfana, chi la nomina non è un vicolo
+    /// cieco, e l'allegato nominato è usato. La nota che nomina sé stessa
+    /// resta orfana.
+    #[test]
+    fn a_link_in_a_property_counts_like_one_in_the_body() {
+        let with = |id: &str, key: &str, value: &str| {
+            let mut m = doc(id, vec![]);
+            m.frontmatter.0.insert(key.into(), serde_json::json!(value));
+            m
+        };
+        let docs = vec![
+            with("indice.md", "progetto", "[[Scorte]]"),
+            doc("Scorte.md", vec![wiki("indice")]),
+            with("fonti.md", "fonte", "[[manuale.pdf]]"),
+            with("sola.md", "se", "[[sola]]"),
+        ];
+        let graph = LinkGraph::build(docs.iter());
+        let names = |found: Vec<HealthIssue>| -> Vec<String> {
+            found.into_iter().map(|the| the.doc.to_string()).collect()
+        };
+        assert_eq!(
+            names(issues(HealthCheck::OrphanDocuments, &docs, &graph)),
+            ["fonti.md", "sola.md"]
+        );
+        assert!(
+            names(issues(HealthCheck::DeadEnds, &docs, &graph)).is_empty(),
+            "a property link is a way out of the note"
+        );
+        assert!(issues_with(
+            HealthCheck::UnusedAttachments,
+            &docs,
+            &graph,
+            &entries_of(&["doc/manuale.pdf"])
+        )
+        .is_empty());
+    }
+
+    /// Un link rotto scritto in una proprietà compare fra i link rotti come
+    /// quello del corpo: la destinazione come era scritta, senza span (il
+    /// frontmatter non ne ha), dopo quelli del corpo. Uno che risolve, un
+    /// allegato che c'è e un `[[#titolo]]` della nota stessa non sono rotti.
+    #[test]
+    fn a_broken_link_in_a_property_is_reported_like_one_in_the_body() {
+        let mut indice = doc("indice.md", vec![wiki("Sparita nel corpo")]);
+        indice.frontmatter = Frontmatter(
+            serde_json::json!({
+                "progetto": "[[Sparita]]",
+                "fonti": ["[[Esiste]]", "[[manuale.pdf]]", "[[#Titolo]]", "[[Persa]]"],
+            })
+            .as_object()
+            .expect("un oggetto")
+            .clone(),
+        );
+        let docs = vec![indice, doc("Esiste.md", vec![])];
+        let graph = LinkGraph::build(docs.iter());
+        let found = issues_with(
+            HealthCheck::BrokenLinks,
+            &docs,
+            &graph,
+            &entries_of(&["doc/manuale.pdf"]),
+        );
+        let said: Vec<(&str, Option<&str>, bool)> = found
+            .iter()
+            .map(|the| (the.doc.as_str(), the.detail.as_deref(), the.span.is_some()))
+            .collect();
+        assert_eq!(
+            said,
+            vec![
+                ("indice.md", Some("Sparita nel corpo"), true),
+                ("indice.md", Some("Sparita"), false),
+                ("indice.md", Some("Persa"), false),
+            ]
+        );
     }
 
     #[test]

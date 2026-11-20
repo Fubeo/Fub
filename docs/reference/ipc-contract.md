@@ -32,23 +32,26 @@ test usano un fake.
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
 
-`query_index` gira fuori dal thread principale dell'app: una domanda può
-durare centinaia di millisecondi (il correttore su una nota lunga, una
-ricerca su un vault grande), e sul thread principale la finestra smetterebbe
-di presentare fotogrammi finché non risponde. Le domande non girano in
-parallelo ma in **corsie** (`crates/fub-app/src/domande.rs`): una per l'indice
-e una per ogni spazio dei nomi di `IndexQuery::Custom`, al più 16. In una
-corsia le risposte escono nell'ordine in cui le domande sono entrate, come
-quando giravano sul thread principale; due corsie non si aspettano, così il
-controllo lungo del correttore non ferma la ricerca. Due domande mandate nello
-stesso istante possono entrare in un ordine qualsiasi.
+`query_index` gira fuori dal thread principale dell'app, che presenta i
+fotogrammi: una domanda può durare centinaia di millisecondi. Le domande girano
+in **corsie** (`crates/fub-app/src/domande.rs`): una per l'indice e una per
+ogni spazio dei nomi di `IndexQuery::Custom`, al più 16. In una corsia le
+risposte escono nell'ordine d'entrata; due corsie non si aspettano, e due
+domande mandate nello stesso istante entrano in ordine qualsiasi.
 
-Anche `render_view` gira fuori dal thread principale, nella corsia delle viste,
-che c'è sempre e non conta fra le 16. Un salvataggio invecchia una ventina di
-view e la shell le ridisegna nello stesso giro: ognuna costa pochi
-millisecondi, ma in fila sul thread principale fermavano la finestra per un
-centinaio di millisecondi. I disegni restano in fila fra loro; la shell tiene
-comunque l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
+Anche le altre porte che toccano disco, workspace o provider girano fuori dal
+thread principale, in corsie fisse fuori dalle 16, nell'ordine d'arrivo:
+`viste` (`render_view`, `view_action`: un disegno chiesto dopo un'azione la
+vede), `contesto` (`set_active_context`: vince l'ultima), `comandi`, `stato`
+(`view_state`, `set_view_state`, il recupero di `view-state.json`) e `risorse`
+(`resource_*`: un pezzo chiesto prima della chiusura del prestito si legge).
+La corsia dell'indice, perché la domanda dopo li veda, scrive i dati che legge
+(impostazioni e profili, scorciatoie, organizzazione, vault aperto, corrente o
+conosciuto, demo) e serve la schermata di supporto (`support_preview`,
+`support_export`, `config_health`, gli altri `recover_config`). Le letture senza ordine (`list_views`,
+`list_commands`, `components_map`, `list_bundles`, i temi) e `cancel_job`
+escono senza corsia; un comando sincrono resta solo nell'elenco motivato di
+`lean_ipc.rs`. La shell tiene l'ultima risposta di ogni pannello (`Race`).
 
 ## La griglia
 
@@ -56,9 +59,8 @@ I fogli di calcolo usano la famiglia Grid, con porte strettamente tipate:
 `list_grid_surfaces` elenca i binding, e una superficie con
 `protocol_version` 2 si apre sui byte di un documento (`open_grid_bytes`,
 `grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
-`grid_bytes_command`, `close_grid_bytes`). Sessione, finestra, comandi e
-limiti: [le porte della griglia](grid-ipc.md).
-
+`grid_bytes_command`, `close_grid_bytes`), in una corsia sua. Sessione,
+finestra, comandi, corsia e limiti: [le porte della griglia](grid-ipc.md).
 
 ## Disegno
 
@@ -70,7 +72,6 @@ del file. Forme, limiti e chi le usa: [le porte del disegno](drawing-ipc.md).
 o non c'è in questa build, all'apertura come a metà sessione; `internal` che
 il motore si è fermato o non si costruisce, e si può riprovare. I dettagli
 stanno [nella stessa pagina](drawing-ipc.md).
-
 
 ## Sessione live
 
@@ -507,15 +508,14 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 
 `resource_write` deposita byte grezzi, coi parametri nella testata
 `x-fub-resource-write`; il contratto intero (campi, `reuse: "same-content"`,
-ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md).
+ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md). I byte di una tessera della vista Mappa (`map_tile`): [Le tessere delle mappe](map-tiles.md).
 
 ## Percorsi
 
 Il frontend invia path relativi o root di vault secondo la porta. Le regole di
 canonicalizzazione e recinzione vivono nel core.
 
-Non accettare un path assoluto in una porta generica per evitare la verifica del
-vault.
+Nessuna porta generica accetta un path assoluto che salti la verifica del vault.
 
 ## Import Tauri
 

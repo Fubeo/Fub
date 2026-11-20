@@ -1113,6 +1113,7 @@
     "base-tool-count",
     "base-tool-new-view",
     "compact",
+    "stacked",
     "on",
     "base-new",
     "base-search-row",
@@ -1175,6 +1176,10 @@
     "base-kanban",
     "base-kanban-column",
     "base-kanban-card",
+    "base-kanban-head",
+    "base-kanban-empty",
+    "base-view-key",
+    "base-view-key-select",
     "base-calendar",
     "base-cal-head",
     "base-cal-title",
@@ -1521,6 +1526,8 @@
     "canvas-formula-text",
     "canvas-ink-label",
     "canvas-ink-frame",
+    "canvas-ink-reflow",
+    "canvas-ink-reflow-back",
     "canvas-lasso-path",
     "canvas-lasso-frame",
     "canvas-lasso-chosen",
@@ -3540,6 +3547,7 @@
     "base-tool-count": "cornice",
     "base-tool-new-view": "cornice",
     "compact": "cornice",
+    "stacked": "cornice",
     "on": "cornice",
     "base-new": "cornice",
     "base-search-row": "cornice",
@@ -3602,6 +3610,10 @@
     "base-kanban": "contenuto",
     "base-kanban-column": "contenuto",
     "base-kanban-card": "contenuto",
+    "base-kanban-head": "contenuto",
+    "base-kanban-empty": "contenuto",
+    "base-view-key": "contenuto",
+    "base-view-key-select": "contenuto",
     "base-calendar": "contenuto",
     "base-cal-head": "contenuto",
     "base-cal-title": "contenuto",
@@ -3948,6 +3960,8 @@
     "canvas-formula-text": "cornice",
     "canvas-ink-label": "cornice",
     "canvas-ink-frame": "segno",
+    "canvas-ink-reflow": "segno",
+    "canvas-ink-reflow-back": "cornice",
     "canvas-lasso-path": "segno",
     "canvas-lasso-frame": "segno",
     "canvas-lasso-chosen": "segno",
@@ -7642,6 +7656,7 @@
         "base-tool-count",
         "base-tool-new-view",
         "compact",
+        "stacked",
         "on",
         "base-new",
         "base-search-row",
@@ -7751,7 +7766,11 @@
       "hooks": [
         "base-kanban",
         "base-kanban-column",
-        "base-kanban-card"
+        "base-kanban-card",
+        "base-kanban-head",
+        "base-kanban-empty",
+        "base-view-key",
+        "base-view-key-select"
       ],
       "states": [
         "rest",
@@ -8503,6 +8522,20 @@
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "canvas-ink-reflow",
+      "part": "editors",
+      "hooks": [
+        "canvas-ink-reflow",
+        "canvas-ink-reflow-back"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
       ]
     },
     {
@@ -12585,10 +12618,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2425,
+    "hooks": 2432,
     "state_names": 7,
-    "assigned_states": 1083,
-    "components": 321,
+    "assigned_states": 1087,
+    "components": 322,
     "preference_tokens": 196
   }
 }

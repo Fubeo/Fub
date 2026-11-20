@@ -78,7 +78,8 @@ merge under the rule in `CLAUDE.md`.
    they are architectural). Then delete `PLAN.md` and `PLAN-ui/` in one commit:
    `docs(piano): il piano <titolo> è concluso`. They stay in the branch history.
 3. Push, mark the PR ready (`gh pr ready`, or the GitHub tools): the full CI
-   runs once, Windows, macOS and benches included. Wait in the background.
+   runs once, Windows and benches included (macOS is paused, ADR 0245). Wait in
+   the background.
 4. Green: merge under the rule in `CLAUDE.md` (what stays the maintainer's
    call: ask and wait), then the final report in Italian, format in
    `CLAUDE.md`.

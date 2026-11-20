@@ -62,6 +62,7 @@ import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./revie
 import { BlockWriter, lookVariables, richSchema, toDoc } from "./schema";
 import { closedBlocks, keepsOutside, selectionInClosed } from "./closed";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
+import { composingKey } from "../../kit/ime";
 
 export { mountRichRibbon } from "./ribbon";
 export { mountRichSide } from "./side";
@@ -94,13 +95,40 @@ const escapePassesThrough = new Plugin({
   props: {
     handleDOMEvents: {
       keydown: (view, event) => {
-        if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return false;
+        if (event.key !== "Escape" || composingKey(event) || event.defaultPrevented) return false;
         if (view.someProp("handleKeyDown", (handle) => handle(view, event))) event.preventDefault();
         return true;
       },
     },
   },
 });
+
+/// Il cursore non resta mai fra le due metà di una coppia surrogata: un clic o
+/// una freccia non lo mettono lì, ma una posizione calcolata sì (#492). Da lì
+/// Invio spezzerebbe l'emoji in due surrogati soli, che nessun file può
+/// scrivere; il bordo torna indietro di uno, davanti al carattere intero.
+const wholeCharacters = new Plugin({
+  appendTransaction: (transactions, _old, state) => {
+    if (!transactions.some((tr) => tr.selectionSet || tr.docChanged)) return null;
+    const { selection } = state;
+    if (!(selection instanceof TextSelection)) return null;
+    const anchor = outsidePair(state.doc, selection.anchor);
+    const head = outsidePair(state.doc, selection.head);
+    if (anchor === selection.anchor && head === selection.head) return null;
+    return state.tr.setSelection(TextSelection.create(state.doc, anchor, head));
+  },
+});
+
+/// `pos`, o la posizione prima della coppia surrogata che `pos` taglia.
+function outsidePair(doc: PmNode, pos: number): number {
+  const $pos = doc.resolve(pos);
+  const offset = $pos.textOffset;
+  if (offset === 0) return pos;
+  const text = $pos.parent.child($pos.index()).text ?? "";
+  const before = text.charCodeAt(offset - 1);
+  const after = text.charCodeAt(offset);
+  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff ? pos - 1 : pos;
+}
 
 /// Ciò che il motore sa del testo che ha ricevuto.
 export type Intake =
@@ -117,6 +145,13 @@ export interface RichPendingEdit {
   /// Lo fa entrare nel documento. Per `undo`, ciò che Annulla deve togliere
   /// entra come ultimo passo suo.
   settle(step: "undo" | "redo"): void;
+}
+
+/// Il tasto scrive un carattere: una lettera, una cifra, un segno, lo spazio.
+/// Ctrl o ⌘ fanno un gesto, salvo con AltGr (Ctrl+Alt su Windows).
+function writesText(event: KeyboardEvent): boolean {
+  if (composingKey(event) || [...event.key].length !== 1) return false;
+  return !(event.ctrlKey || event.metaKey) || event.getModifierState("AltGraph");
 }
 
 /// Le azioni del catalogo che sono un passo della storia.
@@ -257,9 +292,19 @@ export class RichEngine {
     parent.setAttribute("role", "document");
     parent.setAttribute("aria-label", options.label());
     const enter = (event: KeyboardEvent) => {
-      if (event.target !== parent || event.key !== "Enter") return;
-      event.preventDefault();
-      this.focus();
+      if (event.target !== parent) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.focus();
+        return;
+      }
+      // Un carattere scritto col fuoco sul foglio (dopo un clic accanto alla
+      // carta o sulla sua barra di scorrimento) va nel documento, al cursore:
+      // il fuoco entra nel testo mentre il tasto passa, e il tasto resta suo.
+      // Senza, la regola dei tasti fuori dal foglio (`ui/off-sheet-keys.ts`)
+      // fermerebbe le lettere e lascerebbe passare lo spazio: la prima parola
+      // si perderebbe (IMP-723).
+      if (writesText(event) && this.editable()) this.focus();
     };
     parent.addEventListener("keydown", enter);
     this.#motion = new RichMotion({
@@ -280,6 +325,7 @@ export class RichEngine {
   #plugins(): Plugin[] {
     const plugins: Plugin[] = [
       history({ depth: RICH_HISTORY_DEPTH }),
+      wholeCharacters,
       tableShapeGuard,
       fillTableKeys,
       cellSelectionPlugin,
@@ -576,7 +622,7 @@ export class RichEngine {
   /// `event` scrive una lettera, e il cursore sta in un blocco chiuso: nello
   /// stato del motore o, dove il browser lo ha messo col clic, nel DOM.
   #typesIntoClosed(view: EditorView, event: KeyboardEvent): boolean {
-    if (!this.editable() || !this.hasClosed() || event.isComposing) return false;
+    if (!this.editable() || !this.hasClosed() || composingKey(event)) return false;
     if (event.ctrlKey || event.metaKey || [...event.key].length !== 1) return false;
     if (selectionInClosed(view.state.selection)) return true;
     const at = view.dom.ownerDocument.getSelection()?.anchorNode ?? null;

@@ -31,6 +31,7 @@ import { activeTab, layout } from "../../../state/layout";
 import { modeIcon, openModeMenu } from "../../../state/mode-menu";
 import { emit, on, state } from "../../../state/store";
 import { zoomBy } from "../../../state/zoom";
+import { keepFocusOnPress } from "../../../kit/keep-focus";
 import { iconEl } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
@@ -297,6 +298,9 @@ export function mountStatusBand(lifetime: Lifetime): void {
           el.type = "button";
           const id = item.id;
           el.addEventListener("click", () => statusOf()?.items().find((each) => each.id === id)?.open?.());
+          // Una voce che agisce sul posto (lo zoom al 100%) lascia il fuoco al
+          // documento; una che apre qualcosa lo dà a ciò che apre.
+          keepFocusOnPress(el, { when: () => statusOf()?.items().find((each) => each.id === id)?.inPlace === true });
         }
         items.set(item.id, el);
         if (item.beat && same) beats.push(el);
@@ -377,6 +381,8 @@ export function mountStatusBand(lifetime: Lifetime): void {
   };
   for (const { fit, button } of fits) {
     if (!button) continue;
+    // Adattare la carta è un comando sul posto: il fuoco resta al documento.
+    keepFocusOnPress(button, { lifetime });
     lifetime.listen(button, "click", () => {
       const paper = fitOf();
       if (!paper) return;
@@ -423,7 +429,11 @@ export function mountStatusBand(lifetime: Lifetime): void {
   lifetime.add(onEvent("setting_changed", ({ key }) => {
     if (key === "appearance.zoom") readZoom();
   }));
-  if (zoom) lifetime.listen(zoom, "click", () => void zoomBy(0));
+  if (zoom) {
+    lifetime.listen(zoom, "click", () => void zoomBy(0));
+    // Lo zoom torna al 100% sul posto: chi scriveva continua a scrivere.
+    keepFocusOnPress(zoom, { lifetime });
+  }
 
   lifetime.add(
     onLanguage(() => {

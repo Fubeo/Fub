@@ -280,6 +280,38 @@ describe("la cache condivisa", () => {
     third.dispose();
   });
 
+  it("dice una volta sola, per tutte le superfici, che manca il dizionario della lingua (IMP-615)", async () => {
+    const cache = new ProofCache();
+    const told: string[] = [];
+    let missing: string | null = "it_IT";
+    const base = host();
+    const { ports, change } = host({
+      queryIndex: async (query) => {
+        const response = await base.ports.queryIndex(query);
+        const value = (response as { value: unknown }).value as { language: { missing_dictionary: string | null } };
+        value.language.missing_dictionary = missing;
+        return response;
+      },
+      missingDictionary: (dictionary, language) => told.push(`${dictionary} ${language}`),
+    });
+    const first = new ProofClient(ports, cache);
+    await first.check(["uno speling"]);
+    await first.check(["due"]);
+    // Una seconda superficie, e un'impostazione cambiata che svuota la cache.
+    const second = new ProofClient(ports, cache);
+    change();
+    await second.check(["tre"]);
+    expect(told).toEqual(["it_IT it"]);
+    // Un altro dizionario mancante si dice anche lui; uno presente no.
+    missing = "pt_BR";
+    await second.check(["quattro"], "pt-BR");
+    missing = null;
+    await second.check(["cinque"], "en");
+    expect(told).toEqual(["it_IT it", "pt_BR pt"]);
+    first.dispose();
+    second.dispose();
+  });
+
   it("chiudere un client non svuota la cache degli altri", async () => {
     const { ports, checks } = host();
     const first = new ProofClient(ports);

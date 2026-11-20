@@ -5,6 +5,7 @@ import type { GridBytesWindow, GridCommandOutcome, GridWindowRequest } from "../
 import type { GridCommandEffect, GridHost } from "./engine";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
 import { settle, workbookHost, workbookMounted } from "./test-support";
+import { WEBKIT_COMPOSING } from "../../kit/testing";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -256,6 +257,26 @@ describe("GridEngine con una cartella di Excel", () => {
     await settle();
     expect(grid.given.map((request) => request.command.id)).toEqual(["shape.setText"]);
     expect(JSON.parse(grid.given[0].command.params)).toEqual({ id: 2, text: "Spese di casa" });
+    engine.destroy();
+  });
+
+  it("Esc e Ctrl+Invio a metà di una composizione restano al metodo d'immissione", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport } = await workbookMounted(grid);
+    await widened(viewport);
+    objectAt(host, "shape:2")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const field = host.querySelector<HTMLTextAreaElement>(".grid-object-text-editor")!;
+    field.value = "Spese";
+    for (const init of [{ key: "Escape" }, { key: "Enter", ctrlKey: true }]) {
+      for (const composing of [{ isComposing: true }, WEBKIT_COMPOSING]) {
+        const event = new KeyboardEvent("keydown", { ...init, ...composing, bubbles: true, cancelable: true });
+        field.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+        expect(host.querySelector(".grid-object-text-editor")).toBe(field);
+      }
+    }
+    await settle();
+    expect(grid.given).toEqual([]);
     engine.destroy();
   });
 });

@@ -158,6 +158,103 @@ fn isolation_denies_missing_or_corrupt_sites_and_honours_persisted_admins() {
     );
 }
 
+/// A1: senza un token valido un commit è sempre 401, qualunque cosa porti
+/// il corpo: custom JS, un `site_id` con `../`, un sito in sandbox o in deny,
+/// JSON rotto. Prima il preflight leggeva il corpo e il sidecar del sito
+/// senza autenticazione, e la risposta (422 o 200) ne rivelava la modalità.
+/// Lo stesso per il sync: niente parse né lock del vault senza sessione.
+#[test]
+fn an_unauthenticated_commit_or_sync_is_always_401() {
+    use fub_services::publish::site;
+    let dir = TempDir::new();
+    let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+    site::create_site(&dir.0, "aperto", "owner", None).unwrap();
+    fub_services::site_isolation::save_mode(&dir.0, "aperto", "sandbox", None).unwrap();
+    site::create_site(&dir.0, "chiuso", "owner", None).unwrap();
+    std::fs::create_dir_all(dir.0.join("fuori")).unwrap();
+    std::fs::write(dir.0.join("fuori/isolation.json"), br#"{"mode":"sandbox"}"#).unwrap();
+    let commit = |site: &str| {
+        json!({
+            "protocol": "fub-publish/1",
+            "site_id": site,
+            "manifest": { "site_id": site },
+            "pages": [{ "path": "index.html", "html": "<script>alert(1)</script>" }],
+            "assets": [],
+        })
+    };
+    for auth in [None, Some("Bearer non-un-token")] {
+        for site in ["../fuori", "aperto", "chiuso", "nuovo"] {
+            let (status, body) = request(
+                &state,
+                &dir.0,
+                "POST",
+                "/v1/publish/commit",
+                auth,
+                commit(site),
+            );
+            assert_eq!(status, 401, "{auth:?} {site}: {body}");
+        }
+        let (status, body) = request(
+            &state,
+            &dir.0,
+            "POST",
+            "/v1/publish/commit",
+            auth,
+            json!("non un commit"),
+        );
+        assert_eq!(status, 401, "{auth:?} malformed: {body}");
+        let (status, body) = request(
+            &state,
+            &dir.0,
+            "POST",
+            "/v1/sync/push",
+            auth,
+            json!({ "ops": [{ "vault_id": "../fuori" }] }),
+        );
+        assert_eq!(status, 401, "{auth:?} push: {body}");
+    }
+    assert!(state.lock().site_locks.is_empty(), "no site lock taken");
+    assert!(state.lock().vault_locks.is_empty(), "no vault lock taken");
+}
+
+/// A9: un client che tace più di `IO_SLICE` a metà testata o a metà corpo
+/// non riceve 400: la lettura si ritenta fino alla scadenza della fase.
+#[test]
+fn a_pause_longer_than_one_read_slice_is_not_a_bad_request() {
+    let dir = TempDir::new();
+    let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = {
+        let state = Arc::clone(&state);
+        let dir = dir.0.clone();
+        std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            serve(stream, Instant::now(), &state, &dir);
+        })
+    };
+    let pause = IO_SLICE + Duration::from_millis(400);
+    let mut client = TcpStream::connect(addr).unwrap();
+    client
+        .write_all(b"POST /v1/sync/invite HTTP/1.1\r\nHost: local")
+        .unwrap();
+    std::thread::sleep(pause);
+    client
+        .write_all(b"host\r\nContent-Length: 2\r\n\r\n{")
+        .unwrap();
+    std::thread::sleep(pause);
+    client.write_all(b"}").unwrap();
+    client.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut bytes = Vec::new();
+    client.read_to_end(&mut bytes).unwrap();
+    server.join().unwrap();
+    let head = String::from_utf8_lossy(&bytes);
+    assert!(
+        head.starts_with("HTTP/1.1 401 "),
+        "the whole request was read and reached the route: {head}"
+    );
+}
+
 #[test]
 fn a_new_site_drops_an_orphan_isolation_sidecar() {
     use fub_services::publish::site;
@@ -839,6 +936,16 @@ fn sync_http_rejects_unauthorized_unmatched_and_oversized_requests() {
     let (status, body) = exchange(&state, &dir.0, duplicate);
     assert_eq!(status, 400);
     assert_eq!(body["error"], "duplicate content-length");
+    // A2: due Host, uguali o diversi, sono ambigui come due Content-Length.
+    for hosts in [
+        "Host: localhost\r\nHost: evil.test\r\n",
+        "Host: localhost\r\nhost: localhost\r\n",
+    ] {
+        let wire = format!("GET /v1/sync/status HTTP/1.1\r\n{hosts}\r\n");
+        let (status, body) = exchange(&state, &dir.0, wire.as_bytes());
+        assert_eq!(status, 400, "{hosts:?}");
+        assert_eq!(body["error"], "duplicate host");
+    }
     let oversized_pull =
         b"POST /v1/sync/pull HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048577\r\n\r\n";
     let (status, body) = exchange(&state, &dir.0, oversized_pull);

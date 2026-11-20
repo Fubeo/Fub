@@ -1,11 +1,15 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { MathEditor } from "./editor";
 import { attachPalette } from "./palette";
+import { drawn, MATH_READY_MS, mathReady } from "./test-drawn";
 
 // La tavolozza sotto la formula toccata (T62, E27): gli otto pezzi e «Tutti»,
 // i sette gruppi, la ricerca a parole, il nome in fondo; tutta da tastiera.
+
+// KaTeX e i pezzi che arrivano con un `import()` qui ci sono già.
+beforeAll(mathReady, MATH_READY_MS);
 
 beforeEach(() => {
   // KaTeX non disegna in quirks mode, e happy-dom non dice il suo modo.
@@ -19,7 +23,7 @@ afterEach(() => {
   Reflect.deleteProperty(document, "compatMode");
 });
 
-/// KaTeX si carica a parte e disegna al fotogramma dopo.
+/// Il disegno al fotogramma dopo (KaTeX è già caricato da `mathReady`).
 const settle = () => new Promise((done) => setTimeout(done, 40));
 
 async function open(tex: string) {
@@ -30,7 +34,7 @@ async function open(tex: string) {
   const palette = attachPalette(editor, life);
   document.body.append(editor.element);
   editor.focus();
-  await settle();
+  await drawn(".cm-fub-mx-surface", editor.element);
   const root = editor.element;
   const field = root.querySelector<HTMLTextAreaElement>(".cm-fub-mx-input")!;
   const $ = <T extends HTMLElement = HTMLElement>(selector: string) => root.querySelector<T>(selector)!;
@@ -129,6 +133,15 @@ describe("la tavolozza", () => {
     // Invio nel campo mette il primo trovato.
     find.value = "alfa";
     find.dispatchEvent(new Event("input", { bubbles: true }));
+    // Invio ed Esc che chiudono una composizione (WebKit: codice 229) restano
+    // del campo: niente simbolo, la tavolozza resta.
+    const before = changes.length;
+    for (const name of ["Enter", "Escape"]) {
+      const composing = new KeyboardEvent("keydown", { key: name, keyCode: 229, bubbles: true, cancelable: true });
+      find.dispatchEvent(composing);
+      expect(composing.defaultPrevented, name).toBe(false);
+    }
+    expect(changes.length).toBe(before);
     find.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(changes[changes.length - 1]).toBe("x\\alpha");
   });

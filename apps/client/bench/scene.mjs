@@ -18,7 +18,7 @@
 //
 // # Perché `.mjs` e non `.ts`
 //
-// Perché lo leggono in due, e uno dei due è Node: il fotografo (`foto.mjs`) gira
+// Perché lo leggono anche programmi di Node: il fotografo (`photos.mjs`) gira
 // fuori dal browser e fuori da Vite. È la stessa riga di confine del
 // `tsconfig.json` di questa cartella — **`.ts` è del browser, `.mjs` è di
 // Node** — e tenerla vuol dire che il fotografo non ha bisogno di un
@@ -917,6 +917,46 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForFunction(() => document.activeElement?.matches('.base-cal-day[data-day="2026-08-13"]'));
     },
   },
+  // **La vista Mappa**, su `?base=mappa`: otto musei del mondo e un
+  // fornitore di tessere di prova. Con `tessere=0` la riga di macchina è
+  // vuota e la mappa dice «tessere non ammesse» col rimando alle
+  // Impostazioni; con `tessere=1` il sito è ammesso, «Attiva» è il consenso e
+  // le tessere arrivano dall'host finto.
+  {
+    id: "base-mappa-non-ammesse",
+    title: "Base: la Mappa offline, con le tessere non ammesse e il rimando alle Impostazioni",
+    query: "base=mappa&tessere=0",
+    prepare: openMap,
+  },
+  {
+    id: "base-mappa-consenso",
+    title: "Base: la Mappa offline con il sito ammesso, prima del consenso",
+    query: "base=mappa&tessere=1",
+    prepare: openMap,
+  },
+  {
+    id: "base-mappa-tessere",
+    title: "Base: la Mappa con le tessere arrivate dopo «Attiva»",
+    query: "base=mappa&tessere=1",
+    prepare: openMapTiles,
+  },
+  {
+    id: "base-mappa-tessere-stretta",
+    title: "Base: la Mappa con le tessere nella finestra minima, 800 px",
+    query: "base=mappa&tessere=1",
+    viewport: NOTE_NARROW,
+    prepare: openMapTiles,
+  },
+  {
+    id: "settings-tessere",
+    title: "Le preferenze: Privacy, i siti delle tessere delle mappe vuoti e OpenStreetMap con un clic",
+    query: "tessere=0",
+    prepare: async (page) => {
+      await page.click("#open-settings");
+      await page.waitForSelector('#settings-body .setting-row[data-setting-key="map.tile-hosts"] .setting-list-add');
+      await page.$eval('.setting-row[data-setting-key="map.tile-hosts"]', (row) => row.scrollIntoView({ block: "start" }));
+    },
+  },
   // **La linea del tempo** (T34), su `?base=tempo`: otto settimane dal 10
   // agosto 2026 (oggi il 19), le opere dalla richiesta alla consegna: una
   // tagliata a sinistra, una rovesciata, un punto, una con l'ora, una oltre i
@@ -1594,6 +1634,11 @@ export const SCENE = touchLast(onPage("shell", [
       await selectWords(page, "Questa è la nota");
       await page.waitForSelector(".selection-bubble:not([hidden]) .mini-bar [data-command='markdown.bold']");
       if (colors) {
+        // La bolla ferma prima del clic (#511): con un suo menu aperto la bolla
+        // non si riposa più (`selection-bubble.ts`, `holding`), e un clic che
+        // arrivava mentre un riposizionamento era ancora in coda la lasciava,
+        // col pannello dei colori, 2 px più in là in una corsa su tante.
+        await settleBar(page);
         await page.click(".selection-bubble .mini-bar [data-command='mini-bar.color']");
         await page.waitForSelector(".mini-bar-colors .mini-bar-swatch");
       }
@@ -1973,9 +2018,10 @@ export const SCENE = touchLast(onPage("shell", [
     ...(viewport ? { viewport } : {}),
     prepare: async (page) => {
       await openLive(page, [], "top");
-      // Il grafico ha il suo disegno e la scheda persa il suo avviso.
-      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img');
-      await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost');
+      // Il grafico ha il suo disegno e la scheda persa il suo avviso. Se uno
+      // dei due non arriva, l'errore dice quale e com'erano le schede (#505).
+      await waitForCardPart(page, '.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet-chart img', "il disegno del grafico «Vendite»");
+      await waitForCardPart(page, '.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-lost', "l'avviso della scheda persa");
       if (scroll === "table") {
         // La torta si disegna quando entra in vista.
         await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .tb-frame")?.scrollIntoView({ block: "start" }));
@@ -1988,13 +2034,6 @@ export const SCENE = touchLast(onPage("shell", [
       if (scroll === "lost") {
         await page.evaluate(() => document.querySelector(".pane.focus .pane-editor .canvas-card-lost")?.closest(".live-card")?.scrollIntoView({ block: "end" }));
       }
-      // Le violazioni di Mermaid fuori vista: come nelle scene dei diagrammi.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       if (menu) {
         await page.click('.pane.focus .pane-editor .tb-grid [data-row="1"][data-col="0"]', { button: "right" });
@@ -2381,17 +2420,6 @@ export const SCENE = touchLast(onPage("shell", [
         const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
         return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
       });
-      // Mermaid scrive `style="font-family: …"` sul `<div>` dove misura
-      // (`appendDivSvgG`), e la CSP lo rifiuta: succede a ogni disegno, da
-      // prima di queste scene, dentro il contenitore fuori vista che
-      // `ui/mermaid.ts` toglie subito. Quelle violazioni si tolgono dal conto;
-      // ogni altra resta.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       // Il sorgente di un diagramma disegnato è nascosto, col suo «Copia»:
       // conta ciò che si vede. Con un errore il sorgente c'è, ed è suo.
@@ -2436,14 +2464,6 @@ export const SCENE = touchLast(onPage("shell", [
         const all = [...document.querySelectorAll(".pane.focus .pane-editor .mermaid-diagram")];
         return all.length > 0 && all.every((figure) => figure.dataset.state === "ready");
       });
-      // Lo stile in linea del contenitore dove Mermaid misura (#473), come
-      // nelle scene qui sopra.
-      await page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
   })),
@@ -2469,13 +2489,6 @@ export const SCENE = touchLast(onPage("shell", [
         return all.length > 0 && all.every((figure) => figure.dataset.state !== "loading");
       });
       await ready();
-      // Lo stesso stile in linea di Mermaid delle scene qui sopra (#473).
-      const forgetMermaidStyle = () => page.evaluate(() => {
-        const found = globalThis.__fubCsp;
-        for (let i = found.length - 1; i >= 0; i--) {
-          if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-        }
-      });
       if (gesture === "ingrandisci") {
         // Dal menu del tasto destro: in Scrittura il clic porta il cursore nel recinto.
         const box = await page.locator(".pane.focus .pane-editor .mermaid-diagram img").first().boundingBox();
@@ -2485,7 +2498,6 @@ export const SCENE = touchLast(onPage("shell", [
         await page.click(".diagram-menu [data-action='enlarge']");
         await page.waitForSelector(".lightbox.lightbox-diagram");
         await page.waitForFunction(() => document.getAnimations().length === 0);
-        await forgetMermaidStyle();
         return;
       }
       await page.waitForSelector(".pane.focus .pane-editor .cm-fub-diagram-live .mermaid-diagram[data-state='ready']");
@@ -2507,7 +2519,6 @@ export const SCENE = touchLast(onPage("shell", [
       });
       await page.waitForFunction(() => document.getAnimations().length === 0);
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      await forgetMermaidStyle();
     },
   })),
   // I commenti (T22): il segno nel margine con le iniziali e il numero dei
@@ -2564,6 +2575,55 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForSelector(".slash-panel");
       // Poi due fotogrammi, perché il pannello si posi.
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+  })),
+  // Il «/» sull'ultima riga di una nota scorsa fino in fondo: il menu si apre
+  // sopra la riga e la vista non si muove. Nella WebView di Linux la vista
+  // scendeva di una riga: mentre CodeMirror ridisegna la riga, il testo è per
+  // un attimo più corto, e a fondo nota lo scorrimento si accorciava con lui.
+  // La scena fa accorciare il testo per un attimo anche qui, poi scrive il «/».
+  ...[
+    ["slash-10-fondo", "Il menu «/» sull'ultima riga di una nota scorsa fino in fondo: sopra la riga, la vista ferma", null],
+    ["slash-11-fondo-stretta", "Il menu «/» a fondo nota nella finestra minima: sopra la riga, la vista ferma", NOTE_NARROW],
+  ].map(([id, title, viewport]) => ({
+    id,
+    title,
+    query: "live=fondo-nota&slash=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "bottom");
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      // Di nuovo in fondo: la prima misura di CodeMirror allunga la nota di
+      // qualche pixel dopo lo scorrimento di `openLive`.
+      await page.evaluate(async () => {
+        const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+        const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+        view.scrollDOM.scrollTop = view.scrollDOM.scrollHeight;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      });
+      const before = await caretLinePlace(page);
+      if (before.scrollTop < before.maxScroll - 1) throw new Error(`la nota non è scorsa fino in fondo: ${before.scrollTop} di ${before.maxScroll}`);
+      const shrunk = await page.evaluate(async () => {
+        const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+        const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+        // Come CodeMirror quando ridisegna una riga: per un attimo l'ultima
+        // riga non c'è, e la disposizione si calcola così.
+        const last = view.contentDOM.lastElementChild;
+        last.style.display = "none";
+        void view.scrollDOM.scrollHeight;
+        last.style.display = "";
+        return view.scrollDOM.scrollTop;
+      });
+      if (shrunk !== before.scrollTop) throw new Error(`il testo accorciato per un attimo sposta la vista: da ${before.scrollTop} a ${shrunk} px`);
+      await page.keyboard.type("/");
+      await page.waitForSelector(".slash-panel");
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const after = await caretLinePlace(page);
+      if (after.scrollTop !== before.scrollTop || Math.abs(after.lineTop - before.lineTop) > 0.5) {
+        throw new Error(`il «/» a fondo nota sposta la vista: scorrimento da ${before.scrollTop} a ${after.scrollTop} px, riga da ${before.lineTop} a ${after.lineTop}`);
+      }
+      const above = await page.$eval(".slash-panel", (panel) => panel.classList.contains("cm-tooltip-above"));
+      if (!above) throw new Error("a fondo nota il menu «/» non si apre sopra la riga");
     },
   })),
   // La Base nella nota (T18, E12, E19): incorporata, si allarga oltre la
@@ -3669,14 +3729,6 @@ async function openExportBlockMenu(page, text) {
     return drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
       && document.querySelector(".export-space .export-fascia .mermaid-diagram img") !== null;
   }, null, { timeout: 15_000 });
-  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
-  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
-  await page.evaluate(() => {
-    const found = globalThis.__fubCsp;
-    for (let i = found.length - 1; i >= 0; i--) {
-      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-    }
-  });
   const band = text === null
     ? page.locator(".export-space .export-fascia:has(.mermaid-diagram)").first()
     : page.locator(".export-space .export-fascia", { hasText: text }).first();
@@ -3704,14 +3756,6 @@ async function openExportDiagrams(page) {
     return /^\d/.test(pages) && drawn.length > 0 && drawn.every((figure) => figure.dataset.state !== "loading")
       && document.querySelector(".export-space .export-slot .export-fascia") !== null;
   }, null, { timeout: 15_000 });
-  // Mermaid scrive `style` sul `<div>` dove misura, e la CSP lo rifiuta
-  // (vedi le scene `diagramma-*`): quelle violazioni si tolgono dal conto.
-  await page.evaluate(() => {
-    const found = globalThis.__fubCsp;
-    for (let i = found.length - 1; i >= 0; i--) {
-      if (found[i].directive === "style-src-attr" && found[i].blocked === "inline") found.splice(i, 1);
-    }
-  });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
@@ -4066,6 +4110,26 @@ async function expectVeilOnCard(page, card) {
   if (wrong) throw new Error(`il velo non sta sulla scheda: ${wrong}`);
 }
 
+/// Aspetta un pezzo di una scheda della Live. Se non arriva, l'errore nomina
+/// il pezzo e il selettore, e dice com'era ogni scheda del riquadro: la specie,
+/// lo stato e il modo della scheda, lo stato della sua vista e il suo testo.
+/// Il rapporto del fotografo tiene la prima riga dell'errore, quindi tutto sta
+/// su una riga.
+async function waitForCardPart(page, selector, what) {
+  try {
+    await page.waitForSelector(selector);
+  } catch (error) {
+    const cards = await page.evaluate(() =>
+      [...document.querySelectorAll(".pane.focus .pane-editor .live-card")].map((card) => {
+        const view = card.querySelector("[data-card-state]:not(.live-card)");
+        const text = (card.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+        return `${card.dataset.cardKind ?? "?"} ${card.dataset.cardState ?? "?"}/${card.dataset.cardMode ?? "-"} vista ${view?.dataset.cardState ?? "-"} «${text}»`;
+      })).catch(() => ["la pagina non risponde"]);
+    const first = String(error?.message ?? error).split("\n")[0];
+    throw new Error(`${what} non è arrivato (${selector}): ${first}; schede: ${cards.length === 0 ? "nessuna" : cards.join(" · ")}`);
+  }
+}
+
 async function openLive(page, keys, scroll, mode = "live_preview") {
   const doc = await page.evaluate(() => globalThis.__fubLiveBench?.doc ?? null);
   if (doc === null) throw new Error("la pagina non ha la nota della Live");
@@ -4103,6 +4167,20 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     else await page.keyboard.type(key);
   }
   await settleLive(page, scroll === "bottom");
+}
+
+/// Dove sta la riga del cursore nella nota a fuoco: lo scorrimento, quanto può
+/// scorrere al più e il bordo alto della riga nella finestra.
+function caretLinePlace(page) {
+  return page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const view = findTextEditorOrThrow(document.querySelector(".pane.focus .pane-editor .cm-editor").parentElement);
+    const { node } = view.domAtPos(view.state.selection.main.head);
+    const line = (node instanceof Element ? node : node.parentElement)?.closest(".cm-line");
+    if (!line) throw new Error("il cursore non sta in una riga");
+    const scroller = view.scrollDOM;
+    return { scrollTop: scroller.scrollTop, maxScroll: scroller.scrollHeight - scroller.clientHeight, lineTop: line.getBoundingClientRect().top };
+  });
 }
 
 /// La formula toccata (T60). `inline`: → davanti alla formula in riga, poi
@@ -5075,6 +5153,29 @@ async function openCalendar(page) {
 }
 
 /// Apre la linea del tempo di `?base=tempo` e aspetta le sue barre.
+/// Apre la Mappa di `?base=mappa`: i segnaposto disegnati e la riga sotto la
+/// mappa scritta (dopo la lettura degli host ammessi).
+async function openMap(page) {
+  await page.evaluate(async () => {
+    const { openDocument } = await import("/src/state/document-controller.ts");
+    await openDocument("Opere.base");
+  });
+  await page.waitForFunction(() => {
+    const pane = document.querySelector(".pane.focus");
+    return (pane?.querySelectorAll(".base-map-marker").length ?? 0) > 0
+      && pane?.querySelector(".base-bar")?.getAttribute("aria-busy") !== "true"
+      && (pane?.querySelector(".base-map-enable") !== null || pane?.querySelector(".base-map-settings") !== null);
+  });
+}
+
+/// La Mappa con le tessere: «Attiva», poi le quattro tessere del livello 1.
+async function openMapTiles(page) {
+  await openMap(page);
+  await page.click(".pane.focus .base-map-enable");
+  await page.waitForFunction(() => document.querySelectorAll(".pane.focus .base-map-tiles image").length === 4);
+  await page.mouse.move(0, 0);
+}
+
 async function openTimeline(page) {
   await page.evaluate(async () => {
     const { openDocument } = await import("/src/state/document-controller.ts");

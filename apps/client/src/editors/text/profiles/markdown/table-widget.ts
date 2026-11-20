@@ -7,7 +7,7 @@
 // `dispatch` della tastiera (`userEvent: "input"`), quindi entrano nella
 // cronologia locale della superficie e nella sessione del documento come ogni
 // battuta; annulla e ripeti sono quelli nativi dell'editor.
-import { Prec, type Extension } from "@codemirror/state";
+import { Prec, Transaction, type Extension, type TransactionSpec } from "@codemirror/state";
 import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@codemirror/view";
 import { redo, undo } from "@codemirror/commands";
 import { resolvedLanguage } from "../../../../i18n/strings";
@@ -24,6 +24,7 @@ import {
   cellContentStart,
   parseTable,
   tableChanges,
+  tableChangesSince,
   tableWidth,
   type GridPosition,
   type ParsedTable,
@@ -91,6 +92,11 @@ class TableController {
   #widget: TableWidget;
   #parsed: ParsedTable;
   readonly #observer: ResizeObserver | null = null;
+  /// Le battute della cella aperta già scritte nel testo, fuori dalla
+  /// cronologia: `base` è la tabella prima della prima battuta, `last` com'è
+  /// dopo l'ultima. La scrittura di conferma le raccoglie in un solo passo
+  /// d'annulla (IMP-6100).
+  #typing: { readonly base: string; readonly last: string } | null = null;
 
   constructor(view: EditorView, widget: TableWidget, parsed: ParsedTable) {
     this.#view = view;
@@ -98,6 +104,7 @@ class TableController {
     this.#parsed = parsed;
     this.grid = new TableGrid({
       write: (next, select) => this.#write(next, select),
+      draft: (next, select) => this.#draft(next, select),
       readOnly: () => this.#view.state.readOnly || this.#widget.readOnly,
       undo: () => void undo({ state: this.#view.state, dispatch: (tr) => this.#view.dispatch(tr) }),
       redo: () => void redo({ state: this.#view.state, dispatch: (tr) => this.#view.dispatch(tr) }),
@@ -205,16 +212,78 @@ class TableController {
     const view = this.#view;
     const located = this.locate();
     if (!located || view.state.readOnly) return false;
-    const changes = tableChanges(located.parsed, next).map((change) => ({
+    const typing = this.#typing;
+    this.#typing = null;
+    // Le battute della cella sono già nel testo, fuori dalla cronologia: si
+    // torna alla tabella di prima e si scrive quella nuova nello stesso
+    // aggiornamento della vista. La cronologia registra un passo solo, da
+    // prima della cella a dopo; chi annulla la cella ritrova i byte di prima.
+    // Se intanto la tabella è cambiata da un'altra parte, le battute restano
+    // come sono e si scrive soltanto la differenza.
+    const base = typing !== null && typing.last === located.parsed.source && typing.base !== typing.last
+      ? parseTable(typing.base)
+      : null;
+    if (typing !== null && base !== null) {
+      const revert = view.state.update({
+        changes: { from: located.from, to: located.to, insert: withLineBreaks(view.state, typing.base) },
+        annotations: Transaction.addToHistory.of(false),
+        userEvent: "input",
+        // Rimette testo che c'era già: i filtri della battuta non c'entrano.
+        filter: false,
+      });
+      const transactions = [revert];
+      const spec = this.#changes(revert.state, located.from, base, next);
+      if (spec !== null) transactions.push(revert.state.update(spec));
+      pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
+      view.dispatch(transactions);
+      if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
+      return true;
+    }
+    const spec = this.#changes(view.state, located.from, located.parsed, next);
+    if (spec === null) return true;
+    pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
+    view.dispatch(spec);
+    // La stessa griglia è stata aggiornata sul posto: niente da rimettere.
+    if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
+    return true;
+  }
+
+  /// La battuta che porta la tabella `from`, letta come `parsed`, a `next`;
+  /// `null` se sono uguali.
+  #changes(state: EditorView["state"], from: number, parsed: ParsedTable, next: TableData): TransactionSpec | null {
+    const changes = tableChanges(parsed, next).map((change) => ({
+      from: from + change.from,
+      to: from + change.to,
+      insert: withLineBreaks(state, change.insert),
+    }));
+    return changes.length === 0 ? null : { changes, userEvent: "input" };
+  }
+
+  /// Una battuta nella cella aperta: entra nel testo subito, come ogni
+  /// battuta (sessione, bozza, salvataggio), ma fuori dalla cronologia. La
+  /// conferma la registra (`#write`).
+  #draft(next: TableData, selection: GridSelection): boolean {
+    const view = this.#view;
+    const located = this.locate();
+    if (!located || view.state.readOnly) return false;
+    // Una tabella cambiata sotto (un altro riquadro, un annulla) chiude la
+    // serie: da qui si riparte dalla tabella di adesso.
+    const typing = this.#typing !== null && this.#typing.last === located.parsed.source ? this.#typing : null;
+    const base = typing?.base ?? located.parsed.source;
+    const parsedBase = typing ? parseTable(base) : located.parsed;
+    if (!parsedBase) return false;
+    const changes = tableChangesSince(parsedBase, located.parsed.source, next).map((change) => ({
       from: located.from + change.from,
       to: located.from + change.to,
       insert: withLineBreaks(view.state, change.insert),
     }));
     if (changes.length === 0) return true;
+    const spec: TransactionSpec = { changes, userEvent: "input" };
     pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
-    view.dispatch({ changes, userEvent: "input" });
-    // La stessa griglia è stata aggiornata sul posto: niente da rimettere.
+    view.dispatch({ ...spec, annotations: Transaction.addToHistory.of(false) });
     if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
+    const after = this.locate();
+    this.#typing = after ? { base, last: after.parsed.source } : null;
     return true;
   }
 
@@ -517,6 +586,21 @@ const theme = EditorView.baseTheme({
   ".tb-add[hidden]": { display: "none" },
 });
 
+/// La selezione tutta dentro una tabella montata entra nella sua griglia,
+/// sulla cella dove sta: `true` se una tabella l'ha presa.
+function enterSelectedGrid(view: EditorView): boolean {
+  const main = view.state.selection.main;
+  if (view.state.selection.ranges.length > 1) return false;
+  for (const controller of mounted(view)) {
+    const located = controller.locate();
+    if (!located || main.from <= located.from || main.to >= located.to) continue;
+    const cell = cellAtOffset(located.parsed, main.head - located.from);
+    if (cell) queueMicrotask(() => controller.grid.focus(cell));
+    return true;
+  }
+  return false;
+}
+
 /// La parte della Live che conosce le griglie: la tastiera per entrarci, la
 /// griglia attiva che si spegne quando il fuoco torna al testo, e la
 /// selezione portata in una tabella da fuori che vi entra sulla cella giusta.
@@ -534,15 +618,12 @@ export function tableGrids(callbacks: TableWidgetCallbacks): Extension {
       // selezionata — entra nella griglia sulla cella di chi l'ha portata lì.
       // Vale anche per il fuoco che torna al testo con la selezione ancora lì:
       // scrivere nella sorgente nascosta di una tabella non è un gesto possibile.
-      const main = view.state.selection.main;
       if (view.state.selection.ranges.length > 1) return;
-      for (const controller of mounted(view)) {
-        const located = controller.locate();
-        if (!located || main.from <= located.from || main.to >= located.to) continue;
-        const cell = cellAtOffset(located.parsed, main.head - located.from);
-        if (cell) queueMicrotask(() => controller.grid.focus(cell));
-        return;
-      }
+      // La griglia di una tabella appena scritta (il «/», la barra) nasce col
+      // disegno, che viene dopo i plugin: si cerca anche lì, prima della
+      // battuta che segue, perché il testo vada nella cella e non accanto
+      // alla tabella.
+      if (!enterSelectedGrid(view)) queueMicrotask(() => { if (view.hasFocus) enterSelectedGrid(view); });
     }
   });
   return [

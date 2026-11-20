@@ -10,11 +10,11 @@ import { liveReveal, mathClassic, type RevealPolicy } from "../../../live-reveal
 import { CORPUS, LONG_FORMULA } from "./corpus";
 import { MathEditor } from "./editor";
 import { openLifetime } from "../../../../../ui/lifetime";
-import { loadLazyParts } from "../../../../../ui/lazy-part";
+import { MATH_READY_MS, mathReady } from "./test-drawn";
 
-// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
-// come dopo il riscaldamento: i gesti si guardano col loro codice.
-beforeAll(loadLazyParts);
+// KaTeX e i pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci
+// sono già, come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(mathReady, MATH_READY_MS);
 
 // La formula che si modifica toccandola (T60, E27), dentro la nota: con KaTeX
 // vero, perché i segni del cursore sono suoi. La geometria (il clic su
@@ -60,7 +60,7 @@ function mount(doc: string, anchor: number, options: Mount = {}): EditorView {
 }
 
 const press = (view: EditorView, key: string) => runScopeHandlers(view, new KeyboardEvent("keydown", { key }), "editor");
-/// KaTeX si carica a parte e disegna al fotogramma dopo.
+/// Il disegno al fotogramma dopo (KaTeX è già caricato da `mathReady`).
 const settle = () => new Promise((done) => setTimeout(done, 40));
 const input = () => document.querySelector<HTMLTextAreaElement>(".cm-fub-mx-input");
 const status = () => document.querySelector(".cm-fub-mx [role=status]")?.textContent ?? "";
@@ -193,6 +193,35 @@ describe("un blocco $$", () => {
     type(["Escape"]);
     expect(view.state.doc.toString()).toBe("a\n\n$$x$$\n");
     expect(view.state.selection.main.head).toBe(view.state.doc.length);
+  });
+
+  it("scritto a mano nella nota resta testo finché il cursore non ne esce (IMP-719)", async () => {
+    const view = mount("a\n\n", 3);
+    // I dollari e la formula scritti nella nota: la formula da toccare
+    // prenderebbe a metà i tasti che seguono.
+    view.dispatch({ changes: { from: 3, insert: "$$x^2$$" }, selection: { anchor: 8 }, userEvent: "input.type" });
+    await settle();
+    expect(document.querySelector(".cm-fub-mx-block")).toBeNull();
+    view.dispatch({ changes: { from: 8, insert: " +" }, selection: { anchor: 10 }, userEvent: "input.type" });
+    await settle();
+    expect(document.querySelector(".cm-fub-mx-block")).toBeNull();
+    // Fuori, e di nuovo dentro: si tocca come sempre.
+    view.dispatch({ selection: { anchor: 0 }, userEvent: "select" });
+    await settle();
+    view.dispatch({ selection: { anchor: 6 }, userEvent: "select" });
+    await settle();
+    expect(document.querySelector(".cm-fub-mx-block")).not.toBeNull();
+  });
+
+  it("chiuso scrivendo `$$`, il cursore va in una riga nuova e non davanti al testo dopo", async () => {
+    const doc = "a\n\n$$x$$\n# T";
+    const view = mount(doc, 0);
+    view.dispatch({ selection: { anchor: doc.indexOf("x") } });
+    await settle();
+    input()!.focus();
+    type(["End", "$", "$"]);
+    expect(view.state.doc.toString()).toBe("a\n\n$$x$$\n\n# T");
+    expect(view.state.selection.main.head).toBe("a\n\n$$x$$\n".length);
   });
 });
 

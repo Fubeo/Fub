@@ -93,6 +93,11 @@ vi.mock("./editors/core/bootstrap", () => ({
     if (!box.bootstrap) throw new Error("il bootstrap vero non è stato caricato");
     box.bootstrap.setComponentEditors(...args);
   },
+  // Chi legge le forme sintattiche lo dice il bootstrap vero.
+  readsSyntaxForms: (doc: string) => {
+    if (!box.bootstrap) throw new Error("il bootstrap vero non è stato caricato");
+    return box.bootstrap.readsSyntaxForms(doc);
+  },
 }));
 
 /// La famiglia finta: due modalità con id suoi, il testo tenuto com'è, e

@@ -50,6 +50,27 @@ vault spostato riparte come replica nuova, e la cartella del percorso vecchio
 non viene cancellata. I file di una versione precedente, scritti direttamente
 in `sync/` e condivisi da tutti i vault, non vengono adottati né cancellati.
 
+Un passaggio tiene il cursore (`cursor.json`) in memoria e lo scrive con una
+rename atomica soltanto quando cambia: dopo gli ack del push, ogni 512 op
+applicati e a fine pagina del pull, prima di uscire per un errore e alla fine.
+Un passaggio senza cambiamenti non lo riscrive. Prima del primo op applicato
+il pull scrive nel cursore `"pulling": true`, e lo toglie a pull finito; il
+campo manca quando è falso. Dopo un crollo fra due scritture sul disco restano
+file scaricati che il cursore non nomina: un passaggio che trova il segno fa
+prima un pull da solo, che riceve di nuovo quegli op e li riconosce senza
+riscriverli, e solo dopo il push, così non li rimanda al servizio come
+modifiche locali. Un file cambiato davvero dopo il crollo diventa un conflitto,
+con i byte scaricati nella copia accanto. Un passaggio di solo push non fa il
+pull prima. Il servizio scarta un push ripetuto per `op_id`.
+
+Un passaggio non apre i file fermi: un file si legge solo se l'impronta che
+l'indice del workspace tiene per lui manca o non è quella sincronizzata.
+L'indice la lega a misura, data, timbro di cambio e identità del file e la
+ricontrolla alla scansione d'apertura, così un file cambiato ad app chiusa si
+legge anche con la stessa misura e la data rimessa com'era. In un processo
+aperto, un passaggio al giorno non si fida dell'indice e rilegge tutto, per un
+evento del watcher perso.
+
 Sync e pubblicazione leggono il token da `FUB_SERVICES_TOKEN_FILE`, poi da
 `FUB_SERVICES_TOKEN`, poi da `services-token`. Il file vale soltanto se è
 regolare, non è un collegamento e, su Unix, è leggibile dal solo proprietario,

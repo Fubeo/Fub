@@ -2,14 +2,20 @@
 // costanti che valgono dove una molla non serve.
 //
 // Una molla si integra a passo fisso (Eulero semi-implicito, 1/480 s) e si
-// campiona a 60 Hz. La stessa tabella di campioni dà i fotogrammi chiave a
-// `animate` e la posa a metà corsa a chi la interrompe; lo stesso passo muove
-// i valori vivi di `springValue`. Niente `linear()` e niente forma chiusa: un
-// solo integratore, uguale ovunque.
+// campiona al ritmo dello schermo (`samplePeriodMs`, da 60 a 240 Hz): il
+// browser interpola in linea retta fra due fotogrammi chiave, e a 180 Hz una
+// tabella a 60 Hz piegava la velocità ogni tre fotogrammi. La traiettoria è
+// la stessa a ogni ritmo: i campioni la leggono, fra due passi in linea retta.
+// La stessa tabella di campioni dà i fotogrammi chiave a `animate` e la posa a
+// metà corsa a chi la interrompe; lo stesso passo muove i valori vivi di
+// `springValue`. Niente `linear()` e niente forma chiusa: un solo integratore,
+// uguale ovunque.
 //
 // Unità: le durate sono in millisecondi e le velocità in unità al
 // millisecondo, come quelle che danno i gesti. Rigidezza e smorzamento restano
 // al secondo, come nei numeri del disegno.
+
+import { screenPeriodMs } from "../theme/frame-rate";
 
 export type SpringName = "snap" | "soft" | "wide" | "elastic" | "jelly";
 
@@ -44,13 +50,23 @@ export const EXIT_SAFETY_MS = 600;
 /// L'attesa prima di mostrare uno scheletro (ms).
 export const SKELETON_DELAY_MS = 120;
 
-/// Il periodo dei campioni (ms): 60 Hz.
+/// Il periodo dei campioni di serie (ms): 60 Hz, finché lo schermo non è noto.
+/// È anche il più lungo: uno schermo più lento non dirada i campioni.
 export const SAMPLE_MS = 1000 / 60;
+/// Il periodo più corto dei campioni (ms): 240 Hz. Oltre, i fotogrammi chiave
+/// costano più di quanto l'occhio guadagna.
+export const MIN_SAMPLE_MS = 1000 / 240;
+
+/// Il periodo dei campioni di una molla (ms): quello dello schermo
+/// (`screenPeriodMs`), fra `MIN_SAMPLE_MS` e `SAMPLE_MS`.
+export function samplePeriodMs(): number {
+  return Math.min(SAMPLE_MS, Math.max(MIN_SAMPLE_MS, screenPeriodMs()));
+}
 /// Una molla che non si assesta entro qui viene chiusa sul bersaglio (ms). È
 /// per i parametri degeneri di una pelle: le cinque di serie stanno sotto 1,2 s.
 export const SPRING_MAX_MS = 2000;
 
-/// Il passo dell'integrazione (s): otto passi per campione.
+/// Il passo dell'integrazione (s): otto passi per campione a 60 Hz.
 const STEP_S = 1 / 480;
 /// Le soglie dell'assestamento: lo spostamento residuo è una frazione della
 /// corsa, mai sotto un minimo assoluto; la velocità (al secondo) vi è legata.
@@ -104,29 +120,53 @@ export interface SpringTravel {
 }
 
 export interface SpringSamples {
-  /// Un valore ogni `SAMPLE_MS`: il primo è `from`, l'ultimo è esattamente `to`.
+  /// Un valore ogni `period`: il primo è `from`, l'ultimo è esattamente `to`.
   values: number[];
-  /// `(values.length - 1) * SAMPLE_MS`.
+  /// `(values.length - 1) * period`.
   duration: number;
+  /// Il periodo dei campioni (ms).
+  period: number;
 }
 
-/// Campiona una molla da `from` a `to` fino all'assestamento. Pura: gli stessi
-/// argomenti danno gli stessi campioni.
-export function sampleSpring(spring: Spring, travel: SpringTravel): SpringSamples {
+/// Campiona una molla da `from` a `to` fino all'assestamento, un valore ogni
+/// `period` ms (di serie `samplePeriodMs()`). Pura negli argomenti: gli
+/// stessi danno gli stessi campioni. L'integrazione va sempre a `STEP_S`;
+/// un campione che cade fra due passi sta sulla retta che li unisce, così
+/// ogni ritmo legge la stessa traiettoria e l'assestamento si decide sui
+/// campioni, come prima.
+export function sampleSpring(
+  spring: Spring,
+  travel: SpringTravel,
+  period: number = samplePeriodMs(),
+): SpringSamples {
   const { from, to } = travel;
   const precision = restPrecision(to - from, travel.precision);
   const state: SpringState = { x: from, v: (travel.velocity ?? 0) * 1000 };
+  const read: SpringState = { x: from, v: state.v };
   const values = [from];
-  const last = Math.round(SPRING_MAX_MS / SAMPLE_MS);
+  const last = Math.round(SPRING_MAX_MS / period);
+  let steps = 0;
+  let previousX = state.x;
+  let previousV = state.v;
   for (let index = 1; index <= last; index++) {
-    advanceSpring(spring, state, to, SAMPLE_MS / 1000);
-    if (index === last || springAtRest(state, to, precision)) {
+    // In passi: il campione `index` cade dopo `due` passi interi, più una parte.
+    const due = (index * period) / 1000 / STEP_S;
+    while (steps < due - 1e-9) {
+      previousX = state.x;
+      previousV = state.v;
+      advanceSpring(spring, state, to, STEP_S);
+      steps++;
+    }
+    const part = 1 - Math.max(0, steps - due);
+    read.x = previousX + (state.x - previousX) * part;
+    read.v = previousV + (state.v - previousV) * part;
+    if (index === last || springAtRest(read, to, precision)) {
       values.push(to);
       break;
     }
-    values.push(state.x);
+    values.push(read.x);
   }
-  return { values, duration: (values.length - 1) * SAMPLE_MS };
+  return { values, duration: (values.length - 1) * period, period };
 }
 
 /// La molla del livello «calmo»: stessa rigidezza, smorzamento almeno critico,
@@ -137,9 +177,10 @@ export function critical(spring: Spring): Spring {
   return { ...spring, damping: Math.max(spring.damping, 2 * Math.sqrt(spring.stiffness * mass)) };
 }
 
-/// Quanto dura l'assestamento di una corsa lunga 1, da ferma (ms).
+/// Quanto dura l'assestamento di una corsa lunga 1, da ferma (ms). Sempre sui
+/// campioni a 60 Hz: la molla calma non cambia con lo schermo.
 function settleMs(spring: Spring): number {
-  return sampleSpring(spring, { from: 0, to: 1 }).duration;
+  return sampleSpring(spring, { from: 0, to: 1 }, SAMPLE_MS).duration;
 }
 
 const calmed = new Map<string, Spring>();

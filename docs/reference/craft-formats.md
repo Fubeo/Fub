@@ -318,7 +318,18 @@ dei biglietti non impedisce di rinominare, spostare o cancellare il vault.
   memoria si svuota), finché una lease nuova ha la stessa identità, lo stesso
   peso e data e lo stesso timbro di cambiamento: riscrivere un file con lo
   stesso peso e rimettergli la data cambia il timbro, e la revisione si
-  rifà.
+  rifà. Il timbro (`ctime` su unix, `ChangeTime` su Windows) ha però la
+  grana dell'orologio del filesystem, e una riscrittura nella stessa grana
+  non lo cambia: la revisione si ricorda solo se il timbro era già più
+  vecchio di una grana, presa larga a due secondi
+  (`fub_kernel::storage::CHANGE_STAMP_GRAIN`, FAT e HFS+ compresi), quando
+  la lease si è aperta (`fub_kernel::transfer::change_stamp_settled`, con
+  l'orologio letto prima della lease). Un file cambiato da meno di due
+  secondi si rilegge quindi dai byte a ogni domanda, e un file oltre la
+  soglia di `craft.preview` resta senza revisione finché il job non la
+  calcola su una lease aperta dopo quei due secondi (#318). Sfugge solo un
+  filesystem di rete con l'orologio indietro di più della grana, come per
+  ogni lease su `stat`.
 - Che cosa si legge ancora intero, e dall'host: quando la lease non si apre
   (un supporto senza identità o timbro di cambiamento) il comando torna a
   `document_revision`, al peso dell'anagrafe e a `read_document_bytes` fino a

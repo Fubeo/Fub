@@ -125,7 +125,11 @@ ogni movimento del puntatore.
 
 ## La selezione di blocchi
 
-Esc seleziona il blocco del cursore; Shift+↑/↓ allarga ai fratelli, ↑/↓
+Esc seleziona il blocco del cursore, e soltanto lui: su una riga vuota o nel
+frontmatter non seleziona niente, e il velo copre le righe del blocco, non la
+testata della pagina che sta sopra la prima riga. Righe scritte con un solo a
+capo sono un paragrafo solo, come in Markdown, e Esc le sceglie insieme.
+Shift+↑/↓ allarga ai fratelli, ↑/↓
 passano al blocco vicino, Canc e Backspace eliminano i blocchi con le loro righe
 vuote, Mod+D duplica, Invio ed Esc tornano al testo. Copiare e tagliare
 lavorano sul Markdown dei blocchi interi. La selezione è del riquadro: un altro
@@ -224,6 +228,10 @@ delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
   colonna cresce, la casella fa un rimbalzo.
 - **La selezione.** Il velo dei blocchi scelti (`--doc-block-selected`) appare
   di blocco in blocco.
+
+Il cursore non segue la corsa: dal primo fotogramma sta dove andrà la lettera,
+e una battuta che non è un gesto (la lettera scritta subito dopo Invio) porta
+subito al loro posto le righe ancora in movimento.
 
 Oltre 60 righe in movimento, le righe si limitano a una dissolvenza. Col moto
 ridotto non si muove niente: chi nasce appare soltanto in dissolvenza, il

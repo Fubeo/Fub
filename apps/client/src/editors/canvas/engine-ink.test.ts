@@ -594,6 +594,171 @@ const inkChanges = (changes: readonly CanvasChange[]) =>
 const keyD = (target: EventTarget, type: "keydown" | "keyup", init: KeyboardEventInit = {}) =>
   target.dispatchEvent(new KeyboardEvent(type, { key: "d", bubbles: true, cancelable: true, ...init }));
 
+describe("Ctrl+Z subito dopo un tratto lo toglie", () => {
+  const press = (init: KeyboardEventInit) =>
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+
+  it("col fuoco sul pulsante dello strumento (la penna non prende il fuoco): su ogni scheda e sul vuoto", () => {
+    const { host, changes } = mounted();
+    const tool = host.querySelector<HTMLButtonElement>(".canvas-tool")!;
+    for (const [target, world, holder] of [
+      [card(host, "t"), across(0, 0), "t"],
+      [card(host, "img"), across(300, 0), "img"],
+      [card(host, "doc"), across(600, 0), "doc"],
+      [viewportOf(host), [[100, 300], [140, 320], [180, 330]], null],
+    ] as const) {
+      tool.focus();
+      pen(host, target, world);
+      expect(strokesOf(lastChange(changes).text, holder)).toHaveLength(1);
+      press({ key: "z", ctrlKey: true });
+      expect(lastChange(changes).text).toBe(BOARD);
+      // E Ctrl+Maiusc+Z lo rifà, poi Ctrl+Z lo toglie di nuovo.
+      press({ key: "Z", ctrlKey: true, shiftKey: true });
+      expect(strokesOf(lastChange(changes).text, holder)).toHaveLength(1);
+      press({ key: "z", ctrlKey: true });
+      expect(lastChange(changes).text).toBe(BOARD);
+    }
+  });
+
+  it("col fuoco fuori dalla lavagna", () => {
+    const { host, changes } = mounted();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    pen(host, card(host, "t"), across(0, 0));
+    pen(host, card(host, "t"), across(0, 20));
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(2);
+    press({ key: "z", ctrlKey: true });
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(1);
+    press({ key: "z", ctrlKey: true });
+    expect(lastChange(changes).text).toBe(BOARD);
+  });
+
+  it("sopra una scheda che si sta scrivendo: prima i tratti, poi il testo del campo, che resta aperto", () => {
+    const { engine, host, changes } = mounted();
+    card(host, "t").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const field = host.querySelector<HTMLTextAreaElement>("textarea")!;
+    field.focus();
+    field.value = "nota scritta";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    pen(host, field, across(0, 0));
+    pen(host, viewportOf(host), [[100, 300], [140, 320], [180, 330]]);
+    expect(changes).toHaveLength(3);
+    const written = changes[0]!.text;
+    expect(document.activeElement).toBe(field);
+
+    press({ key: "z", ctrlKey: true });
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(0);
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(1);
+    press({ key: "y", ctrlKey: true });
+    expect(strokesOf(lastChange(changes).text, null)).toHaveLength(1);
+    press({ key: "z", ctrlKey: true });
+    press({ key: "z", ctrlKey: true });
+    expect(lastChange(changes).text).toBe(written);
+    // Il campo è ancora aperto col suo testo, col fuoco.
+    expect(host.querySelector("textarea")).toBe(field);
+    expect(field.value).toBe("nota scritta");
+    expect(document.activeElement).toBe(field);
+    // Finiti i tratti, Ctrl+Z torna al campo: la tela non annulla il testo.
+    const count = changes.length;
+    press({ key: "z", ctrlKey: true });
+    expect(changes).toHaveLength(count);
+    expect(engine.hasPending).toBe(false);
+  });
+
+  it("un tasto scritto nel campo dopo il tratto lascia Ctrl+Z al campo", () => {
+    const { host, changes } = mounted();
+    card(host, "t").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const field = host.querySelector<HTMLTextAreaElement>("textarea")!;
+    field.focus();
+    pen(host, field, across(0, 0));
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(1);
+    press({ key: "a" });
+    const count = changes.length;
+    press({ key: "z", ctrlKey: true });
+    expect(changes).toHaveLength(count);
+  });
+});
+
+describe("i tratti sul testo di una scheda allargata o ristretta", () => {
+  const WITH_NOTE = JSON.stringify({
+    nodes: [
+      ...(JSON.parse(BOARD) as { nodes: Json[] }).nodes,
+      { id: "md", type: "file", x: 0, y: 300, width: 240, height: 120, file: "Appunti.md" },
+    ],
+    edges: [],
+  });
+  const widthOf = (text: string, id: string) => (JSON.parse(text) as { nodes: Json[] }).nodes.find((node) => node.id === id)!.width;
+  const reflow = (host: HTMLElement, id: string) => card(host, id).querySelector<HTMLElement>(":scope > .canvas-ink-reflow");
+  const resized = (text: string, sizes: Record<string, number>) => {
+    const doc = JSON.parse(text) as { nodes: Json[] };
+    for (const node of doc.nodes) if (typeof sizes[node.id as string] === "number") node.width = sizes[node.id as string];
+    return JSON.stringify(doc);
+  };
+
+  it("lo dice sulla scheda di testo e sulla nota Markdown finché la larghezza è un'altra, non sulle immagini", () => {
+    const { engine, host, changes } = mounted(WITH_NOTE);
+    pen(host, card(host, "t"), across(0, 0));
+    pen(host, card(host, "md"), across(0, 300));
+    pen(host, card(host, "img"), across(300, 0));
+    expect(reflow(host, "t")).toBeNull();
+    expect(reflow(host, "md")).toBeNull();
+
+    engine.syncDoc(resized(lastChange(changes).text, { t: 260, md: 180, img: 320 }));
+    const note = reflow(host, "t")!;
+    expect(note.getAttribute("role")).toBe("status");
+    expect(note.textContent).toContain("le sottolineature e i disegni sul testo potrebbero non stare più sulle parole");
+    expect(note.querySelector("button")!.textContent).toBe("Torna a 200 px");
+    expect(reflow(host, "md")!.querySelector("button")!.textContent).toBe("Torna a 240 px");
+    // Un'immagine scala i tratti col contenuto: niente da dire.
+    expect(reflow(host, "img")).toBeNull();
+
+    // L'altezza sola non rimanda a capo il testo.
+    const taller = JSON.parse(resized(lastChange(changes).text, { t: 200 })) as { nodes: Json[] };
+    taller.nodes.find((node) => node.id === "t")!.height = 300;
+    engine.syncDoc(JSON.stringify(taller));
+    expect(reflow(host, "t")).toBeNull();
+    engine.destroy();
+  });
+
+  it("«Torna a N px» rimette la larghezza dei tratti in un passo che Ctrl+Z annulla", () => {
+    const { engine, host, changes } = mounted();
+    pen(host, card(host, "t"), across(0, 0));
+    engine.syncDoc(resized(lastChange(changes).text, { t: 150 }));
+    const back = reflow(host, "t")!.querySelector<HTMLButtonElement>("button")!;
+    expect(back.getAttribute("aria-label")).toBe("Torna alla larghezza in cui sono stati scritti i tratti, 200 px");
+    back.click();
+    expect(widthOf(lastChange(changes).text, "t")).toBe(200);
+    expect(strokesOf(lastChange(changes).text, "t")).toHaveLength(1);
+    expect(reflow(host, "t")).toBeNull();
+    engine.undo();
+    expect(widthOf(lastChange(changes).text, "t")).toBe(150);
+    expect(reflow(host, "t")).not.toBeNull();
+    engine.destroy();
+  });
+
+  it("si vede già mentre si tira il bordo, e in sola lettura senza il pulsante", () => {
+    const { engine, host, changes } = mounted();
+    pen(host, card(host, "t"), across(0, 0));
+    const zoom = camera(host).zoom;
+    const grip = card(host, "t").querySelector<HTMLElement>('.canvas-resize[data-corner="se"]')!;
+    grip.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, buttons: 1, ...MOUSE, clientX: 100, clientY: 100 }));
+    viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, buttons: 1, ...MOUSE, clientX: 100 + 60 * zoom, clientY: 100 }));
+    // Prima di lasciare il bordo: la scheda è più larga e l'avviso c'è.
+    expect(reflow(host, "t")).not.toBeNull();
+    viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, buttons: 1, ...MOUSE, clientX: 100, clientY: 100 }));
+    expect(reflow(host, "t")).toBeNull();
+    viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, buttons: 1, ...MOUSE, clientX: 100 + 60 * zoom, clientY: 100 }));
+    viewportOf(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, ...MOUSE, clientX: 100 + 60 * zoom, clientY: 100 }));
+    expect(widthOf(lastChange(changes).text, "t")).not.toBe(200);
+    expect(reflow(host, "t")!.querySelector("button")).not.toBeNull();
+    engine.setReadOnly(true);
+    expect(reflow(host, "t")).not.toBeNull();
+    expect(reflow(host, "t")!.querySelector("button")).toBeNull();
+    engine.destroy();
+  });
+});
+
 describe("la gomma «Il tratto intero» e il tasto D", () => {
   it("la gomma sbiadisce i tratti presi e alla fine li cancella in un passo, anche su due livelli; l'annulla li rimette", () => {
     const { engine, host, changes } = mounted();

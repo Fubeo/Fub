@@ -9,8 +9,10 @@ import type { EditorChange } from "../../core/text-operation";
 import type { PdfEngine, PdfEngineLoader } from "../../media/pdf-view";
 import type { ResourceTransport } from "../../media/resource-port";
 import structure from "../../../theme/scrittoio/structure.css?raw";
+import { decodeInk, inkLength, inkPoint } from "../ink/codec";
 import { PDF_MODES } from "../modes";
 import { mountPdfSurface, type PdfPorts } from "./surface";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 const bando = Object.values(
   import.meta.glob("../../../__fixtures__/annotations/bando.fubann", { query: "?raw", import: "default", eager: true }) as Record<string, string>,
@@ -270,6 +272,14 @@ describe("le pagine", () => {
     field().value = "3";
     key("0", {}, field());
     expect(parent.querySelector(".draw-zoom-level")!.textContent).toBe(zoom);
+    // Invio a metà di una composizione (le cifre larghe di un metodo
+    // d'immissione) conferma il candidato, non porta alla pagina; Esc non
+    // rimette il numero di prima.
+    key("Enter", WEBKIT_COMPOSING, field());
+    key("Escape", WEBKIT_COMPOSING, field());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sheet().getAttribute("aria-label")).toBe("Annotazioni di «Bando.pdf», pagina 1 di 3");
+    expect(field().value).toBe("3");
     key("Enter", {}, field());
     await vi.waitFor(() => expect(sheet().getAttribute("aria-label")).toBe("Annotazioni di «Bando.pdf», pagina 3 di 3"));
     expect(parent.querySelector<HTMLButtonElement>(".pdf-page-next")!.disabled).toBe(true);
@@ -293,6 +303,70 @@ describe("le note", () => {
     // comincia dentro la pagina, a mezza misura dai bordi.
     expect(surface.buffer!.getDoc()).toMatch(/<g id="p0001" fub:page="1" fub:page-size="600 800">\n {4}<text id="o[a-z0-9]{8}" x="48" y="60"/);
   });
+
+  /// Un tocco senza movimento come lo manda il motore, con gli eventi del
+  /// mouse di compatibilità. Mouse e penna: `mousedown` subito dopo
+  /// `pointerdown`, sul foglio. Dito: `mousedown`, `mouseup` e `click` solo
+  /// dopo che il dito si è alzato, su ciò che sta sotto il punto in quel
+  /// momento: il dialogo, se il tocco l'ha appena aperto.
+  function tap(pointerType: "mouse" | "touch" | "pen", [x, y]: readonly [number, number]): void {
+    const target = sheet();
+    const init = { pointerId: pointerType === "touch" ? 2 : 1, pointerType, bubbles: true, cancelable: true, isPrimary: true, button: 0, clientX: x, clientY: y };
+    const pointer = (type: string, buttons: number): PointerEvent => {
+      const e = new PointerEvent(type, { ...init, buttons, pressure: buttons ? (pointerType === "pen" ? 0.5 : 1) : 0, width: pointerType === "touch" ? 2 : 1, height: pointerType === "touch" ? 2 : 1 });
+      Object.defineProperty(e, "timeStamp", { value: (clock += 8) });
+      return e;
+    };
+    const mouse = (type: string, at: EventTarget, buttons: number): void => {
+      at.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons, clientX: x, clientY: y }));
+    };
+    /// Ciò che sta sotto il punto adesso: happy-dom non ha impaginazione, e
+    /// il dialogo copre tutta la finestra.
+    const under = (): EventTarget => document.querySelector(".shell-dialog") ?? target;
+    target.dispatchEvent(pointer("pointerdown", 1));
+    if (pointerType !== "touch") mouse("mousedown", target, 1);
+    target.dispatchEvent(pointer("pointerup", 0));
+    if (pointerType === "touch") {
+      mouse("mousemove", under(), 0);
+      mouse("mousedown", under(), 1);
+    }
+    mouse("mouseup", under(), 0);
+    mouse("click", pointerType === "touch" ? under() : document.body, 0);
+  }
+
+  for (const pointer of ["mouse", "touch", "pen"] as const) {
+    it(`toccare la pagina con lo strumento Nota (${pointer}) apre il dialogo e la nota nasce lì (IMP-3807)`, async () => {
+      const { surface } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
+      await loaded("di 3");
+      key("n");
+      tap(pointer, [120, 200]);
+      const dialog = await vi.waitFor(() => {
+        const found = document.querySelector<HTMLElement>(".shell-dialog");
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      expect(dialog.querySelector("h2")!.textContent).toBe("Nuova nota");
+      expect(document.activeElement).toBe(dialog.querySelector("textarea"));
+      dialog.querySelector("textarea")!.value = "Verificare l'acconto.";
+      dialog.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+      await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('fub:note="Verificare l\'acconto."'));
+      // La riga della nota comincia nel punto toccato, nelle coordinate della pagina.
+      expect(surface.buffer!.getDoc()).toMatch(/<text id="o[a-z0-9]{8}" x="120" y="2\d\d(\.\d+)?"/);
+    });
+
+    it(`toccare fuori dalla pagina con lo strumento Nota (${pointer}) non apre il dialogo e non scrive niente`, async () => {
+      const { surface, changes } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
+      await loaded("di 3");
+      key("n");
+      // La pagina è 600 × 800 punti, dall'angolo in alto a sinistra.
+      tap(pointer, [650, 200]);
+      tap(pointer, [120, -30]);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(document.querySelector(".shell-dialog")).toBeNull();
+      expect(changes).toEqual([]);
+      expect(surface.buffer!.getDoc()).toBe(NEW);
+    });
+  }
 });
 
 describe("gli strumenti delle annotazioni", () => {
@@ -402,6 +476,100 @@ describe("la Lettura", () => {
     } finally {
       style.remove();
     }
+  });
+});
+
+describe("fuori dalla pagina", () => {
+  /// I punti del tratto scritto, nelle coordinate della pagina.
+  const inkPoints = (text: string): (readonly [number, number])[] => {
+    const ink = decodeInk(/fub:ink="([^"]+)"/.exec(text)![1]!);
+    return Array.from({ length: inkLength(ink) }, (_, i) => inkPoint(ink, i));
+  };
+
+  it("un tratto che comincia fuori non scrive niente, con ogni strumento che scrive", async () => {
+    const { surface, changes } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
+    await loaded("di 3");
+    // Sopra la pagina, come il tester nel margine grigio (IMP-4802), e a destra.
+    for (const tool of [() => key("P", { shiftKey: true }), () => key("p"), () => key("r"), () => key("l"), () => key("c")]) {
+      tool();
+      drag([[75, -84], [120, 40], [300, 60]]);
+      drag([[650, 100], [400, 100], [200, 110]]);
+    }
+    expect(changes).toEqual([]);
+    expect(surface.buffer!.getDoc()).toBe(NEW);
+    // Dentro la pagina si scrive come prima.
+    key("p");
+    drag([[100, 100], [200, 100], [300, 110]]);
+    expect(changes).toHaveLength(1);
+  });
+
+  it("un tratto che esce si ferma al bordo della pagina", async () => {
+    const { surface } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
+    await loaded("di 3");
+    key("p");
+    drag([[500, 100], [560, 100], [640, 100], [700, 100]]);
+    const points = inkPoints(surface.buffer!.getDoc());
+    expect(points[0]).toEqual([500, 100]);
+    expect(points[points.length - 1]).toEqual([600, 100]);
+    expect(Math.max(...points.map(([x]) => x))).toBe(600);
+  });
+
+  it("una forma che esce si ferma al bordo, e tenuta con Maiusc resta quadrata", async () => {
+    const { surface } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
+    await loaded("di 3");
+    key("c");
+    drag([[20, 20], [400, 400], [700, 900]]);
+    expect(surface.buffer!.getDoc()).toMatch(/<rect id="o[a-z0-9]{8}" x="20" y="20" width="580" height="780" fill="#000000"\/>/);
+    key("r");
+    const target = sheet();
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", shiftKey: true, bubbles: true }));
+    const shifted = (type: string, [x, y]: readonly [number, number], buttons: number): PointerEvent => {
+      const e = new PointerEvent(type, { ...MOUSE, bubbles: true, cancelable: true, isPrimary: true, button: type === "pointermove" ? -1 : 0, buttons, pressure: buttons ? 0.5 : 0, clientX: x, clientY: y, shiftKey: true });
+      Object.defineProperty(e, "timeStamp", { value: (clock += 8) });
+      return e;
+    };
+    target.dispatchEvent(shifted("pointerdown", [500, 600], 1));
+    target.dispatchEvent(shifted("pointermove", [650, 900], 1));
+    target.dispatchEvent(shifted("pointerup", [650, 900], 0));
+    expect(surface.buffer!.getDoc()).toMatch(/<rect id="o[a-z0-9]{8}" x="500" y="600" width="100" height="100"/);
+  });
+
+  it("fuori dalla pagina gli strumenti che scrivono lasciano la mira per il cursore normale", async () => {
+    mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
+    await loaded("di 3");
+    const hover = ([x, y]: readonly [number, number]): void => {
+      sheet().dispatchEvent(new PointerEvent("pointermove", { ...MOUSE, bubbles: true, button: -1, buttons: 0, clientX: x, clientY: y }));
+    };
+    hover([650, 100]);
+    expect(sheet().hasAttribute("data-off-page")).toBe(true);
+    // La punta dell'evidenziatore non si vede lì.
+    expect(sheet().hasAttribute("data-nib")).toBe(false);
+    hover([300, 100]);
+    expect(sheet().hasAttribute("data-off-page")).toBe(false);
+    expect(sheet().hasAttribute("data-nib")).toBe(true);
+    hover([300, -20]);
+    sheet().dispatchEvent(new PointerEvent("pointerleave", { ...MOUSE }));
+    expect(sheet().hasAttribute("data-off-page")).toBe(false);
+    expect(structure).toMatch(/\.draw-surface\[data-off-page\]:is\([^)]*\[data-tool="highlighter"\][^)]*\) \{\n {2}cursor: default;/);
+  });
+
+  it("un file con segni già fuori dalla pagina si apre com'era: niente si sposta e niente si scrive", async () => {
+    const old = NEW.replace(
+      "</svg>",
+      '  <g id="p0001" fub:page="1" fub:page-size="600 800">\n    <rect id="oaaaaaaaa" x="75" y="-84" width="100" height="10" fill="#000000"/>\n  </g>\n</svg>',
+    );
+    const { surface, changes } = mount(old, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
+    await loaded("di 3");
+    expect(notices()).toEqual([]);
+    expect(changes).toEqual([]);
+    expect(surface.buffer!.getDoc()).toBe(old);
+    // Si sceglie ancora, e un tratto nuovo sulla pagina lo lascia dov'è.
+    key("v");
+    drag([[60, -100], [200, -60]]);
+    expect(surface.selectedText!()?.primary).toMatch(/^<rect id="oaaaaaaaa" x="75" y="-84"/);
+    key("p");
+    drag([[100, 100], [200, 100], [300, 110]]);
+    expect(surface.buffer!.getDoc()).toContain('<rect id="oaaaaaaaa" x="75" y="-84" width="100" height="10" fill="#000000"/>');
   });
 });
 

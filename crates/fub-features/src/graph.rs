@@ -491,7 +491,9 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     let (nodes, edges) = if filter.show_orphans {
         (nodes, edges)
     } else {
-        drop_orphans(nodes, edges)
+        let isolated = isolated_documents(host, &nodes, &edges);
+        let named = property_connected(host, isolated)?;
+        drop_orphans_but(nodes, edges, &named)
     };
     let visible = nodes
         .iter()
@@ -658,6 +660,43 @@ fn group_of(host: &dyn ReadApi) -> Result<String, PluginError> {
     }
 }
 
+/// I vicini di `seeds` fino a `depth`, in una domanda al canale dati.
+fn neighbors(
+    host: &dyn ReadApi,
+    seeds: QueryExpr,
+    direction: LinkDirection,
+    depth: u8,
+) -> Result<Vec<NeighborRef>, PluginError> {
+    match host.query_index(IndexQuery::Neighbors {
+        seeds,
+        direction,
+        depth,
+        page: None,
+    })? {
+        IndexResult::Neighbors(n) => Ok(n.items),
+        other => Err(PluginError::Internal(
+            format!("neighbors query: off-topic response: {}", other.kind_name()).into(),
+        )),
+    }
+}
+
+/// Le voci di un controllo di salute del vault, tutte.
+fn health_issues(
+    host: &dyn ReadApi,
+    check: fub_abi::traits::HealthCheck,
+) -> Result<Vec<fub_abi::traits::HealthIssue>, PluginError> {
+    match host.query_index(IndexQuery::VaultHealth { check, page: None })? {
+        IndexResult::VaultHealth(page) => Ok(page.items),
+        other => Err(PluginError::Internal(
+            format!(
+                "vault health query: off-topic response: {}",
+                other.kind_name()
+            )
+            .into(),
+        )),
+    }
+}
+
 /// Il grafo locale: il seme più i suoi vicini fino a `depth`, con gli archi fra
 /// loro. Due domande al canale dati (i vicini, poi i documenti per i gruppi) e
 /// non una per nota: è la ragione per cui `Neighbors` prende un'espressione.
@@ -670,19 +709,7 @@ fn local_graph(
     let seeds = QueryExpr::of(fub_abi::query::QueryPredicate::Docs {
         docs: vec![fub_abi::model::DocId::new(seed)],
     });
-    let neighbors = match host.query_index(IndexQuery::Neighbors {
-        seeds,
-        direction,
-        depth,
-        page: None,
-    })? {
-        IndexResult::Neighbors(n) => n.items,
-        other => {
-            return Err(PluginError::Internal(
-                format!("neighbors query: off-topic response: {}", other.kind_name()).into(),
-            ))
-        }
-    };
+    let neighbors = neighbors(host, seeds, direction, depth)?;
     // Un insieme ordinato: la lista finale è ordinata comunque, e un hub con
     // migliaia di vicini non paga un confronto con tutti per ognuno.
     let mut unique = std::collections::BTreeSet::from([seed]);
@@ -768,9 +795,20 @@ fn keep_documents(
 }
 
 /// Toglie i nodi senza archi.
+#[cfg(test)]
 fn drop_orphans(
     nodes: Vec<String>,
     edges: Vec<serde_json::Value>,
+) -> (Vec<String>, Vec<serde_json::Value>) {
+    drop_orphans_but(nodes, edges, &std::collections::BTreeSet::new())
+}
+
+/// Toglie i nodi senza archi, tranne quelli di `kept` (le note collegate
+/// soltanto da un link nelle proprietà, che il grafo non disegna).
+fn drop_orphans_but(
+    nodes: Vec<String>,
+    edges: Vec<serde_json::Value>,
+    kept: &std::collections::BTreeSet<String>,
 ) -> (Vec<String>, Vec<serde_json::Value>) {
     let mut linked = std::collections::BTreeSet::new();
     for e in &edges {
@@ -778,8 +816,113 @@ fn drop_orphans(
         linked.insert(from);
         linked.insert(to);
     }
-    let nodes = nodes.into_iter().filter(|n| linked.contains(n)).collect();
+    let nodes = nodes
+        .into_iter()
+        .filter(|n| linked.contains(n) || kept.contains(n))
+        .collect();
     (nodes, edges)
+}
+
+/// Le note fra `nodes` che non hanno un arco disegnato: le sole che il filtro
+/// delle orfane potrebbe togliere.
+fn isolated_documents(
+    host: &dyn ReadApi,
+    nodes: &[String],
+    edges: &[serde_json::Value],
+) -> Vec<fub_abi::model::DocId> {
+    let mut linked = std::collections::BTreeSet::new();
+    for e in edges {
+        let (from, to) = endpoints(e);
+        linked.insert(from);
+        linked.insert(to);
+    }
+    nodes
+        .iter()
+        .filter(|n| !linked.contains(*n))
+        .map(|n| fub_abi::model::DocId::new(n.as_str()))
+        .filter(|doc| host.format_of(doc).is_some())
+        .collect()
+}
+
+/// Fra le note `isolated`, quelle che un link nelle proprietà collega a
+/// un'**altra** nota, in uno dei due versi: il filtro delle orfane le tiene,
+/// come tiene chi ha un arco del corpo.
+///
+/// La regola non sta qui. Chi è nominato lo dice il controllo di salute delle
+/// orfane, che nel kernel conta gli archi del corpo e quelli delle proprietà
+/// (`has_property_backlinks`, la nota che nomina sé stessa esclusa): una nota
+/// isolata che non è orfana, e che nessuna nota nomina nel corpo, è nominata
+/// in una proprietà. Chi nomina lo dice la foglia dei link nelle proprietà,
+/// chiesta con i bersagli che qualcuno nomina davvero: una nota che nomina
+/// soltanto sé stessa non è fra loro, finché nessun altro la nomina.
+fn property_connected(
+    host: &dyn ReadApi,
+    isolated: Vec<fub_abi::model::DocId>,
+) -> Result<std::collections::BTreeSet<String>, PluginError> {
+    use fub_abi::query::{PropertyLinkPredicate, QueryClause, QueryLiteral, QueryPredicate};
+    use std::collections::BTreeSet;
+    let mut kept = BTreeSet::new();
+    if isolated.is_empty() {
+        return Ok(kept);
+    }
+    let orphans: BTreeSet<String> =
+        health_issues(host, fub_abi::traits::HealthCheck::OrphanDocuments)?
+            .into_iter()
+            .map(|issue| issue.doc.to_string())
+            .collect();
+    // Chi nomina nel corpo una nota isolata è fuori dal grafo disegnato (una
+    // ricerca l'ha tolto): quella nota resta orfana per il disegno, come prima.
+    let named_in_body: BTreeSet<String> = neighbors(
+        host,
+        QueryExpr::docs(isolated.clone()),
+        LinkDirection::Inbound,
+        1,
+    )?
+    .into_iter()
+    .map(|r| r.via.to_string())
+    .collect();
+    for doc in &isolated {
+        let id = doc.as_str();
+        if !orphans.contains(id) && !named_in_body.contains(id) {
+            kept.insert(id.to_string());
+        }
+    }
+    let targets: Vec<fub_abi::model::DocId> = documents(host)?
+        .into_iter()
+        .filter(|doc| !orphans.contains(doc))
+        .map(fub_abi::model::DocId::new)
+        .collect();
+    if targets.is_empty() {
+        return Ok(kept);
+    }
+    let leaf = PropertyLinkPredicate { targets, key: None };
+    let naming = QueryExpr {
+        any: vec![QueryClause {
+            all: vec![
+                QueryLiteral {
+                    negated: false,
+                    predicate: leaf.into_predicate(),
+                },
+                QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Docs { docs: isolated },
+                },
+            ],
+        }],
+    };
+    let rows = match host.query_index(IndexQuery::Documents {
+        matching: naming,
+        sort: None,
+        select: fub_abi::traits::PropertySelect::None,
+        excerpts: fub_abi::traits::Excerpts::Omit,
+        page: None,
+    }) {
+        // Un host senza la foglia non sa niente dei link nelle proprietà.
+        Err(PluginError::Unserved(_)) => return Ok(kept),
+        answer => answer?.documents()?.items,
+    };
+    kept.extend(rows.into_iter().map(|row| row.doc.to_string()));
+    Ok(kept)
 }
 
 /// Raggruppamento per tag esatto: la faccetta individua i tag presenti nel
@@ -922,21 +1065,7 @@ fn missing_nodes(
     edges: &mut Vec<serde_json::Value>,
     show_attachments: bool,
 ) -> Result<Vec<String>, PluginError> {
-    let issues = match host.query_index(IndexQuery::VaultHealth {
-        check: fub_abi::traits::HealthCheck::BrokenLinks,
-        page: None,
-    })? {
-        IndexResult::VaultHealth(page) => page.items,
-        other => {
-            return Err(PluginError::Internal(
-                format!(
-                    "vault health query: off-topic response: {}",
-                    other.kind_name()
-                )
-                .into(),
-            ))
-        }
-    };
+    let issues = health_issues(host, fub_abi::traits::HealthCheck::BrokenLinks)?;
     let present: std::collections::BTreeSet<String> = nodes.iter().cloned().collect();
     let mut ids = std::collections::BTreeSet::new();
     let mut seen = std::collections::BTreeSet::new();
@@ -1124,19 +1253,7 @@ fn edge_values(
     seeds: QueryExpr,
     direction: LinkDirection,
 ) -> Result<Vec<serde_json::Value>, PluginError> {
-    let neighbors = match host.query_index(IndexQuery::Neighbors {
-        seeds,
-        direction,
-        depth: 1,
-        page: None,
-    })? {
-        IndexResult::Neighbors(n) => n.items,
-        other => {
-            return Err(PluginError::Internal(
-                format!("neighbors query: off-topic response: {}", other.kind_name()).into(),
-            ))
-        }
-    };
+    let neighbors = neighbors(host, seeds, direction, 1)?;
     let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
     for NeighborRef { doc, via, .. } in neighbors {

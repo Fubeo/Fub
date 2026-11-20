@@ -316,6 +316,29 @@ fn toggle(ws: &mut Workspace, key: &str) -> serde_json::Value {
     payload(&root)
 }
 
+/// Senza orfane il filtro conta anche i link nelle proprietà, nei due versi e
+/// con la regola della salute: chi nomina un'altra nota in una proprietà e
+/// chi ne è nominato restano; la nota che nomina soltanto sé stessa e quella
+/// che non nomina nessuno se ne vanno.
+#[test]
+fn hiding_orphans_keeps_notes_linked_only_in_properties() {
+    let vault = Vault::new();
+    vault.put(
+        "A.md",
+        "---\nprogetto: \"[[B]]\"\n---\n\nniente nel corpo\n",
+    );
+    vault.put("B.md", "niente\n");
+    vault.put("Se.md", "---\nse: \"[[Se]]\"\n---\n\nsolo me\n");
+    vault.put("Sola.md", "nessuno\n");
+    vault.put("C.md", "vedi [[D]]\n");
+    vault.put("D.md", "niente\n");
+    let mut ws = vault.open();
+    let p = toggle(&mut ws, "show_orphans");
+    assert_eq!(p["filter"]["show_orphans"], false);
+    assert_eq!(nodes(&p), ["A.md", "B.md", "C.md", "D.md"]);
+    assert_eq!(edges(&p), [("C.md".to_string(), "D.md".to_string())]);
+}
+
 /// Coi tag come nodi ogni tag è un nodo `#nome`, collegato alle note che lo
 /// portano; una nota che ha solo un tag non è più orfana.
 #[test]

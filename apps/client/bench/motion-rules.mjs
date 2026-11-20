@@ -406,6 +406,26 @@ const cursorLine = (text, yes) => (page) =>
     const line = (node instanceof Element ? node : node?.parentElement)?.closest(".pane.focus .pane-editor .cm-line");
     return !!line && line.textContent.includes(want) === inside;
   }, [text, yes]);
+/// Il cursore disegnato sta dove andrà la prima lettera: il suo riquadro e
+/// quello che CodeMirror dà alla posizione del cursore coincidono (entro un
+/// pixel). Una riga ancora in corsa quando il livello dei cursori si misura
+/// lascia il cursore dove la riga stava in quel momento, finché qualcosa non
+/// lo ridisegna.
+const caretOnHead = (page) =>
+  page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const host = document.querySelector(".pane.focus .pane-editor .cm-editor")?.parentElement;
+    if (!host) return false;
+    const view = findTextEditorOrThrow(host);
+    const drawn = view.dom.querySelector(".cm-cursor-primary")?.getBoundingClientRect();
+    const head = view.coordsAtPos(view.state.selection.main.head);
+    return !!drawn && !!head && Math.abs(drawn.left - head.left) <= 1.5 && Math.abs(drawn.top - head.top) <= 1;
+  });
+/// Tutte le condizioni insieme.
+const every = (...checks) => async (page) => {
+  for (const check of checks) if (!(await check(page))) return false;
+  return true;
+};
 /// Il blocco «Il treno» preso per la maniglia e portato 90 px più giù, col
 /// tasto ancora premuto.
 const liftBlock = async (page) => {
@@ -1143,7 +1163,8 @@ export const CHOREOGRAPHIES = [
       await page.keyboard.press("End");
     },
     act: (page) => page.keyboard.press("Enter"),
-    arrived: cursorLine("Il treno", false),
+    // Arrivata la riga, il cursore è sulla riga nuova e dove andrà il testo.
+    arrived: every(cursorLine("Il treno", false), caretOnHead),
     undo: (page) => page.keyboard.press("Backspace"),
     returned: cursorLine("Il treno", true),
     exit: true,

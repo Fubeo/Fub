@@ -65,6 +65,7 @@ import { openPrimaryView, opensWithoutParams, primaryViews } from "./ui/primary-
 import { mountTitlebar } from "./ui/titlebar";
 import { mountLongPressMenus } from "./ui/long-press";
 import { mountSystemMenuGuard } from "./ui/system-menu";
+import { mountMenuRelease } from "./ui/menu-release";
 import { mountPerfProbe } from "./perf/mount";
 import { platformSupports } from "./platform/capabilities";
 import { mountAppMenu } from "./ui/app-menu";
@@ -134,6 +135,7 @@ import { slowPhase, startupClock, type StartupPhase, type StartupTimes } from ".
 import { preferredPaneMode } from "./state/pane-mode";
 import { setSearchPort } from "./state/search-port";
 import { mountWheelTextSize, zoomBy } from "./state/zoom";
+import { composingKey } from "./kit/ime";
 
 /// Le impostazioni della macchina che ricordano i due pannelli laterali, e le
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
@@ -621,7 +623,7 @@ function mountAdaptiveShell(hooks: VaultProfileHooks): void {
     // Un Esc già gestito (il menu o il dialogo sopra il cassetto, che lo
     // chiudono in cattura con `preventDefault`) chiude solo loro: il cassetto
     // aspetta il prossimo.
-    if (e.key === "Escape" && !e.defaultPrevented) {
+    if (e.key === "Escape" && !e.defaultPrevented && !composingKey(e)) {
       if (
         layout.classList.contains("drawer-sidebar-open") ||
         layout.classList.contains("drawer-inspector-open")
@@ -898,6 +900,9 @@ async function init(): Promise<Teardown> {
   mountLongPressMenus(pageWindowLifetime);
   // Dove Fub non ha un menu, il tasto destro non apre quello della WebView.
   mountSystemMenuGuard(pageWindowLifetime);
+  // Su Linux il tasto destro apre i menu alla pressione: il suo rilascio non
+  // li chiude e non sceglie la voce sotto il puntatore.
+  mountMenuRelease(pageWindowLifetime);
   // La sonda delle prestazioni, se l'impostazione di macchina la vuole: presto,
   // perché l'avvio a freddo si misura fino alla prima nota.
   mountPerfProbe(pageWindowLifetime);

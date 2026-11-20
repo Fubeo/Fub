@@ -21,6 +21,7 @@
 //    dice la shell (`OffSheetDocument`): qui non c'è nessun nome di pannello.
 import type { KeyboardPlatform } from "./commands";
 import { fieldHistoryStep, isWritingField, type FieldHistoryStep } from "./field-history";
+import { composingKey, type ComposingFields } from "../kit/ime";
 
 /// Che cosa fa il tasto fuori dal foglio: niente (`quiet`, il tasto si
 /// ferma), un passo della storia del documento, o `null`, il tasto passa.
@@ -44,12 +45,12 @@ const EDITING_KEYS: ReadonlySet<string> = new Set(["Backspace", "Delete"]);
 /// La regola, su un tasto che nessun comando dell'app ha preso. `active` è
 /// l'elemento col fuoco adesso, dopo i gestori locali.
 export function offSheetKey(
-  e: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "isComposing" | "target"> &
-    Partial<Pick<KeyboardEvent, "getModifierState">>,
+  e: Pick<KeyboardEvent, "key" | "code" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "target"> &
+    ComposingFields & Partial<Pick<KeyboardEvent, "getModifierState">>,
   platform: KeyboardPlatform,
   active: Element | null,
 ): OffSheetKey {
-  if (e.isComposing) return null;
+  if (composingKey(e)) return null;
   const target = e.target;
   // Un campo scrive da sé, e una tendina sceglie con le lettere.
   if (isWritingField(target) || target instanceof HTMLSelectElement) return null;

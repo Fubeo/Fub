@@ -72,6 +72,8 @@ import { drawPageMark } from "./page-mark";
 import { FORMAT_ICON, formatKindOf } from "./format-kind";
 import { pageIcon, pageIconsRevision } from "../state/page-icons";
 import type { Lifetime, Teardown } from "./lifetime";
+import { composingKey } from "../kit/ime";
+import { jsonEqual } from "../kit/json-equal";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -420,7 +422,7 @@ function confirmCancel(payload: unknown): ActionRef | null {
 }
 
 function sameAction(a: ActionRef, b: ActionRef): boolean {
-  return a.action === b.action && JSON.stringify(a.payload ?? null) === JSON.stringify(b.payload ?? null);
+  return a.action === b.action && jsonEqual(a.payload ?? null, b.payload ?? null);
 }
 
 /// Il bottone del «no» fra i figli della domanda, se il provider l'ha disegnato.
@@ -444,7 +446,7 @@ function wireConfirm(el: HTMLElement, payload: unknown, onAction: Port): void {
   el.classList.add("ui-confirm");
   confirmCancels.set(el, confirmCancel(payload));
   el.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || e.isComposing || e.defaultPrevented) return;
+    if (e.key !== "Escape" || composingKey(e) || e.defaultPrevented) return;
     const cancel = confirmCancels.get(el);
     if (!cancel) return;
     // Esc qui è la risposta alla domanda, e basta: non chiude anche la barra
@@ -669,8 +671,7 @@ function update(
     }
     case "row":
       if (prev.node !== "row") return false;
-      children(el, next.cells, onAction);
-      ensureRowCell(el as HTMLTableRowElement);
+      rowCells(el as HTMLTableRowElement, next.cells, onAction);
       connect(el, next.action, onAction);
       return true;
     case "custom": {
@@ -686,7 +687,7 @@ function update(
       const nextRenderer = customRenderer(next.ns, next.payload);
       if (previousRenderer !== nextRenderer) return false;
       if (nextRenderer) {
-        return JSON.stringify(prev.payload) === JSON.stringify(next.payload)
+        return jsonEqual(prev.payload, next.payload)
           && drawnIn.get(el)?.container === contextOf(onAction).container;
       }
       children(el, next.fallback, onAction);
@@ -941,6 +942,34 @@ function documentIcon(doc: string): HTMLElement {
     if (figure) span.appendChild(figure);
   }
   return span;
+}
+
+/// Riconcilia le celle di una riga già disegnata. Ogni nodo sta dentro il suo
+/// `td`, come lo mette il disegno: i figli diretti della riga sono le celle
+/// HTML, non i nodi, quindi l'accoppiamento si fa cella per cella. Accoppiare
+/// sulla riga non trovava nessun vecchio figlio (i `td` non sono nodi
+/// disegnati) e attaccava i nodi nuovi alla riga fuori dalle celle, accanto a
+/// quelle vecchie: una seconda griglia a ogni ridisegno (IMP-4801).
+function rowCells(row: HTMLTableRowElement, cells: readonly UiNode[], onAction: Port): void {
+  for (const empty of Array.from(row.querySelectorAll<HTMLTableCellElement>(":scope > td.ui-empty-cell"))) {
+    empty.remove();
+  }
+  cells.forEach((cell, i) => {
+    let td = row.cells[i];
+    if (!td) {
+      td = document.createElement("td");
+      row.appendChild(td);
+    }
+    children(td, [cell], onAction);
+  });
+  while (row.cells.length > cells.length) {
+    const extra = row.cells[row.cells.length - 1]!;
+    for (const child of Array.from(extra.children)) {
+      if (child instanceof HTMLElement) unmount(child);
+    }
+    extra.remove();
+  }
+  ensureRowCell(row);
 }
 
 function ensureRowCell(row: HTMLTableRowElement): void {
@@ -1946,7 +1975,7 @@ function actionsOfField(
   // per essere ascoltato. Solo dove Invio non vuol già dire altro — in un
   // `<textarea>` è un a capo, su una casella di spunta è la spunta.
   if (acceptEnter(control)) {
-    listen(control, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter");
+    listen(control, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter" && !composingKey(e as KeyboardEvent));
   }
 }
 
