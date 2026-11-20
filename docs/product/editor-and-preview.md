@@ -253,11 +253,11 @@ coordina il buffer, il salvataggio o il fan-out delle modifiche.
 Una nota che va a capo tutta CRLF (scritta su Windows, per esempio) resta
 tutta CRLF: l'editor la apre con quel separatore, e ogni a capo che scrive
 (Invio, le azioni della barra e del «/», le proprietà, la griglia delle
-tabelle, il completamento, l'incolla e il trascinamento) prende quello della
-nota. Una nota già mista si normalizza a LF, com'è sempre stato. Chi compone
-un inserimento lo fa con `"\n"` e conta le posizioni lì, perché un a capo vale
-una posizione qualunque sia il separatore; il testo prende gli a capo della
-nota solo all'ultimo (`editors/text/line-breaks.ts`).
+tabelle, il completamento, l'incolla, il trascinamento, Vim) prende quello
+della nota. Una nota già mista si normalizza a LF, com'è sempre stato. Chi
+compone un inserimento lo fa con `"\n"`, e un filtro sulle transazioni porta
+ogni a capo nudo al separatore della nota (`editors/text/line-breaks.ts`);
+Vim legge le righe unite da `"\n"` (`editors/text/vim-lines.ts`).
 
 ## Undo, redo e selezione
 
