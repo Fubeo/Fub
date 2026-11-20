@@ -37,7 +37,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
-import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
+import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, quiet, settled } from "./memory.mjs";
 import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
 import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
 import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
@@ -113,13 +113,23 @@ const MEMORY_QUIET_MS = 3_000;
 /// quando si rilegge per vedere se la memoria torna col tempo.
 const R1_SETTLE_MS = 10_000;
 const R1_LATE_MS = 60_000;
-/// I giri di apri tutto e chiudi tutto dopo la prima chiusura. Trenta e non
-/// dieci: sul runner la pendenza di dieci giri andava da -25 a 70 MiB per giro
-/// sullo stesso albero (#284), con un errore di circa ±16 MiB; con trenta circa ±3.
-const R1_ROUNDS = 30;
-/// Ogni quanto si rilegge la memoria di un giro, fra `R1_SETTLE_MS` e
-/// `R1_LATE_MS` dalla chiusura.
-const R1_POLL_MS = 5_000;
+/// I giri di apri tutto e chiudi tutto dopo la prima chiusura. Con la
+/// raccolta forzata prima di ogni lettura (#284) la pendenza di quindici giri
+/// sul runner è andata da 3,8 a 9,5 MiB per giro in dieci corse di `main`
+/// (dal 18 al 20 novembre 2026), quella di trenta da 3,4 a 11,0: quindici
+/// giri lasciano alla soglia di 20 lo stesso margine, in metà tempo.
+const R1_ROUNDS = 15;
+/// La quiete di un giro dopo la chiusura (`quiet` in `memory.mjs`): la prima
+/// lettura dopo `R1_QUIET_FIRST_MS`, poi una ogni `R1_QUIET_STEP_MS` finché
+/// due di fila restano entro `R1_STILL_MIB` l'una dall'altra, al più fino a
+/// `R1_SETTLE_MS` dalla chiusura. Prima era un minuto intero per giro, con la
+/// più bassa delle letture: sul runner la pendenza della lettura a 10 s e
+/// quella della più bassa del minuto differivano di meno di mezzo MiB per
+/// giro in ognuna delle dieci corse, e il minuto costava 25 dei 40 minuti
+/// di R1.
+const R1_QUIET_FIRST_MS = 2_000;
+const R1_QUIET_STEP_MS = 1_000;
+const R1_STILL_MIB = 4;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina. Il lanciatore
@@ -1260,9 +1270,9 @@ const SCENARIOS = {
   /// 3. **chiuse**: chiuse tutte le schede, una lettura dopo `R1_SETTLE_MS` e
   ///    una dopo `R1_LATE_MS`, per vedere se la memoria torna col tempo;
   /// 4. **giri**: `R1_ROUNDS` volte tutti i file aperti e poi chiusi; dopo
-  ///    ogni chiusura una lettura a `R1_SETTLE_MS` e poi una ogni
-  ///    `R1_POLL_MS` fino a `R1_LATE_MS`, e il giro vale la più bassa; alla
-  ///    fine la lettura «tardi», `R1_LATE_MS` dopo l'ultima chiusura.
+  ///    ogni chiusura le letture della quiete (`R1_QUIET_FIRST_MS`,
+  ///    `R1_QUIET_STEP_MS`, `R1_STILL_MIB`, al più `R1_SETTLE_MS`), e il
+  ///    giro vale la più bassa.
   ///
   /// Ogni lettura è PSS in MiB, per processo: l'app (l'host Rust e la
   /// finestra), i processi della WebView, la rete, la GPU se c'è.
@@ -1280,6 +1290,7 @@ const SCENARIOS = {
   /// avanti senza.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
+    const started = Date.now();
     const gc = { asked: gcAsked, on: null, absent: null, did: null, calls: 0, ms: 0, skipped: collector.skipped ?? null, openDocument: null };
     const read = async () => {
       if (gc.asked && !gc.skipped && gc.on !== false) {
@@ -1334,6 +1345,7 @@ const SCENARIOS = {
     const late = await read();
     const rounds = [];
     for (let round = 1; round <= R1_ROUNDS; round++) {
+      const roundStart = Date.now();
       for (const [name] of MODES) {
         await openByName(session, name, "");
         await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
@@ -1341,30 +1353,30 @@ const SCENARIOS = {
       await pause(MEMORY_QUIET_MS);
       const open = await settled(driverPid, pause);
       const remained = await closeAll(session);
-      const roundClosedAt = Date.now();
-      await pause(R1_SETTLE_MS);
       // La WebView raccoglie quando vuole ciò che la lavagna lascia aprendosi
-      // (sul runner 300–400 MiB): una lettura sola a 10 s lo trova raccolto o
-      // no a caso, e la retta dei giri misurava questo invece di ciò che resta
-      // (#284). Si rilegge fino a un minuto dalla chiusura, come «tardi», e
-      // vale la lettura più bassa: ciò che ogni giro lascia davvero non scende,
-      // e la pendenza lo vede ancora.
-      const soon = await read();
-      let closed = soon;
-      let lowestAt = Date.now() - roundClosedAt;
-      while (Date.now() - roundClosedAt < R1_LATE_MS) {
-        await pause(Math.min(R1_POLL_MS, Math.max(0, R1_LATE_MS - (Date.now() - roundClosedAt))));
-        const again = await read();
-        if (again && closed && again.pss < closed.pss) {
-          closed = again;
-          lowestAt = Date.now() - roundClosedAt;
-        }
-      }
-      rounds.push({ round, open, left: remained, soon, closed, lowestAtMs: lowestAt });
+      // (sul runner 300–400 MiB): senza la raccolta forzata una lettura sola
+      // lo trovava raccolto o no a caso (#284). Con la raccolta davanti a ogni
+      // lettura basta che la memoria si fermi: la quiete rilegge finché due
+      // letture di fila restano vicine, e il giro vale la più bassa; ciò che
+      // ogni giro lascia davvero non scende, e la pendenza lo vede.
+      const settle = await quiet(read, pause, {
+        since: Date.now(),
+        firstMs: R1_QUIET_FIRST_MS,
+        stepMs: R1_QUIET_STEP_MS,
+        maxMs: R1_SETTLE_MS,
+        stillMiB: R1_STILL_MIB,
+      });
+      rounds.push({
+        round,
+        open,
+        left: remained,
+        soon: settle.soon,
+        closed: settle.lowest,
+        stillAtMs: settle.stillAtMs,
+        reads: settle.reads,
+        ms: Date.now() - roundStart,
+      });
     }
-    // «Tardi» resta un minuto dopo l'ultima chiusura: l'ultimo giro lo ha già
-    // aspettato.
-    const roundsLate = rounds.length > 0 ? await read() : null;
     if (!gc.asked) console.log("· R1: raccolta forzata spenta (--gc=no)");
     else if (gc.skipped) console.log(`✗ R1: raccolta forzata non disponibile, ${gc.skipped} (--gc=no per misurare senza)`);
     else if (gc.on) console.log(`· R1: raccolta forzata prima di ogni lettura a schede chiuse (${gc.calls}, ${gc.ms} ms in tutto)`);
@@ -1395,10 +1407,15 @@ const SCENARIOS = {
       values[`${key}.primo.MiB`] = ys[0] ?? null;
       values[`${key}.ultimo.MiB`] = ys.at(-1) ?? null;
       values[`${key}.pendenza.MiB`] = pendenza(ys);
-      values[`${key}.tardi.MiB`] = residue(roundsLate, group);
     }
     return {
-      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, pollMs: R1_POLL_MS, quietMs: MEMORY_QUIET_MS, rounds: R1_ROUNDS },
+      procedure: {
+        settleMs: R1_SETTLE_MS,
+        lateMs: R1_LATE_MS,
+        quietMs: MEMORY_QUIET_MS,
+        rounds: R1_ROUNDS,
+        roundQuiet: { firstMs: R1_QUIET_FIRST_MS, stepMs: R1_QUIET_STEP_MS, maxMs: R1_SETTLE_MS, stillMiB: R1_STILL_MIB },
+      },
       gc,
       restored,
       empty,
@@ -1408,9 +1425,9 @@ const SCENARIOS = {
       closed,
       late,
       rounds,
-      roundsLate,
       trend,
       values,
+      durationMs: Date.now() - started,
       samples: 3,
     };
   },

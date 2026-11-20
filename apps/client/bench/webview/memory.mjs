@@ -144,6 +144,41 @@ export async function settled(root, pause) {
   return reads[1];
 }
 
+/// La quiete dopo una chiusura (R1): la prima lettura `firstMs` dopo
+/// `since`, poi una ogni `stepMs`; finisce quando due letture di fila
+/// differiscono di non più di `stillMiB` (la memoria è ferma) o quando è
+/// passato `maxMs` da `since`. `read` è una lettura con la raccolta forzata
+/// davanti, e torna `{ pss }` o `null`.
+///
+/// Torna `soon`, la prima lettura, `lowest`, la più bassa, `stillAtMs`, quando
+/// la memoria si è fermata (`null` se è finita a `maxMs`), e `reads`, ogni
+/// lettura con il suo tempo dalla chiusura. Una lettura che manca (`null`)
+/// non ferma la quiete e non è la più bassa.
+export async function quiet(read, pause, { since, firstMs, stepMs, maxMs, stillMiB, now = Date.now }) {
+  const elapsed = () => now() - since;
+  const reads = [];
+  let soon = null;
+  let lowest = null;
+  let stillAtMs = null;
+  let previous = null;
+  await pause(Math.max(0, firstMs - elapsed()));
+  for (;;) {
+    const mem = await read();
+    const atMs = elapsed();
+    reads.push({ atMs, pss: mem?.pss ?? null });
+    if (reads.length === 1) soon = mem;
+    if (mem && (!lowest || mem.pss < lowest.pss)) lowest = mem;
+    if (mem && previous && Math.abs(mem.pss - previous.pss) <= stillMiB) {
+      stillAtMs = atMs;
+      break;
+    }
+    if (mem) previous = mem;
+    if (elapsed() + stepMs > maxMs) break;
+    await pause(stepMs);
+  }
+  return { soon, lowest, stillAtMs, reads };
+}
+
 // La raccolta forzata della WebView (#284). WebKitGTK restituisce la memoria
 // quando vuole, e senza una raccolta prima di ogni lettura la retta dei giri
 // di R1 misurava quando lo faceva più che quanto restava. Dal processo

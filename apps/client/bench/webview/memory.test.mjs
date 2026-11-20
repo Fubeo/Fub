@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-import { COLLECT_SCRIPT, buildCollector, collect } from "./memory.mjs";
+import { COLLECT_SCRIPT, buildCollector, collect, pendenza, quiet } from "./memory.mjs";
 
 describe("la raccolta forzata della WebView per R1 (#284)", () => {
   it("con il gancio spento non raccoglie niente e lo dice", async () => {
@@ -51,5 +53,83 @@ describe("la raccolta forzata della WebView per R1 (#284)", () => {
     };
     const result = buildCollector(dir, { platform: "linux", run });
     expect(result.skipped).toMatch(/non si costruisce: .*aborting/);
+  });
+});
+
+/// Un orologio finto: `pause` lo fa avanzare, ogni lettura costa `readMs`.
+function fakeClock(readMs = 0) {
+  let t = 0;
+  return {
+    now: () => t,
+    pause: async (ms) => {
+      t += ms;
+    },
+    reader: (values) => {
+      let i = 0;
+      return async () => {
+        t += readMs;
+        const pss = values[Math.min(i++, values.length - 1)];
+        return pss === null ? null : { pss };
+      };
+    },
+  };
+}
+
+const QUIET = { since: 0, firstMs: 2_000, stepMs: 1_000, maxMs: 10_000, stillMiB: 4 };
+
+describe("la quiete dopo una chiusura di R1", () => {
+  it("finisce alla prima coppia di letture vicine e vale la più bassa", async () => {
+    const clock = fakeClock();
+    const result = await quiet(clock.reader([1300, 1260, 1250, 1248, 1100]), clock.pause, { ...QUIET, now: clock.now });
+    expect(result.reads.map((r) => r.pss)).toEqual([1300, 1260, 1250, 1248]);
+    expect(result.soon.pss).toBe(1300);
+    expect(result.lowest.pss).toBe(1248);
+    expect(result.stillAtMs).toBe(5_000);
+    expect(result.reads[0].atMs).toBe(2_000);
+  });
+
+  it("una memoria che non si ferma finisce al tetto, senza dire ferma", async () => {
+    const clock = fakeClock(500);
+    const falling = Array.from({ length: 20 }, (_, i) => 1400 - 10 * i);
+    const result = await quiet(clock.reader(falling), clock.pause, { ...QUIET, now: clock.now });
+    expect(result.stillAtMs).toBeNull();
+    expect(result.reads.at(-1).atMs).toBeLessThanOrEqual(QUIET.maxMs);
+    expect(result.lowest.pss).toBe(falling[result.reads.length - 1]);
+  });
+
+  it("conta il tempo dalla chiusura, non dall'inizio della quiete", async () => {
+    const clock = fakeClock();
+    await clock.pause(1_500);
+    const result = await quiet(clock.reader([1000, 1000]), clock.pause, { ...QUIET, now: clock.now });
+    expect(result.reads.map((r) => r.atMs)).toEqual([2_000, 3_000]);
+  });
+
+  it("una lettura che manca non ferma la quiete e non è la più bassa", async () => {
+    const clock = fakeClock();
+    const result = await quiet(clock.reader([1200, null, 1199]), clock.pause, { ...QUIET, now: clock.now });
+    expect(result.reads.map((r) => r.pss)).toEqual([1200, null, 1199]);
+    expect(result.lowest.pss).toBe(1199);
+    expect(result.stillAtMs).toBe(4_000);
+  });
+});
+
+describe("la soglia della pendenza di R1 scopre una perdita", () => {
+  const ci = JSON.parse(readFileSync(new URL("./budgets.json", import.meta.url), "utf8")).ci["R1.giri.pendenza.MiB"];
+  // I residui dei primi quindici giri della corsa più ripida delle dieci di
+  // `main` dal 18 al 20 novembre 2026 con la raccolta forzata (run
+  // 44484569519, lettura a 10 s, MiB interi): un salto di 65 MiB all'ottavo
+  // giro e la crescita di fondo della WebView.
+  const worst = [210, 212, 222, 233, 237, 240, 244, 309, 313, 313, 318, 316, 319, 329, 328];
+  const leak = (mibPerRound) => worst.map((y, i) => y + mibPerRound * (i + 1));
+
+  it("la corsa peggiore vista resta sotto la soglia", () => {
+    expect(pendenza(worst)).toBeLessThan(ci);
+  });
+
+  it("la stessa corsa con 11 MiB lasciati a ogni giro la supera", () => {
+    // La pendenza di Theil e Sen di y + k·giro è quella di y più k: la soglia
+    // scopre ogni perdita sopra soglia meno la pendenza peggiore vista.
+    expect(pendenza(leak(11))).toBeGreaterThan(ci);
+    expect(pendenza(leak(11)) - pendenza(worst)).toBeCloseTo(11, 5);
   });
 });
