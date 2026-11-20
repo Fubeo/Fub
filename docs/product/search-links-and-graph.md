@@ -18,8 +18,19 @@ per foglia. Le foglie testo, regex e task vivono nell'indice full-text;
 proprietà, tag, cartella, path, estensione e link usano i metadati e il grafo
 del kernel. Testo significa termini in AND o frase esatta, con tolleranza
 esatta o refusi che restringono invece di allargare; `case_sensitive` e le
-regex lavorano sui campi memorizzati con limiti dichiarati di pattern,
-documenti e byte. La stessa espressione vale per ricerca globale, viste,
+regex lavorano sui campi memorizzati con limiti dichiarati di pattern (256
+byte), note (2048) e testo letto (8 MiB). Le note da rileggere le sceglie
+prima l'indice: quelle che hanno tutte le parole intere della domanda, o di
+una regex le parole che ogni sua corrispondenza contiene per intero (accanto
+a un inizio o una fine di riga, o a una classe senza lettere né cifre come
+`\s`). Così le maiuscole esatte funzionano in un vault di qualunque grandezza
+finché le note con quelle parole sono al più 2048. Una domanda che l'indice
+non sa restringere (una regex senza parole intere obbligatorie, come
+`(?i)rust` o `R.st`) rilegge tutto il vault, e oltre le 2048 note si rifiuta.
+Oltre un tetto la domanda si rifiuta per intero con un messaggio della
+ricerca, mai con una pagina parziale. Per le maiuscole esatte una parola è
+fatta degli stessi caratteri che l'indice tiene insieme: «Ⓐfoo» è una parola
+sola, e non contiene `foo`. La stessa espressione vale per ricerca globale, viste,
 query salvate e ricerca incorporata: il pianificatore instrada ogni foglia al
 proprietario e ricompone l'AND/OR senza divergenze.
 
