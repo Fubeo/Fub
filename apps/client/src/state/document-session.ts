@@ -295,6 +295,10 @@ export class DocumentSession implements DraftBuffer {
   #state: SessionState;
   /// La coda delle scritture del file e dei comandi distruttivi.
   #queue = new Queue();
+  /// La scrittura del buffer in volo, se c'è: si compie quando il suo esito
+  /// è nella sessione e, per un giornale, le superfici hanno il testo
+  /// riportato sui byte nuovi (`writing`).
+  #writing: Promise<void> | null = null;
   /// La coda delle bozze, separata da quella del file (#485): una bozza parte
   /// anche mentre una scrittura lenta è in volo, con la base che quella
   /// scrittura conosce, così un crash in quei secondi ha comunque il testo.
@@ -384,6 +388,18 @@ export class DocumentSession implements DraftBuffer {
   }
   activityGeneration(): number {
     return this.#activityGeneration;
+  }
+
+  /**
+   * La scrittura del buffer in volo, o `null`. La promessa si compie (anche
+   * se la scrittura fallisce) quando l'esito è nella sessione: per un
+   * giornale (`grid_journal`) le superfici hanno già ricevuto il testo sui
+   * byte nuovi. Annullare un comando del foglio mentre il giornale si scrive
+   * lo toglierebbe da un testo che il disco ha già (IMP-6400): la griglia
+   * aspetta qui, e l'annulla va alla sessione sui byte scritti.
+   */
+  writing(): Promise<void> | null {
+    return this.#writing;
   }
 
   retain(): void {
@@ -1049,6 +1065,18 @@ export class DocumentSession implements DraftBuffer {
     this.#state.result = "in_corso";
     this.#emit({ kind: "changed", id });
 
+    let done = (): void => {};
+    this.#writing = new Promise<void>((resolve) => { done = resolve; });
+    try {
+      await this.#writeText(id, text, base);
+    } finally {
+      this.#writing = null;
+      done();
+    }
+  }
+
+  /// La scrittura di `text` su `base`, e il suo esito nella sessione.
+  async #writeText(id: string, text: string, base: WriteBase): Promise<void> {
     let produced: string;
     try {
       produced = await writeCountingEcho(this.#state, () => this.#api.writeDocument(id, text, base));
@@ -1339,6 +1367,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
   isDirty(id: string): boolean {
     return this.#sessions.get(id)?.dirty === true;
   }
+
+  /// La scrittura in volo di `id`, come `DocumentSession.writing`.
+  writing(id: string): Promise<void> | null {
+    return this.#sessions.get(id)?.writing() ?? null;
+  }
+
   /// Le bozze non arrivano più sul disco (l'ultima è fallita dopo un
   /// `draft-blind`, e nessuna è tornata a scriversi): chi si monta dopo
   /// l'evento lo rilegge qui.
