@@ -109,14 +109,14 @@ The plan file is the contract; a message only points at it.
   shows it (in doubt, ask the user which one); `send_message` in a cloud
   session. In the cloud, if no implementation session exists yet, you may start
   one with `create_session` on the same repository and plan branch, Opus model,
-  and the prompt `/orchestra`. Its effort can't be set from there: tell the user
+  and the prompt `/fub-orchestrator`. Its effort can't be set from there: tell the user
   to set it to high.
 - **Content**, always this shape:
 
   ```text
   Piano «<titolo>» pronto | aggiornato.
   Branch: piano/<slug> · commit <sha> (PLAN.md).
-  Cosa fare: /orchestra | rileggi PLAN.md: cambiano T4, T5 (vedi Modifiche).
+  Cosa fare: /fub-orchestrator | rileggi PLAN.md: cambiano T4, T5 (vedi Modifiche).
   In corso: ferma T4 se è già partito. | nessuna azione sul lavoro in corso.
   ```
 

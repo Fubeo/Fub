@@ -131,7 +131,7 @@ Checks: `.github/workflows/ci.yml` (+ `npm-supply-chain.yml`; `baseline.yml` com
 
 ## Plan workflow
 
-- Roles, one session each: planner (`/pianifica`, Opus, effort xhigh), orchestrator (`/orchestra`, Opus, high), coders ([`coder.md`](.claude/agents/coder.md), Opus, medium). Details: [`orchestra`](.claude/skills/orchestra/SKILL.md), [`pianifica`](.claude/skills/pianifica/SKILL.md).
+- Roles, one session each: planner (`/pianifica`, Opus, effort xhigh), orchestrator (`/fub-orchestrator`, Opus, high), coders ([`coder.md`](.claude/agents/coder.md), Opus, medium). Details: [`fub-orchestrator`](.claude/skills/fub-orchestrator/SKILL.md), [`pianifica`](.claude/skills/pianifica/SKILL.md). Everything about running the orchestration (group branches, coder slots, waiting for CI, clean-up, sentinels) lives in the `fub-orchestrator` skill, not in memory.
 - `PLAN.md` (+ `PLAN-ui/` for a prototype) on `piano/<slug>` is the only hand-off: messages only point at a pushed commit; the file counts. `DECISIONS.md` says what the orchestrator decides alone vs asks, and logs choices made during the work.
 - Coders never push, open PRs or touch CI; only the orchestrator pushes, once per integrated task, to a draft PR.
 - Each plan starts in a new session (or after `/clear`); the orchestrator with a lower compaction threshold (e.g. `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=60 claude`), compacting at natural pauses: state is in `PLAN.md` and git.
