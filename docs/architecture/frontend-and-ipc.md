@@ -429,7 +429,8 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
   (`check-inline-theme.mjs`);
 - un `<style>` creato da uno script o uno `style` scritto come markup, che la
   CSP rifiuterebbe (`check-inline-styles.mjs`);
-- attese concorrenti senza il primitivo di cancellazione;
+- attese concorrenti senza il cancello di `Race` (`check-races.mjs`: regole
+  e limiti noti in testa alla sua funzione `violations`);
 - mirror TypeScript non aggiornati;
 - parole del codice nei testi italiani dell'interfaccia: il glossario in
   `apps/client/src/i18n/gergo.ts` dà per ognuna la parola da usare (per
