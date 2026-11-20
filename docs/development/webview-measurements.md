@@ -322,9 +322,11 @@ apps/client/bench/webview/misura.sh
 
 Lo script costruisce il client e l'app di release, installa `tauri-driver`
 in `target/tauri-driver`, senza toccare il sistema, e misura tutti gli
-scenari con le soglie `targets`. Se manca un display usa `xvfb-run`. Prima
-gli serve WebKitWebDriver, cioè il pacchetto `webkit2gtk-driver`, e senza
-display anche `xvfb`: se mancano, lo script lo dice e si ferma. Gli argomenti
+scenari con le soglie `targets` (`misura.test.mjs` controlla che l'elenco di
+serie e l'ordine di giro li contengano tutti). Se manca un display usa
+`xvfb-run`. Prima gli serve WebKitWebDriver, cioè il pacchetto
+`webkit2gtk-driver`, e senza display anche `xvfb`: se mancano, lo script lo
+dice e si ferma. Gli argomenti
 in più vanno a `run.mjs`, per esempio `--only=R1,T1`. Su una sessione Wayland
 `misura.sh` non usa Xvfb: senza `--wayland` (o, sotto Xvfb, `--x11` con la
 variabile tolta) il banco si ferma, come dice la sezione che segue.
