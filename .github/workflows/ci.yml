@@ -618,8 +618,10 @@ jobs:
         id: bench_verify
         run: npm run bench:verify
         working-directory: apps/client
+      # Anche con il job verde, se una foto è stata ripresa al secondo scatto
+      # (`instabili.json`): così si vede quale scena va resa stabile.
       - name: differenze e foglio di contatto del banco visivo
-        if: ${{ failure() && steps.bench_verify.outcome == 'failure' }}
+        if: ${{ always() && (steps.bench_verify.outcome == 'failure' || hashFiles('apps/client/bench/.output/instabili.json') != '') }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: banco-visivo-${{ github.sha }}
