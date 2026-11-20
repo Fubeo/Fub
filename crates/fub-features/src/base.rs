@@ -1399,9 +1399,16 @@ impl IndexProvider for BaseIndex {
     }
     /// Le basi si leggono dal loro file a ogni domanda, non da ciò che il
     /// kernel consegna: non c'è niente per documento che possa restare
-    /// indietro ([`crate::nothing_kept_per_document`]).
+    /// indietro.
     fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
-        crate::nothing_kept_per_document(entries)
+        // Niente può restare indietro in chi non tiene niente: ogni documento
+        // mostrato, e solo quelli (conformità di `up_to_date`). Un indice che
+        // tenesse stato per documento risponderebbe come `ReminderIndex`.
+        entries
+            .iter()
+            .filter(|entry| entry.kind == fub_abi::traits::EntryKind::Document)
+            .map(|entry| entry.id.clone())
+            .collect()
     }
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         match query {

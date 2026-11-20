@@ -527,10 +527,16 @@ impl IndexProvider for ProofIndex {
     }
 
     /// Il correttore riceve il testo da controllare con la domanda, non dalle
-    /// note consegnate: non tiene niente per documento
-    /// ([`crate::nothing_kept_per_document`]).
+    /// note consegnate: non tiene niente per documento.
     fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
-        crate::nothing_kept_per_document(entries)
+        // Niente può restare indietro in chi non tiene niente: ogni documento
+        // mostrato, e solo quelli (conformità di `up_to_date`). Un indice che
+        // tenesse stato per documento risponderebbe come `ReminderIndex`.
+        entries
+            .iter()
+            .filter(|entry| entry.kind == fub_abi::traits::EntryKind::Document)
+            .map(|entry| entry.id.clone())
+            .collect()
     }
 
     fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {

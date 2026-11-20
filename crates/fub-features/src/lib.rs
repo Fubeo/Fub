@@ -232,34 +232,12 @@ pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};
 #[cfg(feature = "versioning")]
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};
 
-/// La risposta a [`IndexProvider::up_to_date`](fub_abi::traits::IndexProvider::up_to_date)
-/// di un indice che **non tiene niente per documento**: li ha tutti.
-///
-/// La base, il disegno e il correttore rispondono a domande che non leggono
-/// le note che il kernel consegna: `on_documents_indexed` per loro non fa
-/// niente. Il default del contratto («mandami tutto») era quindi una bugia nel
-/// verso costoso: svuotava l'intersezione di `up_to_date` e faceva rileggere e
-/// rianalizzare l'intero vault a ogni riapertura per darlo a chi lo buttava
-/// (misura in `docs/misure/2026-11-20-riapertura-tiepida.md`).
-///
-/// Niente può restare indietro in chi non tiene niente, quindi «ce l'ho» è
-/// vero per ogni documento mostrato, e solo per quelli: a un elenco vuoto si
-/// risponde vuoto (conformità `up_to_date_only_reported_what_it_saw`). Ciò che
-/// non è un documento non è affar suo, come per la ricerca. Un indice che un
-/// giorno tenesse stato per documento non deve usare questa funzione: deve
-/// rispondere come un indice persistente (vedi `ReminderIndex`). La riapertura
-/// senza riletture la presidia `crates/fub-host/tests/warm_reopening.rs`.
-#[cfg(any(feature = "base", feature = "draw", feature = "proof"))]
-pub(crate) fn nothing_kept_per_document(
-    entries: &[fub_abi::traits::VaultEntry],
-) -> Vec<fub_abi::DocId> {
-    entries
-        .iter()
-        .filter(|entry| entry.kind == fub_abi::traits::EntryKind::Document)
-        .map(|entry| entry.id.clone())
-        .collect()
-}
-
+// I documenti di un indice che **non tiene niente per documento**: la base,
+// il disegno e il correttore rispondono a domande che non leggono le note
+// consegnate, quindi «ce l'ho» è vero per ogni documento mostrato, e solo per
+// quelli. Il filtro sta in ciascuno dei tre (i moduli di feature non si parlano,
+// `tests/independent_modules.rs`); la prova comune è qui sotto, la riapertura
+// senza riletture la presidia `crates/fub-host/tests/warm_reopening.rs`.
 #[cfg(all(test, feature = "base", feature = "proof"))]
 mod nothing_kept_tests {
     use fub_abi::edit::Revision;

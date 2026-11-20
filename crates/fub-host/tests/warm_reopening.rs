@@ -455,7 +455,9 @@ fn a_note_changed_while_closed_comes_back_with_its_new_reminder() {
 
 #[test]
 fn a_broken_or_foreign_reminders_file_rereads_and_gives_the_right_reminders() {
-    let damages: [(&str, fn(&str) -> String); 3] = [
+    /// Come si guasta il file buono.
+    type Damage = fn(&str) -> String;
+    let damages: [(&str, Damage); 3] = [
         ("garbage", |_| "{ non è json".to_string()),
         ("old schema", |good| {
             good.replacen("\"schema\":1", "\"schema\":0", 1)

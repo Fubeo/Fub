@@ -322,8 +322,13 @@ fn validate_after_host(root: &Path, expected: &[ExpectedEntry]) {
         let allowed_search_manifest = path == ".fub/plugins/fub.search/manifest.json";
         let allowed_search_index = path.starts_with(".fub/plugins/fub.search/index/");
         let allowed_versioning_index = path == ".fub/plugins/fub.versioning/versions.json";
+        // Il file dei promemoria è derivato come l'indice della ricerca (#521).
+        let allowed_reminders = path == ".fub/plugins/fub.tasks/reminders.json";
         assert!(
-            allowed_search_manifest || allowed_search_index || allowed_versioning_index,
+            allowed_search_manifest
+                || allowed_search_index
+                || allowed_versioning_index
+                || allowed_reminders,
             "verify: unexpected Host output {path}"
         );
     }
