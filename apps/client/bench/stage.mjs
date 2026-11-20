@@ -108,11 +108,14 @@ export const OUTPUT = here("./.output");
 /// del client, con `CHOKIDAR_USEPOLLING` interrogate di continuo, o osservatori
 /// di inotify che altri server di Vite possono avere esaurito: ENOSPC). Il
 /// `null` lo mette quindi un plugin, a configurazione risolta, prima che il
-/// server crei il guardiano.
-export const UNWATCHED = {
-  name: "bench:no-watch",
-  configResolved: (config) => void (config.server.watch = null),
-};
+/// server crei il guardiano. Un plugin nuovo per ogni server: nessuno stato
+/// condiviso fra due palchi aperti nello stesso processo.
+export function unwatched() {
+  return {
+    name: "bench:no-watch",
+    configResolved: (config) => void (config.server.watch = null),
+  };
+}
 
 /// Apre il palco: server di Vite e browser. Restituisce anche come si chiude,
 /// perché un banco che lascia in giro un server è un banco che alla seconda
@@ -126,7 +129,7 @@ export const UNWATCHED = {
 /// `motion-rules.mjs`).
 ///
 /// `watch: false` apre un server che non guarda il disco e non manda
-/// aggiornamenti (vedi `UNWATCHED`): per i banchi che misurano per minuti, a
+/// aggiornamenti (vedi `unwatched`): per i banchi che misurano per minuti, a
 /// cui un file salvato intanto ricaricherebbe la pagina sotto la misura.
 export async function openStage({
   quiet = true,
@@ -148,7 +151,7 @@ export async function openStage({
       configFile: here("../vite.bench.config.ts"),
       logLevel: quiet ? "warn" : "info",
       ...(Object.keys(serverOptions).length === 0 ? {} : { server: serverOptions }),
-      ...(watch ? {} : { plugins: [UNWATCHED] }),
+      ...(watch ? {} : { plugins: [unwatched()] }),
     });
     await server.listen();
     // Il riscaldamento della config (`server.warmup`, #395) parte con

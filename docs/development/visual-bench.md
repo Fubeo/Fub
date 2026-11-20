@@ -119,7 +119,8 @@ mentre si scatta lascia sotto il blocco in mano livelli diversi di un'unità
 da quelli della stessa pagina a caricamento finito. E il suo server di Vite
 non guarda il disco né manda aggiornamenti (`openStage({ watch: false })`,
 come la prova del PDF): un file salvato durante la corsa non ricarica la
-pagina sotto la misura. Il `null` lo mette un plugin a configurazione
+pagina sotto la misura. Per tutti e due vale anche `hmr: false`, quindi
+nemmeno la prova del PDF riceve più gli aggiornamenti a caldo. Il `null` lo mette un plugin a configurazione
 risolta, perché `mergeConfig` scarta un `watch: null` in linea. Anche il budget d'interazione (`npm run bench:interaction`) apre
 la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un
 menu, la palette e una nota arrivano al primo fotogramma e alla fine del moto,
