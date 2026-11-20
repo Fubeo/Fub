@@ -74,9 +74,10 @@ costituiscono un confronto di parità nativo/WASM.
 e prova feed, query, flush, close, `up_to_date` e reconcile nello stesso
 registro del nativo, con teardown e rollback del mount su dichiarazione in
 trappola (`crates/fub-wasm-host/tests/deferred_providers.rs`). La domanda
-`up_to_date` resta un'intersezione su tutti gli indici montati: i provider
-nativi conservativi rispondono vuoto, quindi il guest non viene consultato su
-un'apertura a freddo e il documento viene sempre alimentato.
+`up_to_date` resta un'intersezione su tutti gli indici montati, e il kernel la
+chiede a ognuno anche quando è già vuota: un guest che risponde vuoto, come
+fa la risposta di default, riceve ogni documento a ogni apertura
+([la riapertura tiepida](storage-and-identity.md#la-riapertura-tiepida)).
 `EventHandler` inbound è implementato: un componente reale dichiara la
 maschera e riceve `Notice` attraverso lo stesso registro del nativo, con
 `Guard` applicato alle letture del guest.

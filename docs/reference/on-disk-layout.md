@@ -194,6 +194,7 @@ dell'utente.
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 | `.fub/plugins/fub.commands/archive-recovery.json` | autorevole operativo | 1 | `fub.commands` |
+| `.fub/plugins/fub.tasks/reminders.json` | derivata | 1 | promemoria per nota con la revisione del sorgente (`fub.tasks`, [sotto](#promemoria)) |
 | `.fub/plugins/fub.draw/profili/*.json`, `.fub/plugins/fub.draw/predefinito.json`, `.fub/plugins/fub.draw/doc/*/profilo-pdf.json`, `.fub/plugins/fub.draw/doc/*/esportazione-pdf.json` | autorevole | 1 | profili, predefiniti (del vault e per tipo) e memoria per nota dell'esportazione in PDF ([il formato](pdf-export-format.md)) |
 | `.fub/data/plugins/fub.linkcard/cards/*.json`, `.fub/data/plugins/fub.craft/previews/*.json` | derivata | 1 | schede dei collegamenti (`fub.linkcard`), anteprime dei file Craft (`fub.craft`) |
 
@@ -252,6 +253,19 @@ classificazione è per proprietario:
 
 L'indice Tantivy di `fub.search` è derivato. Una versione incompatibile può
 essere eliminata e ricostruita dai documenti.
+
+### Promemoria
+
+`fub.tasks` scrive in `reminders.json` i promemoria che ha ricavato da ogni
+nota, con la revisione del sorgente da cui li ha ricavati: è ciò che gli
+permette di dire «questa nota ce l'ho» alla riapertura senza rileggerla
+([la riapertura tiepida](../architecture/storage-and-identity.md#la-riapertura-tiepida)).
+Il file è derivato e porta la versione di schema (`schema`, 1) e la versione di Fub
+che l'ha scritto (`producer`): un file illeggibile, di un altro schema o di
+un'altra versione si butta senza errore, e l'indice rilegge ogni nota. Una
+nota presa a sessione aperta senza una revisione dichiarata non si scrive,
+quindi si rilegge alla prossima apertura. Si scrive al flush e alla chiusura,
+solo se qualcosa è cambiato, in modo atomico (file temporaneo e rinomina).
 
 ### Versioning
 

@@ -398,6 +398,29 @@ candidati, lascia il lucchetto, legge, e rientra solo per consegnare le
 impronte imparate. I collegamenti simbolici non si seguono: lo storage è
 radicato nel vault, e nessuna lettura ne esce.
 
+## La riapertura tiepida
+
+Riaprendo un vault, un documento che nessuno ha toccato non si rilegge. Il
+kernel chiede a **ogni** indice montato quali documenti ha già alla revisione
+dell'anagrafe (`IndexProvider::up_to_date`) e salta solo quelli che tutti
+dicono di avere, anche quando l'intersezione è già vuota: la domanda porta
+anche l'annuncio della revisione, e un indice che non la ricevesse non
+saprebbe che revisione scrivere (#521). Il core rimette i metadati dalla riga
+dell'anagrafe, senza parse; il resto si legge, si analizza e si consegna.
+
+- `fub.search` e `fub.tasks` (i promemoria) si ricordano fra due aperture ciò
+  che hanno visto, con la revisione del sorgente: l'indice Tantivy e
+  `reminders.json` ([la mappa del disco](../reference/on-disk-layout.md#promemoria)).
+- `fub.base`, `fub.draw` e `fub.proof` non tengono niente per documento e
+  rispondono con tutti i documenti.
+- Un file degli indici illeggibile, di un altro schema o di un'altra versione
+  si butta: quell'indice risponde «niente», e si rilegge tutto.
+- Una riapertura ferma non riscrive l'anagrafe e non la ricompone: la tabella
+  in memoria si confronta con quella del file al suo posto (#524).
+
+Il presidio è `crates/fub-host/tests/warm_reopening.rs`; i numeri sono in
+[la misura](../misure/2026-11-20-riapertura-tiepida.md#dopo-la-correzione).
+
 ## Schemi
 
 Ogni formato persistente ha una propria `SchemaVersion`. Gli schemi non
