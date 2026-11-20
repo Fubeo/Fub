@@ -148,14 +148,15 @@ function adopt(element: Element): void {
   if (adopted.has(element)) return;
   if (!(element instanceof HTMLElement || element instanceof SVGElement)) return;
   adopted.add(element);
-  styleAttributeAsCssom(element);
+  const asCssom = styleAttributeAsCssom(element);
   watchInsertions(element);
   const written = element.getAttribute("style");
-  if (written !== null) element.setAttribute("style", written);
+  if (written !== null) asCssom(element, written);
   for (const child of Array.from(element.children)) adopt(child);
 }
 
-function styleAttributeAsCssom(element: HTMLElement | SVGElement): void {
+/// Prepara `element` e restituisce come scrivergli uno stile via CSSOM.
+function styleAttributeAsCssom(element: HTMLElement | SVGElement): (target: HTMLElement | SVGElement, value: string) => void {
   const set = Element.prototype.setAttribute;
   const setNS = Element.prototype.setAttributeNS;
   // Un DOM che riflette `cssText` sull'attributo chiamando `setAttribute`
@@ -185,6 +186,7 @@ function styleAttributeAsCssom(element: HTMLElement | SVGElement): void {
       else asCssom(this, value);
     },
   });
+  return asCssom;
 }
 
 let stamping = 0;
