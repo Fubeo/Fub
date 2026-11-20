@@ -276,52 +276,42 @@ pub fn extract_entry(
                         entry.name, cap
                     ))));
                 }
+                // Once the input is all handed over, ask zlib to finish: it
+                // may still owe more output than one buffer holds, so the
+                // loop keeps collecting until `StreamEnd`.
+                let flush = if input.is_empty() {
+                    FlushDecompress::Finish
+                } else {
+                    FlushDecompress::None
+                };
                 let before_in = de.total_in();
                 let before_out = de.total_out();
-                let status = de
-                    .decompress(input, &mut buf, FlushDecompress::None)
-                    .map_err(|e| {
-                        EntryFailure::Entry(io_error(format!(
-                            "ZIP inflate failed for `{}`: {e}",
-                            entry.name
-                        )))
-                    })?;
+                let status = de.decompress(input, &mut buf, flush).map_err(|e| {
+                    EntryFailure::Entry(io_error(format!(
+                        "ZIP inflate failed for `{}`: {e}",
+                        entry.name
+                    )))
+                })?;
                 let used_in = (de.total_in() - before_in) as usize;
                 let made = (de.total_out() - before_out) as usize;
                 out.extend_from_slice(&buf[..made]);
                 input = &input[used_in.min(input.len())..];
-                match status {
-                    Status::StreamEnd => break,
-                    Status::Ok | Status::BufError => {
-                        if input.is_empty() {
-                            // Need more input but there is none: try finishing.
-                            let mut done = false;
-                            for _ in 0..4 {
-                                let s = de
-                                    .decompress(&[], &mut buf, FlushDecompress::Finish)
-                                    .map_err(|e| {
-                                        EntryFailure::Entry(io_error(format!(
-                                            "ZIP inflate failed for `{}`: {e}",
-                                            entry.name
-                                        )))
-                                    })?;
-                                let made2 = (de.total_out() - before_out) as usize
-                                    - made.min((de.total_out() - before_out) as usize);
-                                let _ = made2;
-                                if matches!(s, Status::StreamEnd) {
-                                    done = true;
-                                    break;
-                                }
-                            }
-                            if !done {
-                                return Err(EntryFailure::Entry(bad_args(format!(
-                                    "ZIP entry `{}` ends mid-stream",
-                                    entry.name
-                                ))));
-                            }
-                            break;
-                        }
-                    }
+                if matches!(status, Status::StreamEnd) {
+                    break;
+                }
+                // With room in the buffer, a call that neither reads nor
+                // writes will never do so: the stream is cut short (no input
+                // left) or stuck. Either way the entry fails, it never spins.
+                if used_in == 0 && made == 0 {
+                    let why = if input.is_empty() {
+                        "ends mid-stream"
+                    } else {
+                        "stops inflating before its end"
+                    };
+                    return Err(EntryFailure::Entry(bad_args(format!(
+                        "ZIP entry `{}` {why}",
+                        entry.name
+                    ))));
                 }
                 if out.len() as u64 > cap {
                     return Err(EntryFailure::Entry(bad_args(format!(
@@ -399,6 +389,32 @@ mod tests {
     /// One entry with its central directory. `descriptor` sets bit 3 and
     /// zeroes the local-header sizes, as a streaming writer does.
     fn build(name: &str, body: &[u8], deflate: bool, descriptor: bool) -> Vec<u8> {
+        if deflate {
+            build_deflated(name, body, Compression::none(), descriptor)
+        } else {
+            build_entry(name, body, body, 0, descriptor)
+        }
+    }
+
+    fn deflate_raw(body: &[u8], level: Compression) -> Vec<u8> {
+        let mut enc = DeflateEncoder::new(Vec::new(), level);
+        enc.write_all(body).unwrap();
+        enc.finish().unwrap()
+    }
+
+    fn build_deflated(name: &str, body: &[u8], level: Compression, descriptor: bool) -> Vec<u8> {
+        build_entry(name, body, &deflate_raw(body, level), 8, descriptor)
+    }
+
+    /// One entry whose stored bytes are `payload` (already compressed with
+    /// `method`); the sizes and CRC in the headers describe `body`.
+    fn build_entry(
+        name: &str,
+        body: &[u8],
+        payload: &[u8],
+        method: u16,
+        descriptor: bool,
+    ) -> Vec<u8> {
         let mut crc = !0u32;
         for &byte in body {
             crc ^= u32::from(byte);
@@ -411,15 +427,7 @@ mod tests {
             }
         }
         let crc = !crc;
-        let payload = if deflate {
-            let mut enc = DeflateEncoder::new(Vec::new(), Compression::none());
-            enc.write_all(body).unwrap();
-            enc.finish().unwrap()
-        } else {
-            body.to_vec()
-        };
-        let (method, flags): (u16, u16) =
-            (if deflate { 8 } else { 0 }, if descriptor { 8 } else { 0 });
+        let flags: u16 = if descriptor { 8 } else { 0 };
         let mut z = Vec::new();
         z.extend_from_slice(b"PK\x03\x04");
         z.extend_from_slice(&20u16.to_le_bytes());
@@ -437,7 +445,7 @@ mod tests {
         z.extend_from_slice(&(name.len() as u16).to_le_bytes());
         z.extend_from_slice(&0u16.to_le_bytes());
         z.extend_from_slice(name.as_bytes());
-        z.extend_from_slice(&payload);
+        z.extend_from_slice(payload);
         if descriptor {
             z.extend_from_slice(b"PK\x07\x08");
             for v in [crc, payload.len() as u32, body.len() as u32] {
@@ -557,6 +565,49 @@ mod tests {
             let at = zip.windows(5).position(|w| w == b"hello").unwrap();
             zip[at] ^= 0x01;
             assert!(extract_first(&zip).is_err(), "deflate={deflate}");
+        }
+    }
+    /// Bodies that inflate well past the 256 KiB scratch buffer from a few
+    /// KiB of input: the tail of the output is produced after the input is
+    /// all consumed, and must still reach the entry (A3).
+    #[test]
+    fn a_small_deflate_stream_that_expands_past_the_buffer_is_extracted_whole() {
+        let zeros = vec![0u8; 1024 * 1024];
+        let text: Vec<u8> = b"riga di testo ripetuta, quasi uguale alla precedente\n"
+            .iter()
+            .copied()
+            .cycle()
+            .take(3 * 1024 * 1024 + 17)
+            .collect();
+        for body in [&zeros, &text] {
+            for level in [Compression::fast(), Compression::best()] {
+                for descriptor in [false, true] {
+                    let zip = build_deflated("a.txt", body, level, descriptor);
+                    let out = extract_first(&zip).unwrap_or_else(|error| {
+                        panic!("{} bytes, level {level:?}: {error}", body.len())
+                    });
+                    assert!(out == *body, "{} bytes come back intact", body.len());
+                }
+            }
+        }
+    }
+
+    /// A deflate stream cut short ends with an error, never a busy loop or
+    /// a short success, wherever the cut falls.
+    #[test]
+    fn a_truncated_deflate_stream_fails_instead_of_spinning() {
+        let body: Vec<u8> = (0..600_000u32).map(|i| (i * 7 % 251) as u8).collect();
+        let full = deflate_raw(&body, Compression::default());
+        for cut in [0, 1, full.len() / 3, full.len() / 2, full.len() - 1] {
+            let zip = build_entry("a.txt", &body, &full[..cut], 8, false);
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(extract_first(&zip).map(|out| out.len()));
+            });
+            let result = rx
+                .recv_timeout(std::time::Duration::from_secs(20))
+                .unwrap_or_else(|_| panic!("cut at {cut}: inflate never returned"));
+            assert!(result.is_err(), "cut at {cut}: {result:?}");
         }
     }
 }
