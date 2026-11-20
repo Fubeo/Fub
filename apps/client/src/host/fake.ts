@@ -497,6 +497,9 @@ export interface FakeHost {
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
   renameFromOutside(from: string, to: string): void;
+  /// Cancella una nota **senza che la shell l'abbia chiesto** (`rm` da
+  /// terminale, il sync): il file sparisce e l'evento arriva.
+  removeFromOutside(id: string): void;
   /// Riscrive un file **senza che la shell l'abbia chiesto**: l'altra
   /// applicazione, il sync, un merge. I byte cambiano e l'evento arriva dal
   /// watcher, come succede davvero.
@@ -542,6 +545,9 @@ export interface FakeHost {
 
   /// Simula la chiusura nativa di una finestra documento ancora aperta.
   requestDocumentWindowClose(label: string): void;
+  /// Simula una finestra documento che muore da sola (un crash, il sistema
+  /// che la chiude): sparisce senza passare da `closeDocumentWindow`.
+  destroyDocumentWindow(label: string): void;
   /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
   ///
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
@@ -2929,6 +2935,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       const kind = entryKind(from);
       emit(kind === "document" ? { type: "document_renamed", from, to } : { type: "entry_renamed", from, to, kind });
     },
+    removeFromOutside: (id) => {
+      if (!docs.delete(id)) throw new Error(`host fake: «${id}» non esiste`);
+      emit({ type: "document_removed", id });
+    },
     writeFromOutside: (id, text) => {
       write(id, text);
       const kind = entryKind(id);
@@ -2947,6 +2957,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!request) throw new Error(`host fake: finestra «${label}» non aperta`);
       for (const handler of windowCloseRequested) handler({ label, surface: "document" });
     },
+    destroyDocumentWindow: (label) => {
+      if (!documentWindows.delete(label)) throw new Error(`host fake: finestra «${label}» non aperta`);
+      for (const handler of windowClosed) handler({ label, surface: "document" });
+    },
     files: () => Object.fromEntries([...docs].map(([id, d]) => [id, d.text])),
     trash: () => [...trash].map(([id, d]) => ({ id, original: d.original })),
     calls,
@@ -2955,7 +2969,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!onClose) throw new Error("host finto: nessuno ascolta la chiusura della finestra");
       try {
         if (await onClose()) {
-          await gate("finishMainClose", [], Promise.resolve());
+          // Come `finish_main_close` dell'host vero: con una finestra
+          // documento ancora registrata la finestra principale non si chiude.
+          await gate("finishMainClose", [], documentWindows.size
+            ? Promise.reject(new Error("document windows or a vault close have not finished"))
+            : Promise.resolve());
           if (!mainClosed) {
             mainClosed = true;
             window.dispatchEvent(new Event("pagehide"));

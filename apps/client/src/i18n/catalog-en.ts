@@ -3052,13 +3052,16 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "windows.discard.keep_failed":
     "The text of this window did not get into History, so it was not discarded: {reason}. Try again, or keep your changes.",
   "windows.not_text": "{doc} does not open in a separate window: the window shows only notes and text files.",
+  "windows.closed_alone":
+    "The window for {doc} closed on its own. What it had already passed to the main window is saved; its last changes that were not yet confirmed may be missing.",
+  "windows.closed_alone_unsaved":
+    "The window for {doc} closed on its own and the save is not confirmed: the text stays in the main window. The last changes the window had not yet confirmed may be missing.",
+  "windows.closed_gone": "{doc} no longer exists: its window closed without saving, because there was nothing to save.",
   "windows.error.session_gone": "The document session is no longer available",
   "windows.error.bad_identity": "The window identity is not valid",
-  "windows.error.closed_while_opening": "The window disconnected while opening; the session is kept",
   "windows.error.owner_changed": "The document changed hands: the session is kept",
   "windows.error.owner_changed_saving": "The document changed hands while saving",
   "windows.error.changed_closing": "The document changed while closing: the session is kept",
-  "windows.error.disconnected": "The window disconnected before confirming its last changes; the session is kept",
   "windows.error.session_changed": "The session or the vault changed: the window stays",
   "windows.error.changed_draining": "The session changed while the window was being drained",
   "windows.error.still_opening": "The window is still opening",
@@ -3720,7 +3723,6 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "errors.mobile.storage_choice": "Unrecognized mobile storage choice",
   "errors.bridge.vault_gone": "The document vault is not available",
   "errors.bridge.session_changed": "The document session changed",
-  "errors.bridge.windows_open": "The previous session still has open windows",
   "errors.bridge.not_ready": "The window is not ready for editing",
   "errors.bridge.bad_operation": "Inconsistent local operation",
   "errors.bridge.drain_conflict": "Unrecoverable conflict while saving pending changes",
