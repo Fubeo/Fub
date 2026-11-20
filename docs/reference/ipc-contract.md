@@ -509,6 +509,17 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 `x-fub-resource-write`; il contratto intero (campi, `reuse: "same-content"`,
 ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md).
 
+## Tessere delle mappe
+
+`map_tile(url, kind)` porta i byte di una tessera della vista Mappa di una
+Base come corpo binario (un `ArrayBuffer` in JS, mai un array JSON di
+numeri). `kind` è `"raster"` o `"vector"`, il genere del fornitore del
+`.base`. Nessuna porta generica porta byte che non stanno nel vault, e a chi
+chiedere non lo decide un vault ma la riga di macchina `map.tile-hosts`. La
+risponde soltanto una finestra locale fidata, fuori dal thread principale;
+regole ed errori sono in [Le tessere delle
+mappe](permissions-and-security.md#le-tessere-delle-mappe).
+
 ## Percorsi
 
 Il frontend invia path relativi o root di vault secondo la porta. Le regole di
