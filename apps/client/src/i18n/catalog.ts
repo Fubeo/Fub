@@ -3208,6 +3208,12 @@ export const IT = { // --- la scocca -------------------------------------------
   "windows.closed_alone_unsaved":
     "La finestra di {doc} si è chiusa da sola e il salvataggio non è confermato: il testo resta nella finestra principale. Le ultime modifiche che la finestra non aveva ancora confermato potrebbero mancare.",
   "windows.closed_gone": "{doc} non esiste più: la sua finestra si è chiusa senza salvare, perché non c'era niente da salvare.",
+  "windows.hung_waiting":
+    "La finestra di {doc} non risponde. La aspetto ancora qualche secondo; poi salvo il testo dalla finestra principale e la chiudo.",
+  "windows.hung_closed":
+    "La finestra di {doc} non rispondeva ed è stata chiusa. Il testo che aveva passato alla finestra principale è salvato; le ultime modifiche che non aveva ancora confermato potrebbero mancare.",
+  "windows.hung_closed_unsaved":
+    "La finestra di {doc} non rispondeva ed è stata chiusa, ma il salvataggio non è confermato: il testo resta nella finestra principale. Le ultime modifiche che la finestra non aveva ancora confermato potrebbero mancare.",
   "windows.error.session_gone": "Sessione documento non più disponibile",
   "windows.error.bad_identity": "Identità finestra non valida",
   "windows.error.owner_changed": "Autorità documento cambiata: sessione mantenuta",

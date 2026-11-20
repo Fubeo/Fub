@@ -1313,6 +1313,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
   #blindDraft = false;
   /// A pending open reserves this owner before any flush/read `await`.
   readonly #openIntents = new Map<string, number>();
+  /// I prestiti di chi tiene una sessione **già nata** per quello che è, non
+  /// per il nome che ha (la finestra di un documento): una rinomina sposta la
+  /// sessione sotto un altro id e il prestito la segue, e il nome lasciato
+  /// libero non resta prestato a nessuno (`retainSession`).
+  readonly #sessionLeases = new WeakMap<DocumentSession, number>();
   /// Le bozze scritte per un file cancellato da fuori con testo non salvato,
   /// per vault e id, col testo che tengono: «Ricrea la nota» le toglie dopo la
   /// riscrittura (`discardRemovedDraft`), aspettando che la loro scrittura sia
@@ -1421,6 +1426,28 @@ export class DocumentSessionCollection implements DraftBufferStore {
       if (count <= 1) this.#openIntents.delete(id);
       else this.#openIntents.set(id, count - 1);
     };
+  }
+  /**
+   * Presta la sessione `session` finché il disposer non la rende: `release`
+   * la lascia aperta (`active`) sotto qualunque nome abbia adesso. A differenza
+   * di `retain(id)`, che prenota un'apertura per nome prima che la sessione
+   * esista, questo prestito non resta sul nome di prima dopo una rinomina.
+   * Il disposer è idempotente.
+   */
+  retainSession(session: DocumentSession): () => void {
+    session.retain();
+    this.#sessionLeases.set(session, (this.#sessionLeases.get(session) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const count = this.#sessionLeases.get(session) ?? 0;
+      if (count <= 1) this.#sessionLeases.delete(session);
+      else this.#sessionLeases.set(session, count - 1);
+    };
+  }
+  #leased(session: DocumentSession): boolean {
+    return (this.#sessionLeases.get(session) ?? 0) > 0;
   }
   async handleExternalChange(id: string, source: Origin): Promise<ExternalChangeResult> {
     // L'annuncio si consuma anche senza sessione: non resta appeso a zittire
@@ -1937,6 +1964,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       this.#invalidate(id);
       return { kind: "missing" };
     }
+    if (this.#leased(session)) return { kind: "active" };
 
     // Il testo tenuto dalle superfici entra prima, anche quello che la
     // superficie conferma col suo provider: non è un'attività nuova.
@@ -1961,7 +1989,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       }
       return { kind: "missing" };
     }
-    if ((this.#openIntents.get(id) ?? 0) > 0) return { kind: "active" };
+    if ((this.#openIntents.get(id) ?? 0) > 0 || this.#leased(session)) return { kind: "active" };
     if (this.#deletionVersion(id) !== deletionVersion) {
       // The deletion failed after this release started; its reopen activity is
       // internal, so retry once rather than treating it as a user reopen.
