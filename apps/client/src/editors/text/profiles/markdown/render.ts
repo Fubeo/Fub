@@ -41,10 +41,9 @@ import type {
 // Initial `---` block (optional BOM) closed by `---`/`...`. The body must hold
 // a `:` (or be empty) so a leading rule plus heading is not misread.
 export function detectFrontmatter(source: string): { from: number; to: number } | null {
-  let start = 0;
-  if (source.startsWith("﻿")) start = 1;
-  const firstEnd = source.indexOf("\n", start);
-  if (firstEnd === -1 || source.slice(start, firstEnd).trim() !== "---") return null;
+  const first = openingLine(source, true)!;
+  if (!first.opens) return null;
+  const firstEnd = first.end;
   let pos = firstEnd + 1;
   for (;;) {
     const next = source.indexOf("\n", pos);
@@ -64,14 +63,37 @@ export function detectFrontmatter(source: string): { from: number; to: number } 
 /// documento enorme non va copiato per intero a ogni battuta.
 const FRONTMATTER_WINDOW = 64 * 1024;
 
+/// Quanta cima basta per dire se la prima riga apre un frontmatter: una riga
+/// più lunga non è `---`, salvo che sia `---` fra tanti spazi.
+const FIRST_LINE_WINDOW = 256;
+
+/// La prima riga di una sorgente: dove finisce (l'indice del suo `\n`, -1 se
+/// non c'è nella cima guardata) e se è `---`, cioè se il frontmatter potrebbe
+/// cominciare qui.
+export interface FirstLine {
+  readonly end: number;
+  readonly opens: boolean;
+}
+
+/// La regola unica di «la prima riga apre un frontmatter», per
+/// `frontmatterRange` e per la resa a ogni battuta (`firstLineOf`): dopo un
+/// BOM facoltativo, una riga che tolti gli spazi è `---` e finisce con un a
+/// capo, come la legge `detectFrontmatter`. `head` è la cima della sorgente,
+/// `whole` dice se è tutta. `null` quando la cima non basta a decidere: niente
+/// a capo, e ciò che c'è potrebbe ancora diventare `---` fra spazi.
+function openingLine(head: string, whole: boolean): FirstLine | null {
+  const start = head.startsWith("﻿") ? 1 : 0;
+  const end = head.indexOf("\n", start);
+  if (end !== -1) return { end, opens: head.slice(start, end).trim() === "---" };
+  if (whole || !/^\s*-{0,3}\s*$/.test(head.slice(start))) return { end: -1, opens: false };
+  return null;
+}
+
 /// Il frontmatter di un documento CodeMirror, guardando solo la sua cima: un
 /// documento che non comincia con `---` non si copia affatto.
 export function frontmatterRange(doc: { length: number; sliceString(from: number, to?: number): string }): { from: number; to: number } | null {
-  const head = doc.sliceString(0, Math.min(doc.length, 256));
-  const end = head.indexOf("\n");
-  if ((end !== -1 || head.length === doc.length) && head.slice(0, end === -1 ? undefined : end).replace(/^\uFEFF/, "").trim() !== "---") {
-    return null;
-  }
+  const head = doc.sliceString(0, Math.min(doc.length, FIRST_LINE_WINDOW));
+  if (openingLine(head, head.length === doc.length)?.opens === false) return null;
   return detectFrontmatter(doc.sliceString(0, Math.min(doc.length, FRONTMATTER_WINDOW)));
 }
 
@@ -1099,6 +1121,8 @@ interface DocumentState {
   readonly tops: TopList;
   readonly frontmatter: { readonly from: number; readonly to: number } | null;
   readonly frontmatterBlock: LazyBlock | null;
+  /// La prima riga della sorgente: una modifica più in basso non la rilegge.
+  readonly head: FirstLine;
   readonly collected: Collected;
   readonly dependencies: string;
   readonly forms: readonly SyntaxForm[] | undefined;
@@ -1577,6 +1601,7 @@ function wholeDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
     tops: TopList.of(entries),
     frontmatter,
     frontmatterBlock,
+    head: firstLineOf(source),
     collected,
     dependencies,
     forms,
@@ -1641,11 +1666,21 @@ const inert = (top: { readonly name: string; readonly toc: boolean; readonly fou
   top.name !== "HTMLBlock" && !top.toc
   && top.found.defs.length === 0 && top.found.headings.length === 0 && top.found.references.length === 0;
 
-/// Se la prima riga è `---`: il frontmatter potrebbe cominciare qui.
-function opensFrontmatter(source: string): boolean {
-  const start = source.startsWith("﻿") ? 1 : 0;
-  const end = source.indexOf("\n", start);
-  return end !== -1 && source.slice(start, end).trim() === "---";
+/// La prima riga di `source` (`openingLine`), guardando soltanto la sua cima:
+/// un documento di una riga sola lunga non si scandisce tutto a ogni battuta.
+/// La sorgente intera si legge solo nel caso che la cima non decide.
+export function firstLineOf(source: string): FirstLine {
+  const whole = source.length <= FIRST_LINE_WINDOW;
+  return (whole ? null : openingLine(source.slice(0, FIRST_LINE_WINDOW), false)) ?? openingLine(source, true)!;
+}
+
+/// La prima riga dopo una modifica che comincia a `fromA`: quella di prima se
+/// la modifica sta tutta dopo il suo a capo, riletta soltanto quando la
+/// modifica la tocca. Così una battuta in un documento grande non rilegge la
+/// sorgente nuova dall'inizio, che il motore JavaScript, per una stringa
+/// incollata a pezzi (`sourceOf`), dovrebbe prima ricomporre tutta.
+export function headAfter(was: FirstLine, fromA: number, source: string): FirstLine {
+  return was.end !== -1 && fromA > was.end ? was : firstLineOf(source);
 }
 
 /// La resa di una modifica che lavora soltanto vicino alle posizioni del
@@ -1672,7 +1707,8 @@ function patchDocument(source: string, tree: Tree, forms: readonly SyntaxForm[] 
   const tops = was.tops;
   if (fromA < 0 || tops.size === 0) return null;
   const { frontmatter } = was;
-  if (frontmatter ? fromA < frontmatter.to : opensFrontmatter(source)) return null;
+  const head = headAfter(was.head, fromA, source);
+  if (frontmatter ? fromA < frontmatter.to : head.opens) return null;
   const delta = source.length - was.source.length;
   // Si comincia dal nodo prima del primo che la modifica tocca: una riga
   // scritta sotto un paragrafo può farne un titolo o una tabella.
@@ -1776,6 +1812,7 @@ function patchDocument(source: string, tree: Tree, forms: readonly SyntaxForm[] 
     tops: tops.replace(low, index, added, delta),
     frontmatter,
     frontmatterBlock: was.frontmatterBlock,
+    head,
     collected,
     dependencies: was.dependencies,
     forms,

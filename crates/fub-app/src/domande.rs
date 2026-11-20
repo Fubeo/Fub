@@ -70,7 +70,12 @@
 //!   `reset_setting`, i profili, le scorciatoie), l'organizzazione del vault
 //!   (`set_icon`, `set_pinned`, `set_space`, `set_order`) e il vault corrente
 //!   (`open_vault`, `set_current_vault`, `close_vault`, con l'elenco dei vault
-//!   conosciuti che l'apertura aggiorna). Sul thread principale una scrittura
+//!   conosciuti che l'apertura aggiorna). Ci sta anche la schermata di
+//!   supporto (`support_preview`, `support_export`, `config_health`,
+//!   `recover_config`), che legge e riscrive quei dati e quei file: un vault
+//!   aperto subito prima dell'export è già escluso. Il recupero di
+//!   `view-state.json` va invece nella corsia dello stato di vista, dove quel
+//!   file si scrive. Sul thread principale una scrittura
 //!   finiva prima che la domanda mandata dopo entrasse in fila, anche se la
 //!   shell non aspettava la risposta: nella stessa corsia è ancora così, e
 //!   due scritture di fila (un cursore trascinato) lasciano l'ultima.

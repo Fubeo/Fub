@@ -84,7 +84,7 @@ impl CoreIndex {
             metas: BTreeMap::new(),
             entries: BTreeMap::new(),
             names: EntryNames::default(),
-            observed_in_the_own_instant: BTreeSet::new(),
+            observed_at: BTreeMap::new(),
             learned_on: BTreeMap::new(),
             scanned: false,
             folders: BTreeSet::new(),
@@ -130,7 +130,7 @@ impl CoreIndex {
         self.names.clear();
         self.folders.clear();
         self.tags.clear();
-        self.observed_in_the_own_instant.clear();
+        self.observed_at.clear();
         self.learned_on.clear();
         self.scanned = false;
         self.graph_epoch = 0;
@@ -300,6 +300,53 @@ impl CoreIndex {
         refs
     }
 
+    /// **Chi nomina una delle note o degli allegati `targets` in un link di
+    /// proprietà**, nella sola chiave `key` se c'è: la foglia
+    /// `fub:property-link`.
+    ///
+    /// Le note si leggono dagli archi del grafo; un allegato (una voce senza
+    /// modello, come `[[allegato.pdf]]`) il grafo non lo tiene, e si risolve
+    /// come nel corpo ([`attachments_of`](Self::attachments_of)): prima il
+    /// grafo, poi l'anagrafe con la cartella degli allegati. Quella parte
+    /// passa le proprietà del vault, e si paga solo se un bersaglio è un
+    /// allegato, come [`attachment_backlinks`](Self::attachment_backlinks).
+    pub(super) fn property_linked(&self, targets: &[DocId], key: Option<&str>) -> BTreeSet<DocId> {
+        let mut found = self.graph.property_linked(targets, key);
+        let attachments: BTreeSet<&DocId> = targets
+            .iter()
+            .filter(|t| !self.metas.contains_key(*t) && self.entries.contains_key(*t))
+            .collect();
+        if !attachments.is_empty() {
+            let folder = self.attachment_folder();
+            for (source, metadata) in &self.metas {
+                let hit = crate::graph::property_links_of(&metadata.frontmatter)
+                    .into_iter()
+                    .filter(|(written, _)| key.is_none_or(|key| written == key))
+                    .any(|(_, target)| {
+                        let LinkTarget::Wiki { page, .. } = &target else {
+                            return false;
+                        };
+                        if page.is_empty() || self.graph.resolve_wiki(page).is_some() {
+                            return false;
+                        }
+                        resolve_entry_in_folder(
+                            &self.entries,
+                            &self.names,
+                            source,
+                            &target,
+                            folder.as_deref(),
+                        )
+                        .is_some_and(|entry| attachments.contains(&entry))
+                    });
+                if hit {
+                    found.insert(source.clone());
+                }
+            }
+        }
+        found.retain(|id| self.metas.contains_key(id));
+        found
+    }
+
     /// Mette (o aggiorna) una voce dell'anagrafe.
     /// **Cosa cambia** se questo modello sostituisce quello che c'è (§22.2,
     /// decisione 0069).
@@ -383,11 +430,12 @@ impl CoreIndex {
         // orologio letto qui avrebbe dichiarato pulito ciò che là poteva
         // ancora cambiare. Leggerlo prima di guardare sbaglia solo per
         // eccesso: rilegge qualche voce in più, mai una in meno.
-        if entry.mtime < observed_at {
-            self.observed_in_the_own_instant.remove(&entry.id);
-        } else {
-            self.observed_in_the_own_instant.insert(entry.id.clone());
-        }
+        //
+        // L'istante si tiene per ogni voce, e non solo il sì o il no della
+        // data: chi scrive l'anagrafe lo confronta anche col timbro di
+        // cambiamento che il file ha in quel momento
+        // ([`Workspace::store_entries`](crate::Workspace::store_entries)).
+        self.observed_at.insert(entry.id.clone(), observed_at);
         self.install_entry(entry);
     }
 
@@ -420,18 +468,42 @@ impl CoreIndex {
         self.entries.insert(entry.id.clone(), entry);
     }
 
-    /// Il file su cui una domanda ha imparato l'impronta della voce `id`, se è
-    /// così che la voce l'ha avuta.
+    /// Il file su cui la voce `id` ha imparato la sua impronta, se lo si sa:
+    /// la lettura della seconda fase, la riga che l'anagrafe ha certificato
+    /// alla riapertura, una domanda sul contenuto.
     pub(crate) fn learned_on(&self, id: &DocId) -> Option<crate::same_content::FileWitness> {
         self.learned_on.get(id).copied()
     }
 
-    /// Se di questa voce **non ci si può fidare fino alla prossima apertura**:
-    /// la sua data non era nel passato quando la si è letta, quindi una
-    /// scrittura arrivata subito dopo sarebbe indistinguibile da nessuna
-    /// scrittura (difetto 0187). Chi scrive l'anagrafe la salta.
-    pub(crate) fn observed_at_the_same_instant(&self, id: &DocId) -> bool {
-        self.observed_in_the_own_instant.contains(id)
+    /// Ricorda che l'impronta che la voce `id` porta adesso viene dal file
+    /// `witness` (vedi [`learned_on`](Self::learned_on)). Si chiama subito
+    /// dopo aver installato la voce che porta quell'impronta: una voce che
+    /// cambia dopo lo dimentica da sé.
+    pub(crate) fn remember_read_on(
+        &mut self,
+        id: &DocId,
+        witness: crate::same_content::FileWitness,
+    ) {
+        if self.entries.contains_key(id) {
+            self.learned_on.insert(id.clone(), witness);
+        }
+    }
+
+    /// Se di una voce con data `mtime`, guardata all'istante `observed_at`
+    /// (vedi [`observed_at`](Self::observed_at)), **non ci si può fidare
+    /// fino alla prossima apertura**: la sua data non era nel passato quando
+    /// la si è letta, quindi una scrittura arrivata subito dopo sarebbe
+    /// indistinguibile da nessuna scrittura (difetto 0187). Chi scrive
+    /// l'anagrafe la salta. Un istante che non si conosce è un'osservazione
+    /// di cui non ci si fida.
+    pub(crate) fn seen_in_its_own_instant(mtime: u64, observed_at: Option<u64>) -> bool {
+        observed_at.is_none_or(|observed_at| mtime >= observed_at)
+    }
+
+    /// L'orologio letto prima di guardare il file della voce `id`, se la voce
+    /// c'è (vedi [`set_entry_observed`](Self::set_entry_observed)).
+    pub(crate) fn observed_at(&self, id: &DocId) -> Option<u64> {
+        self.observed_at.get(id).copied()
     }
 
     /// Mette una cartella fra quelle che ci sono (§14.3).
@@ -503,7 +575,7 @@ impl CoreIndex {
     /// sparizione deve portare con sé.
     pub(crate) fn remove_entry(&mut self, id: &DocId) -> Option<EntryKind> {
         self.names.remove_entry(id);
-        self.observed_in_the_own_instant.remove(id);
+        self.observed_at.remove(id);
         self.learned_on.remove(id);
         self.entries.remove(id).map(|and| and.kind)
     }
@@ -525,7 +597,10 @@ impl CoreIndex {
     /// misura e stessa data di quando lo si è osservato. Una voce cambiata nel
     /// frattempo (una scrittura, il rilevatore) vince, e l'impronta si butta.
     /// Accanto all'impronta resta `witness`, il file letto (vedi
-    /// [`learned_on`](Self::learned_on)). Ritorna `true` se l'ha tenuta.
+    /// [`learned_on`](Self::learned_on)). Una voce che ha già un'impronta
+    /// imparata su un altro file (timbro o identità diversi, con la stessa
+    /// misura e la stessa data) descrive quel file, non questo: l'impronta
+    /// nuova non le si attacca. Ritorna `true` se l'ha tenuta.
     ///
     /// Tocca solo l'impronta: i nomi e il segno *racily clean* di `entries`
     /// non dipendono da lei, quindi non serve passare da `install_entry`.
@@ -543,9 +618,11 @@ impl CoreIndex {
         if entry.size != size || entry.mtime != mtime {
             return false;
         }
-        if entry.fingerprint.as_ref() == Some(fingerprint)
-            && self.learned_on.get(id) == Some(&witness)
-        {
+        let known_on = self.learned_on.get(id);
+        if entry.fingerprint.is_some() && known_on.is_some_and(|known| !known.agrees(&witness)) {
+            return false;
+        }
+        if entry.fingerprint.as_ref() == Some(fingerprint) && known_on == Some(&witness) {
             return false;
         }
         entry.fingerprint = Some(fingerprint.clone());

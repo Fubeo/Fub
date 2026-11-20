@@ -18,9 +18,16 @@ use std::time::{Duration, SystemTime};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::Revision;
-use fub_abi::model::DocId;
+use fub_abi::error::FormatError;
+use fub_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
+use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::FormatProvider;
 use fub_kernel::same_content::{SameContent, UnknownReason, MAX_CANDIDATES};
-use fub_kernel::storage::{DirEntry, FileIdentity, Merge, RootedFsStorage, Stat, VaultStorage};
+use fub_kernel::storage::{
+    DirEntry, FileIdentity, FileWitness, Merge, RootedFsStorage, Stat, VaultStorage,
+};
 use fub_kernel::time::Clock;
 use fub_kernel::{data_root, FormatRegistry, MachineSettings, Workspace};
 use serde_json::Value;
@@ -38,6 +45,10 @@ struct Interposed {
     rewritten_after_read: Mutex<Option<(Utf8PathBuf, Vec<u8>)>>,
     /// Quante domande di identità e di segno del cambio ha ricevuto.
     witness_questions: AtomicUsize,
+    /// Il timbro di cambiamento è la data, come su FAT: una rinomina sopra
+    /// non lo cambia, e un file nuovo con la data di prima ha il timbro di
+    /// prima.
+    stamp_is_the_date: bool,
 }
 
 impl VaultStorage for Interposed {
@@ -108,7 +119,21 @@ impl VaultStorage for Interposed {
 
     fn change_stamp(&self, path: &Utf8Path) -> io::Result<Option<u64>> {
         self.witness_questions.fetch_add(1, Ordering::SeqCst);
+        if self.stamp_is_the_date {
+            return Ok(Some(self.inner.stat(path)?.mtime));
+        }
         self.inner.change_stamp(path)
+    }
+
+    /// Timbro e identità insieme sono **una** domanda, come per il supporto
+    /// vero, che su Windows li legge da un handle solo.
+    fn witness(&self, path: &Utf8Path) -> io::Result<FileWitness> {
+        self.witness_questions.fetch_add(1, Ordering::SeqCst);
+        let mut witness = self.inner.witness(path)?;
+        if self.stamp_is_the_date {
+            witness.change_stamp = Some(self.inner.stat(path)?.mtime);
+        }
+        Ok(witness)
     }
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
@@ -123,6 +148,7 @@ impl Interposed {
             failing: Vec::new(),
             rewritten_after_read: Mutex::new(None),
             witness_questions: AtomicUsize::new(0),
+            stamp_is_the_date: false,
         }
     }
 
@@ -429,6 +455,7 @@ fn a_file_changed_while_it_is_read_is_no_match_and_records_nothing() {
     // tocca. La risposta è «b.md», e ad «a.md» non si registra niente.
     put(&root, "a.md", b"vecchio");
     put(&root, "b.md", b"vecchio");
+    beyond_the_grain();
     let storage = Arc::new(Interposed::over(&root));
     let mut workspace = open_on(&root, Arc::clone(&storage));
     storage.rewrite_after_next_read(root.join("a.md"), b"molto piu lungo di prima");
@@ -534,6 +561,7 @@ fn a_fingerprint_computed_for_a_candidate_reaches_the_table_through_the_entry_st
     let dir = tempfile::tempdir().expect("tempdir");
     let root = root_of(&dir);
     put(&root, "a.md", b"ciao!");
+    beyond_the_grain();
     let mut workspace = open(&root);
     assert_eq!(recorded_fingerprint(&root, "a.md"), None);
     let before = fs::read(table_path(&root)).expect("la tabella");
@@ -639,6 +667,7 @@ fn a_fingerprint_learned_on_a_file_replaced_afterwards_is_not_believed() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = root_of(&dir);
     put(&root, "a.md", b"abcd");
+    beyond_the_grain();
     let mut workspace = open(&root);
 
     // La domanda legge «a.md» fuori dal lucchetto e ne calcola l'impronta, e
@@ -663,6 +692,7 @@ fn the_entry_store_does_not_certify_a_file_replaced_after_the_learning() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = root_of(&dir);
     put(&root, "a.md", b"abcd");
+    beyond_the_grain();
     let mut workspace = open(&root);
     let outcome = workspace
         .prepare_same_content(&DocId::new("b.md"), 4)
@@ -702,6 +732,7 @@ fn learning_under_the_lock_asks_the_storage_nothing() {
             format!("byte{n}").as_bytes(),
         );
     }
+    beyond_the_grain();
     let storage = Arc::new(Interposed::over(&root));
     let mut workspace = open_on(&root, Arc::clone(&storage));
 
@@ -750,6 +781,7 @@ fn the_scan_asks_the_change_stamp_only_of_entries_it_could_certify() {
         );
     }
 
+    beyond_the_grain();
     // La prima apertura: l'anagrafe è vuota, nessun timbro si chiede.
     let storage = Arc::new(Interposed::over(&root));
     let workspace = unscanned_on(&root, &storage);
@@ -771,7 +803,7 @@ fn the_scan_asks_the_change_stamp_only_of_entries_it_could_certify() {
     workspace.store_entries();
     drop(workspace);
 
-    // La riapertura: ogni voce certificabile chiede il suo timbro.
+    // La riapertura: ogni voce certificabile chiede timbro e identità.
     let storage = Arc::new(Interposed::over(&root));
     let workspace = unscanned_on(&root, &storage);
     let before = storage.witness_questions.load(Ordering::SeqCst);
@@ -779,8 +811,176 @@ fn the_scan_asks_the_change_stamp_only_of_entries_it_could_certify() {
     assert_eq!(
         storage.witness_questions.load(Ordering::SeqCst) - before,
         8,
-        "alla riapertura il timbro si chiede a ogni voce con la sua impronta"
+        "alla riapertura timbro e identità si chiedono a ogni voce con la sua impronta, \
+         con una domanda sola"
     );
+}
+
+/// **Un file messo al posto di un altro non eredita la sua riga**, anche
+/// dove il timbro di cambiamento non lo distingue.
+///
+/// Su FAT il timbro è la data, e una rinomina sopra non lo tocca: il file
+/// nuovo con la misura e la data di quello di prima ha anche il suo timbro.
+/// Prima la riapertura guardava misura, data e timbro, e certificava il file
+/// nuovo con l'impronta (e i metadati) di quello vecchio; adesso guarda anche
+/// l'identità, con la stessa regola di ogni altro punto che lo decide.
+#[test]
+fn the_reopening_does_not_certify_a_file_renamed_over_with_the_same_stamp() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    put(&root, "a.md", b"abcd");
+    let fat = || {
+        Arc::new(Interposed {
+            stamp_is_the_date: true,
+            ..Interposed::over(&root)
+        })
+    };
+
+    let mut workspace = open_on(&root, fat());
+    let outcome = workspace
+        .prepare_same_content(&DocId::new("b.md"), 4)
+        .invoke(b"zzzz");
+    assert_eq!(workspace.learn_fingerprints(outcome.learned), 1);
+    workspace.store_entries();
+    drop(workspace);
+    assert_eq!(
+        recorded_fingerprint(&root, "a.md"),
+        Some(Revision::of_bytes(b"abcd").0)
+    );
+
+    replace_keeping_the_date(&root, "a.md", b"efgh");
+    let reopened = open_on(&root, fat());
+    reopened.store_entries();
+    assert_ne!(
+        recorded_fingerprint(&root, "a.md"),
+        Some(Revision::of_bytes(b"abcd").0),
+        "il file messo sopra non si certifica coi byte di quello di prima"
+    );
+}
+
+/// Un formato di testo che è il suo testo: rende documenti i `.md`, così la
+/// seconda fase dell'apertura li legge, come fa con le note vere.
+struct Plain;
+
+impl FormatProvider for Plain {
+    fn descriptor(&self) -> FormatDescriptor {
+        FormatDescriptor::text("semplice", "Testo semplice (test)", &["md"])
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        FormatCapabilities::default()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let mut model = DocumentModel::empty(DocId::new(ctx.doc_id.clone()));
+        model.text = source.text().unwrap_or_default().to_string();
+        Ok(model)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        _opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        Ok(model.text.clone())
+    }
+}
+
+/// [`open_on`] con le note come documenti ([`Plain`]).
+fn open_notes_on(root: &Utf8Path, storage: Arc<Interposed>) -> Workspace {
+    let mut registry = FormatRegistry::new();
+    registry.register(Box::new(Plain)).expect("il formato");
+    let mut workspace = Workspace::on(
+        root,
+        registry,
+        storage as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("apertura");
+    workspace.reindex().expect("scansione");
+    workspace
+}
+
+/// **La riga porta il file che si è letto**, non quello che c'è quando la si
+/// scrive.
+///
+/// La seconda fase legge la nota e ne tiene impronta e metadati; poi, senza
+/// che il rilevatore lo dica, un altro file con la stessa misura e la stessa
+/// data prende il suo posto. Dove il timbro è la data (FAT) il timbro non lo
+/// distingue: prima la riga prendeva timbro e identità di adesso, cioè del
+/// file nuovo, con l'impronta di quello letto, e la riapertura certificava il
+/// file nuovo coi byte di quello vecchio. Adesso la voce ricorda il file da
+/// cui ha l'impronta, e la riga di un file che nel frattempo è un altro non
+/// la porta, né porta il timbro.
+#[test]
+fn the_row_does_not_give_the_file_read_the_identity_of_the_one_renamed_over_it() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    put(&root, "a.md", b"abcd");
+    beyond_the_grain();
+    let fat = || {
+        Arc::new(Interposed {
+            stamp_is_the_date: true,
+            ..Interposed::over(&root)
+        })
+    };
+
+    let workspace = open_notes_on(&root, fat());
+    replace_keeping_the_date(&root, "a.md", b"efgh");
+    workspace.store_entries();
+    drop(workspace);
+
+    let reopened = open_notes_on(&root, fat());
+    reopened.store_entries();
+    assert_eq!(
+        recorded_fingerprint(&root, "a.md"),
+        Some(Revision::of_bytes(b"efgh").0),
+        "la riapertura rilegge il file messo sopra invece di certificarlo coi byte letti prima"
+    );
+}
+
+/// Il controllo positivo del test sopra: un file **rimasto lo stesso** dalla
+/// lettura alla scrittura della riga si certifica alla riapertura, senza
+/// rileggerlo (la riga porta timbro e impronta).
+#[test]
+fn the_row_of_a_file_left_alone_certifies_it_at_the_reopening() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    put(&root, "a.md", b"abcd");
+    beyond_the_grain();
+    let fat = || {
+        Arc::new(Interposed {
+            stamp_is_the_date: true,
+            ..Interposed::over(&root)
+        })
+    };
+
+    let workspace = open_notes_on(&root, fat());
+    workspace.store_entries();
+    drop(workspace);
+    assert_eq!(
+        recorded_fingerprint(&root, "a.md"),
+        Some(Revision::of_bytes(b"abcd").0)
+    );
+
+    let mut reopened = open_notes_on(&root, fat());
+    reopened.store_entries();
+    assert_eq!(
+        recorded_fingerprint(&root, "a.md"),
+        Some(Revision::of_bytes(b"abcd").0)
+    );
+    // Certificata vuol dire non riletta: la seconda fase della riapertura non
+    // ha niente da fare.
+    let work = reopened.scan_vault().expect("riapre");
+    assert_eq!(work.total(), 0, "un file rimasto lo stesso non si rilegge");
 }
 
 /// Un orologio fermo a un istante scelto dal test.
@@ -800,6 +1000,7 @@ fn the_instant_of_the_question_is_the_vault_clock() {
 
     // Il controllo positivo: con l'orologio di sistema la data del file, di
     // un'ora fa, è nel passato, e l'impronta si impara.
+    beyond_the_grain();
     let mut workspace = open(&root);
     let outcome = workspace
         .prepare_same_content(&DocId::new("b.md"), 4)
@@ -941,4 +1142,15 @@ fn the_entry_store_asks_each_file_once_even_when_it_writes() {
         writing, still,
         "writing asks the same questions as finding nothing to write"
     );
+}
+
+/// Aspetta che i timbri di cambiamento dei file appena scritti siano **fermi**
+/// per l'anagrafe: più vecchi di una grana
+/// ([`CHANGE_STAMP_GRAIN`](fub_kernel::storage::CHANGE_STAMP_GRAIN), due
+/// secondi) dell'istante in cui li si guarda. `put` mette la data un'ora
+/// indietro, ma il timbro (`ctime`) non si può rimettere: un file scritto
+/// adesso ha il timbro di adesso, e la sua riga si scriverebbe senza timbro,
+/// cosa giusta ma che questi test non guardano.
+fn beyond_the_grain() {
+    std::thread::sleep(std::time::Duration::from_millis(2_100));
 }

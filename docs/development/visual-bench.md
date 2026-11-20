@@ -39,9 +39,12 @@ rigenerazione nell'ambiente Ubuntu validato: sulle PR la fa la CI
 ([le baseline dal runner](testing-and-quality.md#le-baseline-dal-runner)).
 
 Oltre a ora, fuso, lingua, moto e finestra, il palco (`bench/stage.mjs`) tiene
-fermi due casi che la pagina non dichiara da sé. `Math.random` è a seme fisso:
-CodeMirror lo usa per cercare la posizione sotto un punto, e col caso vero una
-selezione di poche lettere si dipingeva a volte come una riga intera. E un
+fermi due casi che la pagina non dichiara da sé. `Math.random` è a seme fisso,
+così chi lo usa dà la stessa foto a ogni corsa; ma il seme nasconde anche un
+difetto che dipende dal caso (CodeMirror fino alla 6.43.7 cercava col caso la
+posizione sotto un punto e dipingeva a volte tre lettere come una riga intera,
+#399): un sospetto del genere si prova con una sonda che rimette il caso vero.
+E un
 elemento che sta per riscriversi da sé porta `data-pending` (la riga dei
 suggerimenti durante la sua pausa): `prepareScene` e `stillShot` aspettano che
 nella pagina non ce ne sia più nessuno, e dopo 5 s falliscono nominando
@@ -113,7 +116,12 @@ ragione ogni pagina del banco del moto parte senza lavoro a riposo in
 sospeso: dopo la scena aspetta che la coda dei riscaldamenti
 (`ui/warmup.ts`, `warmups.pending()`) sia vuota, perché un carattere caricato
 mentre si scatta lascia sotto il blocco in mano livelli diversi di un'unità
-da quelli della stessa pagina a caricamento finito. Anche il budget d'interazione (`npm run bench:interaction`) apre
+da quelli della stessa pagina a caricamento finito. E il suo server di Vite
+non guarda il disco né manda aggiornamenti (`openStage({ watch: false })`,
+come la prova del PDF): un file salvato durante la corsa non ricarica la
+pagina sotto la misura. Per tutti e due vale anche `hmr: false`, quindi
+nemmeno la prova del PDF riceve più gli aggiornamenti a caldo. Il `null` lo mette un plugin a configurazione
+risolta, perché `mergeConfig` scarta un `watch: null` in linea. Anche il budget d'interazione (`npm run bench:interaction`) apre
 la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un
 menu, la palette e una nota arrivano al primo fotogramma e alla fine del moto,
 contro i budget del [budget prestazionale](../product/performance-budget.md#il-budget-dinterazione).

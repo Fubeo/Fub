@@ -18,6 +18,7 @@ use crate::organization::ParkedOrganization;
 use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FileIdentity, Stat, VaultStorage};
 use crate::time::{stamp_from_unix, Clock, SystemClock};
+use crate::transfer::FileWitness;
 use fub_abi::schema::SchemaVersion;
 
 fn is_absent_path_error(error: &std::io::Error) -> bool {
@@ -1232,6 +1233,17 @@ impl Vault {
         self.storage.file_identity(&path).ok().flatten()
     }
 
+    /// Timbro di cambiamento e identità della voce in una domanda sola
+    /// ([`VaultStorage::witness`]). Un errore, o un id fuori dal recinto, è
+    /// un testimone di cui non si conosce niente: chi lo confronta con uno
+    /// noto vede un file cambiato.
+    pub fn witness(&self, id: &DocId) -> crate::storage::FileWitness {
+        self.path_for(id)
+            .ok()
+            .and_then(|path| self.storage.witness(&path).ok())
+            .unwrap_or_default()
+    }
+
     /// Timbro opaco di cambiamento del file, se il backend lo conosce.
     ///
     /// Non identifica il file e non partecipa al rejoin: serve soltanto a
@@ -2043,7 +2055,7 @@ impl Vault {
             let Some(stat) = crate::error::optional(self.storage.stat(path)).map_err(io)? else {
                 continue;
             };
-            if self.trash_file_seen(path, stat).map_err(io)? != *seen {
+            if !seen.same_file(&self.trash_file_seen(path, stat).map_err(io)?) {
                 tracing::warn!(target: "fub.kernel", %path,
                     "trash entry changed after the census: kept");
                 continue;
@@ -2089,12 +2101,26 @@ struct CensusEntry {
 
 /// Ciò che distingue un file da quello che lo ha sostituito allo stesso nome:
 /// dimensione e data, identità e timbro di cambiamento dove il supporto li sa
-/// dare.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// dare, confrontati con la regola unica ([`FileWitness::agrees`]).
+///
+/// La grana del timbro ([`crate::transfer::change_stamp_settled`]) qui non si
+/// chiede, di proposito: censimento e distruzione stanno nella stessa
+/// chiamata, e una riscrittura dello stesso peso e della stessa data nella
+/// grana del timbro fra i due è della stessa natura di quella fra il
+/// controllo e la `remove`, che nessun metadato chiude. Chiederla terrebbe
+/// nel cestino ogni voce cestinata negli ultimi due secondi senza chiudere
+/// niente.
+#[derive(Debug, Clone, Copy)]
 struct TrashFileSeen {
     stat: Stat,
-    identity: Option<FileIdentity>,
-    change: Option<u64>,
+    witness: FileWitness,
+}
+
+impl TrashFileSeen {
+    /// È ancora il file censito?
+    fn same_file(&self, now: &TrashFileSeen) -> bool {
+        self.stat == now.stat && self.witness.agrees(&now.witness)
+    }
 }
 
 impl Vault {
@@ -2103,8 +2129,7 @@ impl Vault {
     fn trash_file_seen(&self, path: &Utf8Path, stat: Stat) -> std::io::Result<TrashFileSeen> {
         Ok(TrashFileSeen {
             stat,
-            identity: self.storage.file_identity(path)?,
-            change: self.storage.change_stamp(path)?,
+            witness: FileWitness::of_path(self.storage.as_ref(), path)?,
         })
     }
 }

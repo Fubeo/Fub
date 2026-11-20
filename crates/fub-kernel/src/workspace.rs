@@ -146,7 +146,9 @@ use crate::safety::Gate;
 use crate::same_content::{LearnedFingerprints, SameContentOutcome};
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
-use crate::transfer::{MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE};
+use crate::transfer::{
+    FileWitness, MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE,
+};
 use crate::undo::UndoStack;
 use crate::vault::{PreparedIgnoreCheck, PreparedTrashSweep, TrashEntry};
 use crate::viewstate::ViewStates;
@@ -2069,8 +2071,9 @@ fn sync_path_is_absent(error: &std::io::Error) -> bool {
 /// sé nessun pezzo.
 #[derive(Default)]
 pub struct ParsedBatch {
-    /// Le voci della fetta, con l'impronta che la lettura ha imparato.
-    read: Vec<VaultEntry>,
+    /// Le voci della fetta, con l'impronta che la lettura ha imparato e il
+    /// file su cui l'ha imparata.
+    read: Vec<(VaultEntry, Option<FileWitness>)>,
     /// Ciò che si è ripreso dalla cache invece di riparsarlo.
     reused: Vec<(DocId, StoredMeta)>,
     /// Ciò che si è letto e parsato.
@@ -2110,6 +2113,10 @@ pub const INDEX_WRITE_BUDGET: std::time::Duration = std::time::Duration::from_mi
 struct PendingIndexEntry {
     entry: VaultEntry,
     source: Option<DocumentSource>,
+    /// Il file letto per l'impronta, preso **prima** della lettura: un file
+    /// messo al posto di quello letto dopo questo istante ha un altro
+    /// testimone, e `store_entries` se ne accorge.
+    witness: Option<FileWitness>,
 }
 
 /// Il risultato di un pezzo di fetta lavorato da un thread: le voci della
@@ -3221,6 +3228,9 @@ pub struct PreparedVaultScan {
     observed_at: u64,
     folders: Vec<String>,
     entries: Vec<VaultEntry>,
+    /// Il file che ogni voce certificata dall'anagrafe descrive, letto
+    /// adesso (vedi `CoreIndex::learned_on`).
+    read_on: Vec<(DocId, FileWitness)>,
     documents: Vec<VaultEntry>,
     known_entries: Vec<Option<StoredEntry>>,
     assets: Vec<VaultEntry>,
@@ -3232,6 +3242,7 @@ pub struct CompletedVaultScan {
     observed_at: u64,
     folders: Vec<String>,
     entries: Vec<VaultEntry>,
+    read_on: Vec<(DocId, FileWitness)>,
     documents: Vec<VaultEntry>,
     known_entries: Vec<Option<StoredEntry>>,
     assets: Vec<VaultEntry>,
@@ -3245,6 +3256,7 @@ impl PreparedVaultScan {
             observed_at,
             folders,
             entries,
+            read_on,
             documents,
             known_entries,
             assets,
@@ -3258,6 +3270,7 @@ impl PreparedVaultScan {
             observed_at,
             folders,
             entries,
+            read_on,
             documents,
             known_entries,
             assets,
@@ -3319,7 +3332,7 @@ impl PreparedIndexBatchCheck {
 /// Seconda metà preparata della fetta: parser e sorgenti risolti, ma nessun
 /// `FormatProvider` o `SyntaxRule` ancora eseguito.
 pub struct PreparedIndexBatchParse {
-    read: Vec<VaultEntry>,
+    read: Vec<(VaultEntry, Option<FileWitness>)>,
     reused: Vec<(DocId, StoredMeta)>,
     parses: Vec<PendingDocumentParse>,
     discarded: Vec<(DocId, KernelError)>,
@@ -5986,7 +5999,7 @@ impl Workspace {
         // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
         // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
         // che qualcuno rivendica quell'estensione, senza essere cambiato.
-        let entries: Vec<(VaultEntry, Option<StoredEntry>)> = scanned
+        let entries: Vec<(VaultEntry, Option<StoredEntry>, Option<FileWitness>)> = scanned
             .files
             .into_iter()
             .map(|file| {
@@ -5994,20 +6007,31 @@ impl Workspace {
                 // alla riapertura incrementale di `finalize_scan_vault`, e
                 // rifarla là è un lock e una copia regalati per niente.
                 //
-                // **Il timbro si chiede per ultimo**, e solo a una voce che
-                // l'anagrafe potrebbe certificare: su Windows leggerlo è
-                // aprire il file, e alla prima apertura di un vault nessuna
+                // **Timbro e identità si chiedono per ultimi**, e solo a una
+                // voce che l'anagrafe potrebbe certificare: su Windows
+                // leggerli è aprire il file, e alla prima apertura di un vault nessuna
                 // voce è nota. Chiederlo a tutti costava cinquemila aperture
                 // buttate su un vault da cinquemila file, la parte più lenta
                 // del montaggio su Windows (issue #493).
-                let known = self
+                let candidate = self
                     .entry_store
                     .known(&file.id)
                     .filter(|known| known.describes(file.size, file.mtime))
-                    .filter(|known| known.fingerprint.is_some())
-                    .filter(|known| {
-                        known.same_change_stamp(self.docs.vault.change_stamp(&file.id))
-                    });
+                    .filter(|known| known.fingerprint.is_some());
+                // Timbro **e identità**, con la regola unica e una domanda
+                // sola al supporto: un file messo al posto di un altro da una
+                // rinomina, dove il timbro è la data (FAT) o la rinomina non
+                // lo tocca, ha la misura, la data e il timbro di quello di
+                // prima, ma non la sua identità.
+                let now = candidate
+                    .as_ref()
+                    .map(|_| FileWitness::of(&self.docs.vault, &file.id));
+                let known =
+                    candidate.filter(|known| now.is_some_and(|now| known.witness().agrees(&now)));
+                // Il file che la riga certificata descrive: la voce ne porta
+                // l'impronta, e `store_entries` la riscrive col timbro solo
+                // se al momento di scriverla il file è ancora questo.
+                let read_on = now.filter(|_| known.is_some());
                 let entry = VaultEntry {
                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
                     kind: media::kind_of_ext(&file.id, |ext| self.docs.registry.has_doc_ext(ext)),
@@ -6015,7 +6039,7 @@ impl Workspace {
                     size: file.size,
                     mtime: file.mtime,
                 };
-                (entry, known)
+                (entry, known, read_on)
             })
             .collect();
 
@@ -6024,7 +6048,11 @@ impl Workspace {
         let mut documents = Vec::new();
         let mut known_entries = Vec::new();
         let mut assets = Vec::new();
-        for (entry, known) in &entries {
+        let mut read_on = Vec::new();
+        for (entry, known, witness) in &entries {
+            if let Some(witness) = witness {
+                read_on.push((entry.id.clone(), *witness));
+            }
             match entry.kind {
                 EntryKind::Document => {
                     documents.push(entry.clone());
@@ -6038,7 +6066,8 @@ impl Workspace {
         Ok(PreparedVaultScan {
             observed_at,
             folders: scanned.folders,
-            entries: entries.into_iter().map(|(entry, _)| entry).collect(),
+            entries: entries.into_iter().map(|(entry, _, _)| entry).collect(),
+            read_on,
             documents,
             known_entries,
             assets,
@@ -6053,6 +6082,7 @@ impl Workspace {
             observed_at,
             folders,
             entries,
+            read_on,
             documents,
             known_entries,
             assets,
@@ -6087,6 +6117,9 @@ impl Workspace {
         // anagrafe le voci che legge.
         for entry in entries {
             self.indexes.core.set_entry_observed(entry, observed_at);
+        }
+        for (id, witness) in read_on {
+            self.indexes.core.remember_read_on(&id, witness);
         }
         self.indexes.core.mark_scanned();
 
@@ -6276,6 +6309,12 @@ impl Workspace {
         // sorgente di testo è lo stesso numero di prima.
         for mut entry in entries {
             let mut source = None;
+            let mut witness = None;
+            if entry.fingerprint.is_none()
+                && matches!(entry.kind, EntryKind::Asset | EntryKind::Document)
+            {
+                witness = Some(FileWitness::of(&docs.vault, &entry.id));
+            }
             match entry.kind {
                 EntryKind::Asset if entry.fingerprint.is_none() => {
                     match docs.vault.fingerprint(&entry.id) {
@@ -6301,7 +6340,11 @@ impl Workspace {
                 }
                 _ => {}
             }
-            out.entries.push(PendingIndexEntry { entry, source });
+            out.entries.push(PendingIndexEntry {
+                entry,
+                source,
+                witness,
+            });
         }
         out
     }
@@ -6322,8 +6365,12 @@ impl Workspace {
         let mut parses = Vec::new();
 
         for pending in entries {
-            let PendingIndexEntry { entry, source } = pending;
-            read.push(entry.clone());
+            let PendingIndexEntry {
+                entry,
+                source,
+                witness,
+            } = pending;
+            read.push((entry.clone(), witness));
             if discarded_ids.contains(&entry.id) || entry.kind != EntryKind::Document {
                 continue;
             }
@@ -6450,12 +6497,16 @@ impl Workspace {
             .map(|(id, _)| id)
             .collect();
 
-        for entry in read {
+        for (entry, witness) in read {
             // L'impronta appena calcolata torna in anagrafe: la voce c'era già
             // dalla prima fase, quello che qui si aggiunge è ciò che si è
-            // imparato leggendola.
+            // imparato leggendola, e su quale file.
             if entry.fingerprint.is_some() && !aged.contains(&entry.id) {
+                let id = entry.id.clone();
                 self.indexes.core.set_entry_from_scan(entry);
+                if let Some(witness) = witness {
+                    self.indexes.core.remember_read_on(&id, witness);
+                }
             }
         }
         for (id, metadata) in reused {
@@ -6682,6 +6733,13 @@ impl Workspace {
     /// chiesto agli indici, cioè i documenti già in memoria (anche quelli
     /// saltati perché ogni indice li aveva) e quelli ancora da esaminare.
     /// Vuoto per un'apertura finita: lì chiude `reconcile`.
+    ///
+    /// Comprende **anche le note consegnate**, ed è voluto: il ritiro toglie
+    /// solo la dichiarazione in volo, mai ciò che un indice tiene, e una nota
+    /// consegnata la sua dichiarazione l'ha già spesa, quindi per lei il ritiro
+    /// non cambia niente e la prossima apertura non rilegge di più. Restringere
+    /// l'elenco alle non consegnate vorrebbe dire tenere il conto di ogni
+    /// consegna per non risparmiare nulla.
     fn withdrawn_ids(&self, work: &Indexing) -> Vec<DocId> {
         if work.finished() {
             return Vec::new();
@@ -6906,16 +6964,73 @@ impl Workspace {
     pub fn store_entries(&self) {
         let _phase = tracing::info_span!(target: "fub.apertura", "store_entries").entered();
         let core = &self.indexes.core;
-        // I testimoni si chiedono **una volta**, qui, fuori dal lucchetto
+        // Ogni file si guarda **una volta**, qui, fuori dal lucchetto
         // dell'anagrafe: il confronto e la tabella nuova vengono dalle stesse
-        // risposte. Chiederli due volte raddoppiava le domande al supporto
+        // risposte. Guardarli due volte raddoppiava le domande al supporto
         // proprio sulla riapertura che scrive, e un file cambiato fra le due
         // avrebbe dato una tabella diversa da quella confrontata.
-        let rows: Vec<_> = core
+        let rows: Vec<(&VaultEntry, StoredEntry)> = core
             .entries
             .values()
-            .filter(|entry| !core.observed_at_the_same_instant(&entry.id))
-            .map(|entry| (entry, self.stored_witness(entry)))
+            .filter_map(|entry| {
+                // Un accesso solo all'osservazione: la stessa risposta decide
+                // se la voce si scrive e se il suo timbro era fermo.
+                let observed_at = core.observed_at(&entry.id);
+                if crate::index::CoreIndex::seen_in_its_own_instant(entry.mtime, observed_at) {
+                    return None;
+                }
+                Some((entry, observed_at))
+            })
+            .map(|(entry, observed_at)| {
+                let now = FileWitness::of(&self.docs.vault, &entry.id);
+                // Il file da cui la voce ha l'impronta (una lettura della
+                // seconda fase, la riga certificata alla riapertura, una
+                // domanda sul contenuto). Se adesso al suo posto c'è un altro
+                // file, con la stessa misura e la stessa data e senza un
+                // evento, la riga non porta l'impronta, e la prossima
+                // apertura rilegge il file invece di certificarlo con i byte
+                // di prima.
+                let read_on = core.learned_on(&entry.id);
+                let fingerprint = entry
+                    .fingerprint
+                    .clone()
+                    .filter(|_| read_on.is_none_or(|witness| witness.agrees(&now)));
+                // Il timbro certifica la riga alla riapertura, quindi si
+                // scrive solo se dice il file **letto**:
+                //
+                // - la voce sa su quale file ha imparato l'impronta, e adesso
+                //   è ancora quello, timbro e identità. Timbro e identità di
+                //   adesso, da soli, sono quelli di un file che può essere
+                //   arrivato dopo la lettura con la misura e la data di
+                //   quello letto (una rinomina sopra, su FAT); una voce che
+                //   non lo sa (una scrittura di Fub, il rilevatore) va senza,
+                //   e si rilegge;
+                // - il timbro era già fermo quando si è guardato il file
+                //   ([`change_stamp_settled`](crate::transfer::change_stamp_settled)):
+                //   ogni riscrittura dopo l'osservazione ha un timbro più
+                //   nuovo di una grana prima di lei, e un timbro più giovane
+                //   può essere quello di una riscrittura sul posto venuta dopo
+                //   la lettura, dello stesso peso e della stessa data.
+                //
+                // Senza timbro la voce resta, per il ricongiungimento, ma la
+                // prossima apertura rilegge il file invece di crederle.
+                let settled = observed_at.and_then(crate::storage::change_stamp_at_unix_millis);
+                let change_stamp = now.change_stamp.filter(|_| {
+                    read_on.is_some_and(|witness| witness.agrees(&now))
+                        && crate::transfer::change_stamp_settled(now.change_stamp, settled)
+                });
+                // I metadati si confrontano al loro posto e si copiano solo se
+                // la tabella si scrive davvero (#524).
+                let row = StoredEntry {
+                    size: entry.size,
+                    mtime: entry.mtime,
+                    change_stamp,
+                    identity: now.identity,
+                    fingerprint,
+                    metadata: None,
+                };
+                (entry, row)
+            })
             .collect();
         // Una riapertura ferma compone la stessa tabella che il file ha già:
         // la si confronta al suo posto, senza copiare i metadati di ogni
@@ -6923,13 +7038,13 @@ impl Workspace {
         // è lo stesso di `store`, campo per campo, e ogni dubbio scrive.
         let unchanged = self.entry_store.already_holds(|known| {
             rows.len() == known.len()
-                && rows.iter().all(|(entry, (now, fingerprint))| {
+                && rows.iter().all(|(entry, row)| {
                     known.get(&entry.id).is_some_and(|stored| {
-                        stored.size == entry.size
-                            && stored.mtime == entry.mtime
-                            && stored.change_stamp == now.change_stamp
-                            && stored.identity == now.identity
-                            && stored.fingerprint.as_ref() == *fingerprint
+                        stored.size == row.size
+                            && stored.mtime == row.mtime
+                            && stored.change_stamp == row.change_stamp
+                            && stored.identity == row.identity
+                            && stored.fingerprint == row.fingerprint
                             && core.stores_metadata_as(&entry.id, stored.metadata.as_ref())
                     })
                 })
@@ -6939,47 +7054,14 @@ impl Workspace {
         }
         let table = rows
             .into_iter()
-            .map(|(entry, (now, fingerprint))| {
-                (
-                    entry.id.clone(),
-                    StoredEntry {
-                        size: entry.size,
-                        mtime: entry.mtime,
-                        change_stamp: now.change_stamp,
-                        identity: now.identity,
-                        fingerprint: fingerprint.cloned(),
-                        metadata: core.stored_metadata(&entry.id),
-                    },
-                )
+            .map(|(entry, row)| {
+                let metadata = core.stored_metadata(&entry.id);
+                (entry.id.clone(), StoredEntry { metadata, ..row })
             })
             .collect();
         if let Err(and) = self.entry_store.store(table) {
             tracing::warn!(target: "fub.kernel", "anagrafe: {and}");
         }
-    }
-
-    /// Il testimone del file di una voce, e l'impronta che la sua riga può
-    /// portare.
-    ///
-    /// Un'impronta imparata da una domanda vale per il file su cui la si è
-    /// imparata: se adesso al suo posto c'è un altro file, con la stessa misura
-    /// e la stessa data e senza un evento, la riga non la porta, e la prossima
-    /// apertura rilegge il file invece di certificarlo con i byte di prima.
-    fn stored_witness<'a>(
-        &self,
-        entry: &'a VaultEntry,
-    ) -> (
-        crate::same_content::FileWitness,
-        Option<&'a fub_abi::edit::Revision>,
-    ) {
-        let now = crate::same_content::FileWitness::of(&self.docs.vault, &entry.id);
-        let fingerprint = entry.fingerprint.as_ref().filter(|_| {
-            self.indexes
-                .core
-                .learned_on(&entry.id)
-                .is_none_or(|witness| witness.agrees(&now))
-        });
-        (now, fingerprint)
     }
 
     /// Elenco ordinato dei documenti indicizzati.
@@ -7083,11 +7165,15 @@ impl Workspace {
     ///   (*racily clean*);
     /// - la voce c'è ancora con la misura e la data lette: una voce cambiata
     ///   nel frattempo, da una scrittura o dal rilevatore, non torna indietro;
+    /// - la voce non sa già di venire da un altro file (vedi
+    ///   [`CoreIndex::learn_fingerprint`](crate::index::CoreIndex::learn_fingerprint));
     /// - se l'anagrafe ha una riga con quella misura e quella data, la riga
-    ///   descrive lo stesso file ([`FileWitness::agrees`](crate::same_content::FileWitness::agrees)).
-    ///   Un file sostituito da un altro con la stessa misura e la stessa data,
-    ///   senza che il rilevatore lo dicesse, ha una voce che descrive ancora
-    ///   quello di prima.
+    ///   non dice un altro file: un'altra identità, o un altro timbro quando
+    ///   la riga ne ha uno. Un file sostituito da un altro con la stessa
+    ///   misura e la stessa data, senza che il rilevatore lo dicesse, ha una
+    ///   voce che descrive ancora quello di prima. Una riga senza timbro non
+    ///   ha certificato nessun timbro, e il suo non smentisce; la sua
+    ///   identità basta per rifiutare, che è la parte prudente.
     ///
     /// Il file letto (segno del cambio e identità) l'ha preso la domanda, fuori
     /// dal lucchetto: qui si confronta soltanto, senza domande al supporto e
@@ -7109,10 +7195,10 @@ impl Workspace {
                 .entry_store
                 .ask_known(&learned.id, |known| {
                     known.describes(learned.size, learned.mtime)
-                        && !learned.witness.agrees(&crate::same_content::FileWitness {
-                            change_stamp: known.change_stamp,
-                            identity: known.identity,
-                        })
+                        && (known.identity != learned.witness.identity
+                            || known
+                                .change_stamp
+                                .is_some_and(|stamp| Some(stamp) != learned.witness.change_stamp))
                 })
                 .unwrap_or(false);
             if table_disagrees {

@@ -2,16 +2,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { markdownUnder } from "./doc-files.mjs";
 
 const root = process.cwd();
 const docsRoot = path.join(root, "docs");
-
-function walk(dir) {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    return entry.isDirectory() ? walk(full) : [full];
-  });
-}
 
 function localMarkdownLinks(file) {
   const text = fs.readFileSync(file, "utf8");
@@ -38,7 +32,7 @@ function localMarkdownLinks(file) {
   return links;
 }
 
-const docs = walk(docsRoot).filter((file) => file.endsWith(".md"));
+const docs = markdownUnder(docsRoot);
 const roots = [path.join(root, "README.md"), path.join(docsRoot, "README.md")];
 const visited = new Set();
 const queue = roots.filter(fs.existsSync);

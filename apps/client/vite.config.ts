@@ -293,6 +293,10 @@ export default defineConfig({
       ],
     },
   },
+  // Il worker che disegna le pagine dei PDF (`pdf-render-worker.ts`) nasce
+  // `type: "module"` e carica il worker di pdf.js con un `import()`: un modulo
+  // anche nel build, come in sviluppo.
+  worker: { format: "es" },
   build: {
     target: "es2021",
     outDir: "dist",

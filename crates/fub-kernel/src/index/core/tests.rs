@@ -435,7 +435,7 @@ fn clearing_the_index_forgets_the_scan_and_the_instants() {
     index.set_entry_observed(asset("foto.png"), 1);
     index.mark_scanned();
     assert!(index.anagrafe_complete());
-    assert!(index.observed_at_the_same_instant(&id));
+    assert_eq!(index.observed_at(&id), Some(1));
 
     // Svuotato, l'indice non sa più quali file ci sono finché una scansione
     // non lo dice di nuovo, e non si porta dietro gli istanti delle voci che
@@ -445,7 +445,7 @@ fn clearing_the_index_forgets_the_scan_and_the_instants() {
         !index.anagrafe_complete(),
         "un indice svuotato non ha finito nessuna scansione"
     );
-    assert!(!index.observed_at_the_same_instant(&id));
+    assert_eq!(index.observed_at(&id), None);
 }
 
 /// Un indice del core vuoto, coi tipi delle proprietà dichiarabili.

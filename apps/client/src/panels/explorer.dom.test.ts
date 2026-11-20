@@ -716,6 +716,37 @@ describe("la scelta dopo uno spostamento (IMP-1803)", () => {
   });
 });
 
+describe("F2 mette il nome dove lo mette il titolo (IMP-2800)", () => {
+  /// Rinomina con F2 la voce `path` (dentro una cartella aperta) in `typed`.
+  const renameWithF2 = async (path: string, typed: string): Promise<void> => {
+    const li = document.querySelector<HTMLElement>(`#file-list li[data-path="${CSS.escape(path)}"]`)!;
+    li.focus();
+    li.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const input = row(path)!.querySelector<HTMLInputElement>("input")!;
+    input.value = typed;
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  };
+  const open = async (folder: string): Promise<void> => {
+    row(folder)!.click();
+    await waitFor(`${folder} aperta`, () => row(`${folder}/Sintassi.md`) !== null || row(`${folder}/Banco.md`) !== null);
+  };
+
+  it("la cartella scritta in testa è quella di partenza, non una dentro", async () => {
+    const host = await start();
+    await open("Guida");
+    await renameWithF2("Guida/Sintassi.md", "Guida/Regole");
+    await waitFor("la nota rinominata in Guida", () => "Guida/Regole.md" in host.files());
+    expect(Object.keys(host.files()).filter((path) => path.startsWith("Guida/Guida/"))).toEqual([]);
+  });
+
+  it("uno «/» in testa parte dalla radice", async () => {
+    const host = await start();
+    await open("Progetti");
+    await renameWithF2("Progetti/Banco.md", "/Banco radice");
+    await waitFor("la nota alla radice", () => "Banco radice.md" in host.files());
+  });
+});
+
 describe("Invio durante la composizione (IME) non conferma i campi dell'albero", () => {
   const enter = (field: HTMLElement, init: KeyboardEventInit = {}) =>
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }));

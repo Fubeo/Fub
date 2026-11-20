@@ -35,7 +35,7 @@
 | ProseMirror resta in Scrittura | `apps/client/src/scrittura/` | `.github/scripts/check-prosemirror-boundary.mjs` | [architecture/rich-surface-and-proofing.md](../architecture/rich-surface-and-proofing.md) |
 | la Tabella non sa in quale editor vive | `apps/client/src/tabella/` | `.github/scripts/check-tabella-boundary.mjs` | [architecture/editor-surfaces.md](../architecture/editor-surfaces.md) |
 | ogni listener globale ha un owner e un disposer | `apps/client/src/ui/lifetime.ts` | `.github/scripts/check-listeners.mjs` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
-| niente attese nascoste dentro un giro della coda | `apps/client/src/state/kernel.ts` | `.github/scripts/check-races.mjs` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
+| niente attese nascoste dentro un giro di una `Race` | `apps/client/src/ui/race.ts` | `.github/scripts/check-races.mjs` | [architecture/runtime-events-and-jobs.md](../architecture/runtime-events-and-jobs.md) |
 | un editor non scrive un ruolo del tema sull'elemento | `apps/client/src/theme/` | `.github/scripts/check-inline-theme.mjs` | [reference/permissions-and-security.md](../reference/permissions-and-security.md) |
 | nessuno stile in linea che la CSP rifiuterebbe (`<style>` creato da uno script, `style` come markup) | `apps/client/src/ui/stylesheets.ts` | `.github/scripts/check-inline-styles.mjs`, `crates/fub-app/tests/platform_configs.rs`, la CSP del banco | [reference/styles-and-csp.md](../reference/styles-and-csp.md) |
 | il tema di serie si rigenera byte per byte | `apps/client/theme/author/` | `npm run theme:generate && npm run theme:verify` | [development/testing-and-quality.md](../development/testing-and-quality.md) |

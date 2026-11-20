@@ -6,7 +6,7 @@ use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, TaskMarker};
-use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::net::{HttpRequest, HttpResponse, LimitedFetchError};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
@@ -573,11 +573,27 @@ impl HostNetwork for KernelHost<'_> {
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
         match self.ws.network() {
             Some(client) => client.fetch(request),
-            None => Err(PluginError::Unserved(
-                "this host is mounted without a network client".into(),
-            )),
+            None => Err(no_network_client()),
         }
     }
+
+    /// Il tetto di byte va al filo com'è: senza questo inoltro il default
+    /// scaricherebbe tutto e rifiuterebbe dopo.
+    fn fetch_limited(
+        &self,
+        request: HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        match self.ws.network() {
+            Some(client) => client.fetch_limited(request, cancelled, max_bytes),
+            None => Err(no_network_client().into()),
+        }
+    }
+}
+
+fn no_network_client() -> PluginError {
+    PluginError::Unserved("this host is mounted without a network client".into())
 }
 
 impl HostServices for KernelHost<'_> {

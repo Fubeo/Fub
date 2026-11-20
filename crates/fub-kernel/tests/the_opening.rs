@@ -619,13 +619,14 @@ fn a_warm_the_second_phase_not_has_nothing_from_do() {
         .mounts();
     std::fs::write(bench.root().join("una.md"), "prima").expect("semina");
     std::fs::write(bench.root().join("due.md"), "seconda").expect("semina");
-    // La semina dev'essere **strettamente nel passato** quando il primo giro
-    // la osserva: una data nello stesso millisecondo dell'osservazione è
-    // *racily clean* (difetto 0187) e la voce non si scrive in anagrafe —
-    // senza questa pausa il banco litiga con l'orologio e perde quando è
-    // veloce, cioè quando gira da solo. La stessa pausa, con lo stesso nome,
-    // sta in `anagrafe.rs` e `ricongiungimento.rs`.
-    beyond_the_millisecondo();
+    // La semina dev'essere **ferma** quando il primo giro la osserva: una
+    // data nello stesso millisecondo dell'osservazione è *racily clean*
+    // (difetto 0187) e la voce non si scrive in anagrafe, e un timbro di
+    // cambiamento più giovane di una grana si scrive senza timbro, cioè la
+    // riapertura rilegge il file invece di crederle. Senza questa pausa il
+    // banco litiga con l'orologio e perde quando è veloce, cioè quando gira
+    // da solo.
+    beyond_the_grain();
     bench.reindex().expect("primo giro");
 
     let work = bench.scan_vault().expect("riapre");
@@ -647,11 +648,62 @@ fn a_warm_the_second_phase_not_has_nothing_from_do() {
     assert!(opening.whole(), "un vault immutato si chiude intero");
 }
 
-/// La pausa che porta la semina oltre il millisecondo corrente, perché la
-/// regola *racily clean* (difetto 0187) si fidi della data che ha visto. Il
-/// gemello sta in `anagrafe.rs` e `ricongiungimento.rs`.
-fn beyond_the_millisecondo() {
-    std::thread::sleep(std::time::Duration::from_millis(5));
+/// **Un file riscritto dopo che lo si è guardato si rilegge alla riapertura**,
+/// anche con la stessa misura e la stessa data e senza un evento.
+///
+/// L'anagrafe scrive il timbro di cambiamento che il file ha quando la scrive,
+/// accanto ai metadati letti quando lo si è guardato. Prima, una riscrittura
+/// fra i due momenti (una data rimessa, un supporto con la grana di due
+/// secondi) dava una riga col timbro nuovo e i metadati vecchi, e la
+/// riapertura la credeva. Adesso il timbro si scrive solo se era già fermo
+/// quando si è guardato il file
+/// ([`change_stamp_settled`](fub_kernel::transfer::change_stamp_settled)):
+/// quello della riscrittura non lo è, e la riga va senza timbro.
+#[test]
+fn a_file_rewritten_after_it_was_seen_is_reread_at_the_reopening() {
+    use std::io::Write;
+
+    let mut bench = Bench::new()
+        .with_format(Box::new(FallibleProvider))
+        .without_scan()
+        .mounts();
+    let path = bench.root().join("una.md");
+    std::fs::write(&path, "prima").expect("semina");
+    beyond_the_grain();
+    bench.reindex().expect("primo giro");
+
+    // Stessa misura, stessa data, stesso file (riscritto sul posto): solo il
+    // timbro di cambiamento lo distingue.
+    let mtime = std::fs::metadata(&path)
+        .expect("il file")
+        .modified()
+        .expect("la data");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .expect("apertura");
+    file.write_all(b"dopo!").expect("riscrittura");
+    file.set_modified(mtime).expect("la stessa data");
+    drop(file);
+    bench.store_entries();
+
+    let work = bench.scan_vault().expect("riapre");
+    assert_eq!(
+        work.total(),
+        1,
+        "la riga scritta dopo la riscrittura non certifica i metadati di prima"
+    );
+}
+
+/// La pausa che porta la semina oltre la grana del timbro di cambiamento
+/// ([`CHANGE_STAMP_GRAIN`](fub_kernel::storage::CHANGE_STAMP_GRAIN), due
+/// secondi), e quindi anche oltre il millisecondo corrente: l'anagrafe crede
+/// alla data (regola *racily clean*, difetto 0187) e al timbro
+/// ([`change_stamp_settled`](fub_kernel::transfer::change_stamp_settled)) che
+/// ha visto solo quando erano già fermi.
+fn beyond_the_grain() {
+    std::thread::sleep(std::time::Duration::from_millis(2_100));
 }
 
 /// **Chi smette a metà non riconcilia**, ed è la riga che separa «ho smesso di

@@ -719,7 +719,14 @@ pub fn resource_read_at(
 /// ChangeTime) devono combaciare con la lease. `change` qui è il Windows
 /// ChangeTime (non creation_time) e il ctime Unix: escludono rewrite in-place a
 /// pari size+mtime; identity esclude replace/rename; stat esclude mutazione di
-/// specie/dimensione/data.
+/// specie/dimensione/data. Il confronto di identità e timbro è quello di ogni
+/// altro punto che decide «il file è quello che conosco»
+/// ([`FileWitness::agrees`]).
+///
+/// La grana del timbro qui non si guarda, ed è giusto così: la lease vive
+/// quanto una lettura, e ciò che se ne ricorda dopo (una revisione) passa da
+/// [`change_stamp_settled`]. Una riscrittura dello stesso peso, della stessa
+/// data e nella stessa grana del timbro fra due pezzi nessun metadato la vede.
 fn verify_lease(
     lease: &ResourceLease,
     stat: &Stat,
@@ -729,22 +736,15 @@ fn verify_lease(
     if *stat != lease.stat {
         return Err(KernelError::Stale(lease.path.clone()));
     }
-    let identity = storage
-        .file_identity(path)
-        .map_err(|source| KernelError::Io {
-            path: path.to_owned(),
-            source,
-        })?;
-    if identity != lease.identity {
-        return Err(KernelError::Stale(lease.path.clone()));
-    }
-    let change = storage
-        .change_stamp(path)
-        .map_err(|source| KernelError::Io {
-            path: path.to_owned(),
-            source,
-        })?;
-    if change != lease.change {
+    let now = FileWitness::of_path(storage, path).map_err(|source| KernelError::Io {
+        path: path.to_owned(),
+        source,
+    })?;
+    let leased = FileWitness {
+        change_stamp: lease.change,
+        identity: lease.identity,
+    };
+    if !leased.agrees(&now) {
         return Err(KernelError::Stale(lease.path.clone()));
     }
     Ok(())
@@ -771,6 +771,36 @@ pub fn change_stamp_settled(change: Option<u64>, observed: Option<u64>) -> bool 
             .checked_add(crate::storage::CHANGE_STAMP_GRAIN)
             .is_some_and(|settled| settled <= observed),
         _ => false,
+    }
+}
+
+pub(crate) use crate::storage::FileWitness;
+
+impl FileWitness {
+    /// Il testimone di `id` adesso, come lo dà il supporto del vault. Un
+    /// errore del supporto è un campo che non si conosce.
+    pub(crate) fn of(vault: &Vault, id: &DocId) -> FileWitness {
+        vault.witness(id)
+    }
+
+    /// Il testimone di `path` adesso; un errore del supporto risale.
+    pub(crate) fn of_path(
+        storage: &dyn VaultStorage,
+        path: &Utf8Path,
+    ) -> std::io::Result<FileWitness> {
+        storage.witness(path)
+    }
+
+    /// `self`, ciò che si sapeva, dice ancora il file `now`?
+    ///
+    /// Ogni campo deve dire lo stesso dalle due parti. **Un campo noto da una
+    /// parte e ignoto dall'altra è un file cambiato**: nel dubbio il file si
+    /// rilegge, che costa una lettura, invece di essere creduto uguale, che
+    /// costerebbe una modifica persa. Un campo ignoto da entrambe le parti non
+    /// decide: è un supporto che non lo sa dare (una memoria, un archivio), e
+    /// per lui vale la regola storica di misura e data.
+    pub(crate) fn agrees(&self, now: &FileWitness) -> bool {
+        self.change_stamp == now.change_stamp && self.identity == now.identity
     }
 }
 
@@ -1276,6 +1306,44 @@ mod tests {
             matches!(opened, Err(PluginError::AlreadyExists(_))),
             "a name that may be a delivered artifact was opened as a new one"
         );
+    }
+
+    /// **Un campo noto da una parte sola è un file cambiato.**
+    ///
+    /// Prima la regola delle impronte imparate diceva il contrario («un campo
+    /// ignoto non decide»), e un timbro che il supporto non dava più (una
+    /// domanda fallita, una riga scritta senza) lasciava passare per lo stesso
+    /// file un file di cui si sapeva solo l'identità. Ignoto da entrambe le
+    /// parti, invece, non decide: è un supporto che non lo sa dare.
+    #[test]
+    fn a_witness_field_known_on_one_side_only_is_a_changed_file() {
+        let id = |file| Some(FileIdentity { volume: 1, file });
+        let full = FileWitness {
+            change_stamp: Some(10),
+            identity: id(7),
+        };
+        assert!(full.agrees(&full));
+        assert!(!full.agrees(&FileWitness {
+            change_stamp: Some(11),
+            ..full
+        }));
+        assert!(!full.agrees(&FileWitness {
+            identity: id(8),
+            ..full
+        }));
+        let no_stamp = FileWitness {
+            change_stamp: None,
+            ..full
+        };
+        let no_identity = FileWitness {
+            identity: None,
+            ..full
+        };
+        for partial in [no_stamp, no_identity, FileWitness::default()] {
+            assert!(!full.agrees(&partial), "{partial:?}");
+            assert!(!partial.agrees(&full), "{partial:?}");
+            assert!(partial.agrees(&partial), "{partial:?}");
+        }
     }
 
     /// **Un timbro nella stessa grana della lettura non si ricorda.**

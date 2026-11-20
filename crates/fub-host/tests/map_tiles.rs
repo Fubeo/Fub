@@ -3,10 +3,12 @@
 //! finta: risponde ciò che la prova le dice e ricorda che cosa le si è chiesto,
 //! così «nessuna richiesta» si vede e non si suppone.
 
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-use fub_abi::net::{HttpHeader, HttpRequest, HttpResponse};
+use fub_abi::net::{HttpHeader, HttpRequest, HttpResponse, LimitedFetchError};
 use fub_abi::settings::SettingValue;
+use fub_abi::text::Text;
 use fub_abi::traits::HostNetwork;
 use fub_abi::PluginError;
 use fub_host::map_tiles::{TileKind, MAP_TILE_HOSTS, MAX_TILE_BYTES};
@@ -60,6 +62,76 @@ fn host_with(network: Arc<Tiles>, allowed: &[&str]) -> Host {
         )
         .unwrap();
     }
+    host
+}
+
+/// Una rete che applica il tetto come il filo vero: legge il corpo a pezzi da
+/// un server che ne avrebbe `body` byte e smette appena supera il tetto
+/// ricevuto. Ricorda il tetto e quanti byte ha chiesto al server.
+struct Capped {
+    body: u64,
+    status: u16,
+    cap_seen: Mutex<Option<u64>>,
+    read_from_server: Mutex<u64>,
+}
+
+const SERVER_CHUNK: u64 = 16 * 1024;
+
+impl HostNetwork for Capped {
+    fn fetch(&self, _: HttpRequest) -> Result<HttpResponse, PluginError> {
+        panic!("a tile must pass its byte cap to the network")
+    }
+
+    fn fetch_limited(
+        &self,
+        _: HttpRequest,
+        _: &AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        *self.cap_seen.lock().unwrap() = Some(max_bytes);
+        let mut body = PNG.to_vec();
+        let mut read = 0u64;
+        while read < self.body {
+            let piece = SERVER_CHUNK.min(self.body - read);
+            read += piece;
+            *self.read_from_server.lock().unwrap() = read;
+            if read > max_bytes {
+                return Err(LimitedFetchError::TooLarge {
+                    limit: max_bytes,
+                    status: self.status,
+                });
+            }
+        }
+        body.resize(read as usize, 0);
+        Ok(HttpResponse {
+            status: self.status,
+            headers: vec![HttpHeader::new("Content-Type", "image/png")],
+            body,
+        })
+    }
+}
+
+fn capped(body: u64) -> Arc<Capped> {
+    capped_with_status(body, 200)
+}
+
+fn capped_with_status(body: u64, status: u16) -> Arc<Capped> {
+    Arc::new(Capped {
+        body,
+        status,
+        cap_seen: Mutex::new(None),
+        read_from_server: Mutex::new(0),
+    })
+}
+
+fn host_with_capped(network: Arc<Capped>) -> Host {
+    let host = Host::without_watcher().with_network(network);
+    host.set_setting_for_user(
+        None,
+        MAP_TILE_HOSTS,
+        SettingValue::List(vec!["tiles.example.test".to_owned()]),
+    )
+    .unwrap();
     host
 }
 
@@ -190,6 +262,65 @@ fn a_tile_over_one_mebibyte_is_refused() {
     let host = host_with(network, &["tiles.example.test"]);
     let refused = host.map_tile(&url("grande"), TileKind::Raster).unwrap_err();
     assert!(matches!(refused, PluginError::Io(_)), "{refused:?}");
+}
+
+/// Il tetto della tessera arriva alla rete: da un server che manda sedici
+/// mebibyte se ne legge al più uno e un pezzo, e il rifiuto dice che la
+/// tessera è troppo grande.
+#[test]
+fn a_tile_over_one_mebibyte_stops_the_download_at_the_cap() {
+    let network = capped(16 * MAX_TILE_BYTES as u64);
+    let host = host_with_capped(Arc::clone(&network));
+    let refused = host
+        .map_tile(&url("senza-fine"), TileKind::Raster)
+        .unwrap_err();
+    let PluginError::Io(Text::Message(message)) = &refused else {
+        panic!("{refused:?}");
+    };
+    assert_eq!(message.key, "host.map.tile.too_large");
+    assert_eq!(
+        *network.cap_seen.lock().unwrap(),
+        Some(MAX_TILE_BYTES as u64)
+    );
+    let read = *network.read_from_server.lock().unwrap();
+    assert!(
+        read <= MAX_TILE_BYTES as u64 + SERVER_CHUNK,
+        "read {read} bytes for a cap of {MAX_TILE_BYTES}"
+    );
+}
+
+/// Lo stato prima del tetto: un redirect con un corpo enorme è ancora il
+/// rifiuto del redirect, un `404` enorme è ancora l'errore di stato, non
+/// «troppo grande».
+#[test]
+fn an_oversized_redirect_or_error_keeps_its_own_refusal() {
+    let oversized = 16 * MAX_TILE_BYTES as u64;
+    let redirect = host_with_capped(capped_with_status(oversized, 302))
+        .map_tile(&url("redirect-enorme"), TileKind::Raster)
+        .unwrap_err();
+    let PluginError::PermissionDenied(Text::Message(message)) = &redirect else {
+        panic!("{redirect:?}");
+    };
+    assert_eq!(message.key, "host.map.tile.redirect");
+
+    let missing = host_with_capped(capped_with_status(oversized, 404))
+        .map_tile(&url("assente-enorme"), TileKind::Raster)
+        .unwrap_err();
+    let PluginError::Io(Text::Message(message)) = &missing else {
+        panic!("{missing:?}");
+    };
+    assert_eq!(message.key, "host.map.tile.status");
+}
+
+/// Il confine è incluso: una tessera di un mebibyte esatto passa.
+#[test]
+fn a_tile_of_exactly_one_mebibyte_passes() {
+    let network = capped(MAX_TILE_BYTES as u64);
+    let host = host_with_capped(Arc::clone(&network));
+    let tile = host
+        .map_tile(&url("esatta"), TileKind::Raster)
+        .expect("a tile at the cap");
+    assert_eq!(tile.bytes.len(), MAX_TILE_BYTES);
 }
 
 #[test]

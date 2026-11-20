@@ -40,7 +40,7 @@ import type {
   TokenReader,
 } from "./mermaid-styles";
 import { notify } from "./notify";
-import { withPageNonce } from "./stylesheets";
+import { cssomStyleDescendants, withPageNonce } from "./stylesheets";
 import { attributeValue, external, isAllowedLink } from "./sanitize";
 import { composingKey } from "../kit/ime";
 
@@ -1204,6 +1204,10 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       // SVG measurement needs layout, not display:none. This temporary root is
       // owned by the queued render and removed on success, failure, or teardown.
       staging.style.cssText = "position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;width:1200px";
+      // Mermaid scrive `style="…"` sul `<div>` che vi monta per misurare
+      // (#473) e sui nodi dell'SVG di prova (`style A …`, `linkStyle`): via
+      // CSSOM la CSP lo lascia valere, e le misure lo contano (#528).
+      cssomStyleDescendants(staging);
       document.body.append(staging);
       try {
         // Mermaid misura le etichette col foglio che mette in un `<style>`:

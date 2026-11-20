@@ -560,6 +560,20 @@ const DIAGRAM_CASES = [
   "Fine.",
 ].join("\n");
 
+/// Gli stili scritti nel diagramma (#528): Mermaid li mette come attributo sui
+/// nodi dell'SVG dove misura. L'etichetta grande deve stare nel suo riquadro.
+const DIAGRAM_NODE_STYLES = [
+  "Un nodo con riempimento e bordo, e una linea rossa:",
+  "",
+  fence("flowchart LR", "  A[Prenota] --> B[Parti]", "  style A fill:#f9f,stroke-width:4px", "  linkStyle 0 stroke:#f00"),
+  "",
+  "Una classe, e un'etichetta grande:",
+  "",
+  fence("flowchart LR", "  A[Valigia]:::verde --> B[Un testo lungo da misurare]", "  classDef verde fill:#0f0,color:#00f", "  style B font-size:30px"),
+  "",
+  "Fine.",
+].join("\n");
+
 /// I diagrammi e le formule nell'esportazione in PDF (T75): un flusso col
 /// titolo, una formula più larga della colonna, un diagramma con un errore
 /// (sulla carta il riquadro «non disegnato» col problema) e uno in Aurora.
@@ -961,6 +975,7 @@ export const LIVE_CASES: Readonly<Record<string, LiveCase>> = {
   diagramma: { text: DIAGRAM_NOTE, cursor: null },
   "diagramma-stili": { text: DIAGRAM_STYLES, cursor: null },
   "diagramma-casi": { text: DIAGRAM_CASES, cursor: null },
+  "diagramma-nodi": { text: DIAGRAM_NODE_STYLES, cursor: null },
   ...Object.fromEntries(["armonia", "acquerello", "aurora", "blueprint", "inchiostro"]
     .map((style) => [`diagramma-tracciato-${style}`, { text: diagramTrace(style), cursor: null }])),
   "diagramma-tracciato-casi": { text: DIAGRAM_TRACE_CASES, cursor: null },

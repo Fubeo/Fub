@@ -2489,6 +2489,14 @@ const TREES: Record<string, UiNode> = {
         }],
       },
       {
+        node: "section", title: "Dalle proprietà · 1", collapsed: false, key: "property_links", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Frammenti di codice", subtitle: "Proprietà: guida, vedi", action: { action: "open", payload: "Guida/Frammenti di codice.md" }, selected: false, drag: { kind: "document", doc: "Guida/Frammenti di codice.md" } },
+          ],
+        }],
+      },
+      {
         node: "section", title: "In uscita · 2", collapsed: false, key: "outgoing", children: [{
           node: "list",
           items: [

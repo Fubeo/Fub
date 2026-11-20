@@ -3370,35 +3370,99 @@ fn startup_diagnostics(
     support::startup_diagnostics(host, vault)
 }
 
+// La schermata di supporto legge e scrive i dati che la corsia dell'indice
+// scrive: l'anteprima conta le impostazioni e i vault conosciuti, l'export
+// rifiuta una destinazione dentro un vault aperto o conosciuto, la salute e
+// il recupero leggono e riscrivono i file di macchina. Girano fuori dal
+// thread principale (l'export scrive un archivio, l'anteprima conta le righe
+// di tutto il log, il recupero copia e riscrive un file) e in fila con le
+// scritture di quei dati: un vault aperto subito prima dell'export è già
+// escluso, e la salute chiesta dopo un'impostazione scritta la vede. Il
+// recupero di `view-state.json` sta nella corsia dello stato di vista, dove
+// quel file si scrive (`support::recover_lane`).
 #[tauri::command]
-fn support_preview(
-    host: State<Host>,
+async fn support_preview(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     vault: Option<String>,
     log_lines: Option<usize>,
 ) -> Result<fub_host::support::SupportPreview, PluginError> {
-    support::support_preview(host, vault, log_lines)
+    support_preview_in_lane(app, &corsie, vault, log_lines).await
+}
+
+async fn support_preview_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    vault: Option<String>,
+    log_lines: Option<usize>,
+) -> Result<fub_host::support::SupportPreview, PluginError> {
+    data_port(source, corsie, "support preview", move |host| {
+        support::support_preview(host, vault.as_deref(), log_lines)
+    })
+    .await
 }
 
 #[tauri::command]
-fn support_export(
-    host: State<Host>,
+async fn support_export(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     preview: fub_host::support::SupportPreview,
     consent: fub_host::support::ExportConsent,
 ) -> Result<String, PluginError> {
-    support::support_export(host, preview, consent)
+    support_export_in_lane(app, &corsie, preview, consent).await
+}
+
+async fn support_export_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    preview: fub_host::support::SupportPreview,
+    consent: fub_host::support::ExportConsent,
+) -> Result<String, PluginError> {
+    data_port(source, corsie, "support export", move |host| {
+        support::support_export(host, &preview, &consent)
+    })
+    .await
 }
 
 #[tauri::command]
-fn config_health() -> Vec<fub_host::support::ConfigReport> {
-    support::config_health()
+async fn config_health(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
+) -> Result<Vec<fub_host::support::ConfigReport>, PluginError> {
+    config_health_in_lane(app, &corsie).await
+}
+
+async fn config_health_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+) -> Result<Vec<fub_host::support::ConfigReport>, PluginError> {
+    data_port(source, corsie, "config health", |host| {
+        Ok(support::config_health(host))
+    })
+    .await
 }
 
 #[tauri::command]
-fn recover_config(
+async fn recover_config(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     path: String,
     action: fub_host::support::RecoverAction,
 ) -> Result<fub_host::support::RecoverOutcome, PluginError> {
-    support::recover_config(path, action)
+    recover_config_in_lane(app, &corsie, path, action).await
+}
+
+async fn recover_config_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    path: String,
+    action: fub_host::support::RecoverAction,
+) -> Result<fub_host::support::RecoverOutcome, PluginError> {
+    let corsia = source.with_host(|host| support::recover_lane(host, &path));
+    host_lane(source, corsie, "config recovery", corsia, move |host| {
+        support::recover_config(host, &path, action)
+    })
+    .await
 }
 
 // --- superficie IPC da `document_windows` (finestre documento) ---------------
@@ -4989,6 +5053,122 @@ mod lane_ipc_tests {
                 "{in_corsia:?}"
             );
         });
+    }
+
+    /// Un vault aperto e un export di supporto mandati di fila, con la
+    /// destinazione dentro quel vault: l'export lo vede già aperto e rifiuta,
+    /// e il rapporto non entra nelle note. Fuori fila l'export poteva
+    /// partire prima dell'apertura e scrivere nel vault.
+    #[test]
+    fn l_export_di_supporto_vede_il_vault_aperto_subito_prima() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        runtime().block_on(async {
+            let anteprima = support_preview_in_lane(Arc::clone(&banco.host), &corsie, None, None)
+                .await
+                .expect("l'anteprima si raccoglie");
+            for giro in 0..10 {
+                let altro = tempfile::tempdir().expect("tempdir");
+                let secondo =
+                    Utf8PathBuf::from_path_buf(altro.path().canonicalize().unwrap()).unwrap();
+                let destinazione = secondo.join(format!("supporto-{giro}.json"));
+                let (aperto, esportato) = tokio::join!(
+                    open_vault_in_lane(Arc::clone(&banco.host), &corsie, secondo.to_string()),
+                    support_export_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        anteprima.clone(),
+                        fub_host::support::ExportConsent {
+                            acknowledged_preview: true,
+                            include_log: false,
+                            destination: destinazione.to_string(),
+                        },
+                    ),
+                );
+                aperto.expect("il vault si apre");
+                let rifiuto = esportato.expect_err("dentro un vault aperto non si scrive");
+                assert!(matches!(rifiuto, PluginError::BadArgs(_)), "{rifiuto:?}");
+                assert!(!destinazione.exists(), "il rapporto è entrato nel vault");
+                let chiusi = banco
+                    .host
+                    .close_vault(&secondo)
+                    .expect("il vault si chiude");
+                assert!(chiusi.is_empty(), "{chiusi:?}");
+            }
+        });
+    }
+
+    /// Un recupero e la salute chiesta subito dopo, senza aspettare: la
+    /// salute vede il file già riscritto. Gli errori del recupero restano
+    /// quelli dell'host anche in corsia.
+    #[test]
+    fn la_salute_chiesta_dopo_un_recupero_lo_vede() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let config = banco
+            .host
+            .configuration_root()
+            .expect("il banco ha una cartella di configurazione")
+            .to_owned();
+        let impostazioni = fub_host::config::machine_settings_path(&config);
+        let sana = |rapporti: &[fub_host::support::ConfigReport]| {
+            rapporti
+                .iter()
+                .find(|rapporto| rapporto.path == impostazioni.as_str())
+                .map(|rapporto| matches!(rapporto.status, fub_host::support::ConfigStatus::Healthy))
+                .expect("la salute elenca le impostazioni")
+        };
+        runtime().block_on(async {
+            for _ in 0..10 {
+                std::fs::write(&impostazioni, b"{ non json").unwrap();
+                let prima = config_health_in_lane(Arc::clone(&banco.host), &corsie)
+                    .await
+                    .unwrap();
+                assert!(!sana(&prima), "il file guasto risulta sano");
+                let (recupero, salute) = tokio::join!(
+                    recover_config_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        impostazioni.to_string(),
+                        fub_host::support::RecoverAction::ResetEmpty,
+                    ),
+                    config_health_in_lane(Arc::clone(&banco.host), &corsie),
+                );
+                assert!(recupero.unwrap().backup.is_some());
+                assert!(sana(&salute.unwrap()), "la salute non vede il recupero");
+            }
+            let estraneo = recover_config_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                config.join("altro.json").to_string(),
+                fub_host::support::RecoverAction::ResetEmpty,
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(estraneo, PluginError::BadArgs(_)), "{estraneo:?}");
+        });
+    }
+
+    /// Il recupero di un file va nella corsia dove quel file si scrive: lo
+    /// stato di vista con `set_view_state`, il resto con l'indice.
+    #[test]
+    fn il_recupero_va_nella_corsia_dove_il_file_si_scrive() {
+        let banco = banco();
+        let config = banco.host.configuration_root().unwrap().to_owned();
+        let corsia = |path: Utf8PathBuf| support::recover_lane(&banco.host, path.as_str());
+        assert_eq!(
+            corsia(fub_host::config::view_states_path(&config)),
+            domande::CORSIA_STATO
+        );
+        assert_eq!(
+            corsia(fub_host::config::machine_settings_path(&config)),
+            domande::CORSIA_INDICE
+        );
+        assert_eq!(
+            corsia(fub_host::config::vault_registry_path(&config)),
+            domande::CORSIA_INDICE
+        );
+        assert_eq!(corsia(config.join("altro.json")), domande::CORSIA_INDICE);
     }
 }
 

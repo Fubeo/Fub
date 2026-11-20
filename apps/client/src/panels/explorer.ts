@@ -78,6 +78,7 @@ import { mountExplorerTypes, type ExplorerTypes } from "./explorer-types";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
+import { placedTitle, renamedPath as renamedPagePath } from "../state/page-rename";
 import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui/context-views";
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
@@ -453,7 +454,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     const next = entries.find((entry) => entry.spec.key === FILES_LEGACY_FOLDER_PAGES)?.value === true;
     if (next === legacyPages) return;
     legacyPages = next;
-    await refreshFromKernel(true);
+    await expected(refreshFromKernel(true));
   });
   void readLegacyPages();
   // Gli XMP e le miniature nell'albero (T26): cambiano soltanto ciò che si
@@ -2436,19 +2437,13 @@ function reportRenameCollision(outcome: RenameResult, typed: string): boolean {
   );
   return true;
 }
-/// Il path che una rinomina in posto dà alla voce: per una nota cambia il
-/// nome pagina e restano cartella ed estensione, per una cartella l'ultimo
-/// segmento.
+/// Il path che una rinomina in posto dà alla voce, con la regola del titolo
+/// (`placedTitle`, IMP-2800): un nome semplice resta nella cartella, uno «/»
+/// in testa o la cartella stessa in testa partono dalla radice. Una nota
+/// tiene la sua estensione.
 function renamedPath(from: string, newName: string, folder = false): string {
-  if (folder) {
-    const parent = parentOf(from);
-    return normalizedName(parent ? `${parent}/${newName}` : newName);
-  }
-  const slash = from.lastIndexOf("/");
-  const dir = slash === -1 ? "" : from.slice(0, slash + 1);
-  const dot = from.lastIndexOf(".");
-  const ext = dot > slash ? from.slice(dot) : "";
-  return normalizedName(`${dir}${newName}${ext}`);
+  if (folder) return normalizedName(placedTitle(parentOf(from), newName));
+  return renamedPagePath(from, newName);
 }
 
 async function renameDoc(from: string, newPageName: string, typed?: string): Promise<void> {

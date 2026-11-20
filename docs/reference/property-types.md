@@ -164,8 +164,9 @@ scritto da solo come testo (`tipo: "[[Tipi/Libro]]"`) si mostra come una
 Relazione anche senza tipo nel registro. In sola lettura il nome apre la
 nota e niente si scrive.
 
-Rinominare o spostare una nota legata (`note.rename`, e `folder.rename` per
-le voci di una cartella) riscrive anche i link delle proprietà che la
+Rinominare o spostare una nota legata (`note.rename`, `folder.rename` per
+le voci di una cartella, e `vault.archive` che la sposta nell'archivio)
+riscrive anche i link delle proprietà che la
 nominano: un link solo, una lista di link, o un testo che è soltanto un
 `[[…]]`, in qualunque chiave. I link del frontmatter non sono link del
 corpo, quindi non li riscrive la rinomina del kernel: li cerca il comando
@@ -182,7 +183,10 @@ si scrive con la sua revisione, nello stesso annullamento della rinomina.
 Una nota cambiata nel frattempo, o un nome nuovo con caratteri che in una
 proprietà cambierebbero il link (`"`, `|`, `#`, `[`…), lascia il link col
 nome vecchio: la rinomina riesce, e l'esito nomina quelle note
-(`partial`), che l'app mostra come un avviso di guasto.
+(`partial`), che l'app mostra come un avviso di guasto. Un'archiviazione
+interrotta dopo lo spostamento, ripresa al lancio seguente, cerca i link
+di proprietà rimasti al percorso vecchio e li riscrive allo stesso modo
+(una nota già riscritta non cambia due volte).
 
 ### Collegata da
 
@@ -197,8 +201,19 @@ Un link della proprietà è una stringa che è soltanto un `[[…]]`, come valor
 o come voce di un elenco, in qualunque chiave e con qualunque tipo
 dichiarato (`fub_abi::rules::properties::links`); un `[[…]]` dentro altro
 testo no. Il grafo dei link del kernel li risolve con le regole dei wikilink
-(nome, percorso anche parziale, alias) e li tiene in archi suoi, separati
-da backlink e uscenti del corpo, aggiornati a ogni scrittura come gli altri.
+(nome, percorso anche parziale, alias, con `#Titolo` o `^blocco` che non
+cambiano la nota) e li tiene in archi suoi, separati da backlink e uscenti
+del corpo, aggiornati a ogni scrittura come gli altri. Un allegato
+(`fonte: "[[contratto.pdf]]"`) non è un nodo del grafo: la foglia lo risolve
+al momento della domanda come i link del corpo, con la cartella degli
+allegati, e così la rinomina dell'allegato riscrive anche le proprietà. Una
+nota tornata dal cestino rientra negli archi da sola, perché il grafo
+risolve di nuovo i link che la nominano. I controlli di salute contano
+questi link come quelli del corpo: una nota nominata solo in una proprietà
+non è orfana, una che nomina solo in una proprietà non è un vicolo cieco,
+un allegato nominato in una proprietà è usato, e un link di proprietà che
+non porta a niente è fra i link rotti, senza span e con la destinazione
+scritta come `detail`. Il filtro «orfane» del grafo usa la stessa regola.
 
 `query_index` li chiede con la foglia custom `fub:property-link` dentro
 una domanda `documents`:
@@ -214,8 +229,10 @@ stessa compare, un link rotto no, un payload diverso è `bad_args`. Il costo
 cresce coi link che arrivano ai bersagli, non col vault. È custom e non un
 caso nuovo di `query-predicate` perché da `0.2.0` la WIT non prende casi
 nuovi (ADR 0238), e così la foglia arriva anche ai plugin già compilati.
-«Collegata da» è questa foglia, una domanda per ogni Relazione dichiarata:
-il client la può chiedere da `query_index`, ma non la mostra ancora.
+«Collegata da» è questa foglia, una domanda per ogni Relazione dichiarata.
+Il pannello Collegamenti la mostra nella sezione «Dalle proprietà»
+(`fub_features::backlinks::property_links`): ogni nota che nomina quella
+aperta in una proprietà, di qualunque chiave, con le chiavi accanto.
 
 ### Il riepilogo in una Base
 

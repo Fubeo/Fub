@@ -84,7 +84,6 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
-import { createServer } from "vite";
 import { GESTURE_SCENE, SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, prepareScene, stillShot, watchCsp, MOMENT, OUTPUT, WINDOW } from "./stage.mjs";
 import {
@@ -976,11 +975,9 @@ await rm(REPORT, { recursive: true, force: true });
 await mkdir(REPORT, { recursive: true });
 
 // Una corsa dura minuti: un file salvato intanto non deve ricaricare la pagina
-// sotto la misura. Il server non guarda il disco e non manda aggiornamenti.
-const stage = await openStage({
-  createServer: (options) => createServer({ ...options, server: { hmr: false, watch: null } }),
-  browserArgs: BROWSER_ARGS,
-});
+// sotto la misura. Il server non guarda il disco e non manda aggiornamenti
+// (`watch: false` di `openStage`: un `watch: null` in linea Vite lo ignora).
+const stage = await openStage({ watch: false, browserArgs: BROWSER_ARGS });
 const report = [];
 try {
   for (const choreography of chosen) {

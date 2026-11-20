@@ -29,12 +29,13 @@
 //    è successo alla prima corsa di questo file.
 // 6. **La finestra è una.** Viewport fisso e `deviceScaleFactor: 1`: la
 //    baseline è per una misura, non per lo schermo di chi passa.
-// 7. **Il caso è seminato.** `Math.random` è un generatore a seme fisso.
-//    CodeMirror lo usa nella ricerca di una posizione sotto un punto
-//    (`InlineCoordsScan.scan`), e la selezione la cerca ai due bordi della
-//    riga a capo: col caso vero, in una corsa su due i due bordi differivano
-//    di un carattere e tre lettere scelte si dipingevano come una riga intera
-//    (`riga-dei-suggerimenti`).
+// 7. **Il caso è seminato.** `Math.random` è un generatore a seme fisso: chi
+//    lo usa (gli id di un diagramma, un pareggio da spezzare) dà la stessa
+//    foto a ogni corsa. Un difetto che dipende dal caso, però, il seme lo
+//    nasconde: CodeMirror fino alla 6.43.7 cercava col caso la posizione sotto
+//    un punto, e tre lettere vicino a un a capo si dipingevano a volte come
+//    una riga intera nell'app vera ma mai qui (#399, corretto a monte nella
+//    6.43.8 e tenuto da `src/editors/text/codemirror-upstream.test.ts`).
 // 8. **Ciò che cambierà da sé lo dice.** Un elemento che sta per riscriversi
 //    senza che nessuno lo tocchi (la riga dei suggerimenti durante la sua
 //    pausa) porta `data-pending`; prima dello scatto si aspetta che nella
@@ -101,6 +102,21 @@ export const BASELINE = here("./baseline");
 /// il termine di paragone.
 export const OUTPUT = here("./.output");
 
+/// Il plugin che spegne il guardiano dei file di Vite. Non basta
+/// `server: { watch: null }` nella configurazione in linea: `mergeConfig` salta
+/// i `null` e il server guarderebbe lo stesso tutta la cartella (152 cartelle
+/// del client, con `CHOKIDAR_USEPOLLING` interrogate di continuo, o osservatori
+/// di inotify che altri server di Vite possono avere esaurito: ENOSPC). Il
+/// `null` lo mette quindi un plugin, a configurazione risolta, prima che il
+/// server crei il guardiano. Un plugin nuovo per ogni server: nessuno stato
+/// condiviso fra due palchi aperti nello stesso processo.
+export function unwatched() {
+  return {
+    name: "bench:no-watch",
+    configResolved: (config) => void (config.server.watch = null),
+  };
+}
+
 /// Apre il palco: server di Vite e browser. Restituisce anche come si chiude,
 /// perché un banco che lascia in giro un server è un banco che alla seconda
 /// corsa non parte.
@@ -111,21 +127,31 @@ export const OUTPUT = here("./.output");
 /// `browserArgs` aggiunge opzioni di Chromium a quelle di tutti i banchi, per
 /// il banco che ne ha bisogno e per lui solo (il moto: `BROWSER_ARGS` di
 /// `motion-rules.mjs`).
+///
+/// `watch: false` apre un server che non guarda il disco e non manda
+/// aggiornamenti (vedi `unwatched`): per i banchi che misurano per minuti, a
+/// cui un file salvato intanto ricaricherebbe la pagina sotto la misura.
 export async function openStage({
   quiet = true,
   port,
   strictPort = true,
   browserArgs = [],
+  watch = true,
   createServer: createServerImpl = createServer,
   chromium: chromiumImpl = chromium,
 } = {}) {
   let server;
   let browser;
   try {
+    const serverOptions = {
+      ...(port === undefined ? {} : { port, strictPort }),
+      ...(watch ? {} : { hmr: false }),
+    };
     server = await createServerImpl({
       configFile: here("../vite.bench.config.ts"),
       logLevel: quiet ? "warn" : "info",
-      ...(port === undefined ? {} : { server: { port, strictPort } }),
+      ...(Object.keys(serverOptions).length === 0 ? {} : { server: serverOptions }),
+      ...(watch ? {} : { plugins: [unwatched()] }),
     });
     await server.listen();
     // Il riscaldamento della config (`server.warmup`, #395) parte con
