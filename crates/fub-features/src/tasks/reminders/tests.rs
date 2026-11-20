@@ -477,7 +477,10 @@ fn the_route_answers_the_next_occurrence_with_the_toggle_rule() {
 #[test]
 fn a_reminder_moved_renamed_or_rebuilt_answers_from_its_new_place() {
     let mut index = indexed(&[
-        ("a.md", "- [ ] Uno ⏰ 2026-11-13 09:00\n- [ ] Due ⏰ 2026-11-13 09:00\n"),
+        (
+            "a.md",
+            "- [ ] Uno ⏰ 2026-11-13 09:00\n- [ ] Due ⏰ 2026-11-13 09:00\n",
+        ),
         ("b.md", "- [ ] Tre ⏰ 2026-11-13 09:00\n"),
     ]);
     let nine = minute("2026-11-13 09:00");
@@ -513,18 +516,39 @@ fn a_reminder_moved_renamed_or_rebuilt_answers_from_its_new_place() {
     index.close(&mut host).unwrap();
     assert!(index.is_empty());
     assert_eq!(index.len(), 0);
-    assert_eq!(index.between(None, None, REMINDER_LIMIT), ReminderList::default());
+    assert_eq!(
+        index.between(None, None, REMINDER_LIMIT),
+        ReminderList::default()
+    );
     index.on_documents_indexed(&[
-        model("a.md", "- [ ] Uno ⏰ 2026-11-13 10:00\n- [ ] Due ⏰ 2026-11-13 09:00\n"),
+        model(
+            "a.md",
+            "- [ ] Uno ⏰ 2026-11-13 10:00\n- [ ] Due ⏰ 2026-11-13 09:00\n",
+        ),
         model("z.md", "- [ ] Tre ⏰ 2026-11-13 09:00\n"),
     ]);
     assert_eq!(index.len(), 3);
     // Un intervallo rovesciato, vuoto o agli estremi dei minuti è vuoto,
     // senza far cadere niente.
-    assert!(index.between(Some(nine), Some(nine), REMINDER_LIMIT).reminders.is_empty());
-    assert!(index.between(Some(nine + 5), Some(nine), REMINDER_LIMIT).reminders.is_empty());
-    assert!(index.between(Some(i64::MAX), None, REMINDER_LIMIT).reminders.is_empty());
-    assert_eq!(index.between(Some(i64::MIN), Some(i64::MAX), REMINDER_LIMIT).reminders.len(), 3);
+    assert!(index
+        .between(Some(nine), Some(nine), REMINDER_LIMIT)
+        .reminders
+        .is_empty());
+    assert!(index
+        .between(Some(nine + 5), Some(nine), REMINDER_LIMIT)
+        .reminders
+        .is_empty());
+    assert!(index
+        .between(Some(i64::MAX), None, REMINDER_LIMIT)
+        .reminders
+        .is_empty());
+    assert_eq!(
+        index
+            .between(Some(i64::MIN), Some(i64::MAX), REMINDER_LIMIT)
+            .reminders
+            .len(),
+        3
+    );
     // Un limite a zero non porta niente ma dice che ce ne sono.
     let none = index.between(None, None, 0);
     assert!(none.reminders.is_empty() && none.more);
@@ -556,7 +580,9 @@ fn random_note(dice: &mut Dice, doc: &str) -> DocumentModel {
             2 | 3 => source.push_str(&format!("- [ ] Compito {line} ⏰ {when}\n")),
             4 => source.push_str(&format!("- [x] Fatto {line} ⏰ {when}\n")),
             5 => source.push_str(&format!("> - [ ] Citato {line} ⏰ {when}\n\n")),
-            6 => source.push_str(&format!("- Voce {line}\n  - [ ] Annidato {line} ⏰ {when}\n")),
+            6 => source.push_str(&format!(
+                "- Voce {line}\n  - [ ] Annidato {line} ⏰ {when}\n"
+            )),
             _ => source.push_str(&format!("Testo {line}.\n\n")),
         }
     }
@@ -581,8 +607,14 @@ fn scanned(
                 .take_while(|heading| heading.span.start < reminder.at)
                 .last()
                 .map(|heading| heading.text.clone());
-            assert_eq!(heading, reminder.heading, "the section of {doc}@{}", reminder.at);
-            if after.is_none_or(|a| reminder.minute > a) && until.is_none_or(|u| reminder.minute <= u) {
+            assert_eq!(
+                heading, reminder.heading,
+                "the section of {doc}@{}",
+                reminder.at
+            );
+            if after.is_none_or(|a| reminder.minute > a)
+                && until.is_none_or(|u| reminder.minute <= u)
+            {
                 hits.push(ReminderEntry {
                     doc: doc.clone(),
                     at: reminder.at,
@@ -598,7 +630,10 @@ fn scanned(
     });
     let more = hits.len() > limit;
     hits.truncate(limit);
-    ReminderList { reminders: hits, more }
+    ReminderList {
+        reminders: hits,
+        more,
+    }
 }
 
 #[test]
@@ -674,7 +709,11 @@ fn the_ordered_index_answers_like_the_full_scan() {
             scanned(&vault, None, None, usize::MAX).reminders.len(),
             "step {step}"
         );
-        assert_eq!(index.is_empty(), index.len() == 0, "step {step}");
+        assert_eq!(
+            index.is_empty(),
+            vault.values().all(|note| reminders_of(note).is_empty()),
+            "step {step}"
+        );
     }
 }
 

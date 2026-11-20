@@ -198,7 +198,9 @@ azioni per voce, e gli avvisi sono al più tre e le loro azioni spariscono con
 loro.
 
 L'indice dei promemoria sta in memoria e si ricostruisce dalle note a ogni
-apertura del vault (`crates/fub-features/src/tasks/reminders.rs`); la notifica
+apertura del vault (`crates/fub-features/src/tasks/reminders.rs`). Li tiene
+anche in ordine d'ora, così la domanda di ogni minuto costa i promemoria di
+quel minuto e non quelli del vault; la notifica
 la mostra l'app (`crates/fub-app/src/promemoria.rs`), con `notify-rust`.
 Provato su Linux; macOS e Windows usano la stessa libreria, senza una prova a
 mano.

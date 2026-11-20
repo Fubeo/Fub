@@ -486,7 +486,9 @@ impl Resolver {
                 .filter(|&at| test(&self.keys[at]))
                 .collect()
         };
-        if let Some(found) = pick(matching(&|[link, doc, _]| *link == wanted || *doc == wanted)) {
+        if let Some(found) = pick(matching(&|[link, doc, _]| {
+            *link == wanted || *doc == wanted
+        })) {
             return found;
         }
         if let Some(folder) = &self.folder {
@@ -662,8 +664,8 @@ pub(crate) fn typed_notes(
 /// Le note di un tipo solo, `types[of]`, per chi ne mostra le prime `shown`
 /// (la pagina del tipo): quante sono in tutto e le prime in ordine di
 /// percorso, con le chiavi `extra`. Le stesse note che [`typed_notes`] dà a
-/// quel tipo, ma senza ordinare le note degli altri tipi e chiedendo le
-/// chiavi `extra` soltanto per le righe che si mostrano.
+/// quel tipo, ma senza raccogliere e ordinare le note degli altri tipi: si
+/// ordinano soltanto le righe che si mostrano.
 pub(crate) fn notes_of_type(
     host: &dyn ReadApi,
     types: &[TypeRef],
@@ -672,7 +674,7 @@ pub(crate) fn notes_of_type(
     extra: &[&str],
     shown: usize,
 ) -> Result<(usize, Vec<DocumentMatch>), PluginError> {
-    let mut rows: Vec<DocumentMatch> = typed_rows(host, types, folder, &[])?
+    let mut rows: Vec<DocumentMatch> = typed_rows(host, types, folder, extra)?
         .into_iter()
         .filter_map(|(at, row)| (at == of).then_some(row))
         .collect();
@@ -684,37 +686,6 @@ pub(crate) fn notes_of_type(
         rows.truncate(shown);
     }
     rows.sort_by(|a, b| a.doc.cmp(&b.doc));
-    let extra: Vec<&str> = extra
-        .iter()
-        .copied()
-        .filter(|key| *key != TYPE_KEY)
-        .collect();
-    if extra.is_empty() || rows.is_empty() {
-        return Ok((total, rows));
-    }
-    // Le colonne in evidenza, per le sole righe mostrate. Una nota sparita
-    // fra le due domande resta col suo nome solo: il prossimo evento
-    // dell'indice ridisegna la pagina.
-    let mut columns: std::collections::HashMap<DocId, Vec<_>> = host
-        .query_index(IndexQuery::Documents {
-            matching: QueryExpr::of(QueryPredicate::Docs {
-                docs: rows.iter().map(|row| row.doc.clone()).collect(),
-            }),
-            sort: None,
-            select: PropertySelect::keys(&extra),
-            page: None,
-            excerpts: Excerpts::Omit,
-        })?
-        .documents()?
-        .items
-        .into_iter()
-        .map(|row| (row.doc, row.properties))
-        .collect();
-    for row in &mut rows {
-        if let Some(properties) = columns.remove(&row.doc) {
-            row.properties.extend(properties);
-        }
-    }
     Ok((total, rows))
 }
 
@@ -1496,8 +1467,19 @@ mod tests {
     /// Un valore di `tipo` a caso, nelle forme che una persona scrive.
     fn random_wanted(dice: &mut Dice) -> String {
         let names = [
-            "Libro", "libro", "LIBRO", "Film", "Progetto", "Quadro", "Statua", "Casa/Libro",
-            "Lavoro/Progetto", "Tipi/Libro", "Tipi/Casa/Progetto.md", "tipi/film", "Altro/Libro",
+            "Libro",
+            "libro",
+            "LIBRO",
+            "Film",
+            "Progetto",
+            "Quadro",
+            "Statua",
+            "Casa/Libro",
+            "Lavoro/Progetto",
+            "Tipi/Libro",
+            "Tipi/Casa/Progetto.md",
+            "tipi/film",
+            "Altro/Libro",
         ];
         names[dice.roll(names.len())].to_string()
     }
@@ -1515,9 +1497,9 @@ mod tests {
                 let picked = match resolver.position(&wanted) {
                     Picked::Found(at) => Resolution::Found(types[at].clone()),
                     Picked::Missing => Resolution::Missing,
-                    Picked::Ambiguous(many) => {
-                        Resolution::Ambiguous(many.iter().map(|&at| types[at].doc.clone()).collect())
-                    }
+                    Picked::Ambiguous(many) => Resolution::Ambiguous(
+                        many.iter().map(|&at| types[at].doc.clone()).collect(),
+                    ),
                 };
                 assert_eq!(picked, expected, "{wanted}");
             }
@@ -1558,8 +1540,7 @@ mod tests {
             for (of, all) in full.iter().enumerate() {
                 for shown in [0, 1, 3, 50] {
                     let (total, rows) =
-                        notes_of_type(&host, &types, folder.as_deref(), of, &extra, shown)
-                            .unwrap();
+                        notes_of_type(&host, &types, folder.as_deref(), of, &extra, shown).unwrap();
                     assert_eq!(total, all.len(), "round {round}, type {of}");
                     let expected: Vec<(String, Vec<(String, String)>)> = all
                         .iter()
