@@ -71,8 +71,17 @@ Files of this skill:
 
 1. **Slots are always full.**
    - Keep as many coders as the maintainer allows (Opus, effort medium).
-   - Haiku (effort xhigh) only for very simple tasks: one or two files, a
-     clear rule, no design or contract choice. Never Sonnet.
+   - Haiku coders (`model: "haiku"`, `effort: "max"`) take the medium tasks
+     too, not only the trivial ones. That means functions of moderate
+     complexity, even over a long session, in one area, with a clear rule
+     and a proof that can be written down. Opus keeps four kinds of task:
+     - a design or contract choice: ABI, WIT, IPC, an on-disk format,
+       security or concurrency;
+     - a graphical task with a prototype;
+     - a task across several crates;
+     - a diagnosis with no known cause.
+     A Haiku result gets the same review as an Opus one. A task a Haiku
+     closes badly goes to Opus. Never Sonnet.
    - A task is ready when its `Stato` is `[ ]` and every task in its
      `Dipende da` is `[x]`. The phases of a plan are not gates.
    - Never run two tasks whose `Tocca` overlap, or two in the same crate,
@@ -138,7 +147,7 @@ Files of this skill:
 
 ## Testers
 
-Haiku testers (effort xhigh, or the effort the maintainer names) use the real
+Haiku testers (effort max, or the effort the maintainer names) use the real
 app like a person would and write down what breaks. They don't take a coder
 slot. Their environments, instructions and defect file are in
 `CLAUDE_DEVICE.md`.
@@ -202,7 +211,7 @@ Fix every alarm at once:
   or `pgrep -x`. **Never** `until ! pgrep -f "X"`: the loop's own command line
   contains X, so it matches itself and never ends. In zsh, split a list of pids
   with `${=pids}` and kill by number, never with a generic `pkill`.
-- **Measurements:** a Haiku (effort xhigh) runs the whole round with the
+- **Measurements:** a Haiku (effort max) runs the whole round with the
   scripts that already exist. An Opus coder starts only when a gesture is
   repeatably over budget (4 runs out of 5) and the cause needs finding in the
   code. Where `CLAUDE_DEVICE.md` says the machine has a real GPU, a Haiku runs

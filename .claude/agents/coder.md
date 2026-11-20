@@ -32,16 +32,21 @@ expected.
   created with. Never push, open a PR, look at or start CI, switch branch,
   rebase, reset or rewrite history. Start no agents but the helpers below.
 - **Haiku helpers.** You may start at most **two** helpers for the whole task
-  (`Agent` with `model: "haiku"` and `effort: "max"`), only for mechanical
-  parts of your task: reading a long red log down to the errors, rerunning a
-  test that timed out under load, a probe or screenshots of the real app or
-  the bench, a wide search, regenerating a generated file. They never start
-  agents, never commit, push or touch git, and never edit a file outside the
-  paths you give them. Brief each one like a peer: the absolute path of your
+  (`Agent` with `model: "haiku"` and `effort: "max"`). They can take two kinds of work:
+  - mechanical parts: reading a long red log down to the errors, rerunning a
+    test that timed out under load, a probe or screenshots of the real app or
+    the bench, a wide search, regenerating a generated file;
+  - one function of moderate complexity with its unit tests, once you have
+    settled the design (signature, owner, rule and failing cases), even when
+    it takes a long session. Never a contract, an on-disk format, security
+    or concurrency.
+
+  They never start agents, never commit, push or touch git, and never edit a
+  file outside the paths you give them. Brief each one like a peer: the absolute path of your
   worktree (they don't share your directory), the exact goal, its own bench
   port or scratch folder, the queue rule for heavy checks, and what to return.
   You stay responsible: check what a helper did before you rely on it, and
-  write the code, the tests and the commits yourself. Name each helper and
+  read every line a helper wrote, run its tests yourself and make the commits. Name each helper and
   what it did in the report.
 - **Your files.** Touch only the paths under `Tocca`, plus the tests, the
   callers, the generated files and the `docs/` page that sit with them: name

@@ -81,11 +81,13 @@ Shared files, in the orchestrator's skill:
    Every choice you made alone gets a line in the `Registro` of
    `DECISIONS.md`.
 4. **Haiku helpers.** At most **two per task** (`Agent` with
-   `model: "haiku"`, `effort: "max"`), as in `coder.md`: only mechanical parts
-   (a long red log read down to the errors, a test rerun that timed out under
-   load, a probe or screenshots, a wide search, a regenerated file). They don't
-   start agents, commit or touch git. You check what they did, and you write
-   the code, the tests and the commits.
+   `model: "haiku"`, `effort: "max"`), as in `coder.md`:
+   - the mechanical parts;
+   - one function of moderate complexity with its tests, once you have
+     settled the design, even over a long session.
+
+   They don't start agents, commit or touch git. You read every line they
+   wrote, run their tests and make the commits.
 5. **Close** as in "Closing" of `coder.md`: guards that take seconds first,
    then `scripts/check.sh --rapido --base <base>` through the heavy-check
    queue, as a background command (you are notified when it ends; don't poll).
