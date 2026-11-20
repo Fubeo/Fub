@@ -20,7 +20,9 @@ use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     InvokeMode, ParamKind, ParamSpec,
 };
-use fub_abi::net::HttpRequest;
+use std::sync::atomic::AtomicBool;
+
+use fub_abi::net::{HttpRequest, LimitedFetchError};
 use fub_abi::settings::SettingValue;
 use fub_abi::text::{Arg, Text};
 use fub_abi::PluginError;
@@ -167,16 +169,39 @@ pub(crate) fn invoke(
     let network = host
         .network()
         .ok_or_else(|| PluginError::Unserved(Text::key("host.web.clip.no_network")))?;
-    // Nessun prestito è preso qui: la rete dura quanto vuole, il vault no.
-    let response = network.fetch(HttpRequest::get(url.as_str()))?;
-    if !(200..300).contains(&response.status) {
-        return Err(PluginError::Io(Text::message(
+    let status_refusal = |status: u16| {
+        PluginError::Io(Text::message(
             "host.web.clip.status",
             vec![
                 Arg::text("url", &url),
-                Arg::text("status", response.status.to_string()),
+                Arg::text("status", status.to_string()),
             ],
-        )));
+        ))
+    };
+    let too_large = || {
+        PluginError::BadArgs(Text::message(
+            "host.web.clip.too_large",
+            vec![Arg::text("url", &url)],
+        ))
+    };
+    // Nessun prestito è preso qui: la rete dura quanto vuole, il vault no. Il
+    // tetto va alla rete, che smette di leggere appena lo supera: una pagina
+    // enorme non fa scaricare il tetto generale dell'host. Il comando non ha
+    // un annullamento suo: la bandiera resta giù, e il tempo è quello
+    // dell'host.
+    let never = AtomicBool::new(false);
+    let response = network
+        .fetch_limited(HttpRequest::get(url.as_str()), &never, MAX_PAGE as u64)
+        .map_err(|error| match error {
+            // Lo stato prima del tetto: un `404` enorme resta un errore di stato.
+            LimitedFetchError::TooLarge { status, .. } if !(200..300).contains(&status) => {
+                status_refusal(status)
+            }
+            LimitedFetchError::TooLarge { .. } => too_large(),
+            LimitedFetchError::Failed(error) => error,
+        })?;
+    if !(200..300).contains(&response.status) {
+        return Err(status_refusal(response.status));
     }
     let kind = response.header("content-type");
     if !is_page(kind) {
@@ -185,11 +210,10 @@ pub(crate) fn invoke(
             vec![Arg::text("kind", kind.unwrap_or_default())],
         )));
     }
+    // Una rete che non porta il tetto fino al filo (il default del contratto)
+    // scarica tutto e rifiuta dopo: il controllo resta qui per lei.
     if response.body.len() > MAX_PAGE {
-        return Err(PluginError::BadArgs(Text::message(
-            "host.web.clip.too_large",
-            vec![Arg::text("url", &url)],
-        )));
+        return Err(too_large());
     }
     let html = String::from_utf8_lossy(&response.body);
     let (markdown, _, notes) = fub_importers::html_to_markdown(&html);

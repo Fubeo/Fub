@@ -52,6 +52,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::custody::{Custody, WriteTurn};
 use crate::query::query_workspace;
@@ -1803,22 +1804,59 @@ impl HostNetwork for JobHost {
     }
 
     /// Come [`fetch`](HostNetwork::fetch), con il tetto di byte del chiamante
-    /// portato fino al filo. La bandiera che ferma il trasferimento è quella
-    /// del job, come per `fetch` e per il `fetch_cancelled` di default: dentro
-    /// un job annulla il job.
+    /// portato fino al filo. Il trasferimento si ferma quando si alza **una
+    /// qualunque** delle bandiere: quella del chiamante (per esempio il cane
+    /// da guardia di un suo tempo limite), quella del job e quelle di chi
+    /// contiene questo host. Il filo ne guarda una sola, quindi riceve una
+    /// bandiera combinata ([`any_raised`]).
     fn fetch_limited(
         &self,
         request: HttpRequest,
-        _cancelled: &AtomicBool,
+        cancelled: &AtomicBool,
         max_bytes: u64,
     ) -> Result<HttpResponse, LimitedFetchError> {
+        // Una bandiera del chiamante già alzata alza subito la combinata, e il
+        // filo rifiuta prima di partire.
         let (client, granted) = self.network_wire()?;
-        Guard::new(client.as_ref(), granted).fetch_limited(
-            request,
-            self.cancelled.as_ref(),
-            max_bytes,
-        )
+        let mut flags: Vec<&AtomicBool> = vec![cancelled, self.cancelled.as_ref()];
+        flags.extend(self.outer_stops.iter().map(Arc::as_ref));
+        any_raised(&flags, |combined| {
+            Guard::new(client.as_ref(), granted).fetch_limited(request, combined, max_bytes)
+        })
     }
+}
+
+/// Ogni quanto il ripetitore di [`any_raised`] guarda le bandiere: sotto la
+/// finestra con cui il filo guarda la sua (`net.rs`, 50 ms), così
+/// l'annullamento non arriva sensibilmente più tardi.
+const RELAY_POLL: Duration = Duration::from_millis(10);
+
+/// Esegue `work` con una bandiera che si alza appena se ne alza una fra
+/// `flags`.
+///
+/// Un filo a parte la ripete finché `work` lavora, e chiude appena `work`
+/// torna (lo si sveglia, non si aspetta il suo giro): il filo dura quanto il
+/// trasferimento e non oltre. Una bandiera già alzata alza subito la
+/// combinata.
+fn any_raised<T>(flags: &[&AtomicBool], work: impl FnOnce(&AtomicBool) -> T) -> T {
+    let raised = || flags.iter().any(|flag| flag.load(Ordering::Relaxed));
+    let combined = AtomicBool::new(raised());
+    let done = AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        let relay = scope.spawn(|| {
+            while !done.load(Ordering::Acquire) {
+                if raised() {
+                    combined.store(true, Ordering::Relaxed);
+                    return;
+                }
+                std::thread::park_timeout(RELAY_POLL);
+            }
+        });
+        let result = work(&combined);
+        done.store(true, Ordering::Release);
+        relay.thread().unpark();
+        result
+    })
 }
 
 impl JobHost {

@@ -3,14 +3,17 @@
 //! e la nota è Markdown con la fonte. Un sito non approvato, un redirect o una
 //! risposta che non è HTML non scrivono niente e lo dicono.
 
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, InvokeMode};
-use fub_abi::net::{HttpHeader, HttpRequest, HttpResponse};
+use fub_abi::net::{HttpHeader, HttpRequest, HttpResponse, LimitedFetchError};
 use fub_abi::settings::SettingValue;
+use fub_abi::text::Text;
 use fub_abi::traits::HostNetwork;
 use fub_abi::PluginError;
+use fub_host::web_clip::MAX_PAGE;
 use fub_host::Host;
 use serde_json::json;
 
@@ -51,6 +54,10 @@ fn page(status: u16, kind: &'static str, body: &'static str) -> Arc<Page> {
 }
 
 fn vault_with(network: Arc<Page>) -> (tempfile::TempDir, Utf8PathBuf, Host) {
+    vault_on(network)
+}
+
+fn vault_on(network: Arc<dyn HostNetwork>) -> (tempfile::TempDir, Utf8PathBuf, Host) {
     let dir = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(dir.path().join("Diario")).unwrap();
     std::fs::create_dir(&root).unwrap();
@@ -191,6 +198,124 @@ fn a_redirect_or_an_answer_that_is_not_a_page_writes_nothing() {
         );
         assert!(notes(&root).is_empty(), "{status} {kind}");
     }
+}
+
+/// Un server che avrebbe `body` byte di HTML: applica il tetto ricevuto come
+/// il filo vero, leggendo a pezzi e smettendo appena lo supera, e ricorda il
+/// tetto e quanti byte ha mandato. Senza tetto (`fetch`) li manda tutti.
+struct Endless {
+    status: u16,
+    body: u64,
+    cap_seen: Mutex<Option<u64>>,
+    sent: Mutex<u64>,
+}
+
+const SERVER_CHUNK: u64 = 16 * 1024;
+
+impl Endless {
+    fn serve(&self, cap: Option<u64>) -> Result<HttpResponse, LimitedFetchError> {
+        let mut sent = 0u64;
+        while sent < self.body {
+            sent += SERVER_CHUNK.min(self.body - sent);
+            *self.sent.lock().unwrap() = sent;
+            if let Some(cap) = cap.filter(|cap| sent > *cap) {
+                return Err(LimitedFetchError::TooLarge {
+                    limit: cap,
+                    status: self.status,
+                });
+            }
+        }
+        let mut body = b"<title>Pagina</title><p>testo</p>".to_vec();
+        body.resize(self.body as usize, b' ');
+        Ok(HttpResponse {
+            status: self.status,
+            headers: vec![HttpHeader::new("Content-Type", "text/html")],
+            body,
+        })
+    }
+}
+
+impl HostNetwork for Endless {
+    fn fetch(&self, _: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.serve(None).map_err(|error| match error {
+            LimitedFetchError::Failed(error) => error,
+            other => PluginError::Io(other.to_string().into()),
+        })
+    }
+
+    fn fetch_limited(
+        &self,
+        _: HttpRequest,
+        _: &AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        *self.cap_seen.lock().unwrap() = Some(max_bytes);
+        self.serve(Some(max_bytes))
+    }
+}
+
+fn endless(status: u16, body: u64) -> Arc<Endless> {
+    Arc::new(Endless {
+        status,
+        body,
+        cap_seen: Mutex::new(None),
+        sent: Mutex::new(0),
+    })
+}
+
+/// Il testo dell'errore come lo vede chi usa Fub: il comando dell'utente lo
+/// rende nella lingua dell'interfaccia.
+fn shown(text: &Text) -> String {
+    match text {
+        Text::Literal(text) => text.to_string(),
+        other => panic!("not rendered: {other:?}"),
+    }
+}
+
+/// Il tetto della pagina arriva alla rete: da un server che manda sedici
+/// mebibyte se ne leggono al più due e un pezzo, e il rifiuto è quello di
+/// sempre per la pagina troppo grande.
+#[test]
+fn a_page_over_the_cap_stops_the_download_at_the_cap() {
+    let network = endless(200, 16 * MAX_PAGE as u64);
+    let (_dir, root, host) = vault_on(network.clone());
+    approve(&host, &["esempio.it"]);
+    let error = clip(&host, "https://esempio.it/enorme", InvokeMode::Apply).unwrap_err();
+    // La frase di `host.web.clip.too_large`.
+    let PluginError::BadArgs(text) = &error else {
+        panic!("{error:?}");
+    };
+    assert!(shown(text).contains("supera i 2 MiB"), "{error:?}");
+    assert_eq!(*network.cap_seen.lock().unwrap(), Some(MAX_PAGE as u64));
+    let sent = *network.sent.lock().unwrap();
+    assert!(
+        sent <= MAX_PAGE as u64 + SERVER_CHUNK,
+        "read {sent} bytes for a cap of {MAX_PAGE}"
+    );
+    assert!(notes(&root).is_empty());
+}
+
+/// Lo stato prima del tetto: un `404` enorme resta l'errore di stato.
+#[test]
+fn an_oversized_error_keeps_its_status_refusal() {
+    let (_dir, root, host) = vault_on(endless(404, 16 * MAX_PAGE as u64));
+    approve(&host, &["esempio.it"]);
+    let error = clip(&host, "https://esempio.it/assente", InvokeMode::Apply).unwrap_err();
+    // La frase di `host.web.clip.status`.
+    let PluginError::Io(text) = &error else {
+        panic!("{error:?}");
+    };
+    assert!(shown(text).contains("ha risposto 404"), "{error:?}");
+    assert!(notes(&root).is_empty());
+}
+
+/// Il confine è incluso: una pagina di due mebibyte esatti diventa una nota.
+#[test]
+fn a_page_exactly_at_the_cap_becomes_a_note() {
+    let (_dir, root, host) = vault_on(endless(200, MAX_PAGE as u64));
+    approve(&host, &["esempio.it"]);
+    clip(&host, "https://esempio.it/esatta", InvokeMode::Apply).expect("a page at the cap");
+    assert_eq!(notes(&root).len(), 1);
 }
 
 #[test]

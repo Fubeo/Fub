@@ -457,6 +457,119 @@ fn a_direct_dry_run_job_host_never_reaches_the_network_provider() {
     );
 }
 
+/// Un trasferimento che non finisce da solo: aspetta finché la bandiera che
+/// riceve si alza, o finché scade il suo tetto di prova. Ricorda se si è
+/// fermato per la bandiera.
+struct UntilCancelled {
+    stopped_by_flag: Mutex<Option<bool>>,
+}
+
+impl HostNetwork for UntilCancelled {
+    fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        panic!("the test asks only fetch_limited")
+    }
+
+    fn fetch_limited(
+        &self,
+        _request: HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+        _max_bytes: u64,
+    ) -> Result<HttpResponse, fub_abi::net::LimitedFetchError> {
+        let started = Instant::now();
+        while started.elapsed() < Duration::from_secs(5) {
+            if cancelled.load(Ordering::Relaxed) {
+                *self.stopped_by_flag.lock().unwrap() = Some(true);
+                return Err(PluginError::Cancelled("stopped".into()).into());
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        *self.stopped_by_flag.lock().unwrap() = Some(false);
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: Vec::new(),
+        })
+    }
+}
+
+/// `JobHost::fetch_limited` ferma il trasferimento quando si alza la bandiera
+/// del chiamante (il cane da guardia di un tempo limite dentro il job) **o**
+/// quella del job: tutte e due contano.
+#[test]
+fn job_fetch_limited_stops_on_the_caller_flag_or_the_job_flag() {
+    use std::sync::atomic::AtomicBool;
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let network = Arc::new(UntilCancelled {
+        stopped_by_flag: Mutex::new(None),
+    });
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_plugin(
+            PluginManifest::new(CALLER, "Network caller").granting(
+                fub_abi::traits::PluginPermissions::of(&[permission::NETWORK]),
+            ),
+            Trust::Community,
+        )
+        .expect("the caller declares with the network grant");
+        ws.set_network(Arc::clone(&network) as Arc<dyn HostNetwork>);
+    }
+    let raise_later = |flag: Arc<AtomicBool>| {
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            flag.store(true, Ordering::Relaxed);
+        })
+    };
+
+    for which in ["caller", "job"] {
+        *network.stopped_by_flag.lock().unwrap() = None;
+        let caller = Arc::new(AtomicBool::new(false));
+        let job_flag = Arc::new(AtomicBool::new(false));
+        let raiser = raise_later(if which == "caller" {
+            Arc::clone(&caller)
+        } else {
+            Arc::clone(&job_flag)
+        });
+        let job = JobHost::new(workspace.clone(), CALLER).cancelled_by(Arc::clone(&job_flag));
+        let started = Instant::now();
+        let result = job.fetch_limited(HttpRequest::get("https://api.acme.test/x"), &caller, 1024);
+        raiser.join().unwrap();
+        assert!(
+            matches!(
+                result,
+                Err(fub_abi::net::LimitedFetchError::Failed(
+                    PluginError::Cancelled(_)
+                ))
+            ),
+            "{which}: {result:?}"
+        );
+        assert_eq!(
+            *network.stopped_by_flag.lock().unwrap(),
+            Some(true),
+            "{which}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(2), "{which}");
+    }
+
+    // Una bandiera del chiamante già alzata non fa partire niente.
+    *network.stopped_by_flag.lock().unwrap() = None;
+    let raised = AtomicBool::new(true);
+    let result = JobHost::new(workspace.clone(), CALLER).fetch_limited(
+        HttpRequest::get("https://api.acme.test/x"),
+        &raised,
+        1024,
+    );
+    assert!(
+        matches!(
+            result,
+            Err(fub_abi::net::LimitedFetchError::Failed(
+                PluginError::Cancelled(_)
+            ))
+        ),
+        "{result:?}"
+    );
+}
+
 #[test]
 fn host_command_releases_both_workspace_guards_and_reenters() {
     let vault = vault();
