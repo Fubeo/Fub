@@ -1840,25 +1840,17 @@ export const SCENE = touchLast(onPage("shell", [
       await page.waitForFunction(() => [...document.querySelectorAll('.pane.focus .pane-editor .live-card[data-card-kind="sheet"] .canvas-card-sheet')]
         .every((sheet) => sheet.dataset.cardState === "content" || sheet.dataset.cardState === "lost"));
       if (scroll === "bottom") {
-        // Le schede sopra prendono la loro altezza anche dopo il primo salto in
-        // fondo, e CodeMirror disegna solo le righe nella vista: si torna in
-        // fondo a ogni controllo finché le due schede dell'ultima riga ci sono
-        // e l'ultima sta nella finestra (un'attesa sola, senza corse).
-        await page.waitForFunction(() => {
-          const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
-          if (!scroller) return false;
-          scroller.scrollTop = scroller.scrollHeight;
-          const missing = document.querySelector('.pane.focus .pane-editor .live-card[data-card-state="missing"]');
-          const card = document.querySelector('.pane.focus .pane-editor .live-card[data-card-state="unsupported"]')?.getBoundingClientRect();
-          // Il fondo vale solo quando altezza e posto restano gli stessi per
-          // dieci fotogrammi di fila: una scheda che cresce dopo il salto
-          // spostava la foto di qualche pixel da una corsa all'altra.
-          const firma = `${scroller.scrollHeight}:${scroller.scrollTop}`;
-          const fermo = window.__fondoFirma === firma ? (window.__fondoFermo ?? 0) + 1 : 0;
-          window.__fondoFirma = firma;
-          window.__fondoFermo = fermo;
-          return missing !== null && card !== undefined && card.bottom <= window.innerHeight && fermo >= 10;
-        }, null, { polling: "raf" });
+        // In fondo con ogni blocco disegnato e misurato (#510): le ultime
+        // schede ci sono di sicuro, anche se lo scorrimento di `openLive` era
+        // arrivato prima che quelle in alto prendessero la loro altezza.
+        await scrollLiveToEnd(page);
+        await page.waitForSelector('.pane.focus .pane-editor .live-card[data-card-state="missing"]');
+        const last = '.pane.focus .pane-editor .live-card[data-card-state="unsupported"]';
+        await page.waitForSelector(last);
+        await page.waitForFunction((selector) => {
+          const card = document.querySelector(selector)?.getBoundingClientRect();
+          return card !== undefined && card.bottom <= window.innerHeight;
+        }, last);
       }
       if (scroll === "lost") {
         // La parte persa sta sotto il foglio: la si porta in alto nella vista.
@@ -3148,11 +3140,8 @@ export const SCENE = touchLast(onPage("shell", [
         if (!focus) return;
         if (focus === "unsupported") {
           // Le schede sopra hanno preso la loro altezza: si va in fondo, dove
-          // CodeMirror monta le ultime.
-          await page.evaluate(() => {
-            const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
-            if (scroller) scroller.scrollTop = scroller.scrollHeight;
-          });
+          // CodeMirror monta le ultime, con ogni blocco misurato (#510).
+          await scrollLiveToEnd(page);
         }
         const card = focus === "unsupported"
           ? '.pane.focus .pane-editor .live-card[data-card-state="unsupported"]'
@@ -4764,6 +4753,73 @@ async function settleLive(page, bottom) {
   }
   // Due fotogrammi: la misura di CodeMirror dopo l'ultima transazione.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/// Porta in fondo la nota della Live a fuoco con un'impaginazione che non
+/// dipende da come ci si è arrivati (#510).
+///
+/// CodeMirror disegna solo le righe vicine alla vista (il suo «viewport»); le
+/// altre le conta con l'ultima altezza misurata o con una stima, e la Live
+/// toglie le decorazioni di riga (i titoli) a ciò che esce dal viewport.
+/// Scorrere subito in fondo dava così due impaginazioni, a seconda che il
+/// viewport coprisse ancora la nota intera o no: quale delle due dipendeva da
+/// quando le schede vive finivano di montarsi rispetto allo scorrimento, e le
+/// righe in vista si spostavano di una frazione di pixel (la foto cambiava di
+/// un pixel da un giro all'altro).
+///
+/// Qui la finestra si allunga finché la nota ci sta tutta: CodeMirror disegna
+/// e misura ogni blocco, schede comprese, nel loro stato finale. Poi la
+/// finestra torna com'era e si scorre in fondo: un viewport che copre la nota
+/// intera resta valido (CodeMirror lo rifà solo se lascia scoperta la vista o
+/// va troppo oltre), e la foto non dipende più dalla storia. Pronto è una
+/// condizione, non un ritardo: la nota disegnata tutta, senza vuoti stimati
+/// (`.cm-gap`), nessuna scheda in caricamento, l'altezza ferma e lo
+/// scorrimento in fondo. Se non ci si arriva, si alza.
+async function scrollLiveToEnd(page) {
+  const settled = () => page.evaluate(async () => {
+    const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+    if (!scroller) throw new Error("la nota a fuoco non ha lo scorrimento di CodeMirror");
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    const loading = () => scroller.querySelector('.live-card[data-card-state="loading"], [data-state="loading"]') !== null;
+    // Misurata: l'altezza e lo scorrimento fermi per due fotogrammi, e
+    // nessuna scheda che legge ancora il suo file.
+    for (let tries = 0; tries < 100; tries += 1) {
+      const before = [scroller.scrollHeight, scroller.scrollTop];
+      await frame();
+      await frame();
+      if (!loading() && scroller.scrollHeight === before[0] && scroller.scrollTop === before[1]) {
+        return {
+          overflow: scroller.scrollHeight - scroller.clientHeight,
+          gaps: scroller.querySelectorAll(".cm-content > .cm-gap").length,
+          bottom: scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1,
+        };
+      }
+    }
+    throw new Error("la nota non si ferma: CodeMirror rimisura a ogni fotogramma");
+  });
+  const window = page.viewportSize();
+  if (!window) throw new Error("la pagina non ha una finestra fissa");
+  let state = await settled();
+  for (let tries = 0; state.overflow > 0 || state.gaps > 0; tries += 1) {
+    if (tries >= 10) throw new Error(`la nota non sta in una finestra lunga: avanza di ${state.overflow} px con ${state.gaps} vuoti`);
+    const { height } = page.viewportSize();
+    await page.setViewportSize({ width: window.width, height: height + Math.max(state.overflow, 0) + 200 });
+    state = await settled();
+  }
+  await page.setViewportSize(window);
+  await settled();
+  for (let tries = 0; ; tries += 1) {
+    if (tries >= 10) throw new Error("la nota non resta in fondo: la sua altezza cambia a ogni giro");
+    await page.evaluate(() => {
+      const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller");
+      scroller.scrollTop = scroller.scrollHeight;
+    });
+    state = await settled();
+    if (state.bottom) break;
+  }
+  // In fondo la nota dev'essere ancora disegnata tutta: se CodeMirror avesse
+  // rifatto il viewport, la foto tornerebbe a dipendere da quando.
+  if (state.gaps > 0) throw new Error("in fondo la nota ha di nuovo dei vuoti stimati: è troppo lunga per questa preparazione");
 }
 
 /// Apre un documento di videoscrittura dall'albero e aspetta che la
