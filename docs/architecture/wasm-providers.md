@@ -77,7 +77,7 @@ trappola (`crates/fub-wasm-host/tests/deferred_providers.rs`). La domanda
 `up_to_date` resta un'intersezione su tutti gli indici montati, e il kernel la
 chiede a ognuno anche quando è già vuota: un guest che risponde vuoto, come
 fa la risposta di default, riceve ogni documento a ogni apertura
-([la riapertura tiepida](storage-and-identity.md#la-riapertura-tiepida)).
+([la riapertura tiepida](plugin-runtime.md#la-riapertura-tiepida)).
 `EventHandler` inbound è implementato: un componente reale dichiara la
 maschera e riceve `Notice` attraverso lo stesso registro del nativo, con
 `Guard` applicato alle letture del guest.

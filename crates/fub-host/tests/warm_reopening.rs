@@ -247,6 +247,17 @@ fn aged(root: &Utf8Path, rel: &str, bytes: &str, ago: Duration) {
 
 const HOUR: Duration = Duration::from_secs(3600);
 
+/// Aspetta che i timbri di cambiamento dei file appena scritti siano
+/// **fermi** per l'anagrafe: più vecchi di una grana
+/// (`fub_kernel::storage::CHANGE_STAMP_GRAIN`, due secondi su Linux)
+/// dell'istante in cui l'apertura li guarda. `aged` porta indietro la data,
+/// ma il timbro (`ctime`) non si rimette: la riga di un file scritto adesso
+/// non certifica niente alla riapertura, e il presidio rileggerebbe il vault
+/// per l'orologio invece che per ciò che c'è dentro.
+fn beyond_the_grain() {
+    std::thread::sleep(Duration::from_millis(2_100));
+}
+
 fn vault() -> (tempfile::TempDir, Utf8PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(dir.path().to_owned()).unwrap();
@@ -278,6 +289,7 @@ fn vault() -> (tempfile::TempDir, Utf8PathBuf) {
     }
     aged(&root, "Viste/progetti.base", BASE, HOUR);
     aged(&root, "Disegni/schizzo.svg", DISEGNO, HOUR);
+    beyond_the_grain();
     (dir, root)
 }
 
@@ -434,6 +446,7 @@ fn a_note_changed_while_closed_comes_back_with_its_new_reminder() {
     assert_eq!(ORA.len(), DOPO.len());
     let changed = format!("---\ntipo: progetto\n---\n# Casa\n\n{DOPO}- [ ] Senza ora\n");
     aged(&root, "Progetti/casa.md", &changed, HOUR / 2);
+    beyond_the_grain();
 
     let (warm, read) = session(&seen, &root);
     assert_eq!(read, vec!["Progetti/casa.md".to_string()]);

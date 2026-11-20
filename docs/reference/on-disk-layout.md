@@ -260,7 +260,7 @@ essere eliminata e ricostruita dai documenti.
 promemoria che ha ricavato da ogni nota, con la revisione del sorgente da cui
 li ha ricavati: è ciò che gli permette di dire «questa nota ce l'ho» alla
 riapertura senza rileggerla
-([la riapertura tiepida](../architecture/storage-and-identity.md#la-riapertura-tiepida)).
+([la riapertura tiepida](../architecture/plugin-runtime.md#la-riapertura-tiepida)).
 Il file è una cache (`HostApi::cache_write`): sta fuori dal backup e dallo
 spazio dati del plugin, e perderlo costa solo una rilettura.
 
