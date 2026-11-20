@@ -50,6 +50,21 @@ vault spostato riparte come replica nuova, e la cartella del percorso vecchio
 non viene cancellata. I file di una versione precedente, scritti direttamente
 in `sync/` e condivisi da tutti i vault, non vengono adottati né cancellati.
 
+Un passaggio tiene il cursore (`cursor.json`) in memoria e lo scrive con una
+rename atomica soltanto quando cambia: dopo gli ack del push, ogni 512 op
+applicati e a fine pagina del pull, prima di uscire per un errore e alla fine.
+Un passaggio senza cambiamenti non lo riscrive. Dopo un crollo fra due
+scritture il pull dopo riceve di nuovo gli op già sul disco e li riconosce
+senza riscriverli; il servizio scarta un push ripetuto per `op_id`.
+
+Un passaggio non apre i file fermi: un file si legge solo se l'impronta che
+l'indice del workspace tiene per lui manca o non è quella sincronizzata.
+L'indice la lega a misura, data, timbro di cambio e identità del file e la
+ricontrolla alla scansione d'apertura, così un file cambiato ad app chiusa si
+legge anche con la stessa misura e la data rimessa com'era. In un processo
+aperto, un passaggio al giorno non si fida dell'indice e rilegge tutto, per un
+evento del watcher perso.
+
 Sync e pubblicazione leggono il token da `FUB_SERVICES_TOKEN_FILE`, poi da
 `FUB_SERVICES_TOKEN`, poi da `services-token`. Il file vale soltanto se è
 regolare, non è un collegamento e, su Unix, è leggibile dal solo proprietario,

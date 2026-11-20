@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// Quanti op applicati al più fra una scrittura del cursore e la successiva.
+const APPLIED_PER_WRITE: usize = 512;
+
 /// Passo reale del job `sync.pass` su `&mut dyn HostApi` (JobHost fuori lock):
 /// outbox/cursori dallo state-dir TRUSTED, HTTP via `HostNetwork::fetch`,
 /// apply via porte locali con CAS raw (`write_document_bytes` per byte/BOM,
@@ -56,7 +59,11 @@ pub(crate) fn run_pass_on(
         .map_err(|_| PluginError::Io("sync endpoint binding failed".into()))?;
     let vdk = ensure_job_vdk(&base, &auth, &mut state, host)?;
     let queued = read_outbox(root)?;
-    let cursor = read_cursor(root)?;
+    // Il cursore del passaggio sta in memoria e si scrive a blocchi, ognuno
+    // in una sola scrittura atomica: dopo gli ack del push, dopo ogni blocco
+    // di op applicati, alla fine del pull. Tutti quelli che lo scrivono
+    // tengono `JobLock`, preso sopra, quindi nessuno lo cambia sotto.
+    let mut cursor = read_cursor(root)?;
     let mut vv = cursor.server_vv.clone();
     for row in &queued {
         let op = row
@@ -85,14 +92,30 @@ pub(crate) fn run_pass_on(
         .into_iter()
         .map(|conflict| conflict.doc_id)
         .collect();
-    let Collected { docs, too_large } = if do_push {
-        collect_job_docs(
+    let queued_docs: BTreeSet<String> = queued
+        .iter()
+        .filter_map(|row| row["op"]["doc_id"].as_str())
+        .map(str::to_string)
+        .collect();
+    let Collected {
+        docs,
+        too_large,
+        listed,
+    } = if do_push {
+        let started = super::job_now_ms();
+        let sweep = sweep::due(root, started);
+        let collected = collect_job_docs(
             host,
             &state.user_exclude,
             &cursor.synced,
             &blocked_docs,
-            &queued,
-        )?
+            &queued_docs,
+            sweep,
+        )?;
+        if sweep {
+            sweep::done(root, started);
+        }
+        collected
     } else {
         Collected::default()
     };
@@ -142,12 +165,13 @@ pub(crate) fn run_pass_on(
         fresh.push(serde_json::json!({"op": op, "revision": doc.revision}));
     }
     for doc_id in cursor.synced.keys().filter(|_| do_push) {
-        if blocked_docs.contains(doc_id)
+        // Un file che l'indice elenca c'è: si chiede al disco soltanto per
+        // quelli che mancano dall'elenco.
+        if listed.contains(doc_id)
+            || blocked_docs.contains(doc_id)
             || !super::is_syncable_entry(doc_id)
             || super::is_user_excluded(&state.user_exclude, doc_id)
-            || queued
-                .iter()
-                .any(|row| row["op"]["doc_id"].as_str() == Some(doc_id))
+            || queued_docs.contains(doc_id)
         {
             continue;
         }
@@ -234,6 +258,7 @@ pub(crate) fn run_pass_on(
         push_conflicts.extend(report_conflicts(root, &push_res)?);
     }
     // Server ack means WAL committed; only then can local queued entries be retired.
+    let mut cursor_dirty = false;
     for row in &queued {
         let op = &row["op"];
         if acked.contains(op["op_id"].as_str().unwrap_or("")) {
@@ -245,23 +270,26 @@ pub(crate) fn run_pass_on(
             }
             let revision: Option<Revision> = serde_json::from_value(row["revision"].clone())
                 .map_err(|_| PluginError::Io("sync queued revision invalid".into()))?;
-            let doc = DocId::new(id.to_string());
-            match (revision, host.document_revision(&doc)) {
-                (Some(expected), Ok(_)) | (Some(expected), Err(PluginError::NotFound(_))) => {
-                    mark_synced(root, id, expected)?
+            // Un aggiornamento confermato è sincronizzato alla revisione che
+            // portava, che il file ci sia ancora o no: non serve rileggerlo.
+            // Una cancellazione toglie l'impronta solo se il file manca
+            // ancora; uno rinato si spedisce al passaggio dopo.
+            match revision {
+                Some(expected) => {
+                    cursor.synced.insert(id.to_string(), expected);
+                    cursor_dirty = true;
                 }
-                (None, Err(PluginError::NotFound(_))) => {
-                    let mut cursor = read_cursor(root)?;
-                    cursor.synced.remove(id);
-                    write_cursor(root, &cursor)?;
-                }
-                (None, Ok(_)) => {}
-                (_, Err(e)) => return Err(e),
+                None => match host.document_revision(&DocId::new(id.to_string())) {
+                    Err(PluginError::NotFound(_)) => {
+                        cursor_dirty |= cursor.synced.remove(id).is_some();
+                    }
+                    Ok(_) => {}
+                    Err(e) => return Err(e),
+                },
             }
         }
     }
     if !acked.is_empty() {
-        let mut cursor = read_cursor(root)?;
         for row in &queued {
             let op = &row["op"];
             if acked.contains(op["op_id"].as_str().unwrap_or("")) {
@@ -275,9 +303,15 @@ pub(crate) fn run_pass_on(
                 }
             }
         }
-        // Persist the sender's counter before retiring its durable outbox.
-        // A crash after push but before pull must not reuse the same counter.
+        cursor_dirty = true;
+    }
+    // Persist the synced revisions and the sender's counter, in one write,
+    // before retiring the durable outbox. A crash after push but before pull
+    // must not reuse the same counter.
+    if cursor_dirty {
         write_cursor(root, &cursor)?;
+    }
+    if !acked.is_empty() {
         let ids: Vec<&str> = acked.iter().map(String::as_str).collect();
         http_post(
             host,
@@ -290,7 +324,6 @@ pub(crate) fn run_pass_on(
         )?;
     }
     drain_outbox(&state, &acked)?;
-    let cursor = read_cursor(root)?;
     let mut applied = BTreeSet::new();
     let mut conflicts = 0;
     let mut held = 0;
@@ -299,7 +332,19 @@ pub(crate) fn run_pass_on(
     let mut version_docs = BTreeSet::new();
     let mut snapshot_vv: Option<BTreeMap<String, u64>> = None;
     let mut restarts = 0u8;
-    if do_pull {
+    // Gli op applicati entrano nel cursore in memoria; si scrivono ogni
+    // `APPLIED_PER_WRITE` op, alla fine di ogni pagina e prima di uscire per
+    // un errore. Un crollo fra due scritture lascia sul disco dei file già
+    // applicati che il cursore non nomina: il pull dopo li riceve di nuovo e
+    // `apply_remote_op` li riconosce (stessi byte, nome già spostato, file già
+    // tolto) senza riscriverli. Il blocco tiene corta la finestra in cui il
+    // push di un passaggio interrotto rimanderebbe al servizio, come modifica
+    // locale, un file appena scaricato.
+    let mut unsaved = 0usize;
+    let pull_result = (|| -> Result<(), PluginError> {
+        if !do_pull {
+            return Ok(());
+        }
         #[allow(clippy::never_loop)]
         loop {
             let mut request = serde_json::json!({
@@ -345,20 +390,26 @@ pub(crate) fn run_pass_on(
                     .get("op_id")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| PluginError::Internal("sync pull bad op id".into()))?;
-                if read_cursor(root)?.applied.contains(id) {
+                if cursor.applied.contains(id) {
                     applied.insert(id.to_string()); // crash after durable apply, before ack
                 } else {
-                    match apply_remote_op(host, &state, &vdk, op)? {
+                    match apply_remote_op(host, &state, &vdk, op, &mut cursor)? {
                         ApplyOutcome::Applied { op_id } => {
-                            mark_applied(root, &op_id)?;
+                            cursor.applied.insert(op_id.clone());
                             applied.insert(op_id);
+                            unsaved += 1;
                         }
                         ApplyOutcome::Conflict { op_id } => {
-                            mark_applied(root, &op_id)?;
+                            cursor.applied.insert(op_id.clone());
                             applied.insert(op_id);
                             conflicts += 1;
+                            unsaved += 1;
                         }
                         ApplyOutcome::Held => held += 1,
+                    }
+                    if unsaved >= APPLIED_PER_WRITE {
+                        write_cursor(root, &cursor)?;
+                        unsaved = 0;
                     }
                 }
                 if applied.contains(id) {
@@ -373,6 +424,10 @@ pub(crate) fn run_pass_on(
                     }
                 }
             }
+            if unsaved > 0 {
+                write_cursor(root, &cursor)?;
+                unsaved = 0;
+            }
             if !truncated {
                 break;
             }
@@ -386,15 +441,27 @@ pub(crate) fn run_pass_on(
             }
             offset = next;
         }
+        Ok(())
+    })();
+    if let Err(error) = pull_result {
+        if unsaved > 0 {
+            write_cursor(root, &cursor)?;
+        }
+        return Err(error);
     }
+    // Il servizio dà la storia di un documento per volta: si chiede per i soli
+    // documenti che questo passaggio ha cambiato, e `versions.json` si scrive
+    // una volta per tutti.
+    let mut histories = Vec::with_capacity(version_docs.len());
     for doc in version_docs {
         let path = format!(
             "/v1/sync/versions?vault_id={}&doc_id={}",
             state.vault_id,
             percent_encode(&doc)
         );
-        store_versions(root, &http_get(host, &base, &auth, &path)?)?;
+        histories.push(http_get(host, &base, &auth, &path)?);
     }
+    store_versions(root, &histories)?;
     if !applied.is_empty() {
         let ids: Vec<&str> = applied.iter().map(String::as_str).collect();
         http_post(
@@ -408,14 +475,15 @@ pub(crate) fn run_pass_on(
         )?;
     }
     if held == 0 && do_pull {
-        advance_cursor(
-            root,
+        let before = (cursor.server_vv.clone(), cursor.applied.len());
+        cursor.advance(
             &snapshot_vv
                 .ok_or_else(|| PluginError::Internal("sync pull missing snapshot".into()))?,
-        )?;
-        let mut cursor = read_cursor(root)?;
+        );
         cursor.applied.clear();
-        write_cursor(root, &cursor)?;
+        if before != (cursor.server_vv.clone(), 0) {
+            write_cursor(root, &cursor)?;
+        }
     }
     let status_path = format!(
         "/v1/sync/status?vault_id={}&replica_id={}",

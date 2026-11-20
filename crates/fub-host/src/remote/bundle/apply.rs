@@ -73,11 +73,17 @@ pub(super) enum ApplyOutcome {
 /// wire) -> `aad_verify` -> CAS raw (`write_document_bytes`) o testo CAS.
 /// Deletes/renames via comandi kernel; binari senza porta = hold (qui la
 /// porta ESISTE: `write_document_bytes`, quindi nessun hold finale).
+///
+/// `cursor` è quello del passaggio, in memoria: qui si aggiornano le impronte
+/// sincronizzate e chi chiama lo scrive su disco a blocchi. Un crollo prima
+/// della scrittura non perde niente: l'op torna col pull dopo e si riconosce
+/// già applicato (stessi byte sul disco, nome già spostato, file già tolto).
 pub(super) fn apply_remote_op(
     host: &mut dyn HostApi,
     state: &JobState,
     vdk: &[u8; 32],
     value: &serde_json::Value,
+    cursor: &mut JobCursor,
 ) -> Result<ApplyOutcome, PluginError> {
     use super::sync::{WireKind, WireOp};
     let op: WireOp = serde_json::from_value(value.clone())
@@ -98,8 +104,8 @@ pub(super) fn apply_remote_op(
     let plain = super::aad_verify(vdk, &envelope, &op.nonce_b64, &op.ciphertext_b64)
         .map_err(|_| PluginError::Conflict("sync authentication failed".into()))?;
     let id = DocId::new(op.doc_id.clone());
-    let cursor = read_cursor(&state.root)?;
-    let prior = cursor.synced.get(&op.doc_id);
+    let prior = cursor.synced.get(&op.doc_id).cloned();
+    let prior = prior.as_ref();
     let current = match host.document_revision(&id) {
         Ok(revision) => Some(revision),
         Err(PluginError::NotFound(_)) => None,
@@ -135,10 +141,8 @@ pub(super) fn apply_remote_op(
                     return Ok(ApplyOutcome::Held);
                 }
                 if bytes == plain && (prior.is_some() || cursor.synced.get(to) == Some(&revision)) {
-                    let mut cursor = read_cursor(&state.root)?;
                     cursor.synced.remove(from);
                     cursor.synced.insert(to.clone(), revision);
-                    write_cursor(&state.root, &cursor)?;
                     return Ok(ApplyOutcome::Applied { op_id: op.op_id });
                 }
             }
@@ -158,7 +162,9 @@ pub(super) fn apply_remote_op(
             }
             if bytes != plain {
                 match host.write_document_bytes(&id, &plain, Some(revision.clone())) {
-                    Ok(written) => mark_synced(&state.root, &op.doc_id, written)?,
+                    Ok(written) => {
+                        cursor.synced.insert(op.doc_id.clone(), written);
+                    }
                     Err(PluginError::Conflict(_)) | Err(PluginError::AlreadyExists(_)) => {
                         return Ok(ApplyOutcome::Held)
                     }
@@ -168,12 +174,9 @@ pub(super) fn apply_remote_op(
         }
         match host.rename_document(&DocId::new(from.clone()), &to_id) {
             Ok(()) => {
-                let mut cursor = read_cursor(&state.root)?;
+                let moved = host.document_revision(&to_id)?;
                 cursor.synced.remove(from);
-                cursor
-                    .synced
-                    .insert(to.clone(), host.document_revision(&to_id)?);
-                write_cursor(&state.root, &cursor)?;
+                cursor.synced.insert(to.clone(), moved);
                 return Ok(ApplyOutcome::Applied { op_id: op.op_id });
             }
             Err(PluginError::Conflict(_)) | Err(PluginError::AlreadyExists(_)) => {
@@ -202,9 +205,7 @@ pub(super) fn apply_remote_op(
             }
             Err(e) => return Err(e),
         }
-        let mut cursor = read_cursor(&state.root)?;
         cursor.synced.remove(&op.doc_id);
-        write_cursor(&state.root, &cursor)?;
         return Ok(ApplyOutcome::Applied { op_id: op.op_id });
     }
     if !matches!(op.kind, WireKind::Create | WireKind::Update) {
@@ -216,7 +217,7 @@ pub(super) fn apply_remote_op(
             return Ok(ApplyOutcome::Held);
         }
         if bytes == plain {
-            mark_synced(&state.root, &op.doc_id, revision.clone())?;
+            cursor.synced.insert(op.doc_id.clone(), revision.clone());
             return Ok(ApplyOutcome::Applied { op_id: op.op_id });
         }
     }
@@ -246,7 +247,7 @@ pub(super) fn apply_remote_op(
     } else {
         match host.write_document_bytes(&id, &plain, current) {
             Ok(revision) => {
-                mark_synced(&state.root, &op.doc_id, revision)?;
+                cursor.synced.insert(op.doc_id.clone(), revision);
                 Ok(ApplyOutcome::Applied { op_id: op.op_id })
             }
             Err(PluginError::Conflict(_)) | Err(PluginError::AlreadyExists(_)) => {
