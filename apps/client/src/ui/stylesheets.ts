@@ -158,10 +158,9 @@ const prepared = new WeakSet<Element>();
  */
 const reflecting = new WeakSet<Element>();
 
-const innerHTMLOf = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-
 // I metodi del prototipo si leggono a ogni chiamata, non una volta sola:
-// così chi li osserva (i test, un profilo) vede anche queste scritture.
+// così chi li osserva (i test, un profilo) vede anche queste scritture, e il
+// modulo si carica anche dove il DOM non c'è (i test senza ambiente DOM).
 
 function writeAsCssom(element: Styled, value: string): void {
   reflecting.add(element);
@@ -210,17 +209,23 @@ function insertBefore<T extends Node>(this: Element, child: T, reference: Node |
  * come attributo che la CSP non ha lasciato valere: i figli nuovi si
  * preparano dopo, e il loro `style` diventa CSSOM.
  */
+function innerHTMLOf(): PropertyDescriptor {
+  return Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML")!;
+}
+
+function getInnerHTML(this: Element): string {
+  return innerHTMLOf().get!.call(this) as string;
+}
+
 function setInnerHTML(this: Element, markup: string): void {
-  innerHTMLOf?.set?.call(this, markup);
+  innerHTMLOf().set!.call(this, markup);
   for (const child of Array.from(this.children)) cssomStyleDescendants(child);
 }
 
 const INSERTIONS: PropertyDescriptorMap = {
   appendChild: { configurable: true, writable: true, value: appendChild },
   insertBefore: { configurable: true, writable: true, value: insertBefore },
-  ...(innerHTMLOf?.get && innerHTMLOf.set
-    ? { innerHTML: { configurable: true, get: innerHTMLOf.get, set: setInnerHTML } }
-    : {}),
+  innerHTML: { configurable: true, get: getInnerHTML, set: setInnerHTML },
 };
 
 const OWN: PropertyDescriptorMap = {
