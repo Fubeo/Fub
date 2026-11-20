@@ -1209,6 +1209,35 @@ describe("le tabelle della superficie Markdown", () => {
     ed.destroy();
   });
 
+  // #411 A-04: in Scrittura la tabella è nel modo foglio (`docs/product/
+  // editor-tables.md`): le frecce dal testo entrano nella griglia e il cursore
+  // diventa la cella attiva, la stessa che dà il clic su una cella, col fuoco
+  // sulla griglia e nessuna cella aperta.
+  it("la freccia giù dalla riga sopra entra sulla prima cella, la su dalla riga sotto sull'ultima riga", () => {
+    const { ed, parent, view } = editor();
+    // La riga vuota dopo la tabella: «sotto» attaccata sarebbe una sua riga.
+    ed.buffer.setDoc(`sopra\n${table}\nsotto`);
+    const press = (key: string) => view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+    );
+    const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
+    const active = () => parent.querySelector(".tb-cell.is-active")?.textContent;
+    view().focus();
+    view().dispatch({ selection: { anchor: 2 } });
+    expect(press("ArrowDown")).toBe(false);
+    expect(document.activeElement).toBe(grid);
+    expect(active()).toBe("a");
+    expect(parent.querySelector(".tb-input")).toBeNull();
+
+    view().focus();
+    view().dispatch({ selection: { anchor: ed.buffer.getDoc().length - "sotto".length - 1 } });
+    expect(press("ArrowUp")).toBe(false);
+    expect(document.activeElement).toBe(grid);
+    expect(active()).toBe("1");
+    expect(parent.querySelector(".tb-input")).toBeNull();
+    ed.destroy();
+  });
+
   it("con la griglia a fuoco la barra agisce sulle sue celle", () => {
     const texts: string[] = [];
     const { ed, parent } = editor((text) => texts.push(text));
