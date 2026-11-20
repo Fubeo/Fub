@@ -323,15 +323,9 @@ La preview usa le forme prodotte dal provider e le policy della webview. I
 blocchi HTML attraversano l'allowlist del sanitizzatore prima di diventare nodi
 DOM; classi e attributi `data-*` scritti nella nota non possono imitare i
 contratti privati della shell. Script, iframe, handler e URL di risorsa remoti
-restano inattivi. Un `<img src>` scritto nel blocco segue la strada di
-un'immagine Markdown: il sanitizzatore lascia il `src` in `data-vault-src` o,
-se remoto, in `data-remote-src`, e l'HTML della nota tiene soltanto quei due
-`data-*`, e soltanto se li ha scritti lui; scritti a mano cadono. «Copia come
-HTML» rimette il `src` alle sole immagini remote `https`; un'immagine del vault
-resta il suo testo alternativo. Un blocco senza elementi consentiti resta
-sorgente leggibile.
-Il Markdown dentro un blocco HTML non viene reinterpretato. Un link `https` apre
-il browser, o il [visore web](../reference/permissions-and-security.md#visore-web).
+restano inattivi; un `<img src>` si risolve come un'immagine Markdown (dei
+`data-*` restano solo i due canali dell'immagine scritti dal sanitizzatore). Un
+blocco senza elementi consentiti resta sorgente, e il suo Markdown non si rilegge. Un link `https` apre il browser, o il [visore web](../reference/permissions-and-security.md#visore-web).
 
 La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
 prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per
