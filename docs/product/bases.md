@@ -262,7 +262,12 @@ resta in vista; sotto i 420 px anche quella scelta. Se nemmeno così stanno,
 le ultime passano in «Altre N viste», l'ultima delle linguette (una freccia e
 il numero), che le elenca in un menu; la vista scelta resta sempre nella
 barra. Subito dopo le linguette, «+» aggiunge una vista nuova (vedi sotto). A
-destra gli attrezzi:
+destra gli attrezzi. Se nemmeno la vista scelta sta accanto agli attrezzi (al
+telefono, dove ogni bottone è largo un dito) la barra va su due file: sopra
+le linguette e «+», con il nome della vista scelta; sotto gli attrezzi e, in
+fondo a destra, «Nuova».
+
+Gli attrezzi:
 
 | Attrezzo | Che cosa fa | Che cosa scrive |
 |---|---|---|

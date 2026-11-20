@@ -14871,6 +14871,30 @@ input.canvas-toolbar-item {
     display: none;
   }
 }
+/* La barra su due file (`stacked`, misurato dalla barra quando nemmeno la
+   vista scelta sta accanto agli strumenti, come al telefono): le linguette e
+   «+» sopra, larghe quanto la fila; lo spazio va a capo e fa da intervallo;
+   sotto gli strumenti, accostati, e «Nuova» in fondo a destra. Niente resta
+   tagliato: se «Nuova» non sta ancora, scende da sola. */
+.base-bar.stacked {
+  flex-wrap: wrap;
+  column-gap: 0;
+}
+.base-bar.stacked .base-tabs {
+  flex: 1 1 0;
+}
+/* Con la fila tutta per sé, la vista scelta torna a dire il suo nome: col
+   dito non c'è un suggerimento che lo dica. */
+.base-bar.stacked .base-tab[aria-pressed="true"] .base-tab-label {
+  display: inline;
+}
+.base-bar.stacked .base-bar-space {
+  flex-basis: 100%;
+  height: var(--space-2);
+}
+.base-bar.stacked .base-new {
+  margin-left: auto;
+}
 /* I popover della barra: Filtro, Ordina, Proprietà. Il rialzo è quello del
    kit; qui il contenuto. */
 .base-popover {

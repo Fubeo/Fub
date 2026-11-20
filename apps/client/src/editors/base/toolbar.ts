@@ -732,15 +732,16 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
     moreTabs.title = label;
   };
   const overflowing = (): boolean => tabs.scrollWidth > tabs.clientWidth + 1;
-  const fitTabs = (): void => {
+  // Vero se le linguette stanno nello spazio che la barra lascia loro.
+  const fitInRow = (): boolean => {
     const all = [...tabs.querySelectorAll<HTMLElement>(".base-tab[data-view]")];
     for (const tab of all) tab.hidden = false;
     hiddenViews = [];
     moreTabs.hidden = true;
     tabs.classList.remove("compact");
-    if (!overflowing()) return;
+    if (!overflowing()) return true;
     tabs.classList.add("compact");
-    if (!overflowing()) return;
+    if (!overflowing()) return true;
     moreTabs.hidden = false;
     labelMore();
     for (const tab of all.reverse()) {
@@ -750,6 +751,18 @@ export function mountBaseToolbar(actions: BaseToolbarActions): BaseToolbar {
       hiddenViews.unshift(tab.dataset.view!);
       labelMore();
     }
+    return !overflowing();
+  };
+  // Se nemmeno la vista scelta e «Altre N viste» stanno accanto agli
+  // strumenti (al telefono, dove ogni bottone è largo un dito), la barra va
+  // su due file (`stacked`): le linguette e «+» sopra, gli strumenti e
+  // «Nuova» sotto (#470). La scelta si rifà ogni volta dalla barra in una
+  // fila, così dipende solo dalla sua larghezza e non oscilla.
+  const fitTabs = (): void => {
+    bar.classList.remove("stacked");
+    if (fitInRow()) return;
+    bar.classList.add("stacked");
+    fitInRow();
   };
   lifetime.listen(moreTabs, "click", () => {
     const items = hiddenViews.map((name): MenuItem => {
