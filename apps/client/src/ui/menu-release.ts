@@ -18,21 +18,22 @@
 // Come nei menu nativi di GTK, premere, scorrere fino a una voce e rilasciare
 // la sceglie: se il puntatore si è mosso davvero dal punto della pressione e
 // si alza sopra una voce (`pick`), la voce riceve il suo clic. Fermo, il
-// rilascio cade sul bordo del menu, che nasce sotto il puntatore, e non
-// sceglie niente.
+// rilascio non sceglie niente, nemmeno quando il menu, spinto in su dal bordo
+// della finestra, si apre con una voce sotto il puntatore.
 //
 // La guardia vive finché quella pressione non finisce, non quanto il menu: un
 // menu chiuso con Esc a tasto ancora giù non lascia passare il rilascio al
 // controllo che c'è sotto. Una pressione nuova prima di un `mouseup` vuol dire
 // che il rilascio è caduto fuori dalla finestra: la guardia si toglie e quella
 // pressione resta un gesto vero.
+import { openLifetime, type Lifetime } from "./lifetime";
 
 /// Quanto deve muoversi il puntatore, a tasto giù, perché il rilascio sopra una
 /// voce la scelga: sotto, è la mano che trema nel rilascio.
 export const RELEASE_SLOP_PX = 4;
 
 /// La guardia della pressione in corso: una sola, perché il tasto è uno.
-let dispose: (() => void) | null = null;
+let guard: Lifetime | null = null;
 
 /// Se `at` è un `contextmenu` arrivato col tasto ancora premuto, inghiotte il
 /// `click` del suo rilascio. `pick` trova, dal bersaglio del rilascio, la voce
@@ -45,47 +46,38 @@ export function swallowOpeningRelease(
   // Un menu aperto in altro modo (un sottomenu del dito, un pulsante) non è
   // una pressione nuova: la guardia di quella in corso resta.
   if (!(at instanceof MouseEvent) || at.type !== "contextmenu" || at.buttons === 0) return;
-  dispose?.();
+  guard?.close();
+  const lifetime = openLifetime();
+  guard = lifetime;
+  lifetime.add(() => {
+    if (guard === lifetime) guard = null;
+  });
   const from = { x: at.clientX, y: at.clientY };
   let released = false;
-  let chosen: HTMLElement | null = null;
-  let settle: ReturnType<typeof setTimeout> | undefined;
   const options = { capture: true } as const;
-  const up = (e: MouseEvent): void => {
+  lifetime.listen(window, "mouseup", (e) => {
     if (released) return;
     released = true;
     const moved = Math.hypot(e.clientX - from.x, e.clientY - from.y) > RELEASE_SLOP_PX;
-    if (moved && pick && e.target instanceof Element) chosen = pick(e.target);
+    const chosen = moved && pick && e.target instanceof Element ? pick(e.target) : null;
     // Il `click` arriva subito dietro al `mouseup`, nello stesso giro: al
     // prossimo la pressione è finita, e la voce scelta trascinando riceve il
     // suo clic, uno solo.
-    settle = setTimeout(() => {
-      const target = chosen;
-      stop();
-      if (target?.isConnected) target.click();
+    const settle = setTimeout(() => {
+      lifetime.close();
+      if (chosen?.isConnected) chosen.click();
     }, 0);
-  };
+    lifetime.add(() => clearTimeout(settle));
+  }, options);
   const swallow = (e: MouseEvent): void => {
     if (!released) return;
     e.preventDefault();
     e.stopImmediatePropagation();
   };
+  lifetime.listen(window, "click", swallow, options);
+  lifetime.listen(window, "auxclick", swallow, options);
   // Una pressione nuova senza rilascio: il rilascio è caduto fuori.
-  const press = (): void => {
-    if (!released) stop();
-  };
-  const stop = (): void => {
-    if (dispose !== stop) return;
-    dispose = null;
-    if (settle !== undefined) clearTimeout(settle);
-    window.removeEventListener("mouseup", up, options);
-    window.removeEventListener("click", swallow, options);
-    window.removeEventListener("auxclick", swallow, options);
-    window.removeEventListener("mousedown", press, options);
-  };
-  window.addEventListener("mouseup", up, options);
-  window.addEventListener("click", swallow, options);
-  window.addEventListener("auxclick", swallow, options);
-  window.addEventListener("mousedown", press, options);
-  dispose = stop;
+  lifetime.listen(window, "mousedown", () => {
+    if (!released) lifetime.close();
+  }, options);
 }
