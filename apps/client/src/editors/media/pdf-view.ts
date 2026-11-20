@@ -15,6 +15,7 @@ import { showContextMenu, type MenuItem } from "../../ui/menu";
 import { attachTooltip } from "../../ui/tooltip";
 import { useMediaIcons } from "./icons";
 import { pdfWhereText, type PdfWhere } from "./pdf-ids";
+import { openPdfRenderWorker, PdfRenderUnavailable, type PdfRenderWorker, type RenderWorkerLike } from "./pdf-render-client";
 
 /// Required local pdf.js version. Composition installs/bundles the dependency
 /// and worker; this module never fetches a CDN or fabricates a loader.
@@ -71,6 +72,16 @@ export interface PdfEngine {
   outline?(): Promise<PdfOutlineItem[]>;
   search(needle: string, limit?: number): Promise<PdfSearchHit[]>;
   renderPage(index: number, canvas: HTMLCanvasElement, scale?: number): Promise<void>;
+  /**
+   * La pagina `index` (da 0) a `scale` pixel per punto, come immagine da
+   * mettere in un canvas `bitmaprenderer`: la disegna un worker, fuori dal
+   * thread principale (#525), e finché il worker non c'è il thread principale.
+   * `null` se una richiesta successiva l'ha superata. Le richieste di questo
+   * metodo si superano fra loro, non quelle di `renderPage`. Facoltativa: un
+   * motore senza (o una WebView senza `OffscreenCanvas`) disegna con
+   * `renderPage`.
+   */
+  renderBitmap?(index: number, scale: number): Promise<ImageBitmap | null>;
   /**
    * Una miniatura della pagina `index` (da 0), larga `width` pixel CSS. Non
    * interrompe la resa della pagina. Facoltativa: senza, niente miniature.
@@ -132,6 +143,8 @@ export interface PdfJsModule {
       getOutline?(): Promise<PdfJsOutline[] | null>;
       getDestination?(id: string): Promise<unknown[] | null>;
       getPageIndex?(ref: unknown): Promise<number>;
+      /** Una copia dei byte del PDF (pdf.js li prende quando apre). */
+      getData?(): Promise<Uint8Array>;
     }>;
     destroy(): Promise<void>;
   };
@@ -146,9 +159,15 @@ interface PdfJsOutline {
   items?: PdfJsOutline[];
 }
 
+/**
+ * Un motore pdf.js. Con `makeRenderWorker` (il worker di
+ * `pdf-render-worker.ts`) offre anche `renderBitmap`, se la WebView sa
+ * disegnare fuori dallo schermo.
+ */
 export function makePdfJsLoader(
   importModule: () => Promise<PdfJsModule>,
   workerUrl: string,
+  makeRenderWorker?: () => RenderWorkerLike,
 ): PdfEngineLoader {
   return async (bytes) => {
     if (!workerUrl) throw new Error("PDF worker must be bundled locally");
@@ -178,6 +197,11 @@ export function makePdfJsLoader(
     // pdf.js ridotto, il modulo finto di un test) lascia la pagina senza
     // testo da scegliere, e la legge senza errori.
     const TextLayer = "TextLayer" in pdfjs ? pdfjs.TextLayer : undefined;
+    // Le pagine in immagine: dal worker quando ha aperto il PDF, intanto (o
+    // se non può) dal thread principale, in un canvas staccato.
+    const bitmaps = makeRenderWorker && typeof OffscreenCanvas === "function" && typeof createImageBitmap === "function" && document.getData
+      ? bitmapRenderer(makeRenderWorker, document as PdfJsDocument & { getData(): Promise<Uint8Array> }, worker.href, () => destroyed)
+      : null;
     // La pagina di una destinazione: per nome o già scritta, il cui primo
     // elemento è il riferimento alla pagina. Una che non si risolve non porta
     // da nessuna parte, e la voce resta senza pagina.
@@ -302,6 +326,12 @@ export function makePdfJsLoader(
           if (activeRender === task) activeRender = null;
         }
       },
+      ...(bitmaps ? {
+        renderBitmap(index: number, scale: number) {
+          if (destroyed || index < 0 || index >= document.numPages) return Promise.reject(new Error("PDF page is unavailable"));
+          return bitmaps.render(index, scale);
+        },
+      } : {}),
       ...(TextLayer ? {
         async renderText(index: number, container: HTMLElement) {
           if (destroyed || index < 0 || index >= document.numPages) throw new Error("PDF page is unavailable");
@@ -333,11 +363,109 @@ export function makePdfJsLoader(
         activeRender?.cancel();
         for (const task of thumbnails) task.cancel();
         for (const layer of texts) layer.cancel();
+        bitmaps?.destroy();
         // Il task di caricamento chiude il documento e il suo worker (pdf.js 6:
         // `PDFDocumentProxy` non ha `destroy`). T91, rotta 6.
         void loading.destroy();
       },
     };
+  };
+}
+
+type PdfJsDocument = Awaited<ReturnType<PdfJsModule["getDocument"]>["promise"]>;
+
+/**
+ * Le pagine di `document` in immagine. Il worker si apre alla prima pagina
+ * chiesta, e intanto le pagine si disegnano qui; una pagina che il worker non
+ * disegna si disegna qui, e un worker che non sa disegnare, che non apre il
+ * PDF o che cade non si usa più.
+ */
+function bitmapRenderer(
+  makeWorker: () => RenderWorkerLike,
+  document: PdfJsDocument & { getData(): Promise<Uint8Array> },
+  workerSrc: string,
+  closed: () => boolean,
+) {
+  let state: "idle" | "opening" | "ready" | "off" = "idle";
+  let renderer: PdfRenderWorker | null = null;
+  /// Il worker che sta aprendo il PDF: chiuso il documento, si chiude anche lui.
+  let opening: RenderWorkerLike | null = null;
+  let generation = 0;
+  let running: { cancel(): void } | null = null;
+  let scratch: HTMLCanvasElement | null = null;
+
+  async function start(): Promise<void> {
+    state = "opening";
+    try {
+      const bytes = await document.getData();
+      if (closed()) return;
+      opening = makeWorker();
+      const opened = await openPdfRenderWorker(opening, { bytes, workerSrc, version: PDFJS_VERSION });
+      opening = null;
+      if (closed()) {
+        opened.destroy();
+        return;
+      }
+      renderer = opened;
+      state = "ready";
+    } catch {
+      // Niente worker: le pagine restano al thread principale, come prima.
+      opening = null;
+      state = "off";
+    }
+  }
+
+  async function here(index: number, scale: number, mine: number): Promise<ImageBitmap | null> {
+    const page = await document.getPage(index + 1);
+    if (closed() || mine !== generation) return null;
+    const viewport = page.getViewport({ scale });
+    scratch ??= globalThis.document.createElement("canvas");
+    scratch.width = Math.max(1, Math.ceil(viewport.width));
+    scratch.height = Math.max(1, Math.ceil(viewport.height));
+    const context = scratch.getContext("2d");
+    if (!context) throw new Error("PDF canvas is unavailable");
+    const task = page.render({ canvas: scratch, canvasContext: context, viewport });
+    running = task;
+    try {
+      await task.promise;
+    } catch (error) {
+      if (!closed() && mine === generation) throw error;
+      return null;
+    } finally {
+      if (running === task) running = null;
+    }
+    if (closed() || mine !== generation) return null;
+    return createImageBitmap(scratch);
+  }
+
+  return {
+    async render(index: number, scale: number): Promise<ImageBitmap | null> {
+      const mine = ++generation;
+      running?.cancel();
+      if (state === "idle") void start();
+      if (state === "ready" && renderer) {
+        try {
+          return await renderer.render(index, scale);
+        } catch (error) {
+          // Il worker è caduto (e allora non si usa più) o non sa disegnare
+          // questa pagina: la si disegna qui.
+          if (error instanceof PdfRenderUnavailable) {
+            renderer = null;
+            state = "off";
+          }
+          if (closed() || mine !== generation) return null;
+        }
+      }
+      return here(index, scale, mine);
+    },
+    destroy(): void {
+      generation++;
+      running?.cancel();
+      renderer?.destroy();
+      renderer = null;
+      opening?.terminate();
+      state = "off";
+    },
   };
 }
 
@@ -454,6 +582,7 @@ export function mountPdfView(
   const canvas = document.createElement("canvas");
   // La seconda pagina, nella vista a due pagine.
   const facing = document.createElement("canvas");
+  const bitmapContexts = new WeakMap<HTMLCanvasElement, ImageBitmapRenderingContext | null>();
   facing.hidden = true;
   const front = pageSheet(canvas);
   const back = pageSheet(facing);
@@ -517,6 +646,25 @@ export function mountPdfView(
   async function paint(index: number, target: HTMLCanvasElement, room: number, clamped: number): Promise<void> {
     if (!engine) return;
     const ratio = devicePixelRatio || 1;
+    const bitmapTarget = engine.renderBitmap ? bitmapContext(target) : null;
+    if (bitmapTarget) {
+      // La pagina arriva fatta dal worker: il canvas tiene quella di prima
+      // finché la nuova non c'è, e il thread principale la mette e basta.
+      const [width, height] = await engine.pageSize(index);
+      const zoom = fit && width > 0 && room > 0 ? room / width : 1;
+      const bitmap = await engine.renderBitmap!(index, ratio * zoom);
+      if (!bitmap) return;
+      if (destroyed || page !== clamped) {
+        bitmap.close();
+        return;
+      }
+      target.width = bitmap.width;
+      target.height = bitmap.height;
+      target.style.width = `${width * zoom}px`;
+      target.style.height = `${height * zoom}px`;
+      bitmapTarget.transferFromImageBitmap(bitmap);
+      return;
+    }
     if (!fit) {
       await engine.renderPage(index, target, ratio);
       return;
@@ -527,6 +675,22 @@ export function mountPdfView(
     if (destroyed || !fit || page !== clamped) return;
     target.style.width = `${width * zoom}px`;
     target.style.height = `${height * zoom}px`;
+  }
+
+  /// Il contesto `bitmaprenderer` di un canvas della pagina, chiesto una volta
+  /// sola: un canvas ha un tipo di contesto per sempre, e senza (una WebView
+  /// che non lo conosce) la pagina si disegna con `renderPage`.
+  function bitmapContext(target: HTMLCanvasElement): ImageBitmapRenderingContext | null {
+    if (!bitmapContexts.has(target)) {
+      let context: ImageBitmapRenderingContext | null = null;
+      try {
+        context = target.getContext("bitmaprenderer");
+      } catch {
+        // Nessun contesto: si resta a `renderPage`.
+      }
+      bitmapContexts.set(target, context);
+    }
+    return bitmapContexts.get(target) ?? null;
   }
 
   /// La prima pagina della coppia che contiene `n`.

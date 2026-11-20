@@ -33,6 +33,18 @@ si apre mostra la sua nota d'errore e nella banda non dice nessuna pagina. La
 riga di stato del visore resta per il caricamento, gli errori e la ricerca, e
 per il lettore di schermo.
 
+Le pagine del visore si disegnano fuori dal thread principale (#525): un
+worker (`pdf-render-worker.ts`, la regola in `pdf-render-serve.ts`) apre lo
+stesso PDF con il suo pdf.js, disegna la pagina in un `OffscreenCanvas` e la
+manda come `ImageBitmap`, che il visore mette in un canvas `bitmaprenderer`;
+la pagina di prima resta finché la nuova non c'è. Il worker nasce alla prima
+pagina chiesta, e quella pagina, finché il worker apre il PDF, si disegna nel
+thread principale. Una pagina che il worker non disegna si disegna nel thread
+principale; una WebView senza `OffscreenCanvas` o `bitmaprenderer`, un worker
+senza font, che non apre il PDF entro 20 secondi o che cade lasciano tutto al
+thread principale, come prima. Miniature, schede vive, lavagna, stampa ed
+esportazione disegnano ancora nel thread principale.
+
 ### Le annotazioni nel visore
 
 Con la feature `draw`, il visore cerca accanto al PDF le sue annotazioni,
