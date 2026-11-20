@@ -43,12 +43,13 @@ quando giravano sul thread principale; due corsie non si aspettano, così il
 controllo lungo del correttore non ferma la ricerca. Due domande mandate nello
 stesso istante possono entrare in un ordine qualsiasi.
 
-Anche `render_view` gira fuori dal thread principale, nella corsia delle viste,
-che c'è sempre e non conta fra le 16. Un salvataggio invecchia una ventina di
-view e la shell le ridisegna nello stesso giro: ognuna costa pochi
-millisecondi, ma in fila sul thread principale fermavano la finestra per un
-centinaio di millisecondi. I disegni restano in fila fra loro; la shell tiene
-comunque l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
+Anche `render_view`, `view_action`, `set_active_context`, `invoke_command`,
+`view_state` e `set_view_state` girano fuori dal thread principale, in corsie
+fisse fuori dalle 16 che tengono l'ordine d'arrivo: `viste` (un disegno chiesto
+dopo un'azione la vede), `contesto` (vince l'ultima pubblicazione), `comandi` e
+`stato` (nell'ordine in cui partono). `list_views`, `list_commands` e
+`components_map`, letture senza ordine, escono senza corsia. La shell tiene
+l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
 
 ## La griglia
 
@@ -58,7 +59,6 @@ I fogli di calcolo usano la famiglia Grid, con porte strettamente tipate:
 `grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
 `grid_bytes_command`, `close_grid_bytes`), in una corsia sua. Sessione,
 finestra, comandi, corsia e limiti: [le porte della griglia](grid-ipc.md).
-
 
 ## Disegno
 

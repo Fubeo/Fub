@@ -31,9 +31,10 @@ l'ordine d'arrivo, come il thread principale: una finestra chiesta prima di
 una modifica si legge alla revisione da cui la modifica parte, e una
 chiusura arriva dopo le richieste partite prima. In parallelo non si
 guadagnerebbe niente, perché il provider di una superficie risponde a una
-chiamata per volta. `list_grid_surfaces`, che legge soltanto il registro,
-resta sul thread principale. La shell scarta comunque una finestra o un
-errore di una revisione superata.
+chiamata per volta. Anche `list_grid_surfaces` passa dalla stessa corsia:
+legge soltanto il registro, ma con un prestito del workspace, e sul thread
+principale aspetterebbe chi lo sta scrivendo. La shell scarta comunque una
+finestra o un errore di una revisione superata.
 
 `open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la shell non
 trasporta i byte, ma il giornale canonico delle celle cambiate (il testo

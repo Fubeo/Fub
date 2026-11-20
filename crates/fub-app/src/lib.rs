@@ -785,13 +785,77 @@ async fn map_tile(
 }
 
 /// Superfici grid dichiarate dai provider montati. La shell negozia famiglia e
-/// versione prima di aprire una sessione.
+/// versione prima di aprire una sessione. Legge il workspace: nella corsia del
+/// foglio, perché sul thread principale aspetterebbe chi lo sta scrivendo.
 #[tauri::command]
-fn list_grid_surfaces(
-    host: State<Host>,
+async fn list_grid_surfaces(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     vault: Option<String>,
 ) -> Result<Vec<GridSurfaceSpec>, PluginError> {
-    host.grid_surfaces(vault.as_deref())
+    grid_port(app, &corsie, "grid surfaces", move |host| {
+        host.grid_surfaces(vault.as_deref())
+    })
+    .await
+}
+
+/// Chi dà l'host al lavoro di una corsia: l'app, e nei test un `Arc<Host>`,
+/// così le prove dell'ordine passano per le stesse funzioni dei comandi.
+trait HostSource: Send + 'static {
+    fn with_host<T>(&self, work: impl FnOnce(&Host) -> T) -> T;
+}
+
+impl HostSource for AppHandle {
+    fn with_host<T>(&self, work: impl FnOnce(&Host) -> T) -> T {
+        work(&self.state::<Host>())
+    }
+}
+
+#[cfg(test)]
+impl HostSource for Arc<Host> {
+    fn with_host<T>(&self, work: impl FnOnce(&Host) -> T) -> T {
+        work(self)
+    }
+}
+
+/// Il lavoro di una porta dell'host fuori dal thread principale, in fondo
+/// alla corsia `corsia` (`domande`). Un comando sincrono di Tauri gira sul
+/// thread che presenta i fotogrammi: una chiamata a un provider, una
+/// scrittura su disco o l'attesa di un prestito del workspace tenuto da un
+/// salvataggio fermavano la finestra per tutto quel tempo. La corsia tiene
+/// l'ordine d'arrivo che il thread principale dava; gli errori restano quelli
+/// dell'host, e un panico risponde `Internal`.
+async fn host_lane<S, T, F>(
+    source: S,
+    corsie: &domande::Corsie,
+    cosa: &'static str,
+    corsia: &'static str,
+    work: F,
+) -> Result<T, PluginError>
+where
+    S: HostSource,
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    corsie
+        .chiedi(cosa, corsia.into(), move || source.with_host(work))
+        .await
+}
+
+/// Una lettura dell'host senza un ordine da tenere (gli elenchi di view e di
+/// comandi, la mappa dei componenti) fuori dal thread principale, senza
+/// corsia: prende il workspace in prestito condiviso, e sul thread
+/// principale aspetterebbe chi lo sta scrivendo. Chi la chiede la aspetta
+/// prima di usarla, e due letture uguali rispondono la stessa cosa in
+/// qualunque ordine escano.
+async fn host_read<T, F>(app: AppHandle, cosa: &'static str, work: F) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || work(&app.state::<Host>()))
+        .await
+        .map_err(|error| unfinished(cosa, error))?
 }
 
 /// Il lavoro di una porta del foglio sui byte, fuori dal thread principale,
@@ -811,11 +875,7 @@ where
     T: Send + 'static,
     F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
 {
-    corsie
-        .chiedi(cosa, domande::CORSIA_GRIGLIA.into(), move || {
-            work(&app.state::<Host>())
-        })
-        .await
+    host_lane(app, corsie, cosa, domande::CORSIA_GRIGLIA, work).await
 }
 
 /// Apre una superficie grid della versione 2 sui byte di un documento. La
@@ -1162,13 +1222,34 @@ async fn discard_draft(
 /// non la shell perché la regola deve essere una sola: la shell sa *quando*
 /// pubblicare, non *chi* segue cosa. `None` = nessun pannello (all'avvio, o
 /// dopo che l'ultima nota è stata chiusa).
+///
+/// Gira nella corsia del contesto (`domande::CORSIA_CONTESTO`): la shell
+/// pubblica senza aspettare la risposta di prima, e in fila l'ultima
+/// pubblicazione resta l'ultima anche fuori dal thread principale.
 #[tauri::command]
-fn set_active_context(
-    host: State<Host>,
+async fn set_active_context(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     context: Option<ViewContext>,
     vault: Option<String>,
 ) -> Result<Vec<String>, PluginError> {
-    host.set_active_context(vault.as_deref(), context)
+    set_active_context_in_lane(app, &corsie, context, vault).await
+}
+
+async fn set_active_context_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    context: Option<ViewContext>,
+    vault: Option<String>,
+) -> Result<Vec<String>, PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "active context",
+        domande::CORSIA_CONTESTO,
+        move |host| host.set_active_context(vault.as_deref(), context),
+    )
+    .await
 }
 
 /// La shell riporta cosa il **sistema** dice: lingua, fuso, calendario (§12.3).
@@ -1191,9 +1272,10 @@ fn set_system_locale(host: State<Host>, locale: Locale) -> bool {
 /// È la metà "discovery" del protocollo: la shell non cabla gli id — monta
 /// ogni view nel contenitore del suo `placement` e la ridisegna quando arriva
 /// un evento della sua maschera `refresh`. Una view di plugin compare da sola.
+/// Fuori dal thread principale (`host_read`).
 #[tauri::command]
-fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
-    host.views(vault.as_deref())
+async fn list_views(app: AppHandle, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
+    host_read(app, "view list", move |host| host.views(vault.as_deref())).await
 }
 
 /// Rende l'albero `UiNode` di **un'istanza** di view. Il render è una lettura:
@@ -1235,10 +1317,16 @@ async fn render_view(
 /// dei campi di input che la shell ha raccolto. Sono due cose con due
 /// proprietari (§2.7), e il fatto che arrivino come due argomenti distinti è
 /// ciò che impedisce alla shell di riscrivere il primo.
+///
+/// Chiama il provider della view, che può essere un plugin: gira nella corsia
+/// delle viste, con i disegni (`domande::CORSIA_VISTE`). Un disegno chiesto
+/// dopo l'azione la vede, come sul thread principale, e le risposte escono
+/// nell'ordine in cui lo stato del provider è cambiato.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-fn view_action(
-    host: State<Host>,
+async fn view_action(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     view: String,
     instance: Option<String>,
     params: Option<serde_json::Value>,
@@ -1247,15 +1335,30 @@ fn view_action(
     fields: Option<Vec<FieldValue>>,
     vault: Option<String>,
 ) -> Result<ViewUpdate, PluginError> {
-    host.view_action(
-        vault.as_deref(),
-        &view_instance(view, instance, params),
-        UiAction {
-            action: ActionId(action),
-            payload: payload.unwrap_or(serde_json::Value::Null),
-            fields: fields.unwrap_or_default(),
-        },
+    let instance = view_instance(view, instance, params);
+    let action = UiAction {
+        action: ActionId(action),
+        payload: payload.unwrap_or(serde_json::Value::Null),
+        fields: fields.unwrap_or_default(),
+    };
+    view_action_in_lane(app, &corsie, instance, action, vault).await
+}
+
+async fn view_action_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    instance: ViewInstance,
+    action: UiAction,
+    vault: Option<String>,
+) -> Result<ViewUpdate, PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "view action",
+        domande::CORSIA_VISTE,
+        move |host| host.view_action(vault.as_deref(), &instance, action),
     )
+    .await
 }
 
 /// L'istanza che la shell nomina, con i due default dell'esemplare unico.
@@ -1284,12 +1387,16 @@ fn view_instance(
 /// la spec dichiara e decide se chiedere conferma dal raggio dichiarato. Sono
 /// le stesse informazioni che leggerebbero una CLI (27.1) o un chiamante
 /// programmatico (22.4) — questo comando IPC è solo il primo dei suoi clienti.
+/// Fuori dal thread principale (`host_read`).
 #[tauri::command]
-fn list_commands(
-    host: State<Host>,
+async fn list_commands(
+    app: AppHandle,
     vault: Option<String>,
 ) -> Result<Vec<CommandSpec>, PluginError> {
-    host.commands(vault.as_deref())
+    host_read(app, "command list", move |host| {
+        host.commands(vault.as_deref())
+    })
+    .await
 }
 
 /// Esegue — o simula — un comando.
@@ -1309,20 +1416,46 @@ fn list_commands(
 /// Anche `trash.os` passa da qui: la scelta è esplicita nel comando e
 /// l'esito `effect.custom` distingue cestino OS e fallback interno, senza
 /// introdurre un'altra porta Tauri o un writer della shell.
+///
+/// Un comando può durare secondi (la pagina web da catturare, l'esportazione
+/// di una cartella, un plugin): gira nella corsia dei comandi
+/// (`domande::CORSIA_COMANDI`), e due comandi mandati di fila si applicano in
+/// quell'ordine, come sul thread principale.
 #[tauri::command]
-fn invoke_command(
-    host: State<Host>,
+async fn invoke_command(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     command: String,
     args: Option<serde_json::Value>,
     mode: Option<InvokeMode>,
     vault: Option<String>,
 ) -> Result<CommandOutcome, PluginError> {
-    host.invoke_user_command(
-        vault.as_deref(),
-        &command,
-        args.unwrap_or(serde_json::Value::Null),
-        mode.unwrap_or(InvokeMode::Apply),
+    invoke_command_in_lane(app, &corsie, command, args, mode, vault).await
+}
+
+async fn invoke_command_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    command: String,
+    args: Option<serde_json::Value>,
+    mode: Option<InvokeMode>,
+    vault: Option<String>,
+) -> Result<CommandOutcome, PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "command",
+        domande::CORSIA_COMANDI,
+        move |host| {
+            host.invoke_user_command(
+                vault.as_deref(),
+                &command,
+                args.unwrap_or(serde_json::Value::Null),
+                mode.unwrap_or(InvokeMode::Apply),
+            )
+        },
     )
+    .await
 }
 
 /// Il canale dati, **generico**: il gemello di `render_view`/`view_action`.
@@ -1642,24 +1775,68 @@ const SHELL_INSTANCE: &str = "window";
 ///
 /// `None` è il caso normale del primo avvio, non un errore: chi non ha mai
 /// salvato niente disegna il proprio default.
+///
+/// Gira nella corsia dello stato di vista (`domande::CORSIA_STATO`), la stessa
+/// delle scritture: una lettura chiesta dopo una scrittura la vede.
 #[tauri::command]
-fn view_state(
-    host: State<Host>,
+async fn view_state(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     key: String,
     vault: Option<String>,
 ) -> Result<Option<serde_json::Value>, PluginError> {
-    host.view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key)
+    view_state_in_lane(app, &corsie, key, vault).await
+}
+
+async fn view_state_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    key: String,
+    vault: Option<String>,
+) -> Result<Option<serde_json::Value>, PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "view state",
+        domande::CORSIA_STATO,
+        move |host| host.view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key),
+    )
+    .await
 }
 
 /// Salva (`Some`) o dimentica (`None`) lo stato di vista della shell.
+///
+/// Ogni scrittura rilegge e riscrive un file: fuori dal thread principale,
+/// nella corsia dello stato di vista (`domande::CORSIA_STATO`). La shell
+/// scrive anche senza aspettare (la scheda scelta nell'ispettore, a ogni
+/// clic), e in fila la seconda scrittura della stessa chiave non è mai
+/// coperta dalla prima.
 #[tauri::command]
-fn set_view_state(
-    host: State<Host>,
+async fn set_view_state(
+    app: AppHandle,
+    corsie: State<'_, domande::Corsie>,
     key: String,
     value: Option<serde_json::Value>,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.set_view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key, value)
+    set_view_state_in_lane(app, &corsie, key, value, vault).await
+}
+
+async fn set_view_state_in_lane(
+    source: impl HostSource,
+    corsie: &domande::Corsie,
+    key: String,
+    value: Option<serde_json::Value>,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host_lane(
+        source,
+        corsie,
+        "view state write",
+        domande::CORSIA_STATO,
+        move |host| host.set_view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key, value),
+    )
+    .await
 }
 
 /// Chi questo host sa montare, e chi è acceso in questo vault. Non è
@@ -2376,10 +2553,18 @@ pub fn components_apply_for(
     for_the_shell(host, vault, result)
 }
 
-/// La mappa dei componenti di un vault, con lo stato e i profili (A7).
+/// La mappa dei componenti di un vault, con lo stato e i profili (A7). Fuori
+/// dal thread principale (`host_read`), come `components_apply`: la pagina
+/// rilegge la mappa dopo aver aspettato la scelta.
 #[tauri::command]
-fn components_map(host: State<Host>, vault: Option<String>) -> Result<ComponentsMap, PluginError> {
-    components_map_for(&host, vault.as_deref())
+async fn components_map(
+    app: AppHandle,
+    vault: Option<String>,
+) -> Result<ComponentsMap, PluginError> {
+    host_read(app, "component map", move |host| {
+        components_map_for(host, vault.as_deref())
+    })
+    .await
 }
 
 /// Applica una scelta sui componenti (A7). Senza `apply` è una prova: dice
@@ -3879,6 +4064,214 @@ mod drawing_ipc_tests {
                 .is_some_and(|text| !text.is_empty()),
             "{wire}"
         );
+    }
+}
+
+/// Le porte uscite dal thread principale tengono l'ordine che lui dava: le
+/// prove passano per le stesse funzioni dei comandi, con un host vero su un
+/// vault temporaneo.
+#[cfg(test)]
+mod lane_ipc_tests {
+    use super::*;
+    use fub_abi::session::ViewContext;
+
+    struct Banco {
+        host: Arc<Host>,
+        root: Utf8PathBuf,
+        _dirs: (tempfile::TempDir, tempfile::TempDir),
+    }
+
+    fn banco() -> Banco {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).unwrap();
+        std::fs::write(root.join("Uno.md"), "# Uno\n\n[[Due]]\n").unwrap();
+        std::fs::write(root.join("Due.md"), "# Due\n").unwrap();
+        let config = tempfile::tempdir().expect("config");
+        let host = Host::without_watcher()
+            .with_config_dir(&Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap());
+        host.open(&root).expect("il vault si apre");
+        Banco {
+            host: Arc::new(host),
+            root,
+            _dirs: (dir, config),
+        }
+    }
+
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+    }
+
+    fn contesto(doc: &str) -> Option<ViewContext> {
+        Some(ViewContext::new("main").with_doc(Some(doc_id(doc).unwrap())))
+    }
+
+    /// Due pubblicazioni mandate senza aspettare (il cursore, poi il cambio
+    /// di nota) lasciano nel kernel l'ultima: ripubblicarla non cambia niente,
+    /// mentre ripubblicare la prima sì.
+    #[test]
+    fn due_contesti_mandati_di_fila_lasciano_l_ultimo() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            for _ in 0..20 {
+                let (a, b) = tokio::join!(
+                    set_active_context_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        contesto("Uno.md"),
+                        vault.clone()
+                    ),
+                    set_active_context_in_lane(
+                        Arc::clone(&banco.host),
+                        &corsie,
+                        contesto("Due.md"),
+                        vault.clone()
+                    ),
+                );
+                a.unwrap();
+                b.unwrap();
+                let ancora = set_active_context_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    contesto("Due.md"),
+                    vault.clone(),
+                )
+                .await
+                .unwrap();
+                assert!(ancora.is_empty(), "il kernel è rimasto su Uno: {ancora:?}");
+                let indietro = set_active_context_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    contesto("Uno.md"),
+                    vault.clone(),
+                )
+                .await
+                .unwrap();
+                assert!(
+                    !indietro.is_empty(),
+                    "nessuna view segue il documento: la prova non direbbe niente"
+                );
+            }
+        });
+    }
+
+    /// Le scritture della stessa chiave mandate senza aspettare (la scheda
+    /// dell'ispettore, a ogni clic) arrivano in ordine, e la lettura chiesta
+    /// dopo le vede.
+    #[test]
+    fn lo_stato_di_vista_scritto_di_fila_resta_l_ultimo_e_si_rilegge() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            let scrivi = |valore: u32| {
+                set_view_state_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    "inspector.tab".into(),
+                    Some(serde_json::json!(valore)),
+                    vault.clone(),
+                )
+            };
+            let (a, b, c, letto) = tokio::join!(
+                scrivi(1),
+                scrivi(2),
+                scrivi(3),
+                view_state_in_lane(
+                    Arc::clone(&banco.host),
+                    &corsie,
+                    "inspector.tab".into(),
+                    vault.clone()
+                ),
+            );
+            a.unwrap();
+            b.unwrap();
+            c.unwrap();
+            assert_eq!(letto.unwrap(), Some(serde_json::json!(3)));
+        });
+        // E la porta dell'host, fuori dalla corsia, legge lo stesso valore.
+        assert_eq!(
+            banco
+                .host
+                .view_state(
+                    Some(banco.root.as_str()),
+                    SHELL_OWNER,
+                    SHELL_INSTANCE,
+                    "inspector.tab"
+                )
+                .unwrap(),
+            Some(serde_json::json!(3))
+        );
+    }
+
+    /// Gli errori dei comandi e delle azioni restano quelli tipizzati
+    /// dell'host: la corsia non li fa diventare `Internal`.
+    #[test]
+    fn in_corsia_gli_errori_restano_tipizzati() {
+        let banco = banco();
+        let corsie = domande::Corsie::default();
+        let vault = Some(banco.root.to_string());
+        runtime().block_on(async {
+            let diretto = banco
+                .host
+                .invoke_user_command(
+                    vault.as_deref(),
+                    "fub.nessuno",
+                    serde_json::Value::Null,
+                    InvokeMode::Apply,
+                )
+                .unwrap_err();
+            let in_corsia = invoke_command_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                "fub.nessuno".into(),
+                None,
+                None,
+                vault.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(
+                serde_json::to_value(&in_corsia).unwrap(),
+                serde_json::to_value(&diretto).unwrap()
+            );
+            assert!(
+                !matches!(in_corsia, PluginError::Internal(_)),
+                "{in_corsia:?}"
+            );
+
+            let azione = view_action_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                view_instance("fub.nessuna".into(), None, None),
+                UiAction {
+                    action: ActionId("apri".into()),
+                    payload: serde_json::Value::Null,
+                    fields: Vec::new(),
+                },
+                vault.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert!(!matches!(azione, PluginError::Internal(_)), "{azione:?}");
+
+            let senza_vault = set_active_context_in_lane(
+                Arc::clone(&banco.host),
+                &corsie,
+                contesto("Uno.md"),
+                Some("/non/esiste".into()),
+            )
+            .await
+            .unwrap_err();
+            assert!(
+                !matches!(senza_vault, PluginError::Internal(_)),
+                "{senza_vault:?}"
+            );
+        });
     }
 }
 
