@@ -120,12 +120,30 @@ impl SearchIndex {
         let Some(writer) = guard.as_mut() else {
             return Ok(());
         };
-        let opstamp = writer
-            .commit()
-            .map_err(|and| PluginError::Internal(reason(INDEX_COMMIT, and)))?;
-        self.reader
-            .reload()
-            .map_err(|and| PluginError::Internal(reason(INDEX_RELOAD, and)))?;
+        // Il commit di tantivy in due tempi, ognuno con il suo span (#522):
+        // `prepare_commit` aspetta i worker e chiude i loro segmenti (gli
+        // fsync dei file nuovi), `commit` scrive i `.del` dei segmenti vecchi
+        // e il `meta.json`. Sono le due voci che una riapertura tiepida paga,
+        // e la tabella di `open_30k` le tiene separate.
+        let opstamp = {
+            let prepared = {
+                let _phase =
+                    tracing::info_span!(target: "fub.apertura", "ricerca_segmenti").entered();
+                writer
+                    .prepare_commit()
+                    .map_err(|and| PluginError::Internal(reason(INDEX_COMMIT, and)))?
+            };
+            let _phase = tracing::info_span!(target: "fub.apertura", "ricerca_commit").entered();
+            prepared
+                .commit()
+                .map_err(|and| PluginError::Internal(reason(INDEX_COMMIT, and)))?
+        };
+        {
+            let _phase = tracing::info_span!(target: "fub.apertura", "ricerca_reload").entered();
+            self.reader
+                .reload()
+                .map_err(|and| PluginError::Internal(reason(INDEX_RELOAD, and)))?;
+        }
         self.opstamp.store(opstamp, Ordering::Relaxed);
         self.dirty.store(false, Ordering::Release);
         Ok(())
@@ -203,6 +221,7 @@ impl SearchIndex {
         if self.manifest_at == Some(opstamp) {
             return Ok(());
         }
+        let _phase = tracing::info_span!(target: "fub.apertura", "ricerca_manifest").entered();
         let manifest = Manifest {
             schema_version: SCHEMA_VERSION,
             opstamp,
