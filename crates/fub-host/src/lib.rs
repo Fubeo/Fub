@@ -141,6 +141,8 @@ mod secret_file;
 pub mod session;
 pub mod settings;
 pub mod shell;
+/// Una bandiera di annullamento sola per chi ne ha più d'una, o un tempo limite.
+mod stop_relay;
 pub mod support;
 mod teardown;
 pub mod theme;

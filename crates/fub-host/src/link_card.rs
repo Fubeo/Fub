@@ -23,8 +23,6 @@
 use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandScope, CommandSpec, ParamKind, ParamSpec,
 };
-use std::sync::atomic::AtomicBool;
-
 use fub_abi::net::{HttpRequest, LimitedFetchError};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{HostApi, JobSpec, Plugin};
@@ -273,14 +271,15 @@ fn card(url: &str, fetch: bool, host: &mut dyn HostApi) -> Result<serde_json::Va
     let failed = |why: &str, status: u16| {
         Ok(serde_json::json!({ "url": url, "failed": why, "status": status }))
     };
-    // Il tetto va alla rete, che smette di leggere appena lo supera. La
-    // bandiera del chiamante resta giù: dentro il job ferma il trasferimento
-    // quella del job, che l'host guarda da sé.
+    // Il tetto va alla rete, che smette di leggere appena lo supera. Il
+    // chiamante non ha un annullamento suo (`no_stop`): dentro il job ferma il
+    // trasferimento la bandiera del job, che l'host guarda da sé, senza filo
+    // di guardia.
     let response = match host.fetch_limited(
         HttpRequest::get(url)
             .with_header("Accept", "text/html,application/xhtml+xml")
             .with_header("User-Agent", format!("Fub/{}", env!("CARGO_PKG_VERSION"))),
-        &AtomicBool::new(false),
+        crate::stop_relay::no_stop(),
         MAX_PAGE as u64,
     ) {
         Ok(response) => response,
@@ -340,7 +339,7 @@ fn icon_data(url: &str, host: &mut dyn HostApi) -> Option<String> {
     let response = host
         .fetch_limited(
             HttpRequest::get(url),
-            &AtomicBool::new(false),
+            crate::stop_relay::no_stop(),
             MAX_ICON as u64,
         )
         .ok()?;

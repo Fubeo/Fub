@@ -448,6 +448,7 @@ pub trait HostNetwork: Send + Sync {
             return Err(crate::net::LimitedFetchError::TooLarge {
                 limit: max_bytes,
                 status: response.status,
+                headers: response.headers,
             });
         }
         Ok(response)

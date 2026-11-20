@@ -20,8 +20,6 @@ use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     InvokeMode, ParamKind, ParamSpec,
 };
-use std::sync::atomic::AtomicBool;
-
 use fub_abi::net::{HttpRequest, LimitedFetchError};
 use fub_abi::settings::SettingValue;
 use fub_abi::text::{Arg, Text};
@@ -184,18 +182,31 @@ pub(crate) fn invoke(
             vec![Arg::text("url", &url)],
         ))
     };
+    let not_page = |kind: Option<&str>| {
+        PluginError::BadArgs(Text::message(
+            "host.web.clip.not_html",
+            vec![Arg::text("kind", kind.unwrap_or_default())],
+        ))
+    };
     // Nessun prestito è preso qui: la rete dura quanto vuole, il vault no. Il
     // tetto va alla rete, che smette di leggere appena lo supera: una pagina
     // enorme non fa scaricare il tetto generale dell'host. Il comando non ha
-    // un annullamento suo: la bandiera resta giù, e il tempo è quello
-    // dell'host.
-    let never = AtomicBool::new(false);
+    // un annullamento suo (`no_stop`), e il tempo è quello dell'host.
     let response = network
-        .fetch_limited(HttpRequest::get(url.as_str()), &never, MAX_PAGE as u64)
+        .fetch_limited(
+            HttpRequest::get(url.as_str()),
+            crate::stop_relay::no_stop(),
+            MAX_PAGE as u64,
+        )
         .map_err(|error| match error {
-            // Lo stato prima del tetto: un `404` enorme resta un errore di stato.
+            // Lo stato e il tipo prima del tetto, nello stesso ordine di una
+            // risposta intera: un `404` enorme resta un errore di stato, un PDF
+            // enorme resta «non è una pagina».
             LimitedFetchError::TooLarge { status, .. } if !(200..300).contains(&status) => {
                 status_refusal(status)
+            }
+            LimitedFetchError::TooLarge { .. } if !is_page(error.content_type()) => {
+                not_page(error.content_type())
             }
             LimitedFetchError::TooLarge { .. } => too_large(),
             LimitedFetchError::Failed(error) => error,
@@ -205,10 +216,7 @@ pub(crate) fn invoke(
     }
     let kind = response.header("content-type");
     if !is_page(kind) {
-        return Err(PluginError::BadArgs(Text::message(
-            "host.web.clip.not_html",
-            vec![Arg::text("kind", kind.unwrap_or_default())],
-        )));
+        return Err(not_page(kind));
     }
     // Una rete che non porta il tetto fino al filo (il default del contratto)
     // scarica tutto e rifiuta dopo: il controllo resta qui per lei.

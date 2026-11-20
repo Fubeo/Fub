@@ -459,27 +459,19 @@ fn a_direct_dry_run_job_host_never_reaches_the_network_provider() {
 
 /// Un trasferimento che non finisce da solo: aspetta finché la bandiera che
 /// riceve si alza, o finché scade il suo tetto di prova. Ricorda se si è
-/// fermato per la bandiera.
+/// fermato per la bandiera; `None` vuol dire che il filo non è mai stato
+/// chiamato.
 struct UntilCancelled {
     stopped_by_flag: Mutex<Option<bool>>,
 }
 
-impl HostNetwork for UntilCancelled {
-    fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
-        panic!("the test asks only fetch_limited")
-    }
-
-    fn fetch_limited(
-        &self,
-        _request: HttpRequest,
-        cancelled: &std::sync::atomic::AtomicBool,
-        _max_bytes: u64,
-    ) -> Result<HttpResponse, fub_abi::net::LimitedFetchError> {
+impl UntilCancelled {
+    fn wait(&self, cancelled: &std::sync::atomic::AtomicBool) -> Result<HttpResponse, PluginError> {
         let started = Instant::now();
         while started.elapsed() < Duration::from_secs(5) {
             if cancelled.load(Ordering::Relaxed) {
                 *self.stopped_by_flag.lock().unwrap() = Some(true);
-                return Err(PluginError::Cancelled("stopped".into()).into());
+                return Err(PluginError::Cancelled("stopped".into()));
             }
             std::thread::sleep(Duration::from_millis(5));
         }
@@ -492,82 +484,191 @@ impl HostNetwork for UntilCancelled {
     }
 }
 
-/// `JobHost::fetch_limited` ferma il trasferimento quando si alza la bandiera
-/// del chiamante (il cane da guardia di un tempo limite dentro il job) **o**
-/// quella del job: tutte e due contano.
-#[test]
-fn job_fetch_limited_stops_on_the_caller_flag_or_the_job_flag() {
-    use std::sync::atomic::AtomicBool;
-    let vault = vault();
-    let (_host, workspace) = open(&vault);
+impl HostNetwork for UntilCancelled {
+    /// Senza bandiera non si ferma niente: un host che la perde per strada
+    /// arriva qui, e la prova lo vede.
+    fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.wait(&std::sync::atomic::AtomicBool::new(false))
+    }
+
+    fn fetch_cancelled(
+        &self,
+        _request: HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+    ) -> Result<HttpResponse, PluginError> {
+        self.wait(cancelled)
+    }
+
+    fn fetch_limited(
+        &self,
+        _request: HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+        _max_bytes: u64,
+    ) -> Result<HttpResponse, fub_abi::net::LimitedFetchError> {
+        Ok(self.wait(cancelled)?)
+    }
+}
+
+/// Il vault con il plugin `CALLER`, che ha il permesso di rete, e il filo che
+/// aspetta la bandiera.
+fn waiting_network(workspace: &Custody<Workspace>) -> Arc<UntilCancelled> {
     let network = Arc::new(UntilCancelled {
         stopped_by_flag: Mutex::new(None),
     });
-    {
-        let mut ws = workspace.write().expect("the vault is alive");
-        ws.register_plugin(
-            PluginManifest::new(CALLER, "Network caller").granting(
-                fub_abi::traits::PluginPermissions::of(&[permission::NETWORK]),
-            ),
-            Trust::Community,
-        )
-        .expect("the caller declares with the network grant");
-        ws.set_network(Arc::clone(&network) as Arc<dyn HostNetwork>);
-    }
-    let raise_later = |flag: Arc<AtomicBool>| {
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(50));
-            flag.store(true, Ordering::Relaxed);
-        })
-    };
+    let mut ws = workspace.write().expect("the vault is alive");
+    ws.register_plugin(
+        PluginManifest::new(CALLER, "Network caller").granting(
+            fub_abi::traits::PluginPermissions::of(&[permission::NETWORK]),
+        ),
+        Trust::Community,
+    )
+    .expect("the caller declares with the network grant");
+    ws.set_network(Arc::clone(&network) as Arc<dyn HostNetwork>);
+    network
+}
 
-    for which in ["caller", "job"] {
+fn raise_later(flag: Arc<std::sync::atomic::AtomicBool>) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(50));
+        flag.store(true, Ordering::Relaxed);
+    })
+}
+
+/// Le tre porte della rete di un job, ognuna con la bandiera del chiamante
+/// quando ce l'ha.
+fn every_door(
+    host: &JobHost,
+    caller: &std::sync::atomic::AtomicBool,
+    door: usize,
+) -> Result<HttpResponse, PluginError> {
+    let request = HttpRequest::get("https://api.acme.test/x");
+    match door {
+        0 => host.fetch(request),
+        1 => host.fetch_cancelled(request, caller),
+        _ => host
+            .fetch_limited(request, caller, 1024)
+            .map_err(|error| match error {
+                fub_abi::net::LimitedFetchError::Failed(error) => error,
+                other => PluginError::Internal(format!("{other:?}").into()),
+            }),
+    }
+}
+
+/// Il trasferimento si ferma quando si alza la bandiera del chiamante (il cane
+/// da guardia di un tempo limite dentro il job) **o** quella del job, da
+/// `fetch_cancelled` e da `fetch_limited`: tutte e due contano.
+#[test]
+fn job_fetch_stops_on_the_caller_flag_or_the_job_flag() {
+    use std::sync::atomic::AtomicBool;
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let network = waiting_network(&workspace);
+
+    for door in 0..3 {
+        for which in ["caller", "job"] {
+            if door == 0 && which == "caller" {
+                continue; // `fetch` non ha la bandiera del chiamante.
+            }
+            *network.stopped_by_flag.lock().unwrap() = None;
+            let caller = Arc::new(AtomicBool::new(false));
+            let job_flag = Arc::new(AtomicBool::new(false));
+            let raiser = raise_later(if which == "caller" {
+                Arc::clone(&caller)
+            } else {
+                Arc::clone(&job_flag)
+            });
+            let job = JobHost::new(workspace.clone(), CALLER).cancelled_by(Arc::clone(&job_flag));
+            let started = Instant::now();
+            let result = every_door(&job, &caller, door);
+            raiser.join().unwrap();
+            assert!(
+                matches!(result, Err(PluginError::Cancelled(_))),
+                "door {door}, {which}: {result:?}"
+            );
+            assert_eq!(
+                *network.stopped_by_flag.lock().unwrap(),
+                Some(true),
+                "door {door}, {which}"
+            );
+            assert!(
+                started.elapsed() < Duration::from_secs(2),
+                "door {door}, {which}"
+            );
+        }
+    }
+}
+
+/// L'host di una **lettura** dentro un job ha una bandiera sua, e sopra quella
+/// del job: annullare il job ferma il trasferimento della lettura da tutte e
+/// tre le porte, non solo da `fetch_limited`.
+#[test]
+fn cancelling_the_job_stops_the_transfer_of_a_read_inside_it() {
+    use std::sync::atomic::AtomicBool;
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let network = waiting_network(&workspace);
+
+    for door in 0..3 {
         *network.stopped_by_flag.lock().unwrap() = None;
-        let caller = Arc::new(AtomicBool::new(false));
         let job_flag = Arc::new(AtomicBool::new(false));
-        let raiser = raise_later(if which == "caller" {
-            Arc::clone(&caller)
-        } else {
-            Arc::clone(&job_flag)
-        });
         let job = JobHost::new(workspace.clone(), CALLER).cancelled_by(Arc::clone(&job_flag));
+        let read = job.for_read(CALLER, InvokeMode::Apply, Arc::new(AtomicBool::new(false)));
+        let raiser = raise_later(Arc::clone(&job_flag));
         let started = Instant::now();
-        let result = job.fetch_limited(HttpRequest::get("https://api.acme.test/x"), &caller, 1024);
+        let result = every_door(&read, &AtomicBool::new(false), door);
         raiser.join().unwrap();
         assert!(
-            matches!(
-                result,
-                Err(fub_abi::net::LimitedFetchError::Failed(
-                    PluginError::Cancelled(_)
-                ))
-            ),
-            "{which}: {result:?}"
+            matches!(result, Err(PluginError::Cancelled(_))),
+            "door {door}: {result:?}"
         );
         assert_eq!(
             *network.stopped_by_flag.lock().unwrap(),
             Some(true),
-            "{which}"
+            "door {door}"
         );
-        assert!(started.elapsed() < Duration::from_secs(2), "{which}");
+        assert!(started.elapsed() < Duration::from_secs(2), "door {door}");
     }
+}
 
-    // Una bandiera del chiamante già alzata non fa partire niente.
-    *network.stopped_by_flag.lock().unwrap() = None;
-    let raised = AtomicBool::new(true);
-    let result = JobHost::new(workspace.clone(), CALLER).fetch_limited(
-        HttpRequest::get("https://api.acme.test/x"),
-        &raised,
-        1024,
-    );
-    assert!(
-        matches!(
-            result,
-            Err(fub_abi::net::LimitedFetchError::Failed(
-                PluginError::Cancelled(_)
-            ))
-        ),
-        "{result:?}"
-    );
+/// Una bandiera già alzata, del chiamante o di chi contiene l'host, non fa
+/// partire niente: il filo non viene nemmeno chiamato.
+#[test]
+fn a_raised_flag_never_reaches_the_wire() {
+    use std::sync::atomic::AtomicBool;
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let network = waiting_network(&workspace);
+
+    for door in 1..3 {
+        *network.stopped_by_flag.lock().unwrap() = None;
+        let job = JobHost::new(workspace.clone(), CALLER);
+        let result = every_door(&job, &AtomicBool::new(true), door);
+        assert!(
+            matches!(result, Err(PluginError::Cancelled(_))),
+            "door {door}: {result:?}"
+        );
+        assert_eq!(
+            *network.stopped_by_flag.lock().unwrap(),
+            None,
+            "door {door}: the wire was called"
+        );
+    }
+    for door in 0..3 {
+        *network.stopped_by_flag.lock().unwrap() = None;
+        let job =
+            JobHost::new(workspace.clone(), CALLER).cancelled_by(Arc::new(AtomicBool::new(true)));
+        let read = job.for_read(CALLER, InvokeMode::Apply, Arc::new(AtomicBool::new(false)));
+        let result = every_door(&read, &AtomicBool::new(false), door);
+        assert!(
+            matches!(result, Err(PluginError::Cancelled(_))),
+            "outer, door {door}: {result:?}"
+        );
+        assert_eq!(
+            *network.stopped_by_flag.lock().unwrap(),
+            None,
+            "outer, door {door}: the wire was called"
+        );
+    }
 }
 
 #[test]

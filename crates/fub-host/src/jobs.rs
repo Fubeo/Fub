@@ -52,10 +52,10 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::custody::{Custody, WriteTurn};
 use crate::query::query_workspace;
+use crate::stop_relay::StopRelay;
 
 use fub_abi::command::{CommandOutcome, Failure, InvokeMode, PlannedEdit, UndoStep};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
@@ -231,7 +231,12 @@ impl JobHost {
     /// Host figlio per una **lettura** col suo frame: ha la bandiera `own`,
     /// figlia di quelle di questo host. Le sue bandiere sono quelle che
     /// guarda, e le stesse che la lettura iscrive fra quelle in volo.
-    fn for_read(&self, plugin: impl Into<String>, mode: InvokeMode, own: Arc<AtomicBool>) -> Self {
+    pub(crate) fn for_read(
+        &self,
+        plugin: impl Into<String>,
+        mode: InvokeMode,
+        own: Arc<AtomicBool>,
+    ) -> Self {
         let mut outer_stops = self.outer_stops.clone();
         outer_stops.push(Arc::clone(&self.cancelled));
         JobHost {
@@ -252,11 +257,13 @@ impl JobHost {
             .chain(outer)
             .any(|flag| flag.load(Ordering::Relaxed))
         {
-            return Err(PluginError::Cancelled(
-                format!("the job of `{}` has been cancelled", self.plugin).into(),
-            ));
+            return Err(self.cancelled_error());
         }
         Ok(())
+    }
+
+    fn cancelled_error(&self) -> PluginError {
+        PluginError::Cancelled(format!("the job of `{}` has been cancelled", self.plugin).into())
     }
 
     /// Il turno di scrittura per **un job**, cioè per chi sta dentro il codice di
@@ -1797,66 +1804,66 @@ impl HostNetwork for JobHost {
     /// token arriva al transport e il suo reader chiude la connessione al primo
     /// controllo, senza aspettare il tetto globale dell'host.
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
-        let (client, granted) = self.network_wire()?;
-        // Lo stesso `Guard` di tutti gli altri: il cancello è uno solo, e chi
-        // gira dentro un job non ne attraversa uno più largo.
-        Guard::new(client.as_ref(), granted).fetch_cancelled(request, self.cancelled.as_ref())
+        self.on_wire(None, |guard, stop| guard.fetch_cancelled(request, stop))
     }
 
-    /// Come [`fetch`](HostNetwork::fetch), con il tetto di byte del chiamante
-    /// portato fino al filo. Il trasferimento si ferma quando si alza **una
-    /// qualunque** delle bandiere: quella del chiamante (per esempio il cane
-    /// da guardia di un suo tempo limite), quella del job e quelle di chi
-    /// contiene questo host. Il filo ne guarda una sola, quindi riceve una
-    /// bandiera combinata ([`any_raised`]).
+    /// Come [`fetch`](HostNetwork::fetch), fermata anche dalla bandiera del
+    /// chiamante.
+    fn fetch_cancelled(
+        &self,
+        request: HttpRequest,
+        cancelled: &AtomicBool,
+    ) -> Result<HttpResponse, PluginError> {
+        self.on_wire(Some(cancelled), |guard, stop| {
+            guard.fetch_cancelled(request, stop)
+        })
+    }
+
+    /// Come [`fetch_cancelled`](HostNetwork::fetch_cancelled), con il tetto
+    /// di byte del chiamante portato fino al filo.
     fn fetch_limited(
         &self,
         request: HttpRequest,
         cancelled: &AtomicBool,
         max_bytes: u64,
     ) -> Result<HttpResponse, LimitedFetchError> {
-        // Una bandiera del chiamante già alzata alza subito la combinata, e il
-        // filo rifiuta prima di partire.
-        let (client, granted) = self.network_wire()?;
-        let mut flags: Vec<&AtomicBool> = vec![cancelled, self.cancelled.as_ref()];
-        flags.extend(self.outer_stops.iter().map(Arc::as_ref));
-        any_raised(&flags, |combined| {
-            Guard::new(client.as_ref(), granted).fetch_limited(request, combined, max_bytes)
+        self.on_wire(Some(cancelled), |guard, stop| {
+            guard.fetch_limited(request, stop, max_bytes)
         })
     }
 }
 
-/// Ogni quanto il ripetitore di [`any_raised`] guarda le bandiere: sotto la
-/// finestra con cui il filo guarda la sua (`net.rs`, 50 ms), così
-/// l'annullamento non arriva sensibilmente più tardi.
-const RELAY_POLL: Duration = Duration::from_millis(10);
-
-/// Esegue `work` con una bandiera che si alza appena se ne alza una fra
-/// `flags`.
-///
-/// Un filo a parte la ripete finché `work` lavora, e chiude appena `work`
-/// torna (lo si sveglia, non si aspetta il suo giro): il filo dura quanto il
-/// trasferimento e non oltre. Una bandiera già alzata alza subito la
-/// combinata.
-fn any_raised<T>(flags: &[&AtomicBool], work: impl FnOnce(&AtomicBool) -> T) -> T {
-    let raised = || flags.iter().any(|flag| flag.load(Ordering::Relaxed));
-    let combined = AtomicBool::new(raised());
-    let done = AtomicBool::new(false);
-    std::thread::scope(|scope| {
-        let relay = scope.spawn(|| {
-            while !done.load(Ordering::Acquire) {
-                if raised() {
-                    combined.store(true, Ordering::Relaxed);
-                    return;
-                }
-                std::thread::park_timeout(RELAY_POLL);
-            }
-        });
-        let result = work(&combined);
-        done.store(true, Ordering::Release);
-        relay.thread().unpark();
-        result
-    })
+impl JobHost {
+    /// **Una regola per le tre porte della rete**: la richiesta passa dal
+    /// `Guard` di tutti gli altri (il cancello è uno solo, e chi gira dentro
+    /// un job non ne attraversa uno più largo), e il trasferimento si ferma
+    /// quando si alza **una qualunque** delle bandiere — quella del chiamante,
+    /// se c'è (per esempio il cane da guardia di un suo tempo limite), quella
+    /// di questo host e quelle di chi lo contiene. Il filo ne guarda una sola,
+    /// e [`StopRelay`] gliela dà.
+    ///
+    /// Una bandiera già alzata ferma la richiesta prima del filo: non parte
+    /// nemmeno.
+    fn on_wire<T, E: From<PluginError>>(
+        &self,
+        caller: Option<&AtomicBool>,
+        send: impl FnOnce(&dyn HostNetwork, &AtomicBool) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let (client, granted) = self.network_wire()?;
+        let relay = StopRelay::watching(
+            caller
+                .into_iter()
+                .chain(std::iter::once(self.cancelled.as_ref()))
+                .chain(self.outer_stops.iter().map(Arc::as_ref)),
+        );
+        if relay.raised() {
+            return Err(self.cancelled_error().into());
+        }
+        let guard = Guard::new(client.as_ref(), granted);
+        relay
+            .run(|stop| send(&guard, stop))
+            .map_err(PluginError::from)?
+    }
 }
 
 impl JobHost {

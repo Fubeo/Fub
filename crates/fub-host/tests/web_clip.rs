@@ -205,6 +205,7 @@ fn a_redirect_or_an_answer_that_is_not_a_page_writes_nothing() {
 /// tetto e quanti byte ha mandato. Senza tetto (`fetch`) li manda tutti.
 struct Endless {
     status: u16,
+    kind: &'static str,
     body: u64,
     cap_seen: Mutex<Option<u64>>,
     sent: Mutex<u64>,
@@ -214,6 +215,7 @@ const SERVER_CHUNK: u64 = 16 * 1024;
 
 impl Endless {
     fn serve(&self, cap: Option<u64>) -> Result<HttpResponse, LimitedFetchError> {
+        let headers = vec![HttpHeader::new("Content-Type", self.kind)];
         let mut sent = 0u64;
         while sent < self.body {
             sent += SERVER_CHUNK.min(self.body - sent);
@@ -222,6 +224,7 @@ impl Endless {
                 return Err(LimitedFetchError::TooLarge {
                     limit: cap,
                     status: self.status,
+                    headers,
                 });
             }
         }
@@ -229,7 +232,7 @@ impl Endless {
         body.resize(self.body as usize, b' ');
         Ok(HttpResponse {
             status: self.status,
-            headers: vec![HttpHeader::new("Content-Type", "text/html")],
+            headers,
             body,
         })
     }
@@ -255,8 +258,13 @@ impl HostNetwork for Endless {
 }
 
 fn endless(status: u16, body: u64) -> Arc<Endless> {
+    endless_of(status, "text/html", body)
+}
+
+fn endless_of(status: u16, kind: &'static str, body: u64) -> Arc<Endless> {
     Arc::new(Endless {
         status,
+        kind,
         body,
         cap_seen: Mutex::new(None),
         sent: Mutex::new(0),
@@ -306,6 +314,30 @@ fn an_oversized_error_keeps_its_status_refusal() {
         panic!("{error:?}");
     };
     assert!(shown(text).contains("ha risposto 404"), "{error:?}");
+    assert!(notes(&root).is_empty());
+}
+
+/// Il tipo prima del tetto: un PDF enorme resta «non è una pagina», non
+/// «troppo grande», come un PDF piccolo.
+#[test]
+fn an_oversized_file_that_is_not_a_page_says_so() {
+    let (_dir, root, host) = vault_on(endless_of(200, "application/pdf", 5 * 1024 * 1024));
+    approve(&host, &["esempio.it"]);
+    let error = clip(&host, "https://esempio.it/articolo.pdf", InvokeMode::Apply).unwrap_err();
+    let (_small_dir, _small_root, small_host) = vault_on(endless_of(200, "application/pdf", 1024));
+    approve(&small_host, &["esempio.it"]);
+    let small = clip(
+        &small_host,
+        "https://esempio.it/breve.pdf",
+        InvokeMode::Apply,
+    )
+    .unwrap_err();
+    // La frase di `host.web.clip.not_html`, la stessa del PDF piccolo.
+    let (PluginError::BadArgs(text), PluginError::BadArgs(small_text)) = (&error, &small) else {
+        panic!("{error:?} / {small:?}");
+    };
+    assert_eq!(shown(text), shown(small_text));
+    assert!(shown(text).contains("application/pdf"), "{error:?}");
     assert!(notes(&root).is_empty());
 }
 

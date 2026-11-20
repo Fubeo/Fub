@@ -99,6 +99,7 @@ impl HostNetwork for Capped {
                 return Err(LimitedFetchError::TooLarge {
                     limit: max_bytes,
                     status: self.status,
+                    headers: Vec::new(),
                 });
             }
         }

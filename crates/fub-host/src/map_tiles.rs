@@ -34,7 +34,6 @@
 //! (la policy delle tessere di OpenStreetMap). Niente va su disco né nel vault.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
@@ -43,6 +42,7 @@ use fub_abi::settings::SettingValue;
 use fub_abi::text::{Arg, Text};
 use fub_abi::PluginError;
 
+use crate::stop_relay::StopRelay;
 use crate::Host;
 
 /// Gli host da cui la vista Mappa può scaricare tessere, su questa macchina.
@@ -339,10 +339,12 @@ impl Host {
         // Il tetto va alla rete, che smette di leggere appena lo supera: un
         // server rotto o ostile non fa scaricare il tetto generale dell'host
         // per ogni tessera.
-        let response = with_deadline(TILE_TIMEOUT, |cancelled| {
-            network.fetch_limited(request, cancelled, MAX_TILE_BYTES as u64)
-        })
-        .map_err(|error| match error {
+        // Il tempo della tessera è una bandiera che si alza alla scadenza: il
+        // filo la guarda mentre legge e smette.
+        let fetched = StopRelay::watching([])
+            .until(TILE_TIMEOUT)
+            .run(|cancelled| network.fetch_limited(request, cancelled, MAX_TILE_BYTES as u64))?;
+        let response = fetched.map_err(|error| match error {
             // Lo stato prima del tetto: un redirect o un `404` con un corpo
             // enorme restano un redirect e un errore di stato.
             LimitedFetchError::TooLarge { status, .. } => match status_refusal(status, &site) {
@@ -385,39 +387,6 @@ impl Host {
         remember(url, &tile);
         Ok(tile)
     }
-}
-
-/// `work` con una bandiera che si alza dopo `limit`: il filo la guarda mentre
-/// legge e smette. Il guardiano se ne va appena `work` è finito.
-fn with_deadline<T>(limit: Duration, work: impl FnOnce(&AtomicBool) -> T) -> T {
-    let cancelled = Arc::new(AtomicBool::new(false));
-    let done = Arc::new((Mutex::new(false), Condvar::new()));
-    let watchdog = {
-        let cancelled = Arc::clone(&cancelled);
-        let done = Arc::clone(&done);
-        std::thread::Builder::new()
-            .name("fub-map-tile".into())
-            .spawn(move || {
-                let (lock, finished) = &*done;
-                let over = lock.lock().unwrap_or_else(|poison| poison.into_inner());
-                let (over, _) = finished
-                    .wait_timeout_while(over, limit, |over| !*over)
-                    .unwrap_or_else(|poison| poison.into_inner());
-                if !*over {
-                    cancelled.store(true, Ordering::Relaxed);
-                }
-            })
-    };
-    let result = work(&cancelled);
-    {
-        let (lock, finished) = &*done;
-        *lock.lock().unwrap_or_else(|poison| poison.into_inner()) = true;
-        finished.notify_all();
-    }
-    if let Ok(watchdog) = watchdog {
-        let _ = watchdog.join();
-    }
-    result
 }
 
 #[cfg(test)]
@@ -501,21 +470,5 @@ mod tests {
         );
         assert_eq!(sniffed(TileKind::Vector, b"<html><svg/></html>"), None);
         assert_eq!(sniffed(TileKind::Vector, b"\x89PNG\r\n\x1a\n"), None);
-    }
-
-    #[test]
-    fn a_deadline_raises_the_flag_only_when_the_work_overruns() {
-        let quick = with_deadline(Duration::from_secs(5), |flag| flag.load(Ordering::Relaxed));
-        assert!(!quick);
-        let slow = with_deadline(Duration::from_millis(20), |flag| {
-            for _ in 0..200 {
-                if flag.load(Ordering::Relaxed) {
-                    return true;
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            false
-        });
-        assert!(slow);
     }
 }

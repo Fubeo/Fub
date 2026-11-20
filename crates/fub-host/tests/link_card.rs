@@ -154,7 +154,11 @@ impl Sized {
         }
         self.seen.lock().unwrap().push((url.to_owned(), cap, sent));
         if let Some(limit) = refused {
-            return Err(LimitedFetchError::TooLarge { limit, status: 200 });
+            return Err(LimitedFetchError::TooLarge {
+                limit,
+                status: 200,
+                headers: Vec::new(),
+            });
         }
         let mut body = if icon {
             PNG.to_vec()
