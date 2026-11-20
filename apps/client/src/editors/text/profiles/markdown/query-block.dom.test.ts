@@ -7,7 +7,16 @@ import { openLifetime } from "../../../../ui/lifetime";
 import { createTextEngine } from "../../engine";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
-import { embedTasksBlocks, markTaskDues, TASKS_QUERY_VIEW } from "./query-block";
+import { Race } from "../../../../ui/race";
+import { matchingDocuments } from "../../../../host/query";
+import { embedTasksBlocks, fillQueryBlock, markTaskDues, TASKS_QUERY_VIEW } from "./query-block";
+
+// La ricerca del kernel, finta: ogni test decide quando e come risponde. La
+// sintassi (`searchExpression`) resta quella vera.
+vi.mock("../../../../host/query", async (importActual) => ({
+  ...(await importActual<typeof import("../../../../host/query")>()),
+  matchingDocuments: vi.fn(),
+}));
 
 /// Chi monta le view, finto: ricorda cosa gli si chiede.
 let known: Set<string>;
@@ -338,5 +347,58 @@ describe("la pastiglia della scadenza", () => {
       engine.destroy();
       parent.remove();
     }
+  });
+});
+
+describe("il recinto ```query```", () => {
+  type Found = Awaited<ReturnType<typeof matchingDocuments>>;
+  const found = (docs: string[]): Found => ({ items: docs.map((doc) => ({ doc })), total: docs.length }) as unknown as Found;
+
+  for (const ending of ["rigetta", "risolve"] as const) {
+    it(`un giro scaduto la cui ricerca ${ending} non scrive nel blocco`, async () => {
+      let answer!: (value: Found) => void;
+      let refuse!: (error: unknown) => void;
+      const slow = new Promise<Found>((yes, no) => { answer = yes; refuse = no; });
+      const search = vi.mocked(matchingDocuments);
+      search.mockReset();
+      search.mockReturnValueOnce(slow);
+      search.mockResolvedValueOnce(found(["Nuova.md"]));
+      // Una sola Vita per i due giri: è il caso in cui `life.closed` non
+      // salva il giro vecchio.
+      const life = openLifetime();
+      const race = new Race();
+      const block = document.createElement("div");
+      document.body.append(block);
+
+      const first = race.last((expected) => fillQueryBlock(block, "vecchia", expected, life));
+      await race.last((expected) => fillQueryBlock(block, "nuova", expected, life));
+      expect(block.textContent).toContain("Nuova");
+
+      if (ending === "rigetta") refuse(new Error("indice chiuso"));
+      else answer(found(["Vecchia.md"]));
+      await first;
+      expect(block.textContent).not.toMatch(/non riuscita|indice chiuso|Vecchia/);
+      expect(block.textContent).toContain("Nuova");
+      life.close();
+    });
+  }
+
+  it("un errore vero del giro corrente si dice nel blocco", async () => {
+    const search = vi.mocked(matchingDocuments);
+    search.mockReset();
+    search.mockRejectedValueOnce(new Error("indice chiuso"));
+    const block = document.createElement("div");
+    await new Race().last((expected) => fillQueryBlock(block, "nota", expected, openLifetime()));
+    expect(block.textContent).toBe("Ricerca non riuscita: indice chiuso");
+    expect(block.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("un errore di sintassi si dice nel blocco senza interrogare il kernel", async () => {
+    const search = vi.mocked(matchingDocuments);
+    search.mockReset();
+    const block = document.createElement("div");
+    await new Race().last((expected) => fillQueryBlock(block, "\"aperta", expected, openLifetime()));
+    expect(block.textContent).toMatch(/^Ricerca non riuscita: /);
+    expect(search).not.toHaveBeenCalled();
   });
 });
