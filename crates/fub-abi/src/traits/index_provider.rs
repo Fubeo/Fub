@@ -574,6 +574,18 @@ pub trait IndexProvider: Send + Sync {
     /// versione dello schema non combaciava non ha niente, e dirlo è l'unica
     /// cosa che gli impedisce di restare vuoto per sempre.
     ///
+    /// # Chi non tiene niente per documento li ha tutti
+    ///
+    /// Un indice che non tiene **niente per documento** — risponde da un file
+    /// suo, dalla domanda stessa, o da ciò che il kernel ha già — può rispondere
+    /// con gli id di tutti i documenti che gli sono stati mostrati: niente, in
+    /// lui, può restare indietro. Lasciargli il default non è prudenza, è il
+    /// verso costoso dello sbaglio: la domanda è un'intersezione, e un solo
+    /// «mandami tutto» fa rileggere e rianalizzare l'intero vault a ogni
+    /// riapertura per consegnarlo a chi lo butta. Vale per lui solo finché non
+    /// tiene niente: il giorno che comincia a ricavare qualcosa dalle note,
+    /// risponde come un indice persistente — o torna al default.
+    ///
     /// # La domanda arriva a fette, e una fetta non parla delle altre
     ///
     /// Il kernel chiede **per fetta**, come alimenta: su un vault grande questo

@@ -231,3 +231,76 @@ pub use template::{
 pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};
 #[cfg(feature = "versioning")]
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};
+
+/// La risposta a [`IndexProvider::up_to_date`](fub_abi::traits::IndexProvider::up_to_date)
+/// di un indice che **non tiene niente per documento**: li ha tutti.
+///
+/// La base, il disegno e il correttore rispondono a domande che non leggono
+/// le note che il kernel consegna: `on_documents_indexed` per loro non fa
+/// niente. Il default del contratto («mandami tutto») era quindi una bugia nel
+/// verso costoso: svuotava l'intersezione di `up_to_date` e faceva rileggere e
+/// rianalizzare l'intero vault a ogni riapertura per darlo a chi lo buttava
+/// (misura in `docs/misure/2026-11-20-riapertura-tiepida.md`).
+///
+/// Niente può restare indietro in chi non tiene niente, quindi «ce l'ho» è
+/// vero per ogni documento mostrato, e solo per quelli: a un elenco vuoto si
+/// risponde vuoto (conformità `up_to_date_only_reported_what_it_saw`). Ciò che
+/// non è un documento non è affar suo, come per la ricerca. Un indice che un
+/// giorno tenesse stato per documento non deve usare questa funzione: deve
+/// rispondere come un indice persistente (vedi `ReminderIndex`). La riapertura
+/// senza riletture la presidia `crates/fub-host/tests/warm_reopening.rs`.
+#[cfg(any(feature = "base", feature = "draw", feature = "proof"))]
+pub(crate) fn nothing_kept_per_document(
+    entries: &[fub_abi::traits::VaultEntry],
+) -> Vec<fub_abi::DocId> {
+    entries
+        .iter()
+        .filter(|entry| entry.kind == fub_abi::traits::EntryKind::Document)
+        .map(|entry| entry.id.clone())
+        .collect()
+}
+
+#[cfg(all(test, feature = "base", feature = "proof"))]
+mod nothing_kept_tests {
+    use fub_abi::edit::Revision;
+    use fub_abi::traits::{EntryKind, IndexProvider, VaultEntry};
+    use fub_abi::DocId;
+    use fub_sdk::testing::conformance::up_to_date_only_reported_what_it_saw;
+
+    fn entry(id: &str, kind: EntryKind, fingerprint: Option<&str>) -> VaultEntry {
+        VaultEntry {
+            id: DocId::new(id),
+            kind,
+            size: 3,
+            mtime: 1,
+            fingerprint: fingerprint.map(Revision::new),
+        }
+    }
+
+    /// Base, disegno e correttore dicono di avere ogni documento mostrato,
+    /// anche senza impronta, e niente di ciò che non è un documento.
+    #[test]
+    fn indexes_without_per_document_state_have_every_document_shown() {
+        #[allow(unused_mut)]
+        let mut indexes: Vec<(&str, Box<dyn IndexProvider>)> = vec![
+            ("base", Box::new(crate::BaseIndex::new())),
+            ("proof", Box::new(crate::ProofIndex::bundled_only())),
+        ];
+        #[cfg(feature = "draw")]
+        indexes.push(("draw", Box::new(crate::draw::DrawIndex)));
+        let shown = [
+            entry("a.md", EntryKind::Document, Some("sha256:a")),
+            entry("b.fubase", EntryKind::Document, None),
+            entry("c.png", EntryKind::Asset, None),
+        ];
+        for (name, index) in &indexes {
+            up_to_date_only_reported_what_it_saw(index.as_ref());
+            let current = index.up_to_date(&shown);
+            assert_eq!(
+                current,
+                vec![DocId::new("a.md"), DocId::new("b.fubase")],
+                "{name}"
+            );
+        }
+    }
+}

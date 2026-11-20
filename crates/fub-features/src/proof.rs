@@ -60,7 +60,7 @@ use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind,
-    QueryRoute,
+    QueryRoute, VaultEntry,
 };
 use fub_abi::ui::UiOption;
 use fub_abi::{DocId, DocumentModel};
@@ -524,6 +524,13 @@ impl IndexProvider for ProofIndex {
 
     fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
+    }
+
+    /// Il correttore riceve il testo da controllare con la domanda, non dalle
+    /// note consegnate: non tiene niente per documento
+    /// ([`crate::nothing_kept_per_document`]).
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        crate::nothing_kept_per_document(entries)
     }
 
     fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {

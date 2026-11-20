@@ -14,7 +14,7 @@ use fub_abi::model::{DateFormats, LinkTarget, PropertyDate, PropertyScalar, Prop
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind,
-    QueryRoute,
+    QueryRoute, VaultEntry,
 };
 use fub_abi::{DocId, DocumentModel};
 use fub_format_base::formula::{
@@ -1396,6 +1396,12 @@ impl IndexProvider for BaseIndex {
     }
     fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
+    }
+    /// Le basi si leggono dal loro file a ogni domanda, non da ciò che il
+    /// kernel consegna: non c'è niente per documento che possa restare
+    /// indietro ([`crate::nothing_kept_per_document`]).
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        crate::nothing_kept_per_document(entries)
     }
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         match query {
