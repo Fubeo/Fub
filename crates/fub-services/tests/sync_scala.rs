@@ -1,6 +1,6 @@
 // Misura del server di sync su una storia lunga (audit PERF-01).
 //
-// Il test è `#[ignore]`: non prova un comportamento, misura. Si lancia con
+// Il test è `#[ignore]`: non prova un comportamento, misura. Si lancia così:
 //
 //     cargo test -p fub-services --release --test sync_scala -- --ignored --nocapture
 //
