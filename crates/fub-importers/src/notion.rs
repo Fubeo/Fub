@@ -1090,7 +1090,9 @@ pub(crate) fn percent_decode(text: &str) -> String {
 
 /// Il valore di una cifra esadecimale ASCII.
 fn hex_digit(byte: u8) -> Option<u8> {
-    char::from(byte).to_digit(16).and_then(|digit| u8::try_from(digit).ok())
+    char::from(byte)
+        .to_digit(16)
+        .and_then(|digit| u8::try_from(digit).ok())
 }
 
 /// Ogni riga dopo la prima, rientrata di `width` spazi.
@@ -1164,10 +1166,7 @@ mod tests {
         assert_eq!(percent_decode("%20"), " ");
         assert_eq!(percent_decode("a%20b%2Fc"), "a b/c");
         assert_eq!(percent_decode("caff%C3%A8"), "caffè");
-        assert_eq!(
-            url_file_name("https://x/%à.pdf").as_deref(),
-            Some("%à.pdf")
-        );
+        assert_eq!(url_file_name("https://x/%à.pdf").as_deref(), Some("%à.pdf"));
         assert_eq!(url_file_name("https://x/%🚀").as_deref(), Some("%🚀"));
     }
 
