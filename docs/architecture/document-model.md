@@ -316,6 +316,19 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   `state/document-bridge.ts`), e la finestra scarta soltanto dopo `kept`; un
   `keep-failed`, o nessuna risposta, non scarta niente e la finestra dice
   perché.
+- **Una finestra del documento morta da sola, o rimasta senza nota.** Una
+  finestra a parte che muore senza passare dalla chiusura di Fub (crash,
+  chiusa dal sistema, anche mentre si apre) non dice più se l'ultima battuta
+  era partita: `state/document-windows.ts` salva dalla sessione della
+  finestra principale ciò che la finestra aveva confermato (o lo mette in
+  bozza), la lascia e avvisa che le ultime modifiche non confermate possono
+  mancare. Cambio di vault e chiusura dell'app aspettano quel salvataggio e
+  non si fermano per sempre. La finestra di una nota cancellata (la sessione
+  si è chiusa e ha messo in bozza il testo) non ha niente da salvare: si
+  chiude senza congelarla né salvarla, con un avviso. Il ponte
+  (`state/document-bridge.ts`) tiene un'autorità per sessione, non per nome:
+  una nota nuova con il nome di una sparita o di una rinominata apre la sua
+  finestra, e il rilascio della finestra vecchia non tocca la sessione nuova.
 
 ## Invarianti
 

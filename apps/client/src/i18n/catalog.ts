@@ -3203,13 +3203,16 @@ export const IT = { // --- la scocca -------------------------------------------
   "windows.discard.keep_failed":
     "Il testo di questa finestra non è entrato nella Cronologia, quindi non è stato scartato: {reason}. Riprova, oppure conserva le tue modifiche.",
   "windows.not_text": "{doc} non si apre in una finestra a parte: la finestra mostra soltanto note e file di testo.",
+  "windows.closed_alone":
+    "La finestra di {doc} si è chiusa da sola. Ciò che aveva già passato alla finestra principale è salvato; le ultime modifiche che non aveva ancora confermato potrebbero mancare.",
+  "windows.closed_alone_unsaved":
+    "La finestra di {doc} si è chiusa da sola e il salvataggio non è confermato: il testo resta nella finestra principale. Le ultime modifiche che la finestra non aveva ancora confermato potrebbero mancare.",
+  "windows.closed_gone": "{doc} non esiste più: la sua finestra si è chiusa senza salvare, perché non c'era niente da salvare.",
   "windows.error.session_gone": "Sessione documento non più disponibile",
   "windows.error.bad_identity": "Identità finestra non valida",
-  "windows.error.closed_while_opening": "Finestra disconnessa durante l'apertura; sessione conservata",
   "windows.error.owner_changed": "Autorità documento cambiata: sessione mantenuta",
   "windows.error.owner_changed_saving": "Autorità documento cambiata durante il salvataggio",
   "windows.error.changed_closing": "Documento modificato durante la chiusura: sessione conservata",
-  "windows.error.disconnected": "Disconnessione prima che le modifiche fossero in salvo; sessione conservata",
   "windows.error.session_changed": "Sessione o vault cambiati: finestra mantenuta",
   "windows.error.changed_draining": "Sessione cambiata mentre le modifiche si mettevano in salvo",
   "windows.error.still_opening": "Finestra ancora in apertura",
@@ -3876,7 +3879,6 @@ export const IT = { // --- la scocca -------------------------------------------
   "errors.mobile.storage_choice": "Scelta dello spazio mobile non riconosciuta",
   "errors.bridge.vault_gone": "Vault del documento non disponibile",
   "errors.bridge.session_changed": "Sessione del documento cambiata",
-  "errors.bridge.windows_open": "La sessione precedente ha ancora finestre aperte",
   "errors.bridge.not_ready": "Finestra non pronta alla modifica",
   "errors.bridge.bad_operation": "Operazione locale incoerente",
   "errors.bridge.drain_conflict": "Conflitto non recuperabile mentre si salvano le modifiche in sospeso",

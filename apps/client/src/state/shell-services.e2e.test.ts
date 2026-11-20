@@ -545,6 +545,24 @@ describe("aprire un vault: i passi e il loro ordine", () => {
     await pending.abandon();
   });
 
+  /// Audit #513, scenario B: una finestra documento morta da sola non ferma
+  /// il cambio di vault per sempre. Ciò che la finestra principale tiene di
+  /// quella nota va sul disco del vault che si lascia, poi si cambia.
+  it("una finestra documento morta da sola non ferma il cambio di vault", async () => {
+    const shell = await start(VAULT);
+    const windows = await import("./document-windows");
+    await windows.openCurrentInNewWindow("note/Spesa.md");
+    const [label] = windows.pendingDocumentWindows();
+    shell.host.destroyDocumentWindow(label!);
+    const { openVault } = await import("../desktop-shell");
+
+    await openVault("/altro");
+
+    expect(shell.host.atGate("openVault").map((c) => c.args[0])).toEqual(["/vault", "/altro"]);
+    expect(shell.store.state.vaultRoot).toBe("/altro");
+    expect(windows.pendingDocumentWindows()).toEqual([]);
+  });
+
   /// Fra lo svuotamento della coda e lo smontaggio c'è una chiamata all'host, e
   /// l'utente può continuare a battere nel documento che sta lasciando. Il vault
   /// di prima resta aperto nell'host, e la sessione scrive in quello in cui è
@@ -1007,6 +1025,45 @@ describe("chiudere la finestra: la guardia", () => {
     expect(view.state.readOnly).toBe(false);
     expect(shell.sessions.inspect("Benvenuto.md")).toMatchObject({ dirty: true });
     await pending.abandon();
+  });
+
+  /// Audit #513, scenario B: una finestra documento morta da sola (crash, il
+  /// sistema che la chiude) non tiene Fub aperto per sempre. La sessione della
+  /// finestra principale si salva, la finestra si lascia, e Fub si chiude
+  /// dicendo che le ultime battute non confermate potrebbero mancare.
+  it("una finestra documento morta da sola non impedisce di chiudere Fub", async () => {
+    const shell = await start(VAULT);
+    const windows = await import("./document-windows");
+    await windows.openCurrentInNewWindow("note/Spesa.md");
+    const [label] = windows.pendingDocumentWindows();
+    expect(label).toBeDefined();
+
+    shell.host.destroyDocumentWindow(label!);
+    await shell.host.close();
+
+    expect(shell.host.atGate("finishMainClose")).toHaveLength(1);
+    expect(windows.pendingDocumentWindows()).toEqual([]);
+    expect(shell.notices()).toContain(shell.t("windows.closed_alone", { doc: "Spesa" }));
+    expect(shell.notices()).not.toContain(shell.t("windows.closed_gone", { doc: "Spesa" }));
+  });
+
+  /// Audit #513, scenario A: la nota della finestra è stata cancellata da fuori.
+  /// Non c'è niente da salvare: la finestra si chiude con un avviso, e Fub con
+  /// lei.
+  it("la finestra di una nota cancellata si chiude con Fub, senza salvare", async () => {
+    const shell = await start(VAULT);
+    const windows = await import("./document-windows");
+    await windows.openCurrentInNewWindow("note/Spesa.md");
+    expect(windows.pendingDocumentWindows()).toHaveLength(1);
+
+    shell.host.removeFromOutside("note/Spesa.md");
+    await waitFor("la sessione della nota si chiude", () => shell.sessions.get("note/Spesa.md") === undefined);
+    await shell.host.close();
+
+    expect(shell.host.atGate("finishMainClose")).toHaveLength(1);
+    expect(windows.pendingDocumentWindows()).toEqual([]);
+    expect(shell.host.files()["note/Spesa.md"]).toBeUndefined();
+    expect(shell.notices()).toContain(shell.t("windows.closed_gone", { doc: "Spesa" }));
   });
 
   /// Dopo il via libera la finestra può ancora non chiudersi: allora la shell

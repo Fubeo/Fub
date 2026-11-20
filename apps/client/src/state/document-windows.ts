@@ -21,6 +21,9 @@ interface WindowEntry {
   closed: boolean;
   initiatedClose: boolean;
   closing: Promise<boolean> | null;
+  /// La finestra è morta da sola e la si sta lasciando (`recoverClosed`):
+  /// chi svuota le finestre aspetta questa promessa invece di dire di no.
+  recovering: Promise<void> | null;
   destruction: { resolve: () => void; reject: (reason: Error) => void; timer: number } | null;
 }
 const windows = new Map<string, WindowEntry>();
@@ -29,7 +32,7 @@ const requestedDuringOpen = new Set<string>();
 let listeners: (() => void)[] = [];
 let installing: Promise<void> | null = null;
 let opening = 0;
-let rootDraining = false;
+let rootDraining: Promise<boolean> | null = null;
 
 function docOf(entry: WindowEntry): string {
   return entry.owner.id;
@@ -62,8 +65,8 @@ async function installListeners(): Promise<void> {
         globalThis.clearTimeout(entry.destruction.timer);
         entry.destruction.resolve();
         entry.destruction = null;
-      } else if (!entry.closing && !entry.initiatedClose) {
-        void recoverClosed(entry).catch((error: unknown) => report(entry, error));
+      } else if (!entry.initiatedClose) {
+        recoverClosed(entry);
       }
     });
     try {
@@ -120,7 +123,7 @@ export async function openCurrentInNewWindow(doc: string | null = activeDoc() ??
       throw new Error(t("windows.error.session_gone"));
     }
     const entry: WindowEntry = { label: null, vault, owner, handle, closed: false,
-      initiatedClose: false, closing: null, destruction: null };
+      initiatedClose: false, closing: null, recovering: null, destruction: null };
     windows.set(handle.surfaceId, entry);
     try {
       const { label } = await api.openDocumentWindow(request);
@@ -128,7 +131,7 @@ export async function openCurrentInNewWindow(doc: string | null = activeDoc() ??
       entry.label = label;
       if (closedDuringOpen.delete(label)) {
         entry.closed = true;
-        report(entry, new Error(t("windows.error.closed_while_opening")));
+        recoverClosed(entry);
       } else if (requestedDuringOpen.delete(label)) {
         await closeDocumentWindowByLabel(label);
       }
@@ -164,21 +167,65 @@ async function saveConfirmed(entry: WindowEntry): Promise<boolean> {
   }
   return true;
 }
+/// La nota della finestra non c'è più (cancellata, sparita dal disco): la sua
+/// sessione si è chiusa per sempre e ha già messo in bozza ciò che andava
+/// tenuto. La finestra non ha niente da congelare né da salvare, e si chiude
+/// (audit #513, scenario A): rifiutarla per sempre non protegge nessun testo.
+function ownerGone(entry: WindowEntry): boolean {
+  return entry.handle.ownerClosed();
+}
 async function release(entry: WindowEntry): Promise<void> {
-  if (!await saveConfirmed(entry)) throw new Error(t("windows.error.changed_closing"));
+  if (!ownerGone(entry) && !await saveConfirmed(entry)) throw new Error(t("windows.error.changed_closing"));
   await entry.handle.dispose();
   windows.delete(entry.handle.surfaceId);
   releaseListenersIfIdle();
 }
-async function recoverClosed(entry: WindowEntry): Promise<boolean> {
-  // A crashed child cannot attest whether its last local operation was sent.
-  // Never infer an empty queue merely because the channel disconnected.
-  report(entry, new Error(t("windows.error.disconnected")));
-  return false;
+/// La finestra è morta da sola (crash, chiusa dal sistema) senza passare dalla
+/// chiusura di Fub (audit #513, scenario B). Non si deduce che la sua coda
+/// fosse vuota: la finestra non può più dire se l'ultima battuta era partita.
+/// Ma la sessione della finestra principale ha il testo di tutto ciò che la
+/// finestra aveva confermato: lo si salva da lì (o in bozza), la finestra si
+/// lascia — mai un blocco per sempre di cambio vault e chiusura — e chi usa Fub
+/// sa che le ultime battute non confermate possono mancare.
+function recoverClosed(entry: WindowEntry): void {
+  if (entry.recovering) return;
+  entry.recovering = (async () => {
+    // Una chiusura o uno svuotamento già in corso finiscono prima: possono
+    // aver lasciato la finestra loro, salvando.
+    await entry.closing?.catch(() => false);
+    await rootDraining?.catch(() => false);
+    // Lasciata da loro, la finestra è uscita col salvataggio confermato. La
+    // nota sparita si guarda prima del rilascio: rilasciata, anche la sessione
+    // salvata di una finestra si chiude.
+    let saved = true;
+    let gone = false;
+    if (windows.get(entry.handle.surfaceId) === entry) {
+      gone = ownerGone(entry);
+      if (!gone) {
+        try {
+          saved = sameOwner(entry) && await saveConfirmed(entry);
+        } catch {
+          saved = false;
+        }
+      }
+      try {
+        await entry.handle.dispose();
+      } catch (error) {
+        // Il rilascio fallito tiene viva la sessione (con il suo prestito):
+        // il testo resta nella finestra principale. La finestra morta non
+        // tiene più niente, e si lascia comunque.
+        report(entry, error);
+      }
+      windows.delete(entry.handle.surfaceId);
+      releaseListenersIfIdle();
+    }
+    if (gone) notify(t("windows.closed_gone", { doc: pageName(docOf(entry)) }), "info");
+    else notify(t(saved ? "windows.closed_alone" : "windows.closed_alone_unsaved", { doc: pageName(docOf(entry)) }), "guasto");
+  })().finally(() => { entry.recovering = null; });
 }
 
 async function freeze(entry: WindowEntry): Promise<void> {
-  if (entry.closed) return;
+  if (entry.closed || ownerGone(entry)) return;
   if (!sameOwner(entry)) throw new Error(t("windows.error.session_changed"));
   await entry.handle.freeze(); // Child has stopped input and main has acknowledged its final seq.
   if (!sameOwner(entry)) throw new Error(t("windows.error.changed_draining"));
@@ -204,40 +251,69 @@ async function nativeClose(entry: WindowEntry): Promise<void> {
       entry.destruction = null;
     }
     if (!entry.closed) entry.initiatedClose = false;
+    // Distrutta anche se la chiusura ha risposto con un errore: la finestra
+    // non c'è più, e la si lascia come una finestra morta da sola.
+    else recoverClosed(entry);
     throw error;
   }
-  await release(entry);
+  try {
+    await release(entry);
+  } catch (error) {
+    // La finestra è già distrutta: un salvataggio non confermato adesso non
+    // può tenerla aperta, la si lascia dicendolo.
+    recoverClosed(entry);
+    throw error;
+  }
 }
 
 /** Freeze *all* surfaces before saving any document; never close on a timer. */
 export async function drainDocumentWindows(): Promise<boolean> {
-  const entries = [...windows.values()];
   if (rootDraining) return false;
+  // Una finestra morta da sola si sta lasciando: si aspetta il suo
+  // salvataggio, poi si guarda ciò che resta.
+  // Non si segna lo svuotamento mentre si aspetta: chi si sta lasciando
+  // aspetta a sua volta uno svuotamento già partito.
+  for (;;) {
+    const recovering = [...windows.values()].flatMap((entry) => (entry.recovering ? [entry.recovering] : []));
+    if (!recovering.length) break;
+    await Promise.allSettled(recovering);
+    if (rootDraining) return false;
+  }
+  const entries = [...windows.values()];
   if (!entries.length) return opening === 0;
   if (opening || entries.some((entry) => !entry.label || entry.closing || entry.closed)) return false;
-  rootDraining = true;
+  let finish: (drained: boolean) => void = () => {};
+  rootDraining = new Promise<boolean>((resolve) => { finish = resolve; });
+  let drained = false;
   try {
     const barriers = await Promise.allSettled(entries.map(freeze));
     const rejected = barriers.find((barrier): barrier is PromiseRejectedResult => barrier.status === "rejected");
     if (rejected) throw rejected.reason;
+    // La finestra di una nota che non c'è più non ha niente da salvare. Si
+    // guarda adesso: dopo il rilascio anche la sessione salvata si chiude.
+    const gone = entries.filter(ownerGone);
+    const live = entries.filter((entry) => !gone.includes(entry));
     const saved = new Set<DocumentSession>();
-    for (const entry of entries) {
+    for (const entry of live) {
       if (saved.has(entry.owner)) continue;
       if (!await saveConfirmed(entry)) throw new Error(t("windows.error.save_unconfirmed_doc", { doc: docOf(entry) }));
       saved.add(entry.owner);
     }
     // A save may complete while a different local surface edits the same document.
-    for (const entry of entries) if (!sameOwner(entry) || documentSessions.isDirty(docOf(entry))) {
+    for (const entry of live) if (!ownerGone(entry) && (!sameOwner(entry) || documentSessions.isDirty(docOf(entry)))) {
       throw new Error(t("windows.error.changed_draining_doc", { doc: docOf(entry) }));
     }
     for (const entry of entries) await nativeClose(entry);
+    for (const entry of gone) notify(t("windows.closed_gone", { doc: pageName(docOf(entry)) }), "info");
+    drained = true;
     return true;
   } catch (error) {
     for (const entry of entries) entry.handle.thaw();
     notify(t("windows.drain_failed", { doc: docOf(entries[0]), reason: errorText(error) }), "guasto");
     return false;
   } finally {
-    rootDraining = false;
+    finish(drained);
+    rootDraining = null;
   }
 }
 
@@ -248,6 +324,11 @@ export async function closeDocumentWindowByLabel(label: string): Promise<boolean
   if (entry.closing) return entry.closing;
   entry.closing = (async () => {
     try {
+      if (ownerGone(entry)) {
+        await nativeClose(entry);
+        notify(t("windows.closed_gone", { doc: pageName(docOf(entry)) }), "info");
+        return true;
+      }
       await freeze(entry);
       if (!await saveConfirmed(entry)) throw new Error(t("windows.error.save_unconfirmed"));
       await nativeClose(entry);

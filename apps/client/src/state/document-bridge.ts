@@ -158,6 +158,9 @@ interface Authority {
   steps: Step[];
   endpoints: Set<Endpoint>;
   applyingSurface: string | null;
+  /// La sessione si è chiusa per sempre (cancellata, sparita dal disco,
+  /// rilasciata): lo dice lei alle sue superfici con `closed()`.
+  closed: boolean;
   detach: () => void;
 }
 interface Endpoint {
@@ -170,8 +173,12 @@ interface Endpoint {
   frozenToken: string | null;
   drain: { token: string; resolve: () => void; reject: (reason: Error) => void; timer: number } | null;
 }
-const authorities = new Map<string, Authority>();
-const keyOf = (vault: string, doc: string): string => `${vault}\0${doc}`;
+/// Una autorità per **sessione**, non per percorso: una rinomina sposta la
+/// stessa sessione sotto un altro nome e la sua autorità resta sua, e il nome
+/// lasciato libero apre la finestra di una nota nuova con un'autorità nuova
+/// (audit #513). Le sessioni di un vault si chiudono tutte quando il vault
+/// cambia, quindi la sessione porta con sé anche il vault.
+const authorities = new Map<DocumentSession, Authority>();
 const identity = (request: DocumentWindowRequest): Identity => ({
   v: 1, doc: request.document, vault: request.vault, session: request.session, surfaceId: request.surfaceId,
 });
@@ -188,6 +195,9 @@ export interface RemoteSurfaceHandle {
   surfaceId: string;
   freeze(): Promise<void>;
   thaw(): void;
+  /// La sessione della finestra si è chiusa per sempre (la nota cancellata o
+  /// sparita dal disco): non c'è più niente da congelare né da salvare.
+  ownerClosed(): boolean;
   dispose(): Promise<void>;
 }
 
@@ -207,17 +217,17 @@ export async function attachRemoteSurface(
     if (profile === null) throw new DocumentWindowUnsupported(doc);
     const owner = documentSessions.get(doc);
     if (state.vaultRoot !== vault || !owner || owner.snapshot().lifecycle !== "open") throw new Error(t("errors.bridge.session_changed"));
-    const key = keyOf(vault, doc);
-    const old = authorities.get(key);
-    if (old && old.owner === owner) {
+    const old = authorities.get(owner);
+    if (old) {
       authority = old;
     } else {
-      if (old?.endpoints.size) throw new Error(t("errors.bridge.windows_open"));
-      const created: Authority = { owner, session: unique(), epoch: unique(), revision: 0, steps: [], endpoints: new Set(), applyingSurface: null, detach: () => {} };
+      const created: Authority = { owner, session: unique(), epoch: unique(), revision: 0, steps: [], endpoints: new Set(),
+        applyingSurface: null, closed: false, detach: () => {} };
       const detachSurface = documentSessions.attachSurface(doc, {
         id: `bridge:${created.session}`,
+        closed: () => { created.closed = true; },
         sync: (update) => {
-          if (authorities.get(key) !== created || state.vaultRoot !== vault || documentSessions.get(owner.id) !== owner) return;
+          if (authorities.get(owner) !== created || state.vaultRoot !== vault || documentSessions.get(owner.id) !== owner) return;
           if (update.kind === "operation") {
             const base = created.revision++;
             created.steps.push({ base, operation: update.operation });
@@ -248,7 +258,7 @@ export async function attachRemoteSurface(
         stopTheme();
         detachSurface();
       };
-      authorities.set(key, created);
+      authorities.set(owner, created);
       authority = created;
     }
     const request: DocumentWindowRequest = {
@@ -262,7 +272,7 @@ export async function attachRemoteSurface(
     // suo id di adesso (`owner.id`), mentre `doc` resta l'identità del canale
     // con cui la finestra è nata e con cui firma i messaggi.
     const scoped = (): boolean => endpoint.active && state.vaultRoot === vault && documentSessions.get(owner.id) === owner
-      && authorities.get(key) === authority;
+      && authorities.get(owner) === authority;
     const reply = (message: RemoteMessage): void => { if (endpoint.active) port.postMessage(message); };
     port.onmessage = (event: MessageEvent<unknown>) => {
       if (!endpoint.active || !isRemoteMessage(event.data)) return;
@@ -395,17 +405,23 @@ export async function attachRemoteSurface(
           endpoint.frozenToken = null;
         }
       },
+      ownerClosed: () => authority.closed,
       dispose: () => {
         if (disposed) return Promise.resolve();
         if (disposing) return disposing;
         if (endpoint.drain) return Promise.reject(new Error("Drain in corso: impossibile rilasciare la sessione"));
         disposing = (async () => {
           releaseLease();
-          try {
-            await releaseSession(owner.id);
-          } catch (error) {
-            releaseLease = documentSessions.retain(doc);
-            throw error;
+          // Si rilascia soltanto la propria sessione, sotto il suo nome di
+          // adesso: una sessione nuova nata sotto lo stesso nome (la nota
+          // cancellata e ricreata) non è di questa finestra.
+          if (documentSessions.get(owner.id) === owner) {
+            try {
+              await releaseSession(owner.id);
+            } catch (error) {
+              releaseLease = documentSessions.retain(owner.id);
+              throw error;
+            }
           }
           disposed = true;
           endpoint.active = false;
@@ -414,7 +430,7 @@ export async function attachRemoteSurface(
           authority.endpoints.delete(endpoint);
           if (authority.endpoints.size === 0) {
             authority.detach();
-            if (authorities.get(key) === authority) authorities.delete(key);
+            if (authorities.get(owner) === authority) authorities.delete(owner);
           }
         })();
         return disposing.finally(() => { disposing = null; });
