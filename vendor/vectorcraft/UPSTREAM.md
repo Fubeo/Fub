@@ -17,8 +17,9 @@ renderizzatore (`render`), l'SVG e il formato nativo (`svg`, `format`), i
 lettori di DXF, EMF/WMF e Affinity (`cad`, `metafile`, `affinity`), il
 controllo degli script (`scriptcheck`), gli strumenti (`tools`), la facciata
 con la sessione e i comandi (`engine`) e gli aiuti dei test (`testkit`). Non
-sono copiati: l'interfaccia (`ui-egui`), il server MCP (`mcp`), le app
-(`apps/*`), `xtask`, il PDF (`crates/pdf`) e l'EPS (`crates/eps`).
+sono copiati: l'interfaccia (`ui-egui`, salvo nove file e una cartella da
+leggere, vedi sotto), il server MCP (`mcp`), le app (`apps/*`), `xtask`, il
+PDF (`crates/pdf`) e l'EPS (`crates/eps`).
 
 ## Riferimento
 
@@ -36,10 +37,22 @@ sono copiati: l'interfaccia (`ui-egui`), il server MCP (`mcp`), le app
 | `crates/render/` | `crates/render/` | `0001` (`Cargo.toml`, una dipendenza dei test); `0003`, `0007` (`src/tests/placed_document.rs`); `0005` (`src/pattern/tests.rs`, `src/addons/halftone/tests.rs`); `0006` (`src/tests.rs`) |
 | `crates/svg/` | `crates/svg/` | `0004` (`src/import/convert.rs`, `tests/it/prop_svg.rs`) |
 | `crates/engine/` | `crates/engine/` | `0001` (22 file: `Cargo.toml`, 12 di `src/`, 9 di test); `0002` (85 file: `Cargo.toml`, 23 di `src/`, 61 di test) |
+| `crates/ui-egui/src/menus/ui_commands.rs`, `panels.rs`, `panels/`, `i18n/it.tsv`, `workspaces.rs`, `shortcut_editor.rs`, `addons/arrange.rs`, `addons/pathtools/corner.rs`, `addons/pathtools/shared_edge.rs` | gli stessi | nessuna |
 | `xtask/src/sha256.rs`, `xtask/affinity-corpus.sha256` | gli stessi | nessuna |
 | `assets/fonts/` | `assets/fonts/` | nessuna |
 | `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE`, `ASSETS.md` | gli stessi | nessuna |
 | `rustfmt.toml` | lo stesso | nessuna |
+
+Di `ui-egui` ci sono soltanto i file da cui
+`tools/disegno-mappa/estrai.mjs` legge la mappa del disegno
+(`crates/fub-disegno/mappa.tsv`, vedi
+[`tools/disegno-mappa/README.md`](../../tools/disegno-mappa/README.md)):
+i comandi dell'interfaccia (`UI_COMMANDS`), i pannelli, le etichette italiane,
+gli spazi di lavoro, l'editor delle scorciatoie, e i tre file di `addons/` che
+dichiarano le costanti con cui `UI_COMMANDS` nomina tre comandi. Sono testo da
+leggere, non codice di Fub: il crate non ha qui il suo `Cargo.toml`, il
+workspace di questa cartella non lo nomina e niente lo compila
+(`cargo metadata --manifest-path vendor/vectorcraft/Cargo.toml` non lo vede).
 
 Di `xtask` ci sono soltanto i due file che i test di `affinity` ed `engine`
 includono con `#[path]` (la SHA-256 con cui il test del corpus Affinity

@@ -88,7 +88,8 @@ export const MOTORI = {
       ["crates/ui-egui/src/dialogs.rs", "le finestre dei fogli, editors/grid/dialogs/"],
     ],
   },
-  // Il motore del disegno. Fuori: l'interfaccia (`ui-egui`), il server MCP
+  // Il motore del disegno. Fuori: l'interfaccia (`ui-egui`, salvo i file
+  // che la mappa del disegno legge), il server MCP
   // (`mcp`), le app e `xtask` (tranne due file che i test includono); e il PDF
   // con l'EPS (`pdf`, `eps`), che vogliono `craft-pdf` di craft-libs: la patch
   // 0002 li toglie dal grafo di `engine`.
@@ -117,6 +118,22 @@ export const MOTORI = {
       "crates/tools",
       "crates/engine",
       "crates/testkit",
+      // Le parti di `ui-egui` da cui `tools/disegno-mappa/estrai.mjs` legge la
+      // mappa del disegno (i comandi dell'interfaccia, i pannelli, le
+      // etichette italiane, gli spazi di lavoro e le scorciatoie). Sono testo
+      // da leggere: senza il `Cargo.toml` del crate, che il workspace di
+      // `vendor/vectorcraft` non nomina, non si compilano. I tre file di
+      // `addons/` dichiarano le costanti con cui `UI_COMMANDS` nomina tre
+      // comandi.
+      "crates/ui-egui/src/menus/ui_commands.rs",
+      "crates/ui-egui/src/addons/arrange.rs",
+      "crates/ui-egui/src/addons/pathtools/corner.rs",
+      "crates/ui-egui/src/addons/pathtools/shared_edge.rs",
+      "crates/ui-egui/src/panels.rs",
+      "crates/ui-egui/src/panels",
+      "crates/ui-egui/src/i18n/it.tsv",
+      "crates/ui-egui/src/workspaces.rs",
+      "crates/ui-egui/src/shortcut_editor.rs",
       // I due file di `xtask` che i test di `affinity` ed `engine` includono
       // (la SHA-256 del corpus e il suo elenco); `xtask` non si copia né gira.
       "xtask/src/sha256.rs",
