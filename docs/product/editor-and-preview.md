@@ -7,9 +7,8 @@
 ## La testata del foglio
 
 Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o la cartella) e le
-cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic o F2 (o scrivendo subito il nome nuovo col fuoco sul
-nome: la prima lettera apre il campo e ne è l'inizio), poi «Salvato» con la
-spunta e «…». Il formato lo dice la figura della linguetta, col nome per il lettore di schermo. Uno stato
+cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic, F2 o scrivendo col fuoco
+sul nome (la prima lettera apre il campo e ne è l'inizio), poi «Salvato» con la spunta e «…». Il formato lo dice la figura della linguetta, col nome per il lettore di schermo. Uno stato
 da notare («Sola lettura») è un chip accanto al percorso; «Si scrive», lo stato normale, lo dice la
 banda, sul telefono «…». Sul telefono resta il nome; in piedi il foglio è largo quanto lo schermo e
 «Salvato» è la spunta (il punto se in sospeso; errore e conflitto restano parole rosse). Sotto il titolo di una nota c'è la [riga dei dati](editor-note-facts.md): modifica, collegamenti, etichette.
