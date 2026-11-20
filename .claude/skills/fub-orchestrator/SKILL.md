@@ -20,15 +20,11 @@ The plan is `$ARGUMENTS`, or `PLAN.md` at the root of the plan branch. Without
 a plan, the work is a queue of defects (from testers, audits, issues) kept in
 one state file.
 
-`CLAUDE.md` and `CLAUDE_DEVICE.md` apply. This workflow allows something
-`CLAUDE.md` otherwise forbids: coder subagents that write, each in its own
-worktree. Only you push, and you merge under the rule in `CLAUDE.md`.
-
-Follow the approved plan to the letter: its tasks, their order of
-dependencies, `Fatto quando` and `Prova`, and `DECISIONS.md`. Re-read the plan
-at the start of every session and after a compaction. When plan and code
-disagree on a fact, the code wins: write the difference in the `Registro` of
-`DECISIONS.md`, never silently.
+`CLAUDE.md` and `CLAUDE_DEVICE.md` apply in full: the plan to the letter and
+the choices you make alone (Plan workflow, Working with the maintainer), and how
+to talk to the maintainer. This workflow allows something `CLAUDE.md` otherwise
+forbids: coder subagents that write, each in its own worktree. Only you push,
+and you merge under the rule in `CLAUDE.md`.
 
 Files of this skill:
 
@@ -136,6 +132,26 @@ Files of this skill:
 6. **Natural pause** (nothing to integrate, no question pending): the state is
    on disk, so compacting loses nothing. Say in one line that it is a good
    moment for `/compact`.
+7. **New work the plan doesn't cover** (a feature, a prototype, a redesign) is
+   not designed by you or a coder: it goes to the planner (`/pianifica`, its
+   own session), with the maintainer's words verbatim.
+
+## Testers
+
+Haiku testers (effort xhigh, or the effort the maintainer names) use the real
+app like a person would and write down what breaks. They don't take a coder
+slot. Their environments, instructions and defect file are in
+`CLAUDE_DEVICE.md`.
+
+- At most two at a time, on different areas, unless the maintainer asks for
+  more. Each one tests away from the parts coders are changing.
+- Before a round, rebuild their app from the newest group branch when the code
+  changed a lot since their build.
+- Their defects: a blocking or serious one takes the next free coder slot; the
+  others go to coders grouped by area, as tasks of the current group. The
+  brief says the defect may be a WebDriver limit: reproduce first.
+- Usability problems (what looks or reads wrong but works) wait for the
+  maintainer's UX plan: no coder on them.
 
 ## State
 
@@ -214,8 +230,6 @@ Fix every alarm at once:
 - `check.sh` prints one line per step. Open `target/check/*.log` only for a red
   step, and only the part you need.
 - Read the plan by section. Don't re-read files that haven't changed.
-- Messages to the user: plain Italian, results first, no task codes and no
-  git words. Say what happened and what you need, without narration.
 
 ## Planner
 

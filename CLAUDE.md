@@ -25,15 +25,16 @@ Saving tokens **never** justifies an incomplete diagnosis, a skipped needed test
 
 ## Working with the maintainer
 
-- **Branch and PR.** Never work on `main`: one branch and one PR against `main` per change; push, PR and merge are part of the work.
+- **Branch and PR.** Never work on `main`: one branch and one PR against `main` per change; push, PR and merge are part of the work. Few open PRs (6–8 at most): merge or close before opening more; a stale PR is realigned and merged, or closed with the reason.
 - **Merge your own PR** when ready (not draft), full CI green on its last commit, final diff read: `gh pr merge <n> --merge --delete-branch`. Never `--admin`; never with a required job red or skipped, except a known flaky test with its issue, rerun once and passed (and the `riuso` run, see CI). A wrong merge → revert or fix PR, never a push to `main`. `gh` not authenticated → ask.
 - **Maintainer's call, ask and wait:** licenses, trademarks, supply-chain policy; secrets, CI permissions; releases and tags; deleting user data; tests with people; a taste choice the maintainer asked to see.
-- **Subagents**, workflows, parallel sessions: only if the maintainer allows them for the task, then read-only. Standing exceptions: plan-workflow coders, each with up to two Haiku helpers ([`coder.md`](.claude/agents/coder.md)), the same two helpers per task in a `/fub-coder` session, and one read-only [`progettista`](.claude/agents/progettista.md) design pass for a hard task in either workflow.
+- **Every other choice is yours** (a plan's `DECISIONS.md` may list more to ask under "Chiede sempre"), for the best result, never the easiest path: quality, customization for the person using Fub (easy for a beginner, configurable for an expert), security, efficiency. A usage choice becomes a setting with a safe default. Write each choice and its reason in the PR body and the report; don't end a report with questions.
+- **Subagents**, workflows, parallel sessions: only if the maintainer allows them for the task, then read-only. Standing exception: the agents that the plan-workflow skills and [`coder.md`](.claude/agents/coder.md) start, within their limits.
 - **Scope.** Only inside the repo; no system packages or settings (give the exact command and why). Tests and probes never touch the maintainer's real vault or files: bench fixtures and temp dirs.
 - **Nothing destructive.** No `rm -rf` outside dirs you created; no `git reset --hard`, `git clean`, destructive checkouts or anything dropping changes without an explicit instruction; no `git push --force` on others' branches; never overwrite, discard or absorb others' changes. Watch disk space.
 - **Privacy.** No personal data (email, token) to external services, not even in a header.
-- **Plans.** `PLAN.md` on its plan branch (see Plan workflow): follow it to the letter, re-read it every session. Plan vs code → code wins, write it down. Status in `Stato:` lines, decisions in `DECISIONS.md`.
-- **Final report** in Italian, self-contained: behaviour; where (paths, branch, PR); what you merged; checks run and not run (why); residual risks; next command. Assumptions are not verified facts. Before ending, list your open PRs and what each waits for.
+- **Talking to the maintainer.** Every message in plain Italian, even a one-liner right after an English notification or a compaction. Results first, then short lists, tables or a mermaid diagram; what changes for the person using Fub, not code. No bare internal codes (task ids, issue numbers) and no git jargon: each message reads on its own.
+- **Final report**, self-contained: behaviour; where (paths, branch, PR); what you merged; checks run and not run (why); residual risks; next command. Assumptions are not verified facts. Before ending, list your open PRs and what each waits for.
 
 ## Before changing anything
 
@@ -131,10 +132,10 @@ Checks: `.github/workflows/ci.yml` (+ `npm-supply-chain.yml`; `baseline.yml` com
 
 ## Plan workflow
 
-- Roles, one session each: planner (`/pianifica`, Opus, effort xhigh), orchestrator (`/fub-orchestrator`, Opus, high), coders ([`coder.md`](.claude/agents/coder.md), Opus, medium). Details: [`fub-orchestrator`](.claude/skills/fub-orchestrator/SKILL.md), [`pianifica`](.claude/skills/pianifica/SKILL.md). Everything about running the orchestration (group branches, coder slots, waiting for CI, clean-up, sentinels) lives in the `fub-orchestrator` skill, not in memory.
+- Roles, one session each: planner (`/pianifica`, Opus, effort xhigh), orchestrator (`/fub-orchestrator`, Opus, high), coders ([`coder.md`](.claude/agents/coder.md), Opus, medium). Details: [`fub-orchestrator`](.claude/skills/fub-orchestrator/SKILL.md), [`pianifica`](.claude/skills/pianifica/SKILL.md).
 - One session alone instead of orchestrator and coders: [`/fub-coder`](.claude/skills/fub-coder/SKILL.md) (Opus, medium), one task at a time, same plan, groups and CI rules.
-- `PLAN.md` (+ `PLAN-ui/` for a prototype) on `piano/<slug>` is the only hand-off: messages only point at a pushed commit; the file counts. `DECISIONS.md` says what the orchestrator decides alone vs asks, and logs choices made during the work.
-- Coders never push, open PRs or touch CI; only the orchestrator pushes, once per integrated task, to a draft PR.
+- Running the work (group branches, agents and their limits, waiting for CI, clean-up, sentinels, testers) lives in those two skills, not in memory.
+- `PLAN.md` (+ `PLAN-ui/` for a prototype) on `piano/<slug>` is the only hand-off: messages only point at a pushed commit; the file counts. Follow it to the letter (tasks, dependencies, `Fatto quando`, `Prova`); re-read it every session and after a compaction. Plan vs code → code wins, written in the `Registro` of `DECISIONS.md`, never silently. Status lives in its `Stato:` lines; `DECISIONS.md` says what is decided alone vs asked, and logs choices made during the work.
 - Each plan starts in a new session (or after `/clear`); the orchestrator with a lower compaction threshold (e.g. `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=60 claude`), compacting at natural pauses: state is in `PLAN.md` and git.
 
 ## Closing gate

@@ -16,17 +16,12 @@ The plan is `$ARGUMENTS`, or `PLAN.md` at the root of the plan branch. Without
 a plan, the work is a queue of defects (from testers, audits, issues) kept in
 the state file named in `CLAUDE_DEVICE.md`.
 
-`CLAUDE.md` and `CLAUDE_DEVICE.md` apply in full. For the work on a single
-task, the rules of [`.claude/agents/coder.md`](../../agents/coder.md) apply to
-you too: "Rules" (except that you own the branch and the push) and "Closing".
-This skill adds what a coder doesn't do: choosing tasks, pushing, CI, merging
-and the state.
-
-Follow the approved plan to the letter: its tasks, their order of
-dependencies, `Fatto quando` and `Prova`, and `DECISIONS.md`. Re-read the plan
-at the start of every session and after a compaction. When plan and code
-disagree on a fact, the code wins: write the difference in the `Registro` of
-`DECISIONS.md`, never silently.
+`CLAUDE.md` and `CLAUDE_DEVICE.md` apply in full: the plan to the letter and
+the choices you make alone (Plan workflow, Working with the maintainer), and how
+to talk to the maintainer. For the work on a single task, the rules of
+[`.claude/agents/coder.md`](../../agents/coder.md) apply to you too: "Rules"
+(except that you own the branch and the push) and "Closing". This skill adds
+what a coder doesn't do: choosing tasks, pushing, CI, merging and the state.
 
 Shared files, in the orchestrator's skill:
 
@@ -110,7 +105,10 @@ Shared files, in the orchestrator's skill:
 - A group is 5–10 tasks, or fewer when they form a coherent delivery.
 - **Before it goes ready:** run `/code-review medium` on the group's diff
   against `main`, fix the true findings, and run the full `scripts/check.sh`
-  through the queue. Then mark the PR ready: the full CI runs.
+  through the queue. Where `CLAUDE_DEVICE.md` says the machine has a real GPU,
+  a Haiku helper also runs the A/B fluidity check described in the
+  orchestrator's skill ("Waiting without spending"). Then mark the PR ready:
+  the full CI runs.
 - **CI:** `ci-attendi.sh <pr>` as a background command, which costs nothing
   while it waits. When only `banco visivo` fails, the baseline bot commits the
   runner's photos and reruns CI; look at its contact sheet before merging.
@@ -141,6 +139,8 @@ Shared files, in the orchestrator's skill:
   item: queued, in progress, merged.
 - External audit: verify every line against the code. Every true item, even a
   small one, becomes an issue and a task; a false one gets a line saying why.
+- Tester defects: blocking or serious ones first, the others grouped by area.
+  Usability problems wait for the maintainer's UX plan.
 
 ## End of a plan
 
@@ -161,5 +161,3 @@ Shared files, in the orchestrator's skill:
   unchanged files.
 - `check.sh` prints one line per step: open `target/check/*.log` only for a red
   step, and only the part you need.
-- Messages to the user: plain Italian, results first, no task codes and no git
-  words.
