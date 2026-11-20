@@ -5953,11 +5953,14 @@ input.canvas-toolbar-item {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+/* Il sottotitolo sta in fondo alla riga (il margine), ma il testo si allinea a
+   sinistra: allineato a destra, Chromium (WebView2) non disegna i puntini
+   delle due righe che la regola comune taglia. */
 .cm-day-page .ui-list-item-subtitle {
   flex: none;
   max-width: 40%;
   margin: 0 0 0 auto;
-  text-align: right;
+  text-align: left;
   color: var(--doc-gutter-fg);
   font-size: var(--text-xs);
 }

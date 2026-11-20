@@ -111,7 +111,9 @@ vi.mock("../graph/config", () => ({
 }));
 
 vi.mock("../i18n/strings", () => ({
-  t: (key: string) => key,
+  // Il conteggio porta i suoi numeri, così le prove lo leggono.
+  t: (key: string, params?: Record<string, unknown>) =>
+    key === "graph.count" && params ? `${key} ${String(params.note)}/${String(params.edges)}` : key,
   resolvedLanguage: () => "it",
   onLanguage: (listener: () => void) => {
     fakes.languageListeners.push(listener);
@@ -326,6 +328,106 @@ describe("lifecycle del renderer graph", () => {
     slider.dispatchEvent(new Event("input"));
     expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(null);
     expect(host.querySelectorAll(".graph-list-open")).toHaveLength(2);
+    stop();
+  });
+
+  it("una nota mancante o un tag sparisce con le note che lo scrivono, mai senza arco", async () => {
+    mountTestGraph();
+    fakes.groups = ["", "sotto"];
+    const render = customRenderer(GRAPH_NS, null)!;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const stop = render(host, {
+      nodes: ["a.md", "b.md", "#alfa", "Sparita", "Comune"],
+      edges: [
+        { from: "a.md", to: "b.md" },
+        { from: "b.md", to: "Sparita" },
+        { from: "b.md", to: "#alfa" },
+        { from: "a.md", to: "Comune" },
+        { from: "b.md", to: "Comune" },
+      ],
+      modified: { "a.md": "1700000000000", "b.md": "1700200000000" },
+      groups: { "a.md": "", "b.md": "sotto" },
+      tags: ["#alfa"],
+      missing: ["Sparita", "Comune"],
+      filter: { show_orphans: true, show_attachments: false, show_tags: true, show_missing: true },
+    }, vi.fn(), NO_RENDER_CONTEXT)!;
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1];
+    // La linea del tempo nasconde b.md: «Sparita» e «#alfa», che solo lui
+    // scrive, se ne vanno con lui; «Comune» resta, perché lo scrive anche a.md.
+    const slider = host.querySelector<HTMLInputElement>(".graph-timeline input")!;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input"));
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set(["a.md", "Comune"]));
+    // Lo stesso con la legenda: spento il gruppo di b.md.
+    slider.value = "2";
+    slider.dispatchEvent(new Event("input"));
+    const sotto = [...host.querySelectorAll<HTMLButtonElement>(".graph-legend-group")]
+      .find((button) => button.textContent === "sotto")!;
+    sotto.click();
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set(["a.md", "Comune"]));
+    sotto.click();
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(null);
+    stop();
+  });
+
+  it("un allegato che c'è segue la sua data e la sua cartella, non la nota che lo scrive", async () => {
+    mountTestGraph();
+    const render = customRenderer(GRAPH_NS, null)!;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const ids = ["a.md", "b.md", "foto.png"];
+    // Il provider manda all'allegato cartella e data sue (graph_view_e2e): la
+    // foto è del primo giorno, la nota che la scrive del secondo.
+    const stop = render(host, {
+      nodes: ids,
+      edges: [{ from: "a.md", to: "b.md" }, { from: "b.md", to: "foto.png" }],
+      modified: { "a.md": "1700000000000", "b.md": "1700200000000", "foto.png": "1700000000000" },
+      groups: { "a.md": "", "b.md": "", "foto.png": "" },
+      filter: { show_orphans: true, show_attachments: true, show_tags: false, show_missing: false },
+    }, vi.fn(), NO_RENDER_CONTEXT)!;
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1];
+    chart.nodeCount.mockReturnValue(ids.length);
+    chart.nodeId.mockImplementation((i: number) => ids[i] ?? null);
+    const slider = host.querySelector<HTMLInputElement>(".graph-timeline input")!;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input"));
+    // Alla data del primo giorno la foto c'era già: resta, come una nota.
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set(["a.md", "foto.png"]));
+    stop();
+  });
+
+  it("un tag o una nota mancante senza note che lo scrivono segue la regola di tutti", async () => {
+    mountTestGraph();
+    const render = customRenderer(GRAPH_NS, null)!;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const ids = ["a.md", "b.md", "#solo", "Sola"];
+    const stop = render(host, {
+      nodes: ids,
+      edges: [{ from: "a.md", to: "b.md" }],
+      modified: { "a.md": "1700000000000", "b.md": "1700200000000" },
+      tags: ["#solo"],
+      missing: ["Sola"],
+      filter: { show_orphans: true, show_attachments: false, show_tags: true, show_missing: true },
+    }, vi.fn(), NO_RENDER_CONTEXT)!;
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1];
+    chart.nodeCount.mockReturnValue(ids.length);
+    chart.nodeId.mockImplementation((i: number) => ids[i] ?? null);
+    const slider = host.querySelector<HTMLInputElement>(".graph-timeline input")!;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input"));
+    // Senza data né cartella non c'è niente che li nasconda: disegno, elenco
+    // e conteggio li contano tutti allo stesso modo.
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set(["a.md", "#solo", "Sola"]));
+    const listed = [...host.querySelectorAll(".graph-list-open")].map((item) => item.textContent ?? "");
+    expect(listed).toHaveLength(3);
+    expect(listed.some((text) => text.includes("solo"))).toBe(true);
+    expect(listed.some((text) => text.includes("Sola"))).toBe(true);
+    expect(host.querySelector(".graph-count")!.textContent).toBe("graph.count 3/0");
     stop();
   });
 

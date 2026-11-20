@@ -322,6 +322,17 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   // migliaia di note ogni istante di modifica era un passo da mezzo secondo.
   const dayOf = (ms: number): number => new Date(ms).setHours(0, 0, 0, 0);
   const times = [...new Set(Object.values(data.modified).map(dayOf))].sort((a, b) => a - b);
+  // Un tag o una nota mancante non è un file: non ha data né cartella, e vive
+  // degli archi dalle note che lo scrivono (il provider manda solo archi
+  // nota → tag e nota → mancante). Le note di ciascuno, calcolate una volta:
+  // la linea del tempo le rilegge a ogni passo, anche in riproduzione.
+  const writers = new Map<string, string[]>();
+  for (const edge of data.edges) {
+    if (!data.tags.has(edge.to) && !data.missing.has(edge.to)) continue;
+    const list = writers.get(edge.to);
+    if (list) list.push(edge.from);
+    else writers.set(edge.to, [edge.from]);
+  }
   const visible = new Set(data.nodes);
   let cutoffIndex = times.length;
   // I gruppi che la legenda ha spento: i loro nodi stanno fuori dalla vista,
@@ -623,9 +634,18 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   function updateTimeline(): void {
     visible.clear();
     const cutoff = cutoffIndex === times.length ? Infinity : times[cutoffIndex];
+    // Un nodo appeso (tag, nota mancante) si vede finché si vede almeno una
+    // delle note che lo scrivono: tenuto da solo era un nodo senza archi. Uno
+    // senza note segue la regola di tutti, così disegno, elenco e conteggio
+    // dicono lo stesso. Un allegato che c'è è un file, con cartella e data sue.
+    const shown = (id: string): boolean =>
+      !hiddenGroups.has(data.groups[id] ?? "\u0000") &&
+      (data.modified[id] === undefined || dayOf(data.modified[id]) <= cutoff);
     for (const id of data.nodes) {
-      if (hiddenGroups.has(data.groups[id] ?? "\u0000")) continue;
-      if (data.modified[id] === undefined || dayOf(data.modified[id]) <= cutoff) visible.add(id);
+      if (!writers.has(id) && shown(id)) visible.add(id);
+    }
+    for (const [id, from] of writers) {
+      if (from.some((doc) => visible.has(doc))) visible.add(id);
     }
     chart?.setVisibleNodes(masked() ? visible : null);
     timeInput.value = String(cutoffIndex);
