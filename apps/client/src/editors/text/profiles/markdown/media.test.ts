@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LinkTarget } from "../../../../host/contract";
 import type { VaultFontPort } from "../../../spatial/fonts/vault";
 import { openLifetime } from "../../../../ui/lifetime";
+import { Race } from "../../../../ui/race";
 import {
   drawingTitle,
   embedOwnText,
@@ -324,6 +325,42 @@ describe("i media del vault dentro una nota", () => {
     await running;
     expect(closed).toEqual(["h-a.png"]);
     expect(root.querySelector("img")?.hasAttribute("src")).toBe(false);
+  });
+
+  it("un giro scaduto mentre aspetta i lease non segna le immagini come mancanti", async () => {
+    // La resa si smonta (o si rifà) con i lease in volo: il lease nato tardi
+    // torna `null`, e il giro vecchio non deve dire «immagine mancante» sulle
+    // immagini che c'erano. Lo ferma il cancello del giro (`ui/race.ts`).
+    let release!: () => void;
+    const slow = new Promise<void>((resolve) => (release = resolve));
+    const root = html([
+      '<img data-vault-src="a.png" alt="a">',
+      '<span class="embed" data-embed-page="b.png">b.png</span>',
+      '<div class="embed" data-embed-path="c.png">c.png</div>',
+    ].join(""));
+    const { media, closed } = port({ "a.png": "a.png", "b.png": "b.png", "c.png": "c.png" }, slow);
+    const asked: string[] = [];
+    const open = media.open;
+    media.open = (id) => {
+      asked.push(id);
+      return open(id);
+    };
+    const life = openLifetime();
+    const race = new Race();
+    const running = race.last((expected) => hydrateVaultMedia(root, "n.md", expected, life, media));
+    // I lease sono partiti: il giro aspetta solo loro.
+    await vi.waitFor(() => expect(asked).toHaveLength(3));
+    race.cancel();
+    life.close();
+    release();
+    await expect(running).resolves.toBeUndefined();
+    // Il giro scade al primo cancello; gli altri rami finiscono dopo.
+    await vi.waitFor(() => expect(closed.sort()).toEqual(["h-a.png", "h-b.png", "h-c.png"]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(root.querySelector(".image-missing")).toBeNull();
+    expect(root.querySelector(".unresolved")).toBeNull();
+    expect(root.querySelector("[data-vault-media=unresolved]")).toBeNull();
+    expect(root.querySelector("img")?.getAttribute("alt")).toBe("a");
   });
 
   it("un PDF incorporato diventa un collegamento, non un lease", async () => {
