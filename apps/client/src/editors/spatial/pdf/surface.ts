@@ -17,7 +17,9 @@
 //   versione» scrive il legame nuovo, un passo di annulla. Nessuno sposta le
 //   annotazioni da sé;
 // - il PDF non c'è, o non si legge: pagine bianche della misura scritta nei
-//   gruppi, e si annota lo stesso, senza scrivere il legame.
+//   gruppi, e si annota lo stesso, senza scrivere il legame. Su una pagina di
+//   cui né il PDF né il file dicono la misura non si scrive: un segno nato
+//   su una misura inventata cadrebbe fuori dalla pagina vera (#321).
 //
 // Aprire non scrive mai: il legame lo scrive un gesto.
 
@@ -122,6 +124,11 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
   /// La pagina che si vede, da 1, e la sua misura in punti.
   let page = 1;
   let size: readonly [number, number] = A4;
+  /// Se `size` è la misura vera della pagina, detta dal PDF o scritta nel
+  /// file per quella pagina. Finché non lo è il foglio non scrive: `size` è
+  /// allora una misura di ripiego, e un segno nato lì cadrebbe fuori dalla
+  /// pagina quando il PDF si legge.
+  let known = false;
   let turning = 0;
   /// Il testo che l'elenco mostra: non si ricostruisce uguale.
   let listed: string | null = null;
@@ -158,19 +165,22 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     return count;
   };
 
-  /// La misura della pagina `k`: quella del PDF, o quella scritta nel file,
-  /// o quella della prima pagina che ne ha una, o A4.
-  const sizeOf = async (k: number): Promise<readonly [number, number]> => {
+  /// La misura della pagina `k`: quella del PDF, o quella scritta nel file
+  /// per `k`, e allora è nota; altrimenti, solo per vedere, quella della
+  /// prima pagina che ne ha una, o A4.
+  const sizeOf = async (k: number): Promise<{ readonly size: readonly [number, number]; readonly known: boolean }> => {
     if (binding.kind === "loaded" && k <= binding.engine.pageCount) {
       try {
-        return await binding.engine.pageSize(k - 1);
+        return { size: await binding.engine.pageSize(k - 1), known: true };
       } catch {
         // Sotto: la misura scritta.
       }
     }
     const current = model();
-    if (current === null) return A4;
-    return writtenSize(current, k) ?? pageGroups(current).find((group) => group.size !== null)?.size ?? A4;
+    if (current === null) return { size: A4, known: false };
+    const written = writtenSize(current, k);
+    if (written !== null) return { size: written, known: true };
+    return { size: pageGroups(current).find((group) => group.size !== null)?.size ?? A4, known: false };
   };
 
   /// Porta il foglio alla pagina `k`; `speak` la annuncia, per chi l'ha
@@ -180,11 +190,12 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     const token = ++turning;
     const next = await sizeOf(target);
     if (disposed || token !== turning) return;
-    const changed = target !== page || next[0] !== size[0] || next[1] !== size[1];
+    const changed = target !== page || next.size[0] !== size[0] || next.size[1] !== size[1];
     page = target;
-    size = next;
+    size = next.size;
+    known = next.known;
     background.show(page - 1, size);
-    showBar();
+    paint();
     if (changed) editor?.showSheet();
     if (speak) announce(t("media.pdf.page", { page, count: pageCount() }));
   };
@@ -254,7 +265,9 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
   const sheet: DrawSheet = {
     page: () => ({ x: 0, y: 0, width: size[0], height: size[1] }),
     scope: (current) => groupsOf(current, page),
-    destination: (current, index, _ids, taken) => pageDestination(current, index, page, size, taken),
+    // Senza la misura vera non nasce niente: il foglio è già in sola lettura,
+    // e questo copre il gesto partito prima che lo diventasse.
+    destination: (current, index, _ids, taken) => (known ? pageDestination(current, index, page, size, taken) : null),
     extra: (current) => {
       if (binding.kind !== "loaded") return [];
       const op = verdict(rootFacts(current), binding.facts).op;
@@ -319,6 +332,9 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     if (pdf === bound) return;
     bound = pdf;
     release();
+    // La misura di prima era dell'altro PDF: la prossima `goTo` dice quella
+    // di adesso.
+    known = false;
     const token = ++bindToken;
     binding = pdf === null ? { kind: "unbound" } : { kind: "pending" };
     background.setEngine(null);
@@ -345,7 +361,7 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     });
     editorLife = owner;
     editor = mounted;
-    mounted.setReadOnly(readOnly || mode === "read");
+    mounted.setReadOnly(readOnly || mode === "read" || !known);
     return mounted;
   };
 
@@ -362,7 +378,10 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
   const show = (next: Opened, fresh: boolean): void => {
     opened = next;
     listed = null;
-    if (fresh) page = 1;
+    if (fresh) {
+      page = 1;
+      known = false;
+    }
     if (next.kind === "scene") {
       rebind();
       if (editor === null) {
@@ -455,6 +474,8 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     const p = document.createElement("p");
     p.className = "vector-notice-text";
     p.textContent = message;
+    // Sta su una riga, accorciato: il testo intero nel suggerimento.
+    p.title = message;
     return p;
   };
 
@@ -508,6 +529,9 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
         case "pending":
           break;
       }
+      // Il foglio non scrive finché la pagina non ha una misura vera: lo
+      // dice, perché gli strumenti spenti da soli non spiegano niente.
+      if (!known && binding.kind !== "pending" && mode === "draw" && !readOnly && !foreign) said.push(t("pdf.size_unknown"));
       const hidden = outside(current);
       if (hidden > 0) said.push(plural(hidden, "pdf.outside.one", "pdf.outside.other"));
     }
@@ -524,7 +548,7 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     confirmButton.hidden = !canConfirm;
     drawHost.hidden = editor === null;
     list.hidden = mode !== "read" || current === null;
-    editor?.setReadOnly(readOnly || mode === "read");
+    editor?.setReadOnly(readOnly || mode === "read" || !known);
     if (!list.hidden) showList();
     showBar();
     if (hadFocus && !root.contains(document.activeElement)) focusShown();

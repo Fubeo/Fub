@@ -3731,6 +3731,7 @@ export const IT = { // --- la scocca -------------------------------------------
   "pdf.missing": "Il PDF «{name}» non c’è: le annotazioni si vedono su pagine bianche.",
   "pdf.unreadable": "Il PDF «{name}» non si legge ({reason}): le annotazioni si vedono su pagine bianche.",
   "pdf.unbound": "Queste annotazioni non nominano un PDF del vault: si vedono su pagine bianche.",
+  "pdf.size_unknown": "Su questa pagina non si scrive finché non se ne conosce la misura: senza il PDF i segni potrebbero finire fuori dalla pagina vera.",
   "pdf.outside.one": "{count} elemento sta fuori dalle pagine: qui non si vede, nella sorgente sì.",
   "pdf.outside.other": "{count} elementi stanno fuori dalle pagine: qui non si vedono, nella sorgente sì.",
   "pdf.list": "Annotazioni",

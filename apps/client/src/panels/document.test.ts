@@ -1601,6 +1601,25 @@ describe("chiusa l'ultima nota, il kernel non ne tiene più il contesto (IMP-107
     await waitFor("il contesto segue la linguetta di Altra.md", () => published()?.doc === "Altra.md");
   });
 
+  // La Struttura segue il documento del contesto: con un PDF davanti il
+  // kernel le dà lo stato vuoto (`outline_view_e2e.rs`), purché il contesto
+  // nomini il PDF e non la nota di prima (#321).
+  it("un PDF davanti pubblica il PDF, all'apertura e dalla sua linguetta", async () => {
+    const host = await start("off");
+    await open("Benvenuto.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] ?? null) as { doc: string | null } | null;
+    };
+    await open(GUIDA);
+    await waitFor("il contesto segue il PDF aperto", () => published()?.doc === GUIDA);
+    document.querySelector<HTMLButtonElement>('.pane.focus .tab[data-key*="Benvenuto.md"]')!.click();
+    await waitFor("il contesto torna alla nota", () => published()?.doc === "Benvenuto.md");
+    document.querySelector<HTMLButtonElement>('.pane.focus .tab[data-key*="guida.pdf"]')!.click();
+    await waitFor("il contesto segue la linguetta del PDF", () => published()?.doc === GUIDA);
+  });
+
   // Un documento che non si apre è comunque quello a fuoco: la barra di
   // Statistiche deve parlare di lui, non dei conteggi della nota di prima
   // (IMP-143). Il perché lo dice la sua scheda; il contesto qui dice solo chi è.
