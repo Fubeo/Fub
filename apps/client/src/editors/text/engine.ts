@@ -55,6 +55,8 @@ import {
 import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import type { SyntaxNode } from "@lezer/common";
 import { vim } from "@replit/codemirror-vim";
+import { insertedLineBreaks } from "./line-breaks";
+import { vimReadsLines } from "./vim-lines";
 import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
 import { byteToNormalizedCharIndices, charToByteIndices } from "../../rules/offsets";
@@ -242,6 +244,7 @@ function foldMarker(open: boolean): HTMLElement {
 /// per ultimo, e si esce dalla concentrazione con «Esci» nella banda o col
 /// comando (T24).
 function vimInput(): Extension {
+  vimReadsLines();
   return [vim(), Prec.lowest(keymap.of([{ key: "Escape", run: () => concentrating() }]))];
 }
 
@@ -1050,10 +1053,10 @@ export class TextEngine {
     return [
       ...(convertLineBreaks === null ? [] : [
         EditorState.lineSeparator.of(convertLineBreaks),
-        // CodeMirror divide il testo incollato o lasciato cadere solo sul
-        // separatore: gli a capo degli appunti diventano quelli della nota,
-        // così un "\n" nudo non resta dentro la riga (#394).
-        EditorView.clipboardInputFilter.of((text) => text.replace(/\r\n?|\n/g, convertLineBreaks)),
+        // CodeMirror divide il testo inserito solo sul separatore: gli a capo
+        // nudi di ogni inserimento (appunti, Vim, comandi) diventano quelli
+        // della nota, così un "\n" non resta dentro la riga (#394, #397).
+        insertedLineBreaks(),
       ]),
       this.profile.of(this.profileExtensions()),
       this.phrasesCompartment.of(editorPhrases()),
