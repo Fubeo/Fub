@@ -372,9 +372,30 @@ riga dell'anagrafe non si copia. L'indice tiene il testimone accanto
 all'impronta finché la voce non cambia. La domanda dopo crede l'impronta solo
 se il file appena guardato ha lo stesso testimone, e `store_entries` non la
 scrive in una riga il cui file adesso è un altro: alla riapertura quel file si
-rilegge invece di essere certificato con i byte di prima. Due testimoni dicono
-lo stesso file se ogni campo che entrambi conoscono coincide; un campo che una
-parte non conosce non decide, per il segno come per l'identità.
+rilegge invece di essere certificato con i byte di prima. I testimoni si
+confrontano con la regola di «Lo stesso file», qui sotto.
+
+### Lo stesso file
+
+Ogni punto che decide «il file è quello che conosco» usa una regola sola, di
+`fub_kernel::transfer`: due testimoni (`FileWitness`) sono lo stesso file se
+timbro di cambiamento (`ctime` su unix, `ChangeTime` su Windows) e identità
+coincidono. Un campo noto da una parte sola è un file cambiato, che si
+rilegge; ignoto da entrambe le parti non decide, e restano peso e data. La
+usano l'anagrafe quando eredita impronta e metadati da una riga, il riuso
+delle righe alla riapertura, `learn_fingerprints`, lo svuotamento del cestino
+e il prestito delle letture a pezzi. Sui supporti dove il timbro è la data
+(FAT) l'identità resta l'unico segno di un file messo sopra un altro.
+
+Un timbro ricordato vale solo se era già fermo quando si è guardato il file:
+più vecchio di una grana, presa larga a due secondi (`CHANGE_STAMP_GRAIN`),
+dell'orologio letto prima di guardarlo (`change_stamp_settled`). Una
+riscrittura venuta dopo, con lo stesso peso e la stessa data, nella stessa
+grana non cambierebbe il timbro. Per questo `store_entries` scrive la riga
+senza timbro quando non era fermo, e la riapertura rilegge quel file; la
+memoria delle revisioni fa lo stesso (`craft-formats.md`). Il prestito e il
+cestino confrontano due letture della stessa chiamata e non ricordano niente:
+lì la grana non si chiede.
 
 La consegna è un prestito esclusivo breve: `Custody::write` prende il turno di
 scrittura prima del lucchetto, quindi non entra a metà del lavoro di un altro
