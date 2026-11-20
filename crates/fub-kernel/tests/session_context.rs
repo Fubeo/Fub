@@ -134,6 +134,11 @@ impl Fixture {
     /// Un workspace con tre view: una che segue solo il documento, una che
     /// segue anche la selezione, una che non segue niente.
     fn workspace(&self) -> Workspace {
+        // Le due note che i test pubblicano ci sono davvero: un documento che
+        // non è nel vault il kernel non lo serve alle view (IMP-1800).
+        for doc in ["Nota.md", "Altra.md"] {
+            std::fs::write(self.root.join(doc), "testo\n").expect("scritta");
+        }
         let mut ws =
             Workspace::new(&self.root, FormatRegistry::new()).expect("l'apertura del vault riesce");
         // I plugin di prova si dichiarano prima di registrare (§7.3): il
@@ -404,4 +409,46 @@ fn the_context_follows_a_rename_and_empties_on_removal() {
     let ctx = ws.active_context().expect("il pannello c'è ancora");
     assert_eq!(ctx.doc, None, "la nota non esiste più");
     assert_eq!(ctx.pane.as_str(), MAIN_PANE, "il pannello sì");
+}
+
+/// **Un documento che non è nel vault non arriva alle view** (IMP-1800).
+///
+/// La shell pubblica in ritardo e di suo: la linguetta ripristinata di un file
+/// tolto ad app chiusa, la nota che un rename dal titolo ha appena spostato.
+/// Servito così, ogni view che legge il documento attivo falliva con
+/// `NotFound`, e la shell mostrava «il pannello non si è ridisegnato: non
+/// esiste più» per pannelli che stavano benissimo. Il contesto pubblicato non
+/// si riscrive: quando il file c'è, la stessa domanda lo ritrova.
+#[test]
+fn a_document_not_in_the_vault_is_not_served_to_the_views() {
+    let fx = Fixture::new();
+    let ws = fx.workspace();
+
+    let redraw = ws.set_active_context(Some(
+        context("Sparita.md").with_selections(Some(SelectionSet::caret(3))),
+    ));
+    assert_eq!(
+        redraw,
+        vec!["solo-doc", "doc-e-selezione"],
+        "le view che seguono il documento si ridisegnano comunque: devono \
+         smettere di mostrare la nota di prima"
+    );
+    let ctx = ws.active_context().expect("il riquadro c'è");
+    assert_eq!(ctx.doc, None, "la nota non è nel vault");
+    assert_eq!(ctx.selections, None, "i suoi offset erano di quel testo");
+    assert_eq!(ctx.pane.as_str(), MAIN_PANE, "il riquadro resta");
+    assert_eq!(
+        ws.render_view(&ViewInstance::only("solo-doc"))
+            .expect("la view si disegna"),
+        UiNode::text(format!("{:?}", Some(ViewContext::new(MAIN_PANE)))),
+        "la view legge il contesto senza documento, come la vedrebbe un plugin"
+    );
+
+    // Il file arriva (lo ricrea l'utente, lo rimette un altro programma): senza
+    // una nuova pubblicazione il contesto torna a nominarlo.
+    std::fs::write(fx.root.join("Sparita.md"), "testo\n").expect("scritta");
+    assert_eq!(
+        ws.active_context().and_then(|c| c.doc),
+        Some(DocId::new("Sparita.md"))
+    );
 }

@@ -11052,9 +11052,18 @@ impl Workspace {
         // Il taglio del §8.1 passa qui: la sessione dice *cosa* è cambiato, il
         // workspace traduce la maschera in id di view. È deliberato che il
         // componente non sappia che le view esistono.
+        let named = context.as_ref().and_then(|c| c.doc.clone());
         let changed = self.session.publish(context);
         if changed.is_empty() {
             return Vec::new();
+        }
+        // Una riga per pubblicazione che cambia qualcosa, non per lettura: le
+        // view lo leggono senza documento (vedi `active_context`).
+        if let Some(doc) = named.filter(|doc| !self.docs.vault.exists(doc)) {
+            tracing::info!(
+                target: "fub.kernel",
+                "contesto su un documento che non è nel vault ({doc}): le view lo leggono senza documento"
+            );
         }
         // `views()` risolve già le due maschere sull'esemplare unico (§22.3):
         // qui non serve una seconda strada per la stessa domanda, e averla
@@ -11088,8 +11097,32 @@ impl Workspace {
     }
 
     /// Il contesto del pannello con il focus, se la shell ne ha pubblicato uno.
+    ///
+    /// **Un documento che non è nel vault non si serve.** La shell pubblica di
+    /// suo e in ritardo (il cursore aspetta 150 ms): può nominare la nota che
+    /// un rename dal titolo ha appena spostato, quella che un altro programma
+    /// ha appena tolto, o la linguetta ripristinata di un file sparito ad app
+    /// chiusa. Servito così, ogni view che legge il documento attivo —
+    /// struttura, note a piè di pagina, proprietà, statistiche — falliva con
+    /// `NotFound`, e la shell lo diceva come un pannello rotto (IMP-1800). È la
+    /// stessa verità di [`Session::invalidate`] con `Gone`, letta dall'altro
+    /// lato: il documento cade, la selezione con lui (i suoi offset erano di
+    /// quel testo), riquadro e modalità restano. Il contesto pubblicato non si
+    /// riscrive: se il file torna, la stessa domanda lo ritrova senza aspettare
+    /// che la shell ripubblichi. Il fatto si scrive nel log quando la shell lo
+    /// pubblica ([`set_active_context`](Workspace::set_active_context)), non a
+    /// ogni lettura.
     pub fn active_context(&self) -> Option<ViewContext> {
-        self.session.context()
+        let mut context = self.session.context()?;
+        if context
+            .doc
+            .as_ref()
+            .is_some_and(|doc| !self.docs.vault.exists(doc))
+        {
+            context.doc = None;
+            context.selections = None;
+        }
+        Some(context)
     }
 
     /// Il documento del contesto attivo: la lettura che il kernel usa dove il
