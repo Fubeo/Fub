@@ -44,12 +44,12 @@ let parent: HTMLElement;
 let surface: EditorSurface | null;
 let loader: { resolve(module: SurfaceModule): void; reject(error: unknown): void };
 
-function mount(): EditorSurface {
+function mount(compact = false): EditorSurface {
   const promise = new Promise<SurfaceModule>((resolve, reject) => {
     loader = { resolve, reject };
   });
   surface = mountVectorSurfaceLazily(
-    { paneId: "p1", documentId: "disegni/casa.svg", parent },
+    { paneId: "p1", documentId: "disegni/casa.svg", parent, ...(compact ? { compact: true } : {}) },
     { onChange: () => {}, onSelectionChange: () => {} },
     () => promise,
   );
@@ -122,6 +122,20 @@ describe("prima che il codice arrivi", () => {
     expect(root.querySelector<HTMLElement>(".vector-notice-action")!.hidden).toBe(true);
   });
 
+  it("in una scheda (T46) «A tutta pagina» aspetta la superficie e le passa", async () => {
+    expect(mount().setFullPage).toBeUndefined();
+    surface!.destroy();
+    const lazy = mount(true);
+    lazy.buffer!.setDoc(SOURCE);
+    lazy.setFullPage!(true);
+    await arrive();
+    const editor = parent.querySelector<HTMLElement>(".draw-editor")!;
+    expect(editor.dataset.compact).toBe("");
+    expect(editor.dataset.workspace).toBe("full");
+    lazy.setFullPage!(false);
+    expect(editor.dataset.workspace).toBe("simple");
+  });
+
   it("un rimando aspetta la scena, e la sceglie", async () => {
     const lazy = mount();
     lazy.buffer!.setDoc(SOURCE);
@@ -176,6 +190,22 @@ describe("dopo", () => {
     expect(told).toBeGreaterThan(0);
     expect(lazy.status!.counts).toBe(true);
     expect(lazy.status!.items().map((item) => item.id)).toContain("zoom");
+  });
+
+  it("il chip dello stato arriva con la superficie: prima non dice niente, e chi lo seguiva lo sa", async () => {
+    const lazy = mount();
+    lazy.buffer!.setDoc(SOURCE);
+    let told = 0;
+    lazy.standing!.subscribe(() => (told += 1));
+    expect(lazy.standing!.current()).toBeNull();
+    await arrive();
+    expect(told).toBeGreaterThan(0);
+    // Senza la sessione del documento il motore non si apre: le parti non si
+    // sanno, e il chip non c'è.
+    expect(lazy.standing!.current()).toBeNull();
+    const before = told;
+    lazy.setMode("read");
+    expect(told).toBeGreaterThan(before);
   });
 
   it("tutto passa alla superficie vera", async () => {

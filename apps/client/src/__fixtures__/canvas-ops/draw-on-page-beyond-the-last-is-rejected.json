@@ -1,0 +1,62 @@
+{
+  "about": "Una pagina oltre l'ultima, quando il conto si sa (`page_count`, che `canvas.apply` legge dal file), è Invalid.",
+  "before": {
+    "nodes": [
+      {
+        "id": "p1",
+        "type": "file",
+        "file": "Corsi/dispensa.pdf",
+        "x": 0,
+        "y": 0,
+        "width": 360,
+        "height": 509
+      },
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "Corsi/voti.xlsx",
+        "x": 400,
+        "y": 0,
+        "width": 640,
+        "height": 420
+      },
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 600,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": {
+        "card": "p1",
+        "page": 5,
+        "page_size": [
+          595,
+          842
+        ],
+        "page_count": 4
+      },
+      "points": [
+        [
+          72,
+          100
+        ]
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "error": {
+      "kind": "Invalid",
+      "index": 0
+    }
+  }
+}

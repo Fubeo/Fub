@@ -24,14 +24,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import html from "../../index.html?raw";
 import generatedEnums from "../host/enums.generated?raw";
-import type { UiNode, ViewSpec, ViewUpdate } from "../host/contract";
+import type { ActionRef, UiNode, ViewSpec, ViewUpdate } from "../host/contract";
 import { openLifetime } from "./lifetime";
 
 function emptyTree(title: string): UiNode {
   return { node: "empty_state", title, detail: null, action: null };
 }
 
-const renderView = vi.fn(async (): Promise<UiNode> => emptyTree("vuoto"));
+const renderView = vi.fn(async (_view?: string): Promise<UiNode> => emptyTree("vuoto"));
 const viewAction = vi.fn(async () => ({ kind: "none" }));
 const listViews = vi.fn(async (): Promise<ViewSpec[]> => []);
 
@@ -52,7 +52,24 @@ vi.mock("../host/ipc", () => ({
 }));
 // `state/document-session` possiede il flush senza trascinare qui CodeMirror
 // e il pannello del documento.
-vi.mock("../state/document-session", () => ({ flushPendingSave: async () => {} }));
+const writeWithdrawn = vi.fn();
+const expectDocumentWrite = vi.fn((_doc: string) => writeWithdrawn);
+vi.mock("../state/document-session", () => ({
+  flushPendingSave: async () => {},
+  get expectDocumentWrite() {
+    return expectDocumentWrite;
+  },
+}));
+// La nota a fuoco: la decide il test che la scrive, gli altri leggono il layout.
+let focusedDoc: string | null | undefined;
+vi.mock("../state/layout", async (original) => {
+  const layout = await original<typeof import("../state/layout")>();
+  return {
+    ...layout,
+    activeDoc: (...args: Parameters<typeof layout.activeDoc>) =>
+      focusedDoc === undefined ? layout.activeDoc(...args) : focusedDoc,
+  };
+});
 
 function spec(id: string, surface: ViewSpec["surface"]): ViewSpec {
   return {
@@ -203,6 +220,71 @@ describe("le superfici che questa shell ospita da sé", () => {
     ).toBe("tags");
   });
 });
+describe("le righe che nominano un posto di un documento (T2b)", () => {
+  function item(label: string, action: ActionRef | null, children: UiNode[] = []): UiNode {
+    return { node: "tree_item", label, expanded: true, action, selected: false, children };
+  }
+  const reveal = (doc: string, start: number, end: number) => ({ action: "reveal", payload: { doc, base: "x", start, end } });
+  // Le view del test si montano senza un vault aperto.
+  const NOTE = { documentId: "nota.md", vault: undefined };
+
+  it("le offre come posti dove far cadere un blocco, con la parte che si vede e l'acceso", async () => {
+    renderView.mockResolvedValueOnce({
+      node: "tree",
+      roots: [
+        item("Primo", reveal("nota.md", 0, 8), [item("Dentro", reveal("nota.md", 10, 20))]),
+        item("Senza posto", null),
+        item("Altrove", reveal("altra.md", 0, 5)),
+      ],
+    } as UiNode);
+    listViews.mockResolvedValueOnce([spec("outline", "left_sidebar")]);
+    const views = await loadViews();
+    const registry = await import("../editors/core/registry");
+    const changed = vi.fn();
+    const unwatch = registry.watchDropOffers(changed);
+    await views.mountDeclaredViews();
+    unwatch();
+    expect(changed, "le righe disegnate lo dicono: chi tiene posti di prima li rimisura").toHaveBeenCalled();
+    const rows = Array.from(document.querySelectorAll<HTMLElement>("#views-left .ui-tree-label"));
+    expect(rows.map((row) => row.dataset.placeDoc ?? null)).toEqual(["nota.md", "nota.md", null, "altra.md"]);
+    expect(rows[1]!.dataset.placeStart).toBe("10");
+    expect(rows[1]!.dataset.placeEnd).toBe("20");
+
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const i = rows.indexOf(this);
+      const top = i * 28;
+      return (i < 0 ? { left: 0, top: 0, right: 1000, bottom: 1000, width: 1000, height: 1000 } : { left: 10, top, right: 200, bottom: top + 28, width: 190, height: 28 }) as DOMRect;
+    });
+    try {
+      const { dropOffers } = await import("../editors/core/registry");
+      const offers = dropOffers(NOTE);
+      expect(offers.map((offer) => [offer.title, offer.kind === "place" ? offer.span.start : -1, offer.kind === "place" ? offer.span.end : -1, offer.rect.top])).toEqual([
+        ["Primo", 0, 8, 0],
+        ["Dentro", 10, 20, 28],
+      ]);
+      offers[1]!.hover(true);
+      expect(rows[1]!.dataset.dropHot).toBe("true");
+      offers[1]!.hover(false);
+      expect(rows[1]!.dataset.dropHot).toBeUndefined();
+      expect(dropOffers({ documentId: "nessuna.md", vault: undefined })).toEqual([]);
+      // Lo stesso percorso in un altro vault è un'altra nota.
+      expect(dropOffers({ documentId: "nota.md", vault: "/altro-vault" })).toEqual([]);
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("una riga nascosta non è un posto", async () => {
+    renderView.mockResolvedValueOnce({ node: "tree", roots: [item("Primo", reveal("nota.md", 0, 8))] } as UiNode);
+    listViews.mockResolvedValueOnce([spec("outline", "left_sidebar")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    const { dropOffers } = await import("../editors/core/registry");
+    // Senza un layout ogni rettangolo è vuoto: niente si vede.
+    expect(dropOffers(NOTE)).toEqual([]);
+  });
+});
+
 describe("l'inspector a tab", () => {
   it("lega tab e pannelli e muove il fuoco con frecce/Home/Fine", async () => {
     listViews.mockResolvedValueOnce([
@@ -262,9 +344,227 @@ describe("l'inspector a tab", () => {
     expect(follows.hidden).toBe(false);
     expect(follows.dataset.state).toBe("none");
     expect(follows.textContent).toBe("Nessuna nota in primo piano");
+    // Con una nota davanti la riga dice «Segue la nota», a voce bassa: il nome
+    // della nota sta nel suggerimento, così un nome lungo non spinge il titolo.
+    const layout = await import("../state/layout");
+    const store = await import("../state/store");
+    layout.openIn(layout.layout.focus, "Cartella/Una nota dal nome lungo.md");
+    store.emit("active-doc", "Cartella/Una nota dal nome lungo.md");
+    expect(follows.dataset.state).toBe("doc");
+    expect(follows.textContent).toBe("Segue la nota");
+    follows.dispatchEvent(new FocusEvent("focus"));
+    const tip = document.getElementById(follows.getAttribute("aria-describedby") ?? "");
+    expect(tip?.textContent).toBe("Segue: Una nota dal nome lungo");
+    follows.dispatchEvent(new FocusEvent("blur"));
     // Una view che non dipende dal documento non ne parla.
     right.querySelectorAll<HTMLButtonElement>(".inspector-tab")[1]!.click();
     expect(follows.hidden).toBe(true);
+  });
+
+  /// #518: le sette view dell'ispettore ricevono un invito a ogni salvataggio
+  /// automatico. Una scheda chiusa non chiede niente al kernel — né al
+  /// montaggio né agli inviti — e chiede l'albero una volta sola quando si apre.
+  it("una scheda chiusa non chiede l'albero finché non si apre, e poi una volta sola", async () => {
+    const rows = (count: number): UiNode => ({
+      node: "list",
+      items: Array.from({ length: count }, (_, i) => ({
+        node: "list_item" as const,
+        title: `Nota ${i}`,
+        subtitle: null,
+        action: null,
+        selected: false,
+        drag: { kind: "document" as const, doc: `Cartella/Nota ${i}.md` },
+      })),
+    });
+    renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(300) : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([
+        spec("outline", "right_sidebar"),
+        spec("backlinks", "right_sidebar"),
+      ]);
+      const views = await loadViews();
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
+      const asked = () => renderView.mock.calls.filter((call) => call[0] === "backlinks").length;
+      // La scheda è chiusa: il provider non è stato interrogato.
+      expect(asked()).toBe(0);
+      expect(content.querySelectorAll(".ui-list-item")).toHaveLength(0);
+
+      // N inviti a scheda chiusa: ancora nessuna richiesta.
+      renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(5) : emptyTree("vuoto")));
+      for (let i = 0; i < 4; i++) await panelHost.refreshPanel("backlinks");
+      expect(asked()).toBe(0);
+
+      // Aperta: una richiesta, e l'albero di adesso.
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(content.querySelectorAll(".ui-list-item")).toHaveLength(5));
+      expect(asked()).toBe(1);
+      // Richiusa e riaperta senza inviti in mezzo: niente da chiedere.
+      tabs[0]!.click();
+      tabs[1]!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(asked()).toBe(1);
+
+      // Aperta, un giro si disegna subito.
+      renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(7) : emptyTree("vuoto")));
+      await panelHost.refreshPanel("backlinks");
+      expect(content.querySelectorAll(".ui-list-item")).toHaveLength(7);
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
+  it("un'azione che risponde a scheda chiusa non lascia un albero vecchio per la riapertura", async () => {
+    // L'azione parte a scheda aperta; la risposta arriva dopo che la scheda si
+    // è chiusa. Un `patch` si applicherebbe al DOM e lascerebbe in attesa
+    // l'albero precedente: la riapertura mostrerebbe quello, non la verità.
+    const rows = (count: number): UiNode => ({
+      node: "list",
+      items: Array.from({ length: count }, (_, i) => ({
+        node: "list_item" as const,
+        title: `Nota ${i}`,
+        subtitle: null,
+        action: { action: "open", payload: i },
+        selected: false,
+        key: `n${i}`,
+        drag: { kind: "document" as const, doc: `Cartella/Nota ${i}.md` },
+      })),
+    });
+    let count = 3;
+    renderView.mockImplementation(async (view) => (view === "backlinks" ? rows(count) : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([
+        spec("outline", "right_sidebar"),
+        spec("backlinks", "right_sidebar"),
+      ]);
+      const views = await loadViews();
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
+      const shownRows = () => content.querySelectorAll<HTMLElement>(".ui-list-item");
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(shownRows()).toHaveLength(3));
+
+      let answer!: (update: ViewUpdate) => void;
+      viewAction.mockImplementationOnce(() => new Promise<ViewUpdate>((resolve) => (answer = resolve)));
+      shownRows()[0]!.click();
+      tabs[0]!.click();
+
+      count = 4;
+      await panelHost.refreshPanel("backlinks");
+      count = 6;
+      answer({
+        kind: "patch",
+        key: "n0",
+        node: { node: "list_item", title: "Ritoccata", subtitle: null, action: null, selected: false, key: "n0" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(shownRows()).toHaveLength(6));
+      expect([...shownRows()].some((row) => row.textContent?.includes("Ritoccata"))).toBe(false);
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
+  it("una risposta arrivata a scheda chiusa non copre l'albero di un invito venuto dopo", async () => {
+    // La richiesta parte a scheda aperta; la scheda si chiude; un invito la
+    // invecchia; poi la vecchia risposta arriva. All'apertura si vede l'albero
+    // dell'invito, non quello della risposta tardiva.
+    let label = "primo";
+    renderView.mockImplementation(async (view) => (view === "backlinks" ? emptyTree(label) : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([spec("outline", "right_sidebar"), spec("backlinks", "right_sidebar")]);
+      const views = await loadViews();
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(content.textContent).toContain("primo"));
+
+      let answer!: (tree: UiNode) => void;
+      renderView.mockImplementationOnce(() => new Promise<UiNode>((resolve) => (answer = resolve)));
+      const late = panelHost.refreshPanel("backlinks");
+      tabs[0]!.click();
+      label = "nuovo";
+      await panelHost.refreshPanel("backlinks");
+      answer(emptyTree("tardivo"));
+      await late;
+
+      renderView.mockClear();
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(content.textContent).toContain("nuovo"));
+      expect(content.textContent).not.toContain("tardivo");
+      expect(renderView).toHaveBeenCalledTimes(1);
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
+  it("a ispettore chiuso nessuna scheda chiede l'albero; riaperto, chiede quella accesa", async () => {
+    let label = "primo";
+    renderView.mockImplementation(async (view) => (view === "backlinks" ? emptyTree(label) : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([spec("backlinks", "right_sidebar"), spec("outline", "right_sidebar")]);
+      const views = await loadViews();
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+      const pane = document.getElementById("right-pane")!;
+      const layout = document.getElementById("layout")!;
+      const app = document.getElementById("app")!;
+      const content = document.querySelector<HTMLElement>('.declared-view[data-view-id="backlinks"]')!;
+      await vi.waitFor(() => expect(content.textContent).toContain("primo"));
+      const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Chiuso: gli inviti non chiedono niente.
+      pane.hidden = true;
+      await settle();
+      renderView.mockClear();
+      label = "chiuso";
+      for (let i = 0; i < 3; i++) await panelHost.refreshPanel("backlinks");
+      expect(renderView).not.toHaveBeenCalled();
+
+      // Affacciato dal bordo si vede: una richiesta.
+      layout.classList.add("peek-inspector");
+      await vi.waitFor(() => expect(content.textContent).toContain("chiuso"));
+      expect(renderView).toHaveBeenCalledTimes(1);
+      layout.classList.remove("peek-inspector");
+      await settle();
+
+      // Riaperto dopo altri inviti: una richiesta sola, per la scheda accesa.
+      renderView.mockClear();
+      label = "riaperto";
+      for (let i = 0; i < 3; i++) await panelHost.refreshPanel("backlinks");
+      await panelHost.refreshPanel("outline");
+      expect(renderView).not.toHaveBeenCalled();
+      pane.hidden = false;
+      await vi.waitFor(() => expect(content.textContent).toContain("riaperto"));
+      expect(renderView.mock.calls.map((call) => call[0])).toEqual(["backlinks"]);
+
+      // La concentrazione ritira l'ispettore anche aperto.
+      app.toggleAttribute("data-focus-mode", true);
+      await settle();
+      renderView.mockClear();
+      await panelHost.refreshPanel("backlinks");
+      expect(renderView).not.toHaveBeenCalled();
+      label = "uscito";
+      app.toggleAttribute("data-focus-mode", false);
+      await vi.waitFor(() => expect(content.textContent).toContain("uscito"));
+      expect(renderView).toHaveBeenCalledTimes(1);
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
   });
 
   it("la scheda di una view nata chiusa ne mostra il contenuto", async () => {
@@ -606,6 +906,65 @@ describe("lifecycle delle view dichiarate", () => {
   });
 });
 
+describe("la scrittura di un'azione di view (IMP-109)", () => {
+  /// Una proprietà cambiata dall'ispettore riscrive la nota aperta: è un gesto
+  /// di chi la guarda, e la sessione non deve dirlo con «è cambiato su disco ed
+  /// è stato ricaricato». L'annuncio parte **prima** della chiamata (l'evento
+  /// arriva mentre il comando scrive) e si ritira poco dopo la risposta.
+  it("annuncia la scrittura della nota a fuoco prima dell'azione, e dopo la risposta ne accorcia la scadenza", async () => {
+    try {
+      expectDocumentWrite.mockClear();
+      writeWithdrawn.mockClear();
+      focusedDoc = "index.md";
+      listViews.mockResolvedValueOnce([spec("graph", "main")]);
+      const views = await loadViews();
+      await views.mountDeclaredViews();
+      renderView.mockImplementationOnce(async () => ({
+        node: "list_item", title: "voce", subtitle: null, action: { action: "set", payload: null }, selected: false,
+      }));
+      const pane = document.createElement("div");
+      document.body.appendChild(pane);
+      await views.mountViewInPane("graph", "main", pane);
+
+      let answer!: (update: ViewUpdate) => void;
+      let calledAfterAnnouncement = false;
+      viewAction.mockImplementationOnce(() => {
+        calledAfterAnnouncement = expectDocumentWrite.mock.calls.length === 1;
+        return new Promise<ViewUpdate>((resolve) => (answer = resolve));
+      });
+      pane.querySelector<HTMLElement>(".ui-list-item")!.click();
+      await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+      expect(expectDocumentWrite).toHaveBeenCalledWith("index.md");
+      expect(calledAfterAnnouncement, "annunciata prima della chiamata").toBe(true);
+      expect(writeWithdrawn, "mentre il comando scrive l'annuncio resta").not.toHaveBeenCalled();
+      answer({ kind: "none" });
+      // Non ritirato del tutto: l'evento può arrivare dopo la risposta.
+      await vi.waitFor(() => expect(writeWithdrawn).toHaveBeenCalledWith(1500));
+      expect(writeWithdrawn).toHaveBeenCalledTimes(1);
+    } finally {
+      focusedDoc = undefined;
+    }
+  });
+
+  it("senza una nota a fuoco non annuncia niente", async () => {
+    expectDocumentWrite.mockClear();
+    focusedDoc = null;
+    listViews.mockResolvedValueOnce([spec("graph", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    renderView.mockImplementationOnce(async () => ({
+      node: "list_item", title: "voce", subtitle: null, action: { action: "set", payload: null }, selected: false,
+    }));
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("graph", "main", pane);
+    pane.querySelector<HTMLElement>(".ui-list-item")!.click();
+    await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+    expect(expectDocumentWrite).not.toHaveBeenCalled();
+    focusedDoc = undefined;
+  });
+});
+
 describe("il vault di una view (FUB-001)", () => {
   /// Senza il nome l'host risponde col vault **corrente**, e «corrente» cambia
   /// aprendone un altro mentre una view è ancora sullo schermo: un'azione che
@@ -657,5 +1016,136 @@ describe("il vault di una view (FUB-001)", () => {
     document.body.appendChild(pane);
     await views.mountViewInPane("graph", "main", pane);
     expect(renderView).toHaveBeenLastCalledWith("graph", "main", null);
+  });
+});
+
+describe("la Cronologia con un testo conservato", () => {
+  /// La forma è quella che disegna `fub_features::versioning::view` (le
+  /// stringhe come le scrive il catalogo italiano): la nota del testo
+  /// conservato al posto della variazione, la riga «Conservata: …» in
+  /// anteprima, e dopo un ripristino la riga con «Annulla».
+  const tree: UiNode = {
+    node: "stack",
+    dir: "column",
+    gap: 1,
+    children: [
+      { node: "text", content: "Versioni: 3" },
+      {
+        node: "stack",
+        dir: "row",
+        gap: 4,
+        key: "restore-undo",
+        children: [
+          { node: "text", content: "Ripristinata la versione del 18 novembre 2026, 10:12." },
+          { node: "button", label: "Annulla", intent: "neutral", action: { action: "undo_restore", payload: { doc: "Nota.md" } } },
+        ],
+      },
+      {
+        node: "list",
+        items: [
+          { node: "list_item", key: "3", title: "18 novembre 2026, 10:40", subtitle: "Testo scartato nel conflitto del 18 novembre 2026, 10:40", action: { action: "preview", payload: { doc: "Nota.md", ts: 3 } }, selected: true },
+          { node: "list_item", key: "2", title: "18 novembre 2026, 10:12", subtitle: "Versione attuale", action: { action: "preview", payload: { doc: "Nota.md", ts: 2 } }, selected: false },
+        ],
+      },
+      {
+        node: "section",
+        title: "Versione del 18 novembre 2026, 10:40",
+        collapsed: false,
+        key: "preview:3",
+        children: [
+          { node: "text", content: "Conservata: Testo scartato nel conflitto del 18 novembre 2026, 10:40" },
+          { node: "stack", dir: "row", gap: 4, children: [
+            { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { doc: "Nota.md", ts: 3 } } },
+          ] },
+        ],
+      },
+    ],
+  };
+
+  /// IMP-136: conservare un testo non scrive la nota, quindi nessun
+  /// `document_changed` invecchia il pannello. Lo invita il kernel, con un
+  /// `view_invalidated` della Cronologia: la scheda già aperta si ridisegna, e
+  /// quella chiusa mostra la voce nuova appena si apre — non «Nessuna
+  /// versione.», l'albero che aveva prima del conflitto.
+  it("un invito del kernel porta la voce conservata nella scheda aperta e in quella chiusa", async () => {
+    let current: UiNode = emptyTree("Nessuna versione.");
+    renderView.mockImplementation(async (view) => (view === "history" ? current : emptyTree("vuoto")));
+    try {
+      listViews.mockResolvedValueOnce([spec("outline", "right_sidebar"), spec("history", "right_sidebar")]);
+      const views = await loadViews();
+      const { forwardNotice } = await import("../state/kernel");
+      const panelHost = await import("./panel-host");
+      await views.mountDeclaredViews();
+      const lifetime = openLifetime();
+      views.mountViewInvalidation(lifetime);
+      const invite = async (): Promise<void> => {
+        forwardNotice({
+          event: { type: "view_invalidated", view: "history", instance: null },
+          origin: { actor: { kind: "kernel" }, batch: null },
+        });
+        await vi.waitFor(() => expect(renderView.mock.calls[renderView.mock.calls.length - 1]?.[0]).toBe("history"));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      };
+
+      const right = document.getElementById("views-right")!;
+      const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+      const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="history"]')!;
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(content.textContent).toContain("Nessuna versione."));
+
+      // Aperta durante il conflitto: si ridisegna all'invito.
+      current = tree;
+      renderView.mockClear();
+      await invite();
+      expect(content.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+
+      // Chiusa durante il conflitto: alla riapertura c'è l'albero dell'invito.
+      current = emptyTree("Nessuna versione.");
+      await panelHost.refreshPanel("history");
+      expect(content.textContent).toContain("Nessuna versione.");
+      tabs[0]!.click();
+      current = tree;
+      renderView.mockClear();
+      forwardNotice({
+        event: { type: "view_invalidated", view: "history", instance: null },
+        origin: { actor: { kind: "kernel" }, batch: null },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(renderView, "chiusa, non si chiede").not.toHaveBeenCalled();
+      expect(content.textContent, "chiusa, non si disegna").toContain("Nessuna versione.");
+      tabs[1]!.click();
+      await vi.waitFor(() => expect(content.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026"));
+      expect(renderView).toHaveBeenCalledTimes(1);
+      lifetime.close();
+    } finally {
+      renderView.mockImplementation(async () => emptyTree("vuoto"));
+    }
+  });
+
+  it("mostra la nota sulla versione e «Annulla» manda l'annullamento del ripristino", async () => {
+    viewAction.mockClear();
+    const { state } = await import("../state/store");
+    state.vaultRoot = "";
+    listViews.mockResolvedValueOnce([spec("history", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    renderView.mockImplementationOnce(async () => tree);
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("history", "main", pane);
+
+    const kept = [...pane.querySelectorAll<HTMLElement>(".ui-list-item")][0]!;
+    expect(kept.textContent).toContain("Testo scartato nel conflitto del 18 novembre 2026");
+    expect(pane.textContent).toContain("Conservata: Testo scartato nel conflitto");
+    expect(pane.textContent).toContain("Ripristinata la versione del 18 novembre 2026");
+    const undo = [...pane.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Annulla");
+    expect(undo, "«Annulla» dopo il ripristino").toBeDefined();
+
+    undo!.click();
+    await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+    const args = viewAction.mock.calls[0] as unknown as unknown[];
+    expect(args[0]).toBe("history");
+    expect(args[3]).toBe("undo_restore");
+    expect(args[4]).toEqual({ doc: "Nota.md" });
   });
 });

@@ -186,10 +186,10 @@ async function firefoxProof() {
     const popupHandle = await route("GET", "/window");
     const script = (source, args = []) => route("POST", "/execute/sync", { script: source, args });
     await route("POST", "/url", { url: extensionUrl });
-    await script('const b=document.createElement("button"); b.id="grant-fixture"; b.onclick=()=>browser.permissions.request({origins:["<all_urls>"]}); document.body.append(b)');
+    await script('const b=document.createElement("button"); b.id="grant-fixture"; b.onclick=()=>browser.permissions.request({origins:["http://127.0.0.1/*"]}); document.body.append(b)');
     const button = await route("POST", "/element", { using: "css selector", value: "#grant-fixture" });
     await route("POST", `/element/${button["element-6066-11e4-a52e-4f735466cecf"]}/click`, {});
-    if (!await script('return browser.permissions.contains({origins:["<all_urls>"]})')) prerequisite("Firefox localhost extension permission");
+    if (!await script('return browser.permissions.contains({origins:["http://127.0.0.1/*"]})')) prerequisite("Firefox localhost extension permission");
     const swap = (handle) => route("POST", "/window", { handle });
     const waitStorage = async (key, test) => { for (let i = 0; i < 80; i++) { const got = await script('return browser.storage.local.get(arguments[0]).then(v => v[arguments[0]])', [key]); if (test(got)) return got; await new Promise((r) => setTimeout(r, 50)); } throw new Error("Firefox extension storage operation not completed"); };
     const driver = {

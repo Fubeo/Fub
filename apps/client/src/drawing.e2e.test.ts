@@ -13,6 +13,8 @@ import type { FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
 import { DEFAULT_CURVE } from "./ink/input/pressure";
+import { FIRST_IMPORT_MS, waiter } from "./test-wait";
+import { NOTE_TYPE_READS } from "./state/note-type-commands";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -96,14 +98,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(2000);
 
 async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");
@@ -112,11 +107,10 @@ async function open(doc: string): Promise<void> {
   await loaded();
 }
 
-/// Il codice del disegno arriva dopo il montaggio: si aspetta che arrivi.
-/// La prima volta lo si trasforma tutto, e con la suite intera che gira
-/// accanto ci vuole più dei due secondi degli altri.
+/// Il codice del disegno arriva dopo il montaggio: si aspetta che arrivi
+/// (vedi [`FIRST_IMPORT_MS`]).
 async function loaded(): Promise<void> {
-  await waitFor("il disegno si carica", () => document.querySelector(".vector-pending") === null, 15_000);
+  await waitFor("il disegno si carica", () => document.querySelector(".vector-pending") === null, FIRST_IMPORT_MS);
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];
@@ -225,7 +219,7 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 
 /// Gli strumenti della colonna, coi primi delle tendine: il Completo e il
 /// Semplice hanno la stessa colonna, e cambiano i comandi.
-const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect"];
+const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;
@@ -348,6 +342,51 @@ describe("un .svg è un disegno", () => {
     expect(written(host, "logo.svg")[0]).toContain('fub:version="1"');
     expect(focusedPane().querySelector<HTMLElement>(".vector-notice")!.hidden).toBe(true);
     expect(focusedPane().querySelector<HTMLElement>(".vector-draw")!.hidden).toBe(false);
+  });
+});
+
+// Un cambio di scheda da tastiera porta il fuoco nella superficie della scheda
+// nuova anche quando non è testo: nel foglio del disegno, che si rimonta e si
+// carica dopo il giro di disegno (IMP-048, IMP-049).
+describe("il fuoco dopo un cambio di scheda da tastiera", () => {
+  const sheetFocused = () => {
+    const focused = document.activeElement;
+    return focused instanceof HTMLElement && focused.matches(".draw-surface") && focused.closest("[hidden]") === null
+      && focusedPane().contains(focused);
+  };
+  const noteFocused = () => {
+    const focused = document.activeElement;
+    const note = mountedTextEditors().find((view) => view.state.doc.toString().includes("# Benvenuto"));
+    return focused instanceof HTMLElement && note?.contentDOM === focused && focused.closest(".pane-editor") !== null
+      && focused.closest("[hidden]") === null;
+  };
+  const pressCtrl = (key: string) => {
+    press(key, { ctrlKey: true });
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+  };
+
+  it("Ctrl+Tab porta il fuoco nel foglio del disegno, e di nuovo nel testo della nota", async () => {
+    await start();
+    await open("Benvenuto.md");
+    await open("casa.svg");
+    focusedPane().querySelector<HTMLElement>(".draw-surface")!.focus();
+    expect(sheetFocused()).toBe(true);
+    pressCtrl("Tab");
+    await waitFor("il fuoco è nel testo della nota", noteFocused);
+    pressCtrl("Tab");
+    await loaded();
+    await waitFor("il fuoco è nel foglio del disegno", sheetFocused, FIRST_IMPORT_MS);
+  });
+
+  it("Ctrl+W su una nota porta il fuoco nel foglio del disegno accanto", async () => {
+    await start();
+    await open("casa.svg");
+    await open("Benvenuto.md");
+    mountedTextEditors().find((view) => view.state.doc.toString().includes("Benvenuto"))!.focus();
+    expect(noteFocused()).toBe(true);
+    pressCtrl("w");
+    await loaded();
+    await waitFor("il fuoco è nel foglio del disegno", sheetFocused, FIRST_IMPORT_MS);
   });
 });
 
@@ -668,6 +707,17 @@ describe("«Esporta…» su un disegno", () => {
     ]);
   });
 
+  it("«PDF…» di una nota apre lo spazio «Esporta in PDF», non il vecchio PDF di solo testo", async () => {
+    const host = await start(withExport());
+    await open("Benvenuto.md");
+    const { entries } = await exportEntries();
+    entries[1]!.click();
+    await waitFor("lo spazio si apre", () => document.querySelector(".export-space") !== null);
+    expect(requests(host)).toEqual([]);
+    document.querySelector<HTMLButtonElement>(".export-back")!.click();
+    expect(document.querySelector(".export-space")).toBeNull();
+  });
+
   it("senza `export.run` nel kernel non c'è", async () => {
     await start();
     await open("casa.svg");
@@ -690,7 +740,7 @@ describe("«Esporta…» su un disegno", () => {
       { target: "draw.png", selection: { kind: "documents", value: ["casa.svg"] }, options: { background: "paper", scope: "drawing", scale: 2 } },
     ]);
     const saved = host.calls.findIndex((call) => call.gate === "writeDocument" && call.args[0] === "casa.svg");
-    const asked = host.calls.findIndex((call) => call.gate === "invokeCommand");
+    const asked = host.calls.findIndex((call) => call.gate === "invokeCommand" && !NOTE_TYPE_READS.has(String(call.args[0])));
     expect(saved).toBeGreaterThanOrEqual(0);
     expect(asked).toBeGreaterThan(saved);
     expect(written(host, "casa.svg")[0]!.match(/<rect /g)).toHaveLength(2);

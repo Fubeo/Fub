@@ -34,8 +34,9 @@ import {
 } from "../../../core/proof";
 import { inlineDelimiters, scanTags, spans, wikilink, type SyntaxForm } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
+import { errorText } from "../../../../host/errors";
 import { FOOTNOTE_DEFINITION } from "./grammar";
-import { frontmatterRange } from "./render";
+import { declaredLanguage, frontmatterRange } from "./render";
 
 export { locate, type ProseLocation, type ProsePiece, type ProseSegment };
 
@@ -249,7 +250,7 @@ export function extractProse(
 ): ProseSegment[] {
   const declared = inlineDelimiters(forms);
   const front = frontmatterRange(state.doc);
-  const blocks: { from: number; to: number; name: string }[] = [];
+  const blocks: { from: number; to: number; listItem: boolean }[] = [];
   const seen = new Set<number>();
   for (const range of ranges) {
     syntaxTree(state).iterate({
@@ -260,7 +261,9 @@ export function extractProse(
         if (!PROSE_BLOCKS.has(node.name)) return undefined;
         if (!seen.has(node.from)) {
           seen.add(node.from);
-          blocks.push({ from: node.from, to: node.to, name: node.name });
+          // Una voce d'elenco: il suo paragrafo, o il compito, sta nel
+          // `ListItem`; un paragrafo in una citazione dentro la voce no.
+          blocks.push({ from: node.from, to: node.to, listItem: node.node.parent?.name === "ListItem" });
         }
         return false;
       },
@@ -275,19 +278,16 @@ export function extractProse(
     const label = FOOTNOTE_DEFINITION.exec(state.doc.sliceString(block.from, block.to));
     const from = block.from + (label ? label[0].length : 0);
     const segment = segmentOf(state, from, block.to, declared);
-    if (segment) out.push(segment);
+    if (segment) out.push(block.listItem ? { ...segment, listItem: true } : segment);
   }
   return out;
 }
 
-/// La lingua dichiarata dal frontmatter (`lang: it-IT`), se c'è.
+/// La lingua dichiarata dal frontmatter (`lang: it-IT`), se c'è. La regola
+/// sta accanto a `frontmatterRange`, perché la legge anche la somma nella
+/// banda, senza caricare il correttore.
 export function frontmatterLanguage(state: EditorState): string | null {
-  const range = frontmatterRange(state.doc);
-  if (!range) return null;
-  const match = /^lang(?:uage)?[ \t]*:[ \t]*["']?([A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{1,8})*)["']?[ \t]*$/m.exec(
-    state.doc.sliceString(range.from, range.to),
-  );
-  return match ? match[1] : null;
+  return declaredLanguage(state.doc);
 }
 
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere.
@@ -330,7 +330,11 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
       }
 
       update(update: ViewUpdate): void {
-        if (update.docChanged || update.viewportChanged) this.schedule(QUIET_MS);
+        // Anche quando il parser avanza: sotto carico l'albero all'apertura
+        // copre solo l'inizio, e la prosa che arriva dopo va controllata
+        // senza aspettare una battuta.
+        const parsed = syntaxTree(update.state) !== syntaxTree(update.startState);
+        if (update.docChanged || update.viewportChanged || parsed) this.schedule(QUIET_MS);
       }
 
       destroy(): void {
@@ -356,7 +360,11 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
         const segments = extractProse(state, ranges, options.forms?.());
         let result;
         try {
-          result = await options.client.check(segments.map((segment) => segment.text), frontmatterLanguage(state));
+          result = await options.client.check(
+            segments.map((segment) => segment.text),
+            frontmatterLanguage(state),
+            segments.map((segment) => segment.listItem === true),
+          );
         } catch {
           // Un guasto del canale non deve rompere la scrittura: si riprova
           // alla prossima battuta.
@@ -420,7 +428,7 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
                 (message) => {
                   if (message) options.notify?.(message);
                 },
-                (error: unknown) => options.notify?.(error instanceof Error ? error.message : String(error)),
+                (error: unknown) => options.notify?.(t("proof.add_word_failed", { word: text, reason: errorText(error, "specie") })),
               );
             },
           });
@@ -438,16 +446,16 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
   );
 }
 
-/// L'aspetto dei segni: un'ondina sotto la parola, del colore del tema.
+/// La forma dei segni: un'ondina sotto la parola al posto della zigzag di
+/// CodeMirror. L'ondina e il suo colore li dà la pelle
+/// (`theme/scrittoio/skin/editors.css`), con i ruoli del tema.
 export const proofTheme = EditorView.baseTheme({
   ".cm-lintRange.cm-fub-proof-spelling": {
     backgroundImage: "none",
-    textDecoration: "underline wavy var(--danger, #d33) 1px",
     textUnderlineOffset: "3px",
   },
   ".cm-lintRange.cm-fub-proof-grammar": {
     backgroundImage: "none",
-    textDecoration: "underline wavy var(--warning, #c80) 1px",
     textUnderlineOffset: "3px",
   },
 });

@@ -9,7 +9,8 @@ use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;
 use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
-use fub_abi::traits::{IndexQuery, IndexResult};
+use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
+use fub_abi::traits::{Excerpts, IndexQuery, IndexResult, Page, PropertySelect};
 use fub_host::{BundleClaim, Host, StartupBundle};
 use fub_kernel::Trust;
 use fub_wasm_host::{LoadError, WasmBundle};
@@ -41,7 +42,11 @@ fn host(vault: &Vault) -> Host {
 }
 
 fn startup(vault: &Vault, example: &str, artifact: &str) -> Host {
-    let wasm = common::component(example, artifact, "");
+    startup_with(vault, example, artifact, "")
+}
+
+fn startup_with(vault: &Vault, example: &str, artifact: &str, feature: &str) -> Host {
+    let wasm = common::component(example, artifact, feature);
     let bundle = Arc::new(WasmBundle::from_file(&wasm, Trust::Community).expect("guest loads"));
     let source = Arc::new(vec![StartupBundle::new(bundle, true, BundleClaim::new())]);
     let host = Host::without_watcher()
@@ -120,6 +125,88 @@ fn index_feed_query_flush_close_and_empty_reconcile_cross_the_component() {
     assert_eq!(empty["count"], 0, "an empty reconcile removes stale ids");
     assert!(empty["reconciled"].as_u64().unwrap() >= 1);
     assert!(host.close().is_empty());
+}
+
+/// The kernel asks **every** index `up_to_date` on every slice of the
+/// opening (#521), guests included. A guest that traps there answers
+/// nothing, which is "send me everything": the opening still ends whole, the
+/// native indexes get every note, and the host stays usable. The trapped
+/// instance itself cannot take anything after the trap (a trapped component
+/// is never re-entered, `component_timing.rs`): its deliveries are losses,
+/// not a stalled opening.
+#[test]
+fn a_guest_trapping_in_up_to_date_does_not_stop_the_opening() {
+    let vault = Vault::new();
+    std::fs::write(vault.root.join("Altra.md"), "un gatto nero\n").expect("second note");
+    let host = startup_with(
+        &vault,
+        "index-provider-wasm",
+        "index_provider_wasm",
+        "trap-up-to-date",
+    );
+    assert_eq!(
+        search(&host, "gatto"),
+        ["Altra.md"],
+        "the native search index got the notes"
+    );
+    assert_eq!(search(&host, "nota"), ["Nota.md"]);
+    let plugins = host.plugin_ids(None).expect("inventory");
+    assert!(
+        plugins.iter().any(|id| id == "fub.search"),
+        "the other indexes stay mounted: {plugins:?}"
+    );
+    assert!(
+        host.query_index(
+            None,
+            IndexQuery::Custom {
+                ns: ROUTE.into(),
+                query: Value::Null
+            }
+        )
+        .is_err(),
+        "the trapped guest answers no more"
+    );
+
+    // A write after the opening still reaches the native indexes.
+    host.write_document(
+        None,
+        &DocId("Altra.md".into()),
+        "un cane bianco\n",
+        WriteBase::Dictated,
+    )
+    .expect("write after a trapped guest");
+    assert_eq!(search(&host, "cane"), ["Altra.md"]);
+
+    // And the vault reopens: the guest traps again, the opening ends again.
+    // The trapped guest cannot flush or close: those are its problems, the
+    // vault closes all the same.
+    let _ = host.close_vault(&vault.root).expect("close vault");
+    host.open(&vault.root)
+        .expect("reopen with the trapping guest");
+    host.wait_indexed(None)
+        .expect("the second opening ends too");
+    assert_eq!(search(&host, "cane"), ["Altra.md"]);
+    let _ = host.close();
+}
+
+fn search(host: &Host, terms: &str) -> Vec<String> {
+    match host.query_index(
+        None,
+        IndexQuery::Documents {
+            matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms(terms))),
+            sort: None,
+            select: PropertySelect::None,
+            page: Some(Page::first(50)),
+            excerpts: Excerpts::default(),
+        },
+    ) {
+        Ok(IndexResult::Documents(hits)) => {
+            let mut docs: Vec<String> = hits.items.into_iter().map(|h| h.doc.to_string()).collect();
+            docs.sort();
+            docs
+        }
+        other => panic!("{other:?}"),
+    }
 }
 
 #[test]

@@ -11,7 +11,8 @@
 // È un cricchetto: un crate sopra la soglia fallisce, e anche uno sotto, perché
 // la soglia va abbassata nello stesso cambio che converte. Si contano i
 // sorgenti di produzione: niente `tests/`, `legacy_tests/`, né il modulo
-// `#[cfg(test)]` in coda a un file.
+// `#[cfg(test)]` in coda a un file. Un `#[cfg(test)] mod tests;` che porta i
+// test in un file a parte non taglia niente: la produzione può seguirlo.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -20,10 +21,10 @@ const root = process.argv[2] ?? process.cwd();
 
 /// I crate i cui errori arrivano all'utente, e quanti letterali hanno oggi.
 const THRESHOLDS = {
-  "fub-app": 88,
-  "fub-features": 80,
-  "fub-host": 377,
-  "fub-kernel": 165,
+  "fub-app": 85,
+  "fub-features": 77,
+  "fub-host": 374,
+  "fub-kernel": 162,
   "fub-wasm-host": 39,
 };
 
@@ -32,7 +33,7 @@ const LITERAL =
 
 function production(file) {
   const text = fs.readFileSync(file, "utf8");
-  const tests = text.search(/^#\[cfg\(test\)\]\s*\n\s*mod /m);
+  const tests = text.search(/^#\[cfg\(test\)\]\s*\n\s*mod \w+\s*\{/m);
   return tests >= 0 ? text.slice(0, tests) : text;
 }
 

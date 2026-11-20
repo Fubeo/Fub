@@ -1,7 +1,7 @@
 // Filtrare l'esplora per percorso.
 //
-// Il campo sta sopra l'albero, sempre: è l'unico campo del pannello File, e
-// il comando `shell.explorer.filter` gli dà il fuoco. Con del testo scritto l'albero cede il posto a un elenco piatto: ogni voce
+// Il campo sta sopra l'albero, sempre: è l'unico campo del pannello File, con
+// la lente dentro, e il comando `shell.explorer.filter` gli dà il fuoco. Con del testo scritto l'albero cede il posto a un elenco piatto: ogni voce
 // e cartella dello spazio il cui percorso intero contiene tutte le parole.
 // Una parola col meno davanti (`-bozze`) toglie le voci che hanno un pezzo di
 // percorso che la contiene: una cartella che corrisponde sparisce con tutto il
@@ -19,6 +19,7 @@ import { textField } from "../kit";
 import type { Lifetime } from "../ui/lifetime";
 import { Race } from "../ui/race";
 import { setTooltip } from "../ui/tooltip";
+import { composingKey } from "../kit/ime";
 
 export interface FilterEntry {
   path: string;
@@ -65,6 +66,8 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
     label: t("explorer.filter"),
     labelHidden: true,
     placeholder: t("explorer.filter"),
+    // La lente dentro il campo: dice che cosa fa prima che ci si scriva.
+    icon: "search",
     lifetime,
   });
   field.input.type = "search";
@@ -127,7 +130,7 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
       if ("error" in read) {
         cached = null;
         const li = document.createElement("li");
-        li.className = "hit-path";
+        li.className = "muted";
         li.textContent = t("explorer.filter.failed", { reason: errorText(read.error) });
         list.replaceChildren(li);
         list.hidden = false;
@@ -138,7 +141,7 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
       const items: HTMLElement[] = hits.slice(0, shown).map(row);
       if (hits.length === 0) {
         const li = document.createElement("li");
-        li.className = "hit-path";
+        li.className = "muted";
         li.textContent = t("explorer.filter.none");
         items.push(li);
       } else if (hits.length > shown) {
@@ -166,7 +169,7 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
     void draw();
   });
   lifetime.listen(field.input, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     if (event.key === "Escape") {
       // Vuoto, il campo non ha niente da togliere: Esc va a chi sta sopra
       // (il cassetto sul telefono, per esempio).

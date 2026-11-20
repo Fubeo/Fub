@@ -17,6 +17,7 @@ import { displayBinding } from "../../../../ui/commands";
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import { notify } from "../../../../ui/notify";
 import { t, type Key } from "../../../../i18n/strings";
+import { liveStrings } from "./strings";
 import { setSanitizedHtml } from "../../../../ui/sanitize";
 import { readClipboard, writeClipboardText } from "../../../../platform/clipboard";
 import type { TableAlign, TableCaps, TableEdit, TableMenuEntry } from "../../../../tabella/adapter";
@@ -24,6 +25,7 @@ import type { TableTarget } from "../../../../tabella/commands";
 import { columnName, TableFrame } from "../../../../tabella/frame/frame";
 import type { TableFormat } from "../../../../tabella/keys";
 import type { Range } from "../../../../tabella/navigation";
+import { selectedCells, selectsSeveral } from "../../../../tabella/selection";
 import {
   clearFormatting,
   clearRange,
@@ -51,6 +53,12 @@ export interface TableGridHost {
   /// deve stare la selezione dopo, anche se la griglia viene ridisegnata da
   /// capo. `false` se adesso non si può (sola lettura, tabella cambiata sotto).
   write(next: TableData, select: { anchor: GridPosition; focus: GridPosition }): boolean;
+  /// Il testo della cella aperta, a ogni battuta: va nel testo della nota
+  /// subito, senza chiudere la cella. Le battute di una cella fanno un solo
+  /// passo d'annulla, quello che la `write` di conferma registra; una
+  /// conferma che rimette il testo di prima rimette la tabella byte per byte.
+  /// Senza, la cella si scrive soltanto alla conferma.
+  draft?(next: TableData, select: { anchor: GridPosition; focus: GridPosition }): boolean;
   readOnly(): boolean;
   undo(): void;
   redo(): void;
@@ -62,10 +70,30 @@ export interface TableGridHost {
   hydrate?(container: HTMLElement): () => void;
   /// Un clic con Mod su un link o un tag dentro una cella: `true` se l'ha seguito.
   activate(event: MouseEvent): boolean;
+  /// La lingua che la nota dichiara (`lang:` nel frontmatter), o `null`: la
+  /// serie della maniglia e la somma la usano al posto di quella di Fub.
+  language?(): string | null;
   /// Il fuoco è entrato nella griglia.
   focused(): void;
   /// Selezione o contenuto sono cambiati: la barra di formattazione rilegge lo stato.
   changed(): void;
+  /// «Grafico da questa tabella» (T54): se la tabella ne ha uno e la nota si
+  /// scrive, se ce n'è già uno da rigenerare sotto la tabella e come
+  /// scriverlo; `null` se la voce non c'è (una tabella senza numeri).
+  chart?(): TableChartAction | null;
+  /// «Trasforma in foglio» (T52): il gesto, se chi monta l'editor sa scrivere
+  /// il foglio e la nota si scrive; `null` se la voce non c'è.
+  sheet?(): (() => void) | null;
+}
+
+/// L'azione «Trasforma in foglio» (T52), per il menu del blocco della tabella.
+export const TABLE_SHEET_ACTION = "markdown.table.sheet";
+
+/// La voce del grafico nel menu della griglia (T54).
+export interface TableChartAction {
+  /// Sotto la tabella c'è già il grafico che la voce aveva scritto.
+  readonly regenerate: boolean;
+  run(): void;
 }
 
 /// Le azioni dell'editor che la griglia sa fare sulle proprie celle, quando
@@ -73,6 +101,9 @@ export interface TableGridHost {
 export interface TableGridActions {
   actionState(id: string): EditorActionState;
   runAction(id: string): boolean;
+  /// Le celle scelte, una volta ciascuna e senza l'intestazione, col testo che
+  /// mostrano: la banda le somma (E24). `null` con una cella sola.
+  selectedValues(): Iterable<string> | null;
 }
 
 const WRAPS: Readonly<Record<string, readonly [string, string]>> = {
@@ -108,6 +139,30 @@ const CAPS: TableCaps = {
 };
 
 const UNAVAILABLE: EditorActionState = { enabled: false, active: null };
+
+/// Le enfasi che una cella può avere attorno a tutto il suo testo: la cella
+/// mostra ciò che sta dentro. Il barrato (`~~`) non c'è: è un'altra regola.
+const SHOWN_WRAPS = ["**", "__", "==", "*", "_", "`"] as const;
+const STRUCK = "~~";
+
+/// Il testo che una cella mostra, per chi legge i valori (la somma della
+/// banda): senza gli spazi attorno e senza le enfasi che lo avvolgono tutto,
+/// così «**1.200**» vale «1.200». Un testo tutto barrato («~~100~~») è un
+/// valore cancellato, che i conti non devono vedere: vale una cella vuota.
+export function shownCellText(text: string): string {
+  let shown = text.trim();
+  for (let changed = true; changed;) {
+    changed = false;
+    if (shown.length > STRUCK.length * 2 && shown.startsWith(STRUCK) && shown.endsWith(STRUCK)) return "";
+    for (const mark of SHOWN_WRAPS) {
+      if (shown.length > mark.length * 2 && shown.startsWith(mark) && shown.endsWith(mark)) {
+        shown = shown.slice(mark.length, -mark.length).trim();
+        changed = true;
+      }
+    }
+  }
+  return shown;
+}
 
 const toCell = (position: GridPosition) => ({ row: position.row, column: position.col });
 const toPosition = (cell: { readonly row: number; readonly column: number }): GridPosition => ({ row: cell.row, col: cell.column });
@@ -162,7 +217,12 @@ const ALIGN_LABELS: Readonly<Record<string, Key>> = {
 /// voce che adesso non vale non si vede; un sottomenu senza voci nemmeno.
 export function tableMenu(
   entries: readonly TableMenuEntry[],
-  options: { readonly align: TableAlign; readonly paste: (() => void) | null },
+  options: {
+    readonly align: TableAlign;
+    readonly paste: (() => void) | null;
+    readonly chart?: TableChartAction | null;
+    readonly sheet?: (() => void) | null;
+  },
 ): { readonly clipboard: MenuItem[]; readonly items: MenuItem[] } {
   const live = entries.filter((entry) => !entry.disabled);
   const byId = new Map(live.map((entry) => [entry.id, entry]));
@@ -199,10 +259,22 @@ export function tableMenu(
     return entry ? [{ label: t(label), danger: true, separator: index === 0, run: entry.run }] : [];
   });
   const sorted = [...nest("table.menu.sort", under("sort"), true), ...nest("table.menu.align", aligns)];
+  // «Grafico da questa tabella» (T54): dopo l'ordine, prima di ciò che svuota.
+  const chart = options.chart ?? null;
+  // «Trasforma in foglio» (T52): accanto al grafico, l'altra strada verso i
+  // fogli.
+  const sheet = options.sheet ?? null;
+  const charted: MenuItem[] = [
+    ...(chart
+      ? [{ label: liveStrings.t(chart.regenerate ? "table_chart.menu.again" : "table_chart.menu"), separator: true, run: () => chart.run() }]
+      : []),
+    ...(sheet ? [{ label: liveStrings.t("table_sheet.menu"), separator: chart === null, run: () => sheet() }] : []),
+  ];
   const items: MenuItem[] = [
     ...nest("table.menu.insert", under("insert")),
     ...nest("table.menu.move", under("move")),
     ...sorted,
+    ...charted,
     ...(clear ? [{ label: t("table.menu.clear_cell"), hint: displayBinding("Delete"), separator: true, run: clear.run }] : []),
     ...danger,
   ];
@@ -243,6 +315,7 @@ export class TableGrid implements TableGridActions {
       align: (column) => this.#data.aligns[column] ?? null,
       readOnly: () => host.readOnly(),
       apply: (edit, select) => this.#apply(edit, select),
+      draft: host.draft ? (edit) => this.#draft(edit) : undefined,
       undo: () => host.undo(),
       redo: () => host.redo(),
       leave: (where) => host.leave(where),
@@ -254,6 +327,8 @@ export class TableGrid implements TableGridActions {
         const menu = tableMenu(entries, {
           align: this.#data.aligns[focus.column] ?? null,
           paste: host.readOnly() ? null : () => this.#paste(),
+          chart: host.readOnly() ? null : host.chart?.() ?? null,
+          sheet: host.readOnly() ? null : host.sheet?.() ?? null,
         });
         const column = (this.#data.rows[0]?.[focus.column] ?? "").trim();
         showContextMenu(at, menu.items, {
@@ -268,6 +343,8 @@ export class TableGrid implements TableGridActions {
         });
       },
       writeClipboard: (data) => writeClipboardText(data.text),
+      notice: (text) => notify(text, "info"),
+      language: () => host.language?.() ?? null,
       focused: () => host.focused(),
       changed: () => host.changed(),
     }, "markdown-rendered");
@@ -290,11 +367,21 @@ export class TableGrid implements TableGridActions {
     return this.#frame.editing;
   }
 
+  /// La cella in cui si lavora: dentro una selezione di più celle Invio e Tab
+  /// la fanno girare senza muovere la selezione.
+  get active(): GridPosition {
+    return toPosition(this.#frame.active);
+  }
+
   /// La tabella è cambiata nel testo (una modifica, un annulla, un altro
   /// riquadro): si ridisegna, e la selezione resta dov'era finché c'è.
   update(data: TableData): void {
     this.#data = data;
     this.#frame.update();
+    // Le celle scelte sono le stesse, ma i loro valori no (un annulla, un
+    // ripeti, la nota ricaricata dal disco): chi le legge, come la somma della
+    // banda, rilegge.
+    this.#host.changed();
   }
 
   /// Porta il fuoco nella griglia: sulla prima o sull'ultima riga (entrando
@@ -320,6 +407,19 @@ export class TableGrid implements TableGridActions {
     this.#frame.destroy();
   }
 
+  /// Le celle scelte col testo che mostrano, lette da ciò che la tabella è
+  /// adesso: una volta per cambio di selezione, mai per battuta.
+  selectedValues(): Iterable<string> | null {
+    const ranges = this.#frame.ranges;
+    if (!selectsSeveral(ranges)) return null;
+    const rows = this.#data.rows;
+    return {
+      *[Symbol.iterator]() {
+        for (const { row, column } of selectedCells(ranges, CAPS.headerRows)) yield shownCellText(rows[row]?.[column] ?? "");
+      },
+    };
+  }
+
   // ── Azioni della barra ─────────────────────────────────────────────────────
 
   actionState(id: string): EditorActionState {
@@ -330,6 +430,7 @@ export class TableGrid implements TableGridActions {
       return { enabled: editable, active: editable && rangeWrapped(this.#data, range, wrap[0], wrap[1]) };
     }
     if (id === "markdown.clear" || id === "markdown.link") return { enabled: editable, active: null };
+    if (id === TABLE_SHEET_ACTION) return { enabled: editable && (this.#host.sheet?.() ?? null) !== null, active: null };
     const command = this.#frame.commandState(id);
     if (!command.known) return UNAVAILABLE;
     return { enabled: command.enabled, active: null };
@@ -344,6 +445,11 @@ export class TableGrid implements TableGridActions {
     if (id === "markdown.link") {
       this.#link();
       return true;
+    }
+    if (id === TABLE_SHEET_ACTION) {
+      const sheet = this.#host.sheet?.() ?? null;
+      sheet?.();
+      return sheet !== null;
     }
     return this.#frame.runCommand(id);
   }
@@ -368,6 +474,17 @@ export class TableGrid implements TableGridActions {
     const next = applyTableEdit(this.#data, edit);
     if (next === this.#data) return false;
     return this.#host.write(next, { anchor: toPosition(select.anchor), focus: toPosition(select.focus) });
+  }
+
+  /// Il testo della cella aperta, a ogni battuta: va nel testo della nota
+  /// come una battuta dell'editor (sessione, bozza, salvataggio), e la
+  /// selezione resta sulla cella. La griglia si aggiorna sul posto senza
+  /// toccare il campo aperto (IMP-6100).
+  #draft(edit: TableEdit): boolean {
+    const next = applyTableEdit(this.#data, edit);
+    if (next === this.#data || !this.#host.draft) return next === this.#data;
+    const { anchor, focus } = this.#frame.selection;
+    return this.#host.draft(next, { anchor: toPosition(anchor), focus: toPosition(focus) });
   }
 
   /// Una tabella nuova che non viene da un gesto della cornice (le enfasi):

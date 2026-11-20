@@ -1,8 +1,9 @@
 //! Le letture a pezzi di `fub.craft` (`craft::ranged`) su un vault vero.
 //!
 //! La revisione di un file letto intero è la stessa di `document_revision`;
-//! un file cambiato fra due pezzi è `Stale`; la memoria delle revisioni non
-//! si fida di peso e data; il vault chiuso spegne un file aperto; un
+//! un file cambiato fra due pezzi è `Stale` (la memoria delle revisioni,
+//! che non si fida di peso e data né di un timbro nella grana della lettura,
+//! si prova in `craft/ranged.rs` con un orologio finto); il vault chiuso spegne un file aperto; un
 //! `craft.preview` mentre un altro thread scrive nel vault non si ferma; una
 //! foto RAW dà il JPEG che porta dentro, letto a pezzi, e un `.docx` di
 //! 300 MiB la sua miniatura; un PDF è `absent`; e nessun byte dei file
@@ -150,32 +151,6 @@ fn a_file_rewritten_while_open_makes_the_next_piece_stale() {
     let mut again = ranged.open(&DocId::new("a.bin")).unwrap();
     std::fs::write(root.join("a.bin"), pattern(CHUNK_BYTES * 3)).unwrap();
     assert!(matches!(again.read_whole(BIG), Err(RangedError::Stale)));
-}
-
-#[test]
-fn the_remembered_revision_does_not_trust_size_and_date() {
-    let (_dir, root) = vault(&[("a.bin", b"AAAAAAAA".to_vec())]);
-    let (ws, ranged) = workspace(&root);
-    let doc = DocId::new("a.bin");
-    let path = root.join("a.bin");
-    let first = ranged.revision(&doc, BIG).unwrap();
-    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
-    // Stesso peso, stessa data, sullo stesso file: resta il timbro di
-    // cambiamento, che è nuovo.
-    std::fs::write(&path, b"BBBBBBBB").unwrap();
-    std::fs::File::options()
-        .write(true)
-        .open(&path)
-        .unwrap()
-        .set_modified(modified)
-        .unwrap();
-    assert_eq!(
-        std::fs::metadata(&path).unwrap().modified().unwrap(),
-        modified
-    );
-    let second = ranged.revision(&doc, BIG).unwrap();
-    assert_ne!(second, first);
-    assert_eq!(second, ws.document_revision(&doc).unwrap());
 }
 
 #[test]

@@ -18,6 +18,7 @@ import { inLayer } from "../layers";
 import { ARRANGE_SHOWN, BAR_FEATURES } from "./constants";
 import type { EditorContext } from "./context";
 import { layerState, layerTitle, union } from "./helpers";
+import { composingKey } from "../../../../kit/ime";
 
 /// I caratteri di un nome XML dopo il primo: dove uno di loro segue `#id`,
 /// il testo cita un altro id.
@@ -333,7 +334,7 @@ export function installControls(ctx: EditorContext): void {
 
   const OPACITY_STEPS: ReadonlyMap<string, number> = new Map([["ArrowUp", 1], ["ArrowDown", -1], ["PageUp", 10], ["PageDown", -10]]);
   life.listen(opacityInput, "keydown", (event) => {
-    if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing || ctx.opacityShown === null) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || composingKey(event) || ctx.opacityShown === null) return;
     const step = OPACITY_STEPS.get(event.key);
     if (event.key === "Enter") {
       commitOpacity();
@@ -478,6 +479,10 @@ export function installControls(ctx: EditorContext): void {
     const titleHome = has("properties") ? panel.lead : ctx.topEnd;
     if (ctx.titleField.parentElement !== titleHome) titleHome.prepend(ctx.titleField);
     if (titleHome !== panel.lead) ctx.titleField.hidden = false;
+    // Il foglietto di destra senza niente dentro (senza «Esporta», come in una
+    // scheda della nota, e col titolo nel pannello) non si vede: vuoto
+    // resterebbe una lista sottile in fondo alla barra.
+    ctx.topEnd.hidden = ![...ctx.topEnd.children].some((child) => !(child as HTMLElement).hidden);
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
     syncLayers();

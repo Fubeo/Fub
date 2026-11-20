@@ -37,6 +37,7 @@ import { setSanitizedHtml } from "../../../ui/sanitize";
 import { openNote } from "../launcher/actions";
 import type { OpenWay } from "../launcher/model";
 import { byId } from "../frame/dom";
+import { composingKey } from "../../../kit/ime";
 
 /// I collegamenti che hanno una scheda: il wikilink della Live, e i collegamenti
 /// interni della Lettura (wikilink e percorsi del vault).
@@ -88,7 +89,7 @@ export function mountLinkCards(lifetime: Lifetime): void {
   });
   lifetime.listen(panes, "keydown", (event) => {
     if (event.key !== "Enter" || !event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
-    if (event.isComposing || event.defaultPrevented) return;
+    if (composingKey(event) || event.defaultPrevented) return;
     const target = linkAtCaret(panes);
     if (!target) return;
     event.preventDefault();

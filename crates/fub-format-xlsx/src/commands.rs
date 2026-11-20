@@ -49,6 +49,11 @@ pub(crate) const PASTE_FROM: &str = "fub.pasteFrom";
 /// Il testo e la tabella HTML di un intervallo, per gli appunti di sistema:
 /// legge soltanto.
 pub(crate) const COPY_HTML: &str = "fub.copyHtml";
+/// Dove sta una parte della cartella (T43: `![[Conti.xlsx#Budget!A1:E7]]`
+/// in una nota): un foglio, un intervallo, un nome definito o una tabella
+/// ([`crate::parts`]). Legge soltanto, senza portare la sessione nella
+/// modalità a comandi.
+pub(crate) const PART: &str = "fub.part";
 /// I comandi composti di Fub, fuori dal catalogo della facciata: id, se
 /// cambia la cartella, parametri.
 const COMPOSED: &[(&str, bool, &str)] = &[
@@ -58,49 +63,69 @@ const COMPOSED: &[(&str, bool, &str)] = &[
         "{source: \"A1:B2\", sourceSheet?: \"s1\", at?: \"C3\", what?: all|formulas|values|formats|comments|validation|allExceptBorders|columnWidths|formulasAndNumberFormats|valuesAndNumberFormats, move?: bool}",
     ),
     (COPY_HTML, false, "{range?} → {range, text, html?}"),
+    (
+        PART,
+        false,
+        "{part?: \"Budget!A1:E7\"} → {found: true, kind: active|sheet|range|name|table, sheet, range} | {found: false, parts: [{kind, name}]}",
+    ),
 ];
 
-/// I gruppi del catalogo che Fub non serve: file e finestre sono della shell,
-/// gli script eseguono codice del documento, la cronologia è del documento.
-const NOT_SERVED_PREFIXES: &[&str] = &["file.", "automate.", "app.", "window.", "history."];
+/// I gruppi del catalogo che Fub non serve, ciascuno con il suo perché: file
+/// e finestre sono della shell, gli script eseguono codice del documento, la
+/// cronologia è del documento.
+const NOT_SERVED_PREFIXES: &[(&str, &str)] = &[
+    (
+        "file.",
+        "aprire, salvare, stampare e chiudere i file è della shell di Fub, non della cartella",
+    ),
+    (
+        "automate.",
+        "gli script eseguono codice scritto nel documento, e Fub non lo esegue",
+    ),
+    (
+        "app.",
+        "le impostazioni del programma sono della shell di Fub",
+    ),
+    ("window.", "le finestre sono della shell di Fub"),
+    (
+        "history.",
+        "la cronologia delle versioni è del documento in Fub, non del motore",
+    ),
+];
 /// I comandi che leggono o cambiano uno stato fuori dalla cartella (gli
 /// appunti, il pennello, il dizionario, gli strumenti dell'interfaccia di
 /// GridCraft) o che aprono un collegamento: rifare il giornale non li
-/// ritroverebbe.
-const NOT_SERVED: &[&str] = &[
-    "edit.copy",
-    "edit.cut",
-    "edit.paste",
-    "edit.pasteSpecial",
-    "edit.clearClipboard",
-    "edit.formatPainter",
-    "edit.beginEdit",
-    "link.open",
-    "home.addIns",
-    "draw.pen",
-    "draw.eraser",
-    "draw.lasso",
-    "review.addToDictionary",
-    "review.showComments",
-    "review.showAllNotes",
-    "view.formulaBar",
-    "view.ruler",
-    "view.macros",
-    "view.newWindow",
-    "view.arrangeAll",
-    "view.hideWindow",
-    "view.unhideWindow",
-    "view.switchWindows",
-    "data.queriesConnections",
+/// ritroverebbe. Ciascuno con il suo perché.
+const NOT_SERVED: &[(&str, &str)] = &[
+    ("edit.copy", "gli appunti sono del sistema: la shell copia con fub.copyHtml"),
+    ("edit.cut", "gli appunti sono del sistema: la shell taglia con fub.copyHtml e fub.pasteFrom"),
+    ("edit.paste", "gli appunti sono del sistema: la shell incolla con fub.pasteFrom"),
+    ("edit.pasteSpecial", "gli appunti sono del sistema: la shell incolla con fub.pasteFrom e la sua scelta di che cosa"),
+    ("edit.clearClipboard", "gli appunti sono del sistema, non della cartella"),
+    ("edit.formatPainter", "il pennello tiene un formato fra due clic, uno stato dell'interfaccia che il giornale non ritrova"),
+    ("edit.beginEdit", "scrivere in una cella è della griglia della shell"),
+    ("link.open", "aprire un collegamento esce dalla cartella: lo fa la shell"),
+    ("home.addIns", "i componenti aggiuntivi del motore non esistono in Fub"),
+    ("draw.pen", "la penna è uno strumento dell'interfaccia del motore"),
+    ("draw.eraser", "la gomma è uno strumento dell'interfaccia del motore"),
+    ("draw.lasso", "il lazo è uno strumento dell'interfaccia del motore"),
+    ("review.addToDictionary", "il dizionario è della correzione di Fub, non della cartella"),
+    ("review.showComments", "mostrare i commenti è della vista della shell"),
+    ("review.showAllNotes", "mostrare le note è della vista della shell"),
+    ("view.formulaBar", "la barra della formula è della shell"),
+    ("view.ruler", "il righello è della vista della shell"),
+    ("view.macros", "le macro eseguono codice scritto nel documento, e Fub non lo esegue"),
+    ("view.newWindow", "le finestre sono della shell di Fub"),
+    ("view.arrangeAll", "le finestre sono della shell di Fub"),
+    ("view.hideWindow", "le finestre sono della shell di Fub"),
+    ("view.unhideWindow", "le finestre sono della shell di Fub"),
+    ("view.switchWindows", "le finestre sono della shell di Fub"),
+    ("data.queriesConnections", "le query e le connessioni leggono dati fuori dalla cartella"),
 ];
 /// I comandi dei gruppi esclusi che restano: le proprietà del documento sono
 /// nella cartella, e l'anteprima di stampa e il PDF senza percorso leggono la
 /// cartella com'è adesso senza cambiarla né scrivere sul disco.
 const SERVED_ANYWAY: &[&str] = &["file.properties", "file.printPreview", "file.exportPdf"];
-/// Gli stati di prima che si tengono: oltre, annullare rifà il giornale
-/// dalla base.
-const UNDO_SNAPSHOTS: usize = 100;
-
 /// Se Fub serve il comando `id` della facciata.
 pub(crate) fn served(id: &str) -> bool {
     if id == UNDO || id == REDO || COMPOSED.iter().any(|(composed, ..)| *composed == id) {
@@ -109,11 +134,43 @@ pub(crate) fn served(id: &str) -> bool {
     if SERVED_ANYWAY.contains(&id) {
         return find_command(id).is_some();
     }
-    !NOT_SERVED.contains(&id)
-        && !NOT_SERVED_PREFIXES
+    why_not_served(id).is_none() && find_command(id).is_some()
+}
+
+/// Perché Fub non serve il comando `id` della facciata, se non lo serve per
+/// scelta: `None` per i comandi serviti e per quelli che la facciata non ha.
+pub(crate) fn why_not_served(id: &str) -> Option<&'static str> {
+    if id == UNDO
+        || id == REDO
+        || COMPOSED.iter().any(|(composed, ..)| *composed == id)
+        || SERVED_ANYWAY.contains(&id)
+    {
+        return None;
+    }
+    if let Some((_, why)) = NOT_SERVED.iter().find(|(not_served, _)| *not_served == id) {
+        return Some(why);
+    }
+    NOT_SERVED_PREFIXES
+        .iter()
+        .find(|(prefix, _)| id.starts_with(prefix))
+        .map(|(_, why)| *why)
+}
+
+/// Le voci dell'elenco dei non serviti, per il test che non restino voci
+/// stantie: gli id esatti e i prefissi.
+pub(crate) fn not_served_entries() -> (Vec<&'static str>, Vec<&'static str>) {
+    (
+        NOT_SERVED.iter().map(|(id, _)| *id).collect(),
+        NOT_SERVED_PREFIXES
             .iter()
-            .any(|prefix| id.starts_with(prefix))
-        && find_command(id).is_some()
+            .map(|(prefix, _)| *prefix)
+            .collect(),
+    )
+}
+
+/// Se `id` è un comando composto di Fub, fuori dal catalogo della facciata.
+pub(crate) fn is_composed_command(id: &str) -> bool {
+    COMPOSED.iter().any(|(composed, ..)| *composed == id)
 }
 
 /// Se il comando `id` può cambiare la cartella.
@@ -153,12 +210,17 @@ pub(crate) fn kind_of(bytes: &[u8]) -> XlsxKind {
     .unwrap_or(XlsxKind::Workbook)
 }
 
-/// Scrive la cartella con il codec.
-pub(crate) fn write(workbook: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, XlsxError> {
-    guarded(|| {
+/// Scrive con il codec la cartella `workbook`, che riscrive il file
+/// `source`: dello stesso tipo, e con la richiesta di ricalcolo
+/// all'apertura che il file fa (IMP-617).
+pub(crate) fn write(workbook: &Workbook, source: &[u8]) -> Result<Vec<u8>, XlsxError> {
+    let kind = kind_of(source);
+    let rewritten = guarded(|| {
         gridcraft_xlsx::write_xlsx_as(workbook, kind)
             .map_err(|error| XlsxError::Codec(error.to_string()))
-    })
+    })?;
+    crate::graft::keep_full_calc(source, rewritten)
+        .map_err(|error| XlsxError::Codec(error.to_string()))
 }
 
 /// Le perdite di `after` rispetto a `before`: ciò che `before` conta più
@@ -185,7 +247,7 @@ fn loses(found: Vec<String>) -> Rewrite {
 /// La prova a vuoto: la cartella `workbook`, letta da `bytes`, riscritta
 /// senza modifiche.
 pub(crate) fn measure(bytes: &[u8], workbook: &Workbook) -> Rewrite {
-    let rewritten = match write(workbook, kind_of(bytes)) {
+    let rewritten = match write(workbook, bytes) {
         Ok(rewritten) => rewritten,
         Err(error) => {
             return Rewrite::Loses(truncate(
@@ -207,7 +269,7 @@ pub(crate) fn measure(bytes: &[u8], workbook: &Workbook) -> Rewrite {
 /// La misura sui byte nuovi: si rileggono, e riscriverli non perde niente.
 pub(crate) fn verify(bytes: &[u8]) -> Result<(), String> {
     let read = crate::read(bytes).map_err(|error| error.to_string())?;
-    let again = write(&read.workbook, kind_of(bytes)).map_err(|error| error.to_string())?;
+    let again = write(&read.workbook, bytes).map_err(|error| error.to_string())?;
     match losses(bytes, &again)? {
         found if found.is_empty() => Ok(()),
         found => match loses(found) {
@@ -261,9 +323,9 @@ fn params_of(command: &GridCommand) -> Result<Json, PluginError> {
 
 /// Lo stato della facciata in un punto del giornale.
 #[derive(Clone)]
-struct Snapshot {
-    workbook: Arc<Workbook>,
-    selection: Selection,
+pub(crate) struct Snapshot {
+    pub workbook: Arc<Workbook>,
+    pub selection: Selection,
     given: BTreeSet<u32>,
 }
 
@@ -283,11 +345,6 @@ pub(crate) struct Facade {
     ready: bool,
     /// I `sheetId` dati: quelli del file e quelli dei fogli nuovi.
     given: BTreeSet<u32>,
-    /// Per ogni comando del giornale, lo stato di prima; `None` oltre
-    /// [`UNDO_SNAPSHOTS`].
-    undo: Vec<Option<Snapshot>>,
-    /// I comandi annullati, con lo stato di dopo.
-    redo: Vec<(GridCommand, Snapshot)>,
 }
 
 impl Facade {
@@ -326,8 +383,6 @@ impl Facade {
             session,
             ready: false,
             given,
-            undo: Vec::new(),
-            redo: Vec::new(),
         }
     }
 
@@ -362,12 +417,8 @@ impl Facade {
             .position(|sheet| sheet.file_id == number)
     }
 
-    /// I comandi del giornale che si possono annullare e ripetere.
-    pub fn can_redo(&self) -> bool {
-        !self.redo.is_empty()
-    }
-
-    fn snapshot(&self) -> Snapshot {
+    /// Lo stato di adesso, per la cronologia ([`crate::cronologia`]).
+    pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             workbook: self.doc().wb.clone(),
             selection: self.doc().selection.clone(),
@@ -375,7 +426,8 @@ impl Facade {
         }
     }
 
-    fn restore(&mut self, snapshot: Snapshot) {
+    /// Torna allo stato `snapshot` della stessa facciata.
+    pub fn restore(&mut self, snapshot: Snapshot) {
         let ready = self.ready;
         let doc = self.doc_mut();
         let same = Arc::ptr_eq(&doc.wb, &snapshot.workbook);
@@ -387,6 +439,15 @@ impl Facade {
             doc.calc.rebuild(&doc.wb);
         }
         self.given = snapshot.given;
+    }
+
+    /// Porta la facciata sulla cartella del file allo stato `snapshot`,
+    /// tenuto da un'altra facciata (prima di un salvataggio): i `sheetId`
+    /// dati sono i suoi e quelli del file di adesso.
+    pub fn adopt(&mut self, snapshot: &Snapshot) {
+        let base = std::mem::take(&mut self.given);
+        self.restore(snapshot.clone());
+        self.given.extend(base);
     }
 
     /// Porta la facciata sul foglio e sulla selezione del comando.
@@ -426,12 +487,6 @@ impl Facade {
             && !same_content(&previous.workbook, &self.doc().wb);
         if changed {
             self.give_sheet_ids(&previous.workbook);
-            self.undo.push(Some(previous));
-            let kept = self.undo.len().saturating_sub(UNDO_SNAPSHOTS);
-            for old in &mut self.undo[..kept] {
-                *old = None;
-            }
-            self.redo.clear();
         }
         self.fill_dialogs(&mut requests);
         Ok(Ran {
@@ -574,43 +629,17 @@ impl Facade {
         }
     }
 
-    /// Annulla l'ultimo comando di `journal`, che resta con gli altri. Senza
-    /// lo stato di prima, rifà gli altri dalla `base`.
-    pub fn undo(&mut self, base: &Workbook, journal: &[GridCommand]) -> Result<(), PluginError> {
-        let Some((last, rest)) = journal.split_last() else {
-            return Err(PluginError::BadArgs("nothing to undo".into()));
-        };
-        let after = self.snapshot();
-        match self.undo.pop().flatten() {
-            Some(before) => self.restore(before),
-            None => {
-                let redo = std::mem::take(&mut self.redo);
-                let mut fresh = Facade::new(base);
-                fresh.replay(rest)?;
-                *self = fresh;
-                self.redo = redo;
-            }
-        }
-        self.redo.push((last.clone(), after));
-        Ok(())
-    }
-
-    /// Ripete l'ultimo comando annullato, e lo dà per il giornale.
-    pub fn redo(&mut self) -> Result<GridCommand, PluginError> {
-        let (command, after) = self
-            .redo
-            .pop()
-            .ok_or_else(|| PluginError::BadArgs("nothing to redo".into()))?;
-        let before = self.snapshot();
-        self.restore(after);
-        self.undo.push(Some(before));
-        Ok(command)
-    }
-
     /// Rifà i comandi di un giornale. Ognuno deve cambiare la cartella come
-    /// la prima volta.
+    /// la prima volta, tranne l'input delle celle in testa: è il giornale di
+    /// celle che il provider ha convertito in comandi, e una cella che i byte
+    /// hanno già è salvata, come la voce applicata che la conversione salta.
+    /// Succede quando un salvataggio di celle finisce mentre una formula
+    /// converte il giornale: il giornale che resta da salvare rimette input
+    /// che il disco ha già (IMP-512).
     pub fn replay(&mut self, commands: &[GridCommand]) -> Result<(), PluginError> {
+        let mut leading = true;
         for command in commands {
+            leading &= input_cell(command).is_some();
             let ran = self.run(command).map_err(|error| {
                 PluginError::Conflict(
                     format!(
@@ -620,7 +649,7 @@ impl Facade {
                     .into(),
                 )
             })?;
-            if !ran.changed {
+            if !ran.changed && !leading {
                 return Err(PluginError::Conflict(
                     format!(
                         "grid journal command `{}` no longer changes the workbook",
@@ -635,14 +664,15 @@ impl Facade {
 
     /// Il catalogo sulla selezione `at`. `edits` spegne, con il suo perché,
     /// i comandi che cambiano la cartella tranne l'input delle celle, e
-    /// `input` spegne anche quello; `undo` dice se il giornale ha un comando
-    /// da annullare.
+    /// `input` spegne anche quello; `undo` e `redo` dicono se la cronologia
+    /// del documento ha un passo da annullare e uno da ripetere.
     pub fn catalog(
         &mut self,
         at: &GridSelection,
         edits: Option<&str>,
         input: Option<&str>,
         undo: bool,
+        redo: bool,
     ) -> Vec<GridCommandState> {
         // Una selezione che il foglio non ha dà il catalogo su quella di
         // prima.
@@ -659,10 +689,7 @@ impl Facade {
             };
             let (enabled, reason) = match (spec.id, blocked) {
                 (UNDO, _) => (undo, (!undo).then(|| "nothing to undo".to_owned())),
-                (REDO, _) => {
-                    let redo = self.can_redo();
-                    (redo, (!redo).then(|| "nothing to redo".to_owned()))
-                }
+                (REDO, _) => (redo, (!redo).then(|| "nothing to redo".to_owned())),
                 (_, Some(why)) => (false, Some(why.to_owned())),
                 _ => {
                     let info = spec.info(&self.session);
@@ -693,27 +720,14 @@ impl Facade {
     }
 
     /// Il punto a cui [`Facade::rollback`] torna.
-    pub fn checkpoint(&self) -> Checkpoint {
-        Checkpoint {
-            snapshot: self.snapshot(),
-            undo: self.undo.len(),
-            redo: self.redo.clone(),
-        }
+    pub fn checkpoint(&self) -> Snapshot {
+        self.snapshot()
     }
 
     /// Torna al punto `checkpoint`, togliendo i comandi dati dopo.
-    pub fn rollback(&mut self, checkpoint: Checkpoint) {
-        self.restore(checkpoint.snapshot);
-        self.undo.truncate(checkpoint.undo);
-        self.redo = checkpoint.redo;
+    pub fn rollback(&mut self, checkpoint: Snapshot) {
+        self.restore(checkpoint);
     }
-}
-
-/// Lo stato della facciata prima di un gruppo di comandi.
-pub(crate) struct Checkpoint {
-    snapshot: Snapshot,
-    undo: usize,
-    redo: Vec<(GridCommand, Snapshot)>,
 }
 
 /// Il comando con cui l'input `value` entra nella cella `cell`.

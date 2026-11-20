@@ -1,0 +1,23 @@
+{
+  "about": "Spostare una scheda con il suo inchiostro v1: il livello resta identico, perché i punti sono in unità della scheda.",
+  "before": {
+    "nodes": [
+      { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 0, "y": 0, "width": 640, "height": 420,
+        "fub:ink": { "v": 1, "strokes": [
+          { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }
+        ] } }
+    ]
+  },
+  "ops": [{ "op": "move", "ids": ["f1"], "dx": 40, "dy": -10 }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 40, "y": -10, "width": 640, "height": 420,
+          "fub:ink": { "v": 1, "strokes": [
+          { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }
+        ] } }
+      ]
+    }
+  }
+}

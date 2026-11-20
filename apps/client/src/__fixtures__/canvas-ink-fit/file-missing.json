@@ -1,0 +1,33 @@
+{
+  "name": "file-missing",
+  "description": "Una scheda file senza il campo file resta ferma.",
+  "card": {
+    "type": "file"
+  },
+  "ref": {
+    "width": 200,
+    "height": 100
+  },
+  "size": {
+    "width": 400,
+    "height": 200
+  },
+  "expect": {
+    "mode": "fixed",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          20,
+          10
+        ],
+        "to": [
+          20,
+          10
+        ]
+      }
+    ]
+  }
+}

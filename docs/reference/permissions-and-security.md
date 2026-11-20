@@ -49,8 +49,17 @@ copie divergenti delle regole.
 | tempo e random | quantità e disponibilità |
 | impostazioni | livello scrivibile e chiave dichiarata |
 | transfer | handle e contenuto, non path arbitrari |
+| notifiche | `fub:notifications` dichiarato e non spento |
 
 L'elenco esatto delle funzioni vive nel contratto.
+
+### Le notifiche del sistema
+
+`fub:notifications` non sta in `PluginPermissions::core()`: lo dichiara solo
+«Compiti» (`fub.tasks`), con l'interruttore `fub.tasks:permissions.notifications`
+in **Componenti**, acceso di serie. Senza funzione WIT nessun plugin WASM
+notifica: lo fa l'app (`fub-app/src/promemoria.rs`), dopo aver chiesto al `Guard`
+(`Host::component_allows`): se è spento, i promemoria restano nella nota.
 
 ## Path fence
 
@@ -59,6 +68,22 @@ Symlink, componenti `..`, differenze di separatore e maiuscole non devono
 consentire una fuga.
 
 Un handle di transfer non diventa automaticamente un path filesystem.
+
+Quando Fub disfa un trasferimento nel cestino del sistema, il file torna
+passando dallo storage del vault (`VaultStorage::move_in_no_replace`): la
+destinazione si risolve dentro la radice aperta, con i suoi lucchetti, e una
+cartella diventata un collegamento verso fuori fa fallire il ritorno invece di
+portare il file fuori dal vault.
+
+L'azzeramento della demo apre la sua cartella senza seguire un collegamento al
+suo posto, legge `.fub-demo.json` da quella cartella aperta e la svuota
+attraverso lo stesso handle; poi toglie per nome la radice rimasta vuota. Una
+cartella messa al posto della demo dopo il controllo non si svuota, e la
+rimozione finale la rifiuta perché non è vuota. Il marcatore si toglie per
+ultimo: un azzeramento fermato a metà lascia una demo che il prossimo finisce.
+Su Windows cap-std (cap-primitives 4.0.3) fa rename, `remove_file` e
+`remove_dir_all` ricostruendo il percorso dall'handle aperto: qui e
+nell'export in una cartella resta una finestra stretta fino all'operazione.
 
 ## Temi installati
 
@@ -69,6 +94,45 @@ non regolari. Una voce del catalogo deve dichiarare lo stesso motore del
 manifest che consegna. Quale motore si possa montare lo decide la shell: un
 tema di un altro motore è rifiutato dal loader con una diagnosi.
 
+Un manifest `theme-2` può dichiarare `extends`, il tema da cui parte. L'unico
+valore accettato è `fub.serie`, scritto esatto; un altro valore, o `extends`
+con `theme-1`, rende il manifest malformato. Con `extends` i fogli sono
+facoltativi: `read_theme` consegna `sheet: null` per una luce senza foglio, e
+`lights` resta obbligatorio. Un tema che eredita e non porta né fogli, né skin,
+né asset è rifiutato. Il catalogo firmato passa dalla stessa validazione. Il
+client monta un tema che eredita sopra la serie: per una luce senza foglio usa
+il foglio di serie della stessa luce e dello stesso contrasto, lascia la pelle
+di serie montata e aggiunge la skin del tema in un canale suo
+([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
+
+Da `theme-2` un tema può portare i suoi caratteri (`fonts` nel manifest): al
+massimo 8 voci, ognuna con `family` (lettere e cifre ASCII, `-` e spazi
+singoli, al massimo 64 caratteri, diversa dalle famiglie di serie e dalle
+parole chiave del CSS), `file` (`fonts/<nome>.woff2`, un asset del tema),
+`weight` da 100 a 900 e `style` `normal` o `italic`. L'host controlla che il
+file sia fra gli asset e cominci con la firma `wOF2`, al massimo 2 MiB l'uno e
+6 MiB in tutto. `@font-face` resta vietato nel CSS di un tema, perché un `src:`
+scritto a mano potrebbe chiamare la rete: le regole le scrive il loader, coi
+valori del manifest e l'URL `data:` dell'asset (la CSP ha `font-src data:`), nel
+canale `caratteri-tema`, e la pelle usa la famiglia per nome. Cambiato tema, il
+canale si svuota.
+
+Da `theme-2` un tema può ridisegnare per nome le icone della shell (`icons` nel
+manifest): il nome di un asset JSON accanto al manifest (`<nome>.json`, in
+minuscolo, mai `manifest.json`), `{ "<nome>": ["<d>", …] }`. Un tema porta
+soltanto i `d` dei tracciati, mai markup: ogni `d` ammette solo i comandi e i
+numeri di un tracciato SVG e gli spazi ASCII, quindi niente `<`, virgolette,
+`url(` o riferimenti. Al massimo 1024 nomi, 8 tracciati e 4 KiB di tracciati per
+nome, 256 KiB per il file. La regola sta in `fub_abi::rules::theme_icons` e la
+applica l'host (all'installazione, all'inventario e alla lettura del tema) come
+il loader della shell, con lo stesso mirror delle regole; la stessa regola dei
+tracciati vale per le icone che i moduli della shell registrano. Il corpo di
+ogni `<svg>` la shell lo costruisce da sé, coi soli `d` validati, nel costrutto
+di tutte le icone (griglia 24, tratto, `currentColor`), e `ui/icons.ts`
+ripassa ogni voce dalla regola prima di disegnarla. Un tema non aggiunge nomi:
+un nome che nessuno disegna non rifiuta il tema ma non si vede. Cambiato tema,
+o annullata l'anteprima, il set cambia e le icone nella pagina si ridisegnano.
+
 Da `theme-2` un tema può dichiarare impostazioni: al massimo 32, con nome
 `a-z`, `0-9`, `-`, etichetta in prosa e specie fra interruttore, numero (con
 minimo e massimo) e scelta. L'host le dichiara al registro delle impostazioni con chiave
@@ -78,10 +142,27 @@ documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazio
 sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 
-Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount. Una
-preview dalle Impostazioni non cambia la scelta persistente: annullamento o
-chiusura rimontano il tema autorevole precedente; un bundle non leggibile o
-rifiutato non ottiene un mount parziale.
+Un tema si installa anche da una cartella scelta dalla persona, o si collega da
+una cartella in sviluppo, solo in modalità sviluppatore e con la cartella scelta
+nella finestra nativa: permesso, porte, sostituzione di un id installato e tema
+collegato in [Temi da una cartella](theme-folder-security.md).
+
+Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount (non
+un bundle uguale per contenuto, mai per id, a quello montato: `MountedBundle`).
+Una preview non cambia la scelta persistente: annullarla o chiuderla rimonta il
+tema autorevole; un bundle illeggibile o rifiutato non si monta a metà.
+
+Il logo (Marcuzzo, nella barra, nelle Informazioni e all'avvio) prende i
+colori da cinque ruoli facoltativi: `--logo-cartella`, `--logo-cartella-retro`,
+`--logo-cartella-ombra`, `--logo-foglio-1` e `--logo-foglio-2`. La serie li
+ricava dall'accento (`logoColors` in `recipe.ts`) con la cartella tenuta alla
+soglia dei segni su `--bg` e `--bg-elev`. Un tema installato che non dichiara
+nessun ruolo del logo li riceve prima della validazione, calcolati dal suo
+`--accent` per la stessa luce e lo stesso contrasto (`completeSheet` della
+serie); un tema che ne dichiara anche uno solo resta com'è, e i ruoli mancanti
+cadono sull'accento e su `--sheet-2`. Il gufo tiene i suoi colori. Con i colori
+forzati il logo diventa una sagoma nei colori di sistema, regola in
+`structure.css`, che un tema non tocca.
 
 Un tema veste la cornice e i segni di Fub, e il contenuto soltanto dove la
 modalità della superficie ne dà l'autorità al tema: una regola sul contenuto si
@@ -100,10 +181,16 @@ contano solo per chi li dichiara
 Il runtime:
 
 - usa Wasmtime component model;
-- non collega WASI;
+- non collega WASI, tranne `wasi:random` (`random` e `insecure-seed`): al
+  più 64 KiB per richiesta e 1 MiB sommando le richieste di una chiamata del
+  contratto, oltre è una trap;
 - non concede filesystem o rete direttamente;
 - serve soltanto le famiglie host disponibili;
-- applica limiti alla memoria lineare e alle tabelle;
+- applica limiti alla memoria lineare e alle tabelle: al più 64 MiB per
+  istanza sommando tutte le sue memorie (oltre, `memory.grow` risponde -1) e
+  1 GiB per tutte le istanze del processo insieme; chi supera il tetto del
+  processo riceve una trap tipizzata (`host.wasm.memory_budget`), e la
+  memoria torna al conto quando l'istanza viene smontata;
 - interrompe chiamate oltre la deadline;
 - converte trap in errori tipizzati;
 - limita la ricorsione delle forme;
@@ -113,8 +200,7 @@ Il componente condivide un'istanza fra i propri provider e non è rientrante.
 
 ## UI non fidata
 
-`UiNode` può rappresentare forme fidate e non fidate. Un componente di terzi
-non può ottenere:
+`UiNode` ha forme fidate e non fidate. Un componente di terzi non ottiene:
 
 - HTML arbitrario;
 - webview;
@@ -144,7 +230,10 @@ aperti a tutti.
 
 La Content Security Policy impedisce script remoti, iframe e oggetti non
 previsti. Il rendering non deve creare HTML attivo da una stringa del vault o
-del plugin senza sanitizzazione e una decisione esplicita.
+del plugin senza sanitizzazione e una decisione esplicita. Un comando dell'app
+si esegue solo se una permission di `crates/fub-app/permissions/` lo concede a
+una capability della finestra: `crates/fub-app/tests/ipc_permissions.rs` lo
+controlla nei due versi.
 
 La CSP sta in `crates/fub-app/tauri.conf.json` (`app.security.csp`) e vale per
 ogni piattaforma. `script-src` è `'self' 'wasm-unsafe-eval'`, e nient'altro:
@@ -173,15 +262,14 @@ scrive a mano.
 Una WebView che non conosce `'wasm-unsafe-eval'` non compila il modulo: la
 lavagna non si cambia, e non c'è un ripiego in TypeScript.
 
-`style-src` è `'self' 'unsafe-inline'`: i moduli della shell, CodeMirror per
-primo, aggiungono elementi `<style>` a pagina avviata. Per questo
-`index.html`, `mobile.html` e `document.html` non hanno un `<style>`: Tauri
-metterebbe un nonce a ognuno e lo aggiungerebbe a `style-src`, e con un nonce
-la WebView ignora `'unsafe-inline'` e rifiuta gli stili aggiunti dopo (gli
-editor restano senza stile). Lo stile che serve prima dei moduli, quello dello
-strato d'avvio, è un file in `public/avvio/`. `src/avvio/pagine.test.ts` tiene
-le tre pagine senza `<style>` né script in linea; nella WebView vera la stessa
-caduta la vede lo scenario S7 di `bench:webview`.
+### Gli stili
+
+`style-src` è `'self'` e `style-src-attr` è `'none'`: nessuno stile in linea.
+Un `<style>` o un attributo `style` che arriva con il markup di un documento,
+di un tema o di un plugin la WebView lo rifiuta, in silenzio. La shell mette i
+suoi stili con file, fogli costruiti, CSSOM e il nonce della pagina; le
+quattro strade, quello che resta fuori e i presidi sono in
+[Gli stili e la CSP](styles-and-csp.md).
 
 ### Immagini remote
 
@@ -195,7 +283,7 @@ redirect, entro il limite delle risorse in linea, nella cartella degli allegati
 una modifica annullabile; una definizione di riferimento cambia soltanto se la
 usano solo immagini. La webview non chiede mai l'immagine alla rete. Una nota
 nella radice con una cartella relativa alla nota (`./`) non ha dove scaricarla
-e lo dice.
+e lo dice. Le tessere della vista Mappa: [Le tessere delle mappe](map-tiles.md).
 
 ## Visore web
 
@@ -221,32 +309,35 @@ label. Nega le nuove finestre e i download.
 - **Salvataggio come nota.** `web.clip` è un comando dell'host. Rilegge da sé
   `viewer.hosts`, riscarica la pagina dalla rete dell'host, che non segue i
   redirect, e scrive Markdown con la fonte, attraverso la cattura. Una
-  risposta che non è 2xx, che non è HTML o che supera 2 MiB non scrive niente
-  e lo dice. In prova il comando non chiama la rete.
+  risposta non 2xx, non HTML o oltre 2 MiB (tetto portato al filo con
+  `fetch_limited`) non scrive niente e lo dice. In prova non chiama la rete.
 
 Un link `https` di una nota va al browser di sistema. Va al visore con Alt+clic
-o quando `viewer.links` è acceso. Un indirizzo che il visore non apre resta al
-browser di sistema.
+o quando `viewer.links` è acceso. Un indirizzo `http` che il visore non apre
+va al browser di sistema; ogni altro schema non si apre, con o senza visore
+montato (`apps/client/src/ui/web-viewer.ts`). Un nodo `web_view` di una vista
+incornicia soltanto un indirizzo `https:`.
 
-## Host nativo del clipper
+Una pagina incorporata in una nota (`![](https://…)` di un sito di `WEB_EMBED_SITES`,
+in `editors/text/profiles/markdown/web-embed.ts`) è un segnaposto che non chiede
+niente alla rete. «Carica» la apre soltanto nel visore, con lo stesso consenso,
+mai nel browser di sistema; nessun iframe entra nella shell.
 
-Il clipper del browser consegna prima a `fub-clipper-host` (nome
-`local.fub.clipper`), per messaggistica nativa: è il solo canale autenticato,
-perché l'host accetta soltanto un'estensione abbinata con
-`fub-cli pair pair --extension-id ID`. `fub://capture` e il file
-`.fubcapture.json` sono il ripiego, senza autenticazione e con
-un'approvazione per ogni cattura.
+Le letture del client con `fetch` (asset del vault, file dell'app, tessere
+della mappa) non seguono redirect e non portano credenziali né referrer:
+passano da `LOCAL_FETCH` in `apps/client/src/editors/core/local-fetch.ts`, e un
+test ferma un `fetch` senza quelle opzioni.
 
-Il browser trova l'host da un manifest dell'utente, mai di sistema.
-`fub-cli native-install --extension-id ID` dice dove lo scriverebbe; con
-`--yes` lo scrive in ogni browser installato, o in quelli dati con
-`--browser`. Su Windows scrive anche la chiave di `HKEY_CURRENT_USER` che punta
-al manifest. L'id decide la famiglia: le 32 lettere di un'estensione Chromium
-danno `allowed_origins`, l'id di Firefox `allowed_extensions`, e un id della
-famiglia sbagliata per il browser nominato è un errore d'uso. Un file con quel
-nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
-soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
-due comandi con l'id vero dell'estensione.
+## Clipper del browser
+
+Il clipper ha un solo canale autenticato, l'host nativo `fub-clipper-host`
+abbinato con `fub-cli pair`. `fub://capture` e il file `.fubcapture.json`
+sono importazioni non autenticate: qualunque pagina apre un `fub://`, e
+l'origine che la cattura dichiara è un'etichetta. Una cattura da lì chiede
+sempre conferma, con limiti di coda e di `nonce`. L'estensione non ha
+permessi di host all'installazione, e la chiave dell'assistente sta di serie
+nella memoria di sessione del browser. Le regole sono in
+[Il clipper del browser](web-clipper.md).
 
 ## Server MCP
 
@@ -319,12 +410,34 @@ L'app riceve soltanto una copia del documento in una cartella privata 0700,
 che si cancella sempre (vedi
 [Anteprime con la CLI](craft-formats.md#anteprime-con-la-cli)).
 
+## Programmi del sistema
+
+«Mostra nella cartella del sistema», «Apri con un'altra app» e «Stampa…»
+passano un percorso a un programma del sistema (`xdg-open` e `dbus-send` su
+Linux, `open` su macOS, `explorer.exe` su Windows): come argomento, mai
+attraverso una shell, e per percorso assoluto, senza cercarlo nel `PATH`
+(`crates/fub-app/src/print.rs`). Su Unix il programma si prende dalle
+cartelle che scrive l'amministratore (`/usr/bin`, `/bin`, `/usr/local/bin` e
+quelle di NixOS e Guix; su macOS solo `/usr/bin`), ed è buono se è un file
+regolare, eseguibile e non riscrivibile dal gruppo o dagli altri; su Windows
+dalla cartella che dà il sistema (`GetSystemWindowsDirectoryW`), mai da
+`SystemRoot`, che sceglie chi avvia Fub. Se non c'è, l'esito è «nessun
+programma» e la shell lo dice. Un file del vault che si eseguirebbe aprendolo
+si mostra e non si apre.
+
+La regola vale per il **primo** programma, non per quelli che lancia lui.
+`xdg-open` è uno script che cerca `gio`, `kde-open` e i loro pari nel `PATH`
+ereditato, come fa l'`Exec=` dei file `.desktop`; il `PATH` del figlio resta
+quello dell'utente, perché restringerlo romperebbe le app in `~/.local/bin`.
+Chi scrive in una cartella di quel `PATH` sceglie quindi l'app che apre il
+file.
+
 ## Supply chain
 
 - sorgenti delle dipendenze limitate dalla policy;
 - licenze controllate;
 - advisory e crate yanked bloccano la CI;
-- SBOM generata;
+- SBOM generata a ogni corsa e confrontata con `Cargo.lock` (`sbom.mjs`);
 - lockfile committati;
 - artefatti generati verificati;
 - dipendenze duplicate sensibili controllate.
@@ -345,6 +458,75 @@ diagnostici devono:
 - dichiarare ciò che includono;
 - essere creati con un gesto esplicito;
 - non diventare canali di esportazione invisibili.
+
+Il file di log della macchina nasce `0600` su Unix, e uno di prima più
+aperto si stringe alla riapertura (`fub_kernel::log::FileSink`); se non si
+lascia stringere, il log si apre lo stesso e lo scrive in fondo al file, una
+volta per episodio, non a ogni riapertura.
+Gli errori della rete dell'host (`fub_host::net`) nominano l'indirizzo letto dal
+parser, senza credenziali, query e frammento, e il motivo con parole fisse; un
+indirizzo illeggibile non si mostra. Un `4xx` o `5xx` è una risposta (64 KiB di
+corpo al più); in un job ferma la rete ogni bandiera alzata.
+
+I file di stato della macchina che devono essere regolari (il lock dello
+scrittore del vault, il lock del sync, il file degli abbinamenti del
+clipper) si aprono con `fub_host::regular_file::open_regular`: il
+collegamento al posto del file non si segue, una FIFO non blocca, e il
+controllo vale sul file aperto, non su un path guardato prima. Una cartella
+o un collegamento sono lo stesso rifiuto su ogni sistema, e un file che
+sparisce o cambia mentre si apre si riapre, poi si rifiuta.
+
+## Documenti ostili
+
+Un file del vault può essere scritto da chiunque: chi lo legge ha un tetto
+mentre legge, non dopo, e oltre il tetto c'è un errore tipizzato o la sola
+lettura, mai una pila o una memoria esaurite.
+
+- `.odt`: annidamento XML fino a 256 elementi (`fub_format_rich::odt`).
+- `.docx`: allineamento delle revisioni con un budget di lavoro e di memoria,
+  senza ricorsione; al più 16 Mi caratteri di testo nell'inventario.
+- `.xlsx`: al più 1,5 GiB di albero XML tenuto in memoria per parte, stimati
+  per eccesso (nodi, nomi, attributi e testi con la capacità dei vettori e
+  l'arrotondamento dell'allocatore; le righe che vanno al flusso non
+  contano), righe e colonne non oltre quelle di un foglio.
+- InkML: nodi (al più 64 per tratto ammesso), punti per tratto e valori per
+  punto contati durante la lettura; la parte più grande che Fub scrive si
+  rilegge; un colore scritto è sempre `#rrggbb`.
+- Arene del modello e della UI: ricostruite fino a 64 livelli
+  (`fub_abi::arena::MAX_ARENA_DEPTH`), oltre è `ArenaError::TooDeep`.
+- SVG pulito per il web: senza script, gestori `on*`, URL `javascript:` e, in
+  un `foreignObject`, elementi che caricano altri documenti.
+- Import JSON generico: nel frontmatter entrano soltanto chiavi che sono
+  identificatori, e mai `title` o `source_file` del file.
+- Intenti di rinomina e lease di lettura recintano di nuovo i loro path prima
+  di comporli con la radice del vault.
+- L'append del kernel rifiuta symlink, hardlink e target non regolari, e
+  conta i nomi del file sull'handle aperto, non riaprendo il path.
+
+Il client scioglie le entità del Markdown senza DOM
+(`apps/client/src/editors/text/profiles/markdown/link-syntax.ts`): le
+numeriche e le nominate della tabella completa di HTML, generata da
+`vendor/whatwg-entities/`, sempre con il `;` finale come vuole CommonMark.
+Un nome che la tabella non ha, o una forma senza `;`, resta testo; un test
+ferma un ritorno di `innerHTML` in quel file.
+
+### Testo verso un foglio di calcolo
+
+Un testo che esce verso un altro foglio di calcolo non diventa una formula
+(CSV injection): un campo che comincia con `=`, `+`, `-` o `@`, anche dopo
+spazi, prende un apostrofo davanti. Vale per l'export CSV dei documenti
+(`fub-importers`, `csv.rs`), per il salvataggio CSV/TSV di GridCraft e per
+il testo degli appunti della griglia (`fub.copyHtml`), con la patch
+`0012-formule-come-testo` di `vendor/gridcraft`. La griglia mette
+l'apostrofo anche davanti a una tabulazione o a un ritorno a capo iniziali,
+e lascia com'è un numero con il segno (`-12`, `-1,234.50`, `-12%`), che
+resta un numero; incollato di nuovo nella griglia, il testo torna quello di
+prima. L'HTML degli appunti non cambia.
+
+## Servizi remoti
+
+Chiavi del vault, ruoli, login e quote dei servizi di sync e pubblicazione:
+[Sicurezza dei servizi remoti](remote-services-security.md).
 
 ## Segnalazioni
 

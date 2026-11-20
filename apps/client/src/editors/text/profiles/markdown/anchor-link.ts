@@ -58,7 +58,8 @@ const cryptoRandom = (): number => crypto.getRandomValues(new Uint32Array(1))[0]
 export function anchorAtCursor(state: EditorState, random: () => number = cryptoRandom, pos = state.selection.main.head): AnchorAtCursor | null {
   const node = enclosingBlock(state, pos);
   if (!node) return null;
-  const slice = state.sliceDoc(node.from, node.to);
+  // Con "\n": la lunghezza del testo è in posizioni anche in una nota CRLF.
+  const slice = state.doc.sliceString(node.from, node.to);
   const written = findTrailingAnchor(slice);
   if (HEADING.test(node.name)) {
     // Un titolo con un id scritto si risolve per quell'id, non per il testo.

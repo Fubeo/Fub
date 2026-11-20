@@ -28,7 +28,7 @@ describe("il rapporto dell'importazione", () => {
 
   it("aggiunge l'esempio dove dice qualcosa, accorciato se è lungo", () => {
     expect(noteText({ kind: "stencil", count: 2, sample: "mxgraph.aws4.lambda" })).toBe(
-      "2 forme che FubDraw non ha si disegnano come le più vicine, di solito rettangoli. Per esempio: «mxgraph.aws4.lambda».",
+      "2 forme che Fub non ha si disegnano come le più vicine, di solito rettangoli. Per esempio: «mxgraph.aws4.lambda».",
     );
     expect(noteText({ kind: "fill", count: 1, sample: "zigzag" })).not.toContain("zigzag»");
     expect(noteText({ kind: "html", count: 1, sample: "img" })).not.toContain("«img»");

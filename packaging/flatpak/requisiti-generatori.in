@@ -1,0 +1,7 @@
+# I moduli dei generatori di flatpak-builder-tools (genera-sorgenti.sh).
+# Si cambia una versione qui, poi si rigenera requisiti-generatori.txt:
+#   uv pip compile --universal --python-version 3.10 --generate-hashes \
+#     packaging/flatpak/requisiti-generatori.in -o packaging/flatpak/requisiti-generatori.txt
+aiohttp==3.14.5
+tomlkit==0.15.2
+PyYAML==6.0.3

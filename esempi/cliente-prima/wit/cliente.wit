@@ -1,0 +1,31 @@
+// L'interfaccia importata com'era «prima»: due stati, due eventi, due
+// funzioni. Il test la fa crescere dal lato dell'host, una cosa alla volta
+// (PA T58); se la si cambia qui, il test non prova più niente.
+package esempio:fornitore@0.1.0;
+
+interface fornitore {
+    enum stato {
+        pronto,
+        occupato,
+    }
+
+    variant evento {
+        vuoto,
+        testo(string),
+    }
+
+    stato-attuale: func() -> stato;
+    prossimo-evento: func() -> evento;
+}
+
+// Ciò che il guest esporta per farsi chiamare: ogni funzione chiede una cosa
+// al fornitore e la racconta in una stringa.
+interface cliente {
+    leggi-stato: func() -> string;
+    leggi-evento: func() -> string;
+}
+
+world cliente-prima {
+    import fornitore;
+    export cliente;
+}

@@ -13,6 +13,7 @@ import {
   setDiagramStylePreference,
   styleDirective,
   styleDirectiveEdit,
+  frontmatterEnd,
   type SourceEdit,
 } from "./diagram-style";
 import { DIAGRAM_STYLE_KEY } from "./theme";
@@ -71,7 +72,7 @@ describe("la direttiva nel sorgente", () => {
     expect(ownDiagramStyle("%% stile: aurora\r\nflowchart LR")).toBe("aurora");
     expect(ownDiagramStyle("flowchart LR\nA-->B")).toBeNull();
     // Un nome che non è uno stile non vale, ma la riga resta una direttiva.
-    expect(styleDirective("%% stile: neon\nflowchart LR")).toEqual({ style: null, from: 0, to: 14 });
+    expect(styleDirective("%% stile: neon\nflowchart LR")).toEqual({ style: null, name: "neon", from: 0, to: 14 });
     // `%%{…}%%` è di Mermaid, e un commento qualsiasi non è una direttiva.
     expect(ownDiagramStyle("%%{init: {'theme': 'forest'}}%%\nflowchart LR")).toBeNull();
     expect(ownDiagramStyle("%% lo stile: aurora mi piace\nflowchart LR")).toBeNull();
@@ -86,6 +87,24 @@ describe("la direttiva nel sorgente", () => {
     expect(apply(moved, styleDirectiveEdit(moved, "aurora"))).toBe("flowchart LR\n%% stile: aurora\nA-->B");
     expect(apply(styled, styleDirectiveEdit(styled, null))).toBe(plain);
     expect(apply("%% stile: aurora", styleDirectiveEdit("%% stile: aurora", null))).toBe("");
+  });
+
+  it("dopo il frontmatter di Mermaid, che resta la prima cosa del recinto, e senza toccare il resto", () => {
+    const titled = "---\ntitle: Il flusso\n---\nflowchart LR\n  A-->B";
+    expect(frontmatterEnd(titled)).toBe(25);
+    const styled = apply(titled, styleDirectiveEdit(titled, "aurora"));
+    expect(styled).toBe("---\ntitle: Il flusso\n---\n%% stile: aurora\nflowchart LR\n  A-->B");
+    expect(apply(styled, styleDirectiveEdit(styled, null))).toBe(titled);
+    // Con gli a capo di Windows il frontmatter si riconosce lo stesso.
+    expect(frontmatterEnd("---\r\ntitle: x\r\n---\r\nflowchart LR")).toBe(20);
+    // Un frontmatter che non si chiude non è un frontmatter.
+    expect(frontmatterEnd("---\ntitle: x\nflowchart LR")).toBe(0);
+    expect(frontmatterEnd("flowchart LR\n---")).toBe(0);
+    // Chiuso sull'ultima riga, senza a capo: la direttiva va sotto.
+    expect(apply("---\ntitle: x\n---", styleDirectiveEdit("---\ntitle: x\n---", "inchiostro"))).toBe("---\ntitle: x\n---\n%% stile: inchiostro");
+    // Un nome sconosciuto si riscrive al suo posto, dov'è.
+    const unknown = "---\ntitle: x\n---\nflowchart LR\n%% stile: neon\nA-->B";
+    expect(apply(unknown, styleDirectiveEdit(unknown, "blueprint"))).toBe("---\ntitle: x\n---\nflowchart LR\n%% stile: blueprint\nA-->B");
   });
 
   it("non propone modifiche che non cambiano niente", () => {

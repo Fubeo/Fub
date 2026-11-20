@@ -60,6 +60,10 @@ impl FormatProvider for MarkdownProvider {
             // Le formule fra dollari, che legge il parser (vedi
             // `parse::build_options`); il recinto `math` resta della regola.
             syntax::MATH,
+            // I commenti con la discussione (`{==…==}{>>…<<}`, CriticMarkup), che
+            // legge il parser (vedi `parse/comments.rs`); i `%%…%%` sotto lo
+            // stesso nome restano della regola, come il recinto `math`.
+            syntax::COMMENTS,
             // Non è una sintassi: dice che il sorgente è prosa, e che le
             // feature possono scriverci testo senza romperlo.
             fub_abi::options::source::PROSE,
@@ -884,6 +888,61 @@ mod tests {
         assert!(unclosed.contains("&lt;details&gt;"), "html: {unclosed}");
         let other = render("<details class=\"x\">\n\nTesto\n\n</details>\n");
         assert!(!other.contains("fub-details"), "html: {other}");
+    }
+
+    /// `<!-- pagina -->` (D17): sulla carta un segnaposto vuoto che volta
+    /// pagina, con lo span del commento; a schermo niente, nemmeno il testo.
+    /// Un commento che dice altro resta com'era.
+    #[test]
+    fn a_page_break_comment_turns_the_page_only_on_paper() {
+        let source =
+            "Prima.\n\n<!-- pagina -->\nDopo.\n\n<!--pagina-->\n\n<!-- pagina, forse -->\n";
+        let model = parse(source);
+        let render = |target| {
+            MarkdownProvider::new()
+                .render_html(
+                    &model,
+                    &RenderOptions {
+                        target,
+                        ..RenderOptions::preview()
+                    },
+                )
+                .unwrap()
+        };
+        let print = render(fub_abi::format::RenderTarget::Print);
+        let start = source.find("<!-- pagina -->").unwrap();
+        assert!(
+            print.contains(&format!(
+                "<div data-fub-source-start=\"{start}\" data-fub-source-end=\"{}\" \
+                 class=\"page-break\" data-page-break=\"mano\"></div><p",
+                start + "<!-- pagina -->".len()
+            )),
+            "print: {print}"
+        );
+        assert_eq!(
+            print.matches("data-page-break").count(),
+            2,
+            "print: {print}"
+        );
+        assert!(print.contains("Dopo."), "il blocco dopo resta suo: {print}");
+        assert!(print.contains("pagina, forse"), "print: {print}");
+        assert!(
+            render(fub_abi::format::RenderTarget::Pdf).contains("data-page-break"),
+            "anche il PDF volta pagina"
+        );
+        for target in [
+            fub_abi::format::RenderTarget::Screen,
+            fub_abi::format::RenderTarget::StaticSite,
+        ] {
+            let html = render(target);
+            assert!(!html.contains("page-break"), "{target:?}: {html}");
+            assert!(
+                !html.contains("&lt;!-- pagina --&gt;"),
+                "{target:?}: {html}"
+            );
+            assert!(!html.contains("&lt;!--pagina--&gt;"), "{target:?}: {html}");
+            assert!(html.contains("pagina, forse"), "{target:?}: {html}");
+        }
     }
 
     #[test]

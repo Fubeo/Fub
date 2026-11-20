@@ -9,6 +9,7 @@
 use std::collections::BTreeSet;
 
 use fub_abi::Delivery;
+#[cfg(feature = "lavagna")]
 use fub_componenti::ErroreMappa;
 use fub_features::componenti::{self, Riga, NUCLEO, SOLO_DELLA_MAPPA};
 
@@ -161,5 +162,207 @@ fn ogni_feature_ufficiale_e_una_riga() {
         note + disegni + lavagna,
         ufficiali,
         "ogni feature ufficiale delle note richiede le note"
+    );
+}
+
+/// Ogni id di un profilo è una riga della mappa, oppure sta nel suo «arriva
+/// con…», che lo rende «più avanti»: un profilo non nomina niente a caso.
+#[test]
+fn ogni_id_dei_profili_esiste_o_e_piu_avanti() {
+    let mappa = componenti::mappa();
+    let profili = componenti::profili();
+    let mut nomi = BTreeSet::new();
+    for profilo in &profili {
+        assert!(nomi.insert(profilo.nome), "«{}» due volte", profilo.nome);
+        assert_eq!(profilo.etichetta, format!("profile.{}.name", profilo.nome));
+        for id in &profilo.componenti {
+            assert!(
+                mappa.componente(id).is_some(),
+                "«{}» sceglie «{id}», che la mappa non ha",
+                profilo.nome
+            );
+        }
+        for id in &profilo.arriva_con {
+            assert!(
+                mappa.componente(id).is_none(),
+                "«{}» aspetta «{id}», che c'è già",
+                profilo.nome
+            );
+        }
+    }
+    let piu_avanti: BTreeSet<&str> = profili
+        .iter()
+        .filter(|profilo| profilo.piu_avanti())
+        .map(|profilo| profilo.nome)
+        .collect();
+    assert_eq!(
+        piu_avanti,
+        BTreeSet::from(["solo-pdf", "grafica", "fotografia"])
+    );
+}
+
+/// «Studio» accende anche ciò che i suoi componenti richiedono: la penna per
+/// lavagna e PDF, i motori per documenti e fogli.
+#[test]
+fn studio_accende_la_penna_e_i_motori() {
+    let mappa = componenti::mappa();
+    let studio = componenti::profilo("studio").expect("il profilo «Studio»");
+    let (stato, _) = mappa.applica_profilo(&Default::default(), &studio.profilo());
+    let attivi = mappa.attivi(&stato);
+    for id in ["fub.penna", "fub.pdf"] {
+        assert!(attivi.contains(id), "«{id}» con «Studio»");
+    }
+    // Lavagna, grafo e correttore sono righe solo nelle build che li compilano.
+    #[cfg(feature = "lavagna")]
+    assert!(attivi.contains("fub.lavagna"));
+    #[cfg(feature = "graph")]
+    assert!(attivi.contains("fub.graph"));
+    #[cfg(feature = "proof")]
+    assert!(attivi.contains("fub.proof"));
+    #[cfg(feature = "rich")]
+    assert!(attivi.contains("fub.motore-documenti"));
+    #[cfg(feature = "xlsx")]
+    assert!(attivi.contains("fub.motore-fogli"));
+}
+
+/// «Solo note» sono le note e il gruppo `scrivere`, senza grafo e correttore;
+/// un profilo che non è «Tutto» non nomina i gruppi che lascia stare.
+#[test]
+fn solo_note_e_i_gruppi_che_un_profilo_non_tocca() {
+    let note = componenti::profilo("solo-note").unwrap();
+    assert!(note.componenti.contains(&"fub.markdown"));
+    assert!(!note.componenti.contains(&"fub.graph"));
+    assert!(!note.componenti.contains(&"fub.proof"));
+    for profilo in componenti::profili() {
+        let tutto = profilo.nome == componenti::PROFILO_TUTTO;
+        for id in &profilo.componenti {
+            let riga = componenti::riga(id).unwrap();
+            assert_ne!(riga.gruppo, "supporto", "«{}» sceglie «{id}»", profilo.nome);
+            if !tutto {
+                assert!(
+                    !componenti::GRUPPI_FUORI_DAI_PROFILI.contains(&riga.gruppo),
+                    "«{}» tocca «{id}»",
+                    profilo.nome
+                );
+            }
+        }
+    }
+    let tutto = componenti::profilo(componenti::PROFILO_TUTTO).unwrap();
+    for riga in componenti::righe() {
+        assert_eq!(
+            tutto.componenti.contains(&riga.id),
+            riga.gruppo != "supporto",
+            "«Tutto» e «{}»",
+            riga.id
+        );
+    }
+}
+
+#[test]
+fn i_gruppi_sono_quelli_con_almeno_una_riga() {
+    let righe = componenti::righe();
+    let gruppi = componenti::gruppi();
+    for riga in &righe {
+        assert!(
+            componenti::GRUPPI.contains(&riga.gruppo),
+            "«{}» sta nel gruppo «{}», che la pagina non ha",
+            riga.id,
+            riga.gruppo
+        );
+        assert!(gruppi.contains(&riga.gruppo), "«{}»", riga.gruppo);
+    }
+    for gruppo in &gruppi {
+        assert!(
+            righe.iter().any(|riga| riga.gruppo == *gruppo),
+            "«{gruppo}» non ha righe e si disegnerebbe vuoto"
+        );
+    }
+    let ordine: Vec<&str> = componenti::GRUPPI
+        .into_iter()
+        .filter(|gruppo| gruppi.contains(gruppo))
+        .collect();
+    assert_eq!(gruppi, ordine, "i gruppi, nell'ordine della pagina");
+    // In questa build nessuna riga è una foto: il gruppo non compare.
+    assert!(!gruppi.contains(&"foto"), "{gruppi:?}");
+}
+
+/// Le righe con un editor dicono quale: la pagina lo carica da lì.
+#[test]
+fn le_righe_con_un_editor_dicono_quale() {
+    let attese: &[(&str, &[&str])] = &[
+        ("fub.pdf", &["editors/media"]),
+        #[cfg(feature = "lavagna")]
+        ("fub.lavagna", &["editors/canvas"]),
+        #[cfg(feature = "rich")]
+        ("fub.rich", &["editors/rich"]),
+        #[cfg(feature = "xlsx")]
+        ("fub.xlsx", &["editors/grid"]),
+        #[cfg(feature = "draw")]
+        ("fub.draw", &["editors/spatial"]),
+    ];
+    for (id, ui) in attese {
+        let riga = componenti::riga(id).unwrap_or_else(|| panic!("«{id}» è una riga"));
+        assert_eq!(riga.ui, *ui, "«{id}»");
+    }
+}
+
+/// I disegni usano il Motore del disegno se c'è, e non lo richiedono: una
+/// build con i disegni e senza il motore ha la mappa che si costruisce, i
+/// disegni e nessuna riga del motore.
+#[test]
+#[cfg(feature = "draw")]
+fn i_disegni_usano_il_motore_e_non_lo_richiedono() {
+    let disegni = componenti::riga("fub.draw").expect("la riga dei disegni");
+    assert_eq!(disegni.uses, &["fub.motore-vettoriale"]);
+    assert!(!disegni.requires.contains(&"fub.motore-vettoriale"));
+    assert_eq!(
+        componenti::riga("fub.motore-vettoriale").is_some(),
+        cfg!(feature = "engine-drawing"),
+        "la riga del motore c'è solo con `engine-drawing`"
+    );
+    assert!(componenti::prova_mappa().is_ok());
+}
+
+/// Il Motore del disegno ha un interruttore suo in «Disegnare» (D-14 (a)): non
+/// è di supporto, non è un bundle, richiede i disegni e sta dietro la sua
+/// cargo feature. Spento, i disegni restano accesi; e i disegni non si
+/// spengono finché il motore acceso li richiede.
+#[test]
+#[cfg(feature = "engine-drawing")]
+fn il_motore_del_disegno_e_un_interruttore_in_disegnare() {
+    let motore = componenti::riga("fub.motore-vettoriale").expect("la riga del motore");
+    assert_eq!(motore.kind, fub_abi::ComponentKind::Engine);
+    assert_eq!(motore.gruppo, "disegnare");
+    assert_ne!(motore.gruppo, "supporto");
+    assert!(!motore.bundle, "il motore non è un bundle");
+    assert_eq!(motore.requires, &["fub.draw"]);
+    assert_eq!(motore.cargo_feature, Some("engine-drawing"));
+    assert!(motore.ui.is_empty());
+    assert_eq!(motore.nome, "component.motore-vettoriale.name");
+
+    let mappa = componenti::mappa();
+    let tutto = fub_componenti::Stato {
+        scelti: ["fub.draw", "fub.motore-vettoriale"]
+            .map(String::from)
+            .into(),
+        in_attesa: Default::default(),
+    };
+    let (spento, effetto) = mappa
+        .spegni(&tutto, "fub.motore-vettoriale")
+        .expect("il motore si spegne da solo");
+    assert!(effetto.spenti_anche.is_empty() && effetto.orfani.is_empty());
+    let attivi = mappa.attivi(&spento);
+    assert!(
+        attivi.contains("fub.draw"),
+        "spento il motore, i disegni restano"
+    );
+    assert!(!attivi.contains("fub.motore-vettoriale"));
+
+    assert_eq!(
+        mappa.spegni(&tutto, "fub.draw"),
+        Err(fub_componenti::Errore::Richiesto {
+            da: vec!["fub.motore-vettoriale".into()],
+        }),
+        "il motore acceso richiede i disegni"
     );
 }

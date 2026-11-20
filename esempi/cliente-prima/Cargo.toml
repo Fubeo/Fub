@@ -1,0 +1,28 @@
+# Un plugin compilato contro un'interfaccia importata «di prima» (PA T58).
+#
+# Il gemello di `esempi/servizio-prima` dal lato degli import: il guest riceve
+# un `enum` e un `variant` da un'interfaccia che l'host gli offre. L'host
+# cresciuto (un caso in più, una funzione in più) sta in
+# `crates/fub-wasm-host/tests/new_case_and_function.rs`, scritto lì con
+# `bindgen!`. Il pacchetto `esempio:fornitore` non è il contratto di Fub: è il
+# minimo che serve per far crescere una cosa alla volta.
+[package]
+name = "cliente-prima"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"
+
+# Un workspace suo, vuoto: chi lo compila da un worktree annidato in un altro
+# checkout (per esempio sotto `.claude/worktrees/`) non risale al
+# `Cargo.toml` di quel checkout, che non lo elenca fra i membri.
+[workspace]

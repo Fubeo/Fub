@@ -97,7 +97,7 @@ struct State {
 }
 
 impl EventSink for SinkWithBrake {
-    fn emit(&self, notice: &Notice) -> Delivery {
+    fn emit(&self, notice: &Notice, _vault: Option<&str>) -> Delivery {
         let mut state = self.state.lock().unwrap();
         if state.phase == Phase::Opening {
             if matches!(&notice.event, Event::Custom { topic, .. } if topic == SEAL) {

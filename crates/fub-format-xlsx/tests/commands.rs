@@ -899,8 +899,9 @@ fn la_finestra_della_convalida_arriva_con_la_regola_della_cella() {
 
 /// Un comando che non tocca le formule non le ricalcola: la riscrittura tiene
 /// i valori salvati nel file, anche quelli che un calcolo cambierebbe (un
-/// valore vecchio, una funzione volatile), e una formula senza valore resta
-/// senza. Ricalcola soltanto ciò che legge una cella cambiata.
+/// valore vecchio, una funzione volatile). Una formula senza valore si calcola
+/// all'apertura, e la riscrittura ne salva il valore. Ricalcola soltanto ciò
+/// che legge una cella cambiata, e la riscrittura salva il valore nuovo.
 #[test]
 fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
     const STALE: &str = r#"<dimension ref="A1:D1"/><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>A1*10</f><v>999</v></c><c r="C1"><f>NOW()</f><v>45000</v></c><c r="D1"><f>A1+1</f></c></row><row r="5"><c r="E5"><v>7</v></c></row></sheetData>"#;
@@ -909,7 +910,7 @@ fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
     let shown = cells(&mut provider, &session.instance, &session.revision, "s1");
     assert_eq!(display(&shown, "s1", "B1"), "999");
     assert_eq!(display(&shown, "s1", "C1"), "45000");
-    assert_eq!(display(&shown, "s1", "D1"), "");
+    assert_eq!(display(&shown, "s1", "D1"), "2");
 
     let bold = give(
         &mut provider,
@@ -926,13 +927,13 @@ fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
     );
     assert_eq!(display(&shown, "s1", "B1"), "999");
     assert_eq!(display(&shown, "s1", "C1"), "45000");
-    assert_eq!(display(&shown, "s1", "D1"), "");
+    assert_eq!(display(&shown, "s1", "D1"), "2");
     let written = provider
         .bytes_to_write(&session.instance, bold.commit.revision.clone())
         .unwrap();
     assert_eq!(value(&written, 0, "B1"), Value::Number(999.0));
     assert_eq!(value(&written, 0, "C1"), Value::Number(45000.0));
-    assert_eq!(value(&written, 0, "D1"), Value::Empty);
+    assert_eq!(value(&written, 0, "D1"), Value::Number(2.0));
 
     // Una cella letta da B1 cambia: B1 si ricalcola.
     let typed = give(
@@ -949,6 +950,12 @@ fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
         "s1",
     );
     assert_eq!(display(&shown, "s1", "B1"), "20");
+    assert_eq!(display(&shown, "s1", "D1"), "3");
+    let written = provider
+        .bytes_to_write(&session.instance, typed.commit.revision.clone())
+        .unwrap();
+    assert_eq!(value(&written, 0, "B1"), Value::Number(20.0));
+    assert_eq!(value(&written, 0, "D1"), Value::Number(3.0));
 }
 
 /// Modificare un commento cambia il suo testo e tiene il thread: le risposte
@@ -1046,6 +1053,30 @@ fn incollare_da_un_intervallo_della_cartella_porta_formule_e_si_rifa() {
     assert_eq!(input(&shown, "s1", "A2"), "");
 }
 
+/// Un testo che sembra una formula esce negli appunti con l'apostrofo davanti
+/// (patch `0012-formule-come-testo` di GridCraft): un altro foglio di
+/// calcolo che lo incolla lo scrive come testo e non lo esegue. Un numero
+/// negativo resta un numero.
+#[test]
+fn negli_appunti_un_testo_che_sembra_una_formula_resta_testo() {
+    let body = r#"<dimension ref="A1:C1"/><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>=HYPERLINK("http://x","y")</t></is></c><c r="B1" t="inlineStr"><is><t>@SUM(1)</t></is></c><c r="C1"><v>-5</v></c></row></sheetData>"#;
+    let bytes = one_sheet(body);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let copied = give(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        command("fub.copyHtml", r#"{"range":"A1:C1"}"#, "A1"),
+    )
+    .unwrap();
+    let result: serde_json::Value =
+        serde_json::from_str(copied.result.as_deref().unwrap()).unwrap();
+    assert_eq!(
+        result["text"],
+        "\"'=HYPERLINK(\"\"http://x\"\",\"\"y\"\")\"\t'@SUM(1)\t-5\n"
+    );
+}
+
 #[test]
 fn copiare_in_html_legge_soltanto_e_i_parametri_sbagliati_si_rifiutano() {
     let bytes = one_sheet(BODY);
@@ -1091,4 +1122,67 @@ fn copiare_in_html_legge_soltanto_e_i_parametri_sbagliati_si_rifiutano() {
     }
     let shown = cells(&mut provider, &session.instance, &session.revision, "s1");
     assert_eq!(input(&shown, "s1", "C1"), "");
+}
+
+/// IMP-028: il file salva `0` per una formula su un riferimento circolare
+/// (come Excel), e la griglia apre senza ricalcolare. Riaperta, la cella dice
+/// `#CIRC!` e la cartella porta l'avviso, non uno `0` muto; una formula che
+/// vale `0` senza giro resta `0`.
+#[test]
+fn una_formula_circolare_resta_un_errore_dopo_il_salvataggio() {
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let written = apply(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        &[
+            ("C3", "=C3+1"),
+            ("D1", "=D2"),
+            ("D2", "=D1*2"),
+            ("E1", "=0*1"),
+        ],
+    )
+    .unwrap();
+    let shown = cells(&mut provider, &session.instance, &written.revision, "s1");
+    assert_eq!(display(&shown, "s1", "C3"), "#CIRC!");
+    let saved = provider
+        .bytes_to_write(&session.instance, written.revision.clone())
+        .unwrap();
+    assert_eq!(value(&saved, 0, "C3"), Value::Number(0.0));
+
+    let (mut again, reopened) = open(&saved, &GridJournal::new());
+    let circular: Vec<_> = reopened
+        .notices
+        .iter()
+        .filter(|notice| notice.code == "circular")
+        .collect();
+    assert_eq!(circular.len(), 1);
+    assert_eq!(circular[0].count, 3);
+    let shown = cells(&mut again, &reopened.instance, &reopened.revision, "s1");
+    for at in ["C3", "D1", "D2"] {
+        assert_eq!(display(&shown, "s1", at), "#CIRC!", "{at}");
+    }
+    assert_eq!(display(&shown, "s1", "E1"), "0");
+
+    // Corretta la formula, la cella mostra il suo valore.
+    let fixed = apply(
+        &mut again,
+        &reopened.instance,
+        &reopened.revision,
+        &[("C3", "=1+1")],
+    )
+    .unwrap();
+    let shown = cells(&mut again, &reopened.instance, &fixed.revision, "s1");
+    assert_eq!(display(&shown, "s1", "C3"), "2");
+}
+
+/// Senza giri la cartella non ha l'avviso.
+#[test]
+fn una_cartella_senza_giri_non_ha_l_avviso_circolare() {
+    let (_, session) = open(&one_sheet(BODY), &GridJournal::new());
+    assert!(session
+        .notices
+        .iter()
+        .all(|notice| notice.code != "circular"));
 }

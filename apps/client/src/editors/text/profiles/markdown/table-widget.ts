@@ -7,22 +7,33 @@
 // `dispatch` della tastiera (`userEvent: "input"`), quindi entrano nella
 // cronologia locale della superficie e nella sessione del documento come ogni
 // battuta; annulla e ripeti sono quelli nativi dell'editor.
-import { Prec, type Extension } from "@codemirror/state";
+import { Prec, Transaction, type Extension, type TransactionSpec } from "@codemirror/state";
 import { EditorView, ViewPlugin, WidgetType, keymap, type ViewUpdate } from "@codemirror/view";
 import { redo, undo } from "@codemirror/commands";
+import { resolvedLanguage } from "../../../../i18n/strings";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { notify } from "../../../../ui/notify";
+import { withLineBreaks } from "../../line-breaks";
+import { followPath, followWikilink, textLinkGesture, type WikilinkFollow } from "./link-gesture";
+import { routeHref } from "./link-syntax";
 import { mountMathBlocks } from "./math";
+import { frontmatterLanguage } from "./proof";
 import type { MarkdownBlock } from "./render-types";
 import {
   cellAtOffset,
   cellContentStart,
   parseTable,
   tableChanges,
+  tableChangesSince,
+  tableWidth,
   type GridPosition,
   type ParsedTable,
   type TableData,
 } from "./table-model";
-import { TableGrid, type TableGridActions } from "./table-grid";
+import { generatedChartAfter, tableChart } from "./table-chart";
+import { proposesSheet, sheetCells, type TableSheetPort } from "./table-sheet";
+import { TableGrid, type TableChartAction, type TableGridActions } from "./table-grid";
+import { liveStrings } from "./strings";
 
 /// Ciò che chi monta l'editor vuole sapere della griglia attiva: la barra di
 /// formattazione le chiede lo stato delle azioni e gliele fa eseguire.
@@ -33,13 +44,28 @@ export interface TableGridCallbacks {
   changed(): void;
 }
 
-export interface TableWidgetCallbacks {
+/// «Trasforma in foglio» (T52): la nota aperta e chi scrive il foglio.
+export interface TableSheetHost {
+  doc(): string;
+  readonly port: TableSheetPort;
+}
+
+export interface TableWidgetCallbacks extends WikilinkFollow {
   openWikilink(page: string, heading: string | null, block: string | null): void;
   searchTag(tag: string): void;
   readonly tableGrid?: TableGridCallbacks;
+  readonly tableSheet?: TableSheetHost;
 }
 
 type GridSelection = { anchor: GridPosition; focus: GridPosition };
+
+/// Quanto testo sotto la tabella si guarda per ritrovare il grafico scritto
+/// da «Grafico da questa tabella» (T54).
+const CHART_LOOKAHEAD = 64 * 1024;
+
+/// Le viste a cui una tabella grande ha già proposto il foglio (T52): una
+/// volta per nota aperta, non a ogni ridisegno.
+const proposed = new WeakSet<EditorView>();
 
 /// La griglia montata di ogni widget, per elemento.
 const controllers = new WeakMap<HTMLElement, TableController>();
@@ -66,6 +92,11 @@ class TableController {
   #widget: TableWidget;
   #parsed: ParsedTable;
   readonly #observer: ResizeObserver | null = null;
+  /// Le battute della cella aperta già scritte nel testo, fuori dalla
+  /// cronologia: `base` è la tabella prima della prima battuta, `last` com'è
+  /// dopo l'ultima. La scrittura di conferma le raccoglie in un solo passo
+  /// d'annulla (IMP-6100).
+  #typing: { readonly base: string; readonly last: string } | null = null;
 
   constructor(view: EditorView, widget: TableWidget, parsed: ParsedTable) {
     this.#view = view;
@@ -73,6 +104,7 @@ class TableController {
     this.#parsed = parsed;
     this.grid = new TableGrid({
       write: (next, select) => this.#write(next, select),
+      draft: (next, select) => this.#draft(next, select),
       readOnly: () => this.#view.state.readOnly || this.#widget.readOnly,
       undo: () => void undo({ state: this.#view.state, dispatch: (tr) => this.#view.dispatch(tr) }),
       redo: () => void redo({ state: this.#view.state, dispatch: (tr) => this.#view.dispatch(tr) }),
@@ -80,6 +112,7 @@ class TableController {
       cellHtml: (row, col) => this.#cellHtml(row, col),
       hydrate: (container) => mountMathBlocks(container),
       activate: (event) => this.#activate(event),
+      language: () => frontmatterLanguage(this.#view.state),
       focused: () => {
         activeGrids.set(this.#view, this.grid);
         this.#widget.callbacks.tableGrid?.active(this.grid);
@@ -87,11 +120,14 @@ class TableController {
       changed: () => {
         if (activeGrids.get(this.#view) === this.grid) this.#widget.callbacks.tableGrid?.changed();
       },
+      chart: () => this.#chart(),
+      sheet: () => this.#sheet(),
     }, parsed);
     if (typeof ResizeObserver !== "undefined") {
       this.#observer = new ResizeObserver(() => this.#view.requestMeasure());
       this.#observer.observe(this.grid.element);
     }
+    this.#propose(parsed);
   }
 
   /// Un widget nuovo per la stessa tabella: la griglia si aggiorna sul posto.
@@ -99,6 +135,52 @@ class TableController {
     this.#widget = widget;
     this.#parsed = parsed;
     this.grid.update(parsed);
+    this.#propose(parsed);
+  }
+
+  /// Una tabella oltre le 200 righe o le 30 colonne si legge meglio in un
+  /// foglio: la nota lo propone una volta, con la voce che lo fa.
+  #propose(parsed: ParsedTable): void {
+    const view = this.#view;
+    if (proposed.has(view) || !proposesSheet(parsed.rows.length - 1, tableWidth(parsed))) return;
+    // Dopo il disegno: il widget si costruisce dentro un aggiornamento della
+    // vista, e la tabella si ritrova nel testo solo quando è montata.
+    queueMicrotask(() => {
+      if (proposed.has(view) || this.#sheet() === null) return;
+      proposed.add(view);
+      notify(liveStrings.t("table_sheet.propose"), "info", {
+        label: liveStrings.t("table_sheet.menu"),
+        run: () => this.#sheet()?.(),
+      });
+    });
+  }
+
+  /// «Trasforma in foglio» (T52): la voce c'è se chi monta l'editor sa
+  /// scrivere il foglio e la nota si scrive.
+  #sheet(): (() => void) | null {
+    const host = this.#widget.callbacks.tableSheet;
+    if (!host || this.#view.state.readOnly || this.#widget.readOnly || this.locate() === null) return null;
+    return () => void this.#turnIntoSheet(host);
+  }
+
+  async #turnIntoSheet(host: TableSheetHost): Promise<void> {
+    const view = this.#view;
+    // La tabella di adesso: il testo può essere cambiato da quando il menu
+    // si è aperto.
+    const located = this.locate();
+    if (!located) {
+      notify(liveStrings.t("table_sheet.failed"), "info");
+      return;
+    }
+    const locale = frontmatterLanguage(view.state) ?? resolvedLanguage();
+    const cells = sheetCells(located.parsed.rows, tableWidth(located.parsed), locale);
+    // I byte UTF-8 del file com'è sul disco: `sliceDoc` rende gli a capo del
+    // file, anche i `\r`.
+    const encoder = new TextEncoder();
+    const start = encoder.encode(view.state.sliceDoc(0, located.from)).length;
+    const text = view.state.sliceDoc(located.from, located.to);
+    const failed = await host.port.turn({ doc: host.doc(), at: [start, start + encoder.encode(text).length], text, cells });
+    if (failed !== null) notify(failed, "guasto");
   }
 
   /// Dove sta adesso la tabella, e la sua sorgente se è ancora quella che la
@@ -110,8 +192,10 @@ class TableController {
     } catch {
       return null;
     }
+    // La sorgente va a capo con "\n", come `doc.sliceString`: la sua lunghezza
+    // è in posizioni anche in una nota CRLF.
     const source = this.#parsed.source;
-    if (this.#view.state.sliceDoc(start, start + source.length) !== source) return null;
+    if (this.#view.state.doc.sliceString(start, start + source.length) !== source) return null;
     return { from: start, to: start + source.length, parsed: this.#parsed };
   }
 
@@ -128,17 +212,136 @@ class TableController {
     const view = this.#view;
     const located = this.locate();
     if (!located || view.state.readOnly) return false;
-    const changes = tableChanges(located.parsed, next).map((change) => ({
-      from: located.from + change.from,
-      to: located.from + change.to,
-      insert: change.insert,
-    }));
-    if (changes.length === 0) return true;
+    const typing = this.#typing;
+    this.#typing = null;
+    // Le battute della cella sono già nel testo, fuori dalla cronologia: si
+    // torna alla tabella di prima e si scrive quella nuova nello stesso
+    // aggiornamento della vista. La cronologia registra un passo solo, da
+    // prima della cella a dopo; chi annulla la cella ritrova i byte di prima.
+    // Se intanto la tabella è cambiata da un'altra parte, le battute restano
+    // come sono e si scrive soltanto la differenza.
+    const base = typing !== null && typing.last === located.parsed.source && typing.base !== typing.last
+      ? parseTable(typing.base)
+      : null;
+    if (typing !== null && base !== null) {
+      const revert = view.state.update({
+        changes: { from: located.from, to: located.to, insert: withLineBreaks(view.state, typing.base) },
+        annotations: Transaction.addToHistory.of(false),
+        userEvent: "input",
+        // Rimette testo che c'era già: i filtri della battuta non c'entrano.
+        filter: false,
+      });
+      const transactions = [revert];
+      const spec = this.#changes(revert.state, located.from, base, next);
+      if (spec !== null) transactions.push(revert.state.update(spec));
+      pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
+      view.dispatch(transactions);
+      if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
+      return true;
+    }
+    const spec = this.#changes(view.state, located.from, located.parsed, next);
+    if (spec === null) return true;
     pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
-    view.dispatch({ changes, userEvent: "input" });
+    view.dispatch(spec);
     // La stessa griglia è stata aggiornata sul posto: niente da rimettere.
     if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
     return true;
+  }
+
+  /// La battuta che porta la tabella `from`, letta come `parsed`, a `next`;
+  /// `null` se sono uguali.
+  #changes(state: EditorView["state"], from: number, parsed: ParsedTable, next: TableData): TransactionSpec | null {
+    const changes = tableChanges(parsed, next).map((change) => ({
+      from: from + change.from,
+      to: from + change.to,
+      insert: withLineBreaks(state, change.insert),
+    }));
+    return changes.length === 0 ? null : { changes, userEvent: "input" };
+  }
+
+  /// Una battuta nella cella aperta: entra nel testo subito, come ogni
+  /// battuta (sessione, bozza, salvataggio), ma fuori dalla cronologia. La
+  /// conferma la registra (`#write`).
+  #draft(next: TableData, selection: GridSelection): boolean {
+    const view = this.#view;
+    const located = this.locate();
+    if (!located || view.state.readOnly) return false;
+    // Una tabella cambiata sotto (un altro riquadro, un annulla) chiude la
+    // serie: da qui si riparte dalla tabella di adesso.
+    const typing = this.#typing !== null && this.#typing.last === located.parsed.source ? this.#typing : null;
+    const base = typing?.base ?? located.parsed.source;
+    const parsedBase = typing ? parseTable(base) : located.parsed;
+    if (!parsedBase) return false;
+    const changes = tableChangesSince(parsedBase, located.parsed.source, next).map((change) => ({
+      from: located.from + change.from,
+      to: located.from + change.to,
+      insert: withLineBreaks(view.state, change.insert),
+    }));
+    if (changes.length === 0) return true;
+    const spec: TransactionSpec = { changes, userEvent: "input" };
+    pending.set(view, { from: located.from, selection, focused: this.grid.hasFocus() });
+    view.dispatch({ ...spec, annotations: Transaction.addToHistory.of(false) });
+    if (controllers.get(this.grid.element) === this && this.grid.element.isConnected) pending.delete(view);
+    const after = this.locate();
+    this.#typing = after ? { base, last: after.parsed.source } : null;
+    return true;
+  }
+
+  /// «Grafico da questa tabella» (T54): il recinto coi valori di adesso, se la
+  /// tabella ne ha uno, e se sotto c'è già quello da rigenerare.
+  #chartPlan(): { readonly from: number; readonly to: number; readonly insert: string; readonly regenerate: boolean } | null {
+    const view = this.#view;
+    const located = this.locate();
+    if (!located || view.state.readOnly || this.#widget.readOnly) return null;
+    const locale = frontmatterLanguage(view.state) ?? resolvedLanguage();
+    const date = new Intl.DateTimeFormat(resolvedLanguage(), { dateStyle: "medium" }).format(new Date());
+    const fence = tableChart(located.parsed, locale, liveStrings.t("table_chart.note", { date }));
+    if (fence === null) return null;
+    const doc = view.state.doc;
+    // Il grafico di prima sta subito sotto: basta guardare fin dove arriva un
+    // recinto ragionevole.
+    const after = doc.sliceString(located.to, Math.min(doc.length, located.to + CHART_LOOKAHEAD));
+    const existing = generatedChartAfter(after);
+    if (existing) {
+      return { from: located.to + existing.from, to: located.to + existing.to, insert: fence, regenerate: true };
+    }
+    // Sotto la tabella, con una riga vuota prima e, se il testo continua
+    // subito, una dopo. La tabella può finire col suo a capo o subito prima.
+    const endsLine = located.to > 0 && doc.sliceString(located.to - 1, located.to) === "\n";
+    let lead: string;
+    let tail: string;
+    if (endsLine) {
+      lead = "\n";
+      tail = after === "" || /^[ \t]*(?:\n|$)/u.test(after) ? "\n" : "\n\n";
+    } else {
+      lead = "\n\n";
+      tail = /^\n[ \t]*\S/u.test(after) ? "\n" : "";
+    }
+    return { from: located.to, to: located.to, insert: `${lead}${fence}${tail}`, regenerate: false };
+  }
+
+  #chart(): TableChartAction | null {
+    const plan = this.#chartPlan();
+    if (plan === null) return null;
+    return {
+      regenerate: plan.regenerate,
+      run: () => {
+        // Il testo può essere cambiato da quando il menu si è aperto: si
+        // rifà il conto su quello di adesso.
+        const now = this.#chartPlan();
+        if (now === null) {
+          notify(liveStrings.t("table_chart.failed"), "info");
+          return;
+        }
+        const view = this.#view;
+        view.dispatch({
+          changes: { from: now.from, to: now.to, insert: withLineBreaks(view.state, now.insert) },
+          userEvent: "input",
+          scrollIntoView: true,
+        });
+        notify(liveStrings.t(now.regenerate ? "table_chart.rewritten" : "table_chart.written"), "info");
+      },
+    };
   }
 
   /// Rimette il cursore nel testo prima o dopo la tabella. Una tabella in
@@ -155,12 +358,12 @@ class TableController {
     if (where === "before") {
       const first = doc.lineAt(located.from);
       if (first.number > 1) view.dispatch({ selection: { anchor: doc.line(first.number - 1).to }, scrollIntoView: true });
-      else if (writable) view.dispatch({ changes: { from: first.from, insert: "\n" }, selection: { anchor: first.from }, userEvent: "input" });
+      else if (writable) view.dispatch({ changes: { from: first.from, insert: view.state.lineBreak }, selection: { anchor: first.from }, userEvent: "input" });
     } else {
       const last = doc.lineAt(located.to);
       if (last.number < doc.lines) view.dispatch({ selection: { anchor: doc.line(last.number + 1).from }, scrollIntoView: true });
       else if (writable) {
-        view.dispatch({ changes: { from: doc.length, insert: "\n" }, selection: { anchor: doc.length + 1 }, userEvent: "input" });
+        view.dispatch({ changes: { from: doc.length, insert: view.state.lineBreak }, selection: { anchor: doc.length + 1 }, userEvent: "input" });
       }
     }
     view.focus();
@@ -172,28 +375,42 @@ class TableController {
     return this.#widget.block.cells?.get(start) ?? null;
   }
 
-  /// Mod+clic su ciò che una cella rende: un link a una nota, un tag, un
-  /// indirizzo esterno che il sanificatore lascia passare.
+  /// Il clic su ciò che una cella rende, con la regola del testo che si
+  /// scrive (`link-gesture.ts`: la cella si scrive, il clic semplice la
+  /// sceglie): Mod col clic (Cmd sul Mac) segue un link a una nota come dice
+  /// `editor.link-click`, un tag, un indirizzo esterno che il sanificatore
+  /// lascia passare; Alt col clic sbircia un link a una nota.
   #activate(event: MouseEvent): boolean {
     const target = event.target instanceof Element ? event.target : null;
-    if (!target) return false;
+    const gesture = textLinkGesture(event);
+    if (!target || !gesture) return false;
     const callbacks = this.#widget.callbacks;
     const wiki = target.closest<HTMLElement>("[data-wikilink-page]");
     if (wiki) {
-      callbacks.openWikilink(
+      void followWikilink(
+        callbacks,
         wiki.dataset.wikilinkPage ?? "",
         wiki.dataset.wikilinkHeading ?? null,
         wiki.dataset.wikilinkBlock ?? null,
+        gesture,
       );
       return true;
     }
+    const anchor = target.closest<HTMLAnchorElement>("a[href]");
+    const href = anchor?.getAttribute("href") ?? "";
+    if (anchor && href !== "" && isAllowedLink(href) && callbacks.openPath) {
+      const route = routeHref(href);
+      if (route.kind === "path" && route.path !== "") {
+        void followPath(callbacks, route.path, gesture);
+        return true;
+      }
+    }
+    if (gesture === "peek") return false;
     const tag = target.closest<HTMLElement>(".tag[data-tag]");
     if (tag) {
       callbacks.searchTag(tag.dataset.tag ?? "");
       return true;
     }
-    const anchor = target.closest<HTMLAnchorElement>("a[href]");
-    const href = anchor?.getAttribute("href") ?? "";
     if (anchor && /^[a-z][\w+.-]*:/i.test(href) && isAllowedLink(href)) {
       window.open(href, "_blank", "noopener,noreferrer");
       return true;
@@ -296,9 +513,11 @@ function enter(view: EditorView, direction: 1 | -1): boolean {
 const theme = EditorView.baseTheme({
   ".tb-frame": { position: "relative", padding: "0.2em 0 0.4em" },
   ".tb-grid": { position: "relative", overflowX: "auto", outline: "none", padding: "2px" },
-  ".tb-grid table": { borderCollapse: "collapse", margin: "0" },
+  // Bordi separati: solo così la cornice della tabella arrotonda gli angoli.
+  ".tb-grid table": { borderCollapse: "separate", borderSpacing: "0", margin: "0" },
   // Le testate a riposo sono trasparenti, non nascoste: la riga delle lettere
   // resta una riga di intestazioni anche per chi legge con la sintesi.
+  // Compaiono col fuoco nella tabella, come nel prototipo (`.gr-let`).
   ".tb-grid .tb-corner, .tb-grid .tb-letter, .tb-grid .tb-rowhead": {
     opacity: "0",
     border: "none",
@@ -311,7 +530,7 @@ const theme = EditorView.baseTheme({
     userSelect: "none",
     cursor: "pointer",
   },
-  ".tb-grid:focus-within .tb-letter, .tb-grid:focus-within .tb-rowhead, .tb-grid:focus-within .tb-corner, .tb-grid:hover .tb-letter, .tb-grid:hover .tb-rowhead": {
+  ".tb-grid:focus-within .tb-letter, .tb-grid:focus-within .tb-rowhead, .tb-grid:focus-within .tb-corner": {
     opacity: "1",
   },
   ".tb-grid .tb-letter.is-selected, .tb-grid .tb-rowhead.is-selected": {
@@ -367,6 +586,21 @@ const theme = EditorView.baseTheme({
   ".tb-add[hidden]": { display: "none" },
 });
 
+/// La selezione tutta dentro una tabella montata entra nella sua griglia,
+/// sulla cella dove sta: `true` se una tabella l'ha presa.
+function enterSelectedGrid(view: EditorView): boolean {
+  const main = view.state.selection.main;
+  if (view.state.selection.ranges.length > 1) return false;
+  for (const controller of mounted(view)) {
+    const located = controller.locate();
+    if (!located || main.from <= located.from || main.to >= located.to) continue;
+    const cell = cellAtOffset(located.parsed, main.head - located.from);
+    if (cell) queueMicrotask(() => controller.grid.focus(cell));
+    return true;
+  }
+  return false;
+}
+
 /// La parte della Live che conosce le griglie: la tastiera per entrarci, la
 /// griglia attiva che si spegne quando il fuoco torna al testo, e la
 /// selezione portata in una tabella da fuori che vi entra sulla cella giusta.
@@ -384,15 +618,12 @@ export function tableGrids(callbacks: TableWidgetCallbacks): Extension {
       // selezionata — entra nella griglia sulla cella di chi l'ha portata lì.
       // Vale anche per il fuoco che torna al testo con la selezione ancora lì:
       // scrivere nella sorgente nascosta di una tabella non è un gesto possibile.
-      const main = view.state.selection.main;
       if (view.state.selection.ranges.length > 1) return;
-      for (const controller of mounted(view)) {
-        const located = controller.locate();
-        if (!located || main.from <= located.from || main.to >= located.to) continue;
-        const cell = cellAtOffset(located.parsed, main.head - located.from);
-        if (cell) queueMicrotask(() => controller.grid.focus(cell));
-        return;
-      }
+      // La griglia di una tabella appena scritta (il «/», la barra) nasce col
+      // disegno, che viene dopo i plugin: si cerca anche lì, prima della
+      // battuta che segue, perché il testo vada nella cella e non accanto
+      // alla tabella.
+      if (!enterSelectedGrid(view)) queueMicrotask(() => { if (view.hasFocus) enterSelectedGrid(view); });
     }
   });
   return [

@@ -4,6 +4,15 @@ import type { SettingEntry, ThemeInfo, ThemeManifest, ThemePayload } from "../ho
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import sheetLight from "./scrittoio/sheet-light.css?raw";
 import skin from "./scrittoio/skin.css?raw";
+import { mountedCss } from "./loader";
+
+// Ogni prova ricarica il modulo del tema da zero (`vi.resetModules`) e monta
+// fogli veri in happy-dom: è lavoro di CPU, fra 0,2 e 0,6 s da sola, e su una
+// macchina molto carica superava i 5 s di default. Le attese dentro le prove
+// sono legate al segnale del codice (`settled`), non all'orologio; questo è
+// solo il tetto di sicurezza, largo, e un montaggio fermo resta fermo ben oltre.
+vi.setConfig({ testTimeout: 20_000 });
+
 const thirdPartySheet = sheetLight.replace(
   "  color-scheme: light;",
   "  color-scheme: normal;",
@@ -84,6 +93,22 @@ function row(key: string, value: string, source: SettingEntry["source"] = "machi
 let lifetime: Lifetime | undefined;
 afterEach(() => lifetime?.close());
 
+/// Il modulo del tema dell'ultimo `mountFromCache`: `vi.resetModules` ne dà uno
+/// nuovo a ogni montaggio.
+let current: typeof import("./theme") | undefined;
+
+/// Aspetta che l'ultimo `mountTheme` sia arrivato in fondo: la sua prima
+/// lettura di impostazioni e catalogo è applicata, comunque sia andata.
+/// È il segnale che il codice dà allo strato d'avvio (`whenThemeSettled`), e
+/// lega l'attesa a quel fatto invece che all'orologio: un `vi.waitFor` riprova
+/// per un secondo, e su una macchina carica scadeva prima che il montaggio
+/// finisse. Dopo il segnale lo stato è quello definitivo, quindi le asserzioni
+/// che seguono lo guardano di un colpo solo.
+function settled(): Promise<void> {
+  if (!current) throw new Error("nessun tema montato");
+  return current.whenThemeSettled();
+}
+
 async function mountFromCache(id: string, light = "light" as const) {
   lifetime?.close();
   lifetime = openLifetime();
@@ -93,12 +118,14 @@ async function mountFromCache(id: string, light = "light" as const) {
   // Dynamic import is intentional: each case models a fresh webview module and
   // exercises cache loading rather than retaining the prior catalog singleton.
   const theme = await import("./theme");
+  current = theme;
   theme.mountTheme(lifetime, vi.fn());
   return theme;
 }
 
 beforeEach(() => {
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
   delete document.documentElement.dataset.theme;
   delete document.documentElement.dataset.contrast;
   localStorage.clear();
@@ -114,9 +141,8 @@ describe("tema runtime installato", () => {
     box.listThemes.mockResolvedValue([info]);
     box.readTheme.mockResolvedValue(payload);
     await mountFromCache(info.manifest.id);
-    await vi.waitFor(() =>
-      expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(thirdPartySheet),
-    );
+    await settled();
+    expect(mountedCss("foglio")).toBe(thirdPartySheet);
     expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!)).toEqual({
       id: "acme.paper",
       light: "light",
@@ -133,9 +159,8 @@ describe("tema runtime installato", () => {
       return payload;
     });
     const theme = await mountFromCache(info.manifest.id);
-    await vi.waitFor(() =>
-      expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(thirdPartySheet),
-    );
+    await settled();
+    expect(mountedCss("foglio")).toBe(thirdPartySheet);
     expect((await theme.themeCatalog()).map((entry) => entry.manifest.id)).toEqual([manifest.id]);
   });
 
@@ -145,10 +170,9 @@ describe("tema runtime installato", () => {
   ])("falls back atomically when the bundle is %s", async (_reason, themes, _detail) => {
     box.listThemes.mockResolvedValue(themes);
     await mountFromCache(info.manifest.id);
-    await vi.waitFor(() =>
-      expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
-    );
-    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
+    await settled();
+    expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie");
+    expect(mountedCss("foglio")).toBe(sheetLight);
     expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!)).toEqual({
       id: "fub.serie",
       light: "light",
@@ -159,11 +183,10 @@ describe("tema runtime installato", () => {
     box.listThemes.mockResolvedValue([info]);
     box.readTheme.mockResolvedValue({ ...payload, sheet: "body { display: grid; }" });
     await mountFromCache(info.manifest.id);
-    await vi.waitFor(() =>
-      expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
-    );
+    await settled();
+    expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie");
 
-    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).not.toBe(
+    expect(mountedCss("foglio")).not.toBe(
       "body { display: grid; }",
     );
   });
@@ -175,25 +198,41 @@ describe("tema runtime installato", () => {
     box.listThemes.mockResolvedValue([{ manifest: older, trust: "community" }]);
     box.readTheme.mockResolvedValue({ ...payload, manifest: older });
     await mountFromCache(info.manifest.id);
-    await vi.waitFor(() =>
-      expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
-    );
-    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
+    await settled();
+    expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie");
+    expect(mountedCss("foglio")).toBe(sheetLight);
     const reasons = box.report.mock.calls.flatMap(([trouble]) => (trouble as { reasons: string[] }).reasons);
     expect(reasons.some((reason) => reason.includes("engine") && reason.includes("theme-2"))).toBe(true);
+  });
+
+  // Un tema che lascia il foglio alla serie (`sheet: null`) si monta col
+  // foglio di serie della sua luce: la pelle di serie resta in `pelle` e la
+  // sua si aggiunge in `pelle-tema` (ADR 0240).
+  it("un tema con extends senza il foglio della luce si monta sopra la serie", async () => {
+    const extending: ThemeManifest = { ...manifest, extends: "fub.serie" };
+    const themeSkin = ".shell-tooltip { white-space: nowrap; }";
+    box.listThemes.mockResolvedValue([{ manifest: extending, trust: "community" }]);
+    box.readTheme.mockResolvedValue({ ...payload, manifest: extending, sheet: null, skin: themeSkin });
+    const theme = await mountFromCache(info.manifest.id);
+    await settled();
+    expect(mountedCss("pelle-tema")).toBe(themeSkin);
+    expect(theme.currentThemeId()).toBe(info.manifest.id);
+    expect(mountedCss("foglio")).toBe(sheetLight);
+    expect(mountedCss("pelle")).toBe(skin);
+    expect(box.report).not.toHaveBeenCalled();
   });
 
   it("does not reactivate a removed theme after a restart", async () => {
     box.listThemes.mockResolvedValue([info]);
     box.readTheme.mockResolvedValue(payload);
     await mountFromCache(info.manifest.id);
-    await vi.waitFor(() =>
-      expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(thirdPartySheet),
-    );
+    await settled();
+    expect(mountedCss("foglio")).toBe(thirdPartySheet);
 
     box.listThemes.mockResolvedValue([]);
     const theme = await mountFromCache(info.manifest.id);
-    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("fub.serie"));
+    await settled();
+    expect(theme.currentThemeId()).toBe("fub.serie");
     expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!)).toEqual({
       id: "fub.serie",
       light: "light",
@@ -208,17 +247,20 @@ describe("tema runtime installato", () => {
     const theme = await mountFromCache("fub.serie");
     box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.theme-id", "acme.paper")]);
     theme.mountTheme(lifetime!, vi.fn());
-    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("acme.paper"));
+    await settled();
+    expect(theme.currentThemeId()).toBe("acme.paper");
   });
 
   it("un id scritto che non regge la luce ricade sul tema di serie", async () => {
     box.listThemes.mockResolvedValue([info]);
     box.readTheme.mockResolvedValue(payload);
     const theme = await mountFromCache(info.manifest.id);
-    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("acme.paper"));
+    await settled();
+    expect(theme.currentThemeId()).toBe("acme.paper");
     box.settings.mockResolvedValue([...settingsRows("dark"), row("appearance.theme-id", "acme.paper")]);
     theme.mountTheme(lifetime!, vi.fn());
-    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("fub.serie"));
+    await settled();
+    expect(theme.currentThemeId()).toBe("fub.serie");
   });
 
   it("un id mai scritto lascia decidere la cache, come prima", async () => {
@@ -228,7 +270,8 @@ describe("tema runtime installato", () => {
     const theme = await mountFromCache(info.manifest.id);
     box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.theme-id", "fub.serie", "default")]);
     theme.mountTheme(lifetime!, vi.fn());
-    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("acme.paper"));
+    await settled();
+    expect(theme.currentThemeId()).toBe("acme.paper");
   });
 
   // Le scelte che il tema dichiara si leggono dal registro delle impostazioni
@@ -264,7 +307,8 @@ describe("tema runtime installato", () => {
     ]);
     theme.mountTheme(lifetime!, vi.fn());
     const root = document.documentElement;
-    await vi.waitFor(() => expect(root.getAttribute("data-opt-trama")).toBe("grossa"));
+    await settled();
+    expect(root.getAttribute("data-opt-trama")).toBe("grossa");
     // Mai scelta: vale il default dichiarato dal tema.
     expect(root.getAttribute("data-opt-bordi")).toBe("true");
     expect(theme.currentThemeOptions()).toMatchObject({
@@ -278,8 +322,9 @@ describe("tema runtime installato", () => {
 
     box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.theme-id", "fub.serie")]);
     theme.mountTheme(lifetime!, vi.fn());
-    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("fub.serie"));
-    await vi.waitFor(() => expect(root.hasAttribute("data-opt-trama")).toBe(false));
+    await settled();
+    expect(theme.currentThemeId()).toBe("fub.serie");
+    expect(root.hasAttribute("data-opt-trama")).toBe(false);
     expect(root.hasAttribute("data-opt-bordi")).toBe(false);
     expect(theme.currentThemeOptions()).toMatchObject({ themeId: "fub.serie", options: [] });
   });
@@ -288,12 +333,14 @@ describe("tema runtime installato", () => {
     const theme = await mountFromCache("fub.serie");
     box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.motion", "reduced")]);
     theme.mountTheme(lifetime!, vi.fn());
-    await vi.waitFor(() => expect(document.documentElement.dataset.motion).toBe("reduced"));
+    await settled();
+    expect(document.documentElement.dataset.motion).toBe("reduced");
     const motion = await import("./reduced-motion");
     expect(motion.reducedMotion()).toBe(true);
     box.settings.mockResolvedValue(settingsRows("light"));
     theme.mountTheme(lifetime!, vi.fn());
-    await vi.waitFor(() => expect(document.documentElement.dataset.motion).toBeUndefined());
+    await settled();
+    expect(document.documentElement.dataset.motion).toBeUndefined();
     expect(motion.reducedMotion()).toBe(false);
   });
 });

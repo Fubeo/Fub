@@ -8,8 +8,10 @@ import "../../theme/scrittoio/structure.css";
 import "./declare";
 import { consegna } from "../../avvio/consegna";
 import { startup as shellStartup } from "../../desktop-shell";
+import { warmFonts } from "../../theme/font-warmup";
 import { themeChoices, whenThemeSettled } from "../../theme/theme";
 import { openLifetime, type Teardown } from "../../ui/lifetime";
+import { warmups } from "../../ui/warmup";
 import { mountShellCommands } from "./commands";
 import { mountConfirm } from "./confirm";
 import { mountFrame } from "./frame";
@@ -40,6 +42,11 @@ export const startup: Promise<Teardown> = shellStartup.then(async (teardownShell
   // posto all'app, e solo dopo `startup` si risolve. Se la shell è caduta lo
   // strato resta, col guasto e Riprova.
   await consegna({ tema: { definitivo: whenThemeSettled, scelte: themeChoices }, vita: lifetime });
+  // Le prime volte care si scaldano a riposo, dopo la consegna (`ui/warmup.ts`):
+  // ciò che si è registrato montando la shell (il grafo), poi i caratteri che
+  // i menu e il lanciatore userebbero per primi.
+  lifetime.add(warmups.register((next) => warmFonts(next)));
+  warmups.start(lifetime);
   return () => {
     lifetime.close();
     teardownShell();

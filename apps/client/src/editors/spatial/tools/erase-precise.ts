@@ -21,7 +21,7 @@ import type { DocumentModel } from "../scene/model";
 import type { Elem } from "../scene/serialize";
 import { elemOf, fubAttributes, nodeOf, Plan, type Arranged } from "./arrange";
 import { removeOps, type NewIds } from "./edit";
-import type { Unit } from "./hit";
+import type { ForeignBlock, Unit } from "./hit";
 import { replaceElem } from "./topath";
 
 /// Un tratto tagliato: i pezzi che restano, già scritti.
@@ -103,8 +103,15 @@ function pieceElem(elem: Elem, piece: CutPiece): Elem {
 /// Prima si tolgono gli oggetti interi, come la gomma di sempre; poi si
 /// tagliano i tratti dall'ultimo al primo, così i pezzi aggiunti sopra un
 /// tratto non spostano quelli prima. Il percorso di ogni tratto tiene conto
-/// dei fratelli tolti davanti a lui.
-export function preciseEraseOps(model: DocumentModel, cuts: readonly StrokeCut[], whole: readonly Unit[], ids: NewIds): Arranged & { readonly cut: number } {
+/// dei fratelli tolti davanti a lui. I blocchi estranei di `foreign` se ne
+/// vanno interi, con gli oggetti interi.
+export function preciseEraseOps(
+  model: DocumentModel,
+  cuts: readonly StrokeCut[],
+  whole: readonly Unit[],
+  ids: NewIds,
+  foreign: readonly ForeignBlock[] = [],
+): Arranged & { readonly cut: number } {
   const plan = new Plan(model, ids);
   const gone = [...whole];
   const kept: Array<{ readonly cut: StrokeCut; readonly elem: Elem }> = [];
@@ -114,11 +121,10 @@ export function preciseEraseOps(model: DocumentModel, cuts: readonly StrokeCut[]
     else kept.push({ cut: each, elem });
   }
   kept.sort((a, b) => comparePaths(b.cut.unit.path, a.cut.unit.path));
-  const removed = removeOps(gone);
+  const removed = removeOps(gone, foreign);
   const shifted = (path: readonly number[]): number[] => {
     const out = [...path];
-    for (const unit of gone) {
-      const r = unit.path;
+    for (const r of [...gone.map((unit) => unit.path), ...foreign.map((block) => block.path)]) {
       if (r.length > out.length) continue;
       const depth = r.length - 1;
       if (r.slice(0, depth).every((step, i) => step === path[i]) && r[depth]! < path[depth]!) out[depth]! -= 1;

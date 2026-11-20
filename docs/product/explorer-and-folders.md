@@ -22,12 +22,44 @@ SVG, anche con prologo XML, commenti o `<!DOCTYPE>` prima di `<svg>`, si mostra
 come immagine inerte. HEIC e TIFF, che la webview non decodifica, mostrano un
 messaggio al posto dell'immagine e lasciano il file intatto.
 La finestra di duecento voci per livello vale per note e file insieme.
+Aprire una cartella rifà soltanto le sue righe, e si muove solo ciò che si
+vede: le voci visibili entrano una dopo l'altra e le righe sotto scivolano.
+Alla chiusura i figli sbiadiscono e le righe sotto risalgono in 140 ms,
+partendo piano (`ease-in-out`), dal bordo se prima non si vedevano. Un clic
+chiude il suggerimento della riga, come quello di ogni controllo, e non torna
+finché il puntatore resta fermo: non copre le voci appena aperte. Righe e
+appuntate rispondono soltanto al tasto sinistro: il centrale non apre né chiude
+una cartella e non apre una nota. Ctrl-clic (Cmd-clic sul Mac) aggiunge o
+toglie una nota dalla scelta, Maiusc-clic sceglie le note fra l'ultima toccata
+e questa, Ctrl-Spazio fa il Ctrl-clic da tastiera. La barra della scelta sta
+sotto l'albero, ferma in fondo alla colonna, così comparendo non sposta le
+righe sotto il puntatore: dice quante note sono scelte e offre «Sposta in…»,
+«In una cartella nuova», «Sposta nel cestino» e «Deseleziona»; Esc la azzera.
+Un clic semplice su una riga azzera la scelta e apre la nota. Un gesto della
+barra, o del menu del gruppo, prende le note scelte nel momento in cui parte:
+la scelta si svuota subito e resta vuota a gesto finito, così le note spostate
+non restano scelte e ciò che si sceglie mentre uno spostamento lungo va è una
+scelta nuova, che la fine del primo non tocca. Se il dialogo si annulla, o la
+cartella nuova non nasce, la scelta torna com'era. Una nota spostata,
+rinominata o cestinata, anche da un altro programma, esce subito dalla scelta:
+la barra non offre mai un percorso che non c'è più. «In una cartella nuova»
+crea la cartella dove stanno le note scelte se sono tutte nella stessa
+cartella, altrimenti nella radice visibile (il vault o lo spazio attivo), e il
+dialogo del nome lo dice prima («Nuova cartella in Progetti», «Nuova cartella
+nella radice»).
+Più note spostate insieme (dalla barra, dal trascinamento o in una cartella
+nuova) vanno una alla volta: un avviso dice a che punto sono («Sposto 60 note
+in Clienti: 12 di 60…»), e alla fine uno solo dice quante sono arrivate. Una
+nota che non si può spostare (la destinazione ha già una nota con quel nome,
+per esempio) resta dov'era, intera, e ha il suo avviso col nome e il motivo;
+il riepilogo dice quante restano indietro.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.
 «Mostra la cartella degli allegati», dalla palette, apre nell'albero la
 cartella di `files.attachment-folder`, dove finiscono gli allegati incollati o
-trascinati. Se la cartella non c'è ancora lo dice e non la crea: la crea il
+trascinati nelle note (i file portati sulla lavagna vanno dove dice
+`canvas.drop_folder`). Se la cartella non c'è ancora lo dice e non la crea: la crea il
 primo allegato. Una cartella che comincia con `./` segue la nota, come in
 Obsidian: con `./` l'allegato va accanto alla nota, con `./allegati` in una sua
 sottocartella, e un `![[foto.png]]` nudo si cerca prima lì. Il comando apre
@@ -36,9 +68,34 @@ con `./` una nota nuova nasce accanto a quella aperta, e vince sullo spazio
 attivo; una cartella scelta da chi crea (il menu di una cartella) vince su
 tutto, e senza una nota aperta si parte dalla radice. La regola è
 `fub_abi::rules::folders::for_note`, con la gemella `folderForNote` nella shell.
-«Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) apre
-un campo sopra l'albero. Con del testo l'albero cede il posto a un elenco
-piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni
+Il titolo del cassetto dice «Note», o il nome dello spazio attivo, e porta due
+azioni a icona: «Ordina» apre un menu con gli stessi ordini a scelta singola
+del sottomenu «Ordina» del contestuale della radice (a mano, per nome, per
+data), e «Crea una nota nuova» crea una nota nello spazio attivo; senza un
+vault aperto è spenta. Gli spazi stanno in un pozzetto: quello acceso mostra
+figura e nome, gli altri solo la figura, col nome per chi usa un lettore di
+schermo. Sopra l'albero, «Tutte le note» porta il numero delle voci di ciò che
+si vede, il vault o lo spazio attivo, a ogni profondità e di ogni specie; con
+zero voci il numero non si scrive. Ogni cartella dice a destra quante voci
+dirette contiene, file compresi e sottocartelle escluse, anche quando è chiusa;
+una cartella vuota non ha numero, e il numero non entra nel nome della riga
+letto da un lettore di schermo. I numeri vengono dall'anagrafe del kernel, non
+da ciò che l'albero disegna o dal filtro.
+«Icona…», dal menu di una nota, di una cartella o di uno spazio, apre un
+selettore con due gruppi col loro titolo: «Figure», quindici figure monocrome
+(cartella, nota, libro, calendario, casa, stella, bandiera, idea, in arrivo,
+archivio, immagine, cuore, lavoro, persone, musica) che prendono il colore del
+testo come le figure dell'albero, ed «Emoji». Sotto, un campo accetta un'emoji qualsiasi e «Senza
+icona» la toglie; l'icona scelta ha il velo d'accento, Esc chiude e il fuoco
+torna dov'era. Una figura si salva come `fub:<nome>` nella stessa stringa
+dell'emoji (`.fub/workspace.json`, vedi [Disposizione su
+disco](../reference/on-disk-layout.md)); un `fub:` con un nome che questa
+versione non conosce non si disegna, e la riga torna alla figura di serie. Nei
+menu e nei titoli il nome di una cartella porta davanti la sua emoji, mai la
+figura. La regola che legge il valore è `apps/client/src/ui/page-mark.ts`.
+«Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) dà il
+fuoco al campo con la lente sopra l'albero. Con del testo l'albero, con le
+appuntate e «Tutte le note», cede il posto a un elenco piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni
 parola, senza badare alle maiuscole. `-parola` toglie ogni voce con un pezzo di
 percorso che la contiene, quindi una cartella sparisce con tutto il contenuto;
 fra virgolette una frase vale una parola. Invio apre la prima voce, una
@@ -48,7 +105,13 @@ Il campo del pannello dei segnalibri segue la stessa regola, sul nome e sul
 percorso del segnalibro.
 Nella testata del foglio ogni cartella del percorso della nota si preme col
 puntatore: l'albero la apre e la porta in vista. Il nome resta il titolo che
-si rinomina col doppio clic o con F2.
+si rinomina col doppio clic o con F2; col fuoco sul nome, scrivere apre il
+campo con la prima lettera già dentro. Il nome scritto, lì e con F2
+nell'explorer, segue la stessa regola del titolo (`placedTitle`): un nome
+semplice resta nella cartella, uno «/» in testa o un percorso che comincia con
+la cartella stessa partono dalla radice. Una nota rinominata o spostata, da Fub o
+da un'altra app, resta appuntata col percorso nuovo e tiene la sua icona: la
+scrivania e l'explorer mostrano la stessa appuntata.
 
 ## Cartelle nuove
 
@@ -117,6 +180,11 @@ vault `files.confirm-trash` non è spenta; l'esito offre «Annulla». Una cartel
 trascinata su un'altra, o sul fondo del pannello, ci entra con `folder.rename`, mai
 dentro sé stessa. Prima del comando la shell salva i buffer aperti; le cartelle
 espanse e lo spazio attivo seguono il path nuovo, e l'esito offre «Annulla».
+
+Il menu di una voce dell'albero, cartella, nota o allegato, è lo stesso dalla
+sua riga e dalla voce intera: tasto destro, tasto Menu o Maiusc+F10 sulla voce
+a fuoco. Solo il titolo del pannello e lo spazio sotto l'ultima voce aprono
+il menu della radice, che crea nello spazio attivo.
 
 ## Trascinare
 

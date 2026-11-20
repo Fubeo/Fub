@@ -8,7 +8,8 @@ export const DRAWERS: PartAnatomy = {
     // I due contenitori. `drawer-*-open` è lo stato «in sovrapposizione» che
     // la shell scrive su `#layout`, `peek-*` quello del cassetto chiuso che si
     // affaccia dal bordo; `files-panel` è il pannello dei file, che
-    // qui serve a riconoscere l'etichetta delle appuntate.
+    // qui serve a riconoscere le etichette di sezione, e `plain-list` (del
+    // pezzo dell'albero) la lista che ne segue una.
     {
       name: "panel",
       states: REST,
@@ -16,6 +17,7 @@ export const DRAWERS: PartAnatomy = {
         "sidebar",
         "inspector-pane",
         "files-panel",
+        "plain-list",
         "drawer-sidebar-open",
         "drawer-inspector-open",
         "peek-sidebar",
@@ -27,16 +29,25 @@ export const DRAWERS: PartAnatomy = {
     { name: "divider", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["layout-divider"] },
     // `search-results`, `search-exclusions` e `drop-into` sono di altri pezzi:
     // qui dicono soltanto quale titolo è l'esito della ricerca e quale è
-    // bersaglio di un rilascio.
+    // bersaglio di un rilascio. `conflict-banner` e `sheet-notice` (di
+    // `sheets`) dicono quale azione sta sul velo di un avviso.
     {
       name: "panel-title",
       states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("dragging")],
-      hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "search-exclusions", "drop-into"],
+      hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "search-exclusions", "drop-into", "conflict-banner", "sheet-notice"],
     },
+    // Le azioni a icona del titolo del cassetto («ordina», «nuova nota») e il
+    // conto di un'etichetta di sezione («Tutte le note 18»).
+    {
+      name: "panel-actions",
+      states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")],
+      hooks: ["panel-title-actions", "icon-button", "panel-count"],
+    },
+    // Il pozzetto degli spazi: l'acceso mostra figura e nome, gli altri la figura.
     {
       name: "space-strip",
       states: [S("rest"), S("hover"), S("selected"), S("focused")],
-      hooks: ["space-strip", "space-chip", "add", "space-title", "clickable"],
+      hooks: ["space-strip", "space-well", "space-chip", "space-chip-icon", "space-chip-name", "add", "space-title", "clickable"],
     },
     // Segnalibri e workspace: pannelli del cassetto con le righe della palette.
     {
@@ -44,11 +55,25 @@ export const DRAWERS: PartAnatomy = {
       states: [S("rest"), S("hover"), S("pressed"), S("selected"), S("focused")],
       hooks: ["bookmarks-panel", "workspaces-panel", "search-result", "palette-row", "palette-title", "palette-desc"],
     },
-    { name: "icon-picker", states: INTERACTIVE, hooks: ["icon-picker", "icon-grid", "icon-none"] },
+    // «Nuova nota di tipo» e «Scegli il tipo» (E5): il menu dei tipi, col
+    // tassello dell'icona; `kit-popover` è del pezzo del kit.
+    {
+      name: "note-type-menu",
+      layer: "cornice",
+      states: [S("rest"), S("hover"), S("selected"), S("focused"), S("disabled")],
+      hooks: ["kit-popover", "note-type-popover", "note-type-menu", "note-type-menu-head", "note-type-menu-list", "note-type-menu-item", "note-type-menu-tile", "note-type-menu-label", "note-type-menu-name", "note-type-menu-sub", "note-type-menu-foot"],
+    },
+    { name: "icon-picker", states: INTERACTIVE, hooks: ["icon-picker", "icon-picker-title", "icon-grid", "icon-grid--figures", "icon-none"] },
     {
       name: "declared-view",
       states: [S("rest"), S("selected"), S("focused")],
       hooks: ["views-status", "declared-view-panel", "declared-view", "ui-stack", "ui-text", "views-modal"],
+    },
+    // La vista «Compiti» nell'ispettore: compiti a due piani, gruppi in maiuscoletto.
+    {
+      name: "tasks-view",
+      states: [S("rest"), S("hover"), S("focused")],
+      hooks: ["declared-view", "ui-section", "ui-children", "ui-stack", "ui-checkbox", "ui-field-label", "ui-badge", "ui-button", "intent-primary"],
     },
   ],
 };

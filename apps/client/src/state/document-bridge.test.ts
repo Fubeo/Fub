@@ -4,9 +4,16 @@ import type * as SessionModule from "./document-session";
 import { operationFromText, type TextOperation } from "../editors/core/text-operation";
 import { state } from "./store";
 import { documentSessions } from "./document-session";
-import { attachChildBridge, attachRemoteSurface, DocumentWindowUnsupported, isRemoteMessage, setDocumentWindowNavigation, type ChildBridge, type MirroredTheme, type RemoteSurfaceHandle } from "./document-bridge";
+import { attachChildBridge, attachRemoteSurface, DocumentWindowRefused, DocumentWindowSilent, DocumentWindowUnsupported, FREEZE_WAIT_MS, isRemoteMessage, setDocumentWindowKeeper, setDocumentWindowNavigation, type ChildBridge, type MirroredTheme, type RemoteSurfaceHandle } from "./document-bridge";
 import { mount } from "../theme/loader";
 import { emit } from "./store";
+
+/// Le porte che una prova pu\u00f2 guastare, e le bozze arrivate al disco.
+const disk = vi.hoisted(() => ({
+  writeFails: false,
+  draftFails: false,
+  drafts: [] as Array<{ id: string; text: string }>,
+}));
 
 vi.mock("./document-session", async (importOriginal) => {
   const real = await importOriginal<typeof SessionModule>();
@@ -17,9 +24,20 @@ vi.mock("./document-session", async (importOriginal) => {
         text: id.includes("crlf") ? "\ufeffa\r\nb" : "abc",
         revision: "disk-1", format_id: "plain", source_kind: "text", text_kind: "source",
       }),
-      writeDocument: async () => "disk-2",
+      openDocument: async (id) => ({
+        text: id.includes("crlf") ? "\ufeffa\r\nb" : "abc",
+        revision: "disk-1", format_id: "plain", source_kind: "text", text_kind: "source",
+      }),
+      documentClosed: async () => {},
+      writeDocument: async () => {
+        if (disk.writeFails) throw new Error("disco pieno");
+        return "disk-2";
+      },
       resourceWrite: async () => ({ revision: "disk-2" }),
-      saveDraft: async () => {},
+      saveDraft: async (id, text) => {
+        if (disk.draftFails) throw new Error("disco pieno");
+        disk.drafts.push({ id, text });
+      },
       discardDraft: async () => {},
     }),
   };
@@ -76,6 +94,9 @@ describe("document-window protocol", () => {
     for (const handle of handles) await handle.dispose();
     expect(MemoryChannel.peers.size).toBe(0);
     state.vaultRoot = "";
+    disk.writeFails = false;
+    disk.draftFails = false;
+    disk.drafts = [];
     vi.unstubAllGlobals();
   });
 
@@ -178,6 +199,103 @@ describe("document-window protocol", () => {
     expect(right).toBe("aYc");
   });
 
+  // «Scarta» nella finestra a parte: il testo della finestra va prima nella
+  // Cronologia (lo conserva la finestra principale, col custode del ponte), e
+  // si scarta soltanto dopo la risposta. Una conservazione mancata non scarta.
+  describe("scartare il testo della finestra", () => {
+    /// Una finestra il cui testo non è entrato nella sessione: «aYc» resta lì,
+    /// la sessione ha «aXc».
+    async function heldWindow(name: string): Promise<{ doc: string; child: ChildBridge; text: () => string }> {
+      const doc = `${number}-${name}.md`;
+      const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+      const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+      handles.push(first.handle, second.handle);
+      let left = "", right = "";
+      children.push(attachChildBridge(first.request, (value) => { left = value; }, () => left, observeState));
+      const child = attachChildBridge(second.request, (value) => { right = value; }, () => right, observeState);
+      children.push(child);
+      await settle();
+      const leftEdit = operationFromText(left, "aXc");
+      const rightEdit = operationFromText(right, "aYc");
+      left = "aXc";
+      right = "aYc";
+      children[0].sendEdit(left, leftEdit);
+      child.sendEdit(right, rightEdit);
+      await settle();
+      expect(documentSessions.text(doc)).toBe("aXc");
+      expect(right).toBe("aYc");
+      return { doc, child, text: () => right };
+    }
+    afterEach(() => setDocumentWindowKeeper(null));
+
+    it("con la Cronologia il testo va conservato prima, e solo dopo si scarta", async () => {
+      const { doc, child, text } = await heldWindow("keep");
+      let release: () => void = () => {};
+      const kept: Array<{ doc: string; text: string; shown: string }> = [];
+      setDocumentWindowKeeper({
+        keeps: () => true,
+        keep: (owner, value) => {
+          kept.push({ doc: owner, text: value, shown: text() });
+          return new Promise<void>((resolve) => { release = resolve; });
+        },
+      });
+      expect(await child.discardKeeps()).toBe(true);
+      const discarding = child.discardKeeping();
+      await settle();
+      expect(kept).toEqual([{ doc, text: "aYc", shown: "aYc" }]);
+      // Finché la conservazione non risponde, il testo resta nella finestra.
+      expect(text()).toBe("aYc");
+      release();
+      await discarding;
+      await settle();
+      expect(text()).toBe("aXc");
+      expect(documentSessions.text(doc)).toBe("aXc");
+    });
+
+    it("una conservazione fallita non scarta niente e dice perché", async () => {
+      const { doc, child, text } = await heldWindow("keep-failed");
+      setDocumentWindowKeeper({ keeps: () => true, keep: () => Promise.reject(new Error("spazio dati pieno")) });
+      await expect(child.discardKeeping()).rejects.toThrow("spazio dati pieno");
+      await settle();
+      expect(text()).toBe("aYc");
+      expect(documentSessions.text(doc)).toBe("aXc");
+      // Il conflitto resta da decidere: «Conserva» porta il testo nella sessione.
+      child.resolveConflict("mine");
+      await settle();
+      expect(documentSessions.text(doc)).toBe("aYc");
+    });
+
+    it("senza la Cronologia la finestra lo sa, e la conservazione chiesta lo stesso non scarta", async () => {
+      const { doc, child, text } = await heldWindow("no-history");
+      expect(await child.discardKeeps()).toBe(false);
+      await expect(child.discardKeeping()).rejects.toThrow();
+      await settle();
+      expect(text()).toBe("aYc");
+      setDocumentWindowKeeper({ keeps: () => false, keep: () => Promise.resolve() });
+      expect(await child.discardKeeps()).toBe(false);
+      await expect(child.discardKeeping()).rejects.toThrow();
+      expect(text()).toBe("aYc");
+      // Lo scarto senza conservare resta quello di sempre, dopo la conferma.
+      child.resolveConflict("theirs");
+      await settle();
+      expect(text()).toBe("aXc");
+      expect(documentSessions.text(doc)).toBe("aXc");
+    });
+
+    it("i messaggi della conservazione hanno la loro forma", () => {
+      const id = { v: 1, doc: "a.md", vault: "v", session: "s", surfaceId: "w" };
+      expect(isRemoteMessage({ ...id, kind: "keep-probe", token: "t" })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep-probe", token: "" })).toBe(false);
+      expect(isRemoteMessage({ ...id, kind: "keep-mode", token: "t", keeps: true })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep-mode", token: "t", keeps: "sì" })).toBe(false);
+      expect(isRemoteMessage({ ...id, kind: "keep", token: "t", text: "" })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep", token: "t" })).toBe(false);
+      expect(isRemoteMessage({ ...id, kind: "kept", token: "t" })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep-failed", token: "t", reason: "x" })).toBe(true);
+      expect(isRemoteMessage({ ...id, kind: "keep-failed", token: "t" })).toBe(false);
+    });
+  });
+
   // La finestra a parte non ha IPC: il profilo lo decide il registro della
   // finestra principale prima di aprirla, e un documento senza superficie di
   // testo non apre niente e non lascia un prestito appeso.
@@ -214,6 +332,225 @@ describe("document-window protocol", () => {
     await handle.dispose();
     handles.pop();
     expect(documentSessions.get(renamed)).toBeUndefined();
+  });
+
+  // Audit #513, scenario C: dopo A→B il nome A è libero. Una nota nuova che si
+  // chiama A apre la sua finestra, con una sessione sua, e le battute di
+  // ciascuna finestra vanno alla sua nota.
+  it("dopo una rinomina il nome di prima apre la finestra di una nota nuova", async () => {
+    const doc = `${number}-vecchia.md`;
+    const renamed = `${number}-spostata.md`;
+    const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(first.handle);
+    let moved = "";
+    children.push(attachChildBridge(first.request, (next) => { moved = next; }, () => moved, observeState));
+    await settle();
+    expect(documentSessions.rename(doc, renamed)).toMatchObject({ kind: "renamed" });
+
+    const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(second.handle);
+    expect(second.request.session).not.toBe(first.request.session);
+    let fresh = "";
+    children.push(attachChildBridge(second.request, (next) => { fresh = next; }, () => fresh, observeState));
+    await settle();
+
+    const edit = operationFromText(fresh, "abc nuova");
+    fresh = "abc nuova";
+    children[1].sendEdit(fresh, edit);
+    await second.handle.freeze();
+    second.handle.thaw();
+    expect(documentSessions.text(doc)).toBe("abc nuova");
+    expect(documentSessions.text(renamed)).toBe("abc");
+    expect(first.handle.ownerClosed()).toBe(false);
+  });
+
+  // Il prestito della finestra è della sessione, non del nome con cui la si è
+  // aperta: dopo A→B chiudere la scheda di B non chiude la sessione che la
+  // finestra mostra ancora, e il nome A lasciato libero non resta prestato a
+  // nessuno. Chiusa la finestra, una nota nuova A aperta in finestra si
+  // lascia del tutto: nessun prestito orfano, nessuna sessione tenuta viva.
+  it("dopo una rinomina il prestito della finestra segue la sessione, non il nome di prima", async () => {
+    const doc = `${number}-prestito.md`;
+    const renamed = `${number}-prestito-dopo.md`;
+    const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(first.handle);
+    expect(documentSessions.rename(doc, renamed)).toMatchObject({ kind: "renamed" });
+
+    // La scheda di B si chiude: la finestra tiene ancora la sessione.
+    expect((await documentSessions.release(renamed)).kind).toBe("active");
+    expect(first.handle.ownerClosed()).toBe(false);
+    // Una nota nuova A, letta e lasciata da un riquadro, si chiude.
+    await documentSessions.readForSurface(doc);
+    expect((await documentSessions.release(doc)).kind).toBe("closed");
+
+    await first.handle.dispose();
+    handles.pop();
+    expect(documentSessions.get(renamed)).toBeUndefined();
+
+    const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    await second.handle.dispose();
+    expect(documentSessions.get(doc)).toBeUndefined();
+    expect(documentSessions.get(renamed)).toBeUndefined();
+  });
+
+  // #513, residuo 1: il silenzio ha il suo errore, distinto da un rifiuto, e
+  // non lascia il congelamento appeso: dopo, la finestra si può rilasciare.
+  it("una finestra che non risponde al congelamento finisce in DocumentWindowSilent", async () => {
+    const doc = `${number}-muta.md`;
+    const { handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    vi.useFakeTimers();
+    try {
+      const frozen = handle.freeze();
+      const outcome = frozen.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(FREEZE_WAIT_MS);
+      expect(await outcome).toBeInstanceOf(DocumentWindowSilent);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Revisione di #513: una finestra in conflitto ha testo che la sessione non
+  // ha. Al congelamento risponde di no, con la ragione: non tace, e quindi non
+  // passa per muta né finisce distrutta col suo testo.
+  it("una finestra in conflitto rifiuta il congelamento con la ragione e tiene il suo testo", async () => {
+    const doc = `${number}-conflitto-chiusura.md`;
+    const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(first.handle, second.handle);
+    let left = "", right = "";
+    children.push(attachChildBridge(first.request, (value) => { left = value; }, () => left, observeState));
+    const child = attachChildBridge(second.request, (value) => { right = value; }, () => right, observeState);
+    children.push(child);
+    await settle();
+    left = "aXc";
+    right = "aYc";
+    children[0].sendEdit(left, operationFromText("abc", left));
+    child.sendEdit(right, operationFromText("abc", right));
+    await settle();
+    vi.useFakeTimers();
+    try {
+      const outcome = second.handle.freeze().catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(FREEZE_WAIT_MS);
+      const error = await outcome;
+      expect(error).toBeInstanceOf(DocumentWindowRefused);
+      expect(error).not.toBeInstanceOf(DocumentWindowSilent);
+      expect((error as DocumentWindowRefused).reason).toMatch(/sovrapposte|Conflitto/);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(right).toBe("aYc");
+    expect(documentSessions.text(doc)).toBe("aXc");
+    // Il conflitto resta da decidere, come prima: «Conserva» porta il testo.
+    child.resolveConflict("mine");
+    await settle();
+    expect(documentSessions.text(doc)).toBe("aYc");
+  });
+
+  // Una finestra che ha scelto «tengo il mio» ha il testo in `recovery` e non
+  // ha ancora la fotografia nuova. Se quella fotografia le viene rifiutata, il
+  // testo resta suo: al congelamento risponde di no anche senza fotografia.
+  it("una finestra con il testo da recuperare e senza fotografia rifiuta il congelamento", async () => {
+    const doc = `${number}-recupero.md`;
+    const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(first.handle, second.handle);
+    let left = "", right = "";
+    const states: string[] = [];
+    children.push(attachChildBridge(first.request, (value) => { left = value; }, () => left, observeState));
+    const child = attachChildBridge(second.request, (value) => { right = value; }, () => right,
+      (change) => { states.push(change.kind); });
+    children.push(child);
+    await settle();
+    left = "aXc";
+    right = "aYc";
+    children[0].sendEdit(left, operationFromText("abc", left));
+    child.sendEdit(right, operationFromText("abc", right));
+    await settle();
+    // La fotografia nuova arriva mentre il vault non è quello della finestra.
+    state.vaultRoot = "altro-vault";
+    child.resolveConflict("mine");
+    await settle();
+    state.vaultRoot = "protocol-vault";
+    expect(states[states.length - 1]).toBe("error");
+    await expect(second.handle.freeze()).rejects.toBeInstanceOf(DocumentWindowRefused);
+    expect(right).toBe("aYc");
+    expect(documentSessions.text(doc)).toBe("aXc");
+    child.resolveConflict("mine");
+    await settle();
+    expect(documentSessions.text(doc)).toBe("aYc");
+  });
+
+  // Una conferma arrivata dopo il tempo limite vale ancora: chi svuota le
+  // finestre la legge prima di distruggere. Un `thaw` o un `freeze` nuovo la
+  // dimenticano.
+  it("una conferma del congelamento arrivata in ritardo resta leggibile", async () => {
+    const doc = `${number}-in-ritardo.md`;
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    const id = { v: 1, doc: request.document, vault: request.vault, session: request.session, surfaceId: request.surfaceId };
+    // Una finestra lenta scritta a mano: saluta, poi risponde quando vuole.
+    const slow = new MemoryChannel(request.channel);
+    const heard: Array<Record<string, unknown>> = [];
+    slow.onmessage = (event) => { heard.push(event.data as Record<string, unknown>); };
+    slow.postMessage({ ...id, kind: "hello" });
+    await settle();
+    const snapshot = heard.find((message) => message.kind === "snapshot")!;
+    vi.useFakeTimers();
+    try {
+      const outcome = handle.freeze().catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(FREEZE_WAIT_MS);
+      expect(await outcome).toBeInstanceOf(DocumentWindowSilent);
+      expect(handle.lateAnswer()).toBeNull();
+      const freeze = heard.find((message) => message.kind === "freeze")!;
+      slow.postMessage({ ...id, kind: "drain-ready", epoch: snapshot.epoch, token: freeze.token, seq: 0, revision: snapshot.revision });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(handle.lateAnswer()).toEqual({ kind: "drained" });
+      handle.thaw();
+      expect(handle.lateAnswer()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      slow.close();
+    }
+  });
+
+  // Una finestra ancora in caricamento quando si chiude Fub: il congelamento
+  // la aspetta e le arriva subito dopo la sua fotografia, invece di essere
+  // rifiutato.
+  it("una finestra che saluta dopo la richiesta di congelamento la riceve e risponde", async () => {
+    const doc = `${number}-in-arrivo.md`;
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    const frozen = handle.freeze();
+    let text = "";
+    const states: string[] = [];
+    children.push(attachChildBridge(request, (next) => { text = next; }, () => text, (change) => { states.push(change.kind); }));
+    await expect(frozen).resolves.toBeUndefined();
+    expect(text).toBe("abc");
+    expect(states).toContain("frozen");
+    handle.thaw();
+    await settle();
+  });
+
+  // Audit #513, scenario A: la nota della finestra sparisce. La finestra sa
+  // che la sua sessione è chiusa per sempre; chiusa, non tocca la sessione
+  // nuova che nel frattempo ha preso lo stesso nome.
+  it("una finestra rimasta senza nota lo sa, e chiudendo non rilascia la nota nuova con lo stesso nome", async () => {
+    const doc = `${number}-cancellata.md`;
+    const orphan = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(orphan.handle);
+    const closedBefore = orphan.handle.ownerClosed?.();
+    expect(documentSessions.handleExternalRemoval(doc)).toMatchObject({ kind: "removed" });
+    const closedAfter = orphan.handle.ownerClosed?.();
+
+    await documentSessions.readForSurface(doc);
+    const reborn = documentSessions.get(doc);
+    expect(reborn?.snapshot().lifecycle).toBe("open");
+    await orphan.handle.dispose();
+    handles.pop();
+    expect(documentSessions.get(doc)).toBe(reborn);
+    expect([closedBefore, closedAfter]).toEqual([false, true]);
+    expect((await documentSessions.release(doc)).kind).toBe("closed");
   });
 
   it("porta il profilo risolto e rifiuta un documento che non è testo", async () => {
@@ -274,6 +611,69 @@ describe("document-window protocol", () => {
     emit("theme");
     await settle();
     expect(themes).toHaveLength(2);
-    for (const el of document.head.querySelectorAll("style[data-fub]")) el.remove();
+    document.adoptedStyleSheets = [];
+  });
+
+  // #237 R01: la finestra di un documento che si chiude rilascia la sessione
+  // senza guardarne l'esito. Con salvataggio e bozza guasti la sessione deve
+  // restare viva e sporca nella finestra principale: è l'unica copia.
+  it("chiudere la finestra con salvataggio e bozza guasti tiene viva la sessione sporca", async () => {
+    const doc = `${number}-non-salvata.md`;
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    let text = "";
+    children.push(attachChildBridge(request, (next) => { text = next; }, () => text, observeState));
+    await settle();
+    disk.writeFails = true;
+    disk.draftFails = true;
+    const edit = operationFromText(text, "abc testo non salvato");
+    text = "abc testo non salvato";
+    children[0].sendEdit(text, edit);
+    await handle.freeze();
+
+    expect(children.pop()!.dispose()).toBe(true);
+    await handle.dispose();
+    handles.pop();
+
+    expect(disk.drafts).toEqual([]);
+    expect(documentSessions.inspect(doc)).toMatchObject({ text: "abc testo non salvato", dirty: true });
+    // Riaperta, la finestra mostra il testo della persona, non il disco.
+    const again = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(again.handle);
+    let reopened = "";
+    children.push(attachChildBridge(again.request, (next) => { reopened = next; }, () => reopened, observeState));
+    await settle();
+    expect(reopened).toBe("abc testo non salvato");
+    // Appena il disco lascia scrivere la bozza, la bozza c'è.
+    disk.draftFails = false;
+    await documentSessions.flushDraft(doc);
+    expect(disk.drafts).toContainEqual({ id: doc, text: "abc testo non salvato" });
+    disk.writeFails = false;
+    expect(await documentSessions.flush(doc)).toBe(false);
+  });
+
+  it("con la bozza scritta e il salvataggio guasto due chiusure di fila lasciano il testo in bozza e nella sessione", async () => {
+    const doc = `${number}-in-bozza.md`;
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    let text = "";
+    children.push(attachChildBridge(request, (next) => { text = next; }, () => text, observeState));
+    await settle();
+    disk.writeFails = true;
+    const edit = operationFromText(text, "abc in bozza");
+    text = "abc in bozza";
+    children[0].sendEdit(text, edit);
+    await handle.freeze();
+
+    expect(children.pop()!.dispose()).toBe(true);
+    // La seconda chiusura aspetta la prima invece di farne un'altra.
+    await Promise.all([handle.dispose(), handle.dispose()]);
+    handles.pop();
+
+    expect(disk.drafts).toContainEqual({ id: doc, text: "abc in bozza" });
+    expect(documentSessions.inspect(doc)).toMatchObject({ text: "abc in bozza", dirty: true });
+    disk.writeFails = false;
+    expect(await documentSessions.flush(doc)).toBe(false);
+    expect((await documentSessions.release(doc)).kind).toBe("closed");
   });
 });

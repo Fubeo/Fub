@@ -1113,6 +1113,179 @@ impl<'a> Args<'a> {
     }
 }
 
+/// Che cosa nomina il testo di un argomento [`ParamKind::Document`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DocumentNamed {
+    /// L'id di un documento che c'è, o il solo documento con quel nome.
+    One(DocId),
+    /// Nessun documento fra quelli che il comando accetta si chiama così.
+    None,
+    /// Più documenti si chiamano così, in ordine di id.
+    Many(Vec<DocId>),
+}
+
+/// Il documento che una persona ha **scritto** in un campo
+/// [`ParamKind::Document`], fra `docs` (i documenti del vault).
+///
+/// [`Args::document`] costruisce l'id dalla stringa e non risolve niente, ed è
+/// giusto per chi passa un id. Un modulo però si compila anche a mano: chi
+/// scrive «Relazione» invece di scegliere `Lavoro/Relazione.docx` dall'elenco
+/// intende quel documento, e il comando che lo riceve deve capirlo o dirgli
+/// perché no, non rispondere con l'errore di un id che non esiste.
+///
+/// La regola:
+///
+/// 1. un id che c'è è sé stesso, anche se il comando non lo accetta: il
+///    rifiuto, con la sua ragione, è del comando;
+/// 2. altrimenti contano i documenti che `accepts` vuole e il cui nome, nome
+///    del file, percorso o percorso senza estensione è il testo, con la chiave
+///    di [`resolution_key`](crate::rules::path::resolution_key) (NFC, senza
+///    distinzione di maiuscole): uno è la risposta, nessuno o più di uno lo
+///    dice, e la frase la scrive il comando.
+///
+/// Non è la risoluzione dei wikilink
+/// ([`IndexQuery::Resolve`](crate::traits::IndexQuery::Resolve)): quella non
+/// conosce gli allegati per nome e sceglie fra omonimi, mentre un modulo che
+/// sceglie al posto di chi lo compila esporta il documento sbagliato.
+pub fn document_named(
+    raw: &str,
+    docs: impl IntoIterator<Item = DocId>,
+    accepts: impl Fn(&DocId) -> bool,
+) -> DocumentNamed {
+    let text = raw.trim();
+    if text.is_empty() {
+        return DocumentNamed::None;
+    }
+    // Due nomi sono lo stesso nome con la chiave della risoluzione, e con
+    // nessun'altra.
+    let wanted = crate::rules::path::resolution_key(text);
+    let same = |candidate: &str| crate::rules::path::resolution_key(candidate) == wanted;
+    let mut found = Vec::new();
+    for doc in docs {
+        if doc.as_str() == text {
+            return DocumentNamed::One(doc);
+        }
+        if !accepts(&doc) {
+            continue;
+        }
+        let path = doc.as_str();
+        let file = path.rsplit('/').next().unwrap_or(path);
+        let without_extension = path
+            .rsplit_once('.')
+            .filter(|(stem, _)| !stem.is_empty() && !stem.ends_with('/'))
+            .map_or(path, |(stem, _)| stem);
+        if same(doc.page_name()) || same(file) || same(path) || same(without_extension) {
+            found.push(doc);
+        }
+    }
+    found.sort();
+    found.dedup();
+    match found.len() {
+        0 => DocumentNamed::None,
+        1 => DocumentNamed::One(found.remove(0)),
+        _ => DocumentNamed::Many(found),
+    }
+}
+
+/// Le due chiavi di catalogo con cui un comando dice perché il nome scritto in
+/// un campo [`ParamKind::Document`] non basta. Le frasi sono del componente che
+/// possiede il comando, perché è il suo catalogo a risolverle; i due argomenti
+/// che ricevono sono `{doc}` (il testo scritto) e, per `ambiguous`, `{docs}`
+/// (gli omonimi in una riga).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DocumentNameKeys<'k> {
+    /// Nessun documento fra quelli che il comando accetta si chiama così.
+    pub missing: &'k str,
+    /// Più documenti fra quelli che il comando accetta si chiamano così.
+    pub ambiguous: &'k str,
+}
+
+impl<'a> Args<'a> {
+    /// Il documento del campo `name`, scelto dall'elenco **o scritto per
+    /// nome**: la lettura di un [`ParamKind::Document`] per un comando.
+    ///
+    /// È [`document_named`] fra i documenti del vault, con l'errore già
+    /// scritto: un nome che nessun documento accettato porta, o che ne portano
+    /// più d'uno, è un [`PluginError::BadArgs`] con la frase di `keys`. Il
+    /// filtro `accepts` resta del comando: lo sa soltanto lui quali documenti
+    /// vuole, e un nome che ne indica uno solo fra quelli giusti non diventa
+    /// ambiguo perché un documento di un altro tipo si chiama uguale.
+    ///
+    /// Un id che c'è si riconosce di solito senza elencare il vault: è il caso
+    /// di chi sceglie dall'elenco del campo, cioè il più comune. Assente resta
+    /// `Ok(None)`, come in [`Args::document`]: che cosa fare senza documento
+    /// (la nota aperta, un errore) lo decide il comando.
+    pub fn named_document<H: crate::traits::VaultRead + ?Sized>(
+        &self,
+        name: &str,
+        host: &H,
+        accepts: impl Fn(&DocId) -> bool,
+        keys: DocumentNameKeys<'_>,
+    ) -> Result<Option<DocId>, PluginError> {
+        let Some(raw) = self.text(name) else {
+            return Ok(None);
+        };
+        // Un id che c'è. Di solito si riconosce senza leggerlo: il nome è
+        // occupato ([`VaultRead::free_name`](crate::traits::VaultRead::free_name)
+        // non lo restituisce) e un formato lo serve, quindi non è una cartella.
+        // Un allegato senza formato (una foto RAW, un `.png`) non sta
+        // nell'elenco dei documenti: per lui decide la revisione, che legge il
+        // file. Lo stesso id lo leggerà comunque il comando.
+        resolve_document_name(
+            raw,
+            |doc| {
+                &host.free_name(doc) != doc
+                    && (host.format_of(doc).is_some() || host.document_revision(doc).is_ok())
+            },
+            || Ok(host.list_documents(None)?.items),
+            accepts,
+            keys,
+        )
+        .map(Some)
+    }
+}
+
+/// Il cuore di [`Args::named_document`], per chi i documenti li conosce da un
+/// altro varco che l'[`HostApi`](crate::traits::HostApi) (l'host, che legge il
+/// workspace): `exists` riconosce, a buon mercato, un id che c'è senza elencare
+/// il vault (un `false` costa solo l'elenco), `docs` lo elenca soltanto quando
+/// serve. La regola è [`document_named`], e
+/// l'errore è quello di `keys`.
+pub fn resolve_document_name(
+    raw: &str,
+    exists: impl FnOnce(&DocId) -> bool,
+    docs: impl FnOnce() -> Result<Vec<DocId>, PluginError>,
+    accepts: impl Fn(&DocId) -> bool,
+    keys: DocumentNameKeys<'_>,
+) -> Result<DocId, PluginError> {
+    let given = DocId::new(raw);
+    if exists(&given) {
+        return Ok(given);
+    }
+    let written = || crate::text::Arg::text("doc", raw.trim());
+    match document_named(raw, docs()?, accepts) {
+        DocumentNamed::One(doc) => Ok(doc),
+        DocumentNamed::None => Err(PluginError::BadArgs(Text::message(
+            keys.missing,
+            vec![written()],
+        ))),
+        DocumentNamed::Many(docs) => Err(PluginError::BadArgs(Text::message(
+            keys.ambiguous,
+            vec![written(), crate::text::Arg::text("docs", homonyms(&docs))],
+        ))),
+    }
+}
+
+/// Gli omonimi in una riga: i primi cinque, e i puntini se sono di più.
+fn homonyms(docs: &[DocId]) -> String {
+    const SHOWN: usize = 5;
+    let mut names: Vec<&str> = docs.iter().take(SHOWN).map(DocId::as_str).collect();
+    if docs.len() > SHOWN {
+        names.push("…");
+    }
+    names.join(", ")
+}
+
 /// La modifica che un comando propone per **un** documento.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlannedEdit {
@@ -1123,6 +1296,228 @@ pub struct PlannedEdit {
 impl PlannedEdit {
     pub fn new(doc: DocId, edit: EditRequest) -> Self {
         PlannedEdit { doc, edit }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Il piano che si applica tutto o niente (A-10)
+// ---------------------------------------------------------------------------
+
+/// Un piano su **più documenti** da applicare **tutto o niente**.
+///
+/// È il fratello eseguibile di [`CommandPlan`]: quello si mostra a chi approva
+/// (ed è un record pubblicato della WIT, che non cresce), questo si consegna a
+/// [`WritePlan::apply`] perché lo scriva. Non attraversa né la WIT né l'IPC:
+/// vive dentro un comando, fra il calcolo delle modifiche e la loro scrittura.
+///
+/// Serve a chi scrive **due file con un annulla solo** — spostare un blocco in
+/// un'altra nota, sincronizzarlo, portarlo su una lavagna: una nota scritta e
+/// l'altra no è uno stato che nessuno ha chiesto. Le regole stanno in
+/// [`crate::rules::plan`]; in breve:
+///
+/// - prima di scrivere si controlla **tutto** (ogni revisione, ogni nome
+///   libero): se uno non passa non si scrive niente;
+/// - se una scrittura fallisce a metà, quelle già fatte si rimettono com'erano
+///   prima di tornare l'errore;
+/// - se anche il rimettere fallisce, la copia di prima va nei dati del plugin
+///   (sotto `.fub/`) e l'errore nomina i file e le copie.
+///
+/// Ogni documento compare **una volta sola**, con un'eccezione: dopo una
+/// [`Rename`](WriteStep::Rename) il nome nuovo si può modificare con una
+/// [`Edit`](WriteStep::Edit) che ha per base la revisione di prima (una
+/// rinomina non cambia i byte). Un documento creato nasce già col testo giusto:
+/// una modifica dopo una creazione è un piano scritto male, e si rifiuta.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WritePlan {
+    /// I passi, **nell'ordine in cui vanno scritti**.
+    pub steps: Vec<WriteStep>,
+}
+
+/// Un passo di un [`WritePlan`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum WriteStep {
+    /// Una modifica chirurgica, con la revisione su cui è stata calcolata.
+    Edit(PlannedEdit),
+    /// Un documento **nuovo**: se il nome è occupato non si scrive niente.
+    Create { doc: DocId, source: String },
+    /// Una rinomina, soltanto se `from` ha ancora la revisione `base` e `to`
+    /// è libero. Riscrive i link entranti come ogni rinomina del vault.
+    Rename {
+        from: DocId,
+        to: DocId,
+        base: crate::edit::Revision,
+    },
+}
+
+impl WritePlan {
+    pub fn new() -> Self {
+        WritePlan::default()
+    }
+
+    /// Un piano fatto solo di modifiche, per esempio gli `edits` di un
+    /// [`CommandPlan`] calcolato in simulazione.
+    pub fn of_edits(edits: Vec<PlannedEdit>) -> Self {
+        WritePlan {
+            steps: edits.into_iter().map(WriteStep::Edit).collect(),
+        }
+    }
+
+    pub fn edit(mut self, doc: DocId, edit: EditRequest) -> Self {
+        self.steps
+            .push(WriteStep::Edit(PlannedEdit::new(doc, edit)));
+        self
+    }
+
+    pub fn create(mut self, doc: DocId, source: impl Into<String>) -> Self {
+        self.steps.push(WriteStep::Create {
+            doc,
+            source: source.into(),
+        });
+        self
+    }
+
+    pub fn rename(mut self, from: DocId, to: DocId, base: crate::edit::Revision) -> Self {
+        self.steps.push(WriteStep::Rename { from, to, base });
+        self
+    }
+
+    /// I documenti che il piano nomina, in ordine e senza ripetizioni: è
+    /// l'elenco da mettere nel [`CommandPlan::docs`] della simulazione.
+    pub fn docs(&self) -> Vec<DocId> {
+        let mut docs: Vec<DocId> = Vec::new();
+        let mut push = |doc: &DocId| {
+            if !docs.contains(doc) {
+                docs.push(doc.clone());
+            }
+        };
+        for step in &self.steps {
+            match step {
+                WriteStep::Edit(planned) => push(&planned.doc),
+                WriteStep::Create { doc, .. } => push(doc),
+                WriteStep::Rename { from, to, .. } => {
+                    push(from);
+                    push(to);
+                }
+            }
+        }
+        docs
+    }
+
+    /// Scrive il piano tutto o niente. Vedi [`crate::rules::plan::apply`].
+    pub fn apply(
+        self,
+        host: &mut dyn crate::traits::HostApi,
+    ) -> Result<AppliedPlan, crate::rules::plan::PlanFailure> {
+        crate::rules::plan::apply(host, self)
+    }
+}
+
+/// Ciò che un [`WritePlan`] ha scritto, passo per passo e nello stesso ordine.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AppliedPlan {
+    pub steps: Vec<AppliedStep>,
+}
+
+/// Un passo scritto, con la revisione che il documento ha **adesso**.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AppliedStep {
+    Edited {
+        doc: DocId,
+        report: crate::edit::EditReport,
+    },
+    Created {
+        doc: DocId,
+        revision: crate::edit::Revision,
+    },
+    Renamed {
+        from: DocId,
+        to: DocId,
+        revision: crate::edit::Revision,
+    },
+}
+
+/// Un passo **strutturale** da disfare, che l'annullamento esprime con un
+/// comando: il contratto non ha un vocabolario di operazioni inverse
+/// ([`UndoStep`]), e gli id dei comandi li conosce chi li registra.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Reversal<'a> {
+    /// Il documento creato dal piano va nel cestino (mai distrutto).
+    Trash { doc: &'a DocId },
+    /// Il documento rinominato torna al nome di prima: `from` è il nome che ha
+    /// adesso, `to` quello che aveva.
+    Rename { from: &'a DocId, to: &'a DocId },
+}
+
+impl AppliedPlan {
+    /// Le modifiche fatte, documento per documento (per mettere il cursore o
+    /// dire quante sostituzioni).
+    pub fn edits(&self) -> impl Iterator<Item = (&DocId, &crate::edit::EditReport)> {
+        self.steps.iter().filter_map(|step| match step {
+            AppliedStep::Edited { doc, report } => Some((doc, report)),
+            _ => None,
+        })
+    }
+
+    /// L'annullamento del piano, **in un passo solo**.
+    ///
+    /// I passi vengono in quest'ordine, che non è un dettaglio:
+    ///
+    /// 1. per ogni documento una [`UndoStep::Edit`] — l'inverso della modifica,
+    ///    oppure una richiesta **senza edit** con la revisione che il piano ha
+    ///    lasciato a un documento creato o rinominato. Una richiesta vuota non
+    ///    scrive niente: è la guardia con cui l'annullamento si accorge che quel
+    ///    file è cambiato dopo;
+    /// 2. poi i passi strutturali, all'indietro, nella forma che `structural`
+    ///    sceglie (`notes.trash`, `notes.rename`…).
+    ///
+    /// Con le guardie davanti, il kernel controlla **ogni** revisione prima di
+    /// toccare un file ([`HostCommands::undo_last`](crate::traits::HostCommands::undo_last)):
+    /// se uno è cambiato dopo il piano, l'annullamento non fa niente e lo dice.
+    pub fn undo(
+        &self,
+        label: impl Into<Text>,
+        mut structural: impl FnMut(Reversal<'_>) -> UndoStep,
+    ) -> Undo {
+        let mut guards: Vec<UndoStep> = Vec::new();
+        let mut reversals: Vec<UndoStep> = Vec::new();
+        let mut edited: Vec<&DocId> = Vec::new();
+        for step in self.steps.iter().rev() {
+            if let AppliedStep::Edited { doc, report } = step {
+                edited.push(doc);
+                guards.push(UndoStep::Edit(PlannedEdit::new(
+                    doc.clone(),
+                    report.inverse(),
+                )));
+            }
+        }
+        for step in self.steps.iter().rev() {
+            match step {
+                AppliedStep::Edited { .. } => {}
+                AppliedStep::Created { doc, revision } => {
+                    guards.push(UndoStep::Edit(PlannedEdit::new(
+                        doc.clone(),
+                        EditRequest::new(revision.clone(), Vec::new()),
+                    )));
+                    reversals.push(structural(Reversal::Trash { doc }));
+                }
+                AppliedStep::Renamed { from, to, revision } => {
+                    // Un nome nuovo modificato dal piano ha già la sua guardia:
+                    // l'inverso della modifica porta la revisione di dopo.
+                    if !edited.contains(&to) {
+                        guards.push(UndoStep::Edit(PlannedEdit::new(
+                            to.clone(),
+                            EditRequest::new(revision.clone(), Vec::new()),
+                        )));
+                    }
+                    reversals.push(structural(Reversal::Rename { from: to, to: from }));
+                }
+            }
+        }
+        guards.extend(reversals);
+        Undo {
+            label: label.into(),
+            steps: guards,
+        }
     }
 }
 
@@ -1369,6 +1764,123 @@ mod tests {
             !CommandScope::writing(CommandReach::Vault)
                 .irreversible()
                 .reversible
+        );
+    }
+
+    fn vault() -> Vec<DocId> {
+        [
+            "Lavoro/Relazione.docx",
+            "Relazione.md",
+            "Archivio/Bilancio.docx",
+            "Bilancio.odt",
+            "Note/Lettera.docx",
+        ]
+        .into_iter()
+        .map(DocId::new)
+        .collect()
+    }
+
+    fn word(doc: &DocId) -> bool {
+        [".docx", ".odt"]
+            .iter()
+            .any(|ext| doc.as_str().ends_with(ext))
+    }
+
+    #[test]
+    fn a_document_written_by_name_is_the_one_the_command_accepts() {
+        let one = |raw: &str| document_named(raw, vault(), word);
+        let relazione = DocumentNamed::One(DocId::new("Lavoro/Relazione.docx"));
+        // Il nome, il nome del file, il percorso senza estensione, senza
+        // distinzione di maiuscole: la nota omonima non conta, il comando non
+        // la vuole.
+        assert_eq!(one("Relazione"), relazione);
+        assert_eq!(one(" relazione "), relazione);
+        assert_eq!(one("Relazione.docx"), relazione);
+        assert_eq!(one("lavoro/relazione"), relazione);
+        assert_eq!(one("LAVORO/RELAZIONE.DOCX"), relazione);
+    }
+
+    #[test]
+    fn an_existing_id_is_itself_even_when_the_command_refuses_it() {
+        assert_eq!(
+            document_named("Relazione.md", vault(), word),
+            DocumentNamed::One(DocId::new("Relazione.md"))
+        );
+    }
+
+    const KEYS: DocumentNameKeys<'static> = DocumentNameKeys {
+        missing: "doc.missing",
+        ambiguous: "doc.ambiguous",
+    };
+
+    fn message(error: PluginError) -> crate::text::Message {
+        match error {
+            PluginError::BadArgs(text) => {
+                text.as_message().cloned().expect("una frase del catalogo")
+            }
+            other => panic!("atteso BadArgs, arrivato {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_written_name_resolves_and_a_chosen_id_does_not_list_the_vault() {
+        let resolved = resolve_document_name("relazione", |_| false, || Ok(vault()), word, KEYS);
+        assert_eq!(resolved.unwrap(), DocId::new("Lavoro/Relazione.docx"));
+        // Chi sceglie dall'elenco passa un id che c'è: il vault non si elenca.
+        let chosen = resolve_document_name(
+            "Relazione.md",
+            |doc| doc.as_str() == "Relazione.md",
+            || panic!("un id che c'è non elenca il vault"),
+            word,
+            KEYS,
+        );
+        assert_eq!(chosen.unwrap(), DocId::new("Relazione.md"));
+    }
+
+    #[test]
+    fn a_name_that_fits_none_or_many_is_the_phrase_of_the_command() {
+        let none = resolve_document_name(" Preventivo ", |_| false, || Ok(vault()), word, KEYS);
+        let none = message(none.unwrap_err());
+        assert_eq!(none.key, "doc.missing");
+        assert_eq!(
+            none.arg("doc"),
+            Some(&crate::text::ArgValue::Text("Preventivo".into()))
+        );
+        let many = resolve_document_name("bilancio", |_| false, || Ok(vault()), word, KEYS);
+        let many = message(many.unwrap_err());
+        assert_eq!(many.key, "doc.ambiguous");
+        assert_eq!(
+            many.arg("docs"),
+            Some(&crate::text::ArgValue::Text(
+                "Archivio/Bilancio.docx, Bilancio.odt".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn many_homonyms_are_cut_after_five() {
+        let docs: Vec<DocId> = (1..=7)
+            .map(|n| DocId::new(format!("c{n}/Nota.md")))
+            .collect();
+        assert_eq!(
+            homonyms(&docs),
+            "c1/Nota.md, c2/Nota.md, c3/Nota.md, c4/Nota.md, c5/Nota.md, …"
+        );
+    }
+
+    #[test]
+    fn no_document_or_many_are_said_not_guessed() {
+        assert_eq!(
+            document_named("Preventivo", vault(), word),
+            DocumentNamed::None
+        );
+        assert_eq!(document_named("   ", vault(), word), DocumentNamed::None);
+        assert_eq!(
+            document_named("bilancio", vault(), word),
+            DocumentNamed::Many(vec![
+                DocId::new("Archivio/Bilancio.docx"),
+                DocId::new("Bilancio.odt"),
+            ])
         );
     }
 }

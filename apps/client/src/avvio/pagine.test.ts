@@ -48,12 +48,10 @@ describe("lo strato d'avvio nelle tre pagine", () => {
     expect(stile.tagName).toBe("LINK");
     expect(stile.getAttribute("rel")).toBe("stylesheet");
     for (const uno of script) expect(tutti.indexOf(stile)).toBeLessThan(tutti.indexOf(uno));
-    // I due caratteri prima dello stile, così la richiesta parte subito.
+    // Il carattere dei testi prima dello stile, così la richiesta parte
+    // subito. Il marchio è un SVG: nessun carattere suo da precaricare.
     const caratteri = tutti.slice(0, tutti.indexOf(stile)).map((el) => el.getAttribute("href"));
-    expect(caratteri).toEqual([
-      "/fonts/newsreader-latin-opsz-italic.woff2",
-      "/fonts/hanken-grotesk-latin-wght-normal.woff2",
-    ]);
+    expect(caratteri).toEqual(["/fonts/hanken-grotesk-latin-wght-normal.woff2"]);
     for (const link of doc.querySelectorAll("link[rel='preload']")) {
       expect(link.getAttribute("as")).toBe("font");
       expect(link.getAttribute("type")).toBe("font/woff2");
@@ -69,13 +67,17 @@ describe("lo strato d'avvio nelle tre pagine", () => {
     expect(doc.body.firstElementChild?.classList.contains("avvio")).toBe(true);
   });
 
-  // Tauri mette un nonce a ogni <style> delle pagine e lo aggiunge a
-  // `style-src`: con un nonce la WebView ignora `'unsafe-inline'`, e gli
-  // elementi <style> che CodeMirror e gli altri moduli aggiungono a pagina
-  // avviata vengono rifiutati (gli editor senza stile, S7 di bench:webview).
-  // Uno script in linea lo vieta già `script-src 'self'`.
-  it.each(Object.entries(PAGINE))("%s: niente <style> né script in linea", (_, html) => {
-    expect(html).not.toMatch(/<style[\s>]/i);
+  // La CSP è `style-src 'self'; style-src-attr 'none'`: niente stili in
+  // linea. Il solo <style> è il portatore vuoto del nonce, che Tauri scrive
+  // servendo la pagina e CodeMirror rilegge (`ui/stylesheets.ts`): uno con
+  // del testo sarebbe uno stile in linea, e senza portatore gli editor
+  // resterebbero senza stile (S7 di bench:webview). Uno script in linea lo
+  // vieta già `script-src 'self'`.
+  it.each(Object.entries(PAGINE))("%s: niente stili né script in linea, un portatore del nonce", (_, html) => {
+    const stili = html.match(/<style[\s>][\s\S]*?<\/style>/gi) ?? [];
+    expect(stili).toEqual(["<style data-fub-nonce></style>"]);
+    expect(parse(html).head.querySelector("style[data-fub-nonce]")).not.toBeNull();
+    expect(html).not.toMatch(/\sstyle=/i);
     for (const script of parse(html).querySelectorAll("script")) {
       expect(script.getAttribute("src"), script.outerHTML).toBeTruthy();
       expect(script.textContent?.trim()).toBe("");
@@ -86,7 +88,7 @@ describe("lo strato d'avvio nelle tre pagine", () => {
     expect(foglio).not.toContain("#avvio");
     expect(foglio).toContain("@media (forced-colors: active)");
     // Famiglie proprie: quelle di fonts.css restano di fonts.css.
-    expect(foglio).toContain('font-family: "Avvio Newsreader"');
+    expect(foglio).not.toContain("Newsreader");
     expect(foglio).toContain('font-family: "Avvio Hanken"');
     expect(foglio).not.toMatch(/Newsreader Variable|Hanken Grotesk Variable/);
     expect(foglioSenzaJs).toContain(".avvio-senza-js { display: block; }");
@@ -139,5 +141,14 @@ describe("lo strato d'avvio nelle tre pagine", () => {
       expect(inerti, nome).toEqual(attesi);
       for (const el of doc.querySelectorAll("[inert]")) expect(el.getAttribute("aria-busy"), nome).toBe("true");
     }
+  });
+});
+
+describe("i pulsanti delle tre pagine", () => {
+  // Un <button> senza `type` è un pulsante d'invio: dentro un modulo, domani,
+  // manderebbe il modulo invece di fare il suo gesto.
+  it.each(Object.entries(PAGINE))('%s: ogni pulsante dice type="button"', (_, html) => {
+    const senza = [...parse(html).querySelectorAll("button")].filter((b) => b.getAttribute("type") !== "button");
+    expect(senza.map((b) => b.id || b.outerHTML)).toEqual([]);
   });
 });

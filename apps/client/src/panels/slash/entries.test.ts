@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COLOR_ENTRY, SLASH_RECENT, SLASH_RESULTS, slashMenuEntries } from "./entries";
+import { BASE_ENTRY, CANVAS_ENTRY, COLOR_ENTRY, REMINDER_ENTRY, SLASH_RESULTS, SLASH_TOP, SYNC_BLOCK_ENTRY, slashMenuEntries } from "./entries";
 import { ALL, SPECS, spec } from "./fixture.test-data";
 
 const OTHERS = [
@@ -11,13 +11,13 @@ const today = new Date(2026, 9, 29);
 const use = (recent: string[] = [], favorites: string[] = []) => ({ recent, favorites, chord: () => null, today });
 
 describe("le voci del «/» nel testo", () => {
-  it("a menu aperto: le linguette nell'ordine, solo ciò che è offerto al «/» e che la superficie sa fare", () => {
+  it("a menu aperto: i gruppi nell'ordine, solo ciò che è offerto al «/» e che la superficie sa fare", () => {
     const { entries, sections, filtering } = slashMenuEntries(LIST, "", ALL);
     expect(filtering).toBe(false);
-    expect(sections).toEqual(["suggested", "text", "lists", "blocks", "code", "media", "people", "style", "page", "vault"]);
+    expect(sections).toEqual(["text", "lists", "blocks", "code", "media", "people", "style", "page", "vault"]);
     expect(entries.some((entry) => entry.id === "markdown.bold")).toBe(false);
     expect(entries.find((entry) => entry.id === "note.daily")).toMatchObject({ section: "vault", action: false });
-    expect(entries.find((entry) => entry.id === "markdown.heading.2" && entry.section !== "suggested")).toMatchObject({ hint: "##", icon: "fmt-h2", section: "text" });
+    expect(entries.find((entry) => entry.id === "markdown.heading.2")).toMatchObject({ hint: "##", icon: "fmt-h2", section: "text" });
     expect(entries.find((entry) => entry.id === "markdown.table")).toMatchObject({ picker: "table", icon: "fmt-table", section: "blocks" });
   });
 
@@ -33,20 +33,35 @@ describe("le voci del «/» nel testo", () => {
     expect(slashMenuEntries(LIST, "fondo giallo", ALL).entries[0]!.id).toBe("markdown.background.yellow");
   });
 
-  it("i Suggeriti guardano il blocco sopra", () => {
-    const afterHeading = slashMenuEntries(LIST, "", ALL, { line: "empty", above: "heading", inList: false }).entries;
-    expect(afterHeading.filter((entry) => entry.section === "suggested").map((entry) => entry.id))
-      .toEqual(["markdown.paragraph", "markdown.list.task", "markdown.list.bullet"]);
-    const afterTask = slashMenuEntries(LIST, "", ALL, { line: "empty", above: "task", inList: true }).entries;
-    expect(afterTask[0]!.id).toBe("markdown.list.task");
+  it("le tessere: in un vault nuovo Attività, Titolo, Riquadro, Tabella, poi gli altri blocchi; mai stili né comandi", () => {
+    const { top } = slashMenuEntries(LIST, "", ALL);
+    expect(top.map((entry) => entry.id)).toEqual([
+      "markdown.list.task", "markdown.heading.2", "markdown.callout", "markdown.table", "markdown.list.bullet", "markdown.codeblock",
+    ]);
+    expect(top).toHaveLength(SLASH_TOP);
   });
 
-  it("preferiti e recenti in cima, i recenti al più cinque, e niente ripetuto fra loro", () => {
-    const { entries, sections } = slashMenuEntries(LIST, "", ALL, undefined, use(["note.daily", "markdown.table", "sparito", "markdown.rule"], ["markdown.rule"]));
-    expect(sections.slice(0, 3)).toEqual(["suggested", "favorites", "recent"]);
-    expect(entries.filter((entry) => entry.section === "favorites").map((entry) => entry.id)).toEqual(["markdown.rule"]);
-    expect(entries.filter((entry) => entry.section === "recent").map((entry) => entry.id)).toEqual(["note.daily", "markdown.table"]);
-    expect(SLASH_RECENT).toBe(5);
+  it("le tessere seguono l'uso: preferiti, poi recenti; un comando del vault o uno stile non diventano tessere", () => {
+    const { top, entries } = slashMenuEntries(LIST, "", ALL, undefined, use(["note.daily", "markdown.rule", COLOR_ENTRY, "markdown.table"], ["markdown.quote"]));
+    expect(top.map((entry) => entry.id)).toEqual([
+      "markdown.quote", "markdown.rule", "markdown.table", "markdown.list.task", "markdown.heading.2", "markdown.callout",
+    ]);
+    // Le righe restano tutte, nei loro gruppi, anche quelle che sono tessere.
+    expect(entries.find((entry) => entry.id === "markdown.quote")).toMatchObject({ section: "text" });
+  });
+
+  it("una tessera nascosta lascia il posto alla seguente; scrivendo, niente tessere", () => {
+    const { top } = slashMenuEntries(LIST, "", ALL, undefined, { ...use(), hidden: ["markdown.callout"] });
+    expect(top.map((entry) => entry.id)).toEqual([
+      "markdown.list.task", "markdown.heading.2", "markdown.table", "markdown.list.bullet", "markdown.codeblock", "markdown.quote",
+    ]);
+    expect(slashMenuEntries(LIST, "tab", ALL).top).toEqual([]);
+  });
+
+  it("spento `fub.formatting`, restano i comandi del vault e nessuna tessera", () => {
+    const { top, entries } = slashMenuEntries(LIST, "", () => false);
+    expect(top).toEqual([]);
+    expect(entries.map((entry) => entry.id)).toEqual(["note.daily"]);
   });
 
   it("filtrando: un elenco solo, al più dodici, con la parte trovata e in inglese", () => {
@@ -57,6 +72,12 @@ describe("le voci del «/» nel testo", () => {
     expect(slashMenuEntries(LIST, "todo", ALL).entries[0]!.id).toBe("markdown.list.task");
     expect(slashMenuEntries(LIST, "e", ALL).entries.length).toBeLessThanOrEqual(SLASH_RESULTS);
     expect(slashMenuEntries(LIST, "qwerty", ALL).entries).toEqual([]);
+  });
+
+  it("la voce dei compiti si trova con le parole di chi la cerca: compito, attività, da fare, checkbox", () => {
+    for (const query of ["compito", "compiti", "attività", "attivita", "da fare", "checkbox", "checklist", "todo", "task"]) {
+      expect(slashMenuEntries(LIST, query, ALL).entries[0]?.id, query).toBe("markdown.list.task");
+    }
   });
 
   it("un errore di battitura da quattro lettere: «/tabela» è Tabella, «forse»", () => {
@@ -82,8 +103,108 @@ describe("le voci del «/» nel testo", () => {
     expect(slashMenuEntries(LIST, "rosso", ALL, undefined, hiding).entries.some((entry) => entry.id === "markdown.color.red")).toBe(false);
   });
 
-  it("le sezioni nell'ordine scelto; quelle non dette dopo, nel loro ordine; Suggeriti resta in cima", () => {
-    const { sections } = slashMenuEntries(LIST, "", ALL, undefined, { ...use(), sections: ["code", "nessuna", "lists"] });
-    expect(sections.slice(0, 4)).toEqual(["suggested", "code", "lists", "text"]);
+  it("i gruppi nell'ordine scelto (`editor.slash.sections`); quelli non detti dopo, nel loro ordine", () => {
+    const { sections, entries } = slashMenuEntries(LIST, "", ALL, undefined, { ...use(), sections: ["code", "nessuna", "lists"] });
+    expect(sections.slice(0, 3)).toEqual(["code", "lists", "text"]);
+    expect(entries[0]!.section).toBe("code");
+  });
+});
+
+describe("la Base dal «/» (T18)", () => {
+  // `base.view.add` c'è soltanto con la componente delle Basi accesa.
+  const WITH_BASES = [...LIST, spec("base.view.add", "Aggiungi una vista", ["toolbar"])];
+
+  it("sta fra i blocchi subito dopo la Tabella, con la sua figura e «/base»", () => {
+    const { entries } = slashMenuEntries(WITH_BASES, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids[ids.indexOf("markdown.table") + 1]).toBe(BASE_ENTRY);
+    expect(entries.find((entry) => entry.id === BASE_ENTRY)).toMatchObject({
+      label: "Base", section: "blocks", action: true, picker: null, icon: "collection", hint: "/base",
+    });
+  });
+
+  it("in un vault nuovo è la tessera dopo Tabella", () => {
+    const { top } = slashMenuEntries(WITH_BASES, "", ALL);
+    expect(top.map((entry) => entry.id)).toEqual([
+      "markdown.list.task", "markdown.heading.2", "markdown.callout", "markdown.table", BASE_ENTRY, "markdown.list.bullet",
+    ]);
+  });
+
+  it("scrivendo «/base» o «database» la si trova per prima", () => {
+    expect(slashMenuEntries(WITH_BASES, "base", ALL).entries[0]!.id).toBe(BASE_ENTRY);
+    expect(slashMenuEntries(WITH_BASES, "database", ALL).entries[0]!.id).toBe(BASE_ENTRY);
+  });
+
+  it("non c'è senza le Basi, dove la superficie non sa crearla, né se è nascosta", () => {
+    expect(slashMenuEntries(LIST, "", ALL).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BASES, "", (id) => id !== BASE_ENTRY && ALL(id)).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BASES, "base", ALL, undefined, { ...use(), hidden: [BASE_ENTRY] }).entries.some((entry) => entry.id === BASE_ENTRY)).toBe(false);
+  });
+});
+
+describe("la lavagna dal «/» (T47)", () => {
+  // `canvas.create` c'è soltanto con la componente della lavagna accesa.
+  const WITH_BOARDS = [...LIST, spec("canvas.create", "Nuova lavagna", ["toolbar"])];
+
+  it("sta fra i file, dopo l'incorporamento, con la sua figura e l'embed di una lavagna", () => {
+    const { entries } = slashMenuEntries(WITH_BOARDS, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids.indexOf(CANVAS_ENTRY)).toBeGreaterThan(ids.indexOf("markdown.embed"));
+    expect(entries.find((entry) => entry.id === CANVAS_ENTRY)).toMatchObject({
+      label: "Lavagna", section: "media", action: true, picker: null, icon: "dashboard", hint: "![[.canvas",
+      description: "Una zona libera dentro la nota: schede, fili e penna.",
+    });
+  });
+
+  it("scrivendo «/lavagna», «canvas» o «whiteboard» la si trova per prima", () => {
+    for (const query of ["lavagna", "canvas", "whiteboard"]) {
+      expect(slashMenuEntries(WITH_BOARDS, query, ALL).entries[0]!.id, query).toBe(CANVAS_ENTRY);
+    }
+  });
+
+  it("non c'è senza la lavagna, dove la superficie non sa crearla, né se è nascosta", () => {
+    expect(slashMenuEntries(LIST, "", ALL).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BOARDS, "", (id) => id !== CANVAS_ENTRY && ALL(id)).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
+    expect(slashMenuEntries(WITH_BOARDS, "lavagna", ALL, undefined, { ...use(), hidden: [CANVAS_ENTRY] }).entries.some((entry) => entry.id === CANVAS_ENTRY)).toBe(false);
+  });
+});
+
+describe("il blocco di un'altra nota dal «/» (T30)", () => {
+  it("subito dopo la trasclusione, con la lente del prototipo, senza forma da scrivere", () => {
+    const { entries } = slashMenuEntries(LIST, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids[ids.indexOf("markdown.embed") + 1]).toBe(SYNC_BLOCK_ENTRY);
+    expect(entries.find((entry) => entry.id === SYNC_BLOCK_ENTRY)).toMatchObject({
+      label: "Blocco di un'altra nota", section: "media", action: true, picker: null, icon: "search", hint: null,
+    });
+  });
+
+  it("scrivendo «sincronizzato» la si trova per prima; non c'è dove la superficie non la sa fare", () => {
+    expect(slashMenuEntries(LIST, "sincronizzato", ALL).entries[0]!.id).toBe(SYNC_BLOCK_ENTRY);
+    expect(slashMenuEntries(LIST, "", (id) => id !== SYNC_BLOCK_ENTRY && ALL(id)).entries.some((entry) => entry.id === SYNC_BLOCK_ENTRY)).toBe(false);
+  });
+});
+
+describe("il promemoria dal «/» (T36)", () => {
+  it("subito dopo la data, fra persone e date, con la sveglia e il `⏰`", () => {
+    const { entries } = slashMenuEntries(LIST, "", ALL);
+    const ids = entries.map((entry) => entry.id);
+    expect(ids[ids.indexOf("markdown.date") + 1]).toBe(REMINDER_ENTRY);
+    expect(entries.find((entry) => entry.id === REMINDER_ENTRY)).toMatchObject({
+      label: "Promemoria", section: "people", action: true, picker: null, icon: "fmt-alarm", hint: "⏰",
+    });
+  });
+
+  it("si trova per nome e per sinonimi; non c'è dove la superficie non lo sa fare, né se è nascosto", () => {
+    expect(slashMenuEntries(LIST, "promemoria", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "sveglia", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "reminder", ALL).entries[0]!.id).toBe(REMINDER_ENTRY);
+    expect(slashMenuEntries(LIST, "", (id) => id !== REMINDER_ENTRY && ALL(id)).entries.some((entry) => entry.id === REMINDER_ENTRY)).toBe(false);
+    expect(slashMenuEntries(LIST, "", ALL, undefined, { ...use(), hidden: [REMINDER_ENTRY] }).entries.some((entry) => entry.id === REMINDER_ENTRY)).toBe(false);
+  });
+
+  it("«/promemoria venerdì 9» è il comando rapido in cima, col giorno e l'ora", () => {
+    const first = slashMenuEntries(LIST, "promemoria venerdì 9", ALL, undefined, use()).entries[0]!;
+    expect(first).toMatchObject({ id: REMINDER_ENTRY, quick: true, params: { date: "2026-10-30", time: "09:00" } });
   });
 });

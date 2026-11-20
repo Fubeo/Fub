@@ -1,9 +1,9 @@
-// L'accento, come controllo: sette campioni e una tinta su misura.
+// L'accento, come controllo: otto campioni e una tinta su misura.
 //
 // Il valore (`appearance.accent`) è una tinta da 0 a 360, e nel form generico è
-// un numero: chi non sa che 265 è un blu deve provare. Qui i sette accenti che
+// un numero: chi non sa che 160 è un verde deve provare. Qui gli otto accenti che
 // la serie ha già misurato (`ACCENT_SWATCHES`) sono campioni da premere, e la
-// tinta libera resta dietro l'ottavo. Il contratto non cambia: si scrive lo
+// tinta libera resta dietro il nono. Il contratto non cambia: si scrive lo
 // stesso numero nella stessa chiave.
 //
 // Ogni campione ha il colore che l'accento avrebbe davvero in questa luce e a
@@ -24,6 +24,7 @@ type SwatchId = (typeof ACCENT_SWATCHES)[number]["id"];
 const CUSTOM = "custom";
 
 const NAMES: Readonly<Record<SwatchId, Key>> = {
+  smeraldo: "prefs.accent.smeraldo",
   "matita-blu": "prefs.accent.matita-blu",
   viola: "prefs.accent.viola",
   prugna: "prefs.accent.prugna",
@@ -117,11 +118,12 @@ export function accentControl(lifetime: Lifetime, panel: HTMLElement): Dress {
     if (panel.hidden) customOpen = false;
   }, { attributes: ["hidden"] });
 
-  // Il cursore segue la riga solo quando la riga è un'altra (la vista l'ha
-  // riscritta: c'è un valore riletto) o la luce è cambiata. Fra una riscrittura
-  // e l'altra è della mano che lo trascina: ogni passo cambia il testo accanto,
-  // il corpo se ne accorge, e riallinearlo lì lo riporterebbe indietro.
-  let shownRow: HTMLElement | null = null;
+  // Il cursore segue la riga solo quando la vista ne ha riscritto il campo (c'è
+  // un valore riletto) o la luce è cambiata. Fra una riscrittura e l'altra è
+  // della mano che lo trascina: ogni passo cambia il testo accanto, il corpo se
+  // ne accorge, e riallinearlo lì lo riporterebbe indietro. La riga resta lo
+  // stesso nodo da un aggiornamento all'altro; il campo no.
+  let shownField: HTMLInputElement | null = null;
 
   // I colori dei campioni cambiano con la luce e col contrasto, non con la riga.
   let painted = "";
@@ -130,7 +132,7 @@ export function accentControl(lifetime: Lifetime, panel: HTMLElement): Dress {
     const level = currentContrast();
     if (painted === `${light}:${level}`) return;
     painted = `${light}:${level}`;
-    shownRow = null;
+    shownField = null;
     radios.forEach((radio, index) => {
       const entry = ACCENT_SWATCHES[index];
       if (!entry) return;
@@ -195,8 +197,8 @@ export function accentControl(lifetime: Lifetime, panel: HTMLElement): Dress {
       setAttr(swatches, "aria-disabled", field.disabled ? "true" : null);
       setText(hueLabel, t("prefs.accent.hue"));
       if (custom.hidden === customOpen) custom.hidden = !customOpen;
-      if (shownRow !== row) {
-        shownRow = row;
+      if (shownField !== field) {
+        shownField = field;
         showHue(hue);
       }
       // Il predefinito, detto col nome del suo campione e non col numero.

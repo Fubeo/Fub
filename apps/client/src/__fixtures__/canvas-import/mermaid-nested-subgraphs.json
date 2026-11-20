@@ -1,0 +1,100 @@
+{
+  "about": "Due subgraph annidati con il titolo, un nodo libero e un arco verso un blocco: ogni blocco è un gruppo con margine 24, il gruppo di fuori sta sotto quello di dentro.",
+  "op": {
+    "op": "from_mermaid",
+    "text": "flowchart TD\n  Inizio --> fasi\n  subgraph fasi [Le fasi]\n    subgraph prima [Prima fase]\n      A[Raccolta] --> B[Pulizia]\n    end\n    C[Analisi]\n  end\n  B --> C"
+  },
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "fasi",
+          "type": "group",
+          "x": 0,
+          "y": 256,
+          "width": 416,
+          "height": 768,
+          "label": "Le fasi"
+        },
+        {
+          "id": "prima",
+          "type": "group",
+          "x": 24,
+          "y": 280,
+          "width": 368,
+          "height": 464,
+          "label": "Prima fase"
+        },
+        {
+          "id": "Inizio",
+          "type": "text",
+          "x": 48,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Inizio"
+        },
+        {
+          "id": "A",
+          "type": "text",
+          "x": 48,
+          "y": 304,
+          "width": 320,
+          "height": 160,
+          "text": "Raccolta"
+        },
+        {
+          "id": "B",
+          "type": "text",
+          "x": 48,
+          "y": 560,
+          "width": 320,
+          "height": 160,
+          "text": "Pulizia"
+        },
+        {
+          "id": "C",
+          "type": "text",
+          "x": 48,
+          "y": 840,
+          "width": 320,
+          "height": 160,
+          "text": "Analisi"
+        }
+      ],
+      "edges": [
+        {
+          "id": "e220a8397b1dcdaf",
+          "fromNode": "Inizio",
+          "toNode": "fasi",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "6e789e6aa1b965f4",
+          "fromNode": "A",
+          "toNode": "B",
+          "toEnd": "arrow"
+        },
+        {
+          "id": "06c45d188009454f",
+          "fromNode": "B",
+          "toNode": "C",
+          "toEnd": "arrow"
+        }
+      ]
+    },
+    "created": [
+      "fasi",
+      "prima",
+      "Inizio",
+      "A",
+      "B",
+      "C",
+      "e220a8397b1dcdaf",
+      "6e789e6aa1b965f4",
+      "06c45d188009454f"
+    ],
+    "notes": []
+  }
+}

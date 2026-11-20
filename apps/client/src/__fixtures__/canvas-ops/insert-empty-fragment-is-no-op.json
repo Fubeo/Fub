@@ -1,0 +1,44 @@
+{
+  "about": "insert di un frammento senza schede né archi: nessuna toppa.",
+  "before": {
+    "nodes": [
+      {
+        "id": "lez",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "Lezione"
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "insert",
+      "fragment": {
+        "version": 1,
+        "nodes": [],
+        "edges": []
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "lez",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Lezione"
+        }
+      ],
+      "edges": []
+    }
+  }
+}

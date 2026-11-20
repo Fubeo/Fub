@@ -3,14 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { isAddress, linkAt, linkDialog, linkSyntax } from "./link-dialog";
 import { markdownEditingExtensions } from "./commands";
+import { parsed } from "./test-support";
 
 function stateOf(doc: string) {
-  const state = EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) });
-  ensureSyntaxTree(state, state.doc.length, 1000);
+  const state = parsed(EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) }));
   return state;
 }
 
@@ -42,13 +41,18 @@ describe("il riquadro «Collegamento»", () => {
     document.body.replaceChildren();
   });
 
-  function mount(doc: string, anchor: number, head = anchor) {
+  function mount(doc: string, anchor: number, head = anchor, lineBreak = "\n") {
     const view = new EditorView({
       parent: document.body,
       state: EditorState.create({
         doc,
         selection: { anchor, head },
-        extensions: [markdown({ base: markdownGrammar }), linkDialog(async (prefix) => ["Viaggio", "Viaggio a Lisbona"].filter((n) => n.startsWith(prefix))), markdownEditingExtensions()],
+        extensions: [
+          markdown({ base: markdownGrammar }),
+          linkDialog(async (prefix) => ["Viaggio", "Viaggio a Lisbona"].filter((n) => n.startsWith(prefix))),
+          markdownEditingExtensions(),
+          ...(lineBreak === "\n" ? [] : [EditorState.lineSeparator.of(lineBreak)]),
+        ],
       }),
     });
     views.push(view);
@@ -97,6 +101,17 @@ describe("il riquadro «Collegamento»", () => {
     action("remove").click();
     await settle();
     expect(second.view.state.doc.toString()).toBe("a alias b");
+  });
+
+  it("in una nota CRLF togliere un link su due righe lascia il testo e il cursore dopo, come in LF (#394)", async () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const { view, pressK } = mount(`a [uno${nl}due](https://x.it)`, 4, 4, nl);
+      expect(pressK()).toBe(true);
+      action("remove").click();
+      await settle();
+      expect(view.state.sliceDoc(), JSON.stringify(nl)).toBe(`a uno${nl}due`);
+      expect(view.state.selection.main.head, JSON.stringify(nl)).toBe("a uno\ndue".length);
+    }
   });
 
   it("le note che corrispondono si propongono, e una scelta riempie il campo", async () => {

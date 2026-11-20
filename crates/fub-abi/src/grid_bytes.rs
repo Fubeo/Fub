@@ -1323,10 +1323,19 @@ impl GridSurfaceSpec {
 /// `apply` riceve le patch di [`GridApplyRequest`], e il suo [`GridCommit`] porta
 /// la modifica **del giornale**: `edit` è il diff fra il testo del giornale
 /// prima e dopo, che la shell applica al buffer della `DocumentSession` come
-/// ogni altro diff. `bytes_to_write` la chiama soltanto l'host, per salvare.
+/// ogni altro diff. Il commit non porta i fogli: `apply` non ne cambia le
+/// righe e le colonne, che la shell usa per controllare ogni finestra; la
+/// misura nuova arriva con il primo [`GridCommandOutcome`] o alla riapertura.
+/// `bytes_to_write` la chiama soltanto l'host, per salvare.
 pub trait GridBytesProvider: Send + Sync {
     fn surfaces(&self) -> Vec<GridSurfaceSpec>;
     /// Apre `source` alla sua revisione e vi applica `journal`.
+    ///
+    /// `revision` è `Revision::of_bytes(source)`: la calcola una volta chi
+    /// legge i byte (l'host, prima di confrontarla con la base della
+    /// sessione del documento), e il registro del kernel la passa così. Il
+    /// provider non la ricalcola: per una cartella di qualche MB era un
+    /// secondo SHA-256 dei byte a ogni apertura.
     fn open(
         &mut self,
         surface: &str,

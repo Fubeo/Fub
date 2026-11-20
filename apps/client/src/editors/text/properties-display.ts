@@ -10,6 +10,10 @@ export const propertiesDisplay = Facet.define<PropertiesDisplay, PropertiesDispl
   combine: (values) => (values.length ? values[values.length - 1]! : "source"),
 });
 
+/// Il valore dell'impostazione; uno che manca, o che non è dei tre, vale il
+/// default dell'host (`visible`, `crates/fub-host/src/settings.rs`). La
+/// faccetta senza nessun valore resta `source`: un editor che non la
+/// configura (un campo di testo, una prova) mostra lo YAML.
 export function propertiesDisplayOf(value: unknown): PropertiesDisplay {
-  return value === "visible" || value === "hidden" ? value : "source";
+  return value === "hidden" || value === "source" ? value : "visible";
 }

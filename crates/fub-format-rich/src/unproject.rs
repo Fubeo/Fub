@@ -63,10 +63,11 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
         claimed: HashSet::new(),
         sections: Vec::new(),
         ink: false,
+        body_only: projection.body_only,
     };
     // Prima i commenti: un segno del testo resta soltanto se il suo c'è.
     comments(projection, &mut document, &mut state)?;
-    let body = blocks(&projection.blocks, &mut document, &mut state)?;
+    let body = blocks(&projection.blocks, &mut document, &mut state, None)?;
     document.body = body;
     drop_lost_anchors(&mut document);
     prune(base, &mut document);
@@ -220,6 +221,9 @@ struct State {
     /// Un inchiostro nuovo: il suo markup prende la forma che il codec gli dà
     /// soltanto dentro il documento ([`settle_ink`]).
     ink: bool,
+    /// Il documento si scrive soltanto nel corpo ([`Projection::body_only`]):
+    /// ciò che si aggiunge non tocca gli stili.
+    body_only: bool,
 }
 
 /// L'id provvisorio della nota nuova `index`: nessun documento ne ha tanti.
@@ -287,16 +291,20 @@ impl Dangling {
     }
 }
 
+/// I blocchi del documento per quelli della proiezione. `in_table` è ciò che
+/// lo stile della tabella che li contiene dà ai paragrafi
+/// ([`projection::table_para`]), fuori da una tabella `None`.
 fn blocks(
     blocks: &[Block],
     document: &mut Document,
     state: &mut State,
+    in_table: Option<&ParaProps>,
 ) -> Result<Vec<Arc<WcBlock>>, RichError> {
     blocks
         .iter()
         .map(|block| match block {
             Block::Para(para) => {
-                paragraph(para, document, state).map(|p| Arc::new(WcBlock::Para(p)))
+                paragraph(para, document, state, in_table).map(|p| Arc::new(WcBlock::Para(p)))
             }
             Block::Table(table) => {
                 let mut out: wordcraft_doc::Table = match &table.k {
@@ -311,7 +319,10 @@ fn blocks(
                         let mut fresh =
                             wordcraft_doc::Table::new(1, cols, document.last_section.text_width());
                         fresh.rows.clear();
-                        fresh.props.style = builtin_style(&mut document.styles, "TableGrid");
+                        fresh.props.style = table_grid(document, state.body_only);
+                        if fresh.props.style.is_none() {
+                            fresh.props.borders = table_grid_borders();
+                        }
                         fresh
                     }
                 };
@@ -326,6 +337,9 @@ fn blocks(
                 {
                     out.props.style = None;
                 }
+                // Lo stile che la tabella avrà nel file, nuova compresa: le
+                // sue celle si scrivono contro di lui, come si rileggeranno.
+                let in_table = projection::table_para(&document.styles, &out);
                 out.rows = table
                     .rows
                     .iter()
@@ -357,7 +371,8 @@ fn blocks(
                                     out.props.span = span as u32;
                                     respanned.set(true);
                                 }
-                                out.blocks = self::blocks(&cell.blocks, document, state)?;
+                                out.blocks =
+                                    self::blocks(&cell.blocks, document, state, in_table.as_ref())?;
                                 if !out.blocks.iter().any(|b| matches!(**b, WcBlock::Para(_))) {
                                     // Word vuole un paragrafo in fondo a ogni cella.
                                     out.blocks.push(Arc::new(WcBlock::Para(Paragraph::new())));
@@ -395,6 +410,7 @@ fn paragraph(
     para: &Para,
     document: &mut Document,
     state: &mut State,
+    in_table: Option<&ParaProps>,
 ) -> Result<Paragraph, RichError> {
     let keep: ParaKeep = para
         .k
@@ -409,8 +425,8 @@ fn paragraph(
     // L'enfasi che la shell mostrava era risolta con lo stile di prima.
     let shown_style = keep.props.style.clone();
     let before = projection::role(document, &keep.props);
-    let shown_align = projection::align(&document.styles, &keep.props);
-    let shown_layout = projection::layout(&document.styles, &keep.props);
+    let shown_align = projection::align_in(&document.styles, &keep.props, in_table);
+    let shown_layout = projection::layout(&document.styles, &keep.props, in_table);
     let shown_s = (before == Role::Body)
         .then(|| projection::style_of(document, &keep.props))
         .flatten();
@@ -425,6 +441,7 @@ fn paragraph(
         (para.align, &para.p),
         (shown_align, &shown_layout),
         &document.styles,
+        in_table,
     );
     if let Role::List { ordered, .. } = para.role {
         if let Some(n) = document.styles.resolve_para(&keep.props).numbering {
@@ -1066,16 +1083,31 @@ fn tracked(
     props
 }
 
+/// Il nome che il codec di Word scrive in `w:author` per una revisione
+/// senza autore: l'attributo è obbligatorio, e Word fa lo stesso.
+const UNKNOWN_AUTHOR: &str = "Unknown";
+
 /// L'indice della revisione `rev` nel documento: quella uguale che c'è già,
 /// o una nuova in fondo.
+///
+/// Una revisione **nuova** senza autore (la shell scrive senza un nome quando
+/// il documento registrava già le modifiche all'apertura) prende il nome che
+/// il codec scriverà nel file: altrimenti la rilettura dei byte nuovi
+/// troverebbe «Unknown» dove il voluto dice niente, e il salvataggio
+/// fallirebbe sempre per [`RichError::Fidelity`]. Una revisione senza autore
+/// che il file ha già resta com'è: è la stessa, e non c'è niente da scrivere.
 fn revision(document: &mut Document, kind: RevisionKind, rev: &Rev) -> u32 {
-    let wanted = Revision {
+    let mut wanted = Revision {
         kind,
         author: rev.by.clone(),
         date: rev.at.clone(),
         move_name: rev.mv.clone(),
     };
-    let index = match document.revisions.iter().position(|r| *r == wanted) {
+    let found = document.revisions.iter().position(|r| *r == wanted);
+    if found.is_none() && wanted.author.is_empty() {
+        wanted.author = UNKNOWN_AUTHOR.to_string();
+    }
+    let index = match found.or_else(|| document.revisions.iter().position(|r| *r == wanted)) {
         Some(index) => index,
         None => {
             document.revisions.push(wanted);
@@ -1306,18 +1338,22 @@ fn with_style(mut props: ParaProps, style: Option<&str>, styles: &StyleSheet) ->
 /// Le proprietà di un paragrafo con l'allineamento e la disposizione voluti,
 /// con la regola delle enfasi: un valore diverso da quello mostrato si toglie
 /// se basta toglierlo, se no si scrive diretto. Ciò che la disposizione non
-/// nomina è quello dello stile.
+/// nomina è quello dello stile del paragrafo. In una cella i valori si
+/// risolvono con lo stile della tabella (`table`): ciò che lui dà già non si
+/// scrive nel paragrafo.
 fn with_layout(
     mut props: ParaProps,
     (align, want): (Option<Align>, &Layout),
     (shown_align, shown): (Option<Align>, &Layout),
     styles: &StyleSheet,
+    table: Option<&ParaProps>,
 ) -> ParaProps {
+    let resolved = |props: &ParaProps| styles.resolve_para_in(props, table);
     let left = |a: Option<Align>| a.filter(|a| *a != Align::Left);
     let (align, shown_align) = (left(align), left(shown_align));
     if align != shown_align {
         props.align = None;
-        if projection::align(styles, &props) != align {
+        if projection::align_in(styles, &props, table) != align {
             props.align = Some(match align {
                 None | Some(Align::Left) => WcAlign::Left,
                 Some(Align::Center) => WcAlign::Center,
@@ -1332,9 +1368,9 @@ fn with_layout(
         let target = want.left.unwrap_or(plain.indent_left);
         props.indent_left = None;
         props.indent_left_chars = None;
-        if !same(styles.resolve_para(&props).indent_left, target) {
+        if !same(resolved(&props).indent_left, target) {
             props.indent_left = Some(target);
-            if !same(styles.resolve_para(&props).indent_left, target) {
+            if !same(resolved(&props).indent_left, target) {
                 props.indent_left_chars = Some(0.0);
             }
         }
@@ -1343,9 +1379,9 @@ fn with_layout(
         let target = want.right.unwrap_or(plain.indent_right);
         props.indent_right = None;
         props.indent_right_chars = None;
-        if !same(styles.resolve_para(&props).indent_right, target) {
+        if !same(resolved(&props).indent_right, target) {
             props.indent_right = Some(target);
-            if !same(styles.resolve_para(&props).indent_right, target) {
+            if !same(resolved(&props).indent_right, target) {
                 props.indent_right_chars = Some(0.0);
             }
         }
@@ -1354,9 +1390,9 @@ fn with_layout(
         let target = want.first.unwrap_or(plain.indent_first);
         props.indent_first = None;
         props.indent_first_chars = None;
-        if !same(styles.resolve_para(&props).indent_first, target) {
+        if !same(resolved(&props).indent_first, target) {
             props.indent_first = Some(target);
-            if !same(styles.resolve_para(&props).indent_first, target) {
+            if !same(resolved(&props).indent_first, target) {
                 props.indent_first_chars = Some(0.0);
             }
         }
@@ -1365,9 +1401,9 @@ fn with_layout(
         let target = want.before.unwrap_or(plain.space_before);
         props.space_before = None;
         props.space_before_auto = None;
-        if !same(styles.resolve_para(&props).space_before, target) {
+        if !same(resolved(&props).space_before, target) {
             props.space_before = Some(target);
-            if !same(styles.resolve_para(&props).space_before, target) {
+            if !same(resolved(&props).space_before, target) {
                 props.space_before_auto = Some(false);
             }
         }
@@ -1376,9 +1412,9 @@ fn with_layout(
         let target = want.after.unwrap_or(plain.space_after);
         props.space_after = None;
         props.space_after_auto = None;
-        if !same(styles.resolve_para(&props).space_after, target) {
+        if !same(resolved(&props).space_after, target) {
             props.space_after = Some(target);
-            if !same(styles.resolve_para(&props).space_after, target) {
+            if !same(resolved(&props).space_after, target) {
                 props.space_after_auto = Some(false);
             }
         }
@@ -1386,7 +1422,7 @@ fn with_layout(
     if want.line != shown.line {
         let target = want.line.unwrap_or_else(|| Line::of(plain.line_spacing));
         props.line_spacing = None;
-        if !Line::of(styles.resolve_para(&props).line_spacing).same(target) {
+        if !Line::of(resolved(&props).line_spacing).same(target) {
             props.line_spacing = Some(target.spacing());
         }
     }
@@ -1445,6 +1481,28 @@ fn regrid(table: &mut wordcraft_doc::Table, cols: usize, text: f32) {
     fit(table);
 }
 
+/// Lo stile di una tabella nuova: «Table Grid», come in Word, aggiunto agli
+/// stili se il documento non lo ha. Un documento che si scrive soltanto nel
+/// corpo (`body_only`) non cambia i suoi stili: la tabella nuova prende lo
+/// stile se c'è già, altrimenti nessuno, e i bordi di «Table Grid» le vanno
+/// come formattazione diretta ([`table_grid_borders`]).
+fn table_grid(document: &mut Document, body_only: bool) -> Option<String> {
+    const ID: &str = "TableGrid";
+    if body_only && document.styles.get(ID).is_none() {
+        return None;
+    }
+    builtin_style(&mut document.styles, ID)
+}
+
+/// I bordi di «Table Grid», per una tabella nuova che non ne prende lo stile
+/// ([`table_grid`]).
+fn table_grid_borders() -> Option<wordcraft_doc::props::Borders> {
+    StyleSheet::builtin()
+        .get("TableGrid")
+        .and_then(|style| style.table.as_ref())
+        .and_then(|table| table.borders)
+}
+
 /// Ogni cella prende la larghezza delle colonne della griglia che copre.
 fn fit(table: &mut wordcraft_doc::Table) {
     let grid = &table.grid;
@@ -1495,6 +1553,13 @@ fn with_marks(
     shown_style: Option<&str>,
     styles: &mut StyleSheet,
 ) -> CharProps {
+    // Un link tolto si toglie prima di confrontare l'enfasi: con lui se ne va
+    // lo stile «Hyperlink», e la sottolineatura che chi legge vedeva da quello
+    // stile, se la vuole ancora, diventa diretta. Il testo resta come la
+    // pagina lo mostra.
+    if href.is_none() && props.link.is_some() {
+        unlink(&mut props);
+    }
     let want: BTreeSet<Mark> = marks.iter().copied().collect();
     let shown: BTreeSet<Mark> = projection::marks(styles, shown_style, &props)
         .into_iter()
@@ -1526,15 +1591,23 @@ fn with_marks(
             props
         };
     }
-    if props.link.as_deref() != href {
-        props.link = href.map(str::to_string);
-        match href {
-            Some(_) if props.style.is_none() => props.style = builtin_style(styles, "Hyperlink"),
-            None if props.style.as_deref() == Some("Hyperlink") => props.style = None,
-            _ => {}
+    // Un link nuovo o cambiato prende lo stile «Hyperlink», come in Word, dopo
+    // l'enfasi: il suo aspetto è quello che il link aggiunge.
+    if let Some(href) = href.filter(|href| props.link.as_deref() != Some(href)) {
+        props.link = Some(href.to_string());
+        if props.style.is_none() {
+            props.style = builtin_style(styles, "Hyperlink");
         }
     }
     props
+}
+
+/// Toglie il link da un tratto, e con lui lo stile «Hyperlink».
+fn unlink(props: &mut CharProps) {
+    props.link = None;
+    if props.style.as_deref() == Some("Hyperlink") {
+        props.style = None;
+    }
 }
 
 /// Riporta sul tratto l'aspetto voluto con la stessa regola delle enfasi: un

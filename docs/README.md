@@ -26,6 +26,8 @@ flowchart LR
 | [La mappa del repository](map/repo.md) | dove sta ogni cosa, e come si prova da sola |
 | [Chi possiede che cosa](map/ownership.md) | ogni regola, il file che la possiede e il test che la presidia |
 | [Dove sta X](map/dove-sta-x.md) | un tipo, un comando, un'impostazione: il file che lo definisce |
+| [Le pagine per domanda](map/pagine.md) | ogni pagina di `docs/`, con la domanda a cui risponde |
+| [Le sigle](map/sigle.md) | che cosa sono K3, N6, P17, M5, S1, T17, D07, A1 |
 | [Orientarsi nella repository](getting-started/repository-tour.md) | il percorso guidato, per chi comincia |
 
 ## Iniziare
@@ -38,23 +40,29 @@ flowchart LR
 |---|---|
 | [Panoramica](product/overview.md) | che cosa offre Fub |
 | [Vault e file](product/vault-and-files.md) | che cosa Fub legge, scrive e conserva |
+| [Operazioni sul vault](product/vault-operazioni.md) | note, cartelle, cattura, import/export |
+| [Recupero e versioni](product/vault-recupero-e-versioni.md) | cestino, rinomine, versioni, snapshot |
 | [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
-| [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
-| [Blocchi](product/editor-blocks.md) | la superficie a blocchi |
-| [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
+| [Editor e anteprima](product/editor-and-preview.md), [la barra di formato](product/editor-toolbar.md) e [le formule](product/editor-math.md); [la griglia dei fogli](product/grid-editor.md) | le superfici di scrittura; la barra sopra il foglio e le sue forme; la formula che si modifica toccandola; le celle di una cartella di Excel |
+| [Scrittura](product/editor-writing.md), [Link, sbirciata e pagine incorporate](product/editor-links.md) e [I commenti nel testo](product/editor-comments.md) | le modalità di una nota, i livelli di presenza, la riga dei suggerimenti e la concentrazione; il clic su un link, la sbirciata, l'incolla degli indirizzi e le pagine web; il passo commentato |
+| [Blocchi](product/editor-blocks.md), [Colori, colonne, persone e date](product/editor-note-extras.md), [Sposta in…](product/editor-move-to.md) e [Tabelle](product/editor-tables.md) | i blocchi di Scrittura; colori, ripiegabili, colonne, indice, persone e date nel file; un blocco in un'altra nota; i gesti delle tabelle in note, documenti e fogli |
+| [Tasto destro, mini-barra e «/»](product/editor-menus.md) e [i diagrammi](product/editor-diagrams.md) | i menu degli editor; il disegno Mermaid, il suo menu e i tasti del blocco |
+| [Basi (file `.base`)](product/bases.md), [la loro bacheca](product/bases-kanban.md), [il calendario](product/bases-calendar.md) [la linea del tempo](product/bases-timeline.md) e [la mappa](product/bases-map.md), [la cella in modifica](product/bases-cell-edit.md) | le viste, i filtri, i limiti e che cosa si scrive sul file; le corsie e la loro proprietà; il mese e le note trascinate fra i giorni; le barre fra due date; i segnaposti e le tessere ammesse dalla macchina; il testo di una cella quando la nota cambia da fuori |
+| [La testata](product/editor-header.md), [la riga dei dati](product/editor-note-facts.md), [la trasclusione viva](product/editor-transclusion.md) e [le schede vive](product/live-cards.md), con [la tabella in foglio](product/editor-table-sheet.md) e [le misure e Obsidian](product/live-cards-measures.md); [i tipi di nota](product/editor-note-types.md) | titolo, proprietà e copertina in cima alla nota; modifica, collegamenti ed etichette sotto il titolo; la sezione di un'altra nota che si scrive dove è riportata; un PDF, un foglio o un file Craft usato dentro la nota, quante schede regge e che cosa ne vede Obsidian |
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
 | [File delle app Craft](product/craft-files.md) | disegni, immagini e foto delle app Craft |
-| [Ricerca, link e grafo](product/search-links-and-graph.md) | trovare e seguire |
-| [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
+| [La lavagna](product/lavagna.md) | schede, fili, inchiostro ed estratti nei file `.canvas` |
+| [Ricerca, link e grafo](product/search-links-and-graph.md), [spazio comandi (Ctrl O)](product/command-space.md) | trovare, seguire e comandare dalla tastiera |
+| [Compiti](product/tasks-and-reminders.md) | i compiti del vault per scadenza, e come si spuntano |
+| [Importare ed esportare](product/import-and-export.md) ed [Esporta in PDF](product/pdf-export.md) | dentro e fuori dal vault; le pagine vere di una nota e la stampa |
 | [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |
 | [Budget prestazionali](product/performance-budget.md) | i numeri e i gate della CI |
 | [Criteri di accettazione](product/acceptance.md) | quando una modifica è accettabile |
 
-I disegni sono una famiglia di trenta pagine, con l'indice dentro
-[Disegni](product/drawing.md): dalla penna alle tavole, dall'import
-all'export, dalla sessione dal tablet ai disegni grandi.
+I disegni sono una famiglia di pagine, con l'indice in [Disegni](product/drawing.md):
+dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
 
 ## Capire l'architettura
 
@@ -63,66 +71,68 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Modello del documento](architecture/document-model.md) e
   [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
-- [Frontend e IPC](architecture/frontend-and-ipc.md)
-- [Superfici dell'editor](architecture/editor-surfaces.md), la
-  [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
-  e la [superficie dei fogli](architecture/grid-surface.md)
-- [Inchiostro e strumenti](architecture/ink-and-tools.md)
-- [Runtime dei plugin](architecture/plugin-runtime.md)
+- [Frontend e IPC](architecture/frontend-and-ipc.md),
+  [i comportamenti della shell](architecture/shell-behaviours.md), [i valori delle impostazioni](architecture/setting-values.md) e
+  [la cornice del telefono](architecture/phone-frame.md)
+- [Superfici dell'editor](architecture/editor-surfaces.md), [quelle da parte](architecture/parked-surfaces.md),
+  [quella su un tratto](architecture/range-surface.md), la
+  [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md), la
+  [superficie dei fogli](architecture/grid-surface.md) e gli [editor dei componenti](architecture/component-editors.md)
+- [Inchiostro e strumenti](architecture/ink-and-tools.md),
+  [l'inchiostro sulla lavagna](architecture/ink-on-canvas.md) e
+  [il disegno sul motore](architecture/disegno.md)
+- [Runtime dei plugin](architecture/plugin-runtime.md), i [provider WASM](architecture/wasm-providers.md) e [capability e sandbox](architecture/plugin-security.md)
+- [Lo strato dei motori](architecture/motori.md)
 
 ## Sviluppare
 
-- [Workflow](development/workflow.md) e [test e qualità](development/testing-and-quality.md)
-- Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md) e [il moto](development/motion-smoke-test.md)
-- [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
+- [Workflow](development/workflow.md), [test e qualità](development/testing-and-quality.md) e [il banco visivo](development/visual-bench.md)
+- Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md) e [la lavagna](development/canvas-smoke-test.md)
+- [Le misure nella WebView](development/webview-measurements.md), [la memoria (R1)](development/webview-memory.md) e [le misure prese](misure/README.md)
 - [Creare un plugin](development/plugin-authoring.md)
+- [La parità della lavagna](development/canvas-parity.md): l'inventario di ciò che la GUI fa e della sua forma in codice
 - [Stile della documentazione](development/documentation-style.md) e [versionamento e release](development/versioning-and-releases.md)
 
 ## Consultare i contratti
 
-- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md),
+- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md)
+  (con il [contratto dei componenti](reference/components-contract.md)),
   [layout su disco](reference/on-disk-layout.md) e
-  [permessi e sicurezza](reference/permissions-and-security.md)
+  [permessi e sicurezza](reference/permissions-and-security.md) (con [gli stili e la CSP](reference/styles-and-csp.md))
 - [Il formato della scena](reference/scene-format.md) con le sue
-  quindici pagine di dettaglio, e le
+  pagine di dettaglio, e le
   [operazioni sulla scena](reference/scene-operations.md)
-- [Le annotazioni PDF](reference/annotation-format.md), la
+- [Le annotazioni PDF](reference/annotation-format.md), [l'esportazione in PDF](reference/pdf-export-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
-- [Il formato della lavagna](reference/canvas-format.md): il nucleo
-  `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
-  le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
-  la loro inversa
-- [Il server MCP](reference/mcp-server.md)
+- Le porte del [disegno](reference/drawing-ipc.md), della [griglia](reference/grid-ipc.md) e dei [temi](reference/theme-ipc.md): l'IPC dei loro motori
+- [Il formato della lavagna](reference/canvas-format.md) (`fub-canvas-core`),
+  le [toppe](reference/canvas-operations.md) con la loro inversa,
+  [la lavagna come codice](reference/canvas-code.md) (letture, misure, operazioni
+  d'intento) col suo [schema](reference/canvas-schema.md), [Mermaid e le
+  scalette](reference/canvas-import.md), [il controllo](reference/canvas-check.md),
+  [l'inchiostro](reference/canvas-ink.md) (`fub:ink`) con [le ancore di pagina e
+  di cella](reference/canvas-ink-anchors.md), e [gli estratti](reference/canvas-parts.md) (`fub:parts`)
+- [Il server MCP](reference/mcp-server.md), [il clipper del browser](reference/web-clipper.md) e [le tessere delle mappe](reference/map-tiles.md)
+- [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
+  ferme, il contratto dei renderer; [la scheda dei file Craft](reference/canvas-craft.md)
+- [I tasti e i gesti della lavagna](reference/canvas-input.md), [la sua
+  vista](reference/canvas-view.md), [l'ispettore](reference/canvas-inspector.md)
+  e [convertire le schede](reference/canvas-convert.md)
+- [Le convenzioni scritte nelle note](reference/note-conventions.md): i commenti (`{==passo==}{>>messaggio<<}`)
+- [I tipi delle proprietà](reference/property-types.md): il registro
+  `properties.types`, le opzioni di Selezione e Stato e i loro comandi
 - [I formati dei file Craft](reference/craft-formats.md), gli
   [XMP accanto alle foto](reference/xmp-sidecars.md) e le
   [app esterne](reference/external-editors.md)
 
 ## Vedere stato e direzione
 
-- [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il
-  rilascio
-- [M5, il runtime WASM](project/m5-wasm-runtime.md): la retrospettiva
+- [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il rilascio, M5
 
 ## Capire le decisioni
 
 - [Indice ADR](decisions/README.md)
-
-## Le pagine che verranno
-
-Nomi già scelti, pagine non ancora scritte: ciascuna nasce quando la sua
-fase passa il cancello (l'ordine sta in [Stato](project/status.md)).
-
-| Pagina | La fase che la scrive |
-|---|---|
-| `misure/motori-*.md` | K0, le misure dei motori |
-| `architecture/componenti.md` | K1 e K2, il modello a componenti |
-| `reference/fub-motori.md` | K3, lo strato dei motori |
-| `product/lavagna.md` | la lavagna, prima versione |
-| `product/pdf-lettore.md` | P2, il visore PDF |
-| `product/pdf-completo.md` | P5, la modifica completa |
-| `product/disegno-completo.md` | K6, tutti gli strumenti del disegno |
-| `product/foto.md` e `product/libreria-foto.md` | K7 e K8 |
 
 ## Gerarchia delle fonti
 

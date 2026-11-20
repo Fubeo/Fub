@@ -229,7 +229,13 @@ export class QuadtreePool implements Quadtree {
     // corretti: sono la somma di tutti i discendenti), i 4 figli partono
     // vuoti e ricevono il contenuto esistente più il nuovo nodo.
     const b = i * 4;
-    for (let k = 0; k < 4; k++) this.children[b + k] = this.newNode();
+    // `newNode` può riallocare `children`: in `this.children[b + k] =
+    // this.newNode()` l'array si legge PRIMA della chiamata, e il figlio
+    // finirebbe nell'array vecchio, perso. Prima il nodo, poi la scrittura.
+    for (let k = 0; k < 4; k++) {
+      const child = this.newNode();
+      this.children[b + k] = child;
+    }
     // Semi-lato del figlio = metà del padre; i centri sono a ±meta/2 dal
     // centro del padre, così i 4 bbox dei figli coprono esattamente i 4
     // quadranti della cella padre (niente buchi: il pruning di `nearest`

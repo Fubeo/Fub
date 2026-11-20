@@ -1,11 +1,14 @@
 // Rinominare dal titolo del foglio.
 //
-// Nella testata la vista scrive il percorso del documento (`.pane-toolbar >
-// .muted`). Qui quel percorso diventa il posto da cui si rinomina: doppio clic,
-// oppure F2 (o Invio, o Spazio) col fuoco sul titolo, e al suo posto compare un
-// campo col nome della pagina. Invio rinomina, Esc e la perdita del fuoco
-// lasciano tutto com'era. Le cartelle del percorso (`[data-folder]`) sono della
-// vista, che le apre nell'esplora: il doppio clic lì non rinomina.
+// Nella testata la vista scrive il percorso del documento a briciole
+// (`.pane-toolbar > .muted`: il vault, le cartelle e il nome in `.crumb-name`,
+// col percorso intero in `data-path`). Qui quel percorso diventa il posto da cui
+// si rinomina: doppio clic sul nome, oppure F2 (o Invio, o Spazio) col fuoco sul
+// titolo, e al suo posto compare un campo col nome della pagina. Un carattere
+// scritto col fuoco sul titolo apre il campo e ne è l'inizio. Invio rinomina,
+// Esc e la perdita del fuoco lasciano tutto com'era. Il vault e le cartelle del
+// percorso (`[data-folder]`) sono della vista, che le apre nell'esplora: il
+// doppio clic lì non rinomina.
 //
 // # La strada
 //
@@ -28,15 +31,24 @@
 // rinominare: il nome scritto era per quello di prima. Una risposta che arriva
 // quando il campo non c'è più non riapre niente: un rifiuto si dice con un
 // avviso, perché non resti muto.
+//
+// # Il titolo e il primo H1
+//
+// Una nota il cui primo H1 dice il nome si mostra con un titolo solo: l'H1 è
+// ripiegato nel titolo (`page/title.ts`). Rinominare da qui riscrive anche
+// quell'H1 col nome nuovo, nello stesso gesto e con un passo d'annullamento
+// della nota, come dal titolo della testata: lo fanno le superfici del
+// riquadro (`retitleIn`), solo dopo una rinomina riuscita.
 import "./sheets.css";
 
+import { retitleIn } from "../../../editors/text/profiles/markdown/page/title";
 import { errorText } from "../../../host/errors";
 import { onLanguage, t } from "../../../i18n/strings";
-import { openPopover, textButton, textField, type PopoverHandle } from "../../../kit";
+import { composingKey, openPopover, textButton, textField, type PopoverHandle } from "../../../kit";
 import { nameFault, pageName } from "../../../rules/mirrored";
 import { searchedName } from "../../../rules/searched-name";
 import { flushPendingSave, renameKeepingBuffer } from "../../../state/document-session";
-import { NAME_FAULT, pageRenameTarget } from "../../../state/page-rename";
+import { NAME_FAULT, pageRenameTarget, renamedPagePath } from "../../../state/page-rename";
 import { renameFolder } from "../../../state/vault";
 import { activeDoc } from "../../../state/layout";
 import { identifier } from "../../../ui/a11y";
@@ -74,6 +86,13 @@ export function proposedName(from: string, typed: string): string | null {
   return nameFault(pageRenameTarget(from, clean).to, "new") === null ? clean : null;
 }
 
+/// Una battuta che scrive un carattere: non una scorciatoia, non un tasto con
+/// nome (Tab, Maiusc, un tasto morto), non lo Spazio, che preme il bottone.
+function writes(event: KeyboardEvent): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey || composingKey(event)) return false;
+  return event.key !== " " && [...event.key].length === 1;
+}
+
 export function mountTitleRename(lifetime: Lifetime): void {
   let edit: Edit | null = null;
 
@@ -83,6 +102,11 @@ export function mountTitleRename(lifetime: Lifetime): void {
     const pane = paneIdOf(bar);
     return pane === null ? null : activeDoc(pane);
   };
+
+  /// Il percorso che il titolo mostra. Per un documento la vista lo scrive a
+  /// briciole (vault, cartelle, `.crumb-name`) e lo tiene intero in
+  /// `data-path`: il testo delle briciole non è più il percorso.
+  const pathOf = (crumb: HTMLElement): string => crumb.dataset.path ?? crumb.textContent ?? "";
 
   const set = (el: HTMLElement, name: string, value: string | null): void => {
     if (el.getAttribute(name) === value) return;
@@ -97,7 +121,7 @@ export function mountTitleRename(lifetime: Lifetime): void {
     crumb.removeAttribute("role");
     crumb.removeAttribute("tabindex");
     crumb.removeAttribute("aria-label");
-    setTooltip(crumb, crumb.textContent ?? "");
+    setTooltip(crumb, pathOf(crumb));
   };
 
   const close = (focusTitle: boolean): void => {
@@ -237,6 +261,7 @@ export function mountTitleRename(lifetime: Lifetime): void {
           return;
         }
         mine.busy = false;
+        retitle(mine, from, name);
         if (edit === mine) close(true);
         return;
       }
@@ -254,7 +279,18 @@ export function mountTitleRename(lifetime: Lifetime): void {
       return;
     }
     mine.busy = false;
+    retitle(mine, from, name);
     if (edit === mine) close(true);
+  };
+
+  /// Dopo una rinomina riuscita: l'H1 ripiegato col nome di prima prende il
+  /// nome nuovo, nelle superfici del riquadro in cui si è rinominato.
+  const retitle = (mine: Edit, from: string, name: string): void => {
+    const pane = mine.bar.closest("[data-pane]");
+    if (!pane || lifetime.closed) return;
+    // La pagina rinominata ha un id nuovo; per una cartella è la sua pagina.
+    const to = renamedPagePath(from, name);
+    retitleIn(pane, { from, to }, pageName(from), pageName(to));
   };
 
   const open = (bar: HTMLElement): void => {
@@ -282,7 +318,8 @@ export function mountTitleRename(lifetime: Lifetime): void {
     life.listen(field.input, "keydown", (event) => {
       // Da tastiera il nome proposto si raggiunge con Tab, come il prossimo
       // controllo: il riquadro del messaggio non sta accanto al campo nel DOM.
-      if (event.key === "Tab" && !event.shiftKey && !event.isComposing) {
+      if (composingKey(event)) return;
+      if (event.key === "Tab" && !event.shiftKey) {
         const use = mine.note?.element.querySelector<HTMLElement>(".sheet-title-proposal");
         if (use) {
           event.preventDefault();
@@ -290,7 +327,7 @@ export function mountTitleRename(lifetime: Lifetime): void {
         }
         return;
       }
-      if (event.key !== "Escape" || event.isComposing) return;
+      if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
       // Una rinomina partita non si annulla: Esc aspetta la risposta.
@@ -324,8 +361,12 @@ export function mountTitleRename(lifetime: Lifetime): void {
   lifetime.listen(panes, "dblclick", (event) => {
     const title = titleOf(event.target);
     const bar = title ? barOf(title) : null;
-    // Una cartella del percorso si apre nell'esplora: due colpi lì non rinominano.
-    if (!bar || (event.target as Element).closest("[data-folder]")) return;
+    // Una cartella del percorso, o il vault, si apre nell'esplora: due colpi lì
+    // non rinominano. Il nome da rinominare è `.crumb-name`: la figura e i
+    // segni fra le briciole non sono il nome; il titolo attorno ai pezzi sì.
+    // Un titolo senza briciole si rinomina tutto.
+    if (!title || !bar || (event.target as Element).closest("[data-folder]")) return;
+    if (event.target !== title && title.querySelector(".crumb-name") && !(event.target as Element).closest(".crumb-name")) return;
     event.preventDefault();
     open(bar);
   });
@@ -342,6 +383,19 @@ export function mountTitleRename(lifetime: Lifetime): void {
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       title.click();
+    } else if (writes(event)) {
+      // Chi ha cliccato il titolo e scrive il nome nuovo di getto: la prima
+      // lettera apre il campo e ne è l'inizio. Senza, le lettere prima del
+      // primo spazio cadevano sul bottone e lo Spazio apriva il campo col
+      // nome selezionato, che il resto sostituiva (IMP-3806).
+      const bar = barOf(title);
+      if (!bar) return;
+      event.preventDefault();
+      open(bar);
+      const input = edit?.input;
+      if (!input) return;
+      input.value = event.key;
+      input.setSelectionRange(input.value.length, input.value.length);
     }
   });
   // Un clic del puntatore sul titolo non rinomina (è il doppio clic a farlo);

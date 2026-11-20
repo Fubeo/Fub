@@ -112,8 +112,28 @@ pub fn append_lines(sync_dir: &Path, replica_id: &str, lines: &[String]) -> Resu
         ));
     }
     std::fs::create_dir_all(sync_dir).map_err(|e| QueueError::Io(format!("sync dir: {e}")))?;
-    // Backpressure before append: a full authority queue never drops.
     let pending = count_lines(sync_dir, replica_id)?;
+    append_lines_after(sync_dir, replica_id, lines, pending)
+}
+
+/// [`append_lines`] when the caller already knows how many ops the queue
+/// holds (`pending`), so the queue is not read again before appending.
+pub(super) fn append_lines_after(
+    sync_dir: &Path,
+    replica_id: &str,
+    lines: &[String],
+    pending: usize,
+) -> Result<(), QueueError> {
+    if lines
+        .iter()
+        .any(|line| line.len() > MAX_LINE_BYTES || line.contains('\n'))
+    {
+        return Err(QueueError::Io(
+            "sync operation exceeds queue line cap".to_string(),
+        ));
+    }
+    std::fs::create_dir_all(sync_dir).map_err(|e| QueueError::Io(format!("sync dir: {e}")))?;
+    // Backpressure before append: a full authority queue never drops.
     if pending + lines.len() > MAX_QUEUE_OPS {
         return Err(QueueError::QueueFull {
             pending: pending + lines.len(),
@@ -304,8 +324,27 @@ fn collect_quarantined(
 /// Durably remove acked `op_id`s: rewrite without them via atomic write.
 /// Ack durability = the rewrite is fsynced before returning.
 pub fn ack_ops(sync_dir: &Path, replica_id: &str, ack: &[String]) -> Result<usize, QueueError> {
+    Ok(ack_ops_counted(sync_dir, replica_id, ack)?.map_or(0, |acked| acked.removed))
+}
+
+/// The queue after an ack that removed something.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Acked {
+    pub removed: usize,
+    /// Ops still pending and their bytes as [`enforce_cap`] measures them.
+    pub pending: usize,
+    pub bytes: u64,
+}
+
+/// [`ack_ops`], also telling what the rewritten queue holds; `None` when
+/// nothing was removed and the file was left alone.
+pub(super) fn ack_ops_counted(
+    sync_dir: &Path,
+    replica_id: &str,
+    ack: &[String],
+) -> Result<Option<Acked>, QueueError> {
     if ack.is_empty() {
-        return Ok(0);
+        return Ok(None);
     }
     let acked: BTreeSet<&str> = ack.iter().map(|s| s.as_str()).collect();
     let ops = load_ops(sync_dir, replica_id)?;
@@ -316,7 +355,7 @@ pub fn ack_ops(sync_dir: &Path, replica_id: &str, ack: &[String]) -> Result<usiz
         .collect();
     let removed = before - kept.len();
     if removed == 0 {
-        return Ok(0);
+        return Ok(None);
     }
     let mut buf = String::new();
     for op in &kept {
@@ -327,7 +366,11 @@ pub fn ack_ops(sync_dir: &Path, replica_id: &str, ack: &[String]) -> Result<usiz
     }
     atomic_write(&queue_path(sync_dir, replica_id), buf.as_bytes())
         .map_err(|e| QueueError::Io(format!("queue ack write: {e}")))?;
-    Ok(removed)
+    Ok(Some(Acked {
+        removed,
+        pending: kept.len(),
+        bytes: buf.len() as u64,
+    }))
 }
 
 /// Check the authority queue's caps. Unacked ops are NEVER expired by wall
@@ -340,23 +383,37 @@ pub fn enforce_cap(
     _now_ms: u64,
 ) -> Result<(usize, bool), QueueError> {
     let ops = load_ops(sync_dir, replica_id)?;
-    if ops.len() > MAX_QUEUE_OPS {
-        return Err(QueueError::QueueFull { pending: ops.len() });
-    }
-    let mut bytes: usize = 0;
-    for op in &ops {
-        bytes = bytes.saturating_add(
-            serde_json::to_string(op)
-                .map_err(|e| QueueError::Io(format!("queue encode: {e}")))?
-                .len()
-                + 1,
-        );
-    }
-    let cap = quotas.max_vault_bytes as usize;
-    if cap > 0 && bytes > cap {
-        return Err(QueueError::QueueFull { pending: ops.len() });
-    }
+    check_cap(ops.len(), measured_bytes(&ops)?, quotas)?;
     Ok((0, false))
+}
+
+/// Bytes a queue of `ops` measures for its cap: each op's JSON line plus the
+/// line end.
+pub(super) fn measured_bytes(ops: &[super::SyncOp]) -> Result<u64, QueueError> {
+    let mut bytes: u64 = 0;
+    for op in ops {
+        let line =
+            serde_json::to_string(op).map_err(|e| QueueError::Io(format!("queue encode: {e}")))?;
+        bytes = bytes.saturating_add(line.len() as u64 + 1);
+    }
+    Ok(bytes)
+}
+
+/// The caps of [`enforce_cap`] on a queue already counted: `pending` ops
+/// measuring `bytes`.
+pub(super) fn check_cap(
+    pending: usize,
+    bytes: u64,
+    quotas: &ServiceQuotas,
+) -> Result<(), QueueError> {
+    if pending > MAX_QUEUE_OPS {
+        return Err(QueueError::QueueFull { pending });
+    }
+    // Una quota di 0 byte non tiene niente: 0 non spegne il tetto.
+    if bytes > quotas.max_vault_bytes {
+        return Err(QueueError::QueueFull { pending });
+    }
+    Ok(())
 }
 
 /// Bytes every replica queue of the vault occupies, quarantined lines

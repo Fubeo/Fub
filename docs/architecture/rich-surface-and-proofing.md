@@ -80,13 +80,13 @@ l'IPC.
   `MAX_SHOWN_BYTES` in `projection.rs`): la superficie la disegna. Le altre
   restano segnaposti col nome e la misura. Il ritorno al documento ignora
   quei byte: vale l'immagine tenuta in `k`. Il codec ODT non li porta ancora.
-  L'enfasi (`m`) e l'aspetto
-  del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
-  sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;
-  il ritorno al documento ne fa formattazione diretta, o la toglie quando
-  basta toglierla. Allo stesso modo un paragrafo porta l'allineamento
-  risolto (`align`), la disposizione (`p`: rientri, prima riga, spazi,
-  interlinea, in punti) dove differisce da quella del suo stile, e lo stile
+  L'enfasi (`m`) e l'aspetto del carattere (`f`: tipo, dimensione, colore,
+  colore dell'evidenziatore) sono marche **risolte**, scritte soltanto dove
+  differiscono dal paragrafo; il ritorno al documento ne fa formattazione
+  diretta, o la toglie quando basta toglierla. Allo stesso modo un paragrafo
+  porta l'allineamento risolto (`align`), la disposizione (`p`: rientri, prima
+  riga, spazi, interlinea, in punti) dove differisce da quella del suo stile
+  (in una cella conta lo stile della tabella, ECMA-376 §17.7.2), e lo stile
   di un paragrafo di corpo (`s`). Il carattere del documento (`f` in testa)
   la galleria degli stili (`styles`) e l'aspetto di ogni ruolo (`roles`:
   titoli, citazione, elenco) sono suggerimenti di resa che il ritorno
@@ -143,7 +143,7 @@ l'IPC.
   nome; commenti, note e permessi per identità; numeri unici nuovi). Si
   rilegge e si controlla contro il file come i byte del codec, e ciò che non
   sa trattare ripiega sulla scrittura intera. Le normalizzazioni
-  dichiarate (`NORMALIZATIONS` in `inventory.rs`, ciascuna con la sua
+  dichiarate (`NORMALIZATIONS` in `inventory/normalize.rs`, ciascuna con la sua
   ragione) non si contano: gli `w:rsid*`, `w:proofErr`,
   `w:lastRenderedPageBreak`, gli `w14:paraId`/`w14:textId` e i loro rimandi
   nei commenti, le statistiche di `app.xml`, il numero (non la presenza) di
@@ -167,32 +167,32 @@ l'IPC.
   propria cronologia `prosemirror-history`; ciò che arriva da un altro riquadro
   o dal disco sostituisce i blocchi diversi fuori dalla cronologia.
   Come nell'editor di testo il Tab si ferma sul foglio che scorre
-  (`.rich-page`, `role="document"`), non dentro il documento: Invio porta a
-  scrivere, dove Tab scrive una tabulazione, sposta il livello di un
+  (`.rich-page`, `role="document"`), non dentro: Invio, o un carattere, porta
+  a scrivere. Dentro, Tab scrive una tabulazione, sposta il livello di un
   elenco o, in una tabella, va di cella in cella (`cell-selection.ts`, che
   sceglie anche più celle), e dopo un Esc, per due secondi, Tab esce.
 - `editors/rich/ribbon.ts` è la barra multifunzione del documento, caricata
   col motore: la barra del kit (`kit/ribbon/ribbon.ts`, la stessa del
   foglio) con le schede Home, Inserisci, Layout, Revisione, Visualizza e la
   contestuale Tabella, Annulla e Ripeti accanto alle schede, le lettere con
-  Alt o F10 e Ctrl+F1 per ritirarla. Ogni controllo è un'azione del motore
+  Alt o F10 e Ctrl+F1 per ritirarla, i gruppi raccolti aperti nella barra
+  (`openInPlace`), forma, pelle e moto del kit (`motion: true`, la tenda è la
+  ricerca con `.rich-page`). Ogni controllo è un'azione del motore
   (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore scrive
   (tipo, dimensione, stile del paragrafo, con la galleria che scrive ogni
-  nome nel carattere del documento), un riquadro di
-  `editors/rich/panels.ts` o una scheda del pannello di destra
-  (`side.ts`). Layout ha le gallerie veloci della pagina (Margini,
-  Orientamento, Dimensione, Colonne), con ciò che c'è segnato e una voce
-  «Altre opzioni di pagina…» che apre Proprietà; Conteggio apre Proprietà
-  sul conteggio. Il catalogo della barra spegne col perché ciò
-  che non si dà adesso: in sola lettura ciò che scrive (restano Trova,
-  Conteggio, Commenti, scorrere le revisioni e lo zoom), mentre si registra
-  il formato. La superficie dichiara `ownBar`, e la barra di formattazione
-  della shell non si mostra sopra; la mini-barra del menu è quella della
-  barra. Lo zoom è il comando della shell (`runShellCommand`). «Copia formato» lo tiene
-  il motore e lo applica alla prossima selezione finita (puntatore o Maiusc
-  rilasciati). **Immagine** sceglie un'immagine del vault con la porta delle
-  immagini del disegno (`DrawingImagePort`: `pick`, poi `read` dal documento
-  con il tetto di 16 MB), senza IPC propria.
+  nome nel carattere del documento), un riquadro di `panels.ts` o una scheda
+  del pannello di destra (`side.ts`). Layout ha le gallerie veloci della
+  pagina (Margini, Orientamento, Dimensione, Colonne) con il segno e «Altre
+  opzioni di pagina…» per Proprietà, come Conteggio. Il catalogo della
+  barra spegne col perché ciò che non si dà adesso: in sola lettura ciò che
+  scrive (restano Trova, Conteggio, Commenti, scorrere le revisioni e lo zoom),
+  mentre si registra il formato. La superficie dichiara `ownBar`, e la barra di
+  formattazione della shell non si mostra sopra; la mini-barra del menu è quella
+  della barra. Lo zoom è il comando della shell (`runShellCommand`). «Copia
+  formato» lo tiene il motore e lo applica alla prossima selezione finita
+  (puntatore o Maiusc rilasciati). **Immagine** sceglie un'immagine del vault
+  con la porta delle immagini del disegno (`DrawingImagePort`: `pick`, poi
+  `read` dal documento con il tetto di 16 MB), senza IPC propria.
 - `editors/rich/review.ts` trova, sostituisce e conta sul testo verbatim di
   un paragrafo alla volta, con una foglia (a-capo, oggetto, segno) per
   posizione: un'occorrenza torna a un intervallo esatto e non porta via un
@@ -338,33 +338,33 @@ Markdown non dipende da questa famiglia; senza la feature `rich` dell'host
 questi documenti tornano file a byte.
 
 L'aspetto del contenuto
-([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): le
-modalità `document` (Pagina) e `reading` (Lettura) offrono `file` e
-`adattato`, `writing` (Scrittura) offre `tema`. I valori del file (carattere,
-misura, colore, evidenziato, spazi, interlinea) stanno sull'elemento come
-variabili di dato `--file-*`, e li disegna la meccanica di `structure.css`
-sotto `look-file` e `look-adattato`; in Scrittura nessuna regola li legge, e
-cambiare modalità non ridisegna il documento. Nell'aspetto adattato
-`editors/rich/tints.ts` porta ogni colore del file sulla carta del tema con
-`theme/adapt.ts`, come decorazione, perché il colore dipende dalla carta e
-non dal documento. Le regole della pelle sul contenuto valgono solo sotto
-`.look-tema`, e il gate del sanitizer lo fa rispettare. I segni del documento
-(revisioni, correttore, ricerca, commenti) prendono i ruoli della carta su
-cui stanno, dalla pelle, e la superficie non scrive ruoli del tema
-sull'elemento.
+([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): Pagina
+(`document`) e Lettura (`reading`) offrono `file` e `adattato`, Scrittura
+(`writing`) `tema`. I valori del file (carattere, misura, colore, evidenziato,
+spazi, interlinea) stanno sull'elemento come variabili di dato `--file-*`, e li
+disegna la meccanica di `structure.css` sotto `look-file` e `look-adattato`; in
+Scrittura nessuna regola li legge, e cambiare modalità non ridisegna il
+documento. Nell'aspetto adattato `editors/rich/tints.ts` porta ogni colore del
+file sulla carta del tema con `theme/adapt.ts`, come decorazione: il colore
+dipende dalla carta, non dal documento. La pelle veste il contenuto solo sotto
+`.look-tema` (gate del sanitizer). I segni del documento (revisioni,
+correttore, ricerca, commenti) prendono dalla pelle i ruoli della carta su cui
+stanno, mai ruoli del tema scritti sull'elemento. In `look-file` anche
+l'anello, il cursore, la sintassi (d'inchiostro, come in Excel) e l'accento dei
+segni della griglia, non le intestazioni, vengono dai `--paper-*`.
 
 Il moto della carta (`editors/rich/rich-motion.ts`) segue la regola del palco:
 il testo è sempre al suo posto finale, e si muove la sagoma di ogni foglio
-(`.rich-sheet-paper`). `RichMotion` osserva la classe `look-*`,
-`data-mode` e la barra, e tiene una fotografia del «prima» aggiornata a ogni
+(`.rich-sheet-paper`). `RichMotion` osserva la classe `look-*`, `data-mode`
+e la barra nascosta in Lettura (non quella ritirata, che muove la pagina
+come tenda), e tiene una fotografia del «prima» aggiornata a ogni
 scorrimento e a ogni misura: il paragrafo in cima alla vista resta in cima
 (`readingPoint`, `keepReadingPoint`), e ogni sagoma va dal rettangolo che si
 vedeva, anche a metà di una corsa, a quello nuovo. Lo zoom e i fogli rifatti
 da una modifica scritta li annuncia il motore: lo zoom tiene il centro della
 vista, un foglio nuovo esce da quello sopra, di uno tolto resta una sagoma
-(`.rich-sheet-ghost`) che si dissolve. Un documento aperto o cambiato da
-fuori non muove niente; le coreografie `rich-*` di `bench/motion-rules.mjs`
-lo misurano.
+(`.rich-sheet-ghost`) che si dissolve. Un documento aperto o cambiato da fuori
+non muove niente; le coreografie `rich-*` di `bench/motion-rules.mjs` lo misurano.
 
 Andare a un punto (Trova, la revisione dopo o prima, una voce di Commenti o
 di Revisioni) è una transazione col segno `GO_TO`. Il motore la scorre da sé,
@@ -399,25 +399,25 @@ Il correttore ha un motore e un client per tutte le superfici di prosa, e un
 adattatore per formato.
 
 - Il motore è la feature `fub.proof`, una route `query_index` custom chiusa e
-  versionata (`languages`, `check`). Riceve segmenti di testo, una lingua, le
-  opzioni e le parole del dizionario personale; risponde con rilievi in byte
-  UTF-8 dentro ogni segmento. Il dizionario personale è l'impostazione del
-  vault `proof.words`, scritta soltanto dai comandi `proof.word.add` e
-  `proof.word.remove`. I dizionari Hunspell della macchina li legge soltanto
-  il collegamento dell'host (`HostWiring::MachineDictionaries`).
+  versionata (`languages`, `check`). Riceve segmenti, lingua, opzioni, parole
+  del dizionario personale e, facoltativo, `list_items` (le voci d'elenco: la
+  prima parola non chiede la maiuscola); risponde con rilievi in byte UTF-8
+  dentro ogni segmento. Il dizionario personale è `proof.words` del vault,
+  scritto soltanto da `proof.word.add` e `proof.word.remove`; i dizionari
+  Hunspell della macchina li legge soltanto `HostWiring::MachineDictionaries`.
 - Il client, `apps/client/src/editors/core/proof.ts`, non conosce CodeMirror
   né formati. Legge le impostazioni, spezza le richieste entro i limiti della
-  route, ricorda i segmenti già controllati, converte gli offset in code unit
-  UTF-16 e scarta le risposte arrivate dopo un cambio di configurazione. Senza
-  la feature (`unserved`) risponde `null`.
+  route, converte gli offset in code unit UTF-16 e scarta le risposte tardive;
+  i segmenti controllati col dizionario presente stanno in una LRU dell'app
+  (`ProofCache`) per le superfici rimontate. Senza feature risponde `null`.
 - L'adattatore del formato estrae la prosa e tiene la mappa a pezzi verso il
   buffer. Quello Markdown
   (`apps/client/src/editors/text/profiles/markdown/proof.ts`) mette `U+FFFC`
-  al posto di codice, link, tag e formule, e offre una sostituzione soltanto
-  per un rilievo che sta in un pezzo copiato dal buffer. I segni sono
-  diagnostiche di `@codemirror/lint`; una correzione è una transazione
-  `input.proof`, quindi entra nella cronologia della superficie e nella coda
-  della `DocumentSession`.
+  al posto di codice, link, tag e formule, segna voce d'elenco il blocco in un
+  `ListItem` (paragrafo o compito), e offre una sostituzione soltanto per un
+  rilievo in un pezzo copiato dal buffer. I segni sono diagnostiche di
+  `@codemirror/lint`; una correzione è una transazione `input.proof`, quindi
+  entra nella cronologia della superficie e nella coda della `DocumentSession`.
 
 L'adattatore della superficie ricca (`apps/client/src/editors/rich/proof.ts`)
 usa lo stesso client e la stessa mappa a pezzi: un segmento per paragrafo, con

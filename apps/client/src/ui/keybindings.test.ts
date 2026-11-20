@@ -20,6 +20,8 @@ import kernelKeys from "../__fixtures__/command-keys.json";
 import { obsidianKeymap } from "../editors/text/profiles/markdown/commands";
 import { conflicts, normalize, shadowedPrefixes, registerShellCommand, resetShellCommands, type CommandEntry } from "./commands";
 import { mountKeyboard } from "./keyboard";
+import { trapFocus } from "./a11y";
+import { state } from "../state/store";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { SHELL_KEYS } from "./shell-keys.generated";
 
@@ -296,6 +298,55 @@ describe("popup ed editor locali precedono la shell", () => {
     keydown(document.body, "p", true);
     expect(executed).toEqual([]);
   });
+
+  // IMP-152: con le Impostazioni aperte Ctrl+N creava una nota e Ctrl+W
+  // chiudeva la scheda, dietro la finestra. Con una finestra modale aperta le
+  // scorciatoie globali tacciono; Escape resta della finestra.
+  it("con una finestra modale aperta le scorciatoie globali tacciono, ed Escape la chiude", () => {
+    const executed = mount();
+    const window = document.createElement("div");
+    window.setAttribute("role", "dialog");
+    window.setAttribute("aria-modal", "true");
+    window.innerHTML = '<button id="dentro">Ok</button>';
+    document.body.appendChild(window);
+    let closed = 0;
+    const release = trapFocus(window, () => {
+      closed += 1;
+      release();
+    });
+    const inside = document.getElementById("dentro")!;
+    const event = new KeyboardEvent("keydown", { key: "p", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+    inside.dispatchEvent(event);
+    keydown(document.body, "p", true);
+    expect(executed, "niente agisce sul fondo").toEqual([]);
+    expect(event.defaultPrevented, "e il tasto non va oltre").toBe(true);
+
+    // Un menu non modale sopra la finestra non la toglie di mezzo.
+    const menu = document.createElement("div");
+    document.body.appendChild(menu);
+    const releaseMenu = trapFocus(menu, () => {});
+    keydown(menu, "p", true);
+    expect(executed).toEqual([]);
+    releaseMenu();
+
+    inside.focus();
+    inside.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(closed, "Escape chiude la finestra").toBe(1);
+    // Chiusa la finestra, le scorciatoie tornano.
+    keydown(document.body, "p", true);
+    expect(executed).toEqual(["shell.palette"]);
+  });
+
+  it("un menu non modale aperto non spegne le scorciatoie", () => {
+    const executed = mount();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.appendChild(menu);
+    const release = trapFocus(menu, () => {});
+    keydown(menu, "p", true);
+    release();
+    expect(executed).toEqual(["shell.palette"]);
+  });
 });
 
 // Un tasto dell'app non ruba un tasto di testo: Alt+← in un campo resta del
@@ -361,6 +412,60 @@ describe("i tasti senza Mod cedono ai campi", () => {
         press(field('<input type="checkbox">'), { key: "ArrowLeft", altKey: true });
         press(field("<input readonly>"), { key: "ArrowLeft", altKey: true });
         expect(executed).toEqual(["shell.pane.back", "shell.pane.back"]);
+      });
+
+      // IMP-008: il WebView di Linux non lega Ctrl+Z ai campi; lo fa la
+      // tastiera dell'app, sulla pila del campo stesso.
+      describe("annulla e ripeti in un campo", () => {
+        let steps: string[] = [];
+        beforeEach(() => {
+          steps = [];
+          Object.defineProperty(document, "execCommand", {
+            configurable: true,
+            value: (command: string) => {
+              steps.push(command);
+              return true;
+            },
+          });
+        });
+        afterEach(() => {
+          delete (document as { execCommand?: unknown }).execCommand;
+        });
+
+        for (const html of ['<input type="search">', "<textarea></textarea>"]) {
+          it(`Mod+Z annulla e Mod+Maiusc+Z ripete in ${html}`, () => {
+            mount(on);
+            const input = field(html);
+            const undo = press(input, { key: "z", ...mod });
+            const redo = press(input, { key: "Z", shiftKey: true, ...mod });
+            expect(steps).toEqual(["undo", "redo"]);
+            expect(undo.defaultPrevented).toBe(true);
+            expect(redo.defaultPrevented).toBe(true);
+          });
+        }
+
+        it("non tocca un contenteditable, che ha la sua pila", () => {
+          mount(on);
+          const event = press(field('<div contenteditable="true"></div>'), { key: "z", ...mod });
+          expect(steps).toEqual([]);
+          expect(event.defaultPrevented).toBe(false);
+        });
+
+        it("un comando dell'app sullo stesso accordo vince", () => {
+          // Un comando del kernel rilegato a Mod-z (l'annulla del vault, per
+          // chi lo vuole lì): la tastiera lo esegue, e il campo non annulla.
+          const spec = { id: "vault.undo", title: "vault.undo", description: "", keybinding: "Mod-z", scope: { reach: "vault" } };
+          const specs = state.commandSpecs;
+          state.commandSpecs = [spec as unknown as (typeof specs)[number]];
+          try {
+            const executed = mount(on);
+            press(field("<input>"), { key: "z", ...mod });
+            expect(steps).toEqual([]);
+            expect(executed).toEqual(["vault.undo"]);
+          } finally {
+            state.commandSpecs = specs;
+          }
+        });
       });
 
       it("un accordo con Mod resta dell'app anche in un campo", () => {

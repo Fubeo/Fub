@@ -26,7 +26,7 @@ altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 
 | Percorso qui | Percorso upstream | Modifiche |
 |---|---|---|
-| `crates/proof/` | `crates/proof/` | nessuna |
+| `crates/proof/` | `crates/proof/` | `src/slot.rs` nuovo; `src/lib.rs`, `src/hyphen.rs`, `src/dict.rs`, `src/patterns.rs`, `src/affix.rs`, `src/tr/dict.rs` e il `mod.rs` di `cs`, `hr`, `id`, `it`, `pl`, `pt`, `ru` e `tr` per dizionari e sillabazione liberabili |
 | `crates/geom/` | `crates/geom/` | nessuna |
 | `crates/doc/` | `crates/doc/` | nessuna |
 | `crates/docx/` | `crates/docx/` | `src/package.rs` e otto file di `tests/` per `zip` 9; `src/write/settings_merge.rs`, `src/write/mod.rs` e `src/lib.rs` per una verifica in più; `src/ink.rs` nuovo, `src/read/story.rs` e `src/write/story.rs` per inchiostro e immagini SVG |
@@ -89,6 +89,46 @@ Le patch di `patches/`, una per ragione:
   `asvg:svgBlip` (Office 2016) e `src/read/story.rs` rilegge da un file;
   `svg_of` lo dà. Servono a `fub-format-rich` per l'inchiostro e i disegni
   nei documenti; il resto del codec non cambia. Va proposta all'upstream.
+- `0005-dizionari-liberabili`: i dizionari Hunspell letti dal disco (ceco,
+  croato, indonesiano, italiano, polacco, portoghese, russo e turco) e i dati
+  di sillabazione decodificati dal binario (inglese, polacco, portoghese,
+  italiano, tedesco) restavano in memoria fino alla fine del processo. Il
+  modulo nuovo `proof/src/slot.rs` tiene ciascuno in un posto liberabile: chi
+  lo usa ne prende una copia condivisa (`Arc`) e finisce con quella, la
+  lettura avviene fuori dal lock e una sola volta anche se più thread la
+  chiedono insieme. In `proof/src/lib.rs` le funzioni pubbliche nuove
+  `loaded_dictionaries_bytes()` e `release_dictionaries()`,
+  `loaded_hyphenation_bytes()` e `release_hyphenation()` stimano e liberano
+  quei byte (le `release_*` restituiscono i byte liberati); il primo uso che
+  segue rilegge, o ridecodifica. Ogni lingua ha `release_dictionary()` e
+  `loaded_dictionary_bytes()`. Un dizionario dato in memoria con
+  `install_dictionary` non si libera, perché non si potrebbe rileggere, e non
+  si conta; le parole dell'utente e quelle ignorate non si toccano. La stima
+  conta la capacità di vettori, stringhe e tabelle (`HeapBytes` di
+  `dict.rs`, `patterns.rs`, `affix.rs` e `tr/dict.rs`), non l'overhead
+  dell'allocatore né i dati inclusi nel binario. `Dictionary::en_us()` e
+  `Patterns::{en_us, pl, pt, it, de}()` di `hyphen.rs` restituiscono un
+  `Arc` invece di un riferimento `'static`: è l'unico cambiamento di firma, e
+  nessun crate di Fub le chiama. Ogni file toccato ha i suoi test. Va
+  proposta all'upstream, con il testo qui sotto.
+
+Il testo da proporre per `0005`, in inglese per l'upstream:
+
+> **Let embedders release the loaded dictionaries and hyphenation data.**
+> The Hunspell dictionaries read from disk and the decoded hyphenation
+> patterns live in `OnceLock`s for the whole process. An embedder under
+> memory pressure (a desktop app that keeps running for days, a server) has
+> no way to give that memory back. This adds a small `Slot<T>` in
+> `wordcraft-proof` (an `RwLock<Option<Arc<T>>>` with a loading mutex, so a
+> dictionary is read outside the lock and only once when several threads
+> need it) and, at the crate root, `loaded_dictionaries_bytes()`,
+> `release_dictionaries() -> usize`, `loaded_hyphenation_bytes()` and
+> `release_hyphenation() -> usize` (estimated heap bytes). A check already
+> running keeps its shared copy; the next one reads the dictionary again. A
+> dictionary given with `install_dictionary` is kept, since it can't be read
+> again. `Dictionary::en_us()` and `Patterns::{en_us, pl, pt, it, de}()` now
+> return `Arc<_>` instead of `&'static _`. Behaviour without a release is
+> unchanged.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo

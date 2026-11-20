@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { smartLists } from "../../smart-lists";
 import { undo, history } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import type { EditorView } from "@codemirror/view";
 import { EditorSelection, EditorState, type StateCommand, type Transaction } from "@codemirror/state";
 import {
   autoPairDecision,
@@ -16,6 +17,7 @@ import {
   sortTableColumns,
   indentListItem,
   markdownKeymap,
+  obsidianKeymap,
   smartListEnter,
   toggleBold,
   toggleBulletList,
@@ -26,6 +28,7 @@ import {
   toggleStrikethrough,
   toggleWikilink,
 } from "./commands";
+import { parsed } from "./test-support";
 
 // I comandi sono `StateCommand` puri: si testano creando un `EditorState` e
 // catturando la transazione dal dispatch, senza mai istanziare una view (i
@@ -37,18 +40,18 @@ function mk(spec: string): EditorState {
   if (open !== -1) {
     const stripped = spec.replace("‹", "");
     const close = stripped.indexOf("›");
-    return EditorState.create({
+    return parsed(EditorState.create({
       doc: stripped.replace("›", ""),
       selection: EditorSelection.single(open, close),
       extensions: [markdown({ base: markdownLanguage })],
-    });
+    }));
   }
   const bar = spec.indexOf("|");
-  return EditorState.create({
+  return parsed(EditorState.create({
     doc: spec.replace("|", ""),
     selection: EditorSelection.single(bar === -1 ? 0 : bar),
     extensions: [markdown({ base: markdownLanguage })],
-  });
+  }));
 }
 
 function show(state: EditorState): string {
@@ -246,9 +249,33 @@ describe("smartListEnter", () => {
   });
 
   it("voce vuota: toglie il marcatore e chiude la lista", () => {
-    expect(run(smartListEnter, "- uno\n- |").out).toBe("- uno\n|");
     expect(run(smartListEnter, "- [ ] |").out).toBe("|");
     expect(run(smartListEnter, "1. |").out).toBe("|");
+  });
+
+  // Senza la riga vuota il testo scritto dopo sarebbe una riga pigra della
+  // voce (`- tre\nquattro`), e resterebbe dentro di lei in ogni lettore.
+  it("voce vuota in fondo a un elenco: ne esce con un paragrafo vero, staccato da una riga vuota", () => {
+    expect(run(smartListEnter, "- tre\n- |").out).toBe("- tre\n\n|");
+    expect(run(smartListEnter, "1. tre\n2. |").out).toBe("1. tre\n\n|");
+    expect(run(smartListEnter, "- [ ] tre\n- [ ] |").out).toBe("- [ ] tre\n\n|");
+    // Già staccata da una riga vuota (un elenco largo): non ne serve un'altra.
+    expect(run(smartListEnter, "- tre\n\n- |").out).toBe("- tre\n\n|");
+    // Dentro una citazione si esce dall'elenco, non dalla citazione.
+    expect(run(smartListEnter, "> - tre\n> - |").out).toBe("> - tre\n>\n> |");
+  });
+
+  it("riga vuota in fondo a un riquadro: ne esce con un paragrafo vero", () => {
+    expect(run(smartListEnter, "> [!note] Viaggio\n> Portare il passaporto\n> |").out)
+      .toBe("> [!note] Viaggio\n> Portare il passaporto\n\n|");
+    expect(run(smartListEnter, "> > dentro\n> > |").out).toBe("> > dentro\n>\n> |");
+  });
+
+  it("voce annidata vuota: sale di un livello, col marcatore della voce che la conteneva", () => {
+    expect(run(smartListEnter, "- a\n  - b\n  - |").out).toBe("- a\n  - b\n- |");
+    expect(run(smartListEnter, "- [ ] a\n  - [ ] |").out).toBe("- [ ] a\n- [ ] |");
+    expect(run(smartListEnter, "1. a\n   1. b\n   2. |\n2. c").out).toBe("1. a\n   1. b\n2. |\n3. c");
+    expect(run(smartListEnter, "- a\n  - b\n    - |").out).toBe("- a\n  - b\n  - |");
   });
 
   it("fuori lista, dentro il marcatore o con selezione lascia il default", () => {
@@ -313,7 +340,8 @@ describe("smartListEnter", () => {
       extensions: [markdown({ base: markdownLanguage }), EditorState.allowMultipleSelections.of(true)],
     });
     smartListEnter({ state, dispatch: (tr) => { state = tr.state; } });
-    expect(state.sliceDoc()).toBe("1. a\n2. \n\n3. b");
+    // La voce svuotata esce dall'elenco con la sua riga vuota sopra.
+    expect(state.sliceDoc()).toBe("1. a\n2. \n\n\n3. b");
   });
 
   it("in sola lettura lascia il default", () => {
@@ -395,8 +423,16 @@ describe("trasforma in lista (Mod-Shift-8/7)", () => {
     expect(run(toggleBulletList, "riga|").out).toBe("- riga|");
   });
 
-  it("solo righe vuote → default", () => {
-    expect(run(toggleBulletList, "|").handled).toBe(false);
+  it("la riga vuota del cursore diventa voce, col cursore dopo il segno (IMP-6104)", () => {
+    expect(run(toggleBulletList, "|").out).toBe("- |");
+    expect(run(toggleOrderedList, "a\n|").out).toBe("a\n1. |");
+    expect(run(toggleBulletList, "  |").out).toBe("  - |");
+    // Il cursore a inizio di una riga piena resta sul testo, dopo il segno.
+    expect(run(toggleBulletList, "|riga").out).toBe("- |riga");
+  });
+
+  it("solo righe vuote selezionate → default", () => {
+    expect(run(toggleBulletList, "‹\n\n›").handled).toBe(false);
   });
 });
 
@@ -486,6 +522,25 @@ describe("autoPairDecision", () => {
     expect(decide("costa 5$ e poi |$", "$")).toBeNull();
   });
 
+  it("la chiusura `$$` di un blocco scritto su una riga scavalca tutte e due le `$`", () => {
+    expect(decide("$$x^2|$$", "$")).toEqual({ action: "skip" });
+    expect(decide("$$x^2$|$", "$")).toEqual({ action: "skip" });
+    // Una `\$` scritta è un segno, non la chiusura.
+    expect(decide("$$5\\$|$", "$")).toBeNull();
+    // `$$` da solo non ha ancora una formula da chiudere.
+    expect(decide("$$|$", "$")).toBeNull();
+  });
+
+  it("la `]` battuta subito dopo una casella è quella della casella (`- [ ]]`)", () => {
+    expect(decide("- [ ]|", "]")).toEqual({ action: "absorb" });
+    expect(decide("1. [x]|", "]")).toEqual({ action: "absorb" });
+    expect(decide("> - [ ]|", "]")).toEqual({ action: "absorb" });
+    // Fuori da una voce la `]` è una lettera.
+    expect(decide("testo [ ]|", "]")).toBeNull();
+    // Dopo la casella, nel testo della voce, sì.
+    expect(decide("- [ ] a]|", "]")).toBeNull();
+  });
+
   it("niente auto-pair con selezione attiva o input multi-carattere", () => {
     expect(decide("‹sel›", "[")).toBeNull();
     const state = mk("|");
@@ -511,7 +566,7 @@ describe("operazioni tabella", () => {
       if (from < 0) throw new Error(`missing selection: ${text}`);
       return EditorSelection.cursor(from);
     });
-    let state = EditorState.create({
+    let state = parsed(EditorState.create({
       doc,
       selection: EditorSelection.create(locations),
       extensions: [
@@ -519,7 +574,7 @@ describe("operazioni tabella", () => {
         EditorState.allowMultipleSelections.of(true),
         history(),
       ],
-    });
+    }));
     let transactions = 0;
     const dispatch = (tr: Transaction) => {
       state = tr.state;
@@ -586,5 +641,60 @@ describe("operazioni tabella", () => {
       expect(result.doc).toBe(source);
       expect(result.transactions).toBe(0);
     }
+  });
+});
+
+describe("la testata del frontmatter sotto Alt-↑/↓ e Mod-d", () => {
+  /// Il tasto come lo dà il profilo Markdown: il primo accordo di
+  /// `obsidianKeymap` con quel nome che risponde `true` ferma la catena, come in
+  /// CodeMirror. Restituisce lo stato dopo il tasto.
+  function pressOn(spec: string, key: string): EditorState {
+    const state = mk(spec);
+    let next = state;
+    const view = { state, dispatch: (tr: Transaction) => { next = tr.state; } } as unknown as EditorView;
+    for (const binding of obsidianKeymap) {
+      if (binding.key === key && binding.run?.(view)) break;
+    }
+    return next;
+  }
+
+  it("Alt-↑ sulla prima riga del corpo non la porta dentro la testata", () => {
+    expect(show(pressOn("---\nicon: 🌿\n---\n|Uno\n\nDue", "Alt-ArrowUp"))).toBe("---\nicon: 🌿\n---\n|Uno\n\nDue");
+  });
+
+  it("Alt-↓ sulla riga di chiusura non la porta nel corpo", () => {
+    expect(show(pressOn("---\nicon: 🌿\n|---\nUno", "Alt-ArrowDown"))).toBe("---\nicon: 🌿\n|---\nUno");
+  });
+
+  it("Alt-↓ sulla riga di apertura non la sposta sotto la prima proprietà", () => {
+    expect(show(pressOn("|---\nicon: 🌿\n---\nUno", "Alt-ArrowDown"))).toBe("|---\nicon: 🌿\n---\nUno");
+  });
+
+  it("Alt-↓ sull'ultima riga della testata non la fa uscire nel corpo", () => {
+    expect(show(pressOn("---\ntags:\n  - x\n  |- y\n---\nTesto", "Alt-ArrowDown"))).toBe("---\ntags:\n  - x\n  |- y\n---\nTesto");
+  });
+
+  it("dentro la testata una riga che non è una chiave si sposta fra le sue righe", () => {
+    expect(show(pressOn("---\ntags:\n  - x\n  |- y\n---\nTesto", "Alt-ArrowUp"))).toBe("---\ntags:\n  |- y\n  - x\n---\nTesto");
+  });
+
+  it("su una riga di proprietà il tasto resta com'era: ai bordi non fa niente", () => {
+    expect(show(pressOn("---\nicon: |🌿\n---\nUno", "Alt-ArrowUp"))).toBe("---\nicon: |🌿\n---\nUno");
+  });
+
+  it("senza una chiusura il `---` non è una testata: le righe si spostano come prima", () => {
+    expect(show(pressOn("---\nUno|\nDue", "Alt-ArrowUp"))).toBe("Uno|\n---\nDue");
+    expect(show(pressOn("Uno\nDue|", "Alt-ArrowUp"))).toBe("Due|\nUno");
+  });
+
+  it("Mod-d sulla testata non copia le sue righe `---`", () => {
+    expect(pressOn("|---\nicon: 🌿\n---\nUno", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\n---\nUno");
+    expect(pressOn("---\nicon: 🌿\n|---\nUno", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\n---\nUno");
+    expect(pressOn("---\nicon: 🌿\n‹---\nUno›\n\nDue", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\n---\nUno\n\nDue");
+  });
+
+  it("Mod-d su una proprietà o sul corpo copia la riga come sempre", () => {
+    expect(pressOn("---\nicon: |🌿\n---\nUno", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\nicon: 🌿\n---\nUno");
+    expect(pressOn("---\nicon: 🌿\n---\n|Uno\n\nDue", "Mod-d").doc.toString()).toBe("---\nicon: 🌿\n---\nUno\nUno\n\nDue");
   });
 });

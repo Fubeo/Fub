@@ -3,11 +3,14 @@
 //!
 //! Una sessione tiene i byte del file, il modello che ne legge GridCraft e il
 //! giornale delle celle cambiate. Le finestre mostrano i valori del file, e
-//! per una cella del giornale il valore nuovo; niente si ricalcola, e una
-//! formula che legge una cella cambiata, direttamente o attraverso altre
-//! formule, mostra il valore del file segnato come **non aggiornato**.
+//! per una cella del giornale il valore nuovo; una formula che legge una cella
+//! cambiata, direttamente o attraverso altre formule, mostra il valore che il
+//! motore di GridCraft le ricalcola ([`crate::ricalcolo`]), e così una formula
+//! che il file ha salvato senza valore. Una formula che il motore non sa
+//! calcolare mostra il valore del file, segnato come **non aggiornato**.
 //! Salvare è l'innesto ([`crate::graft`]): i byte del file con le celle del
-//! giornale cambiate, e ogni altro byte com'era.
+//! giornale cambiate e i valori nuovi delle formule, e ogni altro byte
+//! com'era.
 //!
 //! Dal primo comando della barra la sessione è **a comandi**
 //! ([`crate::commands`], ADR 0219): il giornale porta i comandi, la facciata
@@ -30,7 +33,7 @@ use std::sync::Arc;
 use fub_abi::{
     grid_bytes_revision, grid_journal_match, Arg, GridApplyRequest, GridBook, GridBytesCell,
     GridBytesProvider, GridBytesSession, GridBytesWindow, GridCalculation, GridCellKey,
-    GridCellStyle, GridColumn, GridCommand, GridCommandOutcome, GridCommandRequest,
+    GridCellPatch, GridCellStyle, GridColumn, GridCommand, GridCommandOutcome, GridCommandRequest,
     GridCommandState, GridComment, GridCommentReply, GridCommit, GridDataBar, GridIcon,
     GridInvalidation, GridJournal, GridJournalMatch, GridLink, GridMerge, GridNotice, GridRow,
     GridSelection, GridSheet, GridSheetView, GridSourceEdit, GridSurfaceSpec, GridTable, GridValue,
@@ -47,13 +50,16 @@ use gridcraft_model::{CalcMode, Sheet, SheetViewMode, Visibility, Workbook};
 use gridcraft_numfmt::{format_value, NumberFormat};
 use serde_json::{json, Value as Json};
 
-use crate::commands::{self, Facade, Ran, Rewrite, REDO, UNDO};
+use crate::commands::{self, Facade, Ran, Rewrite, Snapshot, REDO, UNDO};
+use crate::cronologia::{self, Archivio, Cambio, Linea, Passo, Punto, Stato, RESTORE};
 use crate::display::{self, NotShown, Warning};
-use crate::graft::{graft, CellEdit, GraftError};
+use crate::graft::{graft_with_values, CellEdit, FormulaValue, GraftError};
 use crate::input::{self, InputError, NewValue};
 use crate::locks::SheetLocks;
+use crate::motore::{Fogli, Presa};
 use crate::objects;
 use crate::package::Package;
+use crate::ricalcolo::{self, Ricalcolo};
 use crate::{guarded, sheet_xml, XlsxError, FORMAT_ID};
 
 /// L'id della superficie.
@@ -203,13 +209,28 @@ struct Instance {
     files: Vec<FileSheet>,
     sheets: Vec<SheetInfo>,
     ids: HashMap<String, usize>,
+    /// I fogli come il file li dà, per tornare a un giornale di celle.
+    base_sheets: Vec<SheetInfo>,
     /// Le celle si modificano: il pacchetto e il modello si corrispondono.
     editable: bool,
     notices: Vec<GridNotice>,
+    /// Le formule su un riferimento circolare, salvate con `0`: la griglia le
+    /// mostra con `#CIRC!` finché formula e valore restano quelli del file.
+    circular: HashMap<Key, String>,
     journal: GridJournal,
     entries: BTreeMap<GridCellKey, Entry>,
     deps: Option<Deps>,
+    /// Le formule senza valore salvato nel file.
+    uncached: Vec<Key>,
+    /// I valori che il motore dà alle formule senza valore salvato, quando
+    /// il giornale è vuoto: la facciata parte dalla cartella con questi.
+    base_values: HashMap<Key, GcValue>,
+    /// Le formule non aggiornate quando il giornale è vuoto.
+    base_stale: Stale,
+    /// Le formule non aggiornate, nella modalità a celle.
     stale: Stale,
+    /// I valori ricalcolati delle formule, nella modalità a celle.
+    fresh: HashMap<Key, GcValue>,
     revision: Revision,
     /// Il giornale è di comandi: le finestre mostrano la cartella della
     /// facciata.
@@ -218,24 +239,65 @@ struct Instance {
     facade: Option<Facade>,
     /// La riscrittura della cartella, misurata alla prima domanda.
     rewrite: Rewrite,
+    /// La cronologia del documento ([`crate::cronologia`]).
+    line: Linea,
+    /// La presa sul motore dei fogli: conta l'istanza fra quelle aperte.
+    /// Data dopo che l'istanza è nata: un'apertura fallita non conta.
+    presa: Option<Presa>,
 }
 
 /// Il provider della griglia per le cartelle di Excel.
-#[derive(Default)]
+///
+/// Il motore dei fogli ([`crate::motore`]) nasce alla prima apertura, non con
+/// il provider; ogni istanza aperta lo tiene, e quando si chiude l'ultima le
+/// sue cache si svuotano.
 pub struct XlsxGridProvider {
     next_instance: u64,
     instances: HashMap<String, Instance>,
+    fogli: Arc<Fogli>,
+    /// Le cronologie pubblicate, per la sessione che si riapre dopo un
+    /// salvataggio.
+    archivio: Archivio,
+}
+
+impl Default for XlsxGridProvider {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl XlsxGridProvider {
+    /// Il provider sul motore dei fogli del processo. Il primo provider del
+    /// processo iscrive il motore nel registro; nessuno lo costruisce.
     pub fn new() -> Self {
-        Self::default()
+        Self::con_fogli(Fogli::processo())
+    }
+
+    /// Il provider su un motore dei fogli dato: per le prove, con servizi e
+    /// budget loro.
+    #[doc(hidden)]
+    pub fn con_fogli(fogli: Arc<Fogli>) -> Self {
+        Self {
+            next_instance: 0,
+            instances: HashMap::new(),
+            fogli,
+            archivio: Archivio::default(),
+        }
     }
 
     fn instance(&mut self, instance: &str) -> Result<&mut Instance, PluginError> {
-        self.instances
-            .get_mut(instance)
-            .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))
+        instance_in(&mut self.instances, instance)
+    }
+
+    /// Pubblica la cronologia dell'istanza `id` se la sua revisione non è
+    /// più `before`.
+    fn publish(&mut self, id: &str, before: &Revision) {
+        if let Some(instance) = self.instances.get(id) {
+            if instance.revision != *before {
+                self.archivio
+                    .publish(instance.revision.clone(), instance.line.clone());
+            }
+        }
     }
 
     fn new_instance_id(&mut self) -> String {
@@ -269,17 +331,30 @@ impl GridBytesProvider for XlsxGridProvider {
         if source.len() > MAX_GRID_BYTES_SOURCE {
             return Err(bad("grid source exceeds byte limit"));
         }
-        if Revision::of_bytes(source) != revision {
-            return Err(PluginError::Conflict(
-                "grid source does not match its declared revision".into(),
-            ));
-        }
+        // `revision` è già quella dei byte (`GridBytesProvider::open`).
         journal.validate()?;
+        // La prima apertura costruisce il motore.
+        let motore = self
+            .fogli
+            .motore()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
         let read = crate::read(source).map_err(xlsx_error)?;
-        let mut instance = Instance::new(source.to_vec(), revision, read)?;
-        instance.set_journal(journal.clone())?;
+        let mut instance = Instance::new(source.to_vec(), revision.clone(), read)?;
+        let (archivio, instances) = (&self.archivio, &self.instances);
+        instance.set_journal_from(journal.clone(), &|id| {
+            instances
+                .values()
+                .find_map(|open| open.line.find(id))
+                .or_else(|| archivio.find(id))
+        })?;
+        // La cronologia di chi ha scritto questi byte, o questo giornale.
+        instance.line = self
+            .archivio
+            .line_for(&instance.revision, &revision, journal.is_empty())
+            .unwrap_or_else(|| Linea::new(journal.to_text()));
         let id = self.new_instance_id();
         let summary = instance.summary(&id)?;
+        instance.presa = Some(self.fogli.prendi(motore));
         self.instances.insert(id, instance);
         Ok(summary)
     }
@@ -301,7 +376,10 @@ impl GridBytesProvider for XlsxGridProvider {
         request: GridApplyRequest,
     ) -> Result<GridCommit, PluginError> {
         request.validate()?;
-        let commit = self.instance(instance)?.apply(&request)?;
+        let before = self.instance(instance)?.revision.clone();
+        let commit = self.instance(instance)?.apply(&request);
+        self.publish(instance, &before);
+        let commit = commit?;
         commit.validate()?;
         Ok(commit)
     }
@@ -325,7 +403,16 @@ impl GridBytesProvider for XlsxGridProvider {
         request: GridCommandRequest,
     ) -> Result<GridCommandOutcome, PluginError> {
         request.validate()?;
-        let outcome = self.instance(instance)?.command(&request)?;
+        let id = instance;
+        let instance = self.instance(id)?;
+        let before = instance.revision.clone();
+        let outcome = instance.command(&request);
+        // Anche un comando fallito può aver usato le cache.
+        if let Some(presa) = &instance.presa {
+            presa.motore().dopo_il_comando(&request.command.id);
+        }
+        self.publish(id, &before);
+        let outcome = outcome?;
         outcome.validate()?;
         Ok(outcome)
     }
@@ -335,20 +422,57 @@ impl GridBytesProvider for XlsxGridProvider {
         instance: &str,
         expected: Revision,
     ) -> Result<Vec<u8>, PluginError> {
-        self.instance(instance)?.bytes_to_write(&expected)
+        let instance = instance_in(&mut self.instances, instance)?;
+        let bytes = instance.bytes_to_write(&expected)?;
+        // La sessione che si aprirà sui byte nuovi ritrova la cronologia.
+        if bytes != instance.bytes {
+            self.archivio
+                .saved(Revision::of_bytes(&bytes), instance.revision.clone());
+        }
+        Ok(bytes)
     }
 
+    /// Chiude l'istanza. Se era l'ultima aperta sul motore dei fogli, la sua
+    /// presa svuota le cache e rende la memoria al sistema; in ogni caso il
+    /// budget rispetta il tetto. Il provider non ha lucchetti suoi: l'istanza
+    /// esce dall'elenco prima, e le cache si chiamano dopo.
     fn close(&mut self, instance: &str) -> Result<(), PluginError> {
-        self.instances
+        let closed = self
+            .instances
             .remove(instance)
-            .map(|_| ())
-            .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))
+            .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))?;
+        drop(closed);
+        self.fogli.chiusa();
+        Ok(())
     }
 
     fn shutdown(&mut self) -> Result<(), PluginError> {
-        self.instances.clear();
+        let closed = std::mem::take(&mut self.instances);
+        let any = !closed.is_empty();
+        drop(closed);
+        if any {
+            self.fogli.chiusa();
+        }
         Ok(())
     }
+}
+
+fn instance_in<'a>(
+    instances: &'a mut HashMap<String, Instance>,
+    instance: &str,
+) -> Result<&'a mut Instance, PluginError> {
+    instances
+        .get_mut(instance)
+        .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))
+}
+
+/// Gli indici dei fogli per id.
+fn ids_of(sheets: &[SheetInfo]) -> HashMap<String, usize> {
+    sheets
+        .iter()
+        .enumerate()
+        .map(|(index, sheet)| (sheet.id.clone(), index))
+        .collect()
 }
 
 impl Instance {
@@ -382,31 +506,181 @@ impl Instance {
             });
             files.push(FileSheet { part, shape: None });
         }
-        let ids = sheets
-            .iter()
-            .enumerate()
-            .map(|(index, sheet)| (sheet.id.clone(), index))
-            .collect();
-        let notices = notices(&workbook, &report);
+        let ids = ids_of(&sheets);
+        // Un errore nella ricerca lascia la cartella com'era: niente avviso.
+        let circular =
+            guarded(|| Ok(crate::circular::circular_formulas(&workbook))).unwrap_or_default();
+        let mut notices = notices(&workbook, &report);
+        let uncached = ricalcolo::senza_valore(&workbook);
+        if !circular.is_empty() {
+            notices.push(GridNotice {
+                code: "circular".into(),
+                count: u32::try_from(circular.len()).unwrap_or(u32::MAX),
+            });
+        }
         let revision = grid_bytes_revision(&source, "");
-        Ok(Instance {
+        let mut instance = Instance {
             bytes,
             source,
             workbook,
             files,
+            base_sheets: sheets.clone(),
             sheets,
             ids,
             editable,
             notices,
+            circular,
             journal: GridJournal::new(),
             entries: BTreeMap::new(),
             deps: None,
+            uncached,
+            base_values: HashMap::new(),
+            base_stale: Stale::None,
             stale: Stale::None,
+            fresh: HashMap::new(),
             revision,
             commanding: false,
             facade: None,
             rewrite: Rewrite::Unknown,
-        })
+            line: Linea::new(String::new()),
+            presa: None,
+        };
+        instance.calculate_base();
+        Ok(instance)
+    }
+
+    /// Calcola le formule che il file ha salvato senza valore, e dice
+    /// nell'avviso quante restano vuote. Un calcolo che non riesce lascia le
+    /// celle vuote, come le dà il file: la cartella si apre lo stesso.
+    fn calculate_base(&mut self) {
+        if self.uncached.is_empty() {
+            return;
+        }
+        if self.deps.is_none() {
+            match deps(&self.workbook) {
+                Ok(deps) => self.deps = Some(deps),
+                Err(error) => {
+                    tracing::warn!(%error, "xlsx: formule senza valore non calcolate");
+                    return;
+                }
+            }
+        }
+        match self.recalculate(&BTreeMap::new()) {
+            Ok((stale, fresh)) => {
+                self.base_stale = stale;
+                self.base_values = fresh;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "xlsx: formule senza valore non calcolate");
+                return;
+            }
+        }
+        let computed = self
+            .uncached
+            .iter()
+            .filter(|key| self.base_values.contains_key(key))
+            .count();
+        let computed = u32::try_from(computed).unwrap_or(u32::MAX);
+        for notice in &mut self.notices {
+            if notice.code == "uncomputed" {
+                notice.count = notice.count.saturating_sub(computed);
+            }
+        }
+        self.notices
+            .retain(|notice| notice.code != "uncomputed" || notice.count > 0);
+    }
+
+    /// Le formule toccate dalle voci `entries` del giornale e quelle senza
+    /// valore salvato, ricalcolate: quelle che restano non aggiornate, e i
+    /// valori delle altre. Le dipendenze sono già lette.
+    fn recalculate(
+        &mut self,
+        entries: &BTreeMap<GridCellKey, Entry>,
+    ) -> Result<(Stale, HashMap<Key, GcValue>), XlsxError> {
+        let cambi: Vec<(Key, GcValue)> = entries
+            .values()
+            .filter(|entry| entry.state != GridJournalMatch::Applied)
+            .filter_map(|entry| entry.place.map(|place| (place, new_value(&entry.value))))
+            .collect();
+        self.recalculate_with(&cambi)
+    }
+
+    /// [`Instance::recalculate`] con le celle `cambi` e i loro valori.
+    fn recalculate_with(
+        &mut self,
+        cambi: &[(Key, GcValue)],
+    ) -> Result<(Stale, HashMap<Key, GcValue>), XlsxError> {
+        let Some(deps) = self.deps.as_ref() else {
+            return Ok((Stale::None, HashMap::new()));
+        };
+        let edited: HashSet<Key> = cambi.iter().map(|(key, _)| *key).collect();
+        let touched = stale(&self.workbook, deps, &edited, &self.uncached);
+        let Stale::Cells { keys, areas } = touched else {
+            return Ok((touched, HashMap::new()));
+        };
+        // Le formule il cui valore salvato l'innesto non riscrive. Una
+        // cartella che non si modifica non salva niente: si mostra soltanto.
+        let mut blocked = HashSet::new();
+        if self.editable {
+            for &(sheet, cell) in &keys {
+                if self.holds_value(sheet, cell) {
+                    blocked.insert((sheet, cell));
+                }
+            }
+        }
+        let deps = self.deps.as_ref().expect("read above");
+        let Ricalcolo { valori, vecchie } = ricalcolo::ricalcola(
+            &self.workbook,
+            &deps.calc,
+            &deps.dynamic,
+            cambi,
+            &self.uncached,
+            &keys,
+            &blocked,
+        )?;
+        let stale = if vecchie.is_empty() && areas.is_empty() {
+            Stale::None
+        } else {
+            Stale::Cells {
+                keys: vecchie,
+                areas,
+            }
+        };
+        Ok((stale, valori))
+    }
+
+    /// Se il valore salvato della cella non si riscrive: un blocco che lo
+    /// tiene, o un foglio che l'innesto non tratta.
+    fn holds_value(&mut self, sheet: usize, cell: CellRef) -> bool {
+        self.shape(sheet);
+        match self.files[sheet].shape.as_ref().expect("read above") {
+            Shape::Unsupported => true,
+            Shape::Locks(locks) => locks
+                .at(&self.workbook.sheets[sheet], cell)
+                .is_some_and(|lock| lock.holds_value()),
+        }
+    }
+
+    /// Le formule tornano quelle del file: nessuna non aggiornata, nessun
+    /// valore ricalcolato oltre a quelli delle formule senza valore.
+    fn reset_calculation(&mut self) {
+        self.stale = self.base_stale.clone();
+        self.fresh = self.base_values.clone();
+    }
+
+    /// La cartella da cui parte la facciata: quella del file, con i valori
+    /// calcolati delle formule che il file ha salvato senza valore.
+    fn facade_base(&self) -> Workbook {
+        let mut base = self.workbook.clone();
+        for (&(sheet, cell), value) in &self.base_values {
+            if let Some(stored) = base
+                .sheet_mut(sheet)
+                .and_then(|model| model.cells.get_mut(cell))
+            {
+                stored.value = value.clone();
+            }
+        }
+        base
     }
 
     /// La cartella che la griglia mostra: quella del file, o quella della
@@ -419,8 +693,10 @@ impl Instance {
     }
 
     fn facade(&mut self) -> &mut Facade {
-        let workbook = &self.workbook;
-        self.facade.get_or_insert_with(|| Facade::new(workbook))
+        if self.facade.is_none() {
+            self.facade = Some(Facade::new(&self.facade_base()));
+        }
+        self.facade.as_mut().expect("made above")
     }
 
     /// La riscrittura misurata.
@@ -444,8 +720,12 @@ impl Instance {
             Rewrite::Loses(why) => Some(why.clone()),
             _ => None,
         });
-        let undo = self.commanding && !self.journal.commands().is_empty();
-        let mut catalog = self.facade().catalog(at, edits.as_deref(), blocked, undo);
+        let cursor = self.line.cursor();
+        let undo = cursor.checked_sub(1).is_some_and(|to| self.can_travel(to));
+        let redo = cursor + 1 < self.line.len() && self.can_travel(cursor + 1);
+        let mut catalog = self
+            .facade()
+            .catalog(at, edits.as_deref(), blocked, undo, redo);
         // Senza id stabili dei fogli la facciata non si apre affatto.
         if let Some(why) = blocked {
             for command in &mut catalog {
@@ -517,12 +797,26 @@ impl Instance {
                 }
             })
             .collect();
-        self.ids = self
-            .sheets
-            .iter()
-            .enumerate()
-            .map(|(index, sheet)| (sheet.id.clone(), index))
+        self.ids = ids_of(&self.sheets);
+    }
+
+    /// Rimette ai fogli le righe e le colonne di `before`. Il `GridCommit` di
+    /// `apply` non porta i fogli, e la shell controlla ogni finestra sulla
+    /// misura che conosce: una formula scritta sotto l'ultima riga usata, che
+    /// in modalità a comandi farebbe crescere il margine, rendeva illeggibili
+    /// le finestre (IMP-142). La misura cresce al primo comando dopo, che
+    /// porta i fogli, o alla riapertura. `counted` resta quello di prima, così
+    /// quel conteggio non salta il foglio cambiato.
+    fn keep_counts(&mut self, before: Vec<SheetInfo>) {
+        let mut before: HashMap<String, SheetInfo> = before
+            .into_iter()
+            .map(|info| (info.id.clone(), info))
             .collect();
+        for info in &mut self.sheets {
+            if let Some(old) = before.remove(&info.id) {
+                *info = old;
+            }
+        }
     }
 
     /// L'indice nel file del foglio `id`.
@@ -678,8 +972,17 @@ impl Instance {
     /// Il giornale nuovo, con le voci lette contro il file e le formule non
     /// aggiornate.
     fn set_journal(&mut self, journal: GridJournal) -> Result<(), PluginError> {
+        self.set_journal_from(journal, &|_| None)
+    }
+
+    /// [`Instance::set_journal`], con gli stati che [`RESTORE`] può chiamare.
+    fn set_journal_from(
+        &mut self,
+        journal: GridJournal,
+        find: &dyn Fn(&str) -> Option<Arc<Stato>>,
+    ) -> Result<(), PluginError> {
         if !journal.commands().is_empty() {
-            return self.replay(journal);
+            return self.replay(journal, find);
         }
         let mut entries = BTreeMap::new();
         for (key, before, after) in journal.entries() {
@@ -715,27 +1018,48 @@ impl Instance {
         let changed = entries
             .values()
             .any(|entry| entry.place.is_some() && entry.state != GridJournalMatch::Applied);
-        if changed && self.deps.is_none() {
-            self.deps = Some(deps(&self.workbook).map_err(xlsx_error)?);
+        if changed {
+            if self.deps.is_none() {
+                self.deps = Some(deps(&self.workbook).map_err(xlsx_error)?);
+            }
+            let (stale, fresh) = self.recalculate(&entries).map_err(xlsx_error)?;
+            self.stale = stale;
+            self.fresh = fresh;
+        } else {
+            self.reset_calculation();
         }
-        self.stale = match &self.deps {
-            Some(deps) if changed => stale(&self.workbook, deps, &entries),
-            _ => Stale::None,
-        };
         self.revision = grid_bytes_revision(&self.source, &journal.to_text());
         self.journal = journal;
         self.entries = entries;
         Ok(())
     }
 
-    /// Il giornale di comandi `journal`, rifatto sulla cartella del file.
-    fn replay(&mut self, journal: GridJournal) -> Result<(), PluginError> {
-        let mut facade = Facade::new(&self.workbook);
-        facade.replay(journal.commands())?;
+    /// Il giornale di comandi `journal`, rifatto sulla cartella del file. Un
+    /// [`RESTORE`] in testa parte dallo stato che chiama.
+    fn replay(
+        &mut self,
+        journal: GridJournal,
+        find: &dyn Fn(&str) -> Option<Arc<Stato>>,
+    ) -> Result<(), PluginError> {
+        let mut facade = Facade::new(&self.facade_base());
+        let mut rest = journal.commands();
+        if let Some(first) = rest.first().filter(|command| command.id == RESTORE) {
+            let stato = cronologia::restore_target(first)
+                .and_then(|id| find(&id))
+                .ok_or_else(cronologia::lost_state)?;
+            facade.adopt(&stato.snapshot);
+            rest = &rest[1..];
+        }
+        if rest.iter().any(|command| command.id == RESTORE) {
+            return Err(PluginError::Conflict(
+                format!("grid journal command `{RESTORE}` applies only first").into(),
+            ));
+        }
+        facade.replay(rest)?;
         self.facade = Some(facade);
         self.commanding = true;
         self.entries.clear();
-        self.stale = Stale::None;
+        self.reset_calculation();
         self.revision = grid_bytes_revision(&self.source, &journal.to_text());
         self.journal = journal;
         self.count_sheets();
@@ -1024,10 +1348,18 @@ impl Instance {
                     .unwrap_or_default(),
                 new_value(&entry.value),
             ),
-            None => (
-                self.disk_input(sheet, at),
-                model.value_ref(at).cloned().unwrap_or(GcValue::Empty),
-            ),
+            None => {
+                // Il valore ricalcolato di una formula, nella modalità a
+                // celle; altrimenti quello della cartella mostrata.
+                let fresh = (!self.commanding)
+                    .then(|| self.fresh.get(&(sheet, at)).cloned())
+                    .flatten();
+                let value = fresh.unwrap_or_else(|| {
+                    let value = model.value_ref(at).cloned().unwrap_or(GcValue::Empty);
+                    circular_value(&self.circular, model, sheet, at).unwrap_or(value)
+                });
+                (self.disk_input(sheet, at), value)
+            }
         };
         let look = display::look(workbook, sheet, model, at, cache);
         let formatted = format_value(
@@ -1094,10 +1426,54 @@ impl Instance {
         }
     }
 
+    /// Le patch della griglia: un passo della cronologia, con le celle che
+    /// hanno cambiato input.
     fn apply(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         if request.revision != self.revision {
             return Err(stale_revision());
         }
+        let mut seen = BTreeSet::new();
+        let before: Vec<(GridCellKey, String)> = request
+            .patches
+            .iter()
+            .filter(|patch| seen.insert(&patch.cell))
+            .map(|patch| (patch.cell.clone(), self.shown_input(&patch.cell)))
+            .collect();
+        let commit = self.write(request)?;
+        let changes: Vec<Cambio> = before
+            .into_iter()
+            .filter_map(|(cell, before)| {
+                let after = self.shown_input(&cell);
+                (after != before).then_some(Cambio {
+                    cell,
+                    before,
+                    after,
+                })
+            })
+            .collect();
+        if !changes.is_empty() {
+            self.record(Passo::Celle(changes.into()), None);
+        }
+        Ok(commit)
+    }
+
+    /// L'input che la griglia mostra nella cella `key`.
+    fn shown_input(&self, key: &GridCellKey) -> String {
+        if !self.commanding {
+            if let Some((_, after)) = self.journal.get(key) {
+                return after.to_owned();
+            }
+        }
+        match self.place(key) {
+            Some((sheet, cell)) if sheet < self.shown().sheets.len() => {
+                self.disk_input(sheet, cell)
+            }
+            _ => String::new(),
+        }
+    }
+
+    /// Scrive le patch, senza toccare la cronologia.
+    fn write(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         if self.commanding || self.writes_formula(request) {
             return self.apply_commands(request);
         }
@@ -1147,9 +1523,10 @@ impl Instance {
         }
         let before_text = self.journal.to_text();
         let before_stale = self.stale.clone();
+        let before_fresh = self.fresh.clone();
         self.set_journal(journal)?;
         let after_text = self.journal.to_text();
-        let invalidation = self.invalidation(changed, &before_stale);
+        let invalidation = self.invalidation(changed, &before_stale, &before_fresh);
         Ok(GridCommit {
             revision: self.revision.clone(),
             edit: text_diff(&before_text, &after_text),
@@ -1157,10 +1534,30 @@ impl Instance {
         })
     }
 
-    /// Le celle da rileggere: quelle cambiate e le formule che hanno cambiato
-    /// stato.
-    fn invalidation(&self, changed: Vec<GridCellKey>, before: &Stale) -> GridInvalidation {
+    /// Le celle da rileggere: quelle cambiate, le formule che hanno cambiato
+    /// stato e quelle che hanno cambiato valore ricalcolato.
+    fn invalidation(
+        &self,
+        changed: Vec<GridCellKey>,
+        before: &Stale,
+        before_fresh: &HashMap<Key, GcValue>,
+    ) -> GridInvalidation {
         let mut cells: BTreeSet<GridCellKey> = changed.into_iter().collect();
+        let recalculated = before_fresh
+            .iter()
+            .filter(|(key, value)| self.fresh.get(key) != Some(value))
+            .map(|(key, _)| key)
+            .chain(
+                self.fresh
+                    .keys()
+                    .filter(|key| !before_fresh.contains_key(key)),
+            );
+        for &(sheet, cell) in recalculated {
+            cells.insert(self.key(sheet, cell));
+            if cells.len() > MAX_GRID_INVALIDATED_CELLS {
+                return GridInvalidation::All;
+            }
+        }
         match (before, &self.stale) {
             (Stale::All, _) | (_, Stale::All) => return GridInvalidation::All,
             (Stale::Cells { areas: old, .. }, Stale::Cells { areas: new, .. }) if old != new => {
@@ -1232,7 +1629,34 @@ impl Instance {
                 deps.calc.graph.dependents(edit.sheet, edit.cell, &mut out);
                 !out.is_empty()
             });
-        graft(&self.bytes, &self.workbook, edits, recalc)
+        // I valori ricalcolati: quelli che la griglia mostra nella modalità a
+        // celle; nella modalità a comandi, quelli del ricalcolo delle costanti
+        // che il salvataggio innesta, con la stessa regola.
+        let fresh = if self.commanding {
+            let cambi: Vec<(Key, GcValue)> = edits
+                .iter()
+                .map(|edit| ((edit.sheet, edit.cell), new_value(&edit.value)))
+                .collect();
+            self.recalculate_with(&cambi).map_err(xlsx_error)?.1
+        } else {
+            self.fresh.clone()
+        };
+        let edited: HashSet<Key> = edits.iter().map(|edit| (edit.sheet, edit.cell)).collect();
+        let mut formulas: Vec<FormulaValue> = fresh
+            .into_iter()
+            .filter(|(key, value)| {
+                !edited.contains(key)
+                    && self.workbook.sheets[key.0]
+                        .cell(key.1)
+                        .is_some_and(|cell| cell.formula.is_some() && cell.value != *value)
+            })
+            .map(|((sheet, cell), value)| FormulaValue { sheet, cell, value })
+            .collect();
+        formulas.sort_by_key(|formula| (formula.sheet, formula.cell.row, formula.cell.col));
+        // Un valore calcolato da Fub si salva, e chi ha un suo motore lo rifà
+        // all'apertura.
+        let recalc = recalc || !formulas.is_empty();
+        graft_with_values(&self.bytes, &self.workbook, edits, &formulas, recalc)
             .map(|grafted| grafted.bytes)
             .map_err(graft_error)
     }
@@ -1243,23 +1667,32 @@ impl Instance {
             return Err(stale_revision());
         }
         let command = &request.command;
+        if command.id == commands::PART {
+            return self.part(command);
+        }
         let before = self.journal.to_text();
         let was = self.commanding;
-        let (ran, selection) = self.transaction(|this| {
-            let ran = match command.id.as_str() {
-                UNDO => this.undo()?,
-                REDO => this.redo()?,
+        let (ran, selection, prior) = self.transaction(|this| {
+            let (ran, prior) = match command.id.as_str() {
+                UNDO => (this.undo()?, None),
+                REDO => (this.redo()?, None),
                 _ => {
                     this.enter()?;
-                    this.give(command)?
+                    let prior = this.facade().snapshot();
+                    (this.give(command)?, Some(prior))
                 }
             };
             // Un comando che non cambia la cartella non porta la sessione
             // nella modalità a comandi.
             let keep = was || ran.changed;
-            Ok(((ran, this.selection()), keep))
+            Ok(((ran, this.selection(), prior), keep))
         })?;
         let after = self.journal.to_text();
+        if before != after {
+            if let Some(prior) = prior {
+                self.record(Passo::Comandi, Some(prior));
+            }
+        }
         let (sheets, hidden) = self.sheet_list();
         let commands = self.catalog(&selection);
         Ok(GridCommandOutcome {
@@ -1277,6 +1710,40 @@ impl Instance {
             selection,
             result: ran.result,
             dialog: ran.dialog,
+            commands,
+            book: self.book(),
+        })
+    }
+
+    /// [`commands::PART`]: dove sta la parte `part` della cartella mostrata
+    /// ([`crate::parts`]), o le parti che ci sono. Legge soltanto: niente
+    /// facciata nuova, niente modalità a comandi, il giornale com'è.
+    fn part(&mut self, command: &GridCommand) -> Result<GridCommandOutcome, PluginError> {
+        let params: Json = serde_json::from_str(&command.params)
+            .map_err(|_| bad("grid command parameters are not JSON"))?;
+        let text = match params.get("part") {
+            None | Some(Json::Null) => "",
+            Some(Json::String(text)) => text.as_str(),
+            Some(_) => return Err(bad(format!("{}: `part` is not text", commands::PART))),
+        };
+        let result = crate::parts::answer(self.shown(), text, |index| {
+            self.sheets.get(index).map(|info| info.id.clone())
+        });
+        let journal = self.journal.to_text();
+        let selection = self.selection();
+        let (sheets, hidden) = self.sheet_list();
+        let commands = self.catalog(&selection);
+        Ok(GridCommandOutcome {
+            commit: GridCommit {
+                revision: self.revision.clone(),
+                edit: text_diff(&journal, &journal),
+                invalidation: GridInvalidation::Cells(Vec::new()),
+            },
+            sheets,
+            hidden,
+            selection,
+            result: Some(result.to_string()),
+            dialog: None,
             commands,
             book: self.book(),
         })
@@ -1338,7 +1805,7 @@ impl Instance {
         self.facade().replay(&converted)?;
         self.commanding = true;
         self.entries.clear();
-        self.stale = Stale::None;
+        self.reset_calculation();
         self.revision = grid_bytes_revision(&self.source, &journal.to_text());
         self.journal = journal;
         self.count_sheets();
@@ -1377,24 +1844,77 @@ impl Instance {
         Ok(ran)
     }
 
-    /// Annulla l'ultimo comando del giornale.
-    fn undo(&mut self) -> Result<Ran, PluginError> {
-        if !self.commanding || self.journal.commands().is_empty() {
-            return Err(bad("nothing to undo"));
+    /// Un passo nuovo nella cronologia, al giornale di adesso. `prior` è lo
+    /// stato di prima, in modalità a comandi.
+    fn record(&mut self, passo: Passo, prior: Option<Snapshot>) {
+        if let Some(prior) = prior {
+            let current = self.line.current_mut();
+            if current.stato.is_none() {
+                current.stato = Some(Stato::new(prior));
+            }
         }
-        let Instance {
-            facade,
-            workbook,
-            journal,
-            ..
-        } = self;
-        facade
-            .as_mut()
-            .expect("a command journal has its facade")
-            .undo(workbook, journal.commands())?;
-        journal.pop_command();
-        self.revision = grid_bytes_revision(&self.source, &self.journal.to_text());
-        self.count_sheets();
+        let stato = self.state_now();
+        self.line
+            .push(Punto::new(self.journal.to_text(), stato, Some(passo)));
+    }
+
+    /// Lo stato della cartella mostrata, in modalità a comandi.
+    fn state_now(&self) -> Option<Arc<Stato>> {
+        match (&self.facade, self.commanding) {
+            (Some(facade), true) => Some(Stato::new(facade.snapshot())),
+            _ => None,
+        }
+    }
+
+    /// Se la sessione sa arrivare al punto `to`, accanto a quello di adesso.
+    fn can_travel(&self, to: usize) -> bool {
+        let target = self.line.point(to);
+        target.journal.is_some()
+            || matches!(self.line.crossing(to), Some(Passo::Celle(_)))
+            || target.stato.is_some()
+                && self.blocked().is_none()
+                && !matches!(self.rewrite, Rewrite::Loses(_))
+    }
+
+    /// Annulla l'ultimo passo della cronologia.
+    fn undo(&mut self) -> Result<Ran, PluginError> {
+        let to = self
+            .line
+            .cursor()
+            .checked_sub(1)
+            .filter(|&to| self.can_travel(to))
+            .ok_or_else(|| bad("nothing to undo"))?;
+        self.travel(to)
+    }
+
+    /// Ripete l'ultimo passo annullato.
+    fn redo(&mut self) -> Result<Ran, PluginError> {
+        let to = self.line.cursor() + 1;
+        if to >= self.line.len() || !self.can_travel(to) {
+            return Err(bad("nothing to redo"));
+        }
+        self.travel(to)
+    }
+
+    /// Porta il documento al punto `to` della cronologia, accanto a quello di
+    /// adesso: con il giornale del punto, se lo si sa; se no riscrivendo le
+    /// celle del passo, o con [`RESTORE`] verso lo stato del punto.
+    fn travel(&mut self, to: usize) -> Result<Ran, PluginError> {
+        let back = to < self.line.cursor();
+        let target = self.line.point(to).clone();
+        let passo = self.line.crossing(to).cloned();
+        match (&target.journal, passo, &target.stato) {
+            (Some(journal), _, stato) => self.go(journal, stato.as_deref())?,
+            (None, Some(Passo::Celle(changes)), _) => self.rewrite_cells(&changes, back)?,
+            (None, _, Some(stato)) => self.restore_to(stato)?,
+            (None, _, None) => return Err(bad("the state of that step is no longer in memory")),
+        }
+        let stato = if target.stato.is_none() {
+            self.state_now()
+        } else {
+            None
+        };
+        self.line.moved(to, self.journal.to_text(), stato);
         Ok(Ran {
             changed: true,
             result: None,
@@ -1402,20 +1922,85 @@ impl Instance {
         })
     }
 
-    /// Ripete l'ultimo comando annullato.
-    fn redo(&mut self) -> Result<Ran, PluginError> {
-        if !self.commanding {
-            return Err(bad("nothing to redo"));
+    /// Il giornale `journal` sui byte della sessione; `stato` è la cartella
+    /// che dà, se è di comandi.
+    fn go(&mut self, journal: &str, stato: Option<&Stato>) -> Result<(), PluginError> {
+        let journal = GridJournal::parse(journal)?;
+        if journal.commands().is_empty() {
+            self.commanding = false;
+            self.facade = None;
+            self.sheets = self.base_sheets.clone();
+            self.ids = ids_of(&self.sheets);
+            return self.set_journal(journal);
         }
-        let command = self.facade().redo()?;
-        self.journal.push_command(command)?;
-        self.revision = grid_bytes_revision(&self.source, &self.journal.to_text());
-        self.count_sheets();
-        Ok(Ran {
-            changed: true,
-            result: None,
-            dialog: None,
+        let Some(stato) = stato else {
+            return self.replay(journal, &|_| None);
+        };
+        self.facade().adopt(&stato.snapshot);
+        self.enter_journal(journal);
+        Ok(())
+    }
+
+    /// Le celle del passo `changes` riscritte all'indietro (`back`) o in
+    /// avanti.
+    fn rewrite_cells(&mut self, changes: &[Cambio], back: bool) -> Result<(), PluginError> {
+        let patches = changes
+            .iter()
+            .map(|change| {
+                let (from, to) = if back {
+                    (&change.after, &change.before)
+                } else {
+                    (&change.before, &change.after)
+                };
+                GridCellPatch {
+                    cell: change.cell.clone(),
+                    before: Some(from.clone()),
+                    after: to.clone(),
+                }
+            })
+            .collect();
+        // Una cella scritta oltre la fine dei byte salvati resta della
+        // sessione.
+        for change in changes {
+            if let Some((sheet, cell)) = self.place(&change.cell) {
+                let info = &mut self.sheets[sheet];
+                info.rows = info.rows.max((cell.row + 1).min(MAX_GRID_SESSION_ROWS));
+                info.columns = info
+                    .columns
+                    .max((cell.col + 1).min(MAX_GRID_SESSION_COLUMNS));
+            }
+        }
+        self.write(&GridApplyRequest {
+            revision: self.revision.clone(),
+            patches,
         })
+        .map(|_| ())
+    }
+
+    /// Il giornale che porta la cartella allo stato `stato`: [`RESTORE`].
+    fn restore_to(&mut self, stato: &Arc<Stato>) -> Result<(), PluginError> {
+        if let Some(why) = self.blocked() {
+            return Err(bad(why));
+        }
+        if let Rewrite::Loses(why) = self.measured() {
+            return Err(loses(why.clone()));
+        }
+        let mut journal = GridJournal::new();
+        journal.push_command(stato.command())?;
+        self.facade().adopt(&stato.snapshot);
+        self.enter_journal(journal);
+        Ok(())
+    }
+
+    /// La modalità a comandi con il giornale `journal`, che dà la cartella
+    /// della facciata.
+    fn enter_journal(&mut self, journal: GridJournal) {
+        self.commanding = true;
+        self.entries.clear();
+        self.reset_calculation();
+        self.revision = grid_bytes_revision(&self.source, &journal.to_text());
+        self.journal = journal;
+        self.count_sheets();
     }
 
     /// Se una patch scrive una formula nuova: entra soltanto come comando, e
@@ -1434,6 +2019,7 @@ impl Instance {
     /// Le patch in modalità a comandi: ognuna è l'input della sua cella.
     fn apply_commands(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         let before = self.journal.to_text();
+        let counted = self.sheets.clone();
         self.transaction(|this| {
             this.enter()?;
             for patch in &request.patches {
@@ -1458,6 +2044,7 @@ impl Instance {
             }
             Ok(((), true))
         })?;
+        self.keep_counts(counted);
         let after = self.journal.to_text();
         Ok(GridCommit {
             revision: self.revision.clone(),
@@ -1633,8 +2220,7 @@ impl Instance {
                 None => loses(why),
             });
         }
-        let bytes =
-            commands::write(self.shown(), commands::kind_of(&self.bytes)).map_err(xlsx_error)?;
+        let bytes = commands::write(self.shown(), &self.bytes).map_err(xlsx_error)?;
         commands::verify(&bytes).map_err(loses)?;
         Ok(bytes)
     }
@@ -1726,6 +2312,25 @@ fn notices(workbook: &Workbook, report: &gridcraft_xlsx::ReadReport) -> Vec<Grid
     out
 }
 
+/// `#CIRC!` per una formula che il file ha salvato con `0` su un giro di
+/// riferimenti, se la cella ha ancora quella formula e quel valore: una
+/// formula riscritta, o ricalcolata dal motore, mostra il suo.
+fn circular_value(
+    circular: &HashMap<Key, String>,
+    model: &Sheet,
+    sheet: usize,
+    at: CellRef,
+) -> Option<GcValue> {
+    let text = circular.get(&(sheet, at))?;
+    let cell = model.cell(at)?;
+    let same = cell
+        .formula
+        .as_ref()
+        .is_some_and(|formula| &formula.text == text)
+        && matches!(cell.value, GcValue::Number(n) if n == 0.0);
+    same.then_some(GcValue::Error(gridcraft_core::CellError::Circ))
+}
+
 /// Le dipendenze delle formule della cartella.
 fn deps(workbook: &Workbook) -> Result<Deps, XlsxError> {
     guarded(|| {
@@ -1746,18 +2351,23 @@ fn deps(workbook: &Workbook) -> Result<Deps, XlsxError> {
 }
 
 /// Le formule che leggono, direttamente o attraverso altre formule, una cella
-/// che il giornale cambia.
-fn stale(workbook: &Workbook, deps: &Deps, entries: &BTreeMap<GridCellKey, Entry>) -> Stale {
-    let edited: HashSet<Key> = entries
-        .values()
-        .filter(|entry| entry.state != GridJournalMatch::Applied)
-        .filter_map(|entry| entry.place)
-        .collect();
+/// `edited`; e le formule `uncached`, con quelle che le leggono.
+fn stale(workbook: &Workbook, deps: &Deps, edited: &HashSet<Key>, uncached: &[Key]) -> Stale {
     let mut keys: HashSet<Key> = HashSet::new();
     let mut queue: Vec<Key> = edited.iter().copied().collect();
-    for &key in &deps.dynamic {
+    for &key in uncached {
         if !edited.contains(&key) && keys.insert(key) {
             queue.push(key);
+        }
+    }
+    // Una formula che legge celle scelte mentre calcola può leggere una cella
+    // cambiata. All'apertura niente è cambiato: un valore di oggi o casuale
+    // resta quello del file.
+    if !edited.is_empty() {
+        for &key in &deps.dynamic {
+            if !edited.contains(&key) && keys.insert(key) {
+                queue.push(key);
+            }
         }
     }
     let mut areas = Vec::new();

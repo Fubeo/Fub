@@ -31,8 +31,8 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece una `EditorSurface`.
-`DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
+Ogni `Pane` possiede invece una `EditorSurface`, più [quelle da parte](parked-surfaces.md);
+una trasclusione ne ha una [su un tratto](range-surface.md). `DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
 `source_kind`, applicando override, formato, specie, fallback testuale, viewer
 per byte ed errore. Il registro possiede le istanze e le distrugge quando il
 riquadro o l'owner vengono smontati. Ogni famiglia dichiara anche l'insieme dei
@@ -61,7 +61,7 @@ contratto della superficie vera (`apps/client/src/editors/spatial/lazy.ts`):
 finché `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
 rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un `reveal`
 in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è quello della
-shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)).
+shell. Un caricamento fallito lascia il testo alla sessione. Nei disegni la superficie apre anche una sessione del motore (`editors/spatial/motore/sessione.ts`): un'istanza del motore del disegno nell'host, tenuta allineata al testo della `DocumentSession`, che fa girare Selezione, forme e Testo; senza il motore gli strumenti fanno da sé ([il disegno sul motore](disegno.md)). Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)). Un'apertura può chiedere una pagina (un link a `x.pdf#page=3`, `OpenOptions.page`): la riceve il montaggio che l'apertura fa nascere o riporta in primo piano (`SurfaceMountContext.page`, l'`initialPage` del visore del PDF), o `EditorSurface.showPage` se la scheda era già attiva; resta del client, senza IPC.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
@@ -70,10 +70,10 @@ accanto») la imposta nel riquadro nuovo di una divisione verso destra, o va al
 riquadro che la mostra già. Aprire e chiudere non sono mai disponibili
 insieme; stanno nella palette e nel menu del riquadro, senza accordo. Il
 cambio passa dalla via del cambio di scheda: il riquadro stacca e distrugge la
-superficie e ne monta un'altra sulla stessa `DocumentSession`, che restituisce
-testo e descrittore senza leggere il disco. Testo sporco, coda di salvataggio
-e bozza restano; la cronologia locale della superficie smontata si perde come
-a ogni cambio di scheda, quella degli altri riquadri no. Il fuoco va sulla
+superficie, senza metterla da parte, e ne monta un'altra sulla stessa
+`DocumentSession`, che restituisce testo e descrittore senza leggere il disco.
+Testo sporco, coda e bozza restano; la cronologia locale della superficie
+smontata si perde, quella degli altri riquadri no. Il fuoco va sulla
 superficie nuova. Se il riquadro ricorda una lettura per la famiglia della
 vista, l'apertura passa alla scrittura che sceglierebbe `Mod-E`, perché chi
 chiede il sorgente vuole il testo; accanto passa alla modalità di ruolo
@@ -122,11 +122,11 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   argomenti; `null` lascia il menu del sistema. Lo dichiarano il Markdown
   (scrittura e Lettura), i documenti di Word, i fogli, la tela, le basi e il
   visualizzatore dei media;
-- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
-  Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
-  formattazione;
-- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`,
-  dietro `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich);
+- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di Word,
+  i fogli) sopra il menu; il Markdown usa i gruppi della barra di formattazione;
+- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`, dietro
+  `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich, disegno). `writes`
+  («Si scrive») lo dice la banda (`standing-open`, `StandingChip.openFrom`);
 - `ownBar` dice che la superficie disegna la sua barra dei comandi (i
   documenti di Word, con la barra multifunzione del kit): la barra di
   formattazione della shell allora non si mostra, mentre la bolla della
@@ -137,7 +137,7 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   a fuoco; si rifanno soltanto quando cambia quali sono, e la scelta si
   ricorda anche mentre manca. `onShow` ne chiede una (la barra apre
   Commenti); `covers` toglie le view che sostituiscono. Il disegno ne dà
-  cinque (`chrome/hosts.ts`), e nello `status` la vista e le misure;
+  cinque (`editors/spatial/tools/editor/chrome/hosts.ts`), e nello `status` la vista e le misure;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,
@@ -161,7 +161,7 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   (`profiles/markdown/actions.ts`), che la sua keymap condivide; esegue come
   una battuta, con `TextEngine.runCommand`, quindi nella cronologia locale e
   nella sessione. In Lettura o in sola lettura ogni azione è spenta. Ne sono
-  clienti la barra di formattazione (`panels/format-bar.ts`) e `fub.editor.action`;
+  clienti `fub.editor.action` e la barra di formato (`panels/format-bar.ts`, in `kit-bar`);
 - `setSyntaxForms(forms)` riceve le sintassi effettive del documento, cioè
   quelle del provider più gli innesti delle `SyntaxRule` del vault. La tela le
   usa per le card di testo: il canvas dichiara con `fub:embedded-grammar`
@@ -273,19 +273,19 @@ in `apps/client/src/editors/text/profiles/markdown/profile.ts`,
 `FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
 TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
-### Markdown: Source, Live e Reading
+### Markdown: Sorgente, Scrittura e Lettura
 
-Source, Live e Reading sono tre viste sullo stesso `TextEngine` e sullo stesso
-buffer della `DocumentSession`: il cambio modo riusa la vista di scrittura e
-Reading ridisegna dal buffer corrente, senza salvataggio imposto.
+Sorgente (`source`), Scrittura (`live_preview`) e Lettura (`reading`) sono tre viste sullo stesso `TextEngine` e buffer della
+`DocumentSession`. Il cambio modo riusa la vista di scrittura; Lettura ridisegna
+dal buffer senza salvare, e in conflitto la fascia (`drawConflict`) lo dice.
 
-I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
+I blocchi inattivi di Scrittura e la Lettura condividono lo stesso renderer locale in
 `apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso
 montaggio in `apps/client/src/editors/text/profiles/markdown/mount.ts`; i blocchi selezionati mostrano
 la sorgente. Il task passa da normale modifica undoabile della sessione e `readOnly` disabilita l'input.
-Dopo una modifica la Live rende di nuovo i soli blocchi toccati ([la battuta](../product/performance-budget.md#la-battuta)).
+Dopo una modifica Scrittura rende di nuovo i soli blocchi toccati ([la battuta](../product/performance-budget.md#la-battuta)).
 
-Le tabelle GFM di primo livello fanno eccezione in Live: restano un widget
+Le tabelle GFM di primo livello fanno eccezione in Scrittura: restano un widget
 anche col cursore dentro, la griglia di `profiles/markdown/table-widget.ts`. Il
 modello puro (`table-model.ts`) legge la tabella dalla sorgente e calcola le
 modifiche: una cella cambia soltanto il proprio intervallo, un cambio di forma
@@ -309,7 +309,7 @@ Finché una risorsa è viva, il modulo è iscritto alle cache dei documenti
 (`apps/client/src/state/document-caches.ts`). Il pannello annuncia lì i
 documenti cambiati da fuori, tolti o rinominati, senza sapere quale profilo
 tenga quale cache. L'anteprima al passaggio legge il bersaglio dal contratto
-`data-wikilink-*`, che la Live posa come la Lettura.
+`data-wikilink-*`, che Scrittura posa come la Lettura.
 
 La risoluzione dei link resta del kernel tramite `resolvedReference`; per i
 percorsi il frontend invia `LinkTarget::Path`.
@@ -334,7 +334,7 @@ modalità del testo.
 
 I comandi `shell.mode.reading` (`Mod-E`), `shell.mode.live` e
 `shell.mode.source` cercano la modalità per `contextMode`, non per id
-(`apps/client/src/editors/core/surface-modes.ts`): Live sulla tela porta alla
+(`apps/client/src/editors/core/surface-modes.ts`): Scrittura sulla tela porta alla
 modalità `canvas`, e `Mod-E` trova la lettura di un profilo che la chiama
 `read`. Fra più modalità con lo stesso ruolo resta quella corrente, altrimenti
 vale la prima dichiarata. Un comando è disponibile soltanto dove cambierebbe
@@ -382,9 +382,13 @@ foglio di calcolo.
 
 Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
 valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
-`apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora.
+`apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora. Il
+tema di CodeMirror (`editors/text/theme.ts`) dà solo la luce e le classi
+`fub-syn-*`; colori e carattere stanno nella pelle sotto `.cm-*`, con gli
+hook nel contratto. CodeMirror mette i suoi stili prima della pelle, che vince
+a parità di peso: ogni regola pesa quanto quella del tema che sostituisce.
 
-La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
+La finestra documento a parte (`apps/client/src/shells/scrittoio/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
 per il documento (`DocumentWindowRequest.profile`) e lo monta su un
 `TextEngine` nudo, senza completamenti dal vault né slash palette. Un documento
@@ -425,14 +429,10 @@ dei fogli sono descritti nella [superficie dei fogli](grid-surface.md).
 ## Confine CodeMirror
 
 Gli import `@codemirror/*` della shell sono confinati a
-`apps/client/src/editors/text/`. `TextEngine`, i tre profili, le loro
-estensioni, la superficie Markdown e i test del seam vivono sotto questo
-percorso; `panels/document.ts` usa il contratto `EditorSurface` e i tipi senza
-importare CodeMirror.
-
-`node .github/scripts/check-codemirror-boundary.mjs` percorre
-`apps/client/src` e segnala ogni import CodeMirror fuori da
-`apps/client/src/editors/text/`. Il confine impedisce copie incompatibili e
+`apps/client/src/editors/text/` (`TextEngine`, i profili, le estensioni, la
+superficie Markdown, i test del seam); `panels/document.ts` usa `EditorSurface`
+senza importare CodeMirror. `.github/scripts/check-codemirror-boundary.mjs`
+segnala ogni import fuori da lì: il confine impedisce copie incompatibili e
 mantiene CodeMirror un servizio della shell testuale.
 
 ## Dove si trova

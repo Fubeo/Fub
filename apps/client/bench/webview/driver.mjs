@@ -12,9 +12,10 @@ export class WebDriverError extends Error {
   }
 }
 
-async function call(base, method, path, body) {
+async function call(base, method, path, body, signal) {
   const response = await fetch(`${base}${path}`, {
     method,
+    signal,
     headers: { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -23,12 +24,65 @@ async function call(base, method, path, body) {
   return payload.value;
 }
 
+/// I tasti speciali del W3C (§17.4.2 «Keyboard actions») che servono a chi
+/// scrive una sonda. Attenzione ai tasti funzione: `` è **F1**, F2 è
+/// ``.
+export const KEY = Object.freeze({
+  null: "",
+  enter: "",
+  shift: "",
+  control: "",
+  alt: "",
+  escape: "",
+  meta: "",
+  f1: "",
+  f2: "",
+});
+
+/// I modificatori, sinistri e destri: restano premuti finché il testo non
+/// finisce, come nell'«Element Send Keys» del W3C.
+const MODIFIER_KEYS = new Set(["", "", "", "", "", "", "", ""]);
+
+/// Le azioni di tastiera di un testo, con la semantica di «Element Send Keys»:
+/// un modificatore si preme e resta giù per i caratteri che seguono (lo stesso
+/// modificatore ripetuto lo alza, `KEY.null` li alza tutti), e alla fine del
+/// testo si alzano tutti, nell'ordine inverso. Così `keys(KEY.control + "f")`
+/// è Ctrl+F: premere e alzare ogni carattere da solo mandava Ctrl e poi una
+/// `f` nuda, e la sonda scriveva una lettera nella nota.
+export function keyActions(text) {
+  const actions = [];
+  const held = [];
+  const releaseAll = () => {
+    while (held.length > 0) actions.push({ type: "keyUp", value: held.pop() });
+  };
+  for (const ch of text) {
+    if (ch === KEY.null) {
+      releaseAll();
+    } else if (MODIFIER_KEYS.has(ch)) {
+      const at = held.indexOf(ch);
+      if (at === -1) {
+        held.push(ch);
+        actions.push({ type: "keyDown", value: ch });
+      } else {
+        held.splice(at, 1);
+        actions.push({ type: "keyUp", value: ch });
+      }
+    } else {
+      actions.push({ type: "keyDown", value: ch }, { type: "keyUp", value: ch });
+    }
+  }
+  releaseAll();
+  return actions;
+}
+
 /// Una sessione: un'app avviata da `tauri-driver`, chiusa con `close()`.
-export async function openSession(base, application, { timeoutMs = 120_000 } = {}) {
+/// `signal` interrompe la richiesta della sessione: un'app già morta non si
+/// aspetta (`openWithGtkRetry` in `display.mjs`).
+export async function openSession(base, application, { timeoutMs = 120_000, signal } = {}) {
   const started = performance.now();
   const value = await call(base, "POST", "/session", {
     capabilities: { alwaysMatch: { "tauri:options": { application } } },
-  });
+  }, signal);
   const id = value.sessionId;
   const session = `/session/${id}`;
   await call(base, "POST", `${session}/timeouts`, { script: timeoutMs, implicit: 0, pageLoad: timeoutMs });
@@ -39,7 +93,6 @@ export async function openSession(base, application, { timeoutMs = 120_000 } = {
     if (typeof id !== "string") throw new Error(`nessun riferimento per «${css}»: ${JSON.stringify(value)}`);
     return id;
   };
-  const keyActions = (text) => [...text].flatMap((ch) => [{ type: "keyDown", value: ch }, { type: "keyUp", value: ch }]);
   return {
     /// Dalla richiesta della sessione alla sessione pronta, in ms.
     openedIn: performance.now() - started,
@@ -54,7 +107,8 @@ export async function openSession(base, application, { timeoutMs = 120_000 } = {
       const id = await this.find(css);
       await call(base, "POST", `${session}/element/${id}/click`, {});
     },
-    /// Tasti veri, uno alla volta, dalla tastiera virtuale del driver.
+    /// Tasti veri dalla tastiera virtuale del driver; un modificatore nel
+    /// testo resta premuto fino alla fine (`keyActions`).
     async keys(text) {
       await this.actions([{ type: "key", id: "tastiera", actions: keyActions(text) }]);
     },

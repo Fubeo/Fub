@@ -7,8 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TextSelection } from "prosemirror-state";
 import { RICH_ACTIONS } from "./commands";
 import * as engineModule from "./engine";
-import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE, RICH_READING_MODE } from "./surface";
+import { CLOSED_QUIET_MS, mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE, RICH_READING_MODE } from "./surface";
 import { t } from "../../i18n/strings";
+import closedFixture from "../../__fixtures__/rich-closed.json";
 import { declareClipboard } from "../../platform/clipboard";
 import { activeMotions, createManualDriver, setMotionDriver } from "../../moto";
 import type { SurfaceMenuItem } from "../core/editor-menu";
@@ -107,6 +108,62 @@ describe("la superficie ricca", () => {
     expect(surface.defaultMode ?? surface.modes[0].id).toBe("document");
     expect(() => surface.setMode("source")).toThrow();
     surface.destroy();
+  });
+
+  it("dentro una scheda (compatta) è in Scrittura, senza barra né pulsante del pannello, e si scrive (T44)", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const onChange = vi.fn();
+    const surface = mountRichSurface(
+      RICH_PROFILE,
+      { paneId: "card-editor:1", documentId: "lettera.docx", parent, formatId: "docx", compact: true, escapeLeaves: true },
+      { onChange, onSelectionChange: vi.fn(), loadEngine: () => Promise.resolve(engineModule) },
+    );
+    expect(surface.defaultMode).toBe("writing");
+    await flush();
+    surface.setMode(surface.defaultMode!);
+    surface.buffer!.setDoc(SOURCE);
+    expect(parent.querySelector<HTMLElement>(".rich-surface")!.dataset.compact).toBe("true");
+    const host = parent.querySelector<HTMLElement>(".rich-ribbon-host")!;
+    expect(host.hidden).toBe(true);
+    expect(parent.querySelector(".rich-side-open")).toBeNull();
+    expect(surface.editorActions!.editable()).toBe(true);
+    expect(surface.paperFit!.offers()).toEqual([]);
+    // Cambiare modalità non riporta la barra: la scheda resta una colonna.
+    surface.setMode("reading");
+    surface.setMode("writing");
+    expect(host.hidden).toBe(true);
+    surface.destroy();
+  });
+
+  it("il fuoco chiesto prima del motore arriva al testo col motore, se nessuno l'ha portato altrove (T44)", async () => {
+    const mountAsked = (): { parent: HTMLElement; surface: ReturnType<typeof mountRichSurface> } => {
+      const parent = document.createElement("div");
+      parent.tabIndex = -1;
+      document.body.append(parent);
+      const surface = mountRichSurface(
+        RICH_PROFILE,
+        { paneId: "card-editor:2", documentId: "lettera.docx", parent, formatId: "docx", compact: true },
+        { onChange: vi.fn(), onSelectionChange: vi.fn(), loadEngine: () => Promise.resolve(engineModule) },
+      );
+      surface.buffer!.setDoc(SOURCE);
+      parent.focus();
+      surface.focus!();
+      return { parent, surface };
+    };
+    const first = mountAsked();
+    await flush();
+    expect(first.parent.querySelector(".rich-page")!.contains(document.activeElement)).toBe(true);
+    first.surface.destroy();
+
+    const second = mountAsked();
+    const elsewhere = document.createElement("input");
+    document.body.append(elsewhere);
+    elsewhere.focus();
+    await flush();
+    expect(document.activeElement).toBe(elsewhere);
+    second.surface.destroy();
+    elsewhere.remove();
   });
 
   it("in Lettura la barra si ritira e il documento non si scrive; Esc chiede Pagina", async () => {
@@ -218,6 +275,11 @@ describe("la superficie ricca", () => {
       t("rich.find.next"),
       "",
     ]);
+    // Esc che chiude una composizione (anche WebKit, col codice 229) lascia
+    // la barra aperta.
+    what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", isComposing: true, bubbles: true }));
+    what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, bubbles: true }));
+    expect(bar.hidden).toBe(false);
     what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(bar.hidden).toBe(true);
     // Il commento si legge nella sua scheda; non se ne scrivono, non si
@@ -501,6 +563,63 @@ describe("la superficie ricca", () => {
     expect(surface.zone!(1)).toBe(true);
     expect(document.activeElement).toBe(parent.querySelector(".rich-page"));
     expect(surface.zone!(1)).toBe(false);
+    surface.destroy();
+  });
+
+  it("battere in una parte chiusa lo dice con un avviso solo, finché si riprova senza fermarsi (IMP-118)", async () => {
+    let engine: engineModule.RichEngine | null = null;
+    class Captured extends engineModule.RichEngine {
+      constructor(...args: ConstructorParameters<typeof engineModule.RichEngine>) {
+        super(...args);
+        engine = this;
+      }
+    }
+    const told = vi.fn();
+    const never = () => new Promise<never>(() => {});
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const surface = mountRichSurface(
+      RICH_PROFILE,
+      { paneId: "pane", documentId: "lettera.docx", parent, formatId: "docx" },
+      {
+        onChange: vi.fn(),
+        onSelectionChange: vi.fn(),
+        loadEngine: () => Promise.resolve({ ...engineModule, RichEngine: Captured }),
+        proof: { ports: { queryIndex: never, invokeCommand: never, settings: never, interfaceLanguage: () => "it", watch: () => () => {} }, notify: told },
+      },
+    );
+    await flush();
+    surface.buffer!.setDoc(closedFixture.source);
+    const e = engine as engineModule.RichEngine | null;
+    expect(e!.hasClosed()).toBe(true);
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const closedAt = e!.read((state) => {
+      let pos = -1;
+      state.doc.child(1).descendants((node, at) => {
+        if (pos < 0 && node.isText) pos = state.doc.resolve(0).posAtIndex(1) + 1 + at + 1;
+        return pos < 0;
+      });
+      return pos;
+    });
+    e!.select(closedAt);
+    const type = (key: string, init: KeyboardEventInit = {}) => e!.contentElement().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
+    // Un tasto del metodo d'immissione (WebKit: codice 229) non è una lettera
+    // battuta: niente avviso.
+    type("Q", { keyCode: 229 });
+    expect(told).not.toHaveBeenCalled();
+    // Una parola intera, un tasto ogni 200 ms: un avviso.
+    for (const key of "Quadro") {
+      type(key);
+      now += 200;
+    }
+    expect(told).toHaveBeenCalledTimes(1);
+    expect(told).toHaveBeenCalledWith(t("rich.locked.refused"));
+    // Dopo una pausa, il tentativo dopo lo ridice.
+    now += CLOSED_QUIET_MS + 1;
+    type("Q");
+    expect(told).toHaveBeenCalledTimes(2);
+    vi.restoreAllMocks();
     surface.destroy();
   });
 

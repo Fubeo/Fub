@@ -37,18 +37,15 @@ pub fn demo_root() -> Option<String> {
 }
 
 /// Apre la demo isolata (`<config>/demo-vault`) e dice da dove si veniva.
-pub fn open_demo(
-    host: State<Host>,
-    windows: State<DocumentWindows>,
-) -> Result<DemoOpened, PluginError> {
+pub fn open_demo(host: &Host, windows: &DocumentWindows) -> Result<DemoOpened, PluginError> {
     let dir = config_dir();
     let root = support::demo_root(dir.as_deref()).ok_or_else(|| {
         PluginError::Unserved("demo non disponibile senza una cartella di configurazione".into())
     })?;
-    let opened = document_windows::with_vault_transition(&host, &windows, &host_key(&root), || {
-        support::open_demo(&host, dir.as_deref())
+    let opened = document_windows::with_vault_transition(host, windows, &host_key(&root), || {
+        support::open_demo(host, dir.as_deref())
     });
-    crate::for_the_shell(&host, None, opened)
+    crate::for_the_shell(host, None, opened)
 }
 
 /// Il risultato della chiusura: gli eventuali errori di flush e il vault
@@ -61,8 +58,8 @@ pub struct DemoClosed {
 
 /// Chiude la demo e torna al vault precedente quando e` ancora aperto.
 pub fn close_demo(
-    host: State<Host>,
-    windows: State<DocumentWindows>,
+    host: &Host,
+    windows: &DocumentWindows,
     return_to: Option<String>,
 ) -> Result<DemoClosed, PluginError> {
     let Some(dir) = config_dir() else {
@@ -72,31 +69,28 @@ pub fn close_demo(
     };
     let root = host_key(&dir.join(support::DEMO_DIR_NAME));
     let prev = return_to.map(Utf8PathBuf::from);
-    let closed = document_windows::with_vault_transition(&host, &windows, &root, || {
-        let errors = support::close_demo(&host, dir.as_path(), prev.as_deref())?;
+    let closed = document_windows::with_vault_transition(host, windows, &root, || {
+        let errors = support::close_demo(host, dir.as_path(), prev.as_deref())?;
         Ok(DemoClosed {
             errors,
             current: host.current().map(|path| path.to_string()),
         })
     });
-    crate::for_the_shell(&host, None, closed)
+    crate::for_the_shell(host, None, closed)
 }
 
 /// Azzera la demo (solo `<config>/demo-vault`, mai un vault utente).
-pub fn reset_demo(
-    host: State<Host>,
-    windows: State<DocumentWindows>,
-) -> Result<String, PluginError> {
+pub fn reset_demo(host: &Host, windows: &DocumentWindows) -> Result<String, PluginError> {
     let Some(dir) = config_dir() else {
         return Err(PluginError::Unserved(
             "demo non disponibile senza una cartella di configurazione".into(),
         ));
     };
     let root = host_key(&dir.join(support::DEMO_DIR_NAME));
-    let reset = document_windows::with_vault_transition(&host, &windows, &root, || {
-        support::reset_demo(&host, dir.as_path()).map(|root| host_key(&root))
+    let reset = document_windows::with_vault_transition(host, windows, &root, || {
+        support::reset_demo(host, dir.as_path()).map(|root| host_key(&root))
     });
-    crate::for_the_shell(&host, None, reset)
+    crate::for_the_shell(host, None, reset)
 }
 
 /// Diagnostica tipizzata dell'apertura corrente.
@@ -107,16 +101,21 @@ pub fn startup_diagnostics(
     host.startup_diagnostics(vault.as_deref())
 }
 
+// Le quattro porte della schermata di supporto girano in una corsia
+// (`lib.rs`) e leggono la cartella di configurazione dall'host: è lo stesso
+// valore di [`config_dir`], che il bootstrap gli ha dato, e nei test è la
+// cartella temporanea dell'host invece di quella della macchina.
+
 /// Anteprima di supporto redatta dal core: conteggi e code, mai note.
 pub fn support_preview(
-    host: State<Host>,
-    vault: Option<String>,
+    host: &Host,
+    vault: Option<&str>,
     log_lines: Option<usize>,
 ) -> Result<SupportPreview, PluginError> {
     support::collect_preview(
-        &host,
-        vault.as_deref(),
-        config_dir().as_deref(),
+        host,
+        vault,
+        host.configuration_root(),
         log_lines.unwrap_or(40).min(200),
     )
 }
@@ -125,22 +124,42 @@ pub fn support_preview(
 /// Consenso, canonicalizzazione e vault esclusi (demo compresa) li decide
 /// l'host, per ogni chiamante.
 pub fn support_export(
-    host: State<Host>,
-    preview: SupportPreview,
-    consent: ExportConsent,
+    host: &Host,
+    preview: &SupportPreview,
+    consent: &ExportConsent,
 ) -> Result<String, PluginError> {
-    support::export_preview(&host, &preview, &consent)
+    support::export_preview(host, preview, consent)
 }
 
 /// Stato dei tre file di macchina (sano/assente/illeggibile/futuro).
-pub fn config_health() -> Vec<ConfigReport> {
-    support::config_health(config_dir().as_deref())
+pub fn config_health(host: &Host) -> Vec<ConfigReport> {
+    support::config_health(host.configuration_root())
 }
 
 /// Recovery di un file di macchina con backup obbligatorio del precedente.
 /// Quali file sono recuperabili lo decide l'host.
-pub fn recover_config(path: String, action: RecoverAction) -> Result<RecoverOutcome, PluginError> {
-    support::recover_config_file(config_dir().as_deref(), Utf8Path::new(&path), action)
+pub fn recover_config(
+    host: &Host,
+    path: &str,
+    action: RecoverAction,
+) -> Result<RecoverOutcome, PluginError> {
+    support::recover_config_file(host.configuration_root(), Utf8Path::new(path), action)
+}
+
+/// La corsia del recupero di `path`: quella dove il file si scrive. Lo stato
+/// di vista (`view-state.json`) lo scrive `set_view_state`, nella corsia dello
+/// stato; le impostazioni e i vault conosciuti li scrive la corsia
+/// dell'indice, che è anche quella di un percorso che non è un file di
+/// macchina (il rifiuto esce lì, come prima).
+pub fn recover_lane(host: &Host, path: &str) -> &'static str {
+    let view_state = host
+        .configuration_root()
+        .is_some_and(|dir| fub_host::config::view_states_path(dir) == Utf8Path::new(path));
+    if view_state {
+        crate::domande::CORSIA_STATO
+    } else {
+        crate::domande::CORSIA_INDICE
+    }
 }
 
 #[cfg(test)]

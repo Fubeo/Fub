@@ -36,8 +36,21 @@
 //! decide chi monta: [`ProofIndex::with_machine_dictionaries`] lo concede,
 //! [`ProofIndex::bundled_only`] no. Senza dizionario la lingua conserva le
 //! regole grammaticali e la risposta nomina il dizionario che manca.
+//!
+//! # I dizionari letti stanno nel budget dei motori
+//!
+//! Un dizionario Hunspell letto dal disco resta in memoria per il processo
+//! intero, decine di megabyte per lingua. È una cache del budget comune dei
+//! motori (`fub-motori`, ADR 0236): il correttore con i dizionari della
+//! macchina la iscrive nel budget del processo, e il budget la svuota quando
+//! supera il tetto e lei è la meno usata di recente. Svuotata non perde
+//! niente: la parola dopo rilegge il dizionario dallo stesso posto, e il
+//! risultato non cambia. Chi chiude l'ultimo vault la svuota del tutto
+//! ([`empty_dictionaries`]).
 
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::time::Instant;
 
 use fub_abi::command::{
     Args, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
@@ -47,10 +60,11 @@ use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind,
-    QueryRoute,
+    QueryRoute, VaultEntry,
 };
 use fub_abi::ui::UiOption;
 use fub_abi::{DocId, DocumentModel};
+use fub_motori::{Cache, Servizi};
 use serde::{Deserialize, Serialize};
 use wordcraft_proof::{IssueKind, Options, ProofLang};
 
@@ -121,7 +135,11 @@ impl ProofIndex {
     /// Il correttore con i dizionari Hunspell installati sulla macchina. Lo
     /// costruisce chi monta, che è il solo a poter concedere una lettura fuori
     /// dal vault.
+    ///
+    /// Iscrive i dizionari letti nel budget dei motori del processo.
     pub fn with_machine_dictionaries() -> Self {
+        let cache: Arc<dyn Cache> = dictionaries();
+        Servizi::processo().memoria().registra(&cache);
         ProofIndex {
             dictionaries: Dictionaries::Machine,
         }
@@ -134,6 +152,73 @@ impl ProofIndex {
             dictionaries: Dictionaries::Bundled,
         }
     }
+}
+
+/// I dizionari Hunspell letti dal disco, come li vede il budget dei motori.
+/// Sono del motore, per il processo intero: questa è soltanto la loro misura,
+/// con l'ultimo uso e il modo di lasciarli cadere.
+struct MachineDictionaries {
+    last_use: Mutex<Instant>,
+}
+
+impl MachineDictionaries {
+    fn used(&self) {
+        *self.last_use.lock().unwrap_or_else(PoisonError::into_inner) = Instant::now();
+    }
+}
+
+impl Cache for MachineDictionaries {
+    fn nome(&self) -> &str {
+        "correttore.dizionari"
+    }
+
+    /// La stima del motore: la capacità delle tabelle e delle stringhe,
+    /// misurata quando legge ogni dizionario, più la sillabazione decodificata.
+    fn byte(&self) -> u64 {
+        (wordcraft_proof::loaded_dictionaries_bytes() + wordcraft_proof::loaded_hyphenation_bytes())
+            as u64
+    }
+
+    /// Lascia cadere i dizionari di tutte le lingue, e la sillabazione se non
+    /// basta: il motore non sa toglierne uno solo.
+    fn libera(&self, quanto: u64) -> u64 {
+        let mut freed = wordcraft_proof::release_dictionaries() as u64;
+        if freed < quanto {
+            freed += wordcraft_proof::release_hyphenation() as u64;
+        }
+        freed
+    }
+
+    fn ultimo_uso(&self) -> Instant {
+        *self.last_use.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+fn dictionaries() -> Arc<MachineDictionaries> {
+    static DICTIONARIES: OnceLock<Arc<MachineDictionaries>> = OnceLock::new();
+    Arc::clone(DICTIONARIES.get_or_init(|| {
+        Arc::new(MachineDictionaries {
+            last_use: Mutex::new(Instant::now()),
+        })
+    }))
+}
+
+/// I dizionari letti dal disco come cache del budget dei motori: la stessa
+/// che il correttore con i dizionari della macchina iscrive nel budget del
+/// processo.
+pub fn dictionaries_cache() -> Arc<dyn Cache> {
+    dictionaries()
+}
+
+/// I byte stimati dei dizionari letti dal disco, e della sillabazione.
+pub fn dictionary_bytes() -> u64 {
+    dictionaries().byte()
+}
+
+/// Lascia cadere i dizionari letti dal disco e la sillabazione: la parola
+/// dopo li rilegge. Dà i byte stimati liberati.
+pub fn empty_dictionaries() -> u64 {
+    dictionaries().libera(u64::MAX)
 }
 
 /// La domanda, con versione e campi chiusi.
@@ -151,6 +236,11 @@ enum ProofQuery {
         #[serde(default)]
         words: Vec<String>,
         segments: Vec<String>,
+        /// Gli indici dei segmenti che sono voci d'elenco: spesso frammenti,
+        /// la loro prima parola non chiede la maiuscola. Assente per chi non
+        /// ne ha (un documento ricco, una richiesta di prima).
+        #[serde(default)]
+        list_items: Vec<usize>,
     },
 }
 
@@ -246,7 +336,9 @@ impl ProofIndex {
         }
     }
 
-    /// I problemi di ogni segmento, in `language`.
+    /// I problemi di ogni segmento, in `language`. `list_items` sono gli
+    /// indici dei segmenti che sono voci d'elenco: la regola della maiuscola
+    /// sulla prima parola non vale per loro (le frasi dopo la prima sì).
     ///
     /// Una lingua che il motore non corregge (`fr`, `ja`) non produce segni:
     /// è il comportamento di Word senza gli strumenti di quella lingua, e non
@@ -257,9 +349,20 @@ impl ProofIndex {
         options: CheckOptions,
         words: &[String],
         segments: &[String],
+        list_items: &[usize],
     ) -> Result<CheckResult, PluginError> {
         if segments.len() > MAX_SEGMENTS {
             return Err(over(E_SEGMENTS, MAX_SEGMENTS));
+        }
+        if let Some(index) = list_items.iter().find(|&&i| i >= segments.len()) {
+            return Err(bad_query(&format!(
+                "list item {index} out of {} segments",
+                segments.len()
+            )));
+        }
+        let mut listed = vec![false; segments.len()];
+        for &index in list_items {
+            listed[index] = true;
         }
         let mut total = 0usize;
         for segment in segments {
@@ -288,7 +391,7 @@ impl ProofIndex {
         };
         let mut suggested = 0usize;
         let mut out = Vec::with_capacity(segments.len());
-        for segment in segments {
+        for (segment, &list_item) in segments.iter().zip(&listed) {
             let issues = if !support.grammar {
                 Vec::new()
             } else if support.spelling {
@@ -297,14 +400,18 @@ impl ProofIndex {
                     &[(0..segment.len(), lang)],
                     &opts,
                     options.grammar,
-                    // La domanda non dice se un segmento è una voce d'elenco:
-                    // la maiuscola della prima parola si chiede sempre.
-                    false,
+                    list_item,
                 )
             } else if options.grammar {
                 // Senza dizionario non si chiama l'ortografia: oltre a non
-                // servire, cercherebbe il dizionario sul disco.
-                wordcraft_proof::check_grammar_in(segment, lang)
+                // servire, cercherebbe il dizionario sul disco. Il motore non
+                // espone le regole grammaticali con l'eccezione della voce
+                // d'elenco, che `check_text_with` passa: la si applica qui.
+                let mut found = wordcraft_proof::check_grammar_in(segment, lang);
+                if list_item {
+                    found.retain(|issue| !first_word_capital(segment, issue));
+                }
+                found
             } else {
                 Vec::new()
             };
@@ -340,6 +447,12 @@ impl ProofIndex {
                 });
             }
             out.push(kept);
+        }
+        if support.spelling {
+            // L'ortografia può aver letto un dizionario: il budget guarda se
+            // la memoria sta ancora sotto il tetto.
+            dictionaries().used();
+            Servizi::processo().memoria().rispetta();
         }
         Ok(CheckResult {
             language: support,
@@ -413,6 +526,19 @@ impl IndexProvider for ProofIndex {
         Ok(())
     }
 
+    /// Il correttore riceve il testo da controllare con la domanda, non dalle
+    /// note consegnate: non tiene niente per documento.
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        // Niente può restare indietro in chi non tiene niente: ogni documento
+        // mostrato, e solo quelli (conformità di `up_to_date`). Un indice che
+        // tenesse stato per documento risponderebbe come `ReminderIndex`.
+        entries
+            .iter()
+            .filter(|entry| entry.kind == fub_abi::traits::EntryKind::Document)
+            .map(|entry| entry.id.clone())
+            .collect()
+    }
+
     fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {
         let IndexQuery::Custom { ns, query } = request else {
             return Err(bad_query("not a custom query"));
@@ -430,7 +556,8 @@ impl IndexProvider for ProofIndex {
                 options,
                 words,
                 segments,
-            } => to_value(&self.check(&language, options, &words, &segments)?),
+                list_items,
+            } => to_value(&self.check(&language, options, &words, &segments, &list_items)?),
             ProofQuery::Languages { .. } | ProofQuery::Check { .. } => {
                 Err(bad_query("unsupported version"))
             }
@@ -761,6 +888,37 @@ pub fn catalog() -> Vec<StringCatalog> {
 /// in mezzo, parla di un pezzo che il motore non ha visto, e si scarta.
 pub const PLACEHOLDER: char = '\u{FFFC}';
 
+/// Se `issue` è la regola «maiuscola a inizio frase» sulla prima parola del
+/// segmento: un rilievo di grammatica sulla prima parola, prima di cui non c'è
+/// né una lettera né una cifra, che propone soltanto la stessa parola con la
+/// prima lettera maiuscola. È ciò che ogni lingua del motore segnala quando
+/// `capital_first` è vero e non segnala quando è falso (`grammar_in`, privata
+/// in `wordcraft-proof`); il test `list_items_match_the_engine_rule` lo tiene
+/// uguale a `check_text_with` con `list_item`.
+fn first_word_capital(segment: &str, issue: &wordcraft_proof::Issue) -> bool {
+    if issue.kind != IssueKind::Grammar {
+        return false;
+    }
+    let (Some(before), Some(word)) = (
+        segment.get(..issue.start),
+        segment.get(issue.start..issue.end),
+    ) else {
+        return false;
+    };
+    if before.chars().any(char::is_alphanumeric) {
+        return false;
+    }
+    let [fixed] = issue.suggestions.as_slice() else {
+        return false;
+    };
+    let mut written = word.chars();
+    let mut proposed = fixed.chars();
+    match (written.next(), proposed.next()) {
+        (Some(w), Some(f)) => w.is_lowercase() && f.is_uppercase() && written.eq(proposed),
+        _ => false,
+    }
+}
+
 fn touches_placeholder(segment: &str, start: usize, text: &str) -> bool {
     text.contains(PLACEHOLDER)
         || segment
@@ -778,7 +936,7 @@ mod tests {
     fn check(index: &ProofIndex, language: &str, segments: &[&str]) -> CheckResult {
         let segments: Vec<String> = segments.iter().map(|s| s.to_string()).collect();
         index
-            .check(language, CheckOptions::default(), &[], &segments)
+            .check(language, CheckOptions::default(), &[], &segments, &[])
             .unwrap()
     }
 
@@ -820,7 +978,7 @@ mod tests {
         let segments = vec!["Fubvault is here".to_string()];
         let words = vec!["fubvault".to_string()];
         let result = index
-            .check("en", CheckOptions::default(), &words, &segments)
+            .check("en", CheckOptions::default(), &words, &segments, &[])
             .unwrap();
         assert!(result.segments[0].is_empty(), "{:?}", result.segments[0]);
         let result = check(&index, "en", &["Fubvault is here"]);
@@ -867,7 +1025,7 @@ mod tests {
             grammar: false,
             ..CheckOptions::default()
         };
-        let result = index.check("en", options, &[], &segments).unwrap();
+        let result = index.check("en", options, &[], &segments, &[]).unwrap();
         assert!(result.segments[0].is_empty());
         let result = check(&index, "en", &["the the cat"]);
         assert_eq!(result.segments[0][0].kind, ProofIssueKind::Grammar);
@@ -901,6 +1059,103 @@ mod tests {
                 result.segments[0]
             );
         }
+    }
+
+    /// Una voce d'elenco è spesso un frammento: «primo punto» non chiede la
+    /// maiuscola. Un paragrafo che non è una voce la chiede come prima.
+    #[test]
+    fn a_list_item_may_start_in_lower_case() {
+        let index = ProofIndex::bundled_only();
+        let segments: Vec<String> = ["primo punto", "attività da fare", "primo punto"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        // L'italiano senza dizionario: la strada delle sole regole.
+        let result = index
+            .check("it", CheckOptions::default(), &[], &segments, &[0, 1])
+            .unwrap();
+        assert!(result.segments[0].is_empty(), "{:?}", result.segments[0]);
+        assert!(result.segments[1].is_empty(), "{:?}", result.segments[1]);
+        assert_eq!(spans(&segments[2], &result.segments[2]), ["primo"]);
+        // L'inglese, col dizionario: la strada di `check_text_with`.
+        let english: Vec<String> = ["first item", "first item"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let result = index
+            .check("en", CheckOptions::default(), &[], &english, &[0])
+            .unwrap();
+        assert!(result.segments[0].is_empty(), "{:?}", result.segments[0]);
+        assert_eq!(spans(&english[1], &result.segments[1]), ["first"]);
+    }
+
+    /// Senza dizionario la regola della voce d'elenco si applica qui: deve
+    /// togliere esattamente ciò che il motore toglie con `list_item`, in ogni
+    /// lingua, e nient'altro.
+    #[test]
+    fn list_items_match_the_engine_rule() {
+        let samples = [
+            "primo punto",
+            "  «primo» punto, poi",
+            "uno. due tre",
+            "un pò di più",
+            "the the cat. and more",
+            "ıstanbul güzel. izmir de",
+            "istanbul",
+            "яблоки и груши. потом",
+            "první bod",
+            "anak anak sekolah",
+            "\u{FFFC} dopo",
+            "Già maiuscola. bene",
+            "",
+        ];
+        let grammar = |issues: Vec<wordcraft_proof::Issue>| {
+            let mut kept: Vec<_> = issues
+                .into_iter()
+                .filter(|i| i.kind == IssueKind::Grammar)
+                .map(|i| (i.start, i.end, i.message, i.suggestions))
+                .collect();
+            kept.sort();
+            kept
+        };
+        let languages = LANGUAGES
+            .iter()
+            .map(|(_, lang)| *lang)
+            .chain([ProofLang::Id, ProofLang::EnGb]);
+        for lang in languages {
+            for text in samples {
+                let mut ours = wordcraft_proof::check_grammar_in(text, lang);
+                ours.retain(|issue| !first_word_capital(text, issue));
+                let engine = wordcraft_proof::check_text_with(
+                    text,
+                    &[(0..text.len(), lang)],
+                    &Options::default(),
+                    true,
+                    true,
+                );
+                assert_eq!(grammar(ours), grammar(engine), "{lang:?}: {text:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_list_item_out_of_range_is_refused() {
+        let index = ProofIndex::bundled_only();
+        let ask = |list_items: serde_json::Value| {
+            index.query(IndexQuery::Custom {
+                ns: PROOF_ID.into(),
+                query: json!({
+                    "op": "check", "version": 1, "language": "it",
+                    "segments": ["primo"], "list_items": list_items,
+                }),
+            })
+        };
+        let error = ask(json!([1])).unwrap_err();
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+        let Ok(IndexResult::Custom(value)) = ask(json!([0])) else {
+            panic!("non è una risposta custom");
+        };
+        assert_eq!(value["segments"][0], json!([]));
     }
 
     #[test]
@@ -947,11 +1202,11 @@ mod tests {
         let words = vec!["x".to_string(); MAX_WORDS + 1];
         let opts = CheckOptions::default();
         for result in [
-            index.check("en", opts, &[], &many),
-            index.check("en", opts, &[], &big),
-            index.check("en", opts, &[], &total),
-            index.check("en", opts, &words, &[]),
-            index.check("not a tag!", opts, &[], &[]),
+            index.check("en", opts, &[], &many, &[]),
+            index.check("en", opts, &[], &big, &[]),
+            index.check("en", opts, &[], &total, &[]),
+            index.check("en", opts, &words, &[], &[]),
+            index.check("not a tag!", opts, &[], &[], &[]),
         ] {
             assert!(matches!(result, Err(PluginError::BadArgs(_))), "{result:?}");
         }

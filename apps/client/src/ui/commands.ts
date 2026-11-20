@@ -42,13 +42,17 @@
 // prima di ogni vault. Da qui in poi la tabella degli accordi arriva generata
 // (`shell-keys.generated.ts`) e questo modulo non distingue più i due registri
 // se non per chi esegue.
-import { IMPORT_ACCEPT, sourceOf } from "../editors/spatial/import/sources";
+import { IMPORT_ACCEPT, sourceOf } from "../editors/core/drawing-sources";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { settings } from "../host/query";
 import { type Key, t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
+import { components } from "../state/components";
+import { UI_CANVAS, UI_GRID, UI_RICH, UI_SPATIAL } from "../editors/core/component-surfaces";
+import { errorText } from "../host/errors";
 import { state } from "../state/store";
 import type { Lifetime } from "./lifetime";
+import { notify } from "./notify";
 import { SHELL_KEYS, type ShellCommandId } from "./shell-keys.generated";
 
 /// La chiave d'impostazione che tiene la scorciatoia di un comando.
@@ -86,7 +90,10 @@ export interface ShellCommand {
   /// (0081). Un comando nuovo non compila finché non si dichiara di là.
   id: ShellCommandId;
   title: Key;
-  description: Key;
+  /// La frase sotto il titolo. Una funzione quando la frase dipende da com'è
+  /// adesso (`shell.doc.conflict.theirs`: il testo resta nella Cronologia
+  /// soltanto se c'è): si legge ogni volta che la palette chiede i comandi.
+  description: Key | (() => Key);
   layer: CommandLayer;
   available?: () => boolean;
   run: () => void | Promise<void>;
@@ -112,6 +119,11 @@ export interface CommandEntry {
   spec: CommandSpec | null;
   /// Cosa fare per eseguirlo di qua. `null` per un comando del kernel.
   run: (() => void | Promise<void>) | null;
+  /// Il gruppo che la palette scrive accanto al titolo: i comandi che una
+  /// superficie aggiunge (i fogli, «Foglio»).
+  group?: string;
+  /// Perché adesso non si può dare: la palette lo mostra e non lo esegue.
+  unavailable?: string | null;
 }
 
 /// I comandi di shell dichiarati finora. Una mappa e non un array perché
@@ -239,8 +251,177 @@ export const NEW_DRAWING = "drawing.create";
 /// comando: con la feature `draw` spenta un `.svg` non è nemmeno un disegno, e
 /// una voce che non può riuscire è peggio di una voce che manca. Si legge a ogni
 /// apertura di un menu e a ogni cambio dell'elenco (`on("commands")`).
+///
+/// E i disegni sono accesi (K2): spento il loro componente, le porte spariscono
+/// anche se il comando è ancora nell'elenco, e tornano quando si riaccende
+/// (`onComponents`). Finché la mappa non è arrivata valgono i comandi.
 export function canCreateDrawing(): boolean {
-  return hasKernelCommand(NEW_DRAWING);
+  return hasKernelCommand(NEW_DRAWING) && (components()?.uiOn(UI_SPATIAL) ?? true);
+}
+
+// # Il menu «Nuovo»
+//
+// Il «+» dell'albero (anche al telefono), «Nuovo ▸» di una cartella e del
+// titolo dell'albero e il menu File offrono lo stesso elenco di tipi, nello
+// stesso ordine: sta qui, così nessuna porta ne dimentica uno e il riquadro
+// della pagina «Componenti» dice le voci che il menu mostra davvero. Ogni voce
+// c'è soltanto se si può fare, come «Nuovo disegno…»: la nota e la cartella
+// sempre (il testo e l'albero sono del nucleo); un documento, un foglio, un
+// disegno e una lavagna se il kernel dichiara il loro comando e il loro editor
+// è acceso (K2); «da un modello» se c'è il lanciatore dei modelli e il kernel
+// sa fare una nota da un modello. Chi apre un menu rilegge l'elenco.
+
+/// Che cosa si crea dai menu «Nuovo».
+export type NewKind = "note" | "document" | "sheet" | "drawing" | "canvas" | "template" | "folder";
+
+/// Il comando del kernel che fa una nota da un modello: senza, il lanciatore
+/// dei modelli non ha niente da fare.
+export const NOTE_FROM_TEMPLATE = "note.from_template";
+
+/// Il comando di shell che apre il lanciatore sui modelli (lo Scrittoio).
+const TEMPLATES_LAUNCHER = "shell.launcher.templates";
+
+/// Il comando di shell della nota nuova: la sua scorciatoia sta accanto a «Nota».
+const NOTE_NEW = "shell.note.new";
+
+interface NewKindSpec {
+  readonly kind: NewKind;
+  readonly label: Key;
+  /// Il comando del kernel che fa nascere il file, e l'editor che lo apre:
+  /// servono tutti e due.
+  readonly command?: string;
+  readonly ui?: string;
+  /// Una riga prima della voce: da qui non si crea un file vuoto.
+  readonly separator?: boolean;
+}
+
+/// L'elenco, nell'ordine di S34.
+const NEW_KINDS: readonly NewKindSpec[] = [
+  { kind: "note", label: "new.kind.note" },
+  { kind: "document", label: "new.kind.document", command: "document.create", ui: UI_RICH },
+  { kind: "sheet", label: "new.kind.sheet", command: "sheet.create", ui: UI_GRID },
+  { kind: "drawing", label: "new.kind.drawing", command: NEW_DRAWING, ui: UI_SPATIAL },
+  { kind: "canvas", label: "new.kind.canvas", command: "canvas.create", ui: UI_CANVAS },
+  { kind: "template", label: "new.kind.template", separator: true },
+  { kind: "folder", label: "new.kind.folder" },
+];
+
+/// Il nome di un tipo come lo dice il menu.
+export function newKindLabel(kind: NewKind): string {
+  return t(NEW_KINDS.find((each) => each.kind === kind)!.label);
+}
+
+/// Il lanciatore dei modelli, se la cornice ne ha uno che adesso si apre.
+function templatesLauncher(): (() => void | Promise<void>) | null {
+  const entry = allCommands().find((candidate) => candidate.id === TEMPLATES_LAUNCHER);
+  return entry?.run && !entry.unavailable ? entry.run : null;
+}
+
+/// Il comando e l'editor del tipo ci sono ancora (K2)?
+function kindOn(each: NewKindSpec): boolean {
+  if (each.kind === "template") return hasKernelCommand(NOTE_FROM_TEMPLATE);
+  if (each.command === undefined) return true;
+  return hasKernelCommand(each.command) && (each.ui === undefined || (components()?.uiOn(each.ui) ?? true));
+}
+
+function canCreate(each: NewKindSpec): boolean {
+  if (each.kind === "template") return templatesLauncher() !== null && kindOn(each);
+  return kindOn(each);
+}
+
+/// Che cosa si crea adesso, nell'ordine del menu.
+export function newKinds(): NewKind[] {
+  return NEW_KINDS.filter(canCreate).map((each) => each.kind);
+}
+
+/// Chi fa nascere una nota e una cartella: l'esploratore, che ha il campo del
+/// nome della cartella e apre la cartella dove la nota nasce. `folder` è la
+/// cartella scelta ("" è la radice del vault); `undefined` vuol dire «dove la
+/// fa nascere Ctrl+N» per la nota (anche accanto alla nota aperta, con
+/// `files.new-note-folder` a `./`) e la radice di ciò che si vede per la
+/// cartella.
+export interface NewKindHost {
+  note(folder: string | undefined): void;
+  folder(folder: string | undefined): void;
+}
+
+let newHost: NewKindHost | null = null;
+
+/// Dice chi fa le note e le cartelle; restituisce chi lo toglie.
+export function registerNewKindHost(host: NewKindHost): () => void {
+  newHost = host;
+  return () => {
+    if (newHost === host) newHost = null;
+  };
+}
+
+/// Una voce del menu «Nuovo», con la forma di una voce di `ui/menu.ts`.
+export interface NewEntry {
+  readonly kind: NewKind;
+  readonly label: string;
+  readonly hint?: string;
+  readonly separator?: boolean;
+  readonly run: () => void;
+}
+
+/// Le voci del menu «Nuovo». Con `folder` il file nasce in quella cartella
+/// ("" è la radice): è il menu di una cartella dell'albero. Senza, nasce dove
+/// lo fa nascere il gesto diretto: la nota come Ctrl+N, il resto nello spazio
+/// attivo. Sono il «+», il titolo dell'albero e il menu File.
+///
+/// La nota e la cartella mancano soltanto in una cornice senza albero, che non
+/// le sa fare. Una voce scelta quando non si può più fare, a menu aperto, lo
+/// dice con un avviso invece di non fare niente: il suo comando o il suo
+/// editor si sono spenti, o questa finestra non ha più chi la fa partire.
+export function newEntries(folder?: string): NewEntry[] {
+  const kinds = newKinds();
+  return NEW_KINDS.filter((each) => kinds.includes(each.kind))
+    .filter((each) => (each.kind !== "note" && each.kind !== "folder") || newHost !== null)
+    .map((each): NewEntry => {
+      const label = t(each.label);
+      const hint = each.kind === "note" ? displayBinding(allCommands().find((entry) => entry.id === NOTE_NEW)?.binding ?? null) : "";
+      return {
+        kind: each.kind,
+        label,
+        ...(hint ? { hint } : {}),
+        ...(each.separator ? { separator: true } : {}),
+        run: () => {
+          const outcome = startNew(each, folder);
+          if (outcome === "off") notify(t("new.kind.unavailable", { kind: label }), "guasto");
+          else if (outcome === "unreachable") notify(t("new.kind.unreachable", { kind: label }), "guasto");
+        },
+      };
+    });
+}
+
+/// Com'è andata una voce: partita; il suo comando o il suo editor si sono
+/// spenti; c'è tutto, ma questa finestra non ha chi la fa partire.
+type NewOutcome = "started" | "off" | "unreachable";
+
+/// Fa partire la voce `each`.
+function startNew(each: NewKindSpec, folder: string | undefined): NewOutcome {
+  if (!kindOn(each)) return "off";
+  if (each.kind === "note" || each.kind === "folder") {
+    if (newHost === null) return "unreachable";
+    newHost[each.kind](folder);
+    return "started";
+  }
+  if (each.kind === "template") {
+    // Da una cartella, la nota nasce lì: il modulo di `note.from_template`
+    // con la cartella già scritta. Altrimenti il comando «Nuova nota da un
+    // modello» della cornice, come dalla palette.
+    if (folder !== undefined && folder !== "") {
+      return launchCommand(NOTE_FROM_TEMPLATE, { folder }) ? "started" : "unreachable";
+    }
+    const launch = templatesLauncher();
+    if (launch === null) return "unreachable";
+    void Promise.resolve()
+      .then(() => launch())
+      .catch((error: unknown) => notify(t("new.kind.failed", { kind: t(each.label), reason: errorText(error) }), "guasto"));
+    return "started";
+  }
+  const place = folder ?? state.activeSpace ?? "";
+  return launchCommand(each.command!, place === "" ? {} : { folder: place }) ? "started" : "unreachable";
 }
 
 /// Apre «Nuovo disegno…»: il modulo proprio del comando, la galleria, o la
@@ -316,6 +497,36 @@ export function pickDrawingImport(folder = ""): boolean {
   return true;
 }
 
+// # La porta della riga di un componente
+//
+// Una superficie che dice «questo si fa con un componente spento» porta
+// l'utente sulla riga del componente nella pagina «Componenti», col fuoco sul
+// suo interruttore: «Accendi…» del disegno. Non accende niente: accende
+// l'utente. Chi apre la riga sono le impostazioni, che registrano la porta
+// quando si montano e la tolgono quando si smontano.
+
+/// Chi apre la riga di un componente.
+export type ComponentRowOpener = (id: string) => void;
+
+let componentRowOpener: ComponentRowOpener | null = null;
+
+/// Registra chi apre la riga di un componente; restituisce chi la toglie.
+/// Vince l'ultima registrazione.
+export function registerComponentRow(open: ComponentRowOpener): () => void {
+  componentRowOpener = open;
+  return () => {
+    if (componentRowOpener === open) componentRowOpener = null;
+  };
+}
+
+/// Apre la pagina «Componenti» sulla riga `id`; falso se nessuno sa aprirla.
+/// Un `id` che la mappa non ha apre la pagina e basta.
+export function showComponent(id: string): boolean {
+  if (componentRowOpener === null) return false;
+  componentRowOpener(id);
+  return true;
+}
+
 /// Gli accordi riconfigurati, letti dalle impostazioni.
 ///
 /// La mappa è chiave d'impostazione → valore, e non id di comando → accordo:
@@ -365,15 +576,37 @@ export function commandOfKeybindingKey(key: string): string | null {
   return name === "" ? null : `${ns}:${name}`;
 }
 
+/// Le letture partite, per sapere quale è l'ultima: una lettura vecchia che
+/// risponde tardi non rimette gli accordi di prima sopra quelli nuovi.
+let overrideReads = 0;
+
+/// Chi vuole sapere quando la mappa degli accordi è stata riletta (la riga dei
+/// suggerimenti, che scrive i tasti della persona).
+const overrideListeners = new Set<() => void>();
+
+/// Avvisa dopo ogni lettura degli accordi che è arrivata in tempo, cioè quando
+/// `allCommands()` dice già i tasti nuovi. Restituisce il disabbonamento.
+export function onKeyOverridesLoaded(listener: () => void): () => void {
+  overrideListeners.add(listener);
+  return () => {
+    overrideListeners.delete(listener);
+  };
+}
+
 export async function loadKeyOverrides(): Promise<void> {
+  const read = ++overrideReads;
+  let next: Map<string, string>;
   try {
-    overrides = chordMap(await settings());
+    next = chordMap(await settings());
   } catch {
     // Un vault che non sa dire come è configurato non è un motivo per lasciare
     // la tastiera muta: restano gli accordi dichiarati, che sono quelli con cui
     // la shell è nata.
-    overrides = new Map();
+    next = new Map();
   }
+  if (read !== overrideReads) return;
+  overrides = next;
+  for (const listener of [...overrideListeners]) listener();
 }
 
 /// Le righe di impostazione che sono accordi, come mappa. Pura, per il banco.
@@ -404,7 +637,7 @@ export function allCommands(): CommandEntry[] {
     .map((command) => ({
       id: command.id,
       title: t(command.title),
-      description: t(command.description),
+      description: t(typeof command.description === "function" ? command.description() : command.description),
       layer: command.layer,
       // La stessa riga dei comandi del kernel, e da questa voce lo è per davvero
       // (§16.3): l'accordo riconfigurato se c'è, il dichiarato se no.
@@ -430,6 +663,9 @@ export interface KeyChord {
   metaKey: boolean;
   shiftKey: boolean;
   altKey: boolean;
+  /// Il tasto fisico (`KeyboardEvent.code`): serve solo a dare un nome ai
+  /// tasti che la WebView passa come `Unidentified` (`namedKey`).
+  code?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -621,9 +857,29 @@ export function keyboardPlatform(platform: string): KeyboardPlatform {
   return /Mac|iPhone|iPad|iPod/i.test(platform) ? "mac" : "other";
 }
 
+/// I tasti con nome che WebKitGTK può passare come `Unidentified`: Maiusc+Tab
+/// arriva da GTK come `ISO_Left_Tab`, e la WebView lo dà con
+/// `key === "Unidentified"` e `code === "Tab"`, Ctrl compreso — così
+/// `Ctrl-Shift-Tab` non arrivava mai al suo comando (IMP-050; per la griglia
+/// IMP-029, `editors/grid/shortcuts.ts`). Per questi il tasto fisico dice
+/// quale è.
+const NAMED_BY_CODE: Readonly<Record<string, string>> = {
+  Tab: "tab",
+  Enter: "enter",
+  NumpadEnter: "enter",
+  Escape: "escape",
+};
+
+/// Il nome del tasto premuto, minuscolo, con `Unidentified` riletto dal tasto
+/// fisico quando è uno di quelli con nome.
+function namedKey(e: KeyChord): string {
+  if (e.key === "Unidentified" && e.code !== undefined) return NAMED_BY_CODE[e.code] ?? "unidentified";
+  return e.key.toLowerCase();
+}
+
 function pressedChord(e: KeyChord, platform: KeyboardPlatform = "any"): Chord {
   return sameKeyOnEveryLayout({
-    key: e.key.toLowerCase(),
+    key: namedKey(e),
     mod: platform === "mac" ? e.metaKey : platform === "other" ? e.ctrlKey : e.ctrlKey || e.metaKey,
     ctrl: platform === "mac" && e.ctrlKey,
     shift: e.shiftKey,
@@ -916,8 +1172,9 @@ export function advance(
   e: KeyChord,
   platform: KeyboardPlatform = "any",
 ): ResultKeys {
-  if (MODIFIER_KEYS.has(e.key.toLowerCase())) return { type: "passa" };
-  if (waiting && e.key === "Escape") return { type: "annulla" };
+  const key = namedKey(e);
+  if (MODIFIER_KEYS.has(key)) return { type: "passa" };
+  if (waiting && key === "escape") return { type: "annulla" };
   if (platform === "other" && e.metaKey) {
     return waiting ? { type: "annulla" } : { type: "passa" };
   }
@@ -1035,7 +1292,11 @@ export function validateKeybinding(binding: string): KeybindingValidation {
 }
 
 export function rejectedChords(entries: CommandEntry[]): CommandEntry[] {
-  return entries.filter((e) => e.binding !== null && normalizeAlternatives(e.binding) === null);
+  // Un testo vuoto non è un accordo scritto male ma nessun accordo, come dice
+  // `validateKeybinding`: rifiutarlo diceva «non valida» a ogni comando senza
+  // scorciatoia (IMP-140).
+  return entries.filter((e) =>
+    e.binding !== null && e.binding.trim() !== "" && normalizeAlternatives(e.binding) === null);
 }
 
 export type KeybindingIssue =

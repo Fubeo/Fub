@@ -26,6 +26,14 @@ uno nuovo non ha `k`. Un segno senza il suo commento si toglie; due commenti
 con lo stesso id, o una risposta senza il suo, sono una proiezione malformata.
 Il codec ODT rifiuta un elenco non vuoto.
 
+`href` di un tratto è il suo link. Uno nuovo prende lo stile «Hyperlink»
+del documento (o quello predefinito di WordCraft), come in Word. Toglierlo
+toglie il link prima di confrontare l'enfasi: se ne vanno lo stile
+«Hyperlink» e, nel `.docx`, il `w:hyperlink` con gli attributi che la
+proiezione non porta (`w:history`, `w:tooltip`, `w:tgtFrame`); ciò che il
+tratto mostra (`m`, `f`) resta, scritto diretto dove lo dava lo stile. La
+relazione dell'indirizzo se ne va con l'ultimo link che la usa.
+
 `"track": true`, fra `readonly` e `lang`, dice che il documento registra le
 modifiche (assente quando non lo fa): la shell scrive ciò che cambia come
 revisioni `ins` e `del`, e il codec salva l'impostazione con il documento. Il
@@ -103,6 +111,12 @@ la superficie la numera e la mostra al passaggio. Il ritorno al documento li
 ignora, perché vale la nota tenuta nel `k`; su un'altra specie tenuta sono una
 proiezione malformata.
 
+Una cella vuota del file si legge con `blocks` vuoto. Nell'`.odt`, al ritorno,
+una cella con `k` che porta un solo paragrafo vuoto senza `k` (quello che
+ProseMirror vi mette) vale come la cella vuota e si riscrive com'era; una
+cella nuova, senza `k`, si scrive coi suoi blocchi, il paragrafo vuoto
+compreso, e si rilegge uguale.
+
 Un blocco del corpo (paragrafo o tabella, non i blocchi dentro una cella)
 che il codec non riscriverebbe senza perdite porta `"locked": true`, subito
 dopo `role` nel paragrafo e dopo `t` nella tabella: il salvataggio lo lascia
@@ -113,7 +127,10 @@ riscriverebbe senza perdite qualcosa fuori dal corpo, o che un blocco è
 chiuso: si salvano soltanto i blocchi del corpo, per innesto, e un
 salvataggio che tocca altro (pagina, intestazioni, commenti, note) o che
 l'innesto non sa trattare viene rifiutato (`host.rich.locked.outside`).
-Entrambi sono assenti quando sono falsi.
+Entrambi i rifiuti sono `BadArgs`: il file si scrive, quella modifica no.
+Con `body_only` una tabella nuova non aggiunge lo stile `TableGrid`: lo
+prende se il file lo ha, altrimenti ne porta i bordi come formattazione
+diretta. Entrambi i campi sono assenti quando sono falsi.
 
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
@@ -156,4 +173,16 @@ Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
 fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla
 shell nei due versi, e `rich-closed.json` ne porta i blocchi chiusi
-(`crates/fub-format-rich/tests/ts_projection.rs`).
+(`crates/fub-format-rich/tests/ts_projection.rs`). `rich-senza-perdite.json`
+è la proiezione di `Senza perdite.docx` del corpus; su di lei la shell fa una
+raffica di modifiche e l'annulla di tutto, e `rich-annulla.json` (snapshot di
+`apps/client/src/editors/rich/undo.test.ts`) porta le proiezioni salvate per
+strada, che il codec salva in fila tornando al contenuto di partenza.
+
+La proiezione porta solo testo Unicode valido: serde rifiuta un surrogato
+UTF-16 senza la sua metà, e il salvataggio fallirebbe per intero. La shell
+non lascia il cursore fra le due metà di una coppia (una posizione calcolata
+torna davanti al carattere intero) e, scrivendo, sostituisce un surrogato
+rimasto solo con U+FFFD; `rich-surrogato.json` (snapshot di
+`apps/client/src/editors/rich/surrogates.test.ts`) è una proiezione così, che
+il codec salva sullo stesso file.

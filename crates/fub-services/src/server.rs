@@ -119,8 +119,8 @@ pub struct ServiceState {
     pub data_dir: PathBuf,
     pub config: ServicesConfig,
     pub accounts: AccountStore,
-    /// Rate limiting login (chiave: il nome dato al login).
-    pub logins: crate::mfa::LoginRateLimit,
+    /// Rate limiting login: (nome, origine), origine e nome ([`crate::mfa::LoginLimits`]).
+    pub logins: crate::mfa::LoginLimits,
     /// Rate limiting dei codici TOTP (chiave: l'`account_id`). È un limite a
     /// parte perché la chiave del login la sceglie chi chiama: nella stessa
     /// mappa, login falliti col nome giusto esaurirebbero i tentativi TOTP di
@@ -158,7 +158,7 @@ impl ServiceState {
             data_dir,
             config,
             accounts,
-            logins: crate::mfa::LoginRateLimit::new(),
+            logins: crate::mfa::LoginLimits::new(),
             totp_attempts: crate::mfa::LoginRateLimit::new(),
             acls: BTreeMap::new(),
             abuse: std::sync::Arc::default(),
@@ -206,6 +206,32 @@ pub fn redact(_value: &str) -> String {
     String::from("<unlogged>")
 }
 
+/// Il nome dell'host di un header `Host` o di un indirizzo `host:porta`,
+/// senza porta: `esempio.it:8080` → `esempio.it`, `[::1]:7749` → `::1`.
+/// Un IPv6 senza parentesi (`::1`) o con la parentesi aperta resta intero:
+/// non è un host valido e non combacia con nessun nome.
+pub fn host_name(raw: &str) -> &str {
+    let raw = raw.trim();
+    let is_port = |port: &str| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit());
+    if let Some(bracketed) = raw.strip_prefix('[') {
+        // Tra parentesi sta soltanto un indirizzo IPv6, mai un nome.
+        return match bracketed.split_once(']') {
+            Some((address, rest))
+                if address.parse::<std::net::Ipv6Addr>().is_ok()
+                    && (rest.is_empty() || rest.strip_prefix(':').is_some_and(is_port)) =>
+            {
+                address
+            }
+            _ => raw,
+        };
+    }
+    match raw.split_once(':') {
+        None => raw,
+        Some((host, port)) if is_port(port) => host,
+        Some(_) => raw,
+    }
+}
+
 /// Corpo di login/register decodificato senza mai registrarlo.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Credentials {
@@ -220,6 +246,28 @@ pub fn parse_credentials(body: &[u8]) -> Result<Credentials, HttpResponse> {
 #[cfg(test)]
 mod tests {
     use super::ResourceLocks;
+
+    #[test]
+    fn host_name_drops_the_port_and_keeps_ipv6_whole() {
+        for (raw, want) in [
+            ("esempio.it", "esempio.it"),
+            ("esempio.it:8080", "esempio.it"),
+            (" Esempio.it:80 ", "Esempio.it"),
+            ("127.0.0.1:7749", "127.0.0.1"),
+            ("[::1]:7749", "::1"),
+            ("[::1]", "::1"),
+            ("[2001:db8::1]:443", "2001:db8::1"),
+            ("::1", "::1"),
+            ("[::1", "[::1"),
+            ("[::1]x", "[::1]x"),
+            ("[::1]:", "[::1]:"),
+            ("[esempio.it]:80", "[esempio.it]:80"),
+            ("esempio.it:", "esempio.it:"),
+            ("esempio.it:80:81", "esempio.it:80:81"),
+        ] {
+            assert_eq!(super::host_name(raw), want, "{raw:?}");
+        }
+    }
 
     #[test]
     fn idle_locks_do_not_pile_up_but_held_ones_stay() {

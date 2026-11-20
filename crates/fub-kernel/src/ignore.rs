@@ -471,6 +471,26 @@ impl IgnorePolicy {
     /// Valuta un path relativo intero. Le regole superiori si applicano a ogni
     /// componente; soltanto dopo, e senza poterle negare, entra il `.gitignore`.
     pub fn excludes_path(&self, rel: &Utf8Path, kind: Kind) -> bool {
+        self.excludes_above_gitignore(rel, kind) || self.gitignore.is_excluded(rel, kind)
+    }
+
+    /// Questa cartella è esclusa **insieme a tutto ciò che contiene**?
+    ///
+    /// È la domanda di chi decide dove non guardare affatto — un rilevatore
+    /// che paga un osservatore per cartella (inotify) — e non è
+    /// `excludes_path(rel, Kind::Folder)`: il `.gitignore` può riprendere un
+    /// file dentro una cartella che esclude (`build/` e poi `!build/keep.md`),
+    /// quindi una cartella esclusa soltanto da lui può ancora contenere voci
+    /// del vault. Le regole superiori invece valgono per ogni componente e
+    /// niente le nega: ciò che escludono lo escludono a qualunque profondità
+    /// sotto di sé, ed è l'unico caso in cui si può smettere di guardare senza
+    /// perdere un file che il vault conta.
+    pub fn excludes_tree(&self, rel: &Utf8Path) -> bool {
+        self.excludes_above_gitignore(rel, Kind::Folder)
+    }
+
+    /// Le tre regole che precedono il `.gitignore`, componente per componente.
+    fn excludes_above_gitignore(&self, rel: &Utf8Path, kind: Kind) -> bool {
         let components: Vec<&str> = rel.components().map(|c| c.as_str()).collect();
         for (at, component) in components.iter().enumerate() {
             let component_kind = if at + 1 < components.len() {
@@ -489,7 +509,53 @@ impl IgnorePolicy {
                 return true;
             }
         }
-        self.gitignore.is_excluded(rel, kind)
+        false
+    }
+}
+
+/// Dove guarda un rilevatore che paga **un osservatore per cartella**.
+///
+/// inotify, il backend di Linux, non sa guardare un albero: ne guarda una
+/// cartella alla volta, e il budget degli osservatori è dell'utente intero,
+/// condiviso con ogni altro programma (difetto IMP-156: un vault che è anche
+/// un repo git spendeva 446 osservatori su 1038 per `.git/objects`, e al
+/// limite il rilevatore moriva). Questo valore dice quali cartelle meritano
+/// un osservatore, ed è la politica di esclusione del vault e non una lista
+/// del rilevatore: ciò che il vault non conta non si guarda.
+///
+/// Due risposte e non una, perché c'è una cartella esclusa che va guardata lo
+/// stesso: `.fub`, dove sta `settings.json`. Lì dentro cambia **la politica
+/// stessa** — le cartelle escluse e i nascosti — e chi non la guardasse non
+/// saprebbe mai di dover allargare o stringere ciò che guarda. Si guarda da
+/// sola, senza scendere: indici e bozze sotto di lei restano fuori.
+///
+/// Si confronta per uguaglianza: due valori diversi vogliono dire che
+/// l'insieme delle cartelle guardate va riallineato.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WatchScope {
+    policy: IgnorePolicy,
+}
+
+impl WatchScope {
+    /// Il recinto di una politica.
+    pub fn new(policy: IgnorePolicy) -> Self {
+        WatchScope { policy }
+    }
+
+    /// La cartella `rel` (relativa alla radice; vuota è la radice) va
+    /// guardata, e si scende nelle sue sottocartelle?
+    pub fn descends(&self, rel: &Utf8Path) -> bool {
+        rel.as_str().is_empty() || !self.policy.excludes_tree(rel)
+    }
+
+    /// La cartella `rel` va guardata da sola, senza scendere? È la cartella
+    /// di Fub nella radice, dove si scrive la politica.
+    pub fn watches_alone(&self, rel: &Utf8Path) -> bool {
+        let mut components = rel.components();
+        matches!(
+            (components.next(), components.next()),
+            (Some(only), None) if resolution_key(only.as_str()) == FUB_DIR
+        )
     }
 }
 
@@ -899,5 +965,43 @@ mod tests {
         let policy = IgnorePolicy::declaring(["build".into()], true).with_gitignore(rules);
         assert!(policy.excludes_path(Utf8Path::new("build/keep.md"), Kind::File));
         assert!(policy.excludes_path(Utf8Path::new(".fub/keep.md"), Kind::File));
+    }
+
+    /// Una cartella si smette di guardare soltanto se niente sotto di lei può
+    /// tornare nel vault: il `.gitignore` riprende `build/keep.md`, quindi
+    /// `build/` esclusa soltanto da lui non è un albero escluso.
+    #[test]
+    fn only_the_upper_rules_exclude_a_whole_tree() {
+        let policy =
+            IgnorePolicy::default().with_gitignore(parse_gitignore("build/\n!build/keep.md"));
+        assert!(policy.excludes_path(Utf8Path::new("build"), Kind::Folder));
+        assert!(!policy.excludes_tree(Utf8Path::new("build")));
+        for tree in [
+            ".git",
+            ".git/objects/aa",
+            "node_modules",
+            "a/node_modules",
+            ".fub",
+        ] {
+            assert!(policy.excludes_tree(Utf8Path::new(tree)), "{tree}");
+        }
+        assert!(!policy.excludes_tree(Utf8Path::new("note/sub")));
+    }
+
+    #[test]
+    fn the_watch_scope_keeps_an_eye_on_where_the_policy_is_written() {
+        let scope = WatchScope::new(IgnorePolicy::default());
+        assert!(scope.descends(Utf8Path::new("")));
+        assert!(scope.descends(Utf8Path::new("note")));
+        assert!(!scope.descends(Utf8Path::new(".git/objects")));
+        assert!(!scope.descends(Utf8Path::new(".fub")));
+        assert!(scope.watches_alone(Utf8Path::new(".fub")));
+        assert!(scope.watches_alone(Utf8Path::new(".FUB")));
+        assert!(!scope.watches_alone(Utf8Path::new(".fub/index")));
+        assert!(!scope.watches_alone(Utf8Path::new("a/.fub")));
+
+        let revealing = WatchScope::new(IgnorePolicy::declaring(Vec::new(), true));
+        assert!(revealing.descends(Utf8Path::new(".git/objects")));
+        assert_ne!(scope, revealing, "a changed policy is a changed scope");
     }
 }

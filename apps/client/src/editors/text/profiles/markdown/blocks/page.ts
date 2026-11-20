@@ -1,376 +1,195 @@
-// La testata della pagina (H12) e il suo menu «…» (H13): in Blocchi, in cima,
-// l'icona (`icon:`), la copertina (`cover:`) e il titolo, con le proprietà
-// subito sotto. Il titolo è il nome del file, e per la pagina di una cartella
-// (`X/_index.md`, decisione 0229) il nome della cartella: si scrive in riga, e
-// cambiarlo è una rinomina, del file o della cartella. Icona, copertina,
-// larghezza e carattere stanno nel frontmatter, scritti col codice delle
-// proprietà: il file resta Markdown, e Sorgente mostra le stesse righe.
-import { EditorSelection, type EditorState, type Extension, Prec, StateEffect, StateField } from "@codemirror/state";
+// La testata della pagina in Scrittura: l'adattatore di CodeMirror per
+// `../page/header.ts`. Qui stanno il widget di blocco in cima alla nota, il
+// campo che lo rifà quando cambiano frontmatter, titolo o riga dei dati, i
+// tasti che entrano e escono dalla testata e i gesti che scrivono nel testo
+// (una proprietà, la voce della descrizione, il link a una sottopagina).
+// La testata vera, il suo DOM e i suoi riquadri sono gli stessi della Lettura.
+import { EditorSelection, EditorState, type Extension, Prec, StateEffect, StateField, Transaction, type TransactionSpec } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
-import { createList, openPopover, textField, type PopoverHandle } from "../../../../../kit";
-import { catalogLanguage, resolvedLanguage } from "../../../../../i18n/strings";
+import { isolateHistory, redo, undo } from "@codemirror/commands";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
-import { matchEmoji } from "../completions";
-import { propertyBlock, propertyList, propertyValue, setProperty } from "../properties";
-import { imageHtml } from "../render-inline";
-import { liveStrings } from "../strings";
+import { propertiesDisplay } from "../../../properties-display";
+import {
+  addProperty,
+  frontmatterOpen,
+  headerShowsProperties,
+  lastEntry,
+  openPropertyAt,
+  propertyBlock,
+  propertyList,
+  hasAnchors,
+  moveEntryBefore,
+  renamePropertyKey,
+  setProperty,
+  type PropertyWrite,
+  type PropertyBlock,
+} from "../properties";
 import { blocksOptions, type BlocksOptions } from "./handles";
+import { withLineBreaks } from "../../../line-breaks";
+import { noteFactsElement, noteFactsOf, sameLabels, type NoteFactsLabels } from "../note-facts";
+import { pageData as pageDataOf, pageStops, renderPageHeader, samePage, type PageData, type PageHost } from "../page/header";
+import { firstHeading, retitled, sameTitle, type FirstHeading } from "../page/title";
+import { FEATURED_LIMIT, featuredProperties } from "../page/featured";
+import { entryStamp, type WriteOutcome } from "../page/properties/row";
+import { liveStrings } from "../strings";
+import { typedChanges } from "../page/note-type";
+import type { NoteType } from "../../../../../state/note-types";
+import { errorText } from "../../../../../host/errors";
 
-/// Le classi della pagina che il menu «…» scrive in `cssclasses`; il tema le
-/// applica al riquadro (`fub-note--*`). Le altre classi della nota restano.
-export const PAGE_FONTS = ["serif", "sans", "mono"] as const;
-export type PageFont = (typeof PAGE_FONTS)[number];
+export { PAGE_FONTS, pageClassesWith, type PageData, type PageFont } from "../page/header";
 
-/// Ciò che la testata mostra, letto dallo stato e dalle opzioni.
-export interface PageData {
-  readonly title: string;
-  readonly folder: boolean;
-  readonly icon: string | null;
-  readonly cover: string | null;
-  readonly classes: readonly string[];
-  readonly readOnly: boolean;
-  readonly renamable: boolean;
-  readonly subpages: boolean;
+/// La riga dei dati mostra le etichette: allora `tags:` non è una riga della
+/// testata.
+function factTags(state: EditorState): boolean {
+  return (noteFactsOf(state)?.tags.length ?? 0) > 0;
 }
 
+/// La testata di questo stato, con le opzioni dei Blocchi.
 export function pageData(state: EditorState, options: BlocksOptions = state.facet(blocksOptions)): PageData {
-  const icon = propertyValue(state, "icon")?.trim() || null;
-  const cover = propertyValue(state, "cover")?.trim() || null;
-  return {
-    title: options.page?.() ?? "",
-    folder: options.folderPage?.() ?? false,
-    icon,
-    cover,
-    classes: propertyList(state, "cssclasses"),
-    readOnly: state.readOnly,
-    renamable: options.rename !== undefined,
-    subpages: options.subpage !== undefined,
-  };
-}
-
-function sameData(a: PageData, b: PageData): boolean {
-  return a.title === b.title && a.folder === b.folder && a.icon === b.icon && a.cover === b.cover
-    && a.readOnly === b.readOnly && a.renamable === b.renamable && a.subpages === b.subpages
-    && a.classes.length === b.classes.length && a.classes.every((name, i) => name === b.classes[i]);
-}
-
-/// Le classi dopo un gesto del menu: `wide` e `small` si accendono e si
-/// spengono, il carattere è uno solo (o quello del tema, `null`).
-export function pageClassesWith(
-  classes: readonly string[],
-  change: { readonly toggle: "wide" | "small" } | { readonly font: PageFont | null },
-): string[] {
-  if ("toggle" in change) {
-    return classes.includes(change.toggle) ? classes.filter((name) => name !== change.toggle) : [...classes, change.toggle];
-  }
-  const rest = classes.filter((name) => !(PAGE_FONTS as readonly string[]).includes(name));
-  return change.font ? [...rest, change.font] : rest;
+  const block = propertyBlock(state);
+  return pageDataOf(state, options, state.facet(propertiesDisplay), block, block ? frontmatterOpen(state, block) : false, factTags(state));
 }
 
 /// Dove comincia il testo della pagina: dopo il frontmatter, se c'è.
-function bodyStart(state: EditorState): number {
-  const block = propertyBlock(state);
+function bodyStart(state: EditorState, block: PropertyBlock | null = propertyBlock(state)): number {
   if (!block) return 0;
   return Math.min(state.doc.length, block.to + 1);
 }
 
+/// Dove comincia il testo che si vede: dopo il frontmatter e dopo l'H1
+/// ripiegato nel titolo (con le righe vuote che lo seguono), se c'è.
+function textStart(state: EditorState): number {
+  const fold = state.field(titleFold, false);
+  if (fold?.heading && !fold.revealed) return Math.min(state.doc.length, fold.heading.hideTo + 1);
+  return bodyStart(state, state.field(pageHeader, false)?.block ?? propertyBlock(state));
+}
+
+/// L'H1 ripiegato col nome `before` diventa il nome `after`, con un passo
+/// d'annullamento suo (T7, A-15): così titolo e H1 restano uguali dopo una
+/// rinomina dal titolo. Se l'H1 non si ripiega più (cambiato nel frattempo)
+/// non scrive niente. Vale in ogni modalità: chi chiama è la rinomina.
+export function retitleView(view: EditorView, before: string, after: string): boolean {
+  if (view.state.readOnly) return false;
+  const change = retitled(view.state.doc, bodyStart(view.state), before, after);
+  if (!change) return false;
+  view.dispatch({ changes: change, annotations: isolateHistory.of("full"), userEvent: "input" });
+  return true;
+}
+
 /// Scrive una proprietà della pagina con un passo d'annullamento suo.
-function writeProperty(view: EditorView, key: string, value: string | readonly string[] | null): void {
+/// Non scrive mai ciò che non saprebbe riscrivere: in un frontmatter che YAML
+/// non legge non scrive niente; una voce con un commento, un'ancora, un
+/// alias o in una forma che la riscrittura perderebbe non la tocca, e apre lo
+/// YAML su di lei; un valore uguale a quello che c'è non lo riscrive.
+function writeProperty(view: EditorView, key: string, value: PropertyWrite | null): void {
   if (view.state.readOnly) return;
+  const block = propertyBlock(view.state);
+  if (block?.unreadable) return;
+  const entry = block ? lastEntry(block.entries, key) : undefined;
+  if (entry) {
+    const shown = value === null ? null : Array.isArray(value) ? value.join(", ") : typeof value === "object" ? (value as { date: string }).date : String(value);
+    const same = shown !== null && entry.value === shown;
+    if (same) return;
+    if (!entry.simple) {
+      openPropertyAt(view, entry.from);
+      return;
+    }
+  }
   const change = setProperty(view.state, key, value);
-  if (change) view.dispatch({ changes: change, userEvent: "input" });
+  if (change) view.dispatch({ changes: change, annotations: isolateHistory.of("full"), userEvent: "input" });
 }
 
-/// Rilegge la testata: dopo una rinomina il titolo è cambiato fuori dal testo.
-const refreshPage = StateEffect.define<null>();
-
-const lives = new WeakMap<HTMLElement, Lifetime>();
-
-class PageHeaderWidget extends WidgetType {
-  constructor(readonly data: PageData) { super(); }
-
-  override eq(other: PageHeaderWidget): boolean {
-    return sameData(other.data, this.data);
+/// La scrittura di un editor delle proprietà (T8): come `writeProperty`, ma
+/// solo se la voce vale ancora ciò che l'editor ha visto aprendosi
+/// (`expected`, `entryStamp`); se no non scrive e lo dice, e chi scriveva non
+/// perde niente. Una voce che la testata non sa riscrivere apre lo YAML.
+function writePropertyChecked(view: EditorView, key: string, value: PropertyWrite | null, expected: string | null): WriteOutcome {
+  if (view.state.readOnly) return "refused";
+  const block = propertyBlock(view.state);
+  if (block?.unreadable) return "refused";
+  const entry = block ? lastEntry(block.entries, key) : undefined;
+  if (entryStamp(entry) !== expected) return "conflict";
+  if (entry && !entry.simple) {
+    openPropertyAt(view, entry.from);
+    return "refused";
   }
-
-  toDOM(view: EditorView): HTMLElement {
-    const data = this.data;
-    const life = openLifetime();
-    const root = document.createElement("div");
-    root.className = "cm-fub-page";
-    root.setAttribute("role", "group");
-    root.setAttribute("aria-label", liveStrings.t("page.label"));
-    lives.set(root, life);
-    let popover: PopoverHandle | null = null;
-    const closePopover = () => {
-      popover?.close();
-      popover = null;
-    };
-    life.add(closePopover);
-
-    if (data.cover) {
-      const cover = document.createElement("div");
-      cover.className = "cm-fub-page-cover";
-      if (view.state.facet(blocksOptions).mountImage) {
-        const unmount = view.state.facet(blocksOptions).mountImage!(cover, imageHtml("", data.cover));
-        life.add(unmount);
-      }
-      const measure = () => view.requestMeasure();
-      life.listen(cover, "load", measure, { capture: true });
-      root.append(cover);
-    }
-
-    const tools = document.createElement("div");
-    tools.className = "cm-fub-page-tools";
-    const tool = (label: string, run: (button: HTMLButtonElement) => void): HTMLButtonElement => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "cm-fub-page-tool";
-      button.textContent = label;
-      life.listen(button, "click", () => run(button));
-      return button;
-    };
-
-    const iconButton = (anchor: HTMLButtonElement) => {
-      closePopover();
-      popover = openIconPicker(view, anchor, data, life, () => { popover = null; });
-    };
-    const coverButton = (anchor: HTMLButtonElement) => {
-      closePopover();
-      popover = openCoverDialog(view, anchor, data, life, () => { popover = null; });
-    };
-    const subpageButton = (anchor: HTMLButtonElement) => {
-      closePopover();
-      popover = openSubpageDialog(view, anchor, data, life, () => { popover = null; });
-    };
-    const moreButton = (anchor: HTMLButtonElement) => {
-      closePopover();
-      popover = openPageMenu(view, anchor, data, life, () => { popover = null; });
-    };
-
-    if (data.icon) {
-      const icon = document.createElement("button");
-      icon.type = "button";
-      icon.className = "cm-fub-page-icon";
-      icon.textContent = data.icon;
-      icon.setAttribute("aria-label", liveStrings.t("page.icon.change", { icon: data.icon }));
-      icon.disabled = data.readOnly;
-      life.listen(icon, "click", () => iconButton(icon));
-      root.append(icon);
-    }
-    if (!data.readOnly) {
-      if (!data.icon) tools.append(tool(liveStrings.t("page.icon.add"), iconButton));
-      tools.append(tool(liveStrings.t(data.cover ? "page.cover.change" : "page.cover.add"), coverButton));
-      if (data.subpages) tools.append(tool(liveStrings.t("page.subpage.add"), subpageButton));
-      const more = tool("⋯", moreButton);
-      more.classList.add("cm-fub-page-more");
-      more.setAttribute("aria-label", liveStrings.t("page.more"));
-      more.setAttribute("aria-haspopup", "menu");
-      tools.append(more);
-      root.append(tools);
-    }
-
-    const title = document.createElement("input");
-    title.type = "text";
-    title.className = "cm-fub-page-title";
-    title.value = data.title;
-    title.spellcheck = false;
-    title.autocomplete = "off";
-    title.setAttribute("aria-label", liveStrings.t("page.title"));
-    title.title = liveStrings.t(data.folder ? "page.title.folder" : "page.title.file");
-    title.readOnly = data.readOnly || !data.renamable;
-    root.append(title);
-
-    let busy = false;
-    const toBody = () => {
-      const at = bodyStart(view.state);
-      view.dispatch({ selection: EditorSelection.cursor(at), scrollIntoView: true, userEvent: "select" });
-      view.focus();
-    };
-    const commit = async (): Promise<void> => {
-      const options = view.state.facet(blocksOptions);
-      const name = title.value.trim();
-      if (busy || title.readOnly || !options.rename) return;
-      if (name === "" || name === data.title) {
-        title.value = data.title;
-        return;
-      }
-      busy = true;
-      title.readOnly = true;
-      root.setAttribute("aria-busy", "true");
-      const problem = await options.rename(name).catch((error: unknown) => error instanceof Error ? error.message : String(error));
-      busy = false;
-      root.removeAttribute("aria-busy");
-      if (life.closed) return;
-      title.readOnly = false;
-      if (problem) {
-        title.value = data.title;
-        options.notify?.(problem, "guasto");
-        return;
-      }
-      view.dispatch({ effects: refreshPage.of(null) });
-    };
-    life.listen(title, "keydown", (event) => {
-      if (event.isComposing) return;
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void commit();
-        toBody();
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        title.value = data.title;
-        toBody();
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        toBody();
-      }
-    });
-    life.listen(title, "blur", () => void commit());
-    return root;
-  }
-
-  override destroy(dom: HTMLElement): void {
-    lives.get(dom)?.close();
-    lives.delete(dom);
-  }
-
-  /// La testata è un modulo, non testo: tasti e puntatore restano suoi.
-  override ignoreEvent(): boolean {
-    return true;
-  }
+  const change = setProperty(view.state, key, value);
+  if (!change || view.state.sliceDoc(change.from, change.to) === change.insert) return "written";
+  view.dispatch({ changes: change, annotations: isolateHistory.of("full"), userEvent: "input" });
+  return "written";
 }
 
-/// La scelta dell'icona: un campo che cerca fra le emoji (italiano e inglese)
-/// e la griglia dei risultati; «Togli l'icona» se ce n'è una.
-function openIconPicker(view: EditorView, anchor: HTMLElement, data: PageData, life: Lifetime, closed: () => void): PopoverHandle {
-  const own = openLifetime();
-  const body = document.createElement("div");
-  body.className = "cm-fub-page-picker";
-  const grid = document.createElement("div");
-  grid.className = "cm-fub-page-emoji";
-  grid.setAttribute("role", "group");
-  grid.setAttribute("aria-label", liveStrings.t("page.icon.picker"));
-  const language = catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
-  let first: string | null = null;
-  const choose = (char: string | null) => {
-    popover.close();
-    writeProperty(view, "icon", char);
-    view.focus();
-  };
-  let asked = 0;
-  const show = (query: string) => {
-    const question = ++asked;
-    void import("../emoji-data").then(({ EMOJI }) => {
-      if (question !== asked || own.closed) return;
-      const found = query.trim() ? matchEmoji(EMOJI, query.trim(), language) : EMOJI.slice(0, 40).map((entry) => ({ char: entry.char, name: (language === "it" ? entry.it : entry.en)[0] ?? "" }));
-      first = found[0]?.char ?? null;
-      grid.replaceChildren(...found.map(({ char, name }) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "cm-fub-page-emoji-choice";
-        button.textContent = char;
-        button.setAttribute("aria-label", name.replace(/_/g, " "));
-        button.title = name.replace(/_/g, " ");
-        own.listen(button, "click", () => choose(char));
-        return button;
-      }));
-      if (found.length === 0) {
-        const none = document.createElement("p");
-        none.className = "cm-fub-page-empty";
-        none.textContent = liveStrings.t("page.icon.none");
-        grid.append(none);
-      }
-    }, () => {});
-  };
-  const search = textField({
-    label: liveStrings.t("page.icon.search"),
-    labelHidden: true,
-    placeholder: liveStrings.t("page.icon.search"),
-    lifetime: own,
-    onInput: (value) => show(value),
-    onSubmit: () => { if (first) choose(first); },
-  });
-  body.append(search.element, grid);
-  if (data.icon) {
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "cm-fub-page-tool";
-    remove.textContent = liveStrings.t("page.icon.remove");
-    own.listen(remove, "click", () => choose(null));
-    body.append(remove);
-  }
-  show("");
-  const popover = openPopover({
-    anchor,
-    content: body,
-    label: liveStrings.t("page.icon.picker"),
-    placement: "bottom",
-    align: "start",
-    className: "cm-fub-page-popover",
-    lifetime: life,
-    onClose: () => {
-      own.close();
-      closed();
-    },
-  });
-  search.focus();
-  return popover;
+/// Rinomina la chiave nella nota, valore e posto restano: `null` se è
+/// andata (o non c'era niente da fare), se no il perché no.
+function renamePropertyInNote(view: EditorView, key: string, name: string): string | null {
+  if (view.state.readOnly) return null;
+  const next = name.trim();
+  const block = propertyBlock(view.state);
+  if (!block || block.unreadable || next === "" || next === key) return null;
+  if (lastEntry(block.entries, next)) return liveStrings.t("page.properties.rename.taken", { key: next });
+  const change = renamePropertyKey(view.state, key, next);
+  if (change) view.dispatch({ changes: change, annotations: isolateHistory.of("full"), userEvent: "input" });
+  return null;
 }
 
-/// La copertina: un'immagine del vault (il path, come in `![](…)`) o un
-/// indirizzo; «Togli la copertina» se ce n'è una.
-function openCoverDialog(view: EditorView, anchor: HTMLElement, data: PageData, life: Lifetime, closed: () => void): PopoverHandle {
-  const own = openLifetime();
-  const body = document.createElement("div");
-  body.className = "cm-fub-page-picker";
-  const apply = () => {
-    const value = field.value().trim();
-    popover.close();
-    writeProperty(view, "cover", value || null);
-    view.focus();
-  };
-  const field = textField({
-    label: liveStrings.t("page.cover.field"),
-    value: data.cover ?? "",
-    lifetime: own,
-    onSubmit: apply,
-  });
-  const actions = document.createElement("div");
-  actions.className = "cm-fub-page-actions";
-  const use = document.createElement("button");
-  use.type = "button";
-  use.className = "cm-fub-page-tool";
-  use.textContent = liveStrings.t("page.cover.apply");
-  own.listen(use, "click", apply);
-  actions.append(use);
-  if (data.cover) {
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "cm-fub-page-tool";
-    remove.textContent = liveStrings.t("page.cover.remove");
-    own.listen(remove, "click", () => {
-      popover.close();
-      writeProperty(view, "cover", null);
-      view.focus();
-    });
-    actions.append(remove);
+/// «Metti in evidenza»: in una nota senza tipo la voce va fra le prime
+/// quattro del frontmatter, al posto della quarta, che scende fra le altre
+/// (A-15). «Togli dall'evidenza»: in fondo al frontmatter. In una nota con un
+/// tipo (E5) l'evidenza è del tipo: si scrive nel suo file, per tutte le sue
+/// note, e la nota non cambia.
+function featurePropertyInNote(view: EditorView, key: string, on: boolean): void {
+  const state = view.state;
+  if (state.readOnly) return;
+  const type = state.field(pageHeader, false)?.data.properties?.type ?? null;
+  if (type) {
+    state.facet(blocksOptions).featureInType?.(type, key, on);
+    return;
   }
-  body.append(field.element, actions);
-  const popover = openPopover({
-    anchor,
-    content: body,
-    label: liveStrings.t("page.cover.dialog"),
-    placement: "bottom",
-    align: "start",
-    className: "cm-fub-page-popover",
-    lifetime: life,
-    onClose: () => {
-      own.close();
-      closed();
-    },
-  });
-  field.focus();
-  return popover;
+  const block = propertyBlock(state);
+  if (!block || block.unreadable) return;
+  const split = featuredProperties(block.entries, factTags(state));
+  const featured = split.featured.some((entry) => entry.key === key);
+  if (featured === on) return;
+  const target = on ? split.featured[FEATURED_LIMIT - 1]?.key ?? null : null;
+  if (on && target === null) return;
+  const entry = lastEntry(block.entries, key);
+  if (entry && hasAnchors(state, block)) {
+    openPropertyAt(view, entry.from);
+    return;
+  }
+  const changes = moveEntryBefore(state, key, target);
+  if (changes) view.dispatch({ changes, annotations: isolateHistory.of("full"), userEvent: "input" });
+}
+
+/// «Scegli il tipo»: `tipo` diventa il link al tipo e le sue proprietà che
+/// mancano arrivano vuote, in un passo d'annullamento solo. Niente si toglie.
+function chooseTypeInNote(view: EditorView, type: NoteType): void {
+  if (view.state.readOnly) return;
+  const changes = typedChanges(view.state, type);
+  if (changes) view.dispatch({ changes, annotations: isolateHistory.of("full"), userEvent: "input" });
+}
+
+/// Una voce `key:` da scrivere: se c'è già il cursore va alla sua fine,
+/// altrimenti nasce prima della chiusura (o col frontmatter, in cima) e il
+/// cursore ci entra, dopo i due punti. Lo YAML si apre lì.
+export function addPropertyKey(view: EditorView, key: string): void {
+  const state = view.state;
+  if (state.readOnly) return;
+  const block = propertyBlock(state);
+  const entry = block ? lastEntry(block.entries, key) : undefined;
+  if (entry) {
+    openPropertyAt(view, entry.from);
+    return;
+  }
+  const line = `${key}: `;
+  if (!block) {
+    const at = state.doc.sliceString(0, 1) === "﻿" ? 1 : 0;
+    view.dispatch({ changes: { from: at, insert: `---\n${line}\n---\n` }, selection: { anchor: at + 4 + line.length }, scrollIntoView: true, userEvent: "input" });
+  } else {
+    const closing = state.doc.line(block.closing);
+    view.dispatch({ changes: { from: closing.from, insert: `${line}\n` }, selection: { anchor: closing.from + line.length }, scrollIntoView: true, userEvent: "input" });
+  }
+  view.focus();
 }
 
 /// Dove va il link alla sottopagina: in una riga vuota, se il cursore ci sta,
@@ -382,229 +201,447 @@ export function subpageLink(state: EditorState, name: string): { from: number; i
   let end = line;
   while (end.number < state.doc.lines && state.doc.line(end.number + 1).text.trim() !== "") end = state.doc.line(end.number + 1);
   const insert = `\n\n${link}`;
-  return { from: end.to, insert, cursor: end.to + insert.length };
+  return { from: end.to, insert: withLineBreaks(state, insert), cursor: end.to + insert.length };
 }
 
-/// «Nuova sottopagina»: il nome, e che cosa succederà alla pagina. Se la
-/// pagina non è ancora quella di una cartella, il riquadro lo dice prima di
-/// «Crea»: è la domanda. A cose fatte il link `[[Nome]]` entra nel testo.
-function openSubpageDialog(view: EditorView, anchor: HTMLElement, data: PageData, life: Lifetime, closed: () => void): PopoverHandle {
-  const own = openLifetime();
-  const body = document.createElement("div");
-  body.className = "cm-fub-page-picker";
-  let busy = false;
-  const create = async () => {
-    const options = view.state.facet(blocksOptions);
-    const name = field.value().trim();
-    if (busy || !options.subpage || name === "") return;
-    busy = true;
-    popover.close();
-    const problem = await options.subpage(name).catch((error: unknown) => error instanceof Error ? error.message : String(error));
-    if (problem) {
-      options.notify?.(problem, "guasto");
-      return;
+/// Rilegge la testata: dopo una rinomina il titolo è cambiato fuori dal testo.
+const refreshPage = StateEffect.define<null>();
+
+/// Rilegge la testata da fuori: è cambiato qualcosa che il testo non dice
+/// (il registro dei tipi delle proprietà). Senza testata non fa niente.
+export function refreshPageHeader(view: EditorView): boolean {
+  if (view.state.field(pageHeader, false) === undefined) return false;
+  view.dispatch({ effects: refreshPage.of(null) });
+  return true;
+}
+
+/// «Altre N proprietà» aperto o chiuso: dura quanto l'editor, e una testata
+/// rifatta (una battuta nel frontmatter) lo ritrova.
+const setPageMore = StateEffect.define<boolean>();
+const pageMore = StateField.define<boolean>({
+  create: () => false,
+  update: (value, transaction) => transaction.effects.reduce((open, effect) => effect.is(setPageMore) ? effect.value : open, value),
+});
+
+/// Il fuoco al testo, sulla prima riga che si vede dopo il frontmatter (e
+/// dopo l'H1 ripiegato nel titolo).
+function toBody(view: EditorView): void {
+  view.dispatch({ selection: EditorSelection.cursor(textStart(view.state)), scrollIntoView: true, userEvent: "select" });
+  view.focus();
+}
+
+/// Ciò che la testata chiede, fatto sull'editor. `root` è la testata
+/// disegnata: un riquadro che si chiude la rifà, se nel frattempo è cambiata.
+function hostFor(view: EditorView, root: HTMLElement): PageHost {
+  const options = view.state.facet(blocksOptions);
+  const subpage = options.subpage;
+  return {
+    writing: true,
+    mountImage: options.mountImage,
+    writeProperty: (key, value) => writeProperty(view, key, value),
+    writePropertyChecked: (key, value, expected) => writePropertyChecked(view, key, value, expected),
+    currentProperty: (key) => {
+      const block = propertyBlock(view.state);
+      return block ? lastEntry(block.entries, key) : undefined;
+    },
+    renameProperty: (key, name) => renamePropertyInNote(view, key, name),
+    featureProperty: (key, on) => featurePropertyInNote(view, key, on),
+    setPropertyType: options.setPropertyType,
+    addPropertyOption: options.addPropertyOption,
+    searchPeople: options.searchPeople,
+    relations: options.relations,
+    listTypes: options.listTypes,
+    chooseType: (type) => chooseTypeInNote(view, type),
+    openType: options.openType,
+    classes: () => propertyList(view.state, "cssclasses"),
+    // La rinomina dal titolo porta con sé l'H1 ripiegato: riuscita, l'H1
+    // diventa il nome nuovo nello stesso gesto; fallita, non cambia.
+    rename: options.rename ? async (name) => {
+      const before = options.page?.() ?? "";
+      const problem = await options.rename!(name);
+      // Il nome che la pagina prende davvero: `Archivio/Nuova` sposta il file
+      // e la pagina si chiama `Nuova`.
+      const after = options.renamedPage?.(name.trim()) ?? name.trim();
+      if (problem === null && before !== "") retitleView(view, before, after);
+      return problem;
+    } : undefined,
+    notify: options.notify,
+    subpage: subpage ? async (name) => {
+      const problem = await subpage(name).catch((error: unknown) =>
+        liveStrings.t("page.subpage.failed", { name, reason: errorText(error, "specie") }));
+      if (problem) {
+        view.state.facet(blocksOptions).notify?.(problem, "guasto");
+        return;
+      }
+      if (view.state.readOnly) return;
+      const at = subpageLink(view.state, name);
+      view.dispatch({ changes: { from: at.from, insert: at.insert }, selection: EditorSelection.cursor(at.cursor), userEvent: "input", scrollIntoView: true });
+      view.focus();
+    } : undefined,
+    openProperty: (at) => void openPropertyAt(view, at),
+    addProperty: () => {
+      if (addProperty({ state: view.state, dispatch: (transaction) => view.dispatch(transaction) })) view.focus();
+    },
+    addDescription: () => addPropertyKey(view, "description"),
+    toBody: () => toBody(view),
+    focusText: () => view.focus(),
+    refresh: () => view.dispatch({ effects: refreshPage.of(null) }),
+    undo: () => void undo({ state: view.state, dispatch: (transaction) => view.dispatch(transaction) }),
+    redo: () => void redo({ state: view.state, dispatch: (transaction) => view.dispatch(transaction) }),
+    measure: () => view.requestMeasure(),
+    more: {
+      get open() { return view.state.field(pageMore, false) ?? false; },
+      set: (open) => view.dispatch({ effects: setPageMore.of(open) }),
+    },
+    popover: (open) => {
+      const shown = drawn.get(root);
+      if (!shown) return;
+      shown.popover = open;
+      // Chiuso il riquadro, la testata rimasta indietro si rifà adesso.
+      if (!open && shown.pending && !shown.closing && root.isConnected) {
+        const data = view.state.field(pageHeader, false)?.data;
+        if (data) draw(root, view, data);
+      }
+    },
+  };
+}
+
+/// Una testata disegnata: ciò che mostra, la sua vita, quella della riga dei
+/// dati, e se ha un riquadro aperto (allora non si rifà: `pending`).
+interface Drawn {
+  data: PageData;
+  life: Lifetime;
+  facts: Lifetime;
+  popover: boolean;
+  pending: boolean;
+  closing: boolean;
+}
+const drawn = new WeakMap<HTMLElement, Drawn>();
+
+/// Il controllo col fuoco, riconosciuto dopo un rifacimento: la classe, e il
+/// testo che porta (lo stesso pulsante in una testata nuova).
+function focusKey(element: Element): string {
+  // Il nome e il valore di una proprietà: la riga, non il testo, che cambia
+  // proprio con la scrittura.
+  const row = element.closest<HTMLElement>(".cm-fub-page-prop");
+  if (row) return `${element.className}\u0000prop\u0000${row.dataset.key ?? ""}`;
+  return `${element.className}\u0000${element.getAttribute("aria-label") ?? element.textContent ?? ""}`;
+}
+
+/// Disegna `data` in `root`, al posto della testata che c'era. Ciò che si sta
+/// facendo resta: il titolo che si scrive (valore, selezione, fuoco) e il
+/// fuoco su un pulsante che c'è ancora. La vita vecchia si chiude prima di
+/// togliere il campo, così la sua uscita non rinomina.
+function draw(root: HTMLElement, view: EditorView, data: PageData): void {
+  const before = drawn.get(root);
+  const active = root.ownerDocument.activeElement;
+  const focused = active instanceof HTMLElement && root.contains(active) ? active : null;
+  const title = root.querySelector<HTMLInputElement>("input.cm-fub-page-title");
+  const typed = title && before && title.value !== before.data.title
+    ? { value: title.value, start: title.selectionStart, end: title.selectionEnd, direction: title.selectionDirection }
+    : null;
+  const key = focused ? focusKey(focused) : null;
+  if (before) {
+    before.closing = true;
+    before.facts.close();
+    before.life.close();
+  }
+  const life = openLifetime();
+  const facts = openLifetime();
+  life.add(() => drawn.get(root)?.facts.close());
+  drawn.set(root, { data, life, facts, popover: false, pending: false, closing: false });
+  renderPageHeader(data, hostFor(view, root), life, root);
+  placeFacts(root, view, facts);
+  const field = root.querySelector<HTMLInputElement>("input.cm-fub-page-title");
+  if (field && typed && !field.readOnly) {
+    field.value = typed.value;
+    if (focused === title) field.setSelectionRange(typed.start, typed.end, typed.direction ?? undefined);
+  }
+  if (focused === title && field) {
+    field.focus({ preventScroll: true });
+  } else if (key) {
+    const same = [...root.querySelectorAll<HTMLElement>("button, input, [tabindex]")].find((element) => focusKey(element) === key);
+    (same ?? null)?.focus({ preventScroll: true });
+  }
+}
+
+/// Mette in fondo alla testata la riga dei dati dello stato, al posto di
+/// quella che c'era; la sua vita è `facts`, chiusa a ogni rifacimento.
+function placeFacts(root: HTMLElement, view: EditorView, facts: Lifetime): void {
+  root.querySelector(":scope > .note-facts")?.remove();
+  const row = noteFactsElement(view.state, facts);
+  if (row) root.append(row);
+}
+
+class PageHeaderWidget extends WidgetType {
+  constructor(readonly data: PageData, readonly facts: NoteFactsLabels | null) { super(); }
+
+  override eq(other: PageHeaderWidget): boolean {
+    return samePage(other.data, this.data) && sameLabels(other.facts, this.facts);
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const root = document.createElement("div");
+    draw(root, view, this.data);
+    return root;
+  }
+
+  /// La testata si aggiorna sul posto. Cambiata solo la riga dei dati, si
+  /// rifà la riga. Cambiato altro (il frontmatter scritto da un altro
+  /// riquadro, una rinomina), si rifà la testata e il titolo che si sta
+  /// scrivendo resta; con un riquadro aperto (l'icona, la copertina) si
+  /// aspetta che si chiuda, perché non sparisca sotto le mani.
+  override updateDOM(dom: HTMLElement, view: EditorView): boolean {
+    const before = drawn.get(dom);
+    if (!before) return false;
+    if (samePage(before.data, this.data)) {
+      before.facts.close();
+      before.facts = openLifetime();
+      placeFacts(dom, view, before.facts);
+      return true;
     }
-    if (view.state.readOnly) return;
-    const at = subpageLink(view.state, name);
-    view.dispatch({ changes: { from: at.from, insert: at.insert }, selection: EditorSelection.cursor(at.cursor), userEvent: "input", scrollIntoView: true });
-    view.focus();
-  };
-  const field = textField({
-    label: liveStrings.t("page.subpage.field"),
-    lifetime: own,
-    onSubmit: () => void create(),
-  });
-  const note = document.createElement("p");
-  note.className = "cm-fub-page-note";
-  note.textContent = liveStrings.t(data.folder ? "page.subpage.inside" : "page.subpage.move", { page: data.title });
-  const actions = document.createElement("div");
-  actions.className = "cm-fub-page-actions";
-  const make = document.createElement("button");
-  make.type = "button";
-  make.className = "cm-fub-page-tool";
-  make.textContent = liveStrings.t("page.subpage.create");
-  own.listen(make, "click", () => void create());
-  actions.append(make);
-  body.append(field.element, note, actions);
-  const popover = openPopover({
-    anchor,
-    content: body,
-    label: liveStrings.t("page.subpage.dialog"),
-    placement: "bottom",
-    align: "start",
-    className: "cm-fub-page-popover",
-    lifetime: life,
-    onClose: () => {
-      own.close();
-      closed();
-    },
-  });
-  field.focus();
-  return popover;
-}
+    if (before.popover) {
+      before.pending = true;
+      return true;
+    }
+    draw(dom, view, this.data);
+    return true;
+  }
 
-interface PageMenuItem {
-  readonly id: string;
-  readonly label: string;
-  readonly role: "menuitemcheckbox" | "menuitemradio" | "separator";
-  readonly checked: boolean;
-  readonly run: () => void;
-}
+  override destroy(dom: HTMLElement): void {
+    const shown = drawn.get(dom);
+    if (shown) {
+      shown.closing = true;
+      shown.life.close();
+    }
+    drawn.delete(dom);
+  }
 
-/// Il menu «…»: larghezza piena, testo piccolo, carattere. Scrive
-/// `cssclasses` e lascia le classi che non sono sue.
-function openPageMenu(view: EditorView, anchor: HTMLElement, data: PageData, life: Lifetime, closed: () => void): PopoverHandle {
-  const own = openLifetime();
-  const write = (change: Parameters<typeof pageClassesWith>[1]) => () => {
-    popover.close();
-    const next = pageClassesWith(propertyList(view.state, "cssclasses"), change);
-    writeProperty(view, "cssclasses", next.length ? next : null);
-    view.focus();
-  };
-  const font = PAGE_FONTS.find((name) => data.classes.includes(name)) ?? null;
-  const items: PageMenuItem[] = [
-    { id: "wide", label: liveStrings.t("page.wide"), role: "menuitemcheckbox", checked: data.classes.includes("wide"), run: write({ toggle: "wide" }) },
-    { id: "small", label: liveStrings.t("page.small"), role: "menuitemcheckbox", checked: data.classes.includes("small"), run: write({ toggle: "small" }) },
-    { id: "font-default", label: `${liveStrings.t("page.font")}: ${liveStrings.t("page.font.default")}`, role: "menuitemradio", checked: font === null, run: write({ font: null }) },
-    ...PAGE_FONTS.map((name): PageMenuItem => ({
-      id: `font-${name}`,
-      label: `${liveStrings.t("page.font")}: ${liveStrings.t(`page.font.${name}`)}`,
-      role: "menuitemradio",
-      checked: font === name,
-      run: write({ font: name }),
-    })),
-  ];
-  const list = document.createElement("div");
-  list.className = "cm-fub-block-menu";
-  list.setAttribute("aria-label", liveStrings.t("page.more"));
-  const handle = createList<PageMenuItem>({
-    container: list,
-    role: "menu",
-    items,
-    key: (item) => item.id,
-    render: (item, row) => {
-      // Il segno della scelta in vigore: l'aria lo dice con `aria-checked`.
-      const check = document.createElement("span");
-      check.className = "cm-fub-page-check";
-      check.setAttribute("aria-hidden", "true");
-      check.textContent = item.checked ? "✓" : "";
-      const label = document.createElement("span");
-      label.textContent = item.label;
-      row.replaceChildren(check, label);
-      row.setAttribute("role", item.role);
-      row.setAttribute("aria-checked", String(item.checked));
-    },
-    onActivate: (item) => item.run(),
-    focus: "roving",
-    lifetime: own,
-  });
-  handle.setActive(items[0]!.id);
-  const popover = openPopover({
-    anchor,
-    content: list,
-    label: liveStrings.t("page.more"),
-    placement: "bottom",
-    align: "end",
-    className: "cm-fub-block-popover",
-    lifetime: life,
-    onClose: () => {
-      own.close();
-      closed();
-    },
-  });
-  anchor.setAttribute("aria-expanded", "true");
-  own.add(() => anchor.setAttribute("aria-expanded", "false"));
-  return popover;
+  /// La testata è un modulo, non testo: tasti e puntatore restano suoi.
+  override ignoreEvent(): boolean {
+    return true;
+  }
 }
 
 interface PageState {
   readonly data: PageData;
+  readonly facts: NoteFactsLabels | null;
+  /// Il frontmatter letto: si rilegge solo quando una modifica lo tocca.
+  readonly block: PropertyBlock | null;
   readonly decorations: DecorationSet;
 }
 
-function decorate(data: PageData): PageState {
-  const widget = Decoration.widget({ widget: new PageHeaderWidget(data), block: true, side: -1 });
-  return { data, decorations: Decoration.set([widget.range(0)]) };
+function compute(state: EditorState, block: PropertyBlock | null): PageState {
+  const data = pageDataOf(state, state.facet(blocksOptions), state.facet(propertiesDisplay), block, block ? frontmatterOpen(state, block) : false, factTags(state));
+  const facts = noteFactsOf(state);
+  const widget = Decoration.widget({ widget: new PageHeaderWidget(data, facts), block: true, side: -1 });
+  return { data, facts, block, decorations: Decoration.set([widget.range(0)]) };
+}
+
+/// Una modifica che può cambiare il frontmatter: dentro di lui o subito
+/// dopo; senza frontmatter, sulla prima riga, o dovunque se la prima riga è
+/// già un `---` che aspetta la sua chiusura.
+function frontmatterTouched(block: PropertyBlock | null, transaction: Transaction): boolean {
+  if (!transaction.docChanged) return false;
+  if (block) return transaction.changes.touchesRange(0, block.to + 1) !== false;
+  const first = transaction.startState.doc.line(1);
+  if (first.text.replace(/^﻿/, "").trim() === "---") return true;
+  return transaction.changes.touchesRange(0, first.to + 1) !== false;
 }
 
 /// Il titolo viene dalle opzioni, che il testo non avverte quando cambiano:
-/// si rilegge a ogni transazione, che costa una chiamata e un confronto.
+/// si rilegge a ogni transazione, che costa una chiamata e un confronto. Il
+/// frontmatter si rilegge soltanto quando una modifica lo tocca: una battuta
+/// nel testo non lo ripassa.
 const pageHeader = StateField.define<PageState>({
-  create: (state) => decorate(pageData(state)),
+  create: (state) => compute(state, propertyBlock(state)),
   update(value, transaction) {
-    const next = pageData(transaction.state);
-    if (!transaction.docChanged && sameData(next, value.data)) return value;
-    if (sameData(next, value.data)) return { data: value.data, decorations: value.decorations.map(transaction.changes) };
-    return decorate(next);
+    const state = transaction.state;
+    const touched = frontmatterTouched(value.block, transaction);
+    const block = touched ? propertyBlock(state) : value.block;
+    const options = state.facet(blocksOptions);
+    // Un cursore che entra nel frontmatter o ne esce apre e chiude lo YAML;
+    // ogni altro movimento lascia la testata com'è.
+    const opened = value.data.properties !== null && block !== null && frontmatterOpen(state, block) !== value.data.properties.open;
+    const still = !touched && !opened && transaction.effects.length === 0
+      && transaction.startState.facet(propertiesDisplay) === state.facet(propertiesDisplay)
+      && transaction.startState.readOnly === state.readOnly
+      && transaction.startState.facet(blocksOptions) === options
+      && (options.page?.() ?? "") === value.data.title
+      && (options.folderPage?.() ?? false) === value.data.folder;
+    if (still) return transaction.docChanged ? { ...value, decorations: value.decorations.map(transaction.changes) } : value;
+    const next = compute(state, block);
+    if (samePage(next.data, value.data) && sameLabels(next.facts, value.facts)) {
+      return { data: value.data, facts: value.facts, block, decorations: value.decorations.map(transaction.changes) };
+    }
+    return next;
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });
 
-/// ↑ sulla prima riga porta al titolo, come in Notion.
-const toTitle = Prec.high(keymap.of([{
+/// L'H1 ripiegato nel titolo (T7): il primo H1 che dice il nome della
+/// pagina non si vede, perché il titolo lo dice già. Il file non cambia. Si
+/// rivede quando una selezione ci entra (una ricerca, Ctrl-Home in una nota
+/// senza frontmatter), come il frontmatter: niente si scrive al buio.
+interface TitleFold {
+  readonly name: string;
+  readonly heading: FirstHeading | null;
+  readonly revealed: boolean;
+  readonly decorations: DecorationSet;
+}
+
+/// Una selezione entra nell'H1 ripiegato (o nelle righe vuote che nasconde).
+/// Un cursore all'inizio della sua riga sta *prima* del titolo, come quello
+/// prima dell'apertura del frontmatter: non lo apre (`foldGuard`).
+function foldRevealed(state: EditorState, heading: FirstHeading): boolean {
+  return state.selection.ranges.some((range) => range.to > heading.from && range.from <= heading.hideTo);
+}
+
+/// Il cursore prima dell'H1 ripiegato: una nota appena aperta senza
+/// frontmatter, Ctrl-Home, il testo che la protezione del frontmatter manda
+/// sotto la chiusura. Ciò che vi si scrive andrebbe dentro il titolo nascosto,
+/// e non si vedrebbe: scende sotto, dove comincia il testo che si vede. Un
+/// cursore che ci arriva da solo scende con lui.
+const foldGuard = EditorState.transactionFilter.of((transaction): TransactionSpec | readonly TransactionSpec[] => {
+  const fold = transaction.startState.field(titleFold, false);
+  const heading = fold?.heading;
+  if (!heading || fold.revealed) return transaction;
+  const start = transaction.startState.doc;
+  const below = heading.hideTo < start.length ? heading.hideTo + 1 : heading.hideTo;
+  if (!transaction.docChanged) {
+    const main = transaction.newSelection.main;
+    // Fino all'inizio del testo del titolo: il resto della resa viva salta
+    // i segni `# ` nascosti, e il cursore può arrivare qui già spostato.
+    if (!transaction.selection || transaction.newSelection.ranges.length !== 1 || !main.empty
+      || main.head < heading.from || main.head > heading.textFrom) return transaction;
+    return [transaction, { selection: EditorSelection.cursor(below), sequential: true }];
+  }
+  // Solo ciò che si batte o s'incolla: la testata che crea il frontmatter
+  // in cima (`input`) scrive prima dell'H1, ed è giusto così.
+  if (!transaction.isUserEvent("input.type") && !transaction.isUserEvent("input.paste") && !transaction.isUserEvent("input.drop")) {
+    // Un'altra modifica (il testo appeso da un altro riquadro, la testata)
+    // lascia il cursore prima dell'H1 ripiegato, dove il DOM non lo sa
+    // mettere: scende sotto nella stessa modifica, come col movimento, così
+    // la selezione letta dal DOM non torna diversa a metà aggiornamento.
+    let untouched = true;
+    transaction.changes.iterChangedRanges((fromA, toA) => {
+      if (toA > heading.from && fromA < heading.hideTo) untouched = false;
+      if (fromA === toA && fromA > heading.from && fromA < heading.hideTo) untouched = false;
+    });
+    const main = transaction.newSelection.main;
+    if (!untouched || transaction.newSelection.ranges.length !== 1 || !main.empty) return transaction;
+    const from = transaction.changes.mapPos(heading.from, 1);
+    const textFrom = transaction.changes.mapPos(heading.textFrom, 1);
+    if (main.head < from || main.head > textFrom) return transaction;
+    // Sotto il blocco nascosto nel testo nuovo: l'H1 e le righe vuote che lo
+    // seguono, comprese quelle che la modifica ha appena aggiunto.
+    const doc = transaction.newDoc;
+    let line = doc.lineAt(transaction.changes.mapPos(heading.hideTo, -1));
+    while (line.number < doc.lines && doc.line(line.number + 1).text.trim() === "") line = doc.line(line.number + 1);
+    const after = line.number < doc.lines ? line.to + 1 : line.to;
+    return [transaction, { selection: EditorSelection.cursor(after), sequential: true }];
+  }
+  let pure: string | null = null;
+  let touched = false;
+  transaction.changes.iterChanges((fromA, toA, _fromB, _toB, text) => {
+    if (toA < heading.from || fromA > heading.hideTo) return;
+    touched = true;
+    if (fromA === heading.from && toA === heading.from && pure === null) pure = text.toString();
+    else pure = "";
+  });
+  if (!touched) return transaction;
+  const inserted = pure as string | null;
+  if (inserted === null || inserted === "") return transaction;
+  const insert = heading.hideTo < start.length ? inserted : `\n${inserted}`;
+  return {
+    changes: { from: below, insert: withLineBreaks(transaction.startState, insert) },
+    selection: { anchor: below + insert.length },
+    scrollIntoView: true,
+    userEvent: transaction.annotation(Transaction.userEvent) ?? "input",
+  };
+});
+
+function computeFold(state: EditorState): TitleFold {
+  const name = state.facet(blocksOptions).page?.() ?? "";
+  const block = state.field(pageHeader, false)?.block ?? propertyBlock(state);
+  const found = name === "" ? null : firstHeading(state.doc, bodyStart(state, block));
+  const heading = found && sameTitle(found.text, name) ? found : null;
+  const revealed = heading !== null && foldRevealed(state, heading);
+  const decorations = heading && !revealed
+    ? Decoration.set([Decoration.replace({ block: true }).range(heading.from, heading.hideTo)])
+    : Decoration.none;
+  return { name, heading, revealed, decorations };
+}
+
+/// Il nome viene dalle opzioni, che il testo non avverte quando cambiano: si
+/// rilegge a ogni transazione (una chiamata e un confronto). Il primo H1 si
+/// cerca di nuovo solo quando il testo cambia, e la ricerca guarda soltanto
+/// le righe in cima al testo.
+const titleFold = StateField.define<TitleFold>({
+  create: computeFold,
+  update(value, transaction) {
+    const state = transaction.state;
+    const name = state.facet(blocksOptions).page?.() ?? "";
+    if (!transaction.docChanged && name === value.name && transaction.effects.length === 0
+      && transaction.startState.facet(blocksOptions) === state.facet(blocksOptions)) {
+      if (!transaction.selection || !value.heading) return value;
+      if (foldRevealed(state, value.heading) === value.revealed) return value;
+    }
+    return computeFold(state);
+  },
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+});
+
+/// Backspace all'inizio della prima riga sotto l'H1 ripiegato non la unisce
+/// al titolo nascosto: il testo resta dov'è, come sotto il titolo di Notion.
+const foldKeys = Prec.highest(keymap.of([{
+  key: "Backspace",
+  run: (view) => {
+    const fold = view.state.field(titleFold, false);
+    if (!fold?.heading || fold.revealed) return false;
+    const main = view.state.selection.main;
+    return main.empty && view.state.selection.ranges.length === 1 && main.head === Math.min(view.state.doc.length, fold.heading.hideTo + 1);
+  },
+}]));
+
+/// La prima riga che si vede: dopo il frontmatter quando la testata lo
+/// copre, altrimenti la prima del file.
+function firstVisibleLine(state: EditorState): number {
+  const fold = state.field(titleFold, false);
+  const block = state.field(pageHeader, false)?.block ?? null;
+  if (block && (block.unreadable || frontmatterOpen(state, block))) return 1;
+  if (fold?.heading && !fold.revealed) return state.doc.lineAt(Math.min(state.doc.length, fold.heading.hideTo + 1)).number;
+  if (!block) return 1;
+  return state.doc.lineAt(Math.min(state.doc.length, block.to + 1)).number;
+}
+
+/// ↑ sulla prima riga torna su, nella testata: sull'ultima voce, che dal
+/// titolo in giù è la più vicina al testo (come in Notion).
+const toHeader = Prec.high(keymap.of([{
   key: "ArrowUp",
   run: (view) => {
     const main = view.state.selection.main;
-    if (!main.empty || view.state.selection.ranges.length > 1 || view.state.doc.lineAt(main.head).number !== 1) return false;
-    const title = view.dom.querySelector<HTMLInputElement>(".cm-fub-page-title");
-    if (!title) return false;
-    title.focus();
-    title.select();
+    if (!main.empty || view.state.selection.ranges.length > 1) return false;
+    if (view.state.doc.lineAt(main.head).number > firstVisibleLine(view.state)) return false;
+    const header = view.dom.querySelector<HTMLElement>(".cm-fub-page");
+    const stops = header ? pageStops(header) : [];
+    const last = stops[stops.length - 1];
+    if (!last) return false;
+    last.focus();
+    if (last instanceof HTMLInputElement) last.select();
     return true;
   },
 }]));
 
+/// Le regole dei riquadri della testata, che si aprono fuori dal foglio. La
+/// testata stessa la disegna la pelle (`skin/document.css`), in Scrittura e
+/// in Lettura.
 const theme = EditorView.baseTheme({
-  ".cm-fub-page": { position: "relative", margin: "0 0 0.4em", cursor: "default" },
-  ".cm-fub-page-cover": {
-    height: "11em",
-    margin: "0 0 0.8em",
-    overflow: "hidden",
-    borderRadius: "8px",
-    background: "rgba(135, 135, 135, 0.08)",
-  },
-  ".cm-fub-page-cover img": { display: "block", width: "100%", height: "100%", objectFit: "cover", maxWidth: "none" },
-  ".cm-fub-page-cover p": { margin: "0", height: "100%" },
-  ".cm-fub-page-icon": {
-    display: "block",
-    margin: "0 0 0.1em",
-    padding: "0",
-    border: "none",
-    background: "none",
-    fontSize: "2.6em",
-    lineHeight: "1.2",
-    cursor: "pointer",
-  },
-  ".cm-fub-page-tools": { display: "flex", flexWrap: "wrap", gap: "0.25em", minHeight: "1.8em", opacity: "0" },
-  ".cm-fub-page:hover .cm-fub-page-tools, .cm-fub-page:focus-within .cm-fub-page-tools": { opacity: "1" },
-  ".cm-fub-page-tool": {
-    padding: "0.15em 0.5em",
-    border: "none",
-    borderRadius: "4px",
-    background: "none",
-    color: "var(--doc-muted, inherit)",
-    font: "inherit",
-    fontSize: "0.85em",
-    cursor: "pointer",
-  },
-  ".cm-fub-page-title": {
-    display: "block",
-    boxSizing: "border-box",
-    width: "100%",
-    margin: "0",
-    padding: "0",
-    border: "none",
-    background: "none",
-    color: "inherit",
-    font: "inherit",
-    fontSize: "2.1em",
-    fontWeight: "700",
-    lineHeight: "1.25",
-  },
   ".cm-fub-page-picker": { display: "grid", gap: "0.5em", padding: "0.5em", width: "17em" },
   ".cm-fub-page-emoji": { display: "flex", flexWrap: "wrap", gap: "2px", maxHeight: "12em", overflowY: "auto" },
+  ".cm-fub-page-emoji-choice > svg": { width: "1em", height: "1em", verticalAlign: "-0.1em" },
   ".cm-fub-page-emoji-choice": { width: "2em", height: "2em", padding: "0", border: "none", background: "none", fontSize: "1.2em", cursor: "pointer" },
   ".cm-fub-page-actions": { display: "flex", gap: "0.5em", justifyContent: "flex-end" },
 });
 
-export const pageHeaderExtension: Extension = [pageHeader, toTitle, theme];
+export const pageHeaderExtension: Extension = [pageMore, pageHeader, titleFold, Prec.high(foldGuard), headerShowsProperties.of(true), toHeader, foldKeys, theme];

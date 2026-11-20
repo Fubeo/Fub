@@ -272,7 +272,7 @@ fn a_write_without_vault_is_says_the_same() {
     #[derive(Default)]
     struct Recorder(Mutex<Vec<Notice>>);
     impl fub_host::EventSink for Recorder {
-        fn emit(&self, notice: &Notice) -> fub_host::Delivery {
+        fn emit(&self, notice: &Notice, _vault: Option<&str>) -> fub_host::Delivery {
             self.0.lock().unwrap().push(notice.clone());
             fub_host::Delivery::Done
         }
@@ -387,6 +387,46 @@ fn a_notice_of_session_is_says_a_time_single() {
         None,
         "una volta per sessione: la seconda chiamata non deliver"
     );
+}
+
+/// Gli avvisi d'avvio (il percorso di disegno di `fub_app::run`) vengono
+/// dopo la diagnosi del log, uno per tiraggio e nell'ordine; finita la coda,
+/// la risposta è `None`, che è ciò che ferma il ciclo della shell.
+#[test]
+fn startup_notices_follow_the_session_diagnosis_one_per_pull() {
+    use fub_abi::event::{Actor, Origin};
+    use fub_abi::{Event, Notice};
+
+    let custom = |topic: &str| {
+        Notice::new(
+            Event::Custom {
+                topic: topic.into(),
+                payload: serde_json::json!({ "kind": topic }),
+            },
+            Origin::by(Actor::Kernel),
+        )
+    };
+    let host = Host::new()
+        .with_session_notice(Some("`/config` cannot be written".into()))
+        .with_startup_notice(custom("first"))
+        .with_startup_notice(custom("second"));
+
+    let topics: Vec<String> = std::iter::from_fn(|| host.session_notice())
+        .map(|notice| match notice.event {
+            Event::Trouble { .. } => "trouble".to_owned(),
+            Event::Custom { topic, .. } => topic,
+            other => panic!("unexpected notice: {other:?}"),
+        })
+        .collect();
+    assert_eq!(topics, ["trouble", "first", "second"]);
+    assert_eq!(host.session_notice(), None);
+
+    let only_startup = Host::new().with_startup_notice(custom("alone"));
+    assert!(matches!(
+        only_startup.session_notice().map(|notice| notice.event),
+        Some(Event::Custom { topic, .. }) if topic == "alone"
+    ));
+    assert_eq!(only_startup.session_notice(), None);
 }
 
 /// Il livello del log vale **subito**, con o senza vault: prima lo leggeva solo

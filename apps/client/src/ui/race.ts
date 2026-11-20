@@ -121,7 +121,7 @@ export class Race {
   /// È la sola cosa che un contatore nudo non sa fare senza far partire un giro
   /// finto, ed è il motivo per cui `Race` è un oggetto con due metodi invece di
   /// un `++`: fra le quattro implementazioni a mano una sola ce l'aveva
-  /// (`clearSearch`, che azzera la casella e deve impedire alla risposta in volo
+  /// (`clearSearchState` della ricerca, che azzera la casella e deve impedire alla risposta in volo
   /// di ripopolarla), e le altre tre non ce l'avevano perché la loro superficie
   /// si butta invece di riusarsi — cioè non per una scelta, ma per fortuna.
   cancel(): void {

@@ -1,5 +1,6 @@
 {
   "worktree": { "baseRef": "head" },
+  "env": { "CARGO_TERM_QUIET": "true", "NEXTEST_STATUS_LEVEL": "fail" },
   "permissions": {
     "allow": [
       "Bash(scripts/check.sh:*)",

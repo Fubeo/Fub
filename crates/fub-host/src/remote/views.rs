@@ -2,6 +2,8 @@
 //! Non leggono view-state per-esemplare fuori dal contesto di una view e non
 //! eseguono rete durante il render.
 
+use std::collections::HashMap;
+
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -31,8 +33,11 @@ pub const ACTION_RESTORE_CONFIRM: &str = "restore_confirm";
 pub const ACTION_RESTORE_CANCEL: &str = "restore_cancel";
 pub const ACTION_RETRY: &str = "retry";
 
-/// La versione di cui si sta chiedendo il ripristino, finché non si risponde.
-const CONFIRM_STATE: &str = "restore_confirm";
+/// La chiave sotto cui le versioni di prima ricordavano la domanda del
+/// ripristino nello stato di vista. Non si scrive più (vedi [`SyncViews`]): si
+/// legge solo per toglierla, perché una domanda rimasta lì da un avvio di prima
+/// è a un clic da una sovrascrittura della nota (IMP-110).
+const LEGACY_CONFIRM_STATE: &str = "restore_confirm";
 
 // Le chiavi del catalogo: le qualifica l'host con l'id del bundle.
 const T_STATUS: &str = "view.status";
@@ -233,6 +238,10 @@ pub struct SnapshotConflict {
 #[serde(deny_unknown_fields)]
 pub struct SnapshotVersion {
     pub doc_id: String,
+    /// L'op che ha prodotto la versione, come lo manda
+    /// `GET /v1/sync/versions`; i `versions.json` di prima non l'hanno.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub op_id: Option<String>,
     #[serde(with = "super::u64_string")]
     pub version: u64,
     pub hash: String,
@@ -249,13 +258,31 @@ pub struct SyncLogRow {
 }
 
 /// Il path trusted viene catturato dal bundle al montaggio, mai da payload.
+///
+/// # La domanda del ripristino vive in memoria, e muore col processo
+///
+/// «Sostituire la nota con questa versione del server?» è un passo a metà di
+/// un gesto che riscrive la nota. Sta qui, per esemplare, e non nello stato di
+/// vista, che dura fra un avvio e l'altro: ritrovarla al riavvio con «Sì,
+/// ripristina» pronto sotto il dito vuol dire un clic da una sovrascrittura
+/// che nessuno ricorda di aver chiesto (IMP-110).
 pub struct SyncViews {
     state_root: Option<camino::Utf8PathBuf>,
+    /// (view, esemplare) → il payload della versione di cui si chiede il
+    /// ripristino.
+    asking: HashMap<(String, String), serde_json::Value>,
 }
 
 impl SyncViews {
     pub fn new(state_root: Option<camino::Utf8PathBuf>) -> Self {
-        Self { state_root }
+        Self {
+            state_root,
+            asking: HashMap::new(),
+        }
+    }
+
+    fn asking_key(instance: &ViewInstance) -> (String, String) {
+        (instance.view.clone(), instance.instance.clone())
     }
 
     /// Lo stato da mostrare, e i guasti incontrati leggendolo (chiavi del
@@ -350,8 +377,8 @@ impl ViewProvider for SyncViews {
         match instance.view.as_str() {
             SYNC_STATUS_VIEW => Ok(status_tree(&snap, &faults)),
             SYNC_VERSIONS_VIEW => {
-                let asking = host.view_state(CONFIRM_STATE)?;
-                Ok(versions_tree(&snap, asking.as_ref()))
+                let asking = self.asking.get(&Self::asking_key(instance));
+                Ok(versions_tree(&snap, asking))
             }
             SYNC_CONFLICTS_VIEW => Ok(conflicts_tree(&snap)),
             _ => Err(PluginError::UnknownView(instance.view.clone().into())),
@@ -364,6 +391,12 @@ impl ViewProvider for SyncViews {
         action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
+        // La domanda che le versioni di prima avevano lasciato nello stato di
+        // vista: al primo gesto sul pannello se ne va dal disco. Disegnata non
+        // lo è più comunque, perché `render_view` non la legge.
+        if host.view_state(LEGACY_CONFIRM_STATE)?.is_some() {
+            host.set_view_state(LEGACY_CONFIRM_STATE, None)?;
+        }
         match action.action.0.as_str() {
             ACTION_PAUSE => {
                 host.run_command("sync.pause", serde_json::Value::Null)?;
@@ -376,19 +409,21 @@ impl ViewProvider for SyncViews {
             // Ripristinare riscrive la nota con la versione del server: prima
             // si chiede, al posto del bottone.
             ACTION_RESTORE => {
-                host.set_view_state(CONFIRM_STATE, Some(action.payload.clone()))?;
+                self.asking
+                    .insert(Self::asking_key(instance), action.payload.clone());
                 Ok(ViewUpdate::Replace {
                     root: self.render_view(instance, host)?,
                 })
             }
+            // Il «no», dal bottone o da Esc (la shell manda la stessa azione).
             ACTION_RESTORE_CANCEL => {
-                host.set_view_state(CONFIRM_STATE, None)?;
+                self.asking.remove(&Self::asking_key(instance));
                 Ok(ViewUpdate::Replace {
                     root: self.render_view(instance, host)?,
                 })
             }
             ACTION_RESTORE_CONFIRM => {
-                host.set_view_state(CONFIRM_STATE, None)?;
+                self.asking.remove(&Self::asking_key(instance));
                 let doc = action
                     .payload
                     .get("doc_id")
@@ -601,26 +636,36 @@ fn conflict_row(c: &SnapshotConflict) -> UiNode {
 
 fn version_row(v: &SnapshotVersion, asking: Option<&serde_json::Value>) -> UiNode {
     let payload = serde_json::json!({ "doc_id": v.doc_id, "version": v.version.to_string() });
-    let actions = if asking == Some(&payload) {
-        vec![
-            UiNode::text(Text::key(T_RESTORE_QUESTION)),
-            UiNode::button(
-                Text::key(T_RESTORE_CONFIRM),
-                Intent::Danger,
-                ActionRef::with(ACTION_RESTORE_CONFIRM, payload),
-            ),
-            UiNode::button(
-                Text::key(T_CANCEL),
-                Intent::Neutral,
-                ActionRef::new(ACTION_RESTORE_CANCEL),
-            ),
-        ]
+    // Il bottone e la sua domanda si scambiano la stessa chiave, unica nel
+    // pannello: chiusa la domanda, la shell rimette il fuoco al bottone.
+    let key = format!("restore:{}:{}", v.doc_id, v.version);
+    let action = if asking == Some(&payload) {
+        // La domanda al posto del bottone, in un nodo `CONFIRM_NS` perché la
+        // shell le dia Esc e il fuoco.
+        UiNode::confirmation(
+            key,
+            ActionRef::new(ACTION_RESTORE_CANCEL),
+            vec![
+                UiNode::text(Text::key(T_RESTORE_QUESTION)),
+                UiNode::button(
+                    Text::key(T_RESTORE_CONFIRM),
+                    Intent::Danger,
+                    ActionRef::with(ACTION_RESTORE_CONFIRM, payload),
+                ),
+                UiNode::button(
+                    Text::key(T_CANCEL),
+                    Intent::Neutral,
+                    ActionRef::new(ACTION_RESTORE_CANCEL),
+                ),
+            ],
+        )
     } else {
-        vec![UiNode::button(
+        UiNode::button(
             Text::key(T_RESTORE),
             Intent::Neutral,
             ActionRef::with(ACTION_RESTORE, payload),
-        )]
+        )
+        .with_key(key)
     };
     let mut children = vec![UiNode::list_item(
         Text::message(
@@ -639,7 +684,7 @@ fn version_row(v: &SnapshotVersion, asking: Option<&serde_json::Value>) -> UiNod
         )),
         None,
     )];
-    children.extend(actions);
+    children.push(action);
     UiNode::keyed(
         format!("version:{}:{}", v.doc_id, v.version),
         fub_abi::ui::UiKind::Stack {
@@ -684,6 +729,7 @@ mod tests {
             root.join("versions.json"),
             serde_json::to_vec(&vec![SnapshotVersion {
                 doc_id: "Nota.md".into(),
+                op_id: None,
                 version: 3,
                 hash: "abcdef0123456789".into(),
                 ts_ms: 1_700_000_000_000,
@@ -739,6 +785,141 @@ mod tests {
             "{error:?}"
         );
     }
+    /// Una root con una versione del server, `Nota.md` v3.
+    fn root_with_a_version(dir: &tempfile::TempDir) -> camino::Utf8PathBuf {
+        let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+        std::fs::write(
+            root.join("versions.json"),
+            serde_json::to_vec(&vec![SnapshotVersion {
+                doc_id: "Nota.md".into(),
+                op_id: None,
+                version: 3,
+                hash: "abcdef0123456789".into(),
+                ts_ms: 1_700_000_000_000,
+                vv_text: "a:3".into(),
+            }])
+            .unwrap(),
+        )
+        .unwrap();
+        root
+    }
+
+    /// Il nodo [`fub_abi::ui::CONFIRM_NS`] della domanda, se l'albero ne ha uno.
+    fn confirmation(tree: &UiNode) -> Option<&UiNode> {
+        if matches!(&tree.kind, UiKind::Custom { ns, .. } if ns == fub_abi::ui::CONFIRM_NS) {
+            return Some(tree);
+        }
+        tree.children().into_iter().find_map(confirmation)
+    }
+
+    fn key_of_action(node: &UiNode, wanted: &str) -> Option<String> {
+        if let UiKind::Button { action, .. } = &node.kind {
+            if action.action.0 == wanted {
+                return node.key.clone();
+            }
+        }
+        node.children()
+            .into_iter()
+            .find_map(|child| key_of_action(child, wanted))
+    }
+
+    /// La domanda è un nodo di conferma con la chiave del bottone che l'ha
+    /// aperta, e Esc manda il suo «no» (IMP-110).
+    #[test]
+    fn escape_sends_the_no_of_the_restore_question() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut views = SyncViews::new(Some(root_with_a_version(&dir)));
+        let mut host = MemoryHost::new().with_instance("e");
+        let instance = ViewInstance::only(SYNC_VERSIONS_VIEW);
+
+        let tree = views.render_view(&instance, &host).unwrap();
+        let opener = key_of_action(&tree, ACTION_RESTORE).expect("il bottone ha una chiave");
+        let restore = action_of(&tree, ACTION_RESTORE).unwrap();
+        let ViewUpdate::Replace { root } = views
+            .on_action(
+                &instance,
+                UiAction::new(restore.action.0).with_payload(restore.payload),
+                &mut host,
+            )
+            .unwrap()
+        else {
+            panic!("la domanda si disegna")
+        };
+        let node = confirmation(&root).expect("la domanda è un nodo di conferma");
+        assert_eq!(node.key.as_deref(), Some(opener.as_str()));
+        let UiKind::Custom { payload, .. } = &node.kind else {
+            unreachable!()
+        };
+        let escape: ActionRef = serde_json::from_value(payload["cancel"].clone()).unwrap();
+        assert_eq!(escape, ActionRef::new(ACTION_RESTORE_CANCEL));
+        assert!(action_of(node, ACTION_RESTORE_CANCEL).is_some());
+
+        let ViewUpdate::Replace { root } = views
+            .on_action(&instance, UiAction::new(escape.action.0), &mut host)
+            .unwrap()
+        else {
+            panic!("il pannello si ridisegna")
+        };
+        assert!(confirmation(&root).is_none());
+        assert_eq!(key_of_action(&root, ACTION_RESTORE), Some(opener));
+    }
+
+    /// **Una domanda aperta non sopravvive al riavvio** (IMP-110): lo stato di
+    /// vista resta all'host, che lo rilegge al riavvio; la domanda no, perché
+    /// muore col provider.
+    #[test]
+    fn an_open_restore_question_does_not_survive_a_restart() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut host = MemoryHost::new().with_instance("e");
+        let instance = ViewInstance::only(SYNC_VERSIONS_VIEW);
+        {
+            let mut views = SyncViews::new(Some(root_with_a_version(&dir)));
+            let tree = views.render_view(&instance, &host).unwrap();
+            let restore = action_of(&tree, ACTION_RESTORE).unwrap();
+            views
+                .on_action(
+                    &instance,
+                    UiAction::new(restore.action.0).with_payload(restore.payload),
+                    &mut host,
+                )
+                .unwrap();
+            // La domanda è aperta, e si chiude l'app senza rispondere.
+        }
+        use fub_abi::traits::ViewStateRead;
+        assert_eq!(host.view_state(LEGACY_CONFIRM_STATE).unwrap(), None);
+
+        let views = SyncViews::new(Some(root_with_a_version(&dir)));
+        let tree = views.render_view(&instance, &host).unwrap();
+        assert!(confirmation(&tree).is_none());
+        assert!(action_of(&tree, ACTION_RESTORE_CONFIRM).is_none());
+        assert!(action_of(&tree, ACTION_RESTORE).is_some());
+    }
+
+    /// Una domanda che le versioni di prima hanno lasciato nello stato di vista
+    /// non si disegna, e al primo gesto sul pannello se ne va.
+    #[test]
+    fn a_question_left_by_an_older_version_is_ignored_and_removed() {
+        use fub_abi::traits::{ViewStateRead, ViewStateWrite};
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut views = SyncViews::new(Some(root_with_a_version(&dir)));
+        let mut host = MemoryHost::new().with_instance("e");
+        host.set_view_state(
+            LEGACY_CONFIRM_STATE,
+            Some(serde_json::json!({ "doc_id": "Nota.md", "version": "3" })),
+        )
+        .unwrap();
+        let instance = ViewInstance::only(SYNC_VERSIONS_VIEW);
+
+        let tree = views.render_view(&instance, &host).unwrap();
+        assert!(confirmation(&tree).is_none());
+        assert!(action_of(&tree, ACTION_RESTORE_CONFIRM).is_none());
+
+        views
+            .on_action(&instance, UiAction::new(ACTION_RESTORE_CANCEL), &mut host)
+            .unwrap();
+        assert_eq!(host.view_state(LEGACY_CONFIRM_STATE).unwrap(), None);
+    }
+
     fn items(node: &UiNode, out: &mut Vec<(String, Option<Text>)>) {
         if let UiKind::ListItem {
             title, subtitle, ..

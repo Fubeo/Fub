@@ -1,0 +1,39 @@
+{
+  "about": "Due tratti in cima al livello di una scheda che ne ha già uno, poi uno su un gruppo senza livello (nasce): i tratti tengono i campi sconosciuti.",
+  "before": {
+    "nodes": [
+      { "id": "g", "type": "group", "x": -20, "y": -20, "width": 700, "height": 480, "label": "Statistica" },
+      { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 0, "y": 0, "width": 640, "height": 420,
+        "fub:ink": { "v": 1, "strokes": [
+          { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }
+        ] } }
+    ]
+  },
+  "ops": [
+    { "op": "add_strokes", "layer": { "node": "f1" }, "strokes": [
+      { "id": "s2", "tool": "highlighter", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#e69f00", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 100,100 10,0" },
+      { "id": "s3", "tool": "pen", "at": "2026-11-02T09:20:31.250Z", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 200,200 0,10", "fub:tag": "mio" }
+    ] },
+    { "op": "add_strokes", "layer": { "node": "g" }, "strokes": [
+      { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 700, "height": 480 }, "ink": "1 s100 cxy 50,50 5,5" }
+    ] }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "g", "type": "group", "x": -20, "y": -20, "width": 700, "height": 480, "label": "Statistica",
+          "fub:ink": { "v": 1, "strokes": [
+            { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 700, "height": 480 }, "ink": "1 s100 cxy 50,50 5,5" }
+          ] } },
+        { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 0, "y": 0, "width": 640, "height": 420,
+          "fub:ink": { "v": 1, "strokes": [
+            { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" },
+            { "id": "s2", "tool": "highlighter", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#e69f00", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 100,100 10,0" },
+            { "id": "s3", "tool": "pen", "at": "2026-11-02T09:20:31.250Z", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 200,200 0,10", "fub:tag": "mio" }
+          ] } }
+      ]
+    },
+    "created": ["s2", "s3", "s1"]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "write-image-full-turn",
+  "description": "Un giro intero vale 0, e 0 non si scrive.",
+  "file": "foto.webp",
+  "parts": {
+    "kind": "image",
+    "rect": [
+      0,
+      0.25,
+      1,
+      0.5
+    ],
+    "rotate": 720
+  },
+  "expect": {
+    "outcome": "written",
+    "subpath": null,
+    "parts": "{\"kind\":\"image\",\"rect\":[0,0.25,1,0.5]}"
+  }
+}

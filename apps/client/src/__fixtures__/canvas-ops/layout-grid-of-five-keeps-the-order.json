@@ -1,0 +1,117 @@
+{
+  "about": "layout grid su cinque schede 320×160 date in quest'ordine: ceil(√5) = 3 colonne, passo 344 (320 + 24) in orizzontale e 184 (160 + 24) in verticale. Le schede vanno nell'ordine dato, dall'angolo delle schede (0, 0).",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "a"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "b"
+      },
+      {
+        "id": "c",
+        "type": "text",
+        "x": 800,
+        "y": 0,
+        "width": 320,
+        "height": 160,
+        "text": "c"
+      },
+      {
+        "id": "d",
+        "type": "text",
+        "x": 0,
+        "y": 200,
+        "width": 320,
+        "height": 160,
+        "text": "d"
+      },
+      {
+        "id": "e",
+        "type": "text",
+        "x": 400,
+        "y": 200,
+        "width": 320,
+        "height": 160,
+        "text": "e"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "layout",
+      "ids": [
+        "e",
+        "d",
+        "c",
+        "b",
+        "a"
+      ],
+      "kind": "grid"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 344,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "a"
+        },
+        {
+          "id": "b",
+          "type": "text",
+          "x": 0,
+          "y": 184,
+          "width": 320,
+          "height": 160,
+          "text": "b"
+        },
+        {
+          "id": "c",
+          "type": "text",
+          "x": 688,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "c"
+        },
+        {
+          "id": "d",
+          "type": "text",
+          "x": 344,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "d"
+        },
+        {
+          "id": "e",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "e"
+        }
+      ]
+    }
+  }
+}

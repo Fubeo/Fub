@@ -28,8 +28,8 @@ use fub_abi::transfer::{
 use fub_abi::PluginError;
 
 use crate::common::{
-    bad_args, content_hash_hex, is_cancelled, resolve_destination, sanitize_component, write_doc,
-    MAX_CSV_ROWS, MAX_DOCS_PER_IMPORT,
+    bad_args, content_hash_hex, is_cancelled, is_ident, resolve_destination, title_file_stem,
+    write_doc, yaml_key, MAX_CSV_ROWS, MAX_DOCS_PER_IMPORT,
 };
 
 pub const IMPORT_CSV_NOTE: &str = "csv import";
@@ -119,16 +119,6 @@ fn parse_records(text: &str, delim: u8) -> Result<Vec<(usize, Vec<String>)>, Plu
         out.push((start_line, row));
     }
     Ok(out)
-}
-
-fn is_ident(s: &str) -> bool {
-    !s.is_empty()
-        && s.len() <= 64
-        && s.chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-        && s.chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
 }
 
 fn infer_scalar(raw: &str) -> (String, bool) {
@@ -249,8 +239,11 @@ pub(crate) fn row_note(
         }
         let cell = row.get(hi).map(String::as_str).unwrap_or("");
         let (scalar, is_scalar) = infer_scalar(cell);
-        if is_scalar && is_ident(&key) {
-            fm_pairs.push((key, scalar));
+        // Any column name is a property name (`Stato di lettura`, `Città`):
+        // the key is quoted when YAML needs it. Only long or multiline cells
+        // go to the body.
+        if is_scalar {
+            fm_pairs.push((yaml_key(&key), scalar));
         } else {
             convertible = false;
             if !cell.is_empty() {
@@ -366,7 +359,7 @@ impl ImportProvider for CsvImport {
             let entry = format!("{}:{}", source.name, line);
             let note = row_note(&table.headers, row, &source.name, idx);
             let file_stem =
-                sanitize_component(&note.title).unwrap_or_else(|| format!("row_{}", idx + 1));
+                title_file_stem(&note.title).unwrap_or_else(|| format!("row_{}", idx + 1));
             let mut name = format!("{stem_base}-{file_stem}.md");
             let mut suffix = 1;
             while !taken.insert(resolution_key(&name)) {
@@ -622,4 +615,53 @@ fn split_frontmatter(source: &str) -> (Vec<(String, String)>, &str) {
 
 fn is_scalar_value(v: &str) -> bool {
     !v.is_empty() && v.len() <= 500 && !v.contains('\n')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fub_abi::traits::VaultRead;
+    use fub_sdk::testing::MemoryHost;
+
+    // IMP-712: una colonna con spazi o accenti è una proprietà come le altre;
+    // la chiave prende le virgolette solo quando YAML le chiede.
+    #[test]
+    fn every_column_name_is_a_property() {
+        let csv = "Nome,Città,Stato di lettura,Note: varie,2021\nAlfa,Milano,In corso,a,b\n";
+        let mut host = MemoryHost::new();
+        let report = CsvImport
+            .import(
+                &ImportSource::text_source("prova.csv", csv),
+                &ImportRequest::apply(),
+                &mut host,
+            )
+            .unwrap();
+        let note = host.read_document(&report.documents[0].doc).unwrap();
+        let front = note.split("---\n").nth(1).unwrap();
+        assert!(front.contains("Città: Milano\n"), "{note}");
+        assert!(front.contains("Stato di lettura: In corso\n"), "{note}");
+        assert!(front.contains("\"Note: varie\": a\n"), "{note}");
+        assert!(front.contains("\"2021\": b\n"), "{note}");
+        assert!(!note.contains("## "), "{note}");
+    }
+
+    // IMP-510: una barra nel titolo cambia solo il carattere vietato del nome.
+    #[test]
+    fn a_slash_in_the_title_keeps_the_name() {
+        let csv = "Numero,Cliente\nFattura 2026/031,Panificio\n";
+        let mut host = MemoryHost::new();
+        let report = CsvImport
+            .import(
+                &ImportSource::text_source("Fatture.csv", csv),
+                &ImportRequest::apply(),
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(
+            report.documents[0].doc.as_str(),
+            "Fatture-Fattura 2026-031.md"
+        );
+        let note = host.read_document(&report.documents[0].doc).unwrap();
+        assert!(note.contains("title: Fattura 2026/031\n"), "{note}");
+    }
 }

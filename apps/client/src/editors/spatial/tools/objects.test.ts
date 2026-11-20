@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { createObjectTree, ROW_PX, VIRTUAL_AFTER, type ObjectTree, type ObjectTreeOptions, type TreeDrop, type TreeEntry, type TreeToggle } from "./objects";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 function object(key: string, selectable = true, more: Partial<TreeEntry> = {}): TreeEntry {
   return {
@@ -365,8 +366,17 @@ describe("il nome", () => {
     const input = field()!;
     input.value = text;
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    if (finish === "blur") input.blur();
-    else input.dispatchEvent(new KeyboardEvent("keydown", { key: finish, bubbles: true, cancelable: true }));
+    if (finish === "blur") {
+      input.blur();
+      return;
+    }
+    // A metà di una composizione lo stesso tasto è del metodo d'immissione:
+    // il campo resta aperto, e niente si scrive.
+    const composing = new KeyboardEvent("keydown", { key: finish, bubbles: true, cancelable: true, ...WEBKIT_COMPOSING });
+    input.dispatchEvent(composing);
+    expect(composing.defaultPrevented).toBe(false);
+    expect(field()).toBe(input);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: finish, bubbles: true, cancelable: true }));
   }
 
   it("F2 apre sulla riga il campo col nome di adesso; Invio scrive quello nuovo, ripulito, e il fuoco torna all'albero", () => {

@@ -1,0 +1,17 @@
+{
+  "about": "distribute y: i centri verticali (30, 80, 330) diventano 30, 180, 330. Il centro di b va a 180, e il suo y, 150, si aggancia a 152. x non cambia.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 0, "y": 50, "width": 100, "height": 60, "text": "b" },
+    { "id": "c", "type": "text", "x": 0, "y": 300, "width": 100, "height": 60, "text": "c" }
+  ] },
+  "ops": [{ "op": "distribute", "ids": ["a", "b", "c"], "axis": "y" }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+      { "id": "b", "type": "text", "x": 0, "y": 152, "width": 100, "height": 60, "text": "b" },
+      { "id": "c", "type": "text", "x": 0, "y": 300, "width": 100, "height": 60, "text": "c" }
+    ] }
+  }
+}

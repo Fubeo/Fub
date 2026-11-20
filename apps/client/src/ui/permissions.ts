@@ -62,6 +62,7 @@ export const PERMISSIONS = [
   "fub:read-session",
   "fub:read-selection",
   "fub:read-drafts",
+  "fub:notifications",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -94,6 +95,7 @@ export const PHRASES: Record<Permission, Key> = {
   "fub:read-session": "permission.read-session",
   "fub:read-selection": "permission.read-selection",
   "fub:read-drafts": "permission.read-drafts",
+  "fub:notifications": "permission.notifications",
 };
 
 /// Di chi ci si sta fidando, come **chiave**: è la premessa con cui si leggono i

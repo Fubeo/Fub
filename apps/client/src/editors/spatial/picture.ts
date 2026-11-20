@@ -34,6 +34,7 @@ import { attrOf, isSvg, NS_NONE, parseXml, type ElementNode } from "./scene/xml"
 import { cssString, familyName, fubFamily, fubLiveFamily, parseFamilies, shownFamily } from "./fonts/faces";
 import { markupFonts, type TextFont } from "./fonts/vault";
 import { FONT_FILES } from "./tools/text";
+import { fetchLocal } from "../core/local-fetch";
 
 /// I caratteri dell'app nel foglio più grande, i tre in tondo e in corsivo:
 /// misurato sui loro file, 379 KB, con un margine.
@@ -155,7 +156,7 @@ function blobUri(blob: Blob, type: string): Promise<string | null> {
 
 /// Un file dell'app; `null` se non si legge.
 export const appFile = (url: string): Promise<Blob | null> =>
-  fetch(url)
+  fetchLocal(url)
     .then((response) => (response.ok ? response.blob() : null))
     .catch(() => null);
 

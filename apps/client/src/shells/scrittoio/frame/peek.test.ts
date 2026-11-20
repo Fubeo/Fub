@@ -21,6 +21,7 @@ vi.mock("../../../state/document-controller", () => ({
 }));
 
 import { mountDrawerPeek, PEEK_DWELL_MS, PEEK_LEAVE_MS } from "./peek";
+import { WEBKIT_COMPOSING } from "../../../kit/testing";
 
 const layout = (): HTMLElement => document.getElementById("layout") as HTMLElement;
 const sidebar = (): HTMLElement => document.getElementById("sidebar") as HTMLElement;
@@ -37,11 +38,32 @@ function frame(closed: { sidebar?: boolean; inspector?: boolean } = { sidebar: t
     </div>`;
 }
 
-function pointer(target: HTMLElement, type: string, init: { pointerType?: string; buttons?: number } = {}): void {
-  const event = new Event(type) as Event & { pointerType: string; buttons: number };
+function pointer(
+  target: HTMLElement,
+  type: string,
+  init: { pointerType?: string; buttons?: number; x?: number; y?: number } = {},
+): void {
+  // `pointermove` risale fino alla finestra, come nel browser: lì il peek
+  // ricorda dov'era il puntatore.
+  const event = new Event(type, { bubbles: type === "pointermove" }) as Event & {
+    pointerType: string;
+    buttons: number;
+    clientX: number;
+    clientY: number;
+  };
   event.pointerType = init.pointerType ?? "mouse";
   event.buttons = init.buttons ?? 0;
+  event.clientX = init.x ?? 0;
+  event.clientY = init.y ?? 0;
   target.dispatchEvent(event);
+}
+
+/// Il puntatore arriva sul bordo muovendosi: l'ingresso e un movimento.
+let step = 0;
+function arrive(side: string, init: { pointerType?: string; buttons?: number } = {}): void {
+  step += 1;
+  pointer(edge(side), "pointerenter", init);
+  pointer(edge(side), "pointermove", { ...init, x: 790 + (step % 5), y: 40 + step });
 }
 
 /// Gli osservatori e le promesse consegnano a fine giro; il tempo è finto.
@@ -52,7 +74,7 @@ async function settled(): Promise<void> {
 
 /// Sfiora il bordo e aspetta la sosta.
 function brush(side: string): void {
-  pointer(edge(side), "pointerenter");
+  arrive(side);
   vi.advanceTimersByTime(PEEK_DWELL_MS);
 }
 
@@ -117,7 +139,7 @@ describe("affacciarsi", () => {
   it("serve una sosta sul bordo: chi lo attraversa non sveglia il cassetto", () => {
     frame();
     mountDrawerPeek(lifetime);
-    pointer(edge("sidebar"), "pointerenter");
+    arrive("sidebar");
     vi.advanceTimersByTime(PEEK_DWELL_MS - 1);
     expect(layout().classList.contains("peek-sidebar")).toBe(false);
     pointer(edge("sidebar"), "pointerleave");
@@ -156,10 +178,42 @@ describe("affacciarsi", () => {
   it("il tocco e un trascinamento di passaggio non lo svegliano", () => {
     frame();
     mountDrawerPeek(lifetime);
-    pointer(edge("sidebar"), "pointerenter", { pointerType: "touch" });
-    pointer(edge("sidebar"), "pointerenter", { buttons: 1 });
+    arrive("sidebar", { pointerType: "touch" });
+    arrive("sidebar", { buttons: 1 });
     vi.advanceTimersByTime(PEEK_DWELL_MS * 2);
     expect(layout().classList.contains("peek-sidebar")).toBe(false);
+  });
+
+  it("un velo che sparisce sotto il puntatore fermo non lo sveglia", () => {
+    frame();
+    mountDrawerPeek(lifetime);
+    // Il clic che chiude il cassetto lascia il puntatore a destra, sul velo.
+    pointer(document.getElementById("sheet") as HTMLElement, "pointermove", { x: 792, y: 48 });
+    // Il velo sparisce: il browser consegna l'ingresso nel bordo, e a volte
+    // un movimento nello stesso punto, senza che la persona muova niente.
+    pointer(edge("inspector"), "pointerenter", { x: 792, y: 48 });
+    pointer(edge("inspector"), "pointermove", { x: 792, y: 48 });
+    vi.advanceTimersByTime(PEEK_DWELL_MS * 2);
+    expect(layout().classList.contains("peek-inspector")).toBe(false);
+    expect(driver.plays).toHaveLength(0);
+    // Il primo movimento vero, invece, conta: la sosta parte da lì.
+    pointer(edge("inspector"), "pointermove", { x: 793, y: 48 });
+    vi.advanceTimersByTime(PEEK_DWELL_MS - 1);
+    expect(layout().classList.contains("peek-inspector")).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(layout().classList.contains("peek-inspector")).toBe(true);
+  });
+
+  it("un movimento vero sul bordo lo affaccia dopo la sosta", () => {
+    frame();
+    mountDrawerPeek(lifetime);
+    pointer(document.getElementById("sheet") as HTMLElement, "pointermove", { x: 600, y: 48 });
+    pointer(edge("inspector"), "pointerenter", { x: 792, y: 48 });
+    pointer(edge("inspector"), "pointermove", { x: 792, y: 48 });
+    vi.advanceTimersByTime(PEEK_DWELL_MS - 1);
+    expect(layout().classList.contains("peek-inspector")).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(layout().classList.contains("peek-inspector")).toBe(true);
   });
 
   it("nel livello ridotto compare lo stesso, con la sola dissolvenza", () => {
@@ -303,6 +357,9 @@ describe("ritirarsi", () => {
     await settled();
     expect(layout().classList.contains("peek-sidebar")).toBe(true);
 
+    // Esc a metà di una composizione nel filtro è del metodo d'immissione.
+    filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true, ...WEBKIT_COMPOSING }));
+    expect(sidebar().hasAttribute("inert")).toBe(false);
     filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(world.focused).toBe(1);
     expect(sidebar().hasAttribute("inert")).toBe(true);

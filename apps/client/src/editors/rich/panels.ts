@@ -19,6 +19,7 @@ import { imageMime } from "./schema";
 import { check, choice, labelled, remark } from "./form";
 import { formatLength, parseLength } from "./page";
 import { findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery } from "./review";
+import { composingKey } from "../../kit/ime";
 
 /// Ciò che la barra chiede alla shell.
 export interface RichMedia {
@@ -305,6 +306,16 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     toggle.setAttribute("aria-controls", replaceRow.id);
     const replacement = textField({ label: t("rich.find.replace"), labelHidden: true, placeholder: t("rich.find.replace"), lifetime: own }).input;
     replaceRow.append(replacement.closest(".kit-field")!);
+    // Una scrittura della barra stessa: è lei a dire dove va, dopo.
+    let writing = false;
+    const write = (command: Parameters<RichEngine["apply"]>[0]): boolean => {
+      writing = true;
+      try {
+        return engine.apply(command, false);
+      } finally {
+        writing = false;
+      }
+    };
     const replaceOne = button(replaceRow, t("rich.find.replace_one"), () => {
       const matches = findMatches(engine.read((state) => state.doc), query());
       const match = matches[current];
@@ -312,12 +323,12 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
         step(1);
         return;
       }
-      engine.apply(replaceMatch(query(), match, replacement.value), false);
+      write(replaceMatch(query(), match, replacement.value));
       step(1);
     });
     const replaceEvery = button(replaceRow, t("rich.find.replace_all"), () => {
       const total = findMatches(engine.read((state) => state.doc), query()).length;
-      if (!engine.apply(replaceAll(query(), replacement.value), false)) return;
+      if (!write(replaceAll(query(), replacement.value))) return;
       show(-1, t("rich.find.replaced", { n: String(total) }));
     }, "primary");
     function replacing(open: boolean): void {
@@ -363,13 +374,16 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     own.listen(matchCase, "change", refind);
     own.listen(wholeWord, "change", refind);
     own.listen(findBar, "keydown", (event) => {
+      // Invio ed Esc che chiudono una composizione sono del metodo
+      // d'immissione: non cercano e non chiudono la barra.
+      if (composingKey(event)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
         done();
         return;
       }
-      if (event.key !== "Enter" || event.isComposing) return;
+      if (event.key !== "Enter") return;
       if (event.target === what) {
         event.preventDefault();
         step(event.shiftKey ? -1 : 1);
@@ -378,6 +392,19 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
         replaceOne.click();
       }
     });
+    // Il documento cambiato da fuori della barra (Ctrl+Z dal suo pulsante,
+    // che la shell manda al documento: `ui/off-sheet-keys.ts`, o un altro
+    // riquadro) si conta di nuovo. Solo quando cambia il testo: mostrare le
+    // occorrenze è una transazione anche lei, e non cambia niente da contare.
+    let counted = engine.read((state) => state.doc);
+    const recount = (): void => {
+      const doc = engine.read((state) => state.doc);
+      if (doc === counted) return;
+      counted = doc;
+      if (!writing) refind();
+    };
+    const unsubscribe = engine.subscribe(recount);
+    own.add(unsubscribe);
     bar = { what, replacing, life: own };
     findBar.hidden = false;
     changed();

@@ -1,0 +1,15 @@
+{
+  "name": "read-subpath-missing",
+  "description": "Le sezioni senza subpath: qualcuno l'ha tolto, si mostra la nota intera.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"n1\", \"type\": \"file\", \"file\": \"Statistica.md\", \"x\": 0, \"y\": 0, \"width\": 400, \"height\": 500,\n      \"fub:parts\": { \"kind\": \"sections\", \"sections\": [\"Varianza\", \"Media\"] } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "n1",
+        "state": "kept",
+        "reason": "subpath",
+        "shows": null
+      }
+    ]
+  }
+}

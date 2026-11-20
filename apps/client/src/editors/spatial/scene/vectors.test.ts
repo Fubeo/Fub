@@ -65,6 +65,8 @@ function applied(outcome: Outcome): Applied {
 function sessionsWith(text: string): DocumentSessionCollection {
   const api: DocumentSessionApi = {
     readDocument: vi.fn(async (): Promise<DocumentSource> => ({ text, revision: "rev-1", format_id: "svg", source_kind: "text", text_kind: "source" })),
+    openDocument: vi.fn(async (): Promise<DocumentSource> => ({ text, revision: "rev-1", format_id: "svg", source_kind: "text", text_kind: "source" })),
+    documentClosed: vi.fn(async () => {}),
     writeDocument: vi.fn(async () => "rev-2"),
     resourceWrite: vi.fn(async () => ({ revision: "rev-byte" })),
     saveDraft: vi.fn(async () => {}),

@@ -181,3 +181,35 @@ export function tableCommand(id: string, caps: TableCaps): TableCommand | null {
   const found = TABLE_COMMANDS.find((command) => command.id === id);
   return found && caps[found.needs] ? found : null;
 }
+
+/// Ctrl+«+» e Ctrl+«−», secondo ciò che è scelto, come nei fogli di calcolo:
+/// le colonne intere (tutte le righe, non tutta la tabella) inseriscono o
+/// tolgono colonne; il resto righe. Si inseriscono prima della selezione
+/// tante righe (o colonne) quante ne sono scelte, e la selezione va su quelle
+/// nuove; sopra l'intestazione non si inserisce, e allora si va sotto la
+/// selezione. Si tolgono quelle scelte, l'intestazione esclusa. `null` se il
+/// formato non lo sa fare o adesso non vale.
+export function structureEdit(
+  context: TableCommandContext,
+  change: "insert" | "delete",
+): { readonly edit: TableEdit; readonly select: TableTarget } | null {
+  const { range, size, caps } = context;
+  const wholeColumns = range.r0 <= 0 && range.r1 >= size.rows - 1;
+  const wholeRows = range.c0 <= 0 && range.c1 >= size.columns - 1;
+  const onColumns = wholeColumns && !wholeRows;
+  if (change === "delete") {
+    const command = tableCommand(onColumns ? "markdown.table.column.delete" : "markdown.table.row.delete", caps);
+    if (!command || !command.applicable(context)) return null;
+    const { edit, select } = command.edit(context);
+    return select ? { edit, select } : null;
+  }
+  if (onColumns) {
+    if (!caps.insertColumns) return null;
+    const count = range.c1 - range.c0 + 1;
+    return { edit: { kind: "insert-columns", at: range.c0, count }, select: columns(context, range.c0, range.c0 + count - 1) };
+  }
+  if (!caps.insertRows) return null;
+  const count = range.r1 - range.r0 + 1;
+  const at = range.r0 >= caps.headerRows ? range.r0 : range.r1 + 1;
+  return { edit: { kind: "insert-rows", at, count }, select: rows(context, at, at + count - 1) };
+}

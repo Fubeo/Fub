@@ -4,6 +4,8 @@
 //! state belongs to an instance, so separate panels cannot share a selection.
 //! Network work is queued through the existing publish commands.
 
+use std::collections::HashMap;
+
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
@@ -30,8 +32,14 @@ pub const ACTION_ROLLBACK: &str = "rollback";
 pub const ACTION_CONFIRM: &str = "confirm";
 pub const ACTION_CANCEL: &str = "cancel";
 
-/// L'azione in attesa di risposta (`{action, version?}`), finché non si risponde.
-const PENDING: &str = "publish.pending";
+/// La chiave sotto cui le versioni di prima ricordavano l'azione in attesa di
+/// risposta nello stato di vista. Non si scrive più (vedi [`PublishViews`]): si
+/// legge solo per toglierla, perché «Ritirare il sito?» rimasto lì da un avvio
+/// di prima è a un clic dal togliere il sito da internet (IMP-110).
+const LEGACY_PENDING: &str = "publish.pending";
+/// La chiave del bottone «Ritira» e della sua domanda: chiusa la domanda, il
+/// fuoco torna al bottone.
+const UNPUBLISH_KEY: &str = "unpublish";
 
 /// Le stringhe dei pannelli e dei comandi di pubblicazione, nelle due lingue.
 pub fn catalog() -> Vec<StringCatalog> {
@@ -185,6 +193,8 @@ pub fn catalog() -> Vec<StringCatalog> {
         .with("confirm", "Yes, go ahead")
         .with("cancel", "Cancel");
     let (it, en) = super::commands::catalog_rows(it, en);
+    // I comandi leggono il campo «Documento» anche scritto per nome.
+    let (it, en) = crate::doc_names::speaking(crate::doc_names::KEYS, it, en);
     vec![it, en]
 }
 
@@ -233,13 +243,27 @@ struct CachedPreview {
     export: super::site::ExportSnapshot,
 }
 
-/// The site panel set. Stateless across renders (like `TrashView`):
-/// per-exemplar questions live in view-state, never in fields.
-pub struct PublishViews;
+/// The site panel set.
+///
+/// Il sito scelto sta nello stato di vista, che dura fra un avvio e l'altro.
+/// La domanda prima di ritirare o di tornare indietro invece sta qui, per
+/// esemplare, e muore col processo: è un passo a metà di un gesto che cambia
+/// ciò che è online, e ritrovarla al riavvio col sì pronto sotto il dito vuol
+/// dire un clic da un gesto che nessuno ricorda di aver chiesto (IMP-110).
+#[derive(Default)]
+pub struct PublishViews {
+    /// (view, esemplare) → l'azione in attesa di risposta (`{action, site,
+    /// version?}`).
+    asking: HashMap<(String, String), serde_json::Value>,
+}
 
 impl PublishViews {
     pub fn boxed() -> Box<dyn ViewProvider> {
-        Box::new(Self)
+        Box::new(Self::default())
+    }
+
+    fn asking_key(instance: &ViewInstance) -> (String, String) {
+        (instance.view.clone(), instance.instance.clone())
     }
     fn selected(host: &dyn ReadApi) -> Option<String> {
         host.view_state(SELECTED_SITE)
@@ -319,7 +343,10 @@ impl ViewProvider for PublishViews {
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
         match instance.view.as_str() {
-            PUBLISH_SITES_VIEW => Ok(sites_tree(host)),
+            PUBLISH_SITES_VIEW => Ok(sites_tree(
+                host,
+                self.asking.get(&Self::asking_key(instance)),
+            )),
             _ => Err(PluginError::UnknownView(instance.view.clone().into())),
         }
     }
@@ -330,6 +357,12 @@ impl ViewProvider for PublishViews {
         action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
+        // La domanda che le versioni di prima avevano lasciato nello stato di
+        // vista: al primo gesto sul pannello se ne va dal disco. Disegnata non
+        // lo è più comunque, perché `render_view` non la legge.
+        if host.view_state(LEGACY_PENDING)?.is_some() {
+            host.set_view_state(LEGACY_PENDING, None)?;
+        }
         match action.action.0.as_str() {
             ACTION_SELECT => {
                 let site = action
@@ -383,19 +416,18 @@ impl ViewProvider for PublishViews {
                 if let Some(object) = pending.as_object_mut() {
                     object.insert("action".into(), action.action.0.clone().into());
                 }
-                host.set_view_state(PENDING, Some(pending))?;
+                self.asking.insert(Self::asking_key(instance), pending);
                 self.render_view(instance, host)
                     .map(|root| ViewUpdate::Replace { root })
             }
+            // Il «no», dal bottone o da Esc (la shell manda la stessa azione).
             ACTION_CANCEL => {
-                host.set_view_state(PENDING, None)?;
+                self.asking.remove(&Self::asking_key(instance));
                 self.render_view(instance, host)
                     .map(|root| ViewUpdate::Replace { root })
             }
             ACTION_CONFIRM => {
-                let pending = host.view_state(PENDING)?;
-                host.set_view_state(PENDING, None)?;
-                let Some(pending) = pending else {
+                let Some(pending) = self.asking.remove(&Self::asking_key(instance)) else {
                     return Ok(ViewUpdate::None);
                 };
                 let action = UiAction::new(
@@ -474,7 +506,9 @@ fn selected_site(action: &UiAction, host: &dyn HostApi) -> Result<String, Plugin
     Ok(site)
 }
 
-fn sites_tree(host: &dyn ReadApi) -> UiNode {
+/// Il pannello; `pending` è l'azione di cui si sta chiedendo conferma, che
+/// vive in [`PublishViews`] e non nello stato di vista.
+fn sites_tree(host: &dyn ReadApi, pending: Option<&serde_json::Value>) -> UiNode {
     let ids = PublishViews::site_ids(host);
     let selected = PublishViews::selected(host);
     let mut children = vec![UiNode::new(UiKind::Form {
@@ -502,9 +536,8 @@ fn sites_tree(host: &dyn ReadApi) -> UiNode {
         ));
     }
     if let Some(site_id) = selected {
-        let pending = host.view_state(PENDING).ok().flatten();
         children.push(preview_tree(host, &site_id));
-        children.push(activity_tree(host, &site_id, pending.as_ref()));
+        children.push(activity_tree(host, &site_id, pending));
     }
     UiNode::column(1, children)
 }
@@ -602,21 +635,33 @@ fn preview_tree(host: &dyn ReadApi, site_id: &str) -> UiNode {
     UiNode::column(1, children)
 }
 
-/// I bottoni di un gesto che chiede prima: la domanda, il sì e il no.
-fn asking(question: Text) -> Vec<UiNode> {
-    vec![
-        UiNode::text(question),
-        UiNode::button(
-            Text::key("confirm"),
-            Intent::Danger,
-            ActionRef::new(ACTION_CONFIRM),
-        ),
-        UiNode::button(
-            Text::key("cancel"),
-            Intent::Neutral,
-            ActionRef::new(ACTION_CANCEL),
-        ),
-    ]
+/// La domanda di un gesto che chiede prima — la domanda, il sì e il no — al
+/// posto del bottone che l'ha aperta, con la sua chiave `key`: è un nodo
+/// `CONFIRM_NS`, così la shell le dà Esc e, chiusa la domanda, rimette il
+/// fuoco al bottone.
+fn asking(key: impl Into<String>, question: Text) -> UiNode {
+    UiNode::confirmation(
+        key,
+        ActionRef::new(ACTION_CANCEL),
+        vec![
+            UiNode::text(question),
+            UiNode::button(
+                Text::key("confirm"),
+                Intent::Danger,
+                ActionRef::new(ACTION_CONFIRM),
+            ),
+            UiNode::button(
+                Text::key("cancel"),
+                Intent::Neutral,
+                ActionRef::new(ACTION_CANCEL),
+            ),
+        ],
+    )
+}
+
+/// La chiave del bottone «Torna a questa versione» e della sua domanda.
+fn rollback_key(version: &str) -> String {
+    format!("rollback:{version}")
 }
 
 fn activity_tree(host: &dyn ReadApi, site_id: &str, pending: Option<&serde_json::Value>) -> UiNode {
@@ -652,20 +697,23 @@ fn activity_tree(host: &dyn ReadApi, site_id: &str, pending: Option<&serde_json:
                         None,
                     )];
                     if pending_action == Some(ACTION_ROLLBACK) && pending_version == Some(version) {
-                        row.extend(asking(Text::message(
-                            "rollback.question",
-                            vec![Arg::text("version", version)],
-                        )));
+                        row.push(asking(
+                            rollback_key(version),
+                            Text::message("rollback.question", vec![Arg::text("version", version)]),
+                        ));
                     } else if !current {
                         // Tornare alla versione che è già online non fa niente.
-                        row.push(UiNode::button(
-                            Text::key("rollback"),
-                            Intent::Neutral,
-                            ActionRef::with(
-                                ACTION_ROLLBACK,
-                                serde_json::json!({ SITE: site_id, VERSION: version }),
-                            ),
-                        ));
+                        row.push(
+                            UiNode::button(
+                                Text::key("rollback"),
+                                Intent::Neutral,
+                                ActionRef::with(
+                                    ACTION_ROLLBACK,
+                                    serde_json::json!({ SITE: site_id, VERSION: version }),
+                                ),
+                            )
+                            .with_key(rollback_key(version)),
+                        );
                     }
                     UiNode::keyed(
                         format!("version:{version}"),
@@ -684,13 +732,16 @@ fn activity_tree(host: &dyn ReadApi, site_id: &str, pending: Option<&serde_json:
             && site.versions.iter().any(|version| version == live)
     }) {
         if pending_action == Some(ACTION_UNPUBLISH) {
-            children.extend(asking(Text::key("unpublish.question")));
+            children.push(asking(UNPUBLISH_KEY, Text::key("unpublish.question")));
         } else {
-            children.push(UiNode::button(
-                Text::key("unpublish"),
-                Intent::Danger,
-                ActionRef::with(ACTION_UNPUBLISH, serde_json::json!({ SITE: site_id })),
-            ));
+            children.push(
+                UiNode::button(
+                    Text::key("unpublish"),
+                    Intent::Danger,
+                    ActionRef::with(ACTION_UNPUBLISH, serde_json::json!({ SITE: site_id })),
+                )
+                .with_key(UNPUBLISH_KEY),
+            );
         }
     }
     UiNode::column(1, children)
@@ -768,14 +819,16 @@ mod tests {
     fn first_site_can_be_chosen_without_a_remote_record() {
         let mut host = MemoryHost::new().with_instance("e");
         let instance = ViewInstance::only(PUBLISH_SITES_VIEW);
-        let tree = PublishViews.render_view(&instance, &host).unwrap();
+        let tree = PublishViews::default()
+            .render_view(&instance, &host)
+            .unwrap();
         let UiKind::Stack { children, .. } = tree.kind else {
             panic!("publish panel")
         };
         assert!(matches!(children[0].kind, UiKind::Form { .. }));
         assert!(!has_action(&UiNode::column(1, children), ACTION_COMMIT));
 
-        let update = PublishViews
+        let update = PublishViews::default()
             .on_action(
                 &instance,
                 UiAction::new(ACTION_SELECT).with_fields(vec![FieldValue {
@@ -807,7 +860,7 @@ mod tests {
         let mut host = host_with_site().with_instance("e");
         host.set_view_state(SELECTED_SITE, Some(serde_json::json!("blog")))
             .unwrap();
-        let tree = PublishViews
+        let tree = PublishViews::default()
             .render_view(&ViewInstance::only(PUBLISH_SITES_VIEW), &host)
             .unwrap();
         let text = format!("{tree:?}");
@@ -845,14 +898,17 @@ mod tests {
         host.set_view_state(SELECTED_SITE, Some(serde_json::json!("blog")))
             .unwrap();
         let instance = ViewInstance::only(PUBLISH_SITES_VIEW);
-        let click = |host: &mut MemoryHost, action: ActionRef| {
-            PublishViews.on_action(
+        let mut views = PublishViews::default();
+        let mut click = |host: &mut MemoryHost, action: ActionRef| {
+            views.on_action(
                 &instance,
                 UiAction::new(action.action.0).with_payload(action.payload),
                 host,
             )
         };
-        let tree = PublishViews.render_view(&instance, &host).unwrap();
+        let tree = PublishViews::default()
+            .render_view(&instance, &host)
+            .unwrap();
         let unpublish = find_action(&tree, ACTION_UNPUBLISH).unwrap().clone();
         let ViewUpdate::Replace { root } = click(&mut host, unpublish).unwrap() else {
             panic!("la domanda si disegna")
@@ -877,12 +933,143 @@ mod tests {
         );
     }
 
+    /// Il nodo [`fub_abi::ui::CONFIRM_NS`] della domanda, se l'albero ne ha uno.
+    fn confirmation(tree: &UiNode) -> Option<&UiNode> {
+        if matches!(&tree.kind, UiKind::Custom { ns, .. } if ns == fub_abi::ui::CONFIRM_NS) {
+            return Some(tree);
+        }
+        tree.children().into_iter().find_map(confirmation)
+    }
+
+    fn key_of_action(tree: &UiNode, id: &str) -> Option<String> {
+        if let UiKind::Button { action, .. } = &tree.kind {
+            if action.action.0 == id {
+                return tree.key.clone();
+            }
+        }
+        tree.children()
+            .into_iter()
+            .find_map(|child| key_of_action(child, id))
+    }
+
+    /// Le domande di «Ritira» e «Torna a questa versione» sono nodi di
+    /// conferma con la chiave del bottone che le ha aperte, e Esc manda il loro
+    /// «no» (IMP-110).
+    #[test]
+    fn escape_sends_the_no_of_each_question() {
+        let mut host = host_with_site().with_instance("e");
+        host.set_view_state(SELECTED_SITE, Some(serde_json::json!("blog")))
+            .unwrap();
+        let instance = ViewInstance::only(PUBLISH_SITES_VIEW);
+        let mut views = PublishViews::default();
+        let tree = views.render_view(&instance, &host).unwrap();
+        for id in [ACTION_UNPUBLISH, ACTION_ROLLBACK] {
+            let opener = key_of_action(&tree, id).expect("il bottone ha una chiave");
+            let action = find_action(&tree, id).unwrap().clone();
+            let ViewUpdate::Replace { root } = views
+                .on_action(
+                    &instance,
+                    UiAction::new(action.action.0).with_payload(action.payload),
+                    &mut host,
+                )
+                .unwrap()
+            else {
+                panic!("la domanda si disegna")
+            };
+            let node = confirmation(&root).expect("la domanda è un nodo di conferma");
+            assert_eq!(node.key.as_deref(), Some(opener.as_str()), "{id}");
+            let UiKind::Custom { payload, .. } = &node.kind else {
+                unreachable!()
+            };
+            let escape: ActionRef = serde_json::from_value(payload["cancel"].clone()).unwrap();
+            assert_eq!(escape, ActionRef::new(ACTION_CANCEL));
+            assert!(has_action(node, ACTION_CANCEL) && has_action(node, ACTION_CONFIRM));
+
+            let ViewUpdate::Replace { root } = views
+                .on_action(&instance, UiAction::new(escape.action.0), &mut host)
+                .unwrap()
+            else {
+                panic!("il pannello si ridisegna")
+            };
+            assert!(confirmation(&root).is_none());
+            assert_eq!(key_of_action(&root, id), Some(opener));
+        }
+    }
+
+    /// **Una domanda aperta non sopravvive al riavvio** (IMP-110): il sito
+    /// scelto resta nello stato di vista, la domanda muore col provider, e un
+    /// sì arrivato dopo non fa partire niente.
+    #[test]
+    fn an_open_question_does_not_survive_a_restart() {
+        let mut host = host_with_site().with_instance("e");
+        host.set_view_state(SELECTED_SITE, Some(serde_json::json!("blog")))
+            .unwrap();
+        let instance = ViewInstance::only(PUBLISH_SITES_VIEW);
+        {
+            let mut views = PublishViews::default();
+            let tree = views.render_view(&instance, &host).unwrap();
+            let unpublish = find_action(&tree, ACTION_UNPUBLISH).unwrap().clone();
+            views
+                .on_action(
+                    &instance,
+                    UiAction::new(unpublish.action.0).with_payload(unpublish.payload),
+                    &mut host,
+                )
+                .unwrap();
+            // La domanda è aperta, e si chiude l'app senza rispondere.
+        }
+        assert_eq!(host.view_state(LEGACY_PENDING).unwrap(), None);
+
+        let mut views = PublishViews::default();
+        let tree = views.render_view(&instance, &host).unwrap();
+        assert!(confirmation(&tree).is_none());
+        assert!(!has_action(&tree, ACTION_CONFIRM));
+        assert!(has_action(&tree, ACTION_UNPUBLISH));
+        // `MemoryHost` non sa eseguire comandi: un ritiro partito sarebbe un
+        // errore.
+        assert!(matches!(
+            views
+                .on_action(&instance, UiAction::new(ACTION_CONFIRM), &mut host)
+                .unwrap(),
+            ViewUpdate::None
+        ));
+        assert_eq!(
+            host.view_state(SELECTED_SITE).unwrap(),
+            Some(serde_json::json!("blog")),
+            "il sito scelto si ricorda"
+        );
+    }
+
+    /// Una domanda che le versioni di prima hanno lasciato nello stato di vista
+    /// non si disegna, e al primo gesto sul pannello se ne va.
+    #[test]
+    fn a_question_left_by_an_older_version_is_ignored_and_removed() {
+        let mut host = host_with_site().with_instance("e");
+        host.set_view_state(SELECTED_SITE, Some(serde_json::json!("blog")))
+            .unwrap();
+        host.set_view_state(
+            LEGACY_PENDING,
+            Some(serde_json::json!({ "action": ACTION_UNPUBLISH, SITE: "blog" })),
+        )
+        .unwrap();
+        let instance = ViewInstance::only(PUBLISH_SITES_VIEW);
+        let mut views = PublishViews::default();
+        let tree = views.render_view(&instance, &host).unwrap();
+        assert!(confirmation(&tree).is_none());
+        assert!(!has_action(&tree, ACTION_CONFIRM));
+
+        views
+            .on_action(&instance, UiAction::new(ACTION_CANCEL), &mut host)
+            .unwrap();
+        assert_eq!(host.view_state(LEGACY_PENDING).unwrap(), None);
+    }
+
     #[test]
     fn no_cached_manifest_means_no_commit_action() {
         let mut host = host_with_site().with_instance("e");
         host.set_view_state(SELECTED_SITE, Some(serde_json::json!("another")))
             .unwrap();
-        let tree = PublishViews
+        let tree = PublishViews::default()
             .render_view(&ViewInstance::only(PUBLISH_SITES_VIEW), &host)
             .unwrap();
         assert!(has_action(&tree, ACTION_DRY_RUN));

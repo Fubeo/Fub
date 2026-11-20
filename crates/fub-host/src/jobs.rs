@@ -55,13 +55,14 @@ use std::sync::Arc;
 
 use crate::custody::{Custody, WriteTurn};
 use crate::query::query_workspace;
+use crate::stop_relay::StopRelay;
 
 use fub_abi::command::{CommandOutcome, Failure, InvokeMode, PlannedEdit, UndoStep};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, TaskMarker};
-use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::net::{HttpRequest, HttpResponse, LimitedFetchError};
 use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
@@ -86,8 +87,8 @@ use fub_kernel::workspace::{
     PreparedPluginDataIo,
 };
 use fub_kernel::{
-    authorize_query, filter_query_result, IndexBatchStep, ReadOnly, RenameRecoveryPosition,
-    Workspace,
+    authorize_query, filter_query_result, IndexBatchStep, PreparedReadOnlyCommand, ReadOnly,
+    RenameRecoveryPosition, Workspace,
 };
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
@@ -138,6 +139,22 @@ pub struct JobHost {
     /// sapere che la cancellazione esiste si ferma comunque, alla prima cosa
     /// che prova a fare.
     cancelled: Arc<AtomicBool>,
+    /// Le bandiere di **chi contiene** questo host, quando è l'host di una
+    /// lettura col suo frame: il job e le letture più fuori. L'host è fermo se
+    /// è alzata la sua bandiera o una di queste, così annullare il job ferma
+    /// anche le sue letture; spegnere il plugin di una lettura alza invece
+    /// solo la bandiera della lettura, e il job riceve un `Cancelled` da
+    /// `invoke_command` senza essere annullato. Vuota per tutti gli altri.
+    outer_stops: Vec<Arc<AtomicBool>>,
+    /// **I comandi di sola lettura che stanno girando sopra questo host**, dal
+    /// più esterno: ciò su cui si rifiuta la ricorsione di un comando che non
+    /// passa dalla pila condivisa del workspace
+    /// ([`Workspace::prepare_read_only_provider_command`]).
+    ///
+    /// Vuota per un job e per l'ingresso dell'utente. I comandi che scrivono
+    /// non ci finiscono: la loro ricorsione la rifiuta la pila condivisa, che
+    /// col turno è di chi la usa.
+    chain: Vec<String>,
 }
 
 impl JobHost {
@@ -155,6 +172,8 @@ impl JobHost {
             instance: None,
             job: None,
             cancelled: Arc::new(AtomicBool::new(false)),
+            outer_stops: Vec::new(),
+            chain: Vec::new(),
         }
     }
 
@@ -204,6 +223,26 @@ impl JobHost {
             instance: None,
             job: None,
             cancelled: Arc::clone(&self.cancelled),
+            outer_stops: self.outer_stops.clone(),
+            chain: self.chain.clone(),
+        }
+    }
+
+    /// Host figlio per una **lettura** col suo frame: ha la bandiera `own`,
+    /// figlia di quelle di questo host. Le sue bandiere sono quelle che
+    /// guarda, e le stesse che la lettura iscrive fra quelle in volo.
+    pub(crate) fn for_read(
+        &self,
+        plugin: impl Into<String>,
+        mode: InvokeMode,
+        own: Arc<AtomicBool>,
+    ) -> Self {
+        let mut outer_stops = self.outer_stops.clone();
+        outer_stops.push(Arc::clone(&self.cancelled));
+        JobHost {
+            cancelled: own,
+            outer_stops,
+            ..self.for_provider(plugin, mode)
         }
     }
 
@@ -213,12 +252,18 @@ impl JobHost {
     /// anche di mettersi in fila per il lock, che è metà del motivo per cui lo
     /// si annulla.
     fn stopped(&self) -> Result<(), PluginError> {
-        if self.cancelled.load(Ordering::Relaxed) {
-            return Err(PluginError::Cancelled(
-                format!("the job of `{}` has been cancelled", self.plugin).into(),
-            ));
+        let outer = self.outer_stops.iter();
+        if std::iter::once(&self.cancelled)
+            .chain(outer)
+            .any(|flag| flag.load(Ordering::Relaxed))
+        {
+            return Err(self.cancelled_error());
         }
         Ok(())
+    }
+
+    fn cancelled_error(&self) -> PluginError {
+        PluginError::Cancelled(format!("the job of `{}` has been cancelled", self.plugin).into())
     }
 
     /// Il turno di scrittura per **un job**, cioè per chi sta dentro il codice di
@@ -395,10 +440,15 @@ impl JobHost {
             let mut detached = self.for_provider(hook.owner(), InvokeMode::Apply);
             hook.invoke(&mut detached)
         });
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(source, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_write(prepared, source, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -425,6 +475,10 @@ impl JobHost {
     ) -> Result<EditReport, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
+        // Rientrante: chi passa da `apply_edit_detached` lo ha già. Il recupero
+        // delle rinomine ci arriva diretto, e la scrittura sul disco fuori dal
+        // prestito conta sul turno per non avere un altro writer in mezzo.
+        let _turn = self.turn(&workspace)?;
         let prepared = {
             let ws = workspace.read()?;
             let id = fenced_doc_id(id)?;
@@ -447,10 +501,15 @@ impl JobHost {
             hook.invoke(&mut detached)
         });
         let base = request.base;
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(&next, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_edit(prepared, &next, model, before_write, base, &report)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_edit(placed, model, base, &report)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -672,13 +731,53 @@ pub(crate) fn drain_events(workspace: &Custody<Workspace>) -> Result<(), PluginE
 }
 
 /// Consegna gli eventi e completa l'epilogo opaco preparato dal kernel.
+///
+/// La riga del registro si appende **fuori** dal prestito esclusivo (IMP-1805):
+/// è una scrittura sul disco, e su un disco occupato dura secondi che nessuna
+/// lettura del vault deve passare ad aspettare. L'ordine delle righe lo tiene
+/// il turno di scrittura, quindi la si stacca solo se il turno è di questo
+/// thread — lo è per ogni chiamante di oggi; chi non lo tenesse la scrive
+/// dentro il prestito, come prima.
 pub(crate) fn finish_events<T>(
     workspace: &Custody<Workspace>,
     deferred: DeferredEvents<T>,
 ) -> Result<T, PluginError> {
     drain_events(workspace)?;
-    let mut ws = workspace.write()?;
-    Ok(ws.finish_deferred_events(deferred))
+    if !workspace.holds_turn() {
+        let mut ws = workspace.write()?;
+        return Ok(ws.finish_deferred_events(deferred));
+    }
+    let (outcome, record) = {
+        let mut ws = workspace.write()?;
+        ws.finish_deferred_events_detached(deferred)
+    };
+    if let Some(record) = record {
+        if let Err(failure) = record.append() {
+            workspace.write()?.report_journal_failure(failure);
+        }
+    }
+    Ok(outcome)
+}
+
+/// Esegue un comando **di sola lettura** col frame tutto suo
+/// ([`PreparedReadOnlyCommand`]), senza il turno di scrittura.
+///
+/// Il provider gira sotto il recinto [`ReadOnly`], come sul percorso
+/// condiviso; il suo host porta avanti la catena dei comandi, così una sua
+/// invocazione annidata di sé stesso è rifiutata. La fine prende solo un
+/// prestito condiviso: una lettura non ha undo da spingere, batch da chiudere
+/// né eventi da consegnare.
+pub(crate) fn run_read_only_command(
+    workspace: &Custody<Workspace>,
+    mut host: JobHost,
+    mut prepared: PreparedReadOnlyCommand,
+) -> Result<CommandOutcome, PluginError> {
+    host.chain = prepared.chain().to_vec();
+    let why = prepared.read_only_reason();
+    let mut host = Guard::new(host, ReadOnly { why });
+    let outcome = prepared.invoke(&mut host);
+    let ws = workspace.read()?;
+    ws.finish_read_only_provider_command(prepared, outcome)
 }
 
 /// Porta in fondo il solo rebuild di manutenzione con la stessa sequenza a
@@ -746,7 +845,16 @@ pub(crate) fn run_detached_rebuild_index(
                 ws.prepare_finish_index_with_graph(work, graph)
             };
             let completed_finish = prepared_finish.invoke();
-            let opening = workspace.write()?.finalize_finish_index(completed_finish);
+            let (opening, rejoin) = workspace
+                .write()?
+                .finalize_finish_index_detached(completed_finish);
+            // Come all'apertura (`runner/shared.rs`): i dati delle rinomine
+            // riconosciute si spostano fuori dal prestito esclusivo, sotto il
+            // turno del comando, prima della raccolta qui sotto.
+            if !rejoin.is_empty() {
+                let completed = rejoin.invoke();
+                workspace.write()?.finish_rejoin(completed);
+            }
 
             let _ = crate::teardown::flush_indexes(workspace)?;
             workspace.read()?.store_entries();
@@ -909,10 +1017,12 @@ impl VaultWrite for JobHost {
             hook.invoke(&mut detached)
         });
         self.stopped()?;
+        let placed = prepared
+            .place(bytes, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_bytes_write(prepared, bytes, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_bytes_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -1509,6 +1619,24 @@ impl HostCommands for JobHost {
         self.stopped()?;
         self.authorize_caller(Capability::Commands, || format!("invoking `{command}`"))?;
         let workspace = self.workspace.clone();
+        // Un comando di sola lettura ha il suo frame e non prende il turno:
+        // annidato o no, non ferma chi scrive. Ha una bandiera sua: chi spegne
+        // il suo plugin ferma la lettura, non questo host.
+        let own = Arc::new(AtomicBool::new(false));
+        let mut outer_stops = self.outer_stops.clone();
+        outer_stops.push(Arc::clone(&self.cancelled));
+        let read_only = workspace.read()?.prepare_read_only_provider_command(
+            command,
+            args.clone(),
+            self.mode,
+            &self.chain,
+            &own,
+            &outer_stops,
+        )?;
+        if let Some(prepared) = read_only {
+            let host = self.for_read(prepared.owner().to_string(), prepared.host_mode(), own);
+            return run_read_only_command(&workspace, host, prepared);
+        }
         let _turn = self.turn(&workspace)?;
         let mut prepared = {
             let mut ws = workspace.write()?;
@@ -1676,6 +1804,74 @@ impl HostNetwork for JobHost {
     /// token arriva al transport e il suo reader chiude la connessione al primo
     /// controllo, senza aspettare il tetto globale dell'host.
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.on_wire(None, |guard, stop| guard.fetch_cancelled(request, stop))
+    }
+
+    /// Come [`fetch`](HostNetwork::fetch), fermata anche dalla bandiera del
+    /// chiamante.
+    fn fetch_cancelled(
+        &self,
+        request: HttpRequest,
+        cancelled: &AtomicBool,
+    ) -> Result<HttpResponse, PluginError> {
+        self.on_wire(Some(cancelled), |guard, stop| {
+            guard.fetch_cancelled(request, stop)
+        })
+    }
+
+    /// Come [`fetch_cancelled`](HostNetwork::fetch_cancelled), con il tetto
+    /// di byte del chiamante portato fino al filo.
+    fn fetch_limited(
+        &self,
+        request: HttpRequest,
+        cancelled: &AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        self.on_wire(Some(cancelled), |guard, stop| {
+            guard.fetch_limited(request, stop, max_bytes)
+        })
+    }
+}
+
+impl JobHost {
+    /// **Una regola per le tre porte della rete**: la richiesta passa dal
+    /// `Guard` di tutti gli altri (il cancello è uno solo, e chi gira dentro
+    /// un job non ne attraversa uno più largo), e il trasferimento si ferma
+    /// quando si alza **una qualunque** delle bandiere — quella del chiamante,
+    /// se c'è (per esempio il cane da guardia di un suo tempo limite), quella
+    /// di questo host e quelle di chi lo contiene. Il filo ne guarda una sola,
+    /// e [`StopRelay`] gliela dà.
+    ///
+    /// Una bandiera già alzata ferma la richiesta prima del filo: non parte
+    /// nemmeno.
+    fn on_wire<T, E: From<PluginError>>(
+        &self,
+        caller: Option<&AtomicBool>,
+        send: impl FnOnce(&dyn HostNetwork, &AtomicBool) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let (client, granted) = self.network_wire()?;
+        let relay = StopRelay::watching(
+            caller
+                .into_iter()
+                .chain(std::iter::once(self.cancelled.as_ref()))
+                .chain(self.outer_stops.iter().map(Arc::as_ref)),
+        );
+        if relay.raised() {
+            return Err(self.cancelled_error().into());
+        }
+        let guard = Guard::new(client.as_ref(), granted);
+        relay
+            .run(|stop| send(&guard, stop))
+            .map_err(PluginError::from)?
+    }
+}
+
+impl JobHost {
+    /// Il filo e il permesso di adesso, presi per un istante: vedi
+    /// [`fetch`](HostNetwork::fetch) qui sopra per il perché.
+    fn network_wire(
+        &self,
+    ) -> Result<(Arc<dyn HostNetwork>, fub_kernel::host::Granted), PluginError> {
         self.stopped()?;
         if self.mode == InvokeMode::DryRun {
             authorize_family(
@@ -1696,9 +1892,7 @@ impl HostNetwork for JobHost {
                 "this host is mounted without a network client".into(),
             ));
         };
-        // Lo stesso `Guard` di tutti gli altri: il cancello è uno solo, e chi
-        // gira dentro un job non ne attraversa uno più largo.
-        Guard::new(client.as_ref(), granted).fetch_cancelled(request, self.cancelled.as_ref())
+        Ok((client, granted))
     }
 }
 
@@ -1749,6 +1943,12 @@ impl HostServices for JobHost {
     /// di sola lettura: un export del vault intero non tiene in fila chi
     /// scrive. I byte tornano nel rapporto, col tetto di
     /// [`PLUGIN_EXPORT_LIMIT`].
+    ///
+    /// L'errore dell'exporter esce nel catalogo di **chi l'ha scritto** (§12.2),
+    /// come ogni errore di un provider: il job che lo chiama è di un altro
+    /// bundle, e il suo catalogo quella chiave non ce l'ha. Senza, la chiave
+    /// arrivava al centro attività non risolta e si leggeva «bad_args»
+    /// (IMP-130).
     fn run_export(&mut self, request: &ExportRequest) -> Result<ExportReport, PluginError> {
         self.stopped()?;
         let prepared = {
@@ -1757,14 +1957,29 @@ impl HostServices for JobHost {
             ws.prepare_export()
         };
         let at = prepared.choose(&request.target)?;
-        let host = self.for_provider(prepared.owner(at), self.mode);
+        let owner = prepared.owner(at).to_owned();
+        let host = self.for_provider(owner.as_str(), self.mode);
         let mut sink = MemorySink::bounded(PLUGIN_EXPORT_LIMIT);
-        prepared.invoke(at, request, &host, &mut sink)
+        prepared
+            .invoke(at, request, &host, &mut sink)
+            .map_err(|mut error| {
+                // Il workspace si riprende solo per le parole, dopo l'export:
+                // l'exporter ha girato fuori dal prestito.
+                if let Ok(ws) = self.workspace.read() {
+                    ws.localize_as(&owner, &mut error);
+                }
+                error
+            })
     }
 
     /// L'importer gira fuori dal prestito e senza il turno di scrittura: un
     /// import può durare quanto la rete che lo alimenta, e ogni sua scrittura
     /// prende il turno da sé, come quelle di un job.
+    ///
+    /// L'errore dell'importer esce nel catalogo di **chi l'ha scritto**
+    /// (§12.2), come quello di un exporter in [`run_export`](Self::run_export):
+    /// il job che lo chiama è di un altro bundle, e la chiave arrivava al
+    /// centro attività non risolta.
     fn run_import(
         &mut self,
         source: &ImportSource,
@@ -1783,13 +1998,22 @@ impl HostServices for JobHost {
             ws.prepare_import()
         };
         let at = prepared.choose(source)?;
-        let host = self.for_provider(prepared.owner(at), self.mode);
-        if self.mode == InvokeMode::DryRun {
+        let owner = prepared.owner(at).to_owned();
+        let host = self.for_provider(owner.as_str(), self.mode);
+        let outcome = if self.mode == InvokeMode::DryRun {
             let mut host = Guard::new(host, read_only);
             prepared.invoke(at, source, request, &mut host)
         } else {
             let mut host = host;
             prepared.invoke(at, source, request, &mut host)
-        }
+        };
+        outcome.map_err(|mut error| {
+            // Il workspace si riprende solo per le parole, dopo l'import:
+            // l'importer ha girato fuori dal prestito.
+            if let Ok(ws) = self.workspace.read() {
+                ws.localize_as(&owner, &mut error);
+            }
+            error
+        })
     }
 }

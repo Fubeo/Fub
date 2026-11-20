@@ -36,11 +36,13 @@ import {
   type RoleLooks,
 } from "./projection";
 import { FONT_SIZES, lookCommands, markActive, MAX_FONT_SIZE, MIN_FONT_SIZE, type LookState } from "../../scrittura/look";
+import { jsonEqual } from "../../kit/json-equal";
 import { safeHref } from "./paste";
 import { cellAt, cellBoxes, selectedCells } from "./cell-selection";
 import { canComment } from "./comments";
 import { goToRevision, resolveAll, resolveRevision } from "./review";
 import { richSchema } from "./schema";
+import { applyTableEdit, emptyCellLike, emptyRowLike, evenColumns, newCell } from "./table-structure";
 import { tracking } from "./track";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
@@ -60,7 +62,7 @@ function selectedParas(state: EditorState): { node: PmNode; pos: number }[] {
 }
 
 function sameRole(a: Role, b: Role): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  return jsonEqual(a, b);
 }
 
 /// Il ruolo comune ai paragrafi selezionati, o `null` se sono diversi.
@@ -477,21 +479,6 @@ function rowAt($pos: ResolvedPos): InRow | null {
   return null;
 }
 
-/// Una cella vuota come `cell`: stesse proprietà di cella e del paragrafo.
-function emptyCellLike(cell: PmNode): PmNode {
-  const first = cell.firstChild;
-  const attrs = first?.type === para ? { ...first.attrs, role: BODY } : undefined;
-  return cellType.create(cell.attrs, para.create(attrs));
-}
-
-/// Una riga nuova come quella del cursore: stesse proprietà di riga e di
-/// cella (come «Inserisci riga» di Word), celle vuote.
-function emptyRowLike(row: PmNode): PmNode {
-  const cells: PmNode[] = [];
-  row.forEach((cell) => cells.push(emptyCellLike(cell)));
-  return rowType.create(row.attrs, cells);
-}
-
 export function insertRow(where: "before" | "after"): Command {
   return (state, dispatch) => {
     const at = rowAt(state.selection.$from);
@@ -505,26 +492,21 @@ export function insertRow(where: "before" | "after"): Command {
   };
 }
 
+/// Sposta la riga del cursore di un posto, col cambio di tabella di tutti i
+/// gesti (`applyTableEdit`): Ctrl+Alt con le frecce e Alt con le frecce
+/// sulle celle scelte seguono la stessa regola.
 export function moveRow(delta: -1 | 1): Command {
   return (state, dispatch) => {
     const at = rowAt(state.selection.$from);
     if (!at) return false;
-    const target = at.rowIndex + delta;
-    if (target < 0 || target >= at.table.childCount) return false;
+    const tr = state.tr;
+    if (!applyTableEdit(tr, at.table, at.tablePos, { kind: "move-rows", from: at.rowIndex, to: at.rowIndex, by: delta })) return false;
     if (dispatch) {
-      const other = at.table.child(target);
+      const table = tr.doc.nodeAt(at.tablePos)!;
+      let pos = at.tablePos + 1;
+      for (let r = 0; r < at.rowIndex + delta; r += 1) pos += table.child(r).nodeSize;
       const offset = state.selection.from - at.rowPos;
-      const tr = state.tr;
-      if (delta < 0) {
-        const otherPos = at.rowPos - other.nodeSize;
-        tr.replaceWith(otherPos, at.rowPos + at.row.nodeSize, [at.row, other]);
-        tr.setSelection(TextSelection.near(tr.doc.resolve(otherPos + offset)));
-      } else {
-        const end = at.rowPos + at.row.nodeSize + other.nodeSize;
-        tr.replaceWith(at.rowPos, end, [other, at.row]);
-        tr.setSelection(TextSelection.near(tr.doc.resolve(at.rowPos + other.nodeSize + offset)));
-      }
-      dispatch(tr.scrollIntoView());
+      dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(pos + offset))).scrollIntoView());
     }
     return true;
   };
@@ -557,15 +539,7 @@ interface InColumn extends InRow {
 function columnAt(state: EditorState): InColumn | null {
   const { $from } = state.selection;
   const at = rowAt($from);
-  if (!at) return null;
-  let even = true;
-  at.table.forEach((row) => {
-    even &&= row.childCount === at.row.childCount;
-    row.forEach((cell) => {
-      even &&= cell.attrs.span === 1;
-    });
-  });
-  if (!even) return null;
+  if (!at || !evenColumns(at.table)) return null;
   return { ...at, cellIndex: $from.index(at.depth), offset: $from.pos - $from.start(at.depth + 1) };
 }
 
@@ -583,13 +557,20 @@ function rebuildColumns(
   at.table.forEach((row) => rows.push(rowType.create(row.attrs, cells(row))));
   const table = tableType.create(at.table.attrs, rows);
   const tr = state.tr.replaceWith(at.tablePos, at.tablePos + at.table.nodeSize, table);
+  dispatch(cursorInCell(tr, at, cell, offset).scrollIntoView());
+}
+
+/// Mette in `tr` il cursore nella cella `cell` della riga di `at`, nella
+/// tabella che `tr` ha appena rifatto, `offset` dopo l'inizio della cella.
+function cursorInCell(tr: Transaction, at: InRow, cell: number, offset: number): Transaction {
+  const table = tr.doc.nodeAt(at.tablePos)!;
   let pos = at.tablePos + 1;
   for (let r = 0; r < at.rowIndex; r += 1) pos += table.child(r).nodeSize;
   const row = table.child(at.rowIndex);
   pos += 1;
   for (let c = 0; c < cell; c += 1) pos += row.child(c).nodeSize;
   const inside = Math.min(pos + 1 + offset, pos + row.child(cell).nodeSize - 1);
-  dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(inside))).scrollIntoView());
+  return tr.setSelection(TextSelection.near(tr.doc.resolve(inside)));
 }
 
 /// Una colonna vuota accanto a quella del cursore: ogni cella copia le
@@ -612,20 +593,17 @@ export function insertColumn(where: "before" | "after"): Command {
   };
 }
 
+/// Sposta la colonna del cursore di un posto, col cambio di tabella di tutti
+/// i gesti (`applyTableEdit`): con celle unite in larghezza non si sposta.
 export function moveColumn(delta: -1 | 1): Command {
   return (state, dispatch) => {
-    const at = columnAt(state);
-    const target = (at?.cellIndex ?? -2) + delta;
-    if (!at || target < 0 || target >= at.row.childCount) return false;
-    if (dispatch) {
-      const cells = (row: PmNode) => {
-        const out: PmNode[] = [];
-        row.forEach((cell) => out.push(cell));
-        [out[at.cellIndex], out[target]] = [out[target]!, out[at.cellIndex]!];
-        return out;
-      };
-      rebuildColumns(state, dispatch, at, cells, target, at.offset);
-    }
+    const { $from } = state.selection;
+    const at = rowAt($from);
+    if (!at) return false;
+    const cellIndex = $from.index(at.depth);
+    const tr = state.tr;
+    if (!applyTableEdit(tr, at.table, at.tablePos, { kind: "move-columns", from: cellIndex, to: cellIndex, by: delta })) return false;
+    if (dispatch) dispatch(cursorInCell(tr, at, cellIndex + delta, $from.pos - $from.start(at.depth + 1)).scrollIntoView());
     return true;
   };
 }
@@ -744,7 +722,8 @@ export const splitCell: Command = (state, dispatch) => {
 export const TABLE_MAX_COLS = 63;
 
 /// Una tabella `rows × cols` vuota, senza `k`: il formato la scrive con le sue
-/// proprietà predefinite (in Word, la griglia a tutta riga). Va dopo il blocco
+/// proprietà predefinite (in Word, la griglia a tutta riga), e i paragrafi
+/// delle celle hanno la spaziatura della griglia (`newCell`). Va dopo il blocco
 /// del cursore, o prima di un paragrafo vuoto, come in Word; un paragrafo la
 /// segue sempre, perché due tabelle accostate Word le fonde. Non dentro una
 /// tabella: le tabelle annidate non si creano qui.
@@ -758,7 +737,7 @@ export function insertTable(rows: number, cols: number): Command {
       const block = $from.node(1);
       const empty = block.type === para && block.content.size === 0;
       const pos = empty ? $from.before(1) : $from.after(1);
-      const cells = () => Array.from({ length: cols }, () => cellType.create(null, para.create()));
+      const cells = () => Array.from({ length: cols }, newCell);
       const table = tableType.create(
         null,
         Array.from({ length: rows }, () => rowType.create(null, cells())),
@@ -927,7 +906,7 @@ function updateParas(change: (node: PmNode) => Record<string, unknown> | null, a
     const edits: { pos: number; attrs: Record<string, unknown> }[] = [];
     for (const { node, pos } of selectedParas(state)) {
       const attrs = change(node);
-      if (attrs && Object.entries(attrs).some(([key, value]) => JSON.stringify(node.attrs[key]) !== JSON.stringify(value))) {
+      if (attrs && Object.entries(attrs).some(([key, value]) => !jsonEqual(node.attrs[key], value))) {
         edits.push({ pos, attrs: { ...node.attrs, ...attrs } });
       }
     }
@@ -948,8 +927,8 @@ function updateParas(change: (node: PmNode) => Record<string, unknown> | null, a
 function common<T>(state: EditorState, pick: (node: PmNode) => T): T | null {
   const paras = selectedParas(state);
   if (paras.length === 0) return null;
-  const first = JSON.stringify(pick(paras[0].node));
-  return paras.every(({ node }) => JSON.stringify(pick(node)) === first) ? pick(paras[0].node) : null;
+  const first = pick(paras[0].node);
+  return paras.every(({ node }) => jsonEqual(pick(node), first)) ? first : null;
 }
 
 /// L'allineamento comune ai paragrafi selezionati; senza, è a sinistra.

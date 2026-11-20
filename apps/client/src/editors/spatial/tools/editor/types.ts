@@ -15,10 +15,13 @@ import type { GradientView, PaintChannel } from "../gradients";
 import { ConnectorPreview } from "../connectors";
 import type { Ruler, RulerEdge } from "../ruler";
 import type { Frame, Grip } from "../frame";
-import type { Unit } from "../hit";
+import type { Erasable, Unit } from "../hit";
 import type { StrokeCut } from "../erase-precise";
 import type { ShapeTool } from "../shapes";
 import type { Recognized } from "../recognize";
+import type { DrawingPointer, DrawingTool } from "../../../../host/contract";
+import type { DrawKey } from "../../strings";
+import type { Page } from "../../painter/paint";
 
 /// Un'istanza da cui si è entrati nel suo simbolo isolato: la chiave e il
 /// posto con cui ritrovarla, come il contenitore isolato.
@@ -52,7 +55,9 @@ export type Gesture =
   | SelectGesture
   | EraseGesture
   | NoteGesture
+  | TextGesture
   | RulerGesture
+  | MotoreGesture
   | RefusedGesture;
 
 export interface GestureBase {
@@ -60,6 +65,11 @@ export interface GestureBase {
   /// tratto nuovo al limite dei campioni.
   stroke: number;
   readonly pointer: InkPointerType;
+  /// Sul foglio delle annotazioni, la pagina dove comincia un gesto che
+  /// scrive un segno: cominciato fuori non scrive niente, e i suoi punti
+  /// restano dentro (`../page-bounds.ts`). `null` nel disegno libero, e per
+  /// i gesti che non scrivono, come la gomma e la Selezione.
+  readonly page: Page | null;
 }
 
 export interface InkGesture extends GestureBase {
@@ -162,7 +172,7 @@ export interface SelectGesture extends GestureBase {
 export interface EraseGesture extends GestureBase {
   readonly kind: "erase";
   /// Il cammino della gomma e ciò che ha segnato (`ink/tools/sweep`).
-  readonly sweep: EraseSweep<Unit>;
+  readonly sweep: EraseSweep<Erasable>;
   /// Il cammino nella scena, per la gomma precisa.
   readonly path: Point[];
   /// Il raggio nella scena, dal primo punto.
@@ -172,9 +182,56 @@ export interface EraseGesture extends GestureBase {
   readonly cuts: Map<string, StrokeCut | "whole">;
 }
 
+/// Un gesto di uno strumento che passa dal motore del disegno
+/// (`motore/gesti.ts`): i campioni della penna diventano gli eventi del suo
+/// strumento, mandati a ogni fotogramma; l'esito torna come operazioni di
+/// scena, applicate in un passo al rilascio.
+export interface MotoreGesture extends GestureBase {
+  readonly kind: "motore";
+  readonly tool: DrawingTool;
+  /// Gli eventi non ancora mandati, nell'ordine in cui sono arrivati.
+  readonly pending: DrawingPointer[];
+  /// Una richiesta del gesto è partita e non ha ancora risposto.
+  inFlight: boolean;
+  /// Quanti eventi sono già partiti, in tutte le richieste.
+  sent: number;
+  /// L'ultimo punto, nella scena: il rilascio sta lì.
+  last: DrawingPointer | null;
+  /// Il fotogramma che manderà gli eventi nuovi, se ce n'è uno chiesto.
+  frame: number | null;
+  /// Il rilascio o l'annullo è arrivato: niente più anteprime.
+  ended: boolean;
+  /// L'etichetta del passo di annulla e che cosa si annuncia, scelte al
+  /// primo punto come le sceglie lo strumento di oggi: per la Selezione
+  /// dalla maniglia presa (`move`, `resize`, `rotate`) o dal vuoto
+  /// (`marquee`); `shape` per le forme.
+  intent: "shape" | "move" | "resize" | "rotate" | "marquee" | null;
+  /// L'etichetta del passo di annulla.
+  label: DrawKey;
+  /// La selezione di prima, che l'annullo rimette.
+  before: readonly string[];
+  /// Il livello dove la forma va, mandato al motore (`null`: lo sceglie lui).
+  readonly layer: string | null;
+  /// L'anteprima di adesso: la trasformazione della selezione, nella
+  /// scena, e il riquadro di selezione `[x, y, larghezza, altezza]`.
+  matrix: Matrix | null;
+  marquee: readonly [number, number, number, number] | null;
+  /// Gli oggetti che la trasformazione dell'anteprima porta, e i connettori
+  /// che li seguono, come nel gesto della Selezione.
+  units: readonly Unit[];
+  lines: ConnectorPreview | null;
+}
+
 /// Un tocco con lo strumento Nota: dove, nella scena.
 interface NoteGesture extends GestureBase {
   readonly kind: "note";
+  at: Point | null;
+}
+
+/// Un clic con lo strumento Testo senza il motore (la strada semplice): dove
+/// si è premuto, nella scena. Il testo nasce al rilascio.
+interface TextGesture extends GestureBase {
+  readonly kind: "text";
   at: Point | null;
 }
 

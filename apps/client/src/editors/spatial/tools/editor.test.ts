@@ -233,12 +233,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/// Le regole della vista dei contorni montate nel documento: un foglio
+/// costruito (`adoptedStyleSheets`), non un `<style>`, per la CSP.
+function outlineRules(): string {
+  return document.adoptedStyleSheets
+    .flatMap((sheet) => Array.from(sheet.cssRules, (rule) => rule.cssText))
+    .filter((text) => text.includes("[data-outline]"))
+    .join("\n");
+}
+
 describe("la barra e il foglio", () => {
   it("mettono in fila strumenti, colori, spessori, modifica e vista, e il titolo", () => {
     mount();
     const toolbar = host.querySelector('[role="toolbar"]')!;
     expect(toolbar.getAttribute("aria-label")).toBe("Strumenti di disegno");
-    const groups = [...toolbar.querySelectorAll(".draw-group:not([hidden])")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
+    // La barra è la testa intera; la riga delle opzioni è una fila dentro.
+    expect(toolbar.classList.contains("draw-header")).toBe(true);
+    expect(toolbar.querySelector(".draw-toolbar")!.hasAttribute("role")).toBe(false);
+    const groups = [...toolbar.querySelectorAll(".draw-toolbar .draw-group:not([hidden])")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
     expect(groups).toEqual([
       ["group", "Colore"],
       ["radiogroup", "Spessore"],
@@ -253,9 +265,10 @@ describe("la barra e il foglio", () => {
     expect(rail.getAttribute("aria-label")).toBe("Strumenti");
     expect(rail.getAttribute("aria-orientation")).toBe("vertical");
     const tools = railSlots();
-    expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Penna", "Gomma", "Rettangolo"]);
-    expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false"]);
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Penna", "Gomma", "Rettangolo", "Testo"]);
+    expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false", "false"]);
+    expect(tools[5]!.getAttribute("aria-keyshortcuts")).toBe("T");
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(tools[4]!.getAttribute("aria-keyshortcuts")).toBe("R");
     tools[4]!.focus();
     expect(document.getElementById(tools[4]!.getAttribute("aria-describedby")!)?.textContent).toMatch(/^Rettangolo \(R\) — .*Maiusc/);
@@ -270,15 +283,44 @@ describe("la barra e il foglio", () => {
     expect(surface().getAttribute("aria-label")).toBe("Foglio del disegno");
   });
 
-  it("danno alla barra un solo punto di tabulazione, e le frecce la percorrono", () => {
-    mount();
-    const buttons = [...host.querySelectorAll<HTMLButtonElement>('.draw-toolbar[role="toolbar"] button:not([hidden])')];
-    expect(buttons.filter((control) => control.tabIndex === 0)).toHaveLength(1);
-    buttons[0]!.focus();
-    key("ArrowRight", {}, buttons[0]!);
-    expect(document.activeElement).toBe(buttons[1]);
-    expect(buttons[1]!.tabIndex).toBe(0);
-    expect(buttons[0]!.tabIndex).toBe(-1);
+  it("danno alla testa un solo punto di tabulazione, e le frecce la percorrono dal menu a «Esporta»", () => {
+    mount(SOURCE, { onExport: () => {} });
+    const header = host.querySelector<HTMLElement>('.draw-header[role="toolbar"]')!;
+    const controls = (): HTMLElement[] => [...header.querySelectorAll<HTMLElement>("button, input, select")];
+    const reachable = (): HTMLElement[] =>
+      controls().filter((control) => !(control as HTMLButtonElement).disabled && control.closest("[hidden]") === null && !(control instanceof HTMLInputElement && control.type === "range"));
+    // Un solo controllo della testa sta nel Tab: il menu del disegno, il primo.
+    const stops = controls().filter((control) => control.tabIndex === 0);
+    expect(stops.map((control) => control.getAttribute("aria-label"))).toEqual(["Disegno"]);
+    const menu = stops[0]!;
+    menu.focus();
+    key("ArrowRight", {}, menu);
+    const second = reachable()[1]!;
+    expect(document.activeElement).toBe(second);
+    expect(second.tabIndex).toBe(0);
+    expect(menu.tabIndex).toBe(-1);
+    // Ai capi la fila gira: «Esporta» è l'ultimo, e da lì si torna al menu.
+    key("End", {}, second);
+    const last = document.activeElement as HTMLElement;
+    expect(last.getAttribute("aria-label")).toBe("Esporta");
+    key("ArrowRight", {}, last);
+    expect(document.activeElement).toBe(menu);
+    key("ArrowLeft", {}, menu);
+    expect(document.activeElement).toBe(last);
+    key("Home", {}, last);
+    expect(document.activeElement).toBe(menu);
+    expect(controls().filter((control) => control.tabIndex === 0)).toEqual([menu]);
+  });
+
+  it("vestono la testa del kit: il vassoio, i foglietti e i pulsanti", () => {
+    mount(SOURCE, { onExport: () => {} });
+    const header = host.querySelector<HTMLElement>(".draw-header")!;
+    expect(header.classList.contains("kit-bar")).toBe(true);
+    for (const group of header.querySelectorAll(".draw-group")) expect(group.classList.contains("kit-bar-group"), group.getAttribute("aria-label") ?? group.className).toBe(true);
+    for (const control of header.querySelectorAll(".draw-button")) expect(control.classList.contains("kit-bar-button"), control.getAttribute("aria-label") ?? "").toBe(true);
+    // La colonna e la barra della selezione hanno la loro pelle.
+    for (const control of host.querySelectorAll(".draw-rail .draw-button, .draw-arrange .draw-button")) expect(control.classList.contains("kit-bar-button")).toBe(false);
+    expect(host.querySelector(".draw-rail .draw-group")!.classList.contains("kit-bar-group")).toBe(false);
   });
 
   it("hanno in alto il menu del disegno, Annulla e Ripeti", () => {
@@ -349,6 +391,19 @@ describe("gli strumenti", () => {
     expect(editor.engine.text).toMatch(/<ellipse id="o[a-z0-9]{8}" cx="30" cy="20" rx="20" ry="10" fill="none" stroke="#0072b2" stroke-width="8"\/>/);
   });
 
+  it("nel disegno si disegna anche fuori dalla pagina, che si allarga: il limite è solo delle annotazioni di un PDF", () => {
+    // La pagina è 100 × 100: il rettangolo comincia fuori e ci resta.
+    mount();
+    editor.setTool("rect");
+    drag([[150, 150], [200, 180], [250, 200]]);
+    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="150" y="150" width="100" height="50"/);
+    editor.setTool("pen");
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
+    expect(surface().hasAttribute("data-off-page")).toBe(false);
+    drag([[300, 300], [340, 300], [380, 310]]);
+    expect(changes).toHaveLength(2);
+  });
+
   it("un tocco con una forma non scrive niente", () => {
     mount();
     editor.setTool("line");
@@ -390,6 +445,82 @@ describe("gli strumenti", () => {
     drag([[50, 70], [56, 70], [64, 70]]);
     expect(editor.engine.text).not.toContain("o1a2b3c4d");
     expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 0 oggetti.");
+  });
+
+  it("la gomma su un oggetto di un gruppo estraneo toglie lui solo, non il gruppo coi suoi vicini", () => {
+    // Come un livello di Inkscape: un `<g>` della radice senza `fub:layer`,
+    // con dentro tutto il disegno, un collegamento e un figlio bloccato.
+    const source = doc(
+      '<g id="strade"><rect id="a" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/>'
+        + '<rect id="b" x="200" y="200" width="20" height="20"/>'
+        + '<a href="parco.md" id="link"><rect id="c" x="300" y="60" width="20" height="20"/></a>'
+        + '<rect id="fermo" x="60" y="60" width="20" height="20" fub:locked="true"/></g>',
+    );
+    mount(source);
+    const before = editor.engine.text;
+    editor.setTool("eraser");
+    drag([[50, 70], [56, 70], [64, 70]]);
+    const after = editor.engine.text;
+    expect(after).not.toContain('id="a"');
+    for (const kept of ['id="strade"', 'id="b"', 'id="link"', 'id="c"', 'id="fermo"']) expect(after).toContain(kept);
+    expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 1 oggetto.");
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("la gomma che passa su tutti i figli di un gruppo toglie il gruppo, senza lasciarne il guscio", () => {
+    mount(doc('<g id="coppia"><rect id="su" x="60" y="60" width="20" height="20"/><rect id="giu" x="60" y="90" width="20" height="20"/></g>'));
+    editor.setTool("eraser");
+    drag([[70, 50], [70, 120]]);
+    expect(editor.engine.text).not.toContain('id="coppia"');
+    expect(editor.engine.text).not.toContain('id="su"');
+    expect(editor.engine.text).not.toContain('id="giu"');
+  });
+
+  it("la gomma su un collegamento dentro un gruppo lo toglie intero, e il gruppo resta", () => {
+    mount(doc(
+      '<g id="altro"><a href="parco.md" id="link"><rect id="c" x="60" y="60" width="20" height="20"/></a>'
+        + '<rect id="d" x="10" y="10" width="20" height="10"/></g>',
+    ));
+    editor.setTool("eraser");
+    drag([[50, 70], [56, 70], [64, 70]]);
+    // Niente `<a>` vuoto: se ne va col suo unico figlio.
+    expect(editor.engine.text).not.toContain('id="link"');
+    expect(editor.engine.text).not.toContain("<a ");
+    expect(editor.engine.text).toContain('id="altro"');
+    expect(editor.engine.text).toContain('id="d"');
+  });
+
+  it("la gomma toglie intero un testo di un altro programma che attraversa, e lascia i vicini (IMP-038)", () => {
+    // Come la «Mappa del quartiere» adottata: un livello di Inkscape con un
+    // collegamento `mailto:` e un testo senza righe, che il formato dei
+    // disegni non sa riscrivere e lascia estranei.
+    const source = doc(
+      '<g id="strade"><a href="mailto:comune@example.org"><text x="60" y="200">Scrivi al comune</text></a>'
+        + '<text x="60" y="300">Resto</text>'
+        + '<rect id="b" x="60" y="60" width="20" height="20"/></g>',
+    );
+    mount(source);
+    const before = editor.engine.text;
+    editor.setTool("eraser");
+    drag([[50, 194], [80, 194], [120, 194]]);
+    const after = editor.engine.text;
+    expect(after).not.toContain("Scrivi al comune");
+    expect(after).not.toContain("mailto:");
+    for (const kept of ['id="strade"', ">Resto</text>", 'id="b"']) expect(after).toContain(kept);
+    expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 1 oggetto.");
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("la gomma precisa toglie intero un testo di un altro programma in un livello", () => {
+    mount(doc(`<title>Prova</title>${LAYER}<text x="60" y="200">Via Roma</text><rect id="b" x="60" y="60" width="20" height="20"/></g>`), {
+      grid: { ...DEFAULT_GRID, eraser: "precise" },
+    });
+    editor.setTool("eraser");
+    drag([[50, 194], [80, 194], [120, 194]]);
+    expect(editor.engine.text).not.toContain("Via Roma");
+    expect(editor.engine.text).toContain('id="b"');
   });
 
   it("la gomma ferma mentre la rotella sposta la vista non cancella ciò che non ha toccato", () => {
@@ -508,7 +639,7 @@ describe("l'evidenziatore e il colore", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setWorkspace("full");
     expect(editor.workspace).toBe("full");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(free()).toBe(true);
     expect(railTool("Evidenziatore").title).toBe("Evidenziatore (Shift+P)");
     // Lo strumento, il documento, la selezione e la cronologia restano.
@@ -783,10 +914,10 @@ describe("disporre, nel Completo", () => {
     named("Ordine").click();
     expect(named("Ordine").getAttribute("aria-expanded")).toBe("true");
     expect(menu().map((entry) => [entry.querySelector(".menu-label")!.textContent, entry.querySelector(".menu-hint")!.textContent, entry.getAttribute("aria-disabled")])).toEqual([
-      ["Porta in primo piano", "Ctrl+Shift+]", "true"],
-      ["Porta avanti", "Ctrl+]", "true"],
-      ["Porta indietro", "Ctrl+[", null],
-      ["Porta in secondo piano", "Ctrl+Shift+[", null],
+      ["Porta in primo piano", "Ctrl Maiusc ]", "true"],
+      ["Porta avanti", "Ctrl ]", "true"],
+      ["Porta indietro", "Ctrl [", null],
+      ["Porta in secondo piano", "Ctrl Maiusc [", null],
     ]);
     item("Porta in secondo piano").click();
     expect(order()).toEqual([C, A, B]);
@@ -941,11 +1072,11 @@ describe("disporre, nel Completo", () => {
     editor.select([A, B]);
     key("g", { ctrlKey: true });
     expect(editor.engine.text).toBe(source);
-    expect(spoken()).toBe("Non raggruppato: un elemento cambierebbe «fill», e FubDraw non sa riscriverlo com’era.");
+    expect(spoken()).toBe("Non raggruppato: un elemento cambierebbe «fill», e Fub non sa riscriverlo com’era.");
     editor.select([A]);
     key("]", { ctrlKey: true, shiftKey: true });
     expect(editor.engine.text).toBe(source);
-    expect(spoken()).toBe("Ordine invariato: un elemento cambierebbe «stroke», e FubDraw non sa riscriverlo com’era.");
+    expect(spoken()).toBe("Ordine invariato: un elemento cambierebbe «stroke», e Fub non sa riscriverlo com’era.");
   });
 
   it("un foglio di stile che dipende da dove si guarda il disegno ferma il comando, e si dice quale", () => {
@@ -3223,7 +3354,7 @@ describe("spostare dall'albero, nel Completo", () => {
     inTree("End");
     expect(activeKey()).toBe("oe5e5e5e5");
     inTree("ArrowUp", { altKey: true });
-    expect(spoken()).toBe("Lì non va: un elemento cambierebbe «fill», e FubDraw non sa riscriverlo com’era.");
+    expect(spoken()).toBe("Lì non va: un elemento cambierebbe «fill», e Fub non sa riscriverlo com’era.");
     expect(editor.engine.text).toBe(source);
   });
 
@@ -3630,7 +3761,7 @@ describe("la selezione avanzata, nel Completo", () => {
     expect(document.querySelector("#context-menu .menu-clipboard")).toBeNull();
     expect(menu().map(labelOf)).toEqual(["Incolla", "Incolla nello stesso punto", "Seleziona tutto", "Mostra tutto il disegno", "Menu radiale"]);
     expect(menu().every((entry) => entry.getAttribute("aria-disabled") === null)).toBe(true);
-    expect(document.querySelector("#context-menu .menu-foot")!.textContent).toContain("Scrivi per cercare");
+    expect(document.querySelector("#context-menu .menu-foot")!.textContent).toContain("Scrivi per trovare altro");
     item("Seleziona tutto").click();
     expect(editor.selection).toEqual([A, B, G]);
     // Il resto si trova scrivendo.
@@ -4908,13 +5039,13 @@ describe("la Mano e la Lente", () => {
     surface().focus();
     expect(key("y", { ctrlKey: true }).defaultPrevented).toBe(true);
     expect(painted.hasAttribute("data-outline")).toBe(true);
-    expect(painted.querySelector("style")!.textContent).toContain("fill:none!important");
+    expect(outlineRules()).toMatch(/fill:\s*none\s*!important/);
     expect(spoken()).toBe("Vista dei contorni: Ctrl+Y torna al disegno pieno.");
     expect(band()).toContain("outline");
     // Dalla banda si torna al disegno pieno.
     editor.status.items().find((item) => item.id === "outline")!.open!();
     expect(painted.hasAttribute("data-outline")).toBe(false);
-    expect(painted.querySelector("style")).toBeNull();
+    expect(outlineRules()).toBe("");
     expect(band()).not.toContain("outline");
     key("y", { ctrlKey: true });
     key("y", { ctrlKey: true });
@@ -6671,7 +6802,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     mount(SOURCE, { workspace: "simple", onWorkspace });
     expect(host.querySelector<HTMLElement>(".draw-editor")!.dataset.workspace).toBe("simple");
     expect(rail().dataset.size).toBe("large");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(fullButton().hidden).toBe(false);
 
     fullButton().click();

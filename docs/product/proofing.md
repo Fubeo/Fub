@@ -21,6 +21,11 @@ Una correzione si offre soltanto quando la parola sta tutta in un tratto di
 testo semplice: un segno che attraversa il markup (`**`, `_`) si mostra ma non
 si corregge. In sola lettura le correzioni non ci sono.
 
+Una voce d'elenco (puntata, numerata o di attività) è spesso un frammento:
+la sua prima parola può cominciare in minuscolo («- primo punto») senza il
+segno «Maiuscola a inizio frase». Un paragrafo normale, o una citazione dentro
+una voce, la chiede come prima.
+
 Nei documenti di videoscrittura il correttore segna allo stesso modo il testo
 di ogni paragrafo, anche nelle celle; immagini, campi e note contano come
 separatori.
@@ -45,6 +50,12 @@ maiuscolo o con cifre.
 L'indonesiano non è fra le scelte dell'impostazione, ma una nota o un
 documento che lo dichiara (`lang: id`) si corregge come le altre lingue, con
 il dizionario `id_ID`.
+
+Quando sulla macchina manca il dizionario della lingua, il correttore lo dice
+una volta sola finché Fub è aperto, con un avviso nel centro notifiche che
+nomina la lingua e il dizionario (`it_IT`): senza, una bozza piena di refusi
+sembrerebbe corretta. Un dizionario installato con Fub aperto si legge dopo un
+riavvio.
 
 Il correttore è il plugin ufficiale `fub.proof` («Proofing»). Spento dal
 pannello dei componenti, la nota si scrive come prima e non ha segni. Il

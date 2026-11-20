@@ -21,9 +21,15 @@ import type {
   Align,
   Axis,
   CommandReach,
+  ComponentKind,
   CommandSurface,
   ContextKind,
   DocChange,
+  DrawingLossKind,
+  DrawingPhase,
+  DrawingPointerKind,
+  DrawingRefusal,
+  DrawingTool,
   EntryKind,
   Excerpts,
   Gate,
@@ -54,6 +60,7 @@ import type {
   TextScope,
   TextTolerance,
   ThemeEngine,
+  ThemeFontStyle,
   ThemeLight,
   ThemeMotion,
   ViewSurface,
@@ -63,7 +70,22 @@ import type {
 // Manifest congelato della pelle: non passa dal WIT, ma resta parte del confine.
 export const THEME_ENGINE = "theme-1" as const;
 
-export type { ThemeEngine, ThemeLight, ThemeMotion } from "./enums.generated";
+export type { ThemeEngine, ThemeFontStyle, ThemeLight, ThemeMotion } from "./enums.generated";
+
+/**
+ * Un carattere che un tema porta (da `theme-2`). Il CSS del tema non scrive
+ * `@font-face`: la regola la scrive il loader, coi valori di qui e l'URL
+ * `data:` del file, e la pelle usa la famiglia per nome.
+ */
+export interface ThemeFont {
+  /** Lettere e cifre ASCII, `-` e spazi singoli; al massimo 64; non di serie. */
+  family: string;
+  /** `fonts/<nome>.woff2`, cioè l'asset `theme://<id>/fonts/<nome>.woff2`. */
+  file: string;
+  /** Da 100 a 900. */
+  weight: number;
+  style: ThemeFontStyle;
+}
 
 /**
  * Un'impostazione che un tema dichiara per sé (da `theme-2`). L'host la
@@ -90,6 +112,19 @@ export interface ThemeManifest {
   motion: ThemeMotion[];
   /** Assente quando il tema non ne dichiara. */
   settings?: ThemeSetting[];
+  /**
+   * Il tema da cui questo parte, da `theme-2`: oggi solo la serie
+   * (`fub.serie`). Assente quando il tema porta tutto da sé.
+   */
+  extends?: string;
+  /** I caratteri del tema, da `theme-2`. Assente quando non ne porta. */
+  fonts?: ThemeFont[];
+  /**
+   * Il set di icone del tema, da `theme-2`: il nome di un asset JSON accanto
+   * al manifest (`icons.json`), `{ "<nome>": ["<d>", …] }`. Assente quando non
+   * ne porta.
+   */
+  icons?: string;
 }
 
 /** Un tema installato che il backend può consegnare alla shell. */
@@ -103,10 +138,178 @@ export interface ThemeInfo {
 export interface ThemePayload {
   manifest: ThemeManifest;
   light: ThemeLight;
-  sheet: string;
+  /**
+   * `null` solo per un tema con `extends` che non porta il foglio di questa
+   * luce: vale quello di serie, della stessa luce e dello stesso contrasto.
+   */
+  sheet: string | null;
   skin: string | null;
   assets: Record<string, readonly number[]>;
 }
+
+/**
+ * Perché la cartella scelta non è un tema che Fub installa
+ * (`fub_host::theme::ThemeFolderRefusal`), coi campi per dirlo. La shell lo
+ * dice con le sue parole; `malformed.detail` è il motivo dell'host così com'è.
+ */
+export type ThemeFolderRefusal =
+  | { reason: "not_a_theme" }
+  | { reason: "engine"; declared: string }
+  | { reason: "permissions" }
+  | { reason: "invalid_id"; id: string }
+  | { reason: "series" }
+  | { reason: "traversal"; path: string }
+  | { reason: "catalog_state"; file: string }
+  | { reason: "malformed"; detail: string };
+
+/**
+ * Il fascio di una luce della cartella, come lo chiede il cancello della shell
+ * (`fub_host::theme::ThemeFolderLight`): i byte solo degli asset che il
+ * cancello legge (i caratteri, il set di icone), gli altri asset per nome.
+ */
+export interface ThemeFolderLight {
+  light: ThemeLight;
+  sheet: string | null;
+  named: string[];
+}
+
+/**
+ * La cartella di un tema scelta nella finestra nativa e letta senza
+ * installarla (`check_theme_folder`, `fub_host::theme::ThemeFolderCheck`).
+ * La webview non dà il path: lo sceglie la persona, e l'host tiene la
+ * cartella controllata.
+ *
+ * - `cancelled`: la finestra di scelta è stata chiusa;
+ * - `ready`: passa le porte dell'host; il manifest, il fascio di ogni luce
+ *   dichiarata e l'impronta che l'installazione chiede di nuovo. `folder` è
+ *   il path scelto, da mostrare;
+ * - `refused`: la cartella non è un tema installabile, e perché.
+ */
+export type ThemeFolderCheck =
+  | { outcome: "cancelled" }
+  | {
+      outcome: "ready";
+      folder: string;
+      manifest: ThemeManifest;
+      skin: string | null;
+      assets: Record<string, readonly number[]>;
+      lights: ThemeFolderLight[];
+      digest: string;
+    }
+  | { outcome: "refused"; folder: string; refusal: ThemeFolderRefusal };
+
+/**
+ * Perché il disco non ha lasciato scrivere un tema (`fub_host::theme::DiskCause`):
+ * pieno (o la quota finita), negato (i permessi, un disco in sola lettura), un
+ * altro guasto.
+ */
+export type DiskCause = "full" | "denied" | "other";
+
+/**
+ * Perché un'installazione da cartella non tocca ciò che c'è già nella cartella
+ * dei temi di Fub (`fub_host::theme::ThemeBlock`): il tema installato con lo
+ * stesso id ha il file della versione del catalogo che non si legge
+ * (`pointer`: potrebbe dire «ritirato»), al suo posto o al posto della
+ * cartella dei temi c'è un collegamento (`link`), o non è una cartella che Fub
+ * sa usare (`layout`).
+ */
+export type ThemeBlock = "pointer" | "link" | "layout";
+
+/**
+ * Da quale parte un'installazione da cartella non è riuscita a leggere
+ * (`fub_host::theme::ThemeSide`): la cartella scelta o la cartella dei temi
+ * di Fub.
+ */
+export type ThemeSide = "folder" | "themes";
+
+/**
+ * Com'è andata un'installazione da cartella (`install_theme_from_folder`,
+ * `fub_host::theme::ThemeFolderInstall`). Ogni fermata è un esito; un
+ * `PluginError` resta solo per la modalità sviluppatore spenta
+ * (`permission_denied`) e la configurazione che manca (`unserved`).
+ *
+ * - `installed`: il tema è installato; `replaced` se ha preso il posto di uno
+ *   con lo stesso id;
+ * - `collision`: un tema con lo stesso id c'è già e niente è stato toccato; la
+ *   cartella nuova è già controllata. `installed_version` è `null` quando
+ *   quello installato non si legge più;
+ * - `revoked`: il tema installato con lo stesso id è revocato dal catalogo, e
+ *   una cartella non lo sostituisce; niente è stato toccato;
+ * - `blocked`: ciò che c'è nella cartella dei temi di Fub non si tocca (`why`),
+ *   e `path` è dove, da mostrare; `installed` se è il tema già installato con
+ *   lo stesso id (che resta com'era), no se è la cartella dei temi; niente è
+ *   stato toccato;
+ * - `unreadable`: una lettura non è riuscita (`side`: la cartella scelta, con
+ *   i byte del controllo, o la cartella dei temi); niente è scritto, e non è
+ *   un guasto di scrittura. `error` è il guasto così com'è, mai da mostrare;
+ * - `replace_failed`: il nuovo si è fermato e il vecchio non è riuscito a
+ *   tornare al suo nome. `kept` è il nome della cartella, dentro la cartella
+ *   dei temi, dove il vecchio è rimasto: la shell lo dice con le sue parole.
+ *   `error` è il guasto del disco così com'è, per «Copia la diagnosi» e il
+ *   log, mai da mostrare; la cartella sorgente resta dov'è;
+ * - `refused`: le porte dell'installazione hanno rifiutato i byte controllati,
+ *   come un rifiuto del controllo; niente è scritto;
+ * - `changed`: la cartella non ha più i byte del controllo; niente è scritto;
+ * - `unchecked`: non c'è un controllo con questa impronta (uno più recente ha
+ *   preso il suo posto, o è già stato usato o scartato); niente è scritto;
+ * - `failed`: il disco non ha lasciato scrivere e niente è cambiato (con
+ *   `replace`, quello installato è com'era). `cause` è il perché da dire;
+ *   `error` è il guasto così com'è, mai da mostrare.
+ */
+export type ThemeFolderInstall =
+  | { outcome: "installed"; id: string; name: string; version: string; replaced: boolean }
+  | {
+      outcome: "collision";
+      id: string;
+      name: string;
+      version: string;
+      installed_version: string | null;
+    }
+  | { outcome: "revoked"; id: string; name: string; version: string }
+  | { outcome: "blocked"; why: ThemeBlock; path: string; installed: boolean }
+  | { outcome: "unreadable"; side: ThemeSide; error: PluginError }
+  | { outcome: "replace_failed"; id: string; name: string; version: string; kept: string; error: PluginError }
+  | { outcome: "refused"; refusal: ThemeFolderRefusal }
+  | { outcome: "changed" }
+  | { outcome: "unchecked" }
+  | { outcome: "failed"; cause: DiskCause; error: PluginError };
+
+/**
+ * Che cosa è adesso la cartella del tema collegato
+ * (`fub_host::theme::ThemeLinkState`):
+ * - `ready`: passa le porte, e compare fra i temi in sviluppo;
+ * - `missing`: la cartella non c'è più;
+ * - `refused`: non è un tema che Fub legge, coi rifiuti dell'installazione;
+ * - `collision`: un tema installato ha lo stesso id;
+ * - `unreadable`: il disco non la legge. `error` non si mostra.
+ */
+export type ThemeLinkState =
+  | { state: "ready" }
+  | { state: "missing" }
+  | { state: "refused"; refusal: ThemeFolderRefusal }
+  | { state: "collision" }
+  | { state: "unreadable"; error: PluginError };
+
+/**
+ * Il tema collegato com'è adesso (`fub_host::theme::ThemeLink`): la cartella
+ * (da mostrare), l'id e il nome dell'ultimo manifest letto, lo stato e, nel
+ * campanello `fub://theme-changed`, i file salvati relativi alla cartella.
+ * `watched` dice se un osservatore vivo guarda la cartella: `false` vuol dire
+ * che i salvataggi non arrivano.
+ */
+export type ThemeLink = {
+  folder: string;
+  id: string | null;
+  name: string | null;
+  changed: string[];
+  watched: boolean;
+} & ThemeLinkState;
+
+/** Com'è andato «Collega una cartella…» (`fub_host::theme::ThemeFolderLink`). */
+export type ThemeFolderLink =
+  | { outcome: "cancelled" }
+  | { outcome: "linked"; link: ThemeLink }
+  | { outcome: "refused"; link: ThemeLink };
 
 export interface VaultInfo {
   root: string;
@@ -220,6 +423,9 @@ export interface VersionRef {
   // con l'aritmetica.
   hash: string;
   size: number;
+  // Perché la versione è stata conservata a mano (`version.keep`): c'è solo
+  // sui testi messi in salvo, mai sulle fotografie del disco.
+  note?: string;
 }
 
 export interface BacklinkRef {
@@ -442,6 +648,10 @@ export type ViewUpdate =
 
 // Evento del kernel (rispecchia fub_abi::event::Event).
 export type KernelEvent =
+  // Esce anche dopo un **rimontaggio** (spegnere o riaccendere la lavagna dalla
+  // pagina «Componenti», dalla CLI o da MCP): dopo il `vault_closed` dello
+  // stesso `root`, il vault è di nuovo aperto, con i formati di adesso, e la
+  // shell rilegge ciò che ne dipende (`components_map` compresa).
   | { type: "vault_opened"; root: string }
   // `changes` dice COSA è cambiato (§22.2, decisione 0069). Assente/null =
   // NON LO SO — l'evento non viene dalla coda di una scrittura del kernel — e
@@ -587,10 +797,14 @@ export interface Origin {
 }
 
 // Ciò che il ponte Tauri consegna davvero: l'evento E la sua origine
-// (fub_abi::event::Notice, decisione 0012).
+// (fub_abi::event::Notice, decisione 0012), più il vault di cui è il fatto
+// (fub_host::ShellNotice, #216). `vault` è la radice canonica, la stessa di
+// `VaultInfo.root`; manca per un fatto della macchina (una chiave di
+// configurazione, un avviso tirato con `session_notice`).
 export interface KernelNotice {
   event: KernelEvent;
   origin: Origin;
+  vault?: string;
 }
 
 // La dichiarazione di una view offerta da un provider (rispecchia
@@ -948,6 +1162,29 @@ export interface ResourceDescriptor {
   mime: string;
   kind: ResourceKind;
   revision: string | null;
+}
+
+/**
+ * La ricevuta di `resource_write`; rispecchia
+ * `fub_host::resources::ResourceWriteReceipt`. `reused` vero: il vault aveva
+ * già questi byte (`reuse: "same-content"`), niente è stato scritto, e `id` e
+ * `revision` sono quelli del file che c'era. Una ricevuta senza il campo (un
+ * host di prima) arriva a chi chiama con `reused: false`.
+ */
+export interface ResourceWriteReceipt {
+  readonly id: string;
+  readonly revision: string;
+  readonly reused: boolean;
+}
+
+/**
+ * Come depositare: `reuse: "same-content"` chiede all'host di non scrivere se
+ * un file del vault ha esattamente questi byte, anche con un altro nome. Vale
+ * solo per un file nuovo (`expected` nullo: altrimenti `bad_args`). Quando
+ * l'host non sa rispondere, scrive: nel dubbio si deposita.
+ */
+export interface ResourceWriteOptions {
+  readonly reuse?: "same-content";
 }
 
 /** IPC della sola finestra documento locale. Il vault è fissato dal parent. */
@@ -1609,6 +1846,173 @@ export interface GridBytesWindow {
   tables: GridTable[];
   /** Gli oggetti che toccano la finestra, anche quelli ancorati fuori. */
   objects: GridObject[];
+}
+
+// ---------------------------------------------------------------------------
+// Il disegno sul motore (rispecchia `fub_abi::drawing`, K5)
+// ---------------------------------------------------------------------------
+//
+// Il client resta lo scrittore del file: il motore del disegno tiene una copia
+// che segue il testo della `DocumentSession` (`DrawingSync`), ci fa girare i
+// suoi strumenti con i campioni della penna (`DrawingGesture`) e risponde con
+// le operazioni di scena da applicare in un passo di annullamento
+// (`DrawingOutcome.ops`). Le revisioni sono `u64` e viaggiano come stringhe.
+// Le portano i sei comandi del disegno (`docs/reference/drawing-ipc.md`).
+
+/** Il testo di un disegno, al più (`fub_scene::MAX_EDIT_BYTES`). */
+export const MAX_DRAWING_TEXT_BYTES = 20 * 1024 * 1024;
+/** Gli eventi di una sola richiesta di gesto, al più. */
+export const MAX_GESTURE_EVENTS = 100_000;
+/** Le operazioni di un esito, e gli id di una selezione, al più (`MAX_BATCH`). */
+export const MAX_DRAWING_OPS = 10_000;
+/** Il JSON delle operazioni di un esito, al più (`MAX_OP_BYTES`). */
+export const MAX_DRAWING_OPS_BYTES = 8 * 1024 * 1024;
+/** Le parti che il motore non sa modificare, elencate al più. */
+export const MAX_DRAWING_LOSSES = 50_000;
+/** Un colore dello stile, al più. */
+export const MAX_DRAWING_COLOR_BYTES = 64;
+
+/** Colore del tratto: `value` è il colore. */
+export const DRAWING_COMMAND_STROKE_COLOR = "disegno.colore-tratto";
+/** Colore del riempimento: `value` è il colore, o `null` per nessuno. */
+export const DRAWING_COMMAND_FILL_COLOR = "disegno.colore-riempimento";
+/** Spessore del tratto: `value` è un numero, zero o più. */
+export const DRAWING_COMMAND_WIDTH = "disegno.spessore";
+
+// Che specie di parte resta com'è; la fase, lo strumento e la specie di un
+// evento del gesto; perché un gesto non ha fatto niente (`locked` e `hidden`
+// sono il livello bloccato o nascosto, come negli strumenti di oggi).
+export type {
+  DrawingLossKind,
+  DrawingPhase,
+  DrawingPointerKind,
+  DrawingRefusal,
+  DrawingTool,
+} from "./enums.generated";
+
+/** Una parte del disegno che il motore non sa modificare. */
+export interface DrawingLoss {
+  /** L'id dell'elemento, o il suo percorso se non ne ha uno. */
+  element: string;
+  kind: DrawingLossKind;
+  detail: string;
+}
+
+/** Il disegno aperto nel motore. */
+export interface DrawingOpen {
+  instance: string;
+  revision: string;
+  mapped: number;
+  unmapped: number;
+  losses: DrawingLoss[];
+}
+
+/** Un intervallo sostituito, in unità UTF-16 sul testo LF (come `TextEdit`). */
+export interface DrawingEdit {
+  from: number;
+  to: number;
+  deleted: string;
+  inserted: string;
+}
+
+/** La differenza dal testo della copia, o il testo intero. */
+export type DrawingChange =
+  | { kind: "edits"; value: { edits: DrawingEdit[]; length_before: number; length_after: number } }
+  | { kind: "text"; value: { text: string } };
+
+export interface DrawingSync {
+  revision: string;
+  change: DrawingChange;
+}
+
+export interface DrawingSynced {
+  revision: string;
+}
+
+/** Un campione della penna, in coordinate di scena. */
+export interface DrawingPointer {
+  kind: DrawingPointerKind;
+  x: number;
+  y: number;
+  /** Da 0 a 1; 0 al rilascio. */
+  pressure: number;
+  shift: boolean;
+  alt: boolean;
+  /** Ctrl su Windows e Linux, ⌘ su macOS. */
+  cmd: boolean;
+}
+
+/** La griglia magnetica: `grid` è il passo (`null` se spenta), `free` Ctrl/⌘ tenuto. */
+export interface DrawingSnap {
+  grid: number | null;
+  free: boolean;
+}
+
+export interface DrawingStyle {
+  stroke: string;
+  width: number;
+  fill: string | null;
+}
+
+/** Una richiesta di gesto: gli eventi nuovi dall'ultima dello stesso gesto. */
+export interface DrawingGesture {
+  revision: string;
+  phase: DrawingPhase;
+  tool: DrawingTool;
+  layer: string | null;
+  selection: string[];
+  zoom: number;
+  snap: DrawingSnap;
+  style: DrawingStyle | null;
+  /** La riga del testo nuovo, solo per `text`. */
+  text: string | null;
+  /** La cornice che il client tiene per più oggetti scelti; `null` se non ne
+   *  tiene una. Il Rust la legge anche assente (`#[serde(default)]`). */
+  frame: DrawingFrame | null;
+  events: DrawingPointer[];
+}
+
+/** La cornice di trasformazione che il client tiene (`Frame` di
+ *  `tools/frame.ts`): la matrice dalle sue coordinate alla scena
+ *  `[a, b, c, d, e, f]`, il riquadro col contorno e quello della geometria
+ *  `[x0, y0, x1, y1]` nelle sue coordinate. */
+export interface DrawingFrame {
+  matrix: [number, number, number, number, number, number];
+  bounds: [number, number, number, number];
+  geometry: [number, number, number, number];
+}
+
+/** L'anteprima del gesto: la forma nuova (un `Elem` della scena), la matrice
+ *  della selezione `[a, b, c, d, e, f]`, il riquadro `[x, y, larghezza, altezza]`. */
+export interface DrawingPreview {
+  shape: unknown | null;
+  matrix: [number, number, number, number, number, number] | null;
+  marquee: [number, number, number, number] | null;
+}
+
+export interface DrawingOutcome {
+  revision: string;
+  preview: DrawingPreview | null;
+  /** Il JSON di un array di operazioni di scena, per `parseWireOp`. */
+  ops: string | null;
+  selection: string[];
+  losses: DrawingLoss[];
+  refused: DrawingRefusal | null;
+  /** La cornice che il client tiene per la selezione dopo, com'è diventata
+   *  (la forma di `DrawingGesture.frame`); `null`: nessuna. */
+  frame: DrawingFrame | null;
+}
+
+export interface DrawingCommandInfo {
+  id: string;
+  enabled: boolean;
+}
+
+export interface DrawingCommandRequest {
+  revision: string;
+  id: string;
+  selection: string[];
+  value: unknown;
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).
@@ -2319,6 +2723,141 @@ export interface InstalledPluginInfo extends BundleInfo {
   revocation?: CatalogProvenance;
 }
 
+// --- la pagina «Componenti» (A7) -------------------------------------------
+//
+// Rispecchiano `fub_app_lib::{ComponentsMap, ComponentRow, ComponentProfile,
+// ComponentsApplied}` e i tipi di `fub_host::componenti` che ci stanno dentro.
+// I nomi Rust sono italiani (`Azione`, `Rifiuto`, `Esito`…); qui portano il
+// prefisso `Component` perché nel contratto TS stanno accanto a tutto il resto.
+
+export type { ComponentKind } from "./enums.generated";
+
+// Che cosa fare di ciò che dopo uno spegnimento non serve più a nessuno.
+// `chiedi` = nessuna risposta: restano accesi, in attesa.
+export type ComponentOrphans = "chiedi" | "togli" | "tieni";
+
+// Una scelta di chi usa l'app. I campi con un default in Rust possono mancare.
+export type ComponentAction =
+  | { azione: "accendi"; id: string }
+  | { azione: "spegni"; id: string; anche_questi?: boolean; orfani?: ComponentOrphans }
+  | { azione: "rispondi"; orfani: ComponentOrphans; ids?: string[] }
+  | { azione: "profilo"; nome: string };
+
+// Perché un componente è acceso, o che non lo è: la forma di default di serde
+// (`fub_componenti::Perche`), una stringa o `{ RichiestoDa: [...] }`.
+export type ComponentWhy =
+  | "Nucleo"
+  | "Scelto"
+  | { RichiestoDa: string[] }
+  | "InAttesa"
+  | "Spento"
+  | "Sconosciuto";
+
+// Lo stato che il vault ricorda: i componenti scelti e quelli in attesa.
+export interface ComponentState {
+  scelti: string[];
+  in_attesa: string[];
+}
+
+// Un id che una chiave `components.*` nomina e che non conta.
+export interface ComponentMissing {
+  chiave: string;
+  id: string;
+}
+
+// Una riga della pagina: `nome` e `descrizione` sono già nella lingua del vault
+// (l'id e la stringa vuota se il catalogo non li ha: mai una chiave), `gruppo`
+// è l'id di un `ComponentGroup` (`altro` se la riga non ne dice uno), `ui` le
+// cartelle del client che carica (`editors/media`), `richiede` i requisiti
+// diretti già risolti in id, `usa` gli «usa se c'è» che in questa build sono
+// righe.
+export interface ComponentRow {
+  id: string;
+  nome: string;
+  gruppo: string;
+  bundle: boolean;
+  acceso: boolean;
+  perche: ComponentWhy;
+  richiesto_da: string[];
+  descrizione: string;
+  tipo: ComponentKind;
+  ui: string[];
+  richiede: string[];
+  usa: string[];
+}
+
+// Un gruppo della pagina, con il nome nella lingua del vault.
+export interface ComponentGroup {
+  id: string;
+  nome: string;
+}
+
+// Un profilo: `etichetta` è il nome da mostrare, nella lingua del vault;
+// `piu_avanti` se aspetta componenti che non ci sono ancora (`arriva_con`), e
+// allora non si applica.
+export interface ComponentProfile {
+  nome: string;
+  etichetta: string;
+  componenti: string[];
+  arriva_con: string[];
+  piu_avanti: boolean;
+}
+
+// Ciò che `components_map` risponde. `profilo` null = personalizzato.
+// `gruppi` sono quelli che hanno righe, nell'ordine in cui si disegnano.
+export interface ComponentsMap {
+  gruppi: ComponentGroup[];
+  righe: ComponentRow[];
+  stato: ComponentState;
+  profilo: string | null;
+  profili: ComponentProfile[];
+  mancanti: ComponentMissing[];
+}
+
+// Che cosa una scelta cambia oltre al componente nominato. `accesi_anche` è
+// «Attivati anche …: … non funziona senza»; `mancanti` è `[chi, id]`.
+export interface ComponentEffect {
+  accesi_anche: string[];
+  spenti_anche: string[];
+  orfani: string[];
+  mancanti: [string, string][];
+}
+
+// Una riga che cambia: un bundle (`plugins.disabled`) o una riga senza bundle
+// (`components.off`).
+export interface ComponentWrite {
+  id: string;
+  acceso: boolean;
+  bundle: boolean;
+}
+
+// L'esito di una scelta: prima di farla (`applicato: false`, la prova senza
+// `apply`) o dopo. Una scrittura su `fub.lavagna` vuol dire che il vault si è
+// rimontato: la shell lo sa anche dall'evento `vault_opened` che segue il
+// `vault_closed` (vedi `KernelEvent`).
+export interface ComponentOutcome {
+  azione: ComponentAction;
+  effetto: ComponentEffect;
+  scritture: ComponentWrite[];
+  chiavi: string[];
+  stato: ComponentState;
+  applicato: boolean;
+  avvisi: PluginError[];
+}
+
+// Perché una scelta non si applica: una risposta, non un errore.
+export type ComponentRefusal =
+  | { rifiuto: "sconosciuto"; id: string }
+  | { rifiuto: "nucleo"; id: string }
+  | { rifiuto: "richiesto"; id: string; da: string[] }
+  | { rifiuto: "profilo_sconosciuto"; nome: string }
+  | { rifiuto: "profilo_piu_avanti"; nome: string; arriva_con: string[] };
+
+// Ciò che `components_apply` risponde: l'esito o il rifiuto tipato.
+export type ComponentsApplied =
+  | ({ risposta: "esito" } & ComponentOutcome)
+  | ({ risposta: "rifiuto" } & ComponentRefusal);
+
 
 // Un vault che questa macchina conosce (rispecchia `fub_host::VaultEntry`,
 // §11.1): la memoria fra un avvio e l'altro, che è un'altra cosa da `OpenVaults`
@@ -2477,6 +3016,10 @@ export const COMMANDS = {
   trashFolder: "folder.trash",
   folderPage: "note.folder_page",
   subpage: "note.subpage",
+  moveBlock: "note.block.move",
+  syncBlock: "note.block.sync",
+  tableSheet: "note.table.sheet",
+  fromNote: "canvas.from_note",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",

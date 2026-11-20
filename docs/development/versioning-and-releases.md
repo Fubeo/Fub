@@ -66,17 +66,17 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 | Schema | Dove | Versione | Contenuto |
 |---|---|---:|---|
 | registro dei vault | [`crates/fub-host/src/vaults.rs:50`](../../crates/fub-host/src/vaults.rs) | 1 | vault conosciuti dalla macchina |
-| organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../../crates/fub-kernel/src/organization.rs) | 1 | albero, icone, spazi e voci appuntate |
+| organizzazione | [`crates/fub-kernel/src/organization.rs:80`](../../crates/fub-kernel/src/organization.rs) | 1 | albero, icone, spazi e voci appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../../crates/fub-kernel/src/viewstate.rs) | 1 | posizione e stato per esemplare di vista |
-| anagrafe | [`crates/fub-kernel/src/entries.rs:147`](../../crates/fub-kernel/src/entries.rs) | 5 | metadati indicizzati delle voci |
-| impostazioni | [`crates/fub-kernel/src/settings.rs:102`](../../crates/fub-kernel/src/settings.rs) | 2 | valori per vault e macchina |
-| versioning | [`crates/fub-features/src/versioning.rs:468`](../../crates/fub-features/src/versioning.rs) | 1 | snapshot dei file |
-| snapshot globale | [`crates/fub-kernel/src/snapshot.rs:27`](../../crates/fub-kernel/src/snapshot.rs) | 1 | manifest autorevole, contenitore e record di recovery |
-| indice di ricerca | [`crates/fub-features/src/search.rs:147`](../../crates/fub-features/src/search.rs) | 8 | campi, opzioni e tokenizer dell'indice |
+| anagrafe | [`crates/fub-kernel/src/entries.rs:148`](../../crates/fub-kernel/src/entries.rs) | 5 | metadati indicizzati delle voci |
+| impostazioni | [`crates/fub-kernel/src/settings.rs:115`](../../crates/fub-kernel/src/settings.rs) | 2 | valori per vault e macchina |
+| versioning | [`crates/fub-features/src/versioning/store.rs:6`](../../crates/fub-features/src/versioning/store.rs) | 1 | snapshot dei file |
+| snapshot globale | [`crates/fub-kernel/src/snapshot.rs:26`](../../crates/fub-kernel/src/snapshot.rs) | 1 | manifest autorevole, contenitore e record di recovery |
+| indice di ricerca | [`crates/fub-features/src/search.rs:156`](../../crates/fub-features/src/search.rs) | 10 | campi, opzioni e tokenizer dell'indice |
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:178`](../../crates/fub-kernel/src/journal.rs) | 1 | mutazioni applicate al vault |
-| bozze | [`crates/fub-kernel/src/drafts.rs:110`](../../crates/fub-kernel/src/drafts.rs) | 1 | contenuto non ancora salvato |
+| bozze | [`crates/fub-kernel/src/drafts.rs:111`](../../crates/fub-kernel/src/drafts.rs) | 1 | contenuto non ancora salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:242`](../../crates/fub-kernel/src/maintenance.rs) | 1 | copia dei fatti raccolti per la diagnostica |
-| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:173`](../../crates/fub-kernel/src/vault.rs) | 1 | provenienza di una voce cestinata |
+| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:174`](../../crates/fub-kernel/src/vault.rs) | 1 | provenienza di una voce cestinata |
 
 ### Derivato
 
@@ -119,7 +119,7 @@ flowchart LR
 3. verifica WIT e schemi;
 4. aggiorna versione del prodotto e lockfile;
 5. sposta le voci da `Non rilasciato` alla versione;
-6. genera SBOM;
+6. genera la SBOM: `node .github/scripts/sbom.mjs --out fub-sbom.spdx.json`;
 7. spingi il tag `vX.Y.Z`: il workflow costruisce gli artefatti;
 8. completa le note della release bozza;
 9. verifica installazione e avvio dagli artefatti, poi pubblica la bozza;
@@ -141,19 +141,23 @@ workflow di rilascio con il tag che lo ha avviato.
 1. passa dal cancello
    ([`check-release-gate.mjs`](../../.github/scripts/check-release-gate.mjs)):
    il commit del tag deve avere una corsa di `ci.yml` completa e verde in ogni
-   job (la corsa settimanale non conta), e un tag del canale stabile deve avere
-   i segreti di firma;
+   job, banchi, WebView vera, LibreOffice e librerie a runtime compresi (la
+   corsa settimanale non conta, e un job saltato non è verde), e un tag del
+   canale stabile deve avere i segreti di firma;
 2. controlla le versioni e crea la release **bozza**, se non esiste; si ferma
    se la release è già pubblicata;
-3. su Linux (Ubuntu 22.04), Windows e macOS esegue `npm ci` e
+3. su Linux (Ubuntu 22.04) e Windows esegue `npm ci` e
    `cargo tauri build --config crates/fub-app/tauri.conf.json`;
-4. raccoglie `.deb`, `.rpm`, `.AppImage`, `.dmg`, `.msi` e `-setup.exe`,
-   ciascuno con un file `.sha256` accanto, e ne attesta la provenienza
-   (Sigstore, legata a commit e workflow);
+4. raccoglie `.deb`, `.rpm`, `.AppImage`, `.msi` e `-setup.exe`,
+   e a parte costruisce il Flatpak (sezione [Flatpak](#flatpak)), ciascuno
+   con un file `.sha256` accanto, e ne attesta la provenienza (Sigstore,
+   legata a commit e workflow);
 5. li carica come artefatti della corsa e nella release bozza, senza mai
    sostituire un asset che c'è già;
 6. riscarica la bozza e, per ogni installer, controlla digest e attestazione
-   con `gh attestation verify`, firmata da `release.yml` sul commit del tag.
+   con `gh attestation verify`, firmata da `release.yml` sul commit del tag;
+   un file della bozza senza il suo `.sha256`, o un `.sha256` che nomina un
+   altro file, ferma la verifica.
 
 Il tag va spinto dopo che la CI del suo commit è finita: se la corsa manca o è
 ancora in corso il cancello ferma il rilascio, e basta rilanciare il workflow.
@@ -167,23 +171,100 @@ che non pubblica niente: su Android genera il progetto
 (`cargo tauri android init --ci`), fonde i template nativi con
 `crates/fub-app/mobile/install-mobile.sh` e ne verifica la fusione con
 `--check`, poi costruisce un APK di debug per aarch64, caricato come artefatto
-della corsa. Su iOS compila soltanto `fub-app` per il dispositivo: il progetto
-Xcode chiede i target Share e Widget creati a mano e una firma. Non è un
-controllo richiesto.
+della corsa; sulle PR pronte e su `main` un APK per x86_64 si apre anche in un
+emulatore del runner, che dice se Fub parte e ne fotografa lo schermo. Non è
+un controllo richiesto.
+
+macOS e iOS sono in pausa
+([ADR 0245](../decisions/0245-macos-e-ios-in-pausa.md)): nessun `.dmg`, nessuna
+firma Apple e nessun build iOS nelle release. Il codice per macOS e iOS resta
+nei crate, e [`macos-in-pausa.yml`](../../.github/workflows/macos-in-pausa.yml)
+lo prova una volta alla settimana: i test del workspace su macOS e
+`cargo check -p fub-app --target aarch64-apple-ios` (il progetto Xcode chiede i
+target Share e Widget creati a mano e una firma, quindi nessun `.ipa`).
 
 La firma dipende dal canale:
 
-- un tag stabile (`vX.Y.Z`) richiede i segreti `APPLE_CERTIFICATE`,
-  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
-  `APPLE_PASSWORD` e `APPLE_TEAM_ID` (firma e notarizzazione del `.dmg`) e
-  `WINDOWS_CERTIFICATE` (PFX in base64) con `WINDOWS_CERTIFICATE_PASSWORD`
-  (Authenticode di `.msi` e `-setup.exe`); senza, il cancello ferma la corsa;
+- un tag stabile (`vX.Y.Z`) richiede i segreti `WINDOWS_CERTIFICATE` (PFX in
+  base64) e `WINDOWS_CERTIFICATE_PASSWORD` (Authenticode di `.msi` e
+  `-setup.exe`); senza, il cancello ferma la corsa;
 - una prerelease (`vX.Y.Z-rc.1`) firma con i segreti che trova e può uscire
   senza.
 
 Gli installer Linux non hanno una firma del formato: li autentica
 l'attestazione di provenienza, come ogni altro installer.
 Per verificarne uno: `gh attestation verify <file> --repo Fubeo/Fub`.
+
+### Flatpak
+
+Su Linux la release allega anche `Fub-<versione>-linux-x86_64.flatpak`: Fub
+sul runtime GNOME 51, quindi lo stesso WebKitGTK su ogni distribuzione. Non
+sostituisce `.deb`, `.rpm` e AppImage, e non è su Flathub.
+
+- **L'id** è `io.github.Fubeo.Fub`, e resta questo: cambiarlo vorrebbe dire
+  perdere gli aggiornamenti di chi l'ha installato. Flathub accetta un id
+  `io.github.<organizzazione>` verificato su GitHub, mentre `dev.fub.app`
+  (l'identificatore di Tauri) chiederebbe di provare il dominio.
+- **I file** stanno in [`packaging/flatpak/`](../../packaging/flatpak/README.md):
+  il manifest, la voce `.desktop` (con i link `fub://`), il metainfo AppStream
+  e `genera-sorgenti.sh`. Le icone sono quelle del bundle Tauri.
+- **La build** avviene dai sorgenti e senza rete. `genera-sorgenti.sh` ricava
+  da `Cargo.lock` e da `apps/client/package-lock.json`, con i generatori di
+  flatpak-builder-tools a un commit fissato, le sorgenti offline di Cargo e di
+  npm. I moduli Python dei generatori vengono da `requisiti-generatori.txt`,
+  con versione e impronta di ognuno, anche quelli indiretti
+  (`pip install --require-hashes`). Le sorgenti offline non stanno nel repository e si rifanno a ogni build, così non restano
+  indietro rispetto ai lockfile. Rust è l'1.95 della CI, scaricato con la
+  libreria per `wasm32-unknown-unknown` che serve al nucleo della lavagna;
+  Node viene dall'estensione `node22` del SDK. Il job di `release.yml` genera
+  le sorgenti, costruisce in un contenitore col builder di Flatpak e allega
+  il file con il suo `.sha256` e l'attestazione, come ogni altro installer. I
+  comandi per una build a mano sono nel README di `packaging/flatpak/`.
+
+I permessi, e perché:
+
+| Permesso | Perché |
+|---|---|
+| `--socket=wayland`, `--socket=fallback-x11`, `--share=ipc` | la finestra: Wayland, X11 soltanto dove Wayland manca |
+| `--device=dri` | la GPU per WebKitGTK |
+| `--share=network` | il controllo degli aggiornamenti (solo `api.github.com`, lo chiude il `Guard`), la sessione live col tablet, il web viewer, e il canale di controllo fra `fub-cli` e l'app, che passa dal loopback |
+| `--filesystem=home`, `/run/media`, `/media` | i vault, compresi quelli su un disco esterno, con le modifiche fatte da altri programmi |
+| `--own-name=dev.fub.app.SingleInstance` | una sola istanza: il nome che prende il plugin single-instance di Tauri |
+
+Il vault si sceglie col portale dei file, ma l'accesso ai file non può
+fermarsi al portale. Un percorso che l'app non vede passa dal portale dei
+documenti, un filesystem FUSE in `/run/user/<uid>/doc`, e lì inotify riceve
+soltanto le modifiche fatte attraverso quel mount, non quelle di un altro
+programma sul file vero
+([flatpak/xdg-desktop-portal#567](https://github.com/flatpak/xdg-desktop-portal/issues/567),
+[libfuse/libfuse#328](https://github.com/libfuse/libfuse/issues/328)). Il
+watcher dell'host (`notify` su inotify, ricorsivo sulla radice del vault) non
+le vedrebbe, e l'indice resterebbe indietro senza dirlo. Per un percorso che
+l'app può già leggere il portale restituisce invece il percorso vero, e il
+watcher funziona: per questo il manifest dà la home e i due punti dove si
+montano i dischi esterni. Un vault fuori da lì (per esempio sotto `/mnt`) si
+apre ancora dal portale, ma le modifiche esterne si vedono solo riaprendolo.
+
+Dentro la sandbox:
+
+- **la configurazione** sta in `~/.var/app/io.github.Fubeo.Fub/config/fub`
+  (`XDG_CONFIG_HOME` della sandbox), non in `~/.config/fub`: il primo avvio
+  la crea vuota, i vault non cambiano, e un Fub installato da `.deb` tiene la
+  sua;
+- **`fub-cli`** si avvia con `flatpak run --command=fub-cli io.github.Fubeo.Fub …`
+  (anche il server MCP: `… mcp`); legge la stessa configurazione dell'app e
+  la raggiunge sul loopback quando l'app tiene aperto il vault;
+- **i caratteri** sono quelli del runtime più quelli del sistema e dell'utente,
+  che Flatpak monta in sola lettura;
+- **i programmi esterni** non si vedono: aprire un file o un indirizzo passa da
+  `xdg-open`, che nel runtime chiede al portale, mentre le app Craft
+  installate sul sistema non si avviano dalla sandbox.
+
+Per installarlo: `flatpak install --user ./Fub-<versione>-linux-x86_64.flatpak`
+(scarica da Flathub il runtime GNOME 51, se manca), poi
+`flatpak run io.github.Fubeo.Fub` o la voce nel menu delle applicazioni. Per
+toglierlo: `flatpak uninstall --user io.github.Fubeo.Fub`; `--delete-data`
+toglie anche la configurazione, mai i vault.
 
 ### Versione visibile e aggiornamenti
 
@@ -197,10 +278,20 @@ con la feature `http-client` dell'host:
 - parte soltanto dal pulsante «Controlla aggiornamenti», mai in sottofondo;
 - accoda un job, che chiede a GitHub l'ultima release pubblicata del
   repository e la confronta con `CARGO_PKG_VERSION`;
+- chi ha una release vera chiede `/releases/latest`, che GitHub dà solo per le
+  release vere, e non vede le pre-release; chi ha una pre-release (per esempio
+  `0.2.0-prealpha.1`) chiede la lista delle ultime 30 release e prende la
+  versione più alta fra i tag che si leggono, pre-release o no: decide il tag,
+  non il flag `prerelease`; le bozze e le voci senza tag non contano, un tag che
+  non è una versione si salta;
+- le versioni si confrontano come dice semver: una pre-release viene prima
+  della release che anticipa, e le parti della pre-release si confrontano una
+  per una, i numeri come numeri (`prealpha.10` dopo `prealpha.2`) e prima dei
+  testi;
 - il manifest concede la rete al solo `api.github.com`, e il `Guard` chiude ogni
   altro host;
 - l'esito è `{current, latest, newer, url}`: `latest` nullo vuol dire nessuna
-  release pubblicata, e `url` c'è soltanto se porta alle release del
+  release pubblicata (un 404, o una lista senza release), e `url` c'è soltanto se porta alle release del
   repository;
 - una risposta che non si usa (altro stato, corpo illeggibile, tag che non è
   una versione) è l'esito `{current, failed, status}`, che la shell dice nella

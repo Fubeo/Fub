@@ -29,6 +29,7 @@ import { nearestCorner, snapDelta } from "../grid";
 import { sceneCorners, toScreen } from "../../view";
 import type { Unit } from "../hit";
 import { constrainEnd, shapeElem } from "../shapes";
+import { clampToPage, towardPage } from "../page-bounds";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX, MIN_SHAPE_PX, RATIO_ROLES, ROTATE_STEP } from "./constants";
 import type { EditorContext } from "./context";
 import { holdsPath, scaleOf } from "./helpers";
@@ -62,12 +63,17 @@ export function installSelectionGestures(ctx: EditorContext): void {
   } = ctx;
 
   /// Gli estremi di una forma nelle coordinate del suo livello, con Maiusc
-  /// applicato lì: un quadrato resta un quadrato nel livello.
+  /// applicato lì: un quadrato resta un quadrato nel livello. Sul foglio
+  /// delle annotazioni la forma resta sulla pagina del gesto: la griglia non
+  /// porta fuori la fine, e Maiusc la accorcia senza cambiarne la direzione.
   const shapeEnds = (g: ShapeGesture, to: Destination): [Point, Point] | null => {
     if (g.from === null || g.end === null) return null;
+    const page = g.page;
     const from = apply(to.inverse, g.from);
-    const end = apply(to.inverse, snapped(g.end));
-    return [from, ctx.shift ? constrainEnd(g.tool, from, end) : end];
+    const end = apply(to.inverse, page === null ? snapped(g.end) : clampToPage(page, snapped(g.end)));
+    if (!ctx.shift) return [from, end];
+    const square = constrainEnd(g.tool, from, end);
+    return [from, page === null ? square : apply(to.inverse, towardPage(page, g.from, apply(to.matrix, square)))];
   };
   ctx.shapeEnds = shapeEnds;
 

@@ -5,6 +5,8 @@ import type { DraftInfo, SettingEntry, WriteBase } from "../host/contract";
 import type { CraftPreview, CraftPreviewSize, CraftRenderConsent } from "../host/craft";
 import type { FakeHost } from "../host/fake";
 import { rejoinDrafts, type DraftBufferStore } from "../state/drafts";
+import { appendToTextEditor, mountedTextEditors } from "../editors/text/test-support";
+import { waiter } from "../test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -17,6 +19,14 @@ const box = vi.hoisted(() => ({
   /// L'app che farebbe l'anteprima, `null` se non è installata.
   app: "PdfCraft" as string | null,
   asks: [] as string[],
+  /// Il testo della versione che il ripristino della cronologia riscrive,
+  /// per nota (#237 R02): `version.restore` sul finto.
+  versions: new Map<string, string>(),
+  restoring: false,
+  /// Le pagine del PDF che il pdf.js finto apre.
+  pages: 1,
+  /// Il pdf.js finto non sa aprire il PDF.
+  broken: false,
 }));
 
 vi.mock("../host/ipc", () => {
@@ -42,11 +52,32 @@ vi.mock("../host/ipc", () => {
               });
             }
           }
+          // La cronologia sul finto: «Ripristina» chiede, «Sì» riscrive la
+          // nota con la versione scelta, come `version.restore` fa sul disco.
+          if (name === "viewAction" && args[0] === "history") {
+            box.host!.calls.push({ gate: "viewAction", args });
+            const [, , , action, payload] = args as [string, string, unknown, string, { doc: string }];
+            if (action === "restore_confirm") {
+              const text = box.versions.get(payload.doc);
+              if (text === undefined) return Promise.reject(new Error(`nessuna versione di ${payload.doc}`));
+              // Il kernel firma la riscrittura come il comando dell'utente
+              // in un lotto, non come il watcher: il finto la consegna così.
+              box.restoring = true;
+              try {
+                box.host!.writeFromOutside(payload.doc, text);
+              } finally {
+                box.restoring = false;
+              }
+            }
+            return Promise.resolve({ kind: "none" as const });
+          }
           return (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args);
         },
       },
     ),
-    onKernelEvent: (handler: (n: unknown) => void) => now().onKernelEvent(handler as never),
+    onKernelEvent: (handler: (n: { origin: unknown }) => void) =>
+      now().onKernelEvent(((notice: { origin: unknown }) =>
+        handler(box.restoring ? { ...notice, origin: { actor: { kind: "user" }, batch: "version.restore" } } : notice)) as never),
     onClose: (first: () => Promise<boolean>, onFailure: (reason: unknown) => void) => now().onClose(first, onFailure),
     window: {
       minimize: async () => {},
@@ -94,7 +125,7 @@ vi.mock("pdfjs-dist/build/pdf.min.mjs", () => {
     version: "6.3.289",
     GlobalWorkerOptions: { workerSrc: "" },
     getDocument: () => ({
-      promise: Promise.resolve({ numPages: 1, getPage: async () => page, destroy: async () => {} }),
+      promise: box.broken ? Promise.reject(new Error("PDF rotto")) : Promise.resolve({ numPages: box.pages, getPage: async () => page, destroy: async () => {} }),
       destroy: async () => {},
     }),
   };
@@ -235,6 +266,12 @@ describe("il ricongiungimento delle bozze orfane", () => {
 // vera, contro l'host finto.
 const CONSENT = "craft.cli-previews";
 const GUIDA = "Manuali/guida.pdf";
+const FOTO = "Foto/mare.png";
+/// Un PNG di un pixel: l'immagine ha una modalità sola.
+const PNG = Uint8Array.from(
+  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="),
+  (c) => c.charCodeAt(0),
+);
 
 const consentSetting = (value: CraftRenderConsent): SettingEntry => ({
   spec: {
@@ -273,18 +310,11 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 3000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(3000);
 
 /// La shell vera col PDF e un Word nel vault, il consenso `consent`, e
 /// `craft_render` che risponde «in coda» come il backend.
-async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft"): Promise<FakeHost> {
+async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft", notes: Record<string, string> = {}): Promise<FakeHost> {
   vi.resetModules();
   box.consent = consent;
   box.app = app;
@@ -303,8 +333,11 @@ async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft
     render: { app: "PdfCraft", consent: box.consent },
   });
   const host = createFakeHost({
-    file: { "Benvenuto.md": "# Benvenuto\n", "Lettera.docx": rich("ciao") },
-    resources: { [GUIDA]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" } },
+    file: { "Benvenuto.md": "# Benvenuto\n", "Altra.md": "# Altra\n", "Lettera.docx": rich("ciao"), ...notes },
+    resources: {
+      [GUIDA]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" },
+      [FOTO]: { bytes: PNG, mime: "image/png" },
+    },
     craft: { docs: {} },
     craftRender,
     settings: [consentSetting(consent)],
@@ -489,5 +522,1126 @@ describe("il gesto che apre un PDF fa fare l'anteprima (T31)", () => {
     await open(GUIDA, true);
     await waitFor("la riga della domanda", () => consentRows().length === 1);
     expect(renders(host)).toEqual([]);
+  });
+});
+
+// T32: `![[guida.pdf#page=3]]` in una nota porta al PDF a quella pagina, sulla
+// shell vera contro l'host finto. Da T41, in Scrittura l'embed da solo nel suo
+// paragrafo è una scheda viva e ci si arriva col suo «Apri»; in Lettura resta
+// il collegamento, e il clic fa la stessa cosa.
+describe("il collegamento a una pagina di un PDF (T32)", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+    box.pages = 5;
+  });
+
+  afterEach(async () => {
+    box.pages = 1;
+    const menu = await import("../ui/menu");
+    menu.closeContextMenu();
+  });
+
+  const NOTE = "Rimandi.md";
+  /// Una nota con un solo embed del PDF, col punto `heading`.
+  const noteWith = (heading: string) => ["# Rimandi", "", `![[guida.pdf#${heading}]]`, ""].join("\n");
+
+  /// Il collegamento che la Lettura fa dell'embed con quel punto.
+  const linkTo = (heading: string) => visible(".markdown-preview a.wikilink[data-wikilink-page='guida.pdf']")
+    .find((a) => a.dataset.wikilinkHeading === heading);
+  /// «Apri» della scheda viva del PDF, in Scrittura.
+  const cardOpen = () => visible(".cm-content .live-card[data-card-kind='pdf'] .live-card-open")[0];
+  /// La pagina che il visore del PDF dice di mostrare.
+  const shownPage = () => visible(".media-pdf-page")[0]?.getAttribute("aria-label") ?? null;
+  /// Le schede del PDF nel riquadro col fuoco.
+  const pdfTabs = async () => {
+    const { layout } = await import("../state/layout");
+    return layout.panes[layout.focus]!.tabs.filter((tab) => tab.k === "doc" && tab.doc === GUIDA);
+  };
+
+  /// Preme «Apri» sulla scheda viva del PDF della nota aperta.
+  async function openFromCard(): Promise<void> {
+    await waitFor("la scheda viva del PDF", () => cardOpen() !== undefined);
+    cardOpen()!.click();
+    await settle();
+  }
+
+  /// La nota con l'embed `#heading`, e «Apri» sulla sua scheda viva.
+  async function openNoteCard(heading: string): Promise<void> {
+    await start("off", "PdfCraft", { [NOTE]: noteWith(heading) });
+    await open(NOTE);
+    await openFromCard();
+  }
+
+  it("«Apri» sulla scheda di ![[guida.pdf#page=3]] apre il visore alla pagina 3", async () => {
+    await openNoteCard("page=3");
+    await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("una pagina oltre l'ultima apre l'ultima", async () => {
+    await openNoteCard("page=9");
+    await waitFor("l'ultima pagina", () => shownPage() === "Pagina 5 di 5");
+  });
+
+  it.each(["page=0", "page=abc", "page="])("#%s apre la prima pagina, senza errori", async (heading) => {
+    await openNoteCard(heading);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+  });
+
+  it("il PDF già aperto in un'altra scheda torna attivo a quella pagina", async () => {
+    await start("off", "PdfCraft", { [NOTE]: noteWith("page=3") });
+    await open(GUIDA);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+    await open(NOTE);
+    await openFromCard();
+    await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("in Lettura l'embed resta il collegamento, e il clic apre il visore alla pagina 3", async () => {
+    await start("off", "PdfCraft", { [NOTE]: noteWith("page=3") });
+    await open(NOTE);
+    const pane = visible(".pane")[0]!;
+    pane.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!.click();
+    await settle();
+    const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+    radios.find((item) => item.querySelector(".menu-label")?.textContent === "Lettura")!.click();
+    await waitFor("la nota in Lettura", () => pane.dataset.mode === "reading");
+    await waitFor("il collegamento #page=3", () => linkTo("page=3") !== undefined);
+    linkTo("page=3")!.click();
+    await settle();
+    await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("[[guida.pdf#page=4]] col PDF già nella scheda attiva lo porta a quella pagina", async () => {
+    await start("off", "PdfCraft", { [NOTE]: noteWith("page=3") });
+    await open(GUIDA);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+    const { openWikilink } = await import("./document");
+    await openWikilink("guida.pdf", "page=4", undefined, NOTE, { gesture: true });
+    await waitFor("la pagina 4", () => shownPage() === "Pagina 4 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("un PDF rotto resta l'errore di sempre", async () => {
+    box.broken = true;
+    try {
+      await openNoteCard("page=3");
+      await waitFor("l'errore del PDF", () => (visible(".media-pdf [role=status]")[0]?.textContent ?? "").includes("could not be opened"));
+    } finally {
+      box.broken = false;
+    }
+  });
+});
+
+// T45: «Apri a lato» di un percorso col punto (la lavagna, `onOpenPathBeside`),
+// sulla shell vera contro l'host finto.
+describe("«Apri a lato» di un percorso col punto (T45)", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+    box.pages = 5;
+  });
+
+  afterEach(() => {
+    box.pages = 1;
+  });
+
+  /// La pagina che il visore del PDF nel riquadro col fuoco dice di mostrare.
+  const focusedPage = () =>
+    [...document.querySelectorAll<HTMLElement>(".pane.focus .media-pdf-page")].find((page) => !page.closest("[hidden]"))
+      ?.getAttribute("aria-label") ?? null;
+  const layoutNow = async () => (await import("../state/layout"));
+  const paneIds = async () => (await layoutNow()).panes();
+  const toasts = () => [...document.querySelectorAll(".toast")].map((each) => each.textContent ?? "");
+
+  it("un PDF con #page=3 si apre accanto a quella pagina", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    await openPathBeside(`/${GUIDA}#page=3`, "Benvenuto.md");
+    await settle();
+    expect(await paneIds()).toHaveLength(2);
+    const { activeDoc } = await layoutNow();
+    expect(activeDoc()).toBe(GUIDA);
+    await waitFor("la pagina 3", () => focusedPage() === "Pagina 3 di 5");
+  });
+
+  it("col riquadro accanto che mostra già il PDF ci torna e porta la pagina nuova, senza dividere", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    await openPathBeside(`/${GUIDA}#page=3`, "Benvenuto.md");
+    await waitFor("la pagina 3", () => focusedPage() === "Pagina 3 di 5");
+    const [left, right] = await paneIds();
+    (await layoutNow()).focusPane(left!);
+    await settle();
+    await openPathBeside(`/${GUIDA}#page=4`, "Benvenuto.md");
+    await settle();
+    expect(await paneIds()).toEqual([left, right]);
+    expect((await layoutNow()).layout.focus).toBe(right);
+    await waitFor("la pagina 4", () => focusedPage() === "Pagina 4 di 5");
+    expect(toasts().some((text) => text.includes("non sa portare"))).toBe(false);
+  });
+
+  it("in una disposizione annidata ritrova il riquadro accanto che mostra già il PDF (T102)", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    await openPathBeside(`/${GUIDA}#page=3`, "Benvenuto.md");
+    await waitFor("la pagina 3", () => focusedPage() === "Pagina 3 di 5");
+    const [left, right] = await paneIds();
+    // riga [colonna [A, B], C]: A e B uno sopra l'altro, il PDF in C a destra.
+    const layoutModule = await layoutNow();
+    const below = layoutModule.split(left!, "col");
+    expect(below).not.toBeNull();
+    layoutModule.focusPane(left!);
+    await settle();
+    await openPathBeside(`/${GUIDA}#page=4`, "Benvenuto.md");
+    await settle();
+    expect(await paneIds()).toEqual([left, below, right]);
+    expect((await layoutNow()).layout.focus).toBe(right);
+    await waitFor("la pagina 4", () => focusedPage() === "Pagina 4 di 5");
+  });
+
+  it("accanto c'è una colonna: vale il riquadro di quella colonna che mostra già il PDF (T102)", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    await openPathBeside(`/${GUIDA}#page=3`, "Benvenuto.md");
+    await waitFor("la pagina 3", () => focusedPage() === "Pagina 3 di 5");
+    const [left, top] = await paneIds();
+    // riga [A, colonna [C, D]]: C passa a un'altra nota, il PDF va in D.
+    const layoutModule = await layoutNow();
+    const bottom = layoutModule.split(top!, "col");
+    expect(bottom).not.toBeNull();
+    layoutModule.focusPane(top!);
+    await open("Benvenuto.md");
+    layoutModule.focusPane(bottom!);
+    await open(GUIDA);
+    layoutModule.focusPane(left!);
+    await settle();
+    await openPathBeside(`/${GUIDA}#page=4`, "Benvenuto.md");
+    await settle();
+    expect(await paneIds()).toEqual([left, top, bottom]);
+    expect((await layoutNow()).layout.focus).toBe(bottom);
+    await waitFor("la pagina 4", () => focusedPage() === "Pagina 4 di 5");
+  });
+
+  it("senza `reuse` (un `fub://open`) si divide come sempre", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openDocumentBeside } = await import("../state/document-controller");
+    await openDocumentBeside(GUIDA, "row");
+    await settle();
+    const [left] = await paneIds();
+    (await layoutNow()).focusPane(left!);
+    await openDocumentBeside(GUIDA, "row");
+    await settle();
+    expect(await paneIds()).toHaveLength(3);
+  });
+
+  it("un punto che non arriva da nessuna parte (una cella, #B3) apre il file in cima e lo dice", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    const { openPathBeside } = await import("../state/document-controller");
+    const { t } = await import("../i18n/strings");
+    await openPathBeside("/Altra.md#B3", "Benvenuto.md");
+    await settle();
+    expect((await layoutNow()).activeDoc()).toBe("Altra.md");
+    await waitFor("l'avviso", () => toasts().some((text) => text.includes(t("document.reveal_unavailable", { doc: "Altra" }))));
+  });
+});
+
+// #237 R01 e R02: il testo non salvato davanti ai gesti che toccano la sua
+// sessione senza passare dalla chiusura di una linguetta. Salvataggio e bozza
+// falliscono; dopo il gesto la sessione è viva e sporca, la nota riaperta
+// mostra il testo e la bozza parte appena il finto la lascia scrivere.
+describe("il testo non salvato resta (#237)", () => {
+  type Sessions = typeof import("../state/document-session").documentSessions;
+  const BENVENUTO = "Benvenuto.md";
+  const TYPED = "testo non salvato";
+  let repairWrite: (() => void) | null = null;
+  let repairDraft: (() => void) | null = null;
+
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+    box.versions.clear();
+  });
+
+  afterEach(async () => {
+    repairWrite?.();
+    repairDraft?.();
+    repairWrite = repairDraft = null;
+    // Le sessioni sopravvivono alla shell smontata: nessun salvataggio del
+    // giro resta a scrivere sull'host della prova dopo.
+    (await import("../state/document-session")).documentSessions.closeAll();
+  });
+
+  const shows = (text: string) => mountedTextEditors().some((view) => view.state.doc.toString().includes(text));
+
+  /// La shell con «Benvenuto.md» aperta, il testo battuto, e salvataggio e
+  /// bozza guasti.
+  async function unsavedNote(): Promise<{ host: FakeHost; sessions: Sessions }> {
+    const host = await start("off");
+    await open(BENVENUTO);
+    const { documentSessions: sessions } = await import("../state/document-session");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    repairWrite = host.fault("writeDocument", "disco pieno");
+    repairDraft = host.fault("saveDraft", "disco pieno");
+    appendToTextEditor(`\n${TYPED}`);
+    await waitFor("il testo nella sessione", () => sessions.isDirty(BENVENUTO));
+    return { host, sessions };
+  }
+
+  /// La sessione è ancora l'unica copia: viva, sporca, col testo battuto.
+  function expectAlive(sessions: Sessions): void {
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true });
+    expect(sessions.text(BENVENUTO)).toContain(TYPED);
+  }
+
+  /// Riaperta, la nota mostra il testo; tolto il guasto, la bozza c'è.
+  async function expectRecoverable(host: FakeHost, sessions: Sessions): Promise<void> {
+    await open(BENVENUTO);
+    await waitFor("l'editor della nota riaperta col testo", () => shows(TYPED));
+    const before = host.atGate("saveDraft").length;
+    repairDraft?.();
+    repairDraft = null;
+    await sessions.flushDraft(BENVENUTO);
+    const drafts = host.atGate("saveDraft").slice(before).map((call) => call.args);
+    expect(drafts.some(([doc, text]) => doc === BENVENUTO && String(text).includes(TYPED))).toBe(true);
+  }
+
+  it("R01 · un layout che toglie la nota (uno spazio di lavoro) lascia viva la sessione sporca", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const next = structuredClone(layouts.layout);
+    layouts.openIn(next.focus, "Altra.md", next);
+    layouts.removeEverywhere(BENVENUTO, next);
+    const { applyShellLayout } = await import("../state/shell-layout");
+
+    await applyShellLayout(next);
+    await settle();
+
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expectAlive(sessions);
+    await expectRecoverable(host, sessions);
+  });
+
+  it("R01 · un'apertura che finisce con la linguetta già chiusa lascia viva la sessione sporca", async () => {
+    const { host, sessions } = await unsavedNote();
+    await open("Altra.md");
+    const layouts = await import("../state/layout");
+    const controller = await import("../state/document-controller");
+    const contexts = host.atGate("setActiveContext").length;
+    const unlock = host.throttle("setActiveContext");
+
+    // L'apertura si ferma nel pubblicare il contesto, dentro il suo `try`, e
+    // intanto la persona chiude la linguetta: il rilascio della linguetta
+    // trova l'apertura in corso, e chi decide è il `finally` dell'apertura.
+    const opening = controller.openDocument(BENVENUTO);
+    await waitFor("l'apertura pubblica il contesto", () => host.atGate("setActiveContext").length > contexts);
+    const paneId = layouts.layout.focus;
+    const index = layouts.pane(paneId)!.tabs.findIndex((tab) => tab.k === "doc" && tab.doc === BENVENUTO);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const closing = controller.closeTabAt(paneId, index);
+    await settle();
+    unlock();
+    await Promise.all([opening, closing]);
+    await settle();
+
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expectAlive(sessions);
+    await expectRecoverable(host, sessions);
+  });
+
+  /// Le finestre «Modifiche non salvate» a schermo.
+  async function closeQuestions(): Promise<() => HTMLElement[]> {
+    const { t } = await import("../i18n/strings");
+    const title = t("document.close_unsaved.title");
+    return () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
+      .filter((el) => el.isConnected && (el.textContent ?? "").includes(title));
+  }
+
+  /// Chiude la linguetta di «Benvenuto.md» e aspetta che la finestra chieda.
+  async function closeAndAsk(): Promise<{ closing: Promise<void>; paneId: string; asking: () => HTMLElement[] }> {
+    const layouts = await import("../state/layout");
+    const controller = await import("../state/document-controller");
+    const asking = await closeQuestions();
+    const paneId = layouts.layout.focus;
+    const index = layouts.pane(paneId)!.tabs.findIndex((tab) => tab.k === "doc" && tab.doc === BENVENUTO);
+    const shown = asking().length;
+    const closing = controller.closeTabAt(paneId, index);
+    await waitFor("la finestra «Modifiche non salvate»", () => asking().length === shown + 1 || (shown > 0 && asking().length === shown));
+    return { closing, paneId, asking };
+  }
+
+  /// Tolti i guasti: il disco e la bozza tornano buoni.
+  function repair(): void {
+    repairWrite?.();
+    repairDraft?.();
+    repairWrite = repairDraft = null;
+  }
+
+  it("T63 · un cambio da fuori mentre «Modifiche non salvate» chiede la chiude come «Tienila aperta»", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+
+    // Mentre chiede, il disco torna buono e un'altra applicazione cambia la nota.
+    repair();
+    const outside = "# Benvenuto\nscritto da un'altra applicazione\n";
+    host.writeFromOutside(BENVENUTO, outside);
+
+    await waitFor("la finestra chiusa dal cambio da fuori", () => asking().length === 0);
+    await closing;
+    await settle();
+    // La nota è tornata dov'era, col testo battuto e la barra del conflitto;
+    // il disco ha ancora il testo dell'altra applicazione.
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([paneId]);
+    expect(shows(TYPED)).toBe(true);
+    expect(sessions.text(BENVENUTO)).toContain(TYPED);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true, result: "conflitto" });
+    expect(host.files()[BENVENUTO]).toBe(outside);
+  });
+
+  it("T63 · un fatto che non rende vecchia la domanda (lettura fallita, eco tardiva) la lascia chiedere, senza salvare", async () => {
+    const { host, sessions } = await unsavedNote();
+    const { closing, asking } = await closeAndAsk();
+    for (const outcome of [{ kind: "unavailable" }, { kind: "stale" }, { kind: "untracked" }, { kind: "reloaded", text: "", changed: false }] as const) {
+      const change = vi.spyOn(sessions, "handleExternalChange").mockResolvedValueOnce(outcome);
+      const flush = vi.spyOn(sessions, "flush");
+      try {
+        host.writeFromOutside(BENVENUTO, `# Benvenuto\n${outcome.kind}\n`);
+        await waitFor(`il cambio ${outcome.kind} arrivato`, () => change.mock.calls.length > 0);
+        await settle();
+        expect(asking(), outcome.kind).toHaveLength(1);
+        expect(flush, outcome.kind).not.toHaveBeenCalled();
+      } finally {
+        change.mockRestore();
+        flush.mockRestore();
+      }
+    }
+    asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await closing;
+  });
+
+  it("T63 · una seconda domanda sulla stessa nota sostituisce la prima, che non riapre niente", async () => {
+    const { sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const first = await closeAndAsk();
+    const firstDialog = first.asking()[0]!;
+    // La nota si riapre e si richiude mentre la prima domanda è ancora lì.
+    await open(BENVENUTO);
+    await waitFor("l'editor della nota riaperta", () => shows(TYPED));
+    const second = await closeAndAsk();
+    await first.closing;
+    await waitFor("la prima finestra ritirata", () => !firstDialog.isConnected && second.asking().length === 1);
+    // La prima non ha riaperto la nota né disegnato un conflitto.
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(visible(".conflict-banner")).toHaveLength(0);
+
+    // «Scarta» della seconda vale: la nota resta chiusa e il testo se ne va.
+    second.asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="confirm"]')!.click();
+    await second.closing;
+    await settle();
+    expect(second.asking()).toHaveLength(0);
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(sessions.inspect(BENVENUTO)).toBeUndefined();
+  });
+
+  it("T63 · una rinomina da fuori mentre la finestra chiede la ritira, e la nota torna col nome nuovo", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    const NUOVO = "Benvenuto rinominato.md";
+    host.renameFromOutside(BENVENUTO, NUOVO);
+
+    await waitFor("la finestra chiusa dalla rinomina", () => asking().length === 0);
+    await closing;
+    await settle();
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(layouts.panesWithDoc(NUOVO)).toEqual([paneId]);
+    expect(sessions.text(NUOVO)).toContain(TYPED);
+    await waitFor("l'editor col testo battuto", () => shows(TYPED));
+  });
+
+  it("T63 · un'eliminazione da fuori mentre la finestra chiede la ritira, e il testo resta da ricreare", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, asking } = await closeAndAsk();
+    await (host.module.api as unknown as { invokeCommand: (id: string, args: unknown) => Promise<unknown> })
+      .invokeCommand("note.trash", { doc: BENVENUTO });
+
+    await waitFor("la finestra chiusa dall'eliminazione", () => asking().length === 0);
+    await closing;
+    await settle();
+    // Niente da riaprire: il file non c'è più, e il testo è nell'avviso con «Ricrea».
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expect(sessions.inspect(BENVENUTO)).toBeUndefined();
+    const { t } = await import("../i18n/strings");
+    const recreate = t("document.recreate");
+    expect([...document.querySelectorAll("button")].some((button) => button.textContent?.trim() === recreate)).toBe(true);
+  });
+
+  it("T63 · se il salvataggio dopo il cambio da fuori rifiuta, la nota torna lo stesso e niente resta appeso", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const { closing, paneId, asking } = await closeAndAsk();
+    const flush = vi.spyOn(sessions, "flush").mockRejectedValueOnce(new Error("la porta è caduta"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      repair();
+      host.writeFromOutside(BENVENUTO, "# Benvenuto\nda fuori\n");
+      await waitFor("la finestra chiusa dal cambio da fuori", () => asking().length === 0);
+      await expect(closing).resolves.toBeUndefined();
+      await settle();
+      expect(flush).toHaveBeenCalledWith(BENVENUTO);
+      expect(logged).toHaveBeenCalled();
+      expect(layouts.panesWithDoc(BENVENUTO)).toEqual([paneId]);
+      expect(sessions.text(BENVENUTO)).toContain(TYPED);
+      // Il salvataggio non è partito, e lo si dice col suo motivo.
+      expect(toastsAbout("non è stato salvato")).toEqual(["«Benvenuto» non è stato salvato: la porta è caduta"]);
+    } finally {
+      flush.mockRestore();
+      logged.mockRestore();
+    }
+  });
+
+  it("T63 · chiusa con Ctrl+W mentre si scriveva, la nota che torna ha il fuoco nel testo", async () => {
+    await unsavedNote();
+    await open("Altra.md");
+    await open(BENVENUTO);
+    await waitFor("l'editor col testo battuto", () => shows(TYPED));
+    const controller = await import("../state/document-controller");
+    const editor = mountedTextEditors().find((view) => view.state.doc.toString().includes(TYPED))!;
+    editor.focus();
+    expect(editor.hasFocus).toBe(true);
+    const asking = await closeQuestions();
+    const closing = controller.closeCurrentTab();
+    await waitFor("la finestra «Modifiche non salvate»", () => asking().length === 1);
+    asking()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await closing;
+    await settle();
+    const back = mountedTextEditors().find((view) => view.state.doc.toString().includes(TYPED));
+    expect(back?.hasFocus).toBe(true);
+  });
+
+  it("R02 · un ripristino dalla cronologia tiene il testo e dice che il file è cambiato", async () => {
+    const { host, sessions } = await unsavedNote();
+    const restored = "# Benvenuto\nla versione di ieri\n";
+    box.versions.set(BENVENUTO, restored);
+    const { api } = await import("../host/ipc");
+
+    await api.viewAction("history", "history-1", null, "restore", { doc: BENVENUTO, ts: 1 }, []);
+    await api.viewAction("history", "history-1", null, "restore_confirm", { doc: BENVENUTO, ts: 1 }, []);
+    await settle();
+
+    expect(host.files()[BENVENUTO]).toBe(restored);
+    expectAlive(sessions);
+    await waitFor("l'avviso del file cambiato", () => visible('.sheet-notice[data-notice="changed_on_disk"]').length === 1);
+    expect(shows(TYPED)).toBe(true);
+    // Il salvataggio che segue non scrive alla cieca sopra la versione
+    // ripristinata: la base è quella di prima, e il finto risponde conflitto.
+    repairWrite?.();
+    repairWrite = null;
+    await sessions.flush(BENVENUTO);
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true, result: "conflitto" });
+    expect(sessions.text(BENVENUTO)).toContain(TYPED);
+    expect(host.files()[BENVENUTO]).toBe(restored);
+  });
+
+  /// Gli avvisi a galla che nominano la nota.
+  const toastsAbout = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>("#toasts > .toast .toast-text")]
+      .map((text) => text.textContent ?? "")
+      .filter((text) => text.includes(name));
+
+  it("un conflitto sulla nota a schermo si dice una volta, nella barra: niente fascia né avviso a galla", async () => {
+    const { host, sessions } = await unsavedNote();
+    repair();
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await settle();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(visible('.sheet-notice[data-notice="changed_on_disk"], .sheet-notice[data-notice="overwritten"]')).toEqual([]);
+    expect(toastsAbout("Benvenuto")).toEqual([]);
+  });
+
+  it("la finestra che conferma una scelta del conflitto chiede in una frase, e nomina la nota col titolo", async () => {
+    const { host, sessions } = await unsavedNote();
+    repair();
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await settle();
+    await sessions.flush(BENVENUTO);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    visible('.conflict-banner button[data-choice="mine"]')[0]!.click();
+    const dialogs = () => [...document.querySelectorAll<HTMLElement>("dialog, [role=dialog], [role=alertdialog]")]
+      .filter((el) => el.isConnected && (el.textContent ?? "").includes("Mantenere il tuo testo?"));
+    await waitFor("la finestra della scelta", () => dialogs().length === 1);
+    const dialog = dialogs()[0]!;
+    expect(dialog.querySelector(".kit-dialog-title")?.textContent).toBe("Mantenere il tuo testo?");
+    const said = dialog.textContent ?? "";
+    expect(said).toContain("Fub riscrive «Benvenuto» col testo che hai qui: la modifica arrivata da fuori si perde.");
+    expect(said).not.toContain(BENVENUTO);
+    // Il bottone dice la stessa scelta della barra, non il nome di un comando.
+    expect(dialog.querySelector('button[data-action="confirm"]')?.textContent).toBe("Mantieni il mio testo");
+    dialogs()[0]!.querySelector<HTMLButtonElement>('button[data-action="cancel"]')!.click();
+    await settle();
+  });
+
+  it("fuori schermo, il cambio da fuori e il conflitto che segue fanno un avviso solo, col titolo; aperta la nota, resta la barra", async () => {
+    const { host, sessions } = await unsavedNote();
+    await open("Altra.md");
+    // Il disco è ancora guasto: la nota resta sporca, e il cambio da fuori
+    // è un avvertimento, non una rilettura.
+    host.writeFromOutside(BENVENUTO, "# Benvenuto\nda un'altra applicazione\n");
+    await waitFor("l'avviso del cambio da fuori", () => toastsAbout("cambiat").length === 1);
+    repair();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ result: "conflitto" });
+    expect(toastsAbout("Benvenuto")).toHaveLength(1);
+    // Il conflitto è il fatto più forte: prende il posto del cambio da fuori.
+    expect(toastsAbout("Benvenuto")[0]).toContain("«Benvenuto» è cambiato su disco da quando l'hai aperto");
+    expect(toastsAbout("Benvenuto.md")).toEqual([]);
+    await open(BENVENUTO);
+    await waitFor("la barra del conflitto", () => visible(".conflict-banner").length === 1);
+    expect(toastsAbout("Benvenuto")).toEqual([]);
+  });
+
+  it("la bozza che non si scrive è un fatto della sessione: un avviso solo, che se ne va quando le bozze tornano a scriversi", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Il disco della nota resta guasto; la bozza torna a scriversi.
+    repairDraft?.();
+    repairDraft = null;
+    appendToTextEditor(" ancora");
+    await sessions.flushDraft(BENVENUTO);
+    await settle();
+    expect(sessions.saveState(BENVENUTO)).not.toBe("salvato");
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+  });
+
+  it("la sola lettura segue la nota rinominata: un avviso solo, col nome nuovo, che non si ripete", async () => {
+    const host = await start("off");
+    await open(BENVENUTO);
+    const { documentSessions: sessions } = await import("../state/document-session");
+    const layouts = await import("../state/layout");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    repairWrite = host.fault("writeDocument", { kind: "permission_denied", message: "file in sola lettura" });
+    appendToTextEditor(`\n${TYPED}`);
+    await waitFor("il testo nella sessione", () => sessions.isDirty(BENVENUTO));
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della sola lettura", () => toastsAbout("in sola lettura").length === 1);
+    const toastOf = () => [...document.querySelectorAll<HTMLElement>("#toasts > .toast")].find((toast) => (toast.textContent ?? "").includes("in sola lettura"));
+    const before = toastOf();
+    const { recentNotices } = await import("../ui/notify");
+    const told = () => recentNotices().filter((notice) => notice.text.includes("in sola lettura")).length;
+    const toldBefore = told();
+    const NUOVO = "Benvenuto rinominato.md";
+    host.renameFromOutside(BENVENUTO, NUOVO);
+    await waitFor("la nota col nome nuovo", () => layouts.panesWithDoc(NUOVO).length === 1);
+    await settle();
+    expect(toastsAbout("in sola lettura")).toHaveLength(1);
+    expect(toastsAbout("in sola lettura")[0]).toContain("«Benvenuto rinominato» è in sola lettura");
+    // Lo stesso avviso, riscritto: non si rifà, non si riannuncia, lo storico
+    // non lo conta due volte.
+    expect(toastOf()).toBe(before);
+    expect(told()).toBe(toldBefore);
+    appendToTextEditor(" ancora");
+    await sessions.flush(NUOVO).catch(() => {});
+    await settle();
+    expect(toastsAbout("in sola lettura")).toHaveLength(1);
+  });
+
+  it("la pagina di una cartella si nomina come la cartella, negli avvisi come nella finestra", async () => {
+    const PAGE = "Progetti/_index.md";
+    const host = await start("off", "PdfCraft", { [PAGE]: "# Progetti\n" });
+    await open(PAGE);
+    const { documentSessions: sessions } = await import("../state/document-session");
+    await waitFor("l'editor della pagina", () => mountedTextEditors().length > 0);
+    repairWrite = host.fault("writeDocument", "disco pieno");
+    appendToTextEditor(`\n${TYPED}`);
+    await waitFor("il testo nella sessione", () => sessions.isDirty(PAGE));
+    await sessions.flush(PAGE).catch(() => {});
+    await waitFor("l'avviso del salvataggio fallito", () => toastsAbout("non è stato salvato").length === 1);
+    expect(toastsAbout("non è stato salvato")[0]).toContain("«Progetti» non è stato salvato");
+    // «Riprova» col disco ancora guasto: lo dice col nome della cartella.
+    const retry = [...document.querySelectorAll<HTMLElement>("#toasts > .toast")]
+      .find((toast) => (toast.textContent ?? "").includes("non è stato salvato"))!
+      .querySelector<HTMLButtonElement>(".toast-action")!;
+    retry.click();
+    await waitFor("l'avviso di Salva adesso", () => toastsAbout("Non è stato possibile salvare").length === 1);
+    expect(toastsAbout("Non è stato possibile salvare")[0]).toContain("salvare Progetti:");
+  });
+
+  it("la bozza che non si scrive si ridice quando la shell si rimonta, finché la rete manca", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Un nuovo montaggio della finestra: il vecchio ritira i suoi avvisi, il
+    // nuovo rilegge lo stato della collezione, che resta senza rete.
+    const shell = await import("../desktop-shell");
+    (await shell.startup)();
+    await settle();
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+    await shell.mountDesktopShell();
+    await settle();
+    await waitFor("l'avviso della bozza ridetto", () => toastsAbout("non arriva più sul disco").length === 1);
+  });
+
+  it("la bozza che non si scrive non si dice più quando non c'è testo da proteggere", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flushDraft(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso della bozza", () => toastsAbout("non arriva più sul disco").length === 1);
+    // Il disco della nota torna buono, la bozza no: la nota si salva, e non
+    // resta niente di non salvato.
+    repairWrite?.();
+    repairWrite = null;
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.dirtyIds()).toEqual([]);
+    expect(toastsAbout("non arriva più sul disco")).toEqual([]);
+  });
+
+  it("un salvataggio che non riesce si dice una volta, col titolo, e l'avviso se ne va quando la nota è salvata", async () => {
+    const { sessions } = await unsavedNote();
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await waitFor("l'avviso del salvataggio fallito", () => toastsAbout("non è stato salvato").length === 1);
+    appendToTextEditor(" ancora");
+    await sessions.flush(BENVENUTO).catch(() => {});
+    await settle();
+    expect(toastsAbout("non è stato salvato")).toHaveLength(1);
+    expect(toastsAbout("non è stato salvato")[0]).toContain("«Benvenuto» non è stato salvato");
+    repair();
+    await sessions.flush(BENVENUTO);
+    await settle();
+    expect(sessions.saveState(BENVENUTO)).toBe("salvato");
+    expect(toastsAbout("Benvenuto")).toEqual([]);
+  });
+});
+
+// Ciò che le fasi dopo spostano (la modalità, la testata) e non deve cambiare
+// di significato: fissato qui prima di toccarlo (Scrittoio 2, T1).
+describe("la testata del riquadro, prima di Scrittoio 2", () => {
+  const NOTA = "Progetti/Fub/Diario.md";
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const toolbarOf = (pane: HTMLElement) => pane.querySelector<HTMLElement>(".pane-toolbar")!;
+  // Il bottone della modalità è un figlio del foglio, dopo la barra di formato (T3).
+  const currentOf = (pane: HTMLElement) => pane.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!;
+  const radios = () => [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+  const labelOf = (item: Element) => item.querySelector(".menu-label")?.textContent ?? "";
+
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+  });
+
+  afterEach(async () => {
+    const menu = await import("../ui/menu");
+    menu.closeContextMenu();
+  });
+
+  it("il bottone della modalità elenca le modalità della superficie e ne segna una sola", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const pane = panes()[0]!;
+    const current = currentOf(pane);
+    expect(current.hidden).toBe(false);
+    expect(current.getAttribute("aria-haspopup")).toBe("menu");
+    current.click();
+    await settle();
+    expect(current.getAttribute("aria-expanded")).toBe("true");
+    // L'ordine non si fissa: Scrittoio 2 (T2) lo cambia.
+    expect(new Set(radios().map(labelOf))).toEqual(new Set(["Scrittura", "Sorgente", "Lettura"]));
+    const checked = radios().filter((item) => item.getAttribute("aria-checked") === "true");
+    expect(checked.map(labelOf)).toEqual(["Scrittura"]);
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Scrittura" }));
+  });
+
+  it("la voce scelta cambia la modalità del suo riquadro, non quella dell'altro", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { openDocumentBeside } = await import("./document");
+    await openDocumentBeside("Benvenuto.md", "row");
+    await settle();
+    await waitFor("due riquadri con la nota", () => panes().length === 2 && panes().every((p) => p.dataset.mode === "live_preview"));
+    const [left, right] = panes();
+    // Il menu del riquadro **senza** fuoco: il clic lo porta a fuoco e cambia lui.
+    const layout = await import("../state/layout");
+    expect(layout.layout.focus).toBe(right!.dataset.pane);
+    // Come il clic vero in Chromium e WebKitGTK: il bottone prende il fuoco
+    // prima del clic, e il menu, chiudendosi, glielo rende.
+    currentOf(left!).focus();
+    currentOf(left!).click();
+    expect(layout.layout.focus).toBe(left!.dataset.pane);
+    await settle();
+    radios().find((item) => labelOf(item) === "Sorgente")!.click();
+    await waitFor("il riquadro di sinistra in Sorgente", () => left!.dataset.mode === "source");
+    expect(right!.dataset.mode).toBe("live_preview");
+    expect(currentOf(left!).getAttribute("aria-expanded")).toBe("false");
+    expect(currentOf(left!).textContent).toBe("Sorgente");
+    expect(currentOf(right!).textContent).toBe("Scrittura");
+  });
+
+  it("il bottone della modalità ha la figura e il nome della modalità accesa, e il suggerimento (T2)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const { icon } = await import("../ui/icons");
+    const current = currentOf(panes()[0]!);
+    const figure = () => current.querySelector(":scope > svg")?.innerHTML;
+    const name = () => current.querySelector(":scope > .pane-mode-name")?.textContent;
+    const tooltip = () => {
+      current.dispatchEvent(new FocusEvent("focus"));
+      return document.getElementById(current.getAttribute("aria-describedby") ?? "")?.textContent;
+    };
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    expect(figure()).toBe(drawn("pen"));
+    expect(name()).toBe("Scrittura");
+    expect(tooltip()).toBe("Scrittura");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Scrittura" }));
+    const svg = current.querySelector(":scope > svg");
+    // Ridisegnare la testata senza cambiare modalità non riscrive la figura.
+    const { synchronize } = await import("./document");
+    await synchronize();
+    expect(current.querySelector(":scope > svg")).toBe(svg);
+    current.click();
+    await settle();
+    radios().find((item) => labelOf(item) === "Sorgente")!.click();
+    await waitFor("la nota in Sorgente", () => panes()[0]!.dataset.mode === "source");
+    expect(figure()).toBe(drawn("code"));
+    expect(name()).toBe("Sorgente");
+    expect(tooltip()).toBe("Sorgente");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Sorgente" }));
+  });
+
+  it("il bottone della modalità sta nel foglio dopo la barra di formato, non nella testata (T3)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const pane = panes()[0]!;
+    const current = currentOf(pane);
+    expect(current.hidden).toBe(false);
+    expect(toolbarOf(pane).querySelector(".pane-mode-current")).toBeNull();
+    expect(current.previousElementSibling?.classList.contains("format-bar")).toBe(true);
+    // Nel giro del Tab, che segue il DOM (nessun `tabindex` positivo), viene
+    // dopo la testata e dopo la barra, e prima del testo.
+    const before = (node: Element) => (node.compareDocumentPosition(current) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    const focusables = [...pane.querySelectorAll<HTMLElement>("button, [tabindex]")].filter((node) => node.tabIndex >= 0);
+    expect(focusables.filter((node) => node.closest(".pane-toolbar, .format-bar")).every(before)).toBe(true);
+    expect(focusables.some((node) => node.closest(".pane-toolbar"))).toBe(true);
+    expect(before(pane.querySelector(":scope > .format-bar")!)).toBe(true);
+    expect(before(pane.querySelector("[role=tabpanel]")!)).toBe(false);
+    // I segmenti restano nel DOM della testata, nascosti dalla cornice.
+    expect(toolbarOf(pane).querySelector(":scope > .segmented")).not.toBeNull();
+  });
+
+  it("chiusa la linguetta a fuoco, l'ultima, il fuoco va a «…» della testata (T3)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const pane = panes()[0]!;
+    const { closeOtherTabs } = await import("./document");
+    closeOtherTabs();
+    await waitFor("una linguetta sola", () => pane.querySelectorAll(".pane-tabs .tab").length === 1);
+    // La crocetta della linguetta, premuta da tastiera: la linguetta sparisce
+    // col fuoco dentro, e non ce n'è un'altra che lo prenda.
+    const close = pane.querySelector<HTMLButtonElement>(".pane-tabs .tab-close")!;
+    close.focus();
+    expect(document.activeElement).toBe(close);
+    close.click();
+    await waitFor("il riquadro senza linguette", () => pane.querySelectorAll(".pane-tabs .tab").length === 0);
+    await settle();
+    expect(document.activeElement).toBe(toolbarOf(pane).querySelector("[data-pane-menu]"));
+  });
+
+  it("le briciole: la cartella disegnata e il vault, le cartelle con `data-folder`, poi il nome", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    const { icon } = await import("../ui/icons");
+    const store = await import("../state/store");
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    const crumbs = toolbarOf(panes()[0]!).querySelector<HTMLElement>(":scope > .muted")!;
+    // Il vault del banco finto è `/vault`: il nome è la cartella.
+    expect(store.state.vaultName).toBe("vault");
+    expect(crumbs.dataset.path).toBe(NOTA);
+    expect(crumbs.firstElementChild!.tagName.toLowerCase()).toBe("svg");
+    expect(crumbs.firstElementChild!.innerHTML).toBe(drawn("folder"));
+    expect([...crumbs.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => [f.dataset.folder, f.textContent])).toEqual([
+      ["", "vault"],
+      ["Progetti", "Progetti"],
+      ["Progetti/Fub", "Fub"],
+    ]);
+    // Fra i pezzi un segno nascosto al lettore di schermo, non una «/» nel testo
+    // del percorso; la nota si chiama senza «.md».
+    const seps = [...crumbs.querySelectorAll<HTMLElement>(":scope > .crumb-sep")];
+    expect(seps).toHaveLength(3);
+    expect(seps.every((sep) => sep.getAttribute("aria-hidden") === "true")).toBe(true);
+    expect(crumbs.lastElementChild!.className).toBe("crumb-name");
+    expect(crumbs.lastElementChild!.textContent).toBe("Diario");
+    // Il formato non sta più nella testata.
+    expect(toolbarOf(panes()[0]!).querySelector(".pane-format")).toBeNull();
+    // Una nota alla radice: il vault e il nome.
+    await open("Benvenuto.md");
+    expect([...crumbs.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => f.dataset.folder)).toEqual([""]);
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Benvenuto");
+    // Un file che non è una nota tiene l'estensione, che dice il formato.
+    await open("Lettera.docx");
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Lettera.docx");
+    // Il nome scelto dalla persona arriva dopo: la testata si ridisegna.
+    store.setVaultName("Appunti");
+    expect(crumbs.querySelector("[data-folder='']")!.textContent).toBe("Appunti");
+    // Senza nome il percorso parte dal nome.
+    store.setVaultName("");
+    expect(crumbs.querySelectorAll("[data-folder]")).toHaveLength(0);
+    expect(crumbs.querySelector(".crumb-name")!.textContent).toBe("Lettera.docx");
+  });
+
+  it("il formato lo dice la linguetta: la figura per ogni documento, il nome per chi non è una nota", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    await open("Lettera.docx");
+    const { icon } = await import("../ui/icons");
+    const { t } = await import("../i18n/strings");
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    const tabOf = (doc: string) => [...document.querySelectorAll<HTMLElement>(".pane .tab")].find((tab) => tab.dataset.key?.includes(doc))!;
+    const note = tabOf(NOTA);
+    const word = tabOf("Lettera.docx");
+    expect(note.querySelector(".tab-name > svg.tab-format")!.innerHTML).toBe(drawn("notes"));
+    expect(note.getAttribute("aria-label")).toBe("Diario");
+    expect(word.querySelector(".tab-name > svg.tab-format")!.innerHTML).toBe(drawn("format-word"));
+    expect(word.getAttribute("aria-label")).toBe(`Lettera · ${t("format.kind.word")}`);
+  });
+
+  it("due note che cominciano uguali tengono a vista la parte che le distingue, e il nome intero resta (#411 B-03)", async () => {
+    await start("off", null, { "Diario/2026-08-18.md": "# 18\n", "Diario/2026-08-19.md": "# 19\n" });
+    await open("Diario/2026-08-18.md");
+    await open("Diario/2026-08-19.md");
+    await open(NOTA);
+    const tabOf = (doc: string) => [...document.querySelectorAll<HTMLElement>(".pane .tab")].find((tab) => tab.dataset.key?.includes(doc))!;
+    const parts = (tab: HTMLElement) =>
+      [...tab.querySelectorAll<HTMLElement>(".tab-name-head, .tab-name-tail")].map((part) => [part.className, part.textContent]);
+    const diary = tabOf("2026-08-19");
+    // La testa cede con l'ellissi, la coda resta: mese e giorno, non l'anno.
+    expect(parts(diary)).toEqual([["tab-name-head", "2026-"], ["tab-name-tail", "08-19"]]);
+    expect(parts(tabOf("2026-08-18"))).toEqual([["tab-name-head", "2026-"], ["tab-name-tail", "08-18"]]);
+    // Il nome intero, per chi ascolta e per chi passa col puntatore.
+    expect(diary.querySelector(".tab-name")!.textContent).toBe("2026-08-19");
+    expect(diary.getAttribute("aria-label")).toBe("2026-08-19");
+    // Una nota senza gemelle si taglia alla fine come sempre: niente coda.
+    expect(parts(tabOf(NOTA))).toEqual([["tab-name-head", "Diario"]]);
+    // Chiusa una delle due, l'altra torna a un nome solo.
+    document.querySelector<HTMLElement>(`#${CSS.escape(tabOf("2026-08-18").id)} + .tab-close`)!.click();
+    await vi.waitFor(() => expect(parts(tabOf("2026-08-19"))).toEqual([["tab-name-head", "2026-08-19"]]));
+  });
+
+  it("il menu «…» di una nota ha le voci di oggi", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const { icon } = await import("../ui/icons");
+    const menu = toolbarOf(panes()[0]!).querySelector<HTMLButtonElement>("[data-pane-menu]")!;
+    // «…» è la figura della cornice, non tre caratteri.
+    expect(menu.textContent).toBe("");
+    expect(menu.querySelector(":scope > svg")!.innerHTML).toBe(
+      new DOMParser().parseFromString(icon("more"), "image/svg+xml").documentElement.innerHTML,
+    );
+    expect(menu.getAttribute("aria-label")).toBe(t("document.pane.menu"));
+    menu.click();
+    await settle();
+    expect([...document.querySelectorAll("#context-menu .menu-label")].map((l) => l.textContent)).toEqual([
+      t("pane.menu.blocks"),
+      t("pane.menu.focus"),
+      t("pane.menu.split_right"),
+      t("pane.menu.split_down"),
+      t("pane.export_pdf"),
+      t("pane.slides"),
+      t("pane.recorder.open"),
+      t("pane.menu.close_tab"),
+      t("pane.menu.close_pane"),
+    ]);
+  });
+
+  it("una superficie con una modalità sola non ha il bottone, e un riquadro vuoto nemmeno", async () => {
+    await start("off", null);
+    await open(FOTO);
+    const pane = panes()[0]!;
+    await waitFor("l'immagine montata", () => pane.dataset.mode !== undefined && currentOf(pane).hidden);
+    expect(toolbarOf(pane).querySelector<HTMLElement>(":scope > .segmented")!.hidden).toBe(true);
+    const registry = await import("../ui/commands");
+    // Si chiudono l'immagine e la nota di benvenuto: il riquadro resta vuoto.
+    const close = registry.allCommands().find((entry) => entry.id === "shell.tab.close")!;
+    for (let i = 0; i < 4 && toolbarOf(pane).querySelector(":scope > .muted")!.textContent !== ""; i += 1) {
+      await close.run!();
+      await settle();
+    }
+    expect(toolbarOf(pane).querySelector(":scope > .muted")!.textContent).toBe("");
+    expect(currentOf(pane).hidden).toBe(true);
+    expect(toolbarOf(pane).querySelector<HTMLElement>(":scope > .pane-nav")!.hidden).toBe(true);
+  });
+});
+
+describe("il cambio di nota fa il suo lavoro una volta", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    (await import("../state/document-session")).documentSessions.closeAll();
+  });
+
+  it("ridipinge la striscia una volta, e porta in vista la linguetta al fotogramma dopo", async () => {
+    await start("off");
+    await open("Benvenuto.md");
+    await open("Altra.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const strip = document.querySelector<HTMLElement>(".pane.focus .pane-tabs")!;
+    expect(strip.querySelectorAll(".tab")).toHaveLength(2);
+    // Ogni ridisegno della striscia riscrive `aria-selected` su ogni linguetta.
+    const painted: string[] = [];
+    const keyOf = (record: MutationRecord): string => (record.target as HTMLElement).dataset.key ?? "";
+    const observer = new MutationObserver((records) => painted.push(...records.map(keyOf)));
+    observer.observe(strip, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+    // `scrollIntoView` chiede stile e layout aggiornati: durante il cambio
+    // sarebbe un layout forzato fra la superficie smontata e quella nuova.
+    const scrolled: HTMLElement[] = [];
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) {
+      if (strip.contains(this)) scrolled.push(this);
+    });
+
+    const { openDocument } = await import("./document");
+    await openDocument("Benvenuto.md");
+    painted.push(...observer.takeRecords().map(keyOf));
+    observer.disconnect();
+
+    // L'apertura muta il layout (il segnale chiede un giro) e chiede il
+    // proprio giro: i due sono uno solo, e ogni linguetta si dipinge una volta.
+    expect(painted).toHaveLength(2);
+    expect(new Set(painted).size).toBe(2);
+    expect(scrolled).toEqual([]);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(scrolled).toHaveLength(1);
+    expect(scrolled[0]!.dataset.key).toContain("Benvenuto.md");
+    expect(scrolled[0]!.getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+describe("chiusa l'ultima nota, il kernel non ne tiene più il contesto (IMP-107)", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    (await import("../state/document-session")).documentSessions.closeAll();
+  });
+
+  // Le view che seguono la nota (Struttura, Collegamenti, Statistiche) si
+  // ridisegnano dal contesto che il kernel ha ricevuto per ultimo. Se la × chiude
+  // l'ultima linguetta senza che il contesto venga ripubblicato, il kernel tiene
+  // la nota chiusa e le view continuano a dire i suoi conteggi.
+  it("la × dell'ultima linguetta pubblica un contesto senza nota", async () => {
+    const host = await start("off");
+    await open("Benvenuto.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] ?? null) as { doc: string | null } | null;
+    };
+    expect(published()).toMatchObject({ doc: "Benvenuto.md" });
+
+    // Lo startup ha aperto anche un'altra nota: si chiudono tutte le linguette
+    // con la ×, come chi usa l'app, e l'ultima a sparire è quella che resta.
+    const tabs = () => document.querySelectorAll(".pane.focus .tab").length;
+    while (tabs() > 0) {
+      const before = tabs();
+      document.querySelector<HTMLButtonElement>(".pane.focus .tab-close")!.click();
+      await waitFor("una linguetta in meno", () => tabs() === before - 1);
+    }
+    await waitFor("il contesto pubblicato senza nota", () => published()?.doc === null);
+  });
+
+  // Il clic su una linguetta che porta a un'altra nota non passa da `openDocument`:
+  // se il contesto non la segue, le view mostrano ancora la nota di prima.
+  it("la linguetta di un'altra nota pubblica quella nota", async () => {
+    const host = await start("off");
+    await open("Altra.md");
+    await open("Benvenuto.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] ?? null) as { doc: string | null } | null;
+    };
+    expect(published()).toMatchObject({ doc: "Benvenuto.md" });
+
+    document.querySelector<HTMLButtonElement>('.pane.focus .tab[data-key*="Altra.md"]')!.click();
+    await waitFor("il contesto segue la linguetta di Altra.md", () => published()?.doc === "Altra.md");
+  });
+
+  // La Struttura segue il documento del contesto: con un PDF davanti il
+  // kernel le dà lo stato vuoto (`outline_view_e2e.rs`), purché il contesto
+  // nomini il PDF e non la nota di prima (#321).
+  it("un PDF davanti pubblica il PDF, all'apertura e dalla sua linguetta", async () => {
+    const host = await start("off");
+    await open("Benvenuto.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] ?? null) as { doc: string | null } | null;
+    };
+    await open(GUIDA);
+    await waitFor("il contesto segue il PDF aperto", () => published()?.doc === GUIDA);
+    document.querySelector<HTMLButtonElement>('.pane.focus .tab[data-key*="Benvenuto.md"]')!.click();
+    await waitFor("il contesto torna alla nota", () => published()?.doc === "Benvenuto.md");
+    document.querySelector<HTMLButtonElement>('.pane.focus .tab[data-key*="guida.pdf"]')!.click();
+    await waitFor("il contesto segue la linguetta del PDF", () => published()?.doc === GUIDA);
+  });
+
+  // Un documento che non si apre è comunque quello a fuoco: la barra di
+  // Statistiche deve parlare di lui, non dei conteggi della nota di prima
+  // (IMP-143). Il perché lo dice la sua scheda; il contesto qui dice solo chi è.
+  it("un documento che non si apre pubblica sé stesso, non la nota di prima", async () => {
+    const host = await start("off");
+    await open("Benvenuto.md");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    const published = () => {
+      const calls = host.atGate("setActiveContext");
+      return (calls[calls.length - 1]?.args[0] ?? null) as { doc: string | null } | null;
+    };
+    expect(published()).toMatchObject({ doc: "Benvenuto.md" });
+
+    const repair = host.fault("openDocument", { kind: "format", message: "rich codec: password" } as never);
+    try {
+      await open("Lettera.docx").catch(() => {});
+      // Il formato ha detto di no davvero: la prova non passa da un'apertura riuscita.
+      expect(host.atGate("openDocument").some((call) => call.args[0] === "Lettera.docx")).toBe(true);
+      expect(document.querySelector(".pane.focus .rich-editor .ProseMirror")).toBeNull();
+      await waitFor("il contesto segue il documento che non si apre", () => published()?.doc === "Lettera.docx");
+    } finally {
+      repair();
+    }
   });
 });

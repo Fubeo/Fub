@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { EditorSelection, EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState, type TransactionSpec } from "@codemirror/state";
 import { colorsAt, setContentColor, type ColorKind, type ContentColor } from "./color";
 import { colorClasses, renderInline } from "./render-inline";
+import { MARKDOWN_ACTIONS } from "./actions";
 
 // I colori del contenuto (K1): classi fisse, un tag che avvolge, una classe
 // che cambia al posto di un secondo tag.
@@ -67,6 +68,16 @@ describe("dare un colore", () => {
     expect(color(at("niente", 0, 6), "text", null).ran).toBe(false);
   });
 
+  it("in una nota CRLF il tag andato a capo si toglie intero, come in LF (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const doc = `a <span${nl}class="fub-color-red">due</span> b`;
+      const state = EditorState.create({ doc, extensions: nl === "\n" ? [] : [EditorState.lineSeparator.of(nl)] });
+      // Posizioni del documento: l'a capo vale una posizione.
+      const inside = doc.replace(/\r\n/g, "\n").indexOf("due");
+      expect(color(state, "text", null, { from: inside, to: inside + 3 }).doc, JSON.stringify(nl)).toBe("a due b");
+    }
+  });
+
   it("in una riga vuota scrive la coppia vuota col cursore dentro", () => {
     const result = color(at("", 0), "text", "purple");
     expect(result.doc).toBe('<span class="fub-color-purple"></span>');
@@ -84,5 +95,37 @@ describe("dare un colore", () => {
   it("una nota di sola lettura non cambia", () => {
     const state = EditorState.create({ doc: "x", extensions: EditorState.readOnly.of(true), selection: EditorSelection.single(0, 1) });
     expect(color(state, "text", "red").ran).toBe(false);
+  });
+});
+
+describe("se il colore agirebbe", () => {
+  // La barra chiede per ogni colore se è acceso, a ogni movimento del cursore
+  // e a ogni cambio di scheda: la risposta è quella del comando, ma senza
+  // costruire la transazione.
+  const cases: [string, EditorState][] = [
+    ["selezione", at("uno due tre", 4, 7)],
+    ["già rosso", at('uno <span class="fub-color-red">due</span> tre', 32, 35)],
+    ["riga del cursore", at("- [ ] da fare", 8)],
+    ["riga vuota", at("", 0)],
+    ["sola lettura", EditorState.create({ doc: "uno", extensions: EditorState.readOnly.of(true) })],
+  ];
+  const kinds: ColorKind[] = ["text", "fill"];
+  const values: (ContentColor | null)[] = [null, "red", "blue"];
+
+  it("dice sì esattamente quando il comando agirebbe, e non costruisce transazioni", () => {
+    for (const [name, state] of cases) {
+      for (const kind of kinds) {
+        for (const value of values) {
+          const expected = color(state, kind, value).ran;
+          const action = MARKDOWN_ACTIONS.get(`markdown.${kind === "text" ? "color" : "background"}.${value ?? "default"}`)!;
+          let built = 0;
+          const update = state.update.bind(state);
+          Object.defineProperty(state, "update", { configurable: true, value: (...specs: TransactionSpec[]) => (built++, update(...specs)) });
+          expect(action.applicable!(state), `${name} ${kind} ${value}`).toBe(expected);
+          expect(built, `${name} ${kind} ${value}`).toBe(0);
+          delete (state as unknown as { update?: unknown }).update;
+        }
+      }
+    }
   });
 });

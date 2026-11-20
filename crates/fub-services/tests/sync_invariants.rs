@@ -53,18 +53,20 @@ fn vault_sync_dir(dir: &Path) -> PathBuf {
     sync::vault_dir(&fub_services::schema::sync_dir(dir), VAULT)
 }
 
-fn temp_data_dir(name: &str) -> PathBuf {
-    let mut dir = std::env::temp_dir();
-    dir.push(format!(
-        "fub-sync-invariants-{}-{}",
-        name,
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
-    ));
-    std::fs::create_dir_all(&dir).expect("temp dir");
-    dir
+/// Cartella dati temporanea del test, nel `temp_dir()` del sistema.
+///
+/// Si pulisce da sola: il `TempDir` la cancella quando cade, cioè a fine test
+/// anche se il test va in panico (il drop avviene durante lo srotolamento
+/// dello stack). Prima la cartella non veniva mai cancellata e ogni corsa
+/// lasciava nuove `fub-sync-invariants-*` in /tmp. Chi la usa tiene vivo il
+/// `TempDir` per tutta la durata del test e passa `dir.path()` dove serve un
+/// `&Path`.
+fn temp_data_dir(name: &str) -> tempfile::TempDir {
+    let prefix = format!("fub-sync-invariants-{name}-");
+    tempfile::Builder::new()
+        .prefix(&prefix)
+        .tempdir()
+        .expect("temp dir")
 }
 
 struct Replica {
@@ -272,7 +274,7 @@ fn learn(replica: &mut Replica, ops: &[SyncOp]) {
 #[test]
 fn partition_rejoin_converges_or_conflicts() {
     let dir = temp_data_dir("partition");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "partition-user");
     let mut a = Replica::new("a");
     let mut b = Replica::new("b");
@@ -300,7 +302,7 @@ fn partition_rejoin_converges_or_conflicts() {
     learn(&mut b, &pb.ops);
     assert_eq!(a.vv, b.vv, "vectors converge after rejoin");
     // No silent divergence: the shared doc has 2 versions (both preserved).
-    let dir_sync = vault_sync_dir(&dir);
+    let dir_sync = vault_sync_dir(dir.path());
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     assert_eq!(folded.versions["notes/shared.md"].len(), 2);
 }
@@ -312,7 +314,7 @@ fn partition_rejoin_converges_or_conflicts() {
 #[test]
 fn reorder_and_duplicates_are_idempotent() {
     let dir = temp_data_dir("reorder");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "reorder-user");
     let mut a = Replica::new("a");
     let o1 = a.op("notes/x.md", OpKind::Create, "v1");
@@ -334,7 +336,7 @@ fn reorder_and_duplicates_are_idempotent() {
     ];
     let r = push(&mut state, &auth, &a.id, &shuffled);
     assert_eq!(r.ack.len(), shuffled.len(), "every delivery acked");
-    let dir_sync = vault_sync_dir(&dir);
+    let dir_sync = vault_sync_dir(dir.path());
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     // No write lost: the dominating version (v3) is present; stale replays
     // were acked and skipped, never stored as extra versions.
@@ -362,7 +364,7 @@ fn reorder_and_duplicates_are_idempotent() {
 #[test]
 fn concurrent_edit_delete_and_rename() {
     let dir = temp_data_dir("edit-delete");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "edit-user");
     let mut a = Replica::new("a");
     let mut b = Replica::new("b");
@@ -442,6 +444,199 @@ fn concurrent_edit_delete_and_rename() {
     assert!(!conflicts.is_empty(), "routing mismatch must surface");
 }
 
+/// M2: un rinomina su un documento cancellato, che ha visto la
+/// cancellazione, lo fa rivivere e ne toglie la tombstone. Una scrittura
+/// concorrente di un'altra replica diventa una copia di conflitto, non una
+/// scrittura sepolta sotto la cancellazione di prima.
+#[test]
+fn a_rename_onto_a_deleted_document_clears_its_tombstone() {
+    let dir = temp_data_dir("rename-tombstone");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-tomb-user");
+    let mut a = Replica::new("a");
+    let mut b = Replica::new("b");
+    let created = a.op("notes/meta.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    let seen = pull(&mut state, &auth, &b.id, &BTreeMap::new());
+    learn(&mut b, &seen.ops);
+
+    let deleted = a.op("notes/meta.md", OpKind::Delete, "");
+    let source = a.op("notes/fonte.md", OpKind::Create, "fonte");
+    let renamed = a.op(
+        "notes/fonte.md",
+        OpKind::Rename {
+            from: "notes/fonte.md".to_string(),
+            to: "notes/meta.md".to_string(),
+        },
+        "fonte",
+    );
+    let r = push(&mut state, &auth, &a.id, &[deleted, source, renamed]);
+    assert_eq!(r.ack.len(), 3, "{:?}", r.conflicts);
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(
+        !folded.tombstones.contains_key("notes/meta.md"),
+        "the destination lives again"
+    );
+    assert!(folded.tombstones.contains_key("notes/fonte.md"));
+
+    // B saw only the creation: its edit is concurrent with the rename.
+    let edit = b.op("notes/meta.md", OpKind::Update, "modifica di B");
+    let edit_id = edit.op_id.clone();
+    let r = push(&mut state, &auth, &b.id, &[edit]);
+    assert!(
+        r.ack.contains(&edit_id),
+        "kept as a version: {:?}",
+        r.conflicts
+    );
+    assert!(
+        r.conflicts
+            .iter()
+            .all(|conflict| !conflict.reason.contains("tombstone")),
+        "{:?}",
+        r.conflicts
+    );
+}
+
+/// The same rename under a new op id, as the server sees an op it no longer
+/// remembers (dedup set evicted, version chain pruned): vector, ends and
+/// payload unchanged, AAD recomputed for the new id.
+fn reissued(op: &SyncOp, op_id: &str) -> SyncOp {
+    let (from, to) = match &op.kind {
+        OpKind::Rename { from, to } => (Some(from.as_str()), Some(to.as_str())),
+        _ => (None, None),
+    };
+    let mut again = op.clone();
+    again.op_id = op_id.to_string();
+    again.aad = Replica::envelope_aad(
+        op_id,
+        &op.replica_id,
+        &op.doc_id,
+        op.kind.as_str(),
+        &op.vv,
+        op.ts_ms,
+        op.key_epoch,
+        (from, to),
+    );
+    again
+}
+
+fn rename_op(replica: &mut Replica, from: &str, to: &str, body: &str) -> SyncOp {
+    replica.op(
+        from,
+        OpKind::Rename {
+            from: from.to_string(),
+            to: to.to_string(),
+        },
+        body,
+    )
+}
+
+/// Audit 4: a rename that reaches the server after writes that saw it, on
+/// both ends, changes nothing: it neither buries the newer `from` nor
+/// overwrites the newer `to` with its old payload.
+#[test]
+fn a_dominated_rename_is_a_no_op() {
+    let dir = temp_data_dir("rename-dominated");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-dominated-user");
+    let mut a = Replica::new("a");
+    let created = a.op("notes/from.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    // A renames, then recreates `from` and edits `to`: the two later writes
+    // land first, the rename arrives late.
+    let late = rename_op(&mut a, "notes/from.md", "notes/to.md", "prima");
+    let recreated = a.op("notes/from.md", OpKind::Update, "ricreata dopo");
+    let edited = a.op("notes/to.md", OpKind::Update, "modificata dopo");
+    let r = push(&mut state, &auth, &a.id, &[recreated, edited]);
+    assert_eq!(r.ack.len(), 2, "{:?}", r.conflicts);
+    let late_id = late.op_id.clone();
+    let r = push(&mut state, &auth, &a.id, &[late]);
+    assert_eq!(r.ack, [late_id], "a covered op is acknowledged as done");
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(
+        !folded.tombstones.contains_key("notes/from.md"),
+        "the newer `from` is not buried"
+    );
+    assert!(!folded.trash.contains_key("notes/from.md"));
+    assert_eq!(
+        folded.versions["notes/from.md"]
+            .last()
+            .unwrap()
+            .ciphertext_b64,
+        "CT:ricreata dopo"
+    );
+    let to = &folded.versions["notes/to.md"];
+    assert_eq!(to.len(), 1, "the stale payload is not stacked on `to`");
+    assert_eq!(to[0].ciphertext_b64, "CT:modificata dopo");
+}
+
+/// Audit 4: a rename equal to what the server already folded (the same op
+/// under an id the server forgot) is idempotent, even after `from` was
+/// recreated: the second delivery must not delete it again.
+#[test]
+fn a_rename_delivered_again_is_idempotent() {
+    let dir = temp_data_dir("rename-equal");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-equal-user");
+    let mut a = Replica::new("a");
+    let created = a.op("notes/from.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    let renamed = rename_op(&mut a, "notes/from.md", "notes/to.md", "prima");
+    assert_eq!(
+        push(&mut state, &auth, &a.id, std::slice::from_ref(&renamed))
+            .ack
+            .len(),
+        1
+    );
+
+    // Delivered again at once: both ends are exactly the rename.
+    let again = reissued(&renamed, "op-replica-a-again-1");
+    let r = push(&mut state, &auth, &a.id, &[again]);
+    assert_eq!(r.ack.len(), 1, "{:?}", r.conflicts);
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert_eq!(folded.versions["notes/to.md"].len(), 1, "no second version");
+    assert!(folded.tombstones.contains_key("notes/from.md"));
+
+    // `from` lives again, then the old rename comes back once more.
+    let recreated = a.op("notes/from.md", OpKind::Create, "nuova fonte");
+    assert_eq!(push(&mut state, &auth, &a.id, &[recreated]).ack.len(), 1);
+    let again = reissued(&renamed, "op-replica-a-again-2");
+    let r = push(&mut state, &auth, &a.id, &[again]);
+    assert_eq!(r.ack.len(), 1, "{:?}", r.conflicts);
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(
+        !folded.tombstones.contains_key("notes/from.md"),
+        "the recreated `from` is not deleted again"
+    );
+    assert_eq!(folded.versions["notes/to.md"].len(), 1);
+}
+
+/// Audit 4: a rename overtaken on one end only is held: applying it would
+/// bury the newer `from`, dropping it would lose `to`. Nothing changes.
+#[test]
+fn a_rename_overtaken_on_one_end_is_held() {
+    let dir = temp_data_dir("rename-half");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "rename-half-user");
+    let mut a = Replica::new("a");
+    let created = a.op("notes/from.md", OpKind::Create, "prima");
+    push(&mut state, &auth, &a.id, &[created]);
+    let late = rename_op(&mut a, "notes/from.md", "notes/to.md", "prima");
+    let recreated = a.op("notes/from.md", OpKind::Update, "ricreata dopo");
+    assert_eq!(push(&mut state, &auth, &a.id, &[recreated]).ack.len(), 1);
+    let r = push(&mut state, &auth, &a.id, &[late]);
+    assert!(r.ack.is_empty(), "held, not acknowledged");
+    assert_eq!(r.conflicts.len(), 1, "{:?}", r.conflicts);
+    let folded = sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
+    assert!(!folded.tombstones.contains_key("notes/from.md"));
+    assert!(!folded.versions.contains_key("notes/to.md"));
+}
+
 // ---------------------------------------------------------------------------
 // 4. Divergent clocks: ts_ms never decides; vv decides (settings LWW only).
 // ---------------------------------------------------------------------------
@@ -449,7 +644,7 @@ fn concurrent_edit_delete_and_rename() {
 #[test]
 fn divergent_clocks_do_not_decide() {
     let dir = temp_data_dir("clocks");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "clock-user");
     let mut a = Replica::new("a");
     let mut b = Replica::new("b");
@@ -473,7 +668,7 @@ fn divergent_clocks_do_not_decide() {
     push(&mut state, &auth, &c.id, &[sc]);
     let r2 = push(&mut state, &auth, &d.id, &[sd]);
     assert!(r2.conflicts.is_empty(), "settings converge by LWW");
-    let dir_sync = vault_sync_dir(&dir);
+    let dir_sync = vault_sync_dir(dir.path());
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     assert_eq!(folded.versions["config-shared/app.json"].len(), 2);
 }
@@ -485,7 +680,7 @@ fn divergent_clocks_do_not_decide() {
 #[test]
 fn restart_mid_queue_converges() {
     let dir = temp_data_dir("restart");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "restart-user");
     let mut a = Replica::new("a");
     let o1 = a.op("notes/r1.md", OpKind::Create, "one");
@@ -496,7 +691,7 @@ fn restart_mid_queue_converges() {
     // Simulate a crash before ack: drop `state`, reopen, pull must still
     // serve both versions (folded index is durable, WAL replay is bounded).
     drop(state);
-    let mut state2 = open_state(&dir);
+    let mut state2 = open_state(dir.path());
     let pb = pull(&mut state2, &auth, "replica-b", &BTreeMap::new());
     assert!(pb.ops.iter().any(|o| o.ciphertext_b64 == "CT:one"));
     assert!(pb.ops.iter().any(|o| o.ciphertext_b64 == "CT:two"));
@@ -506,8 +701,8 @@ fn restart_mid_queue_converges() {
     let ids: Vec<String> = pb.ops.iter().map(|o| o.op_id.clone()).collect();
     ack(&mut state2, &auth, "replica-b", &ids);
     drop(state2);
-    let _state3 = open_state(&dir);
-    let dir_sync = vault_sync_dir(&dir);
+    let _state3 = open_state(dir.path());
+    let dir_sync = vault_sync_dir(dir.path());
     let wal = fub_services::sync::queue::load_ops(&dir_sync, "replica-b").unwrap();
     assert!(wal.is_empty(), "acked WAL entries stay gone across restart");
 }
@@ -521,7 +716,7 @@ fn restart_mid_queue_converges() {
 #[test]
 fn bearer_status_follows_the_rejection_kind() {
     let dir = temp_data_dir("bearer");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "bearer-user");
     let id = state.bearer(Some(&auth)).expect("session valid");
     assert_eq!(state.bearer(None).unwrap_err().status, 401);
@@ -544,14 +739,14 @@ fn attachment_integrity_roundtrip() {
     assert_ne!(sha, fub_services::sync::versions::sha256_b64(b"other"));
 
     let dir = temp_data_dir("attach");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "attach-user");
     state
         .accounts
         .verify_session_token(Some(&auth))
         .expect("session valid");
     // Quota path: oversized attachment rejected, small one accounted.
-    let dir_sync = vault_sync_dir(&dir);
+    let dir_sync = vault_sync_dir(dir.path());
     let mut folded = fub_services::sync::versions::load(&dir_sync).unwrap_or_default();
     assert!(fub_services::sync::versions::account_attachment(
         &mut folded,
@@ -579,7 +774,7 @@ fn attachment_integrity_roundtrip() {
 #[test]
 fn revocation_blocks_future_pushes() {
     let dir = temp_data_dir("revoke");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let owner_auth = auth_for(&mut state, "owner");
     let guest_id = state
         .accounts
@@ -718,7 +913,7 @@ fn join(state: &mut ServiceState, owner: &str, guest: &str, role: &str) {
 #[test]
 fn an_admin_cannot_revoke_the_owner_or_a_peer() {
     let dir = temp_data_dir("revoke-rank");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let (owner_id, owner) = member(&mut state, "rank-owner");
     let (admin_id, admin) = member(&mut state, "rank-admin");
     let (peer_id, peer) = member(&mut state, "rank-peer");
@@ -729,6 +924,14 @@ fn an_admin_cannot_revoke_the_owner_or_a_peer() {
     join(&mut state, &owner, &admin, "admin");
     join(&mut state, &owner, &peer, "admin");
     join(&mut state, &admin, &writer, "writer");
+    // Un Admin non nomina un altro Admin, che poi non potrebbe togliere.
+    let (status, body) = call(
+        &mut state,
+        "/v1/sync/invite",
+        &admin,
+        serde_json::json!({ "vault_id": VAULT, "role": "admin" }),
+    );
+    assert_eq!(status, 403, "{body}");
     let revoke = |account: &str| serde_json::json!({ "vault_id": VAULT, "account_id": account });
 
     // L'ultimo Owner resta: né un Admin né l'Owner stesso lo tolgono.
@@ -765,7 +968,7 @@ fn an_admin_cannot_revoke_the_owner_or_a_peer() {
 #[test]
 fn pending_invites_are_bounded() {
     let dir = temp_data_dir("invite-bound");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let owner = auth_for(&mut state, "bound-owner");
     let invite = |ttl: serde_json::Value| serde_json::json!({ "vault_id": VAULT, "role": "reader", "ttl_ms": ttl });
     for ttl in [serde_json::json!(0), serde_json::json!(u64::MAX)] {
@@ -787,7 +990,8 @@ fn pending_invites_are_bounded() {
     // Un invito accettato libera il suo posto.
     let (_, guest) = member(&mut state, "bound-guest");
     let shares =
-        std::fs::read_to_string(fub_services::schema::sync_dir(&dir).join("shares.json")).unwrap();
+        std::fs::read_to_string(fub_services::schema::sync_dir(dir.path()).join("shares.json"))
+            .unwrap();
     let token = first_token.unwrap();
     assert!(
         !shares.contains(token.as_str().unwrap()),
@@ -812,7 +1016,7 @@ fn pending_invites_are_bounded() {
 #[test]
 fn invite_step_up_survives_a_restart() {
     let dir = temp_data_dir("step-up");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let (id, owner) = member(&mut state, "step-owner");
     let secret = fub_services::mfa::generate_secret().unwrap().secret_b64;
     state
@@ -827,7 +1031,7 @@ fn invite_step_up_survives_a_restart() {
     let invite = |code: Option<&str>| serde_json::json!({ "vault_id": VAULT, "role": "reader", "code": code });
 
     drop(state);
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let (status, body) = call(&mut state, "/v1/sync/invite", &owner, invite(None));
     assert_eq!(
         (status, body["error"].as_str()),
@@ -839,7 +1043,7 @@ fn invite_step_up_survives_a_restart() {
     assert_eq!(status, 201, "{body}");
 
     drop(state);
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     assert_eq!(
         call(&mut state, "/v1/sync/invite", &owner, invite(Some(&code))).0,
         401,
@@ -850,7 +1054,7 @@ fn invite_step_up_survives_a_restart() {
 #[test]
 fn an_account_owns_at_most_max_vaults() {
     let dir = temp_data_dir("vault-quota");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     state.config.quotas.max_vaults = 2;
     let greedy = auth_for(&mut state, "greedy");
     let other = auth_for(&mut state, "other");
@@ -883,7 +1087,7 @@ fn stale_key_epoch_holds_never_applies() {
     // Epoch 1 establishes the vault record; an epoch-0 replay is held
     // explicitly (surfaced in conflicts), never applied.
     let dir = temp_data_dir("epoch");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "epoch-user");
     let mut a = Replica::new("a");
     a.epoch = 1;
@@ -946,7 +1150,7 @@ fn vault_key_wrap_rotation_roundtrip() {
 
     // Server stores the envelope opaquely through the vault-key endpoints.
     let dir = temp_data_dir("vaultkey");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let owner_auth = auth_for(&mut state, "key-owner");
     let store_body = serde_json::json!({
         "vault_id": VAULT,
@@ -975,11 +1179,73 @@ fn vault_key_wrap_rotation_roundtrip() {
     assert_eq!(resp.status, 200);
 }
 
+/// Audit 1: one rule for the first key of a vault. It is epoch one, with or
+/// without an explicit `key_epoch`; the answer says so (the client stores
+/// that epoch before it seals anything), and an explicit zero is refused
+/// with the same rule in words.
+#[test]
+fn the_first_vault_key_is_epoch_one() {
+    use fub_services::crypto::{derive_kek, wrap_vdk_with_kek, KdfParams};
+    let params = KdfParams::fresh().unwrap();
+    let kek = derive_kek("first key passphrase", &params).unwrap();
+    let wrapped = wrap_vdk_with_kek(&[5u8; 32], &kek, params).unwrap();
+    let store = |state: &mut ServiceState, auth: &str, body: serde_json::Value| {
+        let resp = sync::handle(
+            state,
+            "POST",
+            "/v1/sync/vault-key",
+            Some(auth),
+            &serde_json::to_vec(&body).unwrap(),
+        );
+        let body: serde_json::Value = serde_json::from_slice(&resp.body).unwrap();
+        (resp.status, body)
+    };
+
+    let dir = temp_data_dir("first-epoch");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "first-epoch-owner");
+    let (status, body) = store(
+        &mut state,
+        &auth,
+        serde_json::json!({"vault_id": VAULT, "wrapped": wrapped, "key_epoch": 0}),
+    );
+    assert_eq!(status, 409, "{body}");
+    assert_eq!(body["error"], "initial vault key must start at epoch one");
+    let (status, body) = store(
+        &mut state,
+        &auth,
+        serde_json::json!({"vault_id": VAULT, "wrapped": wrapped}),
+    );
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["key_epoch"], sync::INITIAL_KEY_EPOCH);
+    assert_eq!(sync::INITIAL_KEY_EPOCH, 1);
+
+    // Ops sealed at that epoch are accepted; at zero they are refused.
+    let mut a = Replica::new("a");
+    a.epoch = 0;
+    let stale = a.op("notes/first.md", OpKind::Create, "epoch zero");
+    assert_eq!(push_raw(&mut state, &auth, &a.id, &[stale]).status, 409);
+    a.epoch = sync::INITIAL_KEY_EPOCH;
+    let sealed = a.op("notes/first.md", OpKind::Create, "epoch one");
+    assert_eq!(push(&mut state, &auth, &a.id, &[sealed]).ack.len(), 1);
+
+    let dir = temp_data_dir("first-epoch-explicit");
+    let mut state = open_state(dir.path());
+    let auth = auth_for(&mut state, "first-epoch-explicit-owner");
+    let (status, body) = store(
+        &mut state,
+        &auth,
+        serde_json::json!({"vault_id": VAULT, "wrapped": wrapped, "key_epoch": 1}),
+    );
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["key_epoch"], 1);
+}
+
 #[test]
 fn owner_epoch_rotation_blocks_stale_writes_and_new_devices_skip_old_ciphertext() {
     use fub_services::crypto::{derive_kek, wrap_vdk_with_kek, KdfParams};
     let dir = temp_data_dir("owner-epoch");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "epoch-owner");
     let params = KdfParams::fresh().unwrap();
     let kek = derive_kek("separate vault passphrase", &params).unwrap();
@@ -1043,7 +1309,7 @@ fn owner_epoch_rotation_blocks_stale_writes_and_new_devices_skip_old_ciphertext(
 #[test]
 fn queue_and_memory_bounds_hold() {
     let dir = temp_data_dir("bounds");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "bounds-user");
     // More versions than the per-doc cap on one doc: prune keeps the tail.
     // Each op comes from a DISTINCT replica id so vectors are pairwise
@@ -1068,7 +1334,7 @@ fn queue_and_memory_bounds_hold() {
             assert_eq!(r.ack.len(), batch.len());
         }
     }
-    let dir_sync = vault_sync_dir(&dir);
+    let dir_sync = vault_sync_dir(dir.path());
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     assert_eq!(
         folded.versions["notes/hot.md"].len(),
@@ -1085,14 +1351,14 @@ fn queue_and_memory_bounds_hold() {
 #[test]
 fn dedup_index_is_bounded_without_duplicate_live_versions() {
     let dir = temp_data_dir("seen-bound");
-    let sync_dir = vault_sync_dir(&dir);
+    let sync_dir = vault_sync_dir(dir.path());
     std::fs::create_dir_all(&sync_dir).unwrap();
     let mut folded = fub_services::sync::versions::SyncState::default();
     for n in 0..=sync::MAX_SEEN_OP_IDS {
         folded.seen_op_ids.insert(format!("expired-{n}"));
     }
     fub_services::sync::versions::save(&sync_dir, &folded).unwrap();
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "seen-bound-user");
     let mut a = Replica::new("a");
     let op = a.op("notes/bounded.md", OpKind::Create, "one");
@@ -1121,7 +1387,7 @@ fn queue_corruption_quarantines_and_resyncs() {
     // explicit resync replay converges.
     use fub_services::sync::queue;
     let dir = temp_data_dir("corrupt");
-    let sync_dir = vault_sync_dir(&dir);
+    let sync_dir = vault_sync_dir(dir.path());
     std::fs::create_dir_all(&sync_dir).unwrap();
     let mut a = Replica::new("a");
     let good = a.op("notes/good.md", OpKind::Create, "good");
@@ -1159,7 +1425,7 @@ fn queue_full_is_backpressure_never_drop() {
     // a silent drop: the caller must drain via pull+ack first.
     use fub_services::sync::queue;
     let dir = temp_data_dir("queuefull");
-    let sync_dir = vault_sync_dir(&dir);
+    let sync_dir = vault_sync_dir(dir.path());
     std::fs::create_dir_all(&sync_dir).unwrap();
     let mut a = Replica::new("a");
     let ops: Vec<_> = (0..queue::MAX_QUEUE_OPS)
@@ -1186,7 +1452,7 @@ fn queue_full_is_backpressure_never_drop() {
 #[test]
 fn strict_wire_rejects_malformed_bodies() {
     let dir = temp_data_dir("strict");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "strict-user");
     // Invalid JSON.
     let resp = sync::handle(
@@ -1348,13 +1614,13 @@ fn device_only_never_syncs() {
     // Server-side: a hostile client pushing device-only gets a conflict
     // entry, never stored versions.
     let dir = temp_data_dir("privacy");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "privacy-user");
     let mut evil = Replica::new("evil");
     let op = evil.op("secrets/token.txt", OpKind::Create, "s3cr3t");
     let r = push(&mut state, &auth, &evil.id, &[op]);
     assert_eq!(r.conflicts.len(), 1);
-    let dir_sync = vault_sync_dir(&dir);
+    let dir_sync = vault_sync_dir(dir.path());
     let folded = fub_services::sync::versions::load(&dir_sync).unwrap();
     assert!(!folded.versions.contains_key("secrets/token.txt"));
     // Ciphertext opacity: nothing stored contains the word "plaintext".
@@ -1383,17 +1649,40 @@ fn user_exclude_is_additive_never_subtractive() {
     assert!(truncated);
 }
 
+/// M3: un nome senza punto, o con il solo punto iniziale, non ha
+/// estensione: `ext:makefile` non esclude il file `Makefile`, e una lista di
+/// estensioni ammesse non lo scambia per un'estensione.
+#[test]
+fn a_name_without_a_dot_has_no_extension() {
+    let (sel, _) = sync::parse_user_exclude(&[
+        "ext:makefile".to_string(),
+        "ext:gitignore".to_string(),
+        "ext:md".to_string(),
+    ]);
+    assert!(sync::is_selected(&sel, "notes/Makefile"));
+    assert!(sync::is_selected(&sel, "notes/.gitignore"));
+    assert!(!sync::is_selected(&sel, "notes/a.MD"));
+    assert!(!sync::is_selected(&sel, "notes/build.makefile"));
+    let only_md = sync::SyncSelection {
+        include_ext: vec!["md".to_string()],
+        ..Default::default()
+    };
+    assert!(sync::is_selected(&only_md, "notes/a.md"));
+    assert!(!sync::is_selected(&only_md, "notes/md"));
+    assert!(!sync::is_selected(&only_md, "notes/.md"));
+}
+
 #[test]
 fn no_secret_in_persisted_state() {
     // Passwords, KEKs, VDK cleartext and session tokens must never appear in
     // sync state/shares/queue files.
     let dir = temp_data_dir("noleak");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "noleak-user");
     let mut a = Replica::new("a");
     let op = a.op("notes/clean.md", OpKind::Create, "CT:opaque");
     push(&mut state, &auth, &a.id, &[op]);
-    let dir_sync = vault_sync_dir(&dir);
+    let dir_sync = vault_sync_dir(dir.path());
     let mut blob = Vec::new();
     for entry in std::fs::read_dir(&dir_sync).unwrap() {
         let entry = entry.unwrap();
@@ -1508,7 +1797,7 @@ fn u64_identities_survive_u64_max_as_strings() {
 fn selected_restore_is_authenticated_and_only_a_fresh_write_changes_history() {
     use fub_services::crypto::{aad_verify, seal, SyncEnvelope};
     let dir = temp_data_dir("restore-version");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "restore-user");
     let mut a = Replica::new("a");
     let key = [29u8; 32];
@@ -1556,7 +1845,7 @@ fn selected_restore_is_authenticated_and_only_a_fresh_write_changes_history() {
     };
     let plaintext = aad_verify(&key, &env, &original.nonce_b64, &original.ciphertext_b64).unwrap();
     assert_eq!(plaintext, b"original bytes");
-    let sync_dir = vault_sync_dir(&dir);
+    let sync_dir = vault_sync_dir(dir.path());
     assert_eq!(
         fub_services::sync::versions::load(&sync_dir)
             .unwrap()
@@ -1582,7 +1871,7 @@ fn selected_restore_is_authenticated_and_only_a_fresh_write_changes_history() {
 #[test]
 fn concurrent_rename_and_edit_are_held_without_poisoning_durable_replay() {
     let dir = temp_data_dir("rename-edit");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "rename-edit-user");
     let mut a = Replica::new("a");
     let mut b = Replica::new("b");
@@ -1604,21 +1893,21 @@ fn concurrent_rename_and_edit_are_held_without_poisoning_durable_replay() {
     assert!(held.ack.is_empty());
     assert_eq!(held.conflicts.len(), 1);
     assert_eq!(
-        fub_services::sync::queue::load_ops(&vault_sync_dir(&dir), &b.id)
+        fub_services::sync::queue::load_ops(&vault_sync_dir(dir.path()), &b.id)
             .unwrap()
             .len(),
         0
     );
     let unrelated = b.op("notes/independent.md", OpKind::Create, "safe");
     assert_eq!(push(&mut state, &auth, &b.id, &[unrelated]).ack.len(), 1);
-    let folded = fub_services::sync::versions::load(&vault_sync_dir(&dir)).unwrap();
+    let folded = fub_services::sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
     assert!(folded.versions.contains_key("notes/to.md"));
     assert_eq!(folded.versions["notes/from.md"].len(), 1);
 }
 #[test]
 fn edit_before_concurrent_delete_is_preserved_and_reported() {
     let dir = temp_data_dir("delete-after-edit");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "delete-after-edit-user");
     let mut a = Replica::new("a");
     let mut b = Replica::new("b");
@@ -1632,7 +1921,7 @@ fn edit_before_concurrent_delete_is_preserved_and_reported() {
     let result = push(&mut state, &auth, &b.id, &[delete]);
     assert_eq!(result.ack.len(), 1);
     assert_eq!(result.conflicts.len(), 1);
-    let folded = fub_services::sync::versions::load(&vault_sync_dir(&dir)).unwrap();
+    let folded = fub_services::sync::versions::load(&vault_sync_dir(dir.path())).unwrap();
     assert_eq!(folded.versions["notes/deleted.md"].len(), 3);
     assert_eq!(folded.conflicts.len(), 1);
     assert!(folded.tombstones.contains_key("notes/deleted.md"));
@@ -1641,7 +1930,7 @@ fn edit_before_concurrent_delete_is_preserved_and_reported() {
 #[test]
 fn status_rows_are_sourced_from_authenticated_versions_and_wal_does_not_expire() {
     let dir = temp_data_dir("status-and-wal");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let auth = auth_for(&mut state, "status-user");
     let mut a = Replica::new("a");
     let op = a.op("notes/status.md", OpKind::Create, "opaque");
@@ -1658,7 +1947,7 @@ fn status_rows_are_sourced_from_authenticated_versions_and_wal_does_not_expire()
     assert_eq!(status["entries"][0]["doc_id"], "notes/status.md");
     assert_eq!(status["entries"][0]["server_counter"], "1");
     assert_eq!(status["log"][0]["kind"], "create");
-    let sync_dir = vault_sync_dir(&dir);
+    let sync_dir = vault_sync_dir(dir.path());
     let quotas = fub_services::schema::ServiceQuotas::default();
     fub_services::sync::queue::enforce_cap(
         &sync_dir,
@@ -1679,11 +1968,11 @@ fn status_rows_are_sourced_from_authenticated_versions_and_wal_does_not_expire()
 #[test]
 fn the_vault_quota_counts_history_and_every_replica_queue() {
     let dir = temp_data_dir("vault-quota");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     state.config.quotas.max_vault_bytes = 64 * 1024;
     let auth = auth_for(&mut state, "quota-user");
     let body = "x".repeat(4 * 1024);
-    let sync_dir = vault_sync_dir(&dir);
+    let sync_dir = vault_sync_dir(dir.path());
     // Una nota riscritta molte volte: la storia vecchia cede, l'ultima resta.
     let mut a = Replica::new("a");
     let mut last = String::new();
@@ -1715,6 +2004,62 @@ fn the_vault_quota_counts_history_and_every_replica_queue() {
         folded.versions["notes/a.md"].last().unwrap().ciphertext_b64,
         last
     );
+}
+
+/// M1: una coda già oltre il tetto risponde 507 prima di scrivere: il 507
+/// dice il vero, nessuno stato del vault è stato riscritto.
+#[test]
+fn a_full_queue_refuses_the_push_before_writing() {
+    let dir = temp_data_dir("queue-full-first");
+    let mut state = open_state(dir.path());
+    state.config.quotas.max_vault_bytes = 64 * 1024;
+    let auth = auth_for(&mut state, "queue-full-user");
+    let mut a = Replica::new("a");
+    let op = a.op("notes/a.md", OpKind::Update, &"x".repeat(4 * 1024));
+    let id = a.id.clone();
+    push(&mut state, &auth, &id, std::slice::from_ref(&op));
+    // L'operatore abbassa la quota: la coda non ancora confermata la supera.
+    state.config.quotas.max_vault_bytes = 1024;
+    let sync_dir = vault_sync_dir(dir.path());
+    let state_file = sync::versions::state_path(&sync_dir);
+    let before = std::fs::metadata(&state_file).unwrap().modified().unwrap();
+    let queue_before = sync::queue::vault_queue_bytes(&sync_dir);
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let resp = push_raw(&mut state, &auth, &id, &[op]);
+    assert_eq!(resp.status, 507, "{}", String::from_utf8_lossy(&resp.body));
+    assert_eq!(
+        std::fs::metadata(&state_file).unwrap().modified().unwrap(),
+        before,
+        "a refused push rewrites nothing"
+    );
+    assert_eq!(sync::queue::vault_queue_bytes(&sync_dir), queue_before);
+}
+
+/// Una quota di 0 byte è una quota: il vault non tiene niente, come per i
+/// siti pubblicati. Prima 0 spegneva il controllo del push, della coda e
+/// degli allegati.
+#[test]
+fn a_vault_quota_of_zero_bytes_holds_nothing() {
+    let dir = temp_data_dir("vault-quota-zero");
+    let mut state = open_state(dir.path());
+    state.config.quotas.max_vault_bytes = 0;
+    let auth = auth_for(&mut state, "quota-zero-user");
+    let mut a = Replica::new("a");
+    let op = a.op("notes/a.md", OpKind::Update, "x");
+    let id = a.id.clone();
+    let resp = push_raw(&mut state, &auth, &id, &[op]);
+    assert_eq!(resp.status, 413);
+    let sync_dir = vault_sync_dir(dir.path());
+    assert_eq!(sync::queue::vault_queue_bytes(&sync_dir), 0);
+
+    let mut folded = sync::versions::SyncState::default();
+    let quotas = &state.config.quotas;
+    assert!(
+        sync::versions::account_attachment(&mut folded, "sha", 1, quotas.max_asset_bytes, 0)
+            .is_err()
+    );
+    assert!(sync::versions::account_attachment(&mut folded, "sha", 1, 0, u64::MAX).is_err());
+    assert!(folded.attachments.is_empty());
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -1725,7 +2070,7 @@ fn the_vault_quota_counts_history_and_every_replica_queue() {
 fn a_failed_accept_leaves_the_invitee_unauthorized() {
     use std::os::unix::fs::PermissionsExt;
     let dir = temp_data_dir("accept-fault");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let (_, owner) = member(&mut state, "fault-owner");
     let (_, guest) = member(&mut state, "fault-guest");
     let (status, body) = call(
@@ -1737,7 +2082,7 @@ fn a_failed_accept_leaves_the_invitee_unauthorized() {
     assert_eq!(status, 201, "{body}");
     let token = body["token_b64"].clone();
 
-    let sync_dir = fub_services::schema::sync_dir(&dir);
+    let sync_dir = fub_services::schema::sync_dir(dir.path());
     std::fs::set_permissions(&sync_dir, std::fs::Permissions::from_mode(0o500)).unwrap();
     let probe = sync_dir.join(".probe");
     let writable = std::fs::write(&probe, b"").is_ok();
@@ -1774,7 +2119,7 @@ fn a_failed_accept_leaves_the_invitee_unauthorized() {
         "the failed accept granted nothing in memory"
     );
     drop(state);
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let resp = sync::handle(
         &mut state,
         "POST",
@@ -1796,7 +2141,7 @@ fn a_failed_accept_leaves_the_invitee_unauthorized() {
 #[test]
 fn an_invite_bound_to_an_account_refuses_everyone_else() {
     let dir = temp_data_dir("bound-invite");
-    let mut state = open_state(&dir);
+    let mut state = open_state(dir.path());
     let (_, owner) = member(&mut state, "bound-owner");
     let (bob, bob_auth) = member(&mut state, "bound-bob");
     let (_, mallory) = member(&mut state, "bound-mallory");
@@ -1822,4 +2167,90 @@ fn an_invite_bound_to_an_account_refuses_everyone_else() {
         serde_json::json!({ "token_b64": token }),
     );
     assert_eq!(status, 200, "{body}");
+}
+
+/// La regola di transizione dei parametri KDF, a tutti e due gli ingressi
+/// della busta (caricamento della chiave e invito): `ver=1`/210.000, quella
+/// dei client di prima, e `ver=2`/600.000, quella dei client nuovi, passano;
+/// ogni altra coppia è `400 unsupported wrap version`.
+#[test]
+fn the_server_accepts_both_kdf_versions_and_nothing_else() {
+    use fub_services::crypto::{
+        derive_kek, wrap_vdk_with_kek, KdfParams, KDF_ITERATIONS_V1, KDF_ITERATIONS_V2,
+    };
+    let v2 = KdfParams::fresh().unwrap();
+    let v1 = KdfParams {
+        ver: 1,
+        iterations: KDF_ITERATIONS_V1,
+        ..KdfParams::fresh().unwrap()
+    };
+    let wrap = |params: KdfParams| {
+        let kek = derive_kek("passphrase del vault", &params).unwrap();
+        wrap_vdk_with_kek(&[5u8; 32], &kek, params).unwrap()
+    };
+    let (old, new) = (wrap(v1), wrap(v2));
+    let tampered = |base: &fub_services::crypto::WrappedVdk, ver: u32, iterations: u32| {
+        let mut envelope = base.clone();
+        envelope.kdf.ver = ver;
+        envelope.kdf.iterations = iterations;
+        envelope
+    };
+    let cases = [
+        (old.clone(), 200),
+        (new.clone(), 200),
+        (tampered(&old, 1, KDF_ITERATIONS_V2), 400),
+        (tampered(&new, 2, KDF_ITERATIONS_V1), 400),
+        (tampered(&new, 3, KDF_ITERATIONS_V2), 400),
+        (tampered(&new, 0, KDF_ITERATIONS_V2), 400),
+        (tampered(&new, 2, u32::MAX), 400),
+    ];
+    for (at, (envelope, expected)) in cases.into_iter().enumerate() {
+        let dir = temp_data_dir(&format!("kdf-transition-{at}"));
+        let mut state = open_state(dir.path());
+        let owner = auth_for(&mut state, "kdf-owner");
+        let mut a = Replica::new("kdf");
+        let op = a.op("notes/kdf.md", OpKind::Create, "claim");
+        push(&mut state, &owner, &a.id, &[op]);
+        let stored = sync::handle(
+            &mut state,
+            "POST",
+            "/v1/sync/vault-key",
+            Some(&owner),
+            &serde_json::to_vec(&serde_json::json!({ "vault_id": VAULT, "wrapped": envelope }))
+                .unwrap(),
+        );
+        let invited = sync::handle(
+            &mut state,
+            "POST",
+            "/v1/sync/invite",
+            Some(&owner),
+            &serde_json::to_vec(&serde_json::json!({
+                "vault_id": VAULT, "role": "reader", "wrapped_vdk": envelope,
+            }))
+            .unwrap(),
+        );
+        let ok = |status: u16| {
+            if expected == 200 {
+                (200..300).contains(&status)
+            } else {
+                status == expected
+            }
+        };
+        assert!(
+            ok(stored.status),
+            "case {at}, key: {}",
+            String::from_utf8_lossy(&stored.body)
+        );
+        assert!(
+            ok(invited.status),
+            "case {at}, invite: {}",
+            String::from_utf8_lossy(&invited.body)
+        );
+        if expected == 400 {
+            for body in [&stored.body, &invited.body] {
+                let value: serde_json::Value = serde_json::from_slice(body).unwrap();
+                assert_eq!(value["error"], "unsupported wrap version", "case {at}");
+            }
+        }
+    }
 }

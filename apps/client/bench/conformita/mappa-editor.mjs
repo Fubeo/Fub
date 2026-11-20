@@ -1,0 +1,3049 @@
+// **La mappa del prototipo dell'editor**: quale elemento del prototipo
+// corrisponde a quale elemento dell'app, in quali stati, e quali proprietà si
+// confrontano. Scritta a mano; la leggono `estrai.mjs` (il lato del prototipo)
+// e `verifica.mjs` (il lato dell'app).
+//
+// Gli elementi si identificano per classi e struttura, mai a occhio: la
+// tabella Markdown del prototipo (`.gr`) e quella della Base (`.btab`) sono
+// due cose diverse, anche se si somigliano.
+//
+// # La forma
+//
+// - `STATI`: le coordinate di uno stato, luce e larghezza. Dal lato del
+//   prototipo sono i pulsanti Giorno/Notte e Piena/700/Telefono; dal lato
+//   dell'app la luce della scena e la finestra del banco.
+// - `VISTE`: come si arriva al pezzo dai due lati. `prototipo.prepara(page)`
+//   gira dopo che luce e larghezza sono scelte (può premere «Avanti» fino a un
+//   passo, chiamare una funzione del prototipo, scrivere); `app.scena` è l'id
+//   di una scena di `bench/scene.mjs`, e `app.prepara(page)` (facoltativo) fa
+//   i gesti in più dopo la scena.
+// - `PEZZI`: un elemento per voce. `prototipo` è il selettore dentro `#win`,
+//   `app` quello nella pagina del banco; `proprieta` usa i gruppi di
+//   `confronto.mjs` (`padding`, `border`, `font`, …) e le proprietà lunghe.
+//   `gesto` (facoltativo) porta puntatore o fuoco su un elemento dai due lati
+//   prima di leggere: `{ tipo: "hover" | "focus" | "click", prototipo, app }`,
+//   coi selettori dei due lati. `stati` (facoltativo) restringe gli stati della vista.
+//   `attende` (facoltativo) nomina la PR o il ramo che porta il pezzo
+//   nell'app: i suoi valori attesi si estraggono, ma la verifica non lo legge
+//   finché c'è (con `--attese` sì, per misurare quel lavoro su un ramo locale
+//   che lo contiene). Chi unisce il lavoro toglie `attende` dai suoi pezzi:
+//   da lì le differenze sono rosse come le altre.
+//   `contesto` (facoltativo, di base `interfaccia`) sceglie fra `TRADUZIONI`
+//   quella dei token: `documento` per ciò che sta dentro la pagina.
+// - `DA_COPRIRE`: ciò che ha ancora differenze e che correggono altri lavori,
+//   in due forme. Un pezzo intero (`{ id, prototipo, app, perche }`, con un
+//   id che non è in `PEZZI`) non si confronta affatto: sta qui perché si veda
+//   che cosa manca. Le proprietà di un pezzo coperto (`{ id, proprieta,
+//   perche }`, con l'id di un pezzo di `PEZZI`) si leggono e si confrontano,
+//   ma la loro differenza non fa rosso; se però non differiscono più, è rosso
+//   lo stesso, come un'eccezione non più usata, così chi le corregge le toglie
+//   da qui. Non è un'eccezione: un'eccezione è una differenza voluta, con il
+//   suo motivo in DECISIONS o nel piano (`eccezioni-<prototipo>.json`); qui
+//   c'è una differenza da correggere.
+//
+// Un task grafico aggiunge qui i suoi pezzi, rigenera i valori attesi con
+// `estrai.mjs` e passa `npm run bench:conformita`.
+import { BASE } from "./confronto.mjs";
+
+/// Il prototipo: dove sta, e come si chiamano i file che ne nascono.
+export const PROTOTIPO = {
+  nome: "editor",
+  ramo: "piano/editor-completo",
+  file: "PLAN-ui/editor.html",
+};
+
+/// Con quale token di Fub si scrive ogni token di colore del prototipo. È la
+/// tabella di PLAN.md, «Dal prototipo» (`--acc` → `--accent`, …, `--faint` →
+/// `--muted` perché Fub non ha un terzo grigio), con due righe che il piano
+/// non scrive e che le regole del confronto del 2026-11-16 fissano: il
+/// `--acc-soft` del prototipo è un velo, e da fondo diventa `--accent-veil`;
+/// l'inchiostro d'accento `--acc-ink` diventa `--accent-soft`. `--ink-2` (il
+/// secondo inchiostro) diventa `--text`, per la stessa ragione di `--faint`:
+/// Fub ne ha uno solo. Il velo di passaggio `--hover` diventa quello della
+/// pelle, `--overlay-hover`; il rosso `--danger` diventa il `--danger` del
+/// tema, che la ricetta genera col contrasto garantito (decisioni
+/// dell'orchestratore del 2026-11-16). Un token che qui non c'è (`--tray-2`,
+/// `--sh-pop`…) non ha un equivalente scritto, e il suo valore si confronta
+/// crudo: se l'app ne usa un altro, è un'eccezione col suo motivo.
+export const TRADUZIONE = {
+  "--sheet": ["--sheet"],
+  "--tray": ["--sheet-2"],
+  "--line": ["--border"],
+  "--line-2": ["--border-strong"],
+  "--ink": ["--text"],
+  "--ink-2": ["--text"],
+  "--muted": ["--muted"],
+  "--faint": ["--muted"],
+  "--acc": ["--accent"],
+  "--acc-ink": ["--accent-soft"],
+  "--acc-soft": ["--accent-soft", "--accent-veil"],
+  "--acc-wash": ["--accent-wash"],
+  "--mark": ["--highlight"],
+  "--hover": ["--overlay-hover"],
+  "--danger": ["--danger"],
+  // I colori delle etichette (`.k-green`): `--c-<colore>` → `--doc-color-<colore>`
+  // e il suo fondo `--doc-tint-<colore>`, come dice la tabella del piano. Per
+  // ora il verde (le note del calendario, T17) e l'arancio (lo stato «In
+  // corso» della testata, T9) e il blu (il promemoria, T36), quelli che un
+  // pezzo usa.
+  "--c-green": ["--doc-color-green"],
+  "--c-green-b": ["--doc-tint-green"],
+  "--c-orange": ["--doc-color-orange"],
+  "--c-orange-b": ["--doc-tint-orange"],
+  "--c-blue": ["--doc-color-blue"],
+  "--c-blue-b": ["--doc-tint-blue"],
+};
+
+/// La traduzione dei pezzi dentro la pagina del documento (`contesto:
+/// "documento"`: tabella Markdown, testata, proprietà, riga dei dati,
+/// maniglie dei blocchi). La pagina ha la sua tavolozza, che si cambia a parte
+/// da quella dell'interfaccia (`--doc-*`, `structure.css` e `skin/document.css`):
+/// il foglio è `--doc-bg`, l'inchiostro `--doc-fg`, il grigio `--doc-gutter-fg`,
+/// i fili `--doc-rule-soft` e `--doc-rule`, i fondi tenui `--doc-fill-soft` e
+/// `--doc-fill`, l'evidenziatore `--doc-highlight`, il passaggio sopra un
+/// blocco `--doc-block-hover`, il rosso `--doc-danger`. L'accento non ha una
+/// voce del documento, e resta quello dell'interfaccia. Gli stessi token di
+/// `TRADUZIONE`, nello stesso ordine: le sentinelle sono le stesse.
+export const TRADUZIONE_DOCUMENTO = {
+  "--sheet": ["--doc-bg"],
+  "--tray": ["--doc-fill-soft", "--doc-fill"],
+  "--line": ["--doc-rule-soft"],
+  "--line-2": ["--doc-rule"],
+  "--ink": ["--doc-fg"],
+  "--ink-2": ["--doc-fg"],
+  "--muted": ["--doc-gutter-fg"],
+  "--faint": ["--doc-gutter-fg"],
+  "--acc": ["--accent"],
+  "--acc-ink": ["--accent-soft"],
+  "--acc-soft": ["--accent-soft", "--accent-veil"],
+  "--acc-wash": ["--accent-wash"],
+  "--mark": ["--doc-highlight"],
+  "--hover": ["--doc-block-hover"],
+  "--danger": ["--doc-danger"],
+  "--c-green": ["--doc-color-green"],
+  "--c-green-b": ["--doc-tint-green"],
+  "--c-orange": ["--doc-color-orange"],
+  "--c-orange-b": ["--doc-tint-orange"],
+  "--c-blue": ["--doc-color-blue"],
+  "--c-blue-b": ["--doc-tint-blue"],
+};
+
+/// Le traduzioni per contesto: ogni pezzo usa quella del suo `contesto`.
+export const TRADUZIONI = {
+  interfaccia: TRADUZIONE,
+  documento: TRADUZIONE_DOCUMENTO,
+};
+
+/// Gli stati.`larghezza` è quella del prototipo (`piena`, `700`,
+/// `telefono`); `finestra` la finestra del banco dell'app che le corrisponde.
+export const STATI = {
+  "chiaro-1280": { luce: "light", prototipo: { luce: "giorno", larghezza: "piena" }, finestra: { width: 1280, height: 800 } },
+  "scuro-1280": { luce: "dark", prototipo: { luce: "notte", larghezza: "piena" }, finestra: { width: 1280, height: 800 } },
+  "chiaro-700": { luce: "light", prototipo: { luce: "giorno", larghezza: "700" }, finestra: { width: 700, height: 800 } },
+  "scuro-700": { luce: "dark", prototipo: { luce: "notte", larghezza: "700" }, finestra: { width: 700, height: 800 } },
+};
+
+const TUTTI = Object.keys(STATI);
+/// L'anteprima del lanciatore c'è solo dove c'è posto: il prototipo la
+/// nasconde a 700 px (riga 651), l'app sotto i 960 px (`PREVIEW_MIN_WIDTH`).
+const LARGHI = ["chiaro-1280", "scuro-1280"];
+
+export const VISTE = {
+  /// Il lanciatore Ctrl O sul modo Tutto, con le note nell'elenco e
+  /// l'anteprima della prima. Il prototipo lo apre dalla pillola (`cmdk()`,
+  /// riga 4342) a campo vuoto: le «Recenti» sono note, e la prima è attiva
+  /// con il suo foglio d'anteprima. L'app passa dalla scena del banco,
+  /// che cerca «gui» e aspetta l'anteprima della riga attiva.
+  lanciatore: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.click("#win #pill");
+        await page.waitForSelector("#win .k .k-i.act");
+      },
+    },
+    app: { scena: "launcher-files" },
+  },
+
+  /// Il menu della maniglia: il prototipo lo apre al passo «Al passaggio»
+  /// (maniglie sul blocco «punto») col clic sulla presa; l'app dalla scena
+  /// dei Blocchi col menu aperto su un titolo.
+  "menu-blocco": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Al passaggio");
+        await page.waitForSelector("#win #gutter.on");
+        await page.click("#win #g-grip");
+        await page.waitForSelector("#win .pop .m-s");
+      },
+    },
+    app: { scena: "blocchi-03-menu" },
+  },
+  /// Il tasto destro su una selezione: testata, barra degli appunti, voci e
+  /// piede che invita a scrivere. Il prototipo sceglie due parole al passo
+  /// «Il tasto destro» e apre il menu da sé; l'app dalla scena del banco.
+  "menu-selezione": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il tasto destro");
+        await page.waitForSelector("#win .pop.cx .m-tiles");
+      },
+    },
+    app: { scena: "menu-selezione" },
+  },
+  /// «Nuova nota» che chiede il tipo (T33, `newNote()` del prototipo): il
+  /// menu sotto il pulsante del cassetto. Solo largo: nel prototipo il
+  /// cassetto c'è a finestra piena.
+  "nuova-nota": {
+    stati: LARGHI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.click("#win #new-note");
+        await page.waitForSelector("#win .pop .m-i .ic.tile");
+      },
+    },
+    app: { scena: "tipi-01-nuova" },
+  },
+  /// Il promemoria di un compito (T36): il prototipo lo ha a riposo nel
+  /// compito «Chiedere il preventivo» (`remChip`, riga 2717); l'app dalla
+  /// Live coi promemoria, la prima pastiglia aperta.
+  promemoria: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.waitForSelector("#win .rem");
+      },
+    },
+    app: { scena: "live-28-promemoria" },
+  },
+  /// Le proposte dei simboli (T61): la formula in riga aperta, in fondo `+`
+  /// e `\fr`. Il prototipo al passo «La formula si tocca», che apre la terza
+  /// formula della nota; l'app dalla scena del banco.
+  "formula-simboli": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La formula si tocca");
+        await page.waitForSelector("#win .mx");
+        await page.keyboard.press("End");
+        await page.keyboard.type("+\\fr");
+        await page.waitForSelector("#win .mx-ac:not([hidden]) button.act");
+      },
+    },
+    app: { scena: "formula-04-simboli" },
+  },
+  /// La tavolozza (T62): la formula in riga aperta e «Tutti» aperto, col
+  /// puntatore fuori. Il prototipo al passo «La formula si tocca»; l'app dalla
+  /// scena del banco.
+  "formula-tavolozza": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La formula si tocca");
+        await page.waitForSelector("#win .mx");
+        await page.click("#win .mx-all");
+        await page.waitForSelector("#win .mx-full:not([hidden]) .mx-grid .mx-s");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-06-tavolozza" },
+  },
+  /// La mini-barra sul testo scelto (T12): il prototipo la mostra al passo
+  /// «La mini-barra sulla selezione», che sceglie due parole; l'app dalla
+  /// scena del banco con la barra del foglio nascosta.
+  "mini-barra": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La mini-barra sulla selezione");
+        await page.waitForSelector("#win #minibar:not([hidden])");
+      },
+    },
+    app: { scena: "mini-barra-selezione" },
+  },
+  /// Il LaTeX a vista (T63): il campo sotto la formula, coi tre puntini. Il
+  /// prototipo al passo «Il LaTeX, per chi lo vuole», che apre una formula
+  /// nuova col campo; l'app dalla scena del banco, con la preferenza accesa.
+  "formula-latex": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il LaTeX, per chi lo vuole");
+        await page.waitForSelector("#win .mx .mx-tex");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-11-latex" },
+  },
+  /// I tre puntini aperti (T63): «Mostra il LaTeX» e gli aiuti.
+  "formula-latex-opzioni": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il LaTeX, per chi lo vuole");
+        await page.waitForSelector("#win .mx .mx-tex");
+        await page.click("#win .mx .mx-more");
+        await page.waitForSelector("#win .mx .mx-opts:not([hidden])");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-12-latex-opzioni" },
+  },
+  /// Gli errori in chiaro (T64): un nome che non c'è nel campo del LaTeX,
+  /// dopo la pausa la frase e «Usa \alpha». Il prototipo al passo «Il LaTeX,
+  /// per chi lo vuole», col campo riempito com'è (senza la scrittura veloce);
+  /// l'app dalla scena del banco.
+  "formula-latex-errore": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il LaTeX, per chi lo vuole");
+        await page.waitForSelector("#win .mx .mx-tex");
+        await page.evaluate(() => {
+          const field = document.querySelector("#win .mx .mx-tex");
+          field.value = "v + \\alfa";
+          field.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        await page.waitForSelector("#win .mx .mx-err:not([hidden]) button");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "formula-16-latex-errore" },
+  },
+  /// Le maniglie accanto a un blocco: «+» e la presa con gli occhi, col
+  /// puntatore sul blocco e non sulle maniglie.
+  maniglie: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Al passaggio");
+        await page.waitForSelector("#win #gutter.on");
+      },
+    },
+    app: { scena: "blocchi-01-passaggio" },
+  },
+  /// La tabella Markdown col fuoco e una cella scelta (non la tabella della
+  /// Base, `.btab`): il prototipo al passo «La tabella, coi gesti del
+  /// foglio» (A2:A4 scelte), l'app col cursore in una cella.
+  tabella: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La tabella, coi gesti del foglio");
+        await page.waitForSelector("#win #tb-grid .tg-sel .tg-fill");
+      },
+    },
+    app: { scena: "live-14-tabella-attiva" },
+  },
+  /// La somma nella banda, con più celle numeriche scelte: il prototipo al
+  /// passo «La somma nella banda», l'app allarga di una cella in giù la
+  /// scelta nella colonna dei numeri.
+  somma: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La somma nella banda");
+        await page.waitForSelector("#win #band-words b");
+      },
+    },
+    app: {
+      scena: "live-14-tabella-attiva",
+      prepara: async (page) => {
+        await page.keyboard.press("Shift+ArrowDown");
+        await page.waitForSelector(".status-sum-part[data-lead] > .status-sum-value");
+      },
+    },
+  },
+  /// La testata della nota a riposo, in Scrittura: copertina, strumenti
+  /// (nascosti finché il puntatore non ci passa), titolo e riga dei dati. Il
+  /// prototipo al primo passo, «A riposo».
+  testata: {
+    stati: TUTTI,
+    prototipo: { prepara: (page) => passo(page, "A riposo") },
+    app: { scena: "testata-01-scrittura" },
+  },
+  /// Le proprietà della nota, una riga per proprietà, a riposo.
+  proprieta: {
+    stati: TUTTI,
+    prototipo: { prepara: (page) => passo(page, "A riposo") },
+    app: { scena: "proprieta-01-righe" },
+  },
+  /// Selezione e Stato nella testata (T9): le stesse righe, col registro dei
+  /// tipi che fa dello stato una pastiglia.
+  opzioni: {
+    stati: TUTTI,
+    prototipo: { prepara: (page) => passo(page, "A riposo") },
+    app: { scena: "opzioni-01-righe" },
+  },
+  /// Il calendario della Base: il prototipo al passo «Bacheca e calendario»
+  /// con la vista Calendario scelta, l'app dalla scena del calendario.
+  calendario: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Bacheca e calendario");
+        await page.click('#win .bview[data-bv="calendario"]');
+        await page.waitForSelector("#win .cal .today");
+      },
+    },
+    app: { scena: "base-calendario" },
+  },
+  /// La linea del tempo della Base: il prototipo allo stesso passo con la
+  /// vista Linea del tempo scelta, l'app dalla scena della linea del tempo.
+  tempo: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Bacheca e calendario");
+        await page.click('#win .bview[data-bv="tempo"]');
+        await page.waitForSelector("#win .tl .tl-b");
+      },
+    },
+    app: { scena: "base-tempo" },
+  },
+  /// La riga dei suggerimenti al centro della banda, con dei tasti scritti:
+  /// il prototipo al primo passo, «A riposo» (i tasti della riga
+  /// qualunque), l'app con una parola scelta (grassetto, corsivo, collega).
+  /// Il contesto cambia le parole, non gli stili che si leggono.
+  suggerimenti: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "A riposo");
+        await page.waitForSelector("#win #hint kbd");
+      },
+    },
+    app: { scena: "riga-dei-suggerimenti" },
+  },
+  /// Il «/» appena aperto su una riga vuota (T84): le sei tessere con la
+  /// prima accesa, le righe a gruppi e il disegno in fondo. Il prototipo al
+  /// passo «Il «/»» (lo scrive da sé sull'ultimo blocco), l'app dalla scena
+  /// del banco.
+  slash: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il «/»");
+        await page.waitForSelector("#win .pop.slash .sl-q.act");
+      },
+    },
+    app: { scena: "slash-01-aperto" },
+  },
+  /// La Base incorporata nella nota (T18, E12, E19): il prototipo al passo
+  /// «La Base si costruisce a vista», l'app dalla scena con
+  /// `![[Opere.base#Tabella]]` nella nota della Live.
+  "base-nota": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La Base si costruisce a vista");
+        await page.waitForSelector('#win .blk[data-t="base"]');
+      },
+    },
+    app: { scena: "base-nota" },
+  },
+  /// La trasclusione viva che si scrive (T29): il prototipo al passo «La
+  /// trasclusione viva» (`editTx(true)`), l'app dalla scena del banco dopo
+  /// «Modifica qui».
+  "trasclusione-scrive": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "La trasclusione viva");
+        await page.waitForSelector("#win .tx.editing");
+      },
+    },
+    app: { scena: "trasclusione-viva-02-scrive" },
+  },
+  /// Il foglio nella nota da attivo (T43): il prototipo al passo «Il foglio
+  /// nella nota» (`activateSheet(true)`, la cella C3 scelta), l'app dalla
+  /// scena col foglio attivo e la barra di formato, che aspetta la cella nel
+  /// gruppo «Foglio». A 700 px la cella del gruppo non c'è dai due lati
+  /// (riga 784 del prototipo), e i suoi pezzi stanno solo nei larghi.
+  "foglio-nella-nota": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Il foglio nella nota");
+        await page.waitForSelector("#win .scard.active");
+      },
+    },
+    app: { scena: "schede-vive-02-attiva" },
+  },
+  /// La scheda di documento a riposo (T44): il prototipo al passo «Ogni
+  /// formato è una scheda» (la lettera in `.docx` accanto al PDF, che il passo
+  /// attiva), l'app dalla scena del verbale a riposo.
+  "scheda-documento": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="doc"] .docp p');
+      },
+    },
+    app: { scena: "scheda-documento-01-riposo" },
+  },
+  /// Le schede affiancate (T42): nel prototipo la coppia `.pair` del
+  /// documento d'apertura (il contratto e la lettera), nell'app il
+  /// `[!columns]` col contratto e i conti della scena `schede-misura`.
+  "schede-affiancate": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector("#win .pair .scard");
+      },
+    },
+    app: { scena: "schede-misura-01-affiancate" },
+  },
+  // La scheda PDF (T45): quella della coppia del prototipo, a riposo; nel
+  // banco il manuale del giro, dalla pagina 2.
+  "scheda-pdf": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win .pair .scard[data-kind="pdf"] .pdfn');
+      },
+    },
+    app: { scena: "schede-pdf-01-riposo" },
+  },
+  /// Lo spazio «Esporta in PDF» (T70): il prototipo al passo «Esporta in
+  /// PDF: le pagine vere» (le sezioni Tema e Colori aperte), l'app dalla
+  /// scena dello spazio (le sezioni chiuse). Le teste si confrontano su una
+  /// sezione chiusa dai due lati, la Pagina.
+  "esporta-pdf": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+      },
+    },
+    app: { scena: "esporta-pdf" },
+  },
+  /// La sezione Diagrammi dello spazio (T75): dai due lati aperta, la riga
+  /// dei nodi aperta col blu della tavolozza (`#1f4f8f`) scelto; lo stile
+  /// resta «Come nella nota», il fondo acceso.
+  "esporta-pdf-diagrammi": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="diagrammi"] .px-sh');
+        await page.click('#win .px-sec[data-sec="diagrammi"] [data-col="dgn"]');
+        await page.click('#win [data-colset="dgn"][data-v="#1f4f8f"]');
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-diagrammi" },
+  },
+  // I valori di cella nel testo (T53): nel prototipo il paragrafo `p-conti`
+  // del documento d'apertura («Finora abbiamo speso … su … previsti»), nel
+  // banco lo stesso paragrafo sulla cartella del banco.
+  "valori-cella": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win [data-id="p-conti"] .cellv');
+      },
+    },
+    app: { scena: "valori-cella-01-scrittura" },
+  },
+  // «Estrai» (T49): nel prototipo sulla scheda PDF attiva del passo «Ogni
+  // formato è una scheda», nell'app sul foglio attivo con delle celle scelte
+  // (sul PDF è spento finché non c'è il motore dei PDF: il piano, T49).
+  "estratti-estrai": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="pdf"].active #pdf-ex');
+      },
+    },
+    app: { scena: "estratti-01-estrai" },
+  },
+  // L'estratto (T49): nel prototipo quello che «Estrai» mette sotto la scheda
+  // PDF, nell'app il passo di PDF scritto come lo scrive Obsidian.
+  "estratti-passo": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Ogni formato è una scheda");
+        await page.waitForSelector('#win .scard[data-kind="pdf"].active #pdf-ex');
+        await page.click("#win #pdf-ex");
+        await page.waitForSelector("#win .exc footer button");
+        await page.evaluate(() => document.querySelector("#win .exc")?.scrollIntoView({ block: "center" }));
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "estratti-03-passo" },
+  },
+  // La zona lavagna (T47): quella del prototipo a riposo, la lavagna intera
+  // nella sua zona; nel banco il percorso della visita, a riposo.
+  "scheda-lavagna": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.waitForSelector('#win .scard[data-kind="canvas"] .cvz .cvn');
+      },
+    },
+    app: { scena: "scheda-lavagna-01-riposo" },
+  },
+  /// Le sezioni Tema e Colori aperte (T71): dai due lati la riga
+  /// dell'accento aperta, coi tondi, il selettore e il codice. A 700 px il
+  /// pannello sta sotto le pagine, e i pezzi si leggono dove sono.
+  "esporta-pdf-temi": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-cb[data-col="acc"]');
+        await page.waitForSelector("#win .px-pal");
+        await page.evaluate(() => {
+          const side = document.querySelector("#px-side");
+          if (side) side.scrollTop = 0;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-temi" },
+  },
+  /// Le sezioni Contenuto e Interruzioni aperte (T74): dai due lati i
+  /// commenti nel margine, le tabelle a griglia e il codice numerato.
+  "esporta-pdf-contenuto": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="contenuto"] .px-sh');
+        await page.click('#win .px-sec[data-sec="interruzioni"] .px-sh');
+        await page.click('#win .px-seg button[data-k="comments"][data-v="margine"]');
+        await page.click('#win .px-seg button[data-k="tab"][data-v="griglia"]');
+        await page.click('#win .px-tog[data-k="codeNum"]');
+        await page.waitForSelector('#win .px-tog[data-k="codeNum"][aria-checked="true"]');
+        await page.evaluate(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-contenuto" },
+  },
+  /// Le sezioni Caratteri e Pagina aperte (T72), con la filigrana «BOZZA»
+  /// scritta dai due lati: le righe, i caratteri come pulsanti, i cursori, i
+  /// segmenti, i millimetri, il campo della filigrana, le guide e la
+  /// filigrana sulla prima pagina.
+  "esporta-pdf-caratteri": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click('#win .px-sec[data-sec="caratteri"] .px-sh');
+        await page.click('#win .px-sec[data-sec="pagina"] .px-sh');
+        await page.fill('#win .px-in[data-k="wm"]', "BOZZA");
+        await page.waitForFunction(() => document.querySelector("#win .px-wm")?.textContent === "BOZZA");
+        await chiudiPannello(page, "#px-side");
+      },
+    },
+    app: {
+      scena: "esporta-pdf-caratteri",
+      prepara: async (page) => {
+        await page.fill("#export-page-watermark", "BOZZA");
+        await page.press("#export-page-watermark", "Tab");
+        await page.waitForSelector(".export-slot .export-watermark");
+        await chiudiPannello(page, ".export-side");
+      },
+    },
+  },
+  /// Testata e piè, frontespizio e indice (T73): il prototipo al passo
+  /// «Tutto il cambiabile, dal vivo» (il profilo «Relazione per il Comune»:
+  /// tema Relazione, frontespizio, indice, sezione e titolo in testata, data
+  /// e pagine nel piè, le sezioni Frontespizio e Testata aperte), l'app dalla
+  /// scena che porta lo spazio allo stesso profilo coi suoi controlli.
+  "esporta-pdf-testata": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Tutto il cambiabile, dal vivo");
+        await page.waitForSelector("#win .px:not([hidden]) .px-hfp");
+        await page.waitForSelector("#win .px:not([hidden]) .ptoc-r b");
+        await page.evaluate(() => {
+          const side = document.querySelector("#px-side");
+          if (side) side.scrollTop = 0;
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-testata" },
+  },
+  /// Il menu dei profili (T79): il prototipo apre il pulsante del profilo
+  /// al passo «Esporta in PDF: le pagine vere»; l'app dalla scena coi
+  /// profili del vault, il menu aperto.
+  "esporta-pdf-profili": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector("#win .px:not([hidden]) .px-slot");
+        await page.click("#win #px-prof");
+        await page.waitForSelector("#win .pop .m-l > button.m-i");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-profili" },
+  },
+  /// Il clic sulla pagina (T76): dai due lati il primo paragrafo cliccato,
+  /// scelto, col suo menu aperto.
+  "esporta-pdf-blocco": {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await passo(page, "Esporta in PDF: le pagine vere");
+        await page.waitForSelector('#win .px:not([hidden]) .px-it[data-t="p"]');
+        await page.click('#win .px:not([hidden]) .px-it[data-t="p"]');
+        await page.waitForSelector("#win .px-it.sel");
+        await page.mouse.move(0, 0);
+      },
+    },
+    app: { scena: "esporta-pdf-blocco" },
+  },
+};
+
+/// Riporta in cima il pannello delle sezioni, toglie il fuoco e porta via il
+/// puntatore: gli stessi pezzi a riposo dai due lati.
+async function chiudiPannello(page, pannello) {
+  await page.evaluate((selector) => {
+    const side = document.querySelector(selector);
+    if (side) side.scrollTop = 0;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  }, pannello);
+  await page.mouse.move(0, 0);
+}
+
+/// Porta il giro del prototipo al passo che si chiama `titolo`, dai pallini
+/// della guida (ognuno ha il titolo «n. Nome del passo»): per nome, non per
+/// numero, così un passo aggiunto in mezzo non sposta la vista.
+async function passo(page, titolo) {
+  await page.click(`#tour-steps [data-step][title$=". ${titolo}"]`);
+}
+
+const DIMENSIONI = ["width", "height"];
+const ALLINEAMENTO = ["display", "align-items", "justify-content"];
+
+export const PEZZI = [
+  // ── il lanciatore Ctrl O (T13, #429) ──────────────────────────────────────
+  {
+    id: "lanciatore.superficie",
+    vista: "lanciatore",
+    prototipo: ".k",
+    app: ".launcher",
+    proprieta: [...BASE, "width"],
+  },
+  {
+    id: "lanciatore.testa",
+    vista: "lanciatore",
+    prototipo: ".k-in",
+    app: ".launcher-head",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "lanciatore.lente",
+    vista: "lanciatore",
+    prototipo: ".k-in > .i",
+    app: ".launcher-lens > svg",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "lanciatore.campo",
+    vista: "lanciatore",
+    prototipo: ".k-in input",
+    app: ".launcher-input",
+    proprieta: ["padding", "border", "font", "color", "background"],
+  },
+  {
+    id: "lanciatore.esc",
+    vista: "lanciatore",
+    prototipo: ".k-x",
+    app: ".launcher-close",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "lanciatore.modi",
+    vista: "lanciatore",
+    prototipo: ".k-sc",
+    app: ".launcher-modes",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "lanciatore.modo-scelto",
+    vista: "lanciatore",
+    prototipo: '.k-sc button[aria-selected="true"]',
+    app: '.launcher-mode[aria-selected="true"]',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "lanciatore.modo",
+    vista: "lanciatore",
+    prototipo: '.k-sc button[aria-selected="false"]',
+    app: '.launcher-mode[aria-selected="false"]',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "lanciatore.quadratino-scelto",
+    vista: "lanciatore",
+    prototipo: '.k-sc button[aria-selected="true"] .ti',
+    app: '.launcher-mode[aria-selected="true"] .launcher-mode-tile',
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "lanciatore.quadratino",
+    vista: "lanciatore",
+    prototipo: '.k-sc button[aria-selected="false"] .ti',
+    app: '.launcher-mode[aria-selected="false"] .launcher-mode-tile',
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "lanciatore.riga",
+    vista: "lanciatore",
+    prototipo: ".k-i:not(.act)",
+    app: ".launcher-row:not([data-active])",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    // La riga attiva, senza il fondo: nell'app il fondo è un evidenziatore
+    // che scorre sotto le righe (`.launcher-highlight`), il pezzo qui sotto.
+    id: "lanciatore.riga-attiva",
+    vista: "lanciatore",
+    prototipo: ".k-i.act",
+    app: ".launcher-row[data-active]",
+    proprieta: ["padding", "margin", "gap", "font", "color", "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "lanciatore.riga-attiva-fondo",
+    vista: "lanciatore",
+    prototipo: ".k-i.act",
+    app: ".launcher-highlight",
+    proprieta: ["background-color", "border-radius"],
+  },
+  {
+    id: "lanciatore.icona",
+    vista: "lanciatore",
+    prototipo: ".k-i:not(.act) .ic",
+    app: ".launcher-row:not([data-active]) .launcher-row-icon",
+    proprieta: ["color", "font-size", ...DIMENSIONI],
+  },
+  {
+    id: "lanciatore.icona-attiva",
+    vista: "lanciatore",
+    prototipo: ".k-i.act .ic",
+    app: ".launcher-row[data-active] .launcher-row-icon",
+    proprieta: ["color"],
+  },
+  {
+    id: "lanciatore.anteprima",
+    vista: "lanciatore",
+    stati: LARGHI,
+    prototipo: ".k-prev",
+    app: ".launcher-preview",
+    proprieta: [...BASE, "width", "display"],
+  },
+  {
+    id: "lanciatore.anteprima-foglio",
+    vista: "lanciatore",
+    stati: LARGHI,
+    prototipo: ".kp-sheet",
+    app: ".launcher-preview-sheet",
+    proprieta: [...BASE],
+  },
+  {
+    id: "lanciatore.anteprima-sfumatura",
+    vista: "lanciatore",
+    stati: LARGHI,
+    prototipo: ".kp-sheet::after",
+    app: ".launcher-preview-sheet::after",
+    proprieta: ["height", "background-image"],
+  },
+  {
+    id: "lanciatore.anteprima-testo",
+    vista: "lanciatore",
+    stati: LARGHI,
+    prototipo: ".kp-sheet p",
+    app: ".launcher-preview-page p",
+    proprieta: ["font", "color"],
+  },
+  {
+    // Il titolo di un gruppo («Recenti», «Note»): fermo in cima mentre
+    // l'elenco scorre (T82).
+    id: "lanciatore.gruppo",
+    vista: "lanciatore",
+    prototipo: ".k-g",
+    app: ".launcher-group",
+    proprieta: [...BASE, "position", "top"],
+  },
+
+  // ── i menu dell'editor (T81) e le maniglie dei blocchi (T2a): #431 ───────
+  // Il tasto destro su una selezione.
+  {
+    id: "menu.superficie",
+    vista: "menu-selezione",
+    prototipo: ".pop.cx",
+    app: ".context-menu",
+    proprieta: [...BASE, "width", "min-width"],
+  },
+  {
+    id: "menu.testa",
+    vista: "menu-selezione",
+    prototipo: ".m-head",
+    app: ".context-menu .menu-head",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "menu.testa-icona",
+    vista: "menu-selezione",
+    prototipo: ".m-head .ic svg",
+    app: ".context-menu .menu-head > svg",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.testa-tipo",
+    vista: "menu-selezione",
+    prototipo: ".m-head b",
+    app: ".context-menu .menu-head-kind",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "menu.testa-nome",
+    vista: "menu-selezione",
+    prototipo: ".m-head .x",
+    app: ".context-menu .menu-head-name",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "menu.appunti",
+    vista: "menu-selezione",
+    prototipo: ".m-tiles",
+    app: ".context-menu .menu-clipboard",
+    proprieta: BASE,
+  },
+  {
+    id: "menu.appunto",
+    vista: "menu-selezione",
+    prototipo: ".m-t",
+    app: ".context-menu .menu-quick",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "menu.appunto-icona",
+    vista: "menu-selezione",
+    prototipo: ".m-t .ti svg",
+    app: ".context-menu .menu-quick .kit-tile-icon svg",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.voce",
+    vista: "menu-selezione",
+    prototipo: ".m-l > button.m-i:not(.act)",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit)",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "menu.voce-icona",
+    vista: "menu-selezione",
+    prototipo: ".m-l > button.m-i:not(.act) .ic",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit) .menu-icon",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.voce-tasti",
+    vista: "menu-selezione",
+    prototipo: ".m-l > button.m-i:not(.act) kbd",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit) .kit-row-keys",
+    proprieta: ["font", "color", "padding", "background", "box-shadow", "border-radius"],
+  },
+  {
+    id: "menu.piede",
+    vista: "menu-selezione",
+    prototipo: ".m-find",
+    app: ".context-menu .menu-foot",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  // «Nuova nota di tipo» (T33).
+  {
+    id: "nuova-nota.testa",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-h",
+    app: ".note-type-popover .note-type-menu-head",
+    proprieta: ["font", "color", "padding"],
+  },
+  {
+    id: "nuova-nota.voce",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act)",
+    app: ".note-type-popover .note-type-menu-item:not([data-active])",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "nuova-nota.tassello",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act) .ic.tile",
+    app: ".note-type-popover .note-type-menu-item:not([data-active]) .note-type-menu-tile",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "nuova-nota.sotto",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-l > button.m-i:not(.act) small",
+    app: ".note-type-popover .note-type-menu-item:not([data-active]) .note-type-menu-sub",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "nuova-nota.piede",
+    vista: "nuova-nota",
+    prototipo: ".pop .m-foot",
+    app: ".note-type-popover .note-type-menu-foot",
+    proprieta: [...BASE],
+  },
+  // Il menu della maniglia.
+  {
+    id: "menu.superficie-blocco",
+    vista: "menu-blocco",
+    prototipo: ".pop",
+    app: ".context-menu",
+    proprieta: [...BASE, "min-width"],
+  },
+  {
+    // La riga piccola sotto una voce (T30: «lo stesso blocco in più note»
+    // sotto «Sincronizza in un'altra nota…»).
+    id: "menu.voce-descrizione",
+    vista: "menu-blocco",
+    prototipo: ".m-i small",
+    app: ".context-menu .menu-description",
+    proprieta: ["font", "color", "margin", "white-space"],
+  },
+  {
+    id: "menu.campo",
+    vista: "menu-blocco",
+    prototipo: ".m-s",
+    app: ".context-menu .menu-field",
+    proprieta: [...BASE, ...ALLINEAMENTO],
+  },
+  {
+    id: "menu.campo-lente",
+    vista: "menu-blocco",
+    prototipo: ".m-s > svg",
+    app: ".context-menu .menu-field > svg",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.campo-testo",
+    vista: "menu-blocco",
+    prototipo: ".m-s input",
+    app: ".context-menu .menu-field-input",
+    proprieta: ["font", "color", "padding", "border", "background"],
+  },
+  {
+    id: "menu.titolo",
+    vista: "menu-blocco",
+    prototipo: ".m-h",
+    app: ".context-menu .menu-title",
+    proprieta: ["font", "color", "padding", "margin", "text-transform"],
+  },
+  {
+    id: "menu.voce-accesa",
+    vista: "menu-blocco",
+    prototipo: ".m-i.act",
+    app: ".context-menu .kit-row.menu-lit",
+    proprieta: ["color", "background", "font"],
+  },
+  {
+    id: "menu.voce-accesa-icona",
+    vista: "menu-blocco",
+    prototipo: ".m-i.act .ic",
+    app: ".context-menu .kit-row.menu-lit .menu-icon",
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "menu.scia",
+    vista: "menu-blocco",
+    prototipo: ".m-hl",
+    app: ".context-menu .menu-glide",
+    proprieta: ["background", "border-radius", "opacity"],
+  },
+  {
+    id: "menu.separatore",
+    vista: "menu-blocco",
+    prototipo: ".m-sep",
+    app: ".context-menu .menu-separator",
+    proprieta: ["height", "margin", "background", "border"],
+  },
+  {
+    id: "menu.voce-pericolo",
+    vista: "menu-blocco",
+    prototipo: ".m-i.danger",
+    app: ".context-menu .kit-row.danger",
+    proprieta: ["color", "background"],
+  },
+  {
+    id: "menu.piede-tasti",
+    vista: "menu-blocco",
+    prototipo: ".m-foot",
+    app: ".context-menu .menu-foot-keys",
+    proprieta: BASE,
+  },
+  {
+    id: "menu.piede-tasto",
+    vista: "menu-blocco",
+    prototipo: ".m-foot kbd",
+    app: ".context-menu .menu-foot-keys kbd",
+    proprieta: BASE,
+  },
+  // ── le proposte dei simboli della formula (T61) ───────────────────────────
+  {
+    id: "formula.proposte",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac",
+    app: ".cm-fub-mx-popover .cm-fub-mx-symbols",
+    // La larghezza è quella del riquadro (T60): il prototipo lo stringe a 380 px
+    // col `max-width` di `.pop`, l'app lo tiene a 392 come il piano.
+    proprieta: BASE,
+  },
+  {
+    id: "formula.proposta-scelta",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button.act",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"]',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.proposta",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button:not(.act)",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="false"]',
+    proprieta: ["padding", "gap", "font", "color", "background", "height"],
+  },
+  {
+    id: "formula.proposta-disegno",
+    vista: "formula-simboli",
+    prototipo: ".mx-ac button.act .g",
+    app: '.cm-fub-mx-popover .cm-fub-mx-symbol[aria-selected="true"] .cm-fub-mx-symbol-glyph',
+    proprieta: ["width", "font", "color", ...ALLINEAMENTO],
+  },
+  // ── la tavolozza della formula (T62) ──────────────────────────────────────
+  {
+    id: "formula.tavolozza",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-pal",
+    app: ".cm-fub-mx-popover .cm-fub-mx-palette",
+    proprieta: ["border", "padding", "background"],
+  },
+  {
+    id: "formula.pezzi",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-quick",
+    app: ".cm-fub-mx-popover .cm-fub-mx-quick",
+    proprieta: ["padding", "gap", "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.pezzo",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-quick .mx-s",
+    app: ".cm-fub-mx-popover .cm-fub-mx-quick .cm-fub-mx-tile",
+    proprieta: [...DIMENSIONI, "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.tutti",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-all",
+    app: ".cm-fub-mx-popover .cm-fub-mx-all",
+    // Non il margine a sinistra: spinge «Tutti» in fondo alla fila, e la fila
+    // è larga quanto il riquadro, 392 px nell'app e 380 nel prototipo (T60).
+    proprieta: ["padding", "font", "color", "background", "border-radius", "height", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.tutti-aperto",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-full",
+    app: ".cm-fub-mx-popover .cm-fub-mx-full",
+    proprieta: ["padding"],
+  },
+  {
+    id: "formula.cerca",
+    vista: "formula-tavolozza",
+    // La scatola del prototipo è l'etichetta; nell'app è il campo, che ha il
+    // fuoco e il suo anello (la lente gli sta sopra).
+    prototipo: ".mx-find",
+    app: ".cm-fub-mx-popover .cm-fub-mx-find-input",
+    proprieta: ["height", "border-radius", "background"],
+  },
+  {
+    id: "formula.cerca-spazio",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-find",
+    app: ".cm-fub-mx-popover .cm-fub-mx-find",
+    proprieta: ["margin-bottom"],
+  },
+  {
+    id: "formula.gruppo-scelto",
+    vista: "formula-tavolozza",
+    prototipo: '.mx-tabs button[aria-selected="true"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-group[aria-selected="true"]',
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.gruppo",
+    vista: "formula-tavolozza",
+    prototipo: '.mx-tabs button[aria-selected="false"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-group[aria-selected="false"]',
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.griglia",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-grid",
+    app: ".cm-fub-mx-popover .cm-fub-mx-grid",
+    // Le colonne sono dieci dai due lati; la loro misura segue la larghezza
+    // del riquadro (392 px contro 380, T60), e non si confronta.
+    proprieta: ["gap", "min-height"],
+  },
+  {
+    id: "formula.simbolo",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-grid .mx-s",
+    app: ".cm-fub-mx-popover .cm-fub-mx-grid .cm-fub-mx-tile",
+    proprieta: ["height", "border-radius", "font", "color", "background"],
+  },
+  {
+    id: "formula.nome",
+    vista: "formula-tavolozza",
+    prototipo: ".mx-tip",
+    app: ".cm-fub-mx-popover .cm-fub-mx-tip",
+    proprieta: ["height", "padding", "font", "color"],
+  },
+  // ── il LaTeX a vista e i tre puntini (T63) ────────────────────────────────
+  {
+    id: "formula.latex-riga",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-row",
+    app: ".cm-fub-mx-popover .cm-fub-mx-row",
+    proprieta: ["padding", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.latex",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-tex",
+    app: ".cm-fub-mx-popover .cm-fub-mx-latex",
+    proprieta: ["height", "padding", "font", "color", "border-radius", "box-shadow"],
+  },
+  {
+    id: "formula.puntini",
+    vista: "formula-latex",
+    prototipo: ".mx .mx-row .mx-more",
+    app: ".cm-fub-mx-popover .cm-fub-mx-row .cm-fub-mx-more",
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background"],
+  },
+  {
+    id: "formula.opzioni",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts",
+    app: ".cm-fub-mx-popover .cm-fub-mx-options",
+    proprieta: ["padding", "gap"],
+  },
+  {
+    id: "formula.opzione",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts > div",
+    app: ".cm-fub-mx-popover .cm-fub-mx-option",
+    proprieta: ["font", "color", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.opzione-scelta",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts .seg2 button[aria-pressed="true"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="true"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background", "box-shadow"],
+  },
+  {
+    id: "formula.opzione-altra",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts .seg2 button[aria-pressed="false"]',
+    app: '.cm-fub-mx-popover .cm-fub-mx-segment[aria-pressed="false"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
+  },
+  // ── il posto della formula nei tre puntini (T65) ─────────────────────────
+  {
+    id: "formula.posto",
+    vista: "formula-latex-opzioni",
+    prototipo: ".mx .mx-opts > div:last-child",
+    app: ".cm-fub-mx-popover .cm-fub-mx-option:last-child",
+    proprieta: ["font", "color", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.posto-scelto",
+    vista: "formula-latex-opzioni",
+    prototipo: '.mx .mx-opts [data-disp="0"]',
+    app: '.cm-fub-mx-popover [data-place="inline"]',
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background", "box-shadow"],
+  },
+  // ── gli errori in chiaro (T64) ────────────────────────────────────────────
+  {
+    id: "formula.errore",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error",
+    proprieta: ["margin", "padding", "gap", "border-radius", "background", "font", "color", ...ALLINEAMENTO],
+  },
+  {
+    id: "formula.errore-codice",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err code",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error code",
+    proprieta: ["font", "background", "padding"],
+  },
+  {
+    id: "formula.errore-correzione",
+    vista: "formula-latex-errore",
+    prototipo: ".mx .mx-err button",
+    app: ".cm-fub-mx-popover .cm-fub-mx-error-fix",
+    proprieta: ["height", "padding", "border-radius", "font", "color", "background"],
+  },
+  // Le maniglie: «+» e la presa a due occhi.
+  {
+    id: "maniglie.aggiungi",
+    vista: "maniglie",
+    contesto: "documento",
+    prototipo: "#g-add",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "maniglie.aggiungi-icona",
+    vista: "maniglie",
+    contesto: "documento",
+    prototipo: "#g-add svg",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-add svg',
+    proprieta: DIMENSIONI,
+  },
+  {
+    id: "maniglie.presa",
+    vista: "maniglie",
+    contesto: "documento",
+    prototipo: "#g-grip",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "maniglie.occhi",
+    vista: "maniglie",
+    contesto: "documento",
+    prototipo: "#g-grip svg.ea",
+    app: '.cm-fub-block-handles[data-active="true"] .cm-fub-block-grip-eyes svg',
+    proprieta: DIMENSIONI,
+  },
+
+  // ── la tabella Markdown (T50) e la somma nella banda (T55): #432 ─────────
+  // Le celle si scelgono lontano dal bordo esterno, che nel prototipo è un
+  // anello della scatola (`.gr-box`) e nell'app il bordo delle celle di
+  // fuori: i fili di dentro si confrontano sul lato basso.
+  {
+    id: "tabella.intestazione",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr tr:first-child td:nth-child(2)",
+    app: '.tb-grid .tb-cell.tb-head[data-col="0"]',
+    proprieta: ["padding", "font", "color", "background", "height", "white-space", "border-bottom-width", "border-bottom-style", "border-bottom-color"],
+  },
+  {
+    id: "tabella.cella",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr tr:nth-child(2) td:nth-child(2)",
+    app: '.tb-grid .tb-cell[data-row="1"][data-col="1"]',
+    proprieta: ["padding", "font", "color", "background", "height", "white-space", "border-bottom-width", "border-bottom-style", "border-bottom-color"],
+  },
+  {
+    id: "tabella.lettera",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-let span:not(.on)",
+    app: ".tb-grid .tb-letter:not(.is-selected)",
+    proprieta: ["font", "color", "background"],
+  },
+  {
+    id: "tabella.lettera-scelta",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-let span.on",
+    app: ".tb-grid .tb-letter.is-selected",
+    proprieta: ["font", "color"],
+  },
+  // Nell'app il fondo della scelta è un `::before` sotto la lettera.
+  {
+    id: "tabella.lettera-scelta-fondo",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-let span.on",
+    app: ".tb-grid .tb-letter.is-selected::before",
+    proprieta: ["background"],
+  },
+  {
+    id: "tabella.numero",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-num span:not(.on)",
+    app: ".tb-grid .tb-rowhead:not(.is-selected)",
+    proprieta: ["font", "color", "background"],
+  },
+  {
+    id: "tabella.numero-scelto",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-num span.on",
+    app: ".tb-grid .tb-rowhead.is-selected",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "tabella.numero-scelto-fondo",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".gr-num span.on",
+    app: ".tb-grid .tb-rowhead.is-selected::before",
+    proprieta: ["background"],
+  },
+  {
+    id: "tabella.riempi",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".tg-fill",
+    app: ".tb-grid .tb-fill",
+    proprieta: [...DIMENSIONI, "border-radius", "background", "box-shadow"],
+  },
+  {
+    id: "tabella.aggiungi-riga",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".tg-add.row",
+    app: '.tb-add[data-add="row"]',
+    proprieta: ["height", "bottom", "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "tabella.aggiungi-colonna",
+    vista: "tabella",
+    contesto: "documento",
+    prototipo: ".tg-add.col",
+    app: '.tb-add[data-add="column"]',
+    proprieta: ["width", "right", "border-radius", "color", "background", "opacity"],
+  },
+  {
+    id: "somma.valore",
+    vista: "somma",
+    prototipo: "#band-words b",
+    app: ".status-sum-part[data-lead] > .status-sum-value",
+    proprieta: ["font", "color"],
+  },
+
+  // ── la testata (T7) e le proprietà (T8): #421 ────────────────────────────
+  {
+    id: "testata.copertina",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".cover",
+    app: ".cm-fub-page-cover",
+    proprieta: ["height", "border-radius"],
+  },
+  {
+    id: "testata.strumenti",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".ptools",
+    app: ".cm-fub-page-tools",
+    proprieta: ["display", "gap", "height", "margin", "opacity"],
+  },
+  {
+    id: "testata.strumento",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".ptools button",
+    app: ".cm-fub-page-tool",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "testata.titolo",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".ptitle",
+    app: ".cm-fub-page-title",
+    proprieta: ["font", "color", "margin", "padding"],
+  },
+  {
+    id: "testata.dati",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".facts",
+    app: ".note-facts",
+    proprieta: [...BASE, ...ALLINEAMENTO],
+  },
+  {
+    id: "testata.dato",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".facts button:not(.tag)",
+    app: ".note-fact:not(.note-fact-tags)",
+    proprieta: ["padding", "margin", "gap", "border-radius", "font", "color"],
+  },
+  {
+    id: "testata.etichetta",
+    vista: "testata",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".facts .tag",
+    app: ".note-tag",
+    proprieta: BASE,
+  },
+  {
+    id: "proprieta.elenco",
+    vista: "proprieta",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".props",
+    app: ".cm-fub-page-props",
+    proprieta: ["display", "row-gap", "margin", "font"],
+  },
+  {
+    id: "proprieta.chiave",
+    vista: "proprieta",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".pk",
+    app: ".cm-fub-page-prop-key",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "proprieta.valore",
+    vista: "proprieta",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".pv",
+    app: ".cm-fub-page-prop-value",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "proprieta.persona",
+    vista: "proprieta",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".person",
+    app: ".cm-fub-prop-person",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "opzioni.stato",
+    vista: "opzioni",
+    contesto: "documento",
+    prototipo: ".props .opt.st",
+    app: '.cm-fub-page-prop[data-key="stato"] .cm-fub-prop-opt',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "proprieta.altre",
+    vista: "proprieta",
+    attende: "#421",
+    contesto: "documento",
+    prototipo: ".props .more",
+    app: ".cm-fub-page-props-more",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  // ── il calendario della Base (T17) ──────────────────────────────────────
+  // Il prototipo mostra novembre 2026 (oggi il 9), l'app agosto 2026 (oggi il
+  // 19): i giorni si scelgono per colonna, un martedì dai due lati, perché
+  // l'ultima colonna non ha il filo a destra.
+  {
+    id: "calendario.griglia",
+    vista: "calendario",
+    prototipo: ".cal",
+    app: ".base-cal-grid",
+    proprieta: [...BASE, "display", "min-width"],
+  },
+  {
+    id: "calendario.nome-giorno",
+    vista: "calendario",
+    prototipo: ".cal > .dow",
+    app: ".base-cal-dow",
+    proprieta: [...BASE, "letter-spacing", "text-transform"],
+  },
+  {
+    id: "calendario.giorno",
+    vista: "calendario",
+    prototipo: '.cal > div[data-day="2026-11-03"]',
+    app: '.base-cal-day[data-day="2026-08-04"]',
+    proprieta: [...BASE, "min-height"],
+  },
+  {
+    id: "calendario.fuori",
+    vista: "calendario",
+    prototipo: ".cal > .out",
+    app: '.base-cal-day[data-out="true"]',
+    proprieta: [...BASE, "min-height"],
+  },
+  {
+    id: "calendario.numero",
+    vista: "calendario",
+    prototipo: '.cal > div[data-day="2026-11-03"] .d',
+    app: '.base-cal-day[data-day="2026-08-04"] .base-cal-num',
+    proprieta: [...BASE, "min-width", "height", "display"],
+  },
+  {
+    id: "calendario.oggi",
+    vista: "calendario",
+    prototipo: ".cal > .today .d",
+    app: '.base-cal-day[data-today="true"] .base-cal-num',
+    proprieta: [...BASE, "min-width", "height"],
+  },
+  {
+    id: "calendario.nota",
+    vista: "calendario",
+    prototipo: ".cal .ev.k-green",
+    app: ".base-cal-event",
+    proprieta: [...BASE, "display", "white-space", "text-overflow"],
+  },
+
+  // ── la linea del tempo della Base (T34) ─────────────────────────────────
+  // Il prototipo mostra otto settimane da metà ottobre a dicembre in quattro
+  // colonne, l'app otto settimane in otto: il fondo della traccia (le righe
+  // delle colonne) non si confronta, i pezzi sì.
+  {
+    id: "tempo.griglia",
+    vista: "tempo",
+    prototipo: ".tl",
+    app: ".base-tl",
+    proprieta: [...BASE, "min-width"],
+  },
+  {
+    id: "tempo.scala",
+    vista: "tempo",
+    prototipo: ".tl-a",
+    app: ".base-tl-axis",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "tempo.oggi",
+    vista: "tempo",
+    prototipo: ".tl-s .now",
+    app: ".base-tl-now",
+    proprieta: [...BASE, "white-space"],
+  },
+  {
+    id: "tempo.riga",
+    vista: "tempo",
+    prototipo: ".tl-r",
+    app: ".base-tl-row",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "tempo.nome",
+    vista: "tempo",
+    prototipo: ".tl-r > span",
+    app: ".base-tl-name",
+    proprieta: [...BASE, "white-space", "text-overflow"],
+  },
+  {
+    id: "tempo.barra",
+    vista: "tempo",
+    prototipo: ".tl-b.k-green",
+    app: '.base-tl-bar:not([data-inverted="true"]):not([data-clip-start="true"]):not([data-clip-end="true"])',
+    proprieta: [...BASE, "height", "top", "white-space"],
+  },
+
+  // ── la riga dei suggerimenti (T14): #383 ─────────────────────────────────
+  {
+    id: "suggerimenti.riga",
+    vista: "suggerimenti",
+    prototipo: ".hint",
+    app: "#status-hints",
+    proprieta: [...BASE, ...ALLINEAMENTO, "text-align", "white-space", "overflow-x", "text-overflow", "flex-grow", "flex-shrink", "flex-basis", "min-width"],
+  },
+  {
+    id: "suggerimenti.tasto",
+    vista: "suggerimenti",
+    prototipo: ".hint kbd",
+    app: "#status-hints .status-hints-key",
+    proprieta: [...BASE, "white-space"],
+  },
+
+  // ── il «/» in una colonna (T84) ───────────────────────────────────────────
+  {
+    id: "slash.superficie",
+    vista: "slash",
+    prototipo: ".pop.slash",
+    app: ".cm-tooltip.slash-panel",
+    proprieta: [...BASE, "width"],
+  },
+  {
+    id: "slash.tessere",
+    vista: "slash",
+    prototipo: ".sl-quick",
+    app: ".slash-top",
+    proprieta: [...BASE, "display", "grid-template-columns"],
+  },
+  {
+    id: "slash.tessera-accesa",
+    vista: "slash",
+    prototipo: ".sl-q.act .ti",
+    app: ".slash-tile[data-lit] .kit-tile-icon",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "slash.tessera",
+    vista: "slash",
+    prototipo: ".sl-q:not(.act) .ti",
+    app: ".slash-tile:not([data-lit]) .kit-tile-icon",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "slash.elenco",
+    vista: "slash",
+    prototipo: ".sl-list",
+    app: ".slash-list",
+    proprieta: ["padding", "max-height"],
+  },
+  {
+    id: "slash.gruppo",
+    vista: "slash",
+    prototipo: ".sl-g",
+    app: ".slash-group-label",
+    proprieta: [...BASE, "position", "top"],
+  },
+  {
+    id: "slash.riga",
+    vista: "slash",
+    prototipo: ".sl-i:not(.act)",
+    app: ".slash-row:not([data-lit])",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "slash.sintassi",
+    vista: "slash",
+    prototipo: ".sl-i .sy",
+    app: ".slash-row .slash-syntax-note",
+    proprieta: ["font-family", "font-size", "color", "white-space"],
+  },
+  {
+    id: "slash.disegno",
+    vista: "slash",
+    prototipo: ".sl-det",
+    app: ".slash-detail",
+    proprieta: [...BASE, "display", "grid-template-columns", "min-height"],
+  },
+  {
+    id: "slash.miniatura",
+    vista: "slash",
+    prototipo: ".sl-th",
+    app: ".slash-thumb",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "slash.descrizione",
+    vista: "slash",
+    prototipo: ".sl-tx .d",
+    app: ".slash-description",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "slash.come-si-scrive",
+    vista: "slash",
+    prototipo: ".sl-tx .y",
+    app: ".slash-syntax",
+    proprieta: ["font", "color", "margin", "white-space", "text-overflow"],
+  },
+  // ── la Base nella nota (T18) ────────────────────────────────────────────
+  // Oltre la colonna fino al margine a tutta larghezza, nella colonna a 700.
+  {
+    id: "base.incorporata",
+    vista: "base-nota",
+    prototipo: '.blk[data-t="base"]',
+    app: '.pane.focus .base-surface[data-embedded="true"]',
+    proprieta: ["margin-right"],
+  },
+  // ── le schede affiancate (T42) ──────────────────────────────────────────
+  // Alla pari, 14 px fra l'una e l'altra, 64 px oltre il testo dai due lati
+  // a tutta larghezza e nella colonna a 700.
+  {
+    id: "schede.affiancate",
+    vista: "schede-affiancate",
+    prototipo: ".pair",
+    app: '.pane.focus .pane-editor .fub-columns[data-live-cards="true"]',
+    proprieta: ["column-gap", "margin-left", "margin-right", "align-items"],
+  },
+  // ── la scheda PDF (T45) ───────────────────────────────────────────────────
+  // Il vassoio con 16 px intorno alla pagina (sotto, la fascia di 40 px del
+  // numero è una riga della griglia, non un padding), la pagina con le sue
+  // ombre, il numero e le frecce di 24 px, velate a riposo.
+  {
+    id: "schede.pdf.vassoio",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfw',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf',
+    proprieta: ["background-color", "padding-top", "padding-left", "padding-right"],
+  },
+  {
+    id: "schede.pdf.pagina",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfp',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-page',
+    proprieta: ["border-radius", "box-shadow", "filter"],
+  },
+  {
+    id: "schede.pdf.numero",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] .pdfn > span',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-status',
+    proprieta: ["font", "color", "font-variant-numeric"],
+  },
+  {
+    id: "schede.pdf.freccia",
+    vista: "scheda-pdf",
+    contesto: "documento",
+    prototipo: '.pair .scard[data-kind="pdf"] #pdf-prev',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="pdf"] .canvas-card-pdf-previous',
+    proprieta: [...DIMENSIONI, "border-radius", "color", "opacity"],
+  },
+  // ── il valore di una cella nel testo (T53) ──────────────────────────────
+  // Il tratteggio d'accento sotto, le cifre tabellari, mai a capo, il
+  // puntatore della mano; al passaggio il velo d'accento con gli angoli di 3 px.
+  {
+    id: "valori-cella.valore",
+    vista: "valori-cella",
+    contesto: "documento",
+    prototipo: '[data-id="p-conti"] .cellv',
+    app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]',
+    // Il carattere è quello del paragrafo; l'interlinea è del corpo del testo
+    // (non di questo pezzo), e qui non si confronta.
+    proprieta: ["border-bottom-width", "border-bottom-style", "border-bottom-color", "cursor", "font-variant-numeric", "white-space", "color", "font-family", "font-size", "font-weight", "background-color"],
+  },
+  {
+    id: "valori-cella.passaggio",
+    vista: "valori-cella",
+    contesto: "documento",
+    prototipo: '[data-id="p-conti"] .cellv',
+    app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]',
+    gesto: { tipo: "hover", prototipo: '[data-id="p-conti"] .cellv', app: '.pane.focus .pane-editor .cm-fub-cell-value[data-cell-state="value"]' },
+    proprieta: ["background-color", "border-radius"],
+  },
+  // La zona lavagna: il fondo del vassoio al 60% sul foglio, alta 300 px
+  // (`|640x300`), col puntatore della scheda che si attiva con un clic. Le
+  // schede e i fili sono quelli della lavagna (eccezioni-editor.json).
+  {
+    id: "schede.lavagna.zona",
+    vista: "scheda-lavagna",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="canvas"] .cvz',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest .canvas-viewport',
+    proprieta: ["background-color", "height"],
+  },
+  {
+    id: "schede.lavagna.riposo",
+    vista: "scheda-lavagna",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="canvas"] .cvz',
+    app: '.pane.focus .pane-editor .live-card[data-card-kind="canvas"] .canvas-card-board-rest',
+    proprieta: ["cursor", "overflow"],
+  },
+  // ── gli estratti (T49) ────────────────────────────────────────────────────
+  // «Estrai» in testata: l'azione d'accento in grassetto, come gli altri
+  // pulsanti della testata per il resto.
+  {
+    id: "estratti.estrai",
+    vista: "estratti-estrai",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="pdf"].active #pdf-ex',
+    app: '.pane.focus .pane-editor .live-card[data-card-active="true"][data-card-extract="ready"] .live-card-extract',
+    proprieta: ["color", "font-weight", "display", "opacity"],
+  },
+  // L'estratto: la barra gialla a sinistra, i margini, il carattere del
+  // paragrafo (il `font` del prototipo nomina `--f-text`, che non c'è, e il
+  // testo eredita quello del paragrafo); sotto la fonte nel carattere
+  // dell'interfaccia, e il pulsante d'accento. L'interlinea è del corpo del
+  // testo (non di questo pezzo), e qui non si confronta, come per i valori
+  // di cella.
+  {
+    id: "estratti.citazione",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc",
+    app: ".pane.focus .pane-editor .live-card-excerpt",
+    proprieta: ["border-left-width", "border-left-style", "border-left-color", "padding", "margin-top", "margin-bottom", "font-style", "font-size", "font-family", "color"],
+  },
+  {
+    id: "estratti.fonte",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer",
+    app: ".pane.focus .pane-editor .live-card-excerpt-source",
+    proprieta: ["font-size", "font-style", "font-family", "color", "gap", "margin-top", ...ALLINEAMENTO],
+  },
+  {
+    id: "estratti.vai",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer button",
+    app: ".pane.focus .pane-editor .live-card-excerpt-go",
+    proprieta: ["color", "padding", "border-radius"],
+  },
+  {
+    id: "estratti.vai-passaggio",
+    vista: "estratti-passo",
+    contesto: "documento",
+    prototipo: ".exc footer button",
+    app: ".pane.focus .pane-editor .live-card-excerpt-go",
+    gesto: { tipo: "hover", prototipo: ".exc footer button", app: ".pane.focus .pane-editor .live-card-excerpt-go" },
+    proprieta: ["background-color"],
+  },
+  // ── la mini-barra (T12) ───────────────────────────────────────────────────
+  {
+    id: "mini-barra.superficie",
+    vista: "mini-barra",
+    prototipo: "#minibar",
+    app: ".selection-bubble .mini-bar",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "mini-barra.grassetto",
+    vista: "mini-barra",
+    prototipo: '#minibar [data-mx="bold"]',
+    app: '.selection-bubble .mini-bar [data-command="markdown.bold"]',
+    proprieta: ["padding", "border-radius", "color", "background", ...DIMENSIONI, ...ALLINEAMENTO],
+  },
+  {
+    id: "mini-barra.trasforma",
+    vista: "mini-barra",
+    prototipo: '#minibar [data-mx="turn"]',
+    app: '.selection-bubble .mini-bar [data-command="mini-bar.transform"]',
+    proprieta: ["padding", "gap", "border-radius", "font", "color", "background", "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "mini-barra.commenta",
+    vista: "mini-barra",
+    prototipo: '#minibar [data-mx="comment"]',
+    app: '.selection-bubble .mini-bar [data-command="markdown.comment.add"]',
+    proprieta: ["padding", "gap", "border-radius", "font", "color", "background", "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "mini-barra.filo",
+    vista: "mini-barra",
+    prototipo: "#minibar .sepv",
+    app: ".selection-bubble .mini-bar .mini-bar-rule",
+    proprieta: ["margin", "background", ...DIMENSIONI],
+  },
+  // ── la trasclusione viva (T29) ──────────────────────────────────────────
+  {
+    id: "trasclusione.vassoio",
+    vista: "trasclusione-scrive",
+    contesto: "documento",
+    prototipo: ".tx.editing",
+    app: ".embed.transclusion-editing",
+    proprieta: ["padding", "border-radius", "box-shadow", "background-color"],
+  },
+  {
+    id: "trasclusione.testata",
+    vista: "trasclusione-scrive",
+    contesto: "documento",
+    prototipo: ".tx-h",
+    app: ".transclusion-head",
+    proprieta: ["height", "gap", "font", "color", ...ALLINEAMENTO],
+  },
+  {
+    id: "trasclusione.modifica",
+    vista: "trasclusione-scrive",
+    contesto: "documento",
+    prototipo: "#tx-edit",
+    app: ".transclusion-edit",
+    proprieta: ["height", "padding", "gap", "border-radius", "font", "color", "opacity", ...ALLINEAMENTO],
+  },
+  {
+    id: "trasclusione.fascia",
+    vista: "trasclusione-scrive",
+    contesto: "documento",
+    prototipo: ".tx-band",
+    app: ".transclusion-band",
+    proprieta: ["padding", "margin", "gap", "border-radius", "background-color", "font", "color", ...ALLINEAMENTO],
+  },
+  // ── il foglio nella nota (T43) ──────────────────────────────────────────
+  // La cella attiva e la sua formula nel gruppo «Foglio» della barra (`.fxr`).
+  {
+    id: "foglio-nella-nota.cella",
+    vista: "foglio-nella-nota",
+    stati: LARGHI,
+    prototipo: "#fx-sheet",
+    app: ".format-bar-context .format-bar-context-cell",
+    proprieta: ["font", "color", "padding", "max-width", "white-space"],
+  },
+  // Le lettere delle colonne, che a scheda attiva compaiono piccole e senza fondo.
+  {
+    id: "foglio-nella-nota.lettere",
+    vista: "foglio-nella-nota",
+    contesto: "documento",
+    prototipo: ".scard .gr-let",
+    app: '.live-card[data-card-active="true"] .canvas-card-sheet .grid-column-header',
+    proprieta: ["font-size", "font-weight", "color"],
+  },
+  // ── il promemoria (T36) ───────────────────────────────────────────────────
+  // Il colore, il fondo, la forma e il peso della `.rem`. La misura (12 px,
+  // alta 21) no: nella pagina la pastiglia segue il testo in `em`, come la
+  // scadenza accanto (`.px-pg :is(.due, .pill-in)` del prototipo, riga 1090).
+  {
+    id: "promemoria.pastiglia",
+    vista: "promemoria",
+    contesto: "documento",
+    prototipo: ".rem",
+    app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done)",
+    proprieta: ["color", "background", "box-shadow", "border-radius", "font-weight", "font-family", "white-space", ...ALLINEAMENTO],
+  },
+  {
+    id: "promemoria.sveglia",
+    vista: "promemoria",
+    contesto: "documento",
+    prototipo: ".rem svg",
+    app: ".cm-content .cm-fub-reminder:not(.cm-fub-reminder-done) svg",
+    proprieta: ["color"],
+  },
+  // ── la scheda di documento (T44) ──────────────────────────────────────────
+  // Il margine del testo (`.docw`) e l'inchiostro e lo spazio dei paragrafi
+  // (`.docp`). Il carattere no: il prototipo lo scrive con `var(--f-text)`,
+  // un token che non dichiara, e la regola `font` intera cade (il testo
+  // eredita quello della nota); l'app tiene la misura scritta, 14/1,6.
+  {
+    id: "scheda-documento.testo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docw',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content',
+    proprieta: ["padding"],
+  },
+  {
+    id: "scheda-documento.paragrafo",
+    vista: "scheda-documento",
+    contesto: "documento",
+    prototipo: '.scard[data-kind="doc"] .docp p:not(.r)',
+    app: '.live-card[data-card-kind="document"] .canvas-card-document-content > p',
+    proprieta: ["margin", "color"],
+  },
+
+  // ── lo spazio «Esporta in PDF» (T70) ────────────────────────────────────
+  // Il prototipo lo mette sopra tutta la sua finestra, l'app sotto la barra
+  // del titolo: si confrontano i pezzi, non dove sta lo spazio. Il foglio
+  // non confronta il fondo: è la carta del tema di stampa, non della pelle.
+  {
+    id: "esporta.spazio",
+    vista: "esporta-pdf",
+    prototipo: ".px",
+    app: ".export-space",
+    proprieta: ["color", "background", "display"],
+  },
+  {
+    id: "esporta.barra",
+    vista: "esporta-pdf",
+    prototipo: ".px-top",
+    app: ".export-top",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.indietro",
+    vista: "esporta-pdf",
+    prototipo: ".px-back",
+    app: ".export-back",
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.titolo",
+    vista: "esporta-pdf",
+    prototipo: ".px-tt",
+    app: ".export-title",
+    proprieta: [...BASE, "display", "align-items"],
+  },
+  {
+    id: "esporta.titolo-nome",
+    vista: "esporta-pdf",
+    prototipo: ".px-tt b",
+    app: ".export-title-name",
+    proprieta: ["font", "color", "white-space"],
+  },
+  {
+    id: "esporta.titolo-nota",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-tt span",
+    app: ".export-title-note",
+    proprieta: ["font", "color", "white-space", "text-overflow"],
+  },
+  {
+    id: "esporta.zoom",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom",
+    app: ".export-zoom",
+    proprieta: ["color", "display", "align-items"],
+  },
+  {
+    id: "esporta.zoom-pulsante",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom button",
+    app: ".export-zoom-button",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "esporta.zoom-valore",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-zoom output",
+    app: ".export-zoom-value",
+    proprieta: ["font", "color", "min-width", "text-align", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.viste",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-views",
+    app: ".export-views",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.vista",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: '.px-views button[aria-pressed="false"]',
+    app: '.export-segment[aria-pressed="false"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.vista-premuta",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: '.px-views button[aria-pressed="true"]',
+    app: '.export-segment[aria-pressed="true"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.profilo",
+    vista: "esporta-pdf",
+    prototipo: ".px-prof",
+    app: ".export-profile",
+    proprieta: [...BASE, "height", "max-width", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.esporta",
+    vista: "esporta-pdf",
+    prototipo: ".px-go",
+    app: ".export-go",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.palco",
+    vista: "esporta-pdf",
+    prototipo: ".px-stage",
+    app: ".export-stage",
+    proprieta: ["padding", "background", "overflow-y"],
+  },
+  {
+    id: "esporta.pagine",
+    vista: "esporta-pdf",
+    prototipo: ".px-doc",
+    app: ".export-doc",
+    proprieta: ["gap", ...ALLINEAMENTO, "flex-wrap"],
+  },
+  {
+    id: "esporta.foglio",
+    vista: "esporta-pdf",
+    prototipo: ".px-slot",
+    app: ".export-slot",
+    proprieta: ["border-radius", "box-shadow"],
+  },
+  {
+    id: "esporta.pannello",
+    vista: "esporta-pdf",
+    prototipo: ".px-side",
+    app: ".export-side",
+    proprieta: ["background", "box-shadow", "width"],
+  },
+  {
+    id: "esporta.sezione",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"]',
+    app: '.export-section[data-section="pagina"]',
+    proprieta: ["border", "background"],
+  },
+  {
+    id: "esporta.sezione-testa",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh',
+    app: '.export-section[data-section="pagina"] .export-section-head',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.sezione-nome",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh b',
+    app: '.export-section[data-section="pagina"] .export-section-name',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.sezione-riassunto",
+    vista: "esporta-pdf",
+    prototipo: '.px-sec[data-sec="pagina"] .px-sh span',
+    app: '.export-section[data-section="pagina"] .export-section-summary',
+    proprieta: ["font", "color", "text-align", "white-space", "text-overflow"],
+  },
+  {
+    id: "esporta.banda",
+    vista: "esporta-pdf",
+    prototipo: ".px-band",
+    app: ".export-band",
+    proprieta: [...BASE, "height", "align-items", "white-space"],
+  },
+  {
+    id: "esporta.banda-pagine",
+    vista: "esporta-pdf",
+    prototipo: "#px-info b",
+    app: ".export-band-pages",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.banda-ms",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: "#px-info .ms",
+    app: ".export-band-ms",
+    proprieta: ["font", "color", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.banda-suggerimento",
+    vista: "esporta-pdf",
+    stati: LARGHI,
+    prototipo: ".px-hint",
+    app: ".export-band-hint",
+    proprieta: ["font", "color", "text-overflow"],
+  },
+
+  // ── la sezione Diagrammi (T75) ──────────────────────────────────────────
+  // Le miniature hanno i colori della tavolozza che disegna ogni stile
+  // (`paletteFor`, come quelle del menu del diagramma): si confrontano forma
+  // e misure, non le tinte.
+  {
+    id: "esporta.dg-stili",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-dgs",
+    app: ".export-dg-styles",
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.dg-stile",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"]',
+    app: '.export-dg-style[data-dg="aurora"]',
+    proprieta: ["font", "color", "padding", "gap", "border-radius", "display"],
+  },
+  {
+    id: "esporta.dg-stile-scelto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[aria-pressed="true"]',
+    app: '.export-dg-style[aria-pressed="true"]',
+    proprieta: ["font", "color"],
+  },
+  // Il menu dei profili (T79): il menu di Fub coi profili del vault.
+  {
+    id: "esporta.profili-superficie",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop",
+    app: ".context-menu",
+    proprieta: [...BASE, "min-width"],
+  },
+  {
+    id: "esporta.profili-voce",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i:not(.act)",
+    app: ".context-menu .menu-items > button.kit-row:not(.menu-lit)",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.profili-icona",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i .ic",
+    app: '.context-menu .menu-items > button.kit-row[role="menuitem"] .menu-icon',
+    proprieta: ["color", ...DIMENSIONI],
+  },
+  {
+    id: "esporta.profili-nota",
+    vista: "esporta-pdf-profili",
+    prototipo: ".pop .m-l > button.m-i .lb small",
+    app: ".context-menu .menu-items > button.kit-row .menu-description",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.dg-miniatura",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch',
+    proprieta: ["height", "border-radius", "box-shadow", ...ALLINEAMENTO, "gap"],
+  },
+  {
+    id: "esporta.dg-miniatura-scelta",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[aria-pressed="true"] .px-dsw',
+    app: '.export-dg-style[aria-pressed="true"] .export-dg-swatch',
+    proprieta: ["box-shadow"],
+  },
+  {
+    id: "esporta.dg-miniatura-nodo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .n',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-node',
+    proprieta: [...DIMENSIONI, "border-radius", "border-width", "border-style"],
+  },
+  {
+    id: "esporta.dg-miniatura-scelta-rombo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .d',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-choice',
+    proprieta: [...DIMENSIONI, "border-radius", "transform"],
+  },
+  {
+    id: "esporta.dg-miniatura-pillola",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-dg[data-dg="aurora"] .px-dsw .p',
+    app: '.export-dg-style[data-dg="aurora"] .export-dg-swatch-pill',
+    proprieta: [...DIMENSIONI, "border-radius"],
+  },
+  {
+    id: "esporta.dg-nota",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-note',
+    app: '.export-section[data-section="diagrammi"] .export-note',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.dg-colori",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cols",
+    app: ".export-dg-colors",
+    proprieta: ["display", "gap", "margin"],
+  },
+  {
+    id: "esporta.dg-colore-aperto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col.open",
+    app: ".export-dg-color.is-open",
+    proprieta: ["background", "border-radius", "display"],
+  },
+  {
+    id: "esporta.dg-colore-testa",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-cb",
+    app: ".export-dg-color:not(.is-open) .export-dg-color-head",
+    proprieta: [...BASE, "height", "align-items", "text-align"],
+  },
+  {
+    id: "esporta.dg-colore-pallino",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col.open .px-chip",
+    app: ".export-dg-color.is-open .export-dg-chip",
+    proprieta: [...DIMENSIONI, "border-radius", "background-color", "box-shadow"],
+  },
+  {
+    id: "esporta.dg-colore-pallino-vuoto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-chip.none",
+    app: ".export-dg-color:not(.is-open) .export-dg-chip.is-none",
+    proprieta: [...DIMENSIONI, "border-radius", "box-shadow"],
+  },
+  {
+    id: "esporta.dg-colore-tuo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cb em",
+    app: ".export-dg-color-head em",
+    proprieta: ["font", "color", "background", "border-radius", "padding"],
+  },
+  {
+    id: "esporta.dg-colore-codice",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-col:not(.open) .px-cb code",
+    app: ".export-dg-color:not(.is-open) .export-dg-color-head code",
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.dg-colore-torna",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-cr",
+    app: ".export-dg-reset",
+    proprieta: [...DIMENSIONI, "border-radius", "color", "background"],
+  },
+  {
+    id: "esporta.dg-tavolozza",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-pal",
+    app: ".export-dg-palette",
+    proprieta: ["display", "flex-wrap", "gap", "padding", "align-items"],
+  },
+  {
+    id: "esporta.dg-inchiostro",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-ps[data-v="#b3261e"]',
+    app: "#export-dg-ink-diagramma-nodi-b3261e",
+    proprieta: [...DIMENSIONI, "border-radius", "box-shadow", "background-color"],
+  },
+  {
+    id: "esporta.dg-inchiostro-scelto",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-ps[aria-pressed="true"]',
+    app: '.export-dg-ink[aria-pressed="true"]',
+    proprieta: ["box-shadow", "background-color"],
+  },
+  {
+    id: "esporta.dg-qualsiasi",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-pick",
+    app: ".export-dg-pick",
+    proprieta: [...DIMENSIONI, "border-radius", "background", "box-shadow", "color"],
+  },
+  {
+    id: "esporta.dg-codice-campo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: ".px-hex",
+    app: ".export-dg-hex",
+    proprieta: [...DIMENSIONI, "font", "color", "background", "box-shadow", "border-radius", "padding"],
+  },
+  {
+    id: "esporta.dg-fondo",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog',
+    app: "#export-dg-paper",
+    proprieta: ["font", "color", "min-height", "gap", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.dg-fondo-spiega",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog small',
+    app: "#export-dg-paper small",
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.dg-fondo-interruttore",
+    vista: "esporta-pdf-diagrammi",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-tog i',
+    app: "#export-dg-paper i",
+    proprieta: [...DIMENSIONI, "border-radius", "background"],
+  },
+  // ── le sezioni Tema e Colori (T71) ──────────────────────────────────────
+  // La paginetta d'anteprima di un tema dipinge i colori del tema di stampa,
+  // uguali dai due lati (Fub e Notte); la cornice e le scritte sono della pelle.
+  {
+    id: "esporta.temi",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-themes',
+    app: '.export-themes',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.tema",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"]',
+    app: '.export-theme[data-theme="classico"]',
+    proprieta: [...BASE, "text-align"],
+  },
+  {
+    id: "esporta.tema-scelto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[aria-pressed="true"]',
+    app: '.export-theme[aria-pressed="true"]',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.tema-anteprima",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp',
+    app: '.export-theme[data-theme="classico"] .export-theme-preview',
+    proprieta: [...BASE, "position", "overflow", "text-align"],
+  },
+  {
+    id: "esporta.tema-anteprima-scelta",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[aria-pressed="true"] .px-thp',
+    app: '.export-theme[aria-pressed="true"] .export-theme-preview',
+    proprieta: ["box-shadow"],
+  },
+  {
+    id: "esporta.tema-notte",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="notte"] .px-thp',
+    app: '.export-theme[data-theme="notte"] .export-theme-preview',
+    proprieta: ["background", "color"],
+  },
+  {
+    id: "esporta.tema-aa",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp b',
+    app: '.export-theme[data-theme="classico"] .export-theme-heading',
+    proprieta: ["font-size", "line-height", "margin", "color", "display"],
+  },
+  {
+    id: "esporta.tema-riga",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp i:not(.s)',
+    app: '.export-theme[data-theme="classico"] .export-theme-line:not(.export-theme-line-short)',
+    proprieta: ["height", "margin", "border-radius", "opacity", "background"],
+  },
+  {
+    id: "esporta.tema-riquadro",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-th[data-theme="classico"] .px-thp u',
+    app: '.export-theme[data-theme="classico"] .export-theme-box',
+    proprieta: ["height", "border-radius", "background", "box-shadow", "position"],
+  },
+  {
+    id: "esporta.tema-nota",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-thd',
+    app: '#export-theme-about',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.colori",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-cols',
+    app: '.export-section[data-section="colori"] .export-colors',
+    proprieta: ["display", "gap", "margin"],
+  },
+  {
+    id: "esporta.colore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"]',
+    app: '.export-color[data-color="titoli"]',
+    proprieta: ["border-radius", "background", "display"],
+  },
+  {
+    id: "esporta.colore-aperto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col.open',
+    app: '.export-color.is-open',
+    proprieta: ["border-radius", "background"],
+  },
+  {
+    id: "esporta.colore-testa",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb',
+    app: '#export-color-titoli',
+    proprieta: [...BASE, "height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.colore-tondo",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-chip',
+    app: '#export-color-titoli .export-color-chip',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "background"],
+  },
+  {
+    id: "esporta.colore-nome",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb span',
+    app: '#export-color-titoli .export-color-name',
+    proprieta: ["font", "color", "text-overflow", "white-space"],
+  },
+  {
+    id: "esporta.colore-codice",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-col[data-hl="head"] .px-cb code',
+    app: '#export-color-titoli .export-color-code',
+    proprieta: ["font", "color", "background", "padding"],
+  },
+  {
+    id: "esporta.colore-tavolozza",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-pal',
+    app: '#export-color-palette-accento',
+    proprieta: ["display", "gap", "padding", "align-items"],
+  },
+  {
+    id: "esporta.colore-pronto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-ps[aria-pressed="false"]',
+    app: '.export-swatch[aria-pressed="false"]',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "padding", "border"],
+  },
+  {
+    id: "esporta.colore-pronto-scelto",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-ps[aria-pressed="true"]',
+    app: '.export-swatch[aria-pressed="true"]',
+    proprieta: ["box-shadow", "background"],
+  },
+  {
+    id: "esporta.colore-selettore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-pick',
+    app: '.export-pick',
+    proprieta: ["width", "height", "border-radius", "box-shadow", "background", "color"],
+  },
+  {
+    id: "esporta.colore-esadecimale",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-hex',
+    app: '#export-hex-accento',
+    proprieta: ["width", "height", "border", "border-radius", "box-shadow", "background", "color", "font", "padding"],
+  },
+  {
+    id: "esporta.contrasto",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-con',
+    app: '#export-contrast',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.contrasto-numero",
+    vista: "esporta-pdf-temi",
+    prototipo: '#px-con b',
+    app: '#export-contrast b',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.interruttore",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"]',
+    app: '#export-colors-gray',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.interruttore-nota",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] small',
+    app: '#export-colors-gray .export-toggle-hint',
+    proprieta: ["font", "color", "margin", "display"],
+  },
+  {
+    id: "esporta.interruttore-pallino",
+    vista: "esporta-pdf-temi",
+    prototipo: '.px-sec[data-sec="colori"] .px-tog[data-k="bw"] i',
+    app: '#export-colors-gray .export-toggle-knob',
+    proprieta: ["width", "height", "border-radius", "background"],
+  },
+  // ── le sezioni Contenuto e Interruzioni (T74) ───────────────────────────
+  // Le righe col nome e le scelte (`pxRow`, `pxSeg`), gli interruttori; sulla
+  // pagina il numero del commento e la sua nota nel margine.
+  {
+    id: "esporta.contenuto-riga",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2)',
+    app: '.export-row[data-row="export-content-comments"]',
+    proprieta: ["display", "min-height", "gap", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.contenuto-nome",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2) .px-rl',
+    app: '.export-row[data-row="export-content-comments"] .export-row-label',
+    proprieta: ["font", "color", "flex-shrink"],
+  },
+  {
+    id: "esporta.contenuto-scelte",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-sec[data-sec="contenuto"] .px-row:nth-child(2) .px-seg',
+    app: '.export-row[data-row="export-content-comments"] .export-choices',
+    proprieta: ["display", "padding", "border-radius", "background", "gap"],
+  },
+  {
+    id: "esporta.contenuto-scelta",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-seg button[data-k="comments"][data-v="fondo"]',
+    app: "#export-content-comments-in-fondo",
+    proprieta: [...BASE, "height", "white-space"],
+  },
+  {
+    id: "esporta.contenuto-scelta-presa",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-seg button[data-k="comments"][data-v="margine"]',
+    app: "#export-content-comments-margine",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.contenuto-codice",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-tog[data-k="codeNum"]',
+    app: "#export-content-code",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.interruzioni-intestazione",
+    vista: "esporta-pdf-contenuto",
+    prototipo: '.px-tog[data-k="repeatHead"]',
+    app: "#export-breaks-header",
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.commento-numero",
+    vista: "esporta-pdf-contenuto",
+    prototipo: ".pcm sup",
+    app: ".export-page .export-comment-mark",
+    proprieta: ["font-weight", "color"],
+  },
+  {
+    id: "esporta.commento-margine",
+    vista: "esporta-pdf-contenuto",
+    prototipo: ".pnote",
+    app: ".export-page .export-comment-placed",
+    proprieta: ["color", "border-left-style", "text-align"],
+  },
+  // ── le sezioni Caratteri e Pagina (T72) ─────────────────────────────────
+  {
+    id: "esporta.riga",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-row',
+    app: '.export-section[data-section="pagina"] .export-row',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.riga-nome",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-rl',
+    app: '.export-section[data-section="pagina"] .export-row-label',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.riga-caratteri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-row',
+    app: '.export-section[data-section="caratteri"] .export-row-stacked',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.caratteri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-fonts',
+    app: '.export-section[data-section="caratteri"] .export-fonts',
+    proprieta: ["display", "gap", "flex-wrap"],
+  },
+  {
+    id: "esporta.carattere",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-fonts button[data-k="fb"][data-v="hanken"]',
+    app: '#export-font-testo-hanken',
+    proprieta: [...BASE, "height", "font-size", "color", "background", "cursor"],
+  },
+  {
+    id: "esporta.carattere-scelto",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-fonts button[data-k="fb"][aria-checked="true"]',
+    app: '[id^="export-font-testo-"][aria-checked="true"]',
+    proprieta: ["box-shadow", "color", "background"],
+  },
+  {
+    id: "esporta.cursore",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng',
+    app: '.export-range:has(#export-fonts-size)',
+    proprieta: [...BASE, "display", "align-items", "min-height", "color"],
+  },
+  {
+    id: "esporta.cursore-barra",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng input',
+    app: '#export-fonts-size',
+    proprieta: ["margin", "accent-color", "cursor", "min-width"],
+  },
+  {
+    id: "esporta.cursore-valore",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="caratteri"] .px-rng output',
+    app: '.export-range:has(#export-fonts-size) output',
+    proprieta: ["font-size", "color", "text-align", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.interruttore-sillabazione",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-tog[data-k="hyph"]',
+    app: '#export-fonts-hyphens',
+    proprieta: [...BASE, "min-height", ...ALLINEAMENTO, "text-align"],
+  },
+  {
+    id: "esporta.segmento-scelto",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-seg button[aria-checked="true"]',
+    app: '.export-section[data-section="pagina"] .export-choice[aria-checked="true"]',
+    proprieta: [...BASE, "height", "font", "color", "background"],
+  },
+  {
+    id: "esporta.millimetri",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-mm',
+    app: '.export-section[data-section="pagina"] .export-mm',
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.millimetro",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm label',
+    app: '.export-mm-field',
+    proprieta: ["display", "gap", "font-size", "color", "position"],
+  },
+  {
+    id: "esporta.millimetro-campo",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm input',
+    app: '.export-mm-input',
+    proprieta: [...BASE, "height", "font", "color", "background", "appearance"],
+  },
+  {
+    id: "esporta.millimetro-unita",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-mm em',
+    app: '.export-mm-field em',
+    proprieta: ["position", "right", "bottom", "font-size", "font-style", "color"],
+  },
+  {
+    id: "esporta.filigrana-campo",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-in[data-k="wm"]',
+    app: '#export-page-watermark',
+    proprieta: [...BASE, "width", "height", "font", "color", "background"],
+  },
+  {
+    id: "esporta.nota-guide",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-sec[data-sec="pagina"] .px-note',
+    app: '.export-section[data-section="pagina"] .export-note:not(.export-page-error)',
+    proprieta: ["font", "color", "margin"],
+  },
+  {
+    id: "esporta.guida",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-pg .px-g.g-t',
+    app: '.export-slot .export-guide[data-guide="sopra"]',
+    proprieta: ["position", "height", "opacity", "cursor", "z-index"],
+  },
+  {
+    id: "esporta.guida-lato",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-pg .px-g.g-l',
+    app: '.export-slot .export-guide[data-guide="sinistra"]',
+    proprieta: ["position", "width", "opacity", "cursor"],
+  },
+  {
+    id: "esporta.filigrana",
+    vista: "esporta-pdf-caratteri",
+    prototipo: '.px-slot .px-wm',
+    app: '.export-slot .export-watermark',
+    proprieta: ["position", "display", "font-size", "font-weight", "line-height", "letter-spacing", "white-space", "opacity", "transform", "z-index"],
+  },
+  // ── Testata e piè, frontespizio e indice (T73, passo 29) ──────────────
+  // Il pannello: i sei posti sopra e sotto la paginetta finta, «Fin dove»
+  // dell'indice. Le pagine: testata, piè, frontespizio, indice, coi colori e
+  // i caratteri del tema di stampa (Relazione dai due lati).
+  {
+    id: "esporta.testata-posti",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfp",
+    app: ".export-header-grid",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.testata-fila",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfr",
+    app: ".export-header-row",
+    proprieta: ["display", "gap"],
+  },
+  {
+    id: "esporta.testata-posto",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfs:not(.on)",
+    app: ".export-slot-choice:not(.is-set)",
+    proprieta: [...BASE, "height", "text-overflow", "white-space"],
+  },
+  {
+    id: "esporta.testata-posto-scelto",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfs.on",
+    app: ".export-slot-choice.is-set",
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.testata-paginetta",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfm",
+    app: ".export-header-lines",
+    proprieta: ["display", "gap", "padding"],
+  },
+  {
+    id: "esporta.testata-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hfm i:not(.s)",
+    app: ".export-header-line:not(.export-header-line-short)",
+    proprieta: ["height", "border-radius", "background"],
+  },
+  {
+    id: "esporta.fronte-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-row',
+    app: '.export-section[data-section="fronte"] .export-row',
+    proprieta: ["display", "gap", "min-height", ...ALLINEAMENTO],
+  },
+  {
+    id: "esporta.fronte-scritta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-rl',
+    app: '.export-section[data-section="fronte"] .export-row-label',
+    proprieta: ["font", "color"],
+  },
+  {
+    id: "esporta.fronte-scelte",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg',
+    app: ".export-choices",
+    proprieta: [...BASE, "display"],
+  },
+  {
+    id: "esporta.fronte-scelta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg button[aria-checked="false"]',
+    app: '.export-choice[aria-checked="false"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "esporta.fronte-scelta-premuta",
+    vista: "esporta-pdf-testata",
+    prototipo: '.px-sec[data-sec="fronte"] .px-seg button[aria-checked="true"]',
+    app: '.export-choice[aria-checked="true"]',
+    proprieta: ["background", "color", "box-shadow"],
+  },
+  {
+    id: "esporta.pagina-testata",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-hd.rule",
+    app: ".export-header.has-rule",
+    proprieta: ["display", "font-variant-numeric", "border-bottom"],
+  },
+  {
+    id: "esporta.pagina-pie",
+    vista: "esporta-pdf-testata",
+    prototipo: ".px-ft",
+    app: ".export-footer",
+    proprieta: ["display", "font-variant-numeric"],
+  },
+  {
+    id: "esporta.frontespizio",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover",
+    app: ".export-cover",
+    proprieta: ["display", "flex-direction", "justify-content"],
+  },
+  {
+    id: "esporta.frontespizio-filo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover-band",
+    app: ".export-cover-band",
+    proprieta: ["position", "background"],
+  },
+  {
+    id: "esporta.frontespizio-titolo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".pcover h1",
+    app: ".export-cover-title",
+    proprieta: ["font-weight", "letter-spacing", "color"],
+  },
+  {
+    id: "esporta.indice-titolo",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-h",
+    app: ".export-toc-title",
+    proprieta: ["font-weight", "color"],
+  },
+  {
+    id: "esporta.indice-riga",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r.l-h2",
+    app: '.export-toc-row[data-depth="0"]',
+    proprieta: ["display", "align-items", "gap"],
+  },
+  {
+    id: "esporta.indice-puntini",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r i",
+    app: ".export-toc-dots",
+    proprieta: ["flex-grow", "opacity", "border-bottom-style"],
+  },
+  {
+    id: "esporta.indice-numero",
+    vista: "esporta-pdf-testata",
+    prototipo: ".ptoc-r b",
+    app: ".export-toc-page",
+    proprieta: ["font-weight", "font-variant-numeric", "text-align"],
+  },
+
+  // ── il clic sulla pagina (T76) ──────────────────────────────────────────
+  // Il blocco scelto: il contorno dell'accento fuori dal blocco. Il menu è
+  // quello di tutta l'app, confrontato con le sue viste.
+  {
+    id: "esporta.blocco-scelto",
+    vista: "esporta-pdf-blocco",
+    prototipo: ".px-it.sel",
+    app: ".export-fascia.is-selected",
+    proprieta: ["outline-width", "outline-style", "outline-color", "outline-offset", "border-radius"],
+  },
+];
+
+/// I pezzi che hanno ancora differenze, e chi li corregge. Non si
+/// confrontano finché non passano in `PEZZI`.
+export const DA_COPRIRE = [
+  {
+    id: "esporta.dg-togli-stili",
+    prototipo: '.px-sec[data-sec="diagrammi"] .px-link.in',
+    app: "#export-dg-clear-own",
+    perche: "«Togli lo stile dato a N» c'è solo con uno stile dato a un diagramma solo, e quello lo dà il clic sulla pagina (T76): nessuna vista lo apre ancora dai due lati",
+  },
+  // ── pezzi che la mappa nomina ma non può ancora leggere ──────────────────
+  {
+    id: "compiti.ispettore",
+    prototipo: ".trow",
+    app: '.declared-view[data-view-id="tasks"] .ui-list-item',
+    perche:
+      "i Compiti nell'ispettore (#432, `.ith`/`.trow`): il banco non ha una scena con la vista dei compiti, e l'ispettore del banco non ne ha la scheda",
+  },
+  {
+    id: "compiti.nota",
+    prototipo: ".chk",
+    app: null,
+    perche: "la casella dei compiti nel testo della nota: nessun lavoro l'ha ancora portata dal prototipo",
+  },
+  {
+    id: "tabella.taglio",
+    prototipo: ".tg-cut",
+    app: ".tb-grid .tb-cut",
+    perche: "il tratteggio del taglio (#432) si vede solo dopo Ctrl X: nessuna vista lo apre ancora dai due lati",
+  },
+  {
+    id: "proprieta.opzione",
+    prototipo: ".opt",
+    app: null,
+    perche: "la pastiglia di una scelta (lo Stato): fino a T9 Selezione e Stato si scrivono come testo (#421)",
+  },
+  {
+    id: "proprieta.editor",
+    prototipo: ".pop .dp, .pop .m",
+    app: null,
+    perche: "gli editor dei tipi aperti (#421, scene proprieta-02…09): la mappa non ha ancora le loro viste",
+  },
+];

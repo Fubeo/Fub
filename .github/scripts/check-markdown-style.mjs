@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { markdownUnder } from "./doc-files.mjs";
 
 const root = process.cwd();
 const roots = [
@@ -13,17 +14,9 @@ const roots = [
   "CHANGELOG.md",
 ];
 
-function walk(dir) {
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    return entry.isDirectory() ? walk(full) : [full];
-  });
-}
-
 const files = [
   ...roots.map((file) => path.join(root, file)).filter(fs.existsSync),
-  ...walk(path.join(root, "docs")).filter((file) => file.endsWith(".md")),
+  ...markdownUnder(path.join(root, "docs")),
 ];
 
 const errors = [];
@@ -72,7 +65,14 @@ for (const file of files) {
     if (/<[A-Za-z][^>]*>/.test(visible)) {
       const allowedComment =
         relative === "CONTRIBUTING.md" && /^\s*<!-- ci-required:(start|end) -->\s*$/.test(line);
-      if (!allowedComment) errors.push(`${relative}:${lineNo}: HTML inline non consentito`);
+      // Il logo in testa al README: il Markdown non sa centrare un'immagine né
+      // darle una misura, e un SVG senza misura riempirebbe tutta la colonna.
+      // Solo queste due forme, e solo con un file di assets/logo/.
+      const allowedLogo =
+        relative === "README.md" &&
+        (/^<p align="center">$/.test(line) ||
+          /^ {2}<img src="assets\/logo\/[a-z0-9-]+\.svg" alt="[^"<>]+" width="\d+">$/.test(line));
+      if (!allowedComment && !allowedLogo) errors.push(`${relative}:${lineNo}: HTML inline non consentito`);
     }
   });
 

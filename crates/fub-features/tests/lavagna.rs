@@ -1,19 +1,28 @@
 // Senza la cargo feature `lavagna` il modulo non è compilato, e un test che lo
 // nomina non avrebbe un soggetto.
 #![cfg(feature = "lavagna")]
-//! **`canvas.apply` e `canvas.create` end-to-end**, attraverso il kernel vero
-//! e il formato vero delle lavagne: le operazioni arrivano nel file come una
+//! **`canvas.apply`, `canvas.create`, `canvas.read`, `canvas.check`,
+//! `canvas.guide` e `canvas.preview` end-to-end**, attraverso il kernel vero e
+//! il formato vero delle lavagne: le operazioni arrivano nel file come una
 //! modifica sola, il piano non scrive niente, e l'annulla riporta i byte di
 //! prima; una lavagna nuova prende il nome libero, è la lavagna vuota del
-//! nucleo, e l'annulla la manda nel cestino.
+//! nucleo, e l'annulla la manda nel cestino. Leggere e controllare non scrivono
+//! mai: il controllo dà un problema per codice, la lettura le tre forme, la
+//! guida il testo, i nomi, lo schema e gli esempi, e l'anteprima il disegno
+//! (un PNG con `draw`, l'SVG senza) con l'elenco delle schede.
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, CommandOutcome, InvokeMode, UndoStep};
 use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
+use fub_abi::text::Text;
+use fub_abi::traits::CommandProvider;
 use fub_abi::PluginError;
-use fub_features::lavagna::CANVAS_CREATE;
+use fub_canvas_core::ops::{compile, CanvasOp};
+use fub_features::lavagna::{
+    CANVAS_CHECK, CANVAS_CREATE, CANVAS_GUIDE, CANVAS_PREVIEW, CANVAS_READ,
+};
 use fub_features::{LavagnaCommands, CANVAS_APPLY, LAVAGNA_ID, LAVAGNA_NS};
 use fub_format_canvas::CanvasProvider;
 use fub_format_markdown::MarkdownProvider;
@@ -110,6 +119,37 @@ fn ops() -> String {
     .to_string()
 }
 
+/// `from_mermaid` scrive le schede e gli archi, e le note del nucleo (la forma
+/// del nodo che diventa un rettangolo) arrivano nell'esito.
+#[test]
+fn canvas_apply_mette_le_note_nell_esito() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let ops = json!([
+        { "op": "from_mermaid", "text": "flowchart LR\n  P((Uno)) --> Q[Due]", "near": "a", "side": "bottom" }
+    ])
+    .to_string();
+    let outcome = apply(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops, "seed": "7" }),
+        InvokeMode::Apply,
+    )
+    .expect("le operazioni si applicano");
+    let canvas: Value = serde_json::from_str(&source(&ws, BOARD)).expect("la lavagna è JSON");
+    assert_eq!(canvas["nodes"].as_array().map(Vec::len), Some(3));
+    assert_eq!(canvas["edges"].as_array().map(Vec::len), Some(1));
+    let payload = custom(&outcome);
+    assert_eq!(payload["created"][0], "P");
+    assert_eq!(payload["created"][1], "Q");
+    let notes = payload["notes"].as_array().expect("le note");
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0]["index"], 0);
+    assert_eq!(notes[0]["code"], "shape_dropped");
+    assert!(notes[0]["detail"]
+        .as_str()
+        .is_some_and(|detail| detail.contains("circle")));
+    assert_eq!(payload["notes_omitted"], 0);
+}
+
 #[test]
 fn le_operazioni_arrivano_nel_file_e_l_annulla_ridà_i_byte_di_prima() {
     let (_vault, mut ws) = with_board(BEFORE);
@@ -153,6 +193,8 @@ fn le_operazioni_arrivano_nel_file_e_l_annulla_ridà_i_byte_di_prima() {
         ws.document_revision(&doc).expect("revisione").0,
         "la revisione detta è quella del file"
     );
+    assert_eq!(payload["notes"], json!([]), "nessuna nota");
+    assert_eq!(payload["notes_omitted"], 0);
 
     // L'annulla: i passi dell'esito, come li esegue il kernel.
     let undo = outcome.undo.expect("si annulla");
@@ -404,4 +446,1885 @@ fn una_lavagna_non_prende_il_posto_di_un_file() {
     let error = create(&mut ws, json!({ "name": "Idee: due" }), InvokeMode::Apply)
         .expect_err("un nome vietato");
     assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+}
+
+// ---- canvas.read, canvas.check, canvas.guide ----
+
+/// Tre schede, un arco e un gruppo che le contiene: le letture di tutte le forme.
+const READ_BOARD: &str = r#"{"nodes": [
+  {"id": "a", "type": "text", "x": 0, "y": 0, "width": 200, "height": 80, "text": "Ciao"},
+  {"id": "b", "type": "text", "x": 300, "y": 0, "width": 200, "height": 80, "text": "Poi", "color": "4"},
+  {"id": "g", "type": "group", "x": -20, "y": -40, "width": 560, "height": 160, "label": "Gruppo"}
+], "edges": [{"id": "e1", "fromNode": "a", "toNode": "b", "label": "porta a"}]}"#;
+
+const EMPTY_BOARD: &str = r#"{"nodes": [], "edges": []}"#;
+
+fn read_cmd(
+    ws: &mut Workspace,
+    args: Value,
+    mode: InvokeMode,
+) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_READ, args, mode, Actor::User)
+}
+
+fn check_cmd(
+    ws: &mut Workspace,
+    args: Value,
+    mode: InvokeMode,
+) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_CHECK, args, mode, Actor::User)
+}
+
+fn guide_cmd(ws: &mut Workspace, args: Value) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_GUIDE, args, InvokeMode::Apply, Actor::User)
+}
+
+/// Una lavagna di `count` schede di testo in griglia: il caso delle 100 000 schede.
+fn many_cards(count: usize) -> String {
+    let cards: Vec<String> = (0..count)
+        .map(|i| {
+            format!(
+                r#"{{"id": "n{i}", "type": "text", "x": {}, "y": {}, "width": 200, "height": 80, "text": "Scheda {i}"}}"#,
+                (i % 100) * 240,
+                (i / 100) * 120
+            )
+        })
+        .collect();
+    format!(r#"{{"nodes": [{}], "edges": []}}"#, cards.join(", "))
+}
+
+#[test]
+fn leggere_di_serie_da_una_riga_per_scheda_con_i_conti() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let doc = DocId::new(BOARD);
+    let revision = ws.document_revision(&doc).expect("revisione").0;
+
+    let outcome = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::Apply).expect("si legge");
+    let payload = custom(&outcome);
+    assert_eq!(payload["version"], 1);
+    assert_eq!(payload["kind"], "read");
+    assert_eq!(payload["doc"], BOARD);
+    assert_eq!(payload["revision"], json!(revision), "la revisione letta");
+    assert_eq!(payload["form"], "outline");
+    assert_eq!(
+        payload["counts"],
+        json!({ "cards": 3, "edges": 1, "groups": 1 })
+    );
+    assert_eq!(
+        payload["bounds"],
+        json!({ "x": -20, "y": -40, "width": 560, "height": 160 })
+    );
+    let text = payload["text"].as_str().expect("il testo");
+    assert_eq!(
+        text.lines().next(),
+        Some("cards 3 edges 1 groups 1 bounds -20 -40 560×160")
+    );
+    assert_eq!(
+        text,
+        "cards 3 edges 1 groups 1 bounds -20 -40 560×160\n1 a text \"Ciao\" 0 0 200×80 in=g\n2 b text \"Poi\" 300 0 200×80 color=4 in=g\n3 g group \"Gruppo\" -20 -40 560×160\ne1 a -> b \"porta a\"",
+        "la lettura di serie"
+    );
+    assert!(
+        payload.get("model").is_none(),
+        "il modello si dà solo se chiesto"
+    );
+
+    let dry = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::DryRun)
+        .expect("anche il piano legge");
+    assert_eq!(custom(&dry), payload);
+    assert_eq!(source(&ws, BOARD), READ_BOARD, "leggere non scrive");
+}
+
+#[test]
+fn la_forma_code_ricrea_la_lavagna_su_una_vuota() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "code" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let payload = custom(&outcome);
+    assert_eq!(payload["form"], "code");
+    assert!(payload.get("model").is_none());
+    let ops: Vec<CanvasOp> = serde_json::from_str(payload["text"].as_str().expect("il testo"))
+        .expect("una lista di operazioni");
+    assert_eq!(ops.len(), 4, "tre schede e un arco");
+
+    let mut core = fub_canvas_core::commit::Core::open(EMPTY_BOARD).expect("la vuota si apre");
+    let compiled = compile(core.canvas(), &ops, 1).expect("la lista si compila");
+    core.commit(&compiled.patches).expect("si scrive");
+    let canvas = core.canvas();
+    let nodes: Vec<&str> = canvas.nodes.iter().map(|node| node.id.as_str()).collect();
+    let edges: Vec<&str> = canvas.edges.iter().map(|edge| edge.id.as_str()).collect();
+    assert_eq!(nodes, ["a", "b", "g"]);
+    assert_eq!(edges, ["e1"]);
+}
+
+#[test]
+fn la_forma_json_e_il_modello_e_si_da_solo_se_chiesta() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let payload = custom(&outcome);
+    assert_eq!(payload["form"], "json");
+    assert!(payload.get("text").is_none(), "la forma json non ha testo");
+    assert_eq!(payload["model"]["nodes"].as_array().map(Vec::len), Some(3));
+    assert_eq!(payload["model"]["edges"].as_array().map(Vec::len), Some(1));
+}
+
+/// Una lavagna con un tratto libero di 2000 campioni.
+fn ink_board() -> String {
+    let deltas = vec!["1,1"; 1_999].join(" ");
+    json!({"nodes": [{"id": "a", "type": "text", "x": 0, "y": 0, "width": 200, "height": 80,
+        "text": "Ciao"}], "edges": [],
+        "fub:ink": {"v": 1, "strokes": [{"id": "s1", "tool": "pen",
+            "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2", "anchor": {"kind": "free"},
+            "ink": format!("1 s10 cxy 0,0 {deltas}")}]}})
+    .to_string()
+}
+
+#[test]
+fn la_forma_json_tiene_l_inchiostro_del_file_e_accanto_la_sua_lettura() {
+    let source = ink_board();
+    let (_vault, mut ws) = with_board(&source);
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let payload = custom(&outcome);
+    let file: Value = serde_json::from_str(&source).unwrap();
+    assert_eq!(payload["model"]["fub:ink"], file["fub:ink"]);
+    // Il limite di serie, 20 000 caratteri, vale anche per la lettura.
+    assert_eq!(payload["ink_read"][0]["layer"], "board");
+    assert!(payload["ink_read"].to_string().chars().count() <= 20_000);
+    assert!(payload["ink_read"][0]["strokes"][0]["points_omitted"].is_u64());
+
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json", "max_chars": 1_000_000 }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let stroke = &custom(&outcome)["ink_read"][0]["strokes"][0];
+    assert_eq!(stroke["points"].as_array().map(Vec::len), Some(2000));
+    assert!(stroke.get("points_omitted").is_none());
+
+    // `max_chars` taglia i punti della lettura, e lo dice; il modello no.
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json", "max_chars": 1000 }),
+        InvokeMode::Apply,
+    )
+    .expect("max_chars vale anche per json");
+    let payload = custom(&outcome);
+    assert_eq!(payload["model"]["fub:ink"], file["fub:ink"]);
+    assert!(payload["ink_read"].to_string().chars().count() <= 1000);
+    let stroke = &payload["ink_read"][0]["strokes"][0];
+    let shown = stroke["points"].as_array().map_or(0, Vec::len);
+    assert!(shown > 0 && shown < 2000, "{shown}");
+    assert_eq!(stroke["points_omitted"], json!(2000 - shown));
+}
+
+#[test]
+fn ids_legge_solo_quelle_schede_e_gli_archi_fra_loro() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let two = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ids": "[\"a\", \"zz\", \"b\"]" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let payload = custom(&two);
+    assert_eq!(
+        payload["counts"],
+        json!({ "cards": 2, "edges": 1, "groups": 0 }),
+        "lo zz non è una scheda: i conti lo dicono"
+    );
+    assert_eq!(
+        payload["text"]
+            .as_str()
+            .and_then(|text| text.lines().next()),
+        Some("cards 2 edges 1 groups 0 bounds 0 0 500×80")
+    );
+
+    let alone = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ids": "[\"a\"]" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    assert_eq!(
+        custom(&alone)["counts"],
+        json!({ "cards": 1, "edges": 0, "groups": 0 }),
+        "un arco vuole tutte e due le schede"
+    );
+
+    let none = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ids": "[]" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    assert_eq!(custom(&none)["bounds"], Value::Null);
+    assert_eq!(
+        custom(&none)["text"]
+            .as_str()
+            .and_then(|text| text.lines().next()),
+        Some("cards 0 edges 0 groups 0 bounds -")
+    );
+
+    for raw in ["non è JSON", "{\"a\": 1}", "[\"a\", 3]", "\"a\""] {
+        let error = read_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ids": raw }),
+            InvokeMode::Apply,
+        )
+        .expect_err("gli id non sono una lista di testi");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{raw}: {error:?}");
+    }
+}
+
+#[test]
+fn max_chars_taglia_l_outline_a_una_riga_intera_e_dice_quante_ne_restano() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let full = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::Apply).expect("si legge");
+    let full = custom(&full)["text"].as_str().expect("il testo").to_owned();
+    assert_eq!(full.lines().count(), 5, "conti, tre schede e un arco");
+    let first = full.lines().next().expect("la riga dei conti");
+
+    // `max_chars` 0: esce la prima riga, sempre, con il conto di quelle che restano.
+    let zero = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "max_chars": 0 }),
+        InvokeMode::Apply,
+    )
+    .expect("zero è un limite valido");
+    assert_eq!(custom(&zero)["text"], json!(format!("{first}\n…+4")));
+
+    // Un limite che non entra la seconda riga: la stessa cosa, ma di sessanta caratteri.
+    let sixty = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "max_chars": 60 }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    let sixty = custom(&sixty)["text"].as_str().expect("il testo");
+    assert!(sixty.chars().count() <= 60, "{sixty}");
+    assert_eq!(sixty, format!("{first}\n…+4"));
+
+    let whole = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "max_chars": 10_000 }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    assert_eq!(
+        custom(&whole)["text"],
+        json!(full),
+        "dentro il limite non si taglia"
+    );
+
+    let error = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "code", "max_chars": 10 }),
+        InvokeMode::Apply,
+    )
+    .expect_err("max_chars non vale per il codice");
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+    for raw in [json!(-1), json!(1.5)] {
+        let error = read_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "max_chars": raw }),
+            InvokeMode::Apply,
+        )
+        .expect_err("non è un intero da zero in su");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{raw}: {error:?}");
+    }
+}
+
+#[test]
+fn una_lavagna_di_100_000_schede_si_legge_con_il_limite_di_serie() {
+    let (_vault, mut ws) = with_board(&many_cards(100_000));
+
+    let outline = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::Apply).expect("si legge");
+    let payload = custom(&outline);
+    assert_eq!(payload["counts"]["cards"], 100_000);
+    let text = payload["text"].as_str().expect("il testo");
+    assert!(
+        text.chars().count() <= 20_000,
+        "l'outline di serie sta in 20 000 caratteri: {}",
+        text.chars().count()
+    );
+    // La riga dei conti, le schede lette e la riga che dice quante ne restano
+    // sono tutte le 100 001 righe della lavagna.
+    let lines: Vec<&str> = text.lines().collect();
+    let rest: usize = lines
+        .last()
+        .and_then(|last| last.strip_prefix("…+"))
+        .and_then(|rest| rest.parse().ok())
+        .expect("l'ultima riga dice quante restano");
+    let shown = lines.len() - 2;
+    assert_eq!(
+        shown + rest,
+        100_000,
+        "le schede lette e quelle che restano"
+    );
+
+    // Il modello intero solo se chiesto.
+    let model = read_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "form": "json" }),
+        InvokeMode::Apply,
+    )
+    .expect("si legge");
+    assert_eq!(
+        custom(&model)["model"]["nodes"].as_array().map(Vec::len),
+        Some(100_000)
+    );
+}
+
+#[test]
+fn leggere_e_controllare_rifiutano_come_apply_un_documento_che_non_e_una_lavagna() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    ws.write_document(&DocId::new("Nota.md"), "# Nota\n", WriteBase::Dictated)
+        .expect("la nota si scrive");
+    let args = json!({ "doc": "Nota.md", "ops": ops() });
+    for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_PREVIEW, CANVAS_APPLY] {
+        let error = ws
+            .invoke_command(name, args.clone(), InvokeMode::Apply, Actor::User)
+            .expect_err("una nota non è una lavagna");
+        assert!(
+            matches!(error, PluginError::BadArgs(_)),
+            "{name}: {error:?}"
+        );
+    }
+    assert_eq!(source(&ws, "Nota.md"), "# Nota\n", "la nota non cambia");
+}
+
+#[test]
+fn una_lavagna_che_non_si_apre_e_un_errore_di_argomenti_per_tutti_e_tre() {
+    let (_vault, mut ws) = with_board("{\"nodes\": [");
+    let args = json!({ "doc": BOARD, "ops": ops() });
+    for name in [CANVAS_READ, CANVAS_CHECK, CANVAS_PREVIEW, CANVAS_APPLY] {
+        let error = ws
+            .invoke_command(name, args.clone(), InvokeMode::Apply, Actor::User)
+            .expect_err("non si apre");
+        assert!(
+            matches!(error, PluginError::BadArgs(_)),
+            "{name}: {error:?}"
+        );
+    }
+    assert_eq!(source(&ws, BOARD), "{\"nodes\": [", "il file non cambia");
+}
+
+#[test]
+fn controllare_dice_il_riassunto_e_non_scrive() {
+    // Schede alte 160, il minimo della stima del testo: una più bassa darebbe
+    // anche `text_overflow`, e questo caso vuole solo la sovrapposizione.
+    const TALL: &str = r#"{"nodes": [{"id": "a", "type": "text", "x": 0, "y": 0, "width": 200, "height": 160, "text": "Ciao"}], "edges": []}"#;
+    let (_vault, mut ws) = with_board(TALL);
+    let ops = json!([
+        { "op": "move", "ids": ["a"], "dx": 40, "dy": 0 },
+        { "op": "add_card", "node": { "id": "b", "type": "text", "x": 100, "y": 0, "width": 200, "height": 160, "text": "Poi" } }
+    ])
+    .to_string();
+    let args = json!({ "doc": BOARD, "ops": ops });
+    let outcome = check_cmd(&mut ws, args.clone(), InvokeMode::Apply).expect("il rapporto");
+    let payload = custom(&outcome);
+    assert_eq!(payload["kind"], "check");
+    assert_eq!(payload["ok"], true);
+    assert_eq!(payload["problems"], json!([]));
+    // La scheda `a` si sposta e `b` nasce sopra: si coprono, e l'avviso lo dice.
+    assert_eq!(
+        payload["warnings"],
+        json!([{ "code": "overlap", "ids": ["a", "b"] }])
+    );
+    assert_eq!(payload["warnings_omitted"], 0);
+    assert_eq!(payload["summary"]["cards_added"][0]["id"], "b");
+    assert_eq!(payload["summary"]["cards_changed"][0]["id"], "a");
+    assert_eq!(
+        payload["outline_after"]
+            .as_str()
+            .and_then(|text| text.lines().next()),
+        Some("cards 2 edges 0 groups 0 bounds 40 0 260×160")
+    );
+    // L'esempio di `canvas-operations.md`, «Comandi»: il payload intero.
+    assert_eq!(
+        *payload,
+        json!({
+            "version": 1,
+            "kind": "check",
+            "ok": true,
+            "problems": [],
+            "warnings": [{ "code": "overlap", "ids": ["a", "b"] }],
+            "warnings_omitted": 0,
+            "summary": {
+                "cards_added": [{ "id": "b", "text": "Poi" }],
+                "cards_removed": [],
+                "cards_changed": [{
+                    "id": "a",
+                    "text": "Ciao",
+                    "moved": { "from": { "x": 0, "y": 0 }, "to": { "x": 40, "y": 0 } }
+                }],
+                "edges_added": [],
+                "edges_removed": [],
+                "edges_changed": [],
+                "order_changed": false
+            },
+            "outline_after": "cards 2 edges 0 groups 0 bounds 40 0 260×160\n1 a text \"Ciao\" 40 0 200×160\n2 b text \"Poi\" 100 0 200×160"
+        }),
+        "il payload del controllo"
+    );
+    assert!(outcome.notify.is_some(), "il riassunto per chi legge");
+    assert_eq!(source(&ws, BOARD), TALL, "controllare non scrive");
+
+    let dry = check_cmd(&mut ws, args, InvokeMode::DryRun).expect("anche il piano controlla");
+    assert_eq!(custom(&dry), payload);
+}
+
+#[test]
+fn ogni_codice_di_problema_ha_il_suo_problema() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let cases = [
+        (json!([{ "op": "fly" }]), "unknown_op"),
+        (
+            json!([{ "op": "move", "ids": ["a"], "dx": 1, "dy": 1, "zz": 2 }]),
+            "unknown_field",
+        ),
+        (
+            json!([{ "op": "move", "ids": ["a"], "dx": 1 }]),
+            "missing_field",
+        ),
+        (
+            json!([{ "op": "move", "ids": "a", "dx": 1, "dy": 1 }]),
+            "wrong_type",
+        ),
+        (
+            json!([{ "op": "move", "ids": ["zz"], "dx": 1, "dy": 1 }]),
+            "unknown_node",
+        ),
+        (json!([{ "op": "remove", "ids": ["zz"] }]), "unknown_edge"),
+        (
+            json!([{ "op": "add_card", "node": { "id": "a", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "" } }]),
+            "duplicate_id",
+        ),
+        (
+            json!([{ "op": "resize", "id": "a", "width": 0, "height": 10 }]),
+            "invalid",
+        ),
+        (json!([]), "invalid"),
+        (json!({ "op": "move" }), "wrong_type"),
+    ];
+    for (ops, code) in cases {
+        let outcome = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops.to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto, non un errore");
+        let payload = custom(&outcome);
+        assert_eq!(payload["ok"], false, "{ops}");
+        let problems = payload["problems"].as_array().expect("i problemi");
+        assert_eq!(problems.len(), 1, "{ops}: {problems:?}");
+        assert_eq!(problems[0]["code"], code, "{ops}");
+        assert_eq!(
+            problems[0]["text"],
+            json!({ "key": format!("canvas.check.p_{code}") }),
+            "{ops}: la frase la rende il catalogo"
+        );
+        assert_eq!(payload["summary"], Value::Null, "{ops}");
+        assert_eq!(payload["outline_after"], Value::Null, "{ops}");
+    }
+}
+
+#[test]
+fn un_valore_fuori_dall_elenco_e_bad_value_con_il_nome_vicino() {
+    // Un elenco (`to` di `reorder`, `fit` di `resize`, un colore di `color` o di
+    // `set`) dà `bad_value`. Un nome a una lettera di distanza dà la correzione;
+    // un valore lontano dà solo il problema.
+    let (_vault, mut ws) = with_board(BEFORE);
+    let cases = [
+        (
+            json!([{ "op": "reorder", "ids": ["a"], "to": "bak" }]),
+            "/0/to",
+            Some("back"),
+            json!({ "op": "reorder", "ids": ["a"], "to": "back" }),
+        ),
+        (
+            json!([{ "op": "resize", "id": "a", "fit": "contnt" }]),
+            "/0/fit",
+            Some("content"),
+            json!({ "op": "resize", "id": "a", "fit": "content" }),
+        ),
+        (
+            json!([{ "op": "color", "ids": ["a"], "color": "gren" }]),
+            "/0/color",
+            Some("green"),
+            json!({ "op": "color", "ids": ["a"], "color": "green" }),
+        ),
+        (
+            json!([{ "op": "set", "id": "a", "fields": { "color": "gren" } }]),
+            "/0/fields/color",
+            Some("green"),
+            json!({ "op": "set", "id": "a", "fields": { "color": "green" } }),
+        ),
+    ];
+    for (ops, path, near, fix) in cases {
+        let outcome = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops.to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto, non un errore");
+        let payload = custom(&outcome);
+        assert_eq!(payload["ok"], false, "{ops}");
+        let problems = payload["problems"].as_array().expect("i problemi");
+        assert_eq!(problems.len(), 1, "{ops}: {problems:?}");
+        assert_eq!(problems[0]["code"], "bad_value", "{ops}");
+        assert_eq!(problems[0]["path"], path, "{ops}");
+        assert_eq!(problems[0]["suggestion"].as_str(), near, "{ops}");
+        assert_eq!(problems[0]["fix"], fix, "{ops}");
+    }
+    // Un colore senza nome vicino: il problema, senza suggerimento né correzione.
+    let outcome = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": json!([{ "op": "color", "ids": ["a"], "color": "7" }]).to_string() }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let problem = &custom(&outcome)["problems"][0];
+    assert_eq!(problem["code"], "bad_value", "{problem}");
+    assert!(
+        problem.get("suggestion").is_none() && problem.get("fix").is_none(),
+        "{problem}"
+    );
+}
+
+#[test]
+fn troppe_schede_sono_il_problema_too_many() {
+    let (_vault, mut ws) = with_board(&many_cards(100_000));
+    let ops = json!([{ "op": "add_card", "node": { "id": "nuova", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "" } }]);
+    let outcome = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops.to_string() }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let problems = custom(&outcome)["problems"].clone();
+    assert_eq!(problems[0]["code"], "too_many", "{problems}");
+    assert_eq!(problems[0]["index"], 0);
+}
+
+/// Un gruppo `g` grande quanto la lavagna, con `count` schede di testo dentro.
+fn group_with_cards(count: usize) -> String {
+    let mut nodes = vec![
+        r#"{"id": "g", "type": "group", "x": 0, "y": 0, "width": 10000, "height": 10000, "label": "Gruppo"}"#
+            .to_owned(),
+    ];
+    nodes.extend((0..count).map(|i| {
+        format!(
+            r#"{{"id": "n{i}", "type": "text", "x": {}, "y": {}, "width": 10, "height": 10, "text": ""}}"#,
+            (i % 100) * 20 + 10,
+            (i / 100) * 20 + 10
+        )
+    }));
+    format!(r#"{{"nodes": [{}], "edges": []}}"#, nodes.join(", "))
+}
+
+#[test]
+fn un_move_con_contents_oltre_il_tetto_e_too_many_moved_e_non_scrive() {
+    // Il gruppo e 1000 schede dentro: 1001 toccate, oltre il tetto di mille.
+    let (_vault, mut ws) = with_board(&group_with_cards(1000));
+    let before = source(&ws, BOARD);
+    let ops =
+        json!([{ "op": "move", "ids": ["g"], "dx": 5, "dy": 0, "contents": true }]).to_string();
+
+    let outcome = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let problems = custom(&outcome)["problems"].clone();
+    assert_eq!(problems[0]["code"], "too_many_moved", "{problems}");
+    assert_eq!(problems[0]["index"], 0);
+    assert_eq!(
+        problems[0]["text"],
+        json!({ "key": "canvas.check.p_too_many_moved" })
+    );
+
+    // `canvas.apply` dice lo stesso come errore degli argomenti, e il file non cambia.
+    let error = plugin_error(
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect_err("oltre il tetto non si scrive"),
+    );
+    // Il Workspace rende la frase del catalogo: la posizione da uno, il limite.
+    let PluginError::BadArgs(Text::Literal(line)) = error else {
+        panic!("un tetto è un argomento sbagliato, reso come frase");
+    };
+    assert_eq!(
+        line,
+        "Operazione 1: «move» con «contents» sposta al massimo 1000 schede."
+    );
+    assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+}
+
+#[test]
+fn un_move_con_contents_entro_il_tetto_si_scrive() {
+    // Il gruppo e 999 schede dentro: 1000 toccate, al tetto, e il gruppo le porta tutte.
+    let (_vault, mut ws) = with_board(&group_with_cards(999));
+    let ops =
+        json!([{ "op": "move", "ids": ["g"], "dx": 5, "dy": 0, "contents": true }]).to_string();
+    apply(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops }),
+        InvokeMode::Apply,
+    )
+    .expect("mille schede entrano");
+    let canvas: Value = serde_json::from_str(&source(&ws, BOARD)).expect("la lavagna è JSON");
+    let nodes = canvas["nodes"].as_array().expect("le schede");
+    assert_eq!(nodes[0]["x"], 5, "il gruppo si è mosso");
+    assert_eq!(nodes[1]["x"], 15, "la prima scheda dentro si è mossa di 5");
+}
+
+#[test]
+fn una_base_vecchia_e_il_problema_stale_base_e_non_un_errore() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let current = ws
+        .document_revision(&DocId::new(BOARD))
+        .expect("revisione")
+        .0;
+    let ops = json!([{ "op": "move", "ids": ["a"], "dx": 40, "dy": 0 }]).to_string();
+
+    let stale = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops, "base": "sha256:0" }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let payload = custom(&stale);
+    assert_eq!(payload["ok"], false);
+    assert_eq!(payload["problems"][0]["code"], "stale_base");
+    assert_eq!(
+        payload["problems"][0]["text"]["key"],
+        "canvas.check.p_stale_base"
+    );
+    assert_eq!(payload["problems"].as_array().map(Vec::len), Some(1));
+    assert_eq!(payload["summary"], Value::Null);
+    assert_eq!(payload["outline_after"], Value::Null);
+
+    // Con la revisione giusta il controllo passa, e la base vecchia con una
+    // lista sbagliata dà i due problemi, la base prima.
+    let fresh = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops, "base": current }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    assert_eq!(custom(&fresh)["ok"], true);
+    let both = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": "[{\"op\":\"fly\"}]", "base": "sha256:0" }),
+        InvokeMode::Apply,
+    )
+    .expect("un rapporto");
+    let codes: Vec<&Value> = custom(&both)["problems"]
+        .as_array()
+        .expect("i problemi")
+        .iter()
+        .map(|problem| &problem["code"])
+        .collect();
+    assert_eq!(codes, [&json!("stale_base"), &json!("unknown_op")]);
+    assert_eq!(source(&ws, BOARD), BEFORE, "il controllo non scrive");
+}
+
+#[test]
+fn gli_id_del_controllo_sono_quelli_della_scrittura() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let ops = json!([{ "op": "add_card", "node": { "type": "text", "x": 400, "y": 0, "width": 200, "height": 80, "text": "Nuova" } }])
+        .to_string();
+    let checked = check_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops }),
+        InvokeMode::Apply,
+    )
+    .expect("il rapporto");
+    let predicted = custom(&checked)["summary"]["cards_added"][0]["id"].clone();
+    let applied = apply(
+        &mut ws,
+        json!({ "doc": BOARD, "ops": ops }),
+        InvokeMode::Apply,
+    )
+    .expect("si applica");
+    assert_eq!(
+        custom(&applied)["created"][0],
+        predicted,
+        "stesso seme, stessi id"
+    );
+}
+
+#[test]
+fn una_lista_che_non_si_legge_non_cambia_il_file() {
+    // Il primo problema della forma e la chiave dell'errore si provano nei test
+    // unitari di `lavagna.rs`: qui il kernel rende già il testo nella lingua.
+    let (_vault, mut ws) = with_board(BEFORE);
+    for ops in ["[{\"op\":\"fly\"}]", "non è JSON", "{}"] {
+        let error = apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect_err("una lista che non si legge");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{ops}: {error:?}");
+    }
+    assert_eq!(source(&ws, BOARD), BEFORE, "il file non cambia");
+}
+
+#[test]
+fn i_comandi_che_leggono_non_scrivono() {
+    let specs = LavagnaCommands.commands();
+    for id in [CANVAS_READ, CANVAS_CHECK, CANVAS_GUIDE, CANVAS_PREVIEW] {
+        let spec = specs
+            .iter()
+            .find(|spec| spec.id == id)
+            .unwrap_or_else(|| panic!("manca «{id}»"));
+        assert!(!spec.scope.writes, "«{id}» non scrive");
+    }
+}
+
+#[test]
+fn la_guida_senza_topic_da_il_testo_e_tutte_le_operazioni() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.reindex().expect("reindex");
+    let outcome = guide_cmd(&mut ws, json!({})).expect("la guida");
+    let payload = custom(&outcome);
+    assert_eq!(payload["kind"], "guide");
+    let text = payload["text"].as_str().expect("il testo");
+    assert!(!text.trim().is_empty());
+    assert!(text.lines().count() <= 150, "la guida sta in 150 righe");
+    let names: Vec<&str> = payload["ops"]
+        .as_array()
+        .expect("le operazioni")
+        .iter()
+        .filter_map(|op| op["name"].as_str())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "add_card",
+            "move",
+            "resize",
+            "connect",
+            "remove",
+            "set",
+            "reorder",
+            "color",
+            "align",
+            "distribute",
+            "duplicate",
+            "reverse",
+            "group",
+            "layout",
+            "insert",
+            "convert",
+            "spread_pages",
+            "excerpt",
+            "from_mermaid",
+            "from_outline",
+            "add_strokes",
+            "erase_strokes",
+            "draw",
+            "move_strokes",
+            "restyle_strokes",
+            "erase_along"
+        ]
+    );
+    assert_eq!(
+        payload["schema"]["items"]["oneOf"].as_array().map(Vec::len),
+        Some(26)
+    );
+    let examples = payload["examples"].as_array().expect("gli esempi");
+    assert!(examples.len() >= 7, "almeno un esempio per operazione");
+    assert!(examples.iter().all(|example| example["op"].is_string()));
+}
+
+#[test]
+fn la_guida_con_un_topic_da_solo_la_sua_voce() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.reindex().expect("reindex");
+    let outcome = guide_cmd(&mut ws, json!({ "topic": "move" })).expect("la guida");
+    let payload = custom(&outcome);
+    let ops = payload["ops"].as_array().expect("le operazioni");
+    assert_eq!(ops.len(), 1);
+    assert_eq!(ops[0]["name"], "move");
+    assert_eq!(
+        payload["schema"]["items"]["oneOf"][0]["properties"]["op"]["const"],
+        "move"
+    );
+    assert_eq!(
+        payload["schema"]["items"]["oneOf"].as_array().map(Vec::len),
+        Some(1)
+    );
+    let examples = payload["examples"].as_array().expect("gli esempi");
+    assert!(!examples.is_empty());
+    assert!(examples.iter().all(|example| example["op"] == "move"));
+    assert!(payload["text"].as_str().is_some_and(|t| !t.is_empty()));
+
+    // Un topic vuoto è come non averlo.
+    let blank = guide_cmd(&mut ws, json!({ "topic": "  " })).expect("la guida");
+    assert_eq!(custom(&blank)["ops"].as_array().map(Vec::len), Some(26));
+}
+
+#[test]
+fn un_topic_sconosciuto_e_un_errore_di_argomenti() {
+    // I nomi vicini sono nel messaggio: si provano nei test unitari di `lavagna.rs`.
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.reindex().expect("reindex");
+    for topic in ["mvoe", "xyzzy"] {
+        let error = guide_cmd(&mut ws, json!({ "topic": topic })).expect_err("non c'è");
+        assert!(
+            matches!(error, PluginError::BadArgs(_)),
+            "{topic}: {error:?}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// canvas.preview
+// ---------------------------------------------------------------------------
+
+fn preview_cmd(ws: &mut Workspace, args: Value) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_PREVIEW, args, InvokeMode::Apply, Actor::User)
+}
+
+/// Il tipo dell'immagine che la build dà: un PNG con `draw`, altrimenti l'SVG.
+fn image_media() -> &'static str {
+    if cfg!(feature = "draw") {
+        "image/png"
+    } else {
+        "image/svg+xml"
+    }
+}
+
+/// Il lato lungo di un'immagine, dalla sua misura nel payload.
+fn long_side(image: &Value) -> Option<u64> {
+    image["width"]
+        .as_u64()
+        .zip(image["height"].as_u64())
+        .map(|(w, h)| w.max(h))
+}
+
+#[test]
+fn il_disegno_non_scrive_e_dice_la_forma() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let before = source(&ws, BOARD);
+    let outcome = preview_cmd(&mut ws, json!({ "doc": BOARD })).expect("si disegna");
+
+    let payload = custom(&outcome);
+    assert_eq!(payload["kind"], "preview");
+    assert_eq!(payload["version"], 1);
+    assert_eq!(payload["image"]["media_type"], image_media());
+    assert_eq!(
+        long_side(&payload["image"]),
+        Some(1024),
+        "il lato lungo di serie"
+    );
+
+    // Le tre schede di READ_BOARD, col numero che la lettura dà loro.
+    let outline = payload["outline"].as_array().expect("l'elenco");
+    let ids: Vec<&str> = outline
+        .iter()
+        .map(|card| card["id"].as_str().expect("un id"))
+        .collect();
+    assert_eq!(ids, ["a", "b", "g"]);
+    assert_eq!(outline[2]["kind"], "group");
+    assert_eq!(payload["outline_omitted"], 0);
+    assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+}
+
+#[test]
+fn con_le_operazioni_disegna_la_lavagna_di_dopo_senza_scriverla() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let before = source(&ws, BOARD);
+    let read = read_cmd(&mut ws, json!({ "doc": BOARD }), InvokeMode::Apply).expect("si legge");
+    let revision = custom(&read)["revision"].clone();
+
+    let outcome = preview_cmd(&mut ws, json!({ "doc": BOARD, "ops": ops() })).expect("si disegna");
+    let payload = custom(&outcome);
+    let ids: Vec<&str> = payload["outline"]
+        .as_array()
+        .expect("l'elenco")
+        .iter()
+        .map(|card| card["id"].as_str().expect("un id"))
+        .collect();
+    assert_eq!(
+        ids,
+        ["a", "b"],
+        "la scheda nuova c'è, nella lavagna di dopo"
+    );
+    assert_eq!(payload["revision"], revision, "la revisione non cambia");
+    assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+}
+
+#[test]
+fn una_lista_che_non_si_disegna_e_un_argomento_sbagliato() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    let unknown = json!([{ "op": "move", "ids": ["manca"], "dx": 1, "dy": 0 }]).to_string();
+    for ops in [unknown, "non json".to_owned(), "[]".to_owned()] {
+        let error = preview_cmd(&mut ws, json!({ "doc": BOARD, "ops": ops }))
+            .expect_err("la lista non si disegna");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{ops}: {error:?}");
+    }
+}
+
+#[test]
+fn una_base_vecchia_e_un_conflitto_come_in_apply() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let error = preview_cmd(
+        &mut ws,
+        json!({ "doc": BOARD, "base": "revisione-vecchia" }),
+    )
+    .expect_err("la lavagna è cambiata");
+    assert!(matches!(error, PluginError::Conflict(_)), "{error:?}");
+}
+
+#[test]
+fn la_misura_si_stringe_e_un_numero_che_non_e_intero_e_un_errore() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let big = preview_cmd(&mut ws, json!({ "doc": BOARD, "size": 10_000 })).expect("si stringe");
+    assert_eq!(long_side(&custom(&big)["image"]), Some(2048));
+
+    let small = preview_cmd(&mut ws, json!({ "doc": BOARD, "size": 0 })).expect("si stringe");
+    assert_eq!(long_side(&custom(&small)["image"]), Some(64));
+
+    for bad in [json!(1.5), json!(-3)] {
+        let error = preview_cmd(&mut ws, json!({ "doc": BOARD, "size": bad.clone() }))
+            .expect_err("un lato non è un intero da zero in su");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{bad}: {error:?}");
+    }
+}
+
+#[test]
+fn una_lavagna_vuota_si_disegna_come_un_quadrato_di_64() {
+    let (_vault, mut ws) = with_board(EMPTY_BOARD);
+    let outcome = preview_cmd(&mut ws, json!({ "doc": BOARD })).expect("si disegna");
+    let image = &custom(&outcome)["image"];
+    assert_eq!(
+        (image["width"].as_u64(), image["height"].as_u64()),
+        (Some(64), Some(64))
+    );
+    assert_eq!(
+        custom(&outcome)["outline"].as_array().map(Vec::len),
+        Some(0)
+    );
+}
+
+#[cfg(not(feature = "draw"))]
+#[test]
+fn senza_draw_l_immagine_e_l_svg_come_testo() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let outcome = preview_cmd(&mut ws, json!({ "doc": BOARD })).expect("si disegna");
+    let data = custom(&outcome)["image"]["data"]
+        .as_str()
+        .expect("il testo dell'SVG");
+    assert!(data.starts_with("<svg "), "{}", &data[..data.len().min(80)]);
+    assert!(
+        data.contains("<![CDATA[Ciao]]></text>"),
+        "il testo della scheda c'è nell'SVG"
+    );
+}
+
+#[cfg(feature = "draw")]
+mod con_draw {
+    use super::*;
+    use base64::Engine as _;
+    use lopdf::{dictionary, Document, Object};
+
+    const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+
+    /// Il PNG di un disegno in base64: la sua misura e i suoi pixel in RGBA.
+    fn decode(data: &str) -> (u32, u32, Vec<u8>) {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data)
+            .expect("il PNG è in base64");
+        let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+            .read_info()
+            .expect("un PNG si legge");
+        let mut buffer = vec![0; reader.output_buffer_size().expect("una misura")];
+        let info = reader.next_frame(&mut buffer).expect("i pixel");
+        buffer.truncate(info.buffer_size());
+        (info.width, info.height, buffer)
+    }
+
+    /// Il disegno, con i suoi pixel, e la misura dichiarata nel payload che coincide.
+    fn picture(ws: &mut Workspace, args: Value) -> (Value, Vec<u8>) {
+        let outcome = preview_cmd(ws, args).expect("si disegna");
+        let image = custom(&outcome)["image"].clone();
+        let (width, height, pixels) = decode(image["data"].as_str().expect("i dati"));
+        assert_eq!(image["media_type"], "image/png");
+        assert_eq!(
+            (image["width"].as_u64(), image["height"].as_u64()),
+            (Some(u64::from(width)), Some(u64::from(height)))
+        );
+        (image, pixels)
+    }
+
+    #[test]
+    fn il_png_ha_la_firma_e_due_chiamate_danno_gli_stessi_byte() {
+        let (_vault, mut ws) = with_board(READ_BOARD);
+        let raw = |ws: &mut Workspace| {
+            let outcome = preview_cmd(ws, json!({ "doc": BOARD })).expect("si disegna");
+            let data = custom(&outcome)["image"]["data"]
+                .as_str()
+                .expect("i dati")
+                .to_owned();
+            base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .expect("base64")
+        };
+        let first = raw(&mut ws);
+        let second = raw(&mut ws);
+        assert_eq!(first[..8], PNG_SIGNATURE, "la firma del PNG");
+        assert_eq!(first, second, "la stessa lavagna dà gli stessi byte");
+    }
+
+    #[test]
+    fn una_scheda_con_testo_ha_pixel_di_testo_non_solo_del_suo_colore() {
+        // Una scheda rossa di serie col testo scuro: il rosso c'è, e c'è anche
+        // l'inchiostro del testo, cioè pixel scuri che non sono né il rosso né il
+        // bianco del fondo.
+        let (_vault, mut ws) = with_board(
+            r#"{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":320,"height":160,"color":"1","text":"Ciao mondo, come va"}],"edges":[]}"#,
+        );
+        let (_image, pixels) = picture(&mut ws, json!({ "doc": BOARD }));
+        let red = [0xfb, 0xe1, 0xe1];
+        let ink = pixels
+            .chunks_exact(4)
+            .filter(|px| u32::from(px[0]) + u32::from(px[1]) + u32::from(px[2]) < 300)
+            .count();
+        let card = pixels.chunks_exact(4).filter(|px| px[..3] == red).count();
+        assert!(card > 1000, "la scheda rossa si vede: {card} pixel");
+        assert!(ink > 50, "il testo si vede: {ink} pixel scuri");
+    }
+
+    #[test]
+    fn un_carattere_che_i_font_non_hanno_resta_un_segno_e_non_un_errore() {
+        // Emoji, scrittura da destra a sinistra e un controllo: il disegno esce
+        // lo stesso, con i caratteri di Fub e senza un carattere di sistema.
+        let (_vault, mut ws) = with_board(
+            r#"{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":320,"height":160,"text":"emoji 👋 ebraico שלום \u0007 fine"}],"edges":[]}"#,
+        );
+        let (image, _pixels) = picture(&mut ws, json!({ "doc": BOARD }));
+        assert_eq!(image["media_type"], "image/png");
+    }
+
+    /// Un PNG vero di `width` × `height` pixel, tutto bianco.
+    fn png_file(width: u32, height: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut encoder = png::Encoder::new(&mut out, width, height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("l'intestazione del PNG");
+        writer
+            .write_image_data(&vec![0xff; (width * height * 3) as usize])
+            .expect("i pixel del PNG");
+        writer.finish().expect("il PNG si chiude");
+        out
+    }
+
+    /// Un PDF vero di una pagina, larga `width` e alta `height` punti.
+    fn pdf_file(width: f32, height: f32) -> Vec<u8> {
+        let mut document = Document::with_version("1.5");
+        let pages = document.new_object_id();
+        let page = document.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages,
+            "MediaBox" => vec![0.into(), 0.into(), width.into(), height.into()],
+        });
+        document.objects.insert(
+            pages,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => vec![page.into()],
+                "Count" => 1,
+            }),
+        );
+        let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+        document.trailer.set("Root", catalog);
+        let mut out = Vec::new();
+        document.save_to(&mut out).expect("il PDF si scrive");
+        out
+    }
+
+    /// Un vault con questi file, e accanto la lavagna `BEFORE`.
+    fn vault_with(files: &[(&str, Vec<u8>)]) -> (Vault, Workspace) {
+        let vault = Vault::new();
+        for (path, bytes) in files {
+            let target = vault.root.join(path);
+            if let Some(folder) = target.parent() {
+                std::fs::create_dir_all(folder).expect("la cartella si crea");
+            }
+            std::fs::write(&target, bytes).expect("il file si scrive");
+        }
+        std::fs::write(vault.root.join(BOARD), BEFORE).expect("la lavagna si scrive");
+        let mut ws = vault.open();
+        ws.reindex().expect("reindex");
+        (vault, ws)
+    }
+
+    /// La scheda `id` com'è nel file.
+    fn card(ws: &Workspace, id: &str) -> Value {
+        let canvas: Value = serde_json::from_str(&source(ws, BOARD)).expect("la lavagna è JSON");
+        canvas["nodes"]
+            .as_array()
+            .expect("le schede")
+            .iter()
+            .find(|node| node["id"] == id)
+            .cloned()
+            .expect("la scheda c'è")
+    }
+
+    #[test]
+    fn un_file_vero_da_la_sua_misura_alla_scheda_e_al_ridimensionamento() {
+        // Un PNG di 4×2 pixel e una pagina A4 (595×842 punti) nel vault:
+        // `add_card` ne prende le proporzioni, e `resize` con `fit` quella del file.
+        let (_vault, mut ws) = vault_with(&[
+            ("schemi/foto.png", png_file(4, 2)),
+            ("Corsi/dispensa.pdf", pdf_file(595.0, 842.0)),
+        ]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 400, "y": 0 },
+                { "op": "add_card", "id": "dispensa", "file": "Corsi/dispensa.pdf", "x": 400, "y": 300 },
+                { "op": "resize", "id": "foto", "width": 240, "fit": "content" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le operazioni si applicano");
+        // 4×2 con il lato lungo di 480 dà 480×240; poi con 240 di larghezza, 240×120.
+        let foto = card(&ws, "foto");
+        assert_eq!(
+            (&foto["width"], &foto["height"]),
+            (&json!(240), &json!(120)),
+            "{foto}"
+        );
+        // La pagina A4 con 360 di larghezza dà 360×509: 842 · 360 / 595, intero
+        // come `bornSize` della GUI e come le pagine sparse dello stesso PDF.
+        let dispensa = card(&ws, "dispensa");
+        assert_eq!(
+            (&dispensa["width"], &dispensa["height"]),
+            (&json!(360), &json!(509)),
+            "{dispensa}"
+        );
+    }
+
+    #[test]
+    fn controllare_legge_le_misure_dei_file_come_la_scrittura() {
+        let (_vault, mut ws) = vault_with(&[("schemi/foto.png", png_file(4, 2))]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 400, "y": 0 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("l'immagine si aggiunge");
+        let before = source(&ws, BOARD);
+        // Il controllo ridimensiona con `fit`: il file dà le proporzioni, e
+        // l'altezza è quella che la scrittura darebbe (240×120).
+        let outcome = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "resize", "id": "foto", "width": 240, "fit": "content" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&outcome);
+        assert_eq!(payload["ok"], true, "{payload}");
+        assert_eq!(
+            payload["summary"]["cards_changed"][0]["resized"]["to"],
+            json!({ "width": 240, "height": 120 }),
+            "{payload}"
+        );
+        assert_eq!(source(&ws, BOARD), before, "controllare non scrive");
+    }
+
+    #[test]
+    fn un_file_che_non_si_misura_lascia_le_misure_di_serie() {
+        // Un'immagine rotta; un PNG di 4×2 pixel con 33 MiB dopo la fine, che si
+        // legge ma supera il limite; un file che non c'è. Tutti e tre prendono le
+        // misure di serie di un'immagine: 480×360.
+        let mut too_big = png_file(4, 2);
+        too_big.extend(std::iter::repeat_n(0u8, 33 * 1024 * 1024));
+        let (_vault, mut ws) = vault_with(&[
+            ("rotta.png", b"non e' un'immagine".to_vec()),
+            ("grande.png", too_big),
+        ]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "rotta", "file": "rotta.png", "x": 400, "y": 0 },
+                { "op": "add_card", "id": "grande", "file": "grande.png", "x": 400, "y": 300 },
+                { "op": "add_card", "id": "manca", "file": "non-c-e.png", "x": 400, "y": 600 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le schede si aggiungono lo stesso");
+        for id in ["rotta", "grande", "manca"] {
+            let node = card(&ws, id);
+            assert_eq!(
+                (&node["width"], &node["height"]),
+                (&json!(480), &json!(360)),
+                "{node}"
+            );
+        }
+    }
+
+    #[test]
+    fn l_anteprima_misura_i_file_come_la_scrittura() {
+        // Un PNG di 4×2 pixel: `add_card` senza misura e `resize` con `fit` ne
+        // prendono le proporzioni. Il disegno della lista prima di scrivere e
+        // quello della lavagna scritta sono lo stesso PNG: stessa altezza.
+        let (_vault, mut ws) = vault_with(&[("schemi/foto.png", png_file(4, 2))]);
+        let ops = json!([
+            { "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 400, "y": 0 },
+            { "op": "resize", "id": "foto", "width": 240, "fit": "content" }
+        ])
+        .to_string();
+        let (planned, planned_pixels) = picture(&mut ws, json!({ "doc": BOARD, "ops": ops }));
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect("le operazioni si applicano");
+        let foto = card(&ws, "foto");
+        assert_eq!(
+            (&foto["width"], &foto["height"]),
+            (&json!(240), &json!(120)),
+            "{foto}"
+        );
+        let (written, written_pixels) = picture(&mut ws, json!({ "doc": BOARD }));
+        assert_eq!(
+            (&planned["width"], &planned["height"]),
+            (&written["width"], &written["height"]),
+            "la stessa altezza"
+        );
+        assert!(
+            planned_pixels == written_pixels,
+            "l'anteprima e la lavagna scritta disegnano lo stesso"
+        );
+    }
+
+    /// Un PDF vero con una pagina per misura, in punti.
+    fn pdf_pages(sizes: &[(f32, f32)]) -> Vec<u8> {
+        let turned: Vec<(f32, f32, i64)> = sizes
+            .iter()
+            .map(|&(width, height)| (width, height, 0))
+            .collect();
+        pdf_document(&pdf_turned(&turned))
+    }
+
+    /// Il documento di un PDF con una pagina per misura, in punti, e la sua
+    /// `/Rotate` (0 non si scrive).
+    fn pdf_turned(sizes: &[(f32, f32, i64)]) -> Document {
+        let mut document = Document::with_version("1.5");
+        let pages = document.new_object_id();
+        let kids: Vec<Object> = sizes
+            .iter()
+            .map(|&(width, height, rotate)| {
+                let mut page = dictionary! {
+                    "Type" => "Page",
+                    "Parent" => pages,
+                    "MediaBox" => vec![0.into(), 0.into(), width.into(), height.into()],
+                };
+                if rotate != 0 {
+                    page.set("Rotate", rotate);
+                }
+                document.add_object(page).into()
+            })
+            .collect();
+        let count = i64::try_from(kids.len()).expect("poche pagine");
+        document.objects.insert(
+            pages,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => kids,
+                "Count" => count,
+            }),
+        );
+        let catalog = document.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+        document.trailer.set("Root", catalog);
+        document
+    }
+
+    /// I byte di un documento PDF.
+    fn pdf_document(document: &Document) -> Vec<u8> {
+        let mut document = document.clone();
+        let mut out = Vec::new();
+        document.save_to(&mut out).expect("il PDF si scrive");
+        out
+    }
+
+    /// Le schede della lavagna scritta che mostrano il file `file`, con il loro
+    /// `subpath`, nell'ordine del file.
+    fn cards_of(ws: &Workspace, file: &str) -> Vec<Value> {
+        let canvas: Value = serde_json::from_str(&source(ws, BOARD)).expect("la lavagna è JSON");
+        canvas["nodes"]
+            .as_array()
+            .expect("le schede")
+            .iter()
+            .filter(|node| node["file"] == file)
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn spargere_le_pagine_legge_dal_pdf_il_conto_e_le_misure() {
+        // Tre pagine: A4 dritta, A4 girata, Letter. Senza `page_count` e
+        // `page_sizes` il comando li legge dal file, e le pagine nascono con le
+        // misure della GUI: 360×509, 360×254, 360×466.
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (842.0, 595.0), (612.0, 792.0)]),
+        )]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0, "width": 360, "height": 480 },
+                { "op": "spread_pages", "id": "pdf" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        let pages: Vec<(Value, Value, Value, Value)> = cards_of(&ws, "Corsi/dispensa.pdf")
+            .into_iter()
+            .filter(|node| node["id"] != "pdf")
+            .map(|node| {
+                (
+                    node["subpath"].clone(),
+                    node["x"].clone(),
+                    node["width"].clone(),
+                    node["height"].clone(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            pages,
+            vec![
+                (json!("#page=1"), json!(784), json!(360), json!(509)),
+                (json!("#page=2"), json!(1168), json!(360), json!(254)),
+                (json!("#page=3"), json!(1552), json!(360), json!(466)),
+            ]
+        );
+    }
+
+    #[test]
+    fn controllare_dice_le_pagine_tagliate_e_senza_pdf_serve_il_conto() {
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (595.0, 842.0)]),
+        )]);
+        let outcome = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 },
+                { "op": "spread_pages", "id": "pdf", "pages": "2-9" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&outcome);
+        assert_eq!(payload["ok"], true, "{payload}");
+        let warning = payload["warnings"]
+            .as_array()
+            .expect("gli avvisi")
+            .iter()
+            .find(|warning| warning["code"] == "pages_cut")
+            .cloned()
+            .unwrap_or_else(|| panic!("l'avviso delle pagine tagliate: {payload}"));
+        assert_eq!(warning["index"], 1, "{warning}");
+        // Un PDF che non c'è: il conto non si legge, e la lista è rifiutata.
+        let before = source(&ws, BOARD);
+        let error = plugin_error(
+            apply(
+                &mut ws,
+                json!({ "doc": BOARD, "ops": json!([
+                    { "op": "add_card", "id": "via", "file": "Corsi/manca.pdf", "x": 400, "y": 0 },
+                    { "op": "spread_pages", "id": "via" }
+                ]).to_string() }),
+                InvokeMode::Apply,
+            )
+            .expect_err("senza il conto delle pagine"),
+        );
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+        assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+    }
+
+    #[test]
+    fn l_estratto_prende_le_proporzioni_della_pagina_e_dell_immagine() {
+        // La zona di un quarto della seconda pagina (842×595 girata): 842 × 148,75
+        // punti, larga 360 → 360×64. Il ritaglio di metà di un PNG 4×2 è un
+        // quadrato: 480×480.
+        let (_vault, mut ws) = vault_with(&[
+            (
+                "Corsi/dispensa.pdf",
+                pdf_pages(&[(595.0, 842.0), (842.0, 595.0)]),
+            ),
+            ("schemi/foto.png", png_file(4, 2)),
+        ]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0, "width": 360, "height": 480 },
+                { "op": "add_card", "id": "foto", "file": "schemi/foto.png", "x": 400, "y": 600, "width": 480, "height": 240 },
+                { "op": "excerpt", "id": "pdf", "part": { "kind": "region", "page": 2, "rect": [0, 0, 1, 0.25] } },
+                { "op": "excerpt", "id": "foto", "part": { "kind": "image", "rect": [0, 0, 0.5, 1] } }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("gli estratti nascono");
+        let region = cards_of(&ws, "Corsi/dispensa.pdf")
+            .into_iter()
+            .find(|node| node["id"] != "pdf")
+            .expect("l'estratto del PDF");
+        assert_eq!(
+            (&region["width"], &region["height"], &region["subpath"]),
+            (&json!(360), &json!(64), &json!("#page=2")),
+            "{region}"
+        );
+        let crop = cards_of(&ws, "schemi/foto.png")
+            .into_iter()
+            .find(|node| node["id"] != "foto")
+            .expect("l'estratto dell'immagine");
+        assert_eq!(
+            (&crop["width"], &crop["height"]),
+            (&json!(480), &json!(480)),
+            "{crop}"
+        );
+        assert_eq!(crop["fub:parts"]["kind"], "image", "{crop}");
+    }
+
+    /// Le pagine nate da uno `spread_pages` sulla scheda `pdf`: `(subpath,
+    /// larghezza, altezza)`.
+    fn spread_sizes(ws: &Workspace, file: &str) -> Vec<(Value, Value, Value)> {
+        cards_of(ws, file)
+            .into_iter()
+            .filter(|node| node["id"] != "pdf")
+            .map(|node| {
+                (
+                    node["subpath"].clone(),
+                    node["width"].clone(),
+                    node["height"].clone(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn una_pagina_girata_da_rotate_nasce_girata() {
+        // Un A4 dritto con `/Rotate 90` si mostra 842×595: 360×254, come la GUI
+        // (pdf.js); `/Rotate 180` lo lascia dritto, 360×509.
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/girato.pdf",
+            pdf_document(&pdf_turned(&[(595.0, 842.0, 90), (595.0, 842.0, 180)])),
+        )]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/girato.pdf", "x": 400, "y": 0 },
+                { "op": "spread_pages", "id": "pdf" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        assert_eq!(
+            spread_sizes(&ws, "Corsi/girato.pdf"),
+            vec![
+                (json!("#page=1"), json!(360), json!(254)),
+                (json!("#page=2"), json!(360), json!(509)),
+            ]
+        );
+        // `add_card` misura la prima pagina girata allo stesso modo.
+        assert_eq!(card(&ws, "pdf")["height"], json!(254));
+    }
+
+    #[test]
+    fn il_conto_delle_pagine_del_file_vince_su_quello_dato_e_lo_dice() {
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (595.0, 842.0), (595.0, 842.0)]),
+        )]);
+        let ops = json!([
+            { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 },
+            { "op": "spread_pages", "id": "pdf", "page_count": 9 }
+        ])
+        .to_string();
+        let checked = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&checked);
+        assert_eq!(payload["ok"], true, "{payload}");
+        let warning = payload["warnings"]
+            .as_array()
+            .expect("gli avvisi")
+            .iter()
+            .find(|warning| warning["code"] == "page_count_from_file")
+            .cloned()
+            .unwrap_or_else(|| panic!("l'avviso del conto: {payload}"));
+        assert_eq!(warning["index"], 1, "{warning}");
+        assert!(
+            warning["detail"]
+                .as_str()
+                .is_some_and(|d| d.contains("3 pages")),
+            "{warning}"
+        );
+        let applied = apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": ops }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        let payload = custom(&applied);
+        assert_eq!(
+            payload["notes"][0]["code"], "page_count_from_file",
+            "{payload}"
+        );
+        // Tre pagine, non nove: il file ne ha tre.
+        assert_eq!(spread_sizes(&ws, "Corsi/dispensa.pdf").len(), 3);
+    }
+
+    #[test]
+    fn un_estratto_di_una_pagina_che_il_pdf_non_ha_e_rifiutato() {
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (595.0, 842.0)]),
+        )]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("la scheda nasce");
+        let before = source(&ws, BOARD);
+        for part in [
+            json!({ "kind": "pages", "pages": [2, 3] }),
+            json!({ "kind": "region", "page": 3, "rect": [0, 0, 1, 1] }),
+        ] {
+            for in_place in [false, true] {
+                let error = plugin_error(
+                    apply(
+                        &mut ws,
+                        json!({ "doc": BOARD, "ops": json!([
+                            { "op": "excerpt", "id": "pdf", "part": part, "in_place": in_place }
+                        ]).to_string() }),
+                        InvokeMode::Apply,
+                    )
+                    .expect_err("la pagina 3 non c'è"),
+                );
+                assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+            }
+        }
+        assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+    }
+
+    #[test]
+    fn disegnare_sulla_pagina_legge_dal_pdf_la_misura_della_pagina_n() {
+        // Due pagine, la seconda girata: senza `page_size` l'ancora prende la
+        // misura della pagina 2 dal file, non quella della prima. Una pagina
+        // che il PDF non ha è rifiutata, e un conto dato diverso dal file
+        // perde, con l'avviso.
+        let (_vault, mut ws) = vault_with(&[(
+            "Corsi/dispensa.pdf",
+            pdf_pages(&[(595.0, 842.0), (842.0, 595.0)]),
+        )]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 },
+                { "op": "draw", "id": "s1", "on": { "card": "pdf", "page": 2 }, "points": [[72, 100], [300, 100]] }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("il tratto si scrive");
+        let strokes = &card(&ws, "pdf")["fub:ink"]["strokes"];
+        assert_eq!(
+            strokes[0]["anchor"],
+            json!({ "kind": "page", "page": 2, "width": 842, "height": 595 }),
+            "{strokes}"
+        );
+        let before = source(&ws, BOARD);
+        for op in [
+            json!({ "op": "draw", "on": { "card": "pdf", "page": 3 }, "points": [[72, 100]] }),
+            json!({ "op": "draw", "on": { "card": "pdf", "page": 3, "page_size": [595, 842], "page_count": 9 }, "points": [[72, 100]] }),
+            json!({ "op": "erase_along", "on": { "card": "pdf", "page": 3 }, "points": [[72, 100]], "size": 4 }),
+        ] {
+            let error = plugin_error(
+                apply(
+                    &mut ws,
+                    json!({ "doc": BOARD, "ops": json!([op]).to_string() }),
+                    InvokeMode::Apply,
+                )
+                .expect_err("la pagina 3 non c'è"),
+            );
+            assert!(matches!(error, PluginError::BadArgs(_)), "{op}: {error:?}");
+        }
+        assert_eq!(source(&ws, BOARD), before, "il file non cambia");
+        let checked = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "erase_along", "on": { "card": "pdf", "page": 2, "page_count": 5 }, "points": [[186, 80], [186, 120]], "size": 8 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&checked);
+        assert_eq!(payload["ok"], true, "{payload}");
+        assert!(
+            payload["warnings"]
+                .as_array()
+                .is_some_and(|warnings| warnings
+                    .iter()
+                    .any(|warning| warning["code"] == "page_count_from_file")),
+            "{payload}"
+        );
+    }
+
+    #[test]
+    fn una_misura_data_diversa_dal_pdf_resta_con_una_nota() {
+        // La pagina 1 è un A4 di 595.276 × 841.89: una misura data entro
+        // mezzo punto per lato tace; una diversa resta nell'ancora (vince
+        // chi la dà), e la nota `page_size_not_file` lo dice, in
+        // `canvas.check` e in `canvas.apply`.
+        let (_vault, mut ws) =
+            vault_with(&[("Corsi/dispensa.pdf", pdf_pages(&[(595.276, 841.89)]))]);
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("la scheda si scrive");
+        let codes = |payload: &Value, key: &str| -> Vec<String> {
+            payload[key]
+                .as_array()
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item["code"].as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let draw = |size: Value| json!({ "op": "draw", "on": { "card": "pdf", "page": 1, "page_size": size }, "points": [[72, 100], [300, 100]] });
+        let near = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([draw(json!([595, 842]))]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&near);
+        assert_eq!(payload["ok"], true, "{payload}");
+        assert!(
+            !codes(payload, "warnings").contains(&"page_size_not_file".to_owned()),
+            "{payload}"
+        );
+        let far = check_cmd(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([draw(json!([1190, 1684]))]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("un rapporto");
+        let payload = custom(&far);
+        assert_eq!(payload["ok"], true, "{payload}");
+        assert!(
+            codes(payload, "warnings").contains(&"page_size_not_file".to_owned()),
+            "{payload}"
+        );
+        let applied = apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([draw(json!([1190, 1684]))]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("il tratto si scrive");
+        let payload = custom(&applied);
+        assert!(
+            codes(payload, "notes").contains(&"page_size_not_file".to_owned()),
+            "{payload}"
+        );
+        let strokes = &card(&ws, "pdf")["fub:ink"]["strokes"];
+        assert_eq!(
+            strokes[0]["anchor"],
+            json!({ "kind": "page", "page": 1, "width": 1190, "height": 1684 }),
+            "la misura data resta: {strokes}"
+        );
+    }
+
+    #[test]
+    fn un_pdf_malformato_o_cifrato_non_da_misure() {
+        let mut locked = pdf_turned(&[(595.0, 842.0, 0)]);
+        let encrypt = locked.add_object(dictionary! {
+            "Filter" => "Standard",
+            "V" => 2,
+            "R" => 3,
+            "Length" => 128,
+            "O" => Object::string_literal(vec![1u8; 32]),
+            "U" => Object::string_literal(vec![2u8; 32]),
+            "P" => -4,
+        });
+        locked.trailer.set("Encrypt", encrypt);
+        locked.trailer.set(
+            "ID",
+            vec![
+                Object::string_literal(vec![3u8; 16]),
+                Object::string_literal(vec![3u8; 16]),
+            ],
+        );
+        let (_vault, mut ws) = vault_with(&[
+            (
+                "Corsi/rotto.pdf",
+                b"%PDF-1.5\nnon e un PDF\n%%EOF\n".to_vec(),
+            ),
+            ("Corsi/chiuso.pdf", pdf_document(&locked)),
+        ]);
+        for file in ["Corsi/rotto.pdf", "Corsi/chiuso.pdf"] {
+            // `add_card` prende la misura di serie.
+            apply(
+                &mut ws,
+                json!({ "doc": BOARD, "ops": json!([
+                    { "op": "add_card", "id": "pdf", "file": file, "x": 400, "y": 0 }
+                ]).to_string() }),
+                InvokeMode::Apply,
+            )
+            .unwrap_or_else(|e| panic!("{file}: la scheda nasce: {e:?}"));
+            let pdf = card(&ws, "pdf");
+            assert_eq!(
+                (&pdf["width"], &pdf["height"]),
+                (&json!(360), &json!(480)),
+                "{file}"
+            );
+            // `spread_pages` non ha il conto: la lista è rifiutata, col motivo.
+            let before = source(&ws, BOARD);
+            let error = plugin_error(
+                apply(
+                    &mut ws,
+                    json!({ "doc": BOARD, "ops": json!([
+                        { "op": "spread_pages", "id": "pdf" }
+                    ]).to_string() }),
+                    InvokeMode::Apply,
+                )
+                .expect_err("senza il conto delle pagine"),
+            );
+            assert!(
+                matches!(error, PluginError::BadArgs(_)),
+                "{file}: {error:?}"
+            );
+            assert_eq!(source(&ws, BOARD), before, "{file}: il file non cambia");
+            apply(
+                &mut ws,
+                json!({ "doc": BOARD, "ops": json!([{ "op": "remove", "ids": ["pdf"] }]).to_string() }),
+                InvokeMode::Apply,
+            )
+            .expect("la scheda si toglie");
+        }
+    }
+
+    #[test]
+    fn il_gruppo_delle_pagine_ha_l_etichetta_nella_lingua_di_chi_scrive() {
+        let thirteen = vec![(595.0, 842.0); 13];
+        let (_vault, mut ws) = vault_with(&[("Corsi/dispensa.pdf", pdf_pages(&thirteen))]);
+        let group_label = |ws: &Workspace| -> Value {
+            let canvas: Value =
+                serde_json::from_str(&source(ws, BOARD)).expect("la lavagna è JSON");
+            canvas["nodes"]
+                .as_array()
+                .expect("le schede")
+                .iter()
+                .rev()
+                .find(|node| node["type"] == "group")
+                .map(|node| node["label"].clone())
+                .unwrap_or(Value::Null)
+        };
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "add_card", "id": "pdf", "file": "Corsi/dispensa.pdf", "x": 400, "y": 0 },
+                { "op": "spread_pages", "id": "pdf" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        assert_eq!(group_label(&ws), json!("13 pagine"));
+        // La lingua che la shell pubblica: l'inglese.
+        ws.system_locale().publish(fub_abi::locale::Locale {
+            language: "en".into(),
+            ..fub_abi::locale::Locale::default()
+        });
+        apply(
+            &mut ws,
+            json!({ "doc": BOARD, "ops": json!([
+                { "op": "spread_pages", "id": "pdf", "pages": "1-13" }
+            ]).to_string() }),
+            InvokeMode::Apply,
+        )
+        .expect("le pagine si spargono");
+        assert_eq!(group_label(&ws), json!("13 pages"));
+    }
+}
+
+/// Il campo «Documento» scritto a mano (#486): il nome della lavagna, senza
+/// estensione e senza maiuscole, è la lavagna; la nota omonima non conta,
+/// perché i comandi della lavagna vogliono una lavagna.
+#[test]
+fn una_lavagna_scritta_per_nome_si_legge() {
+    let (_vault, mut ws) = with_board(READ_BOARD);
+    let name = BOARD.trim_end_matches(".canvas");
+    ws.write_document(
+        &DocId::new(format!("{name}.md")),
+        "# Omonima\n",
+        WriteBase::Dictated,
+    )
+    .expect("la nota si scrive");
+    let outcome = read_cmd(
+        &mut ws,
+        json!({ "doc": name.to_lowercase() }),
+        InvokeMode::Apply,
+    )
+    .expect("il nome nomina la sola lavagna");
+    assert_eq!(custom(&outcome)["doc"], BOARD);
+
+    let error = plugin_error(
+        read_cmd(&mut ws, json!({ "doc": "Altrove" }), InvokeMode::Apply)
+            .expect_err("nessuna lavagna si chiama così"),
+    );
+    let PluginError::BadArgs(text) = error else {
+        panic!("atteso BadArgs, arrivato {error:?}")
+    };
+    assert!(
+        text.as_literal().is_some_and(|t| t.contains("«Altrove»")),
+        "{text:?}"
+    );
 }

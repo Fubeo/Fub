@@ -16,6 +16,7 @@ import { revealSidePanel } from "../ui/side-panels";
 import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
 import { setSidePanelOpener } from "../ui/primary-views";
+import { PerVault } from "../state/per-vault";
 
 /// Quale pannello della sidebar è attivo: i due della shell, o l'id di una
 /// view dichiarata con `left_sidebar`. L'unione è `string` e non un enum
@@ -107,6 +108,22 @@ export function lastShownPanel(): SidebarPanel {
   return lastPanel;
 }
 
+/// La vista della barra di ogni vault visto in questa sessione (R07).
+const panelByVault = new PerVault<SidebarPanel>("files");
+
+/// Si entra in un vault: la barra mostra la vista che quel vault aveva, o i
+/// file se non ci si era mai stati — mai quella del vault di prima.
+///
+/// Una view della barra si rivuole e basta: le view del vault nuovo non sono
+/// ancora montate, e mostrarla adesso vorrebbe dire mostrare quella del vault
+/// lasciato. Intanto si vedono i file; `syncRail`, a view montate, la rimostra
+/// se esiste ancora (e altrimenti resta sui file).
+export function enterVaultPanel(root: string): void {
+  const wanted = panelByVault.enter(root, lastPanel);
+  showPanel(wanted === "search" ? "search" : "files");
+  lastPanel = wanted;
+}
+
 /// Il pannello nativo è visibile? Le view dichiarate non si chiedono qui.
 export function isPanelVisible(panel: "files" | "search"): boolean {
   return !NATIVE_PANELS[panel].hidden;
@@ -130,27 +147,40 @@ export function mountSidebarCommands(): void {
     title: "commands.panel.files",
     description: "commands.panel.files.desc",
     layer: "global",
-    run: () => {
-      // Il comando porta il fuoco dove promette: la barra si apre (anche come
-      // cassetto) e si entra nell'albero, sulla voce che il tab troverebbe.
-      revealSidePanel("sidebar");
-      showPanel("files");
-      document.querySelector<HTMLElement>('#file-list li[role="treeitem"][tabindex="0"], #file-list li[role="treeitem"]')?.focus();
-    },
+    run: () => enterPanel("files"),
   });
   registerShellCommand({
     id: "shell.panel.search",
     title: "commands.panel.search",
     description: "commands.panel.search.desc",
     layer: "global",
-    run: () => {
-      revealSidePanel("sidebar");
-      showPanel("search");
-      const input = document.getElementById("search-input");
-      if (input instanceof HTMLInputElement) {
-        input.focus();
-        input.select();
-      }
-    },
+    run: () => enterPanel("search"),
   });
+}
+
+/// Porta a un pannello della barra e dentro di lui: la barra si apre (anche
+/// come cassetto), il pannello si mostra e il fuoco entra dove si lavora — il
+/// campo della ricerca, con ciò che c'era scritto selezionato, o la voce
+/// dell'albero che il Tab troverebbe. È la strada sola della scorciatoia, del
+/// menu e dell'icona della rail: chi arriva col mouse non deve poi cliccare il
+/// campo che la tastiera gli avrebbe dato. Una view dichiarata si mostra e
+/// basta: il suo interno non è della shell.
+///
+/// Su un telefono la barra è un foglio che sale dal basso, e all'apertura il
+/// fuoco va alla sua maniglia (`shells/scrittoio/mobile/bottom-sheets.ts`): un
+/// campo col fuoco alzerebbe la tastiera sopra il foglio. Lì il fuoco resta
+/// alla maniglia.
+export function enterPanel(panel: SidebarPanel): void {
+  revealSidePanel("sidebar");
+  showPanel(panel);
+  if (document.activeElement?.matches("#sidebar > .sheet-grip")) return;
+  if (panel === "search") {
+    const input = document.getElementById("search-input");
+    if (input instanceof HTMLInputElement) {
+      input.focus();
+      input.select();
+    }
+  } else if (panel === "files") {
+    document.querySelector<HTMLElement>('#file-list li[role="treeitem"][tabindex="0"], #file-list li[role="treeitem"]')?.focus();
+  }
 }

@@ -139,6 +139,24 @@ describe("le immagini del vault restano inerti", () => {
   });
 });
 
+describe("lo style ammesso sotto la CSP", () => {
+  it("l'allineamento passa da element.style; il resto cade", async () => {
+    const { sanitizeFragment } = await import("./sanitize");
+    // La CSP dell'app (`style-src-attr 'none'`) rifiuta un `style` scritto
+    // come attributo: nella WebView la cella resterebbe a sinistra. Che il
+    // sanitizzatore non scriva l'attributo lo tiene `check-inline-styles.mjs`;
+    // qui si guarda il risultato, che happy-dom scrive come lo serializza il
+    // CSSOM.
+    const fragment = sanitizeFragment(
+      '<table><tr><td style="text-align: right">a</td><th style="text-align:center;">b</th>' +
+        '<td style="position:fixed;top:0">c</td></tr></table>',
+    );
+    const cells = Array.from(fragment.querySelectorAll<HTMLTableCellElement>("td, th"));
+    expect(cells.map((cell) => cell.style.textAlign)).toEqual(["right", "center", ""]);
+    expect(cells[2]!.hasAttribute("style")).toBe(false);
+  });
+});
+
 describe("l'HTML scritto nella nota", () => {
   it("conserva il colore e la sottolineatura, non il resto delle classi né lo stile", async () => {
     const { sanitizeMarkdownHtml } = await import("./sanitize");
@@ -150,7 +168,41 @@ describe("l'HTML scritto nella nota", () => {
     ));
     expect(holder.innerHTML).toBe(
       '<span class="fub-color-red">a</span><span>b</span><mark class="fub-bg-yellow">c</mark>' +
-        '<u>d</u><table><tbody><tr><td style="text-align:center">e</td></tr></tbody></table>',
+        '<u>d</u><table><tbody><tr><td style="text-align: center;">e</td></tr></tbody></table>',
     );
+  });
+
+  it("un <img src> scritto nella nota tiene il canale dell'immagine; scritto a mano il canale cade", async () => {
+    const { sanitizeMarkdownHtml, VAULT_SRC_ATTRIBUTE, REMOTE_SRC_ATTRIBUTE } = await import("./sanitize");
+    const fragment = sanitizeMarkdownHtml(
+      '<img src="foto.png" alt="f" data-x="1"><img src="https://x.it/b.png" alt="b">' +
+        '<img data-vault-src="../../segreto.png" alt="c"><img data-remote-src="https://spia.it/p.gif" alt="d">' +
+        '<span data-vault-src="a.png">e</span>',
+    );
+    const [local, remote, forgedVault, forgedRemote] = Array.from(fragment.querySelectorAll("img"));
+    expect(local!.getAttribute(VAULT_SRC_ATTRIBUTE)).toBe("foto.png");
+    expect(local!.hasAttribute("data-x")).toBe(false);
+    expect(local!.hasAttribute("src")).toBe(false);
+    expect(remote!.getAttribute(REMOTE_SRC_ATTRIBUTE)).toBe("https://x.it/b.png");
+    expect(remote!.hasAttribute("src")).toBe(false);
+    const names = (element: Element) => element.getAttributeNames().filter((name) => name.startsWith("data-"));
+    expect(names(forgedVault!), "un canale scritto a mano non passa").toEqual([]);
+    expect(names(forgedRemote!)).toEqual([]);
+    expect(names(fragment.querySelector("span")!)).toEqual([]);
+  });
+});
+
+describe("le caselle delle voci", () => {
+  it("prendono per nome il testo della loro voce, senza le sottovoci", () => {
+    const holder = document.createElement("div");
+    holder.append(sanitizeFragment(
+      '<ul><li class="task" data-task="x"><input type="checkbox" disabled checked> Comprare <b>il pane</b>' +
+        '<ul><li class="task"><input type="checkbox" disabled> integrale</li></ul></li>' +
+        '<li class="task"><input type="checkbox" disabled></li></ul>',
+    ));
+    const boxes = [...holder.querySelectorAll("input")];
+    expect(boxes.map((box) => box.getAttribute("aria-label"))).toEqual(["Comprare il pane", "integrale", null]);
+    // Restano caselle disabilitate: il nome non cambia ciò che sono.
+    expect(boxes.every((box) => box.type === "checkbox" && box.disabled)).toBe(true);
   });
 });

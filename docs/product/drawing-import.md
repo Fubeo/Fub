@@ -19,7 +19,7 @@ draw.io, c'è [Disegni, esportare](drawing-export.md#i-formati).
 «Importa disegno» c'è dove si crea un disegno nuovo, quando la feature `draw`
 è accesa:
 
-- nel menu dell'app, accanto a «Nuovo disegno…», come «Importa disegno…»,
+- nel menu File dell'app, dopo «Nuovo ▸», come «Importa disegno…»,
   che sceglie il file dal disco;
 - nella palette dei comandi, «Importa disegno», senza tasti suoi;
 - nel menu di una cartella dell'esplorazione e in quello del titolo dei file,
@@ -154,9 +154,9 @@ Il rapporto della finestra lo dice prima di scrivere, una frase per genere:
   resta;
 - un pezzo dell'aspetto di un testo che il disegno non ha (un'immagine nel
   testo, un apice, uno sfondo) resta fuori, e il testo resta;
-- una forma che FubDraw non ha, come le icone dei servizi cloud, diventa la
+- una forma che Fub non ha, come le icone dei servizi cloud, diventa la
   più vicina, di solito un rettangolo dei suoi colori;
-- una punta che FubDraw non ha diventa la più vicina, o nessuna; una punta
+- una punta che Fub non ha diventa la più vicina, o nessuna; una punta
   vuota diventa piena;
 - un percorso disegnato a mano su un connettore lascia il posto a quello che
   il connettore trova da sé, quando i due sono lontani;

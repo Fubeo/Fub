@@ -11,7 +11,8 @@
 //!   e un peso massimi ([`CliLimits`]): stdout e stderr si leggono da due
 //!   thread con un tetto ciascuno, il resto si scarta senza bloccare il
 //!   processo; ogni ~100 ms si guardano l'annullamento e il tempo, e allo
-//!   scadere si uccide l'intero gruppo (su unix) e si aspetta che esca.
+//!   scadere si uccide l'intero gruppo e si aspetta che esca. Il gruppo è un
+//!   gruppo di processi su unix e un job object su Windows (`job::Job`).
 //!
 //! Il programma è un percorso assoluto, mai cercato nel `PATH`; gli argomenti
 //! arrivano al programma così come sono, senza `sh -c` né `cmd /c`, quindi
@@ -220,7 +221,9 @@ fn detach(command: &mut Command) {
 
 /// Una CLI sta nel suo gruppo, perché il tempo scaduto la fermi insieme ai
 /// figli; su Linux muore anche col thread di Fub che l'ha avviata, quindi con
-/// Fub uscito di colpo; su Windows senza finestra della console.
+/// Fub uscito di colpo. Su Windows parte senza finestra della console e
+/// **sospesa**: la fa partire `job::Job::adopt`, dopo averla messa nel job,
+/// così nessun figlio nasce prima che il job ci sia.
 fn own_group(command: &mut Command) {
     #[cfg(unix)]
     {
@@ -251,8 +254,8 @@ fn own_group(command: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        command.creation_flags(CREATE_NO_WINDOW);
+        use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
+        command.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
     }
 }
 
@@ -272,11 +275,25 @@ fn run_command(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // Su Windows il job c'è prima della CLI: se non si crea, la CLI non parte.
+    #[cfg(windows)]
+    let job = match job::Job::new() {
+        Ok(job) => job,
+        Err(_) => return (Err(LaunchError::Io), true),
+    };
     own_group(&mut command);
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => return (Err(spawn_error(error)), true),
     };
+    // La CLI è nata sospesa: entra nel job e poi parte. Se una delle due cose
+    // non va, la si ferma prima che abbia eseguito un'istruzione sua.
+    #[cfg(windows)]
+    if job.adopt(&child).is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+        return (Err(LaunchError::Io), true);
+    }
     let (done_tx, done_rx) = mpsc::channel();
     let stdout = Buffer::default();
     let stderr = Buffer::default();
@@ -310,7 +327,11 @@ fn run_command(
         Err(LaunchError::Io)
     };
     // I figli del figlio rimasti dopo l'uscita li ha già fermati chi l'ha
-    // raccolta (`watch`, `stop`), prima della raccolta.
+    // raccolta (`watch`, `stop`), prima della raccolta. Su Windows li ferma il
+    // job, chiuso qui: il job ferma i processi che contiene, non dei pid,
+    // quindi chiuderlo dopo la raccolta non tocca nessun altro.
+    #[cfg(windows)]
+    drop(job);
 
     let started = readers.iter().filter(|reader| reader.is_some()).count();
     let deadline = Instant::now() + DRAIN_GRACE;
@@ -434,8 +455,9 @@ fn stop(child: &mut Child) {
 
 /// Su unix ferma con `SIGKILL` ciò che resta del gruppo della CLI. Il gruppo
 /// porta il pid del figlio, e finché ha un membro quell'id non passa a un
-/// altro processo; un gruppo vuoto risponde solo `ESRCH`. Su Windows si
-/// ferma solo il figlio ([`stop`]): i suoi figli restano.
+/// altro processo; un gruppo vuoto risponde solo `ESRCH`. Su Windows qui si
+/// ferma solo la CLI ([`stop`]); i suoi figli li ferma `job::Job`, che
+/// [`run_command`] chiude appena la CLI è raccolta.
 fn stop_group(child: &Child) {
     #[cfg(unix)]
     {
@@ -447,6 +469,148 @@ fn stop_group(child: &Child) {
     #[cfg(not(unix))]
     {
         let _ = child;
+    }
+}
+
+/// Il gruppo di una CLI su Windows: un job object con
+/// `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. La CLI ci entra sospesa, prima di
+/// aver eseguito niente, e ogni processo che avvia ci nasce dentro (non
+/// c'è `BREAKAWAY_OK`, quindi nessuno ne esce). Chiudere il job, a tempo
+/// scaduto, ad annullamento, dopo l'uscita o perché Fub è morto e il
+/// sistema ne chiude gli handle, ferma tutti. Se Fub è già dentro un job
+/// (un terminale, un servizio, la CI), Windows 8 e successivi annidano il
+/// nostro dentro quello; dove non si può, `adopt` fallisce e la CLI non parte.
+#[cfg(windows)]
+mod job {
+    use std::io;
+    use std::os::windows::io::AsRawHandle;
+    use std::process::Child;
+
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+    };
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    use windows_sys::Win32::System::Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME};
+
+    /// Un handle che si chiude con chi lo tiene.
+    struct Owned(HANDLE);
+
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            // SAFETY: l'handle è valido e solo nostro: lo ha aperto chi ha
+            // costruito `Owned`, e nessun altro lo chiude.
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+
+    /// Il job di una CLI. Cadendo ferma ciò che contiene e si chiude.
+    pub(super) struct Job(Owned);
+
+    impl Job {
+        /// Un job nuovo, anonimo e non ereditabile, che chiudendosi ferma
+        /// i suoi processi.
+        pub(super) fn new() -> io::Result<Job> {
+            // SAFETY: attributi e nome nulli sono ammessi: un job anonimo
+            // con la sicurezza di base, il cui handle non si eredita.
+            let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+            if handle.is_null() {
+                return Err(io::Error::last_os_error());
+            }
+            let job = Job(Owned(handle));
+            let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let size = u32::try_from(std::mem::size_of_val(&info))
+                .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+            // SAFETY: `info` vive per tutta la chiamata e `size` è la sua
+            // misura, quella che la classe `JobObjectExtendedLimitInformation`
+            // vuole.
+            let set = unsafe {
+                SetInformationJobObject(
+                    job.0 .0,
+                    JobObjectExtendedLimitInformation,
+                    std::ptr::from_ref(&info).cast(),
+                    size,
+                )
+            };
+            if set == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(job)
+        }
+
+        /// Mette nel job la CLI appena nata sospesa, poi la fa partire.
+        pub(super) fn adopt(&self, child: &Child) -> io::Result<()> {
+            // SAFETY: tutti e due gli handle sono validi: il job è nostro, e
+            // quello del processo lo tiene `child` per tutta la chiamata.
+            let assigned =
+                unsafe { AssignProcessToJobObject(self.0 .0, child.as_raw_handle().cast()) };
+            if assigned == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            resume(child.id())
+        }
+    }
+
+    impl Drop for Job {
+        fn drop(&mut self) {
+            // `KILL_ON_JOB_CLOSE` basterebbe se l'handle fosse l'unico; la
+            // chiusura esplicita non dipende da chi altro ne abbia uno.
+            // SAFETY: l'handle del job è valido finché `self` vive.
+            unsafe {
+                TerminateJobObject(self.0 .0, 1);
+            }
+        }
+    }
+
+    /// Fa partire i thread del processo `pid`, nato sospeso: è uno solo, il
+    /// primo, e `std` non ne restituisce l'handle, quindi lo si cerca in
+    /// un'istantanea dei thread. Errore se non se ne trova nessuno.
+    fn resume(pid: u32) -> io::Result<()> {
+        // SAFETY: una chiamata senza puntatori; l'handle torna a `Owned`.
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+        if snapshot == INVALID_HANDLE_VALUE || snapshot.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let snapshot = Owned(snapshot);
+        let size = u32::try_from(std::mem::size_of::<THREADENTRY32>())
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+        let mut entry = THREADENTRY32 {
+            dwSize: size,
+            ..THREADENTRY32::default()
+        };
+        let mut resumed = 0usize;
+        // SAFETY: l'istantanea è valida e `entry` ha `dwSize` impostato.
+        let mut more = unsafe { Thread32First(snapshot.0, &mut entry) } != 0;
+        while more {
+            if entry.th32OwnerProcessID == pid {
+                // SAFETY: una chiamata senza puntatori; l'handle torna a `Owned`.
+                let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID) };
+                if thread.is_null() {
+                    return Err(io::Error::last_os_error());
+                }
+                let thread = Owned(thread);
+                // SAFETY: l'handle del thread è valido e ha il diritto di
+                // ripresa.
+                if unsafe { ResumeThread(thread.0) } == u32::MAX {
+                    return Err(io::Error::last_os_error());
+                }
+                resumed += 1;
+            }
+            entry.dwSize = size;
+            // SAFETY: come per `Thread32First`.
+            more = unsafe { Thread32Next(snapshot.0, &mut entry) } != 0;
+        }
+        if resumed == 0 {
+            return Err(io::Error::from(io::ErrorKind::NotFound));
+        }
+        Ok(())
     }
 }
 
@@ -1010,5 +1174,206 @@ mod tests {
         assert_gone(raw);
         // Un pid che Fub non ha avviato non è «in corso».
         assert!(!running(u32::MAX));
+    }
+}
+
+/// Le prove del job object: girano solo nella CI Windows. Il programma di
+/// prova è questo stesso binario di test, rilanciato su [`helper`] con un
+/// ruolo nell'ambiente: c'è su ogni macchina che fa girare i test, non
+/// dipende da `cmd.exe` né da PowerShell, e scrive i pid in un file senza
+/// doverli pescare dall'output di una shell.
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use std::fs;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
+
+    /// Il ruolo del binario rilanciato: `dorme` (avvia un figlio e dorme),
+    /// `esce` (avvia un figlio ed esce), `figlio` (dorme). Senza `FUB_`
+    /// davanti, perché `base_command` lo lascerebbe fuori.
+    const ROLE: &str = "CRAFT_LAUNCH_PROVA_RUOLO";
+    /// La cartella dove il programma di prova scrive i pid.
+    const DIR: &str = "CRAFT_LAUNCH_PROVA_CARTELLA";
+
+    fn never() -> bool {
+        false
+    }
+
+    /// Gli argomenti che fanno girare al binario di test solo [`helper`].
+    fn helper_args() -> Vec<OsString> {
+        let module = module_path!()
+            .split_once("::")
+            .map_or(module_path!(), |(_, rest)| rest);
+        [
+            format!("{module}::helper"),
+            "--exact".into(),
+            "--ignored".into(),
+            "--nocapture".into(),
+            "--test-threads=1".into(),
+        ]
+        .into_iter()
+        .map(OsString::from)
+        .collect()
+    }
+
+    fn helper_command(role: &str, dir: &Path) -> Command {
+        let exe = std::env::current_exe().expect("il binario di test");
+        let ambient = std::env::vars_os().chain([
+            (OsString::from(ROLE), OsString::from(role)),
+            (OsString::from(DIR), dir.as_os_str().to_owned()),
+        ]);
+        base_command(&exe, &helper_args(), ambient).expect("comando")
+    }
+
+    /// Scrive il pid tutto in una volta: un file temporaneo e poi il nome.
+    fn write_pid(path: &Path, pid: u32) {
+        let partial = path.with_extension("parziale");
+        fs::write(&partial, pid.to_string()).expect("pid");
+        fs::rename(&partial, path).expect("pid");
+    }
+
+    /// Il pid scritto dal programma di prova, aspettato al più 8 s.
+    fn read_pid(path: &Path) -> u32 {
+        let start = Instant::now();
+        loop {
+            if let Ok(text) = fs::read_to_string(path) {
+                if let Ok(pid) = text.trim().parse() {
+                    return pid;
+                }
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(8),
+                "nessun pid in {path:?}"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// Un processo aperto mentre è vivo: aspettarlo non si confonde con un
+    /// altro processo che riprenda il suo pid.
+    struct Process(HANDLE);
+
+    impl Process {
+        fn open(pid: u32) -> Option<Process> {
+            // SAFETY: una chiamata senza puntatori; l'handle torna a `Process`.
+            let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
+            (!handle.is_null()).then_some(Process(handle))
+        }
+
+        fn exited_within(&self, time: Duration) -> bool {
+            let millis = u32::try_from(time.as_millis()).unwrap_or(u32::MAX);
+            // SAFETY: l'handle è valido e ha il diritto di attesa.
+            unsafe { WaitForSingleObject(self.0, millis) == WAIT_OBJECT_0 }
+        }
+    }
+
+    impl Drop for Process {
+        fn drop(&mut self) {
+            // SAFETY: l'handle è valido e solo nostro.
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+
+    /// Il programma di prova, non una prova: senza ruolo non fa niente.
+    #[test]
+    #[ignore = "il programma di prova delle prove del job, rilanciato da loro"]
+    fn helper() {
+        let Some(role) = std::env::var_os(ROLE) else {
+            return;
+        };
+        let dir = PathBuf::from(std::env::var_os(DIR).expect("la cartella"));
+        match role.to_str() {
+            Some("figlio") => thread::sleep(Duration::from_secs(60)),
+            Some(role @ ("dorme" | "esce")) => {
+                // Il figlio eredita stdout e stderr: se restasse vivo, i
+                // lettori di Fub aspetterebbero lui. Non lo si aspetta apposta:
+                // fermarlo è il compito del job sotto prova.
+                #[allow(clippy::zombie_processes)]
+                let child = Command::new(std::env::current_exe().expect("il binario"))
+                    .args(helper_args())
+                    .env(ROLE, "figlio")
+                    .spawn()
+                    .expect("il figlio");
+                write_pid(&dir.join("figlio"), child.id());
+                write_pid(&dir.join("padre"), std::process::id());
+                if role == "dorme" {
+                    thread::sleep(Duration::from_secs(60));
+                }
+            }
+            other => panic!("ruolo sconosciuto: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_time_stops_the_cli_and_its_child() {
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let command = helper_command("dorme", dir.path());
+        let limits = CliLimits {
+            time: Duration::from_secs(10),
+            ..CliLimits::default()
+        };
+        let start = Instant::now();
+        let runner = thread::spawn(move || run_command(command, &limits, &never));
+        // I due processi si aprono mentre sono vivi, prima dello scadere.
+        let parent = Process::open(read_pid(&dir.path().join("padre"))).expect("il padre vive");
+        let child = Process::open(read_pid(&dir.path().join("figlio"))).expect("il figlio vive");
+        let (result, drained) = runner.join().expect("il thread");
+        assert_eq!(
+            result.expect_err("il tempo la ferma"),
+            LaunchError::TimedOut
+        );
+        assert!(drained, "un lettore è rimasto appeso al figlio");
+        assert!(
+            start.elapsed() < Duration::from_secs(14),
+            "{:?}",
+            start.elapsed()
+        );
+        assert!(
+            parent.exited_within(Duration::from_secs(5)),
+            "il padre vive"
+        );
+        assert!(
+            child.exited_within(Duration::from_secs(5)),
+            "il figlio vive"
+        );
+    }
+
+    #[test]
+    fn a_cli_that_exits_by_itself_leaves_no_child() {
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let command = helper_command("esce", dir.path());
+        let start = Instant::now();
+        let (result, drained) = run_command(command, &CliLimits::default(), &never);
+        result.expect("esce con zero");
+        // Il figlio teneva stdout e stderr: se i lettori hanno finito, il
+        // job lo ha fermato.
+        assert!(drained, "un lettore è rimasto appeso al figlio");
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "{:?}",
+            start.elapsed()
+        );
+        let child = read_pid(&dir.path().join("figlio"));
+        if let Some(child) = Process::open(child) {
+            assert!(
+                child.exited_within(Duration::from_secs(5)),
+                "il figlio vive"
+            );
+        }
+    }
+
+    #[test]
+    fn a_missing_program_is_still_not_found() {
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let missing = dir.path().join("non-c-e.exe");
+        assert_eq!(
+            run_cli(&missing, &[], &CliLimits::default(), &never).unwrap_err(),
+            LaunchError::NotFound
+        );
     }
 }

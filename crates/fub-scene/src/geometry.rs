@@ -71,9 +71,10 @@ impl Matrix {
     }
 }
 
-/// Un segmento di path in coordinate assolute.
+/// Un segmento di path in coordinate assolute. Fuori dal crate è
+/// [`PathSegment`](crate::PathSegment).
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Segment {
+pub enum Segment {
     Move([f64; 2]),
     Line([f64; 2]),
     Quad([f64; 2], [f64; 2]),
@@ -166,7 +167,7 @@ impl PathParser<'_> {
 /// e relativi, comandi impliciti, flag degli archi attaccati, numeri compatti.
 /// Un `d` vuoto è valido e non disegna niente; un `d` malformato è `None`,
 /// perché un browser lo disegna solo fino al primo errore.
-pub(crate) fn parse_path(d: &str) -> Option<Vec<Segment>> {
+pub fn parse_path(d: &str) -> Option<Vec<Segment>> {
     let mut p = PathParser {
         text: d,
         bytes: d.as_bytes(),

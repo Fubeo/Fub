@@ -73,7 +73,8 @@ function select(strip: HTMLElement, index: number): void {
 }
 
 /// Gli osservatori consegnano a fine giro.
-const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+/// La striscia si guarda al fotogramma dopo il cambio: si aspetta quello.
+const settled = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
 function xOf(frame: Keyframe): number {
   const match = /translate\((-?[\d.]+)px/.exec(String(frame.transform));
@@ -195,7 +196,7 @@ describe("il raccordo che scorre", () => {
     expect(xOf(back.keyframes[0])).toBeLessThan(0);
   });
 
-  it("la stessa scheda che cambia posto fa scorrere la sagoma ma non il contenuto", async () => {
+  it("la stessa scheda che cambia posto scorre con la sua sagoma, ma il contenuto no", async () => {
     const { strip, menu, panel } = pane("p1", ["a", "b", "c"], 2);
     mountTabStrips(lifetime);
     // Fissata, «c» passa in testa: la chiave cambia, il documento no.
@@ -207,7 +208,14 @@ describe("il raccordo che scorre", () => {
       menu,
     );
     await settled();
-    expect(driver.plays.some((play) => play.timing.pseudo === "::before")).toBe(true);
+    const [c, a, b] = strip.querySelectorAll(".tab-entry");
+    // La linguetta parte da dov'era e la sagoma, sua figlia, viaggia con lei:
+    // una corsa sola, niente in più sullo pseudo-elemento.
+    const own = driver.plays.find((play) => play.el === c && !play.timing.pseudo)!;
+    expect(xOf(own.keyframes[0])).toBe(2 * WIDTH);
+    expect(driver.plays.some((play) => play.timing.pseudo === "::before")).toBe(false);
+    expect(xOf(driver.plays.find((play) => play.el === a)!.keyframes[0])).toBe(-WIDTH);
+    expect(xOf(driver.plays.find((play) => play.el === b)!.keyframes[0])).toBe(-WIDTH);
     expect(driver.plays.some((play) => play.el === panel)).toBe(false);
   });
 
@@ -226,6 +234,22 @@ describe("il raccordo che scorre", () => {
     expect(start).toBeLessThan(WIDTH);
     expect(start).toBeGreaterThan(-WIDTH);
     expect(start).not.toBe(WIDTH);
+  });
+
+  it("guarda la striscia al fotogramma dopo, una volta sola per più cambi", async () => {
+    const { strip } = pane("p1", ["a", "b", "c"], 0);
+    mountTabStrips(lifetime);
+    select(strip, 1);
+    select(strip, 2);
+    // L'osservatore ha già scattato, ma posti e scorrimento non si leggono a
+    // metà di un cambio di scheda: niente si muove prima del fotogramma.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(driver.plays).toHaveLength(0);
+    await settled();
+    const shapes = driver.plays.filter((play) => play.timing.pseudo === "::before");
+    expect(shapes).toHaveLength(1);
+    expect(xOf(shapes[0].keyframes[0])).toBe(-2 * WIDTH);
   });
 
   it("un riquadro nato dopo viene seguito anche lui", async () => {
@@ -248,6 +272,103 @@ describe("il raccordo che scorre", () => {
     expect(driver.plays.some((play) => play.timing.pseudo === "::before")).toBe(false);
     const fade = driver.plays.find((play) => play.el === panel)!;
     expect(fade.keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+  });
+});
+
+describe("una linguetta che si chiude (#411 B-04)", () => {
+  it("il «+» torna prima che il motore disegni: nessun fotogramma senza", async () => {
+    const { strip, menu } = pane("p1", ["a", "b", "c"], 0);
+    mountTabStrips(lifetime);
+    const plus = strip.querySelector(".tab-new")!;
+    strip.replaceChildren(strip.firstElementChild!, entry("a", 0, true), entry("c", 1, false), menu);
+    // L'osservatore consegna a fine giro, prima di qualunque fotogramma.
+    await Promise.resolve();
+    expect(strip.querySelector(".tab-new")).toBe(plus);
+    expect(plus.nextElementSibling).toBe(menu);
+  });
+
+  it("chi sta a destra scorre al posto nuovo in una corsa sola, chi sta a sinistra resta", async () => {
+    const { strip, menu } = pane("p1", ["a", "b", "c", "d"], 0);
+    mountTabStrips(lifetime);
+    // Si chiude «b»: la vista rifà i figli con gli indici nuovi.
+    strip.replaceChildren(strip.firstElementChild!, entry("a", 0, true), entry("c", 1, false), entry("d", 2, false), menu);
+    await settled();
+    const [a, c, d] = strip.querySelectorAll(".tab-entry");
+    expect(driver.plays.some((play) => play.el === a)).toBe(false);
+    for (const moved of [c, d]) {
+      const plays = driver.plays.filter((play) => play.el === moved);
+      expect(plays).toHaveLength(1);
+      // Parte da un posto più a destra e arriva al suo, senza tornare indietro.
+      const xs = plays[0]!.keyframes.map(xOf);
+      expect(xs[0]).toBe(WIDTH);
+      expect(xs[xs.length - 1]).toBe(0);
+      for (let i = 1; i < xs.length; i++) expect(xs[i]!).toBeLessThanOrEqual(xs[i - 1]! + 0.5);
+    }
+    // La sagoma non ha un viaggio suo: l'attiva è rimasta dov'era.
+    expect(driver.plays.some((play) => play.timing.pseudo === "::before")).toBe(false);
+  });
+
+  it("chiusa l'attiva, la sagoma della nuova somma il suo viaggio a quello della linguetta", async () => {
+    const { strip, menu } = pane("p1", ["a", "b", "c"], 1);
+    mountTabStrips(lifetime);
+    // Si chiude «b», l'attiva: lo diventa «c», che scivola da 240 a 120.
+    strip.replaceChildren(strip.firstElementChild!, entry("a", 0, false), entry("c", 1, true), menu);
+    await settled();
+    const c = strip.querySelectorAll(".tab-entry")[1]!;
+    const own = driver.plays.find((play) => play.el === c && !play.timing.pseudo)!;
+    expect(xOf(own.keyframes[0])).toBe(WIDTH);
+    // La sagoma era su «b», a 120: la linguetta la porta già da 240, e lei
+    // aggiunge solo i -120 che mancano. Insieme partono da 120, dov'era.
+    const shape = driver.plays.find((play) => play.el === c && play.timing.pseudo === "::before")!;
+    expect(xOf(shape.keyframes[0]) + xOf(own.keyframes[0])).toBe(0);
+  });
+
+  it("col movimento ridotto il passo è uno scatto unico, senza corse", async () => {
+    setMotionPreference("reduced");
+    const { strip, menu } = pane("p1", ["a", "b", "c"], 0);
+    mountTabStrips(lifetime);
+    strip.replaceChildren(strip.firstElementChild!, entry("a", 0, true), entry("c", 1, false), menu);
+    await settled();
+    expect(driver.plays).toHaveLength(0);
+  });
+
+  it("finita la corsa, sulle linguette e sul «+» non resta niente: né trasformazioni in linea, né corse", async () => {
+    const { strip, menu } = pane("p1", ["a", "b", "c"], 0);
+    mountTabStrips(lifetime);
+    const plus = strip.querySelector<HTMLElement>(".tab-new")!;
+    placeAfterTabs(strip, plus);
+    strip.replaceChildren(strip.firstElementChild!, entry("a", 0, true), entry("c", 1, false), menu);
+    await settled();
+    // Il «+» c'era e scorre con le altre: la prova non è vuota.
+    expect(driver.plays.some((play) => play.el === plus)).toBe(true);
+    driver.advance(5000);
+    expect(activeMotions()).toBe(0);
+    for (const each of [...strip.querySelectorAll<HTMLElement>(".tab-entry"), plus]) {
+      expect(each.style.transform).toBe("");
+      expect(each.style.translate).toBe("");
+    }
+  });
+});
+
+/// Il «+» sta dopo l'ultima linguetta, come lo mette il motore.
+function placeAfterTabs(strip: HTMLElement, plus: HTMLElement): void {
+  Object.defineProperty(plus, "offsetLeft", { get: () => strip.querySelectorAll(".tab-entry").length * WIDTH });
+}
+
+describe("un foglio nuovo (#423 stage-split)", () => {
+  it("le prime schede arrivano col foglio: il «+» non scorre dal posto vuoto in testa", async () => {
+    // Il foglio nasce con la striscia vuota, e la vista ci scrive la scheda subito dopo.
+    const { strip, menu } = pane("p2", [], -1);
+    mountTabStrips(lifetime);
+    const plus = strip.querySelector<HTMLElement>(".tab-new")!;
+    placeAfterTabs(strip, plus);
+    strip.replaceChildren(strip.firstElementChild!, entry("a", 0, true), menu);
+    await settled();
+    expect(strip.querySelector(".tab-new")).toBe(plus);
+    // Una corsa del «+» dentro l'entrata del foglio salterebbe quando il
+    // foglio si richiude a metà: è il salto che il banco del movimento vede.
+    expect(driver.plays.some((play) => play.el === plus)).toBe(false);
+    expect(activeMotions()).toBe(0);
   });
 });
 

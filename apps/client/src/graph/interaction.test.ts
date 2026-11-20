@@ -502,6 +502,20 @@ describe("createInteraction (wiring su canvas finto)", () => {
     expect(cs.state().scale).toBeCloseTo(4.48, 3);
   });
 
+  it("l'anello del fuoco sta dentro il canvas, che riempie il riquadro e lo taglierebbe", () => {
+    document.documentElement.style.setProperty("--focus-ring", "#007249");
+    try {
+      emit("focus");
+      expect(canvas.style.outline).toContain("#007249");
+      expect(canvas.style.outlineOffset).toBe("-2px");
+      emit("blur");
+      expect(canvas.style.outline).toBe("");
+      expect(canvas.style.outlineOffset).toBe("");
+    } finally {
+      document.documentElement.style.removeProperty("--focus-ring");
+    }
+  });
+
   it("tastiera: Invio apre il focalizzato, Esc deseleziona, P toggla il pin", () => {
     interaction.focusedNode(1);
     emit("keydown", { key: "Enter" });

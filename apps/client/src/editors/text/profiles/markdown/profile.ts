@@ -17,12 +17,16 @@ import { linkDialog } from "./link-dialog";
 import { livePreview, type LivePreviewCallbacks } from "./livepreview";
 import { cursorElements } from "./cursor-elements";
 import { markdownPaste } from "./paste";
+import { formulaPaste } from "./math/paste";
 import { openLinkKeymap } from "./open-link";
 import { markdownGrammar } from "./grammar";
 import { frontmatterRange } from "./render";
-import { liveReveal } from "../../live-reveal";
 import { blockIdMarks } from "./block-id";
 import { transformKeymap } from "./blocks/transform";
+import { commentSource } from "./comments/source";
+import type { NoteFactsExtensions } from "./note-facts";
+import { italianTypography } from "./typography";
+import { taskRecurrence, type NextOccurrence } from "./task-toggle";
 
 const typography = Prec.high(EditorView.theme({
   ".cm-content": {
@@ -146,6 +150,12 @@ const frontmatter: Extension = [
 export interface MarkdownProfileOptions {
   readonly callbacks: LivePreviewCallbacks;
   readonly completions: CompletionSources;
+  /// La riga dei dati sotto il titolo: in Scrittura (coi Blocchi la mette
+  /// la testata), mai in Sorgente. Senza, la riga non c'è.
+  readonly noteFacts?: NoteFactsExtensions;
+  /// La regola della ricorrenza dei compiti (`task-toggle.ts`): senza, la
+  /// spunta di un compito `🔁` non fa nascere il successivo.
+  readonly nextOccurrence?: NextOccurrence;
 }
 
 export interface MarkdownProfile {
@@ -153,9 +163,9 @@ export interface MarkdownProfile {
   extensions(): Extension;
   /// Changes whether live-preview decorations are mounted on the next reconfigure.
   setLivePreview(on: boolean): void;
-  /// I Blocchi (H1): `null` spenti; altrimenti le loro estensioni, sopra la
-  /// Live, con la politica `mai` qualunque sia `editor.live-reveal`. Si
-  /// caricano a richiesta: fino ad allora `[]` tiene già la politica.
+  /// I Blocchi (H1), dentro Scrittura: `null` spenti; altrimenti le loro
+  /// estensioni, sopra la resa viva, con la rivelazione dei segni di
+  /// `editor.live-reveal` come il resto della resa.
   setBlocks(extension: Extension | null): void;
   /// Replaces the syntax declaration used by live preview on the next reconfigure.
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
@@ -175,6 +185,10 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
   // Sorgente) tiene la stessa istanza del plugin, e con lei le parole
   // ignorate in questa sessione.
   let proof: Extension = [];
+  // La tipografia italiana (`editor.typography`), in Sorgente e in Scrittura:
+  // un'istanza sola, che tiene l'impostazione letta fra un `reconfigure` e
+  // l'altro.
+  const quotes = italianTypography({ forms: () => syntaxForms });
 
   return {
     extensions() {
@@ -183,14 +197,22 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         monospaceCode,
         frontmatter,
         markdownEditingExtensions(),
+        // Le formule incollate coi loro delimitatori (T65), prima dell'incolla
+        // del Markdown.
+        formulaPaste,
         markdownPaste,
+        quotes,
         openLinkKeymap(options.callbacks),
         markdown({ base: markdownGrammar, codeLanguages: languages }),
         cursorElements,
-        // «Trasforma in» da tastiera (Mod-Alt-0…8) vale in Live e in Blocchi.
-        previewOn ? [livePreview(options.callbacks, syntaxForms), linkDialog(options.completions.searchNotes), blockIdMarks, Prec.high(keymap.of(transformKeymap))] : [],
-        previewOn && blocks !== null ? [Prec.highest(liveReveal.of("mai")), blocks] : [],
+        // «Trasforma in» da tastiera (Mod-Alt-0…8) vale in Scrittura.
+        previewOn ? [livePreview(options.callbacks, syntaxForms), linkDialog(options.completions.searchNotes), blockIdMarks, Prec.high(keymap.of(transformKeymap))] : commentSource(syntaxForms),
+        // I Blocchi stanno dentro Scrittura, sopra la resa viva; la
+        // rivelazione dei segni resta quella di `editor.live-reveal`.
+        previewOn && blocks !== null ? blocks : [],
+        previewOn && options.noteFacts ? [options.noteFacts.field, blocks === null ? options.noteFacts.live : []] : [],
         markdownCompletions(options.completions),
+        options.nextOccurrence ? taskRecurrence.of(options.nextOccurrence) : [],
         proof,
       ];
     },

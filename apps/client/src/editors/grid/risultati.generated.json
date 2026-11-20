@@ -1,0 +1,581 @@
+{
+  "$generato": "File generato da crates/fub-format-xlsx/tests/ts_risultati.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --test ts_risultati",
+  "elenchi": [
+    "anchorMode",
+    "areas",
+    "calcMode",
+    "category",
+    "func",
+    "group",
+    "h",
+    "issue",
+    "kind",
+    "label",
+    "layout",
+    "mode",
+    "orientation",
+    "paper",
+    "pattern",
+    "scope",
+    "showAs",
+    "sort",
+    "subtotals",
+    "subtype",
+    "type",
+    "underline",
+    "v",
+    "vert",
+    "visibility"
+  ],
+  "comandi": {
+    "insert.chartRecommendations": {
+      "chiavi": {},
+      "colonne": {
+        "label": "fogli.result.col.label",
+        "subtype": "fogli.result.col.subtype",
+        "type": "fogli.result.col.type"
+      },
+      "parole": {
+        "Clustered Bar": "fogli.result.word.clustered_bar",
+        "Clustered Column": "fogli.result.word.clustered_column",
+        "Line with Markers": "fogli.result.word.line_with_markers",
+        "Stacked Bar": "fogli.result.word.stacked_bar",
+        "Stacked Column": "fogli.result.word.stacked_column",
+        "bar": "fogli.result.word.bar",
+        "column": "fogli.result.word.column",
+        "line": "fogli.result.word.line",
+        "markers": "fogli.result.word.markers",
+        "stacked": "fogli.result.word.stacked"
+      }
+    },
+    "data.validate": {
+      "chiavi": {
+        "ok": "fogli.result.key.ok"
+      },
+      "colonne": {},
+      "parole": {}
+    },
+    "formulas.functions": {
+      "chiavi": {},
+      "colonne": {
+        "category": "fogli.result.col.category",
+        "description": "fogli.result.col.description",
+        "name": "fogli.result.col.name",
+        "signature": "fogli.result.col.signature"
+      },
+      "parole": {
+        "AddIn": "fogli.result.word.addin",
+        "Compatibility": "fogli.result.word.compatibility",
+        "Cube": "fogli.result.word.cube",
+        "Database": "fogli.result.word.database",
+        "DateTime": "fogli.result.word.datetime",
+        "Engineering": "fogli.result.word.engineering",
+        "Financial": "fogli.result.word.financial",
+        "Information": "fogli.result.word.information",
+        "Logical": "fogli.result.word.logical",
+        "Lookup": "fogli.result.word.lookup",
+        "MathTrig": "fogli.result.word.mathtrig",
+        "Statistical": "fogli.result.word.statistical",
+        "Text": "fogli.result.word.text",
+        "Web": "fogli.result.word.web"
+      }
+    },
+    "formulas.nameManager": {
+      "chiavi": {},
+      "colonne": {
+        "comment": "fogli.result.col.comment",
+        "name": "fogli.result.col.name",
+        "refersTo": "fogli.result.col.refersTo",
+        "scope": "fogli.result.col.scope",
+        "value": "fogli.result.col.value"
+      },
+      "parole": {
+        "Workbook": "fogli.result.word.workbook"
+      }
+    },
+    "formulas.tracePrecedents": {
+      "chiavi": {},
+      "colonne": {
+        "range": "fogli.result.col.range",
+        "sheet": "fogli.result.col.sheet"
+      },
+      "parole": {}
+    },
+    "formulas.traceDependents": {
+      "chiavi": {},
+      "colonne": {
+        "cell": "fogli.result.col.cell",
+        "sheet": "fogli.result.col.sheet"
+      },
+      "parole": {}
+    },
+    "formulas.errorChecking": {
+      "chiavi": {
+        "circular": "fogli.result.key.circular",
+        "errors": "fogli.result.key.errors"
+      },
+      "colonne": {
+        "cell": "fogli.result.col.cell",
+        "error": "fogli.result.col.error",
+        "formula": "fogli.result.col.formula",
+        "sheet": "fogli.result.col.sheet"
+      },
+      "parole": {}
+    },
+    "formulas.evaluateFormula": {
+      "chiavi": {
+        "formula": "fogli.result.key.formula",
+        "result": "fogli.result.key.result",
+        "steps": "fogli.result.key.steps"
+      },
+      "colonne": {
+        "expression": "fogli.result.col.expression",
+        "value": "fogli.result.col.value"
+      },
+      "parole": {}
+    },
+    "formulas.evaluate": {
+      "chiavi": {
+        "value": "fogli.result.key.value"
+      },
+      "colonne": {},
+      "parole": {}
+    },
+    "review.workbookStatistics": {
+      "chiavi": {
+        "cellsWithData": "fogli.result.key.cellsWithData",
+        "charts": "fogli.result.key.charts",
+        "comments": "fogli.result.key.comments",
+        "endOfSheet": "fogli.result.key.endOfSheet",
+        "formulas": "fogli.result.key.formulas",
+        "name": "fogli.result.key.name",
+        "names": "fogli.result.key.names",
+        "sheet": "fogli.result.key.sheet",
+        "sheets": "fogli.result.key.sheets",
+        "tables": "fogli.result.key.tables",
+        "workbook": "fogli.result.key.workbook"
+      },
+      "colonne": {},
+      "parole": {}
+    },
+    "review.checkAccessibility": {
+      "chiavi": {},
+      "colonne": {
+        "count": "fogli.result.col.count",
+        "issue": "fogli.result.col.issue",
+        "sheet": "fogli.result.col.sheet"
+      },
+      "parole": {
+        "Default sheet name": "fogli.result.word.default_sheet_name",
+        "Merged cells": "fogli.result.word.merged_cells"
+      }
+    },
+    "document.inspect": {
+      "chiavi": {
+        "activeCell": "fogli.result.key.activeCell",
+        "activeSheet": "fogli.result.key.activeSheet",
+        "calcMode": "fogli.result.key.calcMode",
+        "dirty": "fogli.result.key.dirty",
+        "mode": "fogli.result.key.mode",
+        "names": "fogli.result.key.names",
+        "path": "fogli.result.key.path",
+        "redo": "fogli.result.key.redo",
+        "selection": "fogli.result.key.selection",
+        "sheets": "fogli.result.key.sheets",
+        "theme": "fogli.result.key.theme",
+        "title": "fogli.result.key.title",
+        "undo": "fogli.result.key.undo"
+      },
+      "colonne": {
+        "autofilter": "fogli.result.col.autofilter",
+        "cells": "fogli.result.col.cells",
+        "charts": "fogli.result.col.charts",
+        "comments": "fogli.result.col.comments",
+        "conditionalFormats": "fogli.result.col.conditionalFormats",
+        "freeze": "fogli.result.col.freeze",
+        "images": "fogli.result.col.images",
+        "merges": "fogli.result.col.merges",
+        "name": "fogli.result.col.name",
+        "protected": "fogli.result.col.protected",
+        "refersTo": "fogli.result.col.refersTo",
+        "scope": "fogli.result.col.scope",
+        "shapes": "fogli.result.col.shapes",
+        "tabColor": "fogli.result.col.tabColor",
+        "tables": "fogli.result.col.tables",
+        "usedRange": "fogli.result.col.usedRange",
+        "validations": "fogli.result.col.validations",
+        "visibility": "fogli.result.col.visibility",
+        "zoom": "fogli.result.col.zoom"
+      },
+      "parole": {
+        "Automatic": "fogli.result.word.automatic",
+        "Ready": "fogli.result.word.ready",
+        "Visible": "fogli.result.word.visible"
+      }
+    },
+    "sheet.read": {
+      "chiavi": {
+        "range": "fogli.result.key.range",
+        "sheet": "fogli.result.key.sheet",
+        "values": "fogli.result.key.values"
+      },
+      "colonne": {},
+      "parole": {}
+    },
+    "cell.get": {
+      "chiavi": {
+        "align": "fogli.result.key.align",
+        "bg": "fogli.result.key.bg",
+        "bold": "fogli.result.key.bold",
+        "borders": "fogli.result.key.borders",
+        "bottom": "fogli.result.key.bottom",
+        "cell": "fogli.result.key.cell",
+        "charset": "fogli.result.key.charset",
+        "color": "fogli.result.key.color",
+        "comment": "fogli.result.key.comment",
+        "diag_down": "fogli.result.key.diag_down",
+        "diag_up": "fogli.result.key.diag_up",
+        "dxf_stated": "fogli.result.key.dxf_stated",
+        "family": "fogli.result.key.family",
+        "fg": "fogli.result.key.fg",
+        "fill": "fogli.result.key.fill",
+        "font": "fogli.result.key.font",
+        "formula": "fogli.result.key.formula",
+        "h": "fogli.result.key.h",
+        "hidden": "fogli.result.key.hidden",
+        "hyperlink": "fogli.result.key.hyperlink",
+        "indent": "fogli.result.key.indent",
+        "input": "fogli.result.key.input",
+        "italic": "fogli.result.key.italic",
+        "left": "fogli.result.key.left",
+        "locked": "fogli.result.key.locked",
+        "merge": "fogli.result.key.merge",
+        "name": "fogli.result.key.name",
+        "num_fmt": "fogli.result.key.num_fmt",
+        "pattern": "fogli.result.key.pattern",
+        "picture": "fogli.result.key.picture",
+        "protection": "fogli.result.key.protection",
+        "quote_prefix": "fogli.result.key.quote_prefix",
+        "right": "fogli.result.key.right",
+        "rotation": "fogli.result.key.rotation",
+        "scheme": "fogli.result.key.scheme",
+        "shrink": "fogli.result.key.shrink",
+        "size": "fogli.result.key.size",
+        "spill": "fogli.result.key.spill",
+        "spilledFrom": "fogli.result.key.spilledFrom",
+        "strike": "fogli.result.key.strike",
+        "style": "fogli.result.key.style",
+        "text": "fogli.result.key.text",
+        "top": "fogli.result.key.top",
+        "type": "fogli.result.key.type",
+        "underline": "fogli.result.key.underline",
+        "v": "fogli.result.key.v",
+        "value": "fogli.result.key.value",
+        "vert": "fogli.result.key.vert",
+        "wrap": "fogli.result.key.wrap"
+      },
+      "colonne": {},
+      "parole": {
+        "Baseline": "fogli.result.word.baseline",
+        "Bottom": "fogli.result.word.bottom",
+        "General": "fogli.result.word.general",
+        "None": "fogli.result.word.none",
+        "number": "fogli.result.word.number"
+      }
+    },
+    "selection.stats": {
+      "chiavi": {
+        "average": "fogli.result.key.average",
+        "count": "fogli.result.key.count",
+        "max": "fogli.result.key.max",
+        "min": "fogli.result.key.min",
+        "numeric": "fogli.result.key.numeric",
+        "sum": "fogli.result.key.sum"
+      },
+      "colonne": {},
+      "parole": {}
+    },
+    "arrange.selectionPane": {
+      "chiavi": {},
+      "colonne": {
+        "anchorMode": "fogli.result.col.anchorMode",
+        "at": "fogli.result.col.at",
+        "id": "fogli.result.col.id",
+        "kind": "fogli.result.col.kind",
+        "name": "fogli.result.col.name",
+        "title": "fogli.result.col.title"
+      },
+      "parole": {
+        "chart": "fogli.result.word.chart",
+        "moveAndSize": "fogli.result.word.moveandsize"
+      }
+    },
+    "formulas.recentlyUsed": {
+      "chiavi": {},
+      "colonne": {},
+      "parole": {}
+    },
+    "formulas.financial": {
+      "chiavi": {},
+      "colonne": {
+        "category": "fogli.result.col.category",
+        "description": "fogli.result.col.description",
+        "name": "fogli.result.col.name",
+        "signature": "fogli.result.col.signature"
+      },
+      "parole": {
+        "Financial": "fogli.result.word.financial"
+      }
+    },
+    "formulas.logical": {
+      "chiavi": {},
+      "colonne": {
+        "category": "fogli.result.col.category",
+        "description": "fogli.result.col.description",
+        "name": "fogli.result.col.name",
+        "signature": "fogli.result.col.signature"
+      },
+      "parole": {
+        "Logical": "fogli.result.word.logical"
+      }
+    },
+    "formulas.text": {
+      "chiavi": {},
+      "colonne": {
+        "category": "fogli.result.col.category",
+        "description": "fogli.result.col.description",
+        "name": "fogli.result.col.name",
+        "signature": "fogli.result.col.signature"
+      },
+      "parole": {
+        "Text": "fogli.result.word.text"
+      }
+    },
+    "formulas.dateTime": {
+      "chiavi": {},
+      "colonne": {
+        "category": "fogli.result.col.category",
+        "description": "fogli.result.col.description",
+        "name": "fogli.result.col.name",
+        "signature": "fogli.result.col.signature"
+      },
+      "parole": {
+        "DateTime": "fogli.result.word.datetime"
+      }
+    },
+    "formulas.lookupReference": {
+      "chiavi": {},
+      "colonne": {
+        "category": "fogli.result.col.category",
+        "description": "fogli.result.col.description",
+        "name": "fogli.result.col.name",
+        "signature": "fogli.result.col.signature"
+      },
+      "parole": {
+        "Lookup": "fogli.result.word.lookup"
+      }
+    },
+    "formulas.mathTrig": {
+      "chiavi": {},
+      "colonne": {
+        "category": "fogli.result.col.category",
+        "description": "fogli.result.col.description",
+        "name": "fogli.result.col.name",
+        "signature": "fogli.result.col.signature"
+      },
+      "parole": {
+        "MathTrig": "fogli.result.word.mathtrig"
+      }
+    },
+    "formulas.moreFunctions": {
+      "chiavi": {},
+      "colonne": {
+        "category": "fogli.result.col.category",
+        "description": "fogli.result.col.description",
+        "name": "fogli.result.col.name",
+        "signature": "fogli.result.col.signature"
+      },
+      "parole": {
+        "Statistical": "fogli.result.word.statistical"
+      }
+    },
+    "review.spelling": {
+      "chiavi": {
+        "done": "fogli.result.key.done",
+        "issues": "fogli.result.key.issues"
+      },
+      "colonne": {
+        "cell": "fogli.result.col.cell",
+        "suggestions": "fogli.result.col.suggestions",
+        "word": "fogli.result.col.word"
+      },
+      "parole": {}
+    },
+    "review.thesaurus": {
+      "chiavi": {},
+      "colonne": {},
+      "parole": {}
+    },
+    "pivot.fields": {
+      "chiavi": {
+        "anchor": "fogli.result.key.anchor",
+        "calculatedFields": "fogli.result.key.calculatedFields",
+        "columns": "fogli.result.key.columns",
+        "fields": "fogli.result.key.fields",
+        "filters": "fogli.result.key.filters",
+        "grandTotalsCols": "fogli.result.key.grandTotalsCols",
+        "grandTotalsRows": "fogli.result.key.grandTotalsRows",
+        "id": "fogli.result.key.id",
+        "layout": "fogli.result.key.layout",
+        "name": "fogli.result.key.name",
+        "range": "fogli.result.key.range",
+        "records": "fogli.result.key.records",
+        "rows": "fogli.result.key.rows",
+        "sheet": "fogli.result.key.sheet",
+        "showHeaders": "fogli.result.key.showHeaders",
+        "source": "fogli.result.key.source",
+        "style": "fogli.result.key.style",
+        "subtotals": "fogli.result.key.subtotals",
+        "values": "fogli.result.key.values",
+        "valuesOnRows": "fogli.result.key.valuesOnRows",
+        "valuesPosition": "fogli.result.key.valuesPosition"
+      },
+      "colonne": {
+        "areas": "fogli.result.col.areas",
+        "collapsed": "fogli.result.col.collapsed",
+        "date": "fogli.result.col.date",
+        "field": "fogli.result.col.field",
+        "func": "fogli.result.col.func",
+        "group": "fogli.result.col.group",
+        "name": "fogli.result.col.name",
+        "numberFormat": "fogli.result.col.numberFormat",
+        "numeric": "fogli.result.col.numeric",
+        "samples": "fogli.result.col.samples",
+        "showAs": "fogli.result.col.showAs",
+        "sort": "fogli.result.col.sort"
+      },
+      "parole": {
+        "asc": "fogli.result.word.asc",
+        "compact": "fogli.result.word.compact",
+        "none": "fogli.result.word.none",
+        "normal": "fogli.result.word.normal",
+        "rows": "fogli.result.word.rows",
+        "sum": "fogli.result.word.sum",
+        "top": "fogli.result.word.top",
+        "values": "fogli.result.word.values"
+      }
+    },
+    "pivot.fieldList": {
+      "chiavi": {
+        "anchor": "fogli.result.key.anchor",
+        "calculatedFields": "fogli.result.key.calculatedFields",
+        "columns": "fogli.result.key.columns",
+        "fields": "fogli.result.key.fields",
+        "filters": "fogli.result.key.filters",
+        "grandTotalsCols": "fogli.result.key.grandTotalsCols",
+        "grandTotalsRows": "fogli.result.key.grandTotalsRows",
+        "id": "fogli.result.key.id",
+        "layout": "fogli.result.key.layout",
+        "name": "fogli.result.key.name",
+        "range": "fogli.result.key.range",
+        "records": "fogli.result.key.records",
+        "rows": "fogli.result.key.rows",
+        "sheet": "fogli.result.key.sheet",
+        "showHeaders": "fogli.result.key.showHeaders",
+        "source": "fogli.result.key.source",
+        "style": "fogli.result.key.style",
+        "subtotals": "fogli.result.key.subtotals",
+        "values": "fogli.result.key.values",
+        "valuesOnRows": "fogli.result.key.valuesOnRows",
+        "valuesPosition": "fogli.result.key.valuesPosition"
+      },
+      "colonne": {
+        "areas": "fogli.result.col.areas",
+        "collapsed": "fogli.result.col.collapsed",
+        "date": "fogli.result.col.date",
+        "field": "fogli.result.col.field",
+        "func": "fogli.result.col.func",
+        "group": "fogli.result.col.group",
+        "name": "fogli.result.col.name",
+        "numberFormat": "fogli.result.col.numberFormat",
+        "numeric": "fogli.result.col.numeric",
+        "samples": "fogli.result.col.samples",
+        "showAs": "fogli.result.col.showAs",
+        "sort": "fogli.result.col.sort"
+      },
+      "parole": {
+        "asc": "fogli.result.word.asc",
+        "compact": "fogli.result.word.compact",
+        "none": "fogli.result.word.none",
+        "normal": "fogli.result.word.normal",
+        "rows": "fogli.result.word.rows",
+        "sum": "fogli.result.word.sum",
+        "top": "fogli.result.word.top",
+        "values": "fogli.result.word.values"
+      }
+    },
+    "pivot.list": {
+      "chiavi": {},
+      "colonne": {
+        "anchor": "fogli.result.col.anchor",
+        "calculatedFields": "fogli.result.col.calculatedFields",
+        "columns": "fogli.result.col.columns",
+        "filters": "fogli.result.col.filters",
+        "grandTotalsCols": "fogli.result.col.grandTotalsCols",
+        "grandTotalsRows": "fogli.result.col.grandTotalsRows",
+        "id": "fogli.result.col.id",
+        "layout": "fogli.result.col.layout",
+        "name": "fogli.result.col.name",
+        "range": "fogli.result.col.range",
+        "rows": "fogli.result.col.rows",
+        "sheet": "fogli.result.col.sheet",
+        "showHeaders": "fogli.result.col.showHeaders",
+        "source": "fogli.result.col.source",
+        "style": "fogli.result.col.style",
+        "subtotals": "fogli.result.col.subtotals",
+        "values": "fogli.result.col.values",
+        "valuesOnRows": "fogli.result.col.valuesOnRows",
+        "valuesPosition": "fogli.result.col.valuesPosition"
+      },
+      "parole": {
+        "compact": "fogli.result.word.compact",
+        "top": "fogli.result.word.top"
+      }
+    },
+    "data.scenarioManager": {
+      "chiavi": {
+        "scenarios": "fogli.result.key.scenarios"
+      },
+      "colonne": {
+        "changing": "fogli.result.col.changing",
+        "comment": "fogli.result.col.comment",
+        "name": "fogli.result.col.name",
+        "sheet": "fogli.result.col.sheet",
+        "values": "fogli.result.col.values"
+      },
+      "parole": {}
+    },
+    "file.printPreview": {
+      "chiavi": {
+        "pageList": "fogli.result.key.pageList",
+        "pages": "fogli.result.key.pages"
+      },
+      "colonne": {
+        "columns": "fogli.result.col.columns",
+        "height": "fogli.result.col.height",
+        "orientation": "fogli.result.col.orientation",
+        "page": "fogli.result.col.page",
+        "paper": "fogli.result.col.paper",
+        "range": "fogli.result.col.range",
+        "rows": "fogli.result.col.rows",
+        "scale": "fogli.result.col.scale",
+        "sheet": "fogli.result.col.sheet",
+        "width": "fogli.result.col.width"
+      },
+      "parole": {
+        "Letter": "fogli.result.word.letter",
+        "portrait": "fogli.result.word.portrait"
+      }
+    }
+  }
+}

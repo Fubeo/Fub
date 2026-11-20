@@ -14,13 +14,15 @@ import { plural, t } from "../../strings";
 import { gesture as asGesture, removeOps } from "../edit";
 import { gripAt } from "../frame";
 import { toScene } from "../../view";
-import type { Unit } from "../hit";
+import { Unit, type Erasable, type ForeignBlock } from "../hit";
 import { preciseEraseOps, type StrokeCut } from "../erase-precise";
 import { HIT_PX } from "./constants";
 import type { EditorContext } from "./context";
 import { toLocal } from "../../../../ink/geometry";
 import { holdsPath } from "./helpers";
-import type { EraseGesture } from "./types";
+import type { EraseGesture, Gesture } from "./types";
+import { clampToPage, onPage } from "../page-bounds";
+import type { ToolId } from "../registry";
 import type { PointMenu } from "./selection-commands";
 
 /// Quanto dopo il tasto laterale della penna lasciato arriva il menu
@@ -59,37 +61,51 @@ export function installCurvatureTool(ctx: EditorContext): void {
   ctx.redoable = redoable;
 
   const finishErase = (g: EraseGesture): void => {
-    const units = g.sweep.marked();
+    const marked = g.sweep.marked();
     if (ctx.grid.eraser === "precise") {
-      finishPrecise(g, units);
+      finishPrecise(g, marked);
       return;
     }
-    if (units.length === 0) {
+    if (marked.length === 0) {
       painter.setDraft(null);
       return;
     }
-    if (commit("draw.action.erase", asGesture(removeOps(withLabels(units)))) !== null) {
-      announce(`${plural(units.length, "draw.erased.one", "draw.erased.other")} ${objects()}`);
+    const [units, foreign] = split(marked);
+    if (commit("draw.action.erase", asGesture(removeOps(withLabels(units), foreign))) !== null) {
+      announce(`${plural(marked.length, "draw.erased.one", "draw.erased.other")} ${objects()}`);
     }
+  };
+
+  /// Ciò che la gomma ha segnato, diviso fra gli oggetti e i blocchi
+  /// estranei, che se ne vanno interi.
+  const split = (marked: readonly Erasable[]): [Unit[], ForeignBlock[]] => {
+    const units: Unit[] = [];
+    const foreign: ForeignBlock[] = [];
+    for (const each of marked) {
+      if (each instanceof Unit) units.push(each);
+      else foreign.push(each);
+    }
+    return [units, foreign];
   };
 
   /// La gomma precisa: i tratti tagliati restano a pezzi, gli oggetti che
   /// non sono tratti, e i tratti cancellati tutti, se ne vanno interi.
-  const finishPrecise = (g: EraseGesture, units: readonly Unit[]): void => {
+  const finishPrecise = (g: EraseGesture, marked: readonly Erasable[]): void => {
     const whole: Unit[] = [];
     const cuts: StrokeCut[] = [];
+    const [units, foreign] = split(marked);
     for (const unit of units) {
       const cut = g.cuts.get(unit.key);
       if (cut === undefined) continue;
       if (cut === "whole") whole.push(unit);
       else cuts.push(cut);
     }
-    const gone = whole.length + cuts.filter((cut) => cut.pieces.length === 0).length;
-    if (whole.length === 0 && cuts.length === 0) {
+    const gone = whole.length + foreign.length + cuts.filter((cut) => cut.pieces.length === 0).length;
+    if (whole.length === 0 && foreign.length === 0 && cuts.length === 0) {
       painter.setDraft(null);
       return;
     }
-    const planned = preciseEraseOps(ctx.engine.model!, cuts, withLabels(whole), newIds());
+    const planned = preciseEraseOps(ctx.engine.model!, cuts, withLabels(whole), newIds(), foreign);
     if (commit("draw.action.erase", asGesture(planned.ops)) === null) return;
     const said = [
       ...(planned.cut > 0 ? [plural(planned.cut, "draw.erased.part.one", "draw.erased.part.other")] : []),
@@ -99,6 +115,46 @@ export function installCurvatureTool(ctx: EditorContext): void {
   };
 
   const toPoint = (sample: InkSample): Point => [sample.x, sample.y];
+
+  // --- La pagina, sul foglio delle annotazioni ---------------------------------
+
+  /// Il gesto `g`, che scrive un segno sul foglio, non ha ancora un punto.
+  const unplaced = (g: Gesture): boolean => {
+    switch (g.kind) {
+      case "ink":
+        return g.scene.length === 0 && g.held === null;
+      case "shape":
+        return g.from === null;
+      case "note":
+      case "text":
+        return g.at === null;
+      default:
+        return false;
+    }
+  };
+
+  /// Il campione `sample` del gesto `g` portato sulla sua pagina: com'è, se
+  /// il gesto non ne ha una.
+  const kept = (g: Gesture, sample: InkSample): InkSample => {
+    if (g.page === null) return sample;
+    const [x, y] = clampToPage(g.page, [sample.x, sample.y]);
+    return x === sample.x && y === sample.y ? sample : { ...sample, x, y };
+  };
+
+  /// Il punto `p` del gesto `g` portato sulla sua pagina.
+  const keptPoint = (g: Gesture, p: Point): Point => (g.page === null ? p : clampToPage(g.page, p));
+
+  /// Gli strumenti che sul foglio scrivono un segno dove si preme.
+  const MARKING_TOOLS: ReadonlySet<ToolId> = new Set(["pen", "highlighter", "rect", "ellipse", "line", "arrow", "cover", "text", "note"]);
+
+  /// Sul foglio delle annotazioni, se il puntatore in `p` è fuori dalla
+  /// pagina; il foglio lo dice con `data-off-page`, e lì gli strumenti che
+  /// scrivono hanno il cursore normale invece della mira.
+  const offPage = (p: Point | null): boolean => {
+    const off = ctx.folio !== undefined && p !== null && !onPage(ctx.folio.page(), p);
+    surface.toggleAttribute("data-off-page", off);
+    return off;
+  };
 
   // Maiusc, Ctrl o ⌘, e Alt si leggono dall'evento del puntatore prima della
   // pipeline, che ascolta in cattura sullo stesso elemento: registrato prima
@@ -154,9 +210,11 @@ export function installCurvatureTool(ctx: EditorContext): void {
       const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
       ctx.pointerAt = { at: point, pointer };
       // Sopra una maniglia della cornice il cursore dice che cosa fa.
+      const off = offPage(point);
       if (ctx.current === null && ctx.pressed === null) {
         hoverGrip(event);
-        ctx.hoverNib(event.buttons === 0 ? point : null, pointer);
+        // Fuori dalla pagina la punta della penna non si vede: lì non scrive.
+        ctx.hoverNib(event.buttons === 0 && !(off && MARKING_TOOLS.has(ctx.tool)) ? point : null, pointer);
         ctx.hoverRuler(event.buttons === 0 ? point : null, pointer);
       }
     },
@@ -164,6 +222,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
   );
   life.listen(surface, "pointerleave", () => {
     if (ctx.current === null) showGrip(null);
+    offPage(null);
     ctx.pointerAt = null;
     ctx.hoverNib(null, "mouse");
   });
@@ -289,15 +348,22 @@ export function installCurvatureTool(ctx: EditorContext): void {
     onSamples(id, samples) {
       const g = ctx.current;
       if (g === null || g.stroke !== id || samples.length === 0) return;
+      // Sul foglio delle annotazioni fuori dalla pagina non si scrive: un
+      // gesto che comincia fuori non fa niente, nemmeno la Nota; uno che
+      // esce si ferma al bordo.
+      if (g.page !== null && unplaced(g) && !onPage(g.page, toPoint(samples[0]!))) {
+        ctx.current = { stroke: g.stroke, pointer: g.pointer, page: null, kind: "refused" };
+        return;
+      }
       switch (g.kind) {
         case "ink":
           if (g.held !== null) {
-            moveHeld(g, toPoint(samples[samples.length - 1]!));
+            moveHeld(g, keptPoint(g, toPoint(samples[samples.length - 1]!)));
             break;
           }
           // Il contorno si rifà in `onSettled`, una volta per evento.
           for (const each of samples) {
-            const sample = ctx.ruled(each, g.ruler);
+            const sample = kept(g, ctx.ruled(each, g.ruler));
             g.scene.push(sample);
             g.local.push(toLocal(sample, g.to.inverse));
           }
@@ -306,8 +372,8 @@ export function installCurvatureTool(ctx: EditorContext): void {
         case "shape":
           // Il primo punto si aggancia subito, l'ultimo a ogni disegno:
           // Ctrl o ⌘ può cambiare a metà gesto.
-          g.from ??= snapped(toPoint(samples[0]!));
-          g.end = toPoint(samples[samples.length - 1]!);
+          g.from ??= keptPoint(g, snapped(toPoint(samples[0]!)));
+          g.end = keptPoint(g, toPoint(samples[samples.length - 1]!));
           drawShape(g);
           break;
         case "select":
@@ -323,7 +389,11 @@ export function installCurvatureTool(ctx: EditorContext): void {
           ctx.rulerUpdate(g, toPoint(samples[samples.length - 1]!));
           break;
         case "note":
+        case "text":
           g.at ??= toPoint(samples[0]!);
+          break;
+        case "motore":
+          ctx.motoreSamples(g, samples);
           break;
         case "refused":
           break;
@@ -332,7 +402,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
     onPredicted(id, samples) {
       const g = ctx.current;
       if (g === null || g.stroke !== id || g.kind !== "ink" || g.held !== null) return;
-      g.predicted = samples.map((sample) => toLocal(sample, g.to.inverse));
+      g.predicted = samples.map((sample) => toLocal(kept(g, sample), g.to.inverse));
     },
     onSettled(id) {
       // Campioni e predizione dello stesso evento: il contorno e il foglio si
@@ -385,6 +455,14 @@ export function installCurvatureTool(ctx: EditorContext): void {
           ctx.current = null;
           noteAt(g.at, g.pointer);
           return;
+        case "text":
+          ctx.current = null;
+          ctx.textAt(g.at, g.pointer);
+          return;
+        case "motore":
+          ctx.current = null;
+          ctx.motoreEnd(g);
+          return;
         case "refused":
           ctx.current = null;
           return;
@@ -399,6 +477,8 @@ export function installCurvatureTool(ctx: EditorContext): void {
       if (g.kind === "select") showGrip(null);
       // E il righello.
       if (g.kind === "ruler") ctx.rulerCancel(g);
+      // E il gesto sul motore, che rimette la selezione di prima.
+      if (g.kind === "motore") ctx.motoreCancel(g);
       clearPreviews();
     },
     ...(options.touch === undefined ? {} : { touch: options.touch }),

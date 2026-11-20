@@ -74,7 +74,7 @@ fn the_descriptor_claims_fubann_as_text() {
     let descriptor = FubannProvider.descriptor();
     assert_eq!(descriptor.id, ANNOTATIONS_FORMAT_ID);
     assert_eq!(descriptor.id, "fubann");
-    assert_eq!(descriptor.name, "Annotazioni PDF (FubDraw)");
+    assert_eq!(descriptor.name, "Annotazioni PDF");
     assert_eq!(descriptor.extensions, ["fubann"]);
     assert_eq!(descriptor.source, SourceKind::Text);
     assert_eq!(FubannProvider.capabilities(), FormatCapabilities::default());

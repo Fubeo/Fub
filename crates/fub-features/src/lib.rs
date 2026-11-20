@@ -54,9 +54,20 @@
 //!   di Fub; e le impostazioni dell'editor (livello, parti del Personalizzato,
 //!   cartella dei modelli, suggerimenti).
 //!   Fuori dal `default`, dietro la cargo feature `draw`.
+//! - `pdf_export` — l'esportazione delle note in PDF (ADR 0247): il PDF
+//!   scritto dagli elenchi di pagina che la vista misura, con testo vero,
+//!   caratteri incorporati in sotto-insieme, vettori, immagini, collegamenti e
+//!   segnalibri, e il comando `pdf.write_pages` che lo scrive nel vault con un
+//!   lavoro annullabile. Fuori dal `default`, dietro la cargo feature `draw`,
+//!   da cui prende i caratteri.
 //! - [`lavagna`] — la lavagna: il comando `canvas.apply`, che porta in un
 //!   file `.canvas` una lista di operazioni del nucleo (`fub-canvas-core`)
 //!   come una modifica sola, con anteprima e annulla.
+//! - [`tasks`] — i compiti del vault come
+//!   [`ViewProvider`](fub_abi::traits::ViewProvider): i compiti aperti di tutte
+//!   le note, raggruppati per scadenza, con la spunta che passa dal comando
+//!   `note.task.toggle`. Le note le trova `query_index`, dietro la feature
+//!   `tasks`, che accende `search`.
 //! - [`inventory`] — l'elenco delle feature qui sopra, e non una descrizione di
 //!   esso: è da qui che `fub_host::mount` le monta, quindi una feature fuori
 //!   dall'elenco semplicemente non c'è. Le view ne sono un sottoinsieme
@@ -81,6 +92,9 @@ pub mod componenti;
 pub mod dashboard;
 #[cfg(feature = "draw")]
 pub mod draw;
+// I compiti che scadono in un giorno: la pagina del giorno e la Scrivania.
+#[cfg(any(feature = "template", feature = "dashboard"))]
+mod due_tasks;
 // Ogni feature ne usa una parte, e una build parziale lascia spento il resto.
 #[allow(dead_code)]
 mod formats;
@@ -91,8 +105,18 @@ pub mod graph;
 pub mod inventory;
 #[cfg(feature = "lavagna")]
 pub mod lavagna;
+// I tipi di nota: i modelli ne creano le note, le proprietà ne cambiano il
+// tipo e dicono quando manca. Ognuna ne usa una parte.
+// Anche il PDF delle note (coi disegni) li legge: il profilo predefinito per
+// tipo.
+#[cfg(any(feature = "template", feature = "properties", feature = "draw"))]
+#[allow(dead_code)]
+mod note_types;
 #[cfg(feature = "outline")]
 pub mod outline;
+// La prova del motore del PDF delle note (ADR 0247), coi disegni.
+#[cfg(feature = "draw")]
+pub mod pdf_export;
 #[cfg(feature = "proof")]
 pub mod proof;
 #[cfg(feature = "properties")]
@@ -105,6 +129,8 @@ pub mod search;
 pub mod stats;
 #[cfg(feature = "tags")]
 pub mod tags;
+#[cfg(feature = "tasks")]
+pub mod tasks;
 #[cfg(feature = "template")]
 pub mod template;
 #[cfg(feature = "trash")]
@@ -114,7 +140,8 @@ pub mod versioning;
 
 #[cfg(feature = "backlinks")]
 pub use backlinks::{
-    build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_STATUS_VIEW, BACKLINKS_VIEW,
+    build_backlinks_view, BacklinksView, MentionCommands, BACKLINKS_ID, BACKLINKS_STATUS_VIEW,
+    BACKLINKS_VIEW, MENTION_LINK,
 };
 #[cfg(feature = "backup")]
 pub use backup::{
@@ -129,16 +156,21 @@ pub use blocks::{
     COMMENTS_RULE, DIAGRAMS_RULE, DIAGRAM_NS, DIAGRAM_RENDERER, HIGHLIGHT_RULE, MATH_RENDERER,
     MATH_RULE,
 };
+#[cfg(all(feature = "commands", feature = "xlsx"))]
+pub use commands::NOTE_TABLE_SHEET;
 #[cfg(feature = "commands")]
 pub use commands::{
-    occurrences, CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, NOTES_CREATE,
-    NOTES_DUPLICATE, NOTES_FOLDER_PAGE, NOTES_RENAME, NOTES_SUBPAGE, NOTES_TASK_TOGGLE,
-    NOTES_TRASH, SEARCH_OPEN, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS,
-    SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
-    VAULT_UNDO,
+    occurrences, CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, NOTES_BLOCK_MOVE,
+    NOTES_BLOCK_SYNC, NOTES_CREATE, NOTES_DUPLICATE, NOTES_FOLDER_PAGE, NOTES_RENAME,
+    NOTES_SUBPAGE, NOTES_TASK_TOGGLE, NOTES_TRASH, SEARCH_OPEN, SELECTION_WIKILINK,
+    SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
+    TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
 #[cfg(feature = "dashboard")]
-pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
+pub use dashboard::{
+    DashboardView, DASHBOARD_ID, DASHBOARD_VIEW, DESK_BASE_KEY, DESK_TILES_KEY, DESK_TILE_NS,
+    DESK_VIEW,
+};
 #[cfg(feature = "draw")]
 pub use draw::{
     AnnotatedPdfExport, DrawCommands, DrawioExport, ExcalidrawExport, JpegExport, PdfExport,
@@ -151,7 +183,9 @@ pub use draw::{
 pub use formatting::{FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
 pub use graph::{GraphCommands, GraphView, GRAPH_ID, GRAPH_NS, GRAPH_OPEN, GRAPH_VIEW};
-pub use inventory::{every_official_feature, every_official_view, HostWiring, OfficialFeature};
+pub use inventory::{
+    every_official_feature, every_official_view, HostWiring, Jobs, OfficialFeature,
+};
 #[cfg(feature = "lavagna")]
 pub use lavagna::{LavagnaCommands, CANVAS_APPLY, LAVAGNA_ID, LAVAGNA_NS};
 #[cfg(feature = "outline")]
@@ -164,9 +198,11 @@ pub use proof::{ProofCommands, ProofIndex, PROOF_ID, WORDS_KEY, WORD_ADD, WORD_R
 #[cfg(feature = "properties")]
 pub use properties::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
-    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
+    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, NOTES_TYPE_GET,
+    NOTES_TYPE_LIST, NOTES_TYPE_SET, NOTE_TYPES_NS, NOTE_TYPE_PAGE_VIEW, PROPERTIES_ID,
     PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
-    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    PROPERTY_KEY_RENAME, PROPERTY_OPTION_SET, PROPERTY_TARGET_SET, PROPERTY_TYPES_RESTORE,
+    PROPERTY_TYPE_SET,
 };
 #[cfg(feature = "queries")]
 pub use queries::{
@@ -182,14 +218,67 @@ pub use stats::{
 };
 #[cfg(feature = "tags")]
 pub use tags::{build_tags_view, TagCommands, TagPanelView, TAGS_ID, TAGS_VIEW, TAG_RENAME};
+#[cfg(feature = "tasks")]
+pub use tasks::{TasksView, TASKS_ID, TASKS_QUERY_VIEW, TASKS_VIEW};
 #[cfg(feature = "template")]
 pub use template::{
     TemplateCommands, TemplateView, CLOCK_12, CLOCK_24, CLOCK_DATETIME, CLOCK_TIME,
     DAILY_FOLDER_KEY, DAILY_TEMPLATE_KEY, DATE_FORMAT_KEY, ISO_DATE, NOTES_DAILY, NOTES_EXTRACT,
-    NOTES_FROM_TEMPLATE, NOTES_INSERT_DATETIME, NOTES_INSERT_TEMPLATE, NOTES_MERGE, NOTES_RANDOM,
-    NOTES_UNIQUE, TEMPLATE_ID, TEMPLATE_VIEW, TIME_FORMAT_KEY,
+    NOTES_FROM_TEMPLATE, NOTES_FROM_TYPE, NOTES_INSERT_DATETIME, NOTES_INSERT_TEMPLATE,
+    NOTES_MERGE, NOTES_RANDOM, NOTES_UNIQUE, TEMPLATE_ID, TEMPLATE_VIEW, TIME_FORMAT_KEY,
 };
 #[cfg(feature = "trash")]
 pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};
 #[cfg(feature = "versioning")]
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};
+
+// I documenti di un indice che **non tiene niente per documento**: la base,
+// il disegno e il correttore rispondono a domande che non leggono le note
+// consegnate, quindi «ce l'ho» è vero per ogni documento mostrato, e solo per
+// quelli. Il filtro sta in ciascuno dei tre (i moduli di feature non si parlano,
+// `tests/independent_modules.rs`); la prova comune è qui sotto, la riapertura
+// senza riletture la presidia `crates/fub-host/tests/warm_reopening.rs`.
+#[cfg(all(test, feature = "base", feature = "proof"))]
+mod nothing_kept_tests {
+    use fub_abi::edit::Revision;
+    use fub_abi::traits::{EntryKind, IndexProvider, VaultEntry};
+    use fub_abi::DocId;
+    use fub_sdk::testing::conformance::up_to_date_only_reported_what_it_saw;
+
+    fn entry(id: &str, kind: EntryKind, fingerprint: Option<&str>) -> VaultEntry {
+        VaultEntry {
+            id: DocId::new(id),
+            kind,
+            size: 3,
+            mtime: 1,
+            fingerprint: fingerprint.map(Revision::new),
+        }
+    }
+
+    /// Base, disegno e correttore dicono di avere ogni documento mostrato,
+    /// anche senza impronta, e niente di ciò che non è un documento.
+    #[test]
+    fn indexes_without_per_document_state_have_every_document_shown() {
+        #[allow(unused_mut)]
+        let mut indexes: Vec<(&str, Box<dyn IndexProvider>)> = vec![
+            ("base", Box::new(crate::BaseIndex::new())),
+            ("proof", Box::new(crate::ProofIndex::bundled_only())),
+        ];
+        #[cfg(feature = "draw")]
+        indexes.push(("draw", Box::new(crate::draw::DrawIndex)));
+        let shown = [
+            entry("a.md", EntryKind::Document, Some("sha256:a")),
+            entry("b.fubase", EntryKind::Document, None),
+            entry("c.png", EntryKind::Asset, None),
+        ];
+        for (name, index) in &indexes {
+            up_to_date_only_reported_what_it_saw(index.as_ref());
+            let current = index.up_to_date(&shown);
+            assert_eq!(
+                current,
+                vec![DocId::new("a.md"), DocId::new("b.fubase")],
+                "{name}"
+            );
+        }
+    }
+}

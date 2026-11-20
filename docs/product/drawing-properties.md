@@ -60,7 +60,13 @@ in `grid.closed`. Una sezione senza niente da mostrare non c'è.
   Spessore e il Tratteggio; per linee,
   connettori e tracciati aperti, «Punta d’inizio» e «Punta di fine»
   ([Disegni, punte delle linee](drawing-tips.md)).
-- **Testo.** Lo Stile, un corpo e un peso insieme ([Disegni,
+- **Testo.** Per un testo libero scelto da solo, prima di tutto il campo
+  «Testo» con le sue parole, una riga per riga: si scrive lì, va a capo con
+  `Invio`, si scrive lasciando il campo o con `Ctrl+Invio`, e svuotato il
+  testo se ne va. Non c'è per un testo su tracciato, in area, con parole di
+  stili diversi o righe di stili diversi, né per le etichette delle forme e
+  dei connettori, che il campo riscriverebbe perdendo qualcosa. Poi lo Stile,
+  un corpo e un peso insieme ([Disegni,
   tipografia](drawing-typography.md#il-pannello)). Poi
   Carattere, fra Inter, Literata e JetBrains Mono, con sotto il carattere
   usato quando uno non si carica, anche uno dei [caratteri del

@@ -21,15 +21,15 @@ La cartella viene scelta in ordine:
 
 1. `FUB_CONFIG_DIR`;
 2. `fub-config/` accanto all'eseguibile se esiste `fub.portable`;
-3. cartella di configurazione dell'utente per il sistema operativo.
+3. cartella dell'utente per il sistema (sul telefono, [quella privata dell'app](../architecture/phone-frame.md#il-lato-rust)).
 
 | Percorso relativo | Classe | Schema | Contenuto |
 |---|---|---:|---|
 | `settings.json` | autorevole | 1 | impostazioni della macchina |
 | `vaults.json` | autorevole | 1 | vault recenti, preferiti, nome e icona |
 | `view-state.json` | autorevole locale | 1 | stato delle view di questa macchina |
-| `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema |
-| `themes/<id>/` | installato | per tema | fogli, skin e asset |
+| `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema; `extends`, `fonts` e `icons` facoltativi |
+| `themes/<id>/` | installato | per tema | fogli (`sheet-light.css`, `sheet-dark.css`), `skin.css` e asset; con `extends` i fogli sono facoltativi (vedi [Temi installati](permissions-and-security.md#temi-installati)) |
 | `logs/fub.log` | diagnostica | n/a | log del processo |
 | `wasm-plugins/inventory.json` | autorevole | 1 | componenti installati e scelte della macchina |
 | `wasm-plugins/components/<installation>-<sha256>.wasm` | installato | componente | eseguibile verificato |
@@ -49,6 +49,27 @@ abbinamento, coda, cursore, conflitti e l'endpoint a cui la coppia è legata. Un
 vault spostato riparte come replica nuova, e la cartella del percorso vecchio
 non viene cancellata. I file di una versione precedente, scritti direttamente
 in `sync/` e condivisi da tutti i vault, non vengono adottati né cancellati.
+
+Un passaggio tiene il cursore (`cursor.json`) in memoria e lo scrive con una
+rename atomica soltanto quando cambia: dopo gli ack del push, ogni 512 op
+applicati e a fine pagina del pull, prima di uscire per un errore e alla fine.
+Un passaggio senza cambiamenti non lo riscrive. Prima del primo op applicato
+il pull scrive nel cursore `"pulling": true`, e lo toglie a pull finito; il
+campo manca quando è falso. Dopo un crollo fra due scritture sul disco restano
+file scaricati che il cursore non nomina: un passaggio che trova il segno fa
+prima un pull da solo, che riceve di nuovo quegli op e li riconosce senza
+riscriverli, e solo dopo il push, così non li rimanda al servizio come
+modifiche locali. Un file cambiato davvero dopo il crollo diventa un conflitto,
+con i byte scaricati nella copia accanto. Un passaggio di solo push non fa il
+pull prima. Il servizio scarta un push ripetuto per `op_id`.
+
+Un passaggio non apre i file fermi: un file si legge solo se l'impronta che
+l'indice del workspace tiene per lui manca o non è quella sincronizzata.
+L'indice la lega a misura, data, timbro di cambio e identità del file e la
+ricontrolla alla scansione d'apertura, così un file cambiato ad app chiusa si
+legge anche con la stessa misura e la data rimessa com'era. In un processo
+aperto, un passaggio al giorno non si fida dell'indice e rilegge tutto, per un
+evento del watcher perso.
 
 Sync e pubblicazione leggono il token da `FUB_SERVICES_TOKEN_FILE`, poi da
 `FUB_SERVICES_TOKEN`, poi da `services-token`. Il file vale soltanto se è
@@ -145,18 +166,26 @@ consenso e non ripiega mai sul vault privato.
 Un file sconosciuto esiste anche se nessun provider lo riconosce. Non viene
 eliminato né escluso da un backup senza una scelta esplicita.
 
-I file `.<nome>.lock` sono compagni persistenti del protocollo di coordinamento
-dello storage, anche quando si trovano nella radice o nel cestino. Non sono
-contenuto utente né voci da svuotare e non vengono rimossi al rilascio del lock.
-La forma riservata riguarda i file: `Cargo.lock` e i contenuti di directory con
-nomi simili restano dati dell'utente.
+I file `.<nome>.lock` sono i compagni del protocollo di coordinamento dello
+storage, anche quando si trovano nella radice o nel cestino. Non sono contenuto
+utente né voci del cestino. Esistono solo mentre un'operazione li tiene: chi li
+tiene li toglie al rilascio, e quelli rimasti dopo un'uscita forzata o da una
+versione precedente di Fub, vuoti e non tenuti da nessuno, li tolgono
+l'apertura del vault e lo svuotamento del cestino. L'apertura li cerca anche
+in `.fub/`, senza trattarla come contenuto; nello spazio di un plugin
+(`.fub/plugins/<id>/`) guarda solo `doc/` e `doc~trash/`, perché il resto può
+essere la cartella di un motore nativo con lock propri: `.tantivy-writer.lock`
+e `.tantivy-meta.lock` dell'indice di ricerca restano, stabili per
+costruzione. La forma riservata riguarda i file: `Cargo.lock`, i contenuti di
+directory con nomi simili e un `.<nome>.lock` non vuoto restano dati
+dell'utente.
 
 ## Stato del vault
 
 | Percorso | Classe | Schema | Proprietario |
 |---|---|---:|---|
 | `.fub/settings.json` | autorevole | 1 | kernel/host impostazioni |
-| `.fub/workspace.json` | autorevole | 1 | organizzazione |
+| `.fub/workspace.json` | autorevole | 1 | organizzazione; un'icona (`icons`) è un'emoji o `fub:<nome>`, una figura della shell (in lettura anche il nome nudo), e una versione di prima ne mostra il testo |
 | `.fub/journal.jsonl` | autorevole operativo | 1 | registro mutazioni |
 | `.fub/mounts.json` | autorevole | 1 | kernel/host mount esterni espliciti |
 | `.fub/drafts/` | autorevole | 1 | bozze non consolidate |
@@ -165,10 +194,12 @@ nomi simili restano dati dell'utente.
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 | `.fub/plugins/fub.commands/archive-recovery.json` | autorevole operativo | 1 | `fub.commands` |
+| `.fub/plugins/fub.draw/profili/*.json`, `.fub/plugins/fub.draw/predefinito.json`, `.fub/plugins/fub.draw/doc/*/profilo-pdf.json`, `.fub/plugins/fub.draw/doc/*/esportazione-pdf.json` | autorevole | 1 | profili, predefiniti (del vault e per tipo) e memoria per nota dell'esportazione in PDF ([il formato](pdf-export-format.md)) |
 | `.fub/data/plugins/fub.linkcard/cards/*.json`, `.fub/data/plugins/fub.craft/previews/*.json` | derivata | 1 | schede dei collegamenti (`fub.linkcard`), anteprime dei file Craft (`fub.craft`) |
+| `.fub/data/plugins/fub.tasks/reminders.json` | derivata | 1 | promemoria per nota con la revisione del sorgente (`fub.tasks`, [sotto](#promemoria)) |
 
 `properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore
-ha un proprio schema JSON `{ "version": 1, "types": { ... } }`: separa la
+ha uno schema JSON suo, [`{ "version": 1, "types": … }`](property-types.md): separa la
 dichiarazione per nome dai valori, che restano nel frontmatter, e dagli indici,
 che sono ricostruibili. Una versione futura o un valore illeggibile non viene
 riscritto durante la lettura; finché non è compreso, il kernel usa
@@ -223,88 +254,44 @@ classificazione è per proprietario:
 L'indice Tantivy di `fub.search` è derivato. Una versione incompatibile può
 essere eliminata e ricostruita dai documenti.
 
+### Promemoria
+
+`fub.tasks` scrive in `.fub/data/plugins/fub.tasks/reminders.json` i
+promemoria che ha ricavato da ogni nota, con la revisione del sorgente da cui
+li ha ricavati: è ciò che gli permette di dire «questa nota ce l'ho» alla
+riapertura senza rileggerla
+([la riapertura tiepida](../architecture/plugin-runtime.md#la-riapertura-tiepida)).
+Il file è una cache (`HostApi::cache_write`): sta fuori dal backup e dallo
+spazio dati del plugin, e perderlo costa solo una rilettura.
+
+Porta la versione di schema (`schema`, 1) e la versione della **regola di
+lettura** (`rule`, 1). La regola si alza a mano quando cambia ciò che il
+modulo ricava da una nota (sintassi, ora, testo, titolo); un test lega la
+versione a un'impronta di ciò che si ricava da un corpus fisso, quindi una
+lettura cambiata senza alzare la regola fa fallire la CI. La versione di Fub
+non c'entra: un rilascio che non tocca la lettura non costa una rilettura di
+tutto il vault, e uno che la tocca la paga anche fra due build della stessa
+versione. Nella chiave non c'è la configurazione: le opzioni del parser sono
+fisse, e le regole di sintassi montate non si vedono in modo affidabile da un
+indice (lo stesso limite dell'anagrafe e del manifesto della ricerca).
+
+Un file illeggibile, di un altro schema o di un'altra regola si butta senza
+errore, e l'indice rilegge ogni nota. Una nota presa a sessione aperta senza
+una revisione dichiarata non si scrive, quindi si rilegge alla prossima
+apertura. Si scrive al flush e alla chiusura, solo se qualcosa è cambiato, in
+modo atomico (file temporaneo e rinomina). Un vault vuoto non ha il file. Se
+la scrittura fallisce (un vault in sola lettura, un disco pieno) il flush non
+dà errore: un avviso nel log, nessun altro tentativo nella sessione, e alla
+prossima apertura si rilegge.
+
 ### Versioning
 
-`fub.versioning` conserva:
-
-```text
-.fub/plugins/fub.versioning/
-├── versions.json
-└── <impronta>/
-    ├── meta.json
-    └── <timestamp>.<estensione>
-```
-
-`versions.json` è un indice ricostruibile. `meta.json` e gli snapshot sono
-autorevoli: eliminarli perde la memoria delle versioni. `meta.json` dice di
-chi è la cartella (`doc_id`, `deleted_at`) e registra dimensione e impronta di
-ogni versione (`versions`), scritte quando la versione nasce: la ricostruzione
-dell'indice le riprende da lì, quindi un blob alterato dopo la scrittura resta
-rifiutato in lettura. Una cartella scritta prima di questo campo si ricostruisce
-ancora, ricalcolando le impronte dai byte attuali. Per non lasciarla così
-l'indice porta il campo facoltativo `registered`: assente (o `false`) in un
-indice scritto prima, e alla prima apertura il versioning copia nel `meta.json`
-di ogni cartella le impronte che l'indice ricorda — quelle della scrittura —
-poi riscrive l'indice con `registered: true`. Si fa una volta sola e solo da un
-indice che c'è: un indice ricostruito dai byte non registra le impronte che ha
-appena ricalcolato. Il primo salvataggio le registra comunque. Ogni nuova versione
-pota le altre per fasce: sotto le 24 ore tutte, o una per `versioning.interval`
-minuti; una per ora fino a 7 giorni, una per giorno fino a `versioning.retention`
-giorni (90 di serie, 0 nessun limite). Oltre resta solo la più recente. Le due
-impostazioni non sono `program_writable`: abbassarle cancella versioni. Ogni `VersionRef`
-nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
-Gli snapshot conservano i byte originali, anche per allegati binari, senza
-convertire BOM o terminatori di riga. Nessuno snapshot supera 64 MiB
-(`MAX_VERSION_BYTES`): la dimensione di un file si legge dall'anagrafe prima di
-aprirlo, e oltre il tetto il file non si fotografa. Il nome riprende l'estensione del file;
-se manca, contiene soltanto il timestamp.
-
-La lettura verifica che il `VersionRef` esista, che il blob sia leggibile e che
-dimensione e impronta corrispondano ai byte dello snapshot. L'anteprima mostra
-il testo quando è UTF-8, altrimenti indica la dimensione del contenuto binario.
-`version.restore` usa sempre i byte originali, senza decodifica testuale.
-Una verifica fallita non sovrascrive il documento corrente.
-
-Una rinomina porta la storia sotto il nuovo path. Se il nuovo path aveva già
-una storia, le due si uniscono in ordine di tempo: due snapshot diversi dello
-stesso istante restano entrambi, e quello della storia preesistente slitta di
-un millisecondo. Le copie non scrivono mai su un blob che l'indice in vigore
-nomina ancora: se l'unione ci atterrerebbe, la storia unita va in una cartella
-nuova e vuota. L'indice nuovo pubblica l'unione; se una copia fallisce, il
-rename fallisce, le copie già scritte si tolgono e la storia precedente resta
-leggibile.
-
-Cestinare una nota porta la sua storia sotto l'identità che la voce ha nel
-cestino (`doc_id` è l'id della voce, con `deleted_at`), perché il path torna
-libero e chi lo riprende è un'altra nota: il ripristino la riunisce al path
-d'arrivo, come una rinomina. Se la voce non si riconosce (una cancellazione che
-il cestino non ha visto, un cestino che non si elenca) la storia resta sotto il
-path col suo `deleted_at`, come prima.
-
-`version.clear` svuota lo store di tutto il vault in quest'ordine: toglie
-l'indice, toglie il `meta.json` di ogni cartella, riscrive l'indice con ciò che
-resta e solo allora cancella i blob delle cartelle liberate, orfani compresi.
-Un'interruzione lascia al più una cronologia svuotata a metà, che la
-ricostruzione ritrova senza mescolare storie.
-
-Se l'indice manca o non è leggibile, lo store lo ricostruisce dagli snapshot e
-prova a ripubblicarlo. Un errore di scrittura del solo indice genera un avviso:
-view e comandi possono ancora ricostruire e leggere la cronologia dai dati
-autorevoli.
-
-`version.restore` cattura la revisione del documento prima di leggere lo
-snapshot e usa quella revisione per la scrittura condizionata. Il confronto e
-scambio (CAS) impedisce agli writer cooperativi di sovrascrivere una modifica
-intervenuta durante la lettura. Per gli writer esterni è best-effort: una
-modifica già osservabile al confronto produce un conflitto. Il conflitto e gli
-errori di lettura o confronto non sovrascrivono il documento corrente; una
-preimmagine già fotografata resta conservata anche se il commit fallisce.
-Sui file regolari sostituibili anche un errore di scrittura preserva i byte precedenti;
-per symlink, hardlink o conteggio dei nomi non disponibile, la scrittura
-in-place preserva l'identità ma un errore può lasciare i byte modificati.
-Quando riesce, il ripristino è una scrittura normale: fotografa prima il
-contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
-esiste una versione precedente, il comando dichiara anche il ripristino inverso.
+`fub.versioning` tiene sotto `.fub/plugins/fub.versioning/` un indice
+ricostruibile (`versions.json`) e, per ogni documento, una cartella con il
+`meta.json` autorevole (proprietario, dimensione, impronta e nota facoltativa
+di ogni versione) e i blob delle versioni. Schema, potatura, testi conservati
+(`version.keep`), rinomine, ripristino e recupero sono in
+[versioning-store.md](versioning-store.md).
 
 ### Importer
 

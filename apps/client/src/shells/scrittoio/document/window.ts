@@ -182,6 +182,61 @@ export function bootDocumentWindow(series: SeriesFallback): void {
   });
   editor.setReadOnly(true);
   let bootstrapped = false;
+
+  // «Scarta» in due tempi, come la conferma della finestra principale ma
+  // dentro la pagina (questa finestra non ha i dialoghi di sistema): la prima
+  // pressione chiede alla finestra principale se il testo resterà nella
+  // Cronologia e lo dice; la seconda lo scarta, e con la Cronologia soltanto
+  // dopo che il testo c'è entrato. Una conservazione mancata non scarta niente.
+  /// `null` finché non si è chiesto niente; poi se lo scarto conserva.
+  let asking: boolean | null = null;
+  /// Una domanda alla finestra principale è in corso: le scelte aspettano.
+  let busy = false;
+  const calm = (): void => {
+    asking = null;
+    discard.textContent = t("windows.discard_local");
+  };
+  const tell = (text: string): void => {
+    state.dataset.kind = "error";
+    state.textContent = text;
+  };
+  const working = (on: boolean): void => {
+    busy = on;
+    keep.toggleAttribute("disabled", on);
+    discard.toggleAttribute("disabled", on);
+  };
+  const discardChosen = async (): Promise<void> => {
+    if (busy) return;
+    working(true);
+    try {
+      if (asking === null) {
+        tell(t("windows.discard.checking"));
+        const keeps = await bridge.discardKeeps();
+        asking = keeps;
+        discard.textContent = t("windows.discard_confirm");
+        tell(t(keeps ? "windows.discard.kept" : "windows.discard.lost"));
+        return;
+      }
+      const keeps = asking;
+      calm();
+      if (!keeps) {
+        bridge.resolveConflict("theirs");
+        return;
+      }
+      tell(t("windows.discard.keeping"));
+      await bridge.discardKeeping();
+    } catch (error) {
+      calm();
+      const text = t("windows.discard.keep_failed", { reason: errorText(error) });
+      tell(text);
+      say("held", text);
+    } finally {
+      working(false);
+      // Il fuoco resta sulla scelta che si è premuta, se si vede ancora.
+      if (!choices.hidden) discard.focus();
+    }
+  };
+
   bridge = attachChildBridge(
     request,
     (text, operation) => {
@@ -194,6 +249,7 @@ export function bootDocumentWindow(series: SeriesFallback): void {
     },
     () => editor.getDoc(),
     (status) => {
+      calm();
       editor.setReadOnly(status.kind !== "ready");
       choices.hidden = status.kind !== "error" || !bootstrapped;
       if (status.kind === "error") {
@@ -213,8 +269,12 @@ export function bootDocumentWindow(series: SeriesFallback): void {
   // La finestra documento vive quanto la pagina: il suo proprietario è questo
   // `Lifetime`, chiuso dallo stesso `pagehide` che smonta tutto il resto.
   const page = openLifetime();
-  page.listen(keep, "click", () => bridge.resolveConflict("mine"));
-  page.listen(discard, "click", () => bridge.resolveConflict("theirs"));
+  page.listen(keep, "click", () => {
+    if (busy) return;
+    calm();
+    bridge.resolveConflict("mine");
+  });
+  page.listen(discard, "click", () => void discardChosen());
   page.listen(window, "pagehide", () => {
     // Il ponte dice se ha consegnato tutto: se no, l'editor resta, col testo
     // che la finestra principale non ha ancora ricevuto.

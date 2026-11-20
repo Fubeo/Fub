@@ -48,7 +48,7 @@ use crate::vault::{data_root, PreparedVaultRestore, TrashEntry, Vault, FUB_DIR};
 /// Sta nel vault e non nella cartella di configurazione dell'utente perché i
 /// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
 /// metterlo in sync deve portarsi dietro anche loro.
-const PLUGIN_DATA_DIR: &str = "plugins";
+pub(crate) const PLUGIN_DATA_DIR: &str = "plugins";
 
 fn plugin_data_roots(vault: &Vault) -> Vec<Utf8PathBuf> {
     let mut roots = Vec::new();

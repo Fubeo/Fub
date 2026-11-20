@@ -1,0 +1,52 @@
+{
+  "about": "duplicate senza dx né dy: lo spostamento di serie è 32 e la copia si aggancia a 8, come la prima copia di Ctrl+D nella GUI (5+32 = 37 sale a 40, 3+32 = 35 scende a 32). Il primo id del seme va alla copia.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 5,
+        "y": 3,
+        "width": 100,
+        "height": 60,
+        "text": "a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "duplicate",
+      "ids": [
+        "a"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 5,
+          "y": 3,
+          "width": 100,
+          "height": 60,
+          "text": "a"
+        },
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 40,
+          "y": 32,
+          "width": 100,
+          "height": 60,
+          "text": "a"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

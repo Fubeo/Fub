@@ -48,6 +48,11 @@ export async function loadOrganization(): Promise<void> {
     notify(t("organization.unreadable", { reason: errorText(e) }), "guasto");
     state.meta = emptyMeta();
   }
+  // Chi mostra l'organizzazione (le appuntate della scrivania, l'albero) la
+  // legge dallo specchio quando disegna, e può averla letta **prima** di questa
+  // rilettura: una rinomina la fa arrivare dopo il suo `document_renamed`. Senza
+  // il segnale, la scrivania resta con l'appuntata sotto il path vecchio.
+  emit("organization");
 }
 
 /// L'emoji accanto a una nota o a una cartella (`null` la toglie).

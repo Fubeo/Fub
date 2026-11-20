@@ -37,14 +37,18 @@
 // `happy-dom` non c'è né CSS né misura, quindi si asserisce su *cosa* c'è e
 // mai su *dove*.
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { waiter } from "./test-wait";
 import {
   appendToTextEditor as typeInEditor,
+  findTextEditor,
+  isDarkTheme,
   mountedTextEditors as editorViews,
   undoDepth,
 } from "./editors/text/test-support";
-import type { FakeHost } from "./host/fake";
+import type { Call, FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec, KnownVault } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
+import { withoutTypeReads } from "./state/note-type-commands";
 
 // Ogni gesto monta la shell vera: qui un giro sta fra 0,5 e 3 s, sul runner CI
 // è circa tre volte più lento e i 5 s del default li superava ora un gesto ora
@@ -164,8 +168,9 @@ async function mount(
   settings: SettingEntry[] = [],
   root: string | null | undefined = undefined,
   throttles: string[] = [],
-  notice: KernelNotice | null = null,
+  notice: KernelNotice | readonly KernelNotice[] | null = null,
   commands: CommandSpec[] = [],
+  prepare: (host: FakeHost) => void = () => {},
 ): Promise<{ host: FakeHost; startup: Promise<() => void>; unlock: Map<string, () => void> }> {
   vi.resetModules();
   box.confirm = true;
@@ -181,6 +186,7 @@ async function mount(
   box.known = [];
   box.host = host;
   const unlock = new Map(throttles.map((p) => [p, host.throttle(p)]));
+  prepare(host);
   mountShell();
   const main = await import("./main");
   // Quello del montaggio prima, se il suo avvio non è mai arrivato in fondo.
@@ -204,7 +210,7 @@ async function start(
   file: Record<string, string>,
   settings: SettingEntry[] = [],
   root: string | null | undefined = undefined,
-  notice: KernelNotice | null = null,
+  notice: KernelNotice | readonly KernelNotice[] | null = null,
   commands: CommandSpec[] = [],
 ): Promise<FakeHost> {
   const { host, startup } = await mount(file, settings, root, [], notice, commands);
@@ -228,16 +234,14 @@ async function microtasks(rounds = 8): Promise<void> {
   for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
-/// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
-/// Serve ai due pezzi che hanno un timer loro — il debounce della ricerca e
-/// quello del salvataggio — e a nient'altro.
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
+/// Aspetta che una condizione diventi vera, contando i giri del ciclo degli
+/// eventi invece dell'orologio (`test-wait.ts`, #396).
+const waitFor = waiter(2000);
+
+/// Le letture di un documento, in ordine: quelle semplici e quelle di una
+/// sessione sotto la sua chiave di apertura. Tutte e due hanno l'id per primo.
+function documentReads(host: FakeHost): Call[] {
+  return host.calls.filter((call) => call.gate === "readDocument" || call.gate === "openDocument");
 }
 
 function rowsOfNote(): HTMLElement[] {
@@ -316,7 +320,7 @@ async function shortcutField(label: string): Promise<HTMLInputElement> {
 
 /// Il testo dell'editor, letto dal DOM di CodeMirror come lo legge chi guarda.
 function textToVideo(): string {
-  const rows = [...document.querySelectorAll(".cm-content .cm-line")];
+  const rows = [...document.querySelectorAll(".pane-editor .cm-content .cm-line")];
   return rows.map((r) => r.textContent).join("\n");
 }
 
@@ -327,7 +331,10 @@ const VAULT = {
 };
 
 function editorTexts(): string[] {
-  return [...document.querySelectorAll(".cm-content")].map((content) =>
+  // `.cm-scroller > `: il livello dei fantasmi dei Blocchi (`blocks/motion.ts`)
+  // porta la classe del contenuto, ma non è un editor; `.pane-editor`: quelli
+  // delle schede messe da parte sono nascosti, in `.pane-editor-riposo`.
+  return [...document.querySelectorAll(".pane-editor .cm-scroller > .cm-content")].map((content) =>
     [...content.querySelectorAll(".cm-line")].map((line) => line.textContent ?? "").join("\n"),
   );
 }
@@ -453,6 +460,152 @@ describe("il pannello delle impostazioni", () => {
   });
 });
 
+describe("la pagina «Componenti» con la sola tastiera", () => {
+  /// Un tasto sul controllo che ha il fuoco, con l'attivazione che il browser
+  /// farebbe da sé (happy-dom non la fa): Invio sui pulsanti, Spazio sui
+  /// pulsanti e sulle caselle. Un `preventDefault` la ferma, come nel browser.
+  function press(key: string): void {
+    const target = document.activeElement as HTMLElement | null;
+    if (!target || target === document.body) throw new Error(`nessun fuoco per «${key}»`);
+    const proceed = target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    if (!proceed) return;
+    const button = target instanceof HTMLButtonElement;
+    const checkbox = target instanceof HTMLInputElement && target.type === "checkbox";
+    if ((key === "Enter" && button) || (key === " " && (button || checkbox))) target.click();
+  }
+  function focus(selector: string): HTMLElement {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (!el) throw new Error(`non c'è ${selector}`);
+    el.focus();
+    expect(document.activeElement).toBe(el);
+    return el;
+  }
+  const sw = (id: string) => document.getElementById(`component-${id}`) as HTMLInputElement | null;
+  const pressed = (name: string) =>
+    document.querySelector(`[data-profile="${name}"]`)?.getAttribute("aria-pressed") === "true";
+  const notice = () => document.querySelector(".components-notice")?.textContent ?? "";
+  /// Il gesto è finito: niente di occupato, e la mappa riletta è a schermo.
+  /// Con la suite intera in parallelo il ricaricamento dei bundle e la rilettura
+  /// possono superare i due secondi soliti di `waitFor`.
+  async function done(): Promise<void> {
+    await waitFor("la fine del gesto", () => document.querySelector(".components-page [aria-busy]") === null, 8000);
+    await new Promise((r) => setTimeout(r, 80));
+    await settle();
+  }
+
+  it("profili, interruttori, la finestra delle dipendenze, Togli e Tienili, la ricerca", async () => {
+    await start(VAULT);
+    const panel = document.querySelector<HTMLElement>("#settings-panel")!;
+    focus("#open-settings");
+    press("Enter");
+    await settle();
+    focus('#settings-tabs button[data-tab="components"]');
+    press("Enter");
+    await waitFor("la pagina", () => document.querySelector('[data-profile="studio"]') !== null);
+    expect(pressed("studio")).toBe(true);
+
+    // Un profilo che non spegne niente: un tasto, nessuna domanda.
+    box.asked = 0;
+    focus('[data-profile="tutto"]');
+    press("Enter");
+    await done();
+    expect(pressed("tutto")).toBe(true);
+    expect(box.asked).toBe(0);
+    expect((document.activeElement as HTMLElement).dataset.profile).toBe("tutto");
+    focus('[data-profile="studio"]');
+    press(" ");
+    await done();
+    expect(pressed("studio")).toBe(true);
+
+    // Un interruttore: Spazio spegne, il fuoco resta lì, il profilo diventa
+    // personalizzato.
+    focus("#component-fub\\.graph");
+    press(" ");
+    await done();
+    expect(sw("fub.graph")!.checked).toBe(false);
+    expect(document.activeElement).toBe(sw("fub.graph"));
+    expect(document.querySelector(".components-custom")?.textContent).toBe("personalizzato");
+    focus('[data-profile="studio"]');
+    press("Enter");
+    await done();
+    expect(sw("fub.graph")!.checked).toBe(true);
+
+    // La finestra delle dipendenze: «Annulla» non spegne niente…
+    focus('[data-group="supporto"] .components-group-toggle');
+    press("Enter");
+    expect(document.activeElement?.getAttribute("aria-expanded")).toBe("true");
+    box.confirm = false;
+    box.asked = 0;
+    focus("#component-fub\\.penna");
+    press("Enter");
+    await done();
+    expect(box.asked).toBe(1);
+    expect(sw("fub.penna")!.checked).toBe(true);
+    // …e confermare spegne anche chi ne ha bisogno. La scelta rimonta il vault
+    // (`vault_closed` e subito `vault_opened`): il pannello resta aperto.
+    box.confirm = true;
+    focus("#component-fub\\.penna");
+    press(" ");
+    await done();
+    expect(box.asked).toBe(2);
+    expect(sw("fub.penna")!.checked).toBe(false);
+    expect(sw("fub.lavagna")!.checked).toBe(false);
+    await new Promise((r) => setTimeout(r, 2100));
+    expect(panel.hidden).toBe(false);
+    focus('[data-profile="studio"]');
+    press("Enter");
+    await done();
+    expect(sw("fub.penna")!.checked).toBe(true);
+
+    // «Solo note» spegne qualcosa: lo dice prima.
+    box.asked = 0;
+    focus('[data-profile="solo-note"]');
+    press("Enter");
+    await done();
+    expect(box.asked).toBe(1);
+    expect(pressed("solo-note")).toBe(true);
+    // Accendere il PDF accende la penna, e lo dice.
+    focus("#component-fub\\.pdf");
+    press(" ");
+    await done();
+    expect(notice()).toContain("«Penna»");
+    for (const id of ["lavagna", "pdf", "lavagna"]) {
+      focus(`#component-fub\\.${id}`);
+      press(" ");
+      await done();
+    }
+    expect(notice()).toContain("Non serve più a nessun componente: «Penna».");
+    focus('[data-focus-key="notice:drop"]');
+    press("Enter");
+    await done();
+    expect(notice()).not.toContain("«Penna»");
+    expect(sw("fub.penna")!.checked).toBe(false);
+    focus("#component-fub\\.pdf");
+    press(" ");
+    await done();
+    focus("#component-fub\\.pdf");
+    press(" ");
+    await done();
+    expect(notice()).toContain("Non serve più a nessun componente: «Penna».");
+    focus('[data-focus-key="notice:keep"]');
+    press("Enter");
+    await done();
+    expect(notice()).toBe("");
+    expect(sw("fub.penna")!.checked).toBe(true);
+
+    // La ricerca: si scrive, e una ricerca senza esito lo dice.
+    const find = focus("#components-find") as HTMLInputElement;
+    find.value = "zzz";
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(document.querySelector<HTMLElement>(".components-empty")!.hidden).toBe(false);
+    find.value = "penna";
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(document.querySelector<HTMLElement>(".components-empty")!.hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>('[data-component="fub.penna"]')!.hidden).toBe(false);
+    expect(panel.hidden).toBe(false);
+  }, 40000);
+});
+
 describe("vita della finestra", () => {
   it("un avvio lento lo dice, col tratto più lungo, e i tempi si copiano", async () => {
     // L'orologio fermo a venti secondi: la pagina sembra averli spesi tutti.
@@ -527,6 +680,121 @@ describe("vita della finestra", () => {
   });
 });
 
+describe("aperture in gara: vince l'ultima chiesta", () => {
+  /// Tiene in volo le sole chiamate di `port` che `match` riconosce, finché
+  /// non si chiama `release`; `reached` si risolve alla prima tenuta. Le altre
+  /// chiamate della stessa porta passano: `throttle` le fermerebbe tutte, e
+  /// l'avvio non arriverebbe mai al punto che si vuole guardare.
+  function hold(host: FakeHost, port: string, match: (...args: unknown[]) => boolean) {
+    const api = host.module.api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    const original = api[port]!.bind(api);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let reach!: () => void;
+    const reached = new Promise<void>((resolve) => (reach = resolve));
+    api[port] = (...args: unknown[]) => {
+      if (!match(...args)) return original(...args);
+      reach();
+      return gate.then(() => original(...args));
+    };
+    return { reached, release };
+  }
+
+  /// Il riquadro col fuoco dice lo stesso documento dappertutto: la scheda
+  /// scelta, il percorso in testa, il testo dell'editor.
+  function expectShowing(title: string, text: string): void {
+    expect(document.querySelector('.pane.focus .tab[aria-selected="true"]')?.textContent).toContain(title);
+    expect(document.querySelector(".pane.focus .muted")?.textContent).toContain(title);
+    expect(textToVideo()).toContain(text);
+  }
+
+  function tabNames(): string[] {
+    return [...document.querySelectorAll(".pane.focus .tab")].map((tab) => tab.textContent ?? "");
+  }
+
+  it("la prima nota lenta all'avvio non vince sul documento aperto intanto", async () => {
+    const { host, startup, unlock } = await mount(VAULT, [], undefined, ["openDocument"]);
+    await waitFor("l'avvio apre la prima nota", () => host.atGate("openDocument").some((c) => c.args[0] === "Benvenuto.md"));
+    const controller = await import("./state/document-controller");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    unlock.get("openDocument")!();
+    await Promise.all([startup, opening]);
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+  });
+
+  it("la prima nota decisa prima di un'apertura chiesta intanto non parte", async () => {
+    // L'ordine inverso: l'avvio ha visto il riquadro vuoto e cerca la prima
+    // nota; intanto si apre un documento. Arrivata la risposta, la decisione
+    // è vecchia e non deve scavalcare il documento aperto.
+    let first!: ReturnType<typeof hold>;
+    const { host, startup } = await mount(VAULT, [], undefined, [], null, [], (fake) => {
+      first = hold(fake, "queryIndex", (q) => {
+        const query = q as { kind?: string; of_kind?: string | null; page?: { limit?: number } };
+        return query.kind === "entries" && query.of_kind === "document" && query.page?.limit === 1;
+      });
+    });
+    await first.reached;
+    const controller = await import("./state/document-controller");
+    await controller.openDocument("note/Spesa.md", { gesture: true });
+    first.release();
+    await startup;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Benvenuto"))).toBe(false);
+    expect(host.atGate("openDocument").some((c) => c.args[0] === "Benvenuto.md")).toBe(false);
+  });
+
+  it("la nota d'avvio non scavalca il documento aperto mentre la si controllava", async () => {
+    const choice = (key: string, value: string) => ({ spec: { key }, value, source: "machine" }) as unknown as SettingEntry;
+    let check!: ReturnType<typeof hold>;
+    const settings = [choice("files.startup", "note"), choice("files.startup-note", "note/Riunione.md")];
+    const { startup } = await mount(VAULT, settings, undefined, [], null, [], (fake) => {
+      check = hold(fake, "readDocument", (id) => id === "note/Riunione.md");
+    });
+    await check.reached;
+    const controller = await import("./state/document-controller");
+    await controller.openDocument("note/Spesa.md", { gesture: true });
+    check.release();
+    await startup;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Riunione"))).toBe(false);
+  });
+
+  it("durante un'apertura lenta il percorso in testa è già del documento chiesto", async () => {
+    const host = await start(VAULT);
+    await waitFor("Benvenuto è a schermo", () => textToVideo().includes("primo documento"));
+    const controller = await import("./state/document-controller");
+    const unlock = host.throttle("openDocument");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    await waitFor("la lettura di Spesa è partita", () => host.atGate("openDocument").some((c) => c.args[0] === "note/Spesa.md"));
+    await settle();
+    // La scheda è già di Spesa: il percorso dice lo stesso, non Benvenuto.
+    expect(document.querySelector('.pane.focus .tab[aria-selected="true"]')?.textContent).toContain("Spesa");
+    expect(document.querySelector(".pane.focus .muted")?.textContent).toContain("Spesa");
+    expect(document.querySelector(".pane.focus .muted")?.textContent).not.toContain("Benvenuto");
+    unlock();
+    await opening;
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+  });
+
+  it("due aperture rapide: resta l'ultima, e la prima resta una scheda", async () => {
+    const host = await start(VAULT);
+    const controller = await import("./state/document-controller");
+    const unlock = host.throttle("openDocument");
+    const first = controller.openDocument("note/Riunione.md", { gesture: true });
+    const second = controller.openDocument("note/Spesa.md", { gesture: true });
+    await settle();
+    unlock();
+    await Promise.all([first, second]);
+    await settle();
+    expectShowing("Spesa", "pane, latte");
+    expect(tabNames().some((name) => name.includes("Riunione"))).toBe(true);
+  });
+});
+
 describe("navigazione accessibile dell'esploratore", () => {
   it("espande e richiude senza aprire la pagina della cartella né perdere il focus", async () => {
     await start({ ...VAULT, "note/_index.md": "La pagina della cartella.\n" });
@@ -550,6 +818,73 @@ describe("navigazione accessibile dell'esploratore", () => {
     const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
     chevron().dispatchEvent(tab);
     expect(tab.defaultPrevented).toBe(false);
+  });
+
+  it("un'apertura che finisce tardi non toglie il fuoco a un campo aperto intanto, e Invio resta lì", async () => {
+    // R1 sullo schermo vero: si apre un documento lento, e prima che finisca si
+    // apre il lanciatore e si scrive. La fine dell'apertura portava il fuoco
+    // nell'editor, e l'Invio del lanciatore finiva nel documento.
+    const host = await start(VAULT);
+    const controller = await import("./state/document-controller");
+    const unlock = host.throttle("openDocument");
+    const opening = controller.openDocument("note/Riunione.md", { gesture: true });
+    await settle();
+    const field = document.createElement("input");
+    document.body.append(field);
+    field.focus();
+    unlock();
+    await opening;
+    await settle();
+    expect(textToVideo()).toContain("riunione");
+    expect(document.activeElement).toBe(field);
+    field.remove();
+
+    // Senza nessuno che l'abbia portato altrove, il fuoco va all'editor come prima.
+    (document.querySelector<HTMLElement>("#file-list .tree-row") ?? document.body).focus();
+    const again = host.throttle("openDocument");
+    const second = controller.openDocument("note/Spesa.md", { gesture: true });
+    await settle();
+    again();
+    await second;
+    await settle();
+    expect(textToVideo()).toContain("pane, latte");
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+  });
+
+  it("un'apertura che finisce tardi non toglie il fuoco a chi è già entrato nel documento aperto", async () => {
+    // #395: la superficie si monta prima che l'apertura finisca (il contesto
+    // si pubblica dopo). Chi intanto entra nel documento (il Tab della lavagna
+    // vuota al suo primo pulsante) ci resta: la fine dell'apertura riportava
+    // il fuoco all'editor, e il pulsante lo perdeva.
+    const host = await start(VAULT);
+    const controller = await import("./state/document-controller");
+    (document.querySelector<HTMLElement>("#file-list .tree-row") ?? document.body).focus();
+    const unlock = host.throttle("setActiveContext");
+    const opening = controller.openDocument("note/Spesa.md", { gesture: true });
+    for (let i = 0; i < 40 && !textToVideo().includes("pane, latte"); i++) await settle();
+    expect(textToVideo()).toContain("pane, latte");
+    const surface = document.querySelector<HTMLElement>(".pane.focus .pane-editor > *");
+    expect(surface).not.toBeNull();
+    // Un controllo del documento, come «Scrivi una scheda» della lavagna vuota.
+    const control = document.createElement("button");
+    surface?.append(control);
+    control.focus();
+    unlock();
+    await opening;
+    await settle();
+    expect(document.activeElement).toBe(control);
+    control.remove();
+
+    // Col fuoco ancora dove era al gesto, l'editor lo prende come prima.
+    (document.querySelector<HTMLElement>("#file-list .tree-row") ?? document.body).focus();
+    const again = host.throttle("setActiveContext");
+    const second = controller.openDocument("note/Riunione.md", { gesture: true });
+    await settle();
+    again();
+    await second;
+    await settle();
+    expect(textToVideo()).toContain("riunione");
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
   });
 
   it("rivela la nota attiva dentro una cartella chiusa, senza togliere il fuoco all'editor", async () => {
@@ -581,6 +916,8 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 
   it("una cartella del percorso nella testata si apre nell'esplora; il nome resta il titolo", async () => {
+    // Il nome scelto dalla persona per il vault apre il percorso.
+    box.known = [{ root: "/vault", name: "Appunti", icon: null, favorite: false, last_opened: 0, keys_seen: {} }];
     await start(VAULT);
     const noteItem = () =>
       document.querySelector<HTMLElement>('#file-list li[data-path="note/Riunione.md"]');
@@ -594,9 +931,14 @@ describe("navigazione accessibile dell'esploratore", () => {
     await waitFor("la cartella si richiude", () => !noteItem());
 
     const crumb = document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .muted")!;
-    expect(crumb.textContent).toBe("note/Riunione.md");
-    const folder = crumb.querySelector<HTMLElement>("[data-folder]")!;
-    expect(folder.dataset.folder).toBe("note");
+    expect(crumb.dataset.path).toBe("note/Riunione.md");
+    // Le briciole: la cartella disegnata, il vault, la cartella, il nome.
+    expect(crumb.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+    await waitFor("il nome del vault", () => crumb.querySelector("[data-folder='']")?.textContent === "Appunti");
+    expect([...crumb.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => f.textContent)).toEqual(["Appunti", "note"]);
+    expect(crumb.querySelectorAll(".crumb-sep[aria-hidden='true']")).toHaveLength(2);
+    expect(crumb.querySelector(".crumb-name")?.textContent).toBe("Riunione");
+    const folder = crumb.querySelector<HTMLElement>("[data-folder='note']")!;
     expect(folder.textContent).toBe("note");
     // Due colpi sulla cartella non aprono il campo della rinomina.
     folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
@@ -609,8 +951,72 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 });
 
+describe("il cassetto sopra i fogli (A-02)", () => {
+  // A 700 px albero e ispettore sono cassetti col velo: la tastiera non deve
+  // arrivare al foglio coperto. Scegliere un documento chiude il cassetto e dà
+  // il fuoco al documento; qualunque fuoco che entra sotto il velo lo chiude.
+  const narrow = async (body: () => Promise<void>): Promise<void> => {
+    const saved = Object.getOwnPropertyDescriptor(window, "innerWidth");
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 700 });
+    try {
+      await body();
+    } finally {
+      if (saved) Object.defineProperty(window, "innerWidth", saved);
+      else delete (window as { innerWidth?: number }).innerWidth;
+    }
+  };
+  const run = async (id: string) => {
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === id)!.run!();
+    await settle();
+  };
+  const layout = () => document.getElementById("layout")!;
+  const inSheet = () => !!document.activeElement?.closest(".pane");
+
+  it("scegliere una nota dall'albero chiude il cassetto e porta il fuoco nella nota", async () => {
+    await narrow(async () => {
+      await start(VAULT);
+      await run("shell.sidebar.toggle");
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(true);
+      const chevron = document.querySelector<HTMLButtonElement>('#file-list li[data-path="note"] > .tree-row > .chevron')!;
+      chevron.click();
+      await waitFor("la cartella si apre", () => !!document.querySelector('#file-list li[data-path="note/Spesa.md"]'));
+      // Aprire la cartella non è scegliere un documento: il cassetto resta.
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(true);
+      const row = document.querySelector<HTMLElement>('#file-list li[data-path="note/Spesa.md"]')!;
+      row.focus();
+      row.querySelector<HTMLElement>(":scope > .tree-row")!.click();
+      await waitFor("la nota si apre", () => textToVideo().includes("pane, latte"));
+      await settle();
+      expect(layout().classList.contains("drawer-sidebar-open")).toBe(false);
+      expect(document.getElementById("sidebar-scrim")!.hidden).toBe(true);
+      expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+    });
+  });
+
+  it("finché il cassetto è aperto il fuoco non resta nel foglio coperto, anche nell'ispettore", async () => {
+    await narrow(async () => {
+      await start(VAULT);
+      const controller = await import("./state/document-controller");
+      for (const side of ["sidebar", "inspector"] as const) {
+        await run(side === "sidebar" ? "shell.sidebar.toggle" : "shell.inspector.toggle");
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(true);
+        // La rail sta sopra il velo: il fuoco lì non chiude niente.
+        document.querySelector<HTMLElement>("#rail button")!.focus();
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(true);
+        // Una voce dello schema, un collegamento: chi porta il fuoco all'editor
+        // sotto il velo chiude il cassetto prima che arrivi una battuta.
+        controller.focusEditor();
+        expect(inSheet()).toBe(true);
+        expect(layout().classList.contains(`drawer-${side}-open`)).toBe(false);
+        expect(document.getElementById(side === "sidebar" ? "sidebar-scrim" : "inspector-scrim")!.hidden).toBe(true);
+      }
+    });
+  });
+});
+
 describe("il formato si vede", () => {
-  it("un Word ha la sua icona nell'albero e nella scheda, e «WORD» accanto al percorso; una nota no", async () => {
+  it("un Word ha la sua icona nell'albero e nella linguetta; la testata ha solo briciole, «Salvato» e «…»", async () => {
     const rich = JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, c: [{ t: "text", x: "ciao" }] }] });
     await start({ ...VAULT, "Lettera.docx": rich });
     const row = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`);
@@ -618,15 +1024,29 @@ describe("il formato si vede", () => {
     expect(row("Lettera.docx")!.querySelector(".row-icon svg")).not.toBeNull();
     expect(row("Benvenuto.md")!.classList.contains("no-icon")).toBe(true);
     row("Lettera.docx")!.click();
-    const tag = () => document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .pane-format");
-    await waitFor("il Word si apre", () => tag()?.hidden === false);
-    expect(tag()!.textContent).toBe("WORD");
-    const tab = document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
-    expect(tab.querySelector(".tab-format")).not.toBeNull();
-    expect(tab.getAttribute("aria-label")).toContain("Documento di Word");
+    const bar = () => document.querySelector<HTMLElement>(".pane.focus .pane-toolbar")!;
+    const name = () => bar().querySelector<HTMLElement>(":scope > .muted .crumb-name")?.textContent;
+    await waitFor("il Word si apre", () => name() === "Lettera.docx");
+    // Il formato non è più un'etichetta della testata: lo dice la linguetta.
+    expect(bar().querySelector(".pane-format")).toBeNull();
+    const tab = () => document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
+    expect(tab().querySelector("svg.tab-format")).not.toBeNull();
+    expect(tab().getAttribute("aria-label")).toContain("Documento .docx");
+    // «Salvato» è il bottone dello stato, che ridice la parola nel nome; «…» è
+    // una figura col nome di sempre.
+    const save = bar().querySelector<HTMLButtonElement>(".pane-status-slot button.sheet-save")!;
+    await waitFor("lo stato del Word", () => save.dataset.state === "salvato");
+    expect(save.textContent).toBe("Salvato");
+    expect(save.getAttribute("aria-label")).toContain("Salvato");
+    const menu = bar().querySelector<HTMLButtonElement>(":scope > [data-pane-menu]")!;
+    expect(menu.textContent).toBe("");
+    expect(menu.querySelector(":scope > svg")).not.toBeNull();
+    expect(menu.getAttribute("aria-label")).toBe("Azioni del riquadro");
+    // Una nota ha la figura della nota nella linguetta, e nessun nome di formato.
     row("Benvenuto.md")!.click();
-    await waitFor("la nota si apre", () => tag()?.hidden === true);
-    expect(document.querySelector('.pane.focus .tab[aria-selected="true"] .tab-format')).toBeNull();
+    await waitFor("la nota si apre", () => name() === "Benvenuto");
+    expect(tab().querySelector("svg.tab-format")).not.toBeNull();
+    expect(tab().getAttribute("aria-label")).not.toContain("Documento .docx");
   });
 });
 
@@ -758,7 +1178,7 @@ describe("i menu dell'albero e della scheda", () => {
     await start({ ...VAULT, "foto.png": "png" });
     const { setSidePanelController } = await import("./ui/side-panels");
     const revealed: string[] = [];
-    const restore = setSidePanelController({ visible: () => false, reveal: (side) => void revealed.push(side), toggle: () => {} });
+    const restore = setSidePanelController({ visible: () => false, reveal: (side) => void revealed.push(side), toggle: () => {}, dismiss: () => {} });
     await contextMenu(tree("foto.png"), "Mostra le note che lo usano");
     await waitFor("il file si apre", () => [...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("foto")));
     expect(revealed).toEqual(["inspector"]);
@@ -827,7 +1247,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     press();
     await waitFor("la domanda arriva", () => box.asked === asked + 1);
     await settle();
-    expect(host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash")).toBe(false);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).some((call) => call.args[0] === "folder.trash")).toBe(false);
 
     const noConfirm = {
       spec: {
@@ -846,7 +1266,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     asked = box.asked;
     press();
     await waitFor("la cartella va nel cestino", () =>
-      host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash"));
+      withoutTypeReads(host.atGate("invokeCommand")).some((call) => call.args[0] === "folder.trash"));
     expect(box.asked).toBe(asked);
   });
 
@@ -866,6 +1286,44 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it("dopo la rinomina il fuoco resta sulla riga rinominata, o va dove si è cliccato (B-02)", async () => {
+    await start(VAULT);
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    const rename = (from: string, name: string, commit: (field: HTMLInputElement) => void): void => {
+      noteItem(from)!.focus();
+      noteItem(from)!.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+      const field = noteItem(from)!.querySelector<HTMLInputElement>("input")!;
+      expect(document.activeElement).toBe(field);
+      field.value = name;
+      commit(field);
+    };
+
+    // Invio: il fuoco segue la voce al nome nuovo, non cade su `body`.
+    rename("note/Spesa.md", "Lista", (field) =>
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    await waitFor("la voce rinominata", () => !!noteItem("note/Lista.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Lista.md"));
+
+    // Un clic fuori su niente di focalizzabile: il fuoco torna alla riga.
+    rename("note/Lista.md", "Elenco", (field) =>
+      field.dispatchEvent(new FocusEvent("blur", { relatedTarget: null })));
+    await waitFor("la voce rinominata ancora", () => !!noteItem("note/Elenco.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Elenco.md"));
+
+    // Un clic su un controllo: il fuoco resta lì.
+    const elsewhere = document.getElementById("new-note")!;
+    rename("note/Elenco.md", "Compere", (field) => {
+      field.dispatchEvent(new FocusEvent("blur", { relatedTarget: elsewhere }));
+      elsewhere.focus();
+    });
+    await waitFor("la terza rinomina", () => !!noteItem("note/Compere.md"));
+    await settle();
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("un nome rifiutato riapre il campo col testo digitato e la frase accanto", async () => {
     const host = await start(VAULT);
     noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
@@ -883,7 +1341,7 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     expect(again.getAttribute("aria-describedby")).toBe(problem.id);
     expect(problem.textContent).toContain("CON");
     // Niente è partito verso il kernel, e alla prima battuta la frase se ne va.
-    expect(host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
     again.dispatchEvent(new Event("input", { bubbles: true }));
     expect(noteItem("note/Spesa.md")!.querySelector(".tree-rename-problem")).toBeNull();
     expect(again.hasAttribute("aria-invalid")).toBe(false);
@@ -942,11 +1400,142 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     riunione.dispatchEvent(canc);
     expect(canc.defaultPrevented).toBe(true);
     await waitFor("anche la seconda è nel cestino", () => host.trash().length === 2);
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["note.trash", { doc: "note/Spesa.md" }],
       ["note.trash", { doc: "note/Riunione.md" }],
     ]);
     expect(Object.keys(host.files())).toContain("Benvenuto.md");
+  });
+
+  // IMP-154: la riga col fuoco sparisce dall'albero e il fuoco cadeva su
+  // `body`, dove le battute dopo si perdevano. Resta nell'albero, sulla riga
+  // vicina: la successiva, la precedente se era l'ultima, la cartella se è
+  // rimasta vuota. Anche quando la nota cestinata era aperta e l'editor chiude.
+  it("Canc lascia il fuoco sulla riga vicina, anche se la nota era aperta", async () => {
+    const host = await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Spesa.md");
+    await settle();
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    const press = (path: string) => {
+      const item = noteItem(path)!;
+      item.focus();
+      const canc = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
+      item.dispatchEvent(canc);
+      expect(canc.defaultPrevented).toBe(true);
+    };
+    const focusedPath = () => {
+      const active = document.activeElement;
+      return active instanceof HTMLElement && active.matches('#file-list li[role="treeitem"]')
+        ? active.dataset.path
+        : `fuori dall'albero: ${active?.tagName ?? "niente"}`;
+    };
+
+    // Spesa è aperta ed è l'ultima della cartella: il fuoco va alla precedente.
+    expect([...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("Spesa"))).toBe(true);
+    press("note/Spesa.md");
+    await waitFor("Spesa è nel cestino", () => host.trash().length === 1 && !noteItem("note/Spesa.md"));
+    await settle();
+    expect([...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("Spesa"))).toBe(false);
+    expect(focusedPath()).toBe("note/Riunione.md");
+    expect(document.activeElement?.getAttribute("tabindex")).toBe("0");
+
+    // L'ultima della cartella: il fuoco va alla cartella rimasta vuota, se
+    // l'albero la disegna ancora (l'host finto la toglie con l'ultima nota),
+    // altrimenti alla prima voce che resta.
+    press("note/Riunione.md");
+    await waitFor("Riunione è nel cestino", () => host.trash().length === 2 && !noteItem("note/Riunione.md"));
+    await settle();
+    expect(focusedPath()).toBe(noteItem("note") ? "note" : "Benvenuto.md");
+  });
+
+  it("Canc sulla prima di più note lascia il fuoco sulla successiva", async () => {
+    const host = await start(VAULT);
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    const riunione = noteItem("note/Riunione.md")!;
+    riunione.focus();
+    riunione.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
+    await waitFor("Riunione è nel cestino", () => host.trash().length === 1 && !noteItem("note/Riunione.md"));
+    await settle();
+    expect(document.activeElement).toBe(noteItem("note/Spesa.md"));
+  });
+
+  // IMP-6500: con una nota della cartella aperta, F2 sulla riga arrivata con le
+  // frecce (dopo Tab) o col clic apre il campo, per la nota e per la cartella.
+  // Ogni tasto va all'elemento col fuoco in quel momento, come da tastiera.
+  it("F2 sulla riga raggiunta con le frecce o col clic apre il campo, con una nota della cartella aperta", async () => {
+    const host = await start({ ...VAULT, "note/Altra.md": "x\n" });
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Spesa.md");
+    await settle();
+    const key = (name: string): KeyboardEvent => {
+      const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+      return event;
+    };
+    const focusedPath = () => (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("li[role=treeitem]")?.dataset.path;
+    const field = () => document.activeElement instanceof HTMLInputElement ? document.activeElement : null;
+    const renames = () => withoutTypeReads(host.atGate("invokeCommand")).filter((c) => /\.rename$/.test(String(c.args[0])));
+    const walk = async (path: string, step: "ArrowDown" | "ArrowUp") => {
+      for (let i = 0; i < 12 && focusedPath() !== path; i += 1) {
+        key(step);
+        await settle(2);
+      }
+      expect(focusedPath()).toBe(path);
+    };
+
+    // Tab porta il fuoco sulla voce dell'albero che lo tiene (tabindex 0).
+    document.querySelector<HTMLElement>('#file-list li[role="treeitem"][tabindex="0"]')!.focus();
+    await walk("note", "ArrowUp");
+    if (noteItem("note")!.getAttribute("aria-expanded") === "false") key("ArrowRight");
+    await waitFor("la cartella è aperta", () => !!noteItem("note/Riunione.md"));
+    await walk("note/Riunione.md", "ArrowDown");
+
+    // Riga-nota: F2, Esc lascia tutto com'era; F2, Invio col nome invariato pure.
+    expect(key("F2").defaultPrevented).toBe(true);
+    expect(field()?.value).toBe("Riunione");
+    key("Escape");
+    await settle();
+    expect(focusedPath()).toBe("note/Riunione.md");
+    key("F2");
+    expect(field()?.value).toBe("Riunione");
+    key("Enter");
+    await settle();
+    expect(focusedPath()).toBe("note/Riunione.md");
+    expect(renames()).toEqual([]);
+
+    // Un nome già usato da una sorella: il campo resta col perché accanto.
+    key("F2");
+    field()!.value = "Altra";
+    key("Enter");
+    await waitFor("il nome occupato è detto accanto al campo", () => !!noteItem("note/Riunione.md")?.querySelector(".tree-rename-problem"));
+    expect(Object.keys(host.files())).toEqual(expect.arrayContaining(["note/Riunione.md", "note/Altra.md"]));
+    key("Escape");
+    await settle();
+
+    // Un nome con «/»: la nota scende nella sottocartella, col nome dopo «/».
+    noteItem("note/Riunione.md")!.focus();
+    key("F2");
+    field()!.value = "2026/Riunione";
+    key("Enter");
+    await waitFor("la nota è nella sottocartella", () => "note/2026/Riunione.md" in host.files());
+
+    // Riga-cartella col clic: il fuoco è sulla riga, F2 apre il campo e la nota
+    // aperta segue la cartella al nome nuovo.
+    noteItem("note")!.focus();
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await settle();
+    expect(focusedPath()).toBe("note");
+    expect(key("F2").defaultPrevented).toBe(true);
+    expect(field()?.value).toBe("note");
+    field()!.value = "Lavoro nuovo";
+    key("Enter");
+    await waitFor("la cartella ha il nome nuovo", () => "Lavoro nuovo/Spesa.md" in host.files());
+    expect(Object.keys(host.files()).some((path) => path.startsWith("note/"))).toBe(false);
+    await waitFor("la scheda aperta segue", () =>
+      [...document.querySelectorAll<HTMLElement>(".pane .tab")].some((tab) => tab.textContent?.includes("Spesa")));
   });
 });
 
@@ -1104,6 +1693,47 @@ describe("apri un vault", () => {
     ]);
   });
 
+  it("aprire e chiudere una cartella rifà solo il suo sottoalbero: le righe di fuori restano gli stessi nodi", async () => {
+    const host = await start({ ...VAULT, "zeta/Uno.md": "uno\n", "note/sotto/Tre.md": "tre\n" });
+    const entryOf = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
+    const outside = () => ["Benvenuto.md", "note", "zeta"].map((path) => entryOf(path));
+    const before = outside();
+    expect(before.every((li) => li !== null)).toBe(true);
+    const folderRow = entryOf("note")!.querySelector<HTMLElement>(":scope > .tree-row")!;
+    const chevron = folderRow.querySelector<HTMLButtonElement>(":scope > .chevron")!;
+
+    chevron.click();
+    await waitFor("la cartella si apre", () => entryOf("note/Spesa.md") !== null);
+    expect(outside()).toEqual(before);
+    expect(entryOf("note")!.querySelector(":scope > .tree-row")).toBe(folderRow);
+    expect(entryOf("note")!.getAttribute("aria-expanded")).toBe("true");
+    expect(chevron.getAttribute("aria-expanded")).toBe("true");
+    expect(chevron.textContent).toBe("\u25be");
+    // Il sottoalbero è quello di sempre: le sottocartelle, poi le note.
+    const group = entryOf("note")!.querySelector(":scope > .tree-children")!;
+    expect([...group.querySelectorAll<HTMLElement>(':scope > li[role="treeitem"]')].map((li) => li.dataset.path)).toEqual([
+      "note/sotto",
+      "note/Riunione.md",
+      "note/Spesa.md",
+    ]);
+    expect(group.previousElementSibling).toBe(folderRow);
+
+    chevron.click();
+    await waitFor("la cartella si chiude", () => entryOf("note/Spesa.md") === null);
+    expect(outside()).toEqual(before);
+    expect(entryOf("note")!.getAttribute("aria-expanded")).toBe("false");
+    expect(chevron.textContent).toBe("\u25b8");
+    expect(entryOf("note")!.querySelector(":scope > .tree-children:not([inert])")).toBeNull();
+
+    // Se fuori è cambiato qualcosa nel frattempo, si ridisegna tutto: niente
+    // resta indietro.
+    host.writeFromOutside("Altro.md", "altro\n");
+    chevron.click();
+    await waitFor("la cartella si apre col resto aggiornato", () =>
+      entryOf("note/Spesa.md") !== null && entryOf("Altro.md") !== null,
+    );
+  });
+
   it("gli allegati stanno nell'albero: un media si apre nel visualizzatore, un file ignoto no", async () => {
     const host = await start({ ...VAULT, "note/foto.png": "png", "note/dati.zip": "zip" });
     const fileRows = () => [...document.querySelectorAll<HTMLElement>("#file-list .tree-row.file")];
@@ -1120,13 +1750,13 @@ describe("apri un vault", () => {
 
     fileRows()[0]!.click();
     await settle();
-    expect(host.atGate("readDocument").map((call) => call.args[0])).not.toContain("note/dati.zip");
+    expect(documentReads(host).map((call) => call.args[0])).not.toContain("note/dati.zip");
     expect(host.atGate("resourceOpen")).toHaveLength(0);
 
     fileRows()[1]!.click();
     await waitFor("il visualizzatore chiede la risorsa", () => host.atGate("resourceOpen").length > 0);
     expect(host.atGate("resourceOpen")[0]!.args[0]).toBe("note/foto.png");
-    expect(host.atGate("readDocument").map((call) => call.args[0])).not.toContain("note/foto.png");
+    expect(documentReads(host).map((call) => call.args[0])).not.toContain("note/foto.png");
   });
 
   it("un allegato si cestina dal suo menu contestuale, come una nota", async () => {
@@ -1141,7 +1771,7 @@ describe("apri un vault", () => {
     await contextMenu(fileRow()!, "Sposta nel cestino");
     await waitFor("l'allegato è nel cestino", () => host.trash().length === 1);
     expect(Object.keys(host.files())).not.toContain("note/foto.png");
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["note.trash", { doc: "note/foto.png" }],
     ]);
     await waitFor("la riga sparisce", () => !fileRow());
@@ -1210,7 +1840,7 @@ describe("apri un vault", () => {
         (button) => button.dataset.mode,
       );
 
-    expect(modes()).toEqual(["source", "live_preview", "blocks", "reading"]);
+    expect(modes()).toEqual(["source", "live_preview", "reading"]);
     // `start` rimonta i moduli dopo i mock: serve l'esemplare vivo del pannello,
     // non un import statico catturato prima di `vi.resetModules`.
     const { openDocument } = await import("./panels/document");
@@ -1232,7 +1862,7 @@ describe("apri un vault", () => {
     expect(document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode).toBe("source");
     document.querySelector<HTMLElement>(".tab")?.click();
     await settle();
-    expect(modes()).toEqual(["source", "live_preview", "blocks", "reading"]);
+    expect(modes()).toEqual(["source", "live_preview", "reading"]);
     expect(
       document.querySelector<HTMLElement>(".pane.focus .pane-toolbar button[aria-pressed='true']")
         ?.dataset.mode,
@@ -1244,7 +1874,7 @@ describe("apri un vault", () => {
 describe("scrivi", () => {
   it("ciò che si batte arriva al disco, e discende dalla revisione che si era letta", async () => {
     const host = await start(VAULT);
-    const reads = host.atGate("readDocument");
+    const reads = documentReads(host);
     const read = reads[reads.length - 1];
     expect(read?.args[0]).toBe("Benvenuto.md");
 
@@ -1315,9 +1945,53 @@ describe("i confini del buffer", () => {
     );
   });
 
+  it("dice che il file è in sola lettura, tiene la bozza e non lo ripete a ogni battuta", async () => {
+    const host = await start(VAULT);
+    const repair = host.fault("writeDocument", {
+      kind: "permission_denied",
+      message: "il file è in sola lettura: Benvenuto.md",
+    });
+    const { recentNotices } = await import("./ui/notify");
+    const readOnly = () =>
+      recentNotices().filter((notice) => notice.text.includes("è in sola lettura: Fub non lo sovrascrive"));
+
+    typeInEditor("testo su un file in sola lettura");
+    await waitFor("la scrittura rifiutata parte", () => host.atGate("writeDocument").length === 1);
+    await waitFor(
+      "lo stato diventa fallito",
+      () => document.getElementById("save-state")?.dataset.state === "fallito",
+    );
+    expect(host.files()["Benvenuto.md"]).not.toContain("testo su un file in sola lettura");
+    expect(readOnly(), "l'avviso dice sola lettura, non un errore di I/O").toHaveLength(1);
+    expect(readOnly()[0]!.times).toBe(1);
+    expect(
+      recentNotices().some((notice) => notice.text.includes("non è stato salvato")),
+      "non è il messaggio del guasto generico",
+    ).toBe(false);
+
+    // Un'altra battuta: il salvataggio automatico ci riprova, l'avviso no.
+    typeInEditor(" ancora");
+    await waitFor("la seconda scrittura rifiutata parte", () => host.atGate("writeDocument").length === 2);
+    await waitFor(
+      "lo stato torna fallito",
+      () => document.getElementById("save-state")?.dataset.state === "fallito",
+    );
+    await settle();
+    expect(readOnly()[0]!.times, "l'avviso non si ripete a ogni battuta").toBe(1);
+    expect(host.files()["Benvenuto.md"]).not.toContain("testo su un file in sola lettura");
+
+    // Il file torna scrivibile: «Riprova» salva quello che era rimasto.
+    repair();
+    document.querySelector<HTMLButtonElement>('.sheet-notice[data-notice="save_failed"] button')!.click();
+    await waitFor(
+      "il testo rimasto arriva sul disco",
+      () => host.files()["Benvenuto.md"]?.includes("testo su un file in sola lettura ancora") === true,
+    );
+  });
+
   it("ricarica un cambio watcher quando il buffer è pulito", async () => {
     const host = await start(VAULT);
-    const readsBefore = host.atGate("readDocument").length;
+    const readsBefore = documentReads(host).length;
 
     await host.module.api.writeDocument(
       "Benvenuto.md",
@@ -1328,7 +2002,7 @@ describe("i confini del buffer", () => {
 
     await waitFor(
       "il documento viene riletto dopo il cambio watcher",
-      () => host.atGate("readDocument").length > readsBefore,
+      () => documentReads(host).length > readsBefore,
     );
     await waitFor(
       "il testo watcher arriva all'editor",
@@ -1344,7 +2018,7 @@ describe("i confini del buffer", () => {
   it("non sovrascrive il buffer sporco quando il watcher cambia il file", async () => {
     const host = await start(VAULT);
     typeInEditor("testo locale non salvato");
-    const readsBefore = host.atGate("readDocument").length;
+    const readsBefore = documentReads(host).length;
 
     await host.module.api.writeDocument(
       "Benvenuto.md",
@@ -1354,7 +2028,7 @@ describe("i confini del buffer", () => {
     expect(host.emit({ type: "document_changed", id: "Benvenuto.md" })).toBe(true);
 
     await settle();
-    expect(host.atGate("readDocument").length).toBe(readsBefore);
+    expect(documentReads(host).length).toBe(readsBefore);
     expect(textToVideo()).toContain("testo locale non salvato");
     expect(textToVideo()).not.toContain("testo arrivato dal watcher");
     expect(document.querySelector('.sheet-notice[data-notice]')?.getAttribute("data-notice")).toMatch(/changed_on_disk|overwritten/);
@@ -1404,7 +2078,7 @@ describe("i confini del buffer", () => {
 describe("undo locale tra riquadri", () => {
   it("condivide il testo ma non la cronologia, senza rileggere o lasciare timer", async () => {
     const host = await start(VAULT);
-    const readsAtSplit = host.atGate("readDocument").length;
+    const readsAtSplit = documentReads(host).length;
     const initial = editorTexts();
     expect(initial).toHaveLength(1);
 
@@ -1413,7 +2087,7 @@ describe("undo locale tra riquadri", () => {
     );
     await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
     await settle();
-    expect(host.atGate("readDocument").length).toBe(readsAtSplit);
+    expect(documentReads(host).length).toBe(readsAtSplit);
     expect(editorTexts()).toEqual([initial[0], initial[0]]);
 
     const views = editorViews();
@@ -1533,6 +2207,257 @@ describe("una sessione e le sue superfici", () => {
     expect(texts[0]).toContain(" [dopo il rimonto]");
   });
 
+  // C5: tornare a una scheda aperta non rimonta l'editor. La sua superficie
+  // resta da parte, nascosta, col cursore, lo scorrimento e la cronologia
+  // locale; il testo cambiato altrove intanto arriva come da fuori.
+  describe("tornare a una scheda già aperta", () => {
+    const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+    const tabOf = (pane: HTMLElement, name: string) =>
+      [...pane.querySelectorAll<HTMLElement>(".tab")].find((tab) => tab.textContent?.includes(name))!;
+    const viewIn = (pane: HTMLElement) => {
+      const host = pane.querySelector<HTMLElement>(".pane-editor");
+      return host ? findTextEditor(host) : null;
+    };
+    type TextView = NonNullable<ReturnType<typeof findTextEditor>>;
+    /// Una superficie liberata ha distrutto il suo editor, e con lui gli
+    /// ascoltatori e i plugin: il campo è privato in CodeMirror, ma è il segno.
+    const destroyed = (view: TextView) => (view as unknown as { destroyed: boolean }).destroyed;
+    /// Apre Spesa nel primo riquadro, torna su Benvenuto e dà l'editor di Spesa,
+    /// rimasto da parte.
+    const parkSpesa = async (): Promise<TextView> => {
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      return spesa;
+    };
+
+    it("ritrova la stessa superficie, col cursore e la cronologia locale", async () => {
+      const host = await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      spesa.dispatch({ changes: { from: 4, insert: " fresco" }, selection: { anchor: 11 }, userEvent: "input.type" });
+      const depth = undoDepth(spesa.state);
+      expect(depth).toBeGreaterThan(0);
+
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto torna davanti", () => viewIn(panes()[0]!)?.state.doc.toString().includes("Il primo documento") === true);
+      expect(editorViews()).toHaveLength(1);
+      expect(panes()[0]!.querySelectorAll(".pane-editor")).toHaveLength(1);
+      expect(panes()[0]!.querySelector<HTMLElement>(".pane-editor-riposo")?.hidden).toBe(true);
+
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === spesa);
+      expect(spesa.state.doc.toString()).toContain("pane fresco, latte");
+      expect(spesa.state.selection.main.head).toBe(11);
+      expect(undoDepth(spesa.state)).toBe(depth);
+      expect(spesa.state.readOnly).toBe(false);
+      // La superficie che torna scrive ancora nella sessione.
+      spesa.dispatch({ changes: { from: 0, insert: "X" }, userEvent: "input.type" });
+      await settle();
+      const { documentSessions } = await import("./state/document-session");
+      expect(documentSessions.text("note/Spesa.md")).toContain("Xpane fresco");
+      // Il salvataggio arriva al disco qui, non nella prova dopo.
+      await waitFor("il salvataggio arriva al disco", () =>
+        host.atGate("writeDocument").some((call) => String(call.args[1]).includes("Xpane fresco")) &&
+        (host.files()["note/Spesa.md"] ?? "").includes("Xpane fresco"));
+    });
+
+    it("il testo cambiato in un altro riquadro intanto arriva, fuori dalla cronologia locale", async () => {
+      await start({ ...VAULT });
+      await splitRight();
+      await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+      await settle();
+      const { openDocument } = await import("./panels/document");
+      panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Spesa.md");
+      await settle();
+      await waitFor("Spesa si apre a sinistra", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const parked = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto torna davanti", () => viewIn(panes()[0]!) !== parked);
+
+      panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre a destra", () => viewIn(panes()[1]!)?.state.doc.toString().includes("pane, latte") === true);
+      const right = viewIn(panes()[1]!)!;
+      right.dispatch({ changes: { from: 0, insert: "Lista: " }, userEvent: "input.type" });
+      await settle();
+
+      panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti a sinistra", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toContain("Lista: pane, latte");
+      expect(undoDepth(parked.state)).toBe(0);
+    });
+
+    it("chiudere una scheda messa da parte smonta la sua superficie", async () => {
+      await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const parked = viewIn(panes()[0]!)!;
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      const close = tabOf(panes()[0]!, "Spesa").parentElement!.querySelector<HTMLElement>(".tab-close");
+      expect(close).not.toBeNull();
+      close!.click();
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(document.querySelectorAll(".cm-editor")).toHaveLength(1);
+      expect(destroyed(parked)).toBe(true);
+    });
+
+    it("il testo cambiato sul disco mentre è da parte arriva al ritorno", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.writeFromOutside("note/Spesa.md", "cambiato da un'altra app\n");
+      const { documentSessions } = await import("./state/document-session");
+      await waitFor("la sessione rilegge il disco", () => documentSessions.text("note/Spesa.md") === "cambiato da un'altra app\n");
+      // Da parte non si ridisegna: è staccata dalla sessione.
+      expect(parked.state.doc.toString()).toContain("pane, latte");
+
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toBe("cambiato da un'altra app\n");
+      expect(undoDepth(parked.state)).toBe(0);
+    });
+
+    it("una rinomina o uno spostamento lasciano la superficie da parte, e la scheda torna con lei", async () => {
+      // La scheda è la stessa, cambia solo il nome: la superficie la segue
+      // col cursore e la cronologia locale (IMP-046, come per quella davanti).
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.renameFromOutside("note/Spesa.md", "note/Lista.md");
+      await waitFor("la scheda segue la rinomina", () => !!tabOf(panes()[0]!, "Lista"));
+      await settle();
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+      expect(destroyed(parked)).toBe(false);
+
+      tabOf(panes()[0]!, "Lista").click();
+      await waitFor("Lista torna davanti", () => viewIn(panes()[0]!) === parked);
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Lista va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+
+      host.renameFromOutside("note/Lista.md", "Archivio/Lista.md");
+      await waitFor("la scheda segue lo spostamento", () => !!tabOf(panes()[0]!, "Lista"));
+      await settle();
+      expect(destroyed(parked)).toBe(false);
+      tabOf(panes()[0]!, "Lista").click();
+      await waitFor("Lista torna dalla cartella nuova", () => viewIn(panes()[0]!) === parked);
+      expect(parked.state.doc.toString()).toContain("pane, latte");
+      expect(editorViews()).toHaveLength(1);
+
+      // La battuta va alla sessione col nome nuovo.
+      parked.dispatch({ changes: { from: 0, insert: "X " }, userEvent: "input.type" });
+      await waitFor("il salvataggio va al path nuovo", () => host.files()["Archivio/Lista.md"]?.startsWith("X ") === true);
+    });
+
+    it("cambiata l'estensione, la superficie da parte si smonta e la scheda rimonta", async () => {
+      const host = await start({ ...VAULT });
+      const parked = await parkSpesa();
+      host.renameFromOutside("note/Spesa.md", "note/Spesa.txt");
+      await waitFor("la superficie da parte se ne va", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 0);
+      expect(destroyed(parked)).toBe(true);
+    });
+
+    it("un salvataggio in volo quando la scheda va da parte arriva al disco, e la superficie torna intatta", async () => {
+      const host = await start({ ...VAULT });
+      const { openDocument } = await import("./panels/document");
+      await openDocument("note/Spesa.md");
+      await waitFor("Spesa si apre", () => viewIn(panes()[0]!)?.state.doc.toString().includes("pane, latte") === true);
+      const spesa = viewIn(panes()[0]!)!;
+      const release = host.throttle("writeDocument");
+      spesa.dispatch({ changes: { from: 0, insert: "A " }, userEvent: "input.type" });
+      await waitFor("il primo salvataggio è in volo", () =>
+        host.atGate("writeDocument").some((call) => String(call.args[1]).startsWith("A pane")));
+      // Il secondo resta nel debounce della superficie: andare da parte lo registra.
+      spesa.dispatch({ changes: { from: 2, insert: "B " }, userEvent: "input.type" });
+      const depth = undoDepth(spesa.state);
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Spesa va da parte", () => panes()[0]!.querySelectorAll(".pane-editor-riposo").length === 1);
+      const { documentSessions } = await import("./state/document-session");
+      expect(documentSessions.text("note/Spesa.md")).toBe("A B pane, latte, arance\n");
+
+      release();
+      await waitFor("tutto arriva al disco", () => host.files()["note/Spesa.md"] === "A B pane, latte, arance\n");
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === spesa);
+      expect(spesa.state.doc.toString()).toBe("A B pane, latte, arance\n");
+      expect(undoDepth(spesa.state)).toBe(depth);
+      expect(document.querySelector('.sheet-notice[data-notice]')).toBeNull();
+    });
+
+    it("la luce cambiata mentre è da parte arriva al ritorno", async () => {
+      await start({ ...VAULT });
+      const { setEditorTheme } = await import("./panels/document");
+      setEditorTheme("light");
+      const parked = await parkSpesa();
+      expect(isDarkTheme(parked)).toBe(false);
+
+      setEditorTheme("dark");
+      expect(isDarkTheme(viewIn(panes()[0]!)!)).toBe(true);
+      tabOf(panes()[0]!, "Spesa").click();
+      await waitFor("Spesa torna davanti", () => viewIn(panes()[0]!) === parked);
+      expect(isDarkTheme(parked)).toBe(true);
+    });
+
+    it("dividere non copia le superfici da parte, e chiudere il riquadro le smonta", async () => {
+      await start({ ...VAULT });
+      const left = await parkSpesa();
+      await splitRight();
+      await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+      await settle();
+      expect(panes()[1]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(0);
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+
+      const { openDocument } = await import("./panels/document");
+      panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      await openDocument("note/Riunione.md");
+      await waitFor("Riunione si apre a destra", () => viewIn(panes()[1]!)?.state.doc.toString().includes("Appunti") === true);
+      const right = viewIn(panes()[1]!)!;
+      tabOf(panes()[1]!, "Benvenuto").click();
+      await waitFor("Riunione va da parte a destra", () => panes()[1]!.querySelectorAll(".pane-editor-riposo").length === 1);
+
+      const registry = await import("./ui/commands");
+      await registry.allCommands().find((entry) => entry.id === "shell.pane.close")?.run?.();
+      await waitFor("il riquadro si chiude", () => panes().length === 1);
+      expect(destroyed(right)).toBe(true);
+      expect(destroyed(left)).toBe(false);
+      expect(document.querySelectorAll(".pane-editor-riposo")).toHaveLength(1);
+    });
+
+    it("tiene da parte al più quattro superfici per riquadro: la quinta libera la meno recente", async () => {
+      const notes: Record<string, string> = {};
+      for (let i = 1; i <= 5; i += 1) notes[`n/Nota ${i}.md`] = `testo della nota ${i}\n`;
+      await start({ ...VAULT, ...notes });
+      const { openDocument } = await import("./panels/document");
+      const views: TextView[] = [viewIn(panes()[0]!)!];
+      for (let i = 1; i <= 5; i += 1) {
+        await openDocument(`n/Nota ${i}.md`);
+        await waitFor(`Nota ${i} si apre`, () => viewIn(panes()[0]!)?.state.doc.toString() === `testo della nota ${i}\n`);
+        views.push(viewIn(panes()[0]!)!);
+      }
+      // Da parte: Benvenuto, Nota 1…4; la quinta superficie da parte ha liberato Benvenuto.
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(4);
+      expect(destroyed(views[0]!)).toBe(true);
+      expect(views.slice(1).map(destroyed)).toEqual([false, false, false, false, false]);
+      expect(document.querySelectorAll(".cm-editor")).toHaveLength(5);
+
+      // Benvenuto torna montato da capo; Nota 1, ora la meno recente, se ne va.
+      tabOf(panes()[0]!, "Benvenuto").click();
+      await waitFor("Benvenuto si rimonta", () => viewIn(panes()[0]!)?.state.doc.toString().includes("Il primo documento") === true);
+      expect(viewIn(panes()[0]!)).not.toBe(views[0]);
+      expect(destroyed(views[1]!)).toBe(true);
+      expect(panes()[0]!.querySelectorAll(".pane-editor-riposo")).toHaveLength(4);
+      tabOf(panes()[0]!, "Nota 3").click();
+      await waitFor("Nota 3 torna com'era", () => viewIn(panes()[0]!) === views[3]);
+    });
+  });
+
   it("«Apri a lato» dal menu della riga apre la nota in un secondo riquadro", async () => {
     await start(VAULT);
     await contextMenu(row("Benvenuto"), "Apri a lato");
@@ -1584,7 +2509,7 @@ describe("una sessione e le sue superfici", () => {
     if (!field) throw new Error("la riga non è diventata un campo");
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    await waitFor("la rinomina arriva al kernel", () => host.atGate("invokeCommand").length > 0);
+    await waitFor("la rinomina arriva al kernel", () => withoutTypeReads(host.atGate("invokeCommand")).length > 0);
     await settle();
     // La barriera è la **linguetta**: l'albero si riscrive con un evento, la
     // migrazione dell'identità aperta (evento `document_renamed` → layout →
@@ -1645,7 +2570,7 @@ describe("due salvataggi della stessa nota", () => {
     expect(host.atGate("writeDocument").length).toBe(1);
 
     unlock();
-    await waitFor("la nota si apre", () => host.atGate("readDocument").length > 1);
+    await waitFor("la nota si apre", () => documentReads(host).length > 1);
     await settle();
 
     // Una scrittura sola, e nessun conflitto: il flush ha aspettato quella in
@@ -1665,10 +2590,10 @@ describe("rinomina", () => {
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle();
-    await waitFor("la rinomina arriva al kernel", () => host.atGate("invokeCommand").length > 0);
+    await waitFor("la rinomina arriva al kernel", () => withoutTypeReads(host.atGate("invokeCommand")).length > 0);
     await settle();
 
-    const invoked = host.atGate("invokeCommand")[0];
+    const invoked = withoutTypeReads(host.atGate("invokeCommand"))[0];
     expect(invoked.args[0]).toBe("note.rename");
     expect(invoked.args[1]).toEqual({ doc: "Benvenuto.md", to: "Indice.md" });
     expect(Object.keys(host.files())).toContain("Indice.md");
@@ -1708,18 +2633,18 @@ describe("nuova cartella", () => {
     await contextMenu(folderRow("note")!, "Nuovo", "Cartella");
     await typeFolder("Progetti");
     await waitFor("la sottocartella compare aperta sotto la madre", () => !!folderRow("note/Progetti"));
-    expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args.slice(0, 2))).toEqual([
       ["folder.create", { path: "note/Progetti" }],
     ]);
 
-    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
+    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuovo", "Cartella");
     await typeFolder("Archivio");
     await waitFor("la cartella di radice compare", () => !!folderRow("Archivio"));
 
-    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuova cartella");
+    await contextMenu(document.querySelector<HTMLElement>("#files-title")!, "Nuovo", "Cartella");
     await typeFolder("note");
     await waitFor("il rifiuto chiude il campo", () => !document.querySelector("input.new-folder"));
-    expect(host.atGate("invokeCommand")).toHaveLength(3);
+    expect(withoutTypeReads(host.atGate("invokeCommand"))).toHaveLength(3);
     expect(document.querySelectorAll('#file-list li[data-path="note"]')).toHaveLength(1);
   });
 });
@@ -1751,7 +2676,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     return el;
   };
   const commands = (host: FakeHost, id: string) =>
-    host.atGate("invokeCommand").filter((call) => call.args[0] === id).map((call) => call.args[1]);
+    withoutTypeReads(host.atGate("invokeCommand")).filter((call) => call.args[0] === id).map((call) => call.args[1]);
 
   it("una cartella si rinomina con F2 e si sposta trascinandola su un'altra", async () => {
     const host = await start({ ...VAULT, "Archivio/vecchio.md": "x" });
@@ -1853,7 +2778,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     Object.defineProperty(drop, "dataTransfer", {
       value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
     });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     expect(drop.defaultPrevented).toBe(true);
     await waitFor("il rimando è nel testo", () => editorTexts().some((text) => text.includes("img/foto.png")));
     expect(editorTexts().join("\n")).not.toContain("/vault/");
@@ -1887,9 +2812,35 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     Object.defineProperty(drop, "dataTransfer", {
       value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
     });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Spesa](note/Spesa.md)")));
     expect(editorTexts().join("\n")).not.toContain("[[");
+  });
+
+  it("una nota lasciata che l'editor non riesce a scrivere lo dice, senza un rifiuto muto", async () => {
+    await start(VAULT);
+    const { setMode } = await import("./panels/document");
+    await setMode("source");
+    await settle();
+    const { layout } = await import("./state/layout");
+    const { paneOf } = await import("./state/document-controller");
+    const surface = paneOf(layout.focus)!.surface!;
+    vi.spyOn(surface, "insertReferences").mockImplementation(() => {
+      throw new Error("editor guasto");
+    });
+    for (const [kind, value] of [
+      ["application/x-fub-note", "note/Spesa.md"],
+      ["application/x-fub-entries", JSON.stringify([{ id: "note/Spesa.md", note: true }])],
+    ] as const) {
+      const drop = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, "dataTransfer", {
+        value: { types: [kind], files: [], getData: (asked: string) => (asked === kind ? value : "") },
+      });
+      document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
+      expect(drop.defaultPrevented).toBe(true);
+    }
+    await waitFor("l'avviso del collegamento non scritto", () =>
+      [...document.querySelectorAll(".toast")].filter((each) => each.textContent?.includes("editor guasto")).length >= 1);
   });
 
   it("un collegamento web lasciato in una nota diventa un link, il resto un allegato", async () => {
@@ -1901,7 +2852,7 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     const files = [shortcut, new File([new Uint8Array([1, 2, 3])], "foto.png")];
     const drop = new Event("drop", { bubbles: true, cancelable: true });
     Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files, getData: () => "" } });
-    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
     expect(drop.defaultPrevented).toBe(true);
     await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Pagina utile](https://example.org/pagina)")));
     await waitFor("l'immagine è depositata", () => host.atGate("resourceWrite").length === 1);
@@ -1942,12 +2893,12 @@ describe("rinomina durante un salvataggio in volo", () => {
     field.value = "Indice";
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle();
-    expect(host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
 
     unlock();
     await waitFor(
       "la rinomina parte dopo il salvataggio",
-      () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.rename"),
+      () => withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.rename"),
     );
     await settle();
 
@@ -2279,7 +3230,7 @@ describe("chiudere linguette e superfici", () => {
     await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor(
       "la cancellazione arriva al kernel",
-      () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash"),
+      () => withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.trash"),
     );
 
     // Keep the delete command in flight past the save debounce. If the delete
@@ -2312,7 +3263,7 @@ describe("chiudere linguette e superfici", () => {
 
     const deleting = trashWithConfirm("Benvenuto.md");
     await microtasks();
-    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash")).toBe(true);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).some((c) => c.args[0] === "note.trash")).toBe(true);
     expect(view.state.readOnly).toBe(true);
 
     view.focus();
@@ -2386,6 +3337,346 @@ describe("chiudere linguette e superfici", () => {
     );
     expect(host.files()["Benvenuto.md"]).toBe(after);
     expect(documentSessions.inspect("Benvenuto.md")?.dirty).toBe(false);
+  });
+});
+
+describe("i tasti del mouse sulla striscia delle schede", () => {
+  const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+  const names = () => tabs().map((tab) => tab.querySelector(".tab-name")?.textContent);
+  const selected = () => document.querySelector('.pane .tab[aria-selected="true"] .tab-name')?.textContent;
+  /// Una pressione vera: giù e su col tasto, poi il `click` col `detail` della
+  /// serie. WebKitGTK lo manda anche dopo il centrale, col `button` del sinistro.
+  const press = (target: Element, button: number, detail = 1): void => {
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button, detail }));
+    target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button, detail }));
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail }));
+  };
+
+  it("il centrale chiude la scheda e non la attiva, in WebKitGTK e in Chromium (IMP-012)", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    expect(selected()).toBe("Spesa");
+
+    // WebKitGTK: un `click` dopo il centrale.
+    press(tabs()[0]!, 1);
+    await settle();
+    expect(names()).toEqual(["Riunione", "Spesa"]);
+    expect(selected()).toBe("Spesa");
+
+    // Chromium: un `auxclick` col centrale, e nient'altro. Una scheda sola.
+    const riunione = tabs()[0]!;
+    riunione.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 1 }));
+    riunione.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, button: 1 }));
+    riunione.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1, detail: 1 }));
+    riunione.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, detail: 1 }));
+    await settle();
+    expect(names()).toEqual(["Spesa"]);
+  });
+
+  it("il doppio clic sulla × chiude una scheda sola: il secondo clic non tocca ciò che scorre sotto (IMP-013)", async () => {
+    const host = await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    const files = Object.keys(host.files()).sort();
+
+    press(tabs()[2]!.parentElement!.querySelector(".tab-close")!, 0, 1);
+    await settle();
+    expect(names()).toEqual(["Benvenuto", "Riunione"]);
+    expect(selected()).toBe("Riunione");
+    // Il secondo clic della serie cade sulla vicina, sul «+» o sul vuoto, e
+    // non sceglie la parola che ha sotto.
+    const second = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, detail: 2 });
+    tabs()[0]!.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(true);
+    press(tabs()[0]!, 0, 2);
+    const plus = document.querySelector(".pane .tab-new");
+    if (plus) press(plus, 0, 2);
+    const strip = document.querySelector(".pane .pane-tabs")!;
+    press(strip, 0, 2);
+    strip.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 }));
+    await settle();
+    expect(names()).toEqual(["Benvenuto", "Riunione"]);
+    expect(selected()).toBe("Riunione");
+    expect(Object.keys(host.files()).sort()).toEqual(files);
+
+    // Un clic che comincia da capo sulla vicina la attiva, come sempre.
+    press(tabs()[0]!, 0, 1);
+    await settle();
+    expect(selected()).toBe("Benvenuto");
+  });
+});
+
+describe("il fuoco dopo un gesto che toglie ciò che lo aveva", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const focusIn = (el: HTMLElement) => el.contains(document.activeElement);
+
+  it("chiusa con la × la scheda attiva, il fuoco resta nel riquadro (IMP-011)", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    editorViews()[0]!.focus();
+    expect(focusIn(panes()[0]!)).toBe(true);
+    const close = document.querySelector<HTMLElement>('.pane .tab[aria-selected="true"] + .tab-close')!;
+    close.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    close.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    close.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+    await waitFor("resta Benvenuto", () => editorTexts().join().includes("Il primo documento"));
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(focusIn(panes()[0]!)).toBe(true);
+  });
+
+  it("dopo «Dividi a destra» il fuoco è nel riquadro nuovo", async () => {
+    await start(VAULT);
+    editorViews()[0]!.focus();
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(focusIn(panes()[1]!)).toBe(true);
+    expect(panes()[1]!.classList.contains("focus")).toBe(true);
+  });
+
+  it("il divisore mosso con le frecce tiene il fuoco e continua a muoversi (IMP-016)", async () => {
+    await start(VAULT);
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    const divider = () => document.querySelector<HTMLElement>(".pane-divider")!;
+    divider().focus();
+    for (const expected of ["55", "60"]) {
+      document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+      await settle();
+      expect(document.activeElement).toBe(divider());
+      expect(divider().getAttribute("aria-valuenow")).toBe(expected);
+    }
+  });
+});
+
+// Un cambio di scheda fatto con un tasto globale porta il fuoco nell'editor
+// della scheda che diventa attiva, da qualunque punto del riquadro parta: dal
+// testo, o dalla linguetta su cui un clic lo aveva lasciato. Senza, la battuta
+// dopo il tasto finiva sul `body` o su una linguetta e si perdeva in silenzio
+// (IMP-048…051). Il tasto passa dalla tastiera vera (`ui/keyboard.ts`), come
+// nell'app.
+describe("il fuoco dopo un cambio di scheda da tastiera", () => {
+  const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+  const selected = () => document.querySelector<HTMLElement>('.pane .tab[aria-selected="true"] .tab-name')?.textContent;
+  /// Il tasto, con Ctrl, sull'elemento col fuoco: dove lo manda il WebView.
+  /// Maiusc+Tab arriva come lo passa WebKitGTK, `Unidentified` col tasto
+  /// fisico in `code` (GTK lo chiama `ISO_Left_Tab`).
+  const press = (key: string, shift = false) => {
+    const webkit = shift && key === "Tab" ? { key: "Unidentified", code: "Tab" } : { key };
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", {
+      ...webkit, ctrlKey: true, shiftKey: shift, bubbles: true, cancelable: true,
+    }));
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+  };
+  /// Il fuoco è nell'editor che si vede, e quell'editor mostra `text`.
+  const focusedEditorShows = (text: string): boolean => {
+    const focused = document.activeElement;
+    if (!(focused instanceof HTMLElement) || focused === document.body) return false;
+    const content = focused.closest(".cm-content");
+    return !!content && !!focused.closest(".pane-editor") && !focused.closest("[hidden]")
+      && (content.textContent ?? "").includes(text);
+  };
+  const editorOf = (text: string) => editorViews().find((view) => view.state.doc.toString().includes(text))!;
+  /// Due schede, Benvenuto e Riunione (attiva), col fuoco nel testo di Riunione.
+  const twoTabs = async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    expect(selected()).toBe("Riunione");
+    editorOf("Appunti della riunione").focus();
+    expect(focusedEditorShows("Appunti della riunione")).toBe(true);
+  };
+  /// Il clic su una linguetta lascia il fuoco sulla linguetta (le frecce della
+  /// striscia partono da lì): un tasto globale dopo il clic lo porta comunque
+  /// nell'editor.
+  const clickTab = async (name: string) => {
+    const tab = tabs().find((each) => each.textContent?.includes(name))!;
+    tab.focus();
+    tab.click();
+    await settle();
+    expect(document.activeElement).toBe(tabs().find((each) => each.textContent?.includes(name)));
+  };
+  const lands = async (name: string, text: string) => {
+    await waitFor(`la scheda ${name} è attiva`, () => selected() === name);
+    await waitFor(`il fuoco è nel testo di ${name}`, () => focusedEditorShows(text));
+    await settle();
+    expect(focusedEditorShows(text)).toBe(true);
+  };
+
+  it("Ctrl+W porta il fuoco nell'editor della scheda vicina, non sulla sua linguetta (IMP-048)", async () => {
+    await twoTabs();
+    press("w");
+    await waitFor("Riunione si chiude", () => tabs().length === 1);
+    await lands("Benvenuto", "Il primo documento");
+  });
+
+  it("Ctrl+Tab porta il fuoco nell'editor della scheda nuova, dal testo e dalla linguetta (IMP-049)", async () => {
+    await twoTabs();
+    press("Tab");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Riunione");
+    press("Tab");
+    await lands("Benvenuto", "Il primo documento");
+  });
+
+  it("Ctrl+Maiusc+Tab torna alla scheda usata prima, col fuoco nel suo editor (IMP-050)", async () => {
+    await twoTabs();
+    press("Tab", true);
+    await lands("Benvenuto", "Il primo documento");
+    press("Tab", true);
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+PagGiù e Ctrl+PagSu portano il fuoco nell'editor della scheda nuova (IMP-049)", async () => {
+    await twoTabs();
+    press("PageDown");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Benvenuto");
+    press("PageUp");
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+1 e Ctrl+9 portano il fuoco nell'editor della scheda scelta (IMP-049)", async () => {
+    await twoTabs();
+    press("1");
+    await lands("Benvenuto", "Il primo documento");
+    await clickTab("Benvenuto");
+    press("9");
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  // IMP-152: le scorciatoie globali non agiscono dietro una finestra modale.
+  it("con le Impostazioni aperte Ctrl+W e Ctrl+N tacciono, e dopo Esc tornano (IMP-152)", async () => {
+    await twoTabs();
+    const host = box.host!;
+    const panel = document.querySelector<HTMLElement>("#settings-panel")!;
+    press(",");
+    await waitFor("le Impostazioni si aprono", () => !panel.hidden);
+    await settle();
+    expect(panel.contains(document.activeElement)).toBe(true);
+    const files = Object.keys(host.files()).sort();
+
+    press("w");
+    press("n");
+    await settle();
+    expect(tabs(), "nessuna scheda chiusa dietro la finestra").toHaveLength(2);
+    expect(selected()).toBe("Riunione");
+    expect(Object.keys(host.files()).sort(), "nessuna nota creata dietro la finestra").toEqual(files);
+    expect(panel.hidden).toBe(false);
+
+    (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await waitFor("le Impostazioni si chiudono", () => panel.hidden);
+    editorOf("Appunti della riunione").focus();
+    press("w");
+    await waitFor("chiusa la finestra, Ctrl+W torna a chiudere la scheda", () => tabs().length === 1);
+  });
+
+  it("Ctrl+Maiusc+T riapre la scheda col fuoco nel suo editor (IMP-051)", async () => {
+    await twoTabs();
+    press("w");
+    await waitFor("Riunione si chiude", () => tabs().length === 1);
+    await clickTab("Benvenuto");
+    press("T", true);
+    await waitFor("Riunione torna", () => tabs().length === 2);
+    await lands("Riunione", "Appunti della riunione");
+  });
+
+  it("Ctrl+\\ porta il fuoco nell'editor del riquadro nuovo anche dalla linguetta", async () => {
+    await twoTabs();
+    await clickTab("Riunione");
+    press("\\");
+    await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+    await waitFor("il riquadro nuovo ha il suo editor", () => editorViews().length >= 2);
+    await settle();
+    const second = document.querySelectorAll<HTMLElement>(".pane")[1]!;
+    await waitFor("il fuoco è nel riquadro nuovo", () => second.contains(document.activeElement));
+    expect(focusedEditorShows("Appunti della riunione")).toBe(true);
+  });
+
+  it("un tasto di scheda col fuoco fuori dai riquadri porta il fuoco nella scheda nuova", async () => {
+    await twoTabs();
+    const search = document.querySelector<HTMLElement>("#file-list .tree-row")!;
+    search.focus();
+    expect(search.contains(document.activeElement)).toBe(true);
+    press("PageDown");
+    await lands("Benvenuto", "Il primo documento");
+  });
+});
+
+// Un clic nel testo con un menu aperto chiude il menu e lascia il fuoco nel
+// testo: la chiusura non lo riporta al pulsante che aveva aperto il menu, e la
+// battuta dopo arriva alla sessione del documento (IMP-151). Senza, il fuoco
+// tornava su «Ordina» e le battute si perdevano in silenzio.
+describe("il fuoco dopo un clic fuori da un menu", () => {
+  it("il clic nel testo con «Ordina» aperto lascia il fuoco nell'editor, e la battuta arriva alla sessione", async () => {
+    const host = await start(VAULT);
+    const sort = document.getElementById("explorer-sort") as HTMLButtonElement;
+    sort.focus();
+    sort.click();
+    await waitFor("il menu «Ordina» si apre", () => document.getElementById("context-menu") !== null);
+    await settle();
+    expect(sort.getAttribute("aria-expanded")).toBe("true");
+
+    // Il clic del puntatore nel testo: il `mousedown` dà il fuoco all'editor,
+    // poi il `click` arriva al documento e chiude il menu.
+    const view = editorViews().find((each) => each.state.doc.toString().includes("Il primo documento"))!;
+    view.contentDOM.focus();
+    view.contentDOM.click();
+    await settle();
+    expect(sort.getAttribute("aria-expanded"), "il menu si chiude").toBe("false");
+    const focused = editorViews().find((each) => each.contentDOM.contains(document.activeElement));
+    expect(focused, "il fuoco resta nel testo cliccato, non sul pulsante del menu").toBe(view);
+
+    // La battuta va all'editor col fuoco, e da lì alla sessione e al disco.
+    focused!.dispatch({ changes: { from: 0, insert: "QQ" }, userEvent: "input.type" });
+    await settle();
+    const { documentSessions } = await import("./state/document-session");
+    expect(documentSessions.text("Benvenuto.md")).toContain("QQIl primo documento");
+    await waitFor("il salvataggio arriva al disco", () =>
+      host.atGate("writeDocument").some((call) => call.args[0] === "Benvenuto.md" && String(call.args[1]).includes("QQIl primo")));
+  });
+});
+
+describe("chiudere un riquadro", () => {
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const tabNames = (pane: HTMLElement) => [...pane.querySelectorAll<HTMLElement>(".tab .tab-name")].map((tab) => tab.textContent);
+  const run = async (id: string) => {
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === id)?.run?.();
+  };
+
+  // La scheda unica di un riquadro chiuso col testo ancora da salvare: il
+  // testo arriva sul disco prima che la sessione si chiuda, e la scheda si
+  // riapre con Mod-Shift-t come una chiusa con la × (IMP-018).
+  it("la scheda unica non si perde: il testo va sul disco e Mod-Shift-t la riapre (IMP-018)", async () => {
+    const host = await start(VAULT);
+    await twoPanes();
+    // Nel secondo riquadro resta solo Riunione.
+    panes()[1]!.querySelector<HTMLElement>(".tab-entry .tab-close")!.click();
+    await waitFor("il secondo riquadro ha solo Riunione", () => tabNames(panes()[1]!).join() === "Riunione");
+    const right = editorViews()[1]!;
+    right.dispatch({ changes: { from: right.state.doc.length, insert: "testo del riquadro chiuso" } });
+    expect(host.files()["note/Riunione.md"]).not.toContain("testo del riquadro chiuso");
+
+    await run("shell.pane.close");
+    expect(panes()).toHaveLength(1);
+    expect(host.files()["note/Riunione.md"]).toContain("testo del riquadro chiuso");
+    expect(tabNames(panes()[0]!)).toEqual(["Benvenuto"]);
+
+    await run("shell.tab.reopen");
+    await waitFor("Riunione torna nel riquadro rimasto", () => tabNames(panes()[0]!).includes("Riunione"));
+    await waitFor("col testo scritto", () => editorViews()[0]?.state.doc.toString().includes("testo del riquadro chiuso") === true);
   });
 });
 
@@ -2641,7 +3932,7 @@ describe("spostare un file col testo non ancora sul disco", () => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await settle(20);
 
-    const renames = host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename");
+    const renames = withoutTypeReads(host.atGate("invokeCommand")).filter((c) => c.args[0] === "note.rename");
     expect(
       renames,
       "il file si è mosso mentre il testo battuto era solo in RAM: la " +
@@ -2649,7 +3940,7 @@ describe("spostare un file col testo non ancora sul disco", () => {
     ).toEqual([]);
     expect(Object.keys(host.files())).toContain("Benvenuto.md");
     // E chi guarda lo sa: il rifiuto è una frase, non un gesto che non fa niente.
-    expect(document.body.textContent).toContain("Benvenuto.md non è sul disco");
+    expect(document.body.textContent).toContain("Le ultime modifiche di Benvenuto.md non sono ancora salvate");
 
     repair();
   });
@@ -2792,7 +4083,7 @@ describe("cerca", () => {
 
     results[0].click();
     await waitFor("il documento cercato si apre", () =>
-      host.atGate("readDocument").some((c) => c.args[0] === "note/Spesa.md"),
+      documentReads(host).some((c) => c.args[0] === "note/Spesa.md"),
     );
     await settle();
     expect(textToVideo()).toContain("pane, latte, arance");
@@ -2881,7 +4172,7 @@ describe("il cestino scelto", () => {
 
     await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor("la nota è nel cestino", () => host.trash().length === 1);
-    expect(host.atGate("invokeCommand").map((call) => call.args[0])).toEqual(["trash.os"]);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args[0])).toEqual(["trash.os"]);
     const { recentNotices } = await import("./ui/notify");
     expect(recentNotices().some((a) => a.text.includes("cestino del vault"))).toBe(true);
   });
@@ -2994,7 +4285,8 @@ describe("la finestra senza vault", () => {
     };
     const host = await start({}, [], null, notice);
 
-    expect(host.atGate("sessionNotice").length).toBe(1);
+    // Un tiraggio per l'avviso, uno che risponde vuoto e ferma il ciclo.
+    expect(host.atGate("sessionNotice").length).toBe(2);
     const { recentNotices } = await import("./ui/notify");
     expect(recentNotices().some((a) => a.text.includes("non si può scrivere"))).toBe(true);
 
@@ -3006,6 +4298,37 @@ describe("la finestra senza vault", () => {
     const { recentNotices: healthyRecent } = await import("./ui/notify");
     expect(healthy.atGate("sessionNotice").length).toBe(1);
     expect(healthyRecent().some((a) => a.text.includes("non si può scrivere"))).toBe(false);
+  });
+
+  it("dopo la diagnosi tira gli avvisi del percorso di disegno e li mostra", async () => {
+    // Il driver disallineato nasce in `fub_app::run` prima di GTK, e arriva
+    // in coda all'avviso di sessione come `custom` col topic `rendering`:
+    // senza il ciclo dei tiraggi si vedrebbe solo il primo.
+    const trouble: KernelNotice = {
+      event: {
+        type: "trouble",
+        severity: "warning",
+        subject: null,
+        error: { kind: "io", message: "`/config` non si può scrivere" },
+        gate: null,
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const rendering: KernelNotice = {
+      event: {
+        type: "custom",
+        topic: "rendering",
+        payload: { kind: "driver_mismatch", kernel: "550.163.01", library: "595.112.07" },
+      },
+      origin: { actor: { kind: "kernel" }, batch: null },
+    };
+    const host = await start({}, [], null, [trouble, rendering]);
+
+    expect(host.atGate("sessionNotice").length).toBe(3);
+    const { recentNotices } = await import("./ui/notify");
+    const texts = recentNotices().map((a) => a.text);
+    expect(texts.some((text) => text.includes("non si può scrivere"))).toBe(true);
+    expect(texts.some((text) => text.includes("riavvia il computer") && text.includes("550.163.01"))).toBe(true);
   });
 });
 
@@ -3046,6 +4369,217 @@ describe("una rinomina che questa finestra non ha chiesto", () => {
     // E il path vecchio **non** rinasce: era il difetto gemello, e sarebbe
     // passato per una nota duplicata invece che per una battuta persa.
     expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+
+  it("lascia l'editor dov'era: stesso editor, stesso fuoco, stesso cursore (IMP-046)", async () => {
+    // La scheda segue il nome nuovo, ma rimontare la superficie buttava via il
+    // fuoco: le battute dopo un `mv` da fuori finivano sul body, perse.
+    const host = await start(VAULT);
+    const before = editorViews()[0]!;
+    before.focus();
+    before.dispatch({ selection: { anchor: 3 } });
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+
+    host.renameFromOutside("Benvenuto.md", "Fuori.md");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Fuori"));
+    await settle();
+
+    const after = editorViews();
+    expect(after).toHaveLength(1);
+    expect(after[0]).toBe(before);
+    expect(before.dom.isConnected).toBe(true);
+    expect(document.activeElement?.closest(".cm-content")).not.toBeNull();
+    expect(before.state.selection.main.head).toBe(3);
+
+    // La battuta dopo la rinomina va alla sessione col nome nuovo, e da lì sul disco.
+    before.dispatch({ changes: { from: 3, insert: "dopo" }, userEvent: "input.type" });
+    await waitFor("il salvataggio parte col nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Fuori.md" && String(w.args[1]).includes("dopo")));
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+
+  it("con il fuoco in un altro pannello, la rinomina non lo sposta (IMP-046)", async () => {
+    const host = await start(VAULT);
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    expect(document.activeElement).toBe(rail);
+
+    host.renameFromOutside("Benvenuto.md", "Fuori.md");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Fuori"));
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
+
+  it("cambiata l'estensione l'editor si rimonta, e fuoco e cursore tornano dov'erano (IMP-046)", async () => {
+    // `.md` → `.markdown`: un'altra estensione chiede un montaggio nuovo, ma
+    // per chi scrive la nota è la stessa: la battuta dopo deve entrarci.
+    const host = await start(VAULT);
+    const before = editorViews()[0]!;
+    before.focus();
+    before.dispatch({ selection: { anchor: 3 } });
+    typeInEditorAt(before, 3, "prima");
+
+    host.renameFromOutside("Benvenuto.md", "Benvenuto.markdown");
+    await waitFor("l'editor si rimonta sul nome nuovo", () => {
+      const now = editorViews();
+      return now.length === 1 && now[0] !== before;
+    });
+    await settle();
+    const after = editorViews()[0]!;
+    expect(document.activeElement?.closest(".cm-content")).toBe(after.contentDOM);
+    expect(after.state.selection.main.head).toBe(3 + "prima".length);
+
+    after.dispatch({ changes: { from: after.state.selection.main.head, insert: "dopo" }, userEvent: "input.type" });
+    await waitFor("tutto il testo arriva al nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Benvenuto.markdown" && String(w.args[1]).includes("primadopo")));
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+
+  it("cambiata l'estensione col fuoco altrove, il montaggio nuovo non lo prende (IMP-046)", async () => {
+    const host = await start(VAULT);
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    const before = editorViews()[0]!;
+
+    host.renameFromOutside("Benvenuto.md", "Benvenuto.markdown");
+    await waitFor("l'editor si rimonta sul nome nuovo", () => {
+      const now = editorViews();
+      return now.length === 1 && now[0] !== before;
+    });
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
+});
+
+describe("un documento Word rinominato da fuori", () => {
+  const RICH = JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, c: [{ t: "text", x: "ciao" }] }] });
+
+  /// Apre il Word dall'albero e aspetta che la pagina si possa scrivere.
+  async function openLetter(): Promise<FakeHost> {
+    const host = await start({ ...VAULT, "Lettera.docx": RICH });
+    const row = () => document.querySelector<HTMLElement>('#file-list li[data-path="Lettera.docx"] > .tree-row');
+    await waitFor("il Word è nell'albero", () => !!row());
+    row()!.click();
+    await waitFor("la pagina del Word si scrive", () =>
+      document.querySelector<HTMLElement>(".pane.focus .rich-page [contenteditable=true]") !== null);
+    await settle();
+    return host;
+  }
+
+  const richPage = () => document.querySelector<HTMLElement>(".pane.focus .rich-page [contenteditable=true]");
+
+  /// Il cursore all'inizio del testo della pagina, come dopo un clic lì.
+  function caretAtStart(page: HTMLElement): void {
+    const text = document.createTreeWalker(page, NodeFilter.SHOW_TEXT).nextNode()!;
+    window.getSelection()!.collapse(text, 0);
+    document.dispatchEvent(new Event("selectionchange"));
+  }
+
+  /// Una battuta come la dà il browser a una pagina scrivibile: il carattere
+  /// entra nel nodo di testo dove sta la selezione del documento, e il motore
+  /// lo legge dal DOM. Senza fuoco nella pagina (sul body) non entra da
+  /// nessuna parte, come nell'app.
+  function press(char: string): void {
+    const editable = document.activeElement?.closest<HTMLElement>("[contenteditable=true]");
+    if (!editable) return;
+    const selection = window.getSelection()!;
+    let node = selection.focusNode;
+    let offset = selection.focusOffset;
+    if (!node || !editable.contains(node)) return;
+    if (node.nodeType !== Node.TEXT_NODE) {
+      const text = document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode();
+      if (!text) return;
+      node = text;
+      offset = 0;
+    }
+    (node as Text).insertData(offset, char);
+    selection.collapse(node, offset + char.length);
+  }
+
+  it("la pagina resta quella, col fuoco e il cursore, e la battuta dopo va sul nome nuovo (IMP-046)", async () => {
+    const host = await openLetter();
+    const page = richPage()!;
+    page.focus();
+    caretAtStart(page);
+    press("a");
+    await waitFor("la battuta entra", () => page.textContent?.includes("aciao") === true);
+
+    host.renameFromOutside("Lettera.docx", "Lettera nuova.docx");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Lettera nuova"));
+    await settle();
+
+    expect(richPage()).toBe(page);
+    expect(page.isConnected).toBe(true);
+    expect(page.contains(document.activeElement)).toBe(true);
+
+    press("b");
+    await waitFor("la battuta dopo entra al cursore di prima", () => page.textContent?.includes("abciao") === true);
+    await waitFor("il salvataggio va al nome nuovo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Lettera nuova.docx" && String(w.args[1]).includes("abciao")));
+    expect(Object.keys(host.files())).not.toContain("Lettera.docx");
+  });
+
+  it("il testo non salvato prima della rinomina arriva sul disco col nome nuovo", async () => {
+    const host = await openLetter();
+    const unlock = host.throttle("writeDocument");
+    const page = richPage()!;
+    page.focus();
+    caretAtStart(page);
+    press("z");
+    await waitFor("la battuta entra", () => page.textContent?.includes("zciao") === true);
+
+    host.renameFromOutside("Lettera.docx", "Archivio.docx");
+    await settle();
+    unlock();
+    await waitFor("il testo arriva al nome nuovo", () => host.files()["Archivio.docx"]?.includes("zciao") === true);
+    expect(Object.keys(host.files())).not.toContain("Lettera.docx");
+  });
+
+  it("con il fuoco in un altro pannello, la rinomina non lo sposta", async () => {
+    const host = await openLetter();
+    const rail = document.querySelector<HTMLElement>("#rail button")!;
+    rail.focus();
+    host.renameFromOutside("Lettera.docx", "Lettera nuova.docx");
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some((el) => el.textContent === "Lettera nuova"));
+    await settle();
+    expect(document.activeElement).toBe(rail);
+  });
+});
+
+/// Scrive `text` a `at` come una battuta della persona, nella vista data.
+function typeInEditorAt(view: ReturnType<typeof editorViews>[number], at: number, text: string): void {
+  view.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length }, userEvent: "input.type" });
+}
+
+describe("una nota cancellata da fuori con testo non salvato", () => {
+  it("«Ricrea la nota» riscrive il testo e toglie la bozza che lo teneva (IMP-047)", async () => {
+    // La bozza scritta alla cancellazione ha come base la revisione del file
+    // sparito: lasciata lì dopo la ricreazione, alla riapertura dava un
+    // conflitto con un disco uguale a lei.
+    const host = await start(VAULT);
+    const unlock = host.throttle("saveDraft");
+    typeInEditor(" e il testo non salvato");
+    expect(host.emit({ type: "document_removed", id: "Benvenuto.md" })).toBe(true);
+    await waitFor("la bozza parte", () => host.atGate("saveDraft").some((call) => call.args[0] === "Benvenuto.md"));
+
+    await waitFor("il riquadro offre di ricrearla", () =>
+      !!document.querySelector('.sheet-notice[data-notice="removed"]'));
+    const notice = document.querySelector<HTMLElement>('.sheet-notice[data-notice="removed"]')!;
+    const action = [...notice.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Ricrea la nota");
+    expect(action).toBeDefined();
+    action!.click();
+    await waitFor("il file torna col testo", () =>
+      host.atGate("writeDocument").some((w) => w.args[0] === "Benvenuto.md" && String(w.args[1]).includes("il testo non salvato")));
+    await settle();
+    // La bozza è ancora in scrittura: scartarla prima la lascerebbe dopo.
+    expect(host.atGate("discardDraft")).toHaveLength(0);
+
+    unlock();
+    await waitFor("la bozza se ne va", () => host.atGate("discardDraft").some((call) => call.args[0] === "Benvenuto.md"));
   });
 });
 
@@ -3114,7 +4648,7 @@ describe("la palette flussa prima di un comando che scrive", () => {
       [...document.querySelectorAll<HTMLElement>(".launcher-row")].find(
         (each) =>
           each.querySelector(".launcher-row-title")?.textContent === spec.title &&
-          (each.querySelector(".launcher-row-meta")?.textContent ?? "").includes(scopeLabel(spec)),
+          (each.querySelector(".launcher-row-main")?.textContent ?? "").includes(scopeLabel(spec)),
       );
     await waitFor(`il lanciatore offre «${spec.title}» del kernel`, () => row() !== undefined);
     row()!.click();
@@ -3242,13 +4776,209 @@ describe("i riquadri dopo un'attesa", () => {
     expect(host.files()["note/Riunione.md"]).toBe("disco B\n");
   });
 
+  /// La Cronologia accesa monta `version.keep` fra i comandi del registro.
+  const specVersionKeep: CommandSpec = {
+    id: "version.keep",
+    title: "Conserva un testo nella cronologia",
+    description: "",
+    keybinding: null,
+    params: [
+      { name: "doc", title: "Documento", description: "", kind: { kind: "document" }, required: true },
+      { name: "text", title: "Testo", description: "", kind: { kind: "text" }, required: true },
+      { name: "note", title: "Nota", description: "", kind: { kind: "text" }, required: true },
+    ],
+    scope: { writes: true, reach: "document", reversible: true },
+    surfaces: [],
+  };
+
+  it("«Usa la versione su disco» mette il mio testo nella Cronologia prima di scartarlo", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const after = host.calls.slice(before);
+    const kept = after.findIndex((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    const reread = after.findIndex((c) => (c.gate === "readDocument" || c.gate === "openDocument") && c.args[0] === "Benvenuto.md");
+    expect(kept, "il testo è stato conservato").toBeGreaterThan(-1);
+    expect(reread, "il disco si rilegge solo dopo la conservazione").toBeGreaterThan(kept);
+    const args = after[kept]!.args[1] as { doc: string; text: string; note: string };
+    expect(args.doc).toBe("Benvenuto.md");
+    expect(args.text).toContain("mio A ");
+    expect(args.note).toMatch(/^Testo scartato nel conflitto del /);
+    expect(recentNotices().some((notice) => notice.text.includes("è nella Cronologia"))).toBe(true);
+  });
+
+  it("col testo nella Cronologia e il disco che non si rilegge lo si dice, e ripetere non lo conserva due volte", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const before = host.calls.length;
+    const repairOpen = host.fault("openDocument", "disco non leggibile");
+    const repairRead = host.fault("readDocument", "disco non leggibile");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "chi scrive sa che il suo testo è salvo",
+      () => recentNotices().some((notice) => notice.text.includes("è nella Cronologia, ma il file non si è riletto")),
+    );
+    await settle();
+    repairOpen();
+    repairRead();
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    const keeps = host.calls.slice(before).filter((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+    expect(keeps, "lo stesso testo entra nella Cronologia una volta sola").toHaveLength(1);
+  });
+
+  it("se il testo non entra nella Cronologia non si scarta niente, e lo si dice", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    const repair = host.fault("invokeCommand", "spazio dati pieno");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='theirs']")!.click();
+    await waitFor(
+      "l'errore arriva a chi scrive",
+      () => recentNotices().some((notice) => notice.text.includes("non è entrato nella Cronologia")),
+    );
+    await settle();
+    repair();
+
+    expect(editorTexts()[0]).toContain("mio A ");
+    expect(banner()?.hidden, "il conflitto resta da decidere").toBe(false);
+    expect(host.files()["Benvenuto.md"]).toBe("disco A\n");
+  });
+
+  it("la finestra staccata conserva il suo testo con la stessa regola, e un guasto lo dice", async () => {
+    const host = await start(VAULT, [], undefined, null, [specVersionKeep]);
+    const { recentNotices } = await import("./ui/notify");
+    const { attachRemoteSurface } = await import("./state/document-bridge");
+    const { state } = await import("./state/store");
+    const { request, handle } = await attachRemoteSurface("Benvenuto.md", state.vaultRoot, () => "plain-text");
+    // La finestra staccata, com'è vista dal canale: chiede e aspetta.
+    const child = new BroadcastChannel(request.channel);
+    const replies: Array<{ kind: string; token?: string; keeps?: boolean; reason?: string }> = [];
+    child.onmessage = (event: MessageEvent) => replies.push(event.data);
+    const id = { v: 1, doc: request.document, vault: request.vault, session: request.session, surfaceId: request.surfaceId };
+    try {
+      child.postMessage({ ...id, kind: "hello" });
+      await waitFor("la finestra è collegata", () => replies.some((r) => r.kind === "snapshot"));
+      child.postMessage({ ...id, kind: "keep-probe", token: "domanda" });
+      await waitFor("la finestra sa se conserva", () => replies.some((r) => r.kind === "keep-mode"));
+      expect(replies.find((r) => r.kind === "keep-mode")?.keeps).toBe(true);
+
+      const before = host.calls.length;
+      child.postMessage({ ...id, kind: "keep", token: "uno", text: "testo della finestra" });
+      await waitFor("il testo è conservato", () => replies.some((r) => r.kind === "kept" && r.token === "uno"));
+      const kept = host.calls.slice(before).find((c) => c.gate === "invokeCommand" && c.args[0] === "version.keep");
+      const args = kept?.args[1] as { doc: string; text: string; note: string } | undefined;
+      expect(args?.doc).toBe("Benvenuto.md");
+      expect(args?.text).toBe("testo della finestra");
+      expect(args?.note).toMatch(/^Testo scartato nel conflitto del /);
+      // Il nome della nota come lo dice il resto dell'app, non il percorso.
+      const notice = recentNotices().find((entry) => entry.text.includes("è nella Cronologia"));
+      expect(notice?.text).toContain("su Benvenuto è");
+      expect(notice?.text).not.toContain("Benvenuto.md");
+
+      const repair = host.fault("invokeCommand", "spazio dati pieno");
+      child.postMessage({ ...id, kind: "keep", token: "due", text: "testo della finestra" });
+      await waitFor("il guasto torna alla finestra", () => replies.some((r) => r.token === "due"));
+      repair();
+      const failed = replies.find((r) => r.token === "due");
+      expect(failed?.kind).toBe("keep-failed");
+      expect(failed?.reason).toContain("spazio dati pieno");
+    } finally {
+      child.close();
+      await handle.dispose();
+    }
+  });
+
+  it("la palette dice che il testo resta nella Cronologia solo quando c'è chi lo conserva", async () => {
+    const { IT } = await import("./i18n/catalog");
+    const describe = async (): Promise<string | undefined> => {
+      const registry = await import("./ui/commands");
+      return registry.allCommands().find((entry) => entry.id === "shell.doc.conflict.theirs")?.description;
+    };
+    await start(VAULT);
+    expect(await describe()).toBe(IT["commands.doc.conflict.theirs.desc_lost"]);
+    await start(VAULT, [], undefined, null, [specVersionKeep]);
+    expect(await describe()).toBe(IT["commands.doc.conflict.theirs.desc"]);
+  });
+
+  it("in Lettura il conflitto mostra il testo di chi scrive e lo dice nella fascia (R03)", async () => {
+    const host = await start(VAULT);
+    const { setMode } = await import("./panels/document");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    const readingLine = () => banner()?.querySelector<HTMLElement>("[data-conflict-reading]") ?? null;
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    expect(readingLine(), "in Live la riga della Lettura non c'è").toBeNull();
+
+    await setMode("reading");
+    await settle();
+    const rendered = document.querySelector<HTMLElement>(".pane-preview.markdown-rendered");
+    expect(rendered?.textContent, "la Lettura mostra il buffer").toContain("mio A");
+    expect(rendered?.textContent).not.toContain("disco A");
+    expect(banner()?.hidden, "la fascia resta in Lettura").toBe(false);
+    expect(banner()?.querySelectorAll(".conflict-actions button[data-choice]")).toHaveLength(2);
+    expect(readingLine()?.textContent).toBe("Stai leggendo la tua versione, non ancora salvata");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='mine']")!.click();
+    await waitFor("il conflitto si chiude", () => banner()?.hidden !== false);
+    expect(readingLine(), "risolto il conflitto, la riga sparisce").toBeNull();
+    expect(document.querySelector(".pane-preview.markdown-rendered")?.textContent).toContain("mio A");
+  });
+
+  it("due riquadri sulla stessa nota in conflitto: la riga solo in quello in Lettura", async () => {
+    const host = await start(VAULT);
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+    await settle();
+    const { setMode } = await import("./panels/document");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banners = () => [...document.querySelectorAll<HTMLElement>(".pane")]
+      .map((pane) => pane.querySelector<HTMLElement>("[data-banner='document.conflict.body']"));
+    await waitFor("la nota va in conflitto in entrambi", () => banners().every((b) => b && !b.hidden));
+
+    // Il fuoco è sul secondo riquadro, appena aperto: passa in Lettura.
+    await setMode("reading");
+    await settle();
+    const panes = [...document.querySelectorAll<HTMLElement>(".pane")];
+    expect(panes[1]!.querySelector(".pane-preview.markdown-rendered")?.textContent).toContain("mio A");
+    expect(editorTexts()[0]).toContain("mio A");
+    expect(banners()[0]!.querySelector("[data-conflict-reading]"), "il riquadro in Live non la mostra").toBeNull();
+    expect(banners()[1]!.querySelector("[data-conflict-reading]")?.textContent)
+      .toBe("Stai leggendo la tua versione, non ancora salvata");
+  });
+
   it("una lettura fallita non lascia la linguetta mostrata senza editor", async () => {
     const host = await start(VAULT);
     const { openDocument, synchronize } = await import("./panels/document");
-    const restore = host.fault("readDocument");
+    const restore = [host.fault("readDocument"), host.fault("openDocument")];
     await openDocument("note/Spesa.md").catch(() => {});
     expect(textToVideo()).not.toContain("pane, latte");
-    restore();
+    for (const undo of restore) undo();
 
     await synchronize();
     await settle();
@@ -3310,7 +5040,7 @@ describe("i riquadri dopo un'attesa", () => {
     await openDocument("note/Spesa.md");
     await settle();
 
-    expect(panes()[1]!.querySelector(".cm-content")?.textContent).toContain("pane, latte");
+    expect(panes()[1]!.querySelector(".pane-editor .cm-content")?.textContent).toContain("pane, latte");
     expect(state.currentDoc).toBe("note/Spesa.md");
     expect(panes()[0]!.querySelector(".document-surface-error")).not.toBeNull();
   });
@@ -3520,7 +5250,7 @@ describe("portare a schermo un punto", () => {
     const { openDocument } = await import("./panels/document");
     const { t } = await import("./i18n/strings");
     const { closeContextMenu } = await import("./ui/menu");
-    const gestures = [t("pane.recorder.open"), t("pane.slides"), t("pane.print")];
+    const gestures = [t("pane.recorder.open"), t("pane.slides"), t("pane.print"), t("pane.export_pdf")];
     const offered = async (): Promise<string[]> => {
       panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
       await settle();
@@ -3532,7 +5262,8 @@ describe("portare a schermo un punto", () => {
       return gestures.filter((gesture) => labels.includes(gesture));
     };
 
-    expect(await offered(), "la nota Markdown").toEqual(gestures);
+    // Una nota Markdown si stampa dallo spazio «Esporta in PDF».
+    expect(await offered(), "la nota Markdown").toEqual([t("pane.recorder.open"), t("pane.slides"), t("pane.export_pdf")]);
     await openDocument("lavagna.canvas");
     await settle();
     // La tela si stampa dal suo provider; non ha una resa da presentare né
@@ -3580,7 +5311,7 @@ describe("portare a schermo un punto", () => {
     }
   });
 
-  it("la stampa salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
+  it("la stampa dallo spazio «Esporta in PDF» salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
     const host = await start(VAULT);
     const { t } = await import("./i18n/strings");
     const previous = Object.getOwnPropertyDescriptor(window, "print");
@@ -3594,8 +5325,12 @@ describe("portare a schermo un punto", () => {
       panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
       await settle();
       const entry = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
-        .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.print"));
+        .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.export_pdf"));
       entry!.click();
+      await waitFor("lo spazio si apre", () => document.querySelector(".export-print") !== null);
+      // La resa che si impagina ha la riga: la nota è stata salvata prima.
+      await waitFor("la resa arriva", () => document.querySelector(".export-measure")?.textContent?.includes("Riga appena scritta.") === true);
+      document.querySelector<HTMLButtonElement>(".export-print")!.click();
       await waitFor("la stampa parte", () => print.mock.calls.length > 0);
 
       const written = host.calls.findIndex((call) => call.gate === "writeDocument");
@@ -3603,14 +5338,104 @@ describe("portare a schermo un punto", () => {
         call.gate === "queryIndex" && (call.args[0] as { kind?: string }).kind === "render_print");
       expect(written).toBeGreaterThanOrEqual(0);
       expect(rendered).toBeGreaterThan(written);
-      expect(document.querySelector(".print-host .print-body")?.textContent).toContain("Riga appena scritta.");
+      // Le stesse pagine dello spazio, senza zoom.
+      expect(document.querySelectorAll(".print-host > .print-sheet")).toHaveLength(document.querySelectorAll(".export-slot").length);
+      expect(document.querySelector(".print-host")?.textContent).toContain("Benvenuto");
 
       window.dispatchEvent(new Event("afterprint"));
       expect(document.querySelector(".print-host")).toBeNull();
+      document.querySelector(".export-space")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.querySelector(".export-space")).toBeNull();
     } finally {
       if (previous) Object.defineProperty(window, "print", previous);
       else Reflect.deleteProperty(window, "print");
     }
+  });
+
+  it("«Esporta in PDF…» salva, apre lo spazio sopra la nota, cambia vista e con Esc torna alla nota", async () => {
+    const host = await start(VAULT);
+    const { t } = await import("./i18n/strings");
+    typeInEditor("Riga per il PDF.");
+    expect(host.atGate("writeDocument")).toHaveLength(0);
+    const opener = panes()[0]!.querySelector<HTMLButtonElement>("[data-pane-menu]")!;
+    opener.focus();
+    opener.click();
+    await settle();
+    const labels = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].map((button) => button.querySelector(".menu-label")?.textContent);
+    // Al posto di «Stampa», che sta nello spazio.
+    expect(labels).toContain(t("pane.export_pdf"));
+    expect(labels).not.toContain(t("pane.print"));
+    [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
+      .find((button) => button.querySelector(".menu-label")?.textContent === t("pane.export_pdf"))!.click();
+    await waitFor("lo spazio si apre", () => document.querySelector(".export-space") !== null);
+
+    const space = document.querySelector<HTMLElement>(".export-space")!;
+    expect(space.getAttribute("role")).toBe("dialog");
+    expect(document.getElementById("workspace")!.inert).toBe(true);
+    // La nota salvata prima della resa, che il core legge dal disco.
+    const written = host.calls.findIndex((call) => call.gate === "writeDocument");
+    const rendered = host.calls.findIndex((call) =>
+      call.gate === "queryIndex" && (call.args[0] as { kind?: string }).kind === "render_print");
+    expect(written).toBeGreaterThanOrEqual(0);
+    expect(rendered).toBeGreaterThan(written);
+    await waitFor("le pagine ci sono", () => space.querySelector(".export-slot") !== null);
+    expect(space.querySelector(".export-title-note")?.textContent).not.toBe("");
+
+    space.querySelector<HTMLButtonElement>('.export-segment[data-view="due"]')!.click();
+    expect(space.querySelector(".export-doc")?.getAttribute("data-view")).toBe("due");
+    expect(space.querySelector('.export-segment[data-view="due"]')?.getAttribute("aria-pressed")).toBe("true");
+
+    space.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.querySelector(".export-space")).toBeNull();
+    expect(document.querySelector(".export-measure")).toBeNull();
+    expect(document.getElementById("workspace")!.inert).toBe(false);
+    expect(panes()[0]!.contains(document.activeElement)).toBe(true);
+  });
+
+  it("lo spazio «Esporta in PDF» si apre anche dallo spazio dei comandi", async () => {
+    await start(VAULT);
+    const { allCommands } = await import("./ui/commands");
+    const command = allCommands().find((entry) => entry.id === "shell.doc.export_pdf")!;
+    expect(command.unavailable ?? null).toBeNull();
+    await command.run!();
+    await waitFor("lo spazio si apre", () => document.querySelector(".export-space") !== null);
+    document.querySelector<HTMLButtonElement>(".export-back")!.click();
+    expect(document.querySelector(".export-space")).toBeNull();
+  });
+
+  it("la nota resta byte per byte: aprire lo spazio, regolare, stampare e tornare non la riscrive", async () => {
+    // A capo di Windows, spazi in coda, l'interruzione a mano e nessun a capo
+    // finale: niente che una riscrittura lascerebbe com'è.
+    const note = "---\r\ntags: [prova]\r\n---\r\n# Strana  \r\n\r\nRiga con spazi in coda   \r\n\r\n<!-- pagina -->\r\n\r\n| a | b |\r\n|---|---|\r\n| 1 | 2 |\r\n\r\nSenza a capo finale";
+    const host = await start({ ...VAULT, "Strana.md": note });
+    const { openDocument } = await import("./panels/document");
+    const { allCommands } = await import("./ui/commands");
+    await openDocument("Strana.md");
+    await settle();
+    const previous = Object.getOwnPropertyDescriptor(window, "print");
+    const print = vi.fn();
+    Object.defineProperty(window, "print", { configurable: true, value: print });
+    try {
+      await allCommands().find((entry) => entry.id === "shell.doc.export_pdf")!.run!();
+      await waitFor("le pagine ci sono", () => document.querySelector(".export-space .export-slot") !== null);
+      const space = document.querySelector<HTMLElement>(".export-space")!;
+      space.querySelector<HTMLButtonElement>('.export-segment[data-view="tutte"]')!.click();
+      space.querySelector<HTMLButtonElement>('.export-section[data-section="tema"] .export-section-head')!.click();
+      await settle();
+      space.querySelector<HTMLButtonElement>("#export-theme-relazione")!.click();
+      await settle();
+      space.querySelector<HTMLButtonElement>(".export-print")!.click();
+      await waitFor("la stampa parte", () => print.mock.calls.length > 0);
+      window.dispatchEvent(new Event("afterprint"));
+      space.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.querySelector(".export-space")).toBeNull();
+      await settle();
+    } finally {
+      if (previous) Object.defineProperty(window, "print", previous);
+      else Reflect.deleteProperty(window, "print");
+    }
+    expect(host.atGate("writeDocument").filter((call) => call.args[0] === "Strana.md")).toEqual([]);
+    expect(host.files()["Strana.md"]).toBe(note);
   });
 });
 
@@ -3623,7 +5448,7 @@ describe("la modalità di ogni famiglia di superfici", () => {
 
   it("il bottone solo dice la modalità accesa e la cambia da un menu di scelte", async () => {
     await start(VAULT);
-    const current = document.querySelector<HTMLButtonElement>(".pane.focus .pane-toolbar .pane-mode-current")!;
+    const current = document.querySelector<HTMLButtonElement>(".pane.focus > .pane-mode-current")!;
     const pressed = () =>
       document.querySelector<HTMLElement>('.pane.focus .pane-toolbar button[data-mode][aria-pressed="true"]')?.textContent;
     expect(current.hidden).toBe(false);
@@ -3632,13 +5457,27 @@ describe("la modalità di ogni famiglia di superfici", () => {
     current.click();
     expect(current.getAttribute("aria-expanded")).toBe("true");
     const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
-    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Blocchi", "Lettura"]);
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Scrittura", "Sorgente", "Lettura"]);
     expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
-    radios[0]!.click();
+    radios.find((item) => item.querySelector(".menu-label")?.textContent === "Sorgente")!.click();
     await settle();
     expect(paneMode()).toBe("source");
     expect(current.textContent).toBe("Sorgente");
     expect(current.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("con due riquadri aperti, `shell.mode.source` cambia solo quello a fuoco", async () => {
+    await start(VAULT);
+    await twoPanes();
+    const modes = () => [...document.querySelectorAll<HTMLElement>(".pane")].map((pane) => pane.dataset.mode);
+    const focused = () => [...document.querySelectorAll<HTMLElement>(".pane")].findIndex((pane) => pane.classList.contains("focus"));
+    expect(modes()).toEqual(["live_preview", "live_preview"]);
+    expect(focused()).toBe(1);
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === "shell.mode.source")!.run!();
+    await settle();
+    expect(modes()).toEqual(["live_preview", "source"]);
+    expect(focused()).toBe(1);
   });
 
   it("una nota in Sorgente non fa aprire la tela seguente come JSON", async () => {

@@ -7,6 +7,8 @@
 - **Sostituita da:** —
 
 Precisa l'[ADR 0180](0180-compatibilita-wit-additiva.md), che resta in vigore.
+L'[ADR 0238](0238-un-caso-o-una-funzione-del-confine-non-cresce.md) la
+estende agli `enum`, ai `variant`, ai `flags` e alle funzioni esportate.
 
 ## Contesto
 
@@ -38,11 +40,10 @@ dell'ADR 0180 («plugin più vecchi continuano a funzionare») deve essere vera.
 3. **Le novità nei plugin passano da interfacce nuove.** L'host cerca gli
    export una interfaccia alla volta; un plugin che non ha l'interfaccia nuova
    è un plugin vecchio, e l'host prende il default.
-4. **Un nuovo caso o una nuova funzione in un'interfaccia esportata dal plugin
-   valgono come un campo nuovo** finché un test non prova il contrario: l'host
-   controlla con `GuestIndices` il tipo di ogni funzione dell'interfaccia
-   esportata. Una funzione nuova in un'interfaccia che l'host offre resta
-   compatibile, perché il guest importa solo ciò che usa.
+4. **Un nuovo caso e una nuova funzione esportata valgono come un campo
+   nuovo.** La prova con componenti veri e la regola stanno nell'ADR 0238: un
+   caso nuovo in un tipo del confine rompe anche dal lato degli import, una
+   funzione nuova solo in un'interfaccia esportata dal plugin.
 
 ## Conseguenze
 
@@ -57,9 +58,9 @@ dell'ADR 0180 («plugin più vecchi continuano a funzionare») deve essere vera.
 
 - dopo il primo rilascio un dato in più nel manifest o in un altro record
   esportato costa un'interfaccia nuova e il suo default nell'host;
-- la guardia `wit_additivity.rs` accetta ancora un campo in fondo a un record:
-  finché non la si stringe, la regola sta nel test del componente vero e in
-  questa decisione;
+- la guardia `wit_additivity.rs` applica la regola per snapshot: contro le
+  `0.1.x` un campo in fondo a un record passa ancora, perché sono state
+  congelate così;
 - i plugin compilati contro `0.2.0` prima della #285 vanno ricompilati.
 
 ## Alternative scartate

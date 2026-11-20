@@ -162,6 +162,82 @@ describe("la scheda «Disegna»", () => {
     expect(marker.ink!.strokes[0]!.color).toBe("#f0e442");
   });
 
+  // IMP-138: Ctrl+Z subito dopo un tratto, con la sessione ancora aperta.
+  it("Annulla con la sessione aperta toglie l'ultimo tratto, e Ripeti lo rimette", () => {
+    vi.useFakeTimers();
+    const { engine, ink } = setup();
+    ink.setTool("pen");
+    stroke([[10, 10], [40, 10]]);
+    expect(engine.actionState("text.undo").enabled).toBe(true);
+    expect(engine.history("undo")).toBe(true);
+    expect(ink.pending).toEqual([]);
+    expect(document.querySelectorAll(".rich-ink-pending")).toHaveLength(0);
+    // La pausa non lo riporta.
+    vi.advanceTimersByTime(INK_SESSION_PAUSE * 2);
+    expect(atoms(engine)).toEqual([]);
+    expect(engine.history("redo")).toBe(true);
+    expect(atoms(engine)).toHaveLength(1);
+    expect(atoms(engine)[0]!.ink!.strokes).toHaveLength(1);
+  });
+
+  it("con due tratti nella sessione Annulla toglie soltanto l'ultimo", () => {
+    const { engine, ink } = setup();
+    ink.setTool("pen");
+    stroke([[10, 10], [40, 10]]);
+    stroke([[10, 30], [40, 30]]);
+    // Dalla barra o dalla scorciatoia: lo stesso passo.
+    expect(engine.run("text.undo")).toBe(true);
+    const left = atoms(engine).flatMap((atom) => atom.ink!.strokes);
+    expect(left).toHaveLength(1);
+    expect(left[0]!.xy[1]).toBe(atoms(engine)[0]!.ink!.strokes[0]!.xy[1]);
+    expect(engine.run("text.redo")).toBe(true);
+    expect(atoms(engine).flatMap((atom) => atom.ink!.strokes)).toHaveLength(2);
+    // Annulla e ancora Annulla: niente tratti.
+    engine.history("undo");
+    engine.history("undo");
+    expect(atoms(engine)).toEqual([]);
+  });
+
+  it("Ripeti con la sessione aperta la chiude: i tratti nuovi restano", () => {
+    const { engine, ink } = setup();
+    ink.setTool("pen");
+    stroke([[10, 10], [40, 10]]);
+    ink.commit();
+    engine.history("undo");
+    stroke([[10, 30], [40, 30]]);
+    engine.history("redo");
+    expect(ink.pending).toEqual([]);
+    expect(atoms(engine)).toHaveLength(1);
+  });
+
+  it("il tratto porta il fuoco sul velo: Ctrl+Z va al documento del riquadro", () => {
+    const { ink } = setup();
+    ink.setTool("pen");
+    const button = document.createElement("button");
+    document.body.append(button);
+    button.focus();
+    stroke([[10, 10], [40, 10]]);
+    // Il velo sta nel riquadro: da lì `ui/off-sheet-keys.ts` porta Ctrl+Z
+    // alla storia della superficie.
+    expect(document.activeElement).toBe(document.querySelector(".rich-ink-veil"));
+  });
+
+  it("un aggiornamento che dà la chiave all'inchiostro salvato non toglie l'Annulla", () => {
+    const { engine, ink } = setup();
+    ink.setTool("pen");
+    stroke([[10, 10], [40, 10]]);
+    ink.commit();
+    // Il documento riletto dopo il salvataggio: lo stesso inchiostro, ora
+    // con la sua chiave nel file.
+    const saved = parseProjection(engine.getDoc());
+    const atom = (saved.blocks[0] as Para).c!.find((inline): inline is AtomInline => inline.t === "atom")!;
+    (atom as { k?: string }).k = "N1";
+    engine.syncDoc(JSON.stringify(saved));
+    expect(atoms(engine)[0]!.k).toBe("N1");
+    expect(engine.history("undo")).toBe(true);
+    expect(atoms(engine)).toEqual([]);
+  });
+
   it("il colore e lo spessore valgono per lo strumento scelto", () => {
     const { engine, ink } = setup();
     ink.setTool("pen");

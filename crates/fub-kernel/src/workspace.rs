@@ -62,6 +62,9 @@ pub use removal::{
     CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,
     FinalizedDocumentDeletion, PreparedDocumentDeletion, PreparedDocumentRemoval,
 };
+mod reads_in_flight;
+use reads_in_flight::ReadInFlight;
+pub use reads_in_flight::{Barred, ReadsInFlight};
 mod restore;
 pub use restore::{CompletedDocumentRestore, PendingDocumentRestore, PreparedDocumentRestore};
 
@@ -87,7 +90,7 @@ use fub_abi::session::ViewContext;
 use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
-use fub_abi::text::{Localize, Strings, Text};
+use fub_abi::text::{Arg, Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CivilTime, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler,
     HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress,
@@ -124,7 +127,8 @@ use crate::index::plan::{QueryCore, QueryPlan};
 use crate::index::{
     feed_handles as feed_index_handles, reconcile_handles as reconcile_index_handles,
     release_handles as release_index_handles, up_to_date_handles as up_to_date_index_handles,
-    CompletedIndexQuery, Indexes, PreparedIndexQuery, SharedIndexProvider,
+    withdraw_handles as withdraw_index_handles, CompletedIndexQuery, Indexes, PreparedIndexQuery,
+    SharedIndexProvider,
 };
 use crate::journal::{Journal, JournalOp, JournalRead};
 use crate::locale::SystemLocale;
@@ -139,9 +143,12 @@ use crate::registry::FormatRegistry;
 use crate::rename_recovery::{self, RenameRecoveryEdit, RenameRecoveryReceipt, RenameRecoveryScan};
 use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
+use crate::same_content::{LearnedFingerprints, SameContentOutcome};
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
-use crate::transfer::{MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE};
+use crate::transfer::{
+    FileWitness, MemorySink, OpenSources, ResourceLease, SourceBacking, PROLOGUE,
+};
 use crate::undo::UndoStack;
 use crate::vault::{PreparedIgnoreCheck, PreparedTrashSweep, TrashEntry};
 use crate::viewstate::ViewStates;
@@ -182,6 +189,17 @@ pub struct Rejected {
     pub id: DocId,
     /// Cosa ha risposto il disco, o il parser.
     pub why: PluginError,
+    /// [`Gate::FormatParse`] quando a dire di no è stato il provider del
+    /// formato (un parse fallito, una sorgente che non è la sua), `None`
+    /// quando il file non si è nemmeno letto.
+    ///
+    /// È la porta che il guasto porta con sé verso chi lo mostra: il messaggio
+    /// di un [`FormatError`] è la prosa del codec, in inglese e per chi
+    /// sviluppa, e chi disegna lo sostituisce con la sua frase («questo
+    /// documento non si apre») solo se sa che il guasto è entrato da lì
+    /// (IMP-117). Il provider era davvero in mezzo, che è il criterio con cui
+    /// [`Event::Trouble`] dice una porta.
+    pub gate: Option<Gate>,
 }
 
 /// L'esito di un'apertura: cosa **non** ha letto (§15.7).
@@ -222,11 +240,13 @@ impl Opening {
         self.discarded.is_empty() && !self.interrupted
     }
 
-    fn discards(&mut self, id: DocId, why: impl Into<PluginError>) {
+    fn discards(&mut self, id: DocId, why: KernelError) {
         self.index.insert(id.clone());
+        let gate = matches!(why, KernelError::Format(_)).then_some(Gate::FormatParse);
         self.discarded.push(Rejected {
             id,
             why: why.into(),
+            gate,
         });
     }
 }
@@ -2051,8 +2071,9 @@ fn sync_path_is_absent(error: &std::io::Error) -> bool {
 /// sé nessun pezzo.
 #[derive(Default)]
 pub struct ParsedBatch {
-    /// Le voci della fetta, con l'impronta che la lettura ha imparato.
-    read: Vec<VaultEntry>,
+    /// Le voci della fetta, con l'impronta che la lettura ha imparato e il
+    /// file su cui l'ha imparata.
+    read: Vec<(VaultEntry, Option<FileWitness>)>,
     /// Ciò che si è ripreso dalla cache invece di riparsarlo.
     reused: Vec<(DocId, StoredMeta)>,
     /// Ciò che si è letto e parsato.
@@ -2092,6 +2113,10 @@ pub const INDEX_WRITE_BUDGET: std::time::Duration = std::time::Duration::from_mi
 struct PendingIndexEntry {
     entry: VaultEntry,
     source: Option<DocumentSource>,
+    /// Il file letto per l'impronta, preso **prima** della lettura: un file
+    /// messo al posto di quello letto dopo questo istante ha un altro
+    /// testimone, e `store_entries` se ne accorge.
+    witness: Option<FileWitness>,
 }
 
 /// Il risultato di un pezzo di fetta lavorato da un thread: le voci della
@@ -2235,6 +2260,50 @@ pub type BeforeWriteHook =
 /// It can only undo that write while it is still the latest write to the key.
 pub struct PermissionInitialization(crate::settings::MachineSettingRevision);
 
+/// Il rifiuto di un comando che invoca sé stesso, con la catena che lo mostra.
+///
+/// Una frase sola per i quattro posti che lo controllano: la pila condivisa
+/// (sincrona, staccata, rebuild) e la catena di una lettura col suo frame.
+/// Il rifiuto di una lettura fermata: dal suo inizio, se chi smonta il
+/// proprietario l'ha sbarrata, o dalla sua fine, se il vault si è chiuso o il
+/// suo plugin si è spento mentre leggeva.
+fn read_stopped(command: &str) -> PluginError {
+    PluginError::Cancelled(
+        format!("il comando `{command}` è stato fermato: il vault si è chiuso o il suo plugin si sta spegnendo")
+            .into(),
+    )
+}
+
+fn self_invocation(stack: &[String], command: &str) -> PluginError {
+    let mut round = stack.to_vec();
+    round.push(command.to_string());
+    PluginError::BadArgs(
+        format!(
+            "un comando non può invocare sé stesso: {}",
+            round.join(" → ")
+        )
+        .into(),
+    )
+}
+
+/// Esegue il codice di un provider preparato, una volta sola: la porta comune
+/// di [`PreparedCommand::invoke`] e [`PreparedReadOnlyCommand::invoke`].
+fn invoke_prepared(
+    owner: &str,
+    command: &str,
+    args: &mut Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: &dyn CommandProvider,
+    host: &mut dyn HostApi,
+) -> std::result::Result<CommandOutcome, PluginError> {
+    let args = args.take().ok_or_else(|| {
+        PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
+    })?;
+    crate::safety::calling(owner, Gate::Command, command, || {
+        provider.invoke(command, args, mode, host)
+    })
+}
+
 /// Una chiamata a `CommandProvider` preparata sotto lock e invocabile fuori.
 ///
 /// Contiene anche il frame da ripristinare al rientro: attore, batch, pila e
@@ -2277,14 +2346,96 @@ impl PreparedCommand {
         &mut self,
         host: &mut dyn HostApi,
     ) -> std::result::Result<CommandOutcome, PluginError> {
-        let args = self.args.take().ok_or_else(|| {
-            PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
-        })?;
-        crate::safety::calling(&self.owner, Gate::Command, &self.command, || {
-            self.provider.invoke(&self.command, args, self.mode, host)
-        })
+        invoke_prepared(
+            &self.owner,
+            &self.command,
+            &mut self.args,
+            self.mode,
+            self.provider.as_ref(),
+            host,
+        )
     }
 }
+
+/// Una chiamata a un comando **di sola lettura**, preparata con un frame tutto
+/// suo ([`Workspace::prepare_read_only_provider_command`]).
+///
+/// A differenza di [`PreparedCommand`] non lascia niente nello stato condiviso
+/// del workspace: nessun attore scambiato, nessun batch aperto, nessuna voce
+/// sulla pila dei comandi, `in_provider_call` mai alzato. Per questo l'host la
+/// può eseguire **senza il turno di scrittura**, e due letture possono girare
+/// insieme fra loro e accanto a chi scrive. La pila della ricorsione viaggia
+/// dentro il token ([`chain`](Self::chain)): chi presta l'host al provider la
+/// porta avanti alle invocazioni annidate.
+pub struct PreparedReadOnlyCommand {
+    owner: String,
+    command: String,
+    args: Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: Arc<dyn CommandProvider>,
+    why: &'static str,
+    /// I comandi della catena fino a questo, compreso.
+    chain: Vec<String>,
+    /// Il workspace in cui è stata preparata: la fine non si applica a un
+    /// altro, né a questo se nel frattempo si è chiuso.
+    workspace_id: u64,
+    /// Il vault si stava già chiudendo alla preparazione? Allora è una
+    /// lettura della chiusura stessa (un `deactivate` o un handler di
+    /// `VaultClosed` che invoca un comando), e la chiusura non la invalida.
+    closed_at_prepare: bool,
+    /// La bandiera **propria** della lettura: alzata da uno smontaggio o dalla
+    /// chiusura, l'esito non si applica.
+    cancel: Arc<AtomicBool>,
+    /// L'iscrizione fra le letture in volo, che cade col token. `None` per una
+    /// lettura della chiusura stessa: la chiusura che l'ha lanciata non la
+    /// deve aspettare.
+    _in_flight: Option<ReadInFlight>,
+}
+
+impl PreparedReadOnlyCommand {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn command(&self) -> &str {
+        &self.command
+    }
+
+    /// Modalità per le capacità annidate: sempre una simulazione, come per il
+    /// recinto di sola lettura del percorso condiviso.
+    pub fn host_mode(&self) -> InvokeMode {
+        InvokeMode::DryRun
+    }
+
+    /// Il motivo da dare a [`ReadOnly`](crate::ReadOnly), il recinto che l'host
+    /// mette **sempre** davanti al proxy di questa chiamata.
+    pub fn read_only_reason(&self) -> &'static str {
+        self.why
+    }
+
+    /// La catena dei comandi fino a questo, compreso: è ciò che l'host passa a
+    /// [`Workspace::prepare_read_only_provider_command`] per le invocazioni
+    /// annidate, perché un comando che invoca sé stesso resti rifiutato.
+    pub fn chain(&self) -> &[String] {
+        &self.chain
+    }
+
+    /// Esegue **soltanto** il codice del provider, senza guardie del workspace.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        invoke_prepared(
+            &self.owner,
+            &self.command,
+            &mut self.args,
+            self.mode,
+            self.provider.as_ref(),
+            host,
+        )
+    }
+}
+
 /// Frame del solo rebuild di manutenzione che l'host porta avanti senza una
 /// guardia del workspace. Attore, batch, pila e rinvio degli eventi restano
 /// aperti fino alla riconciliazione finale.
@@ -2302,6 +2453,13 @@ impl PreparedMaintenanceRebuild {
         self.mode
     }
 }
+
+/// La chiave del rifiuto di un annullamento quando **un** file è cambiato
+/// dopo l'operazione (argomento `doc`). Il testo sta nel catalogo dei comandi
+/// del core, accanto a `vault.undo`.
+pub const UNDO_STALE_ONE: &str = "vault.undo.stale_one";
+/// Come [`UNDO_STALE_ONE`], per più file (argomento `docs`, separati da virgole).
+pub const UNDO_STALE_MANY: &str = "vault.undo.stale_many";
 
 /// Stato owned di un annullamento fra un passo e il successivo.
 ///
@@ -2704,6 +2862,37 @@ pub struct PreparedDocumentWrite {
     expected_source: Option<String>,
     parser: PreparedParse,
     before_write: Vec<(String, BeforeWriteHook)>,
+    /// Il vault su cui posare i byte: la scrittura sul disco
+    /// ([`PreparedDocumentWrite::place`]) gira senza prestito del workspace.
+    vault: crate::vault::Vault,
+}
+
+/// Una scrittura testuale **già sul disco**, che aspetta soltanto di entrare
+/// nelle tabelle del workspace ([`Workspace::commit_placed_document_write`]).
+///
+/// Esiste perché la scrittura sul disco è la parte lunga di un salvataggio: un
+/// `fsync` su un disco occupato da altri programmi dura secondi, e tenerla
+/// dentro il prestito esclusivo fermava ogni lettura del vault per tutto quel
+/// tempo (IMP-1805). La CAS sul disco resta la stessa e resta sotto il turno di
+/// scrittura, che serializza i writer di Fub fra la base preparata e la
+/// pubblicazione; il prestito esclusivo serve soltanto alle tabelle.
+pub struct PlacedDocumentWrite {
+    id: DocId,
+    existed: bool,
+    from: Option<Revision>,
+    revision: Revision,
+    size: u64,
+    mtime: u64,
+}
+
+/// Come [`PlacedDocumentWrite`], per la via a byte.
+pub struct PlacedDocumentBytesWrite {
+    id: DocId,
+    from: Option<Revision>,
+    rewrote: bool,
+    revision: Revision,
+    size: u64,
+    mtime: u64,
 }
 
 /// Scrittura raw preparata senza eseguire provider. La preimmagine resta quella
@@ -2715,12 +2904,22 @@ pub struct PreparedDocumentBytesWrite {
     expected_bytes: Option<Vec<u8>>,
     parser: Option<PreparedParse>,
     before_write: Vec<(String, BeforeWriteHook)>,
+    /// Il supporto su cui posare i byte, senza prestito del workspace.
+    storage: Arc<dyn crate::storage::VaultStorage>,
 }
 
 /// Apertura metadata sullo storage attivo, eseguibile senza custodia workspace.
 pub struct PreparedResourceOpen {
     vault: crate::vault::Vault,
     id: DocId,
+}
+
+/// La domanda «c'è già questo contenuto nel vault?» sul vault attivo, eseguibile
+/// senza custodia workspace: i candidati si prendono dall'indice vivo sotto il
+/// lucchetto, il confronto si fa fuori (vedi [`crate::same_content`]).
+pub struct PreparedSameContent {
+    vault: crate::vault::Vault,
+    plan: crate::same_content::Plan,
 }
 
 /// Il lettore delle lease di un vault, da tenere fuori dal workspace.
@@ -3029,6 +3228,9 @@ pub struct PreparedVaultScan {
     observed_at: u64,
     folders: Vec<String>,
     entries: Vec<VaultEntry>,
+    /// Il file che ogni voce certificata dall'anagrafe descrive, letto
+    /// adesso (vedi `CoreIndex::learned_on`).
+    read_on: Vec<(DocId, FileWitness)>,
     documents: Vec<VaultEntry>,
     known_entries: Vec<Option<StoredEntry>>,
     assets: Vec<VaultEntry>,
@@ -3040,6 +3242,7 @@ pub struct CompletedVaultScan {
     observed_at: u64,
     folders: Vec<String>,
     entries: Vec<VaultEntry>,
+    read_on: Vec<(DocId, FileWitness)>,
     documents: Vec<VaultEntry>,
     known_entries: Vec<Option<StoredEntry>>,
     assets: Vec<VaultEntry>,
@@ -3053,6 +3256,7 @@ impl PreparedVaultScan {
             observed_at,
             folders,
             entries,
+            read_on,
             documents,
             known_entries,
             assets,
@@ -3066,6 +3270,7 @@ impl PreparedVaultScan {
             observed_at,
             folders,
             entries,
+            read_on,
             documents,
             known_entries,
             assets,
@@ -3127,7 +3332,7 @@ impl PreparedIndexBatchCheck {
 /// Seconda metà preparata della fetta: parser e sorgenti risolti, ma nessun
 /// `FormatProvider` o `SyntaxRule` ancora eseguito.
 pub struct PreparedIndexBatchParse {
-    read: Vec<VaultEntry>,
+    read: Vec<(VaultEntry, Option<FileWitness>)>,
     reused: Vec<(DocId, StoredMeta)>,
     parses: Vec<PendingDocumentParse>,
     discarded: Vec<(DocId, KernelError)>,
@@ -3195,6 +3400,9 @@ pub struct PreparedIndexFinish {
     work: Indexing,
     graph: BuiltGraph,
     ids: Vec<DocId>,
+    /// I documenti di cui ritirare le dichiarazioni, se l'apertura si è
+    /// interrotta ([`Workspace::withdrawn_ids`]); vuoto se è finita.
+    withdrawn: Vec<DocId>,
     providers: Vec<(String, SharedIndexProvider)>,
 }
 
@@ -3210,11 +3418,13 @@ impl PreparedIndexFinish {
             work,
             graph,
             ids,
+            withdrawn,
             providers,
         } = self;
         let mut external_losses = if work.finished() {
             reconcile_index_handles(&providers, &ids)
         } else {
+            withdraw_index_handles(&providers, &withdrawn);
             Vec::new()
         };
         if let Err(error) = release_index_handles(providers) {
@@ -3273,6 +3483,131 @@ pub struct DeferredEvents<T> {
     outcome: T,
     previous_actor: Option<Actor>,
     journal: Option<JournalOp>,
+}
+
+/// **La riga del registro di un epilogo**, da appendere fuori dal prestito
+/// esclusivo ([`Workspace::finish_deferred_events_detached`]).
+///
+/// Appendere al registro è scrivere sul disco, e su un disco occupato da altri
+/// programmi una scrittura dura secondi: dentro il prestito esclusivo fermava
+/// ogni lettura del vault per tutto quel tempo (IMP-1805). L'origine si fissa
+/// qui, sotto il prestito, com'era nell'epilogo; l'ordine fra le righe lo tiene
+/// il turno di scrittura, che chi la appende deve tenere ancora: un altro
+/// writer non può registrare la sua riga prima di questa.
+#[must_use = "la riga va appesa con `append`, o il registro perde un'operazione"]
+pub struct PendingJournalRecord {
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
+    op: JournalOp,
+}
+
+/// Un'appendice del registro che non è riuscita: si riconsegna a
+/// [`Workspace::report_journal_failure`], che la dice come l'epilogo l'ha
+/// sempre detta.
+pub struct JournalFailure(String);
+
+/// **Le rinomine fatte ad app chiusa**, riconosciute alla fine di
+/// un'indicizzazione, con i dati per-documento da portare dietro **fuori** dal
+/// prestito esclusivo ([`Workspace::finalize_finish_index_detached`]).
+///
+/// Spostare l'organizzazione, lo stato per-documento e le bozze è scrivere sul
+/// disco, una volta per ogni rinomina: dopo una riorganizzazione fatta con un
+/// altro programma sono decine di scritture, e dentro il prestito ognuna
+/// fermava le letture del vault (IMP-1805). Va eseguita sotto lo stesso turno
+/// di scrittura della chiusura, e prima della raccolta degli spazi orfani
+/// (`collect_doc_data`): prima si riconosce, poi si raccoglie.
+#[must_use = "i dati delle rinomine vanno spostati con `invoke` e poi detti con `finish_rejoin`"]
+pub struct PendingRejoin {
+    pairs: Vec<(DocId, DocId)>,
+    organization: Arc<OrganizationStore>,
+    drafts: Arc<Drafts>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Le rinomine di un [`PendingRejoin`] con i dati già spostati: restano da
+/// dire ([`Workspace::finish_rejoin`]).
+#[must_use = "le rinomine vanno dette con `finish_rejoin`"]
+pub struct CompletedRejoin {
+    pairs: Vec<(DocId, DocId)>,
+    doc_data_warnings: Vec<String>,
+}
+
+impl PendingRejoin {
+    /// Nessuna rinomina da portare dietro.
+    pub fn is_empty(&self) -> bool {
+        self.pairs.is_empty()
+    }
+
+    /// Sposta i dati di ogni rinomina, senza prestito del workspace: gli
+    /// stessi tre canali, con gli stessi avvisi, di
+    /// [`Workspace::migrate_side_data`].
+    pub fn invoke(self) -> CompletedRejoin {
+        let PendingRejoin {
+            pairs,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        } = self;
+        let mut doc_data_warnings = Vec::new();
+        for (from, to) in &pairs {
+            migrate_side_data_on(
+                &organization,
+                &drafts,
+                storage.as_ref(),
+                &doc_data_roots,
+                from,
+                to,
+                &mut doc_data_warnings,
+            );
+        }
+        CompletedRejoin {
+            pairs,
+            doc_data_warnings,
+        }
+    }
+}
+
+/// Il corpo di [`Workspace::migrate_side_data`] sugli handle posseduti: lo
+/// usano la via con il workspace in mano e [`PendingRejoin::invoke`], così i
+/// canali che seguono una rinomina restano scritti in un posto solo.
+fn migrate_side_data_on(
+    organization: &OrganizationStore,
+    drafts: &Drafts,
+    storage: &dyn crate::storage::VaultStorage,
+    doc_data_roots: &[Utf8PathBuf],
+    from: &DocId,
+    to: &DocId,
+    doc_data_warnings: &mut Vec<String>,
+) {
+    if let Err(and) = organization.migrate(from.as_str(), to.as_str()) {
+        organization.warn(format!(
+            "l'organizzazione di {from} non ha potuto seguire la rinomina in \
+             {to}: {and}"
+        ));
+    }
+    for error in crate::docdata::migrate_data(storage, doc_data_roots, from, to) {
+        doc_data_warnings.push(format!(
+            "lo stato per-documento di {from} non ha potuto seguire la rinomina \
+             in {to} — {error}"
+        ));
+    }
+    if let Err(and) = drafts.migrate(from, to) {
+        organization.warn(format!(
+            "la bozza non salvata di {from} non ha potuto seguire la \
+             rinomina in {to}: {and}"
+        ));
+    }
+}
+
+impl PendingJournalRecord {
+    /// Appende la riga, senza prestito del workspace.
+    pub fn append(self) -> std::result::Result<(), JournalFailure> {
+        self.journal
+            .append(self.origin, self.op)
+            .map_err(JournalFailure)
+    }
 }
 
 /// Diritto monouso a completare una chiusura già annunciata.
@@ -3444,6 +3779,57 @@ impl PreparedDocumentWrite {
     pub fn before_write(&self) -> impl Iterator<Item = BeforeWriteCall<'_>> {
         before_write_calls(&self.before_write, &self.id)
     }
+
+    /// **Posa i byte sul disco**, senza prestito del workspace.
+    ///
+    /// Va chiamata sotto il turno di scrittura, dopo il parse e i ganci, e il
+    /// risultato va consegnato a [`Workspace::commit_placed_document_write`]:
+    /// fra le due il disco ha già il testo nuovo e le tabelle ancora il
+    /// vecchio, come durante la fase degli indici. La CAS è quella di sempre:
+    /// con `DescendsFrom` scrive solo se il disco ha ancora la base verificata
+    /// (altrimenti `Stale`), una creazione solo se il path è ancora libero
+    /// (altrimenti `AlreadyExists`). Un gancio che ha detto di no ferma la
+    /// scrittura prima del disco.
+    pub fn place(
+        self,
+        source: &str,
+        before_write: std::result::Result<(), PluginError>,
+    ) -> Result<PlacedDocumentWrite> {
+        let PreparedDocumentWrite {
+            id,
+            existed,
+            from,
+            expected_source,
+            vault,
+            ..
+        } = self;
+        if let Err(and) = before_write {
+            return Err(Workspace::before_write_error(&id, and));
+        }
+        let (size, mtime) = if let Some(expected) = expected_source.as_deref() {
+            vault
+                .write_if_unchanged(&id, expected, source)?
+                .ok_or_else(|| KernelError::Stale(id.to_string()))?
+        } else if !existed {
+            // La preparazione ha visto il path libero, e il registro dirà
+            // `Created`, il cui inverso è cestinare. Un file posato nel frattempo
+            // da un altro programma non è nostro: la scrittura resta una
+            // creazione fino alla pubblicazione, come nella via a byte.
+            vault
+                .write_if_absent(&id, source)?
+                .ok_or_else(|| KernelError::AlreadyExists(id.to_string()))?
+        } else {
+            vault.write(&id, source)?
+        };
+        Ok(PlacedDocumentWrite {
+            id,
+            existed,
+            from,
+            revision: Revision::of(source),
+            size,
+            mtime,
+        })
+    }
 }
 impl PreparedDocumentBytesWrite {
     /// Produce il modello attraverso la stessa pipeline dei salvataggi testuali.
@@ -3473,11 +3859,68 @@ impl PreparedDocumentBytesWrite {
     pub fn before_write(&self) -> impl Iterator<Item = BeforeWriteCall<'_>> {
         before_write_calls(&self.before_write, &self.id)
     }
+
+    /// **Posa i byte sul disco** senza prestito del workspace: la stessa
+    /// `write_if_unchanged` di sempre (`None` = solo creazione, `Some` = CAS),
+    /// da consegnare poi a [`Workspace::commit_placed_document_bytes_write`].
+    /// Vedi [`PreparedDocumentWrite::place`] per perché sta fuori.
+    pub fn place(
+        self,
+        bytes: &[u8],
+        before_write: std::result::Result<(), PluginError>,
+    ) -> Result<PlacedDocumentBytesWrite> {
+        let PreparedDocumentBytesWrite {
+            id,
+            path,
+            from,
+            expected_bytes,
+            storage,
+            ..
+        } = self;
+        if let Err(error) = before_write {
+            return Err(Workspace::before_write_error(&id, error));
+        }
+        let stored = storage
+            .write_if_unchanged(&path, expected_bytes.as_deref(), bytes)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        let stat = match stored {
+            crate::storage::ConditionalWrite::Written(stat) => stat,
+            crate::storage::ConditionalWrite::Changed => {
+                return Err(if expected_bytes.is_some() {
+                    KernelError::Stale(id.to_string())
+                } else {
+                    KernelError::AlreadyExists(id.to_string())
+                });
+            }
+        };
+        Ok(PlacedDocumentBytesWrite {
+            id,
+            from,
+            rewrote: expected_bytes.is_some(),
+            revision: Revision::of_bytes(bytes),
+            size: stat.size,
+            mtime: stat.mtime,
+        })
+    }
 }
 
 impl PreparedResourceOpen {
     pub fn invoke(self) -> Result<ResourceLease> {
         crate::transfer::resource_open_on(&self.vault, &self.id)
+    }
+}
+
+impl PreparedSameContent {
+    /// Il contenuto, già in memoria, confrontato con i candidati: vedi
+    /// [`SameContent`](crate::same_content::SameContent). I byte devono essere
+    /// quelli della misura data a [`Workspace::prepare_same_content`]; le
+    /// impronte calcolate per strada tornano all'indice con
+    /// [`Workspace::learn_fingerprints`].
+    pub fn invoke(self, bytes: &[u8]) -> SameContentOutcome {
+        crate::same_content::answer(&self.vault, self.plan, bytes)
     }
 }
 
@@ -3596,6 +4039,10 @@ pub struct Workspace {
     /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
     /// sola: chiudere due volte non è chiudere due volte.
     closed: bool,
+    /// I comandi di sola lettura in volo, che il turno non vede: lo
+    /// smontaggio di un loro proprietario risponde `Busy`, la chiusura li
+    /// ferma e li aspetta ([`ReadsInFlight`]).
+    reads_in_flight: ReadsInFlight,
     /// Il vault che leggono i [`ResourceReader`] dati fuori, che non hanno il
     /// workspace e devono smettere quando si chiude. Lo svuota
     /// [`prepare_close`](Workspace::prepare_close), insieme a `closed`: così
@@ -4152,6 +4599,7 @@ impl Workspace {
             clock: Arc::new(crate::time::SystemClock),
             sources: Shelter::new(OpenSources::default()),
             closed: false,
+            reads_in_flight: ReadsInFlight::default(),
             resource_readers_vault,
             settings,
             view_states: ViewStates::in_memory(),
@@ -4261,6 +4709,23 @@ impl Workspace {
     pub(crate) fn localized(&self, plugin: &str, mut and: PluginError) -> PluginError {
         self.localize(plugin, &mut and);
         and
+    }
+
+    /// L'errore di una domanda al canale dati, nel catalogo dell'indice che
+    /// l'ha prodotto (§12.2): la stessa via d'uscita di [`localized`], per la
+    /// domanda che il pianificatore ha girato a un indice. Vale anche per la
+    /// domanda staccata ([`PreparedIndexQuery::invoke`]), che fallisce senza
+    /// il prestito del workspace e torna qui per le parole.
+    ///
+    /// [`localized`]: Workspace::localized
+    pub fn localized_query_failure(
+        &self,
+        failure: crate::index::plan::QueryFailure,
+    ) -> PluginError {
+        match failure.owner {
+            Some(owner) => self.localized(&owner, failure.error),
+            None => failure.error,
+        }
     }
 
     /// Il locale di sistema condiviso: chi monta lo passa alla shell perché ci
@@ -4631,7 +5096,7 @@ impl Workspace {
         if self.providers.plugins.get(plugin).is_none() {
             return Err(RegistryError::UnknownPlugin(plugin.to_string()));
         }
-        if self.dispatch.in_provider_call() {
+        if self.dispatch.in_provider_call() || self.reads_in_flight.busy(plugin) {
             return Err(RegistryError::Busy(plugin.to_string()));
         }
 
@@ -5468,6 +5933,32 @@ impl Workspace {
         }
     }
 
+    /// Toglie i compagni di lock che nessuno tiene più: quelli di un'uscita
+    /// forzata in mezzo a un salvataggio, e quelli che le versioni di Fub che
+    /// il lock non lo toglievano hanno lasciato accanto a ogni file salvato o
+    /// spostato. Sono file nascosti di Fub nella cartella dell'utente, e chi la
+    /// sincronizza o la guarda con un altro programma li vede.
+    ///
+    /// Se un lock è rimasto indietro lo dice il supporto
+    /// ([`VaultStorage::remove_abandoned_lock`]): uno tenuto adesso da un
+    /// salvataggio — di questo processo o di un altro Fub sullo stesso vault —
+    /// resta. Un guasto non risale, come per i temporanei.
+    fn sweep_locks(&self, locks: &[Utf8PathBuf]) {
+        for path in locks {
+            match self.docs.vault.storage().remove_abandoned_lock(path) {
+                Ok(true) => tracing::info!(
+                    target: "fub.kernel",
+                    "lock rimasto indietro, tolto: {path}"
+                ),
+                Ok(false) => {}
+                Err(and) => tracing::warn!(
+                    target: "fub.kernel",
+                    "lock {path} non tolto: {and}"
+                ),
+            }
+        }
+    }
+
     /// **La prima fase dell'apertura** (§15.7): guarda cosa c'è, e basta.
     ///
     /// Al ritorno il vault è **utilizzabile** — l'anagrafe c'è, le cartelle ci
@@ -5488,6 +5979,18 @@ impl Workspace {
         let observed_at = crate::time::now_unix_millis();
         let scanned = self.docs.vault.scan()?;
         self.sweep_temporary(&scanned.temporary_remaining_back);
+        self.sweep_locks(&scanned.locks_remaining_back);
+        // `.fub/` non è contenuto e la scansione non ci entra: i suoi lock
+        // rimasti indietro si cercano a parte, con lo stesso criterio. Un
+        // guasto della camminata non ferma l'apertura, come quello della
+        // pulizia.
+        match self.docs.vault.service_locks() {
+            Ok(locks) => self.sweep_locks(&locks),
+            Err(and) => tracing::warn!(
+                target: "fub.kernel",
+                "lock di .fub non cercati: {and}"
+            ),
+        }
 
         // La scansione raccoglie una fotografia completa ma non muta ancora il
         // core: durante `IndexProvider::up_to_date` i reader vedono l'ultimo stato
@@ -5496,20 +5999,46 @@ impl Workspace {
         // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
         // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
         // che qualcuno rivendica quell'estensione, senza essere cambiato.
-        let entries: Vec<(VaultEntry, Option<StoredEntry>)> = scanned
+        let mut entries: Vec<(VaultEntry, Option<StoredEntry>, Option<FileWitness>)> = scanned
             .files
             .into_iter()
             .map(|file| {
-                let change_stamp = self.docs.vault.change_stamp(&file.id);
                 // Una domanda sola all'anagrafe: la risposta intera serve
                 // alla riapertura incrementale di `finalize_scan_vault`, e
                 // rifarla là è un lock e una copia regalati per niente.
-                let known = self
+                //
+                // **Timbro e identità si chiedono per ultimi**, e solo a una
+                // voce che l'anagrafe potrebbe certificare: su Windows
+                // leggerli è aprire il file, e alla prima apertura di un vault nessuna
+                // voce è nota. Chiederlo a tutti costava cinquemila aperture
+                // buttate su un vault da cinquemila file, la parte più lenta
+                // del montaggio su Windows (issue #493).
+                //
+                // **Si copia solo la riga che si può certificare** (#523): la
+                // domanda su misura, data e impronta si fa sulla riga dov'è, e
+                // una riga che non passa non si copia. Nella closure niente
+                // I/O: il testimone si chiede dopo, fuori dal lucchetto.
+                let candidate = self
                     .entry_store
-                    .known(&file.id)
-                    .filter(|known| known.describes(file.size, file.mtime))
-                    .filter(|known| known.same_change_stamp(change_stamp))
-                    .filter(|known| known.fingerprint.is_some());
+                    .ask_known(&file.id, |known| {
+                        (known.describes(file.size, file.mtime) && known.fingerprint.is_some())
+                            .then(|| known.clone())
+                    })
+                    .flatten();
+                // Timbro **e identità**, con la regola unica e una domanda
+                // sola al supporto: un file messo al posto di un altro da una
+                // rinomina, dove il timbro è la data (FAT) o la rinomina non
+                // lo tocca, ha la misura, la data e il timbro di quello di
+                // prima, ma non la sua identità.
+                let now = candidate
+                    .as_ref()
+                    .map(|_| FileWitness::of(&self.docs.vault, &file.id));
+                let known =
+                    candidate.filter(|known| now.is_some_and(|now| known.witness().agrees(&now)));
+                // Il file che la riga certificata descrive: la voce ne porta
+                // l'impronta, e `store_entries` la riscrive col timbro solo
+                // se al momento di scriverla il file è ancora questo.
+                let read_on = now.filter(|_| known.is_some());
                 let entry = VaultEntry {
                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
                     kind: media::kind_of_ext(&file.id, |ext| self.docs.registry.has_doc_ext(ext)),
@@ -5517,20 +6046,26 @@ impl Workspace {
                     size: file.size,
                     mtime: file.mtime,
                 };
-                (entry, known)
+                (entry, known, read_on)
             })
             .collect();
 
         // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
-        // (che lo chiedono per valore), l'anagrafe per la riapertura.
+        // (che lo chiedono per valore), l'anagrafe per la riapertura. La riga
+        // dell'anagrafe si **sposta** e non si copia: la terna serve dopo solo
+        // per il `VaultEntry`.
         let mut documents = Vec::new();
         let mut known_entries = Vec::new();
         let mut assets = Vec::new();
-        for (entry, known) in &entries {
+        let mut read_on = Vec::new();
+        for (entry, known, witness) in &mut entries {
+            if let Some(witness) = witness {
+                read_on.push((entry.id.clone(), *witness));
+            }
             match entry.kind {
                 EntryKind::Document => {
                     documents.push(entry.clone());
-                    known_entries.push(known.clone());
+                    known_entries.push(known.take());
                 }
                 EntryKind::Asset => assets.push(entry.clone()),
                 _ => {}
@@ -5540,7 +6075,8 @@ impl Workspace {
         Ok(PreparedVaultScan {
             observed_at,
             folders: scanned.folders,
-            entries: entries.into_iter().map(|(entry, _)| entry).collect(),
+            entries: entries.into_iter().map(|(entry, _, _)| entry).collect(),
+            read_on,
             documents,
             known_entries,
             assets,
@@ -5555,6 +6091,7 @@ impl Workspace {
             observed_at,
             folders,
             entries,
+            read_on,
             documents,
             known_entries,
             assets,
@@ -5590,6 +6127,10 @@ impl Workspace {
         for entry in entries {
             self.indexes.core.set_entry_observed(entry, observed_at);
         }
+        for (id, witness) in read_on {
+            self.indexes.core.remember_read_on(&id, witness);
+        }
+        self.indexes.core.mark_scanned();
 
         // **Riapertura incrementale**: per ogni documento descritto dall'anagrafe
         // (size+mtime+timbro di cambiamento → impronta) che porta i metadati e
@@ -5598,11 +6139,12 @@ impl Workspace {
         // disco. A fette finiscono solo i documenti nuovi, modificati, o per cui
         // un indice plugin deve essere allineato.
         let mut to_index = Vec::new();
+        let restoring = tracing::info_span!(target: "fub.apertura", "restore").entered();
         for (entry, known) in documents.into_iter().zip(known_entries) {
             let metadata = if entry.fingerprint.is_some() && up_to_date.contains(&entry.id) {
                 known
                     .filter(|known| known.fingerprint == entry.fingerprint)
-                    .and_then(|known| known.metadata.clone())
+                    .and_then(|known| known.metadata)
             } else {
                 None
             };
@@ -5612,6 +6154,7 @@ impl Workspace {
                 to_index.push(entry);
             }
         }
+        drop(restoring);
         // Gli allegati non hanno metadati da ripristinare: la seconda fase ne
         // legge i byte e aggiorna la stessa impronta dei documenti.
         to_index.extend(assets);
@@ -5777,6 +6320,12 @@ impl Workspace {
         // sorgente di testo è lo stesso numero di prima.
         for mut entry in entries {
             let mut source = None;
+            let mut witness = None;
+            if entry.fingerprint.is_none()
+                && matches!(entry.kind, EntryKind::Asset | EntryKind::Document)
+            {
+                witness = Some(FileWitness::of(&docs.vault, &entry.id));
+            }
             match entry.kind {
                 EntryKind::Asset if entry.fingerprint.is_none() => {
                     match docs.vault.fingerprint(&entry.id) {
@@ -5802,7 +6351,11 @@ impl Workspace {
                 }
                 _ => {}
             }
-            out.entries.push(PendingIndexEntry { entry, source });
+            out.entries.push(PendingIndexEntry {
+                entry,
+                source,
+                witness,
+            });
         }
         out
     }
@@ -5823,8 +6376,12 @@ impl Workspace {
         let mut parses = Vec::new();
 
         for pending in entries {
-            let PendingIndexEntry { entry, source } = pending;
-            read.push(entry.clone());
+            let PendingIndexEntry {
+                entry,
+                source,
+                witness,
+            } = pending;
+            read.push((entry.clone(), witness));
             if discarded_ids.contains(&entry.id) || entry.kind != EntryKind::Document {
                 continue;
             }
@@ -5951,12 +6508,16 @@ impl Workspace {
             .map(|(id, _)| id)
             .collect();
 
-        for entry in read {
+        for (entry, witness) in read {
             // L'impronta appena calcolata torna in anagrafe: la voce c'era già
             // dalla prima fase, quello che qui si aggiunge è ciò che si è
-            // imparato leggendola.
+            // imparato leggendola, e su quale file.
             if entry.fingerprint.is_some() && !aged.contains(&entry.id) {
+                let id = entry.id.clone();
                 self.indexes.core.set_entry_from_scan(entry);
+                if let Some(witness) = witness {
+                    self.indexes.core.remember_read_on(&id, witness);
+                }
             }
         }
         for (id, metadata) in reused {
@@ -6080,9 +6641,10 @@ impl Workspace {
         let external_losses = if work.finished() {
             reconcile_index_handles(&self.indexes.feed_handles(), &ids)
         } else {
+            withdraw_index_handles(&self.indexes.feed_handles(), &self.withdrawn_ids(&work));
             Vec::new()
         };
-        let opening = self.close_indexing(work, external_losses);
+        let (opening, _) = self.close_indexing(work, external_losses, false);
         // Gli errori di flush non fanno fallire l'apertura del vault: un
         // indice è stato derivato, il vault è la verità (M4: notifica).
         {
@@ -6101,10 +6663,12 @@ impl Workspace {
         graph: BuiltGraph,
     ) -> PreparedIndexFinish {
         let ids = self.reconcile_ids(&work);
+        let withdrawn = self.withdrawn_ids(&work);
         PreparedIndexFinish {
             work,
             graph,
             ids,
+            withdrawn,
             providers: self.indexes.feed_handles(),
         }
     }
@@ -6112,6 +6676,27 @@ impl Workspace {
     /// Installa grafo e stato soltanto dopo che `reconcile` dei provider è
     /// tornato. Questa fase non attraversa codice esterno.
     pub fn finalize_finish_index(&mut self, completed: CompletedIndexFinish) -> Opening {
+        self.finalize_finish_index_with(completed, false).0
+    }
+
+    /// Come [`finalize_finish_index`](Self::finalize_finish_index), ma i dati
+    /// delle rinomine fatte ad app chiusa **non** si spostano qui: tornano in
+    /// un [`PendingRejoin`] che chi chiama esegue dopo aver lasciato il
+    /// prestito esclusivo, sotto lo stesso turno, e consegna poi a
+    /// [`finish_rejoin`](Self::finish_rejoin). Gli eventi `DocumentRenamed`
+    /// escono lì, dopo i dati spostati.
+    pub fn finalize_finish_index_detached(
+        &mut self,
+        completed: CompletedIndexFinish,
+    ) -> (Opening, PendingRejoin) {
+        self.finalize_finish_index_with(completed, true)
+    }
+
+    fn finalize_finish_index_with(
+        &mut self,
+        completed: CompletedIndexFinish,
+        detach_rejoin: bool,
+    ) -> (Opening, PendingRejoin) {
         let CompletedIndexFinish {
             work,
             graph,
@@ -6122,7 +6707,7 @@ impl Workspace {
         } else {
             self.indexes.core.rebuild_graph();
         }
-        self.close_indexing(work, external_losses)
+        self.close_indexing(work, external_losses, detach_rejoin)
     }
 
     /// Come [`finish_index`], col grafo già costruito fuori dal prestito
@@ -6154,7 +6739,40 @@ impl Workspace {
         ids
     }
 
-    fn close_indexing(&mut self, work: Indexing, external_losses: Vec<IndexLoss>) -> Opening {
+    /// I documenti a cui un'apertura interrotta può aver lasciato una
+    /// dichiarazione di revisione in volo: tutti quelli che la scansione ha
+    /// chiesto agli indici, cioè i documenti già in memoria (anche quelli
+    /// saltati perché ogni indice li aveva) e quelli ancora da esaminare.
+    /// Vuoto per un'apertura finita: lì chiude `reconcile`.
+    ///
+    /// Comprende **anche le note consegnate**, ed è voluto: il ritiro toglie
+    /// solo la dichiarazione in volo, mai ciò che un indice tiene, e una nota
+    /// consegnata la sua dichiarazione l'ha già spesa, quindi per lei il ritiro
+    /// non cambia niente e la prossima apertura non rilegge di più. Restringere
+    /// l'elenco alle non consegnate vorrebbe dire tenere il conto di ogni
+    /// consegna per non risparmiare nulla.
+    fn withdrawn_ids(&self, work: &Indexing) -> Vec<DocId> {
+        if work.finished() {
+            return Vec::new();
+        }
+        let mut ids: Vec<DocId> = self.documents();
+        ids.extend(
+            work.from_do
+                .iter()
+                .filter(|entry| entry.kind == EntryKind::Document)
+                .map(|entry| entry.id.clone()),
+        );
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    fn close_indexing(
+        &mut self,
+        work: Indexing,
+        external_losses: Vec<IndexLoss>,
+        detach_rejoin: bool,
+    ) -> (Opening, PendingRejoin) {
         let mut opening = work.opening;
         if work.cursor >= work.from_do.len() {
             // **Gli scarti entrano nell'insieme completo**, e non è un
@@ -6206,8 +6824,18 @@ impl Workspace {
         //
         // Solo se l'apertura è arrivata in fondo: da un'anagrafe parziale
         // «sparito» e «non ancora guardato» sono la stessa cosa.
+        let mut rejoined = Vec::new();
         if !opening.interrupted {
-            self.suspended_from_rejoin = self.rejoin_renamed_while_closed();
+            let (pairs, suspended) = {
+                let _phase = tracing::info_span!(target: "fub.apertura", "rejoin").entered();
+                self.rejoin_renamed_while_closed()
+            };
+            self.suspended_from_rejoin = suspended;
+            if detach_rejoin {
+                rejoined = pairs;
+            } else {
+                self.rejoin_now(pairs);
+            }
         }
 
         self.as_actor(Actor::Kernel, |ws| {
@@ -6224,13 +6852,20 @@ impl Workspace {
                     Severity::Failure,
                     Some(discard.id.clone()),
                     discard.why.clone(),
-                    None,
+                    discard.gate,
                 );
             }
             ws.emit_event(Event::IndexUpdated);
             ws.dispatch_pending();
         });
-        opening
+        let rejoin = PendingRejoin {
+            pairs: rejoined,
+            organization: Arc::clone(&self.organization),
+            drafts: Arc::clone(&self.drafts),
+            storage: Arc::clone(self.docs.vault.storage()),
+            doc_data_roots: self.docs.plugin_data_roots(),
+        };
+        (opening, rejoin)
     }
 
     /// Rimette in anagrafe un file che è appena cambiato, chiedendo al disco
@@ -6342,24 +6977,100 @@ impl Workspace {
     /// e se nessuno lo toccasse, per sempre.
     pub fn store_entries(&self) {
         let _phase = tracing::info_span!(target: "fub.apertura", "store_entries").entered();
-        let table = self
-            .indexes
-            .core
+        let core = &self.indexes.core;
+        // Ogni file si guarda **una volta**, qui, fuori dal lucchetto
+        // dell'anagrafe: il confronto e la tabella nuova vengono dalle stesse
+        // risposte. Guardarli due volte raddoppiava le domande al supporto
+        // proprio sulla riapertura che scrive, e un file cambiato fra le due
+        // avrebbe dato una tabella diversa da quella confrontata.
+        let rows: Vec<(&VaultEntry, StoredEntry)> = core
             .entries
             .values()
-            .filter(|entry| !self.indexes.core.observed_at_the_same_instant(&entry.id))
-            .map(|entry| {
-                (
-                    entry.id.clone(),
-                    StoredEntry {
-                        size: entry.size,
-                        mtime: entry.mtime,
-                        change_stamp: self.docs.vault.change_stamp(&entry.id),
-                        identity: self.docs.vault.file_identity(&entry.id),
-                        fingerprint: entry.fingerprint.clone(),
-                        metadata: self.indexes.core.stored_metadata(&entry.id),
-                    },
-                )
+            .filter_map(|entry| {
+                // Un accesso solo all'osservazione: la stessa risposta decide
+                // se la voce si scrive e se il suo timbro era fermo.
+                let observed_at = core.observed_at(&entry.id);
+                if crate::index::CoreIndex::seen_in_its_own_instant(entry.mtime, observed_at) {
+                    return None;
+                }
+                Some((entry, observed_at))
+            })
+            .map(|(entry, observed_at)| {
+                let now = FileWitness::of(&self.docs.vault, &entry.id);
+                // Il file da cui la voce ha l'impronta (una lettura della
+                // seconda fase, la riga certificata alla riapertura, una
+                // domanda sul contenuto). Se adesso al suo posto c'è un altro
+                // file, con la stessa misura e la stessa data e senza un
+                // evento, la riga non porta l'impronta, e la prossima
+                // apertura rilegge il file invece di certificarlo con i byte
+                // di prima.
+                let read_on = core.learned_on(&entry.id);
+                let fingerprint = entry
+                    .fingerprint
+                    .clone()
+                    .filter(|_| read_on.is_none_or(|witness| witness.agrees(&now)));
+                // Il timbro certifica la riga alla riapertura, quindi si
+                // scrive solo se dice il file **letto**:
+                //
+                // - la voce sa su quale file ha imparato l'impronta, e adesso
+                //   è ancora quello, timbro e identità. Timbro e identità di
+                //   adesso, da soli, sono quelli di un file che può essere
+                //   arrivato dopo la lettura con la misura e la data di
+                //   quello letto (una rinomina sopra, su FAT); una voce che
+                //   non lo sa (una scrittura di Fub, il rilevatore) va senza,
+                //   e si rilegge;
+                // - il timbro era già fermo quando si è guardato il file
+                //   ([`change_stamp_settled`](crate::transfer::change_stamp_settled)):
+                //   ogni riscrittura dopo l'osservazione ha un timbro più
+                //   nuovo di una grana prima di lei, e un timbro più giovane
+                //   può essere quello di una riscrittura sul posto venuta dopo
+                //   la lettura, dello stesso peso e della stessa data.
+                //
+                // Senza timbro la voce resta, per il ricongiungimento, ma la
+                // prossima apertura rilegge il file invece di crederle.
+                let settled = observed_at.and_then(crate::storage::change_stamp_at_unix_millis);
+                let change_stamp = now.change_stamp.filter(|_| {
+                    read_on.is_some_and(|witness| witness.agrees(&now))
+                        && crate::transfer::change_stamp_settled(now.change_stamp, settled)
+                });
+                // I metadati si confrontano al loro posto e si copiano solo se
+                // la tabella si scrive davvero (#524).
+                let row = StoredEntry {
+                    size: entry.size,
+                    mtime: entry.mtime,
+                    change_stamp,
+                    identity: now.identity,
+                    fingerprint,
+                    metadata: None,
+                };
+                (entry, row)
+            })
+            .collect();
+        // Una riapertura ferma compone la stessa tabella che il file ha già:
+        // la si confronta al suo posto, senza copiare i metadati di ogni
+        // documento per buttarli via in fondo a `store` (#524). Il confronto
+        // è lo stesso di `store`, campo per campo, e ogni dubbio scrive.
+        let unchanged = self.entry_store.already_holds(|known| {
+            rows.len() == known.len()
+                && rows.iter().all(|(entry, row)| {
+                    known.get(&entry.id).is_some_and(|stored| {
+                        stored.size == row.size
+                            && stored.mtime == row.mtime
+                            && stored.change_stamp == row.change_stamp
+                            && stored.identity == row.identity
+                            && stored.fingerprint == row.fingerprint
+                            && core.stores_metadata_as(&entry.id, stored.metadata.as_ref())
+                    })
+                })
+        });
+        if unchanged {
+            return;
+        }
+        let table = rows
+            .into_iter()
+            .map(|(entry, row)| {
+                let metadata = core.stored_metadata(&entry.id);
+                (entry.id.clone(), StoredEntry { metadata, ..row })
             })
             .collect();
         if let Err(and) = self.entry_store.store(table) {
@@ -6438,6 +7149,86 @@ impl Workspace {
             vault: self.docs.vault.clone(),
             id: valid_doc_id(id.as_str())?,
         })
+    }
+
+    /// La domanda «c'è già un file con questi `bytes_len` byte, dello stesso
+    /// tipo di `target`?», da fare fuori dal lucchetto del workspace: i
+    /// candidati si prendono adesso dall'indice vivo (le voci in memoria, con
+    /// misura e impronta), il vault si clona, e la custodia si rilascia (vedi
+    /// [`PreparedSameContent`]). Finché la scansione non ha installato
+    /// l'anagrafe la risposta è «non so».
+    pub fn prepare_same_content(&self, target: &DocId, bytes_len: u64) -> PreparedSameContent {
+        let plan = crate::same_content::plan(
+            self.indexes.core.entries.values(),
+            |id| self.indexes.core.learned_on(id),
+            self.indexes.core.anagrafe_complete(),
+            &self.docs.vault.ignore_policy(),
+            target,
+            bytes_len,
+        );
+        PreparedSameContent {
+            vault: self.docs.vault.clone(),
+            plan,
+        }
+    }
+
+    /// Riporta nell'indice vivo le impronte che una domanda sul contenuto ha
+    /// calcolato fuori dal lucchetto. Ciascuna si tiene solo se:
+    ///
+    /// - la data letta era già nel passato quando la domanda è cominciata
+    ///   (*racily clean*);
+    /// - la voce c'è ancora con la misura e la data lette: una voce cambiata
+    ///   nel frattempo, da una scrittura o dal rilevatore, non torna indietro;
+    /// - la voce non sa già di venire da un altro file (vedi
+    ///   [`CoreIndex::learn_fingerprint`](crate::index::CoreIndex::learn_fingerprint));
+    /// - se l'anagrafe ha una riga con quella misura e quella data, la riga
+    ///   non dice un altro file: un'altra identità, o un altro timbro quando
+    ///   la riga ne ha uno. Un file sostituito da un altro con la stessa
+    ///   misura e la stessa data, senza che il rilevatore lo dicesse, ha una
+    ///   voce che descrive ancora quello di prima. Una riga senza timbro non
+    ///   ha certificato nessun timbro, e il suo non smentisce; la sua
+    ///   identità basta per rifiutare, che è la parte prudente.
+    ///
+    /// Il file letto (segno del cambio e identità) l'ha preso la domanda, fuori
+    /// dal lucchetto: qui si confronta soltanto, senza domande al supporto e
+    /// senza copiare la riga dell'anagrafe. L'impronta resta nella voce col
+    /// suo testimone: chi la usa dopo la crede solo per quel file, e
+    /// [`store_entries`](Self::store_entries) non la scrive per un file che nel
+    /// frattempo è un altro.
+    ///
+    /// Non scrive niente su disco: l'anagrafe porta le impronte in
+    /// `entries.json` con [`store_entries`](Self::store_entries), l'unico che lo
+    /// scrive. Ritorna quante impronte ha tenuto.
+    pub fn learn_fingerprints(&mut self, learned: LearnedFingerprints) -> usize {
+        let mut kept = 0;
+        for learned in learned.0 {
+            if learned.mtime == 0 || learned.mtime >= learned.observed_at {
+                continue;
+            }
+            let table_disagrees = self
+                .entry_store
+                .ask_known(&learned.id, |known| {
+                    known.describes(learned.size, learned.mtime)
+                        && (known.identity != learned.witness.identity
+                            || known
+                                .change_stamp
+                                .is_some_and(|stamp| Some(stamp) != learned.witness.change_stamp))
+                })
+                .unwrap_or(false);
+            if table_disagrees {
+                continue;
+            }
+            if self.indexes.core.learn_fingerprint(
+                &learned.id,
+                learned.size,
+                learned.mtime,
+                &learned.fingerprint,
+                learned.witness,
+            ) {
+                kept += 1;
+            }
+        }
+        kept
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {
@@ -6603,6 +7394,7 @@ impl Workspace {
             expected_source,
             parser,
             before_write: self.before_write.clone(),
+            vault: self.docs.vault.clone(),
         })
     }
 
@@ -6619,9 +7411,12 @@ impl Workspace {
         self.prepare_document_write(&id, WriteBase::Dictated)
     }
 
-    /// Finalizza una scrittura già parsata e con il gancio già tornato. La CAS
-    /// resta qui, sotto il writer turn: nessun writer Fub può infilarsi fra la
-    /// base preparata e la sostituzione, mentre il provider gira senza RwLock.
+    /// Finalizza una scrittura già parsata e con il gancio già tornato, disco
+    /// compreso: è [`PreparedDocumentWrite::place`] seguita da
+    /// [`commit_placed_document_write`](Self::commit_placed_document_write),
+    /// per chi tiene già il workspace intero (la via breve, i banchi). L'host
+    /// le chiama separate, sotto il turno di scrittura, per non tenere il
+    /// prestito esclusivo durante la scrittura sul disco.
     pub fn commit_document_write(
         &mut self,
         prepared: PreparedDocumentWrite,
@@ -6630,36 +7425,34 @@ impl Workspace {
         before_write: std::result::Result<(), PluginError>,
     ) -> Result<PreparedDocumentFeed> {
         self.indexes.ensure_mutation_available()?;
-        let PreparedDocumentWrite {
+        let placed = prepared.place(source, before_write)?;
+        Ok(self.commit_placed_document_write(placed, model))
+    }
+
+    /// Porta nelle tabelle una scrittura **già posata sul disco**
+    /// ([`PreparedDocumentWrite::place`]): anagrafe, indice centrale, journal
+    /// e consegna agli indici. Non tocca il disco, quindi il prestito
+    /// esclusivo che la chiama dura il tempo di aggiornare la memoria.
+    ///
+    /// Non ripete il controllo di rientro degli indici: l'ha fatto
+    /// [`prepare_document_write`](Self::prepare_document_write) sullo stesso
+    /// thread, e fallire qui lascerebbe sul disco un testo che le tabelle non
+    /// conoscono.
+    pub fn commit_placed_document_write(
+        &mut self,
+        placed: PlacedDocumentWrite,
+        model: DocumentModel,
+    ) -> PreparedDocumentFeed {
+        let PlacedDocumentWrite {
             id,
             existed,
             from,
-            expected_source,
-            ..
-        } = prepared;
-        if let Err(and) = before_write {
-            return Err(Self::before_write_error(&id, and));
-        }
-        let placed = if let Some(expected) = expected_source.as_deref() {
-            self.docs
-                .vault
-                .write_if_unchanged(&id, expected, source)?
-                .ok_or_else(|| KernelError::Stale(id.to_string()))?
-        } else if !existed {
-            // La preparazione ha visto il path libero, e il registro dirà
-            // `Created`, il cui inverso è cestinare. Un file posato nel frattempo
-            // da un altro programma non è nostro: la scrittura resta una
-            // creazione fino alla pubblicazione, come nella via a byte.
-            self.docs
-                .vault
-                .write_if_absent(&id, source)?
-                .ok_or_else(|| KernelError::AlreadyExists(id.to_string()))?
-        } else {
-            self.docs.vault.write(&id, source)?
-        };
-        let revision = Revision::of(source);
+            revision,
+            size,
+            mtime,
+        } = placed;
         let changes = self.indexes.core.changes_for(&model, &revision);
-        self.set_entry(&id, placed.0, placed.1, Some(revision.clone()));
+        self.set_entry(&id, size, mtime, Some(revision.clone()));
         let losses = self
             .indexes
             .core
@@ -6677,7 +7470,7 @@ impl Workspace {
                 to: revision.clone(),
             }
         };
-        Ok(PreparedDocumentFeed {
+        PreparedDocumentFeed {
             id,
             model: Some(model),
             changes,
@@ -6685,7 +7478,7 @@ impl Workspace {
             journal,
             providers,
             losses,
-        })
+        }
     }
 
     /// Come `commit_document_write`, conservando però la semantica di journal
@@ -6699,14 +7492,28 @@ impl Workspace {
         base: Revision,
         report: &EditReport,
     ) -> Result<PreparedDocumentFeed> {
-        let mut pending = self.commit_document_write(prepared, source, model, before_write)?;
+        self.indexes.ensure_mutation_available()?;
+        let placed = prepared.place(source, before_write)?;
+        Ok(self.commit_placed_document_edit(placed, model, base, report))
+    }
+
+    /// Come [`commit_placed_document_write`](Self::commit_placed_document_write),
+    /// con la semantica di journal dell'edit chirurgico.
+    pub fn commit_placed_document_edit(
+        &mut self,
+        placed: PlacedDocumentWrite,
+        model: DocumentModel,
+        base: Revision,
+        report: &EditReport,
+    ) -> PreparedDocumentFeed {
+        let mut pending = self.commit_placed_document_write(placed, model);
         pending.journal = JournalOp::Edited {
             doc: pending.id.clone(),
             from: base,
             to: pending.revision.clone(),
             footprint: crate::journal::EditFootprint::of(&report.applied),
         };
-        Ok(pending)
+        pending
     }
 
     /// Chiude la fase indici senza consegnare eventi. Il journal resta nel
@@ -6803,13 +7610,16 @@ impl Workspace {
             expected_bytes,
             parser,
             before_write: self.before_write.clone(),
+            storage: Arc::clone(self.docs.vault.storage()),
         })
     }
 
     /// Commit atomico raw: UNICA `write_if_unchanged(path, None|Some, bytes)` —
     /// `None` = create-only atomico (`Changed` => `AlreadyExists`), `Some` = CAS
     /// (`Changed` => `Stale`). Mai `exists` + `write`. Il modello arriva dal
-    /// parse detached; qui solo anagrafe/journal/feed.
+    /// parse detached. È [`PreparedDocumentBytesWrite::place`] seguita da
+    /// [`commit_placed_document_bytes_write`](Self::commit_placed_document_bytes_write),
+    /// per chi tiene già il workspace intero; l'host le chiama separate.
     pub fn commit_document_bytes_write(
         &mut self,
         prepared: PreparedDocumentBytesWrite,
@@ -6818,36 +7628,26 @@ impl Workspace {
         before_write: std::result::Result<(), PluginError>,
     ) -> Result<PreparedDocumentFeed> {
         self.indexes.ensure_mutation_available()?;
-        let PreparedDocumentBytesWrite {
+        let placed = prepared.place(bytes, before_write)?;
+        Ok(self.commit_placed_document_bytes_write(placed, model))
+    }
+
+    /// Porta nelle tabelle una scrittura a byte **già posata sul disco**:
+    /// anagrafe, journal e feed, senza I/O. Vedi
+    /// [`commit_placed_document_write`](Self::commit_placed_document_write).
+    pub fn commit_placed_document_bytes_write(
+        &mut self,
+        placed: PlacedDocumentBytesWrite,
+        model: Option<DocumentModel>,
+    ) -> PreparedDocumentFeed {
+        let PlacedDocumentBytesWrite {
             id,
-            path,
             from,
-            expected_bytes,
-            ..
-        } = prepared;
-        if let Err(error) = before_write {
-            return Err(Self::before_write_error(&id, error));
-        }
-        let stored = self
-            .docs
-            .vault
-            .storage()
-            .write_if_unchanged(&path, expected_bytes.as_deref(), bytes)
-            .map_err(|source| KernelError::Io {
-                path: path.clone(),
-                source,
-            })?;
-        let stat = match stored {
-            crate::storage::ConditionalWrite::Written(stat) => stat,
-            crate::storage::ConditionalWrite::Changed => {
-                return Err(if expected_bytes.is_some() {
-                    KernelError::Stale(id.to_string())
-                } else {
-                    KernelError::AlreadyExists(id.to_string())
-                });
-            }
-        };
-        let revision = Revision::of_bytes(bytes);
+            rewrote,
+            revision,
+            size,
+            mtime,
+        } = placed;
         let (changes, losses, providers) = match &model {
             Some(model) => (
                 self.indexes.core.changes_for(model, &revision),
@@ -6858,8 +7658,8 @@ impl Workspace {
             ),
             None => (DocChanges::default(), Vec::new(), Vec::new()),
         };
-        self.set_entry(&id, stat.size, stat.mtime, Some(revision.clone()));
-        let journal = if expected_bytes.is_some() {
+        self.set_entry(&id, size, mtime, Some(revision.clone()));
+        let journal = if rewrote {
             JournalOp::Written {
                 doc: id.clone(),
                 from,
@@ -6871,7 +7671,7 @@ impl Workspace {
                 to: revision.clone(),
             }
         };
-        Ok(PreparedDocumentFeed {
+        PreparedDocumentFeed {
             id,
             model,
             changes,
@@ -6879,7 +7679,7 @@ impl Workspace {
             journal,
             providers,
             losses,
-        })
+        }
     }
 
     /// Via breve raw: prepara detached, parsa fuori lock, committa atomico,
@@ -7038,12 +7838,7 @@ impl Workspace {
     fn record(&mut self, op: JournalOp) {
         let origin = self.dispatch.origin();
         if let Err(and) = self.journal.append(origin, op) {
-            self.report_trouble(
-                Severity::Failure,
-                None,
-                PluginError::Internal(format!("registro: {and}").into()),
-                None,
-            );
+            self.report_journal_failure(JournalFailure(and));
         }
     }
 
@@ -7117,6 +7912,14 @@ impl Workspace {
     /// scelto di scartarla.
     pub fn discard_draft(&mut self, doc: &DocId) -> std::io::Result<()> {
         self.drafts.discard(doc)
+    }
+
+    /// La porta delle bozze staccata dal workspace: chi la tiene scrive e butta
+    /// bozze senza prestito né turno di scrittura (#485), così una bozza non
+    /// aspetta il salvataggio lento che deve coprire. Le mutazioni delle bozze
+    /// restano in fila fra loro e con le migrazioni della rinomina.
+    pub fn draft_port(&self) -> crate::drafts::DraftPort {
+        crate::drafts::DraftPort::new(Arc::clone(&self.drafts), Arc::clone(&self.clock))
     }
 
     /// Le bozze di questo vault, **e quante non si sono lette**.
@@ -7401,6 +8204,16 @@ impl Workspace {
     /// `Custody`, quindi rientra con il solo esito.
     pub fn prepare_is_ignored(&self, abs: &Utf8Path) -> PreparedIgnoreCheck {
         self.docs.vault.prepare_is_ignored(abs)
+    }
+
+    /// Le cartelle che un rilevatore per-cartella deve guardare, con la
+    /// politica di esclusione che vale **adesso** (§15.6).
+    ///
+    /// Nessun I/O: si risolve la politica e basta, come in
+    /// [`prepare_is_ignored`](Self::prepare_is_ignored). Chi guarda la
+    /// richiede a ogni lotto e la confronta con quella con cui sta guardando.
+    pub fn watch_scope(&self) -> crate::ignore::WatchScope {
+        crate::ignore::WatchScope::new(self.docs.vault.ignore_policy())
     }
 
     /// Prepara una lettura del watcher conservando la porta sincrona storica.
@@ -8276,8 +9089,12 @@ impl Workspace {
         tracing::warn!(target: "fub.kernel", "sincronizzazione di {abs}: {and}");
         let subject = self.docs.vault.doc_id_for_path(abs).ok();
         let reason = PluginError::Internal(format!("sincronizzazione di {abs}: {and}").into());
+        // Un documento che il provider non legge più dice la porta del formato,
+        // come allo scarto dell'apertura: il messaggio è la prosa del codec, e
+        // chi lo mostra lo sostituisce con la sua frase (IMP-117).
+        let gate = matches!(and, KernelError::Format(_)).then_some(Gate::FormatParse);
         self.as_actor(Actor::Watcher, |ws| {
-            ws.report_trouble(Severity::Warning, subject, reason, None);
+            ws.report_trouble(Severity::Warning, subject, reason, gate);
             ws.dispatch_pending();
         });
     }
@@ -9599,42 +10416,32 @@ impl Workspace {
     fn migrate_side_data(&mut self, from: &DocId, to: &DocId) {
         // **L'organizzazione segue l'identità** (§11.3): icona, pin e posto
         // nell'ordinamento sono attaccati alla nota, non al suo vecchio path.
-        //
         // Qui e non sull'evento `DocumentRenamed`, che pure lo direbbe: la coda
         // ha un budget e può troncare (decisione 0034), e l'organizzazione è un
-        // dato **autorevole** — perso, non si ricostruisce da niente. Un dato
-        // così non può dipendere da una consegna dichiaratamente best-effort.
-        // Ne segue il guadagno che si vede: passando di qui migra anche la
-        // rinomina fatta da **un'altra app** mentre Fub è aperto, perché
-        // `sync_renamed_path` arriva allo stesso punto.
-        if let Err(and) = self.organization.migrate(from.as_str(), to.as_str()) {
-            self.organization.warn(format!(
-                "l'organizzazione di {from} non ha potuto seguire la rinomina in \
-                 {to}: {and}"
-            ));
-        }
-        // **E lo stesso vale per lo stato per-documento di chiunque altro**
-        // (§13.2). Sta accanto all'organizzazione perché è la stessa cosa vista
-        // in generale: quella è lo stato per-documento *del kernel*, questo è
-        // quello di tutti gli altri, e finché il kernel non lo migrava ognuno se
-        // lo migrava da sé ascoltando l'evento — cioè nessuno lo migrava per il
-        // rename fatto ad app chiusa o da un'altra applicazione.
+        // dato **autorevole** — perso, non si ricostruisce da niente. Passando
+        // di qui migra anche la rinomina fatta da **un'altra app** mentre Fub è
+        // aperto, perché `sync_renamed_path` arriva allo stesso punto.
         //
-        // Cammina il **disco** e non i plugin montati, di proposito: chi è
-        // spento oggi non deve riaccendersi domani con le chiavi di ieri, ed è
-        // esattamente chi non può accorgersene da solo.
-        self.migrate_doc_data(from, to);
-        // **E la bozza non salvata** (§15.2), che sta accanto ai due di sopra
-        // per la ragione dei due di sopra e con un motivo in più: una bozza è
-        // l'**unica** copia di ciò che l'utente ha scritto. Se `to` ne ha già
-        // una sua, quella di `from` prende un nome di recupero e si elenca
-        // come orfana: niente si sovrascrive, e niente resta sotto l'id morto.
-        if let Err(and) = self.drafts.migrate(from, to) {
-            self.organization.warn(format!(
-                "la bozza non salvata di {from} non ha potuto seguire la \
-                 rinomina in {to}: {and}"
-            ));
-        }
+        // **E lo stesso vale per lo stato per-documento di chiunque altro**
+        // (§13.2), cercato sul **disco** e non fra i plugin montati: chi è
+        // spento oggi non deve riaccendersi domani con le chiavi di ieri.
+        //
+        // **E la bozza non salvata** (§15.2), che è l'**unica** copia di ciò che
+        // l'utente ha scritto: se `to` ne ha già una sua, quella di `from`
+        // prende un nome di recupero e si elenca come orfana.
+        let roots = self.docs.plugin_data_roots();
+        let storage = Arc::clone(self.docs.vault.storage());
+        let mut warnings = Vec::new();
+        migrate_side_data_on(
+            &self.organization,
+            &self.drafts,
+            storage.as_ref(),
+            &roots,
+            from,
+            to,
+            &mut warnings,
+        );
+        self.doc_data_warnings.extend(warnings);
     }
 
     /// Sincronizza un **rename accoppiato** riferito dal filesystem (`from` →
@@ -9927,11 +10734,16 @@ impl Workspace {
                     LinkTarget::Wiki { page, .. } => {
                         // Riscrivi solo se il link puntava davvero a `from`
                         // (non a un omonimo) e ci arrivava per nome o per path
-                        // — mai per alias.
+                        // — mai per alias. Il path può essere parziale
+                        // (`[[Progetti/Alpha]]` per `Note/Progetti/Alpha.md`):
+                        // è la coda del path a confine di cartella, la stessa
+                        // regola del grafo, che qui sotto conferma il bersaglio.
                         let key = resolution_key(page);
                         let by_name = key == from_name;
-                        let by_path =
-                            key == from_path || resolution_key(&strip_ext(&key)) == from_path;
+                        let stem = resolution_key(&strip_ext(&key));
+                        let by_path = key == from_path
+                            || stem == from_path
+                            || (key.contains('/') && from_path.ends_with(&format!("/{stem}")));
                         let with_extension = key == from_file || key == from_full;
                         if !(by_name || by_path || with_extension)
                             || self.indexes.core.graph.resolve_wiki(page).as_ref() != Some(from)
@@ -10410,9 +11222,18 @@ impl Workspace {
         // Il taglio del §8.1 passa qui: la sessione dice *cosa* è cambiato, il
         // workspace traduce la maschera in id di view. È deliberato che il
         // componente non sappia che le view esistono.
+        let named = context.as_ref().and_then(|c| c.doc.clone());
         let changed = self.session.publish(context);
         if changed.is_empty() {
             return Vec::new();
+        }
+        // Una riga per pubblicazione che cambia qualcosa, non per lettura: le
+        // view lo leggono senza documento (vedi `active_context`).
+        if let Some(doc) = named.filter(|doc| !self.docs.vault.exists(doc)) {
+            tracing::info!(
+                target: "fub.kernel",
+                "contesto su un documento che non è nel vault ({doc}): le view lo leggono senza documento"
+            );
         }
         // `views()` risolve già le due maschere sull'esemplare unico (§22.3):
         // qui non serve una seconda strada per la stessa domanda, e averla
@@ -10446,8 +11267,32 @@ impl Workspace {
     }
 
     /// Il contesto del pannello con il focus, se la shell ne ha pubblicato uno.
+    ///
+    /// **Un documento che non è nel vault non si serve.** La shell pubblica di
+    /// suo e in ritardo (il cursore aspetta 150 ms): può nominare la nota che
+    /// un rename dal titolo ha appena spostato, quella che un altro programma
+    /// ha appena tolto, o la linguetta ripristinata di un file sparito ad app
+    /// chiusa. Servito così, ogni view che legge il documento attivo —
+    /// struttura, note a piè di pagina, proprietà, statistiche — falliva con
+    /// `NotFound`, e la shell lo diceva come un pannello rotto (IMP-1800). È la
+    /// stessa verità di [`Session::invalidate`] con `Gone`, letta dall'altro
+    /// lato: il documento cade, la selezione con lui (i suoi offset erano di
+    /// quel testo), riquadro e modalità restano. Il contesto pubblicato non si
+    /// riscrive: se il file torna, la stessa domanda lo ritrova senza aspettare
+    /// che la shell ripubblichi. Il fatto si scrive nel log quando la shell lo
+    /// pubblica ([`set_active_context`](Workspace::set_active_context)), non a
+    /// ogni lettura.
     pub fn active_context(&self) -> Option<ViewContext> {
-        self.session.context()
+        let mut context = self.session.context()?;
+        if context
+            .doc
+            .as_ref()
+            .is_some_and(|doc| !self.docs.vault.exists(doc))
+        {
+            context.doc = None;
+            context.selections = None;
+        }
+        Some(context)
     }
 
     /// Il documento del contesto attivo: la lettura che il kernel usa dove il
@@ -10677,7 +11522,10 @@ impl Workspace {
             }
             other => {
                 let needles = occurrences::wanted(&other);
-                let result = self.indexes.query(other)?;
+                let result = self
+                    .indexes
+                    .query(other)
+                    .map_err(|failure| self.localized_query_failure(failure))?;
                 match result {
                     IndexResult::Documents(page) if !needles.is_empty() => {
                         Ok(IndexResult::Documents(self.locate(page, &needles)))
@@ -11503,6 +12351,145 @@ impl Workspace {
         self.prepare_provider_command_here(command, args, mode, None)
     }
 
+    /// Prepara un comando che si è dichiarato **di sola lettura**
+    /// (`!spec.scope.writes`) con un frame tutto suo, che l'host può eseguire
+    /// senza il turno di scrittura.
+    ///
+    /// Prende `&self`: non tocca lo stato condiviso. Niente `swap_actor`,
+    /// niente batch, niente voce sulla pila dei comandi, `in_provider_call`
+    /// resta basso. Gli eventi che altri producono mentre il comando legge
+    /// arrivano subito, e la sua fine non spinge undo, non chiude batch e non
+    /// accoda eventi ([`finish_read_only_provider_command`]).
+    ///
+    /// `outer` è la catena dei comandi che stanno invocando questo (vuota per
+    /// un ingresso dall'utente): il rifiuto della ricorsione si calcola su di
+    /// lei e non sulla pila condivisa, che appartiene a chi tiene il turno.
+    ///
+    /// La lettura si iscrive fra quelle in volo ([`reads_in_flight`]) finché
+    /// il token vive, con `cancel`: la bandiera **sua**, che l'host che la
+    /// serve guarda insieme a quelle di chi la contiene (`outer_stops`, la
+    /// bandiera del job e delle letture fuori). Lo smontaggio del proprietario
+    /// alza solo `cancel`: il job che l'ha chiamata riceve un `Cancelled` da
+    /// `invoke_command` e decide lui. La chiusura del vault alza anche
+    /// `outer_stops`, perché lì si ferma tutto. Finché la lettura è in volo,
+    /// lo smontaggio del suo proprietario risponde `Busy`; mentre chi smonta
+    /// il proprietario ne tiene la sbarra ([`ReadsInFlight::bar`]), una nuova
+    /// lettura è rifiutata con `Cancelled`.
+    ///
+    /// [`reads_in_flight`]: Self::reads_in_flight
+    ///
+    /// `None` vuol dire «non è per questa porta»: il comando scrive, oppure è
+    /// manutenzione del kernel. Il chiamante passa allora dal percorso di
+    /// sempre ([`prepare_provider_command`], col turno). Vale anche per un
+    /// comando che scrive invocato in `DryRun`: è l'anteprima di una
+    /// scrittura, e la sua semantica resta quella del frame condiviso.
+    ///
+    /// [`finish_read_only_provider_command`]: Self::finish_read_only_provider_command
+    /// [`prepare_provider_command`]: Self::prepare_provider_command
+    pub fn prepare_read_only_provider_command(
+        &self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        outer: &[String],
+        cancel: &Arc<AtomicBool>,
+        outer_stops: &[Arc<AtomicBool>],
+    ) -> std::result::Result<Option<PreparedReadOnlyCommand>, PluginError> {
+        let at = self.command_owner(command)?;
+        let entry = &self.providers.commands[at];
+        if entry.id == crate::maintenance::MAINTENANCE_ID {
+            return Ok(None);
+        }
+        let spec = entry
+            .specs
+            .iter()
+            .find(|s| s.id == command)
+            .expect("il proprietario è stato trovato dichiarando questo comando");
+        if spec.scope.writes {
+            return Ok(None);
+        }
+        spec.validate_args(&args)?;
+
+        if outer.iter().any(|c| c == command) {
+            return Err(self_invocation(outer, command));
+        }
+        // Alla chiusura la lettura non si iscrive: chi si spegne può ancora
+        // invocare i comandi di chi resta, e la chiusura non aspetta le
+        // letture lanciate da sé. Altrimenti l'iscrizione è rifiutata se chi
+        // smonta il proprietario ne ha sbarrato le nuove letture.
+        let in_flight = if self.closed {
+            None
+        } else {
+            let entered =
+                self.reads_in_flight
+                    .enter(&entry.id, Arc::clone(cancel), outer_stops.to_vec());
+            Some(entered.ok_or_else(|| read_stopped(command))?)
+        };
+        let why = if mode.is_dry_run() {
+            "una simulazione non scrive"
+        } else {
+            "il comando si è dichiarato di sola lettura"
+        };
+        let mut chain = outer.to_vec();
+        chain.push(command.to_string());
+        Ok(Some(PreparedReadOnlyCommand {
+            owner: entry.id.clone(),
+            command: command.to_string(),
+            args: Some(args),
+            mode,
+            provider: Arc::clone(&entry.provider),
+            why,
+            chain,
+            workspace_id: self.workspace_id,
+            closed_at_prepare: self.closed,
+            cancel: Arc::clone(cancel),
+            _in_flight: in_flight,
+        }))
+    }
+
+    /// Chiude una [`PreparedReadOnlyCommand`]: il recinto degli intenti,
+    /// il completamento del piano e la localizzazione. Nient'altro: niente
+    /// undo (una lettura non ha niente da annullare, anche se il provider ne
+    /// dichiara uno), niente batch, niente eventi.
+    ///
+    /// Se il vault si è chiuso dopo la preparazione, o la lettura è stata
+    /// fermata (la sua bandiera, alzata da uno smontaggio), l'esito non si
+    /// applica: la chiamata risponde con [`PluginError::Cancelled`], anche se
+    /// il provider ha ingoiato il rifiuto dell'host. Una lettura preparata
+    /// quando la chiusura era già cominciata (chi si spegne può ancora
+    /// invocare comandi, come sul percorso condiviso) finisce normalmente.
+    pub fn finish_read_only_provider_command(
+        &self,
+        prepared: PreparedReadOnlyCommand,
+        outcome: std::result::Result<CommandOutcome, PluginError>,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let closed_meanwhile = self.closed && !prepared.closed_at_prepare;
+        let stopped = prepared.cancel.load(Ordering::Relaxed);
+        if prepared.workspace_id != self.workspace_id || closed_meanwhile || stopped {
+            return Err(read_stopped(&prepared.command));
+        }
+        let outcome = outcome.and_then(|outcome| {
+            self.guard_command_intent(&prepared.owner, &outcome)
+                .map(|()| outcome)
+        });
+        match outcome {
+            Err(and) => Err(self.localized(&prepared.owner, and)),
+            Ok(mut outcome) => {
+                if let CommandEffect::Plan(plan) = &mut outcome.effect {
+                    plan.complete();
+                }
+                self.localize(&prepared.owner, &mut outcome);
+                Ok(outcome)
+            }
+        }
+    }
+
+    /// Il registro delle letture in volo, da tenere **fuori** dal lucchetto:
+    /// chi chiude il vault lo usa per fermarle e aspettarle.
+    pub fn reads_in_flight(&self) -> ReadsInFlight {
+        self.reads_in_flight.clone()
+    }
+
     fn prepare_provider_command_here(
         &mut self,
         command: &str,
@@ -11520,15 +12507,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if self.providers.command_stack.iter().any(|c| c == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         if self.providers.commands[at].id == crate::maintenance::MAINTENANCE_ID {
@@ -11589,15 +12568,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if self.providers.command_stack.iter().any(|id| id == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         let owner = self.providers.commands[at].id.clone();
@@ -11799,15 +12770,7 @@ impl Workspace {
         // profondità da limitare con un numero: è un errore di chi lo ha
         // scritto, e l'unica risposta utile lo nomina.
         if self.providers.command_stack.iter().any(|c| c == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         // **La manutenzione la esegue il kernel** (§15.2). L'id è passato dalla
@@ -11954,19 +12917,87 @@ impl Workspace {
     /// niente è ancora «fallito», che è la promessa che
     /// [`HostCommands::undo_last`](fub_abi::traits::HostCommands::undo_last)
     /// faceva già.
+    ///
+    /// # Prima di toccare un file si guardano tutti (A-10)
+    ///
+    /// Le [`UndoStep::Edit`] in testa alla voce — quelle prima del primo passo
+    /// [`Command`](UndoStep::Command), una per documento — portano la
+    /// revisione che l'operazione ha lasciato, e si controllano **tutte prima
+    /// del primo passo**. Se un documento è cambiato dopo l'operazione,
+    /// l'annullamento non tocca niente: torna un [`PluginError::Conflict`] che
+    /// nomina i file cambiati, e la voce resta in pila. È ciò che rende un
+    /// piano su più documenti ([`fub_abi::command::WritePlan`]) annullabile in
+    /// un passo: [`AppliedPlan::undo`](fub_abi::command::AppliedPlan::undo)
+    /// mette davanti, per ogni file, l'inverso della modifica o una richiesta
+    /// vuota che fa solo da guardia. Dopo il primo comando la regola si ferma:
+    /// che cosa un comando tocca lo sa lui, e la base di un passo dopo di lui
+    /// può essere quella che lui stesso produrrà.
     pub fn prepare_undo_replay(&mut self) -> Option<UndoReplay> {
         let entry = self.undo.pop()?;
+        let failure = self.stale_undo_guards(&entry.undo.steps);
         Some(UndoReplay {
             entry,
             next: 0,
             done: 0,
-            failure: None,
+            failure,
             before_replay: self.undo.begin_replay(),
             // Tutto dentro un lotto solo: annullare una rinomina che aveva
             // riscritto quaranta sorgenti è un gesto, quindi un `batch-ended` e
             // un ridisegno.
             owns_batch: self.dispatch.open_batch(),
         })
+    }
+
+    /// Le guardie in testa a una voce di annullamento che non tengono più: il
+    /// perché per [`prepare_undo_replay`](Self::prepare_undo_replay), o `None`
+    /// se tutte reggono.
+    ///
+    /// Un documento che non si legge più (cancellato, un permesso, un disco)
+    /// conta come cambiato: l'annullamento non sa più su cosa andrebbe a
+    /// scrivere, e non scrivere niente è la risposta che non perde niente.
+    fn stale_undo_guards(&self, steps: &[UndoStep]) -> Option<Failure> {
+        let mut seen: Vec<&DocId> = Vec::new();
+        let mut stale: Vec<DocId> = Vec::new();
+        for step in steps {
+            let UndoStep::Edit(planned) = step else {
+                break;
+            };
+            if seen.contains(&&planned.doc) {
+                continue;
+            }
+            seen.push(&planned.doc);
+            let base = &planned.edit.base;
+            let holds = match self.document_revision(&planned.doc) {
+                Ok(current) if current == *base => true,
+                // Una base della forma vecchia non si confronta per
+                // uguaglianza: si ricalcola sui byte.
+                Ok(_) if !base.is_current_form() => self
+                    .read_source_bytes(&planned.doc)
+                    .is_ok_and(|bytes| base.matches_bytes(&bytes)),
+                Ok(_) | Err(_) => false,
+            };
+            if !holds {
+                stale.push(planned.doc.clone());
+            }
+        }
+        let first = stale.first()?.clone();
+        // La frase è una chiave del catalogo di chi annulla: la scrive
+        // `vault.undo` (fub-features), che è il comando da cui passa l'utente.
+        // Due chiavi e non una, perché il catalogo non sceglie il plurale.
+        let text = match stale.as_slice() {
+            [one] => Text::message(UNDO_STALE_ONE, vec![Arg::text("doc", one.as_str())]),
+            many => Text::message(
+                UNDO_STALE_MANY,
+                vec![Arg::text(
+                    "docs",
+                    many.iter()
+                        .map(DocId::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )],
+            ),
+        };
+        Some(Failure::of(first, PluginError::Conflict(text)))
     }
 
     /// Chiude il batch senza chiamare handler. Replay resta attivo nel token:
@@ -12261,7 +13292,9 @@ impl Workspace {
             }
         });
         self.dispatch_pending();
-        report
+        // L'errore dell'importer, nel catalogo di chi l'ha scritto (§12.2),
+        // come quello di un exporter.
+        report.map_err(|error| self.localized(&owner, error))
     }
 
     /// Le destinazioni di export offerte dai provider registrati.
@@ -12299,8 +13332,12 @@ impl Workspace {
     ) -> std::result::Result<ExportReport, PluginError> {
         let prepared = self.prepare_export();
         let at = prepared.choose(&request.target)?;
-        let host = self.read_host_for(prepared.owner(at));
-        prepared.invoke(at, request, &host, out)
+        let owner = prepared.owner(at);
+        let host = self.read_host_for(owner);
+        // L'errore dell'exporter, nel catalogo di chi l'ha scritto (§12.2).
+        prepared
+            .invoke(at, request, &host, out)
+            .map_err(|error| self.localized(owner, error))
     }
 
     // --- eventi ------------------------------------------------------------
@@ -12397,12 +13434,19 @@ impl Workspace {
     /// Alla chiusura, se qualcosa è stato toccato, arriva un
     /// [`Event::BatchEnded`] con l'elenco dei documenti; poi la coda si drena.
     ///
-    /// **Non è una transazione.** Se una delle scritture dentro `f` fallisce, le
-    /// altre restano fatte: il lotto non annulla niente e non lo promette (il
-    /// tutto-o-niente vuole il registro delle mutazioni, che dalla 0067 c'è e di
-    /// ogni lotto tiene i confini: manca chi lo ripercorre). Ciò che è andato storto lo
-    /// riporta `f` col proprio valore di ritorno, che questa funzione passa
-    /// intatto.
+    /// **Il lotto da solo non è una transazione.** Se una delle scritture dentro
+    /// `f` fallisce, le altre restano fatte: il lotto raggruppa ciò che si dice a
+    /// chi ascolta, non ciò che si scrive. Ciò che è andato storto lo riporta `f`
+    /// col proprio valore di ritorno, che questa funzione passa intatto.
+    ///
+    /// Il tutto-o-niente c'è, ed è un altro attrezzo che dentro il lotto ci
+    /// gira: un comando che scrive più documenti li consegna come
+    /// [`WritePlan`](fub_abi::command::WritePlan), che controlla ogni revisione
+    /// prima di scrivere e disfa all'indietro se un passo cade
+    /// ([`fub_abi::rules::plan`]). Sta nel contratto e non qui perché chi lo usa
+    /// riceve soltanto un `HostApi`, e passa così da ogni guardia e da ogni
+    /// turno come le capacità che compone; il lotto del comando che lo apre fa
+    /// uscire scritture e ritorni **una volta, dopo**, come fatti in coda.
     ///
     /// Annidato, entra nel lotto che c'è invece di aprirne un secondo: chiudere
     /// quello interno farebbe arrivare un `batch-ended` mentre l'operazione
@@ -12452,6 +13496,37 @@ impl Workspace {
             self.dispatch.restore_actor(previous_actor);
         }
         deferred.outcome
+    }
+
+    /// Come [`finish_deferred_events`](Self::finish_deferred_events), ma la
+    /// riga del registro **non** si scrive qui: torna a chi chiama, che la
+    /// appende dopo aver lasciato il prestito esclusivo e prima di lasciare il
+    /// turno di scrittura ([`PendingJournalRecord`]).
+    pub fn finish_deferred_events_detached<T>(
+        &mut self,
+        deferred: DeferredEvents<T>,
+    ) -> (T, Option<PendingJournalRecord>) {
+        let record = deferred.journal.map(|op| PendingJournalRecord {
+            journal: Arc::clone(&self.journal),
+            origin: self.dispatch.origin(),
+            op,
+        });
+        if let Some(previous_actor) = deferred.previous_actor {
+            self.dispatch.restore_actor(previous_actor);
+        }
+        (deferred.outcome, record)
+    }
+
+    /// Dice un'appendice del registro non riuscita, con la stessa riga di
+    /// [`record`](Self::record): un guasto del registro non annulla
+    /// l'operazione, che è già avvenuta.
+    pub fn report_journal_failure(&mut self, failure: JournalFailure) {
+        self.report_trouble(
+            Severity::Failure,
+            None,
+            PluginError::Internal(format!("registro: {}", failure.0).into()),
+            None,
+        );
     }
 
     /// Prepara una sola consegna del drenaggio `drain` senza eseguire callback.
@@ -13834,30 +14909,41 @@ impl Workspace {
     ///   rotto): niente ieri, niente spariti, nessuna rinomina da vedere. Il
     ///   ricongiungimento è una capacità di un **derivato**, e perso il derivato
     ///   si perde anche lei — per un giro, e in silenzio.
-    fn rejoin_renamed_while_closed(&mut self) -> BTreeSet<DocId> {
+    fn rejoin_renamed_while_closed(&self) -> (Vec<(DocId, DocId)>, BTreeSet<DocId>) {
         // Qui il cestino è una cautela in più, non la guardia: l'accoppiamento
         // chiede lo stesso file (identità e impronta), e un file che sta nel
         // cestino non è una voce del vault di oggi.
         let trashed = self.trashed_originals().unwrap_or_default();
         // C'era ieri, oggi non c'è, e portava l'impronta di un contenuto.
-        let mut disappeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
-            BTreeMap::new();
-        let snapshot = self.entry_store.snapshot();
-        for (id, entry) in &snapshot {
-            if entry.size == 0 || self.indexes.core.entries.contains_key(id) || trashed.may_hold(id)
-            {
-                continue;
+        //
+        // La domanda si fa sulla tabella dov'è, senza copiarla (#523): si
+        // leggono misura, identità e impronta, e si copia l'impronta delle
+        // sole righe sparite. Dentro solo lavoro in memoria, e nessuna
+        // domanda all'anagrafe: rientrare nel suo lucchetto di lettura con
+        // uno scrittore in attesa può bloccarsi.
+        let disappeared = self.entry_store.with_all_known(|known| {
+            let mut disappeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
+                BTreeMap::new();
+            for (id, entry) in known {
+                if entry.size == 0
+                    || self.indexes.core.entries.contains_key(id)
+                    || trashed.may_hold(id)
+                {
+                    continue;
+                }
+                if let (Some(identity), Some(fingerprint)) =
+                    (entry.identity, entry.fingerprint.clone())
+                {
+                    disappeared
+                        .entry((identity, fingerprint))
+                        .or_default()
+                        .push(id.clone());
+                }
             }
-            if let (Some(identity), Some(fingerprint)) = (entry.identity, entry.fingerprint.clone())
-            {
-                disappeared
-                    .entry((identity, fingerprint))
-                    .or_default()
-                    .push(id.clone());
-            }
-        }
+            disappeared
+        });
         if disappeared.is_empty() {
-            return BTreeSet::new();
+            return (Vec::new(), BTreeSet::new());
         }
 
         // Oggi c'è, ieri non c'era. Si guardano solo le impronte per cui
@@ -13867,7 +14953,9 @@ impl Workspace {
         let mut appeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
             BTreeMap::new();
         for entry in self.indexes.core.entries.values() {
-            if entry.size == 0 || self.entry_store.known(&entry.id).is_some() {
+            // Fuori da `with_all_known`, e senza copiare la riga: basta
+            // sapere se c'è.
+            if entry.size == 0 || self.entry_store.ask_known(&entry.id, |_| ()).is_some() {
                 continue;
             }
             let (Some(identity), Some(fingerprint)) = (
@@ -13899,29 +14987,53 @@ impl Workspace {
 
         for (from, to) in &pairs {
             // Il pavimento e la porta insieme (0062): una riga nel log per chi
-            // fa assistenza, e l'evento qui sotto per chi sta dentro l'app.
+            // fa assistenza, e l'evento di `announce_rejoin` per chi sta dentro
+            // l'app.
             tracing::info!(
                 target: "fub.kernel",
                 "rinomina fatta ad app chiusa riconosciuta dall'impronta: {from} → {to}"
             );
+        }
+        (pairs, suspended)
+    }
+
+    /// Le rinomine riconosciute, portate dietro **subito**: è la via di chi
+    /// tiene il workspace intero (`finish_index`, `reindex`).
+    fn rejoin_now(&mut self, pairs: Vec<(DocId, DocId)>) {
+        for (from, to) in &pairs {
             self.migrate_side_data(from, to);
         }
-        if !pairs.is_empty() {
-            // **E poi si dice**, con lo stesso evento della rinomina vista: chi
-            // tiene stato per-documento fuori dallo spazio dichiarato — il
-            // versioning, che ha uno store suo perché deve sopravvivere alla
-            // cancellazione (0044) — non ha altro modo di saperlo, e questo è
-            // l'unico posto in cui qualcuno lo sa. Che la coda possa troncare
-            // (0034) è la ragione per cui i tre dati autorevoli che il kernel sa
-            // spostare li ha spostati **prima**, e non aspettando che qualcuno
-            // ascoltasse.
-            self.as_actor(Actor::Kernel, |ws| {
-                for (from, to) in pairs {
-                    ws.emit_event(Event::DocumentRenamed { from, to });
-                }
-            });
+        self.announce_rejoin(pairs);
+    }
+
+    /// **E poi si dice**, con lo stesso evento della rinomina vista: chi tiene
+    /// stato per-documento fuori dallo spazio dichiarato — il versioning, che
+    /// ha uno store suo perché deve sopravvivere alla cancellazione (0044) —
+    /// non ha altro modo di saperlo. Che la coda possa troncare (0034) è la
+    /// ragione per cui i tre dati autorevoli che il kernel sa spostare sono
+    /// stati spostati **prima**, e non aspettando che qualcuno ascoltasse.
+    fn announce_rejoin(&mut self, pairs: Vec<(DocId, DocId)>) {
+        if pairs.is_empty() {
+            return;
         }
-        suspended
+        self.as_actor(Actor::Kernel, |ws| {
+            for (from, to) in pairs {
+                ws.emit_event(Event::DocumentRenamed { from, to });
+            }
+        });
+    }
+
+    /// Dice le rinomine di un [`PendingRejoin`] già eseguito: gli avvisi dei
+    /// dati che non hanno seguito, e un `DocumentRenamed` per ognuna. Non
+    /// tocca il disco.
+    pub fn finish_rejoin(&mut self, completed: CompletedRejoin) {
+        let CompletedRejoin {
+            pairs,
+            doc_data_warnings,
+        } = completed;
+        self.doc_data_warnings.extend(doc_data_warnings);
+        self.announce_rejoin(pairs);
+        self.dispatch_pending();
     }
 
     /// Cosa è andato storto **leggendo** la configurazione: un file malformato,

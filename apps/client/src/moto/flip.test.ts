@@ -161,6 +161,41 @@ describe("flip", () => {
     }
   });
 
+  it("con `edge: \"top\"` segue il bordo di sopra, non il centro", () => {
+    // Una griglia che sale di 80 px e intanto si allunga di 80: il suo
+    // centro sale di 40, il suo bordo di sopra di 80.
+    const top = element(0, 120, 100, 200);
+    flip([top], () => place(top, 0, 40, 100, 280), { scale: false, edge: "top" });
+    expect(driver.plays[0].keyframes[0]).toEqual({ transform: "translate(0px, 80px)" });
+    const center = element(0, 120, 100, 200);
+    flip([center], () => place(center, 0, 40, 100, 280), { scale: false });
+    expect(driver.plays[1].keyframes[0]).toEqual({ transform: "translate(0px, 40px)" });
+  });
+
+  it("con `edge: \"top\"` e la scala il riquadro intero torna dov'era: bordo e centro coincidono", () => {
+    const el = element(10, 20, 100, 50);
+    flip([el], () => place(el, 110, 60, 200, 100), { edge: "top" });
+    expect(driver.plays[0].keyframes[0]).toEqual({ transform: "translate(-150px, -65px) scale(0.5, 0.5)" });
+  });
+
+  it("`lift` fa partire quell'elemento più su, anche se non si è mosso", () => {
+    const lifted = element(0, 0, 100, 40);
+    const other = element(100, 0, 100, 40);
+    flip([lifted, other], () => place(other, 200, 0, 100, 40), { scale: false, lift: { element: lifted, travel: 2 } });
+    expect(driver.plays.map((play) => play.el)).toEqual([lifted, other]);
+    expect(driver.plays[0].keyframes[0]).toEqual({ transform: "translate(0px, -2px)" });
+    expect(driver.plays[1].keyframes[0]).toEqual({ transform: "translate(-100px, 0px)" });
+  });
+
+  it("senza `edge` e `lift` non cambia niente", () => {
+    const a = element(10, 20, 100, 50);
+    flip([a], () => place(a, 110, 60, 200, 100));
+    const b = element(10, 20, 100, 50);
+    flip([b], () => place(b, 110, 60, 200, 100), { edge: "center", lift: { element: a, travel: 2 } });
+    expect(driver.plays[1].keyframes).toEqual(driver.plays[0].keyframes);
+    expect(driver.plays[0].keyframes[0]).toEqual({ transform: "translate(-150px, -65px) scale(0.5, 0.5)" });
+  });
+
   it("in «ridotto» e col motore istantaneo muta e basta", () => {
     const el = element(0, 0, 100, 100);
     setMotionPreference("reduced");

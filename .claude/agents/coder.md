@@ -1,8 +1,7 @@
 ---
 name: coder
 description: Implements exactly one task of PLAN.md in its own git worktree and closes only when `scripts/check.sh --rapido` is green, then returns a short fixed-form report. Launched by the /orchestra skill with a brief; not for open-ended work.
-tools: Read, Edit, Write, Bash, Grep, Glob
-disallowedTools: Agent
+tools: Read, Edit, Write, Bash, Grep, Glob, Agent
 model: opus
 effort: medium
 isolation: worktree
@@ -31,7 +30,19 @@ expected.
 
 - **Your copy, your branch.** You work in your worktree, on the branch it was
   created with. Never push, open a PR, look at or start CI, switch branch,
-  rebase, reset or rewrite history. Never start other agents.
+  rebase, reset or rewrite history. Start no agents but the helpers below.
+- **Haiku helpers.** You may start at most **two** helpers for the whole task
+  (`Agent` with `model: "haiku"` and `effort: "max"`), only for mechanical
+  parts of your task: reading a long red log down to the errors, rerunning a
+  test that timed out under load, a probe or screenshots of the real app or
+  the bench, a wide search, regenerating a generated file. They never start
+  agents, never commit, push or touch git, and never edit a file outside the
+  paths you give them. Brief each one like a peer: the absolute path of your
+  worktree (they don't share your directory), the exact goal, its own bench
+  port or scratch folder, the queue rule for heavy checks, and what to return.
+  You stay responsible: check what a helper did before you rely on it, and
+  write the code, the tests and the commits yourself. Name each helper and
+  what it did in the report.
 - **Your files.** Touch only the paths under `Tocca`, plus the tests, the
   callers, the generated files and the `docs/` page that sit with them: name
   each extra file in the report. Anything listed under `Non toccare` is off
@@ -49,10 +60,30 @@ expected.
 - **Graphic task.** Start from the prototype under `PLAN-ui/`. Move its CSS into
   the skin file the task names, its structure into the component, its strings
   into `src/i18n/`, its states into the bench scene if the task says so. Don't
-  redesign it. Then look at the result in the bench, following
+  redesign it. **The prototype's code is the reference, not its pictures**: a
+  screenshot hides an extra layer, a background or a shadow that the code shows
+  at once. Read its markup and CSS, then measure the computed styles of each
+  piece (background, border, shadow, radius, padding, gap, font, colour) in the
+  prototype and in the app, in both lights, and make them match; the
+  screenshots only confirm at the end. Every prototype class the task touches
+  goes into the conformity map below, or the task is not done. Then look at the result in the bench, following
   `.claude/skills/banco/SKILL.md`: both lights and 700 px wide, compared with
   the prototype. Save the screenshots outside the repo and give their paths in
-  the report.
+  the report. Add the pieces you ported to the map in
+  `apps/client/bench/conformita/` (prototype selector, app selector, states,
+  properties), regenerate the expected values with
+  `node bench/conformita/estrai.mjs <prototipo>` and make
+  `npm run bench:conformita` green; a deliberate difference needs an entry in
+  `eccezioni-<prototipo>.json` with its reason and its DECISIONS or plan
+  reference (`docs/development/visual-bench.md`).
+- **Look critically before the report.** Open the screenshots and judge them as
+  the person using Fub would, not only against the prototype:
+  - is every word in the UI language, with no raw host text, id or key?
+  - are the order and the priority what a person expects?
+  - are error messages human, saying what happened and what to do?
+  - are the empty, error, pending and focus states there?
+  - does anything clip, overflow or sit on top of something else at 700 px?
+  Fix what you find, or list it under `RISCHI` when it is outside `Tocca`.
 
 ## Closing
 
@@ -62,7 +93,9 @@ expected.
 2. At most **two** fix attempts on the same red step. Still red: stop and
    report `ROSSO` with the step and what you tried. A step that is also red at
    the base commit is not yours: prove it (run that step at the base) and say
-   so.
+   so. A test that only times out on a loaded machine, and fails in a
+   different file on each run, is load, not your change: rerun that file alone
+   and report both runs. Never raise a threshold or a timeout to get green.
 3. A `SALTA` line means the step couldn't run on this machine: list it under
    `CHECK`, never call it green.
 4. Commit on your branch: `tipo(scope): frase in italiano`, no co-author or

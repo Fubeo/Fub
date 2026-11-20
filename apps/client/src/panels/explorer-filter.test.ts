@@ -83,12 +83,27 @@ describe("il campo sopra l'albero", () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it("porta la lente dentro il campo, fuori dal nome accessibile", () => {
+    const { input } = mount(async () => VAULT);
+    const box = input.closest<HTMLElement>(".kit-field-box")!;
+    const lens = box.querySelector<SVGElement>(":scope > .kit-field-icon > svg");
+    expect(lens).not.toBeNull();
+    expect(lens!.getAttribute("aria-hidden")).toBe("true");
+    // Il campo si chiama ancora soltanto «Filtra le note».
+    expect(document.querySelector(`label[for="${input.id}"]`)!.textContent).toBe("Filtra le note");
+  });
+
   it("vuoto lascia passare Esc a chi sta sopra; con del testo lo tiene", async () => {
     const { input, type } = mount(async () => VAULT);
     const empty = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     input.dispatchEvent(empty);
     expect(empty.defaultPrevented).toBe(false);
     await type("guida");
+    // Esc che chiude una composizione (WebKit: codice 229) non svuota il campo.
+    const composing = new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, bubbles: true, cancelable: true });
+    input.dispatchEvent(composing);
+    expect(composing.defaultPrevented).toBe(false);
+    expect(input.value).toBe("guida");
     const full = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     input.dispatchEvent(full);
     expect(full.defaultPrevented).toBe(true);
@@ -128,6 +143,16 @@ describe("il campo sopra l'albero", () => {
     expect(input.value).toBe("");
     expect(input.closest<HTMLElement>(".explorer-filter")!.hidden).toBe(false);
     expect(tree.hidden).toBe(false);
+  });
+
+  it("senza risultati lo dice con una frase per le persone, non con un errore di percorso (IMP-007)", async () => {
+    const { filter, type, rows } = mount(async () => VAULT);
+    filter.show();
+    await type("citta");
+    expect(rows()).toEqual([]);
+    expect(document.querySelector(".search-results")!.textContent).toBe("Niente corrisponde al filtro: prova con meno parole.");
+    // Una frase che va a capo, non un percorso tagliato coi puntini.
+    expect(document.querySelector(".search-results > li")!.className).toBe("muted");
   });
 
   it("i documenti cambiati si richiedono, e un rifiuto si dice nell'elenco", async () => {

@@ -10,36 +10,47 @@
 // `ci` legge `GITHUB_REPOSITORY` e `GH_TOKEN` (o `GITHUB_TOKEN`); `signing`
 // guarda soltanto se le variabili dei segreti sono valorizzate, mai il valore.
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { TEST } from "./baseline-dal-runner.mjs";
+
 const CI_WORKFLOW = "ci.yml";
 
 // I job che la CI esegue su ogni push: una corsa che non li ha tutti verdi,
-// anche saltati, non è una prova.
+// anche saltati, non è una prova. macOS è in pausa
+// (docs/decisions/0245-macos-e-ios-in-pausa.md): `build + test (macos-latest)`
+// torna in `TEST` quando torna nella matrice di `ci.yml`. I job dei test
+// (Linux e le parti di Windows) sono `TEST` di `baseline-dal-runner.mjs`, che
+// la sua autoprova confronta con la matrice. I motori in vendor, i banchi e la
+// WebView vera su una PR possono saltare, su `main` no: un job saltato non è
+// verde, e qui ci sono tutti i job che un push su `main` fa girare.
 export const REQUIRED_JOBS = [
   "invarianti",
   "supply chain",
   "fmt + clippy",
-  "build + test (ubuntu-latest)",
-  "build + test (windows-latest)",
-  "build + test (macos-latest)",
+  ...TEST,
   "documentazione canonica",
   "client",
-  "varianti di feature e motori in vendor",
+  "varianti di feature",
+  "motori in vendor",
+  "i docx innestati, riletti da LibreOffice",
   "banco visivo",
   "contrasto e tastiera (dark)",
   "contrasto e tastiera (light)",
   "banchi del grafo",
   "banchi del movimento",
+  "la WebView vera (WebKitGTK, S1–S3)",
+  "la WebView vera (WebKitGTK, R1)",
+  "le librerie a runtime (ubuntu-latest)",
+  "le librerie a runtime (windows-latest)",
 ];
 
+// Le firme che il canale stabile promette, per piattaforma. Senza macOS non
+// si promette la firma Apple; quando torna, tornano qui i sei segreti
+// `APPLE_*` (certificato, password, identità, id, password dell'app, team).
 export const SIGNING = {
-  macos: [
-    "APPLE_CERTIFICATE",
-    "APPLE_CERTIFICATE_PASSWORD",
-    "APPLE_SIGNING_IDENTITY",
-    "APPLE_ID",
-    "APPLE_PASSWORD",
-    "APPLE_TEAM_ID",
-  ],
   windows: ["WINDOWS_CERTIFICATE", "WINDOWS_CERTIFICATE_PASSWORD"],
 };
 
@@ -114,6 +125,46 @@ async function checkCi(sha) {
   return ciProblems(sha, runs, (run) => jobs.get(run.id) ?? []);
 }
 
+/**
+ * I job richiesti che `ci.yml` non nomina più: un job rinominato o diviso
+ * senza aggiornare `REQUIRED_JOBS` fermerebbe ogni rilascio. Un nome
+ * richiesto è l'inizio del nome di un job, o un nome di matrice come «la
+ * WebView vera (WebKitGTK, R1)»: il modello del job, con ogni
+ * `${{ matrix.… }}` al posto di un valore che `ci.yml` scrive. I nomi di
+ * `TEST` li confronta l'autoprova di `baseline-dal-runner.mjs`.
+ */
+export function requiredMissingFrom(ci, required = REQUIRED_JOBS) {
+  const templates = [...ci.matchAll(/^ {4}name: (.+)$/gm)].map((match) => match[1].trim());
+  const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = (name, template) => {
+    if (template.startsWith(name)) return true;
+    const parts = template.split(/\$\{\{[^}]*\}\}/);
+    if (parts.length === 1) return false;
+    const found = name.match(new RegExp(`^${parts.map(escape).join("(.+?)")}$`));
+    return Boolean(found) && found.slice(1).every((value) => ci.includes(value));
+  };
+  return required.filter((name) => !TEST.includes(name) && !templates.some((template) => matches(name, template)));
+}
+
+function requiredInCi() {
+  const ci = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "workflows", CI_WORKFLOW), "utf8");
+  return requiredMissingFrom(ci);
+}
+
+const FINTO_CI = `jobs:
+  prova:
+    name: prova (WebKitGTK, \${{ matrix.gruppo }})
+    strategy:
+      matrix:
+        include:
+          - gruppo: S1–S3
+          - gruppo: R1
+    steps:
+      - name: un passo
+  lungo:
+    name: lungo nome del job
+`;
+
 function selfTest() {
   const sha = "a".repeat(40);
   const green = REQUIRED_JOBS.map((name) => ({ name: `${name} (x)`, conclusion: "success" }));
@@ -126,12 +177,18 @@ function selfTest() {
     ["una corsa rossa non basta", ciProblems(sha, [run({ conclusion: "failure" })], () => green).length === 1],
     ["un job saltato non è verde", ciProblems(sha, [run({})], () => green.map((job, i) => (i === 0 ? { ...job, conclusion: "skipped" } : job))).length === 1],
     ["un job mancante non è verde", ciProblems(sha, [run({})], () => green.slice(1)).length === 1],
+    ["una parte di Windows che manca non è verde", ciProblems(sha, [run({})], () => green.filter((job) => !job.name.startsWith(TEST.at(-1)))).length === 1],
+    ["ogni job richiesto ha il suo nome in ci.yml", requiredInCi().length === 0],
+    ["la WebView, LibreOffice e le librerie a runtime sono richiesti", ["la WebView vera (WebKitGTK, S1–S3)", "la WebView vera (WebKitGTK, R1)", "i docx innestati", "le librerie a runtime (ubuntu-latest)", "le librerie a runtime (windows-latest)"].every((name) => REQUIRED_JOBS.some((required) => required.startsWith(name)))],
+    ["un nome di matrice vale con un valore scritto in ci.yml", requiredMissingFrom(FINTO_CI, ["prova (WebKitGTK, R1)", "prova (WebKitGTK, S1–S3)", "lungo"]).length === 0],
+    ["un valore di matrice che ci.yml non scrive non vale", requiredMissingFrom(FINTO_CI, ["prova (WebKitGTK, R2)"]).length === 1],
+    ["il nome di un passo non è il nome di un job", requiredMissingFrom(FINTO_CI, ["un passo"]).length === 1],
     ["una rossa e una verde: basta la verde", ciProblems(sha, [run({ id: 2, conclusion: "failure" }), run({})], () => green).length === 0],
     ["v1.2.3 è stabile", isStable("v1.2.3")],
     ["v1.2.3-rc.1 non è stabile", !isStable("v1.2.3-rc.1")],
-    ["lo stabile senza segreti fallisce", signingProblems("v1.2.3", {}).length === 8],
+    ["lo stabile senza segreti fallisce", signingProblems("v1.2.3", {}).length === 2],
     ["lo stabile con tutti i segreti passa", signingProblems("v1.2.3", Object.fromEntries(Object.values(SIGNING).flat().map((name) => [name, "x"]))).length === 0],
-    ["una variabile vuota è un segreto mancante", signingProblems("v1.2.3", { APPLE_ID: "" }).length === 8],
+    ["una variabile vuota è un segreto mancante", signingProblems("v1.2.3", { WINDOWS_CERTIFICATE: "" }).length === 2],
     ["una prerelease non chiede firme", signingProblems("v1.2.3-rc.1", {}).length === 0],
   ];
   const failed = cases.filter(([, ok]) => !ok);
@@ -140,26 +197,33 @@ function selfTest() {
   console.log(`self-test: ${cases.length} casi del cancello di rilascio`);
 }
 
-const [command, value] = process.argv.slice(2);
-if (command === "--self-test") {
-  selfTest();
-} else if (command === "ci") {
-  const problems = await checkCi(value);
-  if (problems.length) {
-    console.error(`il commit ${value} non ha una CI verde e completa:`);
-    for (const problem of problems) console.error(`  - ${problem}`);
-    process.exit(1);
+// La riga di comando gira soltanto quando lo script è lanciato, non quando un
+// altro modulo lo importa per le sue funzioni.
+async function main(command, value) {
+  if (command === "--self-test") {
+    selfTest();
+  } else if (command === "ci") {
+    const problems = await checkCi(value);
+    if (problems.length) {
+      console.error(`il commit ${value} non ha una CI verde e completa:`);
+      for (const problem of problems) console.error(`  - ${problem}`);
+      process.exit(1);
+    }
+    console.log(`CI verde e completa per ${value}`);
+  } else if (command === "signing") {
+    const problems = signingProblems(value ?? "", process.env);
+    if (problems.length) {
+      console.error(`il tag ${value} è del canale stabile e non ha le firme che promette:`);
+      for (const problem of problems) console.error(`  - ${problem}`);
+      process.exit(1);
+    }
+    console.log(isStable(value ?? "") ? `firme del canale stabile presenti per ${value}` : `${value} non è del canale stabile: firme facoltative`);
+  } else {
+    console.error("uso: check-release-gate.mjs ci <sha> | signing <tag> | --self-test");
+    process.exit(2);
   }
-  console.log(`CI verde e completa per ${value}`);
-} else if (command === "signing") {
-  const problems = signingProblems(value ?? "", process.env);
-  if (problems.length) {
-    console.error(`il tag ${value} è del canale stabile e non ha le firme che promette:`);
-    for (const problem of problems) console.error(`  - ${problem}`);
-    process.exit(1);
-  }
-  console.log(isStable(value ?? "") ? `firme del canale stabile presenti per ${value}` : `${value} non è del canale stabile: firme facoltative`);
-} else {
-  console.error("uso: check-release-gate.mjs ci <sha> | signing <tag> | --self-test");
-  process.exit(2);
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  await main(...process.argv.slice(2, 4));
 }

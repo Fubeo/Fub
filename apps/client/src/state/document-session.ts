@@ -4,10 +4,12 @@
 // l'origine della scrittura, la coda e i due debounce. Il pannello possiede le
 // superfici e osserva soltanto eventi e snapshot immutabili.
 import { api as defaultApi } from "../host/ipc";
+import { isErrorKind } from "../host/errors";
 import type { DocumentSource, DraftInfo, Origin, WriteBase } from "../host/contract";
 import type { SourceKind } from "../host/enums.generated";
 import { Queue } from "../ui/race";
 import {
+  consumeOwnEcho,
   consumeUnderChange,
   failureOutcome,
   stateOf,
@@ -22,6 +24,10 @@ import { lineFeeds, tryApplyOperation, type TextOperation } from "../editors/cor
 import { rebaseGridJournalText } from "./grid-journal";
 
 const SAVE_MS = 400;
+/// Quanto vale l'annuncio di una scrittura di un comando (`expectWrite`): il
+/// suo evento arriva mentre il comando scrive, cioè subito. Oltre, l'annuncio
+/// non zittisce più niente.
+const EXPECTED_WRITE_MS = 10_000;
 /** La cadenza delle bozze: al più una ogni `DRAFT_MS` mentre si scrive. */
 export const DRAFT_MS = 1_000;
 
@@ -44,8 +50,11 @@ export interface DocumentSurface {
   /// Lo legge soltanto la bozza.
   pendingText?(): string | null;
   /// Registra adesso il testo tenuto per sé: diventa una modifica della
-  /// sessione, come alla fine della pausa.
-  commitPending?(): void;
+  /// sessione, come alla fine della pausa. Se la registrazione passa da un
+  /// passo asincrono (la cella di un foglio, confermata dal suo provider) la
+  /// superficie ne dà la promessa, e la sessione la aspetta prima di
+  /// salvare, leggere il disco o chiudersi (`settled`).
+  commitPending?(): void | Promise<void>;
   /// Avvisa a ogni cambio del testo tenuto per sé, con `true` se ne resta.
   /// L'avviso non chiama il nucleo; il disposer lo ferma.
   watchPending?(listener: (pending: boolean) => void): () => void;
@@ -77,9 +86,17 @@ export type SurfaceChangeResult =
 /// corrente» dell'host cambia quando se ne apre un altro, e un salvataggio o
 /// una bozza partiti dopo non devono finire in quello nuovo. Assente: l'host
 /// risponde con il corrente, come prima.
+///
+/// Leggere non apre. Una sessione apre il suo documento sotto la sua **chiave
+/// di apertura** (`open`), e la chiude quando esce per sempre: con
+/// `openDocument` legge, con `writeDocument(…, open)` scrive, con
+/// `documentClosed(open)` chiude. Quali documenti l'host tiene sotto la chiave
+/// lo decide l'host: la sessione la passa per ogni formato. `readDocument` è
+/// la lettura semplice, che non tiene niente.
 export interface DocumentSessionApi {
   readDocument(id: string, vault?: string | null): Promise<DocumentSource>;
-  writeDocument(id: string, text: string, base: WriteBase, vault?: string | null): Promise<string>;
+  openDocument(id: string, open: string, vault?: string | null): Promise<DocumentSource>;
+  writeDocument(id: string, text: string, base: WriteBase, vault?: string | null, open?: string): Promise<string>;
   /// I byte di un file che nessun formato serve — un `.svg`, un `.txt`. Il
   /// kernel rifiuta `writeDocument` su quei file, perché non c'è un modello
   /// da riparsare, e accetta i byte con la stessa guardia: `expected` è la
@@ -92,6 +109,35 @@ export interface DocumentSessionApi {
   ): Promise<{ readonly revision: string }>;
   saveDraft(id: string, text: string, base: string | null, vault?: string | null): Promise<void>;
   discardDraft(id: string, vault?: string | null): Promise<void>;
+  /// La sessione con la chiave `open` è uscita: l'host lascia andare ciò che
+  /// teneva sotto la chiave. Chiudere una chiave sconosciuta o già chiusa non
+  /// costa niente.
+  documentClosed(open: string, vault?: string | null): Promise<void>;
+}
+
+/// Le porte che una `DocumentSession` vede: quelle della collezione, già
+/// legate al vault e alla chiave della sessione.
+interface SessionPort {
+  readDocument(id: string): Promise<DocumentSource>;
+  writeDocument(id: string, text: string, base: WriteBase): Promise<string>;
+  saveDraft(id: string, text: string, base: string | null): Promise<void>;
+  discardDraft(id: string): Promise<void>;
+}
+
+/// La chiave di una bozza lasciata da una cancellazione da fuori.
+function removedDraftKey(id: string, vault: string | null): string {
+  return `${vault ?? ""}\u0000${id}`;
+}
+
+/// Una chiave di apertura nuova: un UUID, o 32 cifre esadecimali dove
+/// `crypto.randomUUID` manca (una pagina servita in un contesto non sicuro,
+/// come il client di prova su HTTP). Tutte e due stanno nella forma che l'host
+/// accetta: da 1 a 64 fra lettere, cifre, `-` e `_`.
+function newOpenKey(): string {
+  const random = globalThis.crypto;
+  if (typeof random.randomUUID === "function") return random.randomUUID();
+  const bytes = random.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export interface DocumentSurfaceDescriptor {
@@ -121,7 +167,9 @@ export type ExternalChangeResult =
   | { kind: "untracked" }
   | { kind: "echo" }
   | { kind: "warning"; cause: "altra_app" | "riscrittura" }
-  | { kind: "reloaded"; text: string; changed: boolean }
+  /// `quiet`: la scrittura era quella che un comando aveva annunciato
+  /// (`expectWrite`), e la ricarica non si dice.
+  | { kind: "reloaded"; text: string; changed: boolean; quiet?: true }
   | { kind: "stale" }
   | { kind: "unavailable" };
 
@@ -136,7 +184,19 @@ type DiskReloadResult = Exclude<ReloadResult, { kind: "missing" } | { kind: "dir
 export type ConflictResolutionResult =
   | { kind: "none" }
   | { kind: "kept" }
-  | { kind: "discarded"; reload: ReloadResult };
+  // `kept`: il testo dell'utente (quello che c'era alla scelta) è nella
+  // Cronologia, conservato adesso o da un «Usa disco» di prima sullo stesso
+  // testo. Con la rilettura mancata è ciò che dice all'utente che il testo è
+  // salvo anche se il conflitto resta aperto.
+  | { kind: "discarded"; reload: ReloadResult; kept: boolean }
+  // Il testo dell'utente non si è potuto mettere in salvo: niente è stato
+  // scartato, il conflitto resta aperto e la scelta si può ripetere.
+  | { kind: "keep-failed"; error: unknown };
+
+/// Mette in salvo il testo che «Usa disco» sta per scartare (la shell lo
+/// conserva nella cronologia con `version.keep`). Una promessa rifiutata
+/// ferma lo scarto.
+export type KeepDiscarded = (text: string) => Promise<void>;
 
 export type RenameResult =
   | { kind: "renamed"; from: string; to: string }
@@ -167,6 +227,9 @@ export type DocumentSessionEvent =
   | { kind: "saved"; id: string }
   | { kind: "save-failed"; id: string; error: unknown; outcome: "conflitto" | "fallito" }
   | { kind: "draft-blind"; id: string }
+  /// Dopo un `draft-blind`, la prima bozza che torna a scriversi: la rete
+  /// sotto il testo non salvato c'è di nuovo (`id` è la nota di quella bozza).
+  | { kind: "draft-restored"; id: string }
   | { kind: "deletion-changed"; id: string; pending: boolean };
 
 type SessionListener = (event: DocumentSessionEvent) => void | Promise<void>;
@@ -177,7 +240,7 @@ type SessionHooks = {
   /// Il testo della sessione è il giornale delle celle di una cartella
   /// (`text_kind` `grid_journal`): salvarlo lo mette nei byte.
   journal(): boolean;
-  draftSucceeded(): void;
+  draftSucceeded(id: string): void;
   draftFailed(id: string): void;
 };
 
@@ -231,7 +294,19 @@ export function isDocumentDeletedDuringRead(error: unknown): boolean {
 export class DocumentSession implements DraftBuffer {
   #id: string;
   #state: SessionState;
+  /// La coda delle scritture del file e dei comandi distruttivi.
   #queue = new Queue();
+  /// La scrittura del buffer in volo, se c'è: si compie quando il suo esito
+  /// è nella sessione e, per un giornale, le superfici hanno il testo
+  /// riportato sui byte nuovi (`writing`).
+  #writing: Promise<void> | null = null;
+  /// La coda delle bozze, separata da quella del file (#485): una bozza parte
+  /// anche mentre una scrittura lenta è in volo, con la base che quella
+  /// scrittura conosce, così un crash in quei secondi ha comunque il testo.
+  /// Una sola scrittura o un solo scarto di bozza alla volta: l'host le riceve
+  /// nell'ordine in cui sono partite, e una risposta vecchia non passa sopra a
+  /// una bozza più nuova.
+  #draftQueue = new Queue();
   #saveTimer: number | undefined;
   #draftTimer: number | undefined;
   #draftGeneration = 0;
@@ -239,7 +314,11 @@ export class DocumentSession implements DraftBuffer {
   #draftOutcome: DraftOutcome | undefined;
   #externalGeneration = 0;
   #activityGeneration = 0;
-  readonly #api: DocumentSessionApi;
+  /// Il testo che «Usa disco» ha già messo in salvo in questo conflitto: se la
+  /// rilettura è mancata e la scelta si ripete sullo stesso testo, non si
+  /// conserva una seconda volta.
+  #keptInConflict: string | undefined;
+  readonly #api: SessionPort;
   readonly #hooks: SessionHooks;
   /// Le superfici sottoscritte, per identità di registrazione. È ownership di
   /// ciclo di vita, non un registro di famiglie: chi si toglie chiude, la
@@ -255,7 +334,7 @@ export class DocumentSession implements DraftBuffer {
     id: string,
     text: string,
     base: WriteBase,
-    api: DocumentSessionApi,
+    api: SessionPort,
     hooks: SessionHooks,
   ) {
     if (token !== OWNER_TOKEN) throw new Error("DocumentSession must be created by its owner");
@@ -310,6 +389,18 @@ export class DocumentSession implements DraftBuffer {
   }
   activityGeneration(): number {
     return this.#activityGeneration;
+  }
+
+  /**
+   * La scrittura del buffer in volo, o `null`. La promessa si compie (anche
+   * se la scrittura fallisce) quando l'esito è nella sessione: per un
+   * giornale (`grid_journal`) le superfici hanno già ricevuto il testo sui
+   * byte nuovi. Annullare un comando del foglio mentre il giornale si scrive
+   * lo toglierebbe da un testo che il disco ha già (IMP-6400): la griglia
+   * aspetta qui, e l'annulla va alla sessione sui byte scritti.
+   */
+  writing(): Promise<void> | null {
+    return this.#writing;
   }
 
   retain(): void {
@@ -423,15 +514,34 @@ export class DocumentSession implements DraftBuffer {
    * conflitto). Una superficie che fallisce non ferma le altre.
    */
   settlePending(): void {
-    if (!this.#isOpen() || this.#pendingSurfaces.size === 0) return;
+    void this.#commitHeld();
+  }
+
+  /**
+   * `settlePending`, con la promessa delle registrazioni che passano da un
+   * passo asincrono (la cella di un foglio, confermata dal suo provider), o
+   * `null` se non ce ne sono. I passi che possono aspettare — salvare, leggere
+   * il disco, chiudere — la aspettano: un testo confermato dopo la chiusura
+   * non avrebbe più una sessione in cui entrare. Con `null` non si aspetta
+   * niente, e il passo resta sincrono come prima.
+   */
+  settled(): Promise<void> | null {
+    return this.#commitHeld();
+  }
+
+  #commitHeld(): Promise<void> | null {
+    if (!this.#isOpen() || this.#pendingSurfaces.size === 0) return null;
+    const waits: Promise<void>[] = [];
     for (const surface of [...this.#surfaces.values()]) {
       if (!this.#pendingSurfaces.has(surface.id)) continue;
       try {
-        surface.commitPending?.();
+        const done = surface.commitPending?.();
+        if (done) waits.push(done.catch((error: unknown) => console.error(error)));
       } catch (error) {
         console.error(error);
       }
     }
+    return waits.length ? Promise.all(waits).then(() => undefined) : null;
   }
 
   /**
@@ -473,10 +583,31 @@ export class DocumentSession implements DraftBuffer {
     }
   }
 
-  /** Consume an external event before applying the clean/dirty policy. */
-  async handleExternalChange(source: Origin): Promise<ExternalChangeResult> {
-    this.settlePending();
+  /**
+   * Consume an external event before applying the clean/dirty policy.
+   *
+   * `expected`: l'evento è la scrittura che un comando lanciato da qui aveva
+   * annunciato (un gesto della barra di una Base). A buffer pulito si
+   * ricarica in silenzio: non è un cambio «da fuori». A buffer sporco vale la
+   * regola di sempre, perché il testo non salvato va protetto comunque.
+   */
+  async handleExternalChange(source: Origin, expected = false): Promise<ExternalChangeResult> {
+    // L'eco di una nostra scrittura non legge né sostituisce il buffer: sul
+    // disco c'è ciò che abbiamo scritto. Il testo che una superficie tiene
+    // ancora per sé (la cella di un foglio in cui si sta scrivendo) resta
+    // suo: confermarlo qui chiuderebbe la cella a metà parola a ogni
+    // salvataggio automatico, e i tasti dopo andrebbero fuori dal foglio
+    // (IMP-310, IMP-414). Senza testo tenuto, l'eco segue la via di sempre.
+    if (!expected && this.#pendingSurfaces.size > 0 && consumeOwnEcho(this.#state, source)) {
+      return { kind: "echo" };
+    }
+    const held = this.settled();
+    if (held) await held;
     const generation = ++this.#externalGeneration;
+    if (expected && !this.#state.dirty) {
+      const reload = await this.#reloadFromDisk(generation);
+      return reload.kind === "reloaded" ? { ...reload, quiet: true } : reload;
+    }
     const underChange = consumeUnderChange(this.#state, source);
     if (underChange === "eco") return { kind: "echo" };
     if (underChange === "altra_app" || underChange === "riscrittura") {
@@ -488,7 +619,8 @@ export class DocumentSession implements DraftBuffer {
   /** Reread a clean document during event reconciliation. */
   async reloadIfClean(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     if (this.#state.dirty) return { kind: "dirty" };
     return this.#reloadFromDisk(++this.#externalGeneration);
   }
@@ -499,10 +631,22 @@ export class DocumentSession implements DraftBuffer {
    * lascia testo, stato sporco ed esito com'erano, invece di spacciare per
    * salvato un testo che il disco non contiene più. Nel frattempo niente parte
    * da solo: i timer si fermano subito e si riarmano se la lettura manca.
+   *
+   * Un buffer sporco va prima in bozza: è la copia che il recupero ritrova
+   * dopo che il disco lo ha sostituito. Se la bozza non si scrive la ricarica
+   * non parte, e dà `unavailable` con testo e stato com'erano (#237 R02).
    */
   async forceReload(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
+    if (this.#state.dirty && !(await this.flushDraft())) {
+      // `flushDraft` ha fermato la cadenza della bozza: si riarma, così il
+      // buffer torna protetto appena il disco lo permette.
+      if (this.#isOpen() && this.#state.dirty) this.scheduleDraft();
+      return this.#isOpen() ? { kind: "unavailable" } : { kind: "missing" };
+    }
+    if (!this.#isOpen()) return { kind: "missing" };
     this.#activityGeneration++;
     const generation = ++this.#externalGeneration;
     this.#clearSaveTimer();
@@ -526,21 +670,49 @@ export class DocumentSession implements DraftBuffer {
    * «Usa disco» scarta il buffer e la bozza soltanto dopo che il disco è stato
    * letto: se la lettura manca, il conflitto resta aperto con il testo
    * dell'utente e la sua bozza, e la scelta si può ripetere.
+   *
+   * Con `keep` il testo dell'utente va prima in salvo: se la conservazione
+   * fallisce non si scarta niente, e lo scarto vale solo per il testo
+   * conservato — un tasto premuto nel frattempo rende la lettura superata e
+   * lascia il conflitto aperto. Un documento a giornale (la griglia,
+   * `grid_journal`) non ha un testo da conservare: lì `keep` non si chiama.
    */
-  async resolveConflict(choice: ConflictChoice): Promise<ConflictResolutionResult> {
-    this.settlePending();
+  async resolveConflict(choice: ConflictChoice, keep?: KeepDiscarded): Promise<ConflictResolutionResult> {
+    const held = this.settled();
+    if (held) await held;
     if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
     if (choice === "mine") {
+      this.#keptInConflict = undefined;
       await this.saveKeepingMine();
       return { kind: "kept" };
     }
+    let kept: string | undefined;
+    if (keep && !this.#hooks.journal()) {
+      kept = this.#state.text;
+      // Lo stesso testo già in salvo da un «Usa disco» la cui rilettura è
+      // mancata: una seconda versione uguale non serve a nessuno.
+      if (this.#keptInConflict !== kept) {
+        try {
+          await keep(kept);
+        } catch (error) {
+          return { kind: "keep-failed", error };
+        }
+        this.#keptInConflict = kept;
+      }
+      if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
+    }
     const reload = await this.#reloadFromDisk(++this.#externalGeneration, () => {
       if (this.#state.result !== "conflitto") return false;
+      // Si scarta soltanto il testo che è stato messo in salvo.
+      if (kept !== undefined && this.#state.text !== kept) return false;
       this.discardChanges();
       return true;
     });
-    if (reload.kind === "reloaded") await this.discardDraft();
-    return { kind: "discarded", reload };
+    if (reload.kind === "reloaded") {
+      this.#keptInConflict = undefined;
+      await this.discardDraft();
+    }
+    return { kind: "discarded", reload, kept: kept !== undefined };
   }
 
   /**
@@ -626,7 +798,8 @@ export class DocumentSession implements DraftBuffer {
   }
 
   async flush(): Promise<boolean> {
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     if (!this.#isOpen() || !this.#state.dirty) return false;
     this.#clearSaveTimer();
     const id = this.#id;
@@ -639,7 +812,8 @@ export class DocumentSession implements DraftBuffer {
    * chiusura della finestra decide su questo esito, non sulla notifica.
    */
   async flushDraft(): Promise<boolean> {
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     this.#clearDraftTimer();
     await this.#writeDraft(this.#id);
     return this.#bufferProtected();
@@ -745,6 +919,17 @@ export class DocumentSession implements DraftBuffer {
     return true;
   }
 
+  /**
+   * La bozza di una sessione già chiusa da una rimozione arrivata da fuori: il
+   * testo resta per il recupero. Passa dalla coda delle bozze, dietro quelle
+   * già partite, così una bozza più vecchia ancora in volo non le arriva sopra.
+   */
+  saveDraftAfterClose(text: string, base: string | null): Promise<void> {
+    const id = this.#id;
+    this.#clearDraftTimer();
+    return this.#draftQueue.enqueue(() => this.#api.saveDraft(id, text, base));
+  }
+
   /** Drop a draft after an external deletion already closed this session. */
   discardDraftAfterClose(): Promise<void> {
     this.#clearDraftTimer();
@@ -752,7 +937,8 @@ export class DocumentSession implements DraftBuffer {
   }
 
   async saveKeepingMine(): Promise<void> {
-    this.settlePending();
+    const held = this.settled();
+    if (held) await held;
     if (!this.#isOpen() || this.#state.result !== "conflitto") return;
     this.#activityGeneration++;
     this.#clearSaveTimer();
@@ -880,6 +1066,18 @@ export class DocumentSession implements DraftBuffer {
     this.#state.result = "in_corso";
     this.#emit({ kind: "changed", id });
 
+    let done = (): void => {};
+    this.#writing = new Promise<void>((resolve) => { done = resolve; });
+    try {
+      await this.#writeText(id, text, base);
+    } finally {
+      this.#writing = null;
+      done();
+    }
+  }
+
+  /// La scrittura di `text` su `base`, e il suo esito nella sessione.
+  async #writeText(id: string, text: string, base: WriteBase): Promise<void> {
     let produced: string;
     try {
       produced = await writeCountingEcho(this.#state, () => this.#api.writeDocument(id, text, base));
@@ -902,9 +1100,12 @@ export class DocumentSession implements DraftBuffer {
       return;
     }
     if (changed) {
-      // The newer dirty text now descends from the revision just written.
-      // Any draft queued before that write captured the old base.
+      // Il testo sporco di adesso discende dalla revisione appena scritta. La
+      // bozza scritta durante il salvataggio è quella giusta (non si toglie),
+      // ma porta la base vecchia: la prossima della cadenza la riscrive sulla
+      // nuova.
       this.#draftGeneration++;
+      this.scheduleDraft();
     } else {
       this.#state.dirty = false;
       this.#afterCleanSave();
@@ -945,6 +1146,8 @@ export class DocumentSession implements DraftBuffer {
     if (next === "") {
       this.#state.dirty = false;
       this.#afterCleanSave();
+    } else {
+      this.scheduleDraft();
     }
     this.#emit({ kind: "saved", id: this.#id });
     this.#fanOut({ kind: "text", text: next });
@@ -969,7 +1172,9 @@ export class DocumentSession implements DraftBuffer {
       return Promise.resolve();
     }
 
-    const promise = this.#queue.enqueue(async () => {
+    // La coda delle bozze, non quella del file: la bozza non aspetta una
+    // scrittura in volo, e porta la base che quella scrittura conosce ancora.
+    const promise = this.#draftQueue.enqueue(async () => {
       if (
         !this.#isOpen() ||
         this.#state.suspended ||
@@ -999,7 +1204,7 @@ export class DocumentSession implements DraftBuffer {
           return;
         }
         this.#draftOutcome = { generation, succeeded: true };
-        this.#hooks.draftSucceeded();
+        this.#hooks.draftSucceeded(id);
       } catch {
         if (
           !this.#isOpen() ||
@@ -1055,9 +1260,11 @@ export class DocumentSession implements DraftBuffer {
     return [...this.#surfaces.values()].filter((surface) => this.#pendingSurfaces.has(surface.id));
   }
 
+  /// Lo scarto passa dalla coda delle bozze: arriva all'host dopo ogni bozza
+  /// partita prima, e una bozza partita dopo (testo nuovo) resta.
   #dropDraft(id: string): Promise<void> {
     if (this.#id !== id) return Promise.resolve();
-    return this.#queue.enqueue(async () => {
+    return this.#draftQueue.enqueue(async () => {
       if (this.#id !== id) return;
       try {
         await this.#api.discardDraft(id);
@@ -1080,8 +1287,20 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// Le sessioni il cui testo è un giornale di celle (`text_kind`
   /// `grid_journal`), anche loro soltanto da una lettura riuscita.
   readonly #journals = new WeakSet<DocumentSession>();
+  /// Le sessioni che una lettura riuscita ha descritto (`#describe`). Una
+  /// sessione nata da una bozza non c'è finché non si legge che file è, e il
+  /// suo primo salvataggio lo chiede prima di scrivere (#514).
+  readonly #described = new WeakSet<DocumentSession>();
+  /// Le sorgenti che `withoutSuperseded` ha appena letto delle bozze che
+  /// restano, con il vault in cui le ha lette: `rejoin` le usa per descrivere
+  /// le sessioni che nascono dalle bozze senza rileggere il file, e le toglie.
+  readonly #draftSources = new Map<string, { readonly vault: string | null; readonly source: DocumentSource }>();
   readonly #listeners = new Set<SessionListener>();
   readonly #identityVersions = new Map<string, number>();
+  /// Le scritture che un comando sta per fare su un documento, annunciate da
+  /// chi lo lancia (`expectWrite`). Ognuna è un gettone con la sua scadenza:
+  /// la consuma il primo evento dell'utente su quel documento.
+  readonly #expectedWrites = new Map<string, { deadline: number }[]>();
   readonly #renaming = new Set<string>();
   readonly #deletions = new Map<string, Promise<DeletionResult>>();
   /// Aliases for an owner whose confirmation survives a rename. The pending
@@ -1094,10 +1313,29 @@ export class DocumentSessionCollection implements DraftBufferStore {
   #blindDraft = false;
   /// A pending open reserves this owner before any flush/read `await`.
   readonly #openIntents = new Map<string, number>();
+  /// I prestiti di chi tiene una sessione **già nata** per quello che è, non
+  /// per il nome che ha (la finestra di un documento): una rinomina sposta la
+  /// sessione sotto un altro id e il prestito la segue, e il nome lasciato
+  /// libero non resta prestato a nessuno (`retainSession`).
+  readonly #sessionLeases = new WeakMap<DocumentSession, number>();
+  /// Le bozze scritte per un file cancellato da fuori con testo non salvato,
+  /// per vault e id, col testo che tengono: «Ricrea la nota» le toglie dopo la
+  /// riscrittura (`discardRemovedDraft`), aspettando che la loro scrittura sia
+  /// finita, e soltanto se tengono il testo ricreato. Una sessione che si
+  /// riapre sull'id toglie la voce: da lì la bozza è sua.
+  readonly #removedDrafts = new Map<string, { text: string; saving: Promise<void> }>();
   /// Il vault in cui è nata ciascuna sessione (FUB-001), `null` se nessun vault
   /// era aperto. Si fissa una volta e non cambia: la sessione scrive lì anche
   /// quando l'host ha già aperto un altro vault.
   readonly #vaults = new WeakMap<DocumentSession, string | null>();
+  /// La chiave di apertura di ciascuna sessione, accanto al suo vault: nasce
+  /// con la sessione (o con la lettura che la crea), la segue nelle rinomine
+  /// e si chiude una volta sola, in `#release`, quando la sessione esce per
+  /// sempre.
+  readonly #keys = new WeakMap<DocumentSession, string>();
+  /// Le sessioni uscite, la cui chiave è già chiusa. Una lettura o una
+  /// scrittura con la chiave che finisce dopo la richiude.
+  readonly #released = new WeakSet<DocumentSession>();
   readonly #currentVault: () => string | null;
 
   /// `currentVault` dice qual è il vault della shell adesso. Il default è la
@@ -1143,6 +1381,18 @@ export class DocumentSessionCollection implements DraftBufferStore {
   isDirty(id: string): boolean {
     return this.#sessions.get(id)?.dirty === true;
   }
+
+  /// La scrittura in volo di `id`, come `DocumentSession.writing`.
+  writing(id: string): Promise<void> | null {
+    return this.#sessions.get(id)?.writing() ?? null;
+  }
+
+  /// Le bozze non arrivano più sul disco (l'ultima è fallita dopo un
+  /// `draft-blind`, e nessuna è tornata a scriversi): chi si monta dopo
+  /// l'evento lo rilegge qui.
+  isDraftBlind(): boolean {
+    return this.#blindDraft;
+  }
   /** Conservative fallback if a lifecycle flush rejects before reporting failures. */
   dirtyIds(): string[] {
     const ids: string[] = [];
@@ -1177,10 +1427,80 @@ export class DocumentSessionCollection implements DraftBufferStore {
       else this.#openIntents.set(id, count - 1);
     };
   }
+  /**
+   * Presta la sessione `session` finché il disposer non la rende: `release`
+   * la lascia aperta (`active`) sotto qualunque nome abbia adesso. A differenza
+   * di `retain(id)`, che prenota un'apertura per nome prima che la sessione
+   * esista, questo prestito non resta sul nome di prima dopo una rinomina.
+   * Il disposer è idempotente.
+   */
+  retainSession(session: DocumentSession): () => void {
+    session.retain();
+    this.#sessionLeases.set(session, (this.#sessionLeases.get(session) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const count = this.#sessionLeases.get(session) ?? 0;
+      if (count <= 1) this.#sessionLeases.delete(session);
+      else this.#sessionLeases.set(session, count - 1);
+    };
+  }
+  #leased(session: DocumentSession): boolean {
+    return (this.#sessionLeases.get(session) ?? 0) > 0;
+  }
   async handleExternalChange(id: string, source: Origin): Promise<ExternalChangeResult> {
+    // L'annuncio si consuma anche senza sessione: non resta appeso a zittire
+    // il prossimo evento, quando il documento si apre. Un evento fuori lotto
+    // con un salvataggio della sessione in volo è l'eco di quel salvataggio:
+    // lo consuma l'eco (`consumeUnderChange`), e l'annuncio aspetta il suo.
     const session = this.#sessions.get(id);
+    const echo = source.batch === null && (session?.snapshot().echoes ?? 0) > 0;
+    const expected = source.actor.kind === "user" && !echo && this.#consumeExpected(id);
     if (!session) return { kind: "untracked" };
-    return session.handleExternalChange(source);
+    return session.handleExternalChange(source, expected);
+  }
+
+  /**
+   * Annuncia che un comando lanciato da qui sta per riscrivere `id` (un gesto
+   * della barra di una Base scrive con `base.view.set`). L'evento di quella
+   * scrittura arriva come un cambio dell'utente in un lotto, e senza annuncio
+   * la sessione lo direbbe con «è cambiato su disco ed è stato ricaricato».
+   * Con l'annuncio la sessione ricarica in silenzio. Si annuncia **prima** di
+   * lanciare il comando, perché l'evento parte mentre il comando scrive,
+   * prima che la sua risposta arrivi; e si ritira se il comando non scrive
+   * (rifiutato, o niente da cambiare), o resterebbe a zittire un cambio vero.
+   * Soltanto un evento dell'utente lo consuma: un'altra app (il watcher) e il
+   * kernel avvisano sempre. L'annuncio scade dopo `EXPECTED_WRITE_MS`.
+   *
+   * `graceMs`: chi non sa se il comando ha scritto (un'azione di una view
+   * dichiarata) non ritira subito, perché l'evento può arrivare dopo la
+   * risposta: accorcia la scadenza a `graceMs` da adesso. Senza timer: la
+   * scadenza la legge chi consuma l'annuncio.
+   */
+  expectWrite(id: string): (graceMs?: number) => void {
+    const token = { deadline: Date.now() + EXPECTED_WRITE_MS };
+    const tokens = this.#expectedWrites.get(id) ?? [];
+    tokens.push(token);
+    this.#expectedWrites.set(id, tokens);
+    return (graceMs = 0) => {
+      if (graceMs > 0) {
+        token.deadline = Math.min(token.deadline, Date.now() + graceMs);
+        return;
+      }
+      const left = (this.#expectedWrites.get(id) ?? []).filter((each) => each !== token);
+      if (left.length) this.#expectedWrites.set(id, left);
+      else this.#expectedWrites.delete(id);
+    };
+  }
+
+  #consumeExpected(id: string): boolean {
+    const now = Date.now();
+    const live = (this.#expectedWrites.get(id) ?? []).filter((each) => each.deadline > now);
+    const taken = live.shift() !== undefined;
+    if (live.length) this.#expectedWrites.set(id, live);
+    else this.#expectedWrites.delete(id);
+    return taken;
   }
   async reloadIfClean(id: string): Promise<ReloadResult> {
     return (await this.#sessions.get(id)?.reloadIfClean()) ?? { kind: "missing" };
@@ -1205,25 +1525,36 @@ export class DocumentSessionCollection implements DraftBufferStore {
     // viene aperto un altro, il testo è di prima e non deve diventare la
     // sessione di un documento omonimo del vault nuovo.
     const vault = this.#currentVault();
-    const source = await this.#api.readDocument(id, ...vaultArg(vault));
-    const current = this.#sessions.get(id);
-    if (current?.snapshot().lifecycle === "open") return current.text();
-    const renamedPendingOwner = this.#pendingDeletionOwners.get(id);
-    if (renamedPendingOwner?.isDeletionPending()) return renamedPendingOwner.text();
-    const deletion = this.#deletions.get(id);
-    if (deletion) {
-      const outcome = await deletion;
-      if (outcome.kind === "deleted") return failDeletedRead(id);
-      return this.read(id);
+    // La lettura apre già sotto la chiave della sessione che forse nascerà:
+    // se non nasce (un'altra sessione si è aperta nel frattempo, una
+    // rinomina, un vault o un'identità cambiati, una cancellazione, una
+    // lettura fallita) la chiave si chiude subito.
+    const open = newOpenKey();
+    let adopted = false;
+    try {
+      const source = await this.#api.openDocument(id, open, ...vaultArg(vault));
+      const current = this.#sessions.get(id);
+      if (current?.snapshot().lifecycle === "open") return current.text();
+      const renamedPendingOwner = this.#pendingDeletionOwners.get(id);
+      if (renamedPendingOwner?.isDeletionPending()) return renamedPendingOwner.text();
+      const deletion = this.#deletions.get(id);
+      if (deletion) {
+        const outcome = await deletion;
+        if (outcome.kind === "deleted") return failDeletedRead(id);
+        return this.read(id);
+      }
+      if (this.#renaming.has(id) || this.#identityVersion(id) !== version) return source.text;
+      if (this.#currentVault() !== vault) return source.text;
+      const session = this.#create(id, source.text, {
+        kind: "descends_from",
+        value: source.revision,
+      }, vault, open);
+      adopted = this.#keys.get(session) === open;
+      this.#describe(session, source);
+      return session.text();
+    } finally {
+      if (!adopted) this.#closeKey(open, vault);
     }
-    if (this.#renaming.has(id) || this.#identityVersion(id) !== version) return source.text;
-    if (this.#currentVault() !== vault) return source.text;
-    const session = this.#create(id, source.text, {
-      kind: "descends_from",
-      value: source.revision,
-    }, vault);
-    this.#describe(session, source);
-    return session.text();
   }
 
   async readForSurface(id: string): Promise<DocumentSurfaceSource> {
@@ -1238,7 +1569,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
     let source: DocumentSource;
     try {
-      source = await this.#api.readDocument(id, ...vaultArg(this.#vaultFor(id)));
+      // Con una sessione si legge sotto la sua chiave; senza (la lettura non
+      // è diventata una sessione) è una lettura semplice.
+      const vault = this.#vaultFor(id);
+      source = session
+        ? await this.#underKey(session, (open) => this.#api.openDocument(id, open, ...vaultArg(vault)))
+        : await this.#api.readDocument(id, ...vaultArg(vault));
     } catch (error) {
       // Una bozza ripristinata può essere l'unica copia rimasta. Se il backend
       // non sa più descriverne la sorgente, la superficie testuale generica la
@@ -1299,9 +1635,72 @@ export class DocumentSessionCollection implements DraftBufferStore {
     session.restoreDraft(text, base);
   }
 
+  /**
+   * Le bozze che hanno ancora qualcosa da dire: una bozza con lo **stesso
+   * testo** del file sul disco non protegge niente, e si toglie (IMP-1801).
+   *
+   * Succede quando l'app si chiude mentre un salvataggio è in volo: il file ha
+   * già il testo nuovo, ma la bozza porta la revisione di prima, e le sole
+   * impronte (`base` diversa da `current`) la fanno sembrare un conflitto a
+   * ogni apertura. Qui si confrontano i testi, che la risposta delle bozze non
+   * porta: si legge il file di ogni bozza di una nota che c'è, e sono poche
+   * (ciò che un crash ha lasciato). Una lettura che non riesce, un testo
+   * diverso o una sessione già aperta su quel documento tengono la bozza: si
+   * toglie soltanto ciò che il disco ha già, byte per byte. Uno scarto che non
+   * riesce tiene la bozza fuori dal recupero di adesso, perché il disco ha lo
+   * stesso testo; alla prossima apertura si riprova.
+   */
+  async withoutSuperseded(drafts: DraftInfo[]): Promise<DraftInfo[]> {
+    const vault = this.#currentVault();
+    this.#draftSources.clear();
+    const checked = await Promise.all(drafts.map(async (draft) => {
+      if (!draft.exists || this.#sessions.has(draft.doc)) return draft;
+      let source: DocumentSource;
+      try {
+        source = await this.#api.readDocument(draft.doc, ...vaultArg(vault));
+      } catch {
+        return draft;
+      }
+      if (source.text !== draft.text) {
+        // La bozza resta: che file è lo si sa già, e la sessione che ne
+        // nascerà non lo rilegge.
+        this.#draftSources.set(draft.doc, { vault, source });
+        return draft;
+      }
+      // Nel frattempo il documento si è aperto, o il vault è cambiato: la
+      // decisione non vale più per questa bozza.
+      if (this.#sessions.has(draft.doc) || this.#currentVault() !== vault) return draft;
+      try {
+        await this.#api.discardDraft(draft.doc, ...vaultArg(vault));
+      } catch {
+        // Lo scarto è pulizia: il testo è già sul disco.
+      }
+      return null;
+    }));
+    return checked.filter((draft): draft is DraftInfo => draft !== null);
+  }
+
+  /**
+   * Le bozze rientrano nei loro documenti e i buffer si salvano. Una sessione
+   * nata qui dalla bozza (il documento non era aperto in nessuna scheda) si
+   * descrive prima del salvataggio con la sorgente che `withoutSuperseded` ha
+   * già letto: un giornale di celle si svuota dopo la scrittura invece di
+   * restare nel buffer (e la griglia lo riapplicherebbe sui byte che lo
+   * contengono già), un file senza formato si scrive a byte (#514). Senza
+   * quella lettura lo fa il primo salvataggio stesso (`#knowSource`).
+   */
   rejoin(drafts: DraftInfo[]): DraftInfo[] {
     const rejoined = rejoinDrafts(drafts, this);
-    for (const draft of rejoined) this.#sessions.get(draft.doc)?.scheduleSave();
+    for (const draft of rejoined) {
+      const session = this.#sessions.get(draft.doc);
+      if (!session) continue;
+      const read = this.#draftSources.get(draft.doc);
+      if (!this.#described.has(session) && read && read.vault === (this.#vaults.get(session) ?? null)) {
+        this.#describe(session, read.source);
+      }
+      session.scheduleSave();
+    }
+    this.#draftSources.clear();
     return rejoined;
   }
 
@@ -1371,6 +1770,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       session.settlePending();
       if (session.dirty) dirty.push(id);
       session.close(true);
+      this.#release(session);
     }
     this.#sessions.clear();
     this.#pendingDeletionOwners.clear();
@@ -1458,7 +1858,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
       for (const alias of aliases) {
         if (this.#deletions.get(alias) === reservation) this.#deletions.delete(alias);
       }
-      if (session) this.#forgetPendingOwner(session);
+      if (session) {
+        this.#forgetPendingOwner(session);
+        // Cancellata, o tolta da un errore che non l'ha riaperta: è uscita.
+        // Riaperta da una cancellazione fallita, tiene la sua chiave.
+        if (session.snapshot().lifecycle !== "open") this.#release(session);
+      }
     }
   }
 
@@ -1482,16 +1887,55 @@ export class DocumentSessionCollection implements DraftBufferStore {
     session.close(true);
     if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);
     this.#forgetPendingOwner(session);
+    this.#release(session);
     if (!dirty || own) {
       void session.discardDraftAfterClose();
       return { kind: "removed", dirty };
     }
     // Il file non c'è più, il lavoro sì: resta in bozza (la ritrova il
     // recupero al prossimo avvio) e torna a chi può offrire di ricrearlo.
-    void this.#api.saveDraft(session.id, text, base, ...vaultArg(this.#vaults.get(session) ?? null)).catch(() => {
+    const vault = this.#vaults.get(session) ?? null;
+    // Dalla coda delle bozze della sessione: l'host non le mette in fila da
+    // sé (#485), e una bozza della sessione ancora in volo è più vecchia.
+    const saving = session.saveDraftAfterClose(text, base).catch(() => {
       this.#emit({ kind: "draft-blind", id: session.id });
     });
+    this.#removedDrafts.set(removedDraftKey(session.id, vault), { text, saving });
     return { kind: "removed", dirty, text };
+  }
+
+  /**
+   * Il file cancellato da fuori è tornato con il testo della sua bozza
+   * («Ricrea la nota», riuscita): la bozza non ha più niente da dire, e
+   * lasciata lì alla riapertura farebbe un conflitto falso, perché la sua
+   * base è la revisione del file cancellato e non quella ricreata (IMP-047).
+   * Si aspetta che la sua scrittura sia finita, così non arriva dopo lo
+   * scarto. Si scarta soltanto la bozza che tiene `text`, il testo ricreato:
+   * una sessione nel frattempo riaperta sull'id tiene la sua bozza, e una
+   * rimozione più nuova (un «Ricrea» rimasto su un avviso di prima) tiene la
+   * bozza col testo più nuovo.
+   */
+  async discardRemovedDraft(id: string, vault: string | null | undefined, text: string): Promise<void> {
+    const key = removedDraftKey(id, vault ?? null);
+    const entry = this.#removedDrafts.get(key);
+    if (!entry) {
+      // La nota si è già riaperta e la bozza è passata a lei. Se è pulita,
+      // senza salvataggi in coda e mostra proprio il testo ricreato, la bozza
+      // sul disco non tiene niente che lei non abbia: alla riapertura dopo
+      // farebbe un conflitto falso, e si toglie.
+      const reopened = this.#sessions.get(id);
+      if (reopened && !reopened.dirty && !reopened.hasPending() && reopened.text() === text) {
+        await this.#api.discardDraft(id, ...vaultArg(vault));
+      }
+      return;
+    }
+    if (entry.text !== text) return;
+    this.#removedDrafts.delete(key);
+    await entry.saving;
+    // Nell'attesa la nota si è riaperta, o è sparita un'altra volta con una
+    // bozza sua: quella non è la bozza di questo testo.
+    if (this.#sessions.has(id) || this.#removedDrafts.has(key)) return;
+    await this.#api.discardDraft(id, ...vaultArg(vault));
   }
   async release(id: string): Promise<CloseResult> {
     if ((this.#openIntents.get(id) ?? 0) > 0) return { kind: "active" };
@@ -1520,9 +1964,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
       this.#invalidate(id);
       return { kind: "missing" };
     }
+    if (this.#leased(session)) return { kind: "active" };
 
-    // Il testo tenuto dalle superfici entra prima: non è un'attività nuova.
-    session.settlePending();
+    // Il testo tenuto dalle superfici entra prima, anche quello che la
+    // superficie conferma col suo provider: non è un'attività nuova.
+    const held = session.settled();
+    if (held) await held;
     const activity = session.activityGeneration();
     await session.flush();
     if (session.dirty) await session.flushDraft();
@@ -1542,7 +1989,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       }
       return { kind: "missing" };
     }
-    if ((this.#openIntents.get(id) ?? 0) > 0) return { kind: "active" };
+    if ((this.#openIntents.get(id) ?? 0) > 0 || this.#leased(session)) return { kind: "active" };
     if (this.#deletionVersion(id) !== deletionVersion) {
       // The deletion failed after this release started; its reopen activity is
       // internal, so retry once rather than treating it as a user reopen.
@@ -1566,8 +2013,14 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return outcome;
   }
 
-  async resolveConflict(id: string, choice: ConflictChoice): Promise<ConflictResolutionResult> {
-    return (await this.#sessions.get(id)?.resolveConflict(choice)) ?? { kind: "none" };
+  async resolveConflict(id: string, choice: ConflictChoice, keep?: KeepDiscarded): Promise<ConflictResolutionResult> {
+    return (await this.#sessions.get(id)?.resolveConflict(choice, keep)) ?? { kind: "none" };
+  }
+  /// Se «Usa disco» su `id` ha un testo da conservare: no per i documenti a
+  /// giornale (la griglia), dove il buffer non è il file.
+  keepsDiscardedText(id: string): boolean {
+    const session = this.#sessions.get(id);
+    return session !== undefined && !this.#journals.has(session);
   }
   async renameKeepingBuffer(from: string, to: string): Promise<RenameResult> {
     const pendingAlias = this.#pendingDeletionOwners.get(from);
@@ -1633,7 +2086,42 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const dirty = session.dirty;
     if (!session.close()) return { kind: "active" };
     if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);
+    this.#release(session);
     return { kind: "closed", dirty };
+  }
+
+  /// L'unica uscita della chiave: la sessione è uscita per sempre (chiusa,
+  /// chiusa con tutte, cancellata, sparita dal disco, sostituita), e l'host
+  /// lascia andare ciò che teneva sotto la sua chiave. Una volta sola; un
+  /// errore dell'host non cambia la chiusura.
+  #release(session: DocumentSession): void {
+    if (this.#released.has(session)) return;
+    this.#released.add(session);
+    const open = this.#keys.get(session);
+    if (open !== undefined) this.#closeKey(open, this.#vaults.get(session) ?? null);
+  }
+
+  #closeKey(open: string, vault: string | null): void {
+    try {
+      void this.#api.documentClosed(open, ...vaultArg(vault)).catch(() => {});
+    } catch {
+      // Una porta che fallisce prima di promettere non cambia la chiusura.
+    }
+  }
+
+  /// Una lettura o una scrittura sotto la chiave della sessione. Se finisce
+  /// quando la sessione è già uscita, l'host può aver segnato di nuovo la
+  /// chiave appena chiusa: la si richiude, e per l'host chiudere due volte non
+  /// costa niente.
+  #underKey<T>(session: DocumentSession, call: (open: string) => Promise<T>): Promise<T> {
+    const open = this.#keys.get(session);
+    if (open === undefined) return Promise.reject(new Error(`document session ${session.id} has no open key`));
+    const pending = call(open);
+    const settled = (): void => {
+      if (this.#released.has(session)) this.#closeKey(open, this.#vaults.get(session) ?? null);
+    };
+    void pending.then(settled, settled);
+    return pending;
   }
 
   #identityVersion(id: string): number {
@@ -1675,6 +2163,26 @@ export class DocumentSessionCollection implements DraftBufferStore {
     else this.#formatless.delete(session);
     if (source.text_kind === "grid_journal") this.#journals.add(session);
     else this.#journals.delete(session);
+    this.#described.add(session);
+  }
+
+  /// Prima di scrivere, la sessione deve sapere che file salva: la porta
+  /// (byte o documento) e se il suo testo è un giornale di celle dipendono da
+  /// lì. Una sessione nata da una bozza non l'ha mai letto, e lo legge adesso
+  /// sotto la sua chiave. Un file che non c'è più si ricrea dalla porta dei
+  /// documenti, come una nota nuova; una lettura che fallisce per un altro
+  /// motivo fa fallire il salvataggio, e la bozza resta: un giornale scritto
+  /// alla cieca resterebbe nel buffer e si riapplicherebbe (#514).
+  async #knowSource(session: DocumentSession, id: string, vault: string | null): Promise<void> {
+    if (this.#described.has(session)) return;
+    let source: DocumentSource;
+    try {
+      source = await this.#underKey(session, (open) => this.#api.openDocument(id, open, ...vaultArg(vault)));
+    } catch (error) {
+      if (isErrorKind(error, "not_found")) return;
+      throw error;
+    }
+    this.#describe(session, source);
   }
 
   /// Il salvataggio di un file senza formato. `Revision::of(testo)` è
@@ -1684,6 +2192,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// revisione del disco e il CAS si fa su quella; se il file non c'è più, lo
   /// si crea — e se nel frattempo qualcuno l'ha creato, è un conflitto.
   async #writeFormatless(
+    session: DocumentSession,
     id: string,
     text: string,
     base: WriteBase,
@@ -1692,34 +2201,50 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const expected =
       base.kind === "descends_from"
         ? base.value
-        : await this.#api.readDocument(id, ...vaultArg(vault)).then((source) => source.revision, () => null);
+        : await this.#underKey(session, (open) => this.#api.openDocument(id, open, ...vaultArg(vault))).then(
+            (source) => source.revision,
+            () => null,
+          );
     const receipt = await this.#api.resourceWrite(id, new TextEncoder().encode(text), expected, ...vaultArg(vault));
     return receipt.revision;
   }
 
-  /// Crea la sessione legandola al `vault` in cui il documento è stato letto.
-  #create(id: string, text: string, base: WriteBase, vault: string | null): DocumentSession {
+  /// Crea la sessione legandola al `vault` in cui il documento è stato letto e
+  /// alla chiave `open` con cui è stato letto; senza lettura (una bozza, un
+  /// documento nuovo) la chiave nasce qui. Se c'è già una sessione aperta la
+  /// chiave non serve, e chi l'ha fatta la chiude.
+  #create(id: string, text: string, base: WriteBase, vault: string | null, open?: string): DocumentSession {
     const existing = this.#sessions.get(id);
     if (existing?.snapshot().lifecycle === "open") return existing;
-    if (existing) this.#sessions.delete(id);
+    if (existing) {
+      this.#sessions.delete(id);
+      this.#release(existing);
+    }
     // La sessione scrive dalla porta che il suo file accetta: il testo per un
     // formato, i byte per un file che nessun formato serve. La scelta è della
-    // collezione, che sa cosa ha letto; la sessione vede una porta sola.
-    const api: DocumentSessionApi = {
-      readDocument: (doc) => this.#api.readDocument(doc, ...vaultArg(vault)),
-      writeDocument: (doc, source, writeBase) =>
-        this.#formatless.has(session)
-          ? this.#writeFormatless(doc, source, writeBase, vault)
-          : this.#api.writeDocument(doc, source, writeBase, ...vaultArg(vault)),
-      resourceWrite: (doc, bytes, expected) => this.#api.resourceWrite(doc, bytes, expected, ...vaultArg(vault)),
+    // collezione, che sa cosa ha letto; la sessione vede una porta sola. Ogni
+    // lettura e ogni scrittura passa la chiave della sessione.
+    const api: SessionPort = {
+      readDocument: (doc) =>
+        this.#underKey(session, (key) => this.#api.openDocument(doc, key, ...vaultArg(vault))),
+      writeDocument: (doc, source, writeBase) => {
+        const write = (): Promise<string> =>
+          this.#formatless.has(session)
+            ? this.#writeFormatless(session, doc, source, writeBase, vault)
+            : this.#underKey(session, (key) => this.#api.writeDocument(doc, source, writeBase, vault, key));
+        // Una sessione già descritta scrive subito, senza un giro in più.
+        return this.#described.has(session) ? write() : this.#knowSource(session, doc, vault).then(write);
+      },
       saveDraft: (doc, source, draftBase) => this.#api.saveDraft(doc, source, draftBase, ...vaultArg(vault)),
       discardDraft: (doc) => this.#api.discardDraft(doc, ...vaultArg(vault)),
     };
     const session: DocumentSession = new DocumentSession(OWNER_TOKEN, id, text, base, api, {
       emit: (event) => this.#emit(event),
       journal: (): boolean => this.#journals.has(session),
-      draftSucceeded: () => {
+      draftSucceeded: (doc) => {
+        if (!this.#blindDraft) return;
         this.#blindDraft = false;
+        this.#emit({ kind: "draft-restored", id: doc });
       },
       draftFailed: (doc) => {
         if (this.#blindDraft) return;
@@ -1728,7 +2253,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
       },
     });
     this.#vaults.set(session, vault);
+    this.#keys.set(session, open ?? newOpenKey());
     this.#sessions.set(id, session);
+    // La bozza di una rimozione di prima è adesso di questa sessione: un
+    // «Ricrea» rimasto sul vecchio avviso non la deve toccare.
+    this.#removedDrafts.delete(removedDraftKey(id, vault));
     return session;
   }
 
@@ -1747,6 +2276,12 @@ export const documentSessions = new DocumentSessionCollection();
 
 export function flushPendingSave(): Promise<string[]> {
   return documentSessions.flushPendingSave();
+}
+
+/// Annuncia la scrittura di un comando su `id` (`expectWrite`): la ricarica
+/// che ne viene, a buffer pulito, non si dice.
+export function expectDocumentWrite(id: string): (graceMs?: number) => void {
+  return documentSessions.expectWrite(id);
 }
 
 export function flushBeforeClose(): Promise<string[]> {

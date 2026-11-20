@@ -119,3 +119,29 @@ describe("un guasto del kernel (§20.2)", () => {
     expect(failureNotice(failure("warning", null)).text).not.toContain(" · da ");
   });
 });
+
+describe("un documento che non si legge (IMP-117)", () => {
+  // Il kernel dice «parse failed: rich codec…» in inglese per ogni documento
+  // rotto: il gate di formato dice già che cosa è successo, e la prosa non
+  // deve arrivare a chi legge.
+  const unreadable = (subject: string | null) =>
+    ({
+      type: "trouble",
+      severity: "failure",
+      subject,
+      error: { kind: "internal", message: "parse failed: rich codec: rich document is encrypted" },
+      gate: "format_parse",
+    }) as const;
+
+  it("dice che il documento non si apre, col suo nome, senza la prosa del codec", () => {
+    const notice = failureNotice(unreadable("Progetti/cifrato.docx"));
+    expect(notice.text).toBe("Questo documento non si apre: cifrato");
+    expect(notice.text).not.toContain("parse failed");
+    expect(notice.text).not.toContain("da parsando");
+    expect(notice.tone).toBe("guasto");
+  });
+
+  it("senza un documento dice la stessa cosa, senza nominare nessuno", () => {
+    expect(failureNotice(unreadable(null)).text).toBe("Questo documento non si apre");
+  });
+});

@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { t } from "../../../../i18n/strings";
+import { EditorState } from "@codemirror/state";
+import { resolvedLanguage, t } from "../../../../i18n/strings";
+import { frontmatterLanguage } from "./proof";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { closeContextMenu } from "../../../../ui/menu";
-import { caseApplies, playCase, TABLE_CONFORMANCE } from "../../../../tabella/conformance";
-import { TableGrid, tableMenu, type TableGridHost } from "./table-grid";
+import { caseApplies, expectedOf, playCase, seenOf, TABLE_CONFORMANCE, type ConformanceClipboard, type ConformanceTarget } from "../../../../tabella/conformance";
+import { framePointer } from "../../../../tabella/frame/test-support";
+import { shownCellText, TableGrid, tableMenu, type TableGridHost } from "./table-grid";
 import type { TableData } from "./table-model";
 
 const grids: TableGrid[] = [];
@@ -19,7 +22,7 @@ afterEach(() => {
 
 /// Una griglia con un host che scrive subito: la tabella nuova torna alla
 /// griglia come farebbe l'editor dopo la transazione.
-function mount(rows: string[][], readOnly = false) {
+function mount(rows: string[][], readOnly = false, language: string | null = null, activate: TableGridHost["activate"] = () => false) {
   const writes: TableData[] = [];
   const left: string[] = [];
   const undo = vi.fn();
@@ -35,7 +38,8 @@ function mount(rows: string[][], readOnly = false) {
     redo: vi.fn(),
     leave: (where) => void left.push(where),
     cellHtml: () => null,
-    activate: () => false,
+    activate,
+    language: () => language,
     focused: vi.fn(),
     changed: vi.fn(),
   };
@@ -59,6 +63,19 @@ function mouse(target: Element, type: string, init: MouseEventInit = {}): void {
 const ROWS = [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]];
 
 describe("la griglia", () => {
+  it("Mod col clic e Alt col clic su una cella chiedono all'ospite di seguire il link; il clic semplice sceglie", () => {
+    const activate = vi.fn(() => true);
+    const { cell } = mount(ROWS, false, null, activate);
+    mouse(cell(1, 0), "mousedown");
+    expect(activate).not.toHaveBeenCalled();
+    for (const init of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+      const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...init });
+      cell(1, 0).dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    }
+    expect(activate).toHaveBeenCalledTimes(3);
+  });
+
   it("disegna celle, lettere delle colonne e numeri delle righe", () => {
     const { root, cell } = mount(ROWS);
     expect(root.getAttribute("role")).toBe("grid");
@@ -77,7 +94,9 @@ describe("la griglia", () => {
     key(root, "ArrowDown", { shiftKey: true });
     expect(grid.selection).toEqual({ anchor: { row: 0, col: 1 }, focus: { row: 1, col: 1 } });
     expect(cell(0, 1).classList.contains("is-selected")).toBe(true);
-    expect(cell(1, 1).classList.contains("is-active")).toBe(true);
+    // Come nei fogli di calcolo la cella attiva resta l'àncora.
+    expect(cell(0, 1).classList.contains("is-active")).toBe(true);
+    expect(cell(1, 1).classList.contains("is-active")).toBe(false);
     expect(cell(1, 0).classList.contains("is-selected")).toBe(false);
   });
 
@@ -256,12 +275,19 @@ describe("la griglia", () => {
     const align = menu.items[3]!.items as { label: string; checked?: boolean }[];
     expect(align.find((item) => item.checked)?.label).toBe(t("table.menu.sub.align_center"));
     expect(menu.items.filter((item) => item.danger).length).toBe(2);
+    // Il grafico e «Trasforma in foglio» (T52) stanno insieme, prima di ciò che svuota.
+    const sheets = tableMenu([entry("table.clear")], { align: null, paste: null, chart: { regenerate: false, run }, sheet: run });
+    expect(sheets.items.map((item) => `${item.separator ? "— " : ""}${item.label}`)).toEqual([
+      "Grafico da questa tabella", "Trasforma in foglio", `— ${t("table.menu.clear_cell")}`,
+    ]);
+    const onlySheet = tableMenu([], { align: null, paste: null, sheet: run });
+    expect(onlySheet.items.map((item) => `${item.separator ? "— " : ""}${item.label}`)).toEqual(["Trasforma in foglio"]);
     const reading = tableMenu([entry("table.cut", true), entry("table.copy")], { align: null, paste: null });
     expect(reading.clipboard.map((item) => item.label)).toEqual([t("editor_menu.copy")]);
     expect(reading.items).toEqual([]);
   });
 
-  it("taglia dal menu svuota le celle che ha copiato, anche se la selezione si sposta prima degli appunti", async () => {
+  it("taglia dal menu segna le celle copiate, e l'incolla dopo le sposta in un passo", async () => {
     let release: () => void = () => {};
     const copied: string[] = [];
     const undeclare = declareClipboard((text) => {
@@ -269,17 +295,28 @@ describe("la griglia", () => {
       return new Promise<void>((resolve) => (release = resolve));
     });
     try {
-      const { grid, cell, writes } = mount(ROWS);
+      const { grid, root, cell, writes } = mount(ROWS);
       grid.focus({ row: 1, col: 0 });
       mouse(cell(1, 0), "contextmenu", { button: 2 });
       [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
         .find((button) => button.textContent?.startsWith(t("table.menu.cut")))!.click();
+      // La parte premuta della barra si fa d'accento, poi il menu si chiude e
+      // il gesto si fa.
+      await vi.waitFor(() => expect(copied).toHaveLength(1));
       grid.focus({ row: 2, col: 1 });
       release();
       await Promise.resolve();
       await Promise.resolve();
       expect(copied).toEqual(["Ada\n"]);
-      expect(writes[writes.length - 1]!.rows).toEqual([["Nome", "Voto"], ["", "10"], ["Bea", "9"]]);
+      // Il taglio non svuota: segna, finché non si incolla.
+      expect(writes).toHaveLength(0);
+      expect(cell(1, 0).classList.contains("is-cut")).toBe(true);
+      const paste = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, "clipboardData", { value: { getData: (type: string) => (type === "text/plain" ? "Ada\n" : "") } });
+      root.dispatchEvent(paste);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]!.rows).toEqual([["Nome", "Voto"], ["", "10"], ["Bea", "Ada"]]);
+      expect(cell(1, 0).classList.contains("is-cut")).toBe(false);
     } finally {
       undeclare();
     }
@@ -354,27 +391,104 @@ describe("le azioni della barra sulla griglia", () => {
     expect(writes[0]!.rows).toEqual([["Nome", "Voto"], ["Ada", "10"]]);
     expect(grid.selection.focus).toEqual({ row: 1, col: 1 });
   });
+
+  it("la maniglia segue la lingua della nota: «Mar» in una nota inglese è marzo anche con Fub in italiano", () => {
+    expect(resolvedLanguage()).toMatch(/^it/);
+    const english = frontmatterLanguage(EditorState.create({ doc: "---\nlang: en-GB\n---\n\n| Month | Hours |\n" }));
+    expect(english).toBe("en-GB");
+    const rows = [["Month", "Hours"], ["Mar", "8"], ["", "7"]];
+    const { grid, writes } = mount(rows, false, english);
+    grid.focus({ row: 1, col: 0 });
+    framePointer(grid.element, { kind: "fill-double" });
+    expect(writes[writes.length - 1]!.rows[2]![0]).toBe("Apr");
+    // Senza lingua nella nota vale quella di Fub: «Mar» è martedì.
+    const { grid: italian, writes: written } = mount(rows.map((row) => [...row]));
+    italian.focus({ row: 1, col: 0 });
+    framePointer(italian.element, { kind: "fill-double" });
+    expect(written[written.length - 1]!.rows[2]![0]).toBe("Mer");
+  });
 });
 
 describe("la prova comune della Tabella, sul Markdown", () => {
   const caps = { insertRows: true, deleteRows: true, moveRows: true, insertColumns: true, deleteColumns: true, moveColumns: true, sort: true, align: true, merge: false, headerRows: 1 };
+  const target: ConformanceTarget = { mode: "sheet", caps, bounded: true, delegates: false };
+  const clipboard = (kind: "cut" | "copy" | "paste", store: ConformanceClipboard) => {
+    const event = new Event(kind, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        setData: (type: string, value: string) => {
+          if (type === "text/plain") store.text = value;
+          if (type === "text/html") store.html = value;
+        },
+        getData: (type: string) => (type === "text/plain" ? store.text : type === "text/html" ? store.html : ""),
+      },
+    });
+    (document.activeElement ?? document.body).dispatchEvent(event);
+  };
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   for (const test of TABLE_CONFORMANCE) {
-    it.runIf(caseApplies(test, caps))(test.name, () => {
-      const { grid } = mount(test.rows.map((row) => [...row]));
+    it.runIf(caseApplies(test, target))(test.name, async () => {
+      if (test.today) {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date(test.today));
+      }
+      const { grid, writes } = mount(test.rows.map((row) => [...row]));
       grid.focus("first");
-      const seen = playCase(test, {
+      const seen = await playCase(test, {
         key: (name, init) => key(document.activeElement ?? document.body, name, init),
         command: (id) => void grid.runAction(id),
+        pointer: (gesture) => framePointer(grid.element, gesture),
+        edits: () => writes.length,
+        clipboard,
         cells: () => grid.data.rows.map((row) => [...row]),
-        active: () => ({ row: grid.selection.focus.row, column: grid.selection.focus.col }),
+        active: () => ({ row: grid.active.row, column: grid.active.col }),
         range: () => {
           const { anchor, focus } = grid.selection;
           return { r0: Math.min(anchor.row, focus.row), c0: Math.min(anchor.col, focus.col), r1: Math.max(anchor.row, focus.row), c1: Math.max(anchor.col, focus.col) };
         },
+        cut: () => {
+          const marked = [...grid.element.querySelectorAll<HTMLElement>(".tb-cell.is-cut")];
+          if (marked.length === 0) return null;
+          const rows = marked.map((cell) => Number(cell.dataset.row));
+          const columns = marked.map((cell) => Number(cell.dataset.col));
+          return { r0: Math.min(...rows), c0: Math.min(...columns), r1: Math.max(...rows), c1: Math.max(...columns) };
+        },
+        ranges: () => grid.element.querySelectorAll(".tb-sel").length,
       });
-      if (test.cells) expect(seen.cells).toEqual(test.cells);
-      if (test.active) expect(seen.active).toEqual(test.active);
-      if (test.range) expect(seen.range).toEqual(test.range);
+      const expected = expectedOf(test, target);
+      expect(seenOf(seen, expected)).toEqual(expected);
     });
   }
+});
+
+describe("le celle scelte per la somma della banda (T55)", () => {
+  it("una cella sola non dà niente; con più celle il testo mostrato, senza l'intestazione e senza le enfasi", () => {
+    const { grid } = mount([["Voce", "Speso"], ["Allestimento", "**1.240**"], ["Trasporti", " 860 "], ["Stampa", ""]]);
+    grid.restore({ anchor: { row: 1, col: 1 }, focus: { row: 1, col: 1 } }, true);
+    expect(grid.selectedValues()).toBeNull();
+    grid.restore({ anchor: { row: 0, col: 1 }, focus: { row: 3, col: 1 } }, true);
+    expect([...grid.selectedValues()!]).toEqual(["1.240", "860", ""]);
+  });
+
+  it("legge le celle di adesso, non quelle di quando la tabella era un'altra", () => {
+    const { grid } = mount([["A"], ["1"], ["2"]]);
+    grid.restore({ anchor: { row: 1, col: 0 }, focus: { row: 2, col: 0 } }, true);
+    grid.update({ rows: [["A"], ["5"], ["6"]], aligns: [null] });
+    expect([...grid.selectedValues()!]).toEqual(["5", "6"]);
+  });
+
+  it("le enfasi attorno a tutto il testo non contano, quelle in mezzo sì", () => {
+    expect(shownCellText(" **_1.200_** ")).toBe("1.200");
+    expect(shownCellText("`42`")).toBe("42");
+    expect(shownCellText("1 **e** 2")).toBe("1 **e** 2");
+    expect(shownCellText("**")).toBe("**");
+  });
+
+  it("il testo barrato non è un valore: non conta", () => {
+    expect(shownCellText("~~100~~")).toBe("");
+    expect(shownCellText("**~~1.240~~**")).toBe("");
+    expect(shownCellText("~~100~~ 120")).toBe("~~100~~ 120");
+  });
 });

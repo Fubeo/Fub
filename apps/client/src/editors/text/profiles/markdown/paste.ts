@@ -1,12 +1,23 @@
 import { isStrictlyInsideCode } from "./parser";
 import { pasteHtml } from "../../paste-html";
-import { EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
+import { textLines } from "../../line-breaks";
+import { Prec, StateEffect, StateField } from "@codemirror/state";
+import { Decoration, EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
 import type TurndownService from "turndown";
 import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
 import { readClipboard } from "../../../../platform/clipboard";
 import { escapeLinkLabel, linkDestination } from "./link-syntax";
+import { AddressChoiceWidget, bareUrl } from "./link-card";
+import { carriedMarkdown } from "./comments/copy";
+import { webEmbedOf } from "./web-embed";
+import { cellsOrigin } from "./cells-clipboard";
+import { declaredLanguage } from "./render";
+import { resolvedLanguage } from "../../../../i18n/strings";
+import { cellsEmbed, tsvTable } from "./table-sheet";
 
-const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`/u;
+// Un commento CriticMarkup (`{>>…<<}`, T21) è Markdown di Fub: incollato da
+// una nota resta commento, invece di passare dall'HTML che non lo porta.
+const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`|\{>>[^\n]*?<<\}/u;
 const contentAnchorPrefix = `#${inContentSpace("")}`;
 
 // Turndown serve solo a un incolla ricco, e stava nel chunk che le tre
@@ -221,8 +232,22 @@ export async function markdownFromClipboard(data: DataTransfer): Promise<string 
 /// Un indirizzo incollato su un testo selezionato diventa un link Markdown,
 /// `[testo](url)`, come in Obsidian. Solo un indirizzo intero (niente spazi,
 /// `http(s)://` o `mailto:`), una selezione sola su una riga, fuori dal codice,
-/// e che non sia già essa stessa un indirizzo.
+/// e che non sia già essa stessa un indirizzo. Su una riga vuota vale la
+/// scelta di `addressOnBlankLine`.
 const PASTED_URL = /^(?:https?:\/\/|mailto:)\S+$/iu;
+
+/// Il Markdown di un link `[testo](indirizzo)`. Un `|` non escapato chiuderebbe
+/// la cella se il link finisce in una tabella: nel testo si scrive `\|`, che in
+/// un paragrafo è lo stesso carattere, e nell'indirizzo `%7C`.
+function linkMarkdown(text: string, url: string): string {
+  return `[${escapePipes(escapeLinkLabel(text))}](${linkDestination(url).replace(/\|/gu, "%7C")})`;
+}
+
+/// Un `|` preceduto da un numero pari di `\` non è escapato, e lo diventa; uno
+/// già escapato resta com'è.
+function escapePipes(text: string): string {
+  return text.replace(/(\\*)\|/gu, (run, slashes: string) => (slashes.length % 2 === 0 ? `${slashes}\\|` : run));
+}
 
 function linkOverSelection(view: EditorView, data: DataTransfer): string | null {
   const { ranges } = view.state.selection;
@@ -232,16 +257,238 @@ function linkOverSelection(view: EditorView, data: DataTransfer): string | null 
   const { from, to } = ranges[0]!;
   const text = view.state.sliceDoc(from, to);
   if (text.includes("\n") || PASTED_URL.test(text.trim()) || isStrictlyInsideCode(view.state, from)) return null;
-  return `[${escapeLinkLabel(text)}](${linkDestination(url)})`;
+  return linkMarkdown(text, url);
 }
+
+/// L'indirizzo che si incolla da solo su una riga vuota, o `null`. Solo dagli
+/// appunti senza HTML: un HTML porta il suo titolo, e il convertitore ne fa già
+/// un link. Il cursore è solo, fuori dal codice, e la riga è vuota per davvero
+/// (uno spazio la lascia a testo, com'è sempre stato).
+function addressOnBlankLine(view: EditorView, data: DataTransfer): string | null {
+  if (data.getData("text/html")) return null;
+  const { ranges } = view.state.selection;
+  if (ranges.length !== 1 || !ranges[0]!.empty) return null;
+  const { from } = ranges[0]!;
+  if (view.state.doc.lineAt(from).length !== 0 || isStrictlyInsideCode(view.state, from)) return null;
+  const url = data.getData("text/plain").trim();
+  return PASTED_URL.test(url) ? url : null;
+}
+
+/// Le celle copiate da un foglio (testo a tabulazioni): la tabella Markdown
+/// che diventano e, se vengono da un file del vault, l'embed della loro
+/// parte. Le celle di un altro programma con il loro HTML passano dalla
+/// conversione dell'HTML, che tiene anche i segni del testo.
+function pastedCells(view: EditorView, data: DataTransfer): { table: string; embed: string | null } | null {
+  if (isStrictlyInsideCode(view.state, view.state.selection.main.from)) return null;
+  const origin = cellsOrigin(data);
+  if (origin === null && data.getData("text/html")) return null;
+  const locale = origin === null ? undefined : declaredLanguage(view.state.doc) ?? resolvedLanguage();
+  const table = tsvTable(data.getData("text/plain"), locale);
+  if (table === null) return null;
+  return { table, embed: origin === null ? null : cellsEmbed(origin) };
+}
+
+/// La scelta sotto un indirizzo incollato su una riga vuota. `link` è il
+/// Markdown scritto a `from`: «Scheda» lo sostituisce con l'indirizzo da solo,
+/// «Incorpora» con `embed`, che c'è soltanto per un sito dell'elenco chiuso.
+/// La scelta vale finché il testo non cambia e il cursore resta sul link.
+///
+/// Le celle incollate da un foglio del vault (T52) hanno la stessa scelta con
+/// altre voci: «Tabella» tiene la tabella scritta (`link`), «Scheda» la
+/// sostituisce con l'embed della parte di foglio (`card`).
+interface AddressChoice {
+  readonly from: number;
+  readonly link: string;
+  readonly url: string;
+  readonly card: string;
+  readonly embed: string | null;
+  readonly cells?: boolean;
+}
+
+/// La pagina incorporata, `![](https://…)` come Obsidian la scrive e la
+/// incorpora per i video: l'indirizzo è quello che il segnaposto aprirà, in
+/// `https` e senza parametri di tracciamento. `null` fuori dall'elenco.
+function embedMarkdown(url: string): string | null {
+  const embed = webEmbedOf(url);
+  return embed === null ? null : `![](${linkDestination(embed.url).replace(/\|/gu, "%7C")})`;
+}
+const offerAddressChoice = StateEffect.define<AddressChoice | null>();
+const addressChoice = StateField.define<AddressChoice | null>({
+  create: () => null,
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(offerAddressChoice)) return effect.value;
+    }
+    // Una battuta, Invio o Annulla tengono il Link: la scelta finisce lì.
+    if (value === null || transaction.docChanged) return null;
+    const { ranges, main } = transaction.state.selection;
+    const to = value.from + value.link.length;
+    return ranges.length === 1 && main.from >= value.from && main.to <= to ? value : null;
+  },
+  provide: (field) => EditorView.decorations.from(field, (choice) => (choice === null
+    ? Decoration.none
+    : Decoration.set(Decoration.widget({ widget: new AddressChoiceWidget(choice.url, choice.embed !== null, choice.cells === true), block: true, side: 1 })
+      .range(choice.from + choice.link.length)))),
+});
+
+/// Il bottone della scelta sotto il puntatore, o `null`.
+function choiceButton(event: Event): HTMLElement | null {
+  const target = event.target instanceof Element ? event.target : null;
+  return target?.closest<HTMLElement>(".cm-fub-address-choice [data-choice]") ?? null;
+}
+
+/// Applica una voce della scelta: «Scheda» scrive l'indirizzo da solo sulla
+/// riga, «Incorpora» lo scrive come pagina incorporata, «Link» (o una scelta
+/// che non c'è più) la chiude e lascia il link. Il fuoco torna nell'editor,
+/// dove il cursore è già.
+function chooseAddress(view: EditorView, kind: string | undefined): void {
+  const choice = view.state.field(addressChoice);
+  if (choice === null) return;
+  const to = choice.from + choice.link.length;
+  const insert = kind === "card" ? choice.card : kind === "embed" ? choice.embed : null;
+  // Il testo deve essere ancora quello scritto: altrimenti la scelta è vecchia.
+  // Il testo si confronta con gli a capo di CodeMirror: una tabella incollata
+  // ha più righe anche in una nota CRLF.
+  if (insert !== null && !view.state.readOnly && view.state.doc.sliceString(choice.from, to) === choice.link) {
+    view.dispatch({
+      changes: { from: choice.from, to, insert },
+      selection: { anchor: choice.from + insert.length },
+      userEvent: "input.paste",
+    });
+  } else {
+    view.dispatch({ effects: offerAddressChoice.of(null) });
+  }
+  view.focus();
+}
+
+/// Il fuoco sta su una voce della scelta.
+function focusIsInChoice(view: EditorView): boolean {
+  const choice = view.contentDOM.querySelector(".cm-fub-address-choice");
+  return choice !== null && choice.contains(view.root.activeElement);
+}
+
+/// Chiude la scelta col Link e riporta il fuoco nell'editor.
+function leaveChoice(view: EditorView): boolean {
+  view.dispatch({ effects: offerAddressChoice.of(null) });
+  view.focus();
+  return true;
+}
+
+/// Tab dall'editor, con la scelta visibile: il fuoco va sul punto di
+/// tabulazione della scelta, il Link. Senza scelta Tab resta com'era.
+function tabIntoChoice(view: EditorView): boolean {
+  const stop = view.contentDOM.querySelector<HTMLElement>(".cm-fub-address-choice [data-choice][tabindex='0']");
+  if (stop === null) return false;
+  stop.focus();
+  return true;
+}
+
+/// Invio e Spazio su una voce della scelta: un clic, come quello del puntatore.
+/// Il tasto è preso qui, così il browser non ne fa un secondo clic.
+function activateChoiceControl(view: EditorView): boolean {
+  if (!focusIsInChoice(view)) return false;
+  const control = view.root.activeElement?.closest<HTMLElement>("[data-choice]");
+  if (!control) return false;
+  control.click();
+  return true;
+}
+
+/// Le chiavi della scelta mentre il fuoco è su di lei. Le frecce le dà la barra
+/// (`kit/toolbar-keys`), che le prende prima dell'editor. Prima dei comandi
+/// dell'editor, perché Tab e Invio in un testo fanno altro.
+const addressChoiceKeys = Prec.highest(keymap.of([
+  { key: "Tab", run: (view) => (focusIsInChoice(view) ? leaveChoice(view) : tabIntoChoice(view)) },
+  { key: "Shift-Tab", run: (view) => (focusIsInChoice(view) ? leaveChoice(view) : false) },
+  { key: "Escape", run: (view) => (focusIsInChoice(view) ? leaveChoice(view) : false) },
+  { key: "Enter", run: activateChoiceControl },
+  { key: "Space", run: activateChoiceControl },
+]));
+
+/// Modificatori da soli: premerli non chiude la scelta.
+const CHOICE_MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta"]);
+
+const addressChoiceGestures = EditorView.domEventHandlers({
+  // Il pulsante non prende il fuoco e non sposta il cursore.
+  mousedown(event) {
+    if (event.button !== 0 || choiceButton(event) === null) return false;
+    event.preventDefault();
+    return true;
+  },
+  click(event, view) {
+    const button = choiceButton(event);
+    if (button === null) return false;
+    event.preventDefault();
+    chooseAddress(view, button.dataset.choice);
+    return true;
+  },
+  // Un tasto che la scelta non prende la chiude col Link, e il fuoco torna
+  // all'editor: il tasto fa il suo lavoro lì, come una battuta.
+  keydown(event, view) {
+    if (event.defaultPrevented || CHOICE_MODIFIERS.has(event.key) || !focusIsInChoice(view)) return false;
+    view.dispatch({ effects: offerAddressChoice.of(null) });
+    view.focus();
+    return false;
+  },
+});
 
 const pasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
     if (view.state.readOnly || view.compositionStarted || !event.clipboardData) return false;
+    // Il testo di un passo tagliato in Fub torna col suo commento
+    // (`comments/copy.ts`); nel codice entra il testo semplice.
+    const carried = carriedMarkdown(event.clipboardData);
+    if (carried !== null && !isStrictlyInsideCode(view.state, view.state.selection.main.from)) {
+      event.preventDefault();
+      view.dispatch(view.state.replaceSelection(carried), { userEvent: "input.paste" });
+      return true;
+    }
+    const cells = pastedCells(view, event.clipboardData);
+    if (cells !== null) {
+      event.preventDefault();
+      const { from, to } = view.state.selection.main;
+      const doc = view.state.doc;
+      // La tabella sta in un blocco suo: una riga vuota la stacca dal testo
+      // che c'è prima o dopo sulla riga.
+      const start = doc.lineAt(from);
+      const end = doc.lineAt(to);
+      const before = doc.sliceString(start.from, from).trim() !== ""
+        ? "\n\n"
+        : from === start.from && start.number > 1 && doc.line(start.number - 1).text.trim() !== "" ? "\n" : "";
+      const after = doc.sliceString(to, end.to).trim() !== ""
+        ? "\n\n"
+        : to === end.to && end.number < doc.lines && doc.line(end.number + 1).text.trim() !== "" ? "\n" : "";
+      const at = from + before.length;
+      const offer = cells.embed === null
+        ? null
+        : { from: at, link: cells.table, url: cells.embed, card: cells.embed, embed: null, cells: true };
+      // Il cursore va in fondo alla tabella: la scelta vale finché resta lì.
+      const insert = textLines(`${before}${cells.table}${after}`);
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: { anchor: at + cells.table.length },
+        userEvent: "input.paste",
+        effects: offerAddressChoice.of(offer),
+        scrollIntoView: true,
+      });
+      return true;
+    }
     const link = linkOverSelection(view, event.clipboardData);
     if (link !== null) {
       event.preventDefault();
       view.dispatch(view.state.replaceSelection(link), { userEvent: "input.paste" });
+      return true;
+    }
+    const address = addressOnBlankLine(view, event.clipboardData);
+    if (address !== null) {
+      event.preventDefault();
+      const { from } = view.state.selection.main;
+      const markdown = linkMarkdown(address, address);
+      // «Scheda» esiste per le pagine web: un mailto è solo un link, senza scelta.
+      const offer = bareUrl(address) === null ? null : { from, link: markdown, url: address, card: address, embed: embedMarkdown(address) };
+      view.dispatch(view.state.replaceSelection(markdown), {
+        userEvent: "input.paste",
+        effects: offerAddressChoice.of(offer),
+      });
       return true;
     }
     // Nel codice l'HTML degli appunti resta il loro testo (C4): convertirlo
@@ -249,8 +496,10 @@ const pasteHandler = EditorView.domEventHandlers({
     if (!view.state.facet(pasteHtml) || isStrictlyInsideCode(view.state, view.state.selection.main.from)) return false;
     const rich = richPaste(event.clipboardData);
     if (rich === null) return false;
+    // Il Markdown convertito va a capo con "\n", quello dichiarato come
+    // capita: entra a righe vere, anche in una nota CRLF (#394).
     const insert = (markdown: string) =>
-      view.dispatch(view.state.replaceSelection(markdown), { userEvent: "input.paste" });
+      view.dispatch(view.state.replaceSelection(textLines(markdown)), { userEvent: "input.paste" });
     if ("markdown" in rich) {
       event.preventDefault();
       insert(rich.markdown);
@@ -303,7 +552,7 @@ export const pastePlainText: Command = (view) => {
   void plainClipboardText().then((text) => {
     // Un editor smontato o diventato di sola lettura nel frattempo non riceve niente.
     if (!text || !view.dom.isConnected || view.state.readOnly) return;
-    view.dispatch(view.state.replaceSelection(text), { userEvent: "input.paste", scrollIntoView: true });
+    view.dispatch(view.state.replaceSelection(textLines(text)), { userEvent: "input.paste", scrollIntoView: true });
   });
   return true;
 };
@@ -314,4 +563,11 @@ const preloadConverter = ViewPlugin.define(() => {
   return {};
 });
 
-export const markdownPaste = [pasteHandler, preloadConverter, keymap.of([{ key: "Mod-Shift-v", run: pastePlainText }])];
+export const markdownPaste = [
+  pasteHandler,
+  addressChoice,
+  addressChoiceGestures,
+  addressChoiceKeys,
+  preloadConverter,
+  keymap.of([{ key: "Mod-Shift-v", run: pastePlainText }]),
+];

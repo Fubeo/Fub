@@ -1,0 +1,56 @@
+[
+  {
+    "pezzo": "calendario.oggi",
+    "proprieta": "color",
+    "motivo": "Il prototipo scrive a mano #fff sul suo accento; Fub scrive sull'accento il suo inchiostro, --accent-contrast, che la ricetta del tema genera col contrasto garantito: di notte l'accento è un verde chiaro, e il bianco del prototipo non si leggerebbe.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--acc → --accent; i colori si prendono dal tema); T17"
+  },
+  {
+    "pezzo": "schede.pdf.pagina",
+    "proprieta": "filter",
+    "motivo": "Di Notte il prototipo abbassa la pagina con filter: brightness(0.9); il vocabolario dei temi (THEME_2_VOCABULARY) non ammette brightness(), e la pelle stende sulla pagina un velo nero al 10% (.canvas-card-pdf::after), che dà lo stesso colore pixel per pixel (0,9 × il colore della pagina). Di Giorno i due valori coincidono (none).",
+    "riferimento": "PLAN.md, T45 «Dal prototipo» (passo 17, .win[data-light=\"notte\"] .pdfp)"
+  },
+  {
+    "pezzo": "esporta.esporta",
+    "proprieta": "color",
+    "motivo": "Il prototipo scrive a mano l'inchiostro del pulsante «Esporta» (#fff di giorno, #06140c di notte) sul suo accento; Fub scrive sull'accento --accent-contrast, che la ricetta del tema genera col contrasto garantito, come per l'oggi del calendario.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--acc → --accent; i colori si prendono dal tema); T70"
+  },
+  {
+    "pezzo": "esporta.viste",
+    "proprieta": "background-color",
+    "motivo": "Il vassoio delle viste nel prototipo è --tray-2 (#eaf0ec di giorno, #1f2922 di notte), un token che la tavolozza di Fub non ha e che la tabella del piano non traduce; Fub usa il vassoio che il piano dà per --tray, cioè --sheet-2, invece di un colore scritto a mano.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--tray → --sheet-2; un token senza equivalente si confronta crudo); T70"
+  },
+  {
+    "pezzo": "esporta.contenuto-scelte",
+    "proprieta": "background-color",
+    "motivo": "Il vassoio delle scelte (`pxSeg`) nel prototipo è --tray-2 (#eaf0ec di giorno, #1f2922 di notte), un token che la tavolozza di Fub non ha e che la tabella del piano non traduce; come il vassoio delle viste (esporta.viste), Fub usa --sheet-2, il vassoio che il piano dà per --tray.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--tray → --sheet-2; un token senza equivalente si confronta crudo); T74"
+  },
+  {
+    "pezzo": "esporta.dg-miniatura",
+    "proprieta": "box-shadow",
+    "motivo": "Nel prototipo la miniatura è .px-paper: il filo attorno è la riga della carta di stampa (--p-rule, #d5ded8) in tutte e due le luci, un colore scritto a mano che la tavolozza di Fub non ha. Fub disegna il filo col filo del pannello (--line-2 → --border-strong), che di notte resta visibile sul pannello scuro; lo spessore (1 px) è lo stesso.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--line-2 → --border-strong; i colori si prendono dal tema); T75"
+  },
+  {
+    "pezzo": "esporta.dg-miniatura-scelta",
+    "proprieta": "box-shadow",
+    "motivo": "Lo stile scelto nel prototipo ha l'anello dell'accento della carta di stampa (--p-acc, #006e46) anche di notte, dove sul pannello scuro si distingue appena; Fub usa l'accento del tema (--acc → --accent), che di notte è il verde chiaro e dice quale stile è scelto con contrasto. Di giorno i due valori coincidono; lo spessore (2 px) è lo stesso.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--acc → --accent); T75"
+  },
+  {
+    "pezzo": "esporta.fronte-scelte",
+    "proprieta": "background-color",
+    "motivo": "Il vassoio di «Fin dove» nel prototipo è --tray-2 (#eaf0ec di giorno, #1f2922 di notte), un token che la tavolozza di Fub non ha e che la tabella del piano non traduce; Fub usa il vassoio che il piano dà per --tray, cioè --sheet-2, come per il vassoio delle viste.",
+    "riferimento": "PLAN.md, «Dal prototipo» (--tray → --sheet-2; un token senza equivalente si confronta crudo); T73"
+  },
+  {
+    "pezzo": "schede.lavagna.zona",
+    "proprieta": "height",
+    "motivo": "Nel prototipo .cvz è alta 300 px sotto la testata (e si stringe a 295 o 279 px nella colonna flessibile); in Fub l'altezza dell'embed (|640x300) è quella di tutta la scheda, testata compresa, per ogni specie (live-cards.css, height: calc(var(--live-card-height) - 35px)): la zona è 265 px, e la nota occupa i 300 px che l'embed scrive.",
+    "riferimento": "PLAN.md, T47 «Dal prototipo» (passo 18, .cvz) e T43 (misura dell'embed, docs/product/live-cards.md «Misura, «Mostra come», affiancare»)"
+  }
+]

@@ -303,12 +303,22 @@ export function split(id: string, dir: "row" | "col", l: Layout = layout): strin
 /// Chiude un riquadro. L'ultimo non si chiude: una finestra senza riquadri non è
 /// uno stato che si possa disegnare, e «chiudi l'ultimo» vorrebbe dire «chiudi
 /// la finestra», che è un altro comando e di un altro modulo.
+///
+/// Chiudere un riquadro chiude le sue schede, e come ogni scheda chiusa vanno
+/// fra quelle che `Mod-Shift-t` riapre (IMP-018): la scheda attiva per ultima,
+/// così il primo ripensamento riporta quella che si stava guardando. Il loro
+/// riquadro non c'è più, quindi tornano in quello col fuoco.
 export function closePane(id: string, l: Layout = layout): boolean {
-  if (!l.panes[id]) return false;
+  const closing = l.panes[id];
+  if (!closing) return false;
   const orderedPanes = panes(l);
   if (orderedPanes.length <= 1) return false;
   const potato = removeNode(l.tree, id);
   if (!potato) return false;
+  closing.tabs.forEach((_, index) => {
+    if (index !== closing.active) rememberClosed(id, index, l);
+  });
+  rememberClosed(id, closing.active, l);
   l.tree = flatten(potato);
   delete l.panes[id];
   if (l.focus === id) l.focus = orderedPanes.find((pane) => pane !== id)!;
@@ -336,15 +346,44 @@ export function openIn(id: string, doc: string, l: Layout = layout): void {
   openTabIn(id, { k: "doc", doc }, l);
 }
 
-/// Mette una **view dichiarata** in un riquadro e la rende attiva (§3.3).
+/// Mette una **view dichiarata** in vista e la rende attiva (§3.3).
 ///
-/// Stessa regola del documento — se c'è già ci si sposta sopra — e per una
-/// ragione più forte: due tab sullo stesso grafo sarebbero due simulazioni che
-/// girano insieme sullo stesso vault, cioè il doppio del lavoro per due disegni
-/// che convergono allo stesso posto. Con `params` la linguetta che c'è già
-/// passa a quegli argomenti; senza, tiene i suoi.
+/// Stessa regola del documento — se c'è già ci si sposta sopra — ma per la
+/// **finestra** e non per il solo riquadro, e per una ragione più forte: due
+/// tab sullo stesso grafo sarebbero due simulazioni che girano insieme sullo
+/// stesso vault, cioè il doppio del lavoro per due disegni che convergono allo
+/// stesso posto. Se la view è già aperta in un altro riquadro il fuoco va lì,
+/// invece di aprirne una seconda in `id` (IMP-114: il pulsante Graph della
+/// rail, dopo una nota aperta dal grafo nel riquadro accanto, apriva un
+/// secondo grafo). Con `params` la linguetta che c'è già passa a quegli
+/// argomenti; senza, tiene i suoi.
 export function openViewIn(id: string, view: string, l: Layout = layout, params?: unknown): void {
-  openTabIn(id, { k: "view", view, ...(params === undefined || params === null ? {} : { params }) }, l);
+  const tab: Tab = { k: "view", view, ...(params === undefined || params === null ? {} : { params }) };
+  openTabIn(paneHolding(tab, id, l) ?? id, tab, l);
+}
+
+/// Il riquadro che tiene già `tab`: `preferred` se ce l'ha, altrimenti il primo
+/// nell'ordine dei riquadri, o `null` se nessuno.
+function paneHolding(tab: Tab, preferred: string, l: Layout): string | null {
+  const holds = (id: string): boolean => l.panes[id]?.tabs.some((each) => sameTab(each, tab)) ?? false;
+  if (holds(preferred)) return preferred;
+  return panes(l).find(holds) ?? null;
+}
+
+/// Il riquadro **diverso da `id`** che tiene già la view `tab`, o `null`: un
+/// documento, o una view che `id` ha già o che nessuno ha. Indietro, Avanti e
+/// la riapertura di una scheda chiusa non passano da `openViewIn`, e senza
+/// questa domanda rimettevano in `id` una view che intanto era andata in un
+/// altro riquadro: il secondo grafo di IMP-114 per un'altra strada.
+function viewHeldElsewhere(tab: Tab, id: string, l: Layout): string | null {
+  if (tab.k !== "view") return null;
+  const holder = paneHolding(tab, id, l);
+  return holder !== null && holder !== id ? holder : null;
+}
+
+/// Porta il fuoco sulla linguetta `tab` del riquadro `holder`, che la tiene.
+function showHeld(holder: string, tab: Tab, l: Layout): void {
+  activateTab(holder, l.panes[holder]!.tabs.findIndex((each) => sameTab(each, tab)), l);
 }
 
 function openTabIn(id: string, tab: Tab, l: Layout): void {
@@ -612,13 +651,20 @@ function rememberClosed(id: string, index: number, l: Layout): void {
 }
 
 /// Riapre l'ultima tab chiusa nel suo riquadro (o in quello col fuoco, se il
-/// suo non c'è più), al suo posto. `false` se non c'è niente da riaprire.
+/// suo non c'è più), al suo posto. `false` se non c'è niente da riaprire. Una
+/// view che intanto si è aperta in un altro riquadro non si raddoppia: il
+/// fuoco va lì, come con `openViewIn`.
 export function reopenClosedTab(l: Layout = layout): boolean {
   const closed = closedTabs.pop();
   if (!closed) return false;
   const id = l.panes[closed.pane] ? closed.pane : l.focus;
   const p = l.panes[id];
   if (!p) return false;
+  const holder = viewHeldElsewhere(closed.tab, id, l);
+  if (holder) {
+    showHeld(holder, closed.tab, l);
+    return true;
+  }
   const already = p.tabs.findIndex((tab) => sameTab(tab, closed.tab));
   if (already >= 0) {
     activateTab(id, already, l);
@@ -731,12 +777,19 @@ export function activateTab(id: string, index: number, l: Layout = layout): void
 
 /// Torna indietro nella cronologia del riquadro (P06/F21): la tab attiva va
 /// nel futuro, e si mostra l'ultima del passato. Torna `false` se non c'è
-/// un passato — niente da fare, niente scritto.
+/// un passato — niente da fare, niente scritto. Se l'ultima del passato è una
+/// view che intanto sta in un altro riquadro, il passo si consuma e il fuoco
+/// va lì: una view si apre una volta per finestra (`openViewIn`).
 export function goBack(id: string, l: Layout = layout): boolean {
   const p = l.panes[id];
   if (!p || !p.history || p.history.past.length === 0) return false;
   const current = p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null;
   const prev = p.history.past.pop()!;
+  const holder = viewHeldElsewhere(prev, id, l);
+  if (holder) {
+    showHeld(holder, prev, l);
+    return true;
+  }
   if (current) p.history.future.push(current);
   const at = p.tabs.findIndex((t) => sameTab(t, prev));
   if (at >= 0) {
@@ -750,13 +803,19 @@ export function goBack(id: string, l: Layout = layout): boolean {
   return true;
 }
 
-/// Va avanti nella cronologia del riquadro (P06/F21): speculare a `goBack`.
-/// Torna `false` se non c'è un futuro.
+/// Va avanti nella cronologia del riquadro (P06/F21): speculare a `goBack`,
+/// anche per una view che intanto sta in un altro riquadro. Torna `false` se
+/// non c'è un futuro.
 export function goForward(id: string, l: Layout = layout): boolean {
   const p = l.panes[id];
   if (!p || !p.history || p.history.future.length === 0) return false;
   const current = p.active >= 0 && p.active < p.tabs.length ? p.tabs[p.active]! : null;
   const next = p.history.future.pop()!;
+  const holder = viewHeldElsewhere(next, id, l);
+  if (holder) {
+    showHeld(holder, next, l);
+    return true;
+  }
   if (current) {
     if (!p.history) p.history = { past: [], future: [] };
     p.history.past.push(current);
@@ -1022,7 +1081,46 @@ export function parseLayout(v: unknown): Layout | null {
   if (Object.keys(panes).length !== ids.size) return null;
   const focus = typeof o.focus === "string" && ids.has(o.focus) ? o.focus : null;
   if (!focus) return null;
-  return { tree, panes, focus };
+  const l: Layout = { tree, panes, focus };
+  dropRepeatedViews(l);
+  return l;
+}
+
+/// Toglie le copie di una view già aperta in un riquadro prima (IMP-114).
+///
+/// Una view si apre una volta per finestra (`openViewIn`), ma le versioni di
+/// prima aprivano un secondo grafo accanto al primo e lo ricordavano: quel
+/// layout è già sul disco di chi usa Fub. Si legge senza il doppione invece di
+/// rifiutarlo — rifiutarlo costerebbe tutte le altre linguette — e resta la
+/// copia del primo riquadro nell'ordine. Fa eccezione la copia in un riquadro
+/// **collegato** a quello che tiene la prima: lì il doppione è lo specchio che
+/// il collegamento chiede (`propagateToLinked`), non un errore.
+function dropRepeatedViews(l: Layout): void {
+  const holders = new Map<string, string | null>();
+  for (const id of panes(l)) {
+    const p = l.panes[id]!;
+    const link = p.link ?? null;
+    const before = p.tabs;
+    const front = p.active >= 0 ? before[p.active] : undefined;
+    const kept = before.filter((tab) => {
+      if (tab.k !== "view") return true;
+      if (!holders.has(tab.view)) {
+        holders.set(tab.view, link);
+        return true;
+      }
+      return link !== null && link === holders.get(tab.view);
+    });
+    if (kept.length === before.length) continue;
+    p.tabs = kept;
+    if (front && kept.includes(front)) {
+      p.active = kept.indexOf(front);
+    } else {
+      // Il doppione era davanti: ci va la linguetta che gli stava prima, come
+      // quando lo si chiude, o la prima se prima non c'era niente.
+      const earlier = before.slice(0, Math.max(p.active, 0)).filter((tab) => kept.includes(tab)).length;
+      p.active = kept.length === 0 ? -1 : Math.min(Math.max(earlier - 1, 0), kept.length - 1);
+    }
+  }
 }
 
 function parseNode(v: unknown): LayoutNode | null {

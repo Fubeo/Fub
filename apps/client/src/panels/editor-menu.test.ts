@@ -108,10 +108,59 @@ describe("il compositore del menu dell'editor", () => {
       clipboard: { offers: { cut: false, copy: false, paste: true, "paste-plain": true }, run: () => {} },
     }, host);
     expect(first.clipboard).toEqual([]);
-    expect(groupsOf(first.items)).toEqual([["Incolla", "Incolla senza formattazione"], ["Inserisci un blocco…"]]);
+    // «Incolla senza formattazione» non ruba un posto: si trova scrivendo.
+    expect(groupsOf(first.items)).toEqual([["Incolla"], ["Inserisci un blocco…"]]);
+    expect(labels(first.searchable)).toContain("Incolla senza formattazione");
     expect(first.header?.kind).toBe("Paragrafo");
-    // Le icone stanno nella testata e nella riga degli appunti, non sulle voci.
-    expect(first.items.filter((item) => item.icon !== undefined)).toEqual([]);
+    // Come nel prototipo, ogni voce ha la sua figura: anche «Incolla».
+    expect(first.items.find((item) => item.label === "Incolla")?.icon).toBeDefined();
+  });
+
+  it("«Copia come ▸» chiude il primo gruppo del posto, dopo «Collega a una nota…», come nel prototipo", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const menu = composeEditorMenu({
+      target: { kind: "selection", name: "3 parole" },
+      context: [
+        { id: "link", label: "Collega a una nota…", run: () => {} },
+        MENU_RULE,
+        { id: "extract", label: "Estrai in una nota nuova", run: () => {} },
+      ],
+      clipboard: {
+        offers: { cut: true, copy: true, paste: true },
+        copyAs: [{ id: "md", label: "Markdown", run: () => {} }],
+        run: () => {},
+      },
+    }, host);
+    expect(groupsOf(menu.items)).toEqual([["Collega a una nota…", "Copia come"], ["Estrai in una nota nuova"]]);
+    expect(menu.items.find((item) => item.label === "Copia come")?.icon).toBe("copy");
+  });
+
+  it("la formula ha la stessa «Copia come ▸» del testo, dopo «Modifica», coi segni delle sue scelte", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const menu = composeEditorMenu({
+      target: { kind: "block", label: "Formula", name: "a+b" },
+      context: [
+        { id: "edit", label: "Modifica", icon: "pen", run: () => {} },
+        MENU_RULE,
+        { id: "place", label: "Da riga a blocco", run: () => {} },
+      ],
+      clipboard: {
+        offers: {},
+        copyAs: [
+          { id: "latex", label: "LaTeX", icon: "copy-latex", run: () => {} },
+          { id: "image", label: "immagine", icon: "copy-image", run: () => {} },
+          { id: "equation", label: "equazione", icon: "copy-equation", run: () => {} },
+        ],
+        run: () => {},
+      },
+    }, host);
+    expect(menu.clipboard, "nessun gesto degli appunti in riga").toEqual([]);
+    expect(groupsOf(menu.items)).toEqual([["Modifica", "Copia come"], ["Da riga a blocco"]]);
+    const copyAs = menu.items.find((item) => item.label === "Copia come")!;
+    expect(copyAs.icon).toBe("copy");
+    expect((copyAs.items as readonly { label: string; icon?: string }[]).map((item) => [item.label, item.icon])).toEqual([
+      ["LaTeX", "copy-latex"], ["immagine", "copy-image"], ["equazione", "copy-equation"],
+    ]);
   });
 
   it("la testata prende l'icona che la superficie dà, o quella del tipo", () => {
@@ -175,6 +224,19 @@ describe("il compositore del menu dell'editor", () => {
     expect(level.map((item) => [item.label, item.choice, item.checked])).toEqual([["Titolo 2", "radio", true], ["Titolo 3", "radio", false]]);
     level[1]!.run!();
     expect(surface.editorActions!.run).toHaveBeenCalledWith("markdown.heading.3");
+  });
+
+  it("il pallino di una voce colore arriva al menu (T47)", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const { items } = composeEditorMenu({
+      target: { kind: "node" },
+      context: [
+        { id: "red", label: "Rosso", radio: true, checked: true, swatches: ["#b7191c"], run: () => {} },
+        { id: "plain", label: "Senza", run: () => {} },
+      ],
+    }, host);
+    expect(items[0]).toMatchObject({ label: "Rosso", choice: "radio", checked: true, swatches: ["#b7191c"] });
+    expect(items[1]!.swatches).toBeUndefined();
   });
 
   it("un sottomenu senza voci risolte sparisce, e i comandi del vault si eseguono per la via del «/»", () => {

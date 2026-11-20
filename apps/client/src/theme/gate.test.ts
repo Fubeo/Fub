@@ -28,7 +28,10 @@ import benchSheet from "../../theme/author/sample/sheet-light.css?raw";
 import benchSkin from "../../theme/author/sample/skin.css?raw";
 import {
   count,
+  declareThemeProfile,
+  mountedCss,
   mountThemeBundle,
+  themeProfile,
   validateThemeBundle,
   type ThemeBundleManifest,
   type ThemeMountResult,
@@ -43,6 +46,7 @@ function bundle(sheet: string, skinText?: string) {
 
 beforeEach(() => {
   document.head.innerHTML = "";
+  document.adoptedStyleSheets = [];
 });
 
 describe("il cancello monta solo ciò che è valido", () => {
@@ -53,7 +57,7 @@ describe("il cancello monta solo ciò che è valido", () => {
     );
 
     expect(result.mounted).toBe(true);
-    expect(document.head.querySelector('style[data-fub="foglio"]')?.textContent).toBe(benchSheet);
+    expect(mountedCss("foglio")).toBe(benchSheet);
   });
 
   it("un tema valido monta foglio e pelle in una sola commit", () => {
@@ -62,8 +66,8 @@ describe("il cancello monta solo ciò che è valido", () => {
     expect(result.mounted).toBe(true);
     expect(count("foglio")).toBe(1);
     expect(count("pelle")).toBe(1);
-    expect(document.head.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
-    expect(document.head.querySelector('style[data-fub="pelle"]')?.textContent).toBe(skin);
+    expect(mountedCss("foglio")).toBe(sheetLight);
+    expect(mountedCss("pelle")).toBe(skin);
   });
 
   it("due mount consecutivi lasciano un solo foglio e una sola pelle", () => {
@@ -77,7 +81,7 @@ describe("il cancello monta solo ciò che è valido", () => {
 
     expect(count("foglio"), "il secondo mount sostituisce, non accatasta").toBe(1);
     expect(count("pelle")).toBe(1);
-    expect(document.head.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetDark);
+    expect(mountedCss("foglio")).toBe(sheetDark);
   });
 
   it("la serie passa dal validatore in tutte e quattro le varianti", () => {
@@ -92,6 +96,22 @@ describe("il cancello monta solo ciò che è valido", () => {
       const reasons = validateThemeBundle(bundle(sheet, skin), light);
       expect(reasons, `${light} deve passare il cancello senza motivi`).toEqual([]);
     }
+  });
+
+  it("la stessa pelle ricontrollata vale per il profilo in vigore, non per quello di prima", () => {
+    // Il controllo di una pelle si ricorda (la serie è lunga), ma soltanto a
+    // parità di testo, profilo e spazio degli asset.
+    expect(validateThemeBundle(bundle(sheetLight, skin), "light")).toEqual([]);
+    const restore = declareThemeProfile({ ...themeProfile(), hooks: themeProfile().hooks.filter((hook) => hook !== "context-menu") });
+    try {
+      const reasons = validateThemeBundle(bundle(sheetLight, skin), "light");
+      expect(reasons.some((reason) => reason.startsWith("pelle:") && reason.includes(".context-menu")), reasons.join("\n")).toBe(true);
+    } finally {
+      restore();
+    }
+    expect(validateThemeBundle(bundle(sheetLight, skin), "light")).toEqual([]);
+    // Un'altra stringa con lo stesso testo prende lo stesso esito.
+    expect(validateThemeBundle(bundle(sheetLight, `${skin} `.trimEnd()), "light")).toEqual([]);
   });
 });
 
@@ -138,7 +158,7 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
     expect(result.mounted).toBe(false);
     expect(troubles[0].reasons.join("\n")).toContain("pelle: content-look");
     expect(troubles[0].reasons.join("\n")).toContain(".look-tema .rich-heading");
-    expect(document.head.querySelector('style[data-fub="pelle"]')).toBeNull();
+    expect(mountedCss("pelle")).toBeNull();
   });
 
   it("una pelle che veste le celle del foglio di calcolo rifiuta, e il tema precedente resta", () => {
@@ -150,7 +170,7 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
     expect(result.mounted).toBe(false);
     expect(troubles[0].reasons.join("\n")).toContain("pelle: content-look");
     expect(troubles[0].reasons.join("\n")).toContain(".look-tema .grid-cell");
-    expect(document.head.querySelector('style[data-fub="pelle"]')).toBeNull();
+    expect(mountedCss("pelle")).toBeNull();
   });
 
   it("un contrasto caduto sotto la soglia AA rifiuta nominando la coppia", () => {
@@ -177,8 +197,8 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
     expect(second.mounted).toBe(false);
     expect(count("foglio")).toBe(1);
     expect(count("pelle")).toBe(1);
-    expect(document.head.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
-    expect(document.head.querySelector('style[data-fub="pelle"]')?.textContent).toBe(skin);
+    expect(mountedCss("foglio")).toBe(sheetLight);
+    expect(mountedCss("pelle")).toBe(skin);
   });
 
   it("un rifiuto è un Trouble via notify, e non un console.warn", () => {
@@ -214,7 +234,7 @@ describe("il cancello trasporta davvero gli asset e legge il moto dichiarato", (
     );
 
     expect(result.mounted).toBe(true);
-    const mounted = document.head.querySelector('style[data-fub="pelle"]')?.textContent ?? "";
+    const mounted = mountedCss("pelle") ?? "";
     expect(mounted).toContain("data:image/png;base64,AQID");
     expect(mounted).toContain(`content: "url(${asset})"`);
     expect(mounted).toContain(`/* url("${asset}") */`);
@@ -245,7 +265,7 @@ describe("il cancello trasporta davvero gli asset e legge il moto dichiarato", (
     );
 
     expect(result.mounted).toBe(true);
-    const mounted = document.head.querySelector('style[data-fub="pelle"]')?.textContent ?? "";
+    const mounted = mountedCss("pelle") ?? "";
     expect(mounted).toContain(
       `background-image: image-set( "data:image/svg+xml;base64,AQID" 1x, u\\72 l( "data:image/png;base64,BAUG" ) 2x);`,
     );
@@ -253,6 +273,16 @@ describe("il cancello trasporta davvero gli asset e legge il moto dichiarato", (
     expect(mounted).toContain(`/* image-set("${quoted}" 1x) */`);
   });
 
+
+  it("la pelle vuota rifiuta chi non eredita, non chi eredita dalla serie", () => {
+    // Per un tema con `extends` la pelle assente è il caso normale: lo veste
+    // la serie, che resta montata sotto di lui (ADR 0240).
+    expect(validateThemeBundle(bundle(sheetLight, " "), "light")).toContain("fascio: pelle vuota");
+    const inheriting = { ...SERIES_MANIFEST, id: "acme.carta", asset_namespace: "theme://acme.carta/", extends: "fub.serie" };
+    expect(
+      validateThemeBundle({ ...bundle(sheetLight, " "), manifest: inheriting, inherited: { skin } }, "light"),
+    ).toEqual([]);
+  });
 
   it("rifiuta un moto malformato invece di inventarlo", () => {
     const manifest = { ...SERIES_MANIFEST, motion: ["opacity", "filter"] };

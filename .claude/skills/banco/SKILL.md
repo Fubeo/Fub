@@ -21,6 +21,11 @@ file in `src/` knows the bench exists, so keep it that way.
   `fault(port, reason)`, `throttle(port)` and `calls`, for error, pending and
   event states. The fake `setSetting` writes the value before a `fault` rejects
   the call.
+- `window.bench.writeFromOutside(id, text)` is another app writing the file:
+  the bytes change and the event comes with the watcher origin. Use it, not
+  `emit`, for an outside change: an emitted event has the shell-write origin,
+  and since the fake sends no echoes the shell takes it for the echo of its
+  own save and says nothing.
 - Output goes to `bench/.output/`: `attuale/` (latest photos), `differenze/`
   (diffs), `foglio-di-contatto.html` (contact sheet) and
   `accessibilita/accessibilita.json` (a11y `failures` and `incompletes` per
@@ -29,6 +34,17 @@ file in `src/` knows the bench exists, so keep it that way.
   and Enter can't accept a completion: pass `{ clock: false }` for that.
 - Don't edit files under `apps/client` while a bench runs: Vite reloads the
   page and the bench dies.
+- The bench serves the app's real CSP (from `crates/fub-app/tauri.conf.json`,
+  with a page nonce like Tauri's): no inline styles, no `eval`. `prepareScene`
+  fails on any `securitypolicyviolation` on an element of the page
+  (`window.__fubCsp` keeps them all). Pass Playwright predicates as functions,
+  not strings: a string predicate runs through `eval` and is refused. Add
+  probe CSS with a constructed sheet (`document.adoptedStyleSheets`), not
+  `addStyleTag`.
+- A UI ported from a plan prototype is also checked by numbers:
+  `npm run bench:conformita` compares computed styles with the prototype's,
+  piece by piece, through the map in `bench/conformita/` (how to add pieces and
+  regenerate the expected values: `docs/development/visual-bench.md`).
 
 Probes:
 

@@ -9,13 +9,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { KernelEvent, KernelNotice } from "../host/contract";
 import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
-import { apply, exportArtifacts, exportNotes, mountActivity, noticeOf, labelOf, remember, PAST_LIMIT, type JobRow, type Past } from "./activity";
+import { apply, exportArtifacts, exportNotes, mountActivity, nameJob, noticeOf, labelOf, queuedJob, remember, PAST_LIMIT, type JobRow, type Past } from "./activity";
 import { api } from "../host/ipc";
 import { state } from "../state/store";
 import samples from "../__fixtures__/mirror-samples.json";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { clearHistory, recentNotices } from "../ui/notify";
 import { t } from "../i18n/strings";
+import centres from "../theme/scrittoio/skin/centres.css?raw";
 
 function notice(event: KernelEvent): KernelNotice {
   return { event, origin: { actor: { kind: "kernel" }, batch: null } };
@@ -97,7 +98,7 @@ describe("l'esito di un lavoro lungo", () => {
     const noticeResult = noticeOf(
       notice({ type: "job_done", id: "7", job: "export", result: { Ok: null } }),
     );
-    expect(noticeResult).toEqual({ text: "«export» è finito.", tone: "info" });
+    expect(noticeResult).toMatchObject({ text: "export: finito.", tone: "info" });
   });
 
   it("nomina il lavoro con ciò che ha detto di sé, non col suo entry point", () => {
@@ -106,7 +107,7 @@ describe("l'esito di un lavoro lungo", () => {
       notice({ type: "job_done", id: "7", job: "export", result: { Ok: null } }),
       rows,
     );
-    expect(noticeResult?.text).toBe("«Esporta «Diario» in PDF» è finito.");
+    expect(noticeResult?.text).toBe("Esporta «Diario» in PDF: finito.");
   });
 
   it("quando fallisce dice **perché**, e con un altro tono", () => {
@@ -129,9 +130,91 @@ describe("l'esito di un lavoro lungo", () => {
     expect(noticeResult?.text).toContain("Cancelled");
   });
 
+  // IMP-130: una chiave che nessuno ha risolto si leggeva come la sigla
+  // «bad_args». Il motivo lo risolve il kernel; se una chiave scappa lo
+  // stesso, resta la frase della specie, mai la sigla né la chiave.
+  it("un errore con una chiave non risolta dice la sua specie a parole", () => {
+    const noticeResult = noticeOf(notice({
+      type: "job_done", id: "7", job: "export",
+      result: { Err: { kind: "bad_args", message: { key: "e_annotated_pdf_missing", args: [] } } },
+    }));
+    expect(noticeResult?.tone).toBe("guasto");
+    expect(noticeResult?.text).toBe(`export: non riuscito. ${t("error.kind.bad_args")}`);
+    expect(noticeResult?.text).not.toContain("bad_args");
+    const empty = noticeOf(notice({
+      type: "job_done", id: "7", job: "export", result: { Err: { kind: "bad_args", message: " " } },
+    }));
+    expect(empty?.text).toBe(`export: non riuscito. ${t("error.kind.bad_args")}`);
+  });
+
   it("gli altri eventi non sono avvisi", () => {
     expect(noticeOf(STARTED)).toBeNull();
     expect(noticeOf(step("7", 1))).toBeNull();
+  });
+});
+
+// Il job dei trasferimenti non sa in che lingua parla chi guarda: la sigla
+// «import.transfer» e la frase «export» arrivavano così al centro attività.
+describe("il nome di un lavoro di import o export", () => {
+  const PANEL = `
+    <button id="activity-button"></button>
+    <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+  `;
+  const queued = (id: string) => ({
+    notify: "export.run queued", undo: null, partial: null,
+    effect: { kind: "custom", ns: "fub.transfer.queued", payload: { job_id: id, op: "export" } },
+  }) as Parameters<typeof queuedJob>[0];
+  const labels = () => [...document.querySelectorAll<HTMLElement>("#activity-list .activity-label")].map((el) => el.textContent);
+
+  it("senza un nome dato, è quello del job nella lingua dell'interfaccia, mai la sigla", () => {
+    const row: JobRow = { id: "9", job: ARTIFACT_JOB, progress: { done: 0, total: 2, label: "export" } };
+    expect(labelOf(row)).toBe(t("activity.job.transfer"));
+    expect(labelOf(row)).toBe("Importazione o esportazione");
+    const done = noticeOf(notice({ type: "job_done", id: "9", job: ARTIFACT_JOB, result: { Ok: null } }));
+    expect(done?.text).toBe("Importazione o esportazione: finito.");
+    expect(done?.text).not.toContain(ARTIFACT_JOB);
+  });
+
+  it("col nome che gli dà chi l'ha chiesto, nella riga, nel suggerimento e nell'esito", () => {
+    document.body.innerHTML = PANEL;
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      document.getElementById("activity-button")!.click();
+      forwardNotice(notice({ type: "job_started", id: "11", job: ARTIFACT_JOB }));
+      forwardNotice(notice({ type: "job_progress", id: "11", progress: { done: 0, total: 2, label: null } }));
+      expect(labels()).toEqual(["Importazione o esportazione"]);
+      expect(queuedJob(queued("11"))).toBe("11");
+      nameJob("11", () => t("activity.job.export", { doc: "Rossi", what: "PDF" }));
+      expect(labels()).toEqual(["Esportazione di «Rossi» come PDF"]);
+      const label = document.querySelector<HTMLElement>("#activity-list .activity-label")!;
+      expect(label.outerHTML).not.toContain(ARTIFACT_JOB);
+      forwardNotice(notice({ type: "job_done", id: "11", job: ARTIFACT_JOB, result: { Ok: null } }));
+      expect(labels()).toEqual(["Esportazione di «Rossi» come PDF: finito."]);
+      expect(recentNotices().some((item) => item.text === "Esportazione di «Rossi» come PDF: finito.")).toBe(true);
+    } finally {
+      lifetime.close();
+    }
+  });
+
+  it("un nome che arriva dopo l'esito ridice l'esito ricordato", () => {
+    document.body.innerHTML = PANEL;
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      document.getElementById("activity-button")!.click();
+      forwardNotice(notice({
+        type: "job_done", id: "12", job: ARTIFACT_JOB,
+        result: { Err: { kind: "bad_args", message: "Il PDF «a.pdf» non è nel vault." } },
+      }));
+      expect(labels()).toEqual(["Importazione o esportazione: non riuscito. Il PDF «a.pdf» non è nel vault."]);
+      nameJob("12", () => t("activity.job.import", { name: "Diario.enex" }));
+      expect(labels()).toEqual(["Importazione di «Diario.enex»: non riuscito. Il PDF «a.pdf» non è nel vault."]);
+    } finally {
+      lifetime.close();
+    }
   });
 });
 
@@ -202,6 +285,69 @@ describe("lo storico del centro attività", () => {
       expect(rows[0]!.textContent).toContain("Disco pieno");
     } finally {
       lifetime.close();
+    }
+  });
+});
+
+describe("la lista dopo una riconciliazione fallita (#237 R05)", () => {
+  const PANEL = `
+    <button id="activity-button"></button>
+    <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+  `;
+  const FAILURE = { kind: "io", message: "Vault non raggiungibile" };
+  const staleText = () => t("activity.stale", { reason: FAILURE.message });
+  const listText = () => document.getElementById("activity-list")!.textContent ?? "";
+  const retryButton = () =>
+    [...document.querySelectorAll<HTMLButtonElement>("#activity-list button")]
+      .find((button) => button.textContent === t("activity.retry"));
+
+  it("senza una lista buona non dice «nessun lavoro»: dice che non lo sa", async () => {
+    document.body.innerHTML = PANEL;
+    const query = vi.spyOn(api, "queryIndex").mockRejectedValue(FAILURE);
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      // Il vault di un test prima non lascia lavori: si parte da una lista vuota.
+      forwardNotice(notice({ type: "vault_closed", root: "/vecchio" }));
+      document.getElementById("activity-button")!.click();
+      await vi.waitFor(() => expect(listText()).toContain(staleText()));
+      expect(listText()).not.toContain(t("activity.none"));
+      expect(retryButton()).toBeDefined();
+    } finally {
+      lifetime.close();
+      query.mockRestore();
+    }
+  });
+
+  it("tiene la lista di prima, lo dice, e Riprova la richiede", async () => {
+    document.body.innerHTML = PANEL;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({
+      kind: "jobs",
+      value: [{ id: "7", job: "export", progress: null }],
+    } as never);
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      forwardNotice(notice({ type: "vault_closed", root: "/vecchio" }));
+      document.getElementById("activity-button")!.click();
+      await vi.waitFor(() => expect(document.querySelectorAll("#activity-list .activity-row")).toHaveLength(1));
+
+      // Un overflow chiede di riconciliare, e la domanda fallisce.
+      query.mockRejectedValue(FAILURE);
+      forwardNotice(notice({ type: "overflow", dropped: 3 }));
+      await vi.waitFor(() => expect(listText()).toContain(staleText()));
+      expect(document.querySelectorAll("#activity-list .activity-row")).toHaveLength(1);
+      expect(listText()).toContain("export");
+
+      // Riprova: la domanda va, e lo stato «non aggiornato» se ne va con lei.
+      query.mockResolvedValue({ kind: "jobs", value: [] } as never);
+      retryButton()!.click();
+      await vi.waitFor(() => expect(listText()).not.toContain(staleText()));
+      expect(document.querySelectorAll("#activity-list .activity-row")).toHaveLength(0);
+      expect(listText()).toContain(t("activity.none"));
+    } finally {
+      lifetime.close();
+      query.mockRestore();
     }
   });
 });
@@ -325,7 +471,63 @@ describe("export artifacts from completed transfer jobs", () => {
     print.mockRestore();
     query.mockRestore();
   });
+
+  // IMP-129: «Salva…» e «Stampa…» erano due figli della riga nello stesso
+  // posto della griglia (la colonna dell'azione), uno sopra l'altro, e il
+  // clic su «Salva…» arrivava a «Stampa…». Ora stanno in un gruppo in fila,
+  // che occupa da solo il posto delle azioni.
+  it("keeps Save and Print side by side in one group, each doing its own action", async () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const save = vi.spyOn(api, "saveArtifact").mockResolvedValue({ status: "cancelled" });
+    const print = vi.spyOn(api, "printArtifact").mockResolvedValue({ status: "opened" });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(complete({
+      path: "atti/Lungo (annotated).pdf", media_type: "application/pdf",
+      content: { kind: "bytes", value: [37, 80, 68, 70] },
+    }));
+    document.getElementById("activity-button")!.click();
+    const row = document.querySelector<HTMLElement>("#activity-list > .activity-row")!;
+    expect(row.querySelectorAll(":scope > .link-button"), "nessun pulsante nel posto dell'azione dei lavori").toHaveLength(0);
+    const group = row.querySelector<HTMLElement>(":scope > .activity-actions")!;
+    expect([...group.children].map((child) => child.textContent)).toEqual(["Salva…", "Stampa…"]);
+    (group.children[0] as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(print, "il clic su «Salva…» non stampa").not.toHaveBeenCalled();
+    lifetime.close();
+    save.mockRestore();
+    print.mockRestore();
+    query.mockRestore();
+  });
+
+  it("the skin gives the group the whole place of the actions, in a row", () => {
+    const actions = declarations(centres, ".activity-actions");
+    expect(actions["grid-column"]).toBe("2 / -1");
+    expect(actions["grid-row"]).toBe("1");
+    expect(actions.display).toBe("flex");
+    // Il posto dell'azione dei lavori in corso resta uno: chi ci mettesse due
+    // pulsanti li rimetterebbe uno sopra l'altro.
+    expect(declarations(centres, ".activity-row > .link-button")["grid-column"]).toBe("3");
+  });
 });
+
+/// Le dichiarazioni della regola il cui selettore è esattamente `selector`.
+function declarations(css: string, selector: string): Record<string, string> {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const out: Record<string, string> = {};
+  for (const rule of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!rule[1]!.split(",").some((each) => each.trim() === selector)) continue;
+    for (const line of rule[2]!.split(";")) {
+      const [name, ...value] = line.split(":");
+      if (name && value.length > 0) out[name.trim()] = value.join(":").trim();
+    }
+  }
+  return out;
+}
 
 describe("the notes of an export report", () => {
   const PNG = { path: "casa.png", media_type: "image/png", content: { kind: "bytes", value: [1] } };

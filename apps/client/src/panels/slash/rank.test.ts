@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { editDistanceAtMost1, fold, initials, rank, type RankContext } from "./rank";
+import { byUse, editDistanceAtMost1, fold, initials, rank, type RankContext } from "./rank";
 
 const NONE: RankContext = { recency: () => 0, fits: () => 0 };
 const entry = (label: string, aliases: readonly string[] = []) => ({ id: label, label, aliases });
@@ -21,6 +21,12 @@ describe("la classifica del «/»", () => {
   it("le iniziali, senza le parole piccole: «ea» è Elenco di attività", () => {
     expect(initials("Elenco di attività")).toBe("ea");
     expect(rank(entry("Elenco di attività"), "ea", NONE)).toMatchObject({ score: 1.5, why: "iniziali" });
+  });
+
+  it("più parole: ognuna è l'inizio di una parola del nome o dei sinonimi", () => {
+    const task = entry("Elenco di attività", ["todo", "da", "fare"]);
+    expect(rank(task, "da fare", NONE)).toEqual({ score: 2.5, span: null });
+    expect(rank(task, "elenco tabella", NONE)).toBeNull();
   });
 
   it("da tre lettere anche dentro le parole, da quattro un errore di battitura", () => {
@@ -50,5 +56,25 @@ describe("la classifica del «/»", () => {
     expect(editDistanceAtMost1("tabella", "tabelta")).toBe(true);
     expect(editDistanceAtMost1("tabella", "tablela")).toBe(true);
     expect(editDistanceAtMost1("tabella", "tbela")).toBe(false);
+  });
+});
+
+describe("i più usati, per le tessere del «/»", () => {
+  const offered = new Set(["task", "h2", "callout", "table", "bullet", "code", "quote"]);
+  const defaults = ["task", "h2", "callout", "table", "bullet", "code"];
+
+  it("in un vault nuovo vale l'ordine scritto", () => {
+    expect(byUse(offered, { favorites: [], recent: [] }, defaults, 6)).toEqual(["task", "h2", "callout", "table", "bullet", "code"]);
+  });
+
+  it("l'uso viene prima: i preferiti, poi i recenti dal più recente, poi l'ordine scritto, senza doppioni", () => {
+    expect(byUse(offered, { favorites: ["quote"], recent: ["table", "code", "quote"] }, defaults, 6))
+      .toEqual(["quote", "table", "code", "task", "h2", "callout"]);
+  });
+
+  it("una voce che non c'è (nascosta, o che la superficie non sa fare) lascia il posto alla seguente", () => {
+    const less = new Set([...offered].filter((id) => id !== "callout"));
+    expect(byUse(less, { favorites: [], recent: ["nota.giornaliera", "callout"] }, defaults, 6)).toEqual(["task", "h2", "table", "bullet", "code"]);
+    expect(byUse(new Set(), { favorites: [], recent: [] }, defaults, 6)).toEqual([]);
   });
 });

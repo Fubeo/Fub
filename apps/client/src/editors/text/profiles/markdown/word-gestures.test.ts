@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorSelection, EditorState, type StateCommand, type Transaction } from "@codemirror/state";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import { emptyPairsExtension } from "./empty-pair";
+import { parsed } from "./test-support";
 
 // I gesti di formato «come in Word» (H11): `|` è il cursore, `‹…›` la
 // selezione.
@@ -15,13 +15,11 @@ function mk(spec: string, live = false): EditorState {
   const selection = open !== -1
     ? EditorSelection.single(open, spec.replace("‹", "").indexOf("›"))
     : EditorSelection.single(spec.indexOf("|"));
-  const state = EditorState.create({
+  return parsed(EditorState.create({
     doc: open !== -1 ? stripped : spec.replace("|", ""),
     selection,
     extensions: [markdown({ base: markdownGrammar }), live ? emptyPairsExtension() : []],
-  });
-  ensureSyntaxTree(state, state.doc.length, 1000);
-  return state;
+  }));
 }
 
 function show(state: EditorState): string {

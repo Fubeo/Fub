@@ -124,10 +124,11 @@ h6.ui-heading {
 
 /* ── Sezioni ─────────────────────────────────────────────────────────────── */
 
-/* L'intestazione di una sezione è un'etichetta di cassetto: maiuscoletto
-   piccolo in grafite, che nomina senza pesare. Il triangolo è disegnato —
-   quello del sistema cambia forma da una macchina all'altra — ed è lo stesso
-   dell'albero dei file. */
+/* L'intestazione di una sezione è in tondo: «In entrata · 2», «In uscita ·
+   2», «Menzioni non collegate · 1». Il nome si scrive come si scrive, in
+   grafite, e il conto lo segue. Il triangolo è disegnato — quello del sistema
+   cambia forma da una macchina all'altra — ed è lo stesso dell'albero dei
+   file. */
 .ui-section {
   margin: 0;
 }
@@ -139,11 +140,11 @@ h6.ui-heading {
   padding: 0 var(--space-4);
   border-radius: var(--radius-control);
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
   line-height: var(--leading-tight);
-  text-transform: uppercase;
+  text-transform: none;
   list-style: none;
   cursor: pointer;
 }
@@ -186,8 +187,8 @@ h6.ui-heading {
 
 /* ── Righe: elenchi e alberi ─────────────────────────────────────────────── */
 
-/* Una voce di elenco è una riga di cassetto. L'altezza minima è scritta dal
-   nodo (un bersaglio); qui c'è il resto: rientro, raggio, e due righe di
+/* Una voce di elenco è una riga di cassetto. L'altezza minima è scritta dalla
+   struttura (un bersaglio); qui c'è il resto: rientro, raggio, e due righe di
    testo che non si pestano. */
 .ui-list-item {
   padding: var(--space-2) var(--space-4);
@@ -201,6 +202,37 @@ h6.ui-heading {
   margin-top: var(--space-1);
   color: var(--muted);
   font-size: var(--text-sm);
+}
+/* La riga in coda a un elenco lungo: le voci oltre la soglia si chiedono da
+   qui (`ui/node.ts`, `LIST_PAGE`). È un «di più», non un'azione: niente fondo
+   a riposo, inchiostro sommesso e il triangolo in giù delle sezioni, sulla
+   verticale delle icone delle voci (il «Altre N proprietà» del prototipo). */
+.ui-list-more {
+  display: flex;
+  padding-top: var(--space-1);
+}
+.ui-list-more > .ui-button {
+  justify-content: flex-start;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  background: transparent;
+  color: var(--muted);
+}
+.ui-list-more > .ui-button::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  transform: rotate(90deg);
+}
+.ui-list-more > .ui-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.ui-list-more > .ui-button:active {
+  background: var(--overlay-active);
 }
 
 .ui-tree-label {
@@ -281,6 +313,15 @@ h6.ui-heading {
   position: relative;
   background: transparent;
 }
+/* **Il bersaglio di un blocco in mano** (E2, «Fuori dalla colonna»): la riga
+   che nomina un posto della nota, col cartellino dei Blocchi sopra, si accende
+   col filo e il velo d'accento; vince sul passaggio e sulla voce corrente. */
+.ui-tree-label[data-drop-hot],
+.ui-tree-label.clickable[data-drop-hot]:hover,
+.ui-tree-item[aria-selected="true"] > .ui-tree-label[data-drop-hot] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--accent-veil);
+}
 :where(.ui-tree) .ui-tree-item[aria-selected="true"] > .ui-tree-label::after,
 :where(.ui-list) .ui-list-item[aria-current="true"]::after {
   content: "";
@@ -349,6 +390,27 @@ h6.ui-heading {
 }
 .ui-table .ui-empty-cell {
   color: var(--muted);
+}
+/* Una tabella di bottoni è una griglia di giorni: le colonne sono uguali (lo
+   dice la struttura) e strette, quindi la cella cede il suo rientro e il
+   bottone sta nella cella invece di allargarla. Una testata più lunga della
+   colonna si tronca con i puntini invece di sovrapporsi alla vicina. */
+.ui-table:has(td > .ui-button) th,
+.ui-table:has(td > .ui-button) td {
+  padding: var(--space-2) var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-table td:has(> .ui-button) {
+  text-align: center;
+}
+.ui-table td > .ui-button {
+  /* Tondo quando la colonna ha posto, più stretto quando non ne ha. */
+  min-width: min(2.5em, 100%);
+  max-width: 100%;
+  padding-right: var(--space-1);
+  padding-left: var(--space-1);
 }
 
 /* ── Schede ──────────────────────────────────────────────────────────────── */
@@ -594,6 +656,12 @@ h6.ui-heading {
   line-height: var(--leading-normal);
   overflow-wrap: anywhere;
 }
+/* La domanda prima di un gesto distruttivo (`fub.confirm`) non è un riquadro:
+   la domanda e i suoi bottoni stanno nella fila del bottone che sostituisce,
+   come se l'involucro non ci fosse. L'involucro serve solo a Esc e al fuoco. */
+.ui-custom.ui-confirm {
+  display: contents;
+}
 /* Il markup porta i suoi elementi nudi: un collegamento e un frammento di
    codice senza queste righe prendono i colori del browser. */
 .ui-html a {
@@ -685,6 +753,144 @@ h6.ui-heading {
   background: var(--bg-active);
 }
 
+/* ── La struttura: un filo a sinistra, la voce corrente è una tacca blu ───
+   Vale per la vista «Struttura» (`data-view-id="outline"`), non per ogni
+   albero dichiarato: un albero di etichette resta com'è. */
+.declared-view[data-view-id="outline"] .ui-tree {
+  border-left: 1px solid var(--border);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label {
+  min-height: var(--row-h);
+  padding: 0 var(--space-4) 0 var(--space-5);
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label::before {
+  content: none;
+}
+.declared-view[data-view-id="outline"] .ui-tree-item > .ui-children {
+  margin-left: var(--space-5);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label.clickable:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label,
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label.clickable:hover {
+  background: transparent;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+/* La tacca sta sul filo, a qualunque profondità: 2 px centrati sulla riga di
+   1 px, alti 16. */
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  inset: 6px auto 6px -1.5px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-1 * var(--space-5) - 1.5px);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-2 * var(--space-5) - 1.5px);
+}
+
+/* ── «In entrata 3»: chi punta qui, il nome a sinistra e la cartella a destra.
+   La sezione la dichiara la vista Struttura con la chiave `outline-incoming`
+   (`incoming` è già dei Collegamenti). */
+.ui-section[data-key="outline-incoming"] {
+  margin-top: var(--space-8);
+}
+.ui-section[data-key="outline-incoming"] > summary {
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ui-section[data-key="outline-incoming"] > summary::before {
+  content: none;
+}
+.ui-section[data-key="outline-incoming"] > summary:hover {
+  background: transparent;
+  color: var(--text);
+}
+.ui-section[data-key="outline-incoming"] > .ui-children {
+  padding: var(--space-2) 0 0;
+}
+/* In riga, e non nella griglia delle voci con l'icona qui sotto: il nome e la
+   cartella stanno sulla stessa linea. */
+.ui-section[data-key="outline-incoming"] .ui-list-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  /* 28 più i 2 px fra una voce e l'altra: il passo di 30 del mockup */
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-md);
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-title {
+  flex: 1 1 auto;
+  font-weight: var(--weight-regular);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* La cartella sta su una riga, come il titolo: intera finché non passa metà
+   dello spazio del testo, oltre si accorcia coi puntini e al titolo resta
+   almeno l'altra metà. Lo spazio del testo è la voce meno l'icona da 15 px
+   (qui sotto) e i due spazi fra icona, titolo e cartella. Niente scatola a
+   righe contate della voce comune: qui la riga è una. */
+.ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: calc((100% - 15px) / 2 - var(--space-4));
+  max-height: none;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: none;
+  /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* L'icona di una voce che nomina una nota: la sua, come nell'albero. */
+.ui-list-item-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+.ui-list-item-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+/* Altrove (i Collegamenti) la voce è in colonna, col contesto sotto il nome:
+   l'icona sta a sinistra della prima riga, e il testo le si allinea accanto. */
+.ui-list-item:has(> .ui-list-item-icon) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: center;
+  align-items: start;
+  column-gap: var(--space-3);
+}
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-icon {
+  grid-row: span 2;
+}
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-title,
+.ui-list-item:has(> .ui-list-item-icon) > .ui-list-item-subtitle {
+  grid-column: 2;
+}
+
 /* In colori forzati i fondi sono del sistema e le ombre non ci sono: ciò che
    era detto con un fondo — un triangolo, una pastiglia, un guasto, la voce
    scelta — torna a dirsi con un colore del sistema o con un contorno. */
@@ -713,6 +919,155 @@ h6.ui-heading {
   .ui-button,
   .ui-section > summary::before,
   .ui-tree-item[aria-expanded] > .ui-tree-label::before {
+    transition: none;
+  }
+}
+
+/* ── La Scrivania ────────────────────────────────────────────────────────── */
+
+/* La Scrivania (E17) è una view dell'area principale fatta di riquadri: il
+   riquadro della finestra le dà tutta l'altezza, e lei scorre da sé. I
+   riquadri stanno in una pila in riga che va a capo: due colonne quando ci
+   stanno, una sola in una finestra stretta (700 px), e quello rimasto solo
+   in fondo prende la riga intera. */
+.pane-view[data-view-id="desk"] > .ui-stack {
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-7) var(--space-8);
+}
+.pane-view[data-view-id="desk"] [data-key="desk-board"] {
+  align-items: flex-start;
+}
+
+/* Un riquadro è un foglio sulla scrivania: il fondo del foglio, un filetto e
+   gli angoli dei fogli. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack {
+  flex: 1 1 22rem;
+  min-width: 0;
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  transition: box-shadow var(--duration-state) var(--ease), opacity var(--duration-state) var(--ease);
+}
+/* Una Base è una tabella: prende la riga intera, e le sue colonne ci stanno. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > [data-key="desk:base"] {
+  flex-basis: 100%;
+}
+/* In una finestra stretta i riquadri stanno in colonna, uno sotto l'altro,
+   anche quando due da 22rem ci starebbero a fatica. */
+@media (max-width: 760px) {
+  .pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack {
+    flex-basis: 100%;
+  }
+  .pane-view[data-view-id="desk"] > .ui-stack {
+    padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+}
+/* Il riquadro in mano si spegne; quello su cui cadrebbe prende l'accento. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack[data-desk-held] {
+  opacity: 0.5;
+}
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack[data-desk-drop] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* La testata: il titolo a sinistra, i comandi a destra, sulla stessa riga
+   anche quando il titolo è lungo. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack > .ui-stack[data-dir="row"] {
+  flex-wrap: nowrap;
+}
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack > .ui-stack[data-dir="row"] > .ui-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il riquadro «Base» porta una Base intera: niente margini doppi. */
+.pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack > .ui-custom[data-ns="fub:base"] {
+  min-width: 0;
+}
+
+/* «Rimetti:» e i riquadri tolti, in fondo. */
+.pane-view[data-view-id="desk"] [data-key="desk-hidden"] > .ui-text {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+/* La riga di comandi di un riquadro (`ui/desk.ts`): la maniglia da
+   trascinare, sù e giù dove non c'è un puntatore, «Togli». Bottoni piccoli e
+   grigi, come quelli di una testata di cassetto; sotto il puntatore la
+   velatura. */
+.desk-commands {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+.desk-grip,
+.desk-step,
+.desk-hide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+}
+.desk-commands svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+.desk-grip {
+  cursor: grab;
+}
+.desk-grip:active {
+  cursor: grabbing;
+}
+.desk-grip:hover,
+.desk-step:hover:not(:disabled),
+.desk-hide:hover {
+  color: var(--text);
+  background: var(--overlay-hover);
+}
+.desk-step:disabled {
+  opacity: 0.4;
+}
+.desk-down svg {
+  rotate: 180deg;
+}
+.desk-grip:focus-visible,
+.desk-step:focus-visible,
+.desk-hide:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* Con un puntatore si trascina, e sù e giù non servono; al tocco il
+   trascinamento non c'è, e ci sono loro. */
+.desk-step {
+  display: none;
+}
+@media (pointer: coarse) {
+  .desk-step {
+    display: inline-flex;
+  }
+  .desk-grip {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack[data-desk-drop] {
+    outline: 2px solid Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-view[data-view-id="desk"] [data-key="desk-board"] > .ui-stack {
     transition: none;
   }
 }

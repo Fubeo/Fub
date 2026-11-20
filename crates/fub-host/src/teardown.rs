@@ -1,7 +1,7 @@
 //! Teardown della sessione e del toggle utente, senza callback sotto guard.
 
 use fub_abi::PluginError;
-use fub_kernel::{RegistryError, Workspace};
+use fub_kernel::{Barred, RegistryError, Workspace};
 
 use crate::custody::Custody;
 use crate::jobs::{drain_events, JobHost};
@@ -26,13 +26,31 @@ pub(crate) fn flush_indexes(
     Ok(errors)
 }
 
+/// Ferma le letture in volo di `id` e le aspetta, e sbarra le nuove finché la
+/// guardia vive: chi smonta la tiene fino al ritiro dei provider.
+///
+/// Le letture non tengono il turno, quindi non basta prenderlo per escluderle.
+/// Fermarle è ciò che rende l'attesa sicura col turno in mano (chi lo tiene può
+/// essere anche chi chiama): una lettura che chiede il turno lo chiede cedendo,
+/// e cede appena vede la bandiera. Si alza solo la bandiera della lettura: il
+/// job che l'ha invocata riceve `Cancelled` e non è annullato. Si aspetta
+/// senza il lucchetto del workspace, che una lettura prende per finire.
+pub(crate) fn stop_reads(workspace: &Custody<Workspace>, id: &str) -> Result<Barred, PluginError> {
+    let reads = workspace.read()?.reads_in_flight();
+    let barred = reads.bar(id);
+    reads.cancel_owner(id);
+    reads.wait_owner_idle(id);
+    Ok(barred)
+}
+
 pub(crate) fn unmount(
     workspace: &Custody<Workspace>,
     registry: &Custody<BundleRegistry>,
     id: &str,
 ) -> Result<Vec<PluginError>, PluginError> {
     let _turn = workspace.write_turn();
-    let prepared = { workspace.write()?.prepare_plugin_teardown(id) };
+    let _barred = stop_reads(workspace, id)?;
+    let prepared = workspace.write()?.prepare_plugin_teardown(id);
     let mut prepared = match prepared {
         Ok(prepared) => prepared,
         Err(error) => {

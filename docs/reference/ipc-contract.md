@@ -27,92 +27,51 @@ test usano un fake.
 | tema | manifest e artefatti della skin |
 | eventi | ascolto del canale tipizzato |
 | sessione live | avviare, interrogare e fermare la sessione di un disegno, rispondere allo scrittore |
+| componenti | leggere la mappa dei componenti di un vault e applicare una scelta |
 
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
 
+`query_index` gira fuori dal thread principale dell'app, che presenta i
+fotogrammi: una domanda può durare centinaia di millisecondi. Le domande girano
+in **corsie** (`crates/fub-app/src/domande.rs`): una per l'indice e una per
+ogni spazio dei nomi di `IndexQuery::Custom`, al più 16. In una corsia le
+risposte escono nell'ordine d'entrata; due corsie non si aspettano, e due
+domande mandate nello stesso istante entrano in ordine qualsiasi.
+
+Anche le altre porte che toccano disco, workspace o provider girano fuori dal
+thread principale, in corsie fisse fuori dalle 16, nell'ordine d'arrivo:
+`viste` (`render_view`, `view_action`: un disegno chiesto dopo un'azione la
+vede), `contesto` (`set_active_context`: vince l'ultima), `comandi`, `stato`
+(`view_state`, `set_view_state`, il recupero di `view-state.json`) e `risorse`
+(`resource_*`: un pezzo chiesto prima della chiusura del prestito si legge).
+La corsia dell'indice, perché la domanda dopo li veda, scrive i dati che legge
+(impostazioni e profili, scorciatoie, organizzazione, vault aperto, corrente o
+conosciuto, demo) e serve la schermata di supporto (`support_preview`,
+`support_export`, `config_health`, gli altri `recover_config`). Le letture senza ordine (`list_views`,
+`list_commands`, `components_map`, `list_bundles`, i temi) e `cancel_job`
+escono senza corsia; un comando sincrono resta solo nell'elenco motivato di
+`lean_ipc.rs`. La shell tiene l'ultima risposta di ogni pannello (`Race`).
+
 ## La griglia
 
-La famiglia Grid usa porte strettamente tipate, con i record `Grid*` del
-mirror: `list_grid_surfaces` elenca i binding, e una superficie con
-`protocol_version` 2 si apre sui byte di un documento con `open_grid_bytes`,
+I fogli di calcolo usano la famiglia Grid, con porte strettamente tipate:
+`list_grid_surfaces` elenca i binding, e una superficie con
+`protocol_version` 2 si apre sui byte di un documento (`open_grid_bytes`,
 `grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
-`grid_bytes_command` e `close_grid_bytes`. La shell
-negozia famiglia, versione e formato prima di aprire; un binding sconosciuto
-o incompatibile non viene chiamato e la superficie dice che il foglio non si
-apre. `query_index` non applica patch e non possiede lifecycle.
+`grid_bytes_command`, `close_grid_bytes`), in una corsia sua. Sessione,
+finestra, comandi, corsia e limiti: [le porte della griglia](grid-ipc.md).
 
-`open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la shell non
-trasporta i byte, ma il giornale canonico delle celle cambiate (il testo
-della sessione documento) e la revisione dei byte da cui parte. L'host legge
-il documento, controlla che il formato sia quello della superficie (`BadArgs`
-altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
-sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
-`GridNotice`, celle in conflitto e il libro `GridBook`: i dodici colori del
-tema in `#RRGGBB`, i nomi definiti visibili, il modo di calcolo
-`GridCalculation`, la struttura protetta e il carattere dello stile Normale,
-nome e punti, che lo stile di una cella tace); la finestra è un `GridBytesWindow`, la cui
-cella porta `GridValue`, il testo formattato, blocco, `stale`, `conflict`,
-l'indice del suo stile e i segni (barra di dati, icona, commento,
-collegamento). La finestra porta gli stili delle sue celle, ognuno una volta
-(`GridCellStyle`: carattere, colori, bordi, allineamenti, rientro, a capo,
-rotazione), le unioni e le tabelle che la toccano (`GridMerge`, `GridTable`
-con le opzioni e il nome dello stile) e la vista del foglio (`GridSheetView`:
-riquadri bloccati, griglia, intestazioni, zoom, da destra a sinistra, la
-modalità `GridViewMode`, le formule mostrate, la protezione, griglia e
-intestazioni in stampa). La finestra porta anche gli oggetti che la toccano,
-nell'ordine in cui si disegnano (`GridObject`: tipo `GridObjectKind`, id,
-cella dell'angolo, scarto e misura in pixel a zoom 100, testo alternativo):
-un grafico o un grafico sparkline con il suo disegno in SVG, un'immagine con
-i suoi byte (`GridMedia`: tipo, impronta `key` e base64), una forma con il
-suo aspetto (`GridShape`), che disegna la shell; `missing` dice perché un
-oggetto non porta ciò che mostra (`too_large`, `unsupported`). La richiesta
-della finestra elenca in `known_media` le impronte che la shell ha già: di
-quelle immagini la finestra porta la chiave senza i byte. Il
-commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
-applicare al buffer della sessione documento.
+## Disegno
 
-La sessione porta anche il catalogo dei comandi che serve
-(`GridCommandState`: id, acceso, perché è spento). `grid_bytes_commands`
-riceve una `GridSelection` (foglio, intervalli A1, cella attiva) e ridà il
-catalogo su quella selezione; `grid_bytes_command` riceve un
-`GridCommandRequest` (la revisione e un `GridCommand` con i parametri come
-testo di un oggetto JSON) e ridà un `GridCommandOutcome`: il commit del
-giornale, che resta alla revisione se il comando non cambia la cartella, i
-fogli, la selezione nuova, il risultato come testo JSON, la finestra di
-dialogo chiesta, il catalogo aggiornato e il libro. Il risultato è sempre un
-oggetto: un valore che non lo è sta sotto `value`, i messaggi del comando
-sotto `messages`. I parametri della finestra chiesta portano anche ciò che la
-finestra mostra all'apertura e che la shell non legge da sé (la regola di
-convalida della cella attiva per `dataValidation`). Un comando che il provider non
-serve, spento o con parametri che non tornano è `BadArgs`. Il provider delle
-cartelle di Excel serve un sottoinsieme del catalogo di GridCraft, più
-`edit.undo` ed `edit.redo` del documento
-([ADR 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
-in proposta); su una cartella che la riscrittura perderebbe i comandi che la
-cambiano sono spenti, e darne uno è `PermissionDenied` con `xlsx.rewrite.loses`.
-
-## Limiti e semantica Grid
-
-Le coordinate sono `SheetId + RowId + ColumnId`; una sessione apre la
-sorgente nell'host, e le letture sono finestre fino a 256×128 e 32.768
-coordinate. Un commit accetta 16.384 patch e
-4 MiB di preimmagini e nuovi input; la risposta, envelope compreso, è al
-massimo 8 MiB. L'invalidazione restituisce le coordinate da rileggere fino a
-32.768 elementi, poi `all`. Il diff del giornale usa offset in byte UTF-8.
-Una finestra porta fino a 1.024 tabelle; il libro fino a 4.096 nomi; un nome
-di tabella, di stile o definito è al massimo di 255 byte. Una finestra porta
-fino a 1.024 oggetti; il disegno di un grafico è al massimo di 1 MiB, i byte
-di un'immagine di 3 MiB in base64 (soltanto PNG, JPEG, GIF, BMP, WebP e SVG),
-il testo di una forma di 64 KiB; la richiesta elenca fino a 256 impronte di
-64 byte al più.
-
-Il registro conserva ownership e disposer per ogni binding. L'unload ritira il
-binding, distrugge le istanze e soltanto dopo rilascia il provider. Nessuna
-battuta attraversa IPC: la shell consegna una sola richiesta al commit.
-Provider nativo e proxy WASM devono osservare la stessa famiglia/versione,
-limiti, fallback ed errori.
-
+Nei disegni (`.svg`, profilo «vector») il client guida il motore del disegno
+con sei porte tipate (`open_drawing`, `drawing_sync`, `drawing_gesture`,
+`drawing_commands`, `drawing_command`, `close_drawing`) e resta lo scrittore
+del file. Forme, limiti e chi le usa: [le porte del disegno](drawing-ipc.md).
+`unserved` vuol dire che il motore è spento nel vault (la riga dei Componenti)
+o non c'è in questa build, all'apertura come a metà sessione; `internal` che
+il motore si è fermato o non si costruisce, e si può riprovare. I dettagli
+stanno [nella stessa pagina](drawing-ipc.md).
 
 ## Sessione live
 
@@ -156,6 +115,22 @@ la shell non offre la sessione. Il fake host li serve se riceve una rete con
 | `unserved` | nessuna interfaccia attiva ha un indirizzo IPv4 privato |
 | `io` | interfacce di rete illeggibili, porta occupata |
 | `internal` | certificato, generatore casuale o QR non disponibili |
+
+## Componenti
+
+La pagina «Componenti» ha due porte dedicate, `components_map` e
+`components_apply`, in `allow-shell` e quindi solo per la finestra
+principale: lo stato dei componenti non è `program_writable`, e un componente
+non deve poter spegnere gli altri. Le forme, i rifiuti tipati, l'avviso del
+rimontaggio e lo scenario dell'host finto sono nel
+[contratto dei componenti](components-contract.md).
+
+## Temi
+
+I temi passano da porte loro: `list_themes` e `read_theme` per leggerli,
+l'installazione da una cartella, la cartella collegata in modalità
+sviluppatore con l'evento `fub://theme-changed`, e il catalogo firmato. Forme,
+esiti e limiti sono nelle [porte dei temi](theme-ipc.md).
 
 ## Apri con e anteprime Craft
 
@@ -233,39 +208,57 @@ utile è sotto il limite esatto e la shell li usa con `Date`.
 
 ## Errori
 
-La forma conserva:
-
-```text
-kind + message
-```
-
-La shell decide il comportamento da `kind`. `message` è presentabile e può
-essere localizzato, ma non viene analizzato con sottostringhe.
+La forma conserva `kind + message`. La shell decide il comportamento da
+`kind`. `message` è presentabile e può essere localizzato, ma non viene
+analizzato con sottostringhe.
 
 `message` sul filo è sempre una stringa. Dentro l'host un errore può restare
 una chiave del catalogo, perché chi lo riceve in Rust lo riconosce da quella.
 I comandi e le view escono già localizzati. Un comando IPC che porta alla shell
 l'errore di una chiamata dell'host lo passa da `Host::localized_error`
 (`for_the_shell` in `fub-app`): una chiave non risolta sul filo è un oggetto,
-non una frase. Un errore nuovo destinato all'utente usa una chiave del
-catalogo invece di un letterale. Il guard `check-error-literals.mjs` conta i
-letterali per crate e ne impedisce la crescita.
+non una frase. L'errore di un indice esterno lo risolve il kernel col
+catalogo di chi l'ha scritto (`QueryFailure`), anche nella domanda staccata.
+Un errore nuovo destinato all'utente usa una chiave del catalogo invece di un
+letterale. Il guard `check-error-literals.mjs` conta i letterali per crate e ne
+impedisce la crescita.
+
+### Un errore davanti a chi usa Fub
+
+Nel client la regola è una (`host/errors.ts`): una riga d'errore dice **che
+cosa** non è riuscito e **perché**. Il soggetto lo dà chi chiama, con una sua
+chiave col segnaposto `{reason}`; il motivo lo dà `errorText(e, motivo)`:
+`"messaggio"` (default) per comandi, view e servizi dei componenti, già
+tradotti dal kernel, e per i nostri `Error`; `"specie"` per le primitive
+dell'host su un documento (aprire, creare, rinominare, leggere, ridisegnare,
+cercare) e per la webview. Sceglie chi chiama, non la specie. Una chiave non
+risolta o un oggetto qualsiasi danno la frase della specie, mai «[object
+Object]»; ciò che va solo nel registro tiene il messaggio intero. Un documento
+rifiutato dal provider di formato esce come `trouble` con
+`gate: "format_parse"`: notifica e barra di stato dicono che non si apre, col
+nome, senza la prosa del codec.
 
 Un errore Rust non attraversa il confine come debug string o stack trace.
 
 ## Eventi
 
-Gli eventi IPC sono fatti già accaduti. Contengono almeno:
-
-- specie;
-- origine;
-- soggetto;
-- batch, quando presente;
-- payload tipizzato;
-- severità per gli avvisi.
+Gli eventi IPC sono fatti già accaduti. Contengono almeno specie, origine,
+soggetto, batch quando presente, payload tipizzato e severità per gli avvisi.
 
 Una coda può compattare progresso o notifiche ripetute. Il risultato autorevole
 di un'operazione resta nella sua risposta.
+
+Su `fub://evenSu `fub://event` ogni notice è `{ event, origin, vault? }`
+(`fub_host::ShellNotice`). `vault` è la radice canonica del vault del fatto, la
+stessa stringa di `VaultInfo.root`, su tutto ciò che il ponte di una sessione
+consegna, `overflow` compreso; manca, non è `null`, per un fatto della
+macchina. È additivo: chi non lo legge riceve il notice di prima. L'uso:
+[di quale vault è un evento](../architecture/runtime-events-and-jobs.md#di-quale-vault-è-un-evento).
+ti prima della shell non si spingono, si tirano con
+`session_notice`: prima la diagnosi del log, poi gli altri avvisi d'avvio
+(come il percorso di disegno, `Event::Custom` col topic `rendering`, vedi
+[la webview del desktop](../architecture/desktop-webview.md#gli-avvisi)), uno
+per chiamata. La shell tira finché la risposta è `null`.
 
 ## View
 
@@ -280,6 +273,24 @@ Il protocollo di view usa:
 
 La shell non interpreta il payload di un'azione. Lo rimanda al provider
 proprietario.
+
+Una view può rispondere a un'azione con `ViewUpdate::Custom` di `ns`
+`fub.inspector.tab` (`fub_abi::ui::INSPECTOR_TAB_NS`) e payload
+`{ "view": "<id>" }`: la shell apre l'ispettore su quella scheda, o dice che
+non c'è. Non è privilegiato, perché cambia solo quale scheda si guarda; lo usa
+«e altri N» sotto la Struttura per portare ai Collegamenti.
+
+Una domanda prima di un gesto distruttivo è un **nodo** `UiKind::Custom` di
+`ns` `fub.confirm` (`fub_abi::ui::CONFIRM_NS`, costruito da
+`UiNode::confirmation`): il `fallback` è la domanda con i suoi bottoni, il
+payload è `{ "cancel": ActionRef }`, l'azione del «no». La shell disegna il
+`fallback` nella fila del nodo che sostituisce, porta il fuoco al «no» quando
+la domanda compare, preme il «no» con Esc e, quando la domanda sparisce, rende
+il fuoco al nodo con la sua stessa chiave (il bottone che l'ha aperta). Una
+shell che non conosce il `ns` disegna il solo `fallback`. Non è privilegiato.
+La domanda è stato del momento: il provider la tiene in memoria e non nello
+stato di vista, che sopravvive al riavvio. La usano Cronologia, Cestino,
+«Versioni sincronizzate» e «Pubblicazione».
 
 ## Barra di formattazione e azioni dell'editor
 
@@ -359,16 +370,62 @@ passa dalle stesse porte dei documenti, senza una porta in più:
 - `save_draft` conserva la proiezione come testo del buffer, come per ogni
   altro documento.
 
+Leggere un documento non lo apre. `read_document { id, vault? }` è una
+**lettura semplice** (l'anteprima, una ricerca, la CLI, un lavoro): la stessa
+proiezione, la stessa revisione e lo stesso `format_id` di un'apertura, ma
+l'host non tiene niente. Una sessione della shell apre il documento sotto la
+sua **chiave di apertura**, un campo `open` facoltativo:
+
+- `read_document { id, vault?, open? }`: con `open`, la revisione letta
+  resta segnata sotto la chiave, e il motore dei documenti ricorda la prova
+  a vuoto dei suoi byte, che il salvataggio dopo non rifà;
+- `write_document { id, source, base, vault?, open? }`: con `open`, la
+  revisione sovrascritta e quella nuova restano segnate sotto la chiave, che
+  si apre se non lo era; senza, le prove che il salvataggio ha lasciato e che
+  nessuna chiave tiene si dimenticano subito;
+- `document_closed { open, vault? }` chiude la chiave (vedi
+  [Motori dei formati](#motori-dei-formati)).
+
+Una chiave ha da 1 a 64 caratteri fra lettere ASCII, cifre, `-` e `_`; una
+chiave malformata è `BadArgs` prima che l'host legga il disco, e `open: null`
+vale come assente. Una chiave tiene le ultime otto revisioni che ha letto o
+scritto, anche di documenti diversi (una sessione rinominata tiene la stessa
+chiave). Un vault tiene al massimo 1024 chiavi: oltre, si chiude quella usata
+meno di recente, con le sue prove, e l'host lo scrive nel log. Le chiavi di un
+vault cadono quando il vault si chiude. Una nota, una cartella di Excel o un
+PDF aperti sotto una chiave si leggono e non segnano niente; senza la feature
+`rich` la chiave si valida e si ignora.
+
 `read_document` e `write_document` girano fuori dal thread principale
 dell'app, per ogni formato: aprire e salvare un `.docx` legge, proietta e
 misura il pacchetto, e la finestra non si ferma ad aspettarli. L'ordine delle
 scritture di un documento lo tiene la `DocumentSession` della shell, che le
-accoda, e una lettura superata la scarta. Le bozze (`save_draft`,
-`discard_draft`) restano sul thread principale, nell'ordine in cui arrivano.
+accoda, e una lettura superata la scarta. Anche le bozze (`save_draft`,
+`discard_draft`) girano fuori dal thread principale, senza il turno di scrittura,
+in fila nella coda delle bozze della sessione ([Bozze e salvataggio](../architecture/runtime-events-and-jobs.md#bozze-e-salvataggio)).
 
 La forma della proiezione (revisioni, commenti, pagina, oggetti, inchiostri e
 disegni, blocchi chiusi, versioni e schema dei dati opachi) è in
 [Proiezione dei documenti di videoscrittura](rich-projection.md).
+
+## Motori dei formati
+
+Due comandi della finestra principale (`allow-shell`), che girano fuori dal
+thread principale e restituiscono `()`:
+
+- `warm_engine { extension }`: scalda in sottofondo il motore che apre
+  l'estensione (`"docx"`, `".XLSX"`), se un vault aperto ha un provider
+  attivo per lei. Un'estensione senza motore, sconosciuta o malformata non fa
+  niente e non è un errore. Non apre file.
+- `document_closed { open, vault? }`: la shell ha chiuso la sessione con
+  questa chiave di apertura. L'host la toglie e dimentica le prove a vuoto
+  delle sue revisioni che nessun'altra chiave aperta tiene, in nessun vault;
+  se non resta aperta nessuna chiave, svuota le cache dei documenti e
+  restituisce al sistema la memoria libera. Una chiave malformata è
+  `BadArgs`; una chiave sconosciuta o già chiusa, o un vault non aperto, non
+  fanno niente.
+
+Il ciclo di vita dei motori è in [Lo strato dei motori](../architecture/motori.md#scaldare-e-chiudere-un-documento).
 
 ## Cartelle di Excel
 
@@ -398,6 +455,21 @@ porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
   file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
   cartella cambia soltanto dal giornale, con `write_document`.
 
+Annulla e ripeti sono del provider (`edit.undo`, `edit.redo`): celle e
+comandi nell'ordine in cui sono avvenuti, anche oltre un salvataggio. Ogni
+passo riscrive il giornale, e il salvataggio seguente lo porta nei byte. Un
+passo di celle si disfa riscrivendo le celle; un comando oltre un salvataggio
+con `fub.restore` (`{"state": "<32 cifre esadecimali>"}`), che vale soltanto
+come primo comando e porta la cartella a uno stato tenuto in memoria dal
+provider. Il giornale resta della versione 2: `fub.restore` è un id del
+catalogo aperto dei comandi, come `fub.pasteFrom`, e un giornale di prima si
+legge com'era. Uno stato che il processo non ha più (una bozza dopo un
+riavvio), o `fub.restore` non in testa, è `Conflict`: il giornale non si
+applica e il file resta com'era; un Fub di prima lo rifiuta allo stesso modo,
+perché non serve il comando. La cronologia tiene 100 passi e 128 MiB di stati
+oltre la cartella di adesso: oltre, esce il passo più vecchio, mai un dato.
+Riaprendo il programma ricomincia vuota.
+
 Nella finestra:
 
 - i valori sono quelli che il file ha salvato, comprese le celle versate
@@ -417,8 +489,10 @@ Nella finestra:
   prende il colore della shell.
 
 Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
-lettura ha lasciato indietro qualcosa), `not-shown-slicers` e `uncomputed`
-(formule senza valore salvato), ciascuno con il suo conteggio. Le unioni, le
+lettura ha lasciato indietro qualcosa), `not-shown-slicers`, `uncomputed`
+(formule senza valore salvato) e `circular` (formule su un riferimento
+circolare, salvate con `0`: la finestra le dà come `#CIRC!`), ciascuno con il
+suo conteggio. Le unioni, le
 note, la formattazione condizionale e gli oggetti (grafici, grafici
 sparkline, immagini e forme) arrivano nella finestra, e non sono avvisi.
 
@@ -430,13 +504,18 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 `apps/client/src/__fixtures__/xlsx-grid.json` la lega alla shell
 (`crates/fub-format-xlsx/tests/ts_grid.rs`).
 
+## Depositare un file
+
+`resource_write` deposita byte grezzi, coi parametri nella testata
+`x-fub-resource-write`; il contratto intero (campi, `reuse: "same-content"`,
+ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md). I byte di una tessera della vista Mappa (`map_tile`): [Le tessere delle mappe](map-tiles.md).
+
 ## Percorsi
 
 Il frontend invia path relativi o root di vault secondo la porta. Le regole di
 canonicalizzazione e recinzione vivono nel core.
 
-Non accettare un path assoluto in una porta generica per evitare la verifica del
-vault.
+Nessuna porta generica accetta un path assoluto che salti la verifica del vault.
 
 ## Import Tauri
 

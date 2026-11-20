@@ -1,0 +1,28 @@
+# Un plugin compilato contro un'interfaccia esportata «di prima» (#289).
+#
+# Il pacchetto `esempio:servizio` non è il contratto di Fub: è il minimo che
+# serve per far crescere un `enum`, un `variant` e un'interfaccia esportata
+# una cosa alla volta, e vedere che cosa fa wasmtime davanti al guest vecchio.
+# L'host cresciuto sta in `crates/fub-wasm-host/tests/new_case_and_function.rs`,
+# scritto lì con `bindgen!`; la prova sul contratto vero è in
+# `esempi/plugin-prima-del-caso` e `esempi/plugin-prima-della-funzione`.
+[package]
+name = "servizio-prima"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"
+
+# Un workspace suo, vuoto: chi lo compila da un worktree annidato in un altro
+# checkout (per esempio sotto `.claude/worktrees/`) non risale al
+# `Cargo.toml` di quel checkout, che non lo elenca fra i membri.
+[workspace]

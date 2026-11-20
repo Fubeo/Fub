@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SCRITTOIO_SERIES } from "./scrittoio/series";
-import { effectiveContrast, preferenceTokens } from "./theme";
+import { barsOf, effectiveContrast, preferenceTokens } from "./theme";
 
 describe("quale contrasto vale", () => {
   it("la scelta esplicita vince e il vuoto segue il sistema", () => {
@@ -28,7 +28,7 @@ describe("le preferenze restano sopra il tema", () => {
 });
 
 describe("tre caratteri distinti", () => {
-  const base = { density: "comfortable" as const, body: 17, lineHeight: 1.65, measure: 68, font: "newsreader", accent: 210 };
+  const base = { density: "comfortable" as const, body: 18, lineHeight: 1.65, measure: 58, font: "newsreader", accent: 210 };
 
   it("lettura, interfaccia e codice si scelgono ognuno per conto suo", () => {
     const tokens = preferenceTokens({ ...base, font: "literata", uiFont: "inter", monoFont: "jetbrains" }, "light", "normal");
@@ -45,5 +45,19 @@ describe("tre caratteri distinti", () => {
     const unknown = preferenceTokens({ ...base, uiFont: "comic", monoFont: "courier" }, "dark", "high");
     expect(unknown["font-ui"]).toBe(defaults["font-ui"]);
     expect(unknown["font-mono"]).toBe(defaults["font-mono"]);
+  });
+});
+
+describe("il vassoio delle barre", () => {
+  it("«marcate» vince, e ogni altro valore è il vassoio di serie", () => {
+    // Il chiaro di serie è il ruolo della ricetta, e l'attributo sulla radice
+    // esiste solo per «marcate»: un valore sconosciuto (un file scritto a mano,
+    // una versione futura) non spegne né sposta il vassoio.
+    expect(barsOf("marked")).toBe("marked");
+    expect(barsOf("light")).toBe("light");
+    expect(barsOf("")).toBe("light");
+    for (const strange of ["Marked", "marcate", "neon", null, undefined, 1, {}, []]) {
+      expect(barsOf(strange)).toBe("light");
+    }
   });
 });

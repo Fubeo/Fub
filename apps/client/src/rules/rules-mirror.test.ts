@@ -11,6 +11,14 @@ import {
   resolveAgainst,
   scanTags,
   taskChecked,
+  taskDue,
+  taskReminder,
+  dueUrgency,
+  THEME_FONT_LIMITS,
+  THEME_ICON_LIMITS,
+  themeFontFault,
+  themeIconFault,
+  themeIconsFileHolds,
   topicMatches,
 } from "./mirrored";
 import { expand } from "../i18n/strings";
@@ -59,6 +67,19 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   name_fault: (c) => nameFault(c.path, c.naming),
   normalized_name: (c) => normalizedName(c.path),
   task_checked: (c) => taskChecked(c.symbol ?? null),
+  // La scadenza di un compito: il tratto si confronta come testo, perché Rust
+  // conta in byte e qui si conta in unità UTF-16.
+  task_due: (c) => {
+    const due = taskDue(c.text);
+    return due && { span: (c.text as string).slice(due.from, due.to), date: due.date };
+  },
+  task_reminder: (c) => {
+    const reminder = taskReminder(c.text);
+    return reminder && { span: (c.text as string).slice(reminder.from, reminder.to), when: reminder.when, timed: reminder.timed };
+  },
+  // Quando una scadenza è vicina: la pastiglia nel testo e quella della
+  // vista devono dare lo stesso colore alla stessa data.
+  due_urgency: (c) => dueUrgency(c.date, c.today),
   // Il riconoscimento di un `#tag` (§4.4): la regola sale nel contratto
   // perché una superficie di scrittura la deve sapere senza avere il parser.
   scan_tags: (c) => scanTags(c.text),
@@ -81,6 +102,16 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   mask_wants: (c) => maskWants(c.mask, c.event),
   // La sintassi della barra di ricerca (P04): una riga, la stessa `QueryExpr`.
   search_syntax: (c) => parseSearch(c.input, c.typing),
+  // I caratteri di un tema (PA T39): l'host rifiuta il manifest, il loader
+  // rifà la domanda al fascio prima di scrivere una regola `@font-face`.
+  theme_font_fault: (c) => themeFontFault(c.family, c.file, c.weight, c.style),
+  // I limiti e gli elenchi di nomi della stessa regola, come valori.
+  theme_font_limit: (c) => THEME_FONT_LIMITS[c.name as keyof typeof THEME_FONT_LIMITS],
+  // Le icone di un tema (PA T40): l'host rifiuta il manifest, il loader rifà
+  // la domanda al fascio, e `ui/icons.ts` la richiede prima di disegnare.
+  theme_icon_fault: (c) => themeIconFault(c.name, c.paths),
+  theme_icons_file: (c) => themeIconsFileHolds(c.file),
+  theme_icon_limit: (c) => THEME_ICON_LIMITS[c.name as keyof typeof THEME_ICON_LIMITS],
 };
 
 describe("mirror delle regole TS↔Rust", () => {
@@ -101,6 +132,18 @@ describe("mirror delle regole TS↔Rust", () => {
       }
     });
   }
+
+  it("ogni limite dei caratteri del tema ha il suo valore di Rust, e viceversa", () => {
+    expect(Object.keys(THEME_FONT_LIMITS).sort()).toEqual(
+      fixture.theme_font_limit.map((c) => String(c.name)).sort(),
+    );
+  });
+
+  it("ogni limite delle icone del tema ha il suo valore di Rust, e viceversa", () => {
+    expect(Object.keys(THEME_ICON_LIMITS).sort()).toEqual(
+      fixture.theme_icon_limit.map((c) => String(c.name)).sort(),
+    );
+  });
 
   it("i casi che contano ci sono davvero", () => {
     // Un presidio si può svuotare senza diventare rosso, potando i casi

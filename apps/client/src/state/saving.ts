@@ -10,6 +10,7 @@
 
 import { isErrorKind } from "../host/errors";
 import type { Origin } from "../host/contract";
+import type { Key } from "../i18n/strings";
 
 /// L'esito dell'ultima scrittura di un buffer.
 ///
@@ -63,6 +64,22 @@ export function stateOf(buf: { dirty: boolean; result: Outcome } | undefined): S
   return buf.dirty ? "non_salvato" : "salvato";
 }
 
+/// La parola che dice uno stato del salvataggio: la stessa nella testata di un
+/// riquadro (`#save-state`) e nella riga del titolo di una scheda della
+/// lavagna che scrive nel documento (N6 T96), perché le due dicano la stessa
+/// cosa della stessa sessione.
+export function saveStateKey(state: SaveState): Key {
+  return SAVE_STATE_KEY[state];
+}
+
+const SAVE_STATE_KEY = {
+  "salvato": "save.saved",
+  "in_corso": "save.saving",
+  "non_salvato": "save.unsaved",
+  "fallito": "save.failed",
+  "conflitto": "save.conflitto",
+} as const satisfies Record<SaveState, Key>;
+
 /// **Che specie di fallimento è questo**, e quindi cosa se ne fa chi salva.
 ///
 /// È una funzione e non un `if` in mezzo a `saveDoc` per la ragione di tutto
@@ -103,6 +120,22 @@ export function failureOutcome(e: unknown): "conflitto" | "fallito" {
 /// difetto peggiore che un centro notifiche possa avere: **un avviso che compare
 /// quando non è successo niente insegna a ignorare quelli che contano**.
 export type UnderChange = "muto" | "eco" | "altra_app" | "riscrittura";
+
+/// L'origine ha l'identità dell'eco (vedi `consumeUnderChange`): attore
+/// `user` fuori da un lotto.
+function echoIdentity(source: Origin): boolean {
+  return source.actor.kind === "user" && source.batch === null;
+}
+
+/// Se l'evento è l'eco di una nostra scrittura ancora attesa, la consuma e
+/// dice di sì: chi lo sa prima di `consumeUnderChange` può non toccare il
+/// buffer, perché sul disco c'è ciò che abbiamo scritto noi. Un'altra
+/// origine non tocca il conto.
+export function consumeOwnEcho(buf: { echoes: number } | undefined, source: Origin): boolean {
+  if (buf === undefined || !echoIdentity(source) || buf.echoes <= 0) return false;
+  buf.echoes -= 1;
+  return true;
+}
 
 /// Chi ha riscritto il file, **consumando l'eco che quell'evento era**.
 ///
@@ -156,7 +189,7 @@ export function consumeUnderChange(
   // lotto. Ogni altra origine — kernel, plugin, comando dell'utente in lotto —
   // è un cambio vero: non consuma l'attesa (che aspetta il nostro evento) e a
   // buffer sporco si dice.
-  if (source.actor.kind !== "user" || source.batch !== null) {
+  if (!echoIdentity(source)) {
     return buf.dirty ? "riscrittura" : "muto";
   }
   const ours = buf.echoes > 0;

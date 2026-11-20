@@ -35,7 +35,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use fub_abi::model::{DocId, DocumentModel};
-use fub_abi::traits::{IndexLoss, IndexProvider, IndexQuery, IndexResult, VaultEntry};
+use fub_abi::traits::{EntryKind, IndexLoss, IndexProvider, IndexQuery, IndexResult, VaultEntry};
 use fub_abi::PluginError;
 
 pub(crate) use core::CoreIndex;
@@ -132,12 +132,13 @@ impl PreparedIndexQuery {
         mut self,
         core: &dyn plan::QueryCore,
         query: IndexQuery,
-    ) -> Result<CompletedIndexQuery, PluginError> {
+    ) -> Result<CompletedIndexQuery, plan::QueryFailure> {
         let outcome = plan::run_detached(&self, core, query);
         let providers = std::mem::take(&mut self.providers);
         let released = release_handles(providers);
         match (outcome, released) {
-            (_, Err(error)) | (Err(error), Ok(())) => Err(error),
+            (_, Err(error)) => Err(plan::QueryFailure { owner: None, error }),
+            (Err(failure), Ok(())) => Err(failure),
             (Ok(result), Ok(())) => Ok(CompletedIndexQuery {
                 result,
                 routing_generation: self.routing_generation,
@@ -251,17 +252,29 @@ pub(crate) fn forget_handles(
 /// Interroga gli indici registrati usando soltanto handle staccati dal
 /// `Workspace`. Chi chiama può quindi rilasciare `Custody<Workspace>` prima di
 /// attraversare il confine del provider.
+///
+/// # Si chiede a tutti, anche quando la risposta è già «niente»
+///
+/// La domanda non è solo una domanda: per un indice persistente è anche il
+/// momento in cui il kernel gli **dichiara** di che revisione è ogni
+/// documento che sta per consegnargli (`SearchIndex`, `ReminderIndex`). Qui
+/// c'era un `break` appena l'intersezione si svuotava, e alla prima apertura
+/// — quando il primo indice non ha niente — gli indici dopo di lui non
+/// ricevevano la domanda: prendevano le note senza revisione, non potevano
+/// scriverla, e il vault si rileggeva intero anche alla seconda apertura
+/// (#521). Chiedere a tutti costa una scorsa di una mappa per indice.
 pub(crate) fn up_to_date_handles(
     providers: &[(String, SharedIndexProvider)],
     entries: &[VaultEntry],
 ) -> BTreeSet<DocId> {
     let mut agreed: BTreeSet<DocId> = entries.iter().map(|entry| entry.id.clone()).collect();
     for (id, index) in providers {
-        if agreed.is_empty() {
-            break;
-        }
         let Ok(_call) = IndexCall::enter(id, index) else {
-            return BTreeSet::new();
+            // Un indice che non si può interrogare non ha detto di avere
+            // niente: non si salta niente. Gli altri si interrogano lo
+            // stesso, per la ragione qui sopra.
+            agreed.clear();
+            continue;
         };
         let index = index.read();
         let theirs =
@@ -276,6 +289,47 @@ pub(crate) fn up_to_date_handles(
         agreed.retain(|doc| theirs.contains(doc));
     }
     agreed
+}
+
+/// **Ritira le dichiarazioni** di un'apertura che non arriva in fondo.
+///
+/// La domanda di [`up_to_date_handles`] dichiara a un indice persistente di
+/// che revisione è ogni documento, e la dichiarazione aspetta la consegna.
+/// Un'apertura finita le chiude con `reconcile`; una interrotta non
+/// riconcilia (un insieme bucato non si dichiara completo), e senza questo
+/// ritiro una dichiarazione restata lì veniva presa dalla prima consegna a
+/// sessione aperta: un salvataggio con il testo nuovo, scritto con la
+/// revisione di quello vecchio, che alla riapertura faceva saltare la nota
+/// con l'indice indietro.
+///
+/// Il ritiro è la stessa domanda **senza impronta**: il contratto dice che
+/// a una voce senza revisione un indice non risponde, e chi tiene
+/// dichiarazioni la toglie (`IndexProvider::up_to_date`). La risposta non
+/// serve e si butta; un indice che non si può interrogare non ha niente da
+/// ritirare che il kernel possa raggiungere.
+pub(crate) fn withdraw_handles(providers: &[(String, SharedIndexProvider)], docs: &[DocId]) {
+    if docs.is_empty() {
+        return;
+    }
+    let entries: Vec<VaultEntry> = docs
+        .iter()
+        .map(|id| VaultEntry {
+            id: id.clone(),
+            kind: EntryKind::Document,
+            size: 0,
+            mtime: 0,
+            fingerprint: None,
+        })
+        .collect();
+    for (id, index) in providers {
+        let Ok(_call) = IndexCall::enter(id, index) else {
+            continue;
+        };
+        let index = index.read();
+        let _ = crate::safety::calling(id, Gate::IndexUpToDate, "", || {
+            Ok(index.up_to_date(&entries))
+        });
+    }
 }
 
 /// Chi non è riuscito ad allinearsi lo dice, e **nomina i morti che si
@@ -444,7 +498,7 @@ impl Indexes {
     }
 
     /// Interroga: il **percorso unico** di dispatch (vedi [`plan`]).
-    pub(crate) fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+    pub(crate) fn query(&self, query: IndexQuery) -> Result<IndexResult, plan::QueryFailure> {
         plan::run(self, query)
     }
 

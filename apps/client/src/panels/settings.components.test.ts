@@ -44,6 +44,7 @@ vi.mock("../host/ipc", () => ({
 }));
 vi.mock("../theme/theme", () => ({
   CONTRAST_KEY: "appearance.contrast",
+  MOTION_KEY: "appearance.motion",
   SERIES_THEME_ID: "fub.serie",
   THEME_KEY: "appearance.theme",
   currentThemeId: () => box.themeId,
@@ -65,6 +66,12 @@ vi.mock("../theme/theme", () => ({
     if (entry) entry.value = light;
   },
   themeCatalog: async () => box.themes,
+  themeRejections: () => [],
+  reloadThemeCatalog: async () => box.themes,
+  // Il tema collegato (PA T37): qui nessuna cartella è collegata.
+  linkedTheme: () => null,
+  refreshThemeLink: async () => null,
+  themeLinkChanged: async () => {},
 }));
 vi.mock("../host/dialog", () => ({
   confirm: (message: string) => {
@@ -76,7 +83,19 @@ vi.mock("../host/dialog", () => ({
 }));
 vi.mock("../host/query", () => ({ settings: async () => box.entries }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
-vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id }));
+vi.mock("../ui/commands", async (importOriginal) => {
+  // La porta della riga di un componente è quella vera: la registra il
+  // pannello, la chiama chi dice «Accendi…».
+  const actual = await importOriginal<typeof import("../ui/commands")>();
+  return {
+    allCommands: () => [],
+    keybindingKey: (id: string) => id,
+    newKinds: () => ["note"],
+    newKindLabel: () => "Nota",
+    registerComponentRow: actual.registerComponentRow,
+    showComponent: actual.showComponent,
+  };
+});
 vi.mock("../ui/a11y", () => ({ trapFocus: () => () => {} }));
 vi.mock("../ui/motion", () => ({
   enterSurface: () => {},
@@ -89,6 +108,7 @@ vi.mock("../ui/notify", () => ({ notify: box.notify }));
 // sostituibile e un import statico legherebbe settings all'IPC reale.
 const { createFakeHost } = await import("../host/fake");
 const { mountSettings } = await import("./settings");
+const { showComponent } = await import("../ui/commands");
 
 function installed(overrides: Partial<InstalledPluginInfo> = {}): InstalledPluginInfo {
   return {
@@ -229,7 +249,7 @@ beforeEach(() => {
 describe("inventario dei componenti installati", () => {
   it("mostra un'installazione negata senza nascondere il bundle ufficiale omonimo", async () => {
     box.host = createFakeHost({
-      bundles: [bundled({ id: "com.acme.notes", name: "Official Notes" })],
+      bundles: [bundled({ id: "com.acme.notes", name: "Official Notes", permissions: { "fub:read-vault": true } })],
       installedPlugins: [installed({ consent: "denied", runtime_known: false })],
     });
 
@@ -257,13 +277,15 @@ describe("inventario dei componenti installati", () => {
   });
 
   it("un inventario installato illeggibile non nasconde i controlli nativi", async () => {
-    box.host = createFakeHost({ bundles: [bundled()] });
+    box.host = createFakeHost({ bundles: [bundled({ permissions: { "fub:read-vault": true } })] });
     box.host.fault("listInstalledPlugins", "inventario illeggibile");
     await openComponents();
 
-    const native = document.getElementById("bundle-fub.search") as HTMLInputElement | null;
-    expect(native?.checked).toBe(true);
-    expect(native?.disabled).toBe(false);
+    await vi.waitFor(() => expect(document.getElementById("component-fub.search")).not.toBeNull());
+    const native = document.getElementById("component-fub.search") as HTMLInputElement;
+    expect(native.checked).toBe(true);
+    expect(native.getAttribute("aria-disabled")).toBeNull();
+    expect(document.querySelector('[data-bundle-permissions="fub.search"]')).not.toBeNull();
     expect(document.getElementById("installed-enabled-41")).toBeNull();
   });
 
@@ -276,7 +298,7 @@ describe("inventario dei componenti installati", () => {
     const permission = document.getElementById(`permission-${box.entries[0].spec.key}`) as HTMLInputElement | null;
     expect(permission?.checked).toBe(true);
     expect(permission?.disabled).toBe(false);
-    expect(document.getElementById(`bundle-${plugin.id}`)).toBeNull();
+    expect(document.querySelector(`[data-bundle-permissions="${plugin.id}"]`)).toBeNull();
   });
 
   it("un riquadro dei permessi aperto resta aperto dopo la scrittura del suo interruttore", async () => {
@@ -311,7 +333,7 @@ describe("inventario dei componenti installati", () => {
     const controls = [...document.querySelectorAll<HTMLInputElement>("input")].filter((input) => input.id === permissionId);
     expect(controls).toHaveLength(1);
     expect(controls[0].checked).toBe(true);
-    expect(document.getElementById(`bundle-${plugin.id}`)).not.toBeNull();
+    expect(document.querySelector(`[data-bundle-permissions="${plugin.id}"]`)).not.toBeNull();
     expect(document.getElementById("installed-enabled-41")).not.toBeNull();
   });
 
@@ -421,7 +443,7 @@ describe("inventario dei componenti installati", () => {
     await openComponents();
 
     let remove = [...document.querySelectorAll<HTMLButtonElement>("#settings-body button")].find(
-      (button) => button.textContent === "Rimuovi",
+      (button) => button.textContent === "Togli",
     )!;
     box.confirm = false;
     remove.click();
@@ -430,7 +452,7 @@ describe("inventario dei componenti installati", () => {
 
     box.confirm = true;
     remove = [...document.querySelectorAll<HTMLButtonElement>("#settings-body button")].find(
-      (button) => button.textContent === "Rimuovi",
+      (button) => button.textContent === "Togli",
     )!;
     remove.click();
     await vi.waitFor(() => expect(box.host!.atGate("removeInstalledPlugin")).toHaveLength(1));
@@ -440,6 +462,36 @@ describe("inventario dei componenti installati", () => {
       expect(document.querySelector<HTMLElement>("#settings-panel")!.hidden).toBe(true);
     });
   });
+  it("la scheda dice le parole del lessico: Acceso, e Togli spento con la sua frase", async () => {
+    box.host = createFakeHost({ installedPlugins: [installed({ enabled: true })] });
+    await openComponents();
+
+    expect(document.querySelector<HTMLLabelElement>('label[for="installed-enabled-41"]')?.textContent).toBe("Acceso");
+    const remove = [...document.querySelectorAll<HTMLButtonElement>("#settings-body button")].find(
+      (button) => button.textContent === "Togli",
+    )!;
+    expect(remove.disabled).toBe(true);
+    const hint = document.getElementById(remove.getAttribute("aria-describedby")!);
+    expect(hint?.textContent).toBe("Spegni il componente prima di toglierlo.");
+    const body = document.querySelector("#settings-body")!.textContent!;
+    expect(body).toContain("Toglie l'installazione; i suoi dati restano nel vault.");
+    expect(body).toContain("È distinto da acceso e spento:");
+    expect(body).not.toMatch(/Abilitato|Disabilita|Rimuov/u);
+  });
+
+  it("un interruttore che non cambia lo dice con le parole del lessico", async () => {
+    box.host = createFakeHost({ installedPlugins: [installed()] });
+    await openComponents();
+    vi.spyOn(box.host.module.api, "setInstalledPluginEnabled").mockRejectedValueOnce(new Error("disco pieno"));
+
+    const enabled = document.querySelector<HTMLInputElement>("#installed-enabled-41")!;
+    enabled.checked = true;
+    enabled.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(box.notify).toHaveBeenCalledWith(expect.stringMatching(/^Componente non acceso né spento: .*disco pieno/u), "guasto"),
+    );
+  });
+
   it("lascia scadere il ridisegno di una mutazione ancora in volo quando il pannello chiude", async () => {
     box.host = createFakeHost({ installedPlugins: [installed()] });
     const releaseMutation = box.host.throttle("setInstalledPluginEnabled");
@@ -483,6 +535,49 @@ describe("settings profile boundary", () => {
     expect(machine.querySelector('[role="status"]')?.textContent).toContain("pronto da copiare");
     action("Importa il JSON incollato").click();
     await vi.waitFor(() => expect(imported).toHaveBeenCalledWith("machine", payload, undefined));
+  });
+
+  it("mostra il profilo predefinito col nome della lingua, e sceglie ancora il suo id", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    const host = createFakeHost({ settings: entries });
+    vi.spyOn(host.module.api, "settingsProfiles").mockResolvedValue({ active: "Default", names: ["Default", "Lavoro"] });
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])], host);
+
+    const machine = document.querySelector<HTMLElement>('[data-profile-scope="machine"]')!;
+    expect(machine.textContent).toContain("Attivo: Predefinito");
+    expect(machine.textContent).not.toContain("Default");
+    const choice = machine.querySelector<HTMLSelectElement>('select[aria-label="Profilo"]')!;
+    expect([...choice.options].map((option) => [option.value, option.textContent])).toEqual([
+      ["Default", "Predefinito"],
+      ["Lavoro", "Lavoro"],
+    ]);
+  });
+
+  it("un cambio che l'host rifiuta dice che cosa non è riuscito, non il suo messaggio in inglese", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    const host = createFakeHost({ settings: entries });
+    vi.spyOn(host.module.api, "settingsProfiles").mockResolvedValue({ active: "Default", names: ["Default", "Lavoro"] });
+    vi.spyOn(host.module.api, "switchSettingsProfile").mockRejectedValue({ kind: "bad_args", message: "unknown profile `Lavoro`" });
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])], host);
+
+    const machine = document.querySelector<HTMLElement>('[data-profile-scope="machine"]')!;
+    [...machine.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Cambia profilo")!.click();
+    await vi.waitFor(() => expect(machine.querySelector('[role="status"]')?.textContent).toBe(
+      "Profilo non modificato: la richiesta non era valida",
+    ));
+  });
+
+  it("una lettura dei profili che fallisce dice perché, senza il messaggio del kernel", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    const host = createFakeHost({ settings: entries });
+    vi.spyOn(host.module.api, "settingsProfiles").mockRejectedValue({ kind: "internal", message: "il registro dei profili non si legge" });
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])], host);
+
+    const machine = document.querySelector<HTMLElement>('[data-profile-scope="machine"]')!;
+    await vi.waitFor(() => expect(machine.textContent).toContain(
+      "Profili non disponibili: si è verificato un problema imprevisto",
+    ));
+    expect(machine.textContent).not.toContain("registro");
   });
 });
 
@@ -634,5 +729,82 @@ describe("radiogroup del tema e della luce", () => {
         expect(radios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
       }
     });
+  });
+});
+
+describe("la riga di un componente da aprire", () => {
+  function mountPanel(): void {
+    document.body.innerHTML = `
+      <button id="open-settings"></button>
+      <section id="settings-panel" hidden>
+        <div id="settings-tabs" role="tablist">
+          <button data-tab="settings"></button>
+          <button data-tab="components"></button>
+        </div>
+        <button id="settings-close"></button>
+        <div id="settings-body"></div>
+      </section>`;
+    mountSettings({ openVault: async () => {}, reloadProvider: box.reloadProvider });
+  }
+  const panel = () => document.querySelector<HTMLElement>("#settings-panel")!;
+  const tabOf = (name: string) => document.querySelector<HTMLElement>(`button[data-tab="${name}"]`)!;
+  const searchSwitch = () => document.querySelector<HTMLInputElement>('[data-focus-key="switch:fub.search"]');
+
+  it("a pannello chiuso apre la scheda «Componenti» con la riga a fuoco e segnata", async () => {
+    mountPanel();
+    expect(showComponent("fub.search")).toBe(true);
+    await vi.waitFor(() => expect(document.activeElement).toBe(searchSwitch()));
+    expect(panel().hidden).toBe(false);
+    expect(tabOf("components").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('[data-component="fub.search"]')!.classList).toContain("components-row--found");
+    // Il primo gesto dell'utente toglie il segno, e il fuoco resta.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    expect(document.querySelector(".components-row--found")).toBeNull();
+    expect(document.activeElement).toBe(searchSwitch());
+  });
+
+  it("a pannello aperto su un'altra scheda cambia scheda e annulla l'anteprima del tema", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    box.entries = entries;
+    box.themes = [theme("fub.serie", ["light", "dark"])];
+    document.documentElement.dataset.theme = box.themeLight;
+    box.host = createFakeHost({ settings: entries });
+    mountPanel();
+    document.querySelector<HTMLButtonElement>("#open-settings")!.click();
+    await vi.waitFor(() => expect(document.querySelectorAll('[role="radiogroup"]').length).toBeGreaterThan(1));
+    const catalog = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')][1]!;
+    [...catalog.querySelectorAll<HTMLButtonElement>('[role="radio"]')]
+      .find((radio) => radio.dataset.themeLight === "dark")!
+      .click();
+    await vi.waitFor(() => expect(box.preview).not.toBeNull());
+
+    expect(showComponent("fub.search")).toBe(true);
+    await vi.waitFor(() => expect(document.activeElement).toBe(searchSwitch()));
+    expect(box.preview).toBeNull();
+    expect(tabOf("components").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("un componente che la mappa non ha apre la scheda e basta", async () => {
+    mountPanel();
+    expect(showComponent("fub.nessuno")).toBe(true);
+    await vi.waitFor(() => expect(document.querySelector('[data-component="fub.search"]')).not.toBeNull());
+    expect(tabOf("components").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector(".components-row--found")).toBeNull();
+  });
+
+  it("il pannello chiuso prima che la riga arrivi non si riapre", async () => {
+    mountPanel();
+    expect(showComponent("fub.search")).toBe(true);
+    document.querySelector<HTMLButtonElement>("#settings-close")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(panel().hidden).toBe(true);
+    expect(document.querySelector(".components-row--found")).toBeNull();
+  });
+
+  it("smontato il pannello, la porta non apre più niente", () => {
+    mountPanel();
+    const stop = mountSettings({ openVault: async () => {}, reloadProvider: box.reloadProvider });
+    stop();
+    expect(showComponent("fub.search")).toBe(false);
   });
 });

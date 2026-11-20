@@ -1,0 +1,12 @@
+{
+  "nodes": [
+    {"id": "ingresso", "type": "text", "x": 0, "y": 0, "width": 220, "height": 80, "text": "Ingresso"},
+    {"id": "sala", "type": "text", "x": 300, "y": 0, "width": 220, "height": 80, "text": "Sala grande", "color": "4"},
+    {"id": "uscita", "type": "text", "x": 600, "y": 0, "width": 220, "height": 80, "text": "Uscita"},
+    {"id": "conti", "type": "file", "x": 300, "y": 140, "width": 360, "height": 220, "file": "Allegati/Conti.xlsx"}
+  ],
+  "edges": [
+    {"id": "e1", "fromNode": "ingresso", "fromSide": "right", "toNode": "sala", "toSide": "left"},
+    {"id": "e2", "fromNode": "sala", "fromSide": "right", "toNode": "uscita", "toSide": "left", "label": "poi"}
+  ]
+}

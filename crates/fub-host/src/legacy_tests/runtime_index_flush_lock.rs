@@ -72,8 +72,8 @@ impl IndexProvider for FlushIndex {
             return Ok(());
         }
         let workspace = self.0.workspace.lock().unwrap().as_ref().unwrap().clone();
-        let read = workspace.try_read().is_some();
-        let write = workspace.try_write().is_some();
+        let read = super::read_comes_free(&workspace);
+        let write = super::write_comes_free(&workspace);
         self.0
             .entered
             .send(Observation {
@@ -197,7 +197,7 @@ fn exercise(path: Path) {
         .expect("runtime reaches IndexProvider::flush");
     let workspace = probe.workspace.lock().unwrap().as_ref().unwrap().clone();
     let reader_workspace = workspace.clone();
-    let reader = std::thread::spawn(move || reader_workspace.try_read().is_some());
+    let reader = std::thread::spawn(move || super::read_comes_free(&reader_workspace));
     let reader_progressed = reader.join().expect("independent reader completes");
     release
         .send(())

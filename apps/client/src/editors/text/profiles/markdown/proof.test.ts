@@ -1,21 +1,21 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { syntaxTree } from "@codemirror/language";
 import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine } from "../../engine";
-import { PLACEHOLDER, ProofClient, type ProofPorts } from "../../../core/proof";
+import { PLACEHOLDER, ProofClient, sharedProofCache, type ProofPorts } from "../../../core/proof";
 import { createMarkdownProfile } from "./profile";
 import { markdownGrammar } from "./grammar";
 import { extractProse, frontmatterLanguage, locate, markdownProof, proofTheme } from "./proof";
+import { parsed, parsedView } from "./test-support";
 
+/// Uno stato con l'albero completo e già consegnato (`parsed`).
 function state(doc: string): EditorState {
-  const created = EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) });
-  ensureSyntaxTree(created, created.doc.length, 5000);
-  return created;
+  return parsed(EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) }));
 }
 
 function prose(doc: string): string[] {
@@ -47,6 +47,36 @@ describe("extractProse", () => {
       "una casella",
       "una citazione\nche continua",
       "uno", "due", "tre", "quattro",
+    ]);
+  });
+
+  it("segna come voci d'elenco i paragrafi delle voci e i compiti, non gli altri", () => {
+    const s = state([
+      "Un paragrafo",
+      "",
+      "- primo punto",
+      "  - sotto punto",
+      "",
+      "1. uno",
+      "",
+      "- [ ] attività da fare",
+      "",
+      "> una citazione",
+      "",
+      "- voce",
+      "",
+      "  > citazione nella voce",
+    ].join("\n"));
+    const marked = extractProse(s, [{ from: 0, to: s.doc.length }]).map((segment) => [segment.text, segment.listItem === true]);
+    expect(marked).toEqual([
+      ["Un paragrafo", false],
+      ["primo punto", true],
+      ["sotto punto", true],
+      ["uno", true],
+      ["attività da fare", true],
+      ["una citazione", false],
+      ["voce", true],
+      ["citazione nella voce", false],
     ]);
   });
 
@@ -128,6 +158,11 @@ describe("frontmatterLanguage", () => {
     expect(frontmatterLanguage(state("---\ntitle: x\n---\nTesto"))).toBeNull();
     expect(frontmatterLanguage(state("lang: en\n"))).toBeNull();
   });
+
+  it("scrive la lingua come la vuole `Intl`: «it_IT» diventa «it-IT»", () => {
+    expect(frontmatterLanguage(state("---\nlang: it_IT\n---\nTesto"))).toBe("it-IT");
+    expect(frontmatterLanguage(state("---\nlanguage: \"pt_BR\"\n---\nTesto"))).toBe("pt-BR");
+  });
 });
 
 /// Un host che segna «speling» con il suggerimento «spelling».
@@ -164,7 +199,10 @@ function ports(overrides: Partial<ProofPorts> = {}): ProofPorts {
   };
 }
 
-function mount(text: string, client: ProofClient) {
+/// `slowParser`: durante l'apertura ogni lettura dell'orologio salta 25 ms,
+/// così il budget di 20 ms del parser finisce dopo un solo passo, come su una
+/// macchina carica, e l'albero consegnato copre solo l'inizio.
+function mount(text: string, client: ProofClient, options: { slowParser?: boolean } = {}) {
   vi.useFakeTimers();
   const parent = document.createElement("div");
   document.body.appendChild(parent);
@@ -179,9 +217,14 @@ function mount(text: string, client: ProofClient) {
     onSelectionChange: () => {},
     extensions: () => profile.extensions(),
   });
+  let clock = Date.now();
+  const slow = options.slowParser ? vi.spyOn(Date, "now").mockImplementation(() => (clock += 25)) : null;
   engine.setDoc(text);
+  slow?.mockRestore();
   const view = EditorView.findFromDOM(parent)!;
-  ensureSyntaxTree(view.state, view.state.doc.length, 5000);
+  // Senza `slowParser` l'albero completo arriva alla vista prima del test,
+  // come quando il parser in sottofondo ha già finito.
+  if (!options.slowParser) parsedView(view);
   return { engine, view, changes, parent };
 }
 
@@ -198,6 +241,9 @@ function diagnostics(view: EditorView): Diagnostic[] {
 }
 
 describe("markdownProof", () => {
+  // La cache dei segmenti è dell'app: ogni prova parte da vuota.
+  beforeEach(() => sharedProofCache.clear());
+
   it("segna una parola e la corregge come una battuta annullabile", async () => {
     const client = new ProofClient(ports());
     const { engine, view, changes } = mount("Un **testo** con 😀 speling qui.", client);
@@ -212,6 +258,35 @@ describe("markdownProof", () => {
     expect(changes).toHaveBeenCalledTimes(1);
     undo(view);
     expect(engine.getDoc()).toBe("Un **testo** con 😀 speling qui.");
+    engine.destroy();
+    client.dispose();
+    vi.useRealTimers();
+  });
+
+  it("non chiede la maiuscola alla prima parola di una voce d'elenco", async () => {
+    // Un host che fa come la route: la prima parola minuscola è un rilievo
+    // di grammatica, tranne nei segmenti che la richiesta dice voci.
+    const client = new ProofClient(ports({
+      queryIndex: async (query) => {
+        if (query.kind !== "custom") throw new Error("query inattesa");
+        const q = query.query as { segments: string[]; language: string; list_items?: number[] };
+        const lists = new Set(q.list_items ?? []);
+        return {
+          kind: "custom",
+          value: {
+            language: { code: q.language, spelling: false, grammar: true, missing_dictionary: "it_IT" },
+            segments: q.segments.map((segment, at) => {
+              const first = /^\p{Ll}\p{L}*/u.exec(segment);
+              if (!first || lists.has(at)) return [];
+              return [{ start: 0, end: new TextEncoder().encode(first[0]).length, kind: "grammar", message: "Maiuscola a inizio frase", suggestions: [] }];
+            }),
+          },
+        };
+      },
+    }));
+    const { engine, view } = mount("minuscolo qui.\n\n- primo punto\n- [ ] attività da fare\n1. uno", client);
+    await settle();
+    expect(diagnostics(view).map((found) => view.state.sliceDoc(found.from, found.to))).toEqual(["minuscolo"]);
     engine.destroy();
     client.dispose();
     vi.useRealTimers();
@@ -275,6 +350,22 @@ describe("markdownProof", () => {
     vi.useRealTimers();
   });
 
+  it("controlla anche la prosa che il parser raggiunge dopo l'apertura", async () => {
+    // Su una macchina carica il parser si ferma presto: all'apertura l'albero
+    // copre solo l'inizio, e il resto arriva dal parser in sottofondo.
+    const client = new ProofClient(ports());
+    const paragraphs = Array.from({ length: 40 }, (_, i) => `Paragrafo ${i} corretto.`);
+    const text = ["Uno speling.", ...paragraphs, "Ultimo speling."].join("\n\n");
+    const { engine, view } = mount(text, client, { slowParser: true });
+    expect(syntaxTree(view.state).length, "l'albero consegnato all'apertura deve essere a metà").toBeLessThan(text.length);
+    await settle();
+    expect(syntaxTree(view.state).length).toBe(text.length);
+    expect(diagnostics(view).map((found) => found.from)).toEqual([text.indexOf("speling"), text.lastIndexOf("speling")]);
+    engine.destroy();
+    client.dispose();
+    vi.useRealTimers();
+  });
+
   it("smette di chiedere quando la superficie è distrutta", async () => {
     const queryIndex = vi.fn(ports().queryIndex);
     const client = new ProofClient(ports({ queryIndex }));
@@ -283,6 +374,28 @@ describe("markdownProof", () => {
     await settle();
     expect(queryIndex).not.toHaveBeenCalled();
     client.dispose();
+    vi.useRealTimers();
+  });
+
+  it("rimontata sulla stessa nota segna senza richiedere niente", async () => {
+    const text = "Primo paragrafo con speling.\n\nSecondo paragrafo pulito.";
+    const queryIndex = vi.fn(ports().queryIndex);
+    const first = new ProofClient(ports({ queryIndex }));
+    const a = mount(text, first);
+    await settle();
+    expect(diagnostics(a.view)).toHaveLength(1);
+    expect(queryIndex).toHaveBeenCalledTimes(1);
+    a.engine.destroy();
+    first.dispose();
+    vi.useRealTimers();
+
+    const second = new ProofClient(ports({ queryIndex }));
+    const b = mount(text, second);
+    await settle();
+    expect(diagnostics(b.view)).toHaveLength(1);
+    expect(queryIndex).toHaveBeenCalledTimes(1);
+    b.engine.destroy();
+    second.dispose();
     vi.useRealTimers();
   });
 });

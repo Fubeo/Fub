@@ -40,13 +40,24 @@
 // il posto giusto. Il mirror del contratto (`host/mirror.test.ts`) tiene ferma
 // la forma dei record; questo file non ne è un secondo, e infatti le risposte
 // che compone sono tipizzate dal contratto e non da sé.
+import { fakeNoteTypes } from "./fake-note-types";
+import { childName, parentOf } from "../rules/organizer";
 import type {
   BundleInfo,
+  ComponentAction,
+  ComponentsApplied,
+  ComponentsMap,
   InstalledPluginInfo,
   CommandSpec,
   ParamSpec,
   DraftInfo,
+  DocumentSource,
   DocumentWindowEvent,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingGesture,
+  DrawingOpen,
+  DrawingOutcome,
   DocumentWindowRequest,
   GridBytesSession,
   GridBytesWindow,
@@ -64,11 +75,21 @@ import type {
   PlannedEdit,
   QueryExpr,
   ResourceDescriptor,
+  ResourceWriteReceipt,
   QueryPredicate,
   SettingEntry,
   SettingValue,
   SyntaxForm,
   TextEdit,
+  DiskCause,
+  ThemeBlock,
+  ThemeFolderCheck,
+  ThemeFolderInstall,
+  ThemeFolderLight,
+  ThemeFolderLink,
+  ThemeFolderRefusal,
+  ThemeLink,
+  ThemeLinkState,
   ThemeInfo,
   ThemePayload,
   UiNode,
@@ -95,6 +116,7 @@ import type {
   SaveArtifactOutcome,
 } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
+import { tryApplyOperation } from "../editors/core/text-operation";
 import {
   CRAFT_BUNDLE_NS,
   CRAFT_PHOTO_COMMAND,
@@ -109,6 +131,69 @@ import {
   type CraftPreviewSubject,
   type CraftRenderConsent,
 } from "./craft";
+import COMPONENTS_SCENARIO from "../__fixtures__/components-scenario.json";
+
+/// Le risposte dell'host vero per la pagina «Componenti», registrate da
+/// `crates/fub-app/tests/ts_mirror_app.rs` (`UPDATE_MIRROR=1`) su un vault
+/// temporaneo con il profilo «Studio» applicato. Il finto **non ha un
+/// risolutore**: serve questi stati e queste scelte, e una scelta che qui non
+/// c'è la rifiuta lanciando.
+///
+/// `mappe` sono gli stati del vault (ciò che `components_map` risponde);
+/// `partenze` dà un nome agli stati da cui il finto può partire (`studio`,
+/// `solo-note`, `tutto`), e `profilo` è quello di serie. Ogni voce di `scelte`
+/// parte da uno stato (`prima`), porta l'azione come la scrive serde, coi
+/// default, la risposta di `components_apply`, lo stato in cui arriva (`dopo`)
+/// e gli `eventi` che l'host ha mandato alla shell dopo aver risposto, nel loro
+/// ordine, con la radice `/vault`. `senza_vault` sono gli errori dei due
+/// comandi a vault chiuso.
+export interface ComponentScenario {
+  profilo: string;
+  partenze: Record<string, number>;
+  mappe: ComponentsMap[];
+  scelte: ComponentChoice[];
+  senza_vault: { components_map: PluginError; components_apply: PluginError };
+}
+
+/// Una scelta registrata dello scenario dei componenti.
+export interface ComponentChoice {
+  prima: number;
+  azione: ComponentAction;
+  apply: boolean;
+  risposta: ComponentsApplied;
+  dopo: number;
+  eventi: KernelEvent[];
+}
+
+/// La radice del vault con cui lo scenario registra gli eventi.
+const SCENARIO_ROOT = "/vault";
+
+/// Lo scenario di serie: il JSON allarga le unioni del contratto a `string`.
+export const COMPONENT_SCENARIO = COMPONENTS_SCENARIO as unknown as ComponentScenario;
+
+/// L'azione come la scrive serde: con i campi che hanno un default. È la sola
+/// regola che il finto sa dei componenti, ed è quella di `#[serde(default)]`.
+function withSerdeDefaults(azione: ComponentAction): ComponentAction {
+  switch (azione.azione) {
+    case "accendi":
+      return { azione: "accendi", id: azione.id };
+    case "spegni":
+      return { azione: "spegni", id: azione.id, anche_questi: azione.anche_questi ?? false, orfani: azione.orfani ?? "chiedi" };
+    case "rispondi":
+      return { azione: "rispondi", orfani: azione.orfani, ids: azione.ids ?? [] };
+    case "profilo":
+      return { azione: "profilo", nome: azione.nome };
+  }
+}
+
+/// Un JSON con le chiavi in ordine: due azioni uguali si scrivono uguali.
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, inner: unknown) =>
+    inner !== null && typeof inner === "object" && !Array.isArray(inner)
+      ? Object.fromEntries(Object.entries(inner as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : inner,
+  );
+}
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
 ///
@@ -148,6 +233,25 @@ interface Lease {
 
 /// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
 const CHUNK_MAX = 64 * 1024;
+/// I limiti della domanda «lo stesso contenuto» (`fub_kernel::same_content`,
+/// A-17): al più tante voci della stessa misura e tanti byte letti; oltre, «non
+/// so», e il deposito si scrive.
+const SAME_CONTENT_MAX_CANDIDATES = 64;
+const SAME_CONTENT_MAX_BYTES = 512 * 1024 * 1024;
+
+/// Le cartelle escluse di serie, come `DEFAULT_EXCLUDED` di
+/// `crates/fub-kernel/src/ignore.rs`.
+const DEFAULT_EXCLUDED_FOLDERS = [".obsidian", ".git", "node_modules", "target", "lost+found", "System Volume Information", "$RECYCLE.BIN"];
+
+/// Il tipo di un nome per lo stesso contenuto, come `extension_of` del kernel:
+/// l'estensione dell'ultimo segmento, in minuscolo, o `null` per un nome che
+/// non ne ha (`LICENSE`) o che è solo estensione (`.gitignore`, `nota.`).
+function sameContentExtension(id: string): string | null {
+  const name = id.slice(id.lastIndexOf("/") + 1);
+  const cut = name.lastIndexOf(".");
+  if (cut <= 0 || cut === name.length - 1) return null;
+  return name.slice(cut + 1).toLowerCase();
+}
 /// I formati di `fub-format-rich` con la feature `rich` dell'host.
 const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 /// Le estensioni delle cartelle di `fub-format-xlsx`, con la feature `xlsx`
@@ -174,17 +278,59 @@ export interface GridBytesFake {
   outcomes?: GridCommandOutcome[];
 }
 
+/// Il motore del disegno del finto (K5). Senza, come l'host senza il motore,
+/// ogni porta del disegno rifiuta con `unserved`; dato, il motore c'è: il
+/// finto tiene la copia di ogni istanza aperta (testo LF e revisione), la fa
+/// seguire ai `drawingSync` controllando che ogni differenza si applichi, e
+/// passa gesti e comandi alle risposte del banco. Le chiamate restano nel
+/// registro (`atGate("drawingGesture")`, …).
+export interface DrawingFake {
+  /// Ciò che `openDrawing` risponde; senza, un'istanza nuova alla revisione
+  /// 0 senza parti che restano come sono.
+  open?: (doc: string, text: string) => DrawingOpen;
+  /// L'esito di un gesto. Senza, un gesto lancia: il finto non sa disegnare.
+  gesto?: (gesture: DrawingGesture, copia: DrawingFakeCopy) => DrawingOutcome;
+  /// I comandi della selezione; senza, nessuno.
+  comandi?: (selection: string[], copia: DrawingFakeCopy) => DrawingCommandInfo[];
+  /// L'esito di un comando. Senza, un comando lancia.
+  comando?: (request: DrawingCommandRequest, copia: DrawingFakeCopy) => DrawingOutcome;
+  /// Il motore spento a metà sessione, letto a ogni chiamata: finché dice
+  /// `true` ogni porta del disegno rifiuta con `unserved` e le istanze aperte
+  /// se ne vanno, come l'host col motore spento nel vault (T29); riacceso,
+  /// un'apertura dà un'istanza nuova.
+  spento?: () => boolean;
+}
+
+/// La copia di un disegno aperto nel motore finto, com'è adesso.
+export interface DrawingFakeCopy {
+  readonly instance: string;
+  readonly doc: string;
+  readonly text: string;
+  readonly revision: string;
+}
+
 export interface Options {
   /// I file del vault: path → testo. Le cartelle si deducono dai path, come
   /// sul disco.
   file?: Record<string, string>;
   root?: string | null;
-  sessionNotice?: KernelNotice | null;
+  /// Il vault che l'app trova all'avvio (`initialVault`): di serie `root`.
+  /// Con `null` l'avvio finisce sul benvenuto, mentre `root` resta il vault
+  /// che i comandi servono quando lo si apre (un vault nuovo appena creato).
+  initialVault?: string | null;
+  /// Gli avvisi di sessione, consegnati uno per tiraggio come fa l'host;
+  /// finiti, il tiraggio risponde `null`.
+  sessionNotice?: KernelNotice | readonly KernelNotice[] | null;
   /// La versione che `appVersion` dichiara; di serie `0.1.0`.
   appVersion?: string;
   view?: ViewSpec[];
   commands?: CommandSpec[];
   settings?: SettingEntry[];
+  /// L'organizzazione del vault alla prima apertura: icone, appuntate, ordine e
+  /// spazi. Di serie vuota, come un vault appena creato. Il finto la tiene come
+  /// il kernel: una rinomina (di Fub, da un'altra app o di una cartella) la porta
+  /// con sé, e un'appuntata messa resta messa.
+  organization?: Organization;
   syntaxForms?: SyntaxForm[];
   /// Bundle nativi/ufficiali che l'host conosce.
   bundles?: BundleInfo[];
@@ -192,11 +338,37 @@ export interface Options {
   themes?: ThemeInfo[];
   /// Fascio per luce, indicizzato come `${id}:${light}`.
   themePayloads?: Record<string, ThemePayload>;
+  /// Le cartelle che «Installa da cartella…» può scegliere, per path: il tema
+  /// che la cartella contiene, il rifiuto tipizzato con cui l'host vero la
+  /// rifiuterebbe (manifest assente, link simbolico, stato del catalogo), o il
+  /// `PluginError` del disco. L'impronta è dei fasci: cambiarli fra il
+  /// controllo e l'installazione è la cartella cambiata.
+  themeFolders?: Record<string, ThemeFolderFake | ThemeFolderRefusal | PluginError>;
+  /// La finestra nativa di scelta della cartella: il path scelto, `null` se la
+  /// persona la chiude. Senza, la finestra si chiude sempre.
+  pickThemeFolder?: () => string | null;
+  /// La cartella del tema collegato all'avvio (la chiave
+  /// `developer.theme-folder`), un path di `themeFolders`. Una cartella che
+  /// `themeFolders` non ha è sparita (`missing`).
+  linkedThemeFolder?: string | null;
+  /// L'osservatore della cartella collegata non parte (il sistema non ne ha
+  /// più): `watched` resta falso, e i salvataggi non arrivano.
+  themeWatchFails?: boolean;
+  /// Temi installati revocati dal catalogo: non stanno in `themes` (l'host non
+  /// li elenca), e «Installa da cartella…» con lo stesso id è `revoked`.
+  revokedThemes?: string[];
+  /// Ciò che nella cartella dei temi blocca un id (`blocked`): il file della
+  /// versione che non si legge, un collegamento, una forma che non è una
+  /// cartella. Lo dice la sonda, prima di leggere la cartella scelta.
+  blockedThemes?: Record<string, ThemeBlock>;
   /// Inventario installato della macchina, compresi elementi spenti o senza
   /// consenso: il fake non li ricava dai bundle runtime.
   installedPlugins?: InstalledPluginInfo[];
   installablePlugins?: Record<string, InstalledPluginInfo>;
   gridBytes?: GridBytesFake;
+  /// Il motore del disegno; senza, le porte del disegno rifiutano con
+  /// `unserved` (vedi `DrawingFake`).
+  drawing?: DrawingFake;
   /// Provider finti per le query custom, indicizzati dal namespace.
   customQueries?: Record<string, (query: unknown) => unknown>;
   /// I vault che la macchina ricorda (i recenti). `forgetVault` li toglie.
@@ -212,6 +384,10 @@ export interface Options {
   draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
+  /// Chi serve le tessere della vista Mappa da un sito che la riga
+  /// `map.tile-hosts` ammette. Il finto rifiuta da solo, come l'host, i siti
+  /// che la riga non ha; senza questa porta un sito ammesso risponde `io`.
+  mapTile?: (url: string, kind: "raster" | "vector") => Promise<ArrayBuffer>;
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
   /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
   revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
@@ -230,6 +406,15 @@ export interface Options {
   /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
   /// l'app rifiuta con `unserved`.
   live?: LiveNetwork;
+  /// La pagina «Componenti»: di serie [`COMPONENT_SCENARIO`], le risposte
+  /// registrate dall'host vero. Con `root: null` i due comandi rispondono
+  /// l'errore che l'host dà a vault chiuso.
+  components?: ComponentScenario;
+  /// Lo stato da cui parte la pagina «Componenti»: un nome di
+  /// `components.partenze` (`solo-note`, `tutto`). Di serie
+  /// `components.profilo`, cioè «Studio». Un nome che lo scenario non ha
+  /// lancia.
+  componentsStart?: string;
   /// I file delle app Craft (N7). Con, un `.vectorcraft`, un `.pcraft`, un
   /// `.figcraft` e un `.xmp` hanno il formato `craft-*` a byte, come con
   /// `fub-format-craft` montato, e il bundle `fub.craft` risponde a
@@ -304,10 +489,17 @@ export interface FakeHost {
   calls: Call[];
   /// Le chiamate a **quella** porta, in ordine.
   atGate(gate: string): Call[];
+  /// Le chiavi di apertura che tengono un documento di videoscrittura in
+  /// questo vault (`openDocument`, `writeDocument` con `open`), finché
+  /// `documentClosed` non le chiude.
+  openKeys(vault?: string | null): number;
   /// Rinomina un file **senza che la shell l'abbia chiesto**: è il `mv` da
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
   renameFromOutside(from: string, to: string): void;
+  /// Cancella una nota **senza che la shell l'abbia chiesto** (`rm` da
+  /// terminale, il sync): il file sparisce e l'evento arriva.
+  removeFromOutside(id: string): void;
   /// Riscrive un file **senza che la shell l'abbia chiesto**: l'altra
   /// applicazione, il sync, un merge. I byte cambiano e l'evento arriva dal
   /// watcher, come succede davvero.
@@ -331,7 +523,19 @@ export interface FakeHost {
   /// Ciò che la porta avrebbe fatto **non lo fa**: una scrittura guasta non
   /// lascia i byte, o un banco che chiede «il disco rifiuta» leggerebbe il file
   /// nuovo e crederebbe di aver provato il contrario.
-  fault(gate: string, reason?: string): () => void;
+  ///
+  /// Un `PluginError` al posto della frase rifiuta con l'errore tipizzato,
+  /// come il backend vero: un permesso negato, un conflitto.
+  fault(gate: string, reason?: string | PluginError): () => void;
+  /// Fa rispondere a `componentsApply` l'errore tipato `error`, finché non si
+  /// chiama ciò che torna: è l'host che non riesce a scrivere la scelta. Lo
+  /// stato non cambia e nessun evento arriva.
+  componentsFail(error: PluginError): () => void;
+  /// Applica una scelta dei componenti **senza che la shell l'abbia chiesto**:
+  /// la CLI, MCP, un'altra finestra. Lo stato cambia e gli eventi registrati
+  /// arrivano subito, nel loro ordine, senza passare da `componentsApply`. Una
+  /// scelta che lo scenario non ha da questo stato lancia.
+  componentsFromOutside(azione: ComponentAction, apply?: boolean): ComponentsApplied;
 
   /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
   ///
@@ -341,12 +545,23 @@ export interface FakeHost {
 
   /// Simula la chiusura nativa di una finestra documento ancora aperta.
   requestDocumentWindowClose(label: string): void;
+  /// Simula una finestra documento che muore da sola (un crash, il sistema
+  /// che la chiude): sparisce senza passare da `closeDocumentWindow`.
+  destroyDocumentWindow(label: string): void;
   /// Manda un evento del kernel a chi si è iscritto, come farebbe il ponte.
   ///
   /// Restituisce `false` se **nessuno** era iscritto: è il caso che interessa
   /// di più, perché è ciò che succede quando un ascoltatore si monta dopo il
   /// router — e un evento consegnato a nessuno non fallisce da sé.
-  emit(event: KernelEvent): boolean;
+  ///
+  /// `vault` è il vault di cui è il fatto, come lo mette il ponte vero
+  /// (`KernelNotice.vault`); senza, il notice non ne nomina nessuno.
+  emit(event: KernelEvent, vault?: string): boolean;
+  /// La cartella del tema collegato è cambiata (`fub://theme-changed`): manda
+  /// a chi ascolta lo stato di adesso, coi file salvati. Chi prova modifica
+  /// prima `themeFolders` (un fascio nuovo, un rifiuto, la cartella tolta).
+  /// `false` se nessuna cartella è collegata o nessuno ascolta.
+  themeFolderChanged(changed?: string[]): boolean;
   /// Manda alla shell un gruppo di eventi di una sessione live, come farebbe
   /// l'host quando lo scrittore entra, scrive o esce.
   ///
@@ -357,6 +572,9 @@ export interface FakeHost {
   /// dopo la fine. Un banco che la scrivesse proverebbe una shell per una rete
   /// che non esiste.
   liveEmit(session: string, events: LiveEvent[]): void;
+  /// La copia di un disegno aperto nel motore finto, o `undefined` se
+  /// l'istanza non c'è (mai aperta, o chiusa).
+  drawingCopy(instance: string): DrawingFakeCopy | undefined;
 }
 
 /// Una sessione live del finto: ciò che l'host vero tiene, senza la rete.
@@ -422,9 +640,122 @@ function resolveAgainst(from: string, raw: string): string | null {
   return segments.length ? segments.join("/") : null;
 }
 
+/// Il documento che la pagina di un wikilink nomina, fra `ids`: una nota per
+/// nome, poi un file per nome (`![[foto.png]]`). È la risoluzione del finto,
+/// più povera di quella del kernel: niente omonimi in ordine, niente path
+/// relativi.
+function wikiPageDoc(ids: Iterable<string>, page: string): string | undefined {
+  const all = [...ids];
+  const expected = `${page}.md`;
+  return all.find((id) => id === expected || id.endsWith(`/${expected}`))
+    ?? all.find((id) => id === page || id.endsWith(`/${page}`));
+}
+
+/// Un wikilink (anche incorporato, `![[…]]`): la pagina, poi il frammento e
+/// l'alias, che la rinomina lascia com'erano.
+const WIKILINK = /(!?\[\[)([^\]|#\n]*)([^\]\n]*)\]\]/g;
+
+/// L'organizzazione del vault come la tiene il kernel (`organization.rs`): una
+/// copia, perché il client non deve condividere con il finto i suoi oggetti.
+function copyOrganization(org: Organization): Organization {
+  return {
+    icons: { ...org.icons },
+    pinned: [...org.pinned],
+    order: Object.fromEntries(Object.entries(org.order).map(([folder, names]) => [folder, [...names]])),
+    spaces: [...org.spaces],
+  };
+}
+
+/// Le liste dell'organizzazione sono insiemi ordinati: un id non ci sta due
+/// volte, e chi c'era già non si sposta (come `senza_doppioni` del kernel).
+function withoutDuplicates(org: Organization): void {
+  const once = (ids: string[]) => [...new Set(ids)];
+  org.pinned = once(org.pinned);
+  org.spaces = once(org.spaces);
+  for (const folder of Object.keys(org.order)) org.order[folder] = once(org.order[folder]!);
+}
+
+/// Il posto di un path nell'ordine scelto a mano della sua cartella: lo stesso
+/// posto se la cartella resta, altrimenti esce da lì.
+function moveInOrder(org: Organization, from: string, to: string): void {
+  const names = org.order[parentOf(from)];
+  const at = names?.indexOf(childName(from)) ?? -1;
+  if (!names || at === -1) return;
+  if (parentOf(from) === parentOf(to)) names[at] = childName(to);
+  else names.splice(at, 1);
+}
+
+/// Un documento cambia path (`from` → `to`): l'icona segue se il path d'arrivo è
+/// libero, il pin e il posto nell'ordine seguono. Come `migrate` del kernel.
+function moveNote(org: Organization, from: string, to: string): void {
+  const icon = org.icons[from];
+  if (icon !== undefined && (org.icons[to] === undefined || from === to)) {
+    delete org.icons[from];
+    org.icons[to] = icon;
+  }
+  org.pinned = org.pinned.map((id) => (id === from ? to : id));
+  moveInOrder(org, from, to);
+  withoutDuplicates(org);
+}
+
+/// Una cartella cambia path, con ciò che sta sotto: come `migrate_folder` del
+/// kernel. Su una collisione vince ciò che la destinazione aveva già.
+function moveFolder(org: Organization, from: string, to: string): void {
+  const rebase = (path: string): string | null =>
+    path === from ? to : path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : null;
+  for (const [key, icon] of Object.entries(org.icons)) {
+    const moved = rebase(key);
+    if (moved !== null && org.icons[moved] === undefined) {
+      delete org.icons[key];
+      org.icons[moved] = icon;
+    }
+  }
+  for (const [key, names] of Object.entries(org.order)) {
+    const moved = rebase(key);
+    if (moved !== null && org.order[moved] === undefined) {
+      delete org.order[key];
+      org.order[moved] = names;
+    }
+  }
+  org.pinned = org.pinned.map((path) => rebase(path) ?? path);
+  org.spaces = org.spaces.map((path) => rebase(path) ?? path);
+  moveInOrder(org, from, to);
+  withoutDuplicates(org);
+}
+
+/// I testi riscritti da una rinomina di `from` in `to`, per documento: i soli
+/// wikilink che nominavano `from` cambiano pagina, nella forma in cui erano
+/// scritti (per nome o per path, con l'estensione se c'era), col frammento e
+/// l'alias intatti. È la parte di `link_retarget_edits` che il banco usa; i
+/// link Markdown `[testo](path)` il finto non li riscrive.
+function renameRewrites(texts: ReadonlyMap<string, string>, from: string, to: string): Map<string, string> {
+  const dot = from.lastIndexOf(".");
+  const ext = dot > from.lastIndexOf("/") ? from.slice(dot) : "";
+  const stem = (id: string): string => (ext && id.endsWith(ext) ? id.slice(0, -ext.length) : id);
+  const rewritten = new Map<string, string>();
+  for (const [id, text] of texts) {
+    const next = text.replace(WIKILINK, (whole, open: string, page: string, rest: string) => {
+      const name = page.trim();
+      if (name === "" || wikiPageDoc(texts.keys(), name) !== from) return whole;
+      const withExt = ext !== "" && name.toLowerCase().endsWith(ext.toLowerCase());
+      const byPath = name.includes("/");
+      const target = byPath ? stem(to) : stem(to).slice(stem(to).lastIndexOf("/") + 1);
+      return `${open}${target}${withExt ? ext : ""}${rest}]]`;
+    });
+    if (next !== text) rewritten.set(id, next);
+  }
+  return rewritten;
+}
+
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
+  const sessionNotices: KernelNotice[] =
+    options.sessionNotice == null
+      ? []
+      : Array.isArray(options.sessionNotice)
+        ? [...(options.sessionNotice as readonly KernelNotice[])]
+        : [options.sessionNotice as KernelNotice];
   const gridBytes = options.gridBytes;
   const gridBytesInstances = new Map<string, GridBytesSession>();
   const gridBytesKey = (revision: string, sheet: string, row: number, column: number) =>
@@ -434,6 +765,26 @@ export function createFakeHost(options: Options = {}): FakeHost {
   );
   let gridBytesCommit = 0;
   let gridBytesOutcome = 0;
+  const drawing = options.drawing;
+  const drawingCopies = new Map<string, DrawingFakeCopy>();
+  let drawingInstances = 0;
+  /// Il motore spento, come l'host senza il componente.
+  const drawingUnserved = (): PluginError => ({ kind: "unserved", message: "host fake: il motore del disegno non c'è" });
+  /// Il motore c'è adesso; spento, lancia `unserved` e chiude le istanze.
+  const drawingServed = (): void => {
+    if (!drawing) throw drawingUnserved();
+    if (drawing.spento?.() === true) {
+      drawingCopies.clear();
+      throw drawingUnserved();
+    }
+  };
+  /// La copia di un'istanza aperta, o il rifiuto dell'host per una chiusa.
+  const drawingCopyOf = (instance: string): DrawingFakeCopy => {
+    drawingServed();
+    const copy = drawingCopies.get(instance);
+    if (!copy) throw { kind: "not_found", message: `host fake: il disegno «${instance}» non è aperto` } satisfies PluginError;
+    return copy;
+  };
   const docs = new Map<string, Document>();
   let known = [...(options.knownVaults ?? [])];
   const trash = new Map<string, Trashed>();
@@ -450,8 +801,202 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const calls: Call[] = [];
   const view = options.view ?? [];
   const bundles = options.bundles ?? [];
-  const themes = options.themes ?? [];
-  const themePayloads = options.themePayloads ?? {};
+  const themes = [...(options.themes ?? [])];
+  const themePayloads: Record<string, ThemePayload> = { ...options.themePayloads };
+  const themeFolders = options.themeFolders ?? {};
+  /// Gli id dei temi installati che il catalogo ha revocato: l'host non li
+  /// elenca, e una cartella non li sostituisce.
+  const revokedThemes = new Set(options.revokedThemes ?? []);
+
+  /// La cartella collegata (`developer.theme-folder`), e chi ascolta il suo
+  /// campanello.
+  let linkedSource: string | null = options.linkedThemeFolder ?? null;
+  /// L'ultimo id e nome letti, come li ricorda il custode dell'host.
+  let linkedKnown: { id: string | null; name: string | null } = { id: null, name: null };
+  const themeChanged = new Set<(link: ThemeLink) => void>();
+  /// Un osservatore vivo guarda `linkedSource`: come l'host, lo si monta solo
+  /// su una cartella pronta, e solo se parte.
+  let watching = false;
+
+  function developerIsOn(): boolean {
+    return settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY)?.value === true;
+  }
+
+  /// Lo stato della cartella collegata, come `fub_host::theme::theme_link`.
+  function readLink(source: string): ThemeLink {
+    const folder = themeFolders[source];
+    let state: ThemeLinkState;
+    let manifest: ThemeInfo["manifest"] | null = null;
+    if (folder === undefined) state = { state: "missing" };
+    else if ("kind" in folder) state = { state: "unreadable", error: folder };
+    else if ("reason" in folder) state = { state: "refused", refusal: folder };
+    else {
+      manifest = folder.info.manifest;
+      state = themes.some((theme) => theme.manifest.id === manifest!.id) ? { state: "collision" } : { state: "ready" };
+    }
+    if (manifest) linkedKnown = { id: manifest.id, name: manifest.name };
+    const watched = watching && source === linkedSource;
+    return { folder: source, id: linkedKnown.id, name: linkedKnown.name, changed: [], watched, ...state };
+  }
+
+  /// La cartella collegata pronta, se la modalità sviluppatore è accesa.
+  function linkedReady(): ThemeFolderFake | null {
+    if (linkedSource === null || !developerIsOn()) return null;
+    const folder = themeFolders[linkedSource];
+    if (folder === undefined || "kind" in folder || "reason" in folder) return null;
+    const id = folder.info.manifest.id;
+    return themes.some((theme) => theme.manifest.id === id) ? null : folder;
+  }
+
+  function listedThemes(): ThemeInfo[] {
+    const linked = linkedReady();
+    return linked ? [...themes, { ...linked.info, trust: "development" }] : [...themes];
+  }
+
+  /// «Collega una cartella…», come `Host::link_theme_folder`.
+  function linkThemeFolder(): ThemeFolderLink {
+    developerOn();
+    const source = options.pickThemeFolder?.() ?? null;
+    if (source === null) return { outcome: "cancelled" };
+    const previous = linkedKnown;
+    linkedKnown = { id: null, name: null };
+    const link = readLink(source);
+    if (link.state !== "ready") {
+      linkedKnown = previous;
+      return { outcome: "refused", link };
+    }
+    linkedSource = source;
+    watching = options.themeWatchFails !== true;
+    return { outcome: "linked", link: { ...link, watched: watching } };
+  }
+
+  function developerOn(): void {
+    const developer = settings.find((entry) => entry.spec.key === DEVELOPER_MODE_KEY);
+    if (developer?.value !== true) {
+      throw { kind: "permission_denied", message: "Per installare un tema da una cartella accendi la modalità sviluppatore." };
+    }
+  }
+
+  /// La cartella controllata, come la tiene l'host: il permesso, che vale una
+  /// volta, di installarla. Dopo una collisione vale solo per «Sostituisci».
+  let checkedFolder: { source: string; digest: string; manifest: ThemeInfo["manifest"]; replaceOnly: boolean } | null =
+    null;
+
+  function themeFolder(source: string): ThemeFolderFake | ThemeFolderRefusal {
+    const folder = themeFolders[source];
+    if (folder === undefined) throw { kind: "io", message: `I/O error: ${source}: no such folder` };
+    if ("kind" in folder) throw folder;
+    return folder;
+  }
+
+  /// Gli asset che il cancello della shell legge da sé (caratteri, icone),
+  /// come `fub_host::theme::discover::shell_assets`.
+  function shellAssets(manifest: ThemeInfo["manifest"]): Set<string> {
+    return new Set([
+      ...(manifest.fonts ?? []).map((font) => `${manifest.asset_namespace}${font.file}`),
+      ...(manifest.icons ? [`${manifest.asset_namespace}${manifest.icons}`] : []),
+    ]);
+  }
+
+  /// Ciò che di una luce cambia: il foglio e gli altri asset per nome, come
+  /// `fub_host::theme::ThemeFolderLight`.
+  function folderLight(manifest: ThemeInfo["manifest"], payload: ThemePayload): ThemeFolderLight {
+    const read = shellAssets(manifest);
+    const named = Object.keys(payload.assets).filter((name) => !read.has(name));
+    return { light: payload.light, sheet: payload.sheet, named };
+  }
+
+  /// La finestra di scelta e la lettura senza installare, come
+  /// `check_theme_folder`: aprirla scarta il permesso di prima, la modalità si
+  /// controlla prima della finestra, poi un fascio per luce dichiarata e
+  /// l'impronta, o il rifiuto tipizzato. Una cartella pronta diventa la
+  /// cartella controllata.
+  function checkThemeFolder(): ThemeFolderCheck {
+    checkedFolder = null;
+    developerOn();
+    const source = options.pickThemeFolder?.() ?? null;
+    if (source === null) return { outcome: "cancelled" };
+    const folder = themeFolder(source);
+    if ("reason" in folder) return { outcome: "refused", folder: source, refusal: folder };
+    const { manifest } = folder.info;
+    const payloads = manifest.lights.map((light) => {
+      const payload = folder.payloads[`${manifest.id}:${light}`];
+      if (payload === undefined) throw { kind: "bad_args", message: `missing sheet for ${light}` };
+      return payload;
+    });
+    const read = shellAssets(manifest);
+    // La pelle e i byte che il cancello legge, una volta per tutte le luci.
+    const assets: Record<string, readonly number[]> = {};
+    for (const payload of payloads) {
+      for (const [name, bytes] of Object.entries(payload.assets)) if (read.has(name)) assets[name] = bytes;
+    }
+    const lights = payloads.map((payload) => folderLight(manifest, payload));
+    const skin = payloads[0]?.skin ?? null;
+    const digest = folderDigest(folder);
+    checkedFolder = { source, digest, manifest, replaceOnly: false };
+    return { outcome: "ready", folder: source, manifest, skin, assets, lights, digest };
+  }
+
+  /// L'installazione da cartella come la fa l'host
+  /// (`Host::install_theme_from_folder`): la modalità sviluppatore si rilegge
+  /// a ogni chiamata, il permesso del controllo si consuma (un'impronta che
+  /// non è la sua è `unchecked` e non lo tocca), una collisione senza
+  /// `replace` lo rinnova solo per «Sostituisci».
+  function installThemeFolder(replace: boolean, digest: string): ThemeFolderInstall {
+    developerOn();
+    const checked = checkedFolder;
+    if (checked === null || checked.digest !== digest) return { outcome: "unchecked" };
+    checkedFolder = null;
+    if (checked.replaceOnly && !replace) return { outcome: "unchecked" };
+    const outcome = publishThemeFolder(checked.source, checked.manifest, replace, digest);
+    if (outcome.outcome === "collision" && !replace && checkedFolder === null) {
+      checkedFolder = { ...checked, replaceOnly: true };
+    }
+    return outcome;
+  }
+
+  /// Come `fub_host::theme::install_theme_from_folder`: **prima** la sonda
+  /// della destinazione col manifest del controllo (ciò che blocca, la revoca,
+  /// la collisione), poi la cartella e la sua impronta. Una cartella che non
+  /// si legge più non ha i byte del controllo (`changed`). Una sostituzione
+  /// che si ferma (`replaceError`) lascia il vecchio, ed è `failed` col suo
+  /// perché (`replaceCause`); con `replaceLost` il vecchio non torna, ed è
+  /// `replace_failed`.
+  function publishThemeFolder(
+    source: string,
+    manifest: ThemeInfo["manifest"],
+    replace: boolean,
+    digest: string,
+  ): ThemeFolderInstall {
+    const { id, name, version } = manifest;
+    const block = options.blockedThemes?.[id];
+    if (block !== undefined) return { outcome: "blocked", why: block, path: `/config/themes/${id}`, installed: true };
+    const at = themes.findIndex((theme) => theme.manifest.id === id);
+    if (at < 0 && revokedThemes.has(id)) return { outcome: "revoked", id, name, version };
+    if (at >= 0 && !replace) {
+      return { outcome: "collision", id, name, version, installed_version: themes[at]!.manifest.version };
+    }
+    const folder = themeFolders[source];
+    if (folder === undefined || "kind" in folder || "reason" in folder || digest !== folderDigest(folder)) {
+      return { outcome: "changed" };
+    }
+    if (folder.installRefusal) return { outcome: "refused", refusal: folder.installRefusal };
+    if (at >= 0 && folder.replaceError) {
+      if (!folder.replaceLost) {
+        return { outcome: "failed", cause: folder.replaceCause ?? "other", error: folder.replaceError };
+      }
+      themes.splice(at, 1);
+      for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
+      return { outcome: "replace_failed", id, name, version, kept: ".tmp-old-1-2", error: folder.replaceError };
+    }
+    if (at >= 0) {
+      themes.splice(at, 1);
+      for (const key of Object.keys(themePayloads)) if (key.startsWith(`${id}:`)) delete themePayloads[key];
+    }
+    themes.push(folder.info);
+    Object.assign(themePayloads, folder.payloads);
+    return { outcome: "installed", id, name, version, replaced: at >= 0 };
+  }
   const installedPlugins = new Map(
     (options.installedPlugins ?? []).map((plugin) => [
       plugin.installation,
@@ -459,6 +1004,37 @@ export function createFakeHost(options: Options = {}): FakeHost {
     ]),
   );
   const installablePlugins = options.installablePlugins ?? {};
+  const components = options.components ?? COMPONENT_SCENARIO;
+  const componentsStart = options.componentsStart ?? components.profilo;
+  /// Lo stato del vault di prova: un indice in `components.mappe`.
+  let componentState = components.partenze[componentsStart] ?? -1;
+  if (components.mappe[componentState] === undefined) {
+    throw new Error(`host fake: the component scenario has no start «${componentsStart}»`);
+  }
+  /// L'errore che `componentsApply` dà adesso, se qualcuno l'ha guastata.
+  let componentsFailure: PluginError | null = null;
+
+  /// La scelta registrata per `azione` dallo stato di adesso: chi la trova la
+  /// applica. Una scelta che lo scenario non ha non si inventa.
+  function componentChoice(azione: ComponentAction, apply: boolean): ComponentChoice {
+    const wanted = canonical(withSerdeDefaults(azione));
+    const recorded = components.scelte.find(
+      (scelta) => scelta.prima === componentState && scelta.apply === apply && canonical(scelta.azione) === wanted,
+    );
+    if (recorded === undefined) {
+      throw new Error(`host fake: no recorded answer for ${wanted} (apply: ${apply}) in component state ${componentState}`);
+    }
+    componentState = recorded.dopo;
+    return recorded;
+  }
+
+  /// Gli eventi di una scelta, con la radice di questo vault al posto di
+  /// quella dello scenario.
+  function componentEvents(recorded: ComponentChoice): KernelEvent[] {
+    return recorded.eventi.map((event) =>
+      "root" in event && event.root === SCENARIO_ROOT && root !== null ? { ...event, root } : structuredClone(event),
+    );
+  }
   let listener: ((n: KernelNotice) => void) | null = null;
   let onClose: (() => Promise<boolean>) | null = null;
   let onCloseFailure: ((reason: unknown) => void) | null = null;
@@ -467,6 +1043,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
   let trashedCount = 0;
   /// Le cartelle create vuote: le altre si ricavano dai path dei documenti.
   const createdFolders = new Set<string>();
+  /// L'organizzazione del vault: la tengono le scritture del finto, come il
+  /// kernel tiene il suo sidecar. Parte da quella che il vault ha (`options`).
+  let organization: Organization = copyOrganization(
+    options.organization ?? { icons: {}, pinned: [], order: {}, spaces: [] },
+  );
 
   for (const [id, text] of Object.entries(options.file ?? {})) write(id, text);
   for (const [id, resource] of Object.entries(options.resources ?? {})) writeBytes(id, resource.bytes, resource.mime);
@@ -476,6 +1057,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const leases = new Map<string, Lease>();
   let nextLease = 0;
   let nextJob = 0;
+  /// I lavori accodati e mai finiti: la risposta di `jobs`, come quella del
+  /// kernel, o il centro attività che riconcilia li perderebbe.
+  const liveJobs: { id: string; job: string; plugin: string; since: number; progress: null }[] = [];
 
   function write(id: string, text: string): string {
     revision += 1;
@@ -506,6 +1090,67 @@ export function createFakeHost(options: Options = {}): FakeHost {
     return doc.bytes ?? new TextEncoder().encode(doc.text);
   }
 
+  /// Il file finto dello stesso tipo di `target` che ha esattamente questi
+  /// byte, il primo per percorso, o `null` (nessuno, contenuto vuoto, o «non
+  /// so» oltre i limiti): la stessa domanda di `Host::same_content`
+  /// (`crates/fub-kernel/src/same_content.rs`). Il tipo è l'estensione del
+  /// nome, piegata in minuscolo e confrontata uguale (`sameContentExtension`).
+  /// Il cestino del finto non sta in `docs`; i file esclusi non sono candidati
+  /// (`excludedFromSameContent`).
+  ///
+  /// **Dove il finto è diverso.** Il budget: l'host vero spende i byte che
+  /// legge davvero (un'impronta già nota non costa niente, un candidato scelto
+  /// costa due letture, impronta e confronto) e risponde «non so» per budget
+  /// finito; il finto non tiene impronte e conta una lettura per candidato.
+  /// Con 512 MiB di budget e 64 MiB per deposito la differenza non si vede
+  /// in nessun banco, e simularla vorrebbe dire rifare l'indice nel finto.
+  function sameContent(target: string, wanted: Uint8Array): string | null {
+    if (wanted.byteLength === 0) return null;
+    if (wanted.byteLength > SAME_CONTENT_MAX_BYTES) return null;
+    const type = sameContentExtension(target);
+    const candidates = [...docs.entries()]
+      .filter(([id]) => !excludedFromSameContent(id))
+      .filter(([id]) => sameContentExtension(id) === type)
+      .map(([id, doc]) => [id, bytesOf(doc)] as const)
+      .filter(([, bytes]) => bytes.byteLength === wanted.byteLength)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    if (candidates.length > SAME_CONTENT_MAX_CANDIDATES) return null;
+    let read = 0;
+    for (const [id, bytes] of candidates) {
+      read += bytes.byteLength;
+      if (read > SAME_CONTENT_MAX_BYTES) return null;
+      if (bytes.every((byte, at) => byte === wanted[at])) return id;
+    }
+    return null;
+  }
+
+  /// Il file `id` è fuori dai candidati dello stesso contenuto, come per
+  /// `IgnorePolicy::excludes_path` del kernel? Ogni segmento si confronta con
+  /// la chiave di risoluzione (trim, NFC, minuscolo): la struttura (`.fub`,
+  /// `.trash`) sempre, i nascosti (un punto davanti, `~$…`, `…~`, `#…#`) se
+  /// `files.show-hidden` non li mostra, le cartelle di `files.excluded-folders`
+  /// (o della lista di serie) solo come cartelle. Il `.gitignore` e i
+  /// temporanei di scrittura il finto non li ha.
+  function excludedFromSameContent(id: string): boolean {
+    const key = (name: string) => name.trim().normalize("NFC").toLowerCase();
+    const setting = (name: string) => settings.find((entry) => entry.spec.key === name)?.value;
+    const shown = setting("files.show-hidden");
+    const showHidden = typeof shown === "boolean" ? shown : false;
+    const declared = setting("files.excluded-folders");
+    const folders = new Set((Array.isArray(declared) ? declared : DEFAULT_EXCLUDED_FOLDERS).map(key));
+    const segments = id.split("/");
+    return segments.some((segment, at) => {
+      const name = key(segment);
+      if (name === ".fub" || name === ".trash") return true;
+      const hidden = name.startsWith(".")
+        || (name.startsWith("~$") && name.length > 2)
+        || (name.endsWith("~") && name.length > 1)
+        || (name.length > 2 && name.startsWith("#") && name.endsWith("#"));
+      if (!showHidden && hidden) return true;
+      return at + 1 < segments.length && folders.has(name);
+    });
+  }
+
   /// Il formato che il registro dei provider riconoscerebbe dall'estensione,
   /// o `null`: allora nessun provider serve il file e `write_document` lo
   /// rifiuta (`unserved`), come nel kernel.
@@ -525,6 +1170,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
     return null;
   }
 
+  /// Ciò che `readDocument` e `openDocument` rispondono.
+  function sourceOf(id: string, doc: Document): DocumentSource {
+    return {
+      // Una cartella si apre col giornale vuoto: i byte sono suoi.
+      text: formatOf(id) === "xlsx" ? "" : doc.text,
+      revision: doc.revision,
+      format_id: formatOf(id),
+      source_kind: sourceKindOf(id),
+      text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
+    };
+  }
+
   /// Come il registro dei formati dell'host: un documento di videoscrittura il
   /// provider lo vuole a byte, e la shell ne riceve la proiezione
   /// (`fub-format-rich`).
@@ -539,13 +1196,32 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const throttles = new Map<string, Promise<void>>();
 
   /// Le porte guaste, col motivo che rispondono.
-  const faults = new Map<string, string>();
+  const faults = new Map<string, string | PluginError>();
+  const faultError = (fault: string | PluginError): Error | PluginError =>
+    typeof fault === "string" ? new Error(fault) : fault;
 
   /// Gli argomenti di una porta con il **vault nominato** in coda, ma solo se la
   /// chiamata lo nomina: le asserzioni sulle chiamate senza vault restano quelle
   /// di sempre, e un banco che vuole provare «questa scrittura ha nominato il
   /// suo vault» lo legge dall'ultimo argomento (FUB-001).
   const named = (args: unknown[], vault?: string | null): unknown[] => (vault ? [...args, vault] : args);
+
+  // Le chiavi di apertura, per vault, come le tiene l'host: una chiave conta
+  // quando apre o scrive un documento di videoscrittura, e cade con
+  // `documentClosed`. Una nota o una cartella aperte sotto la chiave non
+  // segnano niente. Una chiave malformata è `bad_args`, come nell'host.
+  const openKeys = new Map<string, Set<string>>();
+  const OPEN_KEY = /^[A-Za-z0-9_-]{1,64}$/;
+  const badKey = (open: string): PluginError => ({
+    kind: "bad_args",
+    message: `host fake: la chiave di apertura «${open}» non è valida`,
+  });
+  const holdKey = (id: string, open: string, vault?: string | null) => {
+    if (!RICH_FAKE_FORMATS.has(formatOf(id) ?? "")) return;
+    const keys = openKeys.get(vault ?? "") ?? new Set<string>();
+    keys.add(open);
+    openKeys.set(vault ?? "", keys);
+  };
 
   function gate<T>(name: string, args: unknown[], result: T): T {
     calls.push({ gate: name, args });
@@ -555,7 +1231,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       // **guardandola**: una promessa rifiutata che nessuno ascolta è un
       // avviso di runtime in mezzo all'output del banco.
       void (result as Promise<unknown>).catch(() => {});
-      return Promise.reject(new Error(fault)) as T;
+      return Promise.reject(faultError(fault)) as T;
     }
     const throttle = throttles.get(name);
     // La chiamata è **già registrata**: un banco che aspetta «la scrittura è
@@ -574,7 +1250,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   ): Promise<T> {
     calls.push({ gate: name, args });
     const fault = faults.get(name);
-    if (fault !== undefined) return Promise.reject(new Error(fault));
+    if (fault !== undefined) return Promise.reject(faultError(fault));
     const run = () => Promise.resolve().then(effect);
     const throttle = throttles.get(name);
     return throttle ? throttle.then(run) : run();
@@ -592,7 +1268,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   function liveSession(session: string): LiveSession {
     const live = liveSessions.get(session);
     if (live) return live;
-    throw { kind: "not_found", message: `no live session ${JSON.stringify(session)} in this window` } satisfies PluginError;
+    throw { kind: "not_found", message: `Questa finestra non ha la sessione live ${session}.` } satisfies PluginError;
   }
 
   /// Un contatore nella sua grafia unica, o un errore della shell: l'app
@@ -785,18 +1461,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (plugin.mounted) plugin.runtime_known = true;
   }
 
-  function emit(event: KernelEvent): boolean {
+  function emit(event: KernelEvent, vault?: string): boolean {
     if (!listener) return false;
-    listener({ event, origin: { actor: { kind: "user" }, batch: null } });
+    listener({ event, origin: { actor: { kind: "user" }, batch: null }, ...(vault === undefined ? {} : { vault }) });
     return true;
   }
 
   /// Un documento è di tipo `document` se ha un'estensione che il vault
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
-  /// legge dalla risposta e non dalla propria testa.
+  /// legge dalla risposta e non dalla propria testa. Un `.base` è un
+  /// documento come nell'host vero (`fub-format-base` registra `base`):
+  /// l'albero lo apre col clic, come una nota.
   function entryKind(id: string): VaultEntry["kind"] {
     const format = formatOf(id);
-    return format !== null && format !== "canvas" && format !== "base" ? "document" : "asset";
+    return format !== null && format !== "canvas" ? "document" : "asset";
   }
 
   function entry(id: string): VaultEntry {
@@ -839,7 +1517,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
     const text = docs.get(id)?.text ?? "";
     switch (p.kind) {
       case "text": {
-        const haystack = p.case_sensitive ? `${id}\n${text}` : `${id}\n${text}`.toLowerCase();
+        // I campi come la regex: `name` è il nome (qui il path), `body` il
+        // testo; nessun campo, tutti e due. Una ricerca per nome che trovasse
+        // anche il testo metterebbe fra i nomi note che il kernel non dà.
+        const scope = p.fields.length === 0 ? `${id}\n${text}` : p.fields.flatMap((field) => (field === "name" ? [id] : field === "body" ? [text] : [])).join("\n");
+        const haystack = p.case_sensitive ? scope : scope.toLowerCase();
         const needle = p.case_sensitive ? p.text : p.text.toLowerCase();
         return p.mode === "phrase" ? haystack.includes(needle) : needle.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));
       }
@@ -892,6 +1574,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
     spec: { ...e.spec },
   }));
   const syntaxForms = (options.syntaxForms ?? []).map((form) => ({ ...form }));
+  // All'avvio l'host guarda la cartella collegata se è pronta.
+  watching = linkedReady() !== null && options.themeWatchFails !== true;
 
   /// Scrive, e **lo dice**: il backend vero emette `setting_changed` da tutte e
   /// due le porte — dal `Workspace` con un vault aperto, dall'host senza
@@ -958,10 +1642,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
         };
       case "settings":
         return { kind: "settings", value: settings.map((e) => ({ ...e })) };
-      case "organization": {
-        const org: Organization = { icons: {}, pinned: [], order: {}, spaces: [] };
-        return { kind: "organization", value: org };
-      }
+      case "organization":
+        return { kind: "organization", value: copyOrganization(organization) };
       case "drafts": {
         const drafts: DraftInfo[] = [];
         return { kind: "drafts", value: paginate(drafts, q.page) };
@@ -985,7 +1667,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return { kind: "vault_health", value: paginate(issues, q.page) };
       }
       case "jobs":
-        return { kind: "jobs", value: [] };
+        return { kind: "jobs", value: [...liveJobs] };
       case "resolve": {
         const target = q.target;
         if (target.kind === "path") {
@@ -1004,10 +1686,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (page.trim() === "" && (heading !== null || block !== null)) {
           return { kind: "resolved", value: q.from ? { doc: q.from } : null };
         }
-        const expected = `${page}.md`;
-        // Una nota per nome, poi un allegato per nome: `![[foto.png]]`.
-        const hit = [...docs.keys()].find((id) => id === expected || id.endsWith(`/${expected}`))
-          ?? [...docs.keys()].find((id) => id === page || id.endsWith(`/${page}`));
+        const hit = wikiPageDoc(docs.keys(), page);
         return { kind: "resolved", value: hit ? { doc: hit } : null };
       }
       case "tags":
@@ -1122,7 +1801,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
     return answer;
   }
 
+  /// I tipi di nota (E5): elenco, tipo di una nota, nota da un tipo, e la
+  /// proprietà scritta in un file con il suo annulla.
+  const noteTypes = fakeNoteTypes({
+    docs: () => [...docs].map(([id, doc]) => [id, { text: doc.text, revision: doc.revision }]),
+    read: (id) => docs.get(id),
+    write,
+    changed: (id) => void emit({ type: "document_changed", id }),
+  });
+
   function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
+    const typed = noteTypes.command(id, args);
+    if (typed !== undefined) return typed;
     switch (id) {
       case CRAFT_PHOTO_COMMAND: {
         if (!options.craft || options.craft.component === false) {
@@ -1141,6 +1831,19 @@ export function createFakeHost(options: Options = {}): FakeHost {
       }
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
+      // La Cronologia conserva un testo (`version.keep`) solo se il test la
+      // monta fra i comandi, come il registro vero; il file non cambia, e
+      // come lo store vero invita la Cronologia a ridisegnarsi (IMP-136).
+      case "version.keep": {
+        if (!listedCommands().some((spec) => spec.id === id)) {
+          throw { kind: "unknown_command", message: id } satisfies PluginError;
+        }
+        if (typeof args?.text !== "string" || typeof args?.note !== "string" || !docs.has(String(args?.doc))) {
+          throw { kind: "bad_args", message: "host fake: version.keep vuole doc, text e note" } satisfies PluginError;
+        }
+        emit({ type: "view_invalidated", view: "history", instance: null });
+        return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
+      }
       case "note.create": {
         const name = typeof args?.name === "string" && args.name ? args.name : "Senza titolo";
         const doc = `${name}.md`;
@@ -1171,9 +1874,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const to = String(args?.to);
         const before = docs.get(from);
         if (!before) throw new Error(`host fake: «${from}» non esiste`);
+        // Come il kernel, una destinazione occupata è un rifiuto e mai una
+        // sovrascrittura: la nota che c'era resta, e quella spostata pure.
+        if (to !== from && docs.has(to)) throw { kind: "already_exists", message: `«${to}» c'è già` } satisfies PluginError;
+        // Come il kernel, la rinomina si porta dietro i wikilink che la
+        // nominavano (anche quelli della nota stessa): le note toccate
+        // cambiano revisione e lo dicono con `document_changed`.
+        const rewritten = renameRewrites(new Map([...docs].map(([id, entry]) => [id, entry.text])), from, to);
         docs.delete(from);
         docs.set(to, before);
+        moveNote(organization, from, to);
+        const own = rewritten.get(from);
+        if (own !== undefined) write(to, own);
         emit({ type: "document_renamed", from, to });
+        for (const [id, text] of rewritten) {
+          if (id === from) continue;
+          write(id, text);
+          emit({ type: "document_changed", id });
+        }
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       }
       case "trash.os": {
@@ -1271,13 +1989,22 @@ export function createFakeHost(options: Options = {}): FakeHost {
       }
       case "export.run": {
         // Come il comando del kernel: un target che non è registrato si
-        // rifiuta, gli altri accodano il lavoro e lo dicono, in inglese. Qui il
-        // lavoro non gira, e il file non arriva.
+        // rifiuta, gli altri accodano il lavoro e lo dicono, in inglese, con
+        // l'id del job nell'esito tipizzato. Qui il lavoro parte e non
+        // finisce, e il file non arriva.
         const request = JSON.parse(String(args?.request_json)) as { target?: unknown };
         const drawTarget = typeof request.target === "string" && request.target.startsWith("draw.");
         if (!drawTarget || options.draw !== true) throw new Error(`host fake: unknown export target \`${String(request.target)}\``);
         nextJob += 1;
-        return { notify: `export.run queued (job ${nextJob})`, effect: { kind: "done" as const }, undo: null, partial: null };
+        const id = String(nextJob);
+        liveJobs.push({ id, job: "import.transfer", plugin: "fub.importers", since: Date.now(), progress: null });
+        emit({ type: "job_started", id, job: "import.transfer" });
+        return {
+          notify: `export.run queued (job ${id})`,
+          effect: { kind: "custom" as const, ns: "fub.transfer.queued", payload: { job_id: id, op: "export" } },
+          undo: null,
+          partial: null,
+        };
       }
       case "folder.create": {
         const path = String(args?.path ?? "");
@@ -1309,6 +2036,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const folders = [...createdFolders].filter((f) => f === from || inside(f, from));
         if (moving.length === 0 && folders.length === 0) throw { kind: "not_found", message: `«${from}» non c'è` } satisfies PluginError;
         if ([...docs.keys()].some((id) => id === to || inside(id, to))) throw { kind: "already_exists", message: `«${to}» c'è già` } satisfies PluginError;
+        moveFolder(organization, from, to);
         for (const id of moving) {
           const target = `${to}${id.slice(from.length)}`;
           docs.set(target, docs.get(id)!);
@@ -1416,10 +2144,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
 
   const module: typeof import("./ipc") = {
     api: {
-      initialVault: () => gate("initialVault", [], Promise.resolve(root)),
+      initialVault: () => gate("initialVault", [], Promise.resolve(options.initialVault === undefined ? root : options.initialVault)),
       appVersion: () => gate("appVersion", [], Promise.resolve(options.appVersion ?? "0.1.0")),
       sessionNotice: () =>
-        gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),
+        gate("sessionNotice", [], Promise.resolve(sessionNotices.shift() ?? null)),
       // Il vault in memoria non ha cartella di configurazione, log o dialog
       // di sistema. Non simulare un export/recovery riuscito senza disco.
       demoRoot: () => gate("demoRoot", [], Promise.resolve(null)),
@@ -1440,14 +2168,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
       readDocument: (id, vault) => {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));
-        return gate("readDocument", named([id], vault), Promise.resolve({
-          // Una cartella si apre col giornale vuoto: i byte sono suoi.
-          text: formatOf(id) === "xlsx" ? "" : doc.text,
-          revision: doc.revision,
-          format_id: formatOf(id),
-          source_kind: sourceKindOf(id),
-          text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
-        }));
+        return gate("readDocument", named([id], vault), Promise.resolve(sourceOf(id, doc)));
+      },
+      openDocument: (id, open, vault) => {
+        if (!OPEN_KEY.test(open)) return gate("openDocument", named([id, open], vault), Promise.reject(badKey(open)));
+        const doc = docs.get(id);
+        if (!doc) return gate("openDocument", named([id, open], vault), Promise.reject(new Error(`«${id}» non c'è`)));
+        holdKey(id, open, vault);
+        return gate("openDocument", named([id, open], vault), Promise.resolve(sourceOf(id, doc)));
+      },
+      warmEngine: (extension) => gate("warmEngine", [extension], Promise.resolve()),
+      documentClosed: (open, vault) => {
+        if (!OPEN_KEY.test(open)) return gate("documentClosed", named([open], vault), Promise.reject(badKey(open)));
+        openKeys.get(vault ?? "")?.delete(open);
+        return gate("documentClosed", named([open], vault), Promise.resolve());
       },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
         const doc = docs.get(id);
@@ -1482,8 +2216,23 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return lease.url;
       },
       // `expected` null è «solo creazione», una stringa è il CAS sulla
-      // revisione: è il contratto di `resource_write`.
-      resourceWrite: (id, bytes, expected, vault) => gate("resourceWrite", [id, bytes, expected, vault], Promise.resolve().then(() => {
+      // revisione: è il contratto di `resource_write`. Con `reuse:
+      // "same-content"` un file con gli stessi byte risponde al posto della
+      // scrittura (lo scenario dell'host vero lo lega in
+      // `fake-resources.test.ts`).
+      resourceWrite: (id, bytes, expected, vault, options) => gate("resourceWrite", options === undefined ? [id, bytes, expected, vault] : [id, bytes, expected, vault, options], Promise.resolve().then((): ResourceWriteReceipt => {
+        const reuse: unknown = options?.reuse;
+        if (reuse !== undefined && reuse !== "same-content") {
+          throw { kind: "bad_args", message: `host fake: \`reuse\` sconosciuto (${String(reuse)})` } satisfies PluginError;
+        }
+        if (reuse !== undefined && expected !== null) {
+          throw { kind: "bad_args", message: `host fake: \`reuse\` con \`expected\` per «${id}»` } satisfies PluginError;
+        }
+        if (reuse !== undefined) {
+          const found = sameContent(id, bytes);
+          const there = found === null ? undefined : docs.get(found);
+          if (found !== null && there) return { id: found, revision: there.revision, reused: true };
+        }
         const before = docs.get(id);
         if (expected === null && before) {
           throw { kind: "already_exists", message: `host fake: «${id}» esiste già` } satisfies PluginError;
@@ -1494,12 +2243,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const rev = writeBytes(id, bytes, before?.bytes ? before.mime : undefined);
         const kind = entryKind(id);
         emit(kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind });
-        return { id, revision: rev };
+        return { id, revision: rev, reused: false };
       })),
       viewerOpen: (url, title, policy) =>
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       viewerSave: (url, title, allowlist, attachmentFolder, vault) =>
         gate("viewerSave", [url, title, allowlist, attachmentFolder, vault], Promise.reject(new Error("host fake: viewer download is unavailable"))),
+      mapTile: (url, kind) => gate("mapTile", [url, kind], Promise.resolve().then(() => {
+        // La regola dell'host (`Host::map_tile`): soltanto un sito della riga.
+        const row = settings.find((entry) => entry.spec.key === "map.tile-hosts");
+        const hosts = Array.isArray(row?.value) ? row.value : [];
+        let site = "";
+        try { site = new URL(url).hostname.toLowerCase(); } catch { /* non è un indirizzo */ }
+        if (!url.startsWith("https://") || !hosts.some((host) => host.trim().toLowerCase() === site)) {
+          throw { kind: "permission_denied", message: `Le tessere di ${site || url} non sono ammesse su questo computer.` } satisfies PluginError;
+        }
+        if (!options.mapTile) throw { kind: "io", message: "host fake: nessuno serve le tessere" } satisfies PluginError;
+        return options.mapTile(url, kind);
+      })),
       viewerControl: (action) =>
         gate("viewerControl", [action], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       // Il finto non ha una finestra del visore: niente da raccontare.
@@ -1573,7 +2334,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (!session) throw new Error("host fake: grid session closed");
         const outcome = gridBytes?.outcomes?.[gridBytesOutcome++];
         if (!outcome) {
-          throw { kind: "bad_args", message: `host fake: grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+          throw { kind: "bad_args", message: `host fake: il comando della griglia \`${request.command.id}\` non è servito` } satisfies PluginError;
         }
         gridBytesInstances.set(instance, {
           ...session,
@@ -1586,16 +2347,74 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       closeGridBytes: (_surface, instance) => gate("closeGridBytes", [instance], Promise.resolve().then(() => {
         if (!gridBytesInstances.delete(instance)) {
-          throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
+          throw { kind: "not_found", message: "host fake: la sessione della griglia è chiusa" } satisfies PluginError;
         }
       })),
-      writeDocument: (id, source, base, vault) => {
+      openDrawing: (doc, text, vault) => gate("openDrawing", named([doc, text], vault), Promise.resolve().then(() => {
+        drawingServed();
+        const opened = drawing!.open?.(doc, text) ?? {
+          instance: `disegno-${++drawingInstances}`,
+          revision: "0",
+          mapped: 0,
+          unmapped: 0,
+          losses: [],
+        };
+        // La copia è il testo come arriva: il contratto lo vuole LF, ed è
+        // il banco a guardarlo (`drawingCopy`), non il finto a ripararlo.
+        drawingCopies.set(opened.instance, {
+          instance: opened.instance,
+          doc,
+          text,
+          revision: opened.revision,
+        });
+        return opened;
+      })),
+      drawingSync: (instance, sync, vault) => gate("drawingSync", named([instance, sync], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        let text: string;
+        if (sync.change.kind === "text") {
+          text = sync.change.value.text;
+        } else {
+          const { edits, length_before, length_after } = sync.change.value;
+          const applied = tryApplyOperation(copy.text, { beforeLength: length_before, afterLength: length_after, edits });
+          if (applied.kind !== "applied") {
+            throw { kind: "bad_args", message: `host fake: \`change.edits\` non si applica alla copia di «${instance}»` } satisfies PluginError;
+          }
+          text = applied.text;
+        }
+        drawingCopies.set(instance, { ...copy, text, revision: sync.revision });
+        return { revision: sync.revision };
+      })),
+      drawingGesture: (instance, gesture, vault) => gate("drawingGesture", named([instance, gesture], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        if (!drawing?.gesto) throw new Error("host fake: il motore finto non ha risposte per i gesti");
+        return drawing.gesto(gesture, copy);
+      })),
+      drawingCommands: (instance, selection, vault) => gate("drawingCommands", named([instance, selection], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        return drawing?.comandi?.(selection, copy) ?? [];
+      })),
+      drawingCommand: (instance, request, vault) => gate("drawingCommand", named([instance, request], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        if (!drawing?.comando) {
+          throw { kind: "bad_args", message: `host fake: il comando \`${request.id}\` non è servito` } satisfies PluginError;
+        }
+        return drawing.comando(request, copy);
+      })),
+      closeDrawing: (instance, vault) => gate("closeDrawing", named([instance], vault), Promise.resolve().then(() => {
+        drawingCopyOf(instance);
+        drawingCopies.delete(instance);
+      })),
+      writeDocument: (id, source, base, vault, open) => {
+        if (open !== undefined && !OPEN_KEY.test(open)) {
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(badKey(open)));
+        }
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci
         // passasse dentro risponderebbe «no» avendo già scritto.
         const fault = faults.get("writeDocument");
         if (fault !== undefined) {
-          return gate("writeDocument", named([id, source, base], vault), Promise.reject(new Error(fault)));
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(faultError(fault)));
         }
         // Nessun provider serve un file senza formato: il kernel rifiuta la
         // scrittura (`NoProvider`), e lo fa anche il finto — chi salva un
@@ -1630,7 +2449,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
             Promise.reject(conflict),
           );
         }
-        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(write(id, source)));
+        const written = write(id, source);
+        if (open !== undefined) holdKey(id, open, vault);
+        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(written));
       },
       // La rete di sicurezza del §15.2: il testo che non si è salvato. Il
       // finto non ha un crash buffer — registra e basta — perché ciò che i
@@ -1664,7 +2485,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         calls.push({ gate: "invokeCommand", args: callArgs });
         const execute = () => {
           const fault = faults.get("invokeCommand");
-          if (fault !== undefined) return Promise.reject(new Error(fault));
+          if (fault !== undefined) return Promise.reject(faultError(fault));
           // Un comando che rifiuta **rifiuta la promessa**, come attraverso l'IPC:
           // un'eccezione sincrona qui sfuggirebbe a chi aspetta con `.catch`.
           try {
@@ -1691,10 +2512,22 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return gate("queryIndex", named([q], vault), result);
       },
       cancelJob: (id, vault) => gate("cancelJob", named([id], vault), Promise.resolve()),
-      setIcon: (path, icon) => gate("setIcon", [path, icon], Promise.resolve()),
-      setPinned: (id, pinned) => gate("setPinned", [id, pinned], Promise.resolve()),
-      setSpace: (path, space) => gate("setSpace", [path, space], Promise.resolve()),
-      setOrder: (folder, names) => gate("setOrder", [folder, names], Promise.resolve()),
+      setIcon: (path, icon) => installedOperation("setIcon", [path, icon], () => {
+        if (icon) organization.icons[path] = icon;
+        else delete organization.icons[path];
+      }),
+      setPinned: (id, pinned) => installedOperation("setPinned", [id, pinned], () => {
+        if (pinned && !organization.pinned.includes(id)) organization.pinned.push(id);
+        if (!pinned) organization.pinned = organization.pinned.filter((pin) => pin !== id);
+      }),
+      setSpace: (path, space) => installedOperation("setSpace", [path, space], () => {
+        if (space && !organization.spaces.includes(path)) organization.spaces.push(path);
+        if (!space) organization.spaces = organization.spaces.filter((kept) => kept !== path);
+      }),
+      setOrder: (folder, names) => installedOperation("setOrder", [folder, names], () => {
+        if (names.length > 0) organization.order[folder] = [...names];
+        else delete organization.order[folder];
+      }),
       setSetting: (key, value) =>
         gate("setSetting", [key, value], Promise.resolve(writeSetting(key, value))),
       resetSetting: (key) => gate("resetSetting", [key], Promise.resolve(writeSetting(key, null))),
@@ -1707,9 +2540,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
       frameCapabilities: () => unavailable("frameCapabilities", []),
       settingRequiresReopen: (key) => unavailable("settingRequiresReopen", [key]),
       listBundles: () => gate("listBundles", [], Promise.resolve(bundles)),
-      listThemes: () => gate("listThemes", [], Promise.resolve(themes)),
+      listThemes: () => gate("listThemes", [], Promise.resolve(listedThemes())),
       readTheme: (id, light) => {
-        const payload = themePayloads[`${id}:${light}`];
+        const linked = linkedReady();
+        const payload = linked && linked.info.manifest.id === id
+          ? linked.payloads[`${id}:${light}`]
+          : themePayloads[`${id}:${light}`];
         if (!payload) {
           return gate(
             "readTheme",
@@ -1719,8 +2555,71 @@ export function createFakeHost(options: Options = {}): FakeHost {
         }
         return gate("readTheme", [id, light], Promise.resolve(payload));
       },
+      checkThemeFolder: () =>
+        gate(
+          "checkThemeFolder",
+          [],
+          new Promise<ThemeFolderCheck>((resolve) => resolve(checkThemeFolder())),
+        ),
+      discardThemeFolder: () => {
+        checkedFolder = null;
+        return gate("discardThemeFolder", [], Promise.resolve());
+      },
+      installThemeFromFolder: (replace, digest) =>
+        gate(
+          "installThemeFromFolder",
+          [replace, digest],
+          new Promise<ThemeFolderInstall>((resolve) => resolve(installThemeFolder(replace, digest))),
+        ),
+      linkThemeFolder: () =>
+        gate("linkThemeFolder", [], new Promise<ThemeFolderLink>((resolve) => resolve(linkThemeFolder()))),
+      unlinkThemeFolder: () => {
+        linkedSource = null;
+        watching = false;
+        linkedKnown = { id: null, name: null };
+        return gate("unlinkThemeFolder", [], Promise.resolve());
+      },
+      themeLink: () =>
+        gate(
+          "themeLink",
+          [],
+          Promise.resolve(linkedSource === null || !developerIsOn() ? null : readLink(linkedSource)),
+        ),
+      onThemeChanged: (handler) => {
+        calls.push({ gate: "onThemeChanged", args: [] });
+        themeChanged.add(handler);
+        return Promise.resolve(() => { themeChanged.delete(handler); });
+      },
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
+      componentsMap: (vault) =>
+        gate(
+          "componentsMap",
+          named([], vault),
+          root === null
+            ? Promise.reject(components.senza_vault.components_map)
+            : Promise.resolve(structuredClone(components.mappe[componentState])),
+        ),
+      // Una mutazione pigra: un guasto o un freno agiscono prima che lo stato
+      // cambi, come nell'host che non scrive una scelta che non è arrivata.
+      // Gli eventi arrivano **dopo** la risposta: nel ponte vero li consegna un
+      // altro thread, e la shell ha già ripreso con la risposta quando arriva
+      // il primo. Qui li manda una catena di promesse agganciata alla
+      // risposta, due passi dietro a chi la aspetta: niente timer da possedere.
+      componentsApply: (azione, apply, vault) => {
+        let events: KernelEvent[] = [];
+        const answer = installedOperation("componentsApply", named(apply === undefined ? [azione] : [azione, apply], vault), () => {
+          if (root === null) throw components.senza_vault.components_apply;
+          if (componentsFailure !== null) throw structuredClone(componentsFailure);
+          const recorded = componentChoice(azione, apply ?? false);
+          events = componentEvents(recorded);
+          return structuredClone(recorded.risposta);
+        });
+        answer
+          .then(() => Promise.resolve())
+          .then(() => events.forEach((event) => emit(event)), () => undefined);
+        return answer;
+      },
       listInstalledPlugins: (vault) =>
         gate(
           "listInstalledPlugins",
@@ -1763,7 +2662,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("setInstalledPluginEnabled", [installation, enabled], () => {
           const plugin = installed(installation);
           if (enabled && plugin.revoked) throw {
-            kind: "permission_denied", message: "revoked catalog release cannot mount",
+            kind: "permission_denied", message: "Questa versione del catalogo è stata ritirata: non si monta.",
           } satisfies PluginError;
           plugin.enabled = enabled;
           reconcile(plugin);
@@ -1870,7 +2769,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           if ([...liveSessions.values()].some((live) => live.document === document)) {
             throw {
               kind: "already_exists",
-              message: `document ${JSON.stringify(document)} already has a live session`,
+              message: `«${document}» ha già una sessione live.`,
             } satisfies PluginError;
           }
           const chosen = request.address === undefined
@@ -1880,11 +2779,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
             throw (request.address === undefined
               ? {
                   kind: "unserved",
-                  message: "the PC is not on a local network: no active interface has a private IPv4 address",
+                  message: "Il PC non è su una rete locale: nessuna interfaccia attiva ha un indirizzo IPv4 privato.",
                 }
               : {
                   kind: "not_found",
-                  message: `${request.address} is not a private address of an active interface`,
+                  message: `${request.address} non è l'indirizzo privato di un'interfaccia attiva.`,
                 }) satisfies PluginError;
           }
           const session = `live-${String(++nextLive).padStart(6, "0")}`;
@@ -1913,9 +2812,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("livePairing", [session, renew], () => {
           const live = liveSession(session);
           if (!renew) return live.pairing && liveCopy(live.pairing);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           if (live.writer?.connected) {
-            throw { kind: "already_exists", message: "a writer is connected to the session" } satisfies PluginError;
+            throw { kind: "already_exists", message: "Il tablet è collegato: un QR nuovo si chiede quando esce." } satisfies PluginError;
           }
           live.pairing = livePairing(session, live);
           // Lo scrittore che aspettava la ripresa la perde.
@@ -1927,10 +2826,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       liveSend: (session, message) =>
         installedOperation("liveSend", [session, message], () => {
           const live = liveSession(session);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           const regression = (seq: string): PluginError => ({
             kind: "conflict",
-            message: `seq ${seq} is behind the session seq ${live.seq}`,
+            message: `La sessione live ha rifiutato il messaggio: il seq ${seq} è indietro rispetto al ${live.seq} della sessione.`,
           });
           if (message.t === "ack" || message.t === "nack") {
             liveCounter(message.writer, "writer");
@@ -1939,7 +2838,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
             if (at < 0) {
               throw {
                 kind: "not_found",
-                message: `commit ${message.c} of writer ${message.writer} is not awaiting an answer`,
+                message: `La sessione live ha rifiutato il messaggio: il commit ${message.c} dello scrittore ${message.writer} non aspetta una risposta.`,
               } satisfies PluginError;
             }
             // Un `ack` di un duplicato non porta operazioni nuove: il suo
@@ -2022,15 +2921,23 @@ export function createFakeHost(options: Options = {}): FakeHost {
 
   return {
     module,
+    openKeys: (vault) => openKeys.get(vault ?? "")?.size ?? 0,
     renameFromOutside: (from, to) => {
       const before = docs.get(from);
       if (!before) throw new Error(`host fake: «${from}» non esiste`);
       docs.delete(from);
       docs.set(to, before);
+      // Come il kernel: una rinomina da fuori passa dallo stesso punto di quella
+      // di Fub, e l'organizzazione la segue.
+      moveNote(organization, from, to);
       // Ciò che non è un documento cambia con gli eventi `entry_*`, come nel
       // kernel: la shell che li ignorasse qui se ne accorgerebbe.
       const kind = entryKind(from);
       emit(kind === "document" ? { type: "document_renamed", from, to } : { type: "entry_renamed", from, to, kind });
+    },
+    removeFromOutside: (id) => {
+      if (!docs.delete(id)) throw new Error(`host fake: «${id}» non esiste`);
+      emit({ type: "document_removed", id });
     },
     writeFromOutside: (id, text) => {
       write(id, text);
@@ -2038,10 +2945,21 @@ export function createFakeHost(options: Options = {}): FakeHost {
       const event: KernelEvent = kind === "document" ? { type: "document_changed", id } : { type: "entry_changed", id, kind };
       listener?.({ event, origin: { actor: { kind: "watcher" }, batch: null } });
     },
+    themeFolderChanged: (changed = []) => {
+      if (linkedSource === null || !developerIsOn() || themeChanged.size === 0) return false;
+      if (options.themeWatchFails === true) return false;
+      const link = { ...readLink(linkedSource), changed, watched: true };
+      for (const handler of [...themeChanged]) handler(link);
+      return true;
+    },
     requestDocumentWindowClose: (label) => {
       const request = documentWindows.get(label);
       if (!request) throw new Error(`host fake: finestra «${label}» non aperta`);
       for (const handler of windowCloseRequested) handler({ label, surface: "document" });
+    },
+    destroyDocumentWindow: (label) => {
+      if (!documentWindows.delete(label)) throw new Error(`host fake: finestra «${label}» non aperta`);
+      for (const handler of windowClosed) handler({ label, surface: "document" });
     },
     files: () => Object.fromEntries([...docs].map(([id, d]) => [id, d.text])),
     trash: () => [...trash].map(([id, d]) => ({ id, original: d.original })),
@@ -2051,7 +2969,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!onClose) throw new Error("host finto: nessuno ascolta la chiusura della finestra");
       try {
         if (await onClose()) {
-          await gate("finishMainClose", [], Promise.resolve());
+          // Come `finish_main_close` dell'host vero: con una finestra
+          // documento ancora registrata la finestra principale non si chiude.
+          await gate("finishMainClose", [], documentWindows.size
+            ? Promise.reject(new Error("document windows or a vault close have not finished"))
+            : Promise.resolve());
           if (!mainClosed) {
             mainClosed = true;
             window.dispatchEvent(new Event("pagehide"));
@@ -2074,6 +2996,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
         unlock();
       };
     },
+    componentsFail: (error) => {
+      componentsFailure = structuredClone(error);
+      return () => {
+        componentsFailure = null;
+      };
+    },
+    componentsFromOutside: (azione, apply = true) => {
+      if (root === null) throw new Error("host fake: no vault is open");
+      const recorded = componentChoice(azione, apply);
+      componentEvents(recorded).forEach((event) => emit(event));
+      return structuredClone(recorded.risposta);
+    },
     fault: (name, reason) => {
       faults.set(name, reason ?? `host fake: «${name}» è guasta`);
       return () => {
@@ -2086,6 +3020,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!live) throw new Error(`host fake: no live session ${JSON.stringify(session)}`);
       liveEmit(session, live, events);
     },
+    drawingCopy: (instance) => drawingCopies.get(instance),
   };
 }
 
@@ -2155,6 +3090,198 @@ function titled(source: string, title: string): string {
   const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
   return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
+}
+
+/// La chiave della modalità sviluppatore (`fub_host::settings::DEVELOPER_MODE`).
+const DEVELOPER_MODE_KEY = "developer.mode";
+
+/// Una cartella di tema per `themeFolders`: ciò che `extendingTheme` e i suoi
+/// fratelli restituiscono, più l'errore di una sostituzione fallita a metà.
+export interface ThemeFolderFake {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+  /// La sostituzione si ferma con questo errore, e il vecchio resta.
+  replaceError?: PluginError;
+  /// Il perché tipizzato di `replaceError` (`failed.cause`); di default
+  /// `other`.
+  replaceCause?: DiskCause;
+  /// Le porte dell'installazione rifiutano i byte controllati (`refused`).
+  installRefusal?: ThemeFolderRefusal;
+  /// Con `replaceError`: il vecchio non torna (`replace_failed`).
+  replaceLost?: boolean;
+}
+
+/// L'impronta finta di una cartella: cambia quando cambiano i suoi fasci.
+function folderDigest(folder: ThemeFolderFake): string {
+  const text = JSON.stringify(folder.payloads);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return `fake-${hash.toString(16)}`;
+}
+
+/// La riga di `developer.mode` come la dichiara il core: interruttore della
+/// macchina, spento di default, nel gruppo «Sviluppo».
+export function developerModeSetting(on: boolean): SettingEntry {
+  return {
+    spec: {
+      key: DEVELOPER_MODE_KEY,
+      label: "Modalità sviluppatore",
+      description:
+        "Per chi scrive un tema: in «Temi installati» compaiono «Installa da cartella…», che lo controlla e lo installa dalla sua cartella, «Collega una cartella…», che lo rimonta a ogni salvataggio, e «Tutti i componenti», che mostra ogni componente in ogni stato.",
+      group: "Sviluppo",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: on,
+    source: on ? "machine" : "default",
+  };
+}
+
+/// Una cartella di tema che il loader accetta: parte dalla serie senza fogli
+/// suoi (le due luci prendono quelli di serie) e la pelle ritocca un pezzo.
+export function folderTheme(id = "acme.carta", name = "Carta", version = "1.0.0"): ThemeFolderFake {
+  const manifest: ThemeInfo["manifest"] = { ...extendingTheme(id).info.manifest, name, version };
+  const skin = ".shell-tooltip { white-space: nowrap; }\n";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// Un tema che il loader della shell rifiuta: passa le porte dell'host (il
+/// finto non le ha), ma la pelle usa un hook che l'anatomia non dichiara e un
+/// `@font-face`, e il manifest parla `theme-1`. La diagnosi ha una riga per
+/// motivo.
+export function rejectedTheme(id = "acme.rotto", version = "1.0.0"): ThemeFolderFake {
+  const base = extendingTheme(id);
+  const manifest: ThemeInfo["manifest"] = { ...base.info.manifest, name: "Rotto", version, engine: "theme-1" };
+  const skin = ".rotto-titolo { color: red; }\n@font-face { font-family: Rotto; }\n";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni
+/// `themes` e `themePayloads` del finto: porta il foglio chiaro e una pelle, e
+/// la luce scura arriva con `sheet: null`, come la consegna l'host vero.
+export function extendingTheme(id = "acme.carta"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Carta",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+  };
+  const skin = ".carta { color: inherit; }";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: ":root { --carta: #fbf7ee; }", skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// I byte di un WOFF2 finto: la firma `wOF2` e qualche byte dopo. Il finto non
+/// disegna caratteri: conta che la forma arrivi come la consegna l'host vero.
+export function fakeWoff2(size = 12): number[] {
+  return [0x77, 0x4f, 0x46, 0x32, ...Array.from({ length: Math.max(0, size - 4) }, (_, i) => i & 0xff)];
+}
+
+/// Un tema che parte dalla serie e porta due caratteri (`fonts`): il manifest
+/// li dichiara, il fascio porta i file fra gli asset anche se nessun CSS li
+/// nomina, e la pelle usa la famiglia per nome. Come per `extendingTheme`, la
+/// luce scura arriva con `sheet: null`.
+export function fontTheme(id = "acme.caratteri"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Caratteri",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    fonts: [
+      { family: "Carta Serif", file: "fonts/carta.woff2", weight: 400, style: "normal" },
+      { family: "Carta Serif", file: "fonts/carta-italic.woff2", weight: 400, style: "italic" },
+    ],
+  };
+  const skin = '.shell-tooltip { font-family: "Carta Serif", var(--font-ui); }';
+  const assets = {
+    [`theme://${id}/fonts/carta.woff2`]: fakeWoff2(12),
+    [`theme://${id}/fonts/carta-italic.woff2`]: fakeWoff2(9),
+  };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+  };
+}
+
+/// I byte UTF-8 di un set di icone del tema, come li consegna l'host vero fra
+/// gli asset del fascio.
+export function iconSetBytes(set: Readonly<Record<string, readonly string[]>>): number[] {
+  return [...new TextEncoder().encode(JSON.stringify(set))];
+}
+
+/// Un tema che parte dalla serie e ridisegna qualche icona (`icons`): il
+/// manifest nomina il set, il fascio lo porta fra gli asset anche se nessun
+/// CSS lo nomina. Ridisegna una icona di serie (`search`), un alias
+/// (`folder`, che vale per `vault`) e un nome che oggi nessuno disegna.
+export function iconTheme(id = "acme.icone"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+  set: Record<string, string[]>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Icone",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    icons: "icons.json",
+  };
+  const set = {
+    search: ["M4 4h16v16H4z", "M8 12h8"],
+    folder: ["M3 6h18v12H3z"],
+    "modulo-spento": ["M12 3v18"],
+  };
+  const skin = ".shell-tooltip { white-space: nowrap; }\n";
+  const assets = { [`theme://${id}/icons.json`]: iconSetBytes(set) };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+    set,
+  };
 }
 
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,

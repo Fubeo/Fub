@@ -58,6 +58,75 @@ sequenceDiagram
     Q->>UI: evento serializzato
 ```
 
+### Di quale vault è un evento
+
+L'host tiene una sessione per vault aperto, con il suo bus e il suo ponte verso
+l'uscita (`bridge::spawn`); l'uscita verso la shell è una. Il ponte conosce la
+radice della sua sessione e la passa a `EventSink::emit` con ogni notice;
+l'app la manda alla shell nel campo `vault`
+([contratto IPC](../reference/ipc-contract.md#eventi)).
+
+La shell mostra un vault alla volta. Cambiando vault, `vault-session.ts`:
+
+1. scrive ciò che è in sospeso nel vault che lascia, prima e dopo
+   `open_vault` del nuovo (ogni sessione scrive nel vault in cui è nata);
+2. chiude le sessioni dei documenti del vault lasciato;
+3. segna il vault come **lasciato** (`leaveVault` in `state/kernel.ts`):
+   da qui il router scarta i suoi eventi;
+4. chiude il vault lasciato nell'host (`close_vault`): watcher, job, indici e
+   lock di scrittura. La demo è l'eccezione: lascia aperto il vault di prima,
+   a cui `close_demo` torna;
+5. rende corrente il vault nuovo.
+
+Rientrare in un vault (tornare ad A, chiudere la demo) lo toglie dai lasciati
+**prima** di chiedere `open_vault`, perché i primi fatti dell'apertura (il job
+dell'indice) partono prima della risposta. `vault_opened` e `vault_closed`
+passano sempre: nominano la loro radice, e chi segue un lavoro di un vault che
+se ne va (un import, un controllo) li aspetta. Chi li ascolta confronta
+`root` con il vault a cui tiene. Un evento senza `vault` è della macchina e
+arriva sempre.
+
+### Lotto e piano su più documenti
+
+Il lotto (`Workspace::batch`, decisione 0011) raggruppa ciò che si dice a chi
+ascolta: dentro, gli eventi portano l'id del lotto, `index-updated` non esce e
+il dispatch aspetta la chiusura, che manda un solo `batch-ended`. Un comando
+che scrive gira sempre dentro un lotto. Il lotto da solo non è una
+transazione: se una scrittura fallisce, le altre restano fatte.
+
+Il tutto-o-niente lo dà `WritePlan` (`fub_abi::command`), con la regola in
+`fub_abi::rules::plan`. Un comando che scrive più documenti (modifiche, un file
+nuovo, una rinomina) li consegna in un piano solo:
+
+- prima di scrivere si controlla tutto: la revisione di ogni modifica e di ogni
+  rinomina, ogni nome da occupare libero. Se uno non passa, non si scrive niente;
+- se una scrittura fallisce a metà (un conflitto arrivato dopo il controllo, il
+  disco pieno), quelle già fatte si disfano all'indietro prima di tornare
+  l'errore del passo caduto: l'inverso della modifica, il cestino per il file
+  nato dal piano (mai la cancellazione definitiva), la rinomina all'incontrario;
+- se anche un ritorno fallisce, la copia di prima va nello spazio dati del
+  plugin (`.fub/plugins/<id>/piani-non-rimessi/<istante>/<path>`) e l'errore
+  diventa `io`, con i file e le copie nella frase. Vale anche per una modifica
+  su un file che il piano stesso ha rinominato: la copia c'è, e il file si
+  nomina col nome che ha dopo il ritorno (quello di prima, se la rinomina è
+  tornata indietro).
+
+Il piano è composto dalle capacità dell'`HostApi` che il comando già usa
+(`read-document-bytes`, `apply-edit`, `create-document`, `rename-document`,
+`trash-document-if`, `data-write`). Per questo passa da ogni guardia e da ogni
+turno come loro, non tiene il workspace fra un passo e l'altro, e non aggiunge
+niente alla WIT né all'IPC. Le scritture e i ritorni escono come fatti in coda,
+una volta, alla chiusura del lotto del comando.
+
+L'annullamento di un piano è una voce sola (`AppliedPlan::undo`): per ogni
+file l'inverso della modifica, o una richiesta senza edit che fa da guardia
+per un file creato o rinominato, poi i passi strutturali. Prima del primo
+passo il kernel controlla le revisioni di tutte le `UndoStep::Edit` in testa
+alla voce (una per documento, fino al primo passo di comando): se un file è
+cambiato dopo l'operazione, l'annullamento non tocca niente, risponde
+`conflict` con i file cambiati e la voce resta in pila. Vale per ogni voce, non
+solo per i piani.
+
 ## Job
 
 Un job ha un'identità, uno stato e un proprietario. Il suo nome sta nello
@@ -139,6 +208,148 @@ verifica generazione, revisione o identità del workspace. Un token legato a
 un'altra istanza produce un `Conflict` e torna al chiamante: il finalizzatore
 sbagliato non chiude il frame originale.
 
+### Il disco fuori dal prestito esclusivo
+
+Una scrittura durevole fa un `fsync`, e su un disco occupato un `fsync` dura
+secondi. Dentro il prestito esclusivo ogni lettura del vault aspettava quei
+secondi (IMP-1805: prestiti di 11–44 s nei log dei tester). La regola: **il
+disco si scrive sotto il turno, fuori dal prestito; il prestito esclusivo
+aggiorna solo la memoria.** La soglia del log resta 250 ms (`Custody`), e
+`legacy_tests/exclusive_hold_budget.rs` la presidia con un disco finto che fa
+durare 300 ms ogni scrittura.
+
+- **Salvataggi e modifiche** (`write_document`, `apply_edit`, `write_bytes`,
+  anche i link riscritti da una rinomina o da uno spostamento): il kernel
+  prepara la scrittura sotto un prestito condiviso, la posa sul disco con la
+  sua CAS (`PreparedDocumentWrite::place`) e poi aggiorna anagrafe, indice e
+  registro in un prestito breve (`commit_placed_document_*`). La CAS e il turno
+  insieme impediscono che un testo vecchio copra uno nuovo: un altro writer
+  di Fub aspetta il turno, uno esterno fa fallire la CAS con `Stale`. Fra
+  `place` e il commit il file ha già il testo nuovo e l'anagrafe no: il
+  rilevatore che lo guarda in quel tratto fa i suoi piani, ma applica solo con
+  `Custody::write`, che aspetta il turno di chi salva, e il kernel scarta un
+  piano fatto su una voce d'anagrafe che nel frattempo è cambiata
+  (`prepare_sync_path_prepared`). Così un salvataggio o uno spostamento non
+  diventa una modifica da fuori (`legacy_tests/watcher_echo_window.rs`).
+- **La riga del registro** di un epilogo (`jobs::finish_events`) si appende
+  dopo aver lasciato il prestito, quando il turno è del thread che chiude:
+  l'ordine delle righe lo tiene il turno. Un append fallito diventa un
+  `Trouble` come prima.
+- **Le rinomine fatte ad app chiusa** che la fine di un'indicizzazione
+  riconosce (apertura e `vault.rebuild-index`): organizzazione, stato
+  per-documento e bozze si spostano in un `PendingRejoin` eseguito fuori dal
+  prestito, prima della raccolta degli spazi orfani, e i `DocumentRenamed`
+  escono dopo, con `Workspace::finish_rejoin`.
+- **Il registro dei vault** (`vaults.rs`, `mutate`): lock del file compagno,
+  rilettura e scrittura atomica girano sotto il turno della custodia, e
+  l'elenco fuso entra in memoria in un prestito breve solo se la scrittura è
+  riuscita.
+
+### Bozze e salvataggio
+
+La bozza di recupero esiste per coprire il tempo in cui il disco non ha ancora
+il testo, quindi non aspetta la scrittura del file che deve coprire (#485).
+
+- **Shell.** La `DocumentSession` ha due code: una per le scritture del file e
+  i comandi distruttivi, una per le bozze. Una bozza parte anche mentre una
+  scrittura lenta è in volo, e porta la revisione di base che quella scrittura
+  conosce ancora: un crash in quei secondi ritrova l'ultimo testo e sa da
+  quale versione del file parte. Nella coda delle bozze c'è una sola scrittura
+  o un solo scarto alla volta, nell'ordine in cui sono partiti, così una
+  risposta vecchia non passa sopra a una bozza più nuova. La cadenza resta
+  quella di sempre (`DRAFT_MS`): niente IPC per battuta.
+- **Fine del salvataggio.** La bozza si toglie solo se il testo della sessione
+  è quello appena scritto, e lo scarto si accoda dietro le bozze già partite.
+  Se nel frattempo è arrivato testo nuovo la bozza resta, e la cadenza la
+  riscrive sulla revisione nuova.
+- **Bozza già sul disco.** Un'app chiusa con un salvataggio in volo può
+  lasciare il file col testo nuovo e la bozza con la revisione di prima. Al
+  recupero la shell legge il file di ogni bozza rimasta su una nota che c'è
+  (`DocumentSessionCollection.withoutSuperseded`): se il testo è uguale byte
+  per byte, la bozza si scarta e non diventa un conflitto. Una lettura
+  fallita, un testo diverso anche di un a capo o una sessione già aperta
+  tengono la bozza.
+- **Bozza di un documento non aperto.** La sessione che nasce da una bozza
+  sa che file salva prima del primo salvataggio: `rejoin` la descrive con la
+  sorgente che `withoutSuperseded` ha già letto, e se manca la legge il
+  salvataggio stesso, sotto la chiave della sessione. Così il giornale di una
+  cartella si svuota dopo la scrittura (non resta nel buffer per essere
+  riapplicato dalla griglia) e un file senza formato si scrive a byte. Un
+  file che non c'è più si ricrea dalla porta dei documenti; una lettura che
+  fallisce per altro fa fallire il salvataggio e la bozza resta.
+- **Host.** `save_draft` e `discard_draft` girano fuori dal thread principale
+  e non prendono il turno di scrittura, che il salvataggio tiene per tutta la
+  sua durata: prendono la porta delle bozze (`Workspace::draft_port`) con un
+  prestito condiviso breve e scrivono dopo averlo lasciato. Le bozze non
+  toccano anagrafe, indici né eventi; un lucchetto interno a
+  `fub-kernel/src/drafts.rs` le tiene in fila con le migrazioni della
+  rinomina.
+
+### Chi prende il turno per un comando
+
+Un comando di un provider (`Host::invoke_user_command` per l'utente,
+`JobHost::run_command` per un comando annidato o lanciato da un job) prende il
+turno **solo se scrive**:
+
+- un comando che si è dichiarato di sola lettura (`CommandScope::read_only()`,
+  cioè `!spec.scope.writes`) passa da
+  `Workspace::prepare_read_only_provider_command` e **non prende il turno**.
+  Il provider gira sotto `Guard` con la politica `ReadOnly`, come prima: una
+  sua scrittura è rifiutata. Mentre legge, chi salva salva e i suoi eventi
+  arrivano subito; due letture girano insieme;
+- un comando che scrive prende il turno per tutta la chiamata, anche quando
+  gira in `DryRun`: è l'anteprima di una scrittura e resta sul frame condiviso;
+- la manutenzione del kernel e i comandi dell'host trattati prima (le cartelle,
+  il cestino del sistema, i montaggi, la cattura) restano come sono.
+
+La lettura ha **un frame tutto suo** perché il frame condiviso vive nello stato
+del workspace fino alla fine del comando: attore scambiato, batch aperto,
+comando sulla pila, `in_provider_call` alzato. Senza il turno a isolarlo, gli
+eventi di una scrittura parallela finirebbero nel batch del comando e
+aspetterebbero la sua fine, e due letture si pesterebbero sulla pila. Il token
+di sola lettura (`PreparedReadOnlyCommand`) non tocca niente di tutto questo:
+porta con sé la catena dei comandi per rifiutare la ricorsione (`JobHost` la
+passa alle invocazioni annidate), e la sua fine (`finish_read_only_provider_command`,
+un prestito condiviso) non spinge undo, non chiude batch e non accoda eventi.
+Se il vault si chiude mentre il comando legge, la fine risponde `Cancelled` e
+l'esito non si applica. Un comando che si dichiara di sola lettura non lascia
+mai una voce nella pila dell'annullamento, anche se il suo esito ne porta una.
+
+### Chi aspetta chi allo smontaggio
+
+Una lettura senza turno si iscrive fra le **letture in volo** del workspace
+(`ReadsInFlight`) dal prepare finché il token vive: la guardia cade anche se il
+provider va in panico o la fine non viene chiamata. L'iscrizione porta il
+proprietario, la bandiera propria della lettura e quelle di chi la contiene
+(il job, le letture più fuori): l'host della lettura è fermo se è alzata una
+qualunque di queste.
+
+- Nel kernel, `deactivate_plugin`, `prepare_plugin_teardown` e
+  `prepare_plugin_deactivation` rispondono `Busy` se il proprietario ha
+  letture in volo, come con `in_provider_call` per il frame condiviso.
+- La chiusura del vault (`close_session_resources`), dopo `prepare_close` e la
+  consegna di `VaultClosed`, alza la bandiera di tutte le letture in volo e le
+  aspetta, prima di smontare qualunque provider. Le letture si fermano alla
+  prossima chiamata all'host e finiscono con `Cancelled`. Una lettura che sta
+  solo calcolando si aspetta fino alla sua uscita, come prima si aspettava il
+  turno del comando.
+- Lo smontaggio di un singolo plugin (`teardown::unmount` per la
+  disattivazione e lo spegnimento di un bundle, `unmount_guarded` per
+  `Host::unmount_bundle`) passa da `teardown::stop_reads`: sbarra le nuove
+  letture di quel proprietario (una nuova lettura riceve `Cancelled`), ferma e
+  aspetta quelle in volo, e tiene la sbarra fino al ritiro dei provider, così
+  nessuna lettura gira accanto al `deactivate`. Alza solo la bandiera
+  della lettura: il job che l'ha invocata riceve `Cancelled` da
+  `invoke_command`, come da un comando che fallisce, e non è annullato. Alla
+  chiusura invece si alzano anche le bandiere di chi la contiene.
+- Si aspetta senza il lucchetto del workspace: una lettura, per finire, ne
+  prende solo un prestito condiviso. Chi aspetta può tenere il turno, perché
+  una lettura che chiede il turno (un comando annidato in simulazione) lo
+  chiede cedendo e rinuncia appena vede la bandiera.
+- Le letture preparate quando la chiusura era già cominciata (un handler di
+  `VaultClosed` o un `deactivate` che invoca un comando) non si iscrivono:
+  la chiusura che le ha lanciate non aspetta sé stessa.
+
 ## Turno di scrittura e istanza
 
 I due lucchetti si prendono in ordine opposto da due parti. Un salvataggio tiene
@@ -214,6 +425,14 @@ negato, argomenti errati, non trovato, I/O, cancellazione e altre varianti.
 La localizzazione della frase avviene prima della presentazione, ma il tipo non
 viene perso. La shell non decide il comportamento cercando sottostringhe in un
 messaggio.
+
+Una scrittura che chi usa Fub ha chiesto va fino in fondo, oppure chi l'ha
+chiesta sa che non è passata. Un evento del vault, una rilettura o una
+superficie chiusa nel frattempo servono a non ridisegnare con dati vecchi, mai a
+non mandare un comando già chiesto o a tacerne il rifiuto: il conflitto vero lo
+dice la revisione attesa del comando. A superficie chiusa il rifiuto arriva come
+avviso della shell, e un gesto di più passi rimasto a metà dice che cosa è
+scritto e che cosa no (la Base, #484).
 
 ## Shutdown
 

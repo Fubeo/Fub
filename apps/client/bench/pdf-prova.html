@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <title>Prova del motore del PDF</title>
+    <!--
+      La pagina della prova del motore del PDF (ADR 0247): la nota resa dalla
+      Lettura, larga quanto lo spazio fra i margini di un A4, su carta bianca.
+      `pdf-prova.ts` la misura con `src/export/probe.ts`; `pdf-prova.mjs` la
+      fotografa e la confronta col PDF che il core ne scrive.
+    -->
+    <style>
+      html, body { margin: 0; background: #ffffff; overflow: visible !important; height: auto !important; }
+      #carta { padding: 72px; width: 650px; background: #ffffff; }
+      #nota { width: 650px; background: #ffffff; }
+    </style>
+  </head>
+  <body>
+    <div id="carta"><article id="nota" class="markdown-rendered"></article></div>
+    <script type="module" src="./pdf-prova.ts"></script>
+  </body>
+</html>

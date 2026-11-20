@@ -9,7 +9,7 @@
 // `folder.rename` per una cartella, che si porta dietro ogni voce e i link.
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
-import { isFolderPage, nameFault, normalizedName, pageName, type NameFault } from "../rules/mirrored";
+import { FOLDER_PAGE_STEM, isFolderPage, nameFault, normalizedName, pageName, type NameFault } from "../rules/mirrored";
 import { parentOf } from "../rules/organizer";
 import { flushPendingSave, renameKeepingBuffer } from "./document-session";
 import { notify } from "../ui/notify";
@@ -29,12 +29,32 @@ export const NAME_FAULT: Record<NameFault, Key> = {
 };
 
 /// `p/Nome.md` con un altro nome di pagina: stessa cartella, stessa estensione.
+/// Un titolo con delle cartelle sposta il file: vedi [`placedTitle`].
 export function renamedPath(from: string, name: string): string {
   const slash = from.lastIndexOf("/");
-  const dir = slash === -1 ? "" : from.slice(0, slash + 1);
   const dot = from.lastIndexOf(".");
   const ext = dot > slash ? from.slice(dot) : "";
-  return normalizedName(`${dir}${name}${ext}`);
+  return normalizedName(`${placedTitle(slash === -1 ? "" : from.slice(0, slash), name)}${ext}`);
+}
+
+/// Il percorso, dalla radice del vault, che un titolo scritto in una pagina
+/// della cartella `folder` nomina.
+///
+/// Un nome semplice resta nella cartella, e così un percorso che parte da lì
+/// (`Archivio/Nuova` in `Progetti` è `Progetti/Archivio/Nuova`). Due modi di
+/// scrivere il percorso **dalla radice** non si annidano (IMP-2800): uno «/»
+/// in testa (`/Archivio/Nuova`), e il percorso che comincia con la cartella
+/// stessa, come lo mostra la barra sopra il titolo: in `Progetti/Tesi` il
+/// titolo `Progetti/Tesi/Villa` è `Progetti/Tesi/Villa`, non
+/// `Progetti/Tesi/Progetti/Tesi/Villa`.
+export function placedTitle(folder: string, typed: string): string {
+  const name = typed.trim();
+  if (name.startsWith("/")) return name.replace(/^\/+/, "");
+  if (folder === "") return name;
+  const here = normalizedName(folder);
+  const written = normalizedName(name);
+  if (written.startsWith(`${here}/`)) return written;
+  return `${folder}/${name}`;
 }
 
 /// Che cosa cambia nome quando il titolo di `doc` diventa `name`: il file, o la
@@ -46,10 +66,23 @@ export type PageRename =
 export function pageRenameTarget(doc: string, name: string): PageRename {
   if (isFolderPage(doc)) {
     const folder = parentOf(doc);
-    const up = parentOf(folder);
-    return { kind: "folder", from: folder, to: normalizedName(up ? `${up}/${name}` : name) };
+    return { kind: "folder", from: folder, to: normalizedName(placedTitle(parentOf(folder), name)) };
   }
   return { kind: "file", from: doc, to: renamedPath(doc, name) };
+}
+
+/// Il nome che la pagina `doc` prende rinominata col titolo `name`: l'ultimo
+/// pezzo del percorso nuovo (`Archivio/Nuova` → `Nuova`), e per la pagina di
+/// una cartella il nome della cartella.
+export function renamedPageName(doc: string, name: string): string {
+  return pageName(renamedPagePath(doc, name));
+}
+
+/// Il documento che la pagina `doc` diventa rinominata col titolo `name`: il
+/// file nuovo, o per la pagina di una cartella la pagina della cartella nuova.
+export function renamedPagePath(doc: string, name: string): string {
+  const target = pageRenameTarget(doc, name.trim());
+  return target.kind === "folder" ? `${target.to}/${FOLDER_PAGE_STEM}.md` : target.to;
 }
 
 /// Rinomina la pagina `doc` col titolo `name`. Torna `null` se è andata (o se
@@ -79,7 +112,7 @@ export async function renamePage(doc: string, name: string): Promise<string | nu
       return t("explorer.rename_failed", { doc: target.from, to: target.to, reason: t("explorer.destination_open") });
     }
   } catch (error) {
-    return t("explorer.rename_failed", { doc: target.from, to: target.to, reason: errorText(error) });
+    return t("explorer.rename_failed", { doc: target.from, to: target.to, reason: errorText(error, "specie") });
   }
   return null;
 }
@@ -106,7 +139,7 @@ export async function newSubpage(doc: string, name: string): Promise<string | nu
       });
     }
   } catch (error) {
-    return errorText(error);
+    return t("explorer.subpage_failed", { name: typed, reason: errorText(error) });
   }
   return null;
 }

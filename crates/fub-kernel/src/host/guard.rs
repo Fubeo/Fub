@@ -12,7 +12,7 @@ use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, TaskMarker};
-use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::net::{HttpRequest, HttpResponse, LimitedFetchError};
 use fub_abi::options::permission;
 use fub_abi::rules::folders;
 use fub_abi::session::ViewContext;
@@ -28,15 +28,24 @@ use fub_abi::{Event, PluginError};
 
 use crate::workspace::Trust;
 
-/// Le diciannove famiglie di capacità [conta: guard-famiglie], come nomi su
+/// Le venti famiglie di capacità [conta: guard-famiglie], come nomi su
 /// cui una politica risponde.
 ///
-/// Sono i sedici trait di `fub_abi::traits` **più tre**, e non è una
+/// Sono i sedici trait di `fub_abi::traits` **più tre**, più una famiglia che
+/// nessun trait porta ([`Capability::Notifications`]), e non è una
 /// duplicazione: là sono ciò che un host **sa fare**, qui ciò che gli si
 /// **concede**. Le due liste devono coprire le stesse cose, e il presidio è
 /// che [`Guard`] non compila se un trait non è coperto.
 ///
-/// # Perché diciannove e non quattordici
+/// [`Capability::Notifications`] è l'eccezione che va detta: non c'è un
+/// metodo dell'host che notifichi, perché a notificare è l'app, fuori dal
+/// contratto dei componenti. Il componente dei compiti dichiara il permesso,
+/// l'utente lo nega dalle Impostazioni come ogni altro, e chi sta per
+/// mostrare una notifica chiede alla politica di quel componente se la
+/// famiglia è concessa. Il cancello è questo stesso `Policy::denies`, non una
+/// seconda lettura dell'impostazione.
+///
+/// # Perché più famiglie che trait
 ///
 /// Per tredici trait su sedici la corrispondenza è uno a uno, ed era vera
 /// per tutti e quattordici fino alla
@@ -144,6 +153,15 @@ pub enum Capability {
     /// una politica deve poterla negare (il safe mode la nega come tutto il
     /// resto), e senza un nome non ci sarebbe niente da negare.
     Transfer,
+    /// **Mostrare una notifica del sistema**, fuori dalla finestra: il
+    /// promemoria di un compito all'ora scritta.
+    ///
+    /// Nessun metodo dell'host la porta: la notifica la mostra l'app, che
+    /// prima chiede alla politica del componente dei compiti se questa famiglia
+    /// è concessa. Così negare `fub:notifications` dalle Impostazioni spegne le
+    /// notifiche alla domanda successiva, con lo stesso cancello che nega ogni
+    /// altro permesso.
+    Notifications,
 }
 
 impl Capability {
@@ -158,7 +176,7 @@ impl Capability {
     /// [`Granted::new`] e il presidio delle capacità simulate in
     /// `kernel/tests/invoke_command.rs` — e una famiglia che non ci finisse
     /// sparirebbe da entrambi restando verde.
-    pub const ALL: [Capability; 19] = [
+    pub const ALL: [Capability; 20] = [
         Capability::VaultRead,
         Capability::VaultWrite,
         Capability::VaultStructure,
@@ -178,6 +196,7 @@ impl Capability {
         Capability::ViewStateRead,
         Capability::ViewStateWrite,
         Capability::Transfer,
+        Capability::Notifications,
     ];
 
     /// Il permesso del core che governa questa famiglia, se ce n'è uno.
@@ -216,6 +235,7 @@ impl Capability {
             Capability::SessionSelection => Some(permission::READ_SELECTION),
             Capability::Services => Some(permission::CALL_SERVICE),
             Capability::Network => Some(permission::NETWORK),
+            Capability::Notifications => Some(permission::NOTIFICATIONS),
             Capability::SettingsWrite => Some(permission::WRITE_SETTINGS),
             // Leggere la configurazione non ha un permesso, e non è una
             // dimenticanza: uno schema è pubblico per costruzione — sta nel
@@ -277,14 +297,15 @@ impl Capability {
             | Capability::SettingsWrite
             | Capability::ViewStateRead
             | Capability::ViewStateWrite
-            | Capability::Transfer => false,
+            | Capability::Transfer
+            | Capability::Notifications => false,
         }
     }
 }
 
 /// Chi decide quali famiglie un host può servire.
 ///
-/// Una politica è **piccola per costruzione**: risponde a diciannove nomi [conta: guard-famiglie]
+/// Una politica è **piccola per costruzione**: risponde a venti nomi [conta: guard-famiglie]
 /// e non
 /// sa niente di documenti, di blob o di comandi. È ciò che permette di comporne
 /// due senza chiedersi cosa significhi comporre venticinque metodi.
@@ -414,6 +435,10 @@ impl Policy for ReadOnly {
             // che disegnasse una view senza il suo scroll mostrerebbe una cosa
             // diversa da quella che l'utente ha davanti.
             | Capability::ViewStateRead
+            // Nessun metodo dell'host notifica: dentro una simulazione non c'è
+            // niente da negare. Chi notifica è l'app, che chiede la politica
+            // del componente (`Workspace::granted_policy`) e non simula mai.
+            | Capability::Notifications
             | Capability::Commands => None,
         }
     }
@@ -482,7 +507,7 @@ pub struct Granted {
 
 /// Le famiglie concesse, come insieme.
 ///
-/// Diciotto bit in un `u32`, ed era un `u16` fino alla diciassettesima
+/// Venti bit in un `u32`, ed era un `u16` fino alla diciassettesima
 /// famiglia. Il numero sta scritto perché è il conto che ha già morso una
 /// volta: se qui e in [`Capability::ALL`] non dicono la stessa cosa, la riga da
 /// credere è `ALL`.
@@ -721,7 +746,7 @@ impl Policy for Granted {
 
 /// Un host con una politica davanti.
 ///
-/// Delega ciò che la politica concede e nega il resto. Le diciannove famiglie [conta: guard-famiglie]
+/// Delega ciò che la politica concede e nega il resto. Le venti famiglie [conta: guard-famiglie]
 /// sono implementate una volta sola e valgono per **ogni** politica presente e
 /// futura: è la differenza fra aggiungere una politica e aggiungere una impl
 /// da venticinque metodi.
@@ -1497,21 +1522,10 @@ impl<H: TransferRead, P: Policy> TransferRead for Guard<H, P> {
     }
 }
 
-impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
-    /// **Due cancelli, e il secondo è il primo parametro di permesso che questo
-    /// repo legge.** La famiglia dice *se*, l'allowlist dice *dove*, e senza il
-    /// secondo il permesso prometterebbe una cosa che non fa — che è la
-    /// differenza fra un recinto che perde e una frase falsa scritta dall'app.
-    ///
-    /// L'ordine conta e non è indifferente: prima la famiglia, così chi non ha
-    /// `fub:network` legge *«non hai dichiarato il permesso»* e non un elenco
-    /// di host che non lo riguarda.
-    ///
-    /// L'URL si legge **qui e una volta sola**. Non c'è un campo `host` accanto
-    /// nella richiesta apposta: due posti in cui è scritto dove si va sono due
-    /// posti che possono non essere d'accordo, e chi controlla ne guarderebbe
-    /// uno solo.
-    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+impl<H: HostNetwork, P: Policy> Guard<H, P> {
+    /// Il cancello di ogni richiesta di rete, qualunque sia il metodo: vedi
+    /// [`fetch`](HostNetwork::fetch) qui sotto per l'ordine dei controlli.
+    fn admit_request(&self, request: &HttpRequest) -> Result<(), PluginError> {
         let (scheme, host) = split_url(&request.url)?;
         self.check(Capability::Network, || format!("connecting to `{host}`"))?;
         if let Some(why) = self.policy.denies_host(&host) {
@@ -1532,6 +1546,26 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
                 .into(),
             ));
         }
+        Ok(())
+    }
+}
+
+impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
+    /// **Due cancelli, e il secondo è il primo parametro di permesso che questo
+    /// repo legge.** La famiglia dice *se*, l'allowlist dice *dove*, e senza il
+    /// secondo il permesso prometterebbe una cosa che non fa — che è la
+    /// differenza fra un recinto che perde e una frase falsa scritta dall'app.
+    ///
+    /// L'ordine conta e non è indifferente: prima la famiglia, così chi non ha
+    /// `fub:network` legge *«non hai dichiarato il permesso»* e non un elenco
+    /// di host che non lo riguarda.
+    ///
+    /// L'URL si legge **qui e una volta sola**. Non c'è un campo `host` accanto
+    /// nella richiesta apposta: due posti in cui è scritto dove si va sono due
+    /// posti che possono non essere d'accordo, e chi controlla ne guarderebbe
+    /// uno solo.
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.admit_request(&request)?;
         self.inner.fetch(request)
     }
 
@@ -1540,24 +1574,20 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
         request: HttpRequest,
         cancelled: &std::sync::atomic::AtomicBool,
     ) -> Result<HttpResponse, PluginError> {
-        let (scheme, host) = split_url(&request.url)?;
-        self.check(Capability::Network, || format!("connecting to `{host}`"))?;
-        if let Some(why) = self.policy.denies_host(&host) {
-            return Err(PluginError::PermissionDenied(
-                format!("connecting to `{host}`: {why}").into(),
-            ));
-        }
-        if scheme != "https" && !is_loopback(&host) {
-            return Err(PluginError::BadArgs(
-                format!(
-                    "`{scheme}` is not `https`: in plaintext the allowlist promises one \
-                     host and the network delivers another. The local loop is an \
-                     exception, because there is no network to traverse"
-                )
-                .into(),
-            ));
-        }
+        self.admit_request(&request)?;
         self.inner.fetch_cancelled(request, cancelled)
+    }
+
+    /// Lo stesso cancello, e il tetto di byte va al filo com'è: senza questo
+    /// inoltro il default scaricherebbe tutto e rifiuterebbe dopo.
+    fn fetch_limited(
+        &self,
+        request: HttpRequest,
+        cancelled: &std::sync::atomic::AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        self.admit_request(&request)?;
+        self.inner.fetch_limited(request, cancelled, max_bytes)
     }
 }
 
@@ -2268,6 +2298,7 @@ mod tests {
             Capability::ViewStateRead => 16,
             Capability::ViewStateWrite => 17,
             Capability::Transfer => 18,
+            Capability::Notifications => 19,
         }
     }
 
@@ -2280,7 +2311,7 @@ mod tests {
     /// negata a tutti, che è il modo giusto di sbagliare, ma va visto»: la prima
     /// metà è vera per costruzione, la seconda non lo era da nessuna parte.
     ///
-    /// La lunghezza dichiarata (`[Capability; N]`, oggi diciotto) obbliga a **toccare**
+    /// La lunghezza dichiarata (`[Capability; N]`, oggi venti) obbliga a **toccare**
     /// l'elenco quando l'enum cresce, ma non a metterci dentro la variante
     /// giusta: chi ha fretta soddisfa il compilatore duplicando una riga già
     /// presente, e la famiglia nuova non viene iterata mai.
@@ -2295,7 +2326,7 @@ mod tests {
     fn the_discriminants_cover_every_family() {
         assert_eq!(
             Capability::ALL.len(),
-            last_declared_family(Capability::Transfer) as usize + 1,
+            last_declared_family(Capability::Notifications) as usize + 1,
             "`Capability::ALL` is shorter than the enum: there is a family that \
              the compiler knows and the list does not name. It is the case the \
              arithmetic below does not see."
@@ -2605,6 +2636,65 @@ mod tests {
     /// Prima della 0097 il parametro di un permesso non lo leggeva nessuno:
     /// `fub:network` con un elenco dentro concedeva esattamente quanto
     /// `fub:network` nudo.
+    /// Una rete che registra il tetto di byte ricevuto e non scarica niente:
+    /// se il cancello non inoltrasse `fetch_limited`, il default chiamerebbe
+    /// `fetch_cancelled` e qui non arriverebbe nessun tetto.
+    #[derive(Default)]
+    struct RecordsCap(std::sync::Mutex<Option<u64>>);
+
+    impl HostNetwork for RecordsCap {
+        fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
+            panic!("a capped request must reach the wire with its cap")
+        }
+
+        fn fetch_limited(
+            &self,
+            _request: HttpRequest,
+            _cancelled: &std::sync::atomic::AtomicBool,
+            max_bytes: u64,
+        ) -> Result<HttpResponse, LimitedFetchError> {
+            *self.0.lock().unwrap() = Some(max_bytes);
+            Err(LimitedFetchError::TooLarge {
+                limit: max_bytes,
+                status: 200,
+                headers: Vec::new(),
+            })
+        }
+    }
+
+    /// Il tetto di byte attraversa il cancello, e il cancello resta un
+    /// cancello: un host fuori dall'allowlist non arriva al filo.
+    #[test]
+    fn the_byte_cap_crosses_the_gate() {
+        let guard = Guard::new(RecordsCap::default(), with_network(&["api.acme.com"]));
+        let flag = std::sync::atomic::AtomicBool::new(false);
+        let err = guard
+            .fetch_limited(HttpRequest::get("https://api.acme.com/x"), &flag, 1024)
+            .expect_err("the wire refuses");
+        assert_eq!(
+            err,
+            LimitedFetchError::TooLarge {
+                limit: 1024,
+                status: 200,
+                headers: Vec::new(),
+            }
+        );
+        assert_eq!(*guard.inner.0.lock().unwrap(), Some(1024));
+
+        let guard = Guard::new(RecordsCap::default(), with_network(&["api.acme.com"]));
+        let err = guard
+            .fetch_limited(HttpRequest::get("https://altrove.example/x"), &flag, 1024)
+            .expect_err("undeclared host");
+        assert!(
+            matches!(
+                err,
+                LimitedFetchError::Failed(PluginError::PermissionDenied(_))
+            ),
+            "{err:?}"
+        );
+        assert_eq!(*guard.inner.0.lock().unwrap(), None);
+    }
+
     #[test]
     fn the_manifest_says_where_and_it_is_true() {
         let guard = Guard::new(WithNetwork, with_network(&["api.acme.com"]));
@@ -2835,6 +2925,38 @@ mod tests {
         assert!(
             granted.denies(Capability::Drafts).is_some(),
             "but not drafts: they were the same checkbox in the same manifest"
+        );
+    }
+
+    /// Le notifiche si concedono **solo** a chi dichiara `fub:notifications`:
+    /// il permesso dei componenti di casa non le porta con sé, e un manifest a
+    /// cui l'utente l'ha tolto (la sottrazione di `restrict`) torna negato.
+    #[test]
+    fn notifications_follow_their_own_permission() {
+        assert_eq!(
+            Capability::Notifications.permission(),
+            Some(permission::NOTIFICATIONS)
+        );
+        let core = Granted::new("fub.tasks", &PluginPermissions::core(), Trust::Core);
+        assert!(
+            core.denies(Capability::Notifications).is_some(),
+            "the core permissions do not include notifications"
+        );
+        let mut declared = PluginPermissions::core();
+        declared.granted.set(permission::NOTIFICATIONS, true);
+        let granted = Granted::new("fub.tasks", &declared, Trust::Core);
+        assert!(granted.denies(Capability::Notifications).is_none());
+        declared.granted.remove(permission::NOTIFICATIONS);
+        let revoked = Granted::new("fub.tasks", &declared, Trust::Core);
+        let why = revoked
+            .denies(Capability::Notifications)
+            .expect("taken away, it is denied again");
+        assert!(why.contains(permission::NOTIFICATIONS), "{why}");
+        assert!(
+            Granted::undeclared("fub.tasks")
+                .denies(Capability::Notifications)
+                .is_some(),
+            "a component that is not mounted does not notify"
         );
     }
 }

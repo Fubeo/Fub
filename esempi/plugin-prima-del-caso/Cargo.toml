@@ -1,0 +1,26 @@
+# Un plugin compilato contro `fub:abi@0.2.0` prima che l'`enum component-kind`
+# avesse il suo ultimo caso, `data` (#289).
+#
+# Come `manifest-prima-di-k1`: fuori dal workspace, solo `wit-bindgen`,
+# nessuna dipendenza da `fub-abi`. Il WIT che ha in mano è la copia ferma in
+# `wit/deps/fub-abi/`, e la prova sta proprio nel fatto che non è quello vivo.
+[package]
+name = "plugin-prima-del-caso"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"
+
+# Un workspace suo, vuoto: chi lo compila da un worktree annidato in un altro
+# checkout (per esempio sotto `.claude/worktrees/`) non risale al
+# `Cargo.toml` di quel checkout, che non lo elenca fra i membri.
+[workspace]

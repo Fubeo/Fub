@@ -133,3 +133,106 @@ fn a_write_makes_the_kernel_drop_the_selection_under_it() {
          conteggio se ne va anche la riga che la mostrava"
     );
 }
+
+/// Il pannello che si ridisegna a ogni movimento del cursore. Un errore qui è un
+/// avviso a comparsa per ogni ridisegno: per un file che non è testo il
+/// pannello deve disegnarsi e dirlo.
+fn render_open(ws: &Workspace, rel: &str) -> UiNode {
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new(rel))),
+    ));
+    ws.render_view(&ViewInstance::only(STATS_VIEW))
+        .expect("il pannello si disegna, senza errore")
+}
+
+/// Un PDF e un'immagine che nessun formato rivendica: il pannello dice che non
+/// sono testo invece di fallire con l'errore UTF-8 della lettura. Anche un file
+/// senza un MIME noto e con byte non UTF-8 (`.dat`) arriva alla stessa
+/// risposta, dalla decodifica tipizzata dei byte.
+#[test]
+fn a_binary_file_without_a_format_is_said_not_text_and_not_failed() {
+    let vault = Vault::new();
+    let pdf: &[u8] = b"%PDF-1.7\n%\x80\x81\x82\x83\n1 0 obj\n";
+    std::fs::write(vault.root.join("Stampa.pdf"), pdf).unwrap();
+    std::fs::write(vault.root.join("Immagine.png"), b"\x89PNG\r\n\x1a\n\0\0").unwrap();
+    std::fs::write(vault.root.join("dati.dat"), b"ok\xff\xfe").unwrap();
+    let ws = vault.open();
+    for rel in ["Stampa.pdf", "Immagine.png", "dati.dat"] {
+        let tree = render_open(&ws, rel);
+        assert_eq!(
+            texts(&tree),
+            vec!["Questo file non è testo: non ci sono parole da contare.".to_string()],
+            "{rel}"
+        );
+        assert_eq!(tree.key.as_deref(), Some("not_text"), "{rel}");
+    }
+}
+
+/// Un file di testo che nessun formato rivendica si conta come prima: sul
+/// sorgente.
+#[test]
+fn a_text_file_without_a_format_is_still_counted() {
+    let vault = Vault::new();
+    std::fs::write(vault.root.join("leggimi.txt"), "tre parole qui\n").unwrap();
+    std::fs::write(vault.root.join("LICENSE"), "però va\n").unwrap();
+    let ws = vault.open();
+    assert_eq!(
+        texts(&render_open(&ws, "leggimi.txt")),
+        vec!["Parole: 3 · Caratteri: 15".to_string()]
+    );
+    assert_eq!(
+        texts(&render_open(&ws, "LICENSE")),
+        vec!["Parole: 2 · Caratteri: 8".to_string()]
+    );
+}
+
+/// Un commento CriticMarkup non cambia le parole di una nota: il pannello
+/// conta il passo, non i segni né la discussione. È il numero della banda
+/// («N parole») e di `fub-cli wordcount`.
+#[test]
+fn a_comment_does_not_change_the_counts() {
+    let vault = Vault::new();
+    std::fs::write(
+        vault.root.join("Commentata.md"),
+        "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} finale.\n",
+    )
+    .unwrap();
+    std::fs::write(vault.root.join("Senza.md"), "Un testo finale.\n").unwrap();
+    let ws = vault.open();
+    let with = texts(&render_open(&ws, "Commentata.md"));
+    assert_eq!(with, texts(&render_open(&ws, "Senza.md")));
+    assert_eq!(with, vec!["Parole: 3 · Caratteri: 17".to_string()]);
+}
+
+/// Anche la riga «Selezione» conta il testo che si legge: una selezione che
+/// prende un commento non conta i suoi segni né i messaggi, che il buffer sia
+/// pulito (coordinate vere) o sporco (solo il testo).
+#[test]
+fn a_selected_comment_counts_only_its_passage() {
+    let vault = Vault::new();
+    let source = "Un {==testo==}{>>@Anna 2026-11-08 17:40: tre parole qui<<} finale.\n";
+    std::fs::write(vault.root.join("Commentata.md"), source).unwrap();
+    let ws = vault.open();
+    let doc = DocId::new("Commentata.md");
+    let end = source.find(" finale").unwrap();
+    let selected = &source[..end];
+    let expected = vec![
+        "Parole: 3 · Caratteri: 17".to_string(),
+        "Selezione — parole: 2 · caratteri: 8".to_string(),
+    ];
+    for selections in [
+        SelectionSet::anchored(fub_abi::model::Span::new(0, end), selected),
+        SelectionSet::floating(selected),
+    ] {
+        ws.set_active_context(Some(
+            ViewContext::new(MAIN_PANE)
+                .with_doc(Some(doc.clone()))
+                .with_selections(Some(selections)),
+        ));
+        assert_eq!(
+            texts(&ws.render_view(&ViewInstance::only(STATS_VIEW)).unwrap()),
+            expected,
+            "«Un testo» e basta: la discussione non è testo selezionato"
+        );
+    }
+}

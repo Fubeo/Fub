@@ -1,0 +1,23 @@
+{
+  "about": "Ridimensionare una scheda non cambia il suo inchiostro: l'ancora tiene la misura di quando il tratto si è scritto (640×420), e la resa lo stira (D-9).",
+  "before": {
+    "nodes": [
+      { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 0, "y": 0, "width": 640, "height": 420,
+        "fub:ink": { "v": 1, "strokes": [
+          { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }
+        ] } }
+    ]
+  },
+  "ops": [{ "op": "resize", "id": "f1", "width": 320, "height": 210 }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 0, "y": 0, "width": 320, "height": 210,
+          "fub:ink": { "v": 1, "strokes": [
+          { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint", "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }
+        ] } }
+      ]
+    }
+  }
+}

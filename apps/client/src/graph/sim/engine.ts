@@ -128,11 +128,7 @@ export function baseTier(n: number): Tier {
   return n <= 400 ? 1 : n <= 2000 ? 2 : 3;
 }
 
-/// Il budget minimo di un fotogramma per il tier: quello a 60 Hz. Uno schermo
-/// più veloce dà più fluidità quando il lavoro ci sta, mai un grafo più povero.
-export const TIER_BUDGET_MS = 1000 / 60;
-/// Frame più lunghi di così, rispetto al budget, sono lenti: a 60 Hz è la
-/// soglia di 22 ms di sempre.
+/// Frame più lunghi di così, rispetto al budget, sono lenti.
 export const TIER_SLOW = 1.3;
 /// Sotto questo rapporto i frame sono tornati nel budget.
 export const TIER_FAST = 1.1;
@@ -141,24 +137,20 @@ export const TIER_FAST = 1.1;
 /// manciata di fotogrammi, e le etichette lampeggerebbero.
 export const TIER_HOLD_MS = 5000;
 
-/// Il tier di resa, dal numero di nodi e dall'EMA della durata dei frame. Si
-/// parte dalla base per cardinalità e si scende di un gradino (più economico)
-/// quando i frame durano più di `TIER_SLOW` budget; si risale quando tornano
-/// sotto `TIER_FAST`, ma non prima di `TIER_HOLD_MS` dall'ultimo cambio. Mai
-/// sopra la base: un frame veloce su uno schermo a 144 Hz rimetteva la
-/// repulsione esatta su duemila nodi, che rallentava, e il tier rimbalzava.
-/// Il budget è il periodo del tetto dei fotogrammi, mai sotto `TIER_BUDGET_MS`.
-export function calculateTier(
-  n: number,
-  current: Tier,
-  emaFrameMs: number,
-  budgetMs: number,
-  heldMs: number,
-): Tier {
+/// Il tier di resa, dal numero di nodi e dal carico: l'EMA della durata dei
+/// frame divisa per il budget del fotogramma (`FramePacer.budgetMs`, il
+/// periodo dello schermo o del tetto). Si parte dalla base per cardinalità e
+/// si scende di un gradino (più economico) quando i frame durano più di
+/// `TIER_SLOW` budget; si risale quando tornano sotto `TIER_FAST`, ma non
+/// prima di `TIER_HOLD_MS` dall'ultimo cambio. Mai sopra la base: un frame
+/// veloce su uno schermo a 144 Hz rimetteva la repulsione esatta su duemila
+/// nodi, che rallentava, e il tier rimbalzava. Il budget segue lo schermo: a
+/// 180 Hz un frame da 11 ms è un fotogramma perso, e il grafo alleggerisce la
+/// resa per tenere il ritmo invece di scendere a 90.
+export function calculateTier(n: number, current: Tier, load: number, heldMs: number): Tier {
   const base = baseTier(n);
   const cheap = (base < 3 ? base + 1 : 3) as Tier;
-  const budget = budgetMs > TIER_BUDGET_MS ? budgetMs : TIER_BUDGET_MS;
-  if (current !== cheap || cheap === base) return emaFrameMs > budget * TIER_SLOW ? cheap : base;
+  if (current !== cheap || cheap === base) return load > TIER_SLOW ? cheap : base;
   if (heldMs < TIER_HOLD_MS) return cheap;
-  return emaFrameMs < budget * TIER_FAST ? base : cheap;
+  return load < TIER_FAST ? base : cheap;
 }

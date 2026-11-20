@@ -77,11 +77,18 @@ impl FormatProvider for FallibleProvider {
 /// Un indice che annota **cosa gli è arrivato**: è il solo modo di distinguere
 /// «il documento è in anagrafe» da «il documento è stato indicizzato», che è
 /// esattamente la distinzione che uno scarto crea.
+/// Una domanda di `up_to_date` come la vede la spia: per voce, l'id e se
+/// portava un'impronta.
+type Question = Vec<(String, bool)>;
+
 #[derive(Clone, Default)]
 struct SpyIndex {
     seen: Arc<Mutex<Vec<String>>>,
     /// L'insieme che `reconcile` ha dichiarato completo, dell'ultimo giro.
     existing: Arc<Mutex<Vec<String>>>,
+    /// Le domande di `up_to_date`, in ordine: per voce, l'id e se portava
+    /// un'impronta.
+    questions: Arc<Mutex<Vec<Question>>>,
 }
 
 impl IndexProvider for SpyIndex {
@@ -93,7 +100,13 @@ impl IndexProvider for SpyIndex {
         Ok(())
     }
 
-    fn up_to_date(&self, _entries: &[VaultEntry]) -> Vec<DocId> {
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        self.questions.lock().unwrap().push(
+            entries
+                .iter()
+                .map(|e| (e.id.to_string(), e.fingerprint.is_some()))
+                .collect(),
+        );
         Vec::new()
     }
 
@@ -305,6 +318,63 @@ fn every_discard_exits_as_fault_after_that_the_vault_is_and_said_open() {
     assert!(
         failure < indexed,
         "uno scarto è un fatto dell'apertura, non una notizia che arriva dopo"
+    );
+}
+
+/// **Un documento che il parser rifiuta esce con la porta del formato**
+/// (IMP-117): il messaggio è la prosa del codec («parse failed: …», in
+/// inglese), e chi mostra il guasto lo sostituisce con la sua frase solo se sa
+/// che è entrato da lì. Un file che non si legge nemmeno non ha un provider in
+/// mezzo, e la porta resta vuota.
+#[test]
+fn a_document_the_parser_rejects_comes_out_through_the_format_gate() {
+    let (mut bench, _) = bench_from_open();
+    std::fs::write(bench.root().join("rifiutata.md"), "BOOM").expect("semina");
+
+    let rx = bench.bus().subscribe();
+    let opening = bench.reindex().expect("apre");
+
+    let gates: Vec<(String, Option<fub_abi::Gate>)> = std::iter::from_fn(|| rx.try_recv().ok())
+        .filter_map(|n| match n.event {
+            Event::Trouble {
+                subject: Some(id),
+                gate,
+                ..
+            } => Some((id.to_string(), gate)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        gates,
+        [("rifiutata.md".to_string(), Some(fub_abi::Gate::FormatParse))],
+        "il rifiuto del parser dice da che porta è entrato"
+    );
+    assert_eq!(opening.discarded[0].gate, Some(fub_abi::Gate::FormatParse));
+}
+
+/// Lo stesso quando una nota già aperta diventa illeggibile sul disco: il
+/// guasto della sincronizzazione dice la porta del formato, non solo la prosa.
+#[test]
+fn a_document_that_stops_parsing_on_sync_comes_out_through_the_format_gate() {
+    let (mut bench, _) = bench_from_open();
+    std::fs::write(bench.root().join("nota.md"), "sto bene").expect("semina");
+    bench.reindex().expect("apre");
+
+    std::fs::write(bench.root().join("nota.md"), "BOOM").expect("rovina");
+    let rx = bench.bus().subscribe();
+    let abs = bench.root().join("nota.md");
+    let _ = bench.sync_path(&abs);
+
+    let gates: Vec<Option<fub_abi::Gate>> = std::iter::from_fn(|| rx.try_recv().ok())
+        .filter_map(|n| match n.event {
+            Event::Trouble { gate, .. } => Some(gate),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        gates,
+        [Some(fub_abi::Gate::FormatParse)],
+        "il guasto dice da che porta è entrato"
     );
 }
 
@@ -549,13 +619,14 @@ fn a_warm_the_second_phase_not_has_nothing_from_do() {
         .mounts();
     std::fs::write(bench.root().join("una.md"), "prima").expect("semina");
     std::fs::write(bench.root().join("due.md"), "seconda").expect("semina");
-    // La semina dev'essere **strettamente nel passato** quando il primo giro
-    // la osserva: una data nello stesso millisecondo dell'osservazione è
-    // *racily clean* (difetto 0187) e la voce non si scrive in anagrafe —
-    // senza questa pausa il banco litiga con l'orologio e perde quando è
-    // veloce, cioè quando gira da solo. La stessa pausa, con lo stesso nome,
-    // sta in `anagrafe.rs` e `ricongiungimento.rs`.
-    beyond_the_millisecondo();
+    // La semina dev'essere **ferma** quando il primo giro la osserva: una
+    // data nello stesso millisecondo dell'osservazione è *racily clean*
+    // (difetto 0187) e la voce non si scrive in anagrafe, e un timbro di
+    // cambiamento più giovane di una grana si scrive senza timbro, cioè la
+    // riapertura rilegge il file invece di crederle. Senza questa pausa il
+    // banco litiga con l'orologio e perde quando è veloce, cioè quando gira
+    // da solo.
+    beyond_the_grain();
     bench.reindex().expect("primo giro");
 
     let work = bench.scan_vault().expect("riapre");
@@ -577,11 +648,62 @@ fn a_warm_the_second_phase_not_has_nothing_from_do() {
     assert!(opening.whole(), "un vault immutato si chiude intero");
 }
 
-/// La pausa che porta la semina oltre il millisecondo corrente, perché la
-/// regola *racily clean* (difetto 0187) si fidi della data che ha visto. Il
-/// gemello sta in `anagrafe.rs` e `ricongiungimento.rs`.
-fn beyond_the_millisecondo() {
-    std::thread::sleep(std::time::Duration::from_millis(5));
+/// **Un file riscritto dopo che lo si è guardato si rilegge alla riapertura**,
+/// anche con la stessa misura e la stessa data e senza un evento.
+///
+/// L'anagrafe scrive il timbro di cambiamento che il file ha quando la scrive,
+/// accanto ai metadati letti quando lo si è guardato. Prima, una riscrittura
+/// fra i due momenti (una data rimessa, un supporto con la grana di due
+/// secondi) dava una riga col timbro nuovo e i metadati vecchi, e la
+/// riapertura la credeva. Adesso il timbro si scrive solo se era già fermo
+/// quando si è guardato il file
+/// ([`change_stamp_settled`](fub_kernel::transfer::change_stamp_settled)):
+/// quello della riscrittura non lo è, e la riga va senza timbro.
+#[test]
+fn a_file_rewritten_after_it_was_seen_is_reread_at_the_reopening() {
+    use std::io::Write;
+
+    let mut bench = Bench::new()
+        .with_format(Box::new(FallibleProvider))
+        .without_scan()
+        .mounts();
+    let path = bench.root().join("una.md");
+    std::fs::write(&path, "prima").expect("semina");
+    beyond_the_grain();
+    bench.reindex().expect("primo giro");
+
+    // Stessa misura, stessa data, stesso file (riscritto sul posto): solo il
+    // timbro di cambiamento lo distingue.
+    let mtime = std::fs::metadata(&path)
+        .expect("il file")
+        .modified()
+        .expect("la data");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .expect("apertura");
+    file.write_all(b"dopo!").expect("riscrittura");
+    file.set_modified(mtime).expect("la stessa data");
+    drop(file);
+    bench.store_entries();
+
+    let work = bench.scan_vault().expect("riapre");
+    assert_eq!(
+        work.total(),
+        1,
+        "la riga scritta dopo la riscrittura non certifica i metadati di prima"
+    );
+}
+
+/// La pausa che porta la semina oltre la grana del timbro di cambiamento
+/// ([`CHANGE_STAMP_GRAIN`](fub_kernel::storage::CHANGE_STAMP_GRAIN), due
+/// secondi), e quindi anche oltre il millisecondo corrente: l'anagrafe crede
+/// alla data (regola *racily clean*, difetto 0187) e al timbro
+/// ([`change_stamp_settled`](fub_kernel::transfer::change_stamp_settled)) che
+/// ha visto solo quando erano già fermi.
+fn beyond_the_grain() {
+    std::thread::sleep(std::time::Duration::from_millis(2_100));
 }
 
 /// **Chi smette a metà non riconcilia**, ed è la riga che separa «ho smesso di
@@ -608,4 +730,181 @@ fn a_indexing_interrupted_not_declares_complete_nothing() {
         probe.existing.lock().unwrap().is_empty(),
         "`reconcile` non è stato chiamato: un insieme incompleto non si dichiara completo"
     );
+}
+
+/// **Chi smette a metà ritira ciò che ha dichiarato.** La domanda di
+/// `up_to_date` dichiara a un indice persistente la revisione di ogni
+/// documento in arrivo, e senza `reconcile` niente la chiudeva: la prima
+/// consegna a sessione aperta (un salvataggio, testo nuovo) se la prendeva.
+/// Il ritiro è la stessa domanda senza impronta, su ogni documento chiesto.
+fn assert_withdrawn(probe: &SpyIndex, notes: usize) {
+    let questions = probe.questions.lock().unwrap();
+    let asked: Vec<&(String, bool)> = questions.iter().flatten().filter(|(_, f)| *f).collect();
+    assert!(
+        !asked.is_empty(),
+        "the scan declared revisions: {questions:?}"
+    );
+    let last = questions.last().expect("asked");
+    let mut withdrawn: Vec<&str> = last
+        .iter()
+        .filter(|(_, fingerprint)| !fingerprint)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    assert_eq!(
+        withdrawn.len(),
+        last.len(),
+        "the last question carries no fingerprint"
+    );
+    withdrawn.sort();
+    withdrawn.dedup();
+    assert_eq!(
+        withdrawn.len(),
+        notes,
+        "every note asked about is withdrawn"
+    );
+    for asked in asked {
+        assert!(
+            withdrawn.contains(&asked.0.as_str()),
+            "{} withdrawn",
+            asked.0
+        );
+    }
+}
+
+/// Un vault di una fetta e un documento: la prima fetta si chiede e si
+/// consegna, la seconda non arriva mai.
+fn two_slices(bench: &Mounted) -> usize {
+    let notes = 513;
+    for n in 0..notes {
+        std::fs::write(
+            bench.root().join(format!("n{n:03}.md")),
+            format!("nota {n}"),
+        )
+        .expect("semina");
+    }
+    notes
+}
+
+#[test]
+fn a_indexing_interrupted_withdraws_its_declarations() {
+    let (mut bench, probe) = bench_from_open();
+    let notes = two_slices(&bench);
+    let mut work = bench.scan_vault().expect("scansiona");
+    let batch = bench.plan_batch(&mut work);
+    bench.index_batch_prepared(batch);
+    let opening = bench.finish_index(work);
+    assert!(opening.interrupted);
+    assert_withdrawn(&probe, notes);
+}
+
+#[test]
+fn a_indexing_interrupted_withdraws_also_on_the_runner_path() {
+    let (mut bench, probe) = bench_from_open();
+    let notes = two_slices(&bench);
+    let mut work = bench.scan_vault().expect("scansiona");
+    let batch = bench.plan_batch(&mut work);
+    bench.index_batch_prepared(batch);
+    let built = bench.graph_sources().build();
+    let opening = bench.finish_index_with_graph(work, built);
+    assert!(opening.interrupted);
+    assert_withdrawn(&probe, notes);
+}
+
+#[test]
+fn a_finished_indexing_withdraws_nothing() {
+    let (mut bench, probe) = bench_from_open();
+    std::fs::write(bench.root().join("una.md"), "prima").expect("semina");
+    bench.reindex().expect("apre");
+    // La scansione chiede anche dei documenti di cui non conosce l'impronta
+    // (la prima apertura): l'ultima domanda è quella della fetta, con le
+    // impronte, e dopo non c'è un ritiro.
+    let questions = probe.questions.lock().unwrap();
+    assert!(
+        questions
+            .last()
+            .expect("asked")
+            .iter()
+            .all(|(_, fingerprint)| *fingerprint),
+        "a finished opening closes with `reconcile`, not with a withdrawal: {questions:?}"
+    );
+    assert_eq!(*probe.existing.lock().unwrap(), ["una.md"]);
+}
+
+/// Un indice che va in panico **dentro `up_to_date`**: il caso nativo
+/// dell'ospite che va in trap o scade. Annota ciò che riceve dopo.
+#[derive(Clone, Default)]
+struct PanickyIndex {
+    seen: Arc<Mutex<Vec<String>>>,
+}
+
+impl IndexProvider for PanickyIndex {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn up_to_date(&self, _entries: &[VaultEntry]) -> Vec<DocId> {
+        panic!("la domanda va in panico");
+    }
+
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        let mut seen = self.seen.lock().unwrap();
+        seen.extend(docs.iter().map(|doc| doc.id.to_string()));
+        Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::BadArgs("non risponde".into()))
+    }
+
+    fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+}
+
+/// **La domanda va a ogni indice a ogni fetta** (#521), e un indice che ci
+/// va in panico non ferma l'apertura: la sua risposta è «mandami tutto».
+/// L'apertura finisce intera, lui riceve ogni documento, e l'indice dopo di
+/// lui viene interrogato e alimentato come se niente fosse.
+#[test]
+fn a_index_that_panics_in_up_to_date_gets_everything_and_stops_nothing() {
+    let probe = SpyIndex::default();
+    let panicky = PanickyIndex::default();
+    let mut bench = Bench::new()
+        .with_plugin("test.panico")
+        .with_plugin("test.spia")
+        .with_spy()
+        .without_scan()
+        .mounts();
+    bench
+        .register_index_provider("test.panico".to_string(), Box::new(panicky.clone()))
+        .expect("si registra");
+    bench
+        .register_index_provider("test.spia".to_string(), Box::new(probe.clone()))
+        .expect("si registra");
+    let notes = two_slices(&bench);
+    let opening = bench.reindex().expect("l'apertura finisce");
+    assert!(!opening.interrupted && opening.whole());
+    assert_eq!(
+        panicky.seen.lock().unwrap().len(),
+        notes,
+        "ogni documento a lui"
+    );
+    assert_eq!(probe.seen.lock().unwrap().len(), notes, "e agli altri");
+    assert_eq!(probe.existing.lock().unwrap().len(), notes);
 }

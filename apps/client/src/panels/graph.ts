@@ -36,6 +36,7 @@ import type { Lifetime } from "../ui/lifetime";
 import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
 import { setTooltip } from "../ui/tooltip";
+import { warmups } from "../ui/warmup";
 import { GROUP_TOKENS } from "../graph/render/atlas";
 import { nodeLabel } from "../graph/render/painter";
 import { notify } from "../ui/notify";
@@ -118,6 +119,15 @@ export function mountGraph(lifetime: Lifetime): void {
     if (doc) lastDocument = doc;
   }));
   registerCustomRenderer(GRAPH_NS, renderGraph);
+  // La prima apertura in una sessione costava ~140 ms di pagina ferma (il
+  // motore da caricare, l'atlas, le procedure di disegno della WebView da
+  // compilare): a riposo la si fa prima, su un grafo invisibile
+  // (`graph/warmup.ts`). Lo stesso modulo lazy che il renderer chiede dopo.
+  lifetime.add(warmups.register(async (next) => {
+    await next();
+    const engine: GraphEngine = await import("../graph/lazy");
+    await engine.warmGraph(next);
+  }));
 }
 
 /// I documenti aperti in un riquadro qualunque: sono i nodi che il grafo accende.
@@ -173,7 +183,7 @@ function readData(payload: unknown): GraphData {
     ? {
       seed: rawLocal.seed,
       depth: typeof rawLocal.depth === "number" ? rawLocal.depth : 1,
-      direction: typeof rawLocal.direction === "string" ? rawLocal.direction : "outbound",
+      direction: typeof rawLocal.direction === "string" ? rawLocal.direction : "both",
     }
     : null;
   const rawFilter = (extra.filter ?? {}) as { show_orphans?: unknown; show_attachments?: unknown; show_tags?: unknown; show_missing?: unknown };
@@ -312,6 +322,17 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   // migliaia di note ogni istante di modifica era un passo da mezzo secondo.
   const dayOf = (ms: number): number => new Date(ms).setHours(0, 0, 0, 0);
   const times = [...new Set(Object.values(data.modified).map(dayOf))].sort((a, b) => a - b);
+  // Un tag o una nota mancante non è un file: non ha data né cartella, e vive
+  // degli archi dalle note che lo scrivono (il provider manda solo archi
+  // nota → tag e nota → mancante). Le note di ciascuno, calcolate una volta:
+  // la linea del tempo le rilegge a ogni passo, anche in riproduzione.
+  const writers = new Map<string, string[]>();
+  for (const edge of data.edges) {
+    if (!data.tags.has(edge.to) && !data.missing.has(edge.to)) continue;
+    const list = writers.get(edge.to);
+    if (list) list.push(edge.from);
+    else writers.set(edge.to, [edge.from]);
+  }
   const visible = new Set(data.nodes);
   let cutoffIndex = times.length;
   // I gruppi che la legenda ha spento: i loro nodi stanno fuori dalla vista,
@@ -363,6 +384,9 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     else onAction({ action: OPEN, payload: { [DOC]: id } }, []);
   };
   const settleEngine = (engine: GraphEngine): void => {
+    // Il motore è arrivato per la persona: il riscaldamento del grafo, se non
+    // è ancora passato, non serve più (`graph/warmup.ts`).
+    engine.noteGraphOpened();
     if (disposed) return;
     const next = engine.createChart({ config, data, layout: rememberedLayout });
     next.setVisibleNodes(masked() ? visible : null);
@@ -610,9 +634,18 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   function updateTimeline(): void {
     visible.clear();
     const cutoff = cutoffIndex === times.length ? Infinity : times[cutoffIndex];
+    // Un nodo appeso (tag, nota mancante) si vede finché si vede almeno una
+    // delle note che lo scrivono: tenuto da solo era un nodo senza archi. Uno
+    // senza note segue la regola di tutti, così disegno, elenco e conteggio
+    // dicono lo stesso. Un allegato che c'è è un file, con cartella e data sue.
+    const shown = (id: string): boolean =>
+      !hiddenGroups.has(data.groups[id] ?? "\u0000") &&
+      (data.modified[id] === undefined || dayOf(data.modified[id]) <= cutoff);
     for (const id of data.nodes) {
-      if (hiddenGroups.has(data.groups[id] ?? "\u0000")) continue;
-      if (data.modified[id] === undefined || dayOf(data.modified[id]) <= cutoff) visible.add(id);
+      if (!writers.has(id) && shown(id)) visible.add(id);
+    }
+    for (const [id, from] of writers) {
+      if (from.some((doc) => visible.has(doc))) visible.add(id);
     }
     chart?.setVisibleNodes(masked() ? visible : null);
     timeInput.value = String(cutoffIndex);

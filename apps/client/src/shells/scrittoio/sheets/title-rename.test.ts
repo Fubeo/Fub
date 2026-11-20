@@ -41,10 +41,46 @@ vi.mock("../../../ui/tooltip", () => ({
 vi.mock("../../../ui/icons", () => ({ iconEl: () => null }));
 
 import { mountTitleRename, proposedName } from "./title-rename";
+import { keepTitle } from "../../../editors/text/profiles/markdown/page/title";
 
 let driver: ManualDriver;
 let lifetime: Lifetime;
 let panes: HTMLElement;
+
+/// Le briciole come le scrive `drawCrumbs` della vista: il vault, le cartelle
+/// (`data-folder`), i segni fra i pezzi e il nome in `.crumb-name`, col
+/// percorso intero in `data-path`. Una vista resta il suo nome, in testo.
+function crumbs(crumb: HTMLElement, path: string, doc: boolean): void {
+  if (!doc) {
+    delete crumb.dataset.path;
+    crumb.textContent = path;
+    return;
+  }
+  // Come la vista, che a percorso uguale non riscrive niente.
+  if (crumb.dataset.path === path) return;
+  crumb.dataset.path = path;
+  const sep = (): HTMLElement => {
+    const el = document.createElement("span");
+    el.className = "crumb-sep";
+    el.setAttribute("aria-hidden", "true");
+    el.textContent = "/";
+    return el;
+  };
+  const vault = document.createElement("span");
+  vault.dataset.folder = "";
+  vault.textContent = "Vault";
+  const pieces: Node[] = [vault, sep()];
+  const parts = path.split("/");
+  parts.forEach((part, i) => {
+    const el = document.createElement("span");
+    el.textContent = part;
+    if (i === parts.length - 1) el.className = "crumb-name";
+    else el.dataset.folder = parts.slice(0, i + 1).join("/");
+    pieces.push(el);
+    if (i < parts.length - 1) pieces.push(sep());
+  });
+  crumb.replaceChildren(...pieces);
+}
 
 /// Una testata com'è scritta dalla vista: percorso, stato, menu.
 function pane(id: string, doc: string | null, text = doc ?? ""): HTMLElement {
@@ -57,7 +93,7 @@ function pane(id: string, doc: string | null, text = doc ?? ""): HTMLElement {
   bar.setAttribute("role", "toolbar");
   const crumb = document.createElement("span");
   crumb.className = "muted";
-  crumb.textContent = text;
+  crumbs(crumb, text, doc !== null);
   const menu = document.createElement("button");
   menu.dataset.paneMenu = "";
   bar.append(crumb, menu);
@@ -66,9 +102,9 @@ function pane(id: string, doc: string | null, text = doc ?? ""): HTMLElement {
   return bar;
 }
 
-/// Ciò che fa `drawToolbar` della vista col titolo: riscrive il testo.
-function redraw(bar: HTMLElement, path: string): void {
-  crumbOf(bar).textContent = path;
+/// Ciò che fa `drawToolbar` della vista col titolo: riscrive le briciole.
+function redraw(bar: HTMLElement, path: string, doc = true): void {
+  crumbs(crumbOf(bar), path, doc);
 }
 
 const crumbOf = (bar: HTMLElement): HTMLElement => bar.querySelector<HTMLElement>(":scope > .muted")!;
@@ -85,6 +121,22 @@ function dblclick(target: HTMLElement): void {
 function type(input: HTMLInputElement, value: string): void {
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/// Una tastiera: ogni battuta va all'elemento col fuoco in quel momento, e
+/// dove nessuno la prende un campo la scrive al posto della selezione, come fa
+/// il browser. Un bottone non scrive niente.
+function keyboard(text: string): void {
+  for (const key of text) {
+    const target = (document.activeElement ?? document.body) as HTMLElement;
+    const event = press(target, key);
+    if (event.defaultPrevented || !(target instanceof HTMLInputElement) || target.readOnly) continue;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? start;
+    target.value = target.value.slice(0, start) + key + target.value.slice(end);
+    target.setSelectionRange(start + key.length, start + key.length);
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 }
 
 /// Una promessa che si scioglie quando lo dice il banco.
@@ -184,6 +236,32 @@ describe("il titolo che si può premere", () => {
   });
 });
 
+describe("le briciole", () => {
+  it("il doppio clic sul nome rinomina; sul vault, su una cartella o su un segno no", () => {
+    const bar = pane("main", "Guida/Nota.md");
+    mountTitleRename(lifetime);
+    const title = crumbOf(bar);
+    for (const piece of [
+      title.querySelector<HTMLElement>("[data-folder='']")!,
+      title.querySelector<HTMLElement>("[data-folder='Guida']")!,
+      title.querySelector<HTMLElement>(".crumb-sep")!,
+    ]) {
+      dblclick(piece);
+      expect(inputOf(bar)).toBeNull();
+    }
+    dblclick(title.querySelector<HTMLElement>(".crumb-name")!);
+    expect(inputOf(bar)!.value).toBe("Nota");
+  });
+
+  it("il suggerimento del titolo smontato è il percorso, non il testo delle briciole", () => {
+    const bar = pane("main", "Guida/Nota.md");
+    mountTitleRename(lifetime);
+    expect(crumbOf(bar).textContent).toBe("Vault/Guida/Nota.md");
+    lifetime.close();
+    expect(world.tips.get(crumbOf(bar))).toBe("Guida/Nota.md");
+  });
+});
+
 describe("aprire il campo", () => {
   it("il doppio clic mette al posto del titolo un campo col nome della pagina, selezionato", () => {
     const bar = pane("main", "Guida/Nota.md");
@@ -237,6 +315,37 @@ describe("aprire il campo", () => {
     dblclick(crumbOf(view));
     press(crumbOf(view), "F2");
     expect(inputOf(view)).toBeNull();
+  });
+
+  // IMP-3806: un clic sul titolo e poi il nome scritto di getto. Le lettere
+  // prima del primo spazio cadevano sul bottone, lo Spazio apriva il campo col
+  // nome selezionato e il resto lo sostituiva: «Progetto scorte» diventava
+  // «scorte». Ogni battuta va al nome, la prima compresa.
+  it("dopo un clic sul titolo, scrivere apre il campo e nessuna lettera va persa", async () => {
+    const bar = pane("main", "Progetto Gestione Scorte.md");
+    mountTitleRename(lifetime);
+    const title = crumbOf(bar);
+    title.focus();
+    title.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    expect(inputOf(bar)).toBeNull();
+    keyboard("Progetto scorte Ferramenta Bosco");
+    const input = inputOf(bar)!;
+    expect(input.value).toBe("Progetto scorte Ferramenta Bosco");
+    expect(document.activeElement).toBe(input);
+    press(input, "Enter");
+    await settled();
+    expect(renames).toEqual([{ from: "Progetto Gestione Scorte.md", to: "Progetto scorte Ferramenta Bosco.md" }]);
+  });
+
+  it("le scorciatoie e i tasti che non scrivono, col fuoco sul titolo, non aprono il campo", () => {
+    const bar = pane("main", "Guida/Nota.md");
+    mountTitleRename(lifetime);
+    crumbOf(bar).focus();
+    for (const [key, init] of [["a", { ctrlKey: true }], ["k", { metaKey: true }], ["x", { altKey: true }], ["Shift", {}], ["Tab", {}], ["Dead", {}]] as const) {
+      const event = press(crumbOf(bar), key, init);
+      expect(event.defaultPrevented).toBe(false);
+      expect(inputOf(bar)).toBeNull();
+    }
   });
 
   it("un campo solo alla volta", () => {
@@ -423,6 +532,81 @@ describe("rinominare", () => {
     expect(renames).toEqual([]);
     expect(note()!.textContent).toBe("document.unsaved_blocks Guida/Nota.md");
     expect(inputOf(bar)!.value).toBe("Appunti");
+  });
+});
+
+describe("il primo H1 ripiegato nel titolo (T7)", () => {
+  /// Una superficie Markdown del riquadro, come la registra `surface.ts`.
+  function keeper(bar: HTMLElement, doc = "Guida/Nota.md"): { calls: [string, string][]; stop: () => void } {
+    const root = document.createElement("div");
+    bar.closest("[data-pane]")!.append(root);
+    const calls: [string, string][] = [];
+    const stop = keepTitle({ root, documentId: () => doc, retitle: (before, after) => void calls.push([before, after]) });
+    return { calls, stop };
+  }
+
+  it("rinominata la nota, le superfici del riquadro riscrivono l'H1 col nome nuovo", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    const other = pane("side", "Guida/Nota.md");
+    const mine = keeper(bar);
+    const beside = keeper(other);
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Appunti");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(renames).toEqual([{ from: "Guida/Nota.md", to: "Guida/Appunti.md" }]);
+    expect(mine.calls).toEqual([["Nota", "Appunti"]]);
+    // Il buffer è uno: l'altro riquadro lo vede arrivare, non lo riscrive.
+    expect(beside.calls).toEqual([]);
+    mine.stop();
+    beside.stop();
+  });
+
+  it("un titolo con «/» sposta il file: l'H1 prende il nome della pagina, non il percorso", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    const mine = keeper(bar);
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Archivio/Nuova");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(renames).toEqual([{ from: "Guida/Nota.md", to: "Guida/Archivio/Nuova.md" }]);
+    expect(mine.calls).toEqual([["Nota", "Nuova"]]);
+    mine.stop();
+  });
+
+  it("una superficie di un altro documento nello stesso riquadro non riscrive niente", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    const card = keeper(bar, "Guida/Riunioni.md");
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Appunti");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(card.calls).toEqual([]);
+    card.stop();
+  });
+
+  it("una rinomina che non riesce non tocca l'H1", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    const mine = keeper(bar);
+    world.rename = (from, to) => Promise.resolve({ kind: "collision", from, to });
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Appunti");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    world.rename = () => Promise.reject(new Error("no"));
+    type(inputOf(bar)!, "Altro");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    // Un nome rifiutato dalla regola non parte nemmeno.
+    type(inputOf(bar)!, "a/../b");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(mine.calls).toEqual([]);
+    mine.stop();
   });
 });
 

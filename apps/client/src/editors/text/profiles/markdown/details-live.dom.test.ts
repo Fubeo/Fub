@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EditorSelection, EditorState, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { livePreview } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { setDetailsDefault, setDetailsOpen } from "./details-live";
+import { parsedView } from "./test-support";
 
 // Il ripiegabile in Live (K2): la freccia e il sommario, i tag nascosti, il
 // contenuto rientrato; aperto o chiuso è della vista.
@@ -20,17 +20,21 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function mount(doc: string, anchor = 0, policy: RevealPolicy = "mai"): EditorView {
+function mount(doc: string, anchor = 0, policy: RevealPolicy = "mai", lineBreak = "\n"): EditorView {
   const view = new EditorView({
     parent: document.body,
     state: EditorState.create({
       doc,
       selection: { anchor },
-      extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} }), Prec.highest(liveReveal.of(policy))],
+      extensions: [
+        markdown({ base: markdownGrammar }),
+        livePreview({ openWikilink() {}, searchTag() {} }),
+        Prec.highest(liveReveal.of(policy)),
+        ...(lineBreak === "\n" ? [] : [EditorState.lineSeparator.of(lineBreak)]),
+      ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -74,6 +78,17 @@ describe("il ripiegabile in Live", () => {
     arrow(view)!.click();
     expect(view.state.selection.main.head).toBe(NOTE.indexOf("</summary>"));
     expect(text(view)).not.toContain("acqua");
+  });
+
+  it("in una nota CRLF il sommario sulla riga dopo `<details>` sta dove sta in LF (#394)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const view = mount(NOTE.replace(/\n/g, nl), 0, "mai", nl);
+      const summary = view.contentDOM.querySelector<HTMLElement>(".cm-fub-details-summary");
+      expect(summary?.textContent?.replace(arrow(view)!.textContent ?? "", ""), JSON.stringify(nl)).toBe("Ingredienti");
+      view.dispatch({ selection: EditorSelection.cursor(NOTE.indexOf("acqua")) });
+      arrow(view)!.click();
+      expect(view.state.selection.main.head, JSON.stringify(nl)).toBe(NOTE.indexOf("</summary>"));
+    }
   });
 
   it("gli annidati rientrano di più", () => {

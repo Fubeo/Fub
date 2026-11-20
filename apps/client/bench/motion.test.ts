@@ -14,11 +14,13 @@
 // legherebbe il presidio ai numeri di riga.
 import { describe, expect, it } from "vitest";
 
-import { SCENE as scenes } from "./scene.mjs";
+import { GESTURE_SCENE, SCENE } from "./scene.mjs";
 import {
   ALLOWED,
   CHOREOGRAPHIES as choreographies,
+  BROWSER_ARGS,
   EXIT_LIMIT_MS,
+  FRAME_STREAK,
   UNCOVERED as uncovered,
   cssName,
   family,
@@ -27,14 +29,19 @@ import {
   jumps,
   longExits,
   midpoint,
+  perFrame,
   residue,
 } from "./motion-rules.mjs";
 
-/// I sorgenti della shell, dei pannelli, del kit, dell'editor dei documenti e dei Blocchi, come Vite li vede: il percorso dalla
+/// Le scene da cui una coreografia può partire: quelle con le foto e quelle
+/// dei gesti (la cartella grande che accetta i riempimenti, griglia T6).
+const scenes = [...SCENE, ...GESTURE_SCENE];
+
+/// I sorgenti della shell, dei pannelli, del kit, dell'editor dei documenti, dei Blocchi e del menu, e della griglia, come Vite li vede: il percorso dalla
 /// radice del client e il testo.
 const sources = new Map(
   Object.entries(
-    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/ui/motion.ts"], {
+    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/editors/grid/**/*.ts", "../src/ui/motion.ts", "../src/ui/menu.ts"], {
       eager: true,
       query: "?raw",
       import: "default",
@@ -44,7 +51,7 @@ const sources = new Map(
 
 /// Un file «si muove» se importa `moto` e chiama una delle sue partenze.
 const IMPORTS_MOTO = /from\s+"(\.\.?\/)+moto(\/[\w-]+)?"/;
-const STARTS = /\b(animate|springValue|flip|exitGhost|prepareExit|stagger|enter|drag)\(/;
+const STARTS = /\b(animate|springValue|flip|exitGhost|prepareExit|stagger|enter|drag|onFrame)\(/;
 const moving = [...sources]
   .filter(([path, text]) => !path.endsWith(".test.ts") && IMPORTS_MOTO.test(text) && STARTS.test(text))
   .map(([path]) => path)
@@ -161,6 +168,18 @@ describe("la regola 3: solo le proprietà ammesse", () => {
     // Ciò che non si conosce costa come un layout: non passa per pittura.
     expect(family("--qualcosa")).toBe("layout");
   });
+
+  it("durante un gesto è scritta a ogni fotogramma la proprietà estranea cambiata in due fotogrammi di fila", () => {
+    expect(FRAME_STREAK).toBe(2);
+    const slot = ".cm-fub-block-slot";
+    expect(perFrame([
+      { target: slot, property: "top", frames: 1 },
+      { target: slot, property: "height", frames: 2 },
+      { target: slot, property: "transform", frames: 30 },
+      { target: slot, property: "translate", frames: 30 },
+      { target: slot, property: "opacity", frames: 12 },
+    ])).toEqual([{ target: slot, property: "height", frames: 2 }]);
+  });
 });
 
 describe("la regola 2: nessun residuo", () => {
@@ -220,11 +239,22 @@ describe("la regola 4: l'inversione non riparte da zero", () => {
 
   it("chiama salto una corsa ripartita dalla posa di partenza", () => {
     const restarted = { ...flying, left: 112, opacity: 0 };
-    expect(jumps([flying], [restarted])).toEqual([{ key: "pannello", px: 12, opacity: 0.5, nearest: "pannello" }]);
+    expect(jumps([flying], [restarted])).toEqual([
+      {
+        key: "pannello",
+        px: 12,
+        opacity: 0.5,
+        nearest: "pannello",
+        was: { left: 100, top: 50, width: 200, height: 80, opacity: 0.5 },
+        is: { left: 112, top: 50, width: 200, height: 80, opacity: 0 },
+      },
+    ]);
   });
 
   it("chiama salto ciò che sparisce senza lasciare un'immagine", () => {
-    expect(jumps([flying], [])).toEqual([{ key: "pannello", px: null, opacity: null, nearest: null }]);
+    expect(jumps([flying], [])).toEqual([
+      { key: "pannello", px: null, opacity: null, nearest: null, was: { left: 100, top: 50, width: 200, height: 80, opacity: 0.5 }, is: null },
+    ]);
   });
 });
 
@@ -240,6 +270,15 @@ describe("la metà corsa", () => {
   it("senza corse vale il ripiego, e non scende mai sotto un fotogramma", () => {
     expect(midpoint([], 50)).toBeCloseTo(3 * frame, 9);
     expect(midpoint([4])).toBeCloseTo(frame, 9);
+  });
+});
+
+describe("gli scatti delle regole 1 e 4", () => {
+  // Col raster parziale lo stesso stato, raggiunto per due strade, dava ogni
+  // tanto un pixel diverso di due livelli (le Preferenze, regola 4): il
+  // confronto al pixel regge solo se ogni tessera toccata si rifà intera.
+  it("vengono da un Chromium che rasterizza intera ogni tessera toccata", () => {
+    expect(BROWSER_ARGS).toContain("--disable-partial-raster");
   });
 });
 

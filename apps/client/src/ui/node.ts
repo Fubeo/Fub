@@ -19,6 +19,9 @@
 //   posizione, e una lista che si riordina si porta dietro focus e selezione
 //   sbagliati;
 // - un nodo che cambia **specie** si ricostruisce (non c'è niente da salvare);
+// - un sottoalbero **uguale** a quello disegnato non si tocca (`unchanged`):
+//   in WebKit anche un elemento rifatto identico invalida e ridisegna, e le
+//   view si ridisegnano a ogni salvataggio;
 // - un campo che ha il **focus** non si sovrascrive col valore del provider: chi
 //   sta scrivendo ha ragione, e il provider vedrà il valore quando l'azione
 //   scatta.
@@ -58,14 +61,19 @@ import type { ActionRef, FieldValue, UiKind, UiNode, UiOption, UiValue } from ".
 import { customRenderer, NO_RENDER_CONTEXT, type CustomRenderContext } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
 import { activatable, identifier, notActivatable } from "./a11y";
-import { t } from "../i18n/strings";
+import { resolvedLanguage, t } from "../i18n/strings";
 import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { setTooltip } from "./tooltip";
 import { tabIndexForKey } from "./tab-keys";
-import { iconEl } from "./icons";
+import { iconEl, iconsRevision } from "./icons";
 import { offerNote } from "./drag-types";
+import { drawPageMark } from "./page-mark";
+import { FORMAT_ICON, formatKindOf } from "./format-kind";
+import { pageIcon, pageIconsRevision } from "../state/page-icons";
 import type { Lifetime, Teardown } from "./lifetime";
+import { composingKey } from "../kit/ime";
+import { jsonEqual } from "../kit/json-equal";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -91,10 +99,12 @@ declare const PORT: unique symbol;
 export type Port = ActionHandler & { readonly [PORT]: true };
 
 /// Ciò che la shell ricorda di un elemento che ha disegnato: il nodo da cui
-/// viene (per il confronto al giro dopo) e, se è un campo, come si legge il suo
+/// viene (per il confronto al giro dopo), con quali ingressi della shell è
+/// stato disegnato (`drawInputs`) e, se è un campo, come si legge il suo
 /// valore adesso.
 interface Rendered {
   node: UiNode;
+  inputs?: string;
   read?: () => UiValue;
 }
 
@@ -113,6 +123,42 @@ interface Mount {
 }
 
 const mounted = new WeakMap<HTMLElement, Mount>();
+
+/// Ciò che il disegno di un nodo legge **fuori** dal nodo: le icone delle
+/// pagine, il set delle figure (registrazioni e tema) e la lingua delle poche
+/// parole della shell. Un sottoalbero uguale al nodo di prima si salta solo se
+/// anche questi sono quelli con cui era stato disegnato: altrimenti si rifà,
+/// come prima del salto, e l'icona nuova di una pagina arriva al primo giro.
+function drawInputs(): string {
+  return `${pageIconsRevision()}|${iconsRevision()}|${resolvedLanguage()}`;
+}
+
+/// Gli ingressi del giro in corso: li legge una volta `mountTree` o
+/// `patchTree`, e valgono per tutto il loro giro, che è sincrono.
+let passInputs = "";
+/// Vero mentre il giro in corso disegna o riconcilia ciò che sta **dentro un
+/// form**. Un campo lì non ha bisogno di un'azione propria per servire: l'invio
+/// del form manda tutti i suoi campi (`UiKind::Form` in `fub-abi`), quindi non
+/// va disabilitato. Come `passInputs`, vale per un giro sincrono, e lo rimette
+/// a posto chi lo cambia (`withinForm`).
+let insideForm = false;
+
+/// Esegue `run` con `insideForm` a `inside`, e lo rimette com'era dopo.
+function withinForm<T>(inside: boolean, run: () => T): T {
+  const before = insideForm;
+  insideForm = inside;
+  try {
+    return run();
+  } finally {
+    insideForm = before;
+  }
+}
+
+/// Se `el`, già nel DOM, sta dentro un form: per i giri che partono a metà
+/// albero (una patch, «mostra altre»), dove il form non è passato di lì.
+function enclosedInForm(el: HTMLElement): boolean {
+  return el.parentElement?.closest(".ui-form") != null;
+}
 /// Il montaggio di una porta: il disegno riceve soltanto la porta, e da lì
 /// risale al contesto senza che ogni funzione lo porti con sé.
 const mountOfPort = new WeakMap<Port, Mount>();
@@ -172,7 +218,55 @@ function route(container: HTMLElement, onAction: ActionHandler): Mount {
   };
   mounted.set(container, mount);
   mountOfPort.set(mount.port, mount);
+  guardClickRuns(container);
   return mount;
+}
+
+/// **Il secondo clic di un doppio clic vale solo sul controllo del primo**
+/// (IMP-103, la stessa regola delle schede di IMP-013).
+///
+/// Il primo clic su una voce del pannello Collegamenti apre la nota, il
+/// pannello si ridisegna con le voci della nota nuova, e il secondo clic, 180
+/// ms dopo, cadeva sulla voce che intanto era scivolata sotto il puntatore:
+/// apriva una terza nota. Vale per ogni albero dichiarativo, perché ogni
+/// pannello può ridisegnarsi fra i due clic.
+///
+/// Il controllo della prima pressione si ricorda con la sua azione: il
+/// riconciliatore può riusare lo stesso elemento per un nodo diverso, e lì
+/// l'elemento è lo stesso ma la voce no. Un clic che continua una serie
+/// (`detail` > 1) arriva solo se cade sullo stesso elemento con la stessa
+/// azione; la sua pressione, se cade altrove, non sposta nemmeno il fuoco, che
+/// resta dove l'ha messo il primo clic (l'editor della nota aperta). Il clic da
+/// tastiera (`detail` 0) e il clic singolo non cambiano.
+let firstPress: { control: HTMLElement | null; action: string | null } = { control: null, action: null };
+
+/// Il controllo d'azione più interno sotto un evento: l'elemento che ha un
+/// ascoltatore di clic con un'azione in vigore.
+function clickControl(target: EventTarget | null): HTMLElement | null {
+  for (let el = target instanceof Element ? target : null; el; el = el.parentElement) {
+    if (el instanceof HTMLElement && links.get(el)?.get("click")) return el;
+  }
+  return null;
+}
+
+function clickActionOf(control: HTMLElement | null): string | null {
+  const link = control ? links.get(control)?.get("click") : null;
+  return link ? JSON.stringify(link.action) : null;
+}
+
+function continuesFirstPress(control: HTMLElement): boolean {
+  return firstPress.control === control && firstPress.action === clickActionOf(control);
+}
+
+function guardClickRuns(container: HTMLElement): void {
+  container.addEventListener("mousedown", (event) => {
+    const control = clickControl(event.target);
+    if (event.detail <= 1) {
+      firstPress = { control, action: clickActionOf(control) };
+      return;
+    }
+    if (control && !continuesFirstPress(control)) event.preventDefault();
+  }, { capture: true });
 }
 
 /// **Un'azione che va storta lo dice**, e lo dice qui.
@@ -232,6 +326,7 @@ export function mountTree(
 ): void {
   const mount = route(container, onAction);
   mount.context = context;
+  passInputs = drawInputs();
   const previous = mount.root;
   if (previous && previous.parentElement === container) {
     mount.root = reconcile(previous, node, mount.port);
@@ -253,12 +348,13 @@ export function patchTree(container: HTMLElement, key: string, node: UiNode): bo
   if (!mount?.root) return false;
   const target = findByKey(mount.root, key);
   if (!target) return false;
+  passInputs = drawInputs();
   // La porta del contenitore, non un handler ripescato dal sottoalbero: un
   // patch arriva senza il contesto del render, e ciò che risale dall'elemento è
   // **il primo** montaggio, non l'ultimo. Riconciliare con quello riscriverebbe
   // i legami del sottoalbero patchato con l'handler di ieri — cioè disferebbe
   // la 0118 proprio dove nessuno guarda.
-  const updated = reconcile(target, node, mount.port);
+  const updated = withinForm(enclosedInForm(target), () => reconcile(target, node, mount.port));
   if (target === mount.root) mount.root = updated;
   return true;
 }
@@ -297,6 +393,95 @@ function unmount(el: Element): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// La domanda prima di un gesto distruttivo (`fub_abi::ui::CONFIRM_NS`)
+// ---------------------------------------------------------------------------
+//
+// Un `Custom` che questa shell non disegna da sé: il `fallback` è la domanda,
+// testo e bottoni, e si disegna e si riconcilia come ogni altro albero. Ciò
+// che il nodo aggiunge è quello che una fila di bottoni non sa dire (IMP-110):
+// il fuoco va al «no» quando la domanda compare, Esc preme il «no», e quando
+// la domanda sparisce il fuoco torna al nodo con la sua stessa chiave — il
+// bottone che l'ha aperta. Non è un registro di `ui/custom.ts` perché lì un
+// renderer disegna da sé e non riceve il `fallback`, che qui è tutto.
+
+/// Il `ns` del nodo, gemello di `fub_abi::ui::CONFIRM_NS`.
+export const CONFIRM_NS = "fub.confirm";
+
+/// Il «no» di ogni domanda disegnata, letto al momento dell'Esc: la
+/// riconciliazione lo aggiorna senza rifare l'ascoltatore.
+const confirmCancels = new WeakMap<HTMLElement, ActionRef | null>();
+
+/// Il «no» dal payload `{ cancel: ActionRef }`, o `null` se non regge la forma.
+function confirmCancel(payload: unknown): ActionRef | null {
+  if (!payload || typeof payload !== "object") return null;
+  const cancel = (payload as { cancel?: unknown }).cancel;
+  if (!cancel || typeof cancel !== "object") return null;
+  const action = (cancel as { action?: unknown }).action;
+  return typeof action === "string" && action !== "" ? (cancel as ActionRef) : null;
+}
+
+function sameAction(a: ActionRef, b: ActionRef): boolean {
+  return a.action === b.action && jsonEqual(a.payload ?? null, b.payload ?? null);
+}
+
+/// Il bottone del «no» fra i figli della domanda, se il provider l'ha disegnato.
+function cancelButton(el: HTMLElement): HTMLElement | null {
+  const cancel = confirmCancels.get(el);
+  if (!cancel) return null;
+  for (const child of el.children) {
+    const node = rendered.get(child as HTMLElement)?.node;
+    if (node?.node === "button" && sameAction(node.action, cancel)) return child as HTMLElement;
+  }
+  return null;
+}
+
+/// Il fuoco non sta da nessuna parte: l'elemento che lo aveva è stato tolto.
+function focusLost(): boolean {
+  const active = document.activeElement;
+  return active === null || active === document.body || active === document.documentElement;
+}
+
+function wireConfirm(el: HTMLElement, payload: unknown, onAction: Port): void {
+  el.classList.add("ui-confirm");
+  confirmCancels.set(el, confirmCancel(payload));
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || composingKey(e) || e.defaultPrevented) return;
+    const cancel = confirmCancels.get(el);
+    if (!cancel) return;
+    // Esc qui è la risposta alla domanda, e basta: non chiude anche la barra
+    // o il dialogo che la contiene.
+    e.preventDefault();
+    e.stopPropagation();
+    // Il bottone, quando c'è, così Esc passa dalla stessa strada del clic
+    // (anche dal suo «occupato» se il «no» è già in volo).
+    const button = cancelButton(el);
+    if (button) button.click();
+    else void onAction(cancel, []);
+  });
+  // La domanda compare al posto del bottone che l'ha aperta, e quel bottone se
+  // n'è andato col fuoco: il fuoco va al «no», così Esc e Invio arrivano alla
+  // domanda e la scelta sicura è quella sotto il dito. Solo se il fuoco era
+  // perso o stava già in questo pannello: una domanda non lo ruba altrove.
+  queueMicrotask(() => {
+    if (!el.isConnected) return;
+    const scope = el.closest(".declared-view") ?? el.parentElement;
+    if (!focusLost() && !scope?.contains(document.activeElement)) return;
+    cancelButton(el)?.focus();
+  });
+  // Quando la domanda se ne va col fuoco dentro, il fuoco torna al nodo con
+  // la sua chiave, che il ridisegno ha messo al suo posto.
+  disposers.set(el, () => {
+    const key = el.dataset.key;
+    const scope = el.closest(".declared-view") ?? el.parentElement;
+    if (!key || !scope || !el.contains(document.activeElement)) return;
+    queueMicrotask(() => {
+      if (!focusLost()) return;
+      scope.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)?.focus();
+    });
+  });
+}
+
 function findByKey(root: HTMLElement, key: string): HTMLElement | null {
   const matches: HTMLElement[] = [];
   if (rendered.get(root)?.node.key === key) matches.push(root);
@@ -310,7 +495,17 @@ function findByKey(root: HTMLElement, key: string): HTMLElement | null {
 /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
 /// Restituisce l'elemento che ora rappresenta il nodo (lo stesso, o il nuovo).
 function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
-  const prev = rendered.get(el)?.node;
+  const drawn = rendered.get(el);
+  const prev = drawn?.node;
+  // Un sottoalbero uguale a quello disegnato non si tocca: né foglie rifatte
+  // né attributi riscritti. In WebKit ogni elemento sostituito invalida stile
+  // e layout, e una view lunga (i collegamenti in uscita di una nota da 5.000
+  // righe sono 33.000 elementi) ridisegnata uguale a ogni salvataggio teneva
+  // fermo il thread della finestra per 130 ms.
+  if (drawn && prev && drawn.inputs === passInputs && unchanged(prev, next)) {
+    rendered.set(el, { ...drawn, node: next });
+    return el;
+  }
   if (!prev || prev.node !== next.node) {
     const newItem = renderUiNode(next, onAction);
     unmount(el);
@@ -318,7 +513,7 @@ function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
     return newItem;
   }
   if (update(el, prev, next, onAction)) {
-    rendered.set(el, { ...rendered.get(el)!, node: next });
+    rendered.set(el, { ...rendered.get(el)!, node: next, inputs: passInputs });
     key(el, next);
     dragSource(el, next);
     return el;
@@ -329,13 +524,52 @@ function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
   return newItem;
 }
 
+/// Le specie che il confronto di `unchanged` non dà mai per uguali: un campo ha
+/// uno stato dell'utente che `applyField` rimette in riga col nodo anche quando
+/// il nodo non cambia (il valore del provider torna in un campo che ha perso
+/// il fuoco), e un nodo custom ha il suo confronto, che guarda anche dove è
+/// disegnato.
+const NEVER_UNCHANGED: ReadonlySet<string> = new Set([
+  "text_input",
+  "text_area",
+  "date_picker",
+  "number",
+  "slider",
+  "checkbox",
+  "select",
+  "radio",
+  "custom",
+]);
+
+/// Vero se `next` è lo stesso dato di `prev`, campo per campo, e nel
+/// sottoalbero non c'è una specie di `NEVER_UNCHANGED`. I nodi arrivano da un
+/// JSON: oggetti, liste e valori semplici, senza `undefined` né cicli. Il
+/// confronto costa una visita dell'albero, molto meno di un elemento rifatto.
+function unchanged(prev: unknown, next: unknown): boolean {
+  if (prev === null || next === null || typeof prev !== "object" || typeof next !== "object") return prev === next;
+  if (Array.isArray(prev) || Array.isArray(next)) {
+    if (!Array.isArray(prev) || !Array.isArray(next) || prev.length !== next.length) return false;
+    for (let i = 0; i < next.length; i++) if (!unchanged(prev[i], next[i])) return false;
+    return true;
+  }
+  const before = prev as Record<string, unknown>;
+  const after = next as Record<string, unknown>;
+  if (typeof after.node === "string" && NEVER_UNCHANGED.has(after.node)) return false;
+  const keys = Object.keys(after);
+  if (keys.length !== Object.keys(before).length) return false;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(before, key) || !unchanged(before[key], after[key])) return false;
+  }
+  return true;
+}
+
 /// Prova ad aggiornare `el` in posto. `false` = ricostruiscilo.
 ///
 /// La divisione non è per comodità: **i campi si aggiornano** perché hanno uno
 /// stato dell'utente da non buttare via (focus, cursore, ciò che si sta
 /// scrivendo), i **contenitori** si aggiornano perché contengono campi, e le
-/// **foglie** si ricostruiscono perché non hanno niente da conservare e il
-/// confronto costerebbe più del disegno.
+/// **foglie** cambiate si ricostruiscono perché non hanno niente da
+/// conservare. Una foglia uguale non arriva qui: la salta `reconcile`.
 function update(
   el: HTMLElement,
   prev: UiNode,
@@ -353,7 +587,7 @@ function update(
     }
     case "list":
       if (prev.node !== "list") return false;
-      children(el, next.items, onAction);
+      drawListItems(el, next.items, onAction, false);
       markListItems(el);
       return true;
     case "tree":
@@ -374,18 +608,13 @@ function update(
       if (prev.node !== "tree_item") return false;
       // Lo span interno nasce col disegno (A04: vedi `draw`): un riuso da prima
       // dell'altezza minima non lo ha, e lo crea invece di riscrivere la riga.
+      // Altezza, allineamento ed ellissi li scrive la struttura
+      // (`structure.css`), non lo stile in linea: la pelle li può cambiare.
       const row = el.querySelector<HTMLElement>(":scope > .ui-tree-label");
       if (row) {
-        row.style.minHeight = "max(var(--space-9, 32px), 28px)";
-        row.style.display = "flex";
-        row.style.alignItems = "center";
         let text = row.querySelector<HTMLElement>(":scope > span");
         if (!text) {
           text = document.createElement("span");
-          text.style.minWidth = "0";
-          text.style.overflow = "hidden";
-          text.style.textOverflow = "ellipsis";
-          text.style.whiteSpace = "nowrap";
           row.replaceChildren(text);
         }
         text.textContent = next.label;
@@ -416,7 +645,7 @@ function update(
     }
     case "form": {
       if (prev.node !== "form") return false;
-      children(childrenContainer(el), next.children, onAction);
+      withinForm(true, () => children(childrenContainer(el), next.children, onAction));
       const dispatchAction = el.querySelector<HTMLButtonElement>(":scope > .ui-submit");
       if (dispatchAction) {
         dispatchAction.textContent = next.submit_label;
@@ -442,8 +671,7 @@ function update(
     }
     case "row":
       if (prev.node !== "row") return false;
-      children(el, next.cells, onAction);
-      ensureRowCell(el as HTMLTableRowElement);
+      rowCells(el as HTMLTableRowElement, next.cells, onAction);
       connect(el, next.action, onAction);
       return true;
     case "custom": {
@@ -459,10 +687,11 @@ function update(
       const nextRenderer = customRenderer(next.ns, next.payload);
       if (previousRenderer !== nextRenderer) return false;
       if (nextRenderer) {
-        return JSON.stringify(prev.payload) === JSON.stringify(next.payload)
+        return jsonEqual(prev.payload, next.payload)
           && drawnIn.get(el)?.container === contextOf(onAction).container;
       }
       children(el, next.fallback, onAction);
+      if (next.ns === CONFIRM_NS) confirmCancels.set(el, confirmCancel(next.payload));
       return true;
     }
     // **I campi non hanno un elenco da riallineare qui.** Ce l'avevano — il
@@ -585,7 +814,7 @@ export function setNodeMotion(motion: NodeMotion | null): Teardown {
 
 /// Applica l'accoppiamento al DOM: riconcilia ciò che si reuse, disegna il
 /// resto, toglie ciò che non serve più e **sposta** invece di ricreare.
-function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
+function children(parent: HTMLElement, nodes: UiNode[], onAction: Port, end: ChildNode | null = null): void {
   const existing = Array.from(parent.children).filter(
     (c): c is HTMLElement => c instanceof HTMLElement && rendered.has(c),
   );
@@ -631,7 +860,9 @@ function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
   }
   // Rimettere in ordine: `insertBefore` di un nodo già figlio lo SPOSTA, e
   // spostarlo conserva focus, scroll e stato — che è tutto il punto.
-  let reference: ChildNode | null = null;
+  // `end` è ciò che resta in coda e non si sposta (il «mostra altre» di un
+  // elenco lungo): spostare un elemento che ha il fuoco glielo toglie.
+  let reference: ChildNode | null = end;
   for (let i = finalNodes.length - 1; i >= 0; i--) {
     const el = finalNodes[i]!;
     if (el.nextSibling !== reference || el.parentElement !== parent) {
@@ -658,7 +889,7 @@ function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
 
 function renderUiNode(node: UiNode, onAction: Port): HTMLElement {
   const el = draw(node, onAction);
-  rendered.set(el, { ...(rendered.get(el) ?? {}), node });
+  rendered.set(el, { ...(rendered.get(el) ?? {}), node, inputs: passInputs });
   key(el, node);
   dragSource(el, node);
   return el;
@@ -698,11 +929,122 @@ function dragSource(el: HTMLElement, node: UiNode): void {
   });
 }
 
+/// L'icona di una voce che nomina un documento: quella che la pagina si è
+/// data (`icon:`, un'emoji o una figura del set), o la figura del suo formato,
+/// e per ciò che non ha una specie quella della nota. È decorazione: il nome
+/// lo dice già il titolo della voce.
+function documentIcon(doc: string): HTMLElement {
+  const span = document.createElement("span");
+  span.className = "ui-list-item-icon";
+  span.setAttribute("aria-hidden", "true");
+  if (!drawPageMark(span, pageIcon(doc))) {
+    const figure = iconEl(FORMAT_ICON[formatKindOf(doc) ?? "note"]);
+    if (figure) span.appendChild(figure);
+  }
+  return span;
+}
+
+/// Riconcilia le celle di una riga già disegnata. Ogni nodo sta dentro il suo
+/// `td`, come lo mette il disegno: i figli diretti della riga sono le celle
+/// HTML, non i nodi, quindi l'accoppiamento si fa cella per cella. Accoppiare
+/// sulla riga non trovava nessun vecchio figlio (i `td` non sono nodi
+/// disegnati) e attaccava i nodi nuovi alla riga fuori dalle celle, accanto a
+/// quelle vecchie: una seconda griglia a ogni ridisegno (IMP-4801).
+function rowCells(row: HTMLTableRowElement, cells: readonly UiNode[], onAction: Port): void {
+  for (const empty of Array.from(row.querySelectorAll<HTMLTableCellElement>(":scope > td.ui-empty-cell"))) {
+    empty.remove();
+  }
+  cells.forEach((cell, i) => {
+    let td = row.cells[i];
+    if (!td) {
+      td = document.createElement("td");
+      row.appendChild(td);
+    }
+    children(td, [cell], onAction);
+  });
+  while (row.cells.length > cells.length) {
+    const extra = row.cells[row.cells.length - 1]!;
+    for (const child of Array.from(extra.children)) {
+      if (child instanceof HTMLElement) unmount(child);
+    }
+    extra.remove();
+  }
+  ensureRowCell(row);
+}
+
 function ensureRowCell(row: HTMLTableRowElement): void {
   if (row.cells.length > 0) return;
   const td = document.createElement("td");
   td.className = "ui-empty-cell";
   row.appendChild(td);
+}
+
+/// Quante voci di un elenco si disegnano subito, e quante ne aggiunge ogni
+/// «mostra altre». Un elenco lungo costa per ogni elemento che ha nel DOM, anche
+/// quando non si vede: i collegamenti in uscita di una nota da 5.000 righe sono
+/// 4.756 voci e 33.000 elementi nel cassetto, e con loro nella pagina aprire il
+/// cassetto costava 300 ms di stile e layout più un fotogramma da 800 ms, e la
+/// barra, i menu e il binario 20–70 ms ciascuno anche a cassetto chiuso. Le voci
+/// oltre la soglia restano nel nodo, non nel DOM: si mostrano a richiesta.
+export const LIST_PAGE = 200;
+const LIST_MORE = "ui-list-more";
+
+/// Quante voci mostra adesso ogni elenco: la soglia, o di più se la persona ne
+/// ha chieste altre. Un ridisegno della view non le richiude.
+const listShown = new WeakMap<HTMLElement, number>();
+
+/// Disegna (o riconcilia) le voci visibili di un elenco e, se ne restano fuori,
+/// la riga «mostra altre» in coda. `fresh` è il primo disegno: i figli si
+/// aggiungono e basta, senza l'accoppiamento.
+function drawListItems(el: HTMLElement, items: readonly UiNode[], onAction: Port, fresh: boolean): void {
+  const limit = Math.max(LIST_PAGE, listShown.get(el) ?? 0);
+  const visible = items.length > limit ? items.slice(0, limit) : (items as UiNode[]);
+  let more = el.querySelector<HTMLElement>(`:scope > .${LIST_MORE}`);
+  if (fresh) {
+    for (const item of visible) el.appendChild(renderUiNode(item, onAction));
+  } else {
+    children(el, visible, onAction, more);
+  }
+  const rest = items.length - visible.length;
+  if (rest <= 0) {
+    more?.remove();
+    return;
+  }
+  if (!more) {
+    more = div(LIST_MORE);
+    more.setAttribute("role", "listitem");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ui-button";
+    button.addEventListener("click", () => showMoreItems(el, onAction));
+    more.appendChild(button);
+    el.appendChild(more);
+  }
+  const button = more.firstElementChild as HTMLButtonElement;
+  const label = t("views.list_more", { count: String(Math.min(LIST_PAGE, rest)), total: String(items.length) });
+  if (button.textContent !== label) button.textContent = label;
+}
+
+/// Il «mostra altre»: un'altra pagina di voci, dal nodo disegnato adesso. Il
+/// fuoco resta sul bottone; quando le voci finiscono il bottone se ne va e il
+/// fuoco passa alla prima voce nuova, invece di cadere sul corpo della pagina.
+function showMoreItems(el: HTMLElement, onAction: Port): void {
+  const node = rendered.get(el)?.node;
+  if (node?.node !== "list") return;
+  const before = Math.max(LIST_PAGE, listShown.get(el) ?? 0);
+  listShown.set(el, before + LIST_PAGE);
+  const more = el.querySelector<HTMLElement>(`:scope > .${LIST_MORE}`);
+  const hadFocus = more?.contains(document.activeElement) ?? false;
+  passInputs = drawInputs();
+  withinForm(enclosedInForm(el), () => drawListItems(el, node.items, onAction, false));
+  markListItems(el);
+  if (hadFocus && !more?.isConnected) {
+    const first = el.children[before];
+    if (first instanceof HTMLElement) {
+      if (first.tabIndex < 0 && !first.hasAttribute("tabindex")) first.tabIndex = -1;
+      first.focus();
+    }
+  }
 }
 
 /// Ogni figlio di una lista è una sua voce, anche quando il provider non ci
@@ -716,6 +1058,7 @@ function ensureRowCell(row: HTMLTableRowElement): void {
 function markListItems(list: HTMLElement): void {
   for (const child of list.children) {
     if (!(child instanceof HTMLElement) || child.classList.contains("ui-list-item")) continue;
+    if (child.classList.contains(LIST_MORE)) continue;
     child.setAttribute("role", "listitem");
     for (const inner of child.querySelectorAll<HTMLElement>('.ui-list-item[role="listitem"]')) {
       if (inner.parentElement?.closest('[role="list"]') !== list) continue;
@@ -755,7 +1098,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // la guarda: il ruolo è ciò che permette a un lettore di schermo di dire
       // «lista, sei elementi» e di saltarla, invece di leggerla tutta.
       el.setAttribute("role", "list");
-      for (const item of node.items) el.appendChild(renderUiNode(item, onAction));
+      drawListItems(el, node.items, onAction, true);
       markListItems(el);
       return el;
     }
@@ -763,11 +1106,8 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       const el = div("ui-list-item");
       // Stessa regola dell'albero (A04): il bersaglio è la voce intera, che può
       // ricevere il fuoco via `activatable`. Multilinea consentita: `min` e non
-      // altezza fissa.
-      el.style.minHeight = "max(var(--space-9, 32px), 28px)";
-      el.style.display = "flex";
-      el.style.flexDirection = "column";
-      el.style.justifyContent = "center";
+      // altezza fissa. La misura sta in `structure.css` (`.ui-list-item`), e
+      // non in linea, perché la pelle la possa cambiare.
       el.setAttribute("role", "listitem");
       // `selected` è uno stato del nodo (§2.1), e va detto anche a chi non
       // vede lo sfondo cambiato. `aria-current` e non `aria-selected`: il
@@ -777,6 +1117,9 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       if (node.selected) el.setAttribute("aria-current", "true");
       else el.removeAttribute("aria-current");
       connect(el, node.action, onAction);
+      // Una voce che nomina una nota (`drag`) ne porta l'icona in testa, come
+      // nell'albero: quella della pagina, o la figura del formato.
+      if (node.drag?.kind === "document") el.appendChild(documentIcon(node.drag.doc));
       const title = div("ui-list-item-title");
       title.textContent = node.title;
       el.appendChild(title);
@@ -811,7 +1154,10 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // Monitor montato una volta dal punto di montaggio (I08): qui solo il frame.
       const frame = document.createElement("iframe");
       frame.className = "ui-webview";
-      frame.src = node.url;
+      // Il nodo è del solo codice fidato (`UiNode::validate_untrusted`) e la
+      // CSP non apre frame; un indirizzo che non è `https:` resta comunque
+      // fuori, e il frame vuoto è `about:blank`.
+      if (/^https:\/\//i.test(node.url)) frame.src = node.url;
       frame.style.height = `${node.height}px`;
       frame.setAttribute("sandbox", "allow-scripts");
       // Un `<iframe>` senza titolo è, per chi lo incontra navigando, «frame»
@@ -889,17 +1235,12 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // (attivabile qui sotto), quindi è la riga a dover valere 32px a densità
       // normale e almeno 24px ovunque. `space-9` è 24/32/36px nelle tre
       // densità: il pavimento a 28px è la V13 per la compatta, e per G04
-      // l'accessibilità prevale sulla scala quando la scala scende sotto.
-      row.style.minHeight = "max(var(--space-9, 32px), 28px)";
-      row.style.display = "flex";
-      row.style.alignItems = "center";
+      // l'accessibilità prevale sulla scala quando la scala scende sotto. La
+      // misura la scrive `structure.css` (`.ui-tree-label`).
       // Il testo in un elemento anonimo non si restringe e l'ellissi della
-      // pelle morirebbe: sta in uno `span` che può farlo, senza classi nuove.
+      // pelle morirebbe: sta in uno `span` che può farlo, senza classi nuove
+      // (`.ui-tree-label > span` nella struttura).
       const text = document.createElement("span");
-      text.style.minWidth = "0";
-      text.style.overflow = "hidden";
-      text.style.textOverflow = "ellipsis";
-      text.style.whiteSpace = "nowrap";
       text.textContent = node.label;
       row.appendChild(text);
       connect(row, node.action, onAction);
@@ -1042,7 +1383,9 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       const el = document.createElement("form");
       el.className = "ui-form";
       const body = div("ui-children");
-      for (const child of node.children) body.appendChild(renderUiNode(child, onAction));
+      withinForm(true, () => {
+        for (const child of node.children) body.appendChild(renderUiNode(child, onAction));
+      });
       el.appendChild(body);
       const dispatchAction = document.createElement("button");
       dispatchAction.type = "submit";
@@ -1083,6 +1426,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
         if (unmount) disposers.set(el, unmount);
       } else {
         for (const child of node.fallback) el.appendChild(renderUiNode(child, onAction));
+        if (node.ns === CONFIRM_NS) wireConfirm(el, node.payload, onAction);
       }
       return el;
     }
@@ -1397,7 +1741,7 @@ function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction
     const input = row.querySelector<HTMLInputElement>("input")!;
     input.name = el.id;
     input.value = option.value;
-    input.disabled = node.action === null;
+    staticControl(input, node.action);
     row.querySelector<HTMLElement>("span")!.textContent = option.label;
     actionsOfField(input, node.action, onAction);
   });
@@ -1576,6 +1920,10 @@ function listen(
     const link = links.get(el)?.get(event);
     if (!link) return;
     if (link.when && !link.when(e)) return;
+    if (event === "click" && e instanceof MouseEvent && e.detail > 1 && !continuesFirstPress(el)) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     void dispatchAction(el, event);
   });
@@ -1611,7 +1959,10 @@ function staticControl(
   // Un campo senza azione è dato da leggere, non un editor senza salvataggio.
   // Lasciarlo modificabile produce uno stato che sembra accettato e sparisce al
   // primo ridisegno. Il browser espone già la semantica corretta: `disabled`.
-  control.disabled = action === null;
+  // Dentro un form invece il salvataggio c'è, ed è l'invio: i campi per
+  // aggiungere una proprietà o salvare una query non hanno un'azione propria
+  // e devono potersi scrivere (IMP-108, IMP-112).
+  control.disabled = action === null && !insideForm;
 }
 
 function actionsOfField(
@@ -1624,7 +1975,7 @@ function actionsOfField(
   // per essere ascoltato. Solo dove Invio non vuol già dire altro — in un
   // `<textarea>` è un a capo, su una casella di spunta è la spunta.
   if (acceptEnter(control)) {
-    listen(control, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter");
+    listen(control, "keydown", action, onAction, (e) => (e as KeyboardEvent).key === "Enter" && !composingKey(e as KeyboardEvent));
   }
 }
 

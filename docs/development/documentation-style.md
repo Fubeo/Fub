@@ -138,10 +138,14 @@ Regole:
 - un diagramma, una domanda;
 - massimo consigliato 20 nodi o partecipanti;
 - id ASCII ed etichette in italiano;
+- un'id per nodo: Mermaid disegna un solo nodo per id, con l'ultima etichetta;
 - niente colori o stili hardcoded;
 - niente diagrammi duplicati;
 - una frase prima e una breve interpretazione dopo;
 - nessuna relazione futura in un diagramma corrente.
+
+`check-mermaid.mjs` controlla tipo, stili, numero di nodi e id doppie nei
+diagrammi di `docs/` e del `README.md`, e con `--render` li disegna tutti.
 
 ## Tabelle
 
@@ -187,3 +191,11 @@ node .github/scripts/check-prose.mjs
 node .github/scripts/check-tables.mjs
 node .github/scripts/check-locale-loop.mjs
 ```
+
+Le guardie trovano i file di `docs/` con `.github/scripts/doc-files.mjs`, che
+salta le cartelle nascoste: un vault aperto su `docs/` lascia i suoi dati in
+`docs/.fub/`, e quelli non sono documentazione. Per lo stesso motivo
+`check-doc-links.mjs` rifiuta un link che punta dentro una `.fub/` che git
+non traccia: il file c'è solo in quel vault locale. I vault di prova
+tracciati delle fixture restano target validi (casi nella sua autoprova, che
+gira a ogni lancio).

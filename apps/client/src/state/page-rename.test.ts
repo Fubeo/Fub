@@ -40,7 +40,7 @@ vi.mock("../i18n/strings", () => ({
   t: (key: string, args?: Record<string, string>) => (args ? `${key} ${Object.values(args).join(" | ")}` : key),
 }));
 
-import { newSubpage, pageRenameTarget, renamePage, renamedPath } from "./page-rename";
+import { newSubpage, pageRenameTarget, renamePage, renamedPageName, renamedPath } from "./page-rename";
 
 beforeEach(() => {
   world.pending = [];
@@ -62,6 +62,36 @@ describe("che cosa cambia nome", () => {
   it("la pagina di una cartella rinomina la cartella", () => {
     expect(pageRenameTarget("Viaggi/Roma/_index.md", "Napoli")).toEqual({ kind: "folder", from: "Viaggi/Roma", to: "Viaggi/Napoli" });
     expect(pageRenameTarget("Roma/_index.md", "Napoli")).toEqual({ kind: "folder", from: "Roma", to: "Napoli" });
+  });
+
+  it("il nome che la pagina prende: l'ultimo pezzo del percorso, o la cartella", () => {
+    expect(renamedPageName("Nuova.md", "Archivio/Nuova")).toBe("Nuova");
+    expect(renamedPageName("Guida/Nota.md", "Appunti")).toBe("Appunti");
+    expect(renamedPageName("Viaggi/Roma/_index.md", "Napoli")).toBe("Napoli");
+  });
+
+  it("un titolo con cartelle parte dalla cartella della nota, e non annida il percorso dalla radice (IMP-2800)", () => {
+    const fonti = "Progetti/Tesi/Fonti/Villa, R.md";
+    // Il percorso intero, come lo mostra la barra: la nota resta dov'è.
+    expect(pageRenameTarget(fonti, "Progetti/Tesi/Fonti/Villa, R")).toEqual({ kind: "file", from: fonti, to: fonti });
+    expect(pageRenameTarget(fonti, "Progetti/Tesi/Fonti/Rossi")).toEqual({ kind: "file", from: fonti, to: "Progetti/Tesi/Fonti/Rossi.md" });
+    // Lo «/» in testa è la radice del vault.
+    expect(pageRenameTarget(fonti, "/Archivio/Villa, R")).toEqual({ kind: "file", from: fonti, to: "Archivio/Villa, R.md" });
+    expect(pageRenameTarget(fonti, "/Villa, R")).toEqual({ kind: "file", from: fonti, to: "Villa, R.md" });
+    // Un percorso che non parte dalla cartella resta relativo a lei.
+    expect(pageRenameTarget(fonti, "Lette/Villa, R")).toEqual({ kind: "file", from: fonti, to: "Progetti/Tesi/Fonti/Lette/Villa, R.md" });
+    // Alla radice è lo stesso percorso.
+    expect(pageRenameTarget("Ricerca.md", "Area/Esami/Ricerca")).toEqual({ kind: "file", from: "Ricerca.md", to: "Area/Esami/Ricerca.md" });
+    // La pagina di una cartella: il percorso dalla radice nomina la cartella.
+    expect(pageRenameTarget("Viaggi/Roma/_index.md", "Viaggi/Napoli")).toEqual({ kind: "folder", from: "Viaggi/Roma", to: "Viaggi/Napoli" });
+    expect(pageRenameTarget("Viaggi/Roma/_index.md", "/Napoli")).toEqual({ kind: "folder", from: "Viaggi/Roma", to: "Napoli" });
+    expect(renamedPageName(fonti, "/Archivio/Villa, R")).toBe("Villa, R");
+  });
+
+  it("dalla radice la rinomina passa davvero, e il percorso ripetuto non tocca niente", async () => {
+    expect(await renamePage("Progetti/Tesi/Fonti/Villa, R.md", "/Archivio/Villa, R")).toBeNull();
+    expect(await renamePage("Progetti/Tesi/Fonti/Villa, R.md", "Progetti/Tesi/Fonti/Villa, R")).toBeNull();
+    expect(world.files).toEqual([["Progetti/Tesi/Fonti/Villa, R.md", "Archivio/Villa, R.md"]]);
   });
 
   it("un `_index` alla radice è una nota come le altre", () => {
@@ -130,7 +160,8 @@ describe("la sottopagina dalla testata", () => {
     expect(await newSubpage("Viaggio.md", "Tappe")).toContain("document.unsaved_blocks");
     world.pending = [];
     world.subpageFails = "esiste già";
-    expect(await newSubpage("Viaggio.md", "Tappe")).toContain("esiste già");
+    // Che cosa non è riuscito, poi il perché del vault.
+    expect(await newSubpage("Viaggio.md", "Tappe")).toBe("explorer.subpage_failed Tappe | esiste già");
     expect(world.notices).toEqual([]);
   });
 });

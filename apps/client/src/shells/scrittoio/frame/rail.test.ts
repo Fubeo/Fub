@@ -34,7 +34,7 @@ vi.mock("../../../ui/tooltip", () => ({
     el.dataset.tip = text;
   },
 }));
-vi.mock("../../../ui/icons", () => ({ icon: (name: string) => `<svg data-icon="${name}"></svg>` }));
+vi.mock("../../../ui/icons", () => ({ icon: (name: string) => `<svg data-icon="${name}"></svg>`, iconEl: () => null }));
 // Il cambio di luce ha il suo banco (`light.test.ts`): qui conta solo che il
 // piede lo monti, con la stessa vita.
 vi.mock("./light", () => ({ mountLightSwitch: (lifetime: unknown) => world.lightMounts.push(lifetime) }));
@@ -148,8 +148,10 @@ describe("il piede del binario", () => {
     mountRailFoot(lifetime);
     help().click();
     expect(entries()).toEqual([
-      { label: "commands.palette", hint: "Ctrl+Shift+P" },
-      { label: "frame.help.switcher", hint: "Ctrl+O" },
+      // Nel menu i tasti si scrivono separati da uno spazio, coi nomi della
+      // lingua (qui la chiave, perché `t` è finta).
+      { label: "commands.palette", hint: "Ctrl context.key.shift P" },
+      { label: "frame.help.switcher", hint: "Ctrl O" },
       // Un comando senza accordo non mostra tasti.
       { label: "app.settings", hint: null },
     ]);
@@ -197,7 +199,7 @@ describe("il piede del binario", () => {
     closeContextMenu();
     world.commands = [command("shell.palette", "Mod-K")];
     help().click();
-    expect(entries()[0]).toEqual({ label: "commands.palette", hint: "Ctrl+K" });
+    expect(entries()[0]).toEqual({ label: "commands.palette", hint: "Ctrl K" });
   });
 
   it("Escape richiude il menu, e il bottone lo sa", () => {

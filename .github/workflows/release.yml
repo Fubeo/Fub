@@ -1,6 +1,6 @@
 name: Rilascio
 
-# Un tag `vX.Y.Z` costruisce gli installer desktop sulle tre piattaforme e li
+# Un tag `vX.Y.Z` costruisce gli installer desktop per Linux e Windows e li
 # carica, con il loro SHA-256 e un'attestazione di provenienza, in una release
 # **bozza**: la pubblica una persona, dopo averli provati
 # (docs/development/versioning-and-releases.md). `workflow_dispatch`
@@ -8,10 +8,19 @@ name: Rilascio
 #
 # Il cancello (`check-release-gate.mjs`) viene prima di ogni build: il commit
 # deve avere una corsa di CI verde e completa, e un tag del canale stabile
-# (`vX.Y.Z` senza suffisso) deve avere i segreti di firma Apple e Windows.
+# (`vX.Y.Z` senza suffisso) deve avere i segreti di firma di Windows.
 # Una prerelease (`vX.Y.Z-rc.1`) può uscire senza firme, e le note lo dicono.
+# Linux ha anche il `.flatpak` (packaging/flatpak/): il codice dei terzi
+# (contenitore e generatori) gira solo nei job a sola lettura, e la release la
+# tocca un job a parte con le sole azioni ufficiali.
 # Ogni installer, su ogni piattaforma, ha un'attestazione Sigstore legata a
 # commit e workflow, che `gh attestation verify` controlla.
+#
+# macOS è in pausa (docs/decisions/0245-macos-e-ios-in-pausa.md): niente `.dmg`
+# e niente firma Apple. Il job per macOS (la riga `macos-latest` della matrice,
+# il passo «la firma Apple, soltanto se i segreti ci sono», i `.dmg` raccolti e
+# attestati, i segreti `APPLE_*` del cancello) è nel commit che ha messo in
+# pausa macOS: `git log -S macos-latest -- .github/workflows/release.yml`.
 
 on:
   push:
@@ -51,12 +60,6 @@ jobs:
       - name: il canale stabile ha le firme che promette
         if: github.ref_type == 'tag'
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: node .github/scripts/check-release-gate.mjs signing "$GITHUB_REF_NAME"
@@ -89,7 +92,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
@@ -111,26 +114,9 @@ jobs:
         working-directory: apps/client
         run: npm ci
       # La stessa versione di `tauri` nel lockfile: la CLI legge la config con
-      # il suo schema, e dalla 2.12 chiede Rust 1.90, oltre il toolchain fissato.
+      # il suo schema, quindi resta alla versione della libreria.
       - name: Tauri CLI 2.11.5
         run: cargo install tauri-cli --version "=2.11.5" --locked
-      - name: la firma Apple, soltanto se i segreti ci sono
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        # Una variabile vuota non è «niente firma»: Tauri proverebbe a importare
-        # un certificato vuoto e fallirebbe. Si esporta soltanto ciò che c'è.
-        run: |
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
-                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
-            if [ -n "${!name}" ]; then echo "$name=${!name}" >> "$GITHUB_ENV"; fi
-          done
       # Authenticode: il certificato (PFX in base64) entra nell'archivio
       # dell'utente del runner e Tauri firma con la sua impronta. Senza segreto
       # non si firma; il cancello ha già fermato un tag stabile.
@@ -142,11 +128,16 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           if (-not $env:WINDOWS_CERTIFICATE) { exit 0 }
+          # La chiave decodificata resta su disco il meno possibile: si toglie
+          # anche quando l'importazione fallisce.
           $pfx = Join-Path $env:RUNNER_TEMP "fub-signing.pfx"
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
-          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
-          Remove-Item $pfx
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+            $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password -ErrorAction Stop
+          } finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+          }
           $config = @{ bundle = @{ windows = @{
             certificateThumbprint = $cert.Thumbprint
             digestAlgorithm = "sha256"
@@ -168,7 +159,7 @@ jobs:
         run: |
           mkdir -p dist-release
           find target/release/bundle -maxdepth 2 -type f \
-            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.dmg' \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
                -o -name '*.msi' -o -name '*-setup.exe' \) -exec cp {} dist-release/ \;
           cd dist-release
           ls
@@ -186,7 +177,6 @@ jobs:
             dist-release/*.deb
             dist-release/*.rpm
             dist-release/*.AppImage
-            dist-release/*.dmg
             dist-release/*.msi
             dist-release/*-setup.exe
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -203,9 +193,118 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" dist-release/*
 
+  # Le sorgenti offline di Cargo e npm, dai lockfile del commit: il builder
+  # di Flatpak non ha la rete. Non stanno nel repository, si rifanno qui.
+  flatpak-sorgenti:
+    name: Flatpak, sorgenti offline
+    needs: prepare
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      # Ogni modulo, anche quelli che i tre si portano dietro, alla versione e
+      # all'impronta del file di requisiti: un pacchetto cambiato su PyPI non
+      # entra.
+      - name: i moduli dei generatori, alle versioni e impronte fissate
+        run: python -m pip install --require-hashes --only-binary ":all:" -r packaging/flatpak/requisiti-generatori.txt
+      - name: genera le sorgenti offline
+        run: packaging/flatpak/genera-sorgenti.sh
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: flatpak-sorgenti
+          path: packaging/flatpak/generated/
+          if-no-files-found: error
+
+  # Il .flatpak, nel contenitore ufficiale col builder e il SDK GNOME 51.
+  # Il contenitore non ha `gh`: chi tocca la release è il job dopo.
+  flatpak:
+    name: Flatpak (build)
+    needs: flatpak-sorgenti
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
+      options: --privileged
+    outputs:
+      bundle: ${{ steps.nome.outputs.bundle }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: flatpak-sorgenti
+          path: packaging/flatpak/generated/
+      # La versione è quella del tag senza `v`; avviato a mano, quella del
+      # workspace (check-release-version.mjs ha già detto che coincidono).
+      - name: il nome del file
+        id: nome
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)
+          fi
+          [ -n "$version" ] || { echo "versione non trovata"; exit 1; }
+          echo "bundle=Fub-$version-linux-x86_64.flatpak" >> "$GITHUB_OUTPUT"
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
+        with:
+          manifest-path: packaging/flatpak/io.github.Fubeo.Fub.yml
+          bundle: ${{ steps.nome.outputs.bundle }}
+          arch: x86_64
+          cache-key: flatpak-builder-${{ hashFiles('Cargo.lock', 'apps/client/package-lock.json', 'packaging/flatpak/io.github.Fubeo.Fub.yml') }}
+          upload-artifact: false
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: flatpak-bundle
+          path: ${{ steps.nome.outputs.bundle }}
+          if-no-files-found: error
+
+  # Come gli altri installer: SHA-256, attestazione, artefatto della corsa e,
+  # con un tag, la release bozza senza mai sostituire un asset che c'è già.
+  flatpak-pubblica:
+    name: Flatpak (sha256, provenienza, release)
+    needs: flatpak
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: flatpak-bundle
+          path: dist-release/
+      - name: lo SHA-256 accanto al file
+        working-directory: dist-release
+        env:
+          BUNDLE: ${{ needs.flatpak.outputs.bundle }}
+        run: |
+          [ -f "$BUNDLE" ] || { echo "manca $BUNDLE"; exit 1; }
+          sha256sum "$BUNDLE" > "$BUNDLE.sha256"
+          ls -l
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: github.ref_type == 'tag'
+        with:
+          subject-path: dist-release/*.flatpak
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: installer-flatpak
+          path: dist-release/
+          if-no-files-found: error
+      - name: Carica nella release bozza
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist-release/* --repo "$GITHUB_REPOSITORY"
+
   verify:
     name: verifica di ciò che la bozza contiene
-    needs: build
+    needs: [build, flatpak-pubblica]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
@@ -215,12 +314,24 @@ jobs:
       - name: digest, provenienza e commit di ogni installer
         env:
           GH_TOKEN: ${{ github.token }}
+        # Ogni file della bozza: un installer ha il suo `.sha256`, che nomina
+        # proprio lui, e la sua attestazione; un `.sha256` ha il suo
+        # installer. Un file in più senza `.sha256` è rosso, non saltato.
         run: |
+          set -euo pipefail
+          shopt -s nullglob
           mkdir assets && cd assets
           gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
           count=0
-          for sum in *.sha256; do
-            file="${sum%.sha256}"
+          for file in *; do
+            if [[ "$file" == *.sha256 ]]; then
+              [ -f "${file%.sha256}" ] || { echo "::error::$file non ha il suo installer"; exit 1; }
+              continue
+            fi
+            sum="$file.sha256"
+            [ -f "$sum" ] || { echo "::error::$file non ha il suo .sha256"; exit 1; }
+            read -r _ nominato < "$sum"
+            [ "${nominato#\*}" = "$file" ] || { echo "::error::$sum nomina «$nominato», non $file"; exit 1; }
             sha256sum --check "$sum"
             gh attestation verify "$file" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \

@@ -10,7 +10,9 @@ const fake = vi.hoisted(() => {
     entries: [] as SettingEntry[],
     setSetting: vi.fn(),
     resetSetting: vi.fn(),
-    listeners: new Map<string, (event: { key?: string }) => void>(),
+    // Come il kernel vero: più ascoltatori per lo stesso evento (il pannello e
+    // la sua pagina «Componenti» ascoltano entrambi `setting_changed`).
+    listeners: new Map<string, Set<(event: { key?: string }) => void>>(),
   };
   return box;
 });
@@ -30,11 +32,15 @@ vi.mock("../../../platform/confirm", () => ({ confirm: vi.fn(async () => true) }
 vi.mock("../../../host/query", () => ({ settings: async () => fake.entries }));
 vi.mock("../../../state/kernel", () => ({
   onEvent: (type: string, listener: (event: { key?: string }) => void) => {
-    fake.listeners.set(type, listener);
-    return () => fake.listeners.delete(type);
+    const set = fake.listeners.get(type) ?? new Set();
+    set.add(listener);
+    fake.listeners.set(type, set);
+    return () => {
+      set.delete(listener);
+    };
   },
 }));
-vi.mock("../../../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id }));
+vi.mock("../../../ui/commands", () => ({ allCommands: () => [], commandOfKeybindingKey: () => null, keybindingKey: (id: string) => id, registerComponentRow: () => () => {} }));
 vi.mock("../../../ui/permissions", () => ({ TRUST_LABELS: {}, isPermissionKey: () => false, rows: () => [] }));
 vi.mock("../../../ui/a11y", () => ({ trapFocus: () => () => {} }));
 vi.mock("../../../ui/motion", () => ({
@@ -73,7 +79,7 @@ function entry(
 function entries(): SettingEntry[] {
   return [
     entry("appearance.theme", { kind: "choice", default: "", options: [{ value: "", label: "Sistema" }, { value: "light", label: "Chiaro" }] }, ""),
-    entry(ACCENT, { kind: "number", default: 265, min: 0, max: 360 }, 265),
+    entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 160),
     entry(SPACE, { kind: "number", default: 0, min: 0, max: 4 }, 0),
     entry("appearance.body", { kind: "number", default: 16, min: 12, max: 28 }, 16),
   ];
@@ -153,7 +159,7 @@ async function changedOutside(key: string, value: SettingEntry["value"]): Promis
   const found = fake.entries.find((candidate) => candidate.spec.key === key)!;
   found.value = value;
   found.source = "machine";
-  fake.listeners.get("setting_changed")?.({ key });
+  for (const listener of fake.listeners.get("setting_changed") ?? []) listener({ key });
   await settled();
 }
 
@@ -266,19 +272,38 @@ describe("lo spazio dell'interfaccia", () => {
     expect(step(0).disabled).toBe(false);
   });
 
-  it("mentre la scrittura è in volo i passi sono spenti, e poi tornano", async () => {
+  it("mentre la scrittura è in volo i passi restano accesi col fuoco, e l'ultimo passo vince", async () => {
     await openPanel();
-    let release: () => void = () => {};
-    fake.setSetting.mockImplementationOnce(() => new Promise<void>((resolve) => {
-      release = resolve;
+    const releases: (() => void)[] = [];
+    fake.setSetting.mockImplementation((key: string, value: unknown) => new Promise<void>((resolve) => {
+      releases.push(() => {
+        const found = fake.entries.find((candidate) => candidate.spec.key === key)!;
+        found.value = value as SettingEntry["value"];
+        found.source = "machine";
+        resolve();
+      });
     }));
-    step(1).click();
+    step(0).focus();
+    press(step(0), "ArrowRight");
     await settled();
     expect(row(SPACE).getAttribute("aria-busy")).toBe("true");
-    expect([0, 1, 2, 3, 4].every((n) => step(n).disabled)).toBe(true);
-    release();
-    await settled();
     expect([0, 1, 2, 3, 4].some((n) => step(n).disabled)).toBe(false);
+    expect(document.activeElement).toBe(step(1));
+    // Altri due passi mentre il primo è in volo: aspettano, e parte solo l'ultimo.
+    press(step(1), "ArrowRight");
+    press(step(2), "ArrowRight");
+    await settled();
+    expect(document.activeElement).toBe(step(3));
+    expect(fake.setSetting.mock.calls.map(([, value]) => value)).toEqual([1]);
+    releases[0]!();
+    await settled();
+    expect(fake.setSetting.mock.calls.map(([, value]) => value)).toEqual([1, 3]);
+    expect(checkedIn(".prefs-space")).toEqual(["prefs-space-step-3"]);
+    releases[1]!();
+    await settled();
+    expect(row(SPACE).getAttribute("aria-busy")).toBeNull();
+    expect(checkedIn(".prefs-space")).toEqual(["prefs-space-step-3"]);
+    expect(document.activeElement).toBe(step(3));
   });
 
   it("un clic sul nome della riga porta al passo scelto", async () => {
@@ -302,12 +327,12 @@ describe("lo spazio dell'interfaccia", () => {
 });
 
 describe("l'accento", () => {
-  it("sette campioni e la tinta su misura, in un gruppo di scelta", async () => {
+  it("otto campioni e la tinta su misura, in un gruppo di scelta", async () => {
     await openPanel();
     const group = row(ACCENT).querySelector<HTMLElement>(".prefs-accent-swatches")!;
     expect(group.getAttribute("role")).toBe("radiogroup");
     expect([...group.querySelectorAll<HTMLElement>('[role="radio"]')].map((radio) => radio.dataset.accent)).toEqual([
-      "matita-blu", "viola", "prugna", "terracotta", "ocra", "salvia", "petrolio", "custom",
+      "smeraldo", "matita-blu", "viola", "prugna", "terracotta", "ocra", "salvia", "petrolio", "custom",
     ]);
     expect(swatch("ocra").getAttribute("aria-label")).toBe("Ocra");
     expect(swatch("custom").getAttribute("aria-label")).toBe("Su misura");
@@ -320,16 +345,24 @@ describe("l'accento", () => {
 
   it("mai scelto: vale il predefinito, che l'host e la serie dichiarano uguale", async () => {
     await openPanel();
-    expect(native(ACCENT).value).toBe("265");
-    expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-matita-blu"]);
+    expect(native(ACCENT).value).toBe("160");
+    expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-smeraldo"]);
   });
 
   it("scelto: il campione con quella tinta", async () => {
     const list = entries();
-    list[1] = entry(ACCENT, { kind: "number", default: 265, min: 0, max: 360 }, 130, "machine");
+    list[1] = entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 130, "machine");
     await openPanel(list);
     expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-salvia"]);
-    expect(row(ACCENT).querySelector(".setting-default")?.textContent).toBe("Predefinito: Matita blu");
+    expect(row(ACCENT).querySelector(".setting-default")?.textContent).toBe("Predefinito: Smeraldo");
+  });
+
+  it("chi aveva scelto la matita blu, la serie di prima, la ritrova scelta", async () => {
+    const list = entries();
+    list[1] = entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 265, "machine");
+    await openPanel(list);
+    expect(native(ACCENT).value).toBe("265");
+    expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-matita-blu"]);
   });
 
   it("un campione scrive la sua tinta nella stessa chiave, come numero", async () => {
@@ -354,7 +387,7 @@ describe("l'accento", () => {
 
   it("una tinta che non è di nessun campione è «su misura», col cursore sulla tinta", async () => {
     const list = entries();
-    list[1] = entry(ACCENT, { kind: "number", default: 265, min: 0, max: 360 }, 172, "machine");
+    list[1] = entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 172, "machine");
     await openPanel(list);
     expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-custom"]);
     const custom = row(ACCENT).querySelector<HTMLElement>(".prefs-accent-custom")!;
@@ -373,7 +406,7 @@ describe("l'accento", () => {
     expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-custom"]);
     const slider = document.getElementById("prefs-accent-hue") as HTMLInputElement;
     expect(row(ACCENT).querySelector<HTMLElement>(".prefs-accent-custom")!.hidden).toBe(false);
-    expect(slider.value).toBe("265");
+    expect(slider.value).toBe("160");
 
     // Trascinare non è scrivere, e il cursore resta dove lo porta la mano.
     slider.focus();
@@ -389,6 +422,41 @@ describe("l'accento", () => {
     expect(fake.setSetting).toHaveBeenCalledWith(ACCENT, 200);
     expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-custom"]);
     expect(document.activeElement).toBe(slider);
+  });
+
+  it("il cursore non perde mai il fuoco: né mentre scrive, né quando la riga si aggiorna", async () => {
+    await openPanel();
+    let release: () => void = () => {};
+    fake.setSetting.mockImplementationOnce((key: string, value: unknown) => new Promise<void>((resolve) => {
+      release = () => {
+        const found = fake.entries.find((candidate) => candidate.spec.key === key)!;
+        found.value = value as SettingEntry["value"];
+        found.source = "machine";
+        resolve();
+      };
+    }));
+    swatch("custom").click();
+    await settled();
+    const slider = document.getElementById("prefs-accent-hue") as HTMLInputElement;
+    const rowBefore = row(ACCENT);
+    slider.focus();
+    let blurs = 0;
+    slider.addEventListener("blur", () => blurs++);
+    slider.value = "200";
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+    await settled();
+    expect(row(ACCENT).getAttribute("aria-busy")).toBe("true");
+    expect(slider.disabled).toBe(false);
+    expect(document.activeElement).toBe(slider);
+    release();
+    await settled();
+    // La riga aggiornata sul posto: lo stesso nodo, la veste mai staccata.
+    expect(row(ACCENT)).toBe(rowBefore);
+    expect(row(ACCENT).getAttribute("aria-busy")).toBeNull();
+    expect(native(ACCENT).value).toBe("200");
+    expect(slider.value).toBe("200");
+    expect(document.activeElement).toBe(slider);
+    expect(blurs).toBe(0);
   });
 
   it("su misura resta tale anche sulla tinta di un campione, finché le preferenze restano aperte", async () => {
@@ -417,7 +485,7 @@ describe("l'accento", () => {
 
   it("una scrittura rifiutata riporta il cursore sulla tinta vera", async () => {
     const list = entries();
-    list[1] = entry(ACCENT, { kind: "number", default: 265, min: 0, max: 360 }, 172, "machine");
+    list[1] = entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 172, "machine");
     await openPanel(list);
     fake.setSetting.mockRejectedValueOnce(new Error("no"));
     const slider = document.getElementById("prefs-accent-hue") as HTMLInputElement;

@@ -95,6 +95,9 @@ export const THEME_2_OPTIONAL_PAIRS: readonly ContrastPair[] = [
   ["paper-comment", "paper-bg", UI, "il filo di un commento sulla carta di un file"],
   ["paper-ink", "paper-find", AA, "un risultato della ricerca sulla carta di un file"],
   ["paper-ink", "paper-find-now", AA, "il risultato corrente sulla carta di un file"],
+  ["text", "bar-tray", AA, "l'etichetta di un bottone nella barra in una fila"],
+  ["muted", "bar-tray", AA, "un'icona spenta nella barra in una fila"],
+  ["outline", "bar-tray", UI, "il confine di un campo nella barra in una fila"],
 ];
 
 export const THEME_2_REQUIRED_ROLES: readonly string[] = [

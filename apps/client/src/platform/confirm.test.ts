@@ -274,6 +274,65 @@ describe("due domande insieme", () => {
   });
 });
 
+describe("ritirare una domanda", () => {
+  it("a schermo, la chiude con «no» insieme alla sua vita, e fa posto alla dopo", async () => {
+    const { present, shown } = presenter();
+    declare(present);
+    const withdraw = new AbortController();
+    const first = confirm("prima", DELETE, withdraw.signal);
+    const second = confirm("seconda", DELETE);
+    withdraw.abort();
+    await expect(first).resolves.toBe(false);
+    expect(shown[0]!.life.closed).toBe(true);
+    expect(shown.map((each) => each.message)).toEqual(["prima", "seconda"]);
+    // Il sì che arriva dopo dalla superficie ritirata non conta.
+    shown[0]!.yes();
+    expect(await state(first)).toBe(false);
+    shown[1]!.yes();
+    await expect(second).resolves.toBe(true);
+  });
+
+  it("in fila, non arriva mai a schermo", async () => {
+    const { present, shown } = presenter();
+    declare(present);
+    const withdraw = new AbortController();
+    const first = confirm("prima", DELETE);
+    const second = confirm("seconda", DELETE, withdraw.signal);
+    withdraw.abort();
+    await expect(second).resolves.toBe(false);
+    shown[0]!.no();
+    await first;
+    expect(shown.map((each) => each.message)).toEqual(["prima"]);
+  });
+
+  it("già ritirata non chiede niente; ritirarla a risposta data non la cambia", async () => {
+    const { present, shown } = presenter();
+    declare(present);
+    const gone = new AbortController();
+    gone.abort();
+    await expect(confirm("mai", DELETE, gone.signal)).resolves.toBe(false);
+    expect(shown).toHaveLength(0);
+
+    const late = new AbortController();
+    const answered = confirm("elimino?", DELETE, late.signal);
+    shown[0]!.yes();
+    await expect(answered).resolves.toBe(true);
+    late.abort();
+    expect(await state(answered)).toBe(true);
+  });
+
+  it("senza presentatore, ritirata vale «no» anche col dialogo di sistema aperto", async () => {
+    let answer: (yes: boolean) => void = () => {};
+    system.confirm.mockReturnValueOnce(new Promise<boolean>((resolve) => (answer = resolve)));
+    const withdraw = new AbortController();
+    const question = confirm("elimino?", DELETE, withdraw.signal);
+    withdraw.abort();
+    await expect(question).resolves.toBe(false);
+    answer(true);
+    expect(await state(question)).toBe(false);
+  });
+});
+
 describe("dichiarazioni annidate", () => {
   it("risponde l'ultima; ritirarla rimette quella di prima", async () => {
     const outer = presenter();

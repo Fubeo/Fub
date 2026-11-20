@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { history, undo } from "@codemirror/commands";
+import { history, redo, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
-import { EditorSelection, EditorState } from "@codemirror/state";
+import { parsed } from "../test-support";
+import { EditorSelection, EditorState, type StateCommand } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { blockModel } from "./model";
-import { moveBlockBy, moveSiblings } from "./move";
+import { moveBlockBy, moveRun, moveSiblings, nestRun, outdentRun, reindent } from "./move";
 import { blockAnchor } from "./anchor";
 import { mergeUpChange } from "./keys";
 import { deleteRun, duplicateRun } from "./selection";
@@ -13,13 +13,11 @@ import { deleteRun, duplicateRun } from "./selection";
 // Spostare, duplicare ed eliminare blocchi (H5, H7, H8), a byte esatti.
 
 function stateOf(doc: string, cursor = 0): EditorState {
-  const state = EditorState.create({
+  return parsed(EditorState.create({
     doc,
     selection: { anchor: cursor },
     extensions: [markdown({ base: markdownGrammar }), blockModel, history()],
-  });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  }));
 }
 
 const blocksOf = (state: EditorState) => state.field(blockModel).blocks;
@@ -41,6 +39,19 @@ describe("spostare", () => {
   it("il primo non sale e l'ultimo non scende", () => {
     expect(moveBy("Uno\n\nDue", "Uno", -1)).toBe("Uno\n\nDue");
     expect(moveBy("Uno\n\nDue", "Due", 1)).toBe("Uno\n\nDue");
+  });
+
+  it("il frontmatter resta il primo: niente gli passa davanti e lui non scende", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    // Il primo testo non sale sopra il frontmatter, né con la tastiera né con la tratta.
+    expect(moveBy(doc, "Uno", -1)).toBe(doc);
+    const state = stateOf(doc);
+    const blocks = blocksOf(state);
+    expect(blocks[0]!.kind).toBe("frontmatter");
+    expect(moveSiblings(state, blocks, indexAt(state, "Due"), indexAt(state, "Due"), 0)).toBeNull();
+    // Il frontmatter non scende, nemmeno col cursore dentro di lui.
+    expect(moveBy(doc, "icon", 1)).toBe(doc);
+    expect(moveSiblings(state, blocks, 0, 0, indexAt(state, "Uno"))).toBeNull();
   });
 
   it("un file senza a capo finale resta senza", () => {
@@ -77,12 +88,11 @@ describe("spostare", () => {
   it("le voci numerate si rinumerano dopo lo spostamento", async () => {
     const { renumberLists } = await import("../renumber");
     const { smartLists } = await import("../../../smart-lists");
-    const state = EditorState.create({
+    const state = parsed(EditorState.create({
       doc: "1. uno\n2. due\n3. tre",
       selection: { anchor: 14 },
       extensions: [markdown({ base: markdownGrammar }), blockModel, renumberLists, smartLists.of(true)],
-    });
-    ensureSyntaxTree(state, state.doc.length, 5000);
+    }));
     let next = state;
     moveBlockBy(-1)({ state, dispatch: (tr) => { next = tr.state; } });
     expect(next.doc.toString()).toBe("1. uno\n2. tre\n3. due");
@@ -110,6 +120,68 @@ describe("spostare", () => {
 
   it("un `^id` su una riga sua si sposta col suo blocco", () => {
     expect(moveBy("```\nx\n```\n\n^cod\n\nDopo", "Dopo", -1)).toBe("Dopo\n\n```\nx\n```\n\n^cod");
+  });
+});
+
+describe("il frontmatter resta il primo", () => {
+  const step = (state: EditorState, cmd: StateCommand): EditorState => {
+    let next = state;
+    cmd({ state, dispatch: (tr) => { next = tr.state; } });
+    return next;
+  };
+
+  it("senza frontmatter il primo blocco si sposta come sempre", () => {
+    expect(moveBy("Uno\n\nDue", "Due", -1)).toBe("Due\n\nUno");
+    // Un `---` senza chiusura non è un frontmatter: è una riga orizzontale, e non blocca niente.
+    expect(moveBy("---\n\nUno\n\nDue", "Uno", -1)).toBe("Uno\n\n---\n\nDue");
+  });
+
+  it("un frontmatter vuoto (`---` e `---`) è il primo blocco come gli altri", () => {
+    const doc = "---\n---\nUno\n\nDue";
+    const state = stateOf(doc);
+    expect(blocksOf(state)[0]!.kind).toBe("frontmatter");
+    expect(moveBy(doc, "Uno", -1)).toBe(doc);
+    expect(moveBy(doc, "---", 1)).toBe(doc);
+    // Un blocco che sale fin lì finisce subito dopo di lui.
+    expect(moveBy(doc, "Due", -1)).toBe("---\n---\n\nDue\n\nUno");
+  });
+
+  it("un blocco portato sopra il frontmatter finisce subito dopo di lui", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    const state = stateOf(doc);
+    const blocks = blocksOf(state);
+    const due = indexAt(state, "Due");
+    const uno = indexAt(state, "Uno");
+    expect(moveSiblings(state, blocks, due, due, 0)).toBeNull();
+    expect(moveSiblings(state, blocks, uno, due, 0)).toBeNull();
+    const spec = moveSiblings(state, blocks, due, due, uno)!;
+    expect(state.update(spec).state.doc.toString()).toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
+  });
+
+  it("il frontmatter non si sposta, né in su né in giù, né da solo né in una tratta", () => {
+    const state = stateOf("---\nicon: 🌿\n---\nUno\n\nDue");
+    const blocks = blocksOf(state);
+    expect(moveRun(state, blocks, { first: 0, last: 0 }, 1)).toBeNull();
+    expect(moveRun(state, blocks, { first: 0, last: 0 }, -1)).toBeNull();
+    expect(moveRun(state, blocks, { first: 0, last: 1 }, 1)).toBeNull();
+    expect(moveRun(state, blocks, { first: 0, last: 1 }, -1)).toBeNull();
+    expect(moveRun(state, blocks, { first: 1, last: 1 }, -1)).toBeNull();
+  });
+
+  it("annulla e ripeti: il frontmatter resta primo a ogni passo", () => {
+    const doc = "---\nicon: 🌿\n---\nUno\n\nDue";
+    const start = stateOf(doc, doc.indexOf("Due"));
+    const moved = step(start, moveBlockBy(-1));
+    expect(moved.doc.toString()).toBe("---\nicon: 🌿\n---\n\nDue\n\nUno");
+    expect(blocksOf(moved)[0]!.kind).toBe("frontmatter");
+    // Un altro passo verso l'alto non trova più posto: non cambia niente.
+    expect(step(moved, moveBlockBy(-1))).toBe(moved);
+    const back = step(moved, undo);
+    expect(back.doc.toString()).toBe(doc);
+    expect(blocksOf(back)[0]!.kind).toBe("frontmatter");
+    const again = step(back, redo);
+    expect(again.doc.toString()).toBe(moved.doc.toString());
+    expect(blocksOf(again)[0]!.kind).toBe("frontmatter");
   });
 });
 
@@ -181,9 +253,8 @@ describe("il link al blocco", () => {
     const state = stateOf("```\nx\n```\n\nDopo");
     const anchor = blockAnchor(state, blocksOf(state), 0, random);
     const next = state.update({ changes: anchor.changes! }).state;
-    ensureSyntaxTree(next, next.doc.length, 5000);
     expect(next.doc.toString()).toBe(`\`\`\`\nx\n\`\`\`\n\n${anchor.fragment}\n\nDopo`);
-    const settled = next.update({}).state;
+    const settled = parsed(next);
     expect(blocksOf(settled).map((block) => block.kind)).toEqual(["code", "paragraph"]);
     expect(blockAnchor(settled, blocksOf(settled), 0, random)).toEqual({ fragment: anchor.fragment, changes: null });
   });
@@ -205,5 +276,72 @@ describe("la selezione segue lo spostamento", () => {
     const next = selected.update(spec).state;
     expect(next.doc.toString()).toBe("Due\n\nTre\n\nUno");
     expect(next.sliceDoc(next.selection.main.from, next.selection.main.to)).toBe("Due\n\nTre");
+  });
+});
+
+describe("annidare e portare fuori col gesto di lato", () => {
+  const apply = (state: EditorState, spec: ReturnType<typeof nestRun>) => {
+    expect(spec).not.toBeNull();
+    return state.update(spec!).state;
+  };
+
+  it("una voce annidata sotto la voce sopra prende il rientro dei figli, in un passo", () => {
+    const state = stateOf("- uno\n- due\n- tre", 0);
+    const due = indexAt(state, "- due");
+    const next = apply(state, nestRun(state, blocksOf(state), { first: due, last: due }, indexAt(state, "- uno")));
+    expect(next.doc.toString()).toBe("- uno\n  - due\n- tre");
+    let back = next;
+    undo({ state: next, dispatch: (tr) => { back = tr.state; } });
+    expect(back.doc.toString()).toBe("- uno\n- due\n- tre");
+  });
+
+  it("sotto una voce che ha già figli va in fondo, col loro rientro, e porta i suoi", () => {
+    const state = stateOf("1. uno\n   - a\n2. due\n   - b\n3. tre");
+    const due = indexAt(state, "2. due");
+    const next = apply(state, nestRun(state, blocksOf(state), { first: due, last: due }, indexAt(state, "1. uno")));
+    expect(next.doc.toString()).toBe("1. uno\n   - a\n   2. due\n      - b\n3. tre");
+  });
+
+  it("verso una voce più in basso, la voce va in fondo ai suoi figli", () => {
+    const state = stateOf("- uno\n- due\n- tre");
+    const uno = indexAt(state, "- uno");
+    const next = apply(state, nestRun(state, blocksOf(state), { first: uno, last: uno }, indexAt(state, "- tre")));
+    expect(next.doc.toString()).toBe("- due\n- tre\n  - uno");
+  });
+
+  it("una voce annidata portata fuori va subito dopo la sua voce, col suo rientro", () => {
+    const state = stateOf("- uno\n  - a\n  - b\n- due");
+    const a = indexAt(state, "  - a");
+    const next = apply(state, outdentRun(state, blocksOf(state), { first: a, last: a }));
+    expect(next.doc.toString()).toBe("- uno\n  - b\n- a\n- due");
+    const b = indexAt(state, "  - b");
+    expect(state.update(outdentRun(state, blocksOf(state), { first: b, last: b })!).state.doc.toString()).toBe("- uno\n  - a\n- b\n- due");
+  });
+
+  it("la sola voce annidata portata fuori non lascia una riga vuota: l'elenco resta stretto", () => {
+    const state = stateOf("- uno\n  - a\n- due");
+    const a = indexAt(state, "  - a");
+    expect(apply(state, outdentRun(state, blocksOf(state), { first: a, last: a })).doc.toString()).toBe("- uno\n- a\n- due");
+    // In fondo alla nota, e con tutte le sorelle insieme.
+    const last = stateOf("- uno\n  - a\n  - b");
+    const run = { first: indexAt(last, "  - a"), last: indexAt(last, "  - b") };
+    expect(apply(last, outdentRun(last, blocksOf(last), run)).doc.toString()).toBe("- uno\n- a\n- b");
+    // Un elenco largo resta largo: la riga vuota che c'era resta una.
+    const loose = stateOf("- uno\n\n  - a\n\n- due");
+    const b = indexAt(loose, "  - a");
+    expect(apply(loose, outdentRun(loose, blocksOf(loose), { first: b, last: b })).doc.toString()).toBe("- uno\n\n- a\n\n- due");
+  });
+
+  it("non annida ciò che non è una voce, né sotto ciò che non è una voce", () => {
+    const state = stateOf("Testo\n\n- uno\n\nAltro");
+    const blocks = blocksOf(state);
+    expect(nestRun(state, blocks, { first: indexAt(state, "Altro"), last: indexAt(state, "Altro") }, indexAt(state, "- uno"))).toBeNull();
+    expect(nestRun(state, blocks, { first: indexAt(state, "- uno"), last: indexAt(state, "- uno") }, indexAt(state, "Testo"))).toBeNull();
+    expect(outdentRun(state, blocks, { first: indexAt(state, "- uno"), last: indexAt(state, "- uno") })).toBeNull();
+  });
+
+  it("il rientro nuovo lascia vuote le righe vuote", () => {
+    expect(reindent("- a\n\n  testo", "", "  ")).toBe("  - a\n\n    testo");
+    expect(reindent("  - a\n    b", "  ", "")).toBe("- a\n  b");
   });
 });

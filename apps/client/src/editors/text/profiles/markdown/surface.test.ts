@@ -6,9 +6,15 @@ import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
 import { cursorIsLiteral, mountMarkdownSurface, type EditorSlashHost, type MarkdownSurface } from "./surface";
 import { api } from "../../../../host/ipc";
+import { NOTE_TYPE_READS, withoutTypeReads } from "../../../../state/note-type-commands";
 import { state } from "../../../../state/store";
+import { documentSessions } from "../../../../state/document-session";
+import type { DocumentSource } from "../../../../host/contract";
 import { closeCommandPalette } from "../../../../ui/palette";
 import { declareClipboard } from "../../../../platform/clipboard";
+import { trapFocus } from "../../../../ui/a11y";
+import { liveStrings } from "./strings";
+import { parsedView } from "./test-support";
 
 interface TestEditor {
   ed: MarkdownSurface;
@@ -79,6 +85,120 @@ describe("la superficie Markdown", () => {
     expect(ed.buffer.getDoc()).toBe("# Titolo\n\n- [ ] da fare\n");
     expect(view().state.selection.main.anchor).toBe(anchor);
     expect(parent.dataset.markdownMode).toBe("live_preview");
+    ed.destroy();
+  });
+  it("cambiando modo porta il fuoco dove si continua con la tastiera", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("# Titolo\n\nuna riga da leggere\n");
+    view().dispatch({ selection: { anchor: 5 } });
+    view().focus();
+    expect(view().hasFocus).toBe(true);
+
+    // In Lettura l'editor sparisce: il fuoco va sul riquadro di lettura, non
+    // sul corpo della pagina.
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(reading());
+
+    // Al ritorno in scrittura il fuoco torna all'editor, al cursore di prima.
+    ed.setMode("live_preview");
+    expect(view().hasFocus).toBe(true);
+    expect(view().state.selection.main.anchor).toBe(5);
+    ed.destroy();
+  });
+  it("cambiando modo da un menu aperto dall'editor, il menu tiene il fuoco, e chiuso lo rende alla Lettura", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    // Un menu del testo: montato fuori dal riquadro, col fuoco che torna
+    // all'editor quando si chiude.
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    const item = document.createElement("button");
+    menu.append(item);
+    document.body.append(menu);
+    const release = trapFocus(menu, () => {});
+    item.focus();
+    expect(document.activeElement).toBe(item);
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(item);
+    release();
+    // Non torna all'editor nascosto: va dove si legge adesso.
+    expect(document.activeElement).toBe(reading());
+    menu.remove();
+    ed.destroy();
+  });
+  it("cambiando modo il menu del testo aperto dall'editor si chiude: le sue voci non toccano l'editor nascosto", async () => {
+    const { showContextMenu } = await import("../../../../ui/menu");
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    const cut = vi.fn();
+    showContextMenu({ x: 10, y: 10 }, [{ label: "Taglia", run: cut }], { pointer: false });
+    const menu = document.getElementById("context-menu")!;
+    expect(menu.contains(document.activeElement)).toBe(true);
+
+    ed.setMode("reading");
+    // Il menu è chiuso: il fuoco è passato alla Lettura, e la voce non agisce.
+    expect(document.activeElement).toBe(reading());
+    menu.querySelector<HTMLElement>('[role="menuitem"]')?.click();
+    expect(cut).not.toHaveBeenCalled();
+    menu.remove();
+    ed.destroy();
+  });
+  it("cambiando modo non chiude un menu aperto da un'altra parte della finestra", async () => {
+    const { closeContextMenu, showContextMenu } = await import("../../../../ui/menu");
+    const { ed } = editor();
+    ed.buffer.setDoc("testo");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    const other = vi.fn();
+    showContextMenu({ x: 10, y: 10 }, [{ label: "Rinomina", run: other }], { pointer: false });
+    const menu = document.getElementById("context-menu")!;
+    const item = document.activeElement;
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(item);
+    expect(menu.isConnected).toBe(true);
+    closeContextMenu();
+    outside.remove();
+    ed.destroy();
+  });
+  it("cambiando modo con una finestra aperta sopra l'editor, la finestra tiene il fuoco; chiusa, va al modo nuovo", () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("testo");
+    view().focus();
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    const ok = document.createElement("button");
+    dialog.append(ok);
+    document.body.append(dialog);
+    const release = trapFocus(dialog, () => {});
+    ok.focus();
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(ok);
+    ed.setMode("source");
+    expect(document.activeElement).toBe(ok);
+    ed.setMode("reading");
+    release();
+    expect(document.activeElement).toBe(reading());
+    dialog.remove();
+    ed.destroy();
+  });
+  it("cambiando modo non ruba il fuoco a chi lo ha fuori dalla superficie", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("testo");
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+
+    ed.setMode("reading");
+    expect(document.activeElement).toBe(outside);
+    ed.setMode("source");
+    expect(document.activeElement).toBe(outside);
+    expect(view().hasFocus).toBe(false);
+    outside.remove();
     ed.destroy();
   });
   it("in lettura raccoglie le battute di un altro riquadro in un ridisegno solo", () => {
@@ -178,8 +298,13 @@ describe("la superficie Markdown", () => {
   it("in Lettura il link a questo punto è del punto cliccato, non del cursore di scrittura", () => {
     const { ed, view, reading } = editor();
     ed.buffer.setDoc("# Uno\n\ntesto\n\n# Due\n");
+    parsedView(view());
     view().dispatch({ selection: { anchor: 2 } });
     ed.setMode("reading");
+    // Il passaggio alla Lettura riconfigura lo stato e l'albero rinasce a metà:
+    // il DOM della Lettura viene dal testo e non ne dipende, ma `anchorHere`
+    // legge l'albero della vista, che va consegnato di nuovo.
+    parsedView(view());
     const second = [...reading().querySelectorAll<HTMLElement>("[data-md-from]")].find((el) => el.textContent?.includes("Due"));
     expect(second, "la Lettura segna la sorgente dei suoi blocchi").toBeTruthy();
     const point = vi.spyOn(document, "elementFromPoint").mockReturnValue(second!);
@@ -245,7 +370,10 @@ describe("la superficie Markdown", () => {
       },
     ];
     const list = vi.spyOn(api, "listCommands").mockResolvedValue(specs);
-    const invoke = vi.spyOn(api, "invokeCommand").mockImplementation(async () => {
+    const invoke = vi.spyOn(api, "invokeCommand").mockImplementation(async (id) => {
+      // La superficie chiede all'apertura se la nota è un tipo (la pagina del
+      // tipo): è una lettura, non il comando dello slash.
+      if (NOTE_TYPE_READS.has(id)) throw new Error("nessun tipo nel test");
       sequence.push("invoke");
       return { notify: null, effect: { kind: "done" }, undo: null, partial: null };
     });
@@ -277,8 +405,9 @@ describe("la superficie Markdown", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
       expect(document.querySelectorAll("#command-palette [role=option]")).toHaveLength(1);
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-      await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(sequence).toContain("invoke"));
       expect(sequence).toEqual(["flush", "context", "invoke"]);
+      expect(withoutTypeReads(invoke.mock.calls.map((args) => ({ args })))).toHaveLength(1);
       expect(invoke).toHaveBeenCalledWith(
         "selection.wrap", { doc: "notes/current.md", text: "needle" }, "apply",
       );
@@ -344,6 +473,48 @@ describe("la superficie Markdown", () => {
       ed.destroy();
       parent.remove();
       closeCommandPalette();
+      state.currentDoc = previousDoc;
+      vi.restoreAllMocks();
+    }
+  });
+  it("dopo una rinomina il / si apre ancora: la superficie si confronta col nome nuovo della nota", async () => {
+    const previousDoc = state.currentDoc;
+    const source = (): DocumentSource => ({
+      text: "prima ", revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source",
+    });
+    vi.spyOn(api, "readDocument").mockImplementation(async () => source());
+    vi.spyOn(api, "openDocument").mockImplementation(async () => source());
+    vi.spyOn(api, "documentClosed").mockResolvedValue(undefined);
+    vi.spyOn(api, "listCommands").mockResolvedValue([]);
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "settings", value: [] });
+    await documentSessions.read("notes/current.md");
+    state.currentDoc = "notes/current.md";
+    const slash = {
+      currentDoc: vi.fn(() => state.currentDoc),
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+    } satisfies EditorSlashHost;
+    const { ed, parent, view } = editor(() => {}, slash);
+    const press = () => view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }),
+    );
+    try {
+      // La nota si rinomina dal titolo: la sessione e il riquadro passano al
+      // nome nuovo, la superficie resta montata.
+      expect(documentSessions.rename("notes/current.md", "notes/Viaggio.md").kind).toBe("renamed");
+      state.currentDoc = "notes/Viaggio.md";
+      ed.buffer.setDoc("prima ");
+      view().dispatch({ selection: { anchor: 6 } });
+      // Il «/» a inizio parola apre la palette: la battuta non resta testo.
+      expect(press()).toBe(false);
+      await vi.waitFor(() => expect(document.querySelector("#command-palette:not([data-shell-motion=exit]) input")).not.toBeNull());
+    } finally {
+      ed.destroy();
+      parent.remove();
+      closeCommandPalette();
+      documentSessions.get("notes/Viaggio.md")?.close(true);
       state.currentDoc = previousDoc;
       vi.restoreAllMocks();
     }
@@ -452,6 +623,96 @@ describe("la superficie Markdown", () => {
   });
 });
 
+describe("il «/» nell'editor di una scheda della lavagna", () => {
+  /// Monta la superficie come la porta delle schede (`editor-port.ts`): il
+  /// documento del riquadro è la lavagna, non quello della superficie.
+  function card(hosted: boolean, documentId: string) {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const panels: { scope: unknown; palette: boolean; dom: HTMLElement }[] = [];
+    const slash = {
+      currentDoc: () => "Lavagne/Statistica.canvas",
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+      menu: {
+        enabled: () => true,
+        panel: (events: { palette?: unknown }, _has: unknown, scope?: unknown) => {
+          const dom = document.createElement("div");
+          panels.push({ scope, palette: typeof events.palette === "function", dom });
+          return { dom, listId: "lista", update() {}, key: () => false, placed() {}, close() {} };
+        },
+        chosen: vi.fn(),
+        palette: vi.fn(),
+      },
+    } satisfies EditorSlashHost;
+    const ed = mountMarkdownSurface({ paneId: "card-editor:1", documentId, parent, compact: true, escapeLeaves: true, ...(hosted ? { hosted: true } : {}) }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: () => {},
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+      slash,
+    });
+    const view = EditorView.findFromDOM(parent)!;
+    const type = (text: string) => {
+      for (const char of text) {
+        const at = view.state.selection.main.head;
+        view.dispatch({ changes: { from: at, insert: char }, selection: { anchor: at + 1 }, userEvent: "input.type" });
+      }
+    };
+    return { ed, parent, view, type, panels, slash };
+  }
+
+  for (const [kind, documentId] of [
+    ["scheda di testo", "Lavagne/Statistica.canvas#card-editor:1"],
+    ["scheda di una nota", "Benvenuto.md"],
+  ] as const) {
+    it(`apre il menu con le sole azioni dell'editor (${kind})`, () => {
+      const { ed, parent, view, type, panels, slash } = card(true, documentId);
+      try {
+        ed.buffer.setDoc("Perché il quadrato?\n");
+        view.dispatch({ selection: { anchor: ed.buffer.getDoc().length } });
+        type("/");
+        expect(panels).toHaveLength(1);
+        // Niente comandi del vault né palette: agirebbero sulla lavagna.
+        expect(panels[0]).toMatchObject({ scope: { commands: false }, palette: false });
+        // Il pannello galleggia sopra la finestra, fuori dalla scheda che lo
+        // zoom trasforma e che taglia ai bordi.
+        expect(panels[0]!.dom.parentElement).toBe(document.body);
+        expect(panels[0]!.dom.style.position).toBe("fixed");
+        expect(parent.contains(panels[0]!.dom)).toBe(false);
+        // Il tasto «/» non apre la palette dei comandi sulla lavagna.
+        view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
+        expect(slash.menu.palette).not.toHaveBeenCalled();
+        // Il «/» cancellato chiude il pannello, che lascia la finestra.
+        const end = view.state.doc.length;
+        view.dispatch({ changes: { from: end - 1, to: end }, userEvent: "delete.backward" });
+        expect(panels[0]!.dom.isConnected).toBe(false);
+      } finally {
+        ed.destroy();
+        parent.remove();
+      }
+    });
+  }
+
+  it("in un riquadro su un altro documento il «/» resta testo, come prima", () => {
+    const { ed, parent, view, type, panels } = card(false, "Benvenuto.md");
+    try {
+      ed.buffer.setDoc("");
+      view.dispatch({ selection: { anchor: 0 } });
+      type("/");
+      expect(panels).toHaveLength(0);
+      expect(ed.buffer.getDoc()).toBe("/");
+    } finally {
+      ed.destroy();
+      parent.remove();
+    }
+  });
+});
+
 describe("il cursore letterale della palette slash", () => {
   it("è deciso dal profilo sui nodi Markdown che il motore gli dà", () => {
     const parent = document.createElement("div");
@@ -503,10 +764,31 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("Ctrl+Z da un pannello: un passo della storia senza prendere il fuoco, e niente in sola lettura", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("parola");
+    view().dispatch({ selection: { anchor: 2 } });
+    expect(ed.editorActions.run("markdown.bold")).toBe(true);
+    const tab = document.createElement("button");
+    document.body.append(tab);
+    tab.focus();
+    expect(ed.history!("undo")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("parola");
+    expect(document.activeElement).toBe(tab);
+    expect(ed.history!("redo")).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("**parola**");
+    ed.setReadOnly!(true);
+    expect(ed.history!("undo")).toBe(false);
+    expect(ed.buffer.getDoc()).toBe("**parola**");
+    tab.remove();
+    ed.destroy();
+  });
+
   it("piega tutto e apri tutto non toccano il testo né la cronologia", () => {
     const { ed, view } = editor();
     const text = "# Uno\n\ntesto\n\n# Due\n\naltro\n";
     ed.buffer.setDoc(text);
+    parsedView(view());
     expect(ed.editorActions.has("text.fold.all")).toBe(true);
     expect(ed.editorActions.state("text.fold.all")).toEqual({ enabled: true, active: null });
     expect(ed.editorActions.run("text.fold.all")).toBe(true);
@@ -522,6 +804,9 @@ describe("le azioni dell'editor della superficie", () => {
     const { ed, view } = editor();
     const text = "---\ntitolo: Uno\ntag: [a]\n---\n\n# Testo\n";
     ed.buffer.setDoc(text);
+    // In Scrittura le proprietà stanno nella testata (`editor.properties` di
+    // serie `visible`): il frontmatter da piegare si vede in Sorgente.
+    ed.setMode("source");
     const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
     expect(ed.editorActions.run("text.fold.properties")).toBe(true);
     expect(placeholders()).toBe(1);
@@ -539,6 +824,7 @@ describe("le azioni dell'editor della superficie", () => {
     const { ed, view } = editor();
     const text = "# Uno\n\n## Sotto\n\ntesto\n\n# Due\n\naltro\n";
     ed.buffer.setDoc(text);
+    parsedView(view());
     const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
     expect(ed.editorActions.state("text.fold.more")).toEqual({ enabled: true, active: null });
     expect(ed.editorActions.run("text.fold.more")).toBe(true);
@@ -643,6 +929,63 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("un link con un «%» che non codifica niente si apre col nome com'è scritto, senza URIError", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const opened: string[] = [];
+    const peeked: unknown[] = [];
+    const ed = mountMarkdownSurface({ paneId: "riquadro", documentId: "notes/current.md", parent }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: (path) => { opened.push(path); },
+      onPeekLink: (link) => { peeked.push(link); },
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    const view = EditorView.findFromDOM(parent)!;
+    ed.setMode("source");
+    const menuAt = (doc: string) => {
+      ed.buffer.setDoc(doc);
+      view.dispatch({ selection: { anchor: 3 } });
+      return ed.contextMenu!(null);
+    };
+    const run = (menu: ReturnType<NonNullable<MarkdownSurface["contextMenu"]>>, id: string) =>
+      ((menu?.context ?? []).find((entry) => typeof entry !== "string" && entry.id === id) as { run: () => void }).run();
+    const broken = menuAt("[Rapporto](report_50%.md)\n");
+    expect(() => run(broken, "markdown.link.open")).not.toThrow();
+    expect(() => run(broken, "markdown.link.peek")).not.toThrow();
+    expect(opened).toEqual(["report_50%.md"]);
+    expect(peeked).toEqual([{ kind: "path", path: "report_50%.md" }]);
+    // Il nome codificato si decodifica come prima.
+    run(menuAt("[Nota](Nota%20uno.md)\n"), "markdown.link.open");
+    expect(opened[opened.length - 1]).toBe("Nota uno.md");
+    ed.destroy();
+    parent.remove();
+  });
+
+  it("caretAt mette il cursore sotto il punto, senza scrivere; fuori dal riquadro o in Lettura non tocca niente (IMP-3808)", () => {
+    const { ed, view } = editor();
+    ed.setMode("live_preview");
+    ed.buffer.setDoc("Kant e Locke\n");
+    view().dispatch({ selection: { anchor: 13 } });
+    const original = view().posAtCoords.bind(view());
+    view().posAtCoords = ((_coords: { x: number; y: number }) => 4) as typeof original;
+    const box = vi.spyOn(view().scrollDOM, "getBoundingClientRect")
+      .mockReturnValue({ left: 10, top: 20, right: 210, bottom: 120, width: 200, height: 100, x: 10, y: 20, toJSON: () => ({}) });
+    expect(ed.caretAt({ x: 60, y: 40 })).toBe(true);
+    expect(view().state.selection.main.head).toBe(4);
+    expect(ed.buffer.getDoc()).toBe("Kant e Locke\n");
+    // La testata della scheda, sopra il riquadro dell'editor: il cursore resta.
+    view().dispatch({ selection: { anchor: 13 } });
+    expect(ed.caretAt({ x: 60, y: 5 })).toBe(false);
+    expect(view().state.selection.main.head).toBe(13);
+    ed.setMode("reading");
+    expect(ed.caretAt({ x: 60, y: 40 })).toBe(false);
+    box.mockRestore();
+    ed.destroy();
+  });
+
   // Le voci di primo livello, coi separatori come «—»: ciò che la superficie
   // dà al compositore, nei gruppi in cui lo dà.
   const contextLabels = (menu: ReturnType<NonNullable<MarkdownSurface["contextMenu"]>>): string[] =>
@@ -698,16 +1041,64 @@ describe("le azioni dell'editor della superficie", () => {
     expect(menu?.clipboard?.copyAs?.map((item) => item.label)).toEqual([
       t("editor_menu.copy_as.markdown"), t("editor_menu.copy_as.html"), t("editor_menu.copy_as.text"),
     ]);
-    expect(entryOf(menu, t("editor_menu.search_vault"))?.find).toEqual({ where: "vault", query: "due parole" });
+    // Come nel prototipo: «Collega a una nota…», poi «Estrai»; «Cerca nel
+    // vault» si trova scrivendo.
+    expect(contextLabels(menu)).toEqual([t("editor_menu.link.to_note"), "—", t("editor_menu.extract")]);
+    expect(menu?.context?.[0]).toMatchObject({ icon: "fmt-link" });
+    expect(menu?.searchable?.find((item) => typeof item === "object" && "label" in item && item.label === t("editor_menu.search_vault"))).toMatchObject({
+      icon: "search",
+      find: { where: "vault", query: "due parole" },
+    });
     expect(menu?.miniBar).toBe(true);
     ed.destroy();
+  });
+
+  it("la formula si copia con «Copia come»: LaTeX, immagine dove gli appunti prendono un PNG, equazione", async () => {
+    const texts: string[] = [];
+    let png = true;
+    const undeclare = declareClipboard(async (text) => void texts.push(text), {
+      write: async () => {},
+      read: async () => [],
+      supports: (type) => type !== "image/png" || png,
+    });
+    try {
+      const { ed, view } = editor();
+      ed.setMode("source");
+      const doc = "Vale $a+b$ qui\n";
+      const menu = at(ed, view, doc, doc.indexOf("a+b") + 1);
+      expect(menu?.target).toMatchObject({ kind: "block", name: "a+b" });
+      // Le tre voci separate di prima non ci sono più: restano Modifica e il posto.
+      expect(contextLabels(menu)).toEqual([liveStrings.t("live.math.menu.edit"), "—", liveStrings.t("live.math.menu.to_block")]);
+      const copyAs = menu?.clipboard?.copyAs ?? [];
+      expect(copyAs.map((item) => [item.label, item.icon])).toEqual([
+        [liveStrings.t("live.math.copy_as.latex"), "copy-latex"],
+        [liveStrings.t("live.math.copy_as.image"), "copy-image"],
+        [liveStrings.t("live.math.copy_as.equation"), "copy-equation"],
+      ]);
+      // Nessun gesto «Copia»: Ctrl C copia la selezione, non la formula.
+      expect(menu?.clipboard?.offers).toEqual({});
+      copyAs[0]!.run!();
+      await vi.waitFor(() => expect(texts).toEqual(["a+b"]));
+
+      png = false;
+      const plain = at(ed, view, doc, doc.indexOf("a+b") + 1);
+      expect(plain?.clipboard?.copyAs?.map((item) => item.icon), "senza PNG negli appunti, niente immagine").toEqual(["copy-latex", "copy-equation"]);
+      ed.destroy();
+    } finally {
+      undeclare();
+    }
   });
 
   it("nel testo semplice ci sono il blocco da inserire e «Trasforma il blocco», in Lettura «Modifica qui»", () => {
     const { ed, view } = editor();
     ed.setMode("source");
     const text = at(ed, view, "Un paragrafo\n", 3);
-    expect(text?.target.kind).toBe("text");
+    // La testata dice il paragrafo con le sue prime parole; poi «Trasforma il
+    // blocco ▸» e «Inserisci un blocco… /», come nel prototipo.
+    expect(text?.target).toMatchObject({ kind: "text", name: "Un paragrafo" });
+    expect(contextLabels(text)[0]).toBe(t("editor_menu.transform_block"));
+    expect(at(ed, view, "Una frase molto lunga che non entra nella testata del menu\n", 3)?.target.name).toBe("Una frase molto lunga che non ent…");
+    expect(at(ed, view, "Uno\n\n\nDue\n", 5)?.target.name).toBe(t("editor_menu.head.empty"));
     expect(entryOf(text, t("editor_menu.transform_block"))?.items?.length).toBeGreaterThan(6);
     expect(text?.clipboard?.offers).toMatchObject({ paste: true, "paste-plain": true });
     ed.setMode("reading");
@@ -715,6 +1106,38 @@ describe("le azioni dell'editor della superficie", () => {
     expect(reading?.target).toMatchObject({ kind: "page", label: t("editor_menu.head.reading") });
     expect(contextLabels(reading)[0]).toBe(t("editor_menu.edit_here"));
     ed.destroy();
+  });
+
+  it("«Inserisci un blocco…» in una nota CRLF apre il «/» su una riga vera, come in LF (#394)", () => {
+    const slash = {
+      currentDoc: () => "notes/current.md",
+      onEffect: vi.fn(),
+      notify: vi.fn(),
+      flushPendingSave: vi.fn(async () => []),
+      publishContext: vi.fn(async () => {}),
+      menu: {
+        enabled: () => true,
+        panel: () => ({ dom: document.createElement("div"), listId: "lista", update() {}, key: () => false, placed() {}, close() {} }),
+        chosen: vi.fn(),
+        palette: vi.fn(),
+      },
+    } satisfies EditorSlashHost;
+    for (const nl of ["\n", "\r\n"]) {
+      const { ed, view } = editor(() => {}, slash);
+      ed.setMode("source");
+      const menu = at(ed, view, `Un paragrafo${nl}fine`, 3);
+      // Come nel prototipo: «Trasforma il blocco ▸», poi «Inserisci un
+      // blocco… /», con la sua figura.
+      expect(contextLabels(menu).slice(0, 2)).toEqual([t("editor_menu.transform_block"), t("editor_menu.insert_block")]);
+      expect(entryOf(menu, t("editor_menu.insert_block"))).toMatchObject({ icon: "plus", chord: "/" });
+      // La testata dice come comincia il paragrafo, dalla sua prima riga.
+      expect(menu?.target.name).toBe("Un paragrafo");
+      expect(at(ed, view, `Un paragrafo${nl}fine`, `Un paragrafo${nl}fi`.length)?.target.name).toBe("Un paragrafo");
+      entryOf(menu, t("editor_menu.insert_block"))!.run!();
+      expect(ed.buffer.getDoc()).toBe(`Un paragrafo${nl}/${nl}fine`);
+      expect(view().state.selection.main.head).toBe("Un paragrafo\n/".length);
+      ed.destroy();
+    }
   });
 
   it("il tasto destro su un richiamo offre di eliminare la nota, e porta lì il cursore", () => {
@@ -786,6 +1209,35 @@ describe("le tabelle della superficie Markdown", () => {
     ed.destroy();
   });
 
+  // #411 A-04: in Scrittura la tabella è nel modo foglio (`docs/product/
+  // editor-tables.md`): le frecce dal testo entrano nella griglia e il cursore
+  // diventa la cella attiva, la stessa che dà il clic su una cella, col fuoco
+  // sulla griglia e nessuna cella aperta.
+  it("la freccia giù dalla riga sopra entra sulla prima cella, la su dalla riga sotto sull'ultima riga", () => {
+    const { ed, parent, view } = editor();
+    // La riga vuota dopo la tabella: «sotto» attaccata sarebbe una sua riga.
+    ed.buffer.setDoc(`sopra\n${table}\nsotto`);
+    const press = (key: string) => view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+    );
+    const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
+    const active = () => parent.querySelector(".tb-cell.is-active")?.textContent;
+    view().focus();
+    view().dispatch({ selection: { anchor: 2 } });
+    expect(press("ArrowDown")).toBe(false);
+    expect(document.activeElement).toBe(grid);
+    expect(active()).toBe("a");
+    expect(parent.querySelector(".tb-input")).toBeNull();
+
+    view().focus();
+    view().dispatch({ selection: { anchor: ed.buffer.getDoc().length - "sotto".length - 1 } });
+    expect(press("ArrowUp")).toBe(false);
+    expect(document.activeElement).toBe(grid);
+    expect(active()).toBe("1");
+    expect(parent.querySelector(".tb-input")).toBeNull();
+    ed.destroy();
+  });
+
   it("con la griglia a fuoco la barra agisce sulle sue celle", () => {
     const texts: string[] = [];
     const { ed, parent } = editor((text) => texts.push(text));
@@ -797,6 +1249,47 @@ describe("le tabelle della superficie Markdown", () => {
     expect(ed.buffer.getDoc()).toBe("| **a** | b |\n| --- | --- |\n| 1 | 2 |\n");
     expect(texts[texts.length - 1]).toBe(ed.buffer.getDoc());
     expect(ed.editorActions.state("markdown.bold").active).toBe(true);
+    ed.destroy();
+  });
+
+  it("le celle scelte seguono la tabella quando cambia senza cambiare la scelta: annulla, ripeti, disco", () => {
+    const { ed, parent } = editor();
+    ed.buffer.setDoc("| a |\n| --- |\n| 1 |\n| 2 |\n");
+    const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
+    grid.focus();
+    const press = (key: string, shiftKey = false) =>
+      grid.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    press("ArrowDown");
+    press("ArrowDown", true);
+    const values = () => [...(ed.cellSelection!.read()?.values() ?? [])];
+    expect(values()).toEqual(["1", "2"]);
+    const heard = vi.fn();
+    const stop = ed.cellSelection!.subscribe(heard);
+    // Una modifica dalla barra, poi annulla: la somma deve rileggere.
+    expect(ed.editorActions.run("markdown.bold")).toBe(true);
+    heard.mockClear();
+    expect(ed.undo()).toBe(true);
+    expect(heard).toHaveBeenCalled();
+    expect(values()).toEqual(["1", "2"]);
+    // La stessa nota ricaricata dal disco con altri numeri.
+    heard.mockClear();
+    ed.buffer.syncDoc("| a |\n| --- |\n| 5 |\n| 7 |\n");
+    expect(heard).toHaveBeenCalled();
+    expect(values()).toEqual(["5", "7"]);
+    stop();
+    ed.destroy();
+  });
+
+  it("le celle scelte portano la lingua della nota, anche scritta «it_IT»", () => {
+    const { ed, parent } = editor();
+    ed.buffer.setDoc("---\nlang: it_IT\n---\n| a |\n| --- |\n| 1.240 |\n| 860 |\n");
+    const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
+    grid.focus();
+    const press = (key: string, shiftKey = false) =>
+      grid.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+    press("ArrowDown");
+    press("ArrowDown", true);
+    expect(ed.cellSelection!.read()?.locale).toBe("it-IT");
     ed.destroy();
   });
 });
@@ -907,9 +1400,73 @@ describe("i disegni incorporati nella Lettura", () => {
     }
     expect(host.closed).toHaveLength(10);
   });
+
+  it("un <img src> scritto in HTML nella nota si risolve come l'immagine Markdown", async () => {
+    drawingHost(() => "Ciclo");
+    const { ed, reading } = editor();
+    try {
+      ed.setMode("reading");
+      ed.buffer.setDoc('<img src="../disegni/acqua.svg" alt="scritta">\n');
+      await vi.waitFor(() => expect(reading().querySelector("img")?.getAttribute("src")).toMatch(/^fub-asset:/));
+      const img = reading().querySelector<HTMLImageElement>("img")!;
+      expect(img.dataset.vaultId).toBe(ACQUA);
+      expect(img.getAttribute("data-vault-src")).toBe("../disegni/acqua.svg");
+    } finally {
+      ed.destroy();
+      vi.restoreAllMocks();
+    }
+  });
 });
 
-describe("i Blocchi in due riquadri (H16)", () => {
+describe("Scrittura: i Blocchi dentro la resa viva (T3)", () => {
+  it("si apre in Scrittura, coi Blocchi montati dal primo disegno; Sorgente e Lettura non li hanno", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("# Titolo\n\nUno\n\nDue");
+    expect(ed.modes.map((mode) => mode.id)).toEqual(["source", "live_preview", "reading"]);
+    expect(ed.modes.map((mode) => mode.label())).toEqual(["Sorgente", "Scrittura", "Lettura"]);
+    expect(ed.defaultMode).toBe("live_preview");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull();
+    ed.setMode("source");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-handles")).toBeNull();
+    ed.setMode("live_preview");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull();
+    ed.destroy();
+  });
+
+  it("chi chiede i Blocchi di prima ottiene Scrittura; un id che la nota non conosce lancia", () => {
+    const { ed, parent } = editor();
+    ed.setMode("source");
+    ed.setMode("blocks");
+    expect(parent.dataset.markdownMode).toBe("live_preview");
+    expect(() => ed.setMode("wysiwyg")).toThrow(RangeError);
+    ed.destroy();
+  });
+
+  it("in sola lettura niente maniglie né strumenti della testata, e la Lettura resta possibile", async () => {
+    const { ed, view, reading } = editor();
+    ed.buffer.setDoc("---\nicon: 🧳\n---\nUno\n\nDue");
+    ed.setReadOnly(true);
+    view().focus();
+    view().dispatch({ selection: { anchor: view().state.doc.length } });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(view().scrollDOM.querySelector<HTMLElement>(".cm-fub-block-handles")!.hidden).toBe(true);
+    expect(view().dom.querySelector(".cm-fub-page-tools")).toBeNull();
+    ed.setMode("reading");
+    expect(reading().textContent).toContain("Due");
+    ed.destroy();
+  });
+
+  it("le maniglie e gli strumenti della testata dichiarano la loro presenza (al passaggio)", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("---\nicon: 🧳\n---\nUno\n\nDue");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-handles")?.getAttribute("data-presence")).toBe("hover");
+    expect(view().scrollDOM.querySelector(".cm-fub-block-drop")?.getAttribute("data-presence")).toBe("request");
+    expect(view().dom.querySelector(".cm-fub-page-tools")?.getAttribute("data-presence")).toBe("hover");
+    ed.destroy();
+  });
+});
+
+describe("Scrittura in due riquadri (H16)", () => {
   it("la selezione di blocchi resta del suo riquadro e le modifiche dell'altro non sono battute", async () => {
     const { blockSelection } = await import("./blocks/selection");
     const doc = "Uno\n\nDue\n\nTre";
@@ -917,9 +1474,8 @@ describe("i Blocchi in due riquadri (H16)", () => {
     const source = editor();
     blocks.ed.buffer.setDoc(doc);
     source.ed.buffer.setDoc(doc);
-    blocks.ed.setMode("blocks");
     source.ed.setMode("source");
-    await vi.waitFor(() => expect(blocks.view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull());
+    expect(blocks.view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull();
 
     blocks.view().dispatch({ selection: { anchor: doc.indexOf("Tre") } });
     blocks.view().contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -938,5 +1494,204 @@ describe("i Blocchi in due riquadri (H16)", () => {
     expect(source.ed.undo()).toBe(true);
     blocks.ed.destroy();
     source.ed.destroy();
+  });
+});
+
+describe("i commenti nella superficie (T21)", () => {
+  const NOTE = "Il {==passo==}{>>@Anna 2026-11-08: va riscritto<<} poi.\n\nAltro.\n";
+  const COMMENT = "{==passo==}{>>@Anna 2026-11-08: va riscritto<<}";
+  const FROM = NOTE.indexOf("passo");
+  const TO = NOTE.indexOf("==}");
+  const END = NOTE.indexOf(" poi");
+
+  /// Gli appunti di un evento `copy`, `cut` o `paste`, in una mappa.
+  const clipboardEvent = (type: "copy" | "cut" | "paste", data = new Map<string, string>()) => {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        clearData: () => data.clear(),
+        setData: (kind: string, value: string) => void data.set(kind, value),
+        getData: (kind: string) => data.get(kind) ?? "",
+      },
+    });
+    return { event, data };
+  };
+
+  /// Appunti finti con più tipi, che leggono ciò che hanno scritto.
+  const fakeClipboard = () => {
+    const written: Record<string, string>[] = [];
+    const texts: string[] = [];
+    const undeclare = declareClipboard(async (text) => void texts.push(text), {
+      write: async (content) => {
+        const entry: Record<string, string> = {};
+        for (const [type, blob] of Object.entries(content)) entry[type] = await (await blob).text();
+        written.push(entry);
+      },
+      read: async () => {
+        const last = written[written.length - 1] ?? {};
+        return [{ types: Object.keys(last), getType: async (type: string) => new Blob([last[type] ?? ""], { type }) }];
+      },
+      supports: () => true,
+    });
+    return { written, texts, undeclare };
+  };
+
+  it("Copia e «Copia come» dal menu non portano i segni nascosti, e le parole della selezione sono quelle che si leggono", async () => {
+    const clipboard = fakeClipboard();
+    try {
+      const { ed, view } = editor();
+      ed.setMode("live_preview");
+      ed.buffer.setDoc(NOTE);
+      // Dal passo a « poi»: dentro ci sono la chiusura e il messaggio, nascosti.
+      view().dispatch({ selection: { anchor: FROM, head: END + 4 } });
+      const menu = ed.contextMenu!(null)!;
+      expect(menu.target).toMatchObject({ kind: "selection", name: t("editor_menu.words.many", { count: 2 }) });
+      const copyAs = (label: string) => menu.clipboard!.copyAs!.find((item) => item.label === label)!.run!();
+      copyAs(t("editor_menu.copy_as.markdown"));
+      copyAs(t("editor_menu.copy_as.text"));
+      copyAs(t("editor_menu.copy_as.html"));
+      await vi.waitFor(() => expect(clipboard.texts).toHaveLength(3));
+      expect(clipboard.texts.slice(0, 2)).toEqual(["passo poi", "passo poi"]);
+      expect(clipboard.texts[2]).not.toContain("riscritto");
+      menu.clipboard!.run("copy");
+      await vi.waitFor(() => expect(clipboard.written).toHaveLength(1));
+      expect(clipboard.written[0]!["text/plain"]).toBe("passo poi");
+      // In Sorgente i segni si vedono, e si copiano come sono scritti.
+      ed.setMode("source");
+      view().dispatch({ selection: { anchor: FROM, head: END + 4 } });
+      ed.contextMenu!(null)!.clipboard!.copyAs!.find((item) => item.label === t("editor_menu.copy_as.markdown"))!.run!();
+      await vi.waitFor(() => expect(clipboard.texts).toHaveLength(4));
+      expect(clipboard.texts[3]).toBe(NOTE.slice(FROM, END + 4));
+      ed.destroy();
+    } finally {
+      clipboard.undeclare();
+    }
+  });
+
+  it("tagliare tutto il passo e incollarlo altrove porta il commento col testo; il testo semplice resta senza segni", () => {
+    const { ed, view } = editor();
+    ed.setMode("live_preview");
+    ed.buffer.setDoc(NOTE);
+    view().dispatch({ selection: { anchor: FROM, head: TO } });
+    view().focus();
+    for (const toast of document.querySelectorAll(".toast")) toast.remove();
+    const cut = clipboardEvent("cut");
+    view().contentDOM.dispatchEvent(cut.event);
+    // Un gesto, un avviso: quello del taglio, non anche quello della cancellazione.
+    expect([...document.querySelectorAll<HTMLElement>(".toast")].map((toast) => toast.dataset["text"]))
+      .toEqual([liveStrings.t("comments.cut")]);
+    expect(cut.data.get("text/plain")).toBe("passo");
+    expect(cut.data.get("application/x-fub-markdown")).toBe(COMMENT);
+    expect(cut.data.get("text/html")).not.toContain("riscritto");
+    expect(ed.buffer.getDoc()).toBe("Il  poi.\n\nAltro.\n");
+    // Incollato dopo «Altro», il commento torna attaccato al testo.
+    view().dispatch({ selection: { anchor: ed.buffer.getDoc().indexOf("Altro") + 5 } });
+    view().contentDOM.dispatchEvent(clipboardEvent("paste", cut.data).event);
+    expect(ed.buffer.getDoc()).toBe(`Il  poi.\n\nAltro${COMMENT}.\n`);
+    ed.destroy();
+  });
+
+  it("la copia del passo e il taglio di una parte restano quelli di sempre", () => {
+    const gesture = (type: "copy" | "cut", head: number) => {
+      const { ed, view } = editor();
+      ed.setMode("live_preview");
+      ed.buffer.setDoc(NOTE);
+      view().dispatch({ selection: { anchor: FROM, head } });
+      view().focus();
+      const { event, data } = clipboardEvent(type);
+      view().contentDOM.dispatchEvent(event);
+      const doc = ed.buffer.getDoc();
+      ed.destroy();
+      return { data, doc };
+    };
+    const copy = gesture("copy", TO);
+    expect(copy.data.get("text/plain")).toBe("passo");
+    expect(copy.data.has("application/x-fub-markdown")).toBe(false);
+    const partial = gesture("cut", FROM + 3);
+    expect(partial.data.get("text/plain")).toBe("pas");
+    expect(partial.data.has("application/x-fub-markdown")).toBe(false);
+    expect(partial.doc).toBe(NOTE.replace("passo", "so"));
+  });
+
+  it("anche Taglia e Incolla dal menu portano il commento; «Incolla come testo» no", async () => {
+    const clipboard = fakeClipboard();
+    try {
+      const { ed, view } = editor();
+      ed.setMode("live_preview");
+      ed.buffer.setDoc(NOTE);
+      view().dispatch({ selection: { anchor: FROM, head: TO } });
+      for (const toast of document.querySelectorAll(".toast")) toast.remove();
+      ed.contextMenu!(null)!.clipboard!.run("cut");
+      await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe("Il  poi.\n\nAltro.\n"));
+      expect(clipboard.written[0]!["text/plain"]).toBe("passo");
+      expect([...document.querySelectorAll<HTMLElement>(".toast")].map((toast) => toast.dataset["text"]))
+        .toEqual([liveStrings.t("comments.cut")]);
+      view().dispatch({ selection: { anchor: ed.buffer.getDoc().indexOf("Altro") + 5 } });
+      ed.contextMenu!(null)!.clipboard!.run("paste-plain");
+      await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe("Il  poi.\n\nAltropasso.\n"));
+      ed.contextMenu!(null)!.clipboard!.run("paste");
+      await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe(`Il  poi.\n\nAltropasso${COMMENT}.\n`));
+      ed.destroy();
+    } finally {
+      clipboard.undeclare();
+    }
+  });
+
+  it("il testo di una scheda della lavagna non è una pagina: niente titolo, proprietà né icona (IMP-044)", () => {
+    const mount = (pageless: boolean) => {
+      const parent = document.createElement("div");
+      document.body.appendChild(parent);
+      const ed = mountMarkdownSurface({ paneId: "card:2", documentId: "Lavagne/c4.canvas#card:2", parent, compact: true, escapeLeaves: true, pageless }, {
+        onChange: () => {},
+        onSelectionChange: () => {},
+        onOpenWikilink: () => {},
+        onOpenPath: () => {},
+        onSearchTag: () => {},
+        completions: { searchNotes: async () => [], listTags: async () => [] },
+      });
+      ed.setMode("live_preview");
+      ed.buffer.setDoc("");
+      return { parent, ed };
+    };
+    // La nota vera ha la testata, col titolo dal nome del file.
+    const page = mount(false);
+    expect(page.parent.querySelector(".cm-fub-page")).not.toBeNull();
+    page.ed.destroy();
+    page.parent.remove();
+    // La scheda di testo mostra solo il corpo.
+    const card = mount(true);
+    expect(card.parent.querySelector(".cm-fub-page")).toBeNull();
+    expect(card.parent.textContent).not.toContain("c4");
+    card.ed.buffer.setDoc("# Titolo\n\nciao\n");
+    expect(card.ed.buffer.getDoc()).toBe("# Titolo\n\nciao\n");
+    expect(card.parent.querySelector(".cm-fub-page")).toBeNull();
+    card.ed.destroy();
+    card.parent.remove();
+  });
+
+  it("nella nota dentro una scheda della lavagna valgono le stesse regole", () => {
+    // La scheda monta questa superficie, compatta e con Esc che esce
+    // (`editors/core/cards/editor-port.ts`).
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const ed = mountMarkdownSurface({ paneId: "card:1", documentId: "notes/scheda.md", parent, compact: true, escapeLeaves: true }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: () => {},
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    ed.setMode("live_preview");
+    ed.buffer.setDoc(NOTE);
+    const view = EditorView.findFromDOM(parent)!;
+    view.dispatch({ selection: { anchor: NOTE.length } });
+    expect(view.contentDOM.querySelector(".cm-line")?.textContent).toBe("Il passo poi.");
+    expect(view.contentDOM.querySelector(".cm-fub-comment-range")?.textContent).toBe("passo");
+    // Una selezione che prende il segno nascosto `{==` cancella il testo e lascia il commento.
+    view.dispatch({ selection: { anchor: 1, head: FROM + 2 } });
+    view.dispatch(view.state.replaceSelection(""), { userEvent: "delete.backward" });
+    expect(ed.buffer.getDoc()).toBe("I{==sso==}{>>@Anna 2026-11-08: va riscritto<<} poi.\n\nAltro.\n");
+    ed.destroy();
   });
 });

@@ -172,6 +172,7 @@ import { installKeys } from "./editor/keys";
 import { installClipboardCommands } from "./editor/clipboard-commands";
 import { installVaultImages } from "./editor/vault-images";
 import { installLife } from "./editor/life";
+import { installGestiMotore, type MotoreDelDisegno } from "../motore/gesti";
 export { DRAW_SCALE_LIMITS } from "./editor/constants";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -247,7 +248,8 @@ export interface DrawPlace {
 /// Il foglio di un profilo che annota una pagina alla volta su un fondo che
 /// non è del documento: la pagina di un PDF.
 export interface DrawSheet {
-  /// La pagina di adesso, nelle coordinate della scena.
+  /// La pagina di adesso, nelle coordinate della scena: un segno nasce solo
+  /// lì, e un gesto che ne esce si ferma al bordo (`page-bounds.ts`).
   page(): Page;
   /// I gruppi della pagina di adesso: si disegnano e si toccano solo loro.
   scope(model: DocumentModel): readonly ContainerNode[];
@@ -330,9 +332,21 @@ export interface DrawEditorOptions {
   /// chiede («Esporta la selezione» dell'ispettore). Senza, il pulsante non
   /// c'è.
   readonly onExport?: (what?: "selection") => void;
+  /// Il motore del disegno (K5): con lui Selezione, Rettangolo, Ellisse,
+  /// Linea e Freccia chiedono a lui che cosa fare (`motore/gesti.ts`).
+  /// Senza, o finché non c'è, gli strumenti fanno da sé, come sempre. Il
+  /// foglio delle annotazioni non lo usa.
+  readonly motore?: MotoreDelDisegno;
   /// Dove stanno barra, colonna, foglio e pannelli (default
   /// `inlineChrome()`: tutto dentro l'editor).
   readonly chrome?: DrawChrome;
+  /// L'editor sta in una scheda (T46, `compact` del montaggio): gli strumenti
+  /// sono una fila sopra il foglio e non una colonna, la barra della
+  /// selezione c'è in ogni spazio, il menu non cambia spazio né colonna, e il
+  /// pannello delle proprietà si apre solo quando serve (un testo da
+  /// scrivere, il suo pulsante) senza che la scelta si ricordi. Default
+  /// `false`.
+  readonly compact?: boolean;
 }
 
 /// Ciò che la finestra «Esporta» chiede al disegno.
@@ -464,6 +478,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installInkGestures(ctx);
   installInserts(ctx);
   installStrokeShapes(ctx);
+  installGestiMotore(ctx);
   installCurvatureTool(ctx);
   installSheetCursor(ctx);
   installInput(ctx);

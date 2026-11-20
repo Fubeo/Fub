@@ -1,18 +1,21 @@
 // Luce, contrasto e preferenze personali: una risoluzione, un foglio montato.
 import { api } from "../host/ipc";
 import { settings } from "../host/query";
-import type { SettingEntry, ThemeInfo, ThemePayload } from "../host/contract";
-import { asPluginError, errorText } from "../host/errors";
+import type { SettingEntry, ThemeFolderCheck, ThemeInfo, ThemeLink, ThemePayload } from "../host/contract";
+import { errorText } from "../host/errors";
 import { onEvent } from "../state/kernel";
+import { settingTouches } from "../state/setting-change";
 import { emit, on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
-import { reportThemeTrouble } from "../ui/notify";
+import { notify, reportThemeTrouble } from "../ui/notify";
 import {
   mount,
   mountPreferences,
   mountThemeBundle,
   validateThemeBundle,
+  mountedCss,
   declareThemeProfile,
+  type ThemeBundle,
   type ThemeBundleManifest,
   type ThemeMountResult,
   type ThemeProfile,
@@ -25,7 +28,7 @@ import { setFrameRatePreference } from "./frame-rate";
 import { setDiagramStylePreference } from "./diagram-style";
 import { setContentLookPreference } from "./content-look";
 import { applyThemeOptions, resolveThemeOptions, type ThemeOption } from "./options";
-import { t } from "../i18n/strings";
+import { plural, t } from "../i18n/strings";
 
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
@@ -35,12 +38,15 @@ export type ReadingFont = string;
 export interface ThemePreviewSelection {
   id: string;
   light: Theme;
+  /** Il contrasto da provare. Assente, vale quello scelto (o del sistema). */
+  contrast?: ContrastLevel;
 }
 
 // Gemelle delle chiavi dichiarate in fub-host/src/settings.rs.
 export const THEME_KEY = "appearance.theme";
 export const CONTRAST_KEY = "appearance.contrast";
 export const DENSITY_KEY = "appearance.density";
+export const BARS_KEY = "appearance.bars";
 export const BODY_KEY = "appearance.body";
 export const LINE_HEIGHT_KEY = "appearance.line-height";
 export const MEASURE_KEY = "appearance.measure";
@@ -55,11 +61,27 @@ export const FRAME_RATE_KEY = "appearance.frame-rate";
 export const DIAGRAM_STYLE_KEY = "appearance.diagram-style";
 export const CONTENT_LOOK_KEY = "appearance.content-look";
 export const COMPACTNESS_KEY = "chrome.compactness";
+/// La modalità sviluppatore e la cartella del tema collegato
+/// (`fub_host::settings::DEVELOPER_MODE`, `DEVELOPER_THEME_FOLDER`): cambiarle
+/// cambia i temi che l'host elenca.
+const DEVELOPER_MODE = "developer.mode";
+export const DEVELOPER_THEME_FOLDER_KEY = "developer.theme-folder";
 const THEME_CACHE = "fub.appearance.theme";
 export const SERIES_THEME_ID = "fub.serie";
 const PREFERENCES_CACHE = "fub.appearance.preferences";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 const CONTRAST_QUERY = "(prefers-contrast: more)";
+/** Il vassoio delle barre (`appearance.bars`): `light` è quello di serie, il
+ *  tono della ricetta; `marked` lo riporta su `--sheet-2`, più staccato dalla
+ *  carta (D6 C). */
+export type Bars = "light" | "marked";
+
+/** Il vassoio di un valore dell'impostazione: uno sconosciuto è il predefinito,
+ *  e non spegne niente. */
+export function barsOf(value: unknown): Bars {
+  return value === "marked" ? "marked" : "light";
+}
+
 export interface AppearancePreferences {
   density: Density;
   body: number;
@@ -102,6 +124,13 @@ export interface ThemeSeries {
   sheet(light: Theme, contrast: ContrastLevel): string;
   /** I token di densità, accento e cornice: ciò che è proprio della serie. */
   tokens(preferences: AppearancePreferences, light: Theme, contrast: ContrastLevel): Record<string, string>;
+  /**
+   * Completa il foglio di un tema installato con i ruoli facoltativi che la
+   * serie sa ricavare dai suoi colori (la cartella del logo, D26). Rende il
+   * foglio com'è quando non c'è niente da aggiungere. Una serie che non lo dà
+   * lascia i fogli dei temi come sono.
+   */
+  completeSheet?(sheet: string, light: Theme, contrast: ContrastLevel): string;
 }
 
 let series: ThemeSeries = SCRITTOIO_SERIES;
@@ -130,6 +159,8 @@ export function declareThemeSeries(next: ThemeSeries): () => void {
 
 let themeChoice: Theme | "" = "";
 let contrastChoice = "";
+/// `appearance.bars`, come l'ha letto l'ultimo giro (o la cache del primo fotogramma).
+let barsChoice: Bars = "light";
 /// `appearance.content-look`, come l'ha letto l'ultimo giro: lo risolve
 /// `content-look.ts` con il contrasto in vigore.
 let contentLookChoice: unknown = undefined;
@@ -270,35 +301,43 @@ export function preferenceTokens(
   return tokens;
 }
 
-function themeBundle(payload: ThemePayload): {
-  manifest: ThemeBundleManifest;
-  sheet: string;
-  skin?: string;
-  assets: Readonly<Record<string, unknown>>;
-} {
+/**
+ * Il fascio da montare per una luce di un tema installato. Un tema che eredita
+ * dalla serie (`extends: "fub.serie"`) e non porta il foglio di questa luce
+ * prende quello di serie della stessa luce e dello stesso contrasto, e porta
+ * con sé la pelle di serie, che resta montata sotto la sua (ADR 0240).
+ * Ereditare da altro che la serie non si sa fare: il fascio parte senza
+ * eredità e il cancello lo rifiuta dicendo da chi voleva ereditare.
+ *
+ * Il foglio portato dal tema passa dalla serie (`completeSheet`) prima del
+ * cancello: aggiunge i ruoli facoltativi che la serie sa ricavare dai colori
+ * del tema, come la cartella del logo (D26).
+ */
+function themeBundle(payload: ThemePayload, light: Theme, contrast: ContrastLevel): ThemeBundle {
+  const inherits = payload.manifest.extends === SERIES_THEME_ID;
+  const own = payload.sheet;
   return {
     manifest: payload.manifest,
-    sheet: payload.sheet,
+    sheet: own !== null && own !== undefined
+      ? series.completeSheet?.(own, light, contrast) ?? own
+      : inherits ? series.sheet(light, contrast) : "",
     skin: payload.skin ?? undefined,
     assets: payload.assets,
+    ...(inherits ? { inherited: { skin: series.skin } } : {}),
   };
 }
 
+// Il motivo per il rapporto del tema: lo dice `errorText`, anche per un
+// oggetto qualunque (la frase della specie, mai il suo JSON).
 function errorDetail(error: unknown): string {
-  if (error instanceof Error || asPluginError(error)) return errorText(error);
-  if (typeof error === "string") return error;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
+  return errorText(error);
 }
 
 function reportLoadFailure(id: string, detail: string): void {
   reportThemeTrouble({
     type: "theme",
     theme: id,
-    reasons: [`fascio non leggibile: ${detail}`],
+    reasons: [t("theme.reason.unreadable", { detail })],
   });
 }
 
@@ -313,13 +352,23 @@ function persistSelection(): void {
   }
 }
 
+/// `data-bars` sulla radice, solo per `marked`: con `light` l'attributo non c'è
+/// e vale il ruolo della ricetta. Si scrive prima di ogni `await`, così il primo
+/// fotogramma ha già il vassoio scelto, anche se il tema si monta dopo.
+function applyBars(): void {
+  if (barsChoice === "marked") document.documentElement.dataset.bars = "marked";
+  else delete document.documentElement.dataset.bars;
+}
+
 async function apply(): Promise<void> {
   const generation = ++applyGeneration;
+  applyBars();
   const light = effectiveTheme(
     previewSelection?.light ?? themeChoice,
     mediaMatches(DARK_QUERY, true),
   );
-  const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+  const contrast =
+    previewSelection?.contrast ?? effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
   setContentLookPreference(contentLookChoice, contrast === "high");
   const requestedId = previewSelection?.id ?? selectedThemeId;
   let mounted: ThemeMountResult | null = null;
@@ -329,18 +378,18 @@ async function apply(): Promise<void> {
   if (requestedId !== SERIES_THEME_ID && !waitingForCatalog) {
     const info = installedThemes.find((theme) => theme.manifest.id === requestedId);
     if (!info) {
-      reportLoadFailure(requestedId, "tema assente dall'inventario");
+      reportLoadFailure(requestedId, t("theme.reason.not_listed"));
     } else if (!info.manifest.lights.includes(light)) {
-      reportLoadFailure(requestedId, `luce ${light} non offerta`);
+      reportLoadFailure(requestedId, t("theme.reason.light_missing", { light }));
     } else {
       try {
         const cached = catalogPayloads.get(`${requestedId}:${light}`);
         const payload = cached ?? (await api.readTheme(requestedId, light));
         if (generation !== applyGeneration) return;
         if (payload.manifest.id !== requestedId || payload.light !== light) {
-          reportLoadFailure(requestedId, "risposta del canale non coerente");
+          reportLoadFailure(requestedId, t("theme.reason.mismatch"));
         } else {
-          mounted = mountThemeBundle(themeBundle(payload), light);
+          mounted = mountThemeBundle(themeBundle(payload, light, contrast), light);
           if (mounted.mounted) actualId = requestedId;
         }
       } catch (error) {
@@ -392,8 +441,50 @@ async function apply(): Promise<void> {
   emit("theme");
 }
 
+/// Le chiavi che `reread` legge. Lo zoom e i frammenti CSS hanno i loro
+/// ascoltatori (`state/zoom.ts`, `snippets.ts`), e la cornice non è del tema:
+/// rimontare il tema per loro costava un rimontaggio intero a ogni gesto.
+const THEME_READS: ReadonlySet<string> = new Set([
+  THEME_KEY, THEME_ID_KEY, CONTRAST_KEY, MOTION_KEY, FRAME_RATE_KEY, DIAGRAM_STYLE_KEY,
+  CONTENT_LOOK_KEY, DENSITY_KEY, BARS_KEY, BODY_KEY, LINE_HEIGHT_KEY, MEASURE_KEY, FONT_KEY,
+  UI_FONT_KEY, MONO_FONT_KEY, ACCENT_KEY, COMPACTNESS_KEY,
+]);
+
+/// Un cambio di `key` può cambiare il tema montato? Le chiavi lette da
+/// `reread` e le scelte di un tema (`<id>:<nome>`, `options.ts`): della serie e
+/// dei temi installati, o di qualunque tema finché il catalogo non è letto.
+function themeWatchesSetting(key: string): boolean {
+  if (THEME_READS.has(key)) return true;
+  const colon = key.indexOf(":");
+  if (colon <= 0) return false;
+  const id = key.slice(0, colon);
+  return !catalogLoaded || id === SERIES_THEME_ID ||
+    installedThemes.some((installed) => installed.manifest.id === id);
+}
+
 function valueOf(entries: Awaited<ReturnType<typeof settings>>, key: string): unknown {
   return entries.find((entry) => entry.spec.key === key)?.value;
+}
+
+/// La rilettura in volo per un `setting_changed`, e se un altro è arrivato
+/// mentre volava. Un cambio di profilo manda un evento per chiave: senza
+/// questo ogni evento rimontava il tema per conto suo. Con questo le
+/// riletture sono al più due per raffica, e l'ultima parte dopo l'ultimo
+/// evento arrivato, quindi legge tutto ciò che è stato scritto.
+let rereadInFlight: Promise<void> | null = null;
+let rereadAgain = false;
+
+function rereadForSetting(): void {
+  if (rereadInFlight) {
+    rereadAgain = true;
+    return;
+  }
+  rereadInFlight = reread().finally(() => {
+    rereadInFlight = null;
+    if (!rereadAgain) return;
+    rereadAgain = false;
+    rereadForSetting();
+  });
 }
 
 async function reread(): Promise<void> {
@@ -424,6 +515,7 @@ async function reread(): Promise<void> {
   setFrameRatePreference(valueOf(entries, FRAME_RATE_KEY));
   setDiagramStylePreference(valueOf(entries, DIAGRAM_STYLE_KEY));
   contentLookChoice = valueOf(entries, CONTENT_LOOK_KEY);
+  barsChoice = barsOf(valueOf(entries, BARS_KEY));
   preferences = normalizedPreferences({
     density: valueOf(entries, DENSITY_KEY) as Density,
     body: valueOf(entries, BODY_KEY) as number,
@@ -464,7 +556,7 @@ async function reread(): Promise<void> {
     persistSelection();
     localStorage.setItem(
       PREFERENCES_CACHE,
-      JSON.stringify({ contrast: contrastChoice, preferences }),
+      JSON.stringify({ contrast: contrastChoice, preferences, bars: barsChoice }),
     );
   } catch {
     // Il valore vivo è già in memoria; la cache serve solo al primo fotogramma.
@@ -473,10 +565,33 @@ async function reread(): Promise<void> {
   await apply();
 }
 
+/**
+ * Un tema installato che la shell ha lasciato fuori dal catalogo: il cancello
+ * l'ha rifiutato (`validateThemeBundle`, i motivi così come sono) o il fascio
+ * non si è letto. `light` è la luce controllata, `null` se il fascio non è
+ * arrivato; `at` è l'ora del tentativo (`Date.now`).
+ */
+export interface ThemeRejection {
+  readonly id: string;
+  readonly name: string;
+  readonly light: Theme | null;
+  readonly reasons: readonly string[];
+  readonly at: number;
+}
+
+/// I rifiuti dell'ultima lettura del catalogo: li mostra Aspetto come diagnosi.
+let catalogRejections: readonly ThemeRejection[] = [];
+/// Il giro di lettura del catalogo: una lettura superata da una rilettura non
+/// scrive più niente.
+let catalogRound = 0;
+
 async function readCatalog(): Promise<ThemeInfo[]> {
   if (catalogLoaded) return installedThemes;
   if (!catalogRequest) {
-    catalogRequest = api
+    const round = ++catalogRound;
+    const payloads = new Map<string, ThemePayload>();
+    const rejected: ThemeRejection[] = [];
+    const request: Promise<ThemeInfo[]> = api
       .listThemes()
       .then(async (themes) => {
         const verified = await Promise.all(
@@ -488,30 +603,370 @@ async function readCatalog(): Promise<ThemeInfo[]> {
                 // Un fascio che il cancello rifiuta resta installato ma fuori
                 // dal catalogo, e la persona sa perché: è anche il caso di un
                 // tema `theme-1`, scritto per la shell di prima.
-                const reasons = validateThemeBundle(themeBundle(payload), light);
+                // Il foglio ereditato si misura col contrasto di adesso: è
+                // quello che `apply` monterà.
+                const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+                const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
                 if (reasons.length > 0) {
-                  reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
+                  if (round === catalogRound) {
+                    reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
+                  }
+                  rejected.push({ id: info.manifest.id, name: info.manifest.name, light, reasons, at: Date.now() });
                   return null;
                 }
-                catalogPayloads.set(`${info.manifest.id}:${light}`, payload);
+                payloads.set(`${info.manifest.id}:${light}`, payload);
               }
               return info;
             } catch (error) {
-              reportLoadFailure(info.manifest.id, errorDetail(error));
+              const detail = errorDetail(error);
+              if (round === catalogRound) reportLoadFailure(info.manifest.id, detail);
+              rejected.push({
+                id: info.manifest.id,
+                name: info.manifest.name,
+                light: null,
+                reasons: [t("theme.reason.unreadable", { detail })],
+                at: Date.now(),
+              });
               return null;
             }
           }),
         );
-        installedThemes = verified.filter((info): info is ThemeInfo => info !== null);
+        // Superata da una rilettura: il risultato è di quella.
+        if (round !== catalogRound) return readCatalog();
+        const accepted = verified.filter((info): info is ThemeInfo => info !== null);
+        keepLastGoodLinked(themes, accepted, payloads);
+        installedThemes = accepted;
+        catalogPayloads = payloads;
+        catalogRejections = rejected;
         catalogLoaded = true;
         return installedThemes;
       })
       .catch((error: unknown) => {
-        catalogRequest = null;
+        if (round === catalogRound) catalogRequest = null;
         throw error;
       });
+    catalogRequest = request;
   }
   return catalogRequest;
+}
+
+/**
+ * I temi che l'ultima lettura del catalogo ha lasciato fuori, coi motivi:
+ * la diagnosi di Aspetto. Vuoto finché il catalogo non è letto. Il tema
+ * collegato non c'è: la sua diagnosi è in `linkedTheme()`.
+ */
+export function themeRejections(): readonly ThemeRejection[] {
+  const id = linked?.link.id ?? null;
+  return id === null ? catalogRejections : catalogRejections.filter((rejection) => rejection.id !== id);
+}
+
+// --- il tema collegato (PA T37) ---------------------------------------------
+//
+// Una cartella che l'host legge al suo posto e guarda: a ogni salvataggio
+// arriva `fub://theme-changed` con lo stato della cartella. Se il tema è quello
+// in uso o in anteprima si rilegge e si rimonta; un fascio nuovo rifiutato
+// (dal cancello della shell o dalle porte dell'host) **lascia l'ultimo buono**:
+// i fasci di `catalogPayloads` restano quelli, e ogni `apply` rimonta loro.
+// Un rimontaggio alla volta: un evento che arriva mentre uno è in volo aspetta,
+// e di quelli che aspettano vale l'ultimo.
+
+/** Il tema collegato visto dalla shell: lo stato dell'host e la sua storia qui. */
+export interface LinkedThemeStatus {
+  /** Lo stato dell'ultimo campanello o dell'ultima domanda all'host. */
+  readonly link: ThemeLink;
+  /** Da quando questa finestra lo sa collegato. */
+  readonly since: number;
+  /** L'ultimo rimontaggio riuscito, coi file salvati. */
+  readonly reloaded: { readonly at: number; readonly changed: readonly string[] } | null;
+  /** L'ora dell'ultimo fascio buono, `null` se non ce n'è stato uno. */
+  readonly goodAt: number | null;
+  /** L'ora dell'ultimo tentativo non riuscito. */
+  readonly attemptAt: number | null;
+  /** I motivi del cancello della shell, se l'ultimo tentativo li ha avuti. */
+  readonly rejection: ThemeRejection | null;
+}
+
+let linked: LinkedThemeStatus | null = null;
+/// Cambia a ogni collegamento e scollegamento: un rimontaggio cominciato prima
+/// non scrive più niente.
+let linkGeneration = 0;
+let linkInFlight = false;
+let linkWaiting: ThemeLink | null = null;
+/// La cartella collegata secondo l'ultima risposta dell'host: `undefined`
+/// finché non l'ha detto, `null` dopo «Scollega». Un campanello per un'altra
+/// cartella (partito prima dello scollegamento) non rimonta niente.
+let knownLinkFolder: string | null | undefined = undefined;
+
+/** Il tema collegato com'è adesso per la shell, `null` se non ce n'è uno. */
+export function linkedTheme(): LinkedThemeStatus | null {
+  return linked;
+}
+
+function updateLinked(link: ThemeLink, patch: Partial<Omit<LinkedThemeStatus, "link">> = {}): void {
+  const same = linked !== null && linked.link.folder === link.folder;
+  const base: LinkedThemeStatus = same
+    ? linked!
+    : { link, since: Date.now(), reloaded: null, goodAt: null, attemptAt: null, rejection: null };
+  linked = { ...base, ...patch, link };
+}
+
+/// I temi in sviluppo che una lettura del catalogo ha rifiutato tornano con
+/// l'ultimo fascio buono, se c'era: un salvataggio a metà non toglie il tema.
+/// Vale per i rifiuti del cancello della shell (l'host lo elenca, la shell no)
+/// e per quelli delle porte dell'host (`refused`, `unreadable`: l'host non lo
+/// elenca più, ma la cartella è ancora quella collegata).
+function keepLastGoodLinked(listed: ThemeInfo[], accepted: ThemeInfo[], payloads: Map<string, ThemePayload>): void {
+  const ids = new Set(listed.filter((info) => info.trust === "development").map((info) => info.manifest.id));
+  const held = linked?.link;
+  if (held !== undefined && held.id !== null && (held.state === "refused" || held.state === "unreadable")) {
+    ids.add(held.id);
+  }
+  for (const id of ids) {
+    if (accepted.some((theme) => theme.manifest.id === id)) continue;
+    const good = installedThemes.find((theme) => theme.manifest.id === id && theme.trust === "development");
+    if (!good) continue;
+    const lights = good.manifest.lights.map((light) => catalogPayloads.get(`${good.manifest.id}:${light}`));
+    if (lights.some((payload) => payload === undefined)) continue;
+    accepted.push(good);
+    for (const payload of lights) payloads.set(`${good.manifest.id}:${payload!.light}`, payload!);
+  }
+}
+
+/// Un rimontaggio del collegato sta per scrivere il catalogo: una lettura in
+/// volo, partita prima del salvataggio, non deve rimettere dopo di lui il
+/// fascio vecchio. Il suo giro è superato, e chi l'aspetta riceve una
+/// lettura nuova (che vede il salvataggio).
+function supersedeCatalogRead(): void {
+  catalogRound += 1;
+  if (!catalogLoaded) catalogRequest = null;
+}
+
+/// Toglie dal catalogo i temi in sviluppo (ce n'è al più uno) e i loro fasci.
+function dropLinkedFromCatalog(): void {
+  for (const info of installedThemes.filter((theme) => theme.trust === "development")) {
+    for (const light of info.manifest.lights) catalogPayloads.delete(`${info.manifest.id}:${light}`);
+  }
+  installedThemes = installedThemes.filter((theme) => theme.trust !== "development");
+}
+
+function linkSettled(): void {
+  emit("theme-link");
+}
+
+/**
+ * Chiede all'host com'è il tema collegato (Aspetto, l'avvio). `null` se
+ * nessuna cartella è collegata o la modalità sviluppatore è spenta.
+ */
+export async function refreshThemeLink(): Promise<LinkedThemeStatus | null> {
+  const generation = linkGeneration;
+  const link = await api.themeLink();
+  if (generation !== linkGeneration) return linked;
+  knownLinkFolder = link?.folder ?? null;
+  if (link === null) {
+    linked = null;
+    return null;
+  }
+  updateLinked(link);
+  adoptCatalogVerdict(link);
+  return linked;
+}
+
+/// Ciò che l'ultima lettura del catalogo ha deciso del tema collegato, se la
+/// storia di questa finestra non lo sa ancora: preso (l'ultimo buono è di
+/// adesso) o rifiutato coi motivi del cancello.
+function adoptCatalogVerdict(link: ThemeLink): void {
+  if (linked === null || linked.goodAt !== null || linked.attemptAt !== null || link.id === null) return;
+  const accepted = installedThemes.some((theme) => theme.manifest.id === link.id && theme.trust === "development");
+  if (accepted) {
+    updateLinked(link, { goodAt: Date.now() });
+    return;
+  }
+  const rejection = catalogRejections.find((old) => old.id === link.id) ?? null;
+  if (rejection !== null) updateLinked(link, { attemptAt: rejection.at, rejection });
+}
+
+/**
+ * Un collegamento nuovo (`link_theme_folder`) o uno scollegamento: la storia
+ * di prima non vale più, il catalogo si rilegge e chi è in uso si rimonta.
+ */
+export async function themeLinkChanged(link: ThemeLink | null): Promise<void> {
+  linkGeneration += 1;
+  linkWaiting = null;
+  linked = null;
+  knownLinkFolder = link?.folder ?? null;
+  if (link !== null) updateLinked(link);
+  await reloadThemeCatalog().catch(() => []);
+  if (link !== null) adoptCatalogVerdict(link);
+  linkSettled();
+}
+
+/** Il campanello `fub://theme-changed`: un rimontaggio in volo, al più uno che aspetta. */
+export function themeFolderChanged(link: ThemeLink): Promise<void> {
+  if (knownLinkFolder !== undefined && knownLinkFolder !== link.folder) return Promise.resolve();
+  if (linkInFlight) {
+    linkWaiting = link;
+    return Promise.resolve();
+  }
+  return runLinked(link);
+}
+
+async function runLinked(link: ThemeLink): Promise<void> {
+  linkInFlight = true;
+  const epoch = catalogEpoch;
+  try {
+    await remountLinked(link, epoch, linkGeneration);
+  } finally {
+    linkInFlight = false;
+    const next = linkWaiting;
+    linkWaiting = null;
+    if (next !== null && epoch === catalogEpoch) await runLinked(next);
+  }
+}
+
+/// Il tema mostrato adesso: quello in anteprima, o quello scelto.
+function shownThemeId(): string {
+  return previewSelection?.id ?? selectedThemeId;
+}
+
+async function remountLinked(link: ThemeLink, epoch: number, generation: number): Promise<void> {
+  const current = (): boolean => epoch === catalogEpoch && generation === linkGeneration;
+  const at = Date.now();
+  const id = link.id;
+  const name = link.name ?? link.id ?? "";
+  if (link.state === "missing") {
+    const wasShown = id !== null && shownThemeId() === id;
+    updateLinked(link, { attemptAt: at, rejection: null });
+    supersedeCatalogRead();
+    dropLinkedFromCatalog();
+    if (previewSelection?.id === id) previewSelection = null;
+    if (wasShown) notify(t("theme.linked.missing", { series: series.manifest.name }), "guasto");
+    await reread();
+    if (current()) linkSettled();
+    return;
+  }
+  if (link.state === "collision") {
+    updateLinked(link, { attemptAt: at, rejection: null });
+    if (previewSelection?.id === id) previewSelection = null;
+    await reloadThemeCatalog().catch(() => []);
+    if (current()) linkSettled();
+    return;
+  }
+  if (link.state !== "ready" || id === null) {
+    // Le porte dell'host hanno rifiutato il salvataggio (un manifest a metà),
+    // o il disco non legge: resta l'ultimo buono, e la diagnosi lo dice.
+    updateLinked(link, { attemptAt: at, rejection: null });
+    notify(plural(1, "theme.linked.rejected.one", "theme.linked.rejected", { name }), "guasto");
+    linkSettled();
+    return;
+  }
+
+  let info: ThemeInfo | undefined;
+  const payloads: ThemePayload[] = [];
+  let rejection: ThemeRejection | null = null;
+  try {
+    const listed = await api.listThemes();
+    if (!current()) return;
+    info = listed.find((theme) => theme.manifest.id === id && theme.trust === "development");
+    if (info === undefined) throw new Error(t("theme.reason.not_listed"));
+    const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+    for (const light of info.manifest.lights) {
+      const payload = await api.readTheme(id, light);
+      if (!current()) return;
+      if (payload.manifest.id !== id || payload.light !== light) throw new Error(t("theme.reason.mismatch"));
+      const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
+      if (reasons.length > 0) {
+        rejection = { id, name: info.manifest.name, light, reasons, at };
+        break;
+      }
+      payloads.push(payload);
+    }
+  } catch (error) {
+    if (!current()) return;
+    rejection = { id, name, light: null, reasons: [t("theme.reason.unreadable", { detail: errorDetail(error) })], at };
+  }
+  if (!current()) return;
+  if (rejection !== null || info === undefined) {
+    const reasons = rejection?.reasons ?? [];
+    updateLinked(link, { attemptAt: at, rejection });
+    notify(
+      plural(Math.max(1, reasons.length), "theme.linked.rejected.one", "theme.linked.rejected", {
+        name: rejection?.name ?? name,
+      }),
+      "guasto",
+    );
+    linkSettled();
+    return;
+  }
+  // Il fascio nuovo è buono: prende il posto del vecchio, e chi lo mostra lo
+  // rimonta (`reread` rifà anche la scelta: un tema che all'avvio non reggeva
+  // e ora regge torna quello scelto).
+  supersedeCatalogRead();
+  dropLinkedFromCatalog();
+  installedThemes = [...installedThemes, info];
+  for (const payload of payloads) catalogPayloads.set(`${id}:${payload.light}`, payload);
+  catalogRejections = catalogRejections.filter((old) => old.id !== id);
+  updateLinked(link, { goodAt: at, reloaded: { at, changed: link.changed }, attemptAt: null, rejection: null });
+  await reread();
+  if (current()) linkSettled();
+}
+
+/// All'avvio, con la modalità sviluppatore accesa: se la cartella collegata
+/// non c'è più lo si dice, una volta, e l'avvio non si ferma.
+async function checkLinkAtStart(epoch: number): Promise<void> {
+  const developer = settingEntries.some((entry) => entry.spec.key === DEVELOPER_MODE && entry.value === true);
+  if (!developer) return;
+  const status = await refreshThemeLink().catch(() => null);
+  if (epoch !== catalogEpoch || status === null) return;
+  if (status.link.state === "missing") {
+    notify(t("theme.linked.missing_at_start", { folder: status.link.folder, series: series.manifest.name }), "guasto");
+  }
+  linkSettled();
+}
+
+/**
+ * Il cancello del catalogo sulla cartella di un tema **prima** di installarla
+ * (`check_theme_folder`): gli stessi controlli di `readCatalog`, sullo stesso
+ * fascio e col contrasto di adesso, così un tema che il catalogo lascerebbe
+ * fuori non arriva mai nella cartella dei temi. Una voce per luce rifiutata,
+ * coi motivi così come sono; vuoto vuol dire che il catalogo lo prenderebbe.
+ *
+ * La pelle e i byte degli asset che il cancello legge (i caratteri e il set di
+ * icone) arrivano una volta per tutte le luci; gli altri asset arrivano per
+ * nome, luce per luce, e il cancello ne controlla solo la presenza: qui stanno
+ * nel fascio senza byte. Il fascio serve solo al cancello, non si monta.
+ */
+export function vetThemeFolder(
+  check: Extract<ThemeFolderCheck, { outcome: "ready" }>,
+): { light: Theme; reasons: string[] }[] {
+  const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+  const rejected: { light: Theme; reasons: string[] }[] = [];
+  for (const light of check.manifest.lights) {
+    const read = check.lights.find((candidate) => candidate.light === light);
+    if (read === undefined) {
+      rejected.push({ light, reasons: [t("theme.reason.unreadable", { detail: `${check.manifest.id}:${light}` })] });
+      continue;
+    }
+    const assets: Record<string, readonly number[]> = {};
+    for (const name of read.named) assets[name] = [];
+    Object.assign(assets, check.assets);
+    const payload: ThemePayload = { manifest: check.manifest, light, sheet: read.sheet, skin: check.skin, assets };
+    const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
+    if (reasons.length > 0) rejected.push({ light, reasons });
+  }
+  return rejected;
+}
+
+/**
+ * Rilegge il catalogo dei temi dopo un'installazione: un tema nuovo entra (o
+ * resta fuori coi suoi motivi), e se quello sostituito è in uso si rimonta
+ * col fascio nuovo. Una lettura in volo è superata: risponde questa.
+ */
+export async function reloadThemeCatalog(): Promise<ThemeInfo[]> {
+  catalogRound += 1;
+  catalogLoaded = false;
+  catalogRequest = null;
+  await reread();
+  return readCatalog();
 }
 
 /** I temi installati già validati dal backend, per il pannello dedicato. */
@@ -521,8 +976,10 @@ export async function themeCatalog(): Promise<ThemeInfo[]> {
 
 /** Core is bundled with the host. Installed themes are not executable code,
  * but remain community-owned CSS subject to the theme-1 trust gate. */
-export function themeTrust(id: string): "core" | "community" {
-  return id === SERIES_THEME_ID ? "core" : "community";
+export function themeTrust(id: string): "core" | "community" | "development" {
+  if (id === SERIES_THEME_ID) return "core";
+  const info = installedThemes.find((theme) => theme.manifest.id === id);
+  return info?.trust === "development" ? "development" : "community";
 }
 
 /** L'identità effettivamente scelta, non solo la luce che le appartiene. */
@@ -547,8 +1004,11 @@ export function currentThemePreview(): ThemePreviewSelection | null {
  * La selezione autorevole resta invariata: chiude o annulla il pannello e
  * cancelThemePreview rimonta il tema precedente. Più richieste rapide sono
  * serializzate dalla stessa generazione usata dalla selezione persistente.
+ *
+ * `contrast` prova anche un contrasto diverso da quello scelto (la pagina
+ * «Tutti i componenti»); assente, vale la scelta della persona.
  */
-export async function previewTheme(id: string, light: Theme): Promise<void> {
+export async function previewTheme(id: string, light: Theme, contrast?: ContrastLevel): Promise<void> {
   if (id !== SERIES_THEME_ID) {
     const info = installedThemes.find((theme) => theme.manifest.id === id);
     if (!info || !info.manifest.lights.includes(light)) {
@@ -556,7 +1016,7 @@ export async function previewTheme(id: string, light: Theme): Promise<void> {
     }
   }
   const generation = ++selectionGeneration;
-  previewSelection = { id, light };
+  previewSelection = contrast === undefined ? { id, light } : { id, light, contrast };
   await apply();
   if (generation !== selectionGeneration) return;
   if (!mountedVariant.startsWith(id + ":" + light + ":")) {
@@ -620,6 +1080,7 @@ function loadCache(): void {
   selectedThemeId = SERIES_THEME_ID;
   previewSelection = null;
   contrastChoice = "";
+  barsChoice = "light";
   preferences = { ...series.defaults };
   try {
     const cachedTheme = localStorage.getItem(THEME_CACHE) ?? "";
@@ -640,14 +1101,17 @@ function loadCache(): void {
       const parsed = JSON.parse(cached) as {
         contrast?: unknown;
         preferences?: Partial<AppearancePreferences>;
+        bars?: unknown;
       };
       contrastChoice = typeof parsed.contrast === "string" ? parsed.contrast : "";
       preferences = normalizedPreferences(parsed.preferences ?? {});
+      barsChoice = barsOf(parsed.bars);
     }
   } catch {
     themeChoice = "";
     selectedThemeId = SERIES_THEME_ID;
     contrastChoice = "";
+    barsChoice = "light";
     preferences = { ...series.defaults };
   }
 }
@@ -655,7 +1119,7 @@ function loadCache(): void {
 export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void): void {
   if (lifetime.closed) return;
   const hadMountedTheme =
-    document.head.querySelector<HTMLStyleElement>('style[data-fub="foglio"]') !== null;
+    mountedCss("foglio") !== null;
   lifetime.add(() => {
     applyGeneration++;
     selectionGeneration++;
@@ -664,10 +1128,12 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   selectionGeneration++;
   loadCache();
   catalogEpoch += 1;
+  catalogRound += 1;
   catalogLoaded = false;
   catalogRequest = null;
   installedThemes = [];
   catalogPayloads = new Map<string, ThemePayload>();
+  catalogRejections = [];
   mountedVariant = "";
   mountedPreferenceText = "";
   settingEntries = [];
@@ -681,11 +1147,48 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
     const media = window.matchMedia?.(query);
     if (media) lifetime.listen(media, "change", () => void apply());
   }
-  lifetime.add(onEvent("setting_changed", () => void reread()));
+  lifetime.add(
+    onEvent("setting_changed", ({ key }) => {
+      // La modalità sviluppatore e la cartella collegata cambiano i temi che
+      // l'host elenca: il catalogo si rilegge.
+      if (key === DEVELOPER_MODE || key === DEVELOPER_THEME_FOLDER_KEY) {
+        // La cartella può essere cambiata da un'altra finestra: si richiede.
+        knownLinkFolder = undefined;
+        if (key === DEVELOPER_MODE) {
+          linkGeneration += 1;
+          linked = null;
+        }
+        void reloadThemeCatalog().catch(() => []).finally(linkSettled);
+      } else if (settingTouches(key, themeWatchesSetting)) rereadForSetting();
+    }),
+  );
   lifetime.add(on("vault", () => void reread()));
+  linked = null;
+  knownLinkFolder = undefined;
+  linkGeneration += 1;
+  linkWaiting = null;
+  listenThemeFolder(lifetime);
   themeSettled = false;
   const epoch = catalogEpoch;
   void reread().finally(() => {
     if (epoch === catalogEpoch) settleTheme();
+    void checkLinkAtStart(epoch);
   });
+}
+
+/// Il campanello del tema collegato vive quanto il montaggio del tema. Un host
+/// che non lo serve (un banco senza la porta) non ferma niente.
+function listenThemeFolder(lifetime: Lifetime): void {
+  let stop: (() => void) | null = null;
+  lifetime.add(() => {
+    stop?.();
+    stop = null;
+  });
+  void Promise.resolve()
+    .then(() => api.onThemeChanged((link) => void themeFolderChanged(link)))
+    .then((unlisten) => {
+      if (lifetime.closed) unlisten();
+      else stop = unlisten;
+    })
+    .catch(() => undefined);
 }

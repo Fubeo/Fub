@@ -36,6 +36,9 @@ export interface Scene {
   ready?: () => boolean;
   /// Quanto `ready` può farsi aspettare (ms); di serie 30 s.
   readyTimeout?: number;
+  /// La scena accende il tocco emulato da Chromium, che non si spegne più per
+  /// la pagina: queste scene stanno in fondo a `SCENE`.
+  touch?: boolean;
   /// I gesti che portano la pagina davanti all'obiettivo. Riceve la pagina di
   /// Playwright, che da questo lato del confine non ha un tipo — i tipi di
   /// Playwright sono di Node, e Node qui non c'è.
@@ -46,6 +49,19 @@ export interface Scene {
 }
 
 export declare const SCENE: readonly Scene[];
+/// Le scene dei gesti, senza foto di riferimento (la cartella grande).
+export declare const GESTURE_SCENE: readonly Scene[];
 export declare const LIGHTS: readonly Light[];
 export declare function photoFilename(scene: Scene, light: Light): string;
 export declare function sceneUrl(base: string, scene: Scene, light: Light): string;
+
+/// Una scatola in coordinate della pagina, come `getBoundingClientRect`.
+export interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+/// Dove cliccare il velo del cassetto, in coordinate del velo, lontano dalle
+/// scatole `avoid` (il cassetto, i bordi da cui i cassetti si affacciano).
+export declare function scrimClickPoint(scrim: Box, avoid: readonly Box[], top?: number): { x: number; y: number };

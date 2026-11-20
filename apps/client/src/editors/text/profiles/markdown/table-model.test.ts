@@ -9,6 +9,7 @@ import {
   insertColumns,
   insertRows,
   isWrapped,
+  moveColumns,
   moveRows,
   parseTable,
   parseTsv,
@@ -19,6 +20,7 @@ import {
   setCell,
   sortRows,
   tableChanges,
+  tableChangesSince,
   toggleWrap,
   type ParsedTable,
   type TableData,
@@ -85,16 +87,73 @@ describe("la scrittura", () => {
     expect(apply(source, setCell(parsed(source), 1, 1, "2"))).toBe("| a | b |\n| --- | --- |\n| 1 | 2 |");
   });
 
-  it("cambiare la forma riscrive la tabella in forma canonica", () => {
+  it("cambiare la forma riscrive la tabella incolonnata", () => {
     const source = "|a|b|\n|:-|-:|\n|1|2|";
-    expect(apply(source, insertRows(parsed(source), 2))).toBe("| a | b |\n| :--- | ---: |\n| 1 | 2 |\n|  |  |");
-    expect(apply(source, setAlign(parsed(source), 0, 1, "center"))).toBe("| a | b |\n| :---: | :---: |\n| 1 | 2 |");
-    expect(serializeTable({ rows: [["a"]], aligns: [null] })).toBe("| a |\n| --- |");
+    expect(apply(source, insertRows(parsed(source), 2))).toBe("| a   |   b |\n| :-- | --: |\n| 1   |   2 |\n|     |     |");
+    expect(apply(source, setAlign(parsed(source), 0, 1, "center"))).toBe("|  a  |  b  |\n| :-: | :-: |\n|  1  |  2  |");
+    expect(serializeTable({ rows: [["a"]], aligns: [null] })).toBe("| a   |\n| --- |");
+    // Le colonne larghe quanto la cella più lunga, pipe protette comprese.
+    expect(serializeTable({ rows: [["Nome", "Nota"], ["Ada", "a|b"]], aligns: [null, "right"] }))
+      .toBe("| Nome | Nota |\n| ---- | ---: |\n| Ada  | a\\|b |");
+    // Un carattere largo conta due colonne.
+    expect(serializeTable({ rows: [["日本", "x"]], aligns: [null, null] })).toBe("| 日本 | x   |\n| ---- | --- |");
+  });
+
+  it("una tabella già incolonnata resta incolonnata quando cambia una cella", () => {
+    const source = serializeTable({ rows: [["Nome", "Voto"], ["Ada", "10"]], aligns: [null, null] });
+    expect(apply(source, setCell(parsed(source), 1, 0, "Adalberto"))).toBe("| Nome      | Voto |\n| --------- | ---- |\n| Adalberto | 10   |");
+    // Una scritta a mano tocca soltanto la cella.
+    expect(apply("|Nome|Voto|\n|---|---|\n|Ada|10|", setCell(parsed("|Nome|Voto|\n|---|---|\n|Ada|10|"), 1, 0, "Adalberto")))
+      .toBe("|Nome|Voto|\n|---|---|\n| Adalberto |10|");
+  });
+
+  it("una tabella incolonnata cambia soltanto ciò che cambia: le altre righe restano intatte", () => {
+    const source = serializeTable({ rows: [["Nome", "Voto"], ["Ada", "10"], ["Bea", "9"]], aligns: [null, null] });
+    const second = source.indexOf("| Ada");
+    const third = source.indexOf("| Bea");
+    // Una cella che non sposta l'incolonnatura: un cambio dentro la sua riga.
+    const changes = tableChanges(parsed(source), setCell(parsed(source), 1, 1, "8"));
+    expect(changes.length).toBeGreaterThan(0);
+    for (const change of changes) {
+      expect(change.from).toBeGreaterThanOrEqual(second);
+      expect(change.to).toBeLessThan(third);
+    }
+    expect(apply(source, setCell(parsed(source), 1, 1, "8"))).toBe(source.replace("| 10   |", "| 8    |"));
+    // Una riga in fondo che non allarga le colonne: si aggiunge, il resto resta.
+    const added = tableChanges(parsed(source), insertRows(parsed(source), 3));
+    expect(added.every((change) => change.from >= source.length - 1)).toBe(true);
+  });
+
+  it("una cella di una sola colonna, e una tabella di una cella", () => {
+    expect(serializeTable({ rows: [[""]], aligns: [null] })).toBe("|     |\n| --- |");
+    const one = "| x |\n| --- |";
+    expect(apply(one, insertRows(parsed(one), 1))).toBe("| x   |\n| --- |\n|     |");
   });
 
   it("nessuna modifica, nessun cambiamento", () => {
     const source = "| a |\n| --- |\n| 1 |";
     expect(tableChanges(parsed(source), parsed(source))).toEqual([]);
+  });
+});
+
+describe("le battute di una cella aperta", () => {
+  it("riscrivono la cella da com'era prima: gli spazi di un valore a metà non restano", () => {
+    const base = parsed("| A | B |\n| --- | --- |\n|  |  |\n");
+    // Dopo «Prova » la sorgente ha la cella con lo spazio in coda.
+    const middle = "| A | B |\n| --- | --- |\n| Prova  |  |\n";
+    const next = setCell(base, 1, 0, "Prova c");
+    const changes = tableChangesSince(base, middle, next);
+    let out = middle;
+    for (const change of [...changes].reverse()) out = out.slice(0, change.from) + change.insert + out.slice(change.to);
+    expect(out).toBe("| A | B |\n| --- | --- |\n| Prova c |  |\n");
+  });
+
+  it("tornate al valore di prima rimettono la sorgente di prima", () => {
+    const base = parsed("| A | B |\n| --- | --- |\n|  |  |\n");
+    const changes = tableChangesSince(base, "| A | B |\n| --- | --- |\n| x |  |\n", base);
+    let out = "| A | B |\n| --- | --- |\n| x |  |\n";
+    for (const change of [...changes].reverse()) out = out.slice(0, change.from) + change.insert + out.slice(change.to);
+    expect(out).toBe(base.source);
   });
 });
 
@@ -119,6 +178,17 @@ describe("righe e colonne", () => {
   it("gli spostamenti restano nel corpo", () => {
     expect(moveRows(data, 1, 1, 1).rows).toEqual([["h1", "h2"], ["c", "d"], ["a", "b"]]);
     expect(moveRows(data, 1, 1, -1)).toBe(data);
+  });
+
+  it("le intestazioni trascinate spostano di più posti in un passo, sempre dentro la tabella", () => {
+    const four: TableData = { rows: [["h"], ["a"], ["b"], ["c"]], aligns: [null] };
+    expect(moveRows(four, 3, 3, -2).rows).toEqual([["h"], ["c"], ["a"], ["b"]]);
+    expect(moveRows(four, 1, 2, 1).rows).toEqual([["h"], ["c"], ["a"], ["b"]]);
+    expect(moveRows(four, 3, 3, -3)).toBe(four);
+    expect(moveRows(four, 1, 1, 0)).toBe(four);
+    const wide: TableData = { rows: [["x", "y", "z"]], aligns: ["left", null, "right"] };
+    expect(moveColumns(wide, 0, 0, 2)).toEqual({ rows: [["y", "z", "x"]], aligns: [null, "right", "left"] });
+    expect(moveColumns(wide, 0, 0, 3)).toBe(wide);
   });
 
   it("l'ordinamento legge i numeri come numeri e tiene l'intestazione", () => {
@@ -153,11 +223,11 @@ describe("gli appunti", () => {
     expect(rangeTsv(data, { top: 0, left: 0, bottom: 1, right: 1 })).toBe("a\tb\n1\t2\n");
   });
 
-  it("una cella multilinea di un foglio è una cella, e si scrive su una riga", () => {
+  it("una cella multilinea di un foglio è una cella, e l'a capo si scrive <br>", () => {
     expect(parseTsv('"prima\nseconda\tterza"\tx\r\ny\r\n')).toEqual([["prima\nseconda\tterza", "x"], ["y"]]);
     const data: TableData = { rows: [["a", "b"], ["1", "2"]], aligns: [null, null] };
     const pasted = pasteMatrix(data, { row: 1, col: 0 }, parseTsv('"prima\nseconda"\n'));
-    expect(serializeTable(pasted)).toBe("| a | b |\n| --- | --- |\n| prima seconda | 2 |");
+    expect(serializeTable(pasted)).toBe("| a                | b   |\n| ---------------- | --- |\n| prima<br>seconda | 2   |");
   });
 });
 

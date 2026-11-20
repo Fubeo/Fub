@@ -1,0 +1,19 @@
+{
+  "name": "image-letterboxed-wider",
+  "description": "Un'immagine 2:1 scritta in una scheda 300×300 (l'immagine 300×150 a y = 75) e mostrata in una scheda 600×200 (l'immagine 400×200 a x = 100): il riquadro dell'immagine va sul riquadro dell'immagine.",
+  "card": { "type": "file", "file": "Foto/lavagna.png" },
+  "aspect": 2,
+  "ref": { "width": 300, "height": 300 },
+  "size": { "width": 600, "height": 200 },
+  "expect": {
+    "mode": "scale",
+    "s": 1.3333333333333333,
+    "x": 100,
+    "y": -100,
+    "points": [
+      { "from": [0, 75], "to": [100, 0] },
+      { "from": [300, 225], "to": [500, 200] },
+      { "from": [150, 150], "to": [300, 100] }
+    ]
+  }
+}

@@ -415,6 +415,8 @@ struct Scanner<'a> {
     rels: &'a BTreeMap<String, String>,
     limits: &'a Limits,
     elements: u64,
+    /// I caratteri di testo letti, per [`Limits::chars`].
+    chars: u64,
     depth: usize,
     blocks: Vec<Vec<Token>>,
     /// Ciò che va con il blocco che segue: segni fra due blocchi, l'apertura
@@ -455,6 +457,7 @@ pub(crate) fn scan(
         rels,
         limits,
         elements: 0,
+        chars: 0,
         depth: 0,
         blocks: Vec::new(),
         pending: Vec::new(),
@@ -1345,6 +1348,7 @@ impl<'a> Scanner<'a> {
                 }
                 "t" | "delText" => {
                     let node = self.capture(child, child_empty)?;
+                    self.count_chars(node.text.chars().count())?;
                     pieces.extend(node.text.chars().map(Piece::Char));
                 }
                 "instrText" | "delInstrText" => {
@@ -1402,6 +1406,16 @@ impl<'a> Scanner<'a> {
             }
         }
         self.flush(&mut pieces, &props);
+        Ok(())
+    }
+
+    /// Conta `n` caratteri di testo, prima che diventino segni: oltre
+    /// [`Limits::chars`] il flusso non si fa, invece di chiedere gigabyte.
+    fn count_chars(&mut self, n: usize) -> Result<(), ScanError> {
+        self.chars = self.chars.saturating_add(n as u64);
+        if self.chars > self.limits.chars {
+            return Err(InventoryError::Limit("text characters").into());
+        }
         Ok(())
     }
 
@@ -1564,12 +1578,29 @@ pub(crate) fn keeps(before: &[Token], after: &[Token]) -> Result<(), String> {
             }
         }
         if let (Some(b), Some(a)) = (before[i].sig(), after[j].sig()) {
-            if let Some(item) = missing(&b.opaque, &a.opaque).first() {
+            if let Some(item) = missing(&b.opaque, &a.opaque)
+                .into_iter()
+                .find(|item| !gone_with_wrapper(item, &a.full))
+            {
                 return Err(format!("{}: lost {item}", describe_at(before, i)));
             }
         }
     }
     Ok(())
+}
+
+/// Gli involucri che la superficie toglie interi: togliere un link dal testo
+/// toglie il suo `w:hyperlink`, e con lui gli attributi che la proiezione non
+/// mostra (`w:history`, `w:tooltip`, `w:tgtFrame`, `w:docLocation`). I link
+/// non si annidano, così un carattere ne ha al più uno.
+const REMOVABLE_WRAPPERS: &[&str] = &["ctx/w:hyperlink"];
+
+/// Se la voce `item` è di un involucro che il carattere, dopo, non ha più:
+/// se n'è andata con lui, non persa.
+fn gone_with_wrapper(item: &str, after: &[String]) -> bool {
+    REMOVABLE_WRAPPERS
+        .iter()
+        .any(|wrapper| under(item, wrapper) && !after.iter().any(|other| under(other, wrapper)))
 }
 
 #[cfg(test)]
@@ -1583,6 +1614,32 @@ mod tests {
         scan(xml.as_bytes(), &BTreeMap::new(), &crate::inventory::LIMITS)
             .expect("scan")
             .blocks
+    }
+
+    #[test]
+    fn il_testo_oltre_il_tetto_non_diventa_segni() {
+        // Un segno per carattere: senza tetto un paragrafo di centinaia di
+        // milioni di caratteri chiede gigabyte prima di qualunque controllo.
+        let xml = format!(
+            r#"<w:document {W}><w:body><w:p><w:r><w:t>{}</w:t></w:r><w:r><w:t>{}</w:t></w:r></w:p></w:body></w:document>"#,
+            "a".repeat(6),
+            "b".repeat(6)
+        );
+        let limits = Limits {
+            chars: 10,
+            ..crate::inventory::LIMITS
+        };
+        assert!(matches!(
+            scan(xml.as_bytes(), &BTreeMap::new(), &limits),
+            Err(ScanError::Inventory(InventoryError::Limit(
+                "text characters"
+            )))
+        ));
+        let limits = Limits {
+            chars: 12,
+            ..crate::inventory::LIMITS
+        };
+        assert!(scan(xml.as_bytes(), &BTreeMap::new(), &limits).is_ok());
     }
 
     fn one(body: &str) -> Vec<Token> {
@@ -1689,6 +1746,27 @@ mod tests {
             r#"<w:p><w:r><w:rPr><w:i/><w:rFonts w:ascii="C" w:eastAsia="B"/><w:lang w:eastAsia="ja-JP"/><w:eastAsianLayout w:combine="1"/></w:rPr><w:t>xy</w:t></w:r></w:p>"#,
         );
         assert!(keeps(&tokens, &edited).is_ok());
+    }
+
+    #[test]
+    fn un_link_tolto_porta_via_i_suoi_attributi_e_un_link_tenuto_no() {
+        let linked = one(
+            r#"<w:p><w:hyperlink r:id="rId1" w:history="1" w:tooltip="t"><w:r><w:rPr><w:lang w:eastAsia="ja-JP"/></w:rPr><w:t>x</w:t></w:r></w:hyperlink></w:p>"#,
+        );
+        // Tolto il link, gli attributi che la proiezione non mostra se ne
+        // vanno con lui; le proprietà del run restano da tenere.
+        let unlinked =
+            one(r#"<w:p><w:r><w:rPr><w:lang w:eastAsia="ja-JP"/></w:rPr><w:t>x</w:t></w:r></w:p>"#);
+        assert!(keeps(&linked, &unlinked).is_ok());
+        let bare = one(r#"<w:p><w:r><w:t>x</w:t></w:r></w:p>"#);
+        let lost = keeps(&linked, &bare).expect_err("perdita");
+        assert!(lost.contains("w:lang"), "{lost}");
+        // Il link che resta tiene ogni suo attributo.
+        let kept = one(
+            r#"<w:p><w:hyperlink r:id="rId1" w:history="1"><w:r><w:rPr><w:lang w:eastAsia="ja-JP"/></w:rPr><w:t>x</w:t></w:r></w:hyperlink></w:p>"#,
+        );
+        let lost = keeps(&linked, &kept).expect_err("perdita");
+        assert!(lost.contains("w:tooltip"), "{lost}");
     }
 
     #[test]

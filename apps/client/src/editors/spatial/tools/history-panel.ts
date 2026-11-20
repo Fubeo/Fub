@@ -35,6 +35,7 @@ import type { Lifetime } from "../../../ui/lifetime";
 import type { Mark, Step } from "./history";
 import { cleanName, NAME_MAX } from "./naming";
 import { ROW_PX } from "./objects";
+import { composingKey } from "../../../kit/ime";
 
 /// Le righe disegnate oltre quelle che si vedono, sopra e sotto.
 const OVERSCAN = 8;
@@ -395,7 +396,7 @@ export function createHistoryPanel(life: Lifetime, options: HistoryPanelOptions)
   };
 
   life.listen(field, "keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== "Escape") return;
+    if ((event.key !== "Enter" && event.key !== "Escape") || composingKey(event)) return;
     event.preventDefault();
     event.stopPropagation();
     finishRename(event.key === "Enter", true);

@@ -13,19 +13,30 @@ stesso, senza conversioni e senza copie a lato.
 I comandi stanno nella barra multifunzione sopra il foglio, come in Word: le
 schede **Home**, **Inserisci**, **Layout**, **Revisione** e **Visualizza**, e
 **Tabella** quando il cursore sta in una tabella; **Annulla** e **Ripeti**
-accanto alle schede. Alt o F10 mostrano le lettere di ogni scheda e di ogni
-comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
+accanto alle schede: la storia tiene 10 000 passi, e annullando tutto
+documento e contenuto del file tornano com'erano all'apertura. Alt o F10 mostrano le
+lettere di ogni scheda e di ogni comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
 si apre per un gesto. Stretta, la barra raccoglie prima Modifica, Stili e
-Paragrafo in un pulsante ciascuno. Un comando che adesso non si dà resta al
-suo posto, spento, e il suggerimento dice perché.
+Paragrafo in un pulsante ciascuno, e per ultimo Carattere; un gruppo raccolto si apre sul posto,
+nella barra, e gli altri si raccolgono per fargli posto: Esc lo richiude e
+torna al suo pulsante. Un comando che adesso non si dà resta al suo posto,
+spento, e il suggerimento dice perché. La barra è quella dei fogli: le
+schede sono segmenti come le schede dell'ispettore, con la scelta su un
+foglietto, e i comandi stanno in foglietti su un vassoio un tono sotto la
+carta. Si muove anche come quella dei fogli: cambiando scheda il segno scorre
+e i foglietti entrano uno dopo l'altro dal lato della scheda; ritirandola la
+ricerca e la pagina salgono sul vassoio che svanisce, e riaprendola
+riscendono, senza che lo scorrimento cambi; il gruppo che si apre sul posto
+si alza, e gli altri scivolano per fargli posto. Con il moto ridotto gli
+stessi stati arrivano subito.
 
 Si modificano:
 
 - il testo, con a-capo, tabulazioni e salti di pagina (`Ctrl+Invio`) o di
   colonna (`Ctrl+Maiusc+Invio`), anche dalla scheda **Inserisci**;
-- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo (web o
-  posta) e lo mettono sulla selezione, sul link al cursore o, senza
-  selezione, su un testo nuovo; dallo stesso modulo un link si toglie;
+- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo
+  (web o posta) e lo mettono sulla selezione, sul link al cursore o su un
+  testo nuovo; dallo stesso modulo un link si toglie anche dal file;
 - grassetto, corsivo e barrato dal gruppo **Carattere** di **Home**;
 - l'aspetto del carattere dallo stesso gruppo: tipo e
   dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
@@ -50,7 +61,10 @@ Si modificano:
 - le tabelle: una nuova dal pulsante **Tabella** di **Inserisci**, scegliendo
   righe e colonne sulla griglia (col mouse o con le frecce), dopo il paragrafo
   del cursore o al posto di uno vuoto; è la griglia di Word, a tutta riga, a
-  colonne uguali e con i bordi.
+  colonne uguali e con i bordi. In un documento che si scrive soltanto nel
+  corpo (parti chiuse, «Solo il testo») gli stili del file non cambiano: se
+  il file non ha già lo stile «Griglia tabella», la tabella nuova ne prende i
+  bordi come formattazione sua, e si salva come ogni paragrafo.
   Righe e colonne si aggiungono, si spostano e si tolgono dalla scheda
   **Tabella** o con le scorciatoie della tabella Markdown; una colonna nuova
   copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
@@ -60,8 +74,11 @@ Si modificano:
   Tab e Maiusc+Tab vanno alla cella dopo e prima, col suo testo scelto, e
   Tab nell'ultima cella aggiunge una riga. Maiusc con una freccia alla fine
   (o all'inizio) del testo di una cella, o il trascinamento da una cella a
-  un'altra, sceglie più celle: Canc le svuota, Ctrl+C e Ctrl+X le copiano
-  come un foglio di calcolo, «Unisci celle» le unisce se stanno in una riga;
+  un'altra, sceglie più celle: Canc le svuota, Ctrl+C le copia come un foglio
+  di calcolo, Ctrl+X le segna e l'incolla le sposta, «Unisci celle» le unisce
+  se stanno in una riga; sulle celle scelte valgono i gesti dei fogli di
+  calcolo (Ctrl+Spazio, Ctrl+D, Ctrl+«+», Maiusc+F8…), descritti in
+  [Tabelle](editor-tables.md#nei-documenti);
 - le immagini e le note nuove, dalla scheda **Inserisci**:
   **Immagine** sceglie un PNG, un JPEG o un GIF del vault (fino a 16 MB) e lo
   mette al cursore, nel testo, alla sua misura (un pixel CSS è tre quarti di
@@ -77,7 +94,15 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   alla precedente. Un'occorrenza sta dentro un paragrafo e non scavalca un
   oggetto o un segno (l'inizio di un commento, un segnalibro). Il testo nuovo
   prende l'aspetto del primo carattere sostituito, e **Sostituisci tutto** è
-  una battuta sola, che si annulla in una volta;
+  una battuta sola, che si annulla in una volta. Dopo un gesto della barra,
+  o delle schede Commenti e Revisioni del pannello, `Ctrl+Z` e `Ctrl+Y`
+  annullano e ripetono nel documento anche col fuoco sul pulsante; dentro
+  una casella (Trova, Sostituisci con, il nome) restano della casella. Nella
+  scheda Revisioni il fuoco non esce col pulsante premuto: dopo **Accetta** o
+  **Rifiuta** passa allo stesso pulsante della voce che prende il posto di
+  quella risolta (o di quella prima, se era l'ultima), dopo **Accetta tutte**
+  o **Rifiuta tutte** all'interruttore **Registra le modifiche**, e senza
+  interruttore all'elenco, così `Ctrl+Z` annulla subito da lì;
 - **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
   del documento e, se c'è, della selezione: una parola è ciò che sta fra due
   spazi, un oggetto separa senza contare, il testo delle note non conta;
@@ -109,8 +134,9 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   inserito si toglie davvero, e un tratto battuto di seguito resta una
   modifica sola. Mentre si registra il formato non si cambia (aspetto, stile,
   spaziatura, tabelle), perché non ha una revisione da scrivere; commenti,
-  accettare e rifiutare restano liberi. Un `.docx` che registra già si apre
-  così, non più in sola lettura;
+  accettare e rifiutare restano liberi. Senza un autore la revisione nuova
+  si scrive come fa Word, con l'autore «Unknown». Un `.docx` che registra
+  già si apre così, non più in sola lettura;
 - **Pagina** in un `.docx` cambia la pagina della sezione dove sta il
   cursore: la dimensione della carta (quelle di Word), l'orientamento, i
   margini (già pronti o in centimetri) e le colonne. Una pagina girata tiene
@@ -131,7 +157,8 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   prende gli stili Intestazione e Piè di pagina di Word. Vuoti, la sezione
   mostra quelli della sezione prima. Quelli della prima pagina e delle pagine
   pari restano come sono, e uno con immagini, tabelle o aspetti diversi si
-  legge ma si modifica in Word. Mentre si registra non si cambiano;
+  legge ma qui non si può ancora modificare. Mentre si registra non si
+  cambiano;
 - **Sommario** in un `.docx` mette prima del paragrafo del cursore il
   sommario dei titoli fino al terzo livello, o rifà quello già messo da Fub
   con i titoli di adesso. I numeri di pagina li calcola Word aprendo il file.
@@ -167,7 +194,9 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
 
 - un **paragrafo o una tabella** che la riscrittura non porterebbe intero
   resta com'è nel file, segnato, e da Fub non si cambia: lo si può spostare
-  intero, ma non scriverci dentro né toglierlo. Il chip accanto al percorso
+  intero, ma non scriverci dentro né toglierlo. Chi ci prova (una lettera,
+  un a capo, una cancellazione) lo legge in un avviso, uno solo finché
+  riprova senza fermarsi per qualche secondo. Il chip accanto al percorso
   dice quante parti restano come sono («2 parti chiuse»); il suo riquadro le
   elenca, con la pagina e un «Vai» per ciascuna, e il resto del testo si
   scrive;
@@ -182,9 +211,12 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
   il modello non si rilegge uguale, o il corpo del file non si legge blocco
   per blocco come lo legge il codec.
 
-Il chip dice anche «Si scrive», quando il file si riscrive tutto, e «Sola
-lettura», con il perché nella lingua di chi scrive; il suo riquadro offre di
-cercare. Accanto al chip, «Registra» dice che le modifiche si registrano.
+Il chip dice anche «Sola lettura», con il perché nella lingua di chi scrive;
+il suo riquadro offre di cercare. Quando il file si riscrive tutto lo stato è
+normale, e lo dice la banda di stato, accanto alla modalità: «Si scrive», che
+apre la stessa spiegazione del chip (sul telefono è la prima voce di «…»).
+Accanto al chip, «Registra» dice che le modifiche si registrano; quando si
+scrive tutto, e il chip non c'è, lo dice la voce «Registra» della banda.
 
 Un salvataggio che tocca soltanto il testo è un **innesto**: il file resta
 com'era, byte per byte, tranne i paragrafi e le tabelle toccati, che arrivano
@@ -196,7 +228,9 @@ uguale a ciò che si voleva scrivere non scrive, e il testo resta nel buffer;
 lo stesso vale per un salvataggio che cambierebbe un blocco chiuso o una
 parte che l'utente non ha toccato, che duplicherebbe un'immagine o
 lascerebbe un riferimento senza relazione. Un documento cifrato o più grande
-di 256 MiB non si apre; uno molto lungo (centomila paragrafi) si apre in
+di 256 MiB non si apre, e neppure uno vuoto o rotto: la scheda lo dice in
+una frase, con il motivo tecnico in «Dettagli», chiuso; i pannelli accanto restano in piedi (le statistiche dicono che
+non c'è niente da contare); uno molto lungo (centomila paragrafi) si apre in
 qualche secondo, senza fermare l'interfaccia.
 
 Limiti attuali:
@@ -211,9 +245,9 @@ Limiti attuali:
 - l'interlinea «almeno» ed «esattamente» si mostra e si conserva, ma dalla
   barra si sceglie soltanto un multiplo. La carta disegna carattere, misura,
   colore, rientri, spazi e interlinea che il file scrive sul paragrafo o sul
-  tratto; quelli che vengono dallo stile non si disegnano (valgono i
-  predefiniti di Word), e un campo vuoto della spaziatura non dice quanto
-  valgono. I bordi delle tabelle del file non si disegnano;
+  tratto, e in una cella lo stile della tabella; quelli dello stile del
+  paragrafo no (valgono i predefiniti di Word), e un campo vuoto della
+  spaziatura non dice quanto valgono. I bordi delle tabelle non si disegnano;
 - un foglio il cui testo non ci sta si allunga e non si spezza, quindi le
   **Pagine** della banda di stato contano i fogli, non le pagine che Word
   stamperebbe. Una sezione che comincia a pagina pari o dispari apre un foglio
@@ -256,8 +290,9 @@ Un documento si guarda in tre modi, dal selettore accanto al percorso:
 
 Mentre il documento ha il fuoco, la banda di stato dice il foglio del cursore
 («Pagina 2 di 5», in Pagina e in Lettura), le parole («12 di 418 parole» con
-una selezione), la lingua che il file dice per il testo e **Registra** quando
-le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
+una selezione), la lingua che il file dice per il testo (in una finestra sotto
+gli 800 px si fa da parte: la dice già il correttore), **Si scrive** quando il
+file si riscrive tutto e **Registra** quando le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
 un clic ci porta; il conteggio della nota, che la banda mostra per le altre
 note, si fa da parte.
 
@@ -269,10 +304,10 @@ Lettura la barra non c'è. F6 vale anche per gli altri fogli, che sono una zona
 sola; la scorciatoia si cambia in Preferenze come le altre.
 
 Il formato si vede prima di aprire: nell'albero, nelle schede e nel
-lanciatore un documento di Word, un OpenDocument, un foglio di calcolo e un
+lanciatore un documento .docx, un OpenDocument, un foglio di calcolo e un
 disegno hanno ciascuno la sua icona, diversa dal foglietto di una nota. Accanto
-al percorso, nella testata del foglio, un'etichetta dice **WORD**, **ODT**,
-**RTF** o **EXCEL**. La specie viene dall'estensione (`ui/format-kind.ts`);
+al percorso, nella testata del foglio, un'etichetta dice **DOCX**, **ODT**,
+**RTF** o **XLSX**. La specie viene dall'estensione (`ui/format-kind.ts`);
 quale formato apre il file lo decide sempre il backend.
 
 **Carta adattata**, nella scheda **Visualizza**, porta il documento di Pagina
@@ -282,7 +317,7 @@ il predefinito, se l'aspetto del contenuto in Preferenze › Aspetto è
 automatico. I segni di Fub (revisioni, correttore, ricerca, commenti)
 prendono i colori della carta su cui stanno.
 
-Cambiando modo, ritirando la barra o cambiando lo zoom si muove la carta, e
+Cambiando modo o cambiando lo zoom si muove la carta, e
 il testo è già al suo posto: il paragrafo in cima alla vista resta in cima, e
 lo zoom tiene fermo il centro della vista. Un foglio aperto da `Ctrl+Invio`
 esce da quello sopra; tolto il salto, la sua sagoma si dissolve. Un documento
@@ -310,10 +345,10 @@ La scheda «Disegna» (`editors/rich/ink.ts`) mette un velo sopra la pagina
 quando è scelto uno strumento che disegna, e raccoglie i tratti con
 l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`). I tratti di una
 sessione diventano un oggetto `ink` davanti al testo, ancorato al paragrafo
-più vicino, in un passo di Annulla; la geometria pura (riquadro, gomma, lazo,
-contorno) sta in `editors/rich/ink-shape.ts`. In un documento OpenDocument la
-sessione entra come `drawing`. Un inchiostro del file che non si legge resta
-opaco, e il chip dello stato lo dice in «Che cosa manca?».
+più vicino, in un passo di Annulla, che toglie l'ultimo tratto anche a sessione
+aperta (`RichEngine.holdPending`); la geometria pura (riquadro, gomma, lazo,
+contorno) sta in `editors/rich/ink-shape.ts`. In OpenDocument è un `drawing`.
+Un inchiostro illeggibile resta opaco; il chip dello stato lo dice in «Che cosa manca?».
 
 Il menu **«Tipo di penna»** sceglie una delle sei penne del disegno
 ([penne](drawing-pen.md)); la penna di ogni tratto entra nel pennello come
@@ -335,7 +370,8 @@ gli stessi limiti. Il codec non porta la sua pagina, quindi in Pagina sta su
 un A4 con i margini di 2 cm, che il riquadro **Pagina** dice senza
 cambiarli; un salto di pagina o di colonna però non si scrive, e una
 tabella nuova ha una colonna per cella della riga più lunga e celle con un
-bordo sottile (lo stile automatico `FubC…`). Le colonne si aggiungono o si
+bordo sottile (`FubC…`), ognuna col suo paragrafo anche vuoto, come in
+LibreOffice: riaperta, è quella salvata. Le colonne si aggiungono o si
 tolgono soltanto in una tabella con le colonne tutte uguali, e le celle si
 uniscono o si dividono soltanto in una tabella senza celle unite in altezza;
 altrimenti il salvataggio lo rifiuta e il testo resta nel buffer. Il
@@ -374,25 +410,24 @@ apre.
 ## Esportare una copia
 
 **Esporta una copia** (`rich.export-copy`, dalla palette) scrive un documento
-di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o Word XML
+di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o XML
 (un `.docx` in un file XML solo, Flat OPC), con gli esportatori di WordCraft.
 Il documento non si tocca: la copia arriva nell'attività e si salva dove si
-vuole. Una copia nello stesso formato del documento (un `.rtf` in RTF, un
-`.odt` in OpenDocument) non si fa: sarebbe il file riscritto da un modello che
-ne porta meno.
+vuole. Una copia nello stesso formato (un `.rtf` in RTF) non si fa. Il
+documento si sceglie dall'elenco o si scrive per nome (nome, nome del file o
+percorso, senza distinzione di maiuscole) se un solo documento di
+videoscrittura lo porta; altrimenti il comando dice che non c'è o elenca gli
+omonimi.
 
 Accanto alla copia l'attività dice **cosa non porta**. La copia si rilegge con
 l'importatore del suo formato e si confronta con il documento: parole, titoli,
 voci d'elenco, tabelle, link, enfasi, note, commenti, intestazioni e piè di
 pagina, immagini, grafici, forme, equazioni, campi, segnalibri, revisioni e
 oggetti non interpretati. Ciò che manca o diminuisce è un avviso, con il
-numero. Impaginazione, caratteri, colori e stili dei paragrafi non si misurano,
-e l'avviso lo dice. Un documento letto da un importatore (`.rtf`, `.doc`,
-`.odt`) parte già da meno del file, e anche questo è un avviso. In HTML e nel
-testo semplice i commenti si possono mettere in fondo alla copia.
-
-`.html`, `.txt`, `.tex` e `.xml` restano file di testo: si aprono e si
-modificano come sorgente, anche quando sono nati da una copia.
+numero; impaginazione, caratteri, colori e stili non si misurano, e un avviso
+lo dice, come per un documento letto da un importatore (`.rtf`, `.doc`, `.odt`).
+In HTML e nel testo semplice i commenti vanno, a scelta, in fondo. **Anteprima…**
+dà gli avvisi. `.html`, `.txt`, `.tex` e `.xml` restano file di testo.
 
 ## Dove si trova
 

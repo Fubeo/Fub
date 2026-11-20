@@ -5,7 +5,7 @@ import { getCM } from "@replit/codemirror-vim";
 import { insertNewlineAndIndent, redoDepth, undoDepth } from "@codemirror/commands";
 import { EditorSelection, EditorState, StateField, Transaction, type Extension } from "@codemirror/state";
 import { findNext, replaceAll, SearchQuery, selectMatches, setSearchQuery } from "@codemirror/search";
-import { createTextEngine, type TextEngine } from "./engine";
+import { createTextEngine, TEXT_HISTORY_DEPTH, type TextEngine } from "./engine";
 import type { EditorChange } from "../core/text-operation";
 import { MAX_FOOTPRINTS, type FootprintState } from "./history-footprints";
 interface TestEditor {
@@ -124,6 +124,44 @@ describe("applyUserEdit", () => {
     expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("a\r\nb\r\n");
     ed.destroy();
+  });
+  // Protezione, non una correzione: `insertAtCursor` divide già il testo su
+  // "\n" (`Text.of`), e i riferimenti trascinati passano di qui.
+  it("insertAtCursor scrive più righe come righe vere anche in CRLF (i riferimenti)", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const { ed, view } = editor();
+      ed.setDoc(`a${nl}b${nl}`);
+      view().dispatch({ selection: { anchor: 3 } });
+      expect(ed.insertAtCursor("[[Uno]]\n[[Due]]")).toBe(true);
+      expect(ed.getDoc()).toBe(`a${nl}b[[Uno]]${nl}[[Due]]${nl}`);
+      ed.destroy();
+    }
+  });
+  // Incolla e trascinamento lasciati a CodeMirror: il testo si divide solo
+  // sul separatore, e in una nota CRLF il `clipboardInputFilter` del motore
+  // porta ogni a capo (`\n`, `\r\n`, `\r` nudo) a quello della nota (#394).
+  it("incollare o trascinare righe con a capo di ogni forma: righe vere, come in LF", () => {
+    const clipboard = (text: string) => ({ files: [], types: ["text/plain"], getData: (type: string) => (type === "text/plain" || type === "Text" ? text : "") });
+    for (const nl of ["\n", "\r\n"]) {
+      for (const kind of ["paste", "drop"] as const) {
+        const { ed, view } = editor();
+        ed.setDoc(`a${nl}b`);
+        view().dispatch({ selection: { anchor: 1 } });
+        // Il trascinamento mette il fuoco nell'editor; in happy-dom col fuoco
+        // la selezione scritta manda `selectionchange` dentro la transazione.
+        view().focus = () => {};
+        const event = new Event(kind, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, kind === "paste" ? "clipboardData" : "dataTransfer", { value: clipboard("1\r2\n3\r\n4") });
+        Object.defineProperty(event, "clientX", { value: 0 });
+        Object.defineProperty(event, "clientY", { value: 0 });
+        view().contentDOM.dispatchEvent(event);
+        const doc = ed.getDoc();
+        expect(doc.split(nl).length, `${kind} ${JSON.stringify(nl)}: ${JSON.stringify(doc)}`).toBe(5);
+        if (nl === "\r\n") expect(doc.replace(/\r\n/g, ""), kind).not.toMatch(/[\r\n]/);
+        expect(doc.replace(/\r?\n/g, "|"), kind).toMatch(/1\|2\|3\|4/);
+        ed.destroy();
+      }
+    }
   });
   it("insertAtCursor rifiuta sola lettura e testo con CR", () => {
     const { ed } = editor();
@@ -336,6 +374,35 @@ describe("raggruppamento degli eventi utente", () => {
     expect(ed.getDoc()).toBe("uno");
     expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("");
+  });
+
+  it("annulla fino all'originale anche dopo più di cento passi lenti", () => {
+    // La storia di CodeMirror tiene `minDepth` passi (100 se non le si dice
+    // altro) e oltre butta via i più vecchi senza dirlo: l'annulla non
+    // tornava più al testo aperto.
+    const original = "# Nota\n\ntesto aperto\n";
+    const { ed, view } = editor();
+    ed.setDoc(original);
+    const steps = 300;
+    let clock = 1_000_000;
+    for (let i = 0; i < steps; i++) {
+      // Ogni tasto oltre il `newGroupDelay` dal precedente: un passo a sé.
+      clock += 1_000;
+      const end = view().state.doc.length;
+      view().dispatch({
+        changes: { from: end, insert: "x" },
+        selection: EditorSelection.single(end + 1),
+        userEvent: "input.type",
+        annotations: Transaction.time.of(clock),
+      });
+    }
+    expect(steps).toBeGreaterThan(100);
+    expect(steps).toBeLessThan(TEXT_HISTORY_DEPTH);
+    expect(undoDepth(view().state)).toBe(steps);
+    let undone = 0;
+    while (undone <= steps && ed.undo()) undone += 1;
+    expect(undone).toBe(steps);
+    expect(ed.getDoc()).toBe(original);
   });
 
   it("ripristina la selezione dopo undo e redo", () => {

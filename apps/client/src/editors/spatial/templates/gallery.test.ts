@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingEntry } from "../../../host/contract";
 import type { FakeHost } from "../../../host/fake";
 import type { Gallery } from "./gallery";
+import { waiter } from "../../../test-wait";
 
 const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
 
@@ -61,14 +62,7 @@ async function settle(rounds = 4): Promise<void> {
   for (let i = 0; i < rounds; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function until(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const until = waiter(2000);
 
 /// I file dei modelli, uno per id e lingua, che registrano quali si leggono.
 function templateFiles(log: string[] = []): Record<string, () => Promise<string>> {
@@ -618,7 +612,7 @@ describe("i tasti e il fuoco", () => {
     document.querySelector<HTMLButtonElement>(".palette-actions button[type=button]")!.click();
     await until("la finestra chiusa", () => dialog() === null);
     await open();
-    dialog()!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    dialog()!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerType: "mouse" }));
     await until("la finestra chiusa", () => dialog() === null);
     expect(document.activeElement).toBe(opener);
   });

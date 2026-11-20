@@ -1,14 +1,21 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
 import { cursorCharLeft, cursorCharRight, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
+import { syntaxTreeAvailable } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { createTextEngine } from "../../engine";
 import { livePreview, pageIconsChanged } from "./livepreview";
 import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { closeContextMenu } from "../../../../ui/menu";
+import { loadLazyParts } from "../../../../ui/lazy-part";
+import { parsedView } from "./test-support";
+
+// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
+// come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(loadLazyParts);
 
 // I diagrammi del test non passano da Mermaid: basta un'immagine qualsiasi.
 vi.mock("mermaid", () => ({
@@ -88,6 +95,7 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
       ],
     });
     engine.setDoc(source);
+    parsedView(parent);
     return { parent, engine, cleanup: () => { engine.destroy(); parent.remove(); } };
   }
   it("con «mai» un paragrafo di sole immagini resta testo, con l'immagine figura in riga (D8, K10)", () => {
@@ -111,6 +119,36 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
       engine.revealByteOffset("Testo sopra\n\n![".length);
       expect(parent.querySelectorAll(".cm-markdown-block").length).toBe(0);
     } finally {
+      cleanup();
+    }
+  });
+
+  it("il trascinamento da un blocco reso lascia il documento al rilascio e alla chiusura", () => {
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
+    const listeners = (spy: typeof added, type: string) =>
+      spy.mock.calls.filter(([name]) => name === type).map(([, listener]) => listener);
+    const press = (parent: HTMLElement) => parent.querySelector<HTMLElement>(".cm-markdown-block")!
+      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+    const { parent, engine, cleanup } = editorWith("Testo sopra\n\n![Schema](schema.png)\n\nTesto sotto\n", "riga");
+    try {
+      press(parent);
+      expect(listeners(added, "mousemove")).toHaveLength(1);
+      document.dispatchEvent(new MouseEvent("mouseup"));
+      expect(listeners(removed, "mousemove")).toEqual(listeners(added, "mousemove"));
+      expect(listeners(removed, "mouseup")).toEqual(listeners(added, "mouseup"));
+
+      // Un trascinamento ancora aperto quando l'editor si chiude (il clic ha
+      // portato il cursore nel blocco: lo si riporta in cima perché torni reso).
+      engine.revealByteOffset(0);
+      press(parent);
+      expect(listeners(added, "mousemove")).toHaveLength(2);
+      engine.destroy();
+      expect(listeners(removed, "mousemove")).toEqual(listeners(added, "mousemove"));
+      expect(listeners(removed, "mouseup")).toEqual(listeners(added, "mouseup"));
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
       cleanup();
     }
   });
@@ -165,6 +203,34 @@ describe("wikilink in Live", () => {
         link.dataset.wikilinkHeading,
         link.dataset.wikilinkBlock,
       ])).toEqual([["Nota", "Sez", "b1"], ["Altra", undefined, undefined]]);
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+
+  it("una figura del set accanto al wikilink è una maschera, un `fub:` sconosciuto niente (Scrittoio 2)", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const icons = new Map([["Libri", "fub:book"], ["Futuro", "fub:astronave"]]);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownGrammar }),
+        livePreview({ openWikilink() {}, searchTag() {}, pageIcon: (page) => icons.get(page) ?? null }),
+      ],
+    });
+    try {
+      engine.setDoc("Primo\n\nVai a [[Libri]] e [[Futuro]]");
+      const links = [...parent.querySelectorAll<HTMLElement>(".cm-fub-wikilink")];
+      expect(links.map((link) => [link.dataset.pageFigure, link.dataset.pageIcon])).toEqual([
+        ["book", undefined],
+        [undefined, undefined],
+      ]);
+      // La figura non è testo: né nel documento né nel link.
+      expect(links[0]!.textContent).toBe("Libri");
+      expect(engine.getDoc()).toBe("Primo\n\nVai a [[Libri]] e [[Futuro]]");
     } finally {
       engine.destroy();
       parent.remove();
@@ -239,6 +305,7 @@ describe("wikilink in Live", () => {
     });
     try {
       engine.setDoc('Primo\n\nUn <span class="fub-color-red">rosso</span> e <mark class="fub-bg-blue fub-color-gray">blu</mark> e <span class="altro">x</span>');
+      parsedView(parent);
       const red = parent.querySelector<HTMLElement>("span.fub-color-red");
       expect(red?.textContent).toBe("rosso");
       const blue = parent.querySelector<HTMLElement>("mark.fub-bg-blue");
@@ -272,6 +339,40 @@ describe("tabelle in Live", () => {
     return { parent, engine, cell, cleanup: () => { engine.destroy(); parent.remove(); } };
   }
 
+  it("un link in una cella segue la regola del clic: Mod segue editor.link-click, Alt sbircia", () => {
+    for (const rule of ["apri", "sbircia"] as const) {
+      const parent = document.createElement("div");
+      document.body.append(parent);
+      const openWikilink = vi.fn();
+      const openPath = vi.fn();
+      const peekLink = vi.fn();
+      const engine = createTextEngine(parent, {
+        onChange() {},
+        onSelectionChange() {},
+        extensions: () => [
+          markdown({ base: markdownGrammar }),
+          livePreview({ openWikilink, openPath, peekLink, linkClick: () => rule, searchTag() {} }),
+        ],
+      });
+      try {
+        engine.setDoc("Testo\n\n| a | b |\n| --- | --- |\n| [[Nota]] | [testo](Carte/B.md) |\n");
+        const at = (selector: string) => parent.querySelector<HTMLElement>(`.tb-grid ${selector}`)!;
+        const down = (target: HTMLElement, init: MouseEventInit) =>
+          target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0, ...init }));
+        down(at("[data-wikilink-page]"), { altKey: true });
+        expect(peekLink).toHaveBeenLastCalledWith({ kind: "wiki", page: "Nota", heading: null, block: null });
+        down(at("[data-wikilink-page]"), { ctrlKey: true });
+        if (rule === "apri") expect(openWikilink).toHaveBeenLastCalledWith("Nota", null, null);
+        else expect(peekLink).toHaveBeenCalledTimes(2);
+        down(at("a.internal-path"), { altKey: true });
+        expect(peekLink).toHaveBeenLastCalledWith({ kind: "path", path: "Carte/B.md" });
+      } finally {
+        engine.destroy();
+        parent.remove();
+      }
+    }
+  });
+
   it("sono griglie anche col cursore dentro, e non tornano sorgente", () => {
     const { parent, engine, cell, cleanup } = editorWith(table);
     try {
@@ -304,15 +405,68 @@ describe("tabelle in Live", () => {
     }
   });
 
-  it("una riga aggiunta dalla griglia riscrive la tabella in forma canonica", () => {
+  it("una riga aggiunta dalla griglia riscrive la tabella incolonnata", () => {
     const { parent, engine, cleanup } = editorWith("|a|b|\n|---|---|\n|1|2|\n\nFine");
     try {
       const add = parent.querySelector<HTMLButtonElement>('.tb-add[data-add="row"]')!;
       add.click();
-      expect(engine.getDoc()).toBe("| a | b |\n| --- | --- |\n| 1 | 2 |\n|  |  |\n\nFine");
+      expect(engine.getDoc()).toBe("| a   | b   |\n| --- | --- |\n| 1   | 2   |\n|     |     |\n\nFine");
       expect(parent.querySelectorAll(".tb-grid tbody tr").length).toBe(3);
     } finally {
       cleanup();
+    }
+  });
+
+  // In una nota tutta CRLF la griglia scrive come in LF, con gli a capo
+  // della nota (#394): prima non trovava più la sua sorgente, e una riga
+  // aggiunta entrava con un "\n" nudo.
+  it("in una nota CRLF scrive celle e righe come in LF, e il file resta CRLF", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const cr = (text: string) => text.replace(/\n/g, nl);
+      const typed = editorWith(cr(table));
+      try {
+        const grid = typed.parent.querySelector<HTMLElement>(".tb-grid")!;
+        typed.cell(1, 0).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+        grid.dispatchEvent(new KeyboardEvent("keydown", { key: "u", bubbles: true, cancelable: true }));
+        const input = typed.cell(1, 0).querySelector("input")!;
+        input.value = "uno";
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+        expect(typed.engine.getDoc()).toBe(cr("Testo\n\n| a | b |\n| --- | --- |\n| uno | 2 |\n"));
+      } finally {
+        typed.cleanup();
+      }
+      const added = editorWith(cr("|a|b|\n|---|---|\n|1|2|\n\nFine"));
+      try {
+        added.parent.querySelector<HTMLButtonElement>('.tb-add[data-add="row"]')!.click();
+        expect(added.engine.getDoc()).toBe(cr("| a   | b   |\n| --- | --- |\n| 1   | 2   |\n|     |     |\n\nFine"));
+        expect(added.parent.querySelectorAll(".tb-grid tbody tr").length).toBe(3);
+      } finally {
+        added.cleanup();
+      }
+    }
+  });
+
+  it("in una nota CRLF uscire da una tabella in cima o in fondo aggiunge una riga vera", () => {
+    for (const nl of ["\n", "\r\n"]) {
+      const cr = (text: string) => text.replace(/\n/g, nl);
+      const { parent, engine, cleanup } = editorWith(cr("| a | b |\n| --- | --- |\n| 1 | 2 |"));
+      try {
+        const key = (name: string) => parent.querySelector<HTMLElement>(".tb-grid")!
+          .dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
+        const view = EditorView.findFromDOM(parent.querySelector(".cm-editor")!)!;
+        parent.querySelector<HTMLElement>('.tb-grid [data-row="0"][data-col="0"]')!
+          .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+        key("ArrowUp");
+        expect(engine.getDoc()).toBe(cr("\n| a | b |\n| --- | --- |\n| 1 | 2 |"));
+        expect(view.state.selection.main.head).toBe(0);
+        parent.querySelector<HTMLElement>('.tb-grid [data-row="1"][data-col="0"]')!
+          .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
+        key("ArrowDown");
+        expect(engine.getDoc()).toBe(cr("\n| a | b |\n| --- | --- |\n| 1 | 2 |\n"));
+        expect(view.state.selection.main.head).toBe(view.state.doc.length);
+      } finally {
+        cleanup();
+      }
     }
   });
 });
@@ -365,25 +519,65 @@ describe("un diagramma in Live", () => {
     return { parent, engine, cleanup: () => { closeContextMenu(); engine.destroy(); parent.remove(); } };
   }
 
-  function openStyleMenu(parent: HTMLElement): void {
-    parent.querySelector<HTMLButtonElement>(".mermaid-diagram .mermaid-action")!.click();
+  /// Il tasto destro sul diagramma: il menu E26.
+  function openMenu(parent: HTMLElement): HTMLElement {
+    parent.querySelector<HTMLElement>(".mermaid-diagram")!
+      .dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 40 }));
+    return document.querySelector<HTMLElement>(".diagram-menu")!;
   }
+  const scope = (menu: HTMLElement, value: "this" | "all") =>
+    menu.querySelector<HTMLButtonElement>(`.diagram-menu-segment[data-value="${value}"]`)!;
+  const style = (menu: HTMLElement, id: string) =>
+    menu.querySelector<HTMLButtonElement>(`[role="radio"][data-diagram-style="${id}"]`)!;
 
-  it("«Solo per questo diagramma» scrive la direttiva in cima al recinto, e la toglie", () => {
+  it("«Questo» scrive la direttiva in cima al recinto, e «Tutti» la toglie", () => {
     const { parent, engine, cleanup } = mountNote(false);
     try {
       expect(parent.querySelector(".mermaid-diagram")).not.toBeNull();
-      openStyleMenu(parent);
-      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      let menu = openMenu(parent);
+      expect(scope(menu, "this").getAttribute("aria-pressed")).toBe("false");
+      scope(menu, "this").click();
+      style(menu, "armonia").click();
       expect(engine.getDoc()).toBe("Testo\n\n```mermaid\n%% stile: armonia\nflowchart LR\nA-->B\n```\n\nFine");
-      // Il widget rinasce dal nuovo sorgente: adesso lo stile è suo.
-      openStyleMenu(parent);
-      const radios = [...document.querySelectorAll<HTMLButtonElement>('#context-menu [role="menuitemradio"]')];
-      radios[2]!.click();
+      expect(document.querySelector(".diagram-menu")).toBeNull();
+      // Il widget rinasce dal nuovo sorgente: adesso lo stile è suo, e il
+      // menu parte da «Questo».
+      menu = openMenu(parent);
+      expect(scope(menu, "this").getAttribute("aria-pressed")).toBe("true");
+      style(menu, "aurora").click();
       expect(engine.getDoc()).toBe("Testo\n\n```mermaid\n%% stile: aurora\nflowchart LR\nA-->B\n```\n\nFine");
-      openStyleMenu(parent);
-      document.querySelector<HTMLButtonElement>('#context-menu [role="menuitemcheckbox"]')!.click();
+      menu = openMenu(parent);
+      scope(menu, "all").click();
+      style(menu, "aurora").click();
       expect(engine.getDoc()).toBe(note);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("in una nota CRLF la direttiva entra come riga vera, come in LF (#394)", () => {
+    const { parent, engine, cleanup } = mountNote(false);
+    try {
+      engine.setDoc(note.replace(/\n/g, "\r\n"));
+      let menu = openMenu(parent);
+      scope(menu, "this").click();
+      style(menu, "armonia").click();
+      expect(engine.getDoc()).toBe("Testo\r\n\r\n```mermaid\r\n%% stile: armonia\r\nflowchart LR\r\nA-->B\r\n```\r\n\r\nFine");
+      menu = openMenu(parent);
+      scope(menu, "all").click();
+      style(menu, "armonia").click();
+      expect(engine.getDoc()).toBe(note.replace(/\n/g, "\r\n"));
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("l'orientamento riscrive soltanto la direzione", () => {
+    const { parent, engine, cleanup } = mountNote(false);
+    try {
+      const menu = openMenu(parent);
+      menu.querySelector<HTMLButtonElement>('.diagram-menu-segment[data-value="TD"]')!.click();
+      expect(engine.getDoc()).toBe(note.replace("flowchart LR", "flowchart TD"));
     } finally {
       cleanup();
     }
@@ -392,8 +586,9 @@ describe("un diagramma in Live", () => {
   it("in sola lettura il sorgente non si scrive", () => {
     const { parent, engine, cleanup } = mountNote(true);
     try {
-      openStyleMenu(parent);
-      expect(document.querySelector('#context-menu [role="menuitemcheckbox"]')).toBeNull();
+      const menu = openMenu(parent);
+      expect(scope(menu, "this").disabled).toBe(true);
+      expect(menu.querySelector<HTMLButtonElement>('.diagram-menu-segment[data-value="TD"]')!.disabled).toBe(true);
       expect(engine.getDoc()).toBe(note);
     } finally {
       cleanup();
@@ -624,5 +819,76 @@ describe("la rivelazione e la composizione", () => {
       engine.destroy();
       parent.remove();
     }
+  });
+});
+
+// Aprire una nota grande non legge tutto il file prima della prima schermata:
+// la Live rende l'inizio, e il resto arriva a pezzi quando la pagina è libera.
+describe("Live: apertura di una nota grande", () => {
+  const TABLE = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+  const note = () => {
+    const paragraphs = Array.from({ length: 2_000 }, (_, i) => `Paragrafo ${i + 1}: una riga di prosa senza segni, lunga quanto basta.`);
+    return `Inizio.\n\n${TABLE}\n\n${paragraphs.join("\n\n")}\n\n${TABLE}\n`;
+  };
+
+  /// Dove cominciano i blocchi che la Live sostituisce con un widget.
+  function widgets(view: EditorView): number[] {
+    const found: number[] = [];
+    for (const source of view.state.facet(EditorView.decorations)) {
+      const set = typeof source === "function" ? source(view) : source;
+      set.between(0, view.state.doc.length, (from, to, value) => {
+        if (value.spec.block && value.spec.widget && to > from) found.push(from);
+      });
+    }
+    return found.sort((a, b) => a - b);
+  }
+
+  function open(doc: string) {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc,
+        extensions: [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} })],
+      }),
+    });
+    return { view, cleanup: () => { view.destroy(); parent.remove(); } };
+  }
+
+  it("rende subito la tabella in cima, quella in fondo dopo, senza bloccare la pagina", async () => {
+    const doc = note();
+    const top = doc.indexOf(TABLE);
+    const bottom = doc.lastIndexOf(TABLE);
+    const { view, cleanup } = open(doc);
+    try {
+      expect(widgets(view)).toEqual([top]);
+      // L'apertura non ha portato il parser in fondo al documento.
+      expect(syntaxTreeAvailable(view.state, doc.length)).toBe(false);
+      await vi.waitFor(() => expect(widgets(view)).toEqual([top, bottom]));
+      expect(syntaxTreeAvailable(view.state, doc.length)).toBe(true);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("una battuta mentre il resto arriva non perde niente", async () => {
+    const doc = note();
+    const { view, cleanup } = open(doc);
+    try {
+      view.dispatch({ changes: { from: 0, insert: "Nuovo " } });
+      const text = view.state.doc.toString();
+      await vi.waitFor(() => expect(widgets(view)).toEqual([text.indexOf(TABLE), text.lastIndexOf(TABLE)]));
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("chiusa prima della fine, la vista non lavora più", async () => {
+    const { view, cleanup } = open(note());
+    const dispatch = vi.spyOn(view, "dispatch");
+    cleanup();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

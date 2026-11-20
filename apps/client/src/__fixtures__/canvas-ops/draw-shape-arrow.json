@@ -1,0 +1,83 @@
+{
+  "about": "Una freccia è un tratto solo: l'asta, poi un'ala della punta (30°, lunga max(12, 3 · misura)) fino in fondo e indietro alla cima, poi l'altra.",
+  "before": {
+    "nodes": [
+      {
+        "id": "t1",
+        "type": "text",
+        "text": "Ciclo dell'acqua",
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "text": "Evaporazione",
+        "x": 400,
+        "y": 0,
+        "width": 320,
+        "height": 160
+      }
+    ],
+    "edges": []
+  },
+  "ops": [
+    {
+      "op": "draw",
+      "on": "board",
+      "shape": {
+        "kind": "arrow",
+        "x1": 330,
+        "y1": 80,
+        "x2": 390,
+        "y2": 80
+      },
+      "size": 3
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "t1",
+          "type": "text",
+          "x": 0,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Ciclo dell'acqua"
+        },
+        {
+          "id": "t2",
+          "type": "text",
+          "x": 400,
+          "y": 0,
+          "width": 320,
+          "height": 160,
+          "text": "Evaporazione"
+        }
+      ],
+      "fub:ink": {
+        "v": 1,
+        "strokes": [
+          {
+            "id": "e220a8397b1dcdaf",
+            "tool": "pen",
+            "brush": "pf1 size=3 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=3 taperEnd=12 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+            "color": "#0072b2",
+            "anchor": {
+              "kind": "free"
+            },
+            "ink": "1 s100 cxypt 33000,8000,128,0 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 400,0,0,8 -346,-200,0,8 -347,-200,0,8 -346,-200,0,8 346,200,0,8 347,200,0,8 346,200,0,8 -346,200,0,8 -347,200,0,8 -346,200,0,8 346,-200,0,8 347,-200,0,8 346,-200,0,8"
+          }
+        ]
+      }
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

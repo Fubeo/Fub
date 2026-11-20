@@ -9,14 +9,20 @@
 //! stile della riga o della colonna, come in Excel. Un testo nuovo si scrive
 //! come stringa in linea, e la tabella delle stringhe condivise non cambia.
 //!
-//! Niente si ricalcola. Quando una formula legge una cella cambiata, o una
-//! formula si toglie, la cartella chiede a chi la apre di ricalcolare
-//! (`fullCalcOnLoad`); quando una formula si toglie, esce anche la catena di
-//! calcolo, che Excel ricostruisce.
+//! L'innesto non calcola: i valori nuovi delle formule glieli dà chi lo
+//! chiama ([`crate::ricalcolo`]), e una formula con un valore nuovo tiene i
+//! byte della sua `<f>` e cambia soltanto il valore salvato (`<v>` e il suo
+//! tipo). Quando una formula legge una cella cambiata, o una formula si toglie,
+//! la cartella chiede comunque a chi la apre di ricalcolare
+//! (`fullCalcOnLoad`): Excel e LibreOffice rifanno i conti col loro motore, e
+//! un programma che legge soltanto i valori salvati li trova aggiornati.
+//! Quando una formula si toglie, esce anche la catena di calcolo, che Excel
+//! ricostruisce.
 //!
 //! Il risultato si rilegge prima di uscire: ogni cella non toccata deve avere
 //! lo stesso input, lo stesso valore salvato e lo stesso stile, ogni cella
-//! cambiata il valore voluto. Una forma che l'innesto non sa trattare è un
+//! cambiata il valore voluto, ogni formula ricalcolata la sua formula, il suo
+//! stile e il valore nuovo. Una forma che l'innesto non sa trattare è un
 //! errore, e i byte di partenza restano quelli.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -41,6 +47,25 @@ pub struct CellEdit {
     pub sheet: usize,
     pub cell: CellRef,
     pub value: NewValue,
+}
+
+/// Il valore nuovo che una formula ha calcolato: la formula resta com'è, e
+/// cambia il valore che il file ne salva.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FormulaValue {
+    /// L'indice del foglio nel modello.
+    pub sheet: usize,
+    pub cell: CellRef,
+    pub value: Value,
+}
+
+/// Ciò che l'innesto scrive in una cella.
+#[derive(Clone, Copy, Debug)]
+enum Change<'a> {
+    /// Un valore costante al posto dell'input della cella.
+    Input(&'a NewValue),
+    /// Il valore salvato di una formula, che resta.
+    Cached(&'a Value),
 }
 
 /// I byte innestati, e che cosa l'innesto ha dovuto dire al file.
@@ -102,7 +127,19 @@ pub fn graft(
     edits: &[CellEdit],
     recalc: bool,
 ) -> Result<Grafted, GraftError> {
-    let mut by_sheet: BTreeMap<usize, BTreeMap<CellRef, &NewValue>> = BTreeMap::new();
+    graft_with_values(original, model, edits, &[], recalc)
+}
+
+/// [`graft`], e in più i valori nuovi delle formule `formulas`, che restano
+/// le formule del file.
+pub fn graft_with_values(
+    original: &[u8],
+    model: &Workbook,
+    edits: &[CellEdit],
+    formulas: &[FormulaValue],
+    recalc: bool,
+) -> Result<Grafted, GraftError> {
+    let mut by_sheet: BTreeMap<usize, BTreeMap<CellRef, Change>> = BTreeMap::new();
     for edit in edits {
         if edit.sheet >= model.sheets.len() {
             return Err(GraftError::NoSheet(edit.sheet));
@@ -119,10 +156,48 @@ pub fn graft(
         if by_sheet
             .entry(edit.sheet)
             .or_default()
-            .insert(edit.cell, &edit.value)
+            .insert(edit.cell, Change::Input(&edit.value))
             .is_some()
         {
             return Err(GraftError::Edit(format!("{} edited twice", edit.cell)));
+        }
+    }
+    for formula in formulas {
+        let sheet = model
+            .sheets
+            .get(formula.sheet)
+            .ok_or(GraftError::NoSheet(formula.sheet))?;
+        if sheet
+            .cell(formula.cell)
+            .is_none_or(|cell| cell.formula.is_none())
+        {
+            return Err(GraftError::Edit(format!(
+                "{} has no formula to hold a value",
+                formula.cell
+            )));
+        }
+        match &formula.value {
+            Value::Number(number) if !number.is_finite() => {
+                return Err(GraftError::Edit(format!("{} is not finite", formula.cell)));
+            }
+            Value::Text(text) if text.chars().count() > MAX_TEXT_CHARS => {
+                return Err(GraftError::Edit(format!(
+                    "{} text is too long",
+                    formula.cell
+                )));
+            }
+            Value::Array(_) => {
+                return Err(GraftError::Edit(format!("{} holds an array", formula.cell)));
+            }
+            _ => {}
+        }
+        if by_sheet
+            .entry(formula.sheet)
+            .or_default()
+            .insert(formula.cell, Change::Cached(&formula.value))
+            .is_some()
+        {
+            return Err(GraftError::Edit(format!("{} edited twice", formula.cell)));
         }
     }
     if by_sheet.is_empty() {
@@ -157,8 +232,12 @@ pub fn graft(
         }
         let sheet = &model.sheets[index];
         let locks = SheetLocks::new(sheet, &layout.facts, &model.styles);
-        for &cell in cells.keys() {
-            if let Some(lock) = locks.at(sheet, cell) {
+        for (&cell, change) in cells {
+            let lock = match change {
+                Change::Input(_) => locks.at(sheet, cell),
+                Change::Cached(_) => locks.at(sheet, cell).filter(|lock| lock.holds_value()),
+            };
+            if let Some(lock) = lock {
                 return Err(GraftError::Locked {
                     sheet: index,
                     cell,
@@ -347,6 +426,118 @@ fn content(prefix: Option<&[u8]>, value: &NewValue) -> (Option<&'static str>, Ve
     }
 }
 
+fn no_formula(pos: CellRef) -> GraftError {
+    shape(format!("{pos} has no formula in the sheet to hold a value"))
+}
+
+/// Il qualificatore `t` e il contenuto `<v>` del valore salvato di una
+/// formula, come li scrive Excel; un valore vuoto non ha `<v>`.
+fn cached_content(prefix: Option<&[u8]>, value: &Value) -> (Option<&'static str>, Vec<u8>) {
+    let element = |text: &str| {
+        let name = qname(prefix, "v");
+        let mut out = b"<".to_vec();
+        out.extend_from_slice(&name);
+        out.push(b'>');
+        out.extend_from_slice(escape(text).as_bytes());
+        out.extend_from_slice(b"</");
+        out.extend_from_slice(&name);
+        out.push(b'>');
+        out
+    };
+    match value {
+        Value::Empty | Value::Array(_) => (None, Vec::new()),
+        Value::Number(number) => (None, element(&number_input(*number))),
+        Value::Bool(flag) => (Some("b"), element(if *flag { "1" } else { "0" })),
+        Value::Error(error) => (Some("e"), element(error.as_str())),
+        Value::Text(text) => (Some("str"), element(&encode_xstring(text))),
+    }
+}
+
+/// Una cella con formula, `cell` com'è nel file, con il valore salvato
+/// `value`: il tag tiene i suoi attributi tranne il tipo, la formula e ogni
+/// altro figlio restano i loro byte, e il `<v>` è quello nuovo, al posto di
+/// quello vecchio o dopo la formula.
+fn cached_cell(cell: &[u8], prefix: Option<&[u8]>, value: &Value) -> Result<Vec<u8>, GraftError> {
+    let mut reader = Reader::from_reader(cell);
+    reader.config_mut().trim_text(false);
+    let (kind, body) = cached_content(prefix, value);
+    let mut depth = 0usize;
+    let mut tag_end = None;
+    // Dove finisce la formula, e dove sta il `<v>` vecchio.
+    let mut after_formula = None;
+    let mut old_value: Option<(usize, usize)> = None;
+    let mut value_start = 0usize;
+    loop {
+        let start = reader.buffer_position() as usize;
+        let event = reader
+            .read_event()
+            .map_err(|error| shape(format!("a formula cell does not parse: {error}")))?;
+        let end = reader.buffer_position() as usize;
+        match event {
+            Event::Start(ref element) | Event::Empty(ref element) => {
+                let empty = matches!(event, Event::Empty(_));
+                let name = element.name();
+                match (depth, local(name.as_ref())) {
+                    (0, _) => {
+                        if empty {
+                            return Err(shape("a formula cell without content"));
+                        }
+                        tag_end = Some(end);
+                    }
+                    (1, b"f") if empty => after_formula = Some(end),
+                    (1, b"v") if empty => old_value = Some((start, end)),
+                    (1, b"v") => value_start = start,
+                    (1, b"is") => return Err(shape("a formula cell with an inline string")),
+                    _ => {}
+                }
+                if !empty {
+                    depth += 1;
+                }
+            }
+            Event::End(ref element) => {
+                depth = depth.saturating_sub(1);
+                match (depth, local(element.name().as_ref())) {
+                    (1, b"f") => after_formula = Some(end),
+                    (1, b"v") => old_value = Some((value_start, end)),
+                    (0, _) => break,
+                    _ => {}
+                }
+            }
+            Event::Eof => return Err(shape("a formula cell is not closed")),
+            _ => {}
+        }
+    }
+    let tag_end = tag_end.ok_or_else(|| shape("a formula cell without a tag"))?;
+    let after_formula = after_formula.ok_or_else(|| shape("a formula cell without a formula"))?;
+    let first: Vec<(&str, String)> = kind
+        .map(|kind| ("t", kind.to_string()))
+        .into_iter()
+        .collect();
+    let tag = retag(&cell[..tag_end], &[b"t"], &first, Some(false))?;
+    let mut out = tag;
+    let splice = match old_value {
+        Some((start, end)) => Splice {
+            start,
+            end,
+            bytes: body,
+        },
+        None => Splice {
+            start: after_formula,
+            end: after_formula,
+            bytes: body,
+        },
+    };
+    out.extend_from_slice(&apply(
+        &cell[tag_end..],
+        vec![Splice {
+            start: splice.start - tag_end,
+            end: splice.end - tag_end,
+            bytes: splice.bytes,
+        }],
+    )?);
+    Ok(out)
+}
+
 /// Il testo come `ST_Xstring`: i caratteri che XML non ammette diventano
 /// `_xHHHH_`, e un `_xHHHH_` già nel testo protegge il suo `_`. È l'inversa
 /// della lettura del codec.
@@ -464,12 +655,15 @@ fn grow(pos: CellRef, bounds: &mut Option<RangeRef>) {
 fn rewrite_sheet(
     bytes: &[u8],
     layout: &SheetLayout,
-    cells: &BTreeMap<CellRef, &NewValue>,
+    cells: &BTreeMap<CellRef, Change>,
 ) -> Result<(Vec<u8>, bool), GraftError> {
     let prefix = layout.prefix.as_deref();
-    let mut by_row: BTreeMap<u32, Vec<(u32, &NewValue)>> = BTreeMap::new();
-    for (cell, value) in cells {
-        by_row.entry(cell.row).or_default().push((cell.col, value));
+    let mut by_row: BTreeMap<u32, Vec<(u32, Change)>> = BTreeMap::new();
+    for (cell, change) in cells {
+        by_row
+            .entry(cell.row)
+            .or_default()
+            .push((cell.col, *change));
     }
     let mut splices = Vec::new();
     let mut formula_removed = false;
@@ -477,7 +671,7 @@ fn rewrite_sheet(
 
     // Le righe nuove, e quelle esistenti che cambiano.
     let mut new_rows: BTreeMap<u32, Vec<u8>> = BTreeMap::new();
-    let mut touched: BTreeMap<usize, &[(u32, &NewValue)]> = BTreeMap::new();
+    let mut touched: BTreeMap<usize, &[(u32, Change)]> = BTreeMap::new();
     for (&row, values) in &by_row {
         match layout.rows.binary_search_by_key(&row, |span| span.row) {
             Ok(index) => {
@@ -485,8 +679,11 @@ fn rewrite_sheet(
             }
             Err(_) => {
                 let mut xml = Vec::new();
-                for &(col, value) in values {
+                for &(col, change) in values {
                     let pos = CellRef::new(row, col);
+                    let Change::Input(value) = change else {
+                        return Err(no_formula(pos));
+                    };
                     let style = layout.inherited_style(None, col);
                     if let Some(cell) =
                         render_cell(&qname(prefix, "c"), None, pos, style, prefix, value)?
@@ -617,7 +814,7 @@ fn rewrite_row(
     layout: &SheetLayout,
     row: &RowSpan,
     cells: &[CellSpan],
-    values: &[(u32, &NewValue)],
+    values: &[(u32, Change)],
     needs_r: bool,
     splices: &mut Vec<Splice>,
     grow: &mut dyn FnMut(CellRef),
@@ -627,8 +824,22 @@ fn rewrite_row(
     // L'esito di ogni cella esistente toccata: `None` esce.
     let mut replaced: BTreeMap<usize, Option<Vec<u8>>> = BTreeMap::new();
     let mut inserts: Vec<(u32, Vec<u8>)> = Vec::new();
-    for &(col, value) in values {
+    for &(col, change) in values {
         let pos = CellRef::new(row.row, col);
+        let value = match change {
+            Change::Input(value) => value,
+            Change::Cached(value) => {
+                let index = cells
+                    .binary_search_by_key(&col, |cell| cell.pos.col)
+                    .ok()
+                    .filter(|&index| cells[index].formula)
+                    .ok_or_else(|| no_formula(pos))?;
+                let span = cells[index].span;
+                let out = cached_cell(&bytes[span.start..span.end], prefix, value)?;
+                replaced.insert(index, Some(out));
+                continue;
+            }
+        };
         match cells.binary_search_by_key(&col, |cell| cell.pos.col) {
             Ok(index) => {
                 let cell = &cells[index];
@@ -840,6 +1051,59 @@ fn full_calc_on_load(xml: &[u8]) -> Result<Vec<u8>, GraftError> {
     }
 }
 
+/// Se `xl/workbook.xml` chiede di ricalcolare all'apertura.
+fn asks_full_calc(xml: &[u8]) -> Result<bool, GraftError> {
+    let mut reader = Reader::from_reader(xml);
+    let mut depth = 0usize;
+    loop {
+        let event = reader
+            .read_event()
+            .map_err(|error| package::xml_error("workbook", error))?;
+        match event {
+            Event::Start(ref element) | Event::Empty(ref element) => {
+                if depth == 1 && local(element.name().as_ref()) == b"calcPr" {
+                    return Ok(attr(element, b"fullCalcOnLoad")
+                        .is_some_and(|value| matches!(value.trim(), "1" | "true")));
+                }
+                if matches!(event, Event::Start(_)) {
+                    depth += 1;
+                }
+            }
+            Event::End(_) => depth = depth.saturating_sub(1),
+            Event::Eof => return Ok(false),
+            _ => {}
+        }
+    }
+}
+
+/// La riscrittura `rewritten` della cartella `source`, con la richiesta di
+/// ricalcolo all'apertura che `source` fa. Il codec scrive `fullCalcOnLoad`
+/// soltanto per una formula senza valore; quella di un innesto dice che i
+/// valori salvati delle formule possono essere vecchi, e la riscrittura li
+/// porta così come sono.
+pub(crate) fn keep_full_calc(source: &[u8], rewritten: Vec<u8>) -> Result<Vec<u8>, GraftError> {
+    let mut package = Package::open(source)?;
+    let part = package.workbook_part()?;
+    let asked = match package.read(&part)? {
+        Some(xml) => asks_full_calc(&xml)?,
+        None => false,
+    };
+    if !asked {
+        return Ok(rewritten);
+    }
+    let mut package = Package::open(&rewritten)?;
+    let part = package.workbook_part()?;
+    let xml = package
+        .read(&part)?
+        .ok_or_else(|| GraftError::Package(format!("{part} is missing")))?;
+    if asks_full_calc(&xml)? {
+        return Ok(rewritten);
+    }
+    let replaced = HashMap::from([(normalize(&part), full_calc_on_load(&xml)?)]);
+    drop(package);
+    rezip(&rewritten, replaced, &BTreeSet::new())
+}
+
 /// Toglie gli elementi vuoti `name` il cui attributo `key` soddisfa `matches`.
 fn remove_empty(
     xml: &[u8],
@@ -954,7 +1218,7 @@ fn verify_sheet(
     before_styles: &StyleTable,
     after: &Sheet,
     after_styles: &StyleTable,
-    edits: Option<&BTreeMap<CellRef, &NewValue>>,
+    edits: Option<&BTreeMap<CellRef, Change>>,
 ) -> Result<(), GraftError> {
     let fail = |what: String| Err(GraftError::Verify(format!("sheet {index}: {what}")));
     let edited = |pos: &CellRef| edits.is_some_and(|edits| edits.contains_key(pos));
@@ -986,11 +1250,31 @@ fn verify_sheet(
     {
         return fail("the sheet structure changed".into());
     }
-    for (pos, value) in edits.into_iter().flatten() {
+    for (pos, change) in edits.into_iter().flatten() {
         let cell = after.cells.get(*pos);
         let value_now = cell.map(|cell| &cell.value).unwrap_or(&Value::Empty);
-        if *value_now != expected(value) || cell.is_some_and(|cell| cell.formula.is_some()) {
-            return fail(format!("{pos} does not hold the new value"));
+        match change {
+            Change::Input(value) => {
+                if *value_now != expected(value) || cell.is_some_and(|cell| cell.formula.is_some())
+                {
+                    return fail(format!("{pos} does not hold the new value"));
+                }
+            }
+            // La formula resta la stessa, con il suo stile, e salva il valore
+            // nuovo.
+            Change::Cached(value) => {
+                let kept = match (before.cells.get(*pos), cell) {
+                    (Some(was), Some(now)) => {
+                        let mut same = was.clone();
+                        same.value = now.value.clone();
+                        same_cell(&same, before_styles, now, after_styles)
+                    }
+                    _ => false,
+                };
+                if !kept || value_now != *value {
+                    return fail(format!("{pos} does not hold the new formula value"));
+                }
+            }
         }
     }
     Ok(())
@@ -999,7 +1283,7 @@ fn verify_sheet(
 fn verify(
     model: &Workbook,
     bytes: &[u8],
-    edits: &BTreeMap<usize, BTreeMap<CellRef, &NewValue>>,
+    edits: &BTreeMap<usize, BTreeMap<CellRef, Change>>,
 ) -> Result<(), GraftError> {
     let after = crate::read(bytes)?.workbook;
     if after.sheets.len() != model.sheets.len() {

@@ -343,6 +343,35 @@ impl HostPort {
         }
     }
 
+    /// La mappa dei componenti e il loro stato, dall'host che tiene il vault.
+    pub fn components(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<fub_host::componenti::Componenti, PluginError> {
+        match self.app(vault) {
+            None => self.local.components(vault),
+            Some((app, vault)) => app.call_as(Call::Components { vault }),
+        }
+    }
+
+    /// Applica una scelta sui componenti, o la prova senza `apply`.
+    pub fn apply_components(
+        &self,
+        vault: Option<&str>,
+        azione: fub_host::componenti::Azione,
+        apply: bool,
+    ) -> Result<Result<fub_host::componenti::Esito, fub_host::componenti::Rifiuto>, PluginError>
+    {
+        match self.app(vault) {
+            None => self.local.apply_components(vault, azione, apply),
+            Some((app, vault)) => app.call_as(Call::ApplyComponents {
+                vault,
+                azione,
+                apply,
+            }),
+        }
+    }
+
     pub fn set_setting_for_user(
         &self,
         vault: Option<&str>,

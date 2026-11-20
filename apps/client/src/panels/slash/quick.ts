@@ -4,6 +4,8 @@
 // lo stesso che la riga di comando può chiamare.
 import { t } from "../../i18n/strings";
 import { fold } from "./rank";
+import { saidReminder } from "../../editors/text/profiles/markdown/dates";
+import { firstWeekday } from "../../state/dates";
 
 export interface QuickCommand {
   readonly id: string;
@@ -96,6 +98,21 @@ export function quickCommand(raw: string, today: Date): QuickCommand | null {
     const found = CALLOUTS.find((each) => each.type === word || each.names.includes(word));
     if (!found) return null;
     return { id: "markdown.callout", params: { type: found.type }, label: t("slash.quick.callout", { name: calloutLabel(found.type) }), icon: "fmt-callout" };
+  }
+  // «/promemoria venerdì 9» (T36): il giorno e l'ora con le parole delle
+  // date (T10), letti sul testo com'è scritto, accenti compresi.
+  const reminder = /^(?:promemoria|ricordami|reminder|remind(?: me)?) (.+)$/iu.exec(raw.trim().replace(/\s+/g, " "));
+  if (reminder) {
+    const when = saidReminder(reminder[1]!, today, firstWeekday(), t("slash.locale"));
+    if (!when) return null;
+    const [year, month, date] = when.date.split("-").map(Number) as [number, number, number];
+    return {
+      // `REMINDER_ENTRY` di `entries.ts`, che legge questo file.
+      id: "markdown.reminder",
+      params: { date: when.date, time: when.time },
+      label: t("slash.quick.reminder", { date: longDay(new Date(year, month - 1, date)), time: when.time }),
+      icon: "fmt-alarm",
+    };
   }
   const day = resolveDay(q, today);
   if (day) return { id: "markdown.date", params: { date: isoOf(day) }, label: t("slash.quick.date", { date: longDay(day) }), icon: "fmt-date" };

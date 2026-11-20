@@ -15,8 +15,8 @@ fine; a whole task is a coder's job.
 The plan is `$ARGUMENTS`, or `PLAN.md` at the root of the plan branch.
 
 `CLAUDE.md` applies. In this workflow it allows what it otherwise forbids:
-coder subagents that write, each in its own worktree. Only you push; only the
-user merges.
+coder subagents that write, each in its own worktree. Only you push, and you
+merge under the rule in `CLAUDE.md`.
 
 ## Start
 
@@ -43,6 +43,14 @@ user merges.
    and a prompt built from [brief.md](brief.md). Put in it only that task's
    section, the base commit (the plan branch's current HEAD) and the decisions
    that apply. Set the task's `Stato` to `[~] in corso · coder · base <sha>`.
+   A graphic task also adds its pieces to the prototype map in
+   `apps/client/bench/conformita/` and passes `npm run bench:conformita`
+   (through the heavy-check queue); say so in its brief. When the user names
+   an artifact or prototype as the reference, the brief says that its code
+   (markup, CSS, computed styles measured prototype → app in both lights) is
+   the reference and screenshots are only the final confirmation. At
+   integration, every prototype class the task touches must be in the map and
+   compared; a missing one sends the task back.
 3. **While they work** don't poll. Integrate whoever finished, answer questions,
    handle CI results as they arrive.
 4. **A report arrives:**
@@ -70,9 +78,11 @@ user merges.
    they are architectural). Then delete `PLAN.md` and `PLAN-ui/` in one commit:
    `docs(piano): il piano <titolo> è concluso`. They stay in the branch history.
 3. Push, mark the PR ready (`gh pr ready`, or the GitHub tools): the full CI
-   runs once, Windows, macOS and benches included. Wait in the background.
-4. Green: the final report in Italian (format in `CLAUDE.md`) and ask the user
-   to merge. **Never merge without the user's explicit OK.**
+   runs once, Windows and benches included (macOS is paused, ADR 0245). Wait in
+   the background.
+4. Green: merge under the rule in `CLAUDE.md` (what stays the maintainer's
+   call: ask and wait), then the final report in Italian, format in
+   `CLAUDE.md`.
 
 ## Spend little
 

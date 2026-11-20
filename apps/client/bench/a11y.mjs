@@ -3,6 +3,7 @@
 //
 //     node bench/a11y.mjs
 //     node bench/a11y.mjs --light=dark    # una luce sola, come la CI in due job
+//     node bench/a11y.mjs --scene=a,b     # solo le scene nominate, per provarle
 //
 // Una scansione strutturale non basta: il nome può esserci ma il fuoco non
 // arrivare mai, un controllo può avere un ruolo valido ma non reagire a Invio,
@@ -11,8 +12,9 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { editorFrameRingGap, modalComboboxGap } from "./a11y-rules.mjs";
 import { SCENE, LIGHTS, sceneUrl } from "./scene.mjs";
-import { openStage, openPage, prepareScene, OUTPUT, WINDOW } from "./stage.mjs";
+import { openStage, openPage, prepareScene, assertCsp, OUTPUT, WINDOW } from "./stage.mjs";
 /// Debito storico dichiarato. Non è un'esenzione dalle altre regole:
 /// ogni violazione fuori dal debito resta bloccante e viene riportata.
 const DEBT = [
@@ -37,8 +39,18 @@ if (ONLY !== undefined && !LIGHTS.includes(ONLY)) {
 }
 const RUN_LIGHTS = ONLY === undefined ? LIGHTS : [ONLY];
 
+/// Le scene da esaminare: tutte, o quelle che `--scene=` nomina (separate da
+/// virgole). Un nome che non è una scena è un errore, non un elenco più corto:
+/// altrimenti un refuso darebbe un verde su niente.
+const NAMED = process.argv.find((arg) => arg.startsWith("--scene="))?.slice("--scene=".length).split(",");
+const unknown = NAMED?.filter((id) => !SCENE.some((s) => s.id === id)) ?? [];
+if (unknown.length > 0) throw new Error(`--scene=: ${unknown.join(", ")} non sono scene`);
+
 /// Che cosa si esamina, e dove va il referto.
-const SET = { scenes: SCENE, report: join(OUTPUT, "accessibilita") };
+const SET = {
+  scenes: NAMED === undefined ? SCENE : SCENE.filter((s) => NAMED.includes(s.id)),
+  report: join(OUTPUT, "accessibilita"),
+};
 
 const REPORT = SET.report;
 const require = createRequire(import.meta.url);
@@ -113,25 +125,81 @@ async function aScene(page, scene, light, base, axeSource) {
   // Lo script resta nella pagina fra una scena e l'altra, ma non si usa mai
   // una configurazione precedente: ogni passata parte dal documento corrente.
   const hasAxe = await page.evaluate(() => Boolean(window.axe));
-  if (!hasAxe) await page.addScriptTag({ content: axeSource });
+  // Valutato come espressione e non con `addScriptTag`: un `<script>` in linea
+  // la CSP del banco (quella dell'app) lo rifiuta.
+  if (!hasAxe) await page.evaluate(axeSource);
 
   await paperUnderText(page);
+  // Anche ciò che il banco aggiunge per misurare passa dalla CSP: un rifiuto
+  // qui cambierebbe la misura senza dirlo.
+  try {
+    await assertCsp(page);
+  } catch (e) {
+    await removePaper(page);
+    row.outcome = OUTCOMES.unstable;
+    row.reason = e.message.replace(/:?\n\s*/g, " — ");
+    console.error(`✗ ${scene.id} (${light}): ${row.reason}`);
+    return row;
+  }
   // Nessuna selezione manuale: una nuova regola axe applicabile deve diventare
   // senza che questo file debba essere aggiornato a mano.
-  const outcome = await page.evaluate(
-    async () =>
-      // eslint-disable-next-line no-undef
-      await window.axe.run(document, {
-        // Gli iframe sono web_view del catalogo e portano `about:blank`: il
-        // documento figlio non appartiene alla superficie che si sta provando.
-        iframes: false,
-      }),
-  );
-
-  await page.evaluate(() => {
-    document.getElementById("bench-carta")?.remove();
-    document.querySelectorAll("[data-bench-carta]").forEach((pane) => delete pane.dataset.benchCarta);
+  const outcome = await page.evaluate(async () => {
+    // eslint-disable-next-line no-undef
+    const axe = window.axe;
+    const result = await axe.run(document, {
+      // Gli iframe sono web_view del catalogo e portano `about:blank`: il
+      // documento figlio non appartiene alla superficie che si sta provando.
+      iframes: false,
+    });
+    // `aria-required-children` scende nei figli del DOM, e non sa che un
+    // figlio dichiarato da un altro elemento con `aria-owns` sta, per il
+    // browser, sotto quell'elemento: la cella aperta della griglia vive nel
+    // livello dei segni (sopra le celle) e la sua cella la dichiara sua. La
+    // stessa visita di axe, con i suoi giudizi di ruolo, visibilità e fuoco,
+    // ma senza i sottoalberi dichiarati altrove: se non resta niente fuori
+    // posto il rilievo cade; se resta, resta com'è.
+    const ownedElsewhere = (element, root) => {
+      for (let node = element; node && node !== root; node = node.parentElement) {
+        if (!node.id) continue;
+        const owner = document.querySelector(`[aria-owns~="${CSS.escape(node.id)}"]`);
+        if (owner && root.contains(owner) && !node.contains(owner)) return true;
+      }
+      return false;
+    };
+    const misplaced = (root) => {
+      const required = ["row", "rowgroup"];
+      const globals = axe.commons.standards.getGlobalAriaAttrs();
+      const queue = [...root.children];
+      const found = [];
+      for (let element; (element = queue.shift()); ) {
+        if (ownedElsewhere(element, root)) continue;
+        const vNode = axe.utils.getNodeFromTree(element);
+        if (!vNode || !axe.commons.dom.isVisibleToScreenReaders(vNode)) continue;
+        const role = axe.commons.aria.getRole(vNode, { noPresentational: true });
+        const global = globals.some((name) => vNode.hasAttr(name)) || axe.commons.dom.isFocusable(vNode);
+        if ((!role && !global) || role === "rowgroup") queue.push(...element.children);
+        else if (!required.includes(role)) found.push(element);
+      }
+      return found;
+    };
+    const rule = result.violations.find((each) => each.id === "aria-required-children");
+    if (rule) {
+      // L'albero virtuale di axe vive solo durante una sua visita.
+      axe.setup(document);
+      try {
+        rule.nodes = rule.nodes.filter((node) => {
+          const target = typeof node.target[0] === "string" ? document.querySelector(node.target[0]) : null;
+          return !(target?.getAttribute("role") === "grid" && misplaced(target).length === 0);
+        });
+      } finally {
+        axe.teardown();
+      }
+    }
+    result.violations = result.violations.filter((rule) => rule.nodes.length > 0);
+    return result;
   });
+
+  await removePaper(page);
 
   const count = (group) => group.reduce((n, r) => n + r.nodes.length, 0);
   row.examined =
@@ -181,8 +249,8 @@ async function aScene(page, scene, light, base, axeSource) {
 /// sopra, col colore che ha davvero: ciò che si vede non cambia, e axe confronta
 /// il testo con la carta vera invece di arrendersi.
 async function paperUnderText(page) {
+  await removePaper(page);
   await page.evaluate(() => {
-    document.getElementById("bench-carta")?.remove();
     const rules = [".pane::before, .pane::after { background: transparent !important; }"];
     document.querySelectorAll(".pane").forEach((pane, index) => {
       const paper = getComputedStyle(pane, "::before").backgroundColor;
@@ -190,10 +258,25 @@ async function paperUnderText(page) {
       pane.dataset.benchCarta = String(index);
       rules.push(`.pane[data-bench-carta="${index}"] > :not(.pane-tabs) { background-color: ${paper} !important; }`);
     });
-    const style = document.createElement("style");
-    style.id = "bench-carta";
-    style.textContent = rules.join("\n");
-    document.head.append(style);
+    // Un foglio costruito, non un `<style>`: senza il nonce della pagina la
+    // CSP del banco lo rifiuterebbe in silenzio, e axe tornerebbe a vedere lo
+    // pseudo-elemento invece della carta (e a tacere sul contrasto del foglio).
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(rules.join("\n"));
+    Object.defineProperty(window, "__benchCarta", { value: sheet, configurable: true });
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  });
+}
+
+/// Toglie la carta messa da `paperUnderText`.
+async function removePaper(page) {
+  await page.evaluate(() => {
+    const sheet = window.__benchCarta;
+    if (sheet !== undefined) {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((existing) => existing !== sheet);
+      delete window.__benchCarta;
+    }
+    document.querySelectorAll("[data-bench-carta]").forEach((pane) => delete pane.dataset.benchCarta);
   });
 }
 
@@ -388,8 +471,21 @@ async function inspectKeyboard(page) {
       const rect = el.getBoundingClientRect();
       return rect.width === 0 || rect.height === 0;
     };
+    // Un menu dentro una superficie modale (il menu della maniglia: un
+    // dialogo col campo della ricerca e, sotto, il menu delle voci) ne è una
+    // parte: il giro del Tab è quello della superficie, campo compreso. Lo
+    // dice la superficie stessa, che dà il suo nome al menu delle voci. Un
+    // menu aperto *da* un dialogo modale (il menu dei profili dello spazio
+    // «Esporta in PDF») sta nel suo DOM perché fuori sarebbe inerte, ma ha il
+    // suo nome e la sua trappola: il giro del Tab è il suo.
+    const ownMenu = (el) => {
+      const surface = el.parentElement?.closest("[aria-modal=\"true\"]");
+      if (!surface) return false;
+      return Boolean(surface.id) && (el.getAttribute("aria-labelledby") ?? "").split(/\s+/).includes(surface.id);
+    };
     const modal = [...document.querySelectorAll("[aria-modal=\"true\"], [role=\"menu\"]")]
       .filter((el) => !hidden(el))
+      .filter((el) => el.getAttribute("role") !== "menu" || !ownMenu(el))
       .at(-1);
     const scope = modal ?? document;
     const nodes = [...scope.querySelectorAll("*")].filter(
@@ -425,6 +521,11 @@ async function inspectKeyboard(page) {
   const failures = [];
 
   try {
+    // Le lettere di Alt di una barra tengono i tasti, come in Office: il
+    // primo Tab le chiude e non sposta il fuoco. axe ha già esaminato la
+    // scena con le lettere; il percorso del Tab parte dalla barra a riposo,
+    // e Esc ce la riporta.
+    if (await page.locator("[data-keytips=\"true\"]").count() > 0) await page.keyboard.press("Escape");
     await page.evaluate(() => {
       const active = document.activeElement;
       if (active instanceof HTMLElement) active.blur();
@@ -467,7 +568,25 @@ async function inspectKeyboard(page) {
     // resta il rilievo di prima.
     let previousProbe = null;
     let previousDescendant = null;
-    const readActual = () => page.evaluate(() => {
+    // L'applicazione che contiene il fuoco di prima (lei stessa o un figlio).
+    let previousApp = null;
+    // Il combobox di una finestra modale mostra il fuoco col cursore e la
+    // riga attiva, non con un anello: i fatti si raccolgono qui nella
+    // pagina, il giudizio (stretto, con i suoi casi) sta in
+    // `a11y-rules.mjs`, `modalComboboxGap`.
+    const readActual = async () => {
+      const actual = await readFocused();
+      if (actual?.combobox) {
+        if (!actual.indicator && modalComboboxGap(actual.combobox) === null) actual.indicator = true;
+        delete actual.combobox;
+      }
+      if (actual?.editorFrame) {
+        if (!actual.indicator && editorFrameRingGap(actual.editorFrame) === null) actual.indicator = true;
+        delete actual.editorFrame;
+      }
+      return actual;
+    };
+    const readFocused = () => page.evaluate(() => {
         const el = document.activeElement;
         if (!(el instanceof HTMLElement)) return null;
         const hasIndicator = (style, pseudo, after) =>
@@ -520,10 +639,120 @@ async function inspectKeyboard(page) {
         const descendantIndicator =
           descendant !== null &&
           hasIndicator(getComputedStyle(descendant), getComputedStyle(descendant, "::before"), getComputedStyle(descendant, "::after"));
+        // La griglia dei fogli disegna il fuoco coi pezzi del motore dei segni
+        // (`editors/grid/grid-motion.ts`): l'anello della cella attiva, o il
+        // rettangolo della selezione quando è la cella sola, sono elementi a
+        // parte sopra la cella, non un'ombra della cella. Conta un pezzo che
+        // si vede e tocca il bordo della cella attiva.
+        const markIndicator =
+          descendant !== null &&
+          el.classList.contains("grid-viewport") &&
+          (() => {
+            const cell = descendant.getBoundingClientRect();
+            return [...el.querySelectorAll(".grid-mark-ring, .grid-mark-edge")].some((mark) => {
+              if (mark.hidden) return false;
+              const look = getComputedStyle(mark);
+              const box = mark.getBoundingClientRect();
+              return look.visibility === "visible" && Number(look.opacity) > 0 && box.width > 0 && box.height > 0 &&
+                box.right >= cell.left - 2 && box.left <= cell.right + 2 && box.bottom >= cell.top - 2 && box.top <= cell.bottom + 2;
+            });
+          })();
         const indicator =
-          (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator || boxIndicator || descendantIndicator)) ||
+          (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator || boxIndicator || descendantIndicator || markIndicator)) ||
           (el.tagName === "IFRAME" && shellIndicator);
+        // I fatti del combobox, per l'eccezione della finestra modale: solo
+        // per un campo combobox senza un indicatore suo.
+        const lookOf = (node) => {
+          const s = getComputedStyle(node);
+          const sides = ["Top", "Right", "Bottom", "Left"];
+          const drawn = sides.filter((side) => s[`border${side}Style`] !== "none" && parseFloat(s[`border${side}Width`]) > 0);
+          return {
+            background: s.backgroundColor,
+            backgroundImage: s.backgroundImage,
+            border: drawn.length === 0 ? "none" : sides.map((side) => `${s[`border${side}Width`]} ${s[`border${side}Style`]} ${s[`border${side}Color`]}`).join(", "),
+            outline: s.outlineStyle === "none" ? "none" : `${s.outlineWidth} ${s.outlineStyle} ${s.outlineColor}`,
+            boxShadow: s.boxShadow,
+          };
+        };
+        let combobox = null;
+        if (!indicator && el.tagName === "INPUT" && el.getAttribute("role") === "combobox") {
+          const controlsId = el.getAttribute("aria-controls");
+          const list = controlsId ? document.getElementById(controlsId) : null;
+          const dialog = el.closest('[role="dialog"]');
+          const rect = el.getBoundingClientRect();
+          let activeFacts = null;
+          if (descendantId) {
+            if (descendant === null) activeFacts = { exists: false };
+            else {
+              const owner = descendant.closest('[role="listbox"]');
+              const other = owner
+                ? [...owner.querySelectorAll('[role="option"]')].find((one) => one !== descendant && !one.matches(":hover")) ??
+                  [...owner.querySelectorAll('[role="option"]')].find((one) => one !== descendant) ??
+                  null
+                : null;
+              const highlight = owner?.querySelector(":scope > .kit-list-highlight") ?? null;
+              activeFacts = {
+                exists: true,
+                look: lookOf(descendant),
+                otherLook: other ? lookOf(other) : null,
+                highlight: highlight
+                  ? {
+                      hidden: highlight.hidden || getComputedStyle(highlight).display === "none" || getComputedStyle(highlight).visibility !== "visible",
+                      look: lookOf(highlight),
+                      sameSize:
+                        Math.abs(highlight.offsetWidth - descendant.offsetWidth) <= 1 &&
+                        Math.abs(highlight.offsetHeight - descendant.offsetHeight) <= 1 &&
+                        descendant.offsetWidth > 0 &&
+                        descendant.offsetHeight > 0,
+                    }
+                  : null,
+              };
+            }
+          }
+          combobox = {
+            tag: el.tagName,
+            role: el.getAttribute("role"),
+            focusVisible: el.matches(":focus-visible"),
+            readOnly: el.readOnly,
+            disabled: el.disabled,
+            caretColor: style.caretColor,
+            color: style.color,
+            width: rect.width,
+            height: rect.height,
+            visibility: style.visibility,
+            controls: list?.getAttribute("role") ?? null,
+            dialog: dialog ? { modal: dialog.getAttribute("aria-modal") } : null,
+            descendant: activeFacts,
+          };
+        }
+        // I fatti dello scroller dell'editor di testo, per l'anello che
+        // disegna l'editor: solo per un `.cm-scroller` senza un anello suo.
+        let editorFrame = null;
+        if (!indicator && el.classList.contains("cm-scroller")) {
+          const frame = el.parentElement;
+          const veil = frame ? getComputedStyle(frame, "::after") : null;
+          editorFrame = {
+            focusVisible: el.matches(":focus-visible"),
+            frame: frame?.classList.contains("cm-editor") ?? false,
+            after: veil
+              ? {
+                  content: veil.content,
+                  display: veil.display,
+                  position: veil.position,
+                  top: veil.top,
+                  right: veil.right,
+                  bottom: veil.bottom,
+                  left: veil.left,
+                  outlineStyle: veil.outlineStyle,
+                  outlineWidth: veil.outlineWidth,
+                  boxShadow: veil.boxShadow,
+                }
+              : null,
+          };
+        }
         return {
+          combobox,
+          editorFrame,
           probe: el.dataset.a11yProbe ?? null,
           indicator,
           descendant: descendant
@@ -534,6 +763,9 @@ async function inspectKeyboard(page) {
           // disegno percorre gli oggetti con Tab, ed esce dopo l'ultimo, che
           // Fine raggiunge.
           application: el.getAttribute("role") === "application",
+          // L'applicazione che contiene il fuoco, lui compreso: la lavagna
+          // porta il Tab sulle sue schede, figlie della tela.
+          app: el.closest('[role="application"]')?.dataset.a11yProbe ?? null,
         };
       });
     let candidates = await refreshProbes();
@@ -542,7 +774,7 @@ async function inspectKeyboard(page) {
         failures.push({ source: "browser", rule: "tab-order", where: "document", reason: "Il percorso Tab non termina" });
         break;
       }
-      const expected = candidates[index];
+      let expected = candidates[index];
       await page.keyboard.press("Tab");
       let actual = await readActual();
       if (actual?.probe === null) {
@@ -565,6 +797,45 @@ async function inspectKeyboard(page) {
         await page.keyboard.press("Tab");
         await refreshProbes();
         actual = await readActual();
+      }
+      // Un'applicazione che porta il Tab sui suoi figli in un ordine suo (la
+      // lavagna: le schede in ordine di lettura, non del documento) si
+      // percorre fino all'uscita, guardando l'anello di ogni fermata; uscita,
+      // il Tab deve arrivare sul primo controllo dopo di lei. Un fuoco che
+      // non esce mai finisce nel limite delle visite, come una trappola.
+      if (actual && actual.probe !== expected.probe && previousApp !== null) {
+        while (actual?.app === previousApp && visited < 10_000) {
+          if (!actual.indicator) {
+            failures.push({
+              source: "browser",
+              rule: "focus-visible",
+              where: `[${actual.probe}]`,
+              reason: "il fuoco da tastiera non ha un indicatore visibile",
+            });
+          }
+          await page.keyboard.press("Tab");
+          visited += 1;
+          actual = await readActual();
+          if (actual?.probe === null) {
+            candidates = await refreshProbes();
+            actual = await readActual();
+          }
+        }
+        if (visited >= 10_000) {
+          failures.push({ source: "browser", rule: "tab-order", where: "document", reason: "Il percorso Tab non esce dall'applicazione" });
+          break;
+        }
+        const after = await page.evaluate((probe) => {
+          const app = document.querySelector(`[data-a11y-probe="${probe}"]`);
+          if (!app) return null;
+          let last = Number(probe);
+          for (const inner of app.querySelectorAll("[data-a11y-probe]")) last = Math.max(last, Number(inner.dataset.a11yProbe));
+          return String(last + 1);
+        }, previousApp);
+        const next = candidates.find((one) => one.probe === after);
+        // L'applicazione era l'ultima fermata: il percorso è finito.
+        if (!next) break;
+        expected = next;
       }
       if (!actual || actual.probe !== expected.probe) {
         failures.push({
@@ -630,6 +901,7 @@ async function inspectKeyboard(page) {
       }
       previousProbe = focused.probe;
       previousDescendant = focused.descendant;
+      previousApp = focused.app;
       index = Number(focused.probe) + 1;
     }
   } finally {
@@ -642,6 +914,121 @@ async function inspectKeyboard(page) {
       document.querySelectorAll("[data-a11y-probe]").forEach((el) => delete el.dataset.a11yProbe);
     });
   }
+  // Dopo il percorso, perché questa prova tocca la scena (apre e chiude un
+  // menu) e il percorso deve vederla com'era.
+  failures.push(...await inspectToolbarStops(page), ...await inspectModeMenu(page));
+  return failures;
+}
+
+/// Le barre in una fila del documento (la barra di formato del riquadro, la
+/// barra del PDF) sono **un** punto di Tab ciascuna: dentro si va con le
+/// frecce (`kit/toolbar-keys.ts`). Si contano i candidati del Tab con la
+/// stessa regola del percorso — visibile, acceso, `tabIndex >= 0` — perché
+/// una barra con un pulsante in più nell'ordine passerebbe il percorso
+/// (l'ordine resta giusto) e costerebbe un Tab in più a ogni passaggio.
+async function inspectToolbarStops(page) {
+  return page.evaluate(() => {
+    const BARS = [
+      [".pane .format-bar.kit-bar", "la barra di formato"],
+      [".media-pdf-toolbar", "la barra del PDF"],
+    ];
+    const hidden = (el) => {
+      if (!el.checkVisibility()) return true;
+      for (let n = el; n; n = n.parentElement) {
+        if (n.hidden || n.inert || n.getAttribute("aria-hidden") === "true") return true;
+        const style = getComputedStyle(n);
+        if (style.display === "none" || style.visibility === "hidden") return true;
+      }
+      const rect = el.getBoundingClientRect();
+      return rect.width === 0 || rect.height === 0;
+    };
+    const issues = [];
+    for (const [selector, name] of BARS) {
+      for (const bar of document.querySelectorAll(selector)) {
+        if (hidden(bar)) continue;
+        const buttons = [...bar.querySelectorAll("button, [role=button]")].filter((el) => !hidden(el));
+        if (buttons.length === 0) continue;
+        const stops = [bar, ...bar.querySelectorAll("*")].filter(
+          (el) => !hidden(el) && !el.matches(":disabled") && el.tabIndex >= 0,
+        );
+        if (stops.length !== 1) {
+          issues.push({
+            source: "browser",
+            rule: "toolbar-tab-stop",
+            where: selector,
+            reason: `${name} ha ${stops.length} punti di Tab invece di uno: dentro la barra si va con le frecce`,
+          });
+        }
+      }
+    }
+    return issues;
+  });
+}
+
+/// La modalità nella banda (`#status-mode`) è un bottone che apre un menu: con
+/// Invio il menu si apre, con Esc si chiude e il fuoco torna sul bottone, non
+/// sul documento né sul corpo della pagina. Dove la banda non ha la modalità
+/// (una superficie con un modo solo, il telefono) la prova non ha niente da
+/// guardare. Se la scena ha già il menu aperto (`banda-modalita`) si prova
+/// prima l'Esc, poi di nuovo l'Invio; se ha aperto un'altra superficie (un
+/// menu, un dialogo) la prova la lascia stare: Invio andrebbe a lei.
+async function inspectModeMenu(page) {
+  const read = () => page.evaluate(() => {
+    const button = document.getElementById("status-mode");
+    const shown = (el) => el !== null && el.checkVisibility() && !el.closest("[hidden], [inert], [aria-hidden=\"true\"]");
+    const menu = document.getElementById("context-menu");
+    // Un blocco in mano (il puntatore è giù) è un gesto aperto: Esc è suo,
+    // e lo riporta al posto. La copia in mano è nascosta ai lettori, perciò
+    // conta che ci sia, non che si veda.
+    const other = [...document.querySelectorAll("[role=\"menu\"], [role=\"dialog\"], [aria-modal=\"true\"]")]
+      .some((el) => shown(el) && !(menu?.contains(el))) || document.querySelector(".cm-fub-block-lift") !== null;
+    return {
+      present: shown(button) && button.getAttribute("aria-disabled") !== "true",
+      expanded: button?.getAttribute("aria-expanded") === "true",
+      menu: shown(menu),
+      other,
+      focused: document.activeElement === button,
+      inside: menu !== null && menu.contains(document.activeElement),
+    };
+  });
+  const issue = (reason) => ({ source: "browser", rule: "mode-menu", where: "button#status-mode", reason });
+  const settled = (want) => page.waitForFunction(
+    (open) => {
+      const button = document.getElementById("status-mode");
+      const menu = document.getElementById("context-menu");
+      const shown = menu !== null && menu.checkVisibility();
+      return (button?.getAttribute("aria-expanded") === "true") === open && shown === open;
+    },
+    want,
+    { timeout: 2_000 },
+  ).then(() => true, () => false);
+
+  let now = await read();
+  if (!now.present) return [];
+  const failures = [];
+  const escape = async () => {
+    await page.keyboard.press("Escape");
+    if (!(await settled(false))) return issue("Esc non chiude il menu delle modalità");
+    now = await read();
+    if (!now.focused) return issue("chiuso il menu delle modalità con Esc, il fuoco non torna sulla banda");
+    return null;
+  };
+
+  if (now.expanded || now.menu) {
+    if (!now.expanded) return [];
+    const failed = await escape();
+    if (failed) return [failed];
+  } else if (now.other) {
+    return [];
+  } else {
+    await page.focus("#status-mode");
+  }
+  await page.keyboard.press("Enter");
+  if (!(await settled(true))) return [issue("Invio sulla modalità della banda non apre il menu")];
+  now = await read();
+  if (!now.inside) failures.push(issue("aperto con Invio, il menu delle modalità non prende il fuoco"));
+  const failed = await escape();
+  if (failed) failures.push(failed);
   return failures;
 }
 
@@ -678,8 +1065,9 @@ function summary(report) {
     }
   }
 
-  // Una voce del debito di una luce che non si è esaminata non è riparata.
-  const fixed = DEBT.filter((d) => RUN_LIGHTS.includes(d.light) && !d.seen);
+  // Una voce del debito di una luce che non si è esaminata non è riparata, e
+  // nemmeno una che le scene scelte con `--scene=` non mostrano.
+  const fixed = NAMED === undefined ? DEBT.filter((d) => RUN_LIGHTS.includes(d.light) && !d.seen) : [];
   if (fixed.length > 0) {
     console.error(`\n${fixed.length} voci del debito non si vedono più:`);
     for (const d of fixed) {

@@ -27,6 +27,12 @@ stessa finestra. L'import ha tre tappe, e solo la seconda scrive nel vault.
 Chiudere la finestra dopo l'anteprima toglie la sorgente depositata
 (`import.cancel`).
 
+Ogni tappa è un lavoro del centro attività, col nome della sorgente:
+«Lettura di «Diario.enex» per l'importazione», «Importazione di
+«Diario.enex»», «Annullamento dell'importazione di «Diario.enex»». Se
+l'importer rifiuta la sorgente, il motivo esce con la frase del suo catalogo,
+nella lingua dell'interfaccia, come per un exporter.
+
 ### Archivi grandi
 
 Un import prende al più 64 MiB e 10 000 voci per volta. Un archivio ZIP più
@@ -42,11 +48,54 @@ sono. Ogni parte è un import con la sua anteprima e la sua ricevuta:
 - «Annulla l'import» toglie le parti entrate, dall'ultima alla prima.
 
 L'importer degli archivi tratta ogni voce da sola, e il nome nel vault viene
-dal suo path: dividere non cambia ciò che entra. Due voci che diventano lo
+dal suo path: dividere non cambia ciò che entra. L'eccezione è l'export di
+Notion, che si legge per intero (vedi sotto). Due voci che diventano lo
 stesso nome in parti diverse seguono la scelta sui conflitti, come una nota
 che c'è già. Una voce più grande di una parte (oltre 32 MiB decompressa) non
 entra e compare fra le perdite del piano. Un file che non è uno ZIP oltre i
 64 MiB non parte.
+
+### Un export di Notion
+
+Lo ZIP che Notion scrive con «Export → Markdown & CSV» si importa come ogni
+archivio, e l'importer lo riconosce dai nomi: pagine e database con l'id di
+Notion (32 cifre esadecimali) in fondo. Diventa un vault ordinato, in
+Markdown nativo:
+
+- l'id si toglie dai nomi di file e cartelle, e la cartella `Export-…` che
+  Notion mette sopra a tutto sparisce. Due pagine nella stessa cartella con lo
+  stesso titolo diventano `Titolo` e `Titolo 2`. I link fra le pagine, alle
+  immagini e al database seguono il nome nuovo;
+- un database arriva da Notion due volte, il `.csv` e la cartella con una
+  pagina per riga. Il `.csv` entra così com'è, col nome pulito, e si apre
+  come foglio dal link che lo chiama. Ogni riga diventa **una** nota nella
+  cartella del database: la pagina della riga, col suo testo, e le colonne
+  del CSV come proprietà. Le righe `Chiave: valore` che la pagina ripeteva
+  lasciano il corpo; una riga che dice altro resta. Una riga senza pagina
+  diventa una nota con le sole proprietà e il titolo nell'H1;
+- una colonna in cui ogni valore è un numero diventa numeri; una in cui ogni
+  valore è una data come la scrive Notion («December 8, 2026», anche con
+  l'ora) diventa date ISO; una di soli `Yes` e `No` diventa vero o falso.
+  Basta un valore che non si legge e la colonna resta testo, intera: nessun
+  valore cambia di nascosto. La prima colonna è il titolo, che sta nel nome
+  del file e nell'H1;
+- un callout (`<aside>`) diventa il richiamo `> [!note]`, con l'icona in
+  testa al testo.
+
+Il rapporto dice quanti nomi hanno perso l'id, quante righe di ogni database
+si sono unite a una pagina e quante vengono dal solo CSV, e quali colonne
+sono diventate numeri, date o vero/falso. Un CSV che non si legge resta un
+file, e il rapporto dice perché le sue righe non sono diventate note.
+
+Un archivio diviso in parti si importa una parte alla volta: un database il
+cui `.csv` e le cui pagine cadono in parti diverse non si unisce, e i link a
+un file di un'altra parte perdono l'id con la stessa regola, senza sapere se
+il nome ha preso un numero.
+
+In ogni CSV, anche fuori da Notion, una colonna con spazi o accenti nel nome
+(«Stato di lettura», «Città») è una proprietà come le altre; solo le celle
+lunghe o su più righe vanno nel corpo. Una barra nel titolo di una riga
+cambia solo il nome del file (`Fattura 2026-031.md`); il titolo resta intero.
 
 ### Da Notion o da Airtable
 
@@ -153,9 +202,15 @@ destinazione **nuova**, fuori dal vault, col dialogo di sistema.
 
 - Gli artefatti si scrivono direttamente nella cartella scelta, senza il tetto
   di memoria dell'export di una nota sola. Un formato che produce un file solo
-  (il documento unico Markdown, un PDF unico) lo mette dentro quella cartella.
+  (il documento unico Markdown) lo mette dentro quella cartella.
 - Una cartella che esiste già non si sovrascrive mai, e una destinazione dentro
   il vault si rifiuta.
+- La cartella scelta si apre una volta e ogni file si crea, si rinomina e si
+  toglie attraverso le sue sottocartelle aperte (`fub_kernel::transfer::DirectorySink`):
+  un collegamento che porta fuori dalla cartella scelta si rifiuta, anche se
+  compare a export in corso al posto di una sottocartella. Su Windows
+  cap-std ricostruisce il percorso dall'handle per rinominare e togliere: lì
+  resta una finestra stretta fino all'operazione.
 - Una cartella del vault che non c'è, o che non contiene niente che il formato
   sappia scrivere, è un errore e non un export vuoto riuscito. Se l'export
   fallisce a metà, la cartella creata per lui si toglie.
@@ -168,8 +223,8 @@ attività (vedi sotto).
 
 ## Esportare una nota
 
-Il menu del riquadro di una nota ha «Esporta come HTML» ed «Esporta come PDF
-(testo statico)», e «Esporta…» li offre nel launcher. Prima si salva la coda
+Il menu del riquadro di una nota ha «Esporta ▸ HTML…» e «PDF…»; «Esporta…»
+offre l'HTML nel launcher. Prima si salva la coda
 della nota; poi il core esegue l'export sul documento salvato e il file arriva
 al centro attività, da cui lo si salva dove si vuole.
 
@@ -178,10 +233,16 @@ al centro attività, da cui lo si salva dove si vuole.
   entrano nel file come `data:` URI (fino a 16 MiB l'una, 64 MiB per file), e
   le note incorporate entrano con la loro resa, fino a quattro livelli e senza
   giri. Il file porta una Content-Security-Policy che non esegue script e non
-  carica niente da fuori.
-- **PDF** (`importers.pdf.single`): il testo della nota in un PDF statico, col
-  nome della nota. Per diagrammi, formule e immagini c'è «Stampa», che il
-  sistema salva anche in PDF.
+  carica niente da fuori. I messaggi dei commenti
+  (`{==passo==}{>>messaggio<<}`) non entrano; con l'opzione
+  `{"comments": true}` ogni discussione diventa un rimando numerato dopo il
+  passo e una nota in fondo alla pagina.
+- **PDF**: «PDF…» apre lo spazio [«Esporta in PDF»](pdf-export.md), con le
+  pagine vere, diagrammi, formule e immagini. Il vecchio PDF di solo testo
+  non c'è più: i suoi id (`importers.pdf.single`, `importers.pdf`) restano
+  sinonimi di `pdf.export_note` per chi li chiama con `export.run`, e non
+  sono più fra i formati di «Esporta il vault…» (più note in un PDF: tasto
+  destro su una cartella).
 
 Ciò che non entra lo dice il rapporto, con la nota a cui si riferisce: una
 parte che solo Fub disegna (un diagramma, una query, una vista), che
@@ -205,6 +266,11 @@ fogli senza niente da stampare; una nota ricorda che il PDF stampa i valori:
 formule, convalide, filtri e collegamenti fra fogli restano nella cartella, e
 i caratteri diventano quelli standard del PDF. L'anteprima di stampa della barra mostra
 invece la cartella com'è nella sessione, anche prima del salvataggio.
+
+Nella palette, **Anteprima…** di `xlsx.export-pdf` stampa il PDF in memoria e
+mostra lo stesso elenco, senza accodare niente. La cartella si sceglie
+dall'elenco del campo o si scrive per nome, con la regola di «Esporta una
+copia» dei [documenti di videoscrittura](word-documents.md#esportare-una-copia).
 
 ## Il formato Markdown
 

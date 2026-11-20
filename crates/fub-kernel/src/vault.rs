@@ -18,6 +18,7 @@ use crate::organization::ParkedOrganization;
 use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FileIdentity, Stat, VaultStorage};
 use crate::time::{stamp_from_unix, Clock, SystemClock};
+use crate::transfer::FileWitness;
 use fub_abi::schema::SchemaVersion;
 
 fn is_absent_path_error(error: &std::io::Error) -> bool {
@@ -36,7 +37,7 @@ pub(crate) fn fingerprint_of(
 }
 
 /// L'impronta e quanti byte l'hanno data.
-fn sized_fingerprint_of(
+pub(crate) fn sized_fingerprint_of(
     storage: &dyn VaultStorage,
     path: &Utf8Path,
 ) -> std::io::Result<(Revision, u64)> {
@@ -344,6 +345,15 @@ pub struct Scan {
     /// chi decide di togliere qualcosa dal vault di qualcuno è chi ha chiesto
     /// la scansione, non chi cammina.
     pub temporary_remaining_back: Vec<Utf8PathBuf>,
+    /// I compagni di lock (`.nota.md.lock`) che la camminata ha attraversato,
+    /// in path assoluto e in ordine.
+    ///
+    /// Sono **candidati**, non residui: un lock si toglie da sé al rilascio, e
+    /// uno che c'è ancora può essere tenuto adesso da un salvataggio in corso.
+    /// Se è rimasto indietro lo decide il supporto, che il lock lo sa provare
+    /// ([`VaultStorage::remove_abandoned_lock`]); per la stessa ragione dei
+    /// temporanei li toglie chi ha chiesto la scansione.
+    pub locks_remaining_back: Vec<Utf8PathBuf>,
 }
 /// Valutazione owned del filtro di un path del watcher.
 ///
@@ -453,8 +463,11 @@ impl CompletedOsTrash {
         if !self.is_current() {
             return Err(KernelError::Stale(self.original.to_string()));
         }
-        crate::storage::FsStorage
-            .rename_no_replace(&self.destination, &self.vault.path_for(&self.original)?)
+        // Dal cestino del sistema al vault passando dallo storage del vault:
+        // la destinazione ha gli stessi presidi di ogni altra scrittura.
+        self.vault
+            .storage
+            .move_in_no_replace(&self.destination, &self.vault.path_for(&self.original)?)
             .map_err(|source| KernelError::Io {
                 path: self.destination,
                 source,
@@ -869,6 +882,13 @@ impl Vault {
         self.clock = clock;
     }
 
+    /// L'istante di adesso secondo l'orologio di questo vault, quello che un
+    /// banco può iniettare: chi confronta un istante con le date dei file del
+    /// vault (la regola *racily clean*) lo prende da qui, non dal sistema.
+    pub(crate) fn now_unix_millis(&self) -> u64 {
+        self.clock.now_unix_millis()
+    }
+
     /// Aggancia le impostazioni da cui leggere la politica di esclusione.
     ///
     /// Builder e non parametro di [`on`](Vault::on) per la ragione di
@@ -978,6 +998,7 @@ impl Vault {
             files: Vec::new(),
             folders: Vec::new(),
             temporary_remaining_back: Vec::new(),
+            locks_remaining_back: Vec::new(),
         };
         // La politica si risolve **una volta per scansione** e non per voce di
         // directory: leggerla è prendere un lock e costruire un elenco, e una
@@ -991,6 +1012,7 @@ impl Vault {
         out.files.sort_by(|a, b| a.id.cmp(&b.id));
         out.folders.sort();
         out.temporary_remaining_back.sort();
+        out.locks_remaining_back.sort();
         Ok(out)
     }
 
@@ -1010,6 +1032,7 @@ impl Vault {
             files: Vec::new(),
             folders: Vec::new(),
             temporary_remaining_back: Vec::new(),
+            locks_remaining_back: Vec::new(),
         };
         let Ok(rel) = dir.strip_prefix(&self.root) else {
             return Ok(out);
@@ -1046,7 +1069,89 @@ impl Vault {
         out.files.sort_by(|a, b| a.id.cmp(&b.id));
         out.folders.sort();
         out.temporary_remaining_back.sort();
+        out.locks_remaining_back.sort();
         Ok(out)
+    }
+
+    /// I compagni di lock (`.settings.json.lock`) che stanno nella cartella di
+    /// servizio [`FUB_DIR`], in path assoluto e in ordine.
+    ///
+    /// La scansione non entra in `.fub/`, e deve restare così: lì non c'è
+    /// contenuto dell'utente. Ma il supporto del vault ci prende i suoi lock
+    /// come accanto a una nota — le impostazioni, l'anagrafe, le bozze, i
+    /// sidecar del cestino, lo stato per documento dei plugin — e un'uscita
+    /// forzata in mezzo a una di quelle scritture ne lascia uno a terra, come
+    /// le versioni di Fub che il lock non lo toglievano. Questa camminata cerca
+    /// **solo** quei nomi: non produce voci, non legge la politica di
+    /// esclusione e non segue i collegamenti. Sono candidati, come
+    /// [`Scan::locks_remaining_back`]: se uno è rimasto indietro lo decide
+    /// [`VaultStorage::remove_abandoned_lock`].
+    ///
+    /// Lo spazio di un plugin (`.fub/plugins/<id>/`) si cammina soltanto negli
+    /// spazi per documento ([`DOC_SPACE`](fub_abi::rules::doc_data::DOC_SPACE) e
+    /// [`PARKED_SPACE`](fub_abi::rules::doc_data::PARKED_SPACE)), che scrive e
+    /// sposta il kernel. Il resto può essere la cartella vera che
+    /// `Workspace::plugin_data_dir` consegna a un motore nativo, con un
+    /// protocollo di lock suo: l'indice di ricerca (tantivy) vi tiene
+    /// `.tantivy-writer.lock` e `.tantivy-meta.lock`, che hanno la stessa forma,
+    /// sono stabili per costruzione e non si provano nemmeno — prenderne uno
+    /// per un istante farebbe fallire l'apertura del suo writer.
+    pub fn service_locks(&self) -> Result<Vec<Utf8PathBuf>> {
+        let mut out = Vec::new();
+        self.walk_service_locks(&self.root.join(FUB_DIR), &mut out)?;
+        out.sort();
+        Ok(out)
+    }
+
+    fn walk_service_locks(&self, dir: &Utf8Path, out: &mut Vec<Utf8PathBuf>) -> Result<()> {
+        let entries = match self.storage.list(dir) {
+            Ok(entries) => entries,
+            // Un vault appena creato non ha ancora `.fub/`, e uno spazio di
+            // plugin non ha per forza gli spazi per documento.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(source) => {
+                return Err(KernelError::Io {
+                    path: dir.to_owned(),
+                    source,
+                })
+            }
+        };
+        let plugin_spaces = self
+            .root
+            .join(FUB_DIR)
+            .join(crate::documents::PLUGIN_DATA_DIR);
+        for entry in entries {
+            match entry.stat.kind {
+                EntryKind::Dir if dir == plugin_spaces => {
+                    for space in [
+                        fub_abi::rules::doc_data::DOC_SPACE,
+                        fub_abi::rules::doc_data::PARKED_SPACE,
+                    ] {
+                        let space = entry.path.join(space);
+                        // `list` segue un collegamento: lo spazio si cammina
+                        // solo se è una cartella vera.
+                        if self
+                            .storage
+                            .stat_no_follow(&space)
+                            .is_ok_and(|stat| stat.kind == EntryKind::Dir)
+                        {
+                            self.walk_service_locks(&space, out)?;
+                        }
+                    }
+                }
+                EntryKind::Dir => self.walk_service_locks(&entry.path, out)?,
+                EntryKind::File
+                    if entry
+                        .path
+                        .file_name()
+                        .is_some_and(crate::storage::is_write_lock) =>
+                {
+                    out.push(entry.path);
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     fn walk(&self, dir: &Utf8Path, policy: &IgnorePolicy, out: &mut Scan) -> Result<()> {
@@ -1079,6 +1184,12 @@ impl Vault {
                     && self.storage.is_left_behind(&entry.stat)
                 {
                     out.temporary_remaining_back.push(entry.path.clone());
+                }
+                // Lo stesso per un compagno di lock che un'uscita forzata ha
+                // lasciato a terra: la politica lo nasconde, e la camminata è
+                // il solo posto da cui si vede.
+                if kind == Kind::File && crate::storage::is_write_lock(name) {
+                    out.locks_remaining_back.push(entry.path.clone());
                 }
                 continue;
             }
@@ -1120,6 +1231,17 @@ impl Vault {
     pub fn file_identity(&self, id: &DocId) -> Option<FileIdentity> {
         let path = self.path_for(id).ok()?;
         self.storage.file_identity(&path).ok().flatten()
+    }
+
+    /// Timbro di cambiamento e identità della voce in una domanda sola
+    /// ([`VaultStorage::witness`]). Un errore, o un id fuori dal recinto, è
+    /// un testimone di cui non si conosce niente: chi lo confronta con uno
+    /// noto vede un file cambiato.
+    pub fn witness(&self, id: &DocId) -> crate::storage::FileWitness {
+        self.path_for(id)
+            .ok()
+            .and_then(|path| self.storage.witness(&path).ok())
+            .unwrap_or_default()
     }
 
     /// Timbro opaco di cambiamento del file, se il backend lo conosce.
@@ -1826,10 +1948,14 @@ impl Vault {
     /// sidecar valido può quindi essere una cestinatura ancora in corso in
     /// un'altra finestra. Quella voce resta dov'è; il sidecar è il marcatore che
     /// rende distruttibile la sola fotografia già completata.
+    ///
+    /// I compagni di lock non sono voci: finiscono in `locks`, perché chi
+    /// svuota provi a togliere quelli che nessuno tiene più.
     fn trash_entries_with_sidecars(
         &self,
         dir: &Utf8Path,
-        out: &mut Vec<(Utf8PathBuf, Utf8PathBuf)>,
+        out: &mut Vec<CensusEntry>,
+        locks: &mut Vec<Utf8PathBuf>,
     ) -> Result<()> {
         let entries = self.storage.list(dir).map_err(|source| KernelError::Io {
             path: dir.to_owned(),
@@ -1837,7 +1963,7 @@ impl Vault {
         })?;
         for entry in entries {
             if entry.stat.is_dir() {
-                self.trash_entries_with_sidecars(&entry.path, out)?;
+                self.trash_entries_with_sidecars(&entry.path, out, locks)?;
                 continue;
             }
             if entry
@@ -1845,12 +1971,29 @@ impl Vault {
                 .file_name()
                 .is_some_and(crate::storage::is_write_lock)
             {
+                locks.push(entry.path);
                 continue;
             }
             let id = self.doc_id_for_path(&entry.path)?;
             if self.read_trash_sidecar(&id, &entry.stat)?.is_some() {
                 let sidecar = self.trash_sidecar_path(&id);
-                out.push((entry.path, sidecar));
+                // Lo stesso `stat` che lo sweep richiederà prima di
+                // distruggere: due domande uguali, confrontabili.
+                let io = |source| KernelError::Io {
+                    path: entry.path.clone(),
+                    source,
+                };
+                let Some(stat) =
+                    crate::error::optional(self.storage.stat(&entry.path)).map_err(io)?
+                else {
+                    continue;
+                };
+                let seen = self.trash_file_seen(&entry.path, stat).map_err(io)?;
+                out.push(CensusEntry {
+                    path: entry.path,
+                    sidecar,
+                    seen,
+                });
             }
         }
         Ok(())
@@ -1869,18 +2012,54 @@ impl Vault {
     /// censimento iniziale, e si rimuovono solo quei sidecar. Una `trash`
     /// concorrente resta quindi reversibile con il suo path d'origine intatto.
     ///
-    /// Resta una finestra multi-processo non coperta: senza un lock di vault, un
-    /// altro processo puo sostituire una voce gia censita fra la verifica del
-    /// sidecar e la `remove`. Questo metodo non introduce un lock
-    /// inter-processo che il kernel non possiede.
+    /// Una voce censita si distrugge solo se è ancora **lo stesso file**:
+    /// stessa identità, stessa dimensione e data, stesso timbro di
+    /// cambiamento. Un altro processo Fub sullo stesso vault che nel frattempo
+    /// l'ha sostituita (una nuova cestinatura con lo stesso nome, un
+    /// ripristino seguito da un'altra cancellazione) lascia la sua voce
+    /// intatta, insieme al sidecar. Fra quel controllo e la `remove` resta una
+    /// finestra di una chiamata di sistema, che solo un lock inter-processo
+    /// sul vault chiuderebbe, e il kernel non lo possiede.
     pub fn empty_trash(&self) -> Result<usize> {
         let dir = self.root.join(TRASH_DIR);
         let mut cataloged = Vec::new();
+        let mut locks = Vec::new();
         if self.has_trash(&dir)? {
-            self.trash_entries_with_sidecars(&dir, &mut cataloged)?;
+            self.trash_entries_with_sidecars(&dir, &mut cataloged, &mut locks)?;
+        }
+        // Un compagno di lock nel cestino non è una voce e non si conta; se
+        // nessuno lo tiene più — l'ha lasciato una versione di Fub che non lo
+        // toglieva, o un'uscita forzata — se ne va con il resto. Un guasto non
+        // risale: non è una voce che l'utente ha chiesto di distruggere.
+        for lock in &locks {
+            if let Err(error) = self.storage.remove_abandoned_lock(lock) {
+                tracing::warn!(target: "fub.kernel", %lock, %error,
+                    "lock del cestino non tolto");
+            }
         }
         let mut count = 0;
-        for (path, sidecar) in &cataloged {
+        for CensusEntry {
+            path,
+            sidecar,
+            seen,
+        } in &cataloged
+        {
+            // Una voce cambiata dopo il censimento non è più quella che
+            // l'utente ha deciso di distruggere: resta, col suo sidecar. Un
+            // guasto del supporto mentre lo si chiede invece risale, come per
+            // la `remove` qui sotto (0193): non è una voce cambiata.
+            let io = |source| KernelError::Io {
+                path: path.clone(),
+                source,
+            };
+            let Some(stat) = crate::error::optional(self.storage.stat(path)).map_err(io)? else {
+                continue;
+            };
+            if !seen.same_file(&self.trash_file_seen(path, stat).map_err(io)?) {
+                tracing::warn!(target: "fub.kernel", %path,
+                    "trash entry changed after the census: kept");
+                continue;
+            }
             // Si distrugge solo questa voce, e solo se c'è ancora: chi l'ha già
             // tolta (un'altra finestra, un sync) non si conta — il risultato
             // che si voleva c'è già. Un guasto vero del supporto risale, perché
@@ -1909,6 +2088,49 @@ impl Vault {
         let _ = self.storage.remove_empty_dir(&self.trash_metadata_dir());
         tracing::info!(target: "fub.kernel", "trash emptied: {count} entries destroyed");
         Ok(count)
+    }
+}
+
+/// Una voce del cestino censita da [`Vault::empty_trash`]: il file, il suo
+/// sidecar e com'era il file quando lo si è contato.
+struct CensusEntry {
+    path: Utf8PathBuf,
+    sidecar: Utf8PathBuf,
+    seen: TrashFileSeen,
+}
+
+/// Ciò che distingue un file da quello che lo ha sostituito allo stesso nome:
+/// dimensione e data, identità e timbro di cambiamento dove il supporto li sa
+/// dare, confrontati con la regola unica ([`FileWitness::agrees`]).
+///
+/// La grana del timbro ([`crate::transfer::change_stamp_settled`]) qui non si
+/// chiede, di proposito: censimento e distruzione stanno nella stessa
+/// chiamata, e una riscrittura dello stesso peso e della stessa data nella
+/// grana del timbro fra i due è della stessa natura di quella fra il
+/// controllo e la `remove`, che nessun metadato chiude. Chiederla terrebbe
+/// nel cestino ogni voce cestinata negli ultimi due secondi senza chiudere
+/// niente.
+#[derive(Debug, Clone, Copy)]
+struct TrashFileSeen {
+    stat: Stat,
+    witness: FileWitness,
+}
+
+impl TrashFileSeen {
+    /// È ancora il file censito?
+    fn same_file(&self, now: &TrashFileSeen) -> bool {
+        self.stat == now.stat && self.witness.agrees(&now.witness)
+    }
+}
+
+impl Vault {
+    /// Come è ora il file `path`. Un errore del supporto risale: «non lo so»
+    /// è già `None` nella risposta del backend, non un errore da tacere.
+    fn trash_file_seen(&self, path: &Utf8Path, stat: Stat) -> std::io::Result<TrashFileSeen> {
+        Ok(TrashFileSeen {
+            stat,
+            witness: FileWitness::of_path(self.storage.as_ref(), path)?,
+        })
     }
 }
 

@@ -7,18 +7,16 @@
 // `resource_open`, `resource_read_chunk` (risposta binaria -> ArrayBuffer, mai
 // array JSON di numeri), `resource_close`, `resource_write` (corpo `Uint8Array`
 // grezzo + metadati in header, mai base64/JSON), `viewer_open`.
+import type { ResourceWriteOptions, ResourceWriteReceipt } from "../../host/contract";
 import type { ResourceDescriptor } from "./media-types";
 import type { ResourceTransport } from "./resource-port";
 import type { AttachmentDeposit } from "./attachment-target";
 
-/// La ricevuta di un deposito binario riuscito: id fenced scritto + revisione
-/// dei byte (`Revision::of_bytes`). Niente handle: chi vuole leggere apre la
-/// risorsa separatamente. Gemella di `ResourceWriteReceipt` in
-/// `crates/fub-host/src/resources.rs` (id/revision stringhe canoniche).
-export interface ResourceWriteReceipt {
-  readonly id: string;
-  readonly revision: string;
-}
+/// La ricevuta di un deposito binario: id fenced + revisione dei byte
+/// (`Revision::of_bytes`) + `reused`. Niente handle: chi vuole leggere apre la
+/// risorsa separatamente. Il mirror sta in `host/contract.ts`, gemello di
+/// `ResourceWriteReceipt` in `crates/fub-host/src/resources.rs`.
+export type { ResourceWriteReceipt } from "../../host/contract";
 
 /// La `invoke` nativa, iniettata da `host/ipc.ts` (l'unico modulo che importa
 /// il core Tauri). Corpo binario (`Uint8Array`/`ArrayBuffer`) e terzo argomento
@@ -62,6 +60,18 @@ export function makeResourceTransport(invoke: TauriInvoke, vault?: string): Reso
  * headers: { "x-fub-resource-write": encodeURIComponent(JSON.stringify({ id,
  * vault: vault ?? null, expected })) } })`. Torna la ricevuta, non un handle:
  * fallire l'open dopo non fa fallire il deposito.
+ *
+ * `options.reuse: "same-content"` aggiunge il campo `reuse` ai metadati:
+ * l'host non scrive se il vault ha già questi byte, e la ricevuta lo dice
+ * (`reused: true`, `id` del file che c'era). Senza opzioni i metadati sono
+ * quelli di sempre, campo per campo. Con `expected` dato è `bad_args`, qui
+ * come nell'host. Un host di prima rifiuta il campo che non conosce
+ * (`bad_args`): è un «non so», e il deposito si rifà senza `reuse` — nel
+ * dubbio si scrive. Se anche quello è `bad_args`, l'errore è suo e arriva a
+ * chi chiama.
+ *
+ * `support` ricorda il rifiuto per la seduta (T32b): dopo il primo, i depositi
+ * con `reuse` vanno subito senza, e non pagano un giro in più all'host.
  */
 export async function writeResource(
   invoke: TauriInvoke,
@@ -69,11 +79,69 @@ export async function writeResource(
   bytes: Uint8Array,
   expected: string | null,
   vault?: string,
+  options?: ResourceWriteOptions,
+  support?: ReuseSupport,
 ): Promise<ResourceWriteReceipt> {
-  const meta = encodeURIComponent(JSON.stringify({ id, vault: vault ?? null, expected }));
-  return invoke<ResourceWriteReceipt>("resource_write", bytes, {
-    headers: { [RESOURCE_WRITE_HEADER]: meta },
-  });
+  const send = async (reuse: ResourceWriteOptions["reuse"]): Promise<ResourceWriteReceipt> => {
+    const fields = reuse === undefined
+      ? { id, vault: vault ?? null, expected }
+      : { id, vault: vault ?? null, expected, reuse };
+    const meta = encodeURIComponent(JSON.stringify(fields));
+    const receipt = await invoke<Omit<ResourceWriteReceipt, "reused"> & { reused?: boolean }>("resource_write", bytes, {
+      headers: { [RESOURCE_WRITE_HEADER]: meta },
+    });
+    return { ...receipt, reused: receipt.reused === true };
+  };
+  const reuse = options?.reuse;
+  if (reuse === undefined) return send(undefined);
+  if (expected !== null) {
+    throw { kind: "bad_args", message: "resource_write cannot reuse the same content while overwriting at a revision" };
+  }
+  if (support?.refused) return send(undefined);
+  try {
+    return await send(reuse);
+  } catch (error) {
+    if (!isBadArgs(error)) throw error;
+  }
+  try {
+    const receipt = await send(undefined);
+    support?.refuse();
+    return receipt;
+  } catch (error) {
+    // Un `bad_args` anche senza `reuse` non parlava di `reuse` (un id che
+    // l'host rifiuta): non è un host di prima, e non si ricorda niente.
+    if (!isBadArgs(error)) support?.refuse();
+    throw error;
+  }
+}
+
+/**
+ * Il ricordo, per la seduta, che l'host non sa `reuse` (T32b). Lo tiene chi
+ * possiede il trasporto: `host/ipc.ts` uno per finestra, che dura quanto la
+ * seduta; i test ne fanno uno loro e lo azzerano con `reset`. Mai un globale di
+ * questo modulo: `writeResource` senza `support` riprova ogni volta.
+ */
+export class ReuseSupport {
+  #refused = false;
+
+  /** Vero dopo che l'host ha rifiutato `reuse` in questa seduta. */
+  get refused(): boolean {
+    return this.#refused;
+  }
+
+  /** L'host ha rifiutato `reuse` e accettato il deposito senza. */
+  refuse(): void {
+    this.#refused = true;
+  }
+
+  /** Si torna a chiedere `reuse` (un host nuovo, o un test). */
+  reset(): void {
+    this.#refused = false;
+  }
+}
+
+function isBadArgs(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { kind?: unknown }).kind === "bad_args";
 }
 
 /** Binds paste/drop/recorder deposits to the native create-only write. */

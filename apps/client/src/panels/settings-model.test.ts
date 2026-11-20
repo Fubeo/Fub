@@ -11,8 +11,11 @@ import {
   matchesSearch,
   normalizeSearch,
   numberStep,
+  parseSettingNumber,
   sectionAnchor,
   searchTerms,
+  shownChoice,
+  visibleChoices,
 } from "./settings-model";
 
 function entry(
@@ -70,6 +73,35 @@ describe("il controllo si sceglie dalla forma del dato", () => {
   it("un valore fuori dalle scelte resta visibile in una tendina", () => {
     const options = [{ value: "compact", label: "Compatta" }, { value: "relaxed", label: "Rilassata" }];
     expect(controlFor(entry({ kind: "choice", default: "compact", options }, "enorme")).kind).toBe("select");
+  });
+
+  // La modalità iniziale com'è dichiarata in `crates/fub-host/src/settings.rs`:
+  // `blocks`, scelto da un Fub che aveva i Blocchi, resta valido in fondo con
+  // l'etichetta di Scrittura (T4).
+  const modes = [
+    { value: "live_preview", label: "Scrittura" },
+    { value: "source", label: "Sorgente" },
+    { value: "reading", label: "Lettura" },
+    { value: "blocks", label: "Scrittura" },
+  ];
+  const initialMode = (value: string) =>
+    entry({ kind: "choice", default: "live_preview", options: modes }, value, { key: "editor.default-mode" }, "machine");
+
+  it("due scelte con la stessa etichetta sono una: si mostra la prima", () => {
+    expect(visibleChoices(modes).map((option) => option.value)).toEqual(["live_preview", "source", "reading"]);
+    expect(controlFor(initialMode("source"))).toEqual({ kind: "segmented", options: modes.slice(0, 3) });
+  });
+
+  it("il valore di prima accende la scelta con la sua etichetta, e il valore resta quello scritto", () => {
+    const blocks = initialMode("blocks");
+    expect(shownChoice(blocks)).toBe("live_preview");
+    expect(controlFor(blocks)).toEqual({ kind: "segmented", options: modes.slice(0, 3) });
+    expect(blocks.value).toBe("blocks");
+    expect(isModified(blocks), "la scelta resta della persona").toBe(true);
+    expect(shownChoice(initialMode("reading"))).toBe("reading");
+    // Un valore che non è fra le scelte resta com'è, in una tendina.
+    expect(shownChoice(initialMode("pagine"))).toBe("pagine");
+    expect(controlFor(initialMode("pagine")).kind).toBe("select");
   });
 
   it("un'opzione senza etichetta non rende lungo il segmentato: conta il ripiego", () => {
@@ -178,5 +210,48 @@ describe("le ancore delle sezioni", () => {
     expect(sectionAnchor("Template e giornaliere", 13)).toBe("settings-section-13-template-e-giornaliere");
     expect(sectionAnchor("Proprietà", 10)).toBe("settings-section-10-proprieta");
     expect(sectionAnchor("…", 2)).toBe("settings-section-2");
+  });
+});
+
+describe("il numero scritto nel campo di una riga", () => {
+  const open = { kind: "number", default: 10, min: 0, max: null } as const;
+  const read = (text: string, language = "en", kind: Extract<SettingKind, { kind: "number" }> = open) =>
+    parseSettingNumber(text, kind, language);
+
+  it("la virgola e il punto separano i decimali, in ogni lingua", () => {
+    for (const language of ["en", "it"]) {
+      expect(read("1,5", language)).toEqual({ value: 1.5 });
+      expect(read("1.5", language)).toEqual({ value: 1.5 });
+      expect(read(" 12 ", language)).toEqual({ value: 12 });
+    }
+  });
+
+  it("ciò che non è il numero scritto si rifiuta col suo motivo", () => {
+    expect(read("")).toEqual({ problem: "empty" });
+    expect(read("   ")).toEqual({ problem: "empty" });
+    expect(read("abc")).toEqual({ problem: "syntax" });
+    expect(read("12px")).toEqual({ problem: "syntax" });
+    expect(read("1e400")).toEqual({ problem: "finite" });
+    expect(read("99999999999999999999")).toEqual({ problem: "precision" });
+    expect(read("100000000000000000000")).toEqual({ problem: "precision" });
+    expect(read("0.1234567890123456")).toEqual({ problem: "precision" });
+    expect(read("123456789012345")).toEqual({ value: 123456789012345 });
+  });
+
+  it("un numero che nella lingua si legge anche come migliaia non si indovina", () => {
+    expect(read("1,500", "en")).toEqual({ problem: "ambiguous" });
+    expect(read("1,500", "it")).toEqual({ value: 1.5 });
+    expect(read("1.500", "it")).toEqual({ problem: "ambiguous" });
+    expect(read("1.500", "en")).toEqual({ value: 1.5 });
+    expect(read("0,500", "en")).toEqual({ value: 0.5 });
+    expect(read("1,5000", "en")).toEqual({ value: 1.5 });
+  });
+
+  it("gli estremi sono quelli dello schema", () => {
+    const bounded = { kind: "number", default: 16, min: 12, max: 28 } as const;
+    expect(read("-7")).toEqual({ problem: "min", min: 0 });
+    expect(read("11", "en", bounded)).toEqual({ problem: "min", min: 12 });
+    expect(read("29", "en", bounded)).toEqual({ problem: "max", max: 28 });
+    expect(read("28", "en", bounded)).toEqual({ value: 28 });
   });
 });

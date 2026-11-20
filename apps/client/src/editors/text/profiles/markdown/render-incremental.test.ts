@@ -1,13 +1,33 @@
-import { describe, expect, it } from "vitest";
-import { EditorState, type ChangeSpec } from "@codemirror/state";
+import { describe, expect, it, vi } from "vitest";
+import { EditorSelection, EditorState, Prec, Text, type ChangeSpec, type Extension } from "@codemirror/state";
+import { EditorView, type DecorationSet } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
-import { freshBlocks, renderMarkdown, renderMarkdownState } from "./render";
+import { ensureSyntaxTree, syntaxTreeAvailable } from "@codemirror/language";
+import {
+  detectFrontmatter,
+  firstLineOf,
+  frontmatterRange,
+  freshBlocks,
+  headAfter,
+  PREFIX_RENDER_FROM,
+  renderMarkdown,
+  renderMarkdownState,
+  renderMarkdownStatePrefix,
+  renderPatch,
+  visitedBlocks,
+} from "./render";
+import { livePreview, liveBlocksVisited, liveGapLines } from "./livepreview";
+import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import type { MarkdownDocument } from "./render-types";
+import { parsed } from "./test-support";
 
 // La Live rende di nuovo soltanto i blocchi che una modifica tocca: gli altri
 // tornano dalla resa di prima, spostati. Qui si prova che il risultato è quello
-// di una resa da capo, e che il lavoro di una battuta è un blocco.
+// di una resa da capo, e che il lavoro di una battuta è un blocco e i suoi
+// vicini: né la resa né la Live fanno un giro su tutti i blocchi. È la guardia
+// della CI per la battuta nei 4 ms, che il banco d'interazione misura fuori
+// dalla CI.
 
 function stateOf(doc: string): EditorState {
   return EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
@@ -27,6 +47,7 @@ function shape(document: MarkdownDocument) {
     anchors: [...document.anchors].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
     dependencies: document.dependencies,
     html: document.html,
+    source: document.source,
   };
 }
 
@@ -76,6 +97,10 @@ const CORPUS = [
 ].join("\n");
 
 /// Un generatore pseudo-casuale con un seme: la stessa serie a ogni giro.
+// Le prove a caso fanno migliaia di passi: un tempo largo, perché la CI e le
+// macchine cariche non le facciano scadere.
+const FUZZ_TIMEOUT = 60_000;
+
 function random(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -84,7 +109,77 @@ function random(seed: number): () => number {
   };
 }
 
-const INSERTS = ["a", " ", "\n", "\n\n", "**", "[^1]", "[^3]", "# ", "## ", "```", "> ", "- ", "|", "^id", "$$", "---", "[guida]", "[x]: /y"];
+/// Una nota con ciò che la resa incrementale deve saper lasciare alla resa
+/// da capo: un ID a parte, ripiegabili, un indice, recinti, righe che fanno di
+/// un paragrafo un titolo o una tabella.
+const TRICKY = [
+  "Primo paragrafo.",
+  "^solo",
+  "",
+  "<details>",
+  "<summary>Apri</summary>",
+  "",
+  "Dentro, con un richiamo[^a].",
+  "",
+  "</details>",
+  "",
+  "```toc",
+  "```",
+  "",
+  "# Titolo",
+  "",
+  "Un paragrafo che diventa titolo",
+  "",
+  "    codice rientrato",
+  "",
+  "",
+  "testo dopo il codice",
+  "",
+  "~~~",
+  "un recinto",
+  "~~~",
+  "",
+  "- uno",
+  "- due[^a]",
+  "",
+  "Fine[^b].",
+  "",
+  "[^a]: Prima nota.",
+  "[^b]: Seconda nota.",
+].join("\n");
+
+const INSERTS = [
+  "a", " ", "\n", "\n\n", "**", "[^1]", "[^3]", "# ", "## ", "```", "> ", "- ", "|", "^id", "$$", "---", "[guida]", "[x]: /y",
+  "\n^id\n", "===", "| --- |", "<details>", "</details>", "    ", "~~~", "[^a]", "\n---\n", "```toc\n```",
+];
+
+/// Una modifica a caso, sola o con altre in punti diversi del testo.
+function randomChanges(next: () => number, length: number): ChangeSpec[] {
+  const count = next() < 0.85 ? 1 : 2 + Math.floor(next() * 2);
+  const points = Array.from({ length: count }, () => Math.floor(next() * (length + 1))).sort((a, b) => a - b);
+  const changes: ChangeSpec[] = [];
+  let free = 0;
+  for (const at of points) {
+    if (at < free) continue;
+    if (next() < 0.7) {
+      changes.push({ from: at, insert: INSERTS[Math.floor(next() * INSERTS.length)]! });
+      free = at + 1;
+    } else {
+      const to = Math.min(length, at + 1 + Math.floor(next() * 6));
+      changes.push({ from: at, to });
+      free = to + 1;
+    }
+  }
+  return changes;
+}
+
+/// La nota delle battute: `count` sezioni con titolo, paragrafo con un
+/// richiamo, riquadro e tabella.
+function sectionsNote(count: number): string {
+  const sections = Array.from({ length: count }, (_, i) =>
+    `## Sezione ${i}\n\nTesto **forte** ${i}[^1].\n\n> [!note] Nota ${i}\n> corpo\n\n| a | b |\n| --- | --- |\n| ${i} | x |\n`);
+  return `${sections.join("\n")}\n[^1]: La nota.\n`;
+}
 
 describe("la resa incrementale della Live", () => {
   it("senza resa di prima è la resa da capo", () => {
@@ -92,29 +187,33 @@ describe("la resa incrementale della Live", () => {
   });
 
   it("dopo ogni modifica, qualunque, è uguale alla resa da capo", () => {
-    for (const seed of [1, 2, 3, 4, 5]) {
-      const next = random(seed);
-      let state = stateOf(CORPUS);
-      let document = renderMarkdownState(state);
-      for (let step = 0; step < 60; step++) {
-        const length = state.doc.length;
-        const at = Math.floor(next() * (length + 1));
-        const changes: ChangeSpec = next() < 0.7
-          ? { from: at, insert: INSERTS[Math.floor(next() * INSERTS.length)]! }
-          : { from: at, to: Math.min(length, at + 1 + Math.floor(next() * 6)) };
-        const transaction = state.update({ changes });
-        state = transaction.state;
-        document = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
-        const source = state.doc.toString();
-        expect(shape(document), `seme ${seed}, passo ${step}`).toEqual(shape(renderMarkdown(source)));
+    let steps = 0;
+    let patched = 0;
+    for (const [name, corpus] of [["corpus", CORPUS], ["difficile", TRICKY], ["frontmatter", `---\na: 1\n---\n\n${TRICKY}`]] as const) {
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const next = random(seed);
+        let state = stateOf(corpus);
+        let document = renderMarkdownState(state);
+        for (let step = 0; step < 80; step++) {
+          const transaction = state.update({ changes: randomChanges(next, state.doc.length) });
+          state = transaction.state;
+          document = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
+          // La resa da capo dello stesso albero: l'albero incrementale di
+          // CodeMirror può dividere un paragrafo diversamente da una lettura
+          // nuova, e qui si prova la resa, non il parser.
+          expect(shape(document), `${name}, seme ${seed}, passo ${step}`).toEqual(shape(renderMarkdownState(state)));
+          steps++;
+          if (renderPatch(document)) patched++;
+        }
       }
     }
-  });
+    // La prova vale per la resa che lavora vicino alla modifica, non soltanto
+    // per quella da capo che la sostituisce nei casi difficili.
+    expect(patched / steps).toBeGreaterThan(0.3);
+  }, FUZZ_TIMEOUT);
 
   it("una battuta in un paragrafo rende quel paragrafo e basta", () => {
-    const sections = Array.from({ length: 200 }, (_, i) =>
-      `## Sezione ${i}\n\nTesto **forte** ${i}[^1].\n\n> [!note] Nota ${i}\n> corpo\n\n| a | b |\n| --- | --- |\n| ${i} | x |\n`);
-    const text = `${sections.join("\n")}\n[^1]: La nota.\n`;
+    const text = sectionsNote(200);
     let state = stateOf(text);
     let document = renderMarkdownState(state);
     const at = text.indexOf("Testo **forte** 100") + "Testo".length;
@@ -127,6 +226,66 @@ describe("la resa incrementale della Live", () => {
     expect(document.blocks.length).toBeGreaterThan(800);
   });
 
+  it("una battuta guarda soltanto i blocchi vicini, non tutti", () => {
+    const text = sectionsNote(200);
+    let state = stateOf(text);
+    let document = renderMarkdownState(state);
+    expect(visitedBlocks(document)).toBeGreaterThan(800);
+    let at = text.indexOf("Testo **forte** 100") + "Testo".length;
+    // Battute, un a capo, una cancellazione: una manciata di blocchi ciascuna.
+    const keys: ({ insert: string } | { delete: number })[] = [{ insert: "a" }, { insert: "b" }, { insert: " " }, { insert: "\n" }, { insert: "c" }, { delete: 1 }];
+    for (const change of keys) {
+      const changes = "insert" in change ? { from: at, insert: change.insert } : { from: at - 1, to: at };
+      const transaction = state.update({ changes });
+      state = transaction.state;
+      at = "insert" in change ? at + change.insert.length : at - 1;
+      document = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
+      expect(visitedBlocks(document), JSON.stringify(change)).toBeLessThanOrEqual(6);
+    }
+    expect(shape(document)).toEqual(shape(renderMarkdownState(state)));
+  });
+
+  it("in un recinto lungo, in una tabella o in un riquadro la battuta resta vicina", () => {
+    const fence = `\`\`\`js\n${Array.from({ length: 2_000 }, (_, i) => `const riga${i} = ${i};`).join("\n")}\n\`\`\`\n`;
+    const text = `${sectionsNote(60)}\n${fence}\n${sectionsNote(60)}`;
+    for (const needle of ["const riga1000 =", "| 30 | x |", "> corpo", "Nota 40"]) {
+      expect(text.indexOf(needle), needle).toBeGreaterThan(0);
+      let state = stateOf(text);
+      let document = renderMarkdownState(state);
+      const at = text.indexOf(needle) + 2;
+      const transaction = state.update({ changes: { from: at, insert: "x" } });
+      state = transaction.state;
+      document = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
+      expect(visitedBlocks(document), needle).toBeLessThanOrEqual(6);
+      expect(shape(document), needle).toEqual(shape(renderMarkdownState(state)));
+    }
+  });
+
+  it("mille righe incollate si rendono, e il resto torna com'era", () => {
+    const text = sectionsNote(100);
+    let state = stateOf(text);
+    let document = renderMarkdownState(state);
+    const pasted = Array.from({ length: 1_000 }, (_, i) => (i % 10 === 0 ? `### Incollato ${i}` : `riga incollata ${i}`)).join("\n");
+    const at = text.indexOf("## Sezione 50");
+    const transaction = state.update({ changes: { from: at, insert: `${pasted}\n\n` } });
+    state = transaction.state;
+    document = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
+    expect(shape(document)).toEqual(shape(renderMarkdownState(state)));
+  });
+
+  it("un indice dentro una citazione o una lista segue i titoli", () => {
+    for (const toc of ["> ```toc\n> ```\n", "- voce\n\n  ```toc\n  ```\n"]) {
+      const text = `${toc}\n# Uno\n\n## Due\n\nTesto.\n`;
+      let state = stateOf(text);
+      const document = renderMarkdownState(state);
+      // Il livello cambia, l'id del titolo no: l'indice va rifatto lo stesso.
+      const transaction = state.update({ changes: { from: text.indexOf("# Uno"), insert: "#" } });
+      state = transaction.state;
+      const next = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
+      expect(shape(next), toc).toEqual(shape(renderMarkdownState(state)));
+    }
+  });
+
   it("una definizione che cambia rifà tutti i blocchi, che potrebbero leggerla", () => {
     const text = "Vedi [la guida][g].\n\nAltro.\n\n[g]: /uno\n";
     let state = stateOf(text);
@@ -137,5 +296,242 @@ describe("la resa incrementale della Live", () => {
     const next = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
     expect(freshBlocks(next)).toBe(next.blocks.length);
     expect(next.blocks[0]!.html).toContain('href="/due"');
+  });
+});
+
+/// Uno stato con la Live, l'albero in fondo e la resa completa.
+function liveState(doc: string, selection: EditorSelection, policy: RevealPolicy = "mai"): EditorState {
+  const extensions: Extension = [
+    markdown({ base: markdownGrammar }),
+    Prec.highest(liveReveal.of(policy)),
+    livePreview({ openWikilink() {}, searchTag() {} }),
+  ];
+  // La transazione vuota porta l'albero nello stato, e la resa a metà si completa.
+  return parsed(EditorState.create({ doc, selection, extensions }));
+}
+
+/// Le decorazioni che i campi dello stato danno alla vista, come testo: un
+/// widget per il suo tipo e la sorgente del suo blocco.
+function decorationsOf(state: EditorState): string[] {
+  const found: string[] = [];
+  // Le righe nascoste dopo i blocchi la vista le prende dal campo, soltanto
+  // nel suo tratto: qui contano tutte.
+  const gaps = liveGapLines(state);
+  for (const source of [...state.facet(EditorView.decorations), ...(gaps ? [gaps] : [])]) {
+    if (typeof source === "function") continue;
+    (source as DecorationSet).between(0, state.doc.length, (from, to, value) => {
+      const widget = value.spec.widget as { constructor: { name: string }; block?: { source: string } } | undefined;
+      found.push(`${from}-${to} ${String(value.spec.class ?? "")} ${widget ? `${widget.constructor.name}:${widget.block?.source ?? ""}` : ""}`);
+    });
+  }
+  return found;
+}
+
+describe("i blocchi resi della Live a ogni battuta", () => {
+  for (const policy of ["mai", "elemento", "riga"] as const) {
+    it(`dopo modifiche e cursori a caso sono quelli di una Live appena aperta (${policy})`, () => {
+      for (const [name, corpus] of [["corpus", CORPUS], ["difficile", TRICKY], ["sezioni", sectionsNote(30)]] as const) {
+        for (const seed of [1, 2, 3, 4, 5, 6]) {
+          const next = random(seed);
+          let state = liveState(corpus, EditorSelection.single(0), policy);
+          for (let step = 0; step < 40; step++) {
+            const length = state.doc.length;
+            const head = Math.floor(next() * (length + 1));
+            // Due volte su tre una modifica col cursore dopo, una volta il
+            // cursore che salta altrove.
+            state = next() < 0.67
+              ? state.update({ changes: randomChanges(next, length), userEvent: "input.type" }).state
+              : state.update({ selection: { anchor: head, head: Math.min(length, head + Math.floor(next() * 3)) } }).state;
+            // L'albero incrementale di CodeMirror può dividere un paragrafo
+            // diversamente da una lettura nuova: lì una Live appena aperta non
+            // è il termine di paragone.
+            const blocksOf = (document: MarkdownDocument) => document.blocks.map((block) => `${block.from}-${block.to}`).join();
+            if (blocksOf(renderMarkdownState(state)) !== blocksOf(renderMarkdown(state.doc.toString()))) continue;
+            const fresh = liveState(state.doc.toString(), state.selection, policy);
+            expect(decorationsOf(state), `${policy}, ${name}, seme ${seed}, passo ${step}`).toEqual(decorationsOf(fresh));
+          }
+        }
+      }
+    }, FUZZ_TIMEOUT);
+  }
+
+  it("una battuta e un cursore che si muove guardano soltanto i blocchi vicini", () => {
+    const text = sectionsNote(200);
+    let at = text.indexOf("Testo **forte** 100") + "Testo".length;
+    let state = liveState(text, EditorSelection.single(at));
+    expect(liveBlocksVisited(state)).toBeGreaterThan(800);
+    for (const letter of "abc") {
+      state = state.update({ changes: { from: at, insert: letter }, selection: { anchor: at + 1 }, userEvent: "input.type" }).state;
+      at++;
+      expect(liveBlocksVisited(state)).toBeLessThanOrEqual(6);
+    }
+    // Il cursore entra in una tabella resa e ne esce: rifà quella e basta.
+    const table = state.doc.toString().indexOf("| 150 | x |") + 2;
+    state = state.update({ selection: { anchor: table } }).state;
+    expect(liveBlocksVisited(state)).toBeLessThanOrEqual(4);
+    state = state.update({ selection: { anchor: at } }).state;
+    expect(liveBlocksVisited(state)).toBeLessThanOrEqual(4);
+    expect(decorationsOf(state)).toEqual(decorationsOf(liveState(state.doc.toString(), state.selection)));
+  });
+});
+
+// Un documento grande appena aperto si rende fin dove il parser arriva in
+// fretta: la prima schermata non aspetta la lettura di tutto il file.
+describe("resa dell'inizio di un documento grande", () => {
+  /// Una nota ben oltre `PREFIX_RENDER_FROM`, con una tabella in cima e una
+  /// definizione di link in fondo.
+  function largeNote(): string {
+    const paragraphs = Array.from({ length: 2_000 }, (_, i) => `Paragrafo ${i + 1}: una riga di prosa senza segni, lunga quanto basta.`);
+    return `Vedi [la guida][g].\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n${paragraphs.join("\n\n")}\n\n[g]: /guida\n`;
+  }
+
+  it("un documento piccolo si rende tutto, come renderMarkdownState", () => {
+    const state = stateOf(CORPUS);
+    const { document, complete } = renderMarkdownStatePrefix(state);
+    expect(complete).toBe(true);
+    expect(shape(document)).toEqual(shape(renderMarkdownState(stateOf(CORPUS))));
+  });
+
+  it("un documento grande si ferma a un blocco chiuso, senza leggere tutto il file", () => {
+    const text = largeNote();
+    expect(text.length).toBeGreaterThan(PREFIX_RENDER_FROM * 4);
+    const state = stateOf(text);
+    const { document, complete } = renderMarkdownStatePrefix(state);
+    expect(complete).toBe(false);
+    // L'albero dello stato non è stato portato in fondo.
+    expect(syntaxTreeAvailable(state, text.length)).toBe(false);
+    expect(document.source.length).toBeGreaterThanOrEqual(PREFIX_RENDER_FROM / 2);
+    expect(document.source.length).toBeLessThan(PREFIX_RENDER_FROM * 2);
+    expect(text.startsWith(document.source)).toBe(true);
+    // I blocchi resi sono quelli della resa completa, uno per uno; la
+    // definizione in fondo non c'è ancora.
+    const full = renderMarkdownState(stateOf(text));
+    const last = document.blocks[document.blocks.length - 1]!;
+    expect(last.to).toBeLessThanOrEqual(document.source.length);
+    expect(document.blocks.map((block) => [block.from, block.to, block.kind]))
+      .toEqual(full.blocks.slice(0, document.blocks.length).map((block) => [block.from, block.to, block.kind]));
+    expect(document.blocks[1]!.kind).toBe(full.blocks[1]!.kind);
+    expect(document.blocks[0]!.html).not.toContain('href="/guida"');
+    expect(full.blocks[0]!.html).toContain('href="/guida"');
+  });
+
+  it("con l'albero in fondo la resa è completa e uguale a quella da capo", () => {
+    const text = largeNote();
+    const state = stateOf(text);
+    const partial = renderMarkdownStatePrefix(state);
+    expect(ensureSyntaxTree(state, text.length, 10_000)).not.toBeNull();
+    const { document, complete } = renderMarkdownStatePrefix(state, undefined, { document: partial.document, changes: state.changes() });
+    expect(complete).toBe(true);
+    expect(shape(document)).toEqual(shape(renderMarkdownState(stateOf(text))));
+  });
+});
+
+// Se una modifica può aprire un frontmatter dipende soltanto dalla prima riga:
+// la resa di una battuta più in basso non rilegge la sorgente dall'inizio, che
+// per la stringa incollata a pezzi di `sourceOf` vorrebbe dire ricomporla
+// tutta a ogni battuta.
+describe("la prima riga e il frontmatter a ogni battuta", () => {
+  /// La regola di prima, che rileggeva sempre la sorgente nuova.
+  function opensBefore(source: string): boolean {
+    const start = source.startsWith("﻿") ? 1 : 0;
+    const end = source.indexOf("\n", start);
+    return end !== -1 && source.slice(start, end).trim() === "---";
+  }
+
+  const CASES: readonly [string, string][] = [
+    ["senza frontmatter", "# Titolo\n\nTesto.\n"],
+    ["con frontmatter", "---\na: 1\n---\n\nTesto.\n"],
+    ["non chiuso", "---\na: 1\n\nTesto.\n"],
+    ["con BOM", "﻿---\na: 1\n---\nTesto.\n"],
+    ["BOM senza frontmatter", "﻿Testo\n---\n"],
+    ["CRLF", "---\r\na: 1\r\n---\r\nTesto.\r\n"],
+    ["spazi intorno", "  ---  \na: 1\n---\n"],
+    ["una riga sola", "---"],
+    ["vuoto", ""],
+    ["regola dopo il testo", "Testo\n---\n"],
+    // Più lunghe della cima che la regola guarda (#528).
+    ["una riga sola lunga", "parola ".repeat(80)],
+    ["una prima riga lunga", `${"parola ".repeat(80)}\n---\na: 1\n---\n`],
+    ["--- fra tanti spazi", `---${" ".repeat(300)}\na: 1\n---\n`],
+    ["BOM e --- fra tanti spazi", `﻿${" ".repeat(300)}---\na: 1\n---\n`],
+    ["tanti spazi senza a capo", " ".repeat(300)],
+  ];
+  const EDITS: readonly ({ insert: string } | { remove: number })[] = [
+    { insert: "x" }, { insert: "\n" }, { insert: "-" }, { insert: "---\n" }, { insert: "﻿" }, { remove: 1 }, { remove: 3 },
+  ];
+
+  it("dà la risposta di prima per ogni modifica in ogni punto", () => {
+    for (const [name, text] of CASES) {
+      const was = firstLineOf(text);
+      expect(was.opens, name).toBe(opensBefore(text));
+      for (let at = 0; at <= text.length; at++) {
+        for (const edit of EDITS) {
+          const to = "remove" in edit ? Math.min(text.length, at + edit.remove) : at;
+          const next = text.slice(0, at) + ("insert" in edit ? edit.insert : "") + text.slice(to);
+          expect(headAfter(was, at, next).opens, `${name}, ${JSON.stringify(edit)} a ${at}`).toBe(opensBefore(next));
+        }
+      }
+    }
+  });
+
+  it("la regola è la stessa di frontmatterRange", () => {
+    for (const [name, text] of CASES) {
+      const doc = Text.of(text.split("\n"));
+      expect(frontmatterRange(doc) !== null, name).toBe(detectFrontmatter(text) !== null);
+      if (!opensBefore(text)) expect(frontmatterRange(doc), name).toBeNull();
+    }
+  });
+
+  it("un documento di una riga sola lunga non si scandisce tutto a ogni battuta", () => {
+    const text = "parola ".repeat(20_000);
+    const was = firstLineOf(text);
+    expect(was).toEqual({ end: -1, opens: false });
+    const next = `${text.slice(0, 70_000)}x${text.slice(70_000)}`;
+    let whole = 0;
+    const indexOf = String.prototype.indexOf;
+    const spy = vi.spyOn(String.prototype, "indexOf").mockImplementation(function (this: string, search: string, position?: number) {
+      if (this.length === next.length) whole++;
+      return indexOf.call(this, search, position);
+    });
+    try {
+      expect(headAfter(was, 70_000, next).opens).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(whole).toBe(0);
+  });
+
+  it("una battuta in un documento grande non rilegge la sorgente dall'inizio", () => {
+    const text = sectionsNote(400);
+    expect(text.length).toBeGreaterThan(30_000);
+    let state = stateOf(text);
+    let document = renderMarkdownState(state);
+    const at = text.indexOf("Testo **forte** 300") + "Testo".length;
+    const transaction = state.update({ changes: { from: at, insert: "a" } });
+    state = transaction.state;
+    // Le letture dall'inizio della sorgente intera: ognuna, su una stringa a
+    // pezzi, la ricompone tutta.
+    let fromStart = 0;
+    const length = state.doc.length;
+    const indexOf = String.prototype.indexOf;
+    const startsWith = String.prototype.startsWith;
+    const spies = [
+      vi.spyOn(String.prototype, "indexOf").mockImplementation(function (this: string, search: string, position?: number) {
+        if (this.length === length && (position ?? 0) <= 1) fromStart++;
+        return indexOf.call(this, search, position);
+      }),
+      vi.spyOn(String.prototype, "startsWith").mockImplementation(function (this: string, search: string, position?: number) {
+        if (this.length === length && (position ?? 0) <= 1) fromStart++;
+        return startsWith.call(this, search, position);
+      }),
+    ];
+    try {
+      document = renderMarkdownState(state, undefined, { document, changes: transaction.changes });
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    expect(renderPatch(document)).not.toBeNull();
+    expect(fromStart).toBe(0);
+    expect(shape(document)).toEqual(shape(renderMarkdownState(state)));
   });
 });

@@ -11,6 +11,7 @@ import {
   validateBytesWindow,
   workbookView,
   WORKBOOK_SCALE,
+  writtenValue,
 } from "./workbook";
 
 /// Una copia della fixture del provider, da cambiare in un test.
@@ -82,13 +83,19 @@ describe("una cartella di Excel sulla versione 2", () => {
     expect(fresh.workbook.sheets[0].rows[3].height).toBeUndefined();
   });
 
-  it("segna le formule non aggiornate e le celle in conflitto", () => {
+  it("mostra le formule ricalcolate dal provider, segna quelle che non sa calcolare e le celle in conflitto", () => {
     const edited = fixture.edit.window as GridBytesWindow;
     validateBytesWindow(edited, { ...session, revision: fixture.edit.commit.revision });
     const view = workbookView(session, [edited], null);
     const cell = (row: number, column: number) => view.sheets[0].cells.get(cellKey({ row, column }))?.bytes;
     expect(cell(1, 1)?.input).toBe("900");
-    expect(cell(3, 1)).toMatchObject({ input: "=SUM(B2:B3)", display: "680", stale: true });
+    // Le formule che leggono B2, anche a catena, hanno il valore nuovo.
+    expect(cell(3, 1)).toMatchObject({ input: "=SUM(B2:B3)", display: "780", stale: false });
+    expect(cell(2, 2)).toMatchObject({ input: "=B3/B4", display: "-15.38%", stale: false });
+    // La funzione di una macro resta vuota e segnata.
+    const note = workbookView(session, windows, null).sheets[1].cells;
+    expect(note.get(cellKey({ row: 0, column: 1 }))?.bytes).toMatchObject({ display: "Una nota!", stale: false });
+    expect(note.get(cellKey({ row: 0, column: 2 }))?.bytes).toMatchObject({ display: "", stale: true });
 
     const conflict = fixture.conflict.session as GridBytesSession;
     validateBytesSession(conflict);
@@ -202,5 +209,20 @@ describe("l'input di una cella nella lingua", () => {
     expect(fileInput("1.500", ",")).toBe("'1.500");
     expect(fileInput("1.500", ".")).toBe("1.500");
     expect(fileInput("1,5", ".")).toBe("1,5");
+  });
+
+  it("mostra subito come numero soltanto un numero semplice; il resto lo riconosce il motore", () => {
+    const shown = (draft: string, decimal: "." | ",") => writtenValue(fileInput(draft, decimal), decimal);
+    expect(shown("1,5", ",")).toEqual({ value: { kind: "number", value: 1.5 }, display: "1,5" });
+    expect(shown("1.5", ".")).toEqual({ value: { kind: "number", value: 1.5 }, display: "1.5" });
+    expect(shown("-42", ",")).toEqual({ value: { kind: "number", value: -42 }, display: "-42" });
+    // «1.5» in italiano e «1,5» in inglese sono testo, come li scrive il file.
+    expect(shown("1.5", ",")).toEqual({ value: { kind: "text", value: "1.5" }, display: "1.5" });
+    expect(shown("1,5", ".")).toEqual({ value: { kind: "text", value: "1,5" }, display: "1,5" });
+    expect(shown("'42", ",")).toEqual({ value: { kind: "text", value: "42" }, display: "42" });
+    for (const draft of ["15/03/2026", "12%", "3 €", "1e3", "=A1+1", "TRUE"]) {
+      expect(shown(draft, ",").value.kind).toBe("text");
+    }
+    expect(shown("", ",")).toEqual({ value: { kind: "blank" }, display: "" });
   });
 });

@@ -19,6 +19,11 @@ const world = vi.hoisted(() => ({
   signals: new Map<string, Set<Listener>>(),
   languages: new Set<() => void>(),
   confirm: null as null | ((message: string, options: unknown) => Promise<boolean>),
+  /// Il suggerimento di ogni elemento, e ogni sua scrittura in ordine.
+  tips: new Map<HTMLElement, string>(),
+  tipWrites: [] as string[],
+  /// I comandi del registro: `version.keep` c'è se la Cronologia è accesa.
+  kernelCommands: [] as string[],
 }));
 
 function subscribe<K>(map: Map<K, Set<Listener>>, key: K, listener: Listener): () => void {
@@ -31,6 +36,7 @@ function subscribe<K>(map: Map<K, Set<Listener>>, key: K, listener: Listener): (
 vi.mock("../../../ui/commands", () => ({
   allCommands: () => world.commands,
   displayBinding: (binding: string | null) => (binding ? "Ctrl+S" : ""),
+  hasKernelCommand: (id: string) => world.kernelCommands.includes(id),
 }));
 vi.mock("../../../state/layout", () => ({
   layout: world,
@@ -44,6 +50,7 @@ vi.mock("../../../state/document-session", () => ({
     },
     inspect: () => ({ base: world.base }),
     saveState: () => world.saveState,
+    keepsDiscardedText: () => true,
   },
 }));
 vi.mock("../../../state/kernel", () => ({
@@ -63,7 +70,17 @@ vi.mock("../../../i18n/strings", () => ({
   },
   resolvedLanguage: () => "it",
 }));
-vi.mock("../../../ui/tooltip", () => ({ setTooltip: () => {}, attachTooltip: () => () => {}, dismissTooltip: () => {} }));
+vi.mock("../../../ui/tooltip", () => ({
+  setTooltip: (target: HTMLElement, text: string) => {
+    world.tipWrites.push(text);
+    world.tips.set(target, text);
+  },
+  attachTooltip: (target: HTMLElement, text: string) => {
+    world.tips.set(target, text);
+    return () => void world.tips.delete(target);
+  },
+  dismissTooltip: () => {},
+}));
 vi.mock("../../../ui/icons", () => ({ iconEl: () => null }));
 
 import { mountSaveState } from "./save-state";
@@ -119,9 +136,12 @@ beforeEach(() => {
   driver = createManualDriver();
   setMotionDriver(driver);
   world.focus = "main";
+  world.kernelCommands = [];
   world.doc = "Guida/Nota.md";
   world.base = { kind: "descends_from", value: "8842117" };
   world.confirm = null;
+  world.tips.clear();
+  world.tipWrites = [];
   commandsOf("shell.doc.save", "shell.doc.conflict.mine", "shell.doc.conflict.theirs");
   document.body.innerHTML =
     '<div id="panes"><section class="pane" data-pane="main"><div class="pane-toolbar"><span class="pane-status-slot">' +
@@ -167,6 +187,27 @@ describe("lo stato di salvataggio come bottone", () => {
     await settled();
     expect(button().dataset.state).toBe("fallito");
     expect(button().getAttribute("aria-label")).toBe("sheet.save.button Salvataggio fallito");
+  });
+
+  it("il suggerimento ridice la parola dello stato, scritto solo quando cambia", async () => {
+    mountSaveState(lifetime);
+    expect(world.tips.get(button())).toBe("Salvato");
+    drawSave("in_corso");
+    await settled();
+    expect(world.tips.get(button())).toBe("Salvataggio…");
+    drawSave("fallito");
+    await settled();
+    expect(world.tips.get(button())).toBe("Salvataggio fallito");
+    // La stessa parola riscritta dalla vista non riscrive il suggerimento.
+    const writes = world.tipWrites.length;
+    live.textContent = "Salvataggio fallito";
+    await settled();
+    expect(world.tipWrites.length).toBe(writes);
+    expect(world.tipWrites).toEqual(["Salvato", "Salvataggio…", "Salvataggio fallito"]);
+    // Smontato, il suggerimento se ne va col bottone.
+    const gone = button();
+    lifetime.close();
+    expect(world.tips.has(gone)).toBe(false);
   });
 
   it("senza stato non c'è bottone da premere", async () => {
@@ -331,8 +372,27 @@ describe("il popover dello stato", () => {
     expect(asked).toHaveLength(1);
     expect(asked[0]!.message).toContain("Guida/Nota.md");
     expect(asked[0]!.options.danger).toBe(true);
+    // Senza la Cronologia la domanda dice che il testo va perso.
+    expect(asked[0]!.message).toContain("commands.doc.conflict.theirs.desc_lost");
     expect(panel()).toBeNull();
     expect(runs["shell.doc.conflict.theirs"]).not.toHaveBeenCalled();
+  });
+
+  it("con la Cronologia accesa la domanda dice che il testo resta lì", async () => {
+    commandsOf("shell.doc.conflict.mine", "shell.doc.conflict.theirs");
+    world.kernelCommands = ["version.keep"];
+    const asked: string[] = [];
+    world.confirm = (message) => {
+      asked.push(message);
+      return Promise.resolve(false);
+    };
+    drawSave("conflitto");
+    mountSaveState(lifetime);
+    button().click();
+    actions()[1]!.click();
+    await settled();
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.split("\n").pop()).toBe("commands.doc.conflict.theirs.desc");
   });
 
   it("dopo un sì esegue il comando del lato scelto, una volta", async () => {

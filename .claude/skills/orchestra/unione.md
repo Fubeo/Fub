@@ -11,10 +11,21 @@ Read this when a coder reports `FATTO`.
 - Read the diff of the non-test code. Skim the tests only to confirm they prove
   the task's `Fatto quando`, and that none was deleted, skipped or weakened.
 - Graphic task: open the screenshots named under `FOTO` and compare them with
-  the prototype, both lights and the narrow width.
+  the prototype, both lights and the narrow width. Its pieces are in the map of
+  `apps/client/bench/conformita/` and `npm run bench:conformita` is green; every
+  new entry in `eccezioni-<prototipo>.json` cites DECISIONS or the plan.
 - Check the `CLAUDE.md` closing gate against what you read: owner of the rule,
   generated files from their source, docs updated, no new dependency nobody
   asked for.
+- Before every integration, a medium-level `code-review` of the task's diff
+  (`<base>..<sha>`), by a reviewer that sees the code, not your conclusion. Ask
+  it to judge each item under `DIFFERENZE DAL PIANO` too. Send what it finds
+  back to the coder at once: a defect found here costs one round, the same
+  defect found in the final review of the plan costs a full CI.
+- Graphic task: look at the screenshots critically yourself, as the person
+  using Fub would: the UI language everywhere, no raw host text, a sensible
+  order, human error messages, empty, error and focus states, nothing clipped
+  at 700 px.
 
 Not convincing: resume the coder with what is wrong, precisely. Don't fix a
 whole task yourself.
@@ -48,9 +59,20 @@ whole task yourself.
 
 ## 4. Clean up
 
-- `git worktree remove <path>` and `git branch -D <coder branch>`: the commits
-  are in the plan branch now. The worktree's `target/` is the biggest thing on
-  disk.
+Right after the push, not at the end of the session:
+
+- `git worktree unlock <path>`, then `git worktree remove <path>` and
+  `git branch -D <coder branch>`: the commits are in the plan branch now. The
+  Agent tool locks the worktrees it creates, so without the unlock `remove`
+  fails and the worktree stays; check the exit code. A `cargo clean` alone is
+  not a clean-up: the worktree and its branch must go too.
+- The same holds for every other branch, local or on GitHub, that has nothing
+  left to give: an experiment that ended, a work-in-progress branch overtaken
+  by the real one, a plan already merged. Before deleting one that is not fully
+  merged (`git merge-base --is-ancestor`, or `git cherry` with only `-` lines),
+  save it with `git bundle`, outside the repository.
+- At every resume, `git ls-remote --heads origin` and `git worktree list`
+  should show only `main`, branches with an open PR and work in progress.
 
 ## Shared build cache
 

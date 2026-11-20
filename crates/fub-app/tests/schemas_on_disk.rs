@@ -62,8 +62,8 @@ const SOURCES: &[(&str, &str)] = &[
         include_str!("../../fub-kernel/src/settings.rs"),
     ),
     (
-        "crates/fub-features/src/versioning.rs",
-        include_str!("../../fub-features/src/versioning.rs"),
+        "crates/fub-features/src/versioning/store.rs",
+        include_str!("../../fub-features/src/versioning/store.rs"),
     ),
     (
         "crates/fub-kernel/src/snapshot.rs",

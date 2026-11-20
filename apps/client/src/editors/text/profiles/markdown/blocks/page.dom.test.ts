@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
 import { history, undo } from "@codemirror/commands";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, runScopeHandlers } from "@codemirror/view";
@@ -10,7 +9,9 @@ import { livePreview } from "../livepreview";
 import { liveReveal } from "../../../live-reveal";
 import { propertyList, setProperty } from "../properties";
 import { blocksMode, type BlocksOptions } from "./index";
+import "../../../../../i18n/strings";
 import { pageClassesWith, pageData, subpageLink } from "./page";
+import { parsedView } from "../test-support";
 
 // La testata della pagina in Blocchi (H12) e il suo menu «…» (H13).
 
@@ -35,8 +36,7 @@ function mount(doc: string, options: BlocksOptions = {}, readOnly = false): Edit
       ],
     }),
   });
-  ensureSyntaxTree(view.state, view.state.doc.length, 1000);
-  view.dispatch({});
+  parsedView(view);
   views.push(view);
   return view;
 }
@@ -58,9 +58,14 @@ describe("le proprietà che la testata scrive", () => {
     expect(apply("Testo", "icon", "🌱")).toBe("---\nicon: 🌱\n---\nTesto");
   });
 
-  it("sostituisce la voce che c'era, con tutte le sue righe", () => {
+  it("sostituisce la voce che c'era, con tutte le sue righe, e tiene la forma dell'elenco", () => {
     expect(apply("---\ncssclasses:\n  - wide\n  - serif\ntags: a\n---\nX", "cssclasses", ["wide"]))
-      .toBe("---\ncssclasses: [wide]\ntags: a\n---\nX");
+      .toBe("---\ncssclasses:\n  - wide\ntags: a\n---\nX");
+    expect(apply("---\ncssclasses: [wide, serif]\n---\nX", "cssclasses", ["wide"]))
+      .toBe("---\ncssclasses: [wide]\n---\nX");
+    // Senza voci un elenco a righe non sa più dire d'essere un elenco: `[]`.
+    expect(apply("---\ncssclasses:\n- wide\n---\nX", "cssclasses", []))
+      .toBe("---\ncssclasses: []\n---\nX");
   });
 
   it("aggiunge la voce prima della riga di chiusura, e la toglie con null", () => {
@@ -152,6 +157,32 @@ describe("la testata della pagina", () => {
     expect(rename).not.toHaveBeenCalled();
   });
 
+  it("Ctrl+Z nel titolo senza modifiche sue annulla la nota, un passo per tasto (IMP-6105)", () => {
+    const view = mount("Testo", { rename: async () => null });
+    const at = view.state.doc.length;
+    view.dispatch({ changes: { from: at, insert: "\n\nUno" }, userEvent: "input" });
+    view.dispatch({ changes: { from: view.state.doc.length, insert: "\n\nDue" }, userEvent: "input" });
+    const field = title(view);
+    field.focus();
+    const chord = (name: string, shiftKey = false) => {
+      const event = new KeyboardEvent("keydown", { key: name, ctrlKey: true, shiftKey, bubbles: true, cancelable: true });
+      field.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(chord("z")).toBe(true);
+    expect(view.state.doc.toString()).toBe("Testo\n\nUno");
+    expect(chord("z")).toBe(true);
+    expect(view.state.doc.toString()).toBe("Testo");
+    expect(chord("Z", true)).toBe(true);
+    expect(view.state.doc.toString()).toBe("Testo\n\nUno");
+    expect(chord("y")).toBe(true);
+    expect(view.state.doc.toString()).toBe("Testo\n\nUno\n\nDue");
+    // Con un nome scritto nel titolo, Ctrl+Z è del campo: la nota non cambia.
+    field.value = "Altro";
+    expect(chord("z")).toBe(false);
+    expect(view.state.doc.toString()).toBe("Testo\n\nUno\n\nDue");
+  });
+
   it("↑ sulla prima riga porta al titolo", () => {
     const view = mount("Testo\n\nAltro", { rename: async () => null });
     view.focus();
@@ -173,6 +204,28 @@ describe("la testata della pagina", () => {
     expect(propertyList(view.state, "cssclasses")).toEqual(["mia", "wide", "mono"]);
     undo(view);
     expect(propertyList(view.state, "cssclasses")).toEqual(["mia", "wide"]);
+  });
+
+  it("una figura del set si disegna, si sceglie e si scrive `icon: fub:<nome>` (Scrittoio 2)", () => {
+    const view = mount("---\nicon: fub:book\n---\nTesto");
+    const icon = view.dom.querySelector<HTMLButtonElement>(".cm-fub-page-icon")!;
+    expect(icon.querySelector("svg")?.getAttribute("data-icon")).toBe("book");
+    expect(icon.textContent).toBe("");
+    expect(icon.getAttribute("aria-label")).toContain("Libro");
+    icon.click();
+    const figure = document.querySelector<HTMLButtonElement>('.cm-fub-page-popover [data-icon="fub:heart"]')!;
+    expect(figure.querySelector("svg")).not.toBeNull();
+    figure.click();
+    expect(view.state.doc.toString()).toBe("---\nicon: fub:heart\n---\nTesto");
+  });
+
+  it("un `fub:` sconosciuto o un indirizzo non si mostrano, e si può scegliere un'icona", () => {
+    for (const value of ["fub:astronave", "https://notion.so/icon.png"]) {
+      const view = mount(`---\nicon: ${value}\n---\nTesto`);
+      expect(view.dom.querySelector(".cm-fub-page-icon")).toBeNull();
+      const tools = [...view.dom.querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].map((button) => button.textContent);
+      expect(tools).toContain("Aggiungi un'icona");
+    }
   });
 
   it("la copertina si scrive dal suo riquadro e si toglie", () => {
@@ -217,6 +270,19 @@ describe("la testata della pagina", () => {
     await settle();
     expect(view.state.doc.toString()).toBe("Testo");
     expect(notify).toHaveBeenCalledWith("C'è già", "guasto");
+  });
+
+  it("una sottopagina che l'host rifiuta con un errore tipizzato dice che cosa e la specie, mai «[object Object]»", async () => {
+    const notify = vi.fn();
+    const refused = { kind: "already_exists", message: "Tappe.md esiste già nel vault" };
+    const view = mount("Testo", { subpage: async () => { throw refused; }, notify, folderPage: () => true });
+    [...view.dom.querySelectorAll<HTMLButtonElement>(".cm-fub-page-tool")].find((button) => button.textContent === "Nuova sottopagina")!.click();
+    const field = document.querySelector<HTMLInputElement>(".cm-fub-page-popover input")!;
+    field.value = "Tappe";
+    key(field, "Enter");
+    await settle();
+    expect(view.state.doc.toString()).toBe("Testo");
+    expect(notify).toHaveBeenCalledWith("Non ho potuto creare la sottopagina «Tappe»: esiste già qualcosa con lo stesso nome", "guasto");
   });
 });
 

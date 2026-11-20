@@ -164,6 +164,31 @@
 .save-state[data-state="conflitto"]::before {
   background: var(--danger);
 }
+/* «Salvato» ha la spunta verde, non il punto grigio: il punto resta per ciò
+   che è in sospeso, e il rosso per ciò che è andato storto. Il bottone della
+   testata ripete la classe: al telefono `sheets/sheets.css` arriva dopo la
+   pelle e il suo `display: block` vincerebbe. */
+.save-state,
+.save-state.sheet-save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-base);
+}
+.save-state:not(:empty)::before {
+  margin-right: 0;
+}
+.save-state[data-state="salvato"]::before {
+  box-sizing: border-box;
+  width: 5px;
+  height: 9px;
+  margin: -3px var(--space-1) 0 var(--space-1);
+  border-right: 1.5px solid var(--success);
+  border-bottom: 1.5px solid var(--success);
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg);
+}
 
 /* L'attesa del secondo tasto di una sequenza: una pastiglia che galleggia in
    basso al centro finché l'app aspetta, e sparisce subito dopo. */
@@ -279,7 +304,8 @@
 .dock-panel > ul > li {
   padding: var(--space-4) 0;
 }
-.dock-panel > ul > li + li {
+/* Senza un fratello anonimo a sinistra di `+` o `~`: il perché è in `theme/fratelli.test.ts`. */
+.dock-panel > ul > li:where(:nth-child(n + 2)) {
   border-top: 1px solid var(--border);
 }
 
@@ -350,6 +376,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Il nome di un lavoro in corso, o di un file da salvare, va a capo invece di
+   accorciarsi: «Esportazione di «Bando di gara.pdf» come PDF redatto» dice
+   quale delle due esportazioni sta girando solo per intero. Gli esiti dei
+   lavori finiti (`data-tone`) restano su una riga: un motivo lungo lo ridice
+   il suggerimento. */
+.activity-row:not([data-tone]) > .activity-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .activity-row > .muted {
   grid-column: 2;
   grid-row: 1;
@@ -364,6 +399,17 @@
 .activity-row > .link-button {
   grid-column: 3;
   grid-row: 1;
+  margin-right: calc(-1 * var(--space-3));
+}
+/* Le azioni di un file esportato («Salva…», «Stampa…»): un gruppo in fila nel
+   posto delle azioni, uno accanto all'altro anche quando il centro è stretto;
+   il nome del file si accorcia, i pulsanti no. */
+.activity-actions {
+  grid-column: 2 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   margin-right: calc(-1 * var(--space-3));
 }
 .activity-row > span[role="status"] {

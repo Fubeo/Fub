@@ -28,9 +28,14 @@ Fub avvia un programma in due modi soli, scritti una volta in
   byte fino al tetto e scartano il resto continuando a leggere: un processo
   che scrive molto non si blocca su un tubo pieno. Ogni ~100 ms Fub guarda
   il tempo e l'annullamento del job; a tempo scaduto o annullato ferma il
-  processo con `SIGKILL` sull'intero gruppo (su unix, così anche i figli del
-  figlio) e aspetta che esca. Anche dopo un'uscita normale il gruppo si
-  ferma: della CLI non resta niente. Un codice d'uscita diverso da zero è un
+  processo insieme ai processi che ha avviato e aspetta che esca. Su unix la
+  CLI ha un gruppo di processi suo e Fub manda `SIGKILL` all'intero gruppo.
+  Su Windows la CLI nasce sospesa, entra in un job object con
+  `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` e solo allora parte: ogni processo
+  che avvia nasce nel job, e chiudere il job li ferma tutti. Se il job non si
+  crea, o la CLI non ci entra, la CLI non parte e l'errore è quello del
+  sistema. Anche dopo un'uscita normale il gruppo, o il job, si ferma: della
+  CLI non resta niente. Un codice d'uscita diverso da zero è un
   errore col suo codice; un job annullato prima di partire non avvia niente.
 
 | Limite di una CLI | Valore |
@@ -54,10 +59,11 @@ loro catalogo.
 
 **Chiudendo Fub** un'app avviata con «Apri con» resta aperta: non è nel
 gruppo di Fub e nessuno la ferma. Una CLI vive dentro il job che la
-aspetta: annullare il job ferma il gruppo. Se Fub esce mentre il job aspetta,
-nessuno la ferma più e la CLI, che ha un gruppo suo, arriva in fondo da sola.
-Su Windows il tempo e l'annullamento fermano solo il processo della CLI, non
-i processi che ha avviato lei.
+aspetta: annullare il job ferma il gruppo. Se Fub esce di colpo mentre il
+job aspetta, su Linux la CLI muore con il thread che l'ha avviata
+(`PR_SET_PDEATHSIG`) e su Windows con il job object, che il sistema chiude
+insieme agli handle di Fub; su macOS nessuno la ferma più e la CLI, che ha un
+gruppo suo, arriva in fondo da sola.
 
 ## Apri con
 

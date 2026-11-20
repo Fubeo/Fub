@@ -451,6 +451,17 @@ impl Revision {
                 .eq_ignore_ascii_case(&format!("{:016x}", Fnv1a::hash(source)))
     }
 
+    /// È nella forma che [`Revision::of_bytes`] emette oggi (`sha256:` e 64
+    /// cifre esadecimali)? Due revisioni di questa forma si confrontano per
+    /// uguaglianza; una della forma vecchia (la FNV-1a a 16 cifre che
+    /// [`Revision::matches_bytes`] accetta durante la migrazione) diversa da
+    /// una nuova non dice che i byte sono altri, e va ricalcolata.
+    pub fn is_current_form(&self) -> bool {
+        self.0.strip_prefix("sha256:").is_some_and(|digest| {
+            digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+        })
+    }
+
     pub fn matches(&self, source: &str) -> bool {
         self.matches_bytes(source.as_bytes())
     }
@@ -776,6 +787,18 @@ mod tests {
 
     fn request(source: &str, edits: Vec<TextEdit>) -> EditRequest {
         EditRequest::new(Revision::of(source), edits)
+    }
+
+    #[test]
+    fn only_the_sha256_form_is_the_current_form() {
+        assert!(Revision::of_bytes(b"ciao").is_current_form());
+        assert!(Revision::default().is_current_form());
+        let legacy = format!("{:016x}", Fnv1a::hash(b"ciao"));
+        assert!(Revision::new(legacy.clone()).matches_bytes(b"ciao"));
+        assert!(!Revision::new(legacy).is_current_form());
+        assert!(!Revision::new("sha256:abc").is_current_form());
+        assert!(!Revision::new(format!("sha256:{}", "z".repeat(64))).is_current_form());
+        assert!(!Revision::new("").is_current_form());
     }
 
     #[test]

@@ -28,7 +28,7 @@
 import { api } from "../host/ipc";
 import { activeJobs } from "../host/query";
 import { openVaultRoot, vaultArg } from "../state/store";
-import type { ExportArtifact, JobProgress, JobStatus, KernelNotice, TransferNote } from "../host/contract";
+import type { CommandOutcome, ExportArtifact, JobProgress, JobStatus, KernelNotice, TransferNote } from "../host/contract";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { onAnyEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
@@ -105,10 +105,48 @@ export function apply(jobs: JobRow[], notice: KernelNotice): Result {
   }
 }
 
-/// Cosa mostra la riga di un lavoro: ciò che il job racconta di sé, o il nome
-/// del suo entry point finché non racconta niente.
+/// I nomi dei lavori che questa shell ha chiesto, per id: li dà chi ha
+/// accodato il lavoro, che sa che cosa sta facendo («Esportazione di
+/// «Rossi» come PDF»). Sono funzioni e non frasi, così una lingua che cambia
+/// mentre il lavoro gira rinomina anche la riga.
+const named = new Map<string, () => string>();
+
+/// I job della shell che hanno un nome loro anche quando nessuno l'ha dato:
+/// l'id del job è stabile (lo specchio di `fub_host::shell`), la sua frase
+/// d'avanzamento no — la scrive il job, che una lingua non ce l'ha.
+const KNOWN_JOBS: Readonly<Record<string, "activity.job.transfer">> = {
+  [ARTIFACT_JOB]: "activity.job.transfer",
+};
+
+/// Cosa mostra la riga di un lavoro: il nome che gli ha dato chi l'ha chiesto;
+/// se no quello del job, quando la shell lo conosce; se no ciò che il job
+/// racconta di sé, e il nome del suo entry point finché non racconta niente.
 export function labelOf(job: JobRow): string {
+  const name = named.get(job.id);
+  if (name) return name();
+  const known = KNOWN_JOBS[job.job];
+  if (known) return t(known);
   return job.progress?.label ?? job.job;
+}
+
+/// L'id del job che un comando di transfer ha accodato, dall'esito tipizzato.
+export function queuedJob(outcome: CommandOutcome): string | null {
+  const effect = outcome.effect;
+  if (effect.kind !== "custom" || effect.ns !== "fub.transfer.queued") return null;
+  const id = (effect.payload as { job_id?: unknown } | null)?.job_id;
+  return typeof id === "string" ? id : null;
+}
+
+/// Dà un nome al lavoro `id`, appena chi l'ha accodato ne conosce l'id.
+///
+/// L'id arriva con la risposta del comando, e un lavoro veloce può essere già
+/// finito: allora il nome va all'esito che il centro ricorda, che lo diceva
+/// col nome generico. L'avviso già mostrato resta com'era.
+export function nameJob(id: string, name: () => string): void {
+  const done = past.some((item) => item.id === id);
+  if (done) past = past.map((item) => (item.id === id && item.retell ? { ...item, text: item.retell(name()) } : item));
+  else named.set(id, name);
+  redraw();
 }
 
 /// Cosa dire all'utente quando un lavoro finisce, o `null` se non c'è niente da
@@ -121,23 +159,32 @@ export function labelOf(job: JobRow): string {
 /// un comando, un'automazione — quindi non c'è la famiglia di job silenziosi
 /// per cui questa regola sarebbe rumore. Il giorno che ci fosse, è qui che si
 /// mette la differenza.
-export function noticeOf(notice: KernelNotice, rows: readonly JobRow[] = []): { text: string; tone: Tone } | null {
+export function noticeOf(notice: KernelNotice, rows: readonly JobRow[] = []): Outcome | null {
   if (notice.event.type !== "job_done") return null;
   const { id, result } = notice.event;
-  // Il nome che la riga aveva, cioè ciò che il lavoro ha detto di sé: l'id
-  // del suo entry point soltanto se non ha detto niente.
-  const row = rows.find((candidate) => candidate.id === id);
-  const job = row ? labelOf(row) : notice.event.job;
+  // Il nome che la riga aveva, o che avrebbe avuto: quello di un lavoro
+  // finito prima che la lista lo vedesse si cerca allo stesso modo.
+  const row = rows.find((candidate) => candidate.id === id) ?? { id, job: notice.event.job, progress: null };
+  const job = labelOf(row);
   // `result` attraversa l'IPC come un `Result` serializzato da serde: `Ok` è
   // ciò che il job ha reso, `Err` è un `PluginError` col `kind` del §12.2 —
   // che resta l'unica domanda su cui ramificare, mai una sottostringa.
   // L'esito annullato è un esito finale come gli altri: il job si è fermato
   // perché lo si è chiesto, e la riga che sparisce lo dice — non resta appesa.
   const error = (result as { Err?: unknown } | null)?.Err;
-  if (error === undefined) return { text: t("activity.finished", { job }), tone: "info" };
-  const outcome = asPluginError(error);
-  if (outcome?.kind === "cancelled") return { text: t("activity.finished", { job }), tone: "info" };
-  return { text: t("activity.failed", { job, reason: describeOutcome(error) }), tone: "guasto" };
+  const ended = error === undefined || asPluginError(error)?.kind === "cancelled";
+  const retell = ended
+    ? (name: string) => t("activity.finished", { job: name })
+    : (name: string) => t("activity.failed", { job: name, reason: describeOutcome(error) });
+  return { text: retell(job), tone: ended ? "info" : "guasto", retell };
+}
+
+/// L'esito di un lavoro in una riga, e come ridirlo con un altro nome: il
+/// nome può arrivare dopo l'esito (vedi `nameJob`).
+export interface Outcome {
+  text: string;
+  tone: Tone;
+  retell: (job: string) => string;
 }
 
 /// Un esito fallito in una riga: il `message` del `PluginError` quando c'è, la
@@ -147,8 +194,14 @@ export function noticeOf(notice: KernelNotice, rows: readonly JobRow[] = []): { 
 /// sono il ripiego di un formato che non esiste più — non il ramo che decide.
 function describeOutcome(error: unknown): string {
   const plugin = asPluginError(error);
-  if (plugin) return plugin.message.trim() !== "" ? plugin.message : plugin.kind;
+  if (plugin) return plugin.message.trim() !== "" ? plugin.message : errorText(plugin, "specie");
   if (typeof error === "string") return error;
+  // Un errore del contratto con una chiave che nessuno ha risolto (IMP-130:
+  // «bad_args» al posto del motivo): la frase della sua specie, nella lingua
+  // di chi legge, mai la sigla.
+  if (error && typeof error === "object" && typeof (error as { kind?: unknown }).kind === "string") {
+    return errorText(error);
+  }
   if (error && typeof error === "object") {
     const entries = Object.entries(error as Record<string, unknown>);
     const [name, detail] = entries[0] ?? [t("activity.unknown_error"), undefined];
@@ -261,6 +314,9 @@ export interface Past {
   text: string;
   tone: Tone;
   when: number;
+  /// Il lavoro, e come ridirne l'esito quando il suo nome arriva tardi.
+  id?: string;
+  retell?: (job: string) => string;
 }
 /// Quanti lavori finiti si ricordano. Il centro dice **che cosa è successo**,
 /// non tiene il registro della sessione: dieci bastano a rispondere a «è
@@ -301,6 +357,7 @@ export function mountActivity(lifetime: Lifetime): void {
     activityEpoch++;
     finished = [];
     past = [];
+    named.clear();
     open = false;
   });
   lifetime.listen($("#activity-button"), "click", () => {
@@ -345,12 +402,16 @@ export function mountActivity(lifetime: Lifetime): void {
         finished = [];
         past = [];
       }
+      if (eventNotice.event.type === "vault_opened" || eventNotice.event.type === "vault_closed") named.clear();
       const resultNotice = noticeOf(eventNotice, jobs);
-      if (resultNotice) past = remember(past, { ...resultNotice, when: Date.now() });
+      if (resultNotice && eventNotice.event.type === "job_done") {
+        past = remember(past, { ...resultNotice, when: Date.now(), id: eventNotice.event.id });
+      }
       const result = apply(jobs, eventNotice);
       jobs = result.jobs;
       const completed = eventNotice.event;
       if (completed.type === "job_done") {
+        named.delete(completed.id);
         const artifacts = exportArtifacts(eventNotice);
         const notes = artifacts === null ? [] : exportNotes(eventNotice);
         if (artifacts && (artifacts.length > 0 || notes.length > 0) &&
@@ -463,9 +524,11 @@ function redraw(): void {
   list.replaceChildren();
   // R05/U64/S17: query fallita = lista precedente + stale esplicito con retry.
   // Nessun-job e lista-non-aggiornata restano due righe diverse: la prima dice
-  // che non gira niente, la seconda che non lo si sa più.
+  // che non gira niente, la seconda che non lo si sa più — e non stanno mai
+  // insieme: sotto una lista non aggiornata «nessun lavoro» sarebbe proprio la
+  // bugia che lo stato esplicito serve a evitare.
   if (stale) list.appendChild(staleNote());
-  if (jobs.length === 0 && finished.length === 0 && past.length === 0) {
+  if (!stale && jobs.length === 0 && finished.length === 0 && past.length === 0) {
     const empty = document.createElement("li");
     empty.className = "muted";
     empty.textContent = t("activity.none");
@@ -492,13 +555,19 @@ function redraw(): void {
             artifact.state === "failed" ? t("activity.artifact_failed", { reason: artifact.detail }) :
               artifact.detail || t("activity.artifact_ready");
         const busy = artifact.state === "saving" || artifact.state === "printing";
+        // Le azioni del file stanno in un gruppo solo, in fila: la griglia
+        // della riga ha un posto per un'azione (quello di «Annulla» nei
+        // lavori in corso), e due pulsanti in quel posto finivano uno sopra
+        // l'altro, col clic su «Salva…» che arrivava a «Stampa…» (IMP-129).
+        const actions = document.createElement("span");
+        actions.className = "activity-actions";
         const save = document.createElement("button");
         save.type = "button";
         save.className = "link-button";
         save.textContent = t("activity.artifact_save");
         save.disabled = busy;
         save.addEventListener("click", () => void persistArtifact(report, artifact));
-        item.append(save);
+        actions.append(save);
         // Un PDF si stampa anche: passa al lettore del sistema, e i byte
         // restano per salvarlo.
         if (artifact.media_type === "application/pdf") {
@@ -508,8 +577,9 @@ function redraw(): void {
           print.textContent = t("activity.artifact_print");
           print.disabled = busy;
           print.addEventListener("click", () => void printArtifact(report, artifact));
-          item.append(print);
+          actions.append(print);
         }
+        item.append(actions);
       }
       item.append(status);
       list.append(item);
@@ -636,8 +706,11 @@ function row(job: JobRow): HTMLLIElement {
 
   const text = document.createElement("span");
   text.className = "activity-label";
-  text.textContent = labelOf(job);
-  setTooltip(text, `${job.job} · ${job.id}`);
+  const label = labelOf(job);
+  text.textContent = label;
+  // Il nome intero, che la riga può ellissare: l'id del job e il suo numero
+  // non dicono niente a chi legge.
+  setTooltip(text, label);
 
   // U64: progresso reale o indeterminato — mai una barra a metà inventata, mai
   // una percentuale composta da testo (l'età del job non è un dato mostrato).

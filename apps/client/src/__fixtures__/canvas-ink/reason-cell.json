@@ -1,0 +1,88 @@
+{
+  "name": "reason-cell",
+  "description": "Un'ancora cell con una cella che non è un indirizzo A1 valido (riga zero, senza riga, minuscola, col dollaro, con uno zero davanti, oltre l'ultima colonna o l'ultima riga, un numero, mancante) o con un foglio vuoto, non testo o mancante: ragione anchor, e il tratto resta nel file com'era. Alla radice un'ancora cell è fuori posto.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"f1\", \"type\": \"file\", \"file\": \"Conti/bilancio.xlsx\", \"x\": 0, \"y\": 0, \"width\": 480, \"height\": 320,\n      \"fub:ink\": { \"v\": 1, \"strokes\": [\n        { \"id\": \"s-1\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": \"A0\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-2\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": \"B\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-3\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": \"b3\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-4\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": \"$B$3\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-5\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": \"B03\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-6\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": \"XFE1\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-7\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": \"A1048577\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-8\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": 23}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-9\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-10\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"\", \"cell\": \"B3\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-11\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": 1, \"cell\": \"B3\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" },\n        { \"id\": \"s-12\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"cell\": \"B3\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" }\n      ] } }\n  ],\n  \"edges\": [],\n  \"fub:ink\": { \"v\": 1, \"strokes\": [\n    { \"id\": \"s-1\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\", \"color\": \"#0072b2\", \"anchor\": {\"kind\": \"cell\", \"sheet\": \"Foglio1\", \"cell\": \"B3\"}, \"ink\": \"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\" }\n  ] }\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": {
+          "node": "f1"
+        },
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-2",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-3",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-4",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-5",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-6",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-7",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-8",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-9",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-10",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-11",
+            "drawn": false,
+            "reason": "anchor"
+          },
+          {
+            "id": "s-12",
+            "drawn": false,
+            "reason": "anchor"
+          }
+        ]
+      },
+      {
+        "layer": "board",
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": false,
+            "reason": "anchor"
+          }
+        ]
+      }
+    ]
+  }
+}

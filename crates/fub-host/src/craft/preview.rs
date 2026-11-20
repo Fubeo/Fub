@@ -276,6 +276,12 @@ fn store(host: &mut dyn HostApi, preview: &CraftPreview, size: PreviewSize) {
 /// Il soggetto di `doc`: dal formato, se è di un provider Craft, o
 /// dall'estensione del nome. Un nome senza estensione, o che è solo
 /// un'estensione (`.pdf`), non ne ha.
+/// `doc` ha un'anteprima di questo bundle? È la domanda con cui il comando
+/// sceglie fra gli omonimi di un nome scritto a mano.
+pub(super) fn previewable(host: &dyn HostApi, doc: &DocId) -> bool {
+    subject_of(host, doc).is_some()
+}
+
 fn subject_of(host: &dyn HostApi, doc: &DocId) -> Option<PreviewSubject> {
     if let Some(app) = host
         .format_of(doc)
@@ -720,7 +726,9 @@ mod tests {
             std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         let ws = fub_kernel::Workspace::new(&root, fub_kernel::FormatRegistry::new()).unwrap();
-        let ranged = Ranged::new(ws.resource_reader());
+        // Il file è appena nato: con l'orologio vero la revisione letta nei
+        // due secondi dopo non si ricorda (#318). Qui si prova la cache.
+        let ranged = Ranged::new(ws.resource_reader()).with_clock(crate::craft::ranged::long_after);
         let host = MemoryHost::new()
             .with_value(
                 core_spec(crate::settings::CRAFT_EDITOR_PATHS),

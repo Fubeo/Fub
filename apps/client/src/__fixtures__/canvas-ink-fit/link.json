@@ -1,0 +1,34 @@
+{
+  "name": "link",
+  "description": "Una scheda link resta ferma.",
+  "card": {
+    "type": "link",
+    "url": "https://example.org"
+  },
+  "ref": {
+    "width": 400,
+    "height": 300
+  },
+  "size": {
+    "width": 800,
+    "height": 300
+  },
+  "expect": {
+    "mode": "fixed",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          399,
+          299
+        ],
+        "to": [
+          399,
+          299
+        ]
+      }
+    ]
+  }
+}

@@ -234,6 +234,150 @@ fn la_fixture_dei_blocchi_chiusi_è_la_proiezione_del_codec() {
     );
 }
 
+/// `Senza perdite.docx` del corpus: titoli, una nota, un elenco, una tabella
+/// con celle unite, due sezioni. Il file su cui il tester ha visto IMP-150.
+fn senza_perdite() -> Vec<u8> {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/corpus/docx/senza-perdite.docx");
+    std::fs::read(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+}
+
+/// Salva una dopo l'altra le proiezioni `saves` sui byte che ogni salvataggio
+/// lascia, come fa l'app, e rilegge l'ultimo file.
+fn save_chain(start: &[u8], saves: &[String]) -> String {
+    let mut current = start.to_vec();
+    for (i, json) in saves.iter().enumerate() {
+        match save(Codec::Docx, &current, json)
+            .unwrap_or_else(|error| panic!("salvataggio {i}: {error:?}"))
+        {
+            Saved::Bytes(out) => current = out,
+            Saved::Unchanged => {}
+        }
+    }
+    open(Codec::Docx, &current).unwrap().projection
+}
+
+#[test]
+fn la_fixture_di_senza_perdite_è_la_proiezione_del_codec() {
+    let opened = open(Codec::Docx, &senza_perdite()).unwrap();
+    assert_eq!(opened.readonly, None, "il file si deve poter modificare");
+    let path = fixture("rich-senza-perdite.json");
+    if std::env::var_os("UPDATE_MIRROR").is_some() {
+        let mut out =
+            serde_json::to_string_pretty(&json!({ "source": opened.projection })).unwrap();
+        out.push('\n');
+        std::fs::write(&path, out).expect("scrive la fixture");
+        return;
+    }
+    assert_eq!(
+        source_of("rich-senza-perdite.json"),
+        opened.projection,
+        "la fixture di Senza perdite è stantia: rigenerala con \
+         `UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_projection`"
+    );
+}
+
+/// IMP-150, sul file: dopo «tutto sostituito da XYZ» salvato, la proiezione
+/// di partenza salvata sopra riporta il contenuto di prima (gli stessi
+/// paragrafi, celle unite comprese, la nota, le sezioni).
+#[test]
+fn salvare_xyz_e_poi_l_originale_torna_al_contenuto_di_partenza() {
+    let start = senza_perdite();
+    let base = open(Codec::Docx, &start).unwrap().projection;
+    let mut xyz: Value = serde_json::from_str(&base).unwrap();
+    xyz["blocks"] =
+        json!([{ "t": "para", "role": { "kind": "body" }, "c": [{ "t": "text", "x": "XYZ" }] }]);
+    let xyz = xyz.to_string();
+    let reopened = save_chain(&start, &[xyz, base.clone()]);
+    assert_eq!(reopened, base);
+}
+
+/// IMP-150, la raffica: le proiezioni che la shell ha salvato per strada e
+/// quella dopo l'annulla di tutto (`rich-annulla.json`, snapshot di
+/// `apps/client/src/editors/rich/undo.test.ts`), salvate in fila sul file,
+/// lo riportano al contenuto di partenza.
+#[test]
+fn la_raffica_annullata_salva_il_file_di_partenza() {
+    let path = fixture("rich-annulla.json");
+    let raw = std::fs::read_to_string(&path).unwrap();
+    let value: Value = serde_json::from_str(&raw).unwrap();
+    let start = senza_perdite();
+    let base = open(Codec::Docx, &start).unwrap().projection;
+    assert_eq!(
+        value["base"].as_str(),
+        Some(base.as_str()),
+        "rich-annulla.json è stantia: rigenerala con \
+         `npx vitest run src/editors/rich/undo.test.ts -u`"
+    );
+    let saves: Vec<String> = value["saves"]
+        .as_array()
+        .expect("campo saves")
+        .iter()
+        .map(|s| s.as_str().unwrap().to_string())
+        .collect();
+    assert!(saves.len() > 2, "la raffica salva più volte per strada");
+    assert_ne!(saves[0], base, "la raffica cambia il documento");
+    assert_eq!(
+        saves.last(),
+        Some(&base),
+        "l'annulla di tutto torna alla proiezione di partenza"
+    );
+    assert_eq!(save_chain(&start, &saves), base);
+}
+
+/// #492: un surrogato rimasto solo nel documento della shell
+/// (`rich-surrogato.json`, snapshot di
+/// `apps/client/src/editors/rich/surrogates.test.ts`) arriva come U+FFFD, e
+/// il salvataggio del `.docx` riesce senza perdere il testo intorno.
+#[test]
+fn un_surrogato_solo_non_fa_fallire_il_salvataggio() {
+    let path = fixture("rich-surrogato.json");
+    let raw = std::fs::read_to_string(&path).unwrap();
+    let value: Value = serde_json::from_str(&raw).unwrap();
+    let start = senza_perdite();
+    let base = open(Codec::Docx, &start).unwrap().projection;
+    assert_eq!(
+        value["base"].as_str(),
+        Some(base.as_str()),
+        "rich-surrogato.json è stantia: rigenerala con \
+         `npx vitest run src/editors/rich/surrogates.test.ts -u`"
+    );
+    let source = value["source"].as_str().expect("campo source").to_string();
+    let reopened = save_chain(&start, &[source]);
+    let projection = Projection::from_json(&reopened).unwrap();
+    let Block::Para(first) = &projection.blocks[0] else {
+        panic!("il primo blocco è un paragrafo");
+    };
+    let text: String = first
+        .c
+        .iter()
+        .filter_map(|inline| match inline {
+            Inline::Text { x, .. } => Some(x.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        text.starts_with("a\u{fffd}b"),
+        "il testo scritto resta, il surrogato solo è U+FFFD: {text:?}"
+    );
+    let Block::Para(was) = &Projection::from_json(&base).unwrap().blocks[0] else {
+        panic!("il primo blocco è un paragrafo");
+    };
+    let before: String = was
+        .c
+        .iter()
+        .filter_map(|inline| match inline {
+            Inline::Text { x, .. } => Some(x.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        text,
+        format!("a\u{fffd}b{before}"),
+        "nessun altro testo cambia"
+    );
+}
+
 fn plain(blocks: &[Block], index: usize) -> (Role, String, Vec<(String, Vec<Mark>)>) {
     let Block::Para(para) = &blocks[index] else {
         panic!("il blocco {index} è una tabella");

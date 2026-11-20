@@ -24,10 +24,28 @@
 // perfettamente legale che rompe ogni tema di terzi già scritto.
 import { describe, expect, it } from "vitest";
 
+import misureLogo from "../../../../assets/logo/misure.json?raw";
+
 import { contrast } from "./contrast";
 import { fromHex } from "./oklch";
 import { THEME_2_OPTIONAL_PAIRS } from "./scrittoio/profile";
-import { CONTRASTS, LIGHTS, OPTIONAL_ROLES, SHEETS, VARIANTS, palette, roles, sheet } from "./scrittoio/recipe";
+import {
+  ACCENT_SWATCHES,
+  CONTRASTS,
+  DEFAULT_ACCENT_HUE,
+  LIGHTS,
+  LOGO_ROLES,
+  OPTIONAL_ROLES,
+  SHEETS,
+  STATUS_HUE_GAP,
+  VARIANTS,
+  accentPalette,
+  logoColors,
+  palette,
+  roles,
+  sheet,
+  statusHue,
+} from "./scrittoio/recipe";
 import darkHigh from "./scrittoio/sheet-dark-high.css?raw";
 import dark from "./scrittoio/sheet-dark.css?raw";
 import lightHigh from "./scrittoio/sheet-light-high.css?raw";
@@ -108,8 +126,10 @@ describe("i ruoli facoltativi: i segni sulle due carte", () => {
   it("non sono fra i ruoli obbligatori, e i ruoli obbligatori restano 154", () => {
     // 26 segni e carte, più i sei colori degli autori su ognuna delle due, la
     // scrivania del disegno, i sei segni della Live e dei Blocchi e i nove
-    // colori del contenuto col loro fondo.
-    expect(OPTIONAL_ROLES.length).toBe(39 + 6 + 18);
+    // colori del contenuto col loro fondo; poi il vassoio della barra e le
+    // quattro ombre facoltative (il foglio, il foglio col fuoco, il rialzo,
+    // ciò che si apre sopra tutto), e i cinque colori del logo.
+    expect(OPTIONAL_ROLES.length).toBe(39 + 6 + 18 + 5 + 5);
     expect(roles().filter((role) => OPTIONAL_ROLES.includes(role))).toEqual([]);
     expect(roles()).toHaveLength(154);
   });
@@ -209,5 +229,124 @@ describe("il vocabolario cresce solo in modo additivo", () => {
     const roleNames = roles();
     const duplicates = roleNames.filter((n, i) => roleNames.indexOf(n) !== i);
     expect(duplicates).toEqual([]);
+  });
+});
+
+describe("i colori di stato restano lontani dall'accento (D25)", () => {
+  const STATUS = ["danger", "warning", "success", "info"] as const;
+  /// Dieci tinte libere sulla ruota: due vicino al rosso (27) e all'ambra (70)
+  /// dei segni, una sul «salvato» (155).
+  const FREE_HUES = [0, 20, 40, 60, 95, 150, 180, 230, 290, 320] as const;
+  const gap = (a: number, b: number): number => Math.abs(((((a - b) % 360) + 540) % 360) - 180);
+
+  it("la serie è lo smeraldo, primo dei campioni, e la matita blu resta", () => {
+    expect(DEFAULT_ACCENT_HUE).toBe(160);
+    expect(ACCENT_SWATCHES[0]).toEqual({ id: "smeraldo", hue: 160 });
+    expect(ACCENT_SWATCHES.find((s) => s.id === "matita-blu")?.hue).toBe(265);
+  });
+
+  it("statusHue sposta una tinta troppo vicina a 30°, dal lato dove stava, e lascia le altre", () => {
+    expect(STATUS_HUE_GAP).toBe(30);
+    expect(statusHue(155, 160)).toBe(130); // il salvato sotto lo smeraldo
+    expect(statusHue(240, 265)).toBe(235); // l'informazione sotto la matita blu
+    expect(statusHue(27, 160)).toBe(27);
+    expect(statusHue(70, 160)).toBe(70);
+    expect(statusHue(27, 40)).toBe(10); // una tinta libera vicina al rosso
+    expect(statusHue(70, 60)).toBe(90); // e una vicina all'ambra
+    expect(statusHue(10, 350)).toBe(20); // attraverso lo zero
+    expect(statusHue(350, 10)).toBe(340);
+    expect(statusHue(190, 160)).toBe(190); // a 30° esatti non si muove
+  });
+
+  it.each([...ACCENT_SWATCHES.map((s) => s.hue), ...FREE_HUES])("accento %i: ogni segno a 30° o più", (accent) => {
+    for (const hue of [27, 25, 70, 75, 155, 240]) {
+      expect(gap(statusHue(hue, accent), accent)).toBeGreaterThanOrEqual(STATUS_HUE_GAP);
+    }
+    // E nei colori che escono davvero, dove il gamut e gli otto bit possono
+    // limare qualche grado.
+    for (const { light, contrast } of VARIANTS) {
+      const colors = palette(light, contrast, accent);
+      const accentHue = fromHex(colors["accent"]!).h;
+      for (const role of STATUS) {
+        expect(gap(fromHex(colors[role]!).h, accentHue), `${role} in ${light} × ${contrast}`).toBeGreaterThanOrEqual(
+          STATUS_HUE_GAP - 6,
+        );
+      }
+    }
+  });
+
+  it("l'accento di serie non aggiunge un foglio di preferenze", () => {
+    for (const { light, contrast } of VARIANTS) expect(accentPalette(light, contrast, DEFAULT_ACCENT_HUE)).toEqual({});
+  });
+});
+
+describe("la cartella del logo segue la tinta e resta staccata dal fondo (D26)", () => {
+  /// I valori attesi, misurati sul prototipo del piano (`script/logo-misure.mjs`).
+  const MISURE = JSON.parse(misureLogo) as {
+    tinte: { id: string; tinta: number; varianti: Record<string, { colori: Record<string, string> }> }[];
+  };
+  const FREE_HUES = [0, 20, 40, 60, 95, 150, 180, 230, 290, 320] as const;
+  const UI: Readonly<Record<string, number>> = { normal: 3, high: 4.5 };
+  const logoOf = (colors: Record<string, string>): Record<string, string> =>
+    Object.fromEntries(LOGO_ROLES.map((role) => [role.replace(/^logo-/, ""), colors[role]!]));
+
+  it("i ruoli sono cinque, facoltativi, e ogni foglio della serie li dichiara", () => {
+    expect(LOGO_ROLES).toEqual([
+      "logo-cartella",
+      "logo-cartella-retro",
+      "logo-cartella-ombra",
+      "logo-foglio-1",
+      "logo-foglio-2",
+    ]);
+    for (const role of LOGO_ROLES) expect(OPTIONAL_ROLES).toContain(role);
+    for (const { light, contrast: level } of VARIANTS) {
+      for (const role of LOGO_ROLES) expect(ON_DISK[light][level]).toContain(`--${role}: `);
+    }
+  });
+
+  it("con 160 è il disegno dell'utente: Menta di notte, Smeraldo di giorno appena più scuro", () => {
+    expect(logoOf(palette("dark", "normal"))).toEqual({
+      cartella: "#89cca8",
+      "cartella-retro": "#67ad88",
+      "cartella-ombra": "#77b493",
+      "foglio-1": "#006e46",
+      "foglio-2": "#238b8b",
+    });
+    expect(palette("light", "normal")["logo-cartella"]).toBe("#37996c");
+    expect(palette("light", "high")["logo-cartella"]).toBe("#077b50");
+  });
+
+  it.each(ACCENT_SWATCHES.map((swatch) => [swatch.id, swatch.hue] as const))(
+    "%s: i colori sono quelli misurati nel piano",
+    (id, hue) => {
+      const expected = MISURE.tinte.find((tinta) => tinta.id === id);
+      expect(expected?.tinta).toBe(hue);
+      for (const { light, contrast: level } of VARIANTS) {
+        expect(logoOf(palette(light, level, hue)), `${light} × ${level}`).toEqual(
+          expected!.varianti[`${light}-${level}`]!.colori,
+        );
+      }
+    },
+  );
+
+  it.each([...ACCENT_SWATCHES.map((s) => s.hue), ...FREE_HUES])(
+    "tinta %i: la cartella e il retro reggono la soglia dei confini sui due fondi del logo",
+    (hue) => {
+      for (const { light, contrast: level } of VARIANTS) {
+        const colors = palette(light, level, hue);
+        for (const role of ["logo-cartella", "logo-cartella-retro"]) {
+          for (const background of ["bg", "bg-elev"]) {
+            const ratio = contrast(colors[role]!, colors[background]!);
+            expect(ratio, `--${role} su --${background}, ${light} × ${level}`).toBeGreaterThanOrEqual(UI[level]!);
+          }
+        }
+      }
+    },
+  );
+
+  it("un accento quasi grigio fa una cartella quasi grigia, non verde", () => {
+    const grey = logoColors("light", "normal", 160, ["#eeeeee", "#ffffff"], 0.01 / 0.08);
+    for (const role of LOGO_ROLES) expect(fromHex(grey[role]).c, role).toBeLessThan(0.02);
+    expect(contrast(grey["logo-cartella"], "#eeeeee")).toBeGreaterThanOrEqual(3);
   });
 });

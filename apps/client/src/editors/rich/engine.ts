@@ -25,6 +25,7 @@ import { EditorView } from "prosemirror-view";
 import type { PaperFit } from "../core/registry";
 import { operationFromText, type EditorChange, type EditorChangeOrigin } from "../core/text-operation";
 import { ProofClient, type ProofPorts } from "../core/proof";
+import { errorText } from "../../host/errors";
 import {
   applyFormat,
   backspace,
@@ -49,7 +50,8 @@ import { DEFAULT_PAGE, pageVariables, samePage, setRunningAt } from "./page";
 import { openRunningEditor, type RunningEditor } from "./running";
 import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetElement, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
-import { cellSelectionPlugin } from "./cell-selection";
+import { acrossCells, cellSelectionPlugin } from "./cell-selection";
+import { SHAPE_FREE, tableShapeGuard } from "./table-structure";
 import { GO_TO, lineBoxes, RichMotion, type Rect } from "./rich-motion";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
@@ -58,8 +60,9 @@ import { setTint, tintPlugin } from "./tints";
 import type { Paper } from "../../theme/adapt";
 import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, lookVariables, richSchema, toDoc } from "./schema";
-import { closedBlocks, keepsOutside } from "./closed";
+import { closedBlocks, keepsOutside, selectionInClosed } from "./closed";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
+import { composingKey } from "../../kit/ime";
 
 export { mountRichRibbon } from "./ribbon";
 export { mountRichSide } from "./side";
@@ -73,12 +76,94 @@ export interface RichEngineOptions {
   readonly proof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
   /// L'etichetta accessibile dell'area di scrittura, nella lingua corrente.
   readonly label: () => string;
+  /// Chi scrive ha provato a cambiare un blocco chiuso: una lettera dentro,
+  /// un a capo, una cancellazione che lo tocca. La battuta non entra; chi
+  /// mostra la superficie lo dice (una volta, non a ogni tasto).
+  readonly onClosedWrite?: () => void;
+  /// Esc non è del documento (una scheda nella nota, `escapeLeaves` del
+  /// registro): il motore lo tiene solo per chiudere ciò che ha aperto (il
+  /// pennello, il taglio fra le celle), e sennò lo lascia passare a chi lo
+  /// ospita, senza il `preventDefault` che ProseMirror mette a ogni Esc.
+  readonly escapeLeaves?: boolean;
+}
+
+/// Esc che lascia il documento (`escapeLeaves`): i tasti del motore lo
+/// provano prima; se nessuno lo prende, ProseMirror non lo tocca e l'evento
+/// sale intatto a chi ospita la superficie (la scheda, che esce). Senza,
+/// ProseMirror lo segna sempre come preso (`captureKeyDown`).
+const escapePassesThrough = new Plugin({
+  props: {
+    handleDOMEvents: {
+      keydown: (view, event) => {
+        if (event.key !== "Escape" || composingKey(event) || event.defaultPrevented) return false;
+        if (view.someProp("handleKeyDown", (handle) => handle(view, event))) event.preventDefault();
+        return true;
+      },
+    },
+  },
+});
+
+/// Il cursore non resta mai fra le due metà di una coppia surrogata: un clic o
+/// una freccia non lo mettono lì, ma una posizione calcolata sì (#492). Da lì
+/// Invio spezzerebbe l'emoji in due surrogati soli, che nessun file può
+/// scrivere; il bordo torna indietro di uno, davanti al carattere intero.
+const wholeCharacters = new Plugin({
+  appendTransaction: (transactions, _old, state) => {
+    if (!transactions.some((tr) => tr.selectionSet || tr.docChanged)) return null;
+    const { selection } = state;
+    if (!(selection instanceof TextSelection)) return null;
+    const anchor = outsidePair(state.doc, selection.anchor);
+    const head = outsidePair(state.doc, selection.head);
+    if (anchor === selection.anchor && head === selection.head) return null;
+    return state.tr.setSelection(TextSelection.create(state.doc, anchor, head));
+  },
+});
+
+/// `pos`, o la posizione prima della coppia surrogata che `pos` taglia.
+function outsidePair(doc: PmNode, pos: number): number {
+  const $pos = doc.resolve(pos);
+  const offset = $pos.textOffset;
+  if (offset === 0) return pos;
+  const text = $pos.parent.child($pos.index()).text ?? "";
+  const before = text.charCodeAt(offset - 1);
+  const after = text.charCodeAt(offset);
+  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff ? pos - 1 : pos;
 }
 
 /// Ciò che il motore sa del testo che ha ricevuto.
 export type Intake =
   | { readonly kind: "ok"; readonly readonly: ReadOnlyReason | null }
   | { readonly kind: "invalid"; readonly reason: string };
+
+/// Un gesto che si vede sulla pagina e non è ancora nel documento: i tratti
+/// della sessione aperta della scheda «Disegna». Annulla e Ripeti sono del
+/// documento, e chi lo guarda non distingue un tratto entrato da uno in
+/// attesa: prima di un passo della storia il gesto entra.
+export interface RichPendingEdit {
+  /// C'è qualcosa in attesa.
+  pending(): boolean;
+  /// Lo fa entrare nel documento. Per `undo`, ciò che Annulla deve togliere
+  /// entra come ultimo passo suo.
+  settle(step: "undo" | "redo"): void;
+}
+
+/// Il tasto scrive un carattere: una lettera, una cifra, un segno, lo spazio.
+/// Ctrl o ⌘ fanno un gesto, salvo con AltGr (Ctrl+Alt su Windows).
+function writesText(event: KeyboardEvent): boolean {
+  if (composingKey(event) || [...event.key].length !== 1) return false;
+  return !(event.ctrlKey || event.metaKey) || event.getModifierState("AltGraph");
+}
+
+/// Le azioni del catalogo che sono un passo della storia.
+const HISTORY_STEPS: Readonly<Record<string, "undo" | "redo">> = { "text.undo": "undo", "text.redo": "redo" };
+
+/// Quanti passi tiene la storia del documento. Quella di ProseMirror ne tiene
+/// 100 se non le si dice altro, e oltre butta via i più vecchi senza dirlo:
+/// dopo una raffica di tasti l'annulla non tornava più al documento aperto, e
+/// il salvataggio portava sul disco lo stato a metà (IMP-150). Diecimila passi
+/// sono ore di scrittura un gesto alla volta; un passo tiene soltanto ciò che
+/// ha cambiato, e i nodi che non cambiano sono in comune.
+export const RICH_HISTORY_DEPTH = 10_000;
 
 export class RichEngine {
   readonly #view: EditorView;
@@ -103,6 +188,8 @@ export class RichEngine {
   /// L'ultima transazione dell'utente non è entrata: cambiava ciò che non si
   /// scrive.
   #refused = false;
+  /// Perché l'ultimo `#admitted` ha detto di no.
+  #refusal: "closed" | "outside" | null = null;
   #shellReadOnly = false;
   #destroyed = false;
   /// «Copia formato»: l'aspetto preso, che va sulla prossima selezione finita.
@@ -130,6 +217,9 @@ export class RichEngine {
   /// l'ultima occorrenza a cui è andato Trova.
   #goingTo: { ring: boolean } | null = null;
   #lastFound = -1;
+  /// Ciò che è già sulla pagina ma non ancora nel documento (i tratti della
+  /// sessione dell'inchiostro): un passo della storia lo fa entrare prima.
+  readonly #pendingEdits = new Set<RichPendingEdit>();
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -175,8 +265,16 @@ export class RichEngine {
           this.#paint();
           return false;
         },
-        keydown: (_view, event) => {
+        keydown: (view, event) => {
           if (event.key === "Shift") this.#shiftDown = true;
+          // Una lettera dentro un blocco chiuso non arriva a una transazione:
+          // il blocco non è modificabile nel DOM, e il browser la lascia
+          // cadere. Qui si vede, e si dice.
+          if (this.#typesIntoClosed(view, event)) {
+            event.preventDefault();
+            this.#options.onClosedWrite?.();
+            return true;
+          }
           return false;
         },
         keyup: (_view, event) => {
@@ -194,9 +292,19 @@ export class RichEngine {
     parent.setAttribute("role", "document");
     parent.setAttribute("aria-label", options.label());
     const enter = (event: KeyboardEvent) => {
-      if (event.target !== parent || event.key !== "Enter") return;
-      event.preventDefault();
-      this.focus();
+      if (event.target !== parent) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.focus();
+        return;
+      }
+      // Un carattere scritto col fuoco sul foglio (dopo un clic accanto alla
+      // carta o sulla sua barra di scorrimento) va nel documento, al cursore:
+      // il fuoco entra nel testo mentre il tasto passa, e il tasto resta suo.
+      // Senza, la regola dei tasti fuori dal foglio (`ui/off-sheet-keys.ts`)
+      // fermerebbe le lettere e lascerebbe passare lo spazio: la prima parola
+      // si perderebbe (IMP-723).
+      if (writesText(event) && this.editable()) this.focus();
     };
     parent.addEventListener("keydown", enter);
     this.#motion = new RichMotion({
@@ -216,7 +324,9 @@ export class RichEngine {
 
   #plugins(): Plugin[] {
     const plugins: Plugin[] = [
-      history(),
+      history({ depth: RICH_HISTORY_DEPTH }),
+      wholeCharacters,
+      tableShapeGuard,
       fillTableKeys,
       cellSelectionPlugin,
       findPlugin,
@@ -239,17 +349,20 @@ export class RichEngine {
         }),
       );
     }
+    if (this.#options.escapeLeaves) plugins.unshift(escapePassesThrough);
     return plugins;
   }
 
   #keys(): Record<string, (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean> {
     const keys: Record<string, (state: EditorState, dispatch?: (tr: Transaction) => void) => boolean> = {
-      Enter: splitParagraph,
-      "Shift-Enter": insertBreak("\n"),
+      // Su una selezione che esce da una cella, prima lo svuotamento di Canc:
+      // la cancellazione di ProseMirror unirebbe le celle.
+      Enter: chainCommands(acrossCells(splitParagraph), splitParagraph),
+      "Shift-Enter": chainCommands(acrossCells(insertBreak("\n")), insertBreak("\n")),
       "Mod-Enter": insertBreak("\u000c"),
       Backspace: chainCommands(backspace, deleteChar(-1)),
       Delete: chainCommands(deleteForward, deleteChar(1)),
-      "Mod-y": redo,
+      "Mod-y": (state, dispatch) => this.#historyStep("redo", state, dispatch),
       // Dopo un Esc il Tab porta fuori dal documento, come nell'editor di testo.
       Tab: (state, dispatch) => Date.now() > this.#tabLeaves && chainCommands(cellTab(1), shiftListLevel(1), insertTab)(state, dispatch),
       "Shift-Tab": (state, dispatch) => Date.now() > this.#tabLeaves && chainCommands(cellTab(-1), shiftListLevel(-1))(state, dispatch),
@@ -264,9 +377,41 @@ export class RichEngine {
       if (!action.chord || action.chord in keys) continue;
       keys[action.chord] = ASK_ACTIONS.has(id) ? (state) => action.run(state) && this.#ask(id) : action.run;
     }
-    keys["Mod-z"] = undo;
-    keys["Mod-Shift-z"] = redo;
+    keys["Mod-z"] = (state, dispatch) => this.#historyStep("undo", state, dispatch);
+    keys["Mod-Shift-z"] = (state, dispatch) => this.#historyStep("redo", state, dispatch);
     return keys;
+  }
+
+  /// Un passo della storia, dopo che ciò che era in attesa è entrato.
+  /// `state` è quello di chi chiama; se un gesto in attesa è entrato, il
+  /// passo si fa sullo stato nuovo.
+  #historyStep(step: "undo" | "redo", state: EditorState, dispatch?: (tr: Transaction) => void): boolean {
+    const settled = dispatch ? this.#settle(step) : false;
+    const command = step === "undo" ? undo : redo;
+    return command(settled ? this.#view.state : state, dispatch) || settled;
+  }
+
+  /// Fa entrare nel documento ciò che è in attesa. Vero se qualcosa è entrato.
+  #settle(step: "undo" | "redo"): boolean {
+    let settled = false;
+    for (const edit of [...this.#pendingEdits]) {
+      if (!edit.pending()) continue;
+      edit.settle(step);
+      settled = true;
+    }
+    return settled;
+  }
+
+  /// Un gesto in attesa che Annulla e Ripeti fanno entrare prima del loro
+  /// passo. Restituisce chi lo toglie.
+  holdPending(edit: RichPendingEdit): () => void {
+    this.#pendingEdits.add(edit);
+    return () => this.#pendingEdits.delete(edit);
+  }
+
+  #hasPending(): boolean {
+    for (const edit of this.#pendingEdits) if (edit.pending()) return true;
+    return false;
   }
 
   #state(doc: PmNode): EditorState {
@@ -352,7 +497,7 @@ export class RichEngine {
       this.#notify();
       return;
     }
-    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true));
+    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true).setMeta(SHAPE_FREE, true));
     this.#notify();
   }
 
@@ -384,7 +529,7 @@ export class RichEngine {
     } catch (error) {
       this.#head = { version: this.#head.version, opaque_schema: this.#head.opaque_schema };
       this.#closed = [];
-      this.#intake = { kind: "invalid", reason: error instanceof Error ? error.message : String(error) };
+      this.#intake = { kind: "invalid", reason: errorText(error) };
       return null;
     }
   }
@@ -407,6 +552,7 @@ export class RichEngine {
     const blocks = user ? this.#admitted(before.doc, state.doc) : null;
     if (user && !blocks) {
       this.#refused = true;
+      if (this.#refusal === "closed") this.#options.onClosedWrite?.();
       this.#notify();
       return;
     }
@@ -461,9 +607,28 @@ export class RichEngine {
   #admitted(before: PmNode, after: PmNode): string[] | null {
     const closed: string[] = [];
     const blocks = this.#writer.write(after, closed);
-    if (closed.length !== this.#closed.length || closed.some((block, i) => block !== this.#closed[i])) return null;
-    if (this.bodyOnly() && !keepsOutside(before, after)) return null;
+    this.#refusal = null;
+    if (closed.length !== this.#closed.length || closed.some((block, i) => block !== this.#closed[i])) {
+      this.#refusal = "closed";
+      return null;
+    }
+    if (this.bodyOnly() && !keepsOutside(before, after)) {
+      this.#refusal = "outside";
+      return null;
+    }
     return blocks;
+  }
+
+  /// `event` scrive una lettera, e il cursore sta in un blocco chiuso: nello
+  /// stato del motore o, dove il browser lo ha messo col clic, nel DOM.
+  #typesIntoClosed(view: EditorView, event: KeyboardEvent): boolean {
+    if (!this.editable() || !this.hasClosed() || composingKey(event)) return false;
+    if (event.ctrlKey || event.metaKey || [...event.key].length !== 1) return false;
+    if (selectionInClosed(view.state.selection)) return true;
+    const at = view.dom.ownerDocument.getSelection()?.anchorNode ?? null;
+    const element = at instanceof Element ? at : at?.parentElement ?? null;
+    const locked = element?.closest("[data-rich-locked]") ?? null;
+    return locked !== null && view.dom.contains(locked);
   }
 
   /// Il documento si scrive soltanto nel corpo: il formato non riscriverebbe
@@ -565,6 +730,12 @@ export class RichEngine {
     return done;
   }
 
+  /// Un passo della storia del documento senza portare il fuoco nel testo:
+  /// Ctrl+Z da un pannello resta sul pannello (`ui/off-sheet-keys.ts`).
+  history(step: "undo" | "redo"): boolean {
+    return this.apply((state, dispatch) => this.#historyStep(step, state, dispatch), false);
+  }
+
   /// Un gesto che sposta soltanto la selezione, come andare a una revisione o
   /// a un commento: vale anche in sola lettura. Se il comando toccasse il
   /// documento non si applica.
@@ -615,13 +786,17 @@ export class RichEngine {
     if (!action || !this.editable()) return false;
     if (ASK_ACTIONS.has(id)) return action.run(this.#view.state) && this.#ask(id);
     this.#refused = false;
-    const done = action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view) && !this.#refused;
+    const step = HISTORY_STEPS[id];
+    const settled = step ? this.#settle(step) : false;
+    const done = (action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view) && !this.#refused) || settled;
     if (done) this.#view.focus();
     return done;
   }
 
   actionState(id: string): { enabled: boolean; active: boolean | null } {
     if (!this.editable()) return { enabled: false, active: null };
+    // Un tratto in attesa si annulla anche se la storia è ancora vuota.
+    if (HISTORY_STEPS[id] === "undo" && this.#hasPending()) return { enabled: true, active: null };
     const state = richActionState(id, this.#view.state);
     // Mentre si registra, un'azione che non si registra non si offre; né
     // un'azione che cambia ciò che non si scrive.

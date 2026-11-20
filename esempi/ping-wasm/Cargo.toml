@@ -62,3 +62,8 @@ wit-bindgen = "0.60"
 # come lo vede l'host, cioè come un trap.
 strip = true
 opt-level = "s"
+
+# Un workspace suo, vuoto: chi lo compila da un worktree annidato in un altro
+# checkout (per esempio sotto `.claude/worktrees/`) non risale al
+# `Cargo.toml` di quel checkout, che non lo elenca fra i membri.
+[workspace]

@@ -29,14 +29,14 @@
 // del checker sono strutturali (il ragionamento lungo sta in `a11y-check.ts`).
 // Il contrasto, che senza layout non si potrebbe decidere, ha il presidio suo
 // in `theme/contrast.test.ts`.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import html from "../../index.html?raw";
 import samples from "../__fixtures__/mirror-samples.json";
 import type { UiNode } from "../host/contract";
 import css from "../theme/scrittoio/skin.css?raw";
 import { accessibleName, formatIssues, checkAccessibility } from "./a11y-check";
-import { activatable, trapFocus, notActivatable } from "./a11y";
+import { activatable, redirectFocusReturn, trapFocus, notActivatable } from "./a11y";
 import { mountTree, unmountTree } from "./node";
 
 const nodes = samples.UiNode as unknown as UiNode[];
@@ -232,6 +232,54 @@ describe("una modale non lascia uscire il fuoco", () => {
     expect(document.activeElement?.id, "e torna da dove era partito").toBe("fuori");
   });
 
+  it("si apre in cima: il primo comando in fondo prende il fuoco senza far scorrere", () => {
+    document.body.innerHTML = `
+      <button id="fuori">Apri</button>
+      <div id="modale" tabindex="-1"><p>Un testo lungo.</p><button id="fondo">Ok</button></div>`;
+    const outside = document.querySelector<HTMLElement>("#fuori")!;
+    const modal = document.querySelector<HTMLElement>("#modale")!;
+    outside.focus();
+    // happy-dom non scorre: il finto porta in vista come il browser quando il
+    // fuoco arriva senza `preventScroll`.
+    const focus = HTMLElement.prototype.focus;
+    const spy = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+      focus.call(this, options);
+      if (modal.contains(this) && !options?.preventScroll) modal.scrollTop = 900;
+    });
+    try {
+      const releaseTrap = trapFocus(modal, () => releaseTrap());
+      expect(document.activeElement?.id).toBe("fondo");
+      expect(modal.scrollTop, "la modale resta all'inizio").toBe(0);
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.activeElement?.id, "il fuoco torna da dove era partito").toBe("fuori");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("con `moveFocus: false` il fuoco lo mette il chiamante, una volta sola", () => {
+    document.body.innerHTML = `
+      <button id="fuori">Apri</button>
+      <div id="modale" tabindex="-1"><button id="primo">Primo</button><input id="campo"></div>`;
+    const outside = document.querySelector<HTMLElement>("#fuori")!;
+    const modal = document.querySelector<HTMLElement>("#modale")!;
+    outside.focus();
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    const releaseTrap = trapFocus(modal, () => releaseTrap(), { moveFocus: false });
+    try {
+      expect(focus, "la trappola non sposta il fuoco da sé").not.toHaveBeenCalled();
+      expect(document.activeElement?.id).toBe("fuori");
+      document.querySelector<HTMLElement>("#campo")!.focus();
+      expect(focus).toHaveBeenCalledTimes(1);
+      // Il resto della trappola è quello di sempre: Escape chiude e il fuoco
+      // torna da dove era partito.
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(document.activeElement?.id).toBe("fuori");
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
   it("Escape in una ricerca piena la svuota, e solo il secondo chiude", () => {
     document.body.innerHTML = `
       <button id="fuori">Apri</button>
@@ -390,6 +438,36 @@ describe("due modali aperte: comanda l'ultima", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(counts.above).toBe(1);
     releaseAbove();
+  });
+});
+
+describe("dove torna il fuoco di una superficie intrappolata", () => {
+  it("chi cambia sotto le superfici aperte sposta il loro ritorno; le altre restano", () => {
+    document.body.innerHTML = `
+      <div id="riquadro"><button id="editor">Editor</button><button id="lettura">Lettura</button></div>
+      <button id="altro">Altro</button>
+      <div id="menu" tabindex="-1"><button id="voce">Voce</button></div>
+      <div id="finestra" tabindex="-1"><button id="ok">Ok</button></div>`;
+    const at = (id: string) => document.getElementById(id)!;
+    at("editor").focus();
+    const releaseMenu = trapFocus(at("menu"), () => {});
+    at("voce").focus();
+    const releaseWindow = trapFocus(at("finestra"), () => {});
+    at("ok").focus();
+    redirectFocusReturn(at("riquadro"), at("lettura"));
+    // La finestra torna alla voce del menu (non è nel riquadro); il menu, che
+    // tornava all'editor, torna alla lettura.
+    releaseWindow();
+    expect(document.activeElement).toBe(at("voce"));
+    releaseMenu();
+    expect(document.activeElement).toBe(at("lettura"));
+
+    at("altro").focus();
+    const releaseOther = trapFocus(at("menu"), () => {});
+    at("voce").focus();
+    redirectFocusReturn(at("riquadro"), at("lettura"));
+    releaseOther();
+    expect(document.activeElement).toBe(at("altro"));
   });
 });
 

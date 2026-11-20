@@ -60,7 +60,9 @@ not their dumps.
 
 `PLAN.md` at the root, from [PLAN.modello.md](PLAN.modello.md), in Italian.
 Every field filled; `Non toccare` and `Casi limite` are not optional. For a
-graphic task, `Dal prototipo` says which piece goes into which file.
+graphic task, `Dal prototipo` says which piece goes into which file, by
+selector of the prototype's code: the code is the reference, screenshots of it
+are not.
 
 ## 7. Re-read as a coder
 

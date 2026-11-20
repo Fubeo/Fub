@@ -25,9 +25,19 @@ struct Vault {
 
 impl Vault {
     fn with_docx(paragraphs: &[&str]) -> Self {
+        Vault::with_docx_and(paragraphs, &[])
+    }
+
+    /// Come [`Vault::with_docx`], con altri file scritti prima dell'apertura.
+    fn with_docx_and(paragraphs: &[&str], others: &[(&str, Vec<u8>)]) -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).expect("utf8");
         std::fs::write(root.join("Lettera.docx"), docx(paragraphs)).unwrap();
+        for (name, bytes) in others {
+            let path = root.join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
         std::fs::write(root.join("Nota.md"), "# Nota\n").unwrap();
         let config = tempfile::tempdir().expect("config");
         let host = Host::without_watcher()
@@ -238,6 +248,69 @@ fn un_contenuto_rotto_è_rifiutato_con_la_sua_specie_e_il_file_resta() {
         );
     }
     assert_eq!(vault.on_disk(), before);
+}
+
+/// Un `.docx` vuoto o rotto non si apre, e lo dice in una frase: senza il
+/// gergo del codec («Could not find EOCD») e, passato dalla lingua di chi
+/// guarda, come testo e non come chiave. È la frase che la superficie
+/// d'errore mostra; prima arrivava alla shell come un oggetto e si leggeva
+/// «[object Object]».
+#[test]
+fn un_docx_che_non_si_apre_lo_dice_in_una_frase() {
+    let vault = Vault::with_docx(&["Intatto."]);
+    let files: [(&str, &[u8]); 2] = [
+        ("Vuoto.docx", b""),
+        ("Finto.docx", b"solo testo, non un pacchetto"),
+    ];
+    for (name, bytes) in files {
+        std::fs::write(vault.root.join(name), bytes).unwrap();
+    }
+    for (name, bytes) in files {
+        let error = vault
+            .host
+            .read_document_with_format(None, &DocId::new(name))
+            .unwrap_err();
+        let error = vault.host.localized_error(None, error);
+        let wire = serde_json::to_value(&error).unwrap();
+        let message = wire["message"].as_str().unwrap_or_else(|| panic!("{wire}"));
+        assert!(message.contains(name), "{message}");
+        assert!(
+            !message.contains("zip") && !message.contains("EOCD"),
+            "{message}"
+        );
+        assert_eq!(std::fs::read(vault.root.join(name)).unwrap(), bytes);
+    }
+}
+
+/// Con un `.docx` che non si apre in primo piano, i pannelli accanto si
+/// disegnano: le statistiche dicono che non c'è niente da contare, i
+/// collegamenti calcolano le menzioni sul nome. Prima le statistiche
+/// fallivano a ogni ridisegno (un avviso «did not redraw: parse failed: rich
+/// codec…» per documento) e le menzioni dicevano «Could not load this
+/// section.».
+#[test]
+fn un_docx_che_non_si_apre_non_rompe_i_pannelli_accanto() {
+    use fub_abi::session::ViewContext;
+    use fub_abi::traits::ViewInstance;
+    use fub_abi::ui::{UiKind, UiNode};
+    fn failed(node: &UiNode) -> bool {
+        matches!(node.kind, UiKind::Failed { .. }) || node.children().into_iter().any(failed)
+    }
+    let vault = Vault::with_docx(&["Intatto."]);
+    std::fs::write(vault.root.join("Vuoto.docx"), b"").unwrap();
+    let mut context = ViewContext::new("p1");
+    context.doc = Some(DocId::new("Vuoto.docx"));
+    vault.host.set_active_context(None, Some(context)).unwrap();
+    let stats = vault
+        .host
+        .render_view(None, &ViewInstance::only("stats"))
+        .expect("le statistiche si disegnano");
+    assert_eq!(stats.key.as_deref(), Some("unreadable"), "{stats:?}");
+    let links = vault
+        .host
+        .render_view(None, &ViewInstance::only("backlinks"))
+        .expect("i collegamenti si disegnano");
+    assert!(!failed(&links), "{links:?}");
 }
 
 #[test]
@@ -588,6 +661,95 @@ fn esportare_una_copia_accoda_l_export_e_il_documento_resta() {
     assert_eq!(vault.on_disk(), before);
 }
 
+/// IMP-139: «Anteprima…» del modulo mostra ciò che il modulo promette, cioè
+/// che cosa la copia non porta, e non accoda niente.
+#[test]
+fn l_anteprima_della_copia_dice_che_cosa_il_formato_non_porta() {
+    let vault = Vault::with_docx(&["Primo paragrafo.", "Secondo."]);
+    let before = vault.on_disk();
+    let outcome = vault
+        .host
+        .invoke_user_command(
+            None,
+            "rich.export-copy",
+            serde_json::json!({"doc": "Lettera.docx", "format": "html"}),
+            fub_abi::InvokeMode::DryRun,
+        )
+        .expect("the preview answers");
+    let fub_abi::command::CommandEffect::Plan(plan) = &outcome.effect else {
+        panic!("the preview is a plan: {outcome:?}");
+    };
+    let summary = plan.summary.to_string();
+    assert!(summary.contains("Lettera.docx"), "{summary}");
+    // Il rapporto che l'export scriverebbe: qui niente manca, e resta ciò
+    // che il confronto non misura.
+    assert!(summary.contains("HTML"), "{summary}");
+    assert!(!summary.contains("would queue"), "{summary}");
+    assert!(plan.docs.is_empty() && plan.edits.is_empty(), "{plan:?}");
+    assert!(outcome.notify.is_none(), "{outcome:?}");
+    assert_eq!(vault.on_disk(), before);
+}
+
+/// Nel campo «Documento» si può scrivere il nome invece di sceglierlo
+/// dall'elenco: «lettera» è `Lettera.docx`, e la nota omonima non conta.
+#[test]
+fn il_documento_scritto_per_nome_e_quello_di_videoscrittura() {
+    let vault = Vault::with_docx_and(&["Primo."], &[("Lettera.md", b"# Lettera\n".to_vec())]);
+    let outcome = vault
+        .host
+        .invoke_user_command(
+            None,
+            "rich.export-copy",
+            serde_json::json!({"doc": "lettera", "format": "txt"}),
+            fub_abi::InvokeMode::DryRun,
+        )
+        .expect("the name names the document");
+    let fub_abi::command::CommandEffect::Plan(plan) = &outcome.effect else {
+        panic!("the preview is a plan: {outcome:?}");
+    };
+    let summary = plan.summary.to_string();
+    assert!(summary.contains("«Lettera.docx»"), "{summary}");
+}
+
+/// Un nome che non c'è, o che hanno due documenti, si dice con una frase del
+/// catalogo, non con l'errore di un id che non è un documento.
+#[test]
+fn un_nome_che_non_c_e_o_che_hanno_in_due_si_dice() {
+    let vault = Vault::with_docx_and(
+        &["Primo."],
+        &[("Archivio/Lettera.docx", docx(&["Vecchia."]))],
+    );
+    let refused = |name: &str| {
+        let error = vault
+            .host
+            .invoke_user_command(
+                None,
+                "rich.export-copy",
+                serde_json::json!({"doc": name, "format": "txt"}),
+                fub_abi::InvokeMode::DryRun,
+            )
+            .expect_err("the name is refused");
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+        error.to_string()
+    };
+    let missing = refused("Preventivo");
+    assert!(missing.contains("«Preventivo»"), "{missing}");
+    assert!(!missing.contains("word-processing"), "{missing}");
+    let both = refused("Lettera");
+    assert!(both.contains("Archivio/Lettera.docx"), "{both}");
+    assert!(both.contains("«Lettera»"), "{both}");
+    // Il percorso intero resta la via per sceglierne uno.
+    vault
+        .host
+        .invoke_user_command(
+            None,
+            "rich.export-copy",
+            serde_json::json!({"doc": "Archivio/Lettera.docx", "format": "txt"}),
+            fub_abi::InvokeMode::DryRun,
+        )
+        .expect("the path names one");
+}
+
 #[test]
 fn una_nota_non_si_esporta_come_copia_di_videoscrittura() {
     let vault = Vault::with_docx(&["Word."]);
@@ -753,7 +915,7 @@ fn un_paragrafo_chiuso_non_si_scrive_e_gli_altri_sì() {
         &changed.to_json().unwrap(),
         WriteBase::DescendsFrom(revision.clone()),
     );
-    let Err(PluginError::PermissionDenied(fub_abi::Text::Message(message))) = result else {
+    let Err(PluginError::BadArgs(fub_abi::Text::Message(message))) = result else {
         panic!("{result:?}")
     };
     assert_eq!(message.key, "host.rich.locked.block");
@@ -781,4 +943,153 @@ fn un_paragrafo_chiuso_non_si_scrive_e_gli_altri_sì() {
         .unwrap();
     let reread = Projection::from_json(&text).unwrap();
     assert_eq!(texts(&reread), ["Chiuso", "Primo", "Secondo e cambiato"]);
+}
+
+// --- «Nuovo documento» (`document.create`) ---------------------------------
+
+fn create_document(
+    vault: &Vault,
+    args: serde_json::Value,
+    mode: fub_abi::command::InvokeMode,
+) -> Result<fub_abi::command::CommandOutcome, PluginError> {
+    vault
+        .host
+        .invoke_user_command(None, "document.create", args, mode)
+}
+
+fn navigated(outcome: &fub_abi::command::CommandOutcome) -> DocId {
+    match &outcome.effect {
+        fub_abi::command::CommandEffect::Navigate { doc } => doc.clone(),
+        other => panic!("un documento creato si apre, non {other:?}"),
+    }
+}
+
+#[test]
+fn un_documento_nuovo_nasce_vuoto_si_apre_e_si_salva() {
+    use fub_abi::command::{CommandEffect, InvokeMode};
+    use serde_json::json;
+
+    let vault = Vault::with_docx(&["Esiste."]);
+    let specs = vault.host.commands(None).unwrap();
+    let spec = specs
+        .iter()
+        .find(|spec| spec.id == "document.create")
+        .expect("il comando c'è con la feature `rich`");
+    assert_eq!(spec.title.as_literal(), Some("Nuovo documento"));
+    assert!(spec.params.iter().all(|param| !param.required));
+
+    // La prova a secco dice il nome e non scrive.
+    let plan = create_document(&vault, json!({}), InvokeMode::DryRun).unwrap();
+    let CommandEffect::Plan(plan) = &plan.effect else {
+        panic!("una prova a secco risponde con un piano: {:?}", plan.effect)
+    };
+    assert_eq!(plan.docs, [DocId::new("Documento senza titolo.docx")]);
+    assert!(!vault.root.join("Documento senza titolo.docx").exists());
+
+    let outcome = create_document(&vault, json!({}), InvokeMode::Apply).unwrap();
+    let doc = navigated(&outcome);
+    assert_eq!(doc, DocId::new("Documento senza titolo.docx"));
+    assert_eq!(
+        outcome.notify.as_ref().and_then(|text| text.as_literal()),
+        Some("Creato il documento «Documento senza titolo.docx»")
+    );
+
+    // Il codec lo apre, e la superficie lo può scrivere.
+    let bytes = std::fs::read(vault.root.join(doc.as_str())).unwrap();
+    let opened = fub_format_rich::open_unremembered(Codec::Docx, &bytes).unwrap();
+    assert_eq!(opened.readonly, None);
+    let (text, revision, format) = vault.host.read_document_with_format(None, &doc).unwrap();
+    assert_eq!(format.unwrap().descriptor.id, "docx");
+    assert_eq!(revision, Revision::of_bytes(&bytes));
+    let mut projection = Projection::from_json(&text).unwrap();
+    assert!(texts(&projection).iter().all(String::is_empty));
+    // Nasce nella lingua di chi lo crea, non in inglese: il correttore
+    // controlla ciò che vi si scrive in italiano (IMP-615).
+    let lang = projection.lang.clone().unwrap_or_default();
+    assert!(lang == "it" || lang.starts_with("it-"), "{lang}");
+
+    // Una modifica si salva sul file nato dal comando, e si rilegge.
+    projection.blocks = vec![paragraph("Prima riga.")];
+    let saved = vault
+        .host
+        .write_document(
+            None,
+            &doc,
+            &projection.to_json().unwrap(),
+            WriteBase::DescendsFrom(revision),
+        )
+        .unwrap();
+    let after = std::fs::read(vault.root.join(doc.as_str())).unwrap();
+    assert_eq!(saved, Revision::of_bytes(&after));
+    let reread = Projection::from_json(
+        &fub_format_rich::open_unremembered(Codec::Docx, &after)
+            .unwrap()
+            .projection,
+    )
+    .unwrap();
+    assert_eq!(texts(&reread), ["Prima riga."]);
+
+    // Il nome successivo è il primo libero; un nome dato va nella cartella.
+    let next = navigated(&create_document(&vault, json!({}), InvokeMode::Apply).unwrap());
+    assert_eq!(next, DocId::new("Documento senza titolo 1.docx"));
+    let placed = navigated(
+        &create_document(
+            &vault,
+            json!({ "name": "Relazione", "folder": "Scuola" }),
+            InvokeMode::Apply,
+        )
+        .unwrap(),
+    );
+    assert_eq!(placed, DocId::new("Scuola/Relazione.docx"));
+    assert!(vault.root.join("Scuola/Relazione.docx").is_file());
+}
+
+#[test]
+fn un_documento_nuovo_non_prende_il_posto_di_un_file() {
+    use fub_abi::command::InvokeMode;
+    use serde_json::json;
+
+    let vault = Vault::with_docx(&["Esiste."]);
+    let before = vault.on_disk();
+    for name in ["Lettera", "Lettera.docx"] {
+        for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+            let error = create_document(&vault, json!({ "name": name }), mode).unwrap_err();
+            assert!(matches!(error, PluginError::AlreadyExists(_)), "{error:?}");
+        }
+    }
+    assert_eq!(vault.on_disk(), before);
+    // Un `.odt` è un altro formato: «Nuovo documento» scrive soltanto Word.
+    let error =
+        create_document(&vault, json!({ "name": "Lettera.odt" }), InvokeMode::Apply).unwrap_err();
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+    assert!(!vault.root.join("Lettera.odt").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn un_documento_nuovo_in_una_cartella_in_sola_lettura_e_un_errore_tipato() {
+    use fub_abi::command::InvokeMode;
+    use std::os::unix::fs::PermissionsExt;
+
+    let vault = Vault::with_docx(&["Esiste."]);
+    let closed = vault.root.join("Chiusa");
+    std::fs::create_dir(&closed).unwrap();
+    std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o555)).unwrap();
+    // Chi gira come root scrive anche lì: la prova non dice niente.
+    if std::fs::write(closed.join("sonda"), b"").is_ok() {
+        std::fs::remove_file(closed.join("sonda")).unwrap();
+        std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+    let result = create_document(
+        &vault,
+        serde_json::json!({ "name": "Bozza", "folder": "Chiusa" }),
+        InvokeMode::Apply,
+    );
+    std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // Il kernel porta a `PermissionDenied` soltanto il file in sola lettura
+    // (PA T59); una cartella in cui non si crea resta la specie `Io` del
+    // contratto, e il comando la passa com'è, senza leggerne la prosa.
+    assert!(matches!(result, Err(PluginError::Io(_))), "{result:?}");
+    assert!(!closed.join("Bozza.docx").exists());
 }

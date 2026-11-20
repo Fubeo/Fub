@@ -126,8 +126,10 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
       try {
         media = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (error) {
-        set("denied", error instanceof Error ? error.message : String(error));
-        throw new Error(t("errors.recorder.denied", { reason: error instanceof Error ? error.message : String(error) }));
+        // Lo stato porta il messaggio intero, per il registro; la frase per chi
+        // legge dice la specie (vedi `errorText`).
+        set("denied", errorText(error));
+        throw new Error(t("errors.recorder.denied", { reason: errorText(error, "specie") }));
       }
       if (destroyed) {
         for (const track of media.getTracks()) track.stop();
@@ -155,7 +157,7 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
       if (!recorder) {
         releaseStream();
         set("failed", `no supported audio encoder started: ${String(cause)}`);
-        throw new Error(t("errors.recorder.no_encoder", { reason: String(cause) }));
+        throw new Error(t("errors.recorder.no_encoder", { reason: errorText(cause, "specie") }));
       }
       stopped = new Promise<void>((resolve) => {
         recorder!.onstop = () => {
@@ -213,7 +215,7 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
       await stopped;
       await pendingWrite;
       releaseStream();
-      if (writeFailure) throw new Error(t("errors.recorder.staging", { reason: String(writeFailure) }));
+      if (writeFailure) throw new Error(t("errors.recorder.staging", { reason: errorText(writeFailure, "specie") }));
       if (destroyed || !recordingActive()) throw new Error(t("errors.recorder.stopped"));
       set("stopped");
       return { id, startedAt, mime, bytes, finalized: false };

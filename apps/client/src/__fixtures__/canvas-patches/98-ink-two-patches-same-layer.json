@@ -1,0 +1,10 @@
+{
+  "name": "ink-two-patches-same-layer",
+  "description": "Due toppe sullo stesso livello, ognuna sul modello della precedente: s2 in fondo, poi s3 in testa; l'annulla le disfa in ordine inverso",
+  "before": "{\n  \"nodes\": [],\n  \"edges\": [],\n  \"fub:ink\": {\"v\":1,\"strokes\":[\n    {\"id\":\"s1\",\"tool\":\"pen\",\"brush\":\"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\",\"color\":\"#0072b2\",\"anchor\":{\"kind\":\"free\"},\"ink\":\"1 s100 cxy 100,100 10,0\"}\n  ]}\n}\n",
+  "patches": [{"kind":"ink","layer":"board","at":1,"before":null,"after":{"id":"s2","tool":"pen","brush":"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint","color":"#0072b2","anchor":{"kind":"free"},"ink":"1 s100 cxy 200,100 10,0"}},{"kind":"ink","layer":"board","at":0,"before":null,"after":{"id":"s3","tool":"pen","brush":"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint","color":"#0072b2","anchor":{"kind":"free"},"ink":"1 s100 cxy 300,100 10,0"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\n  \"nodes\": [],\n  \"edges\": [],\n  \"fub:ink\": {\"v\":1,\"strokes\":[\n    {\"id\":\"s3\",\"tool\":\"pen\",\"brush\":\"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\",\"color\":\"#0072b2\",\"anchor\":{\"kind\":\"free\"},\"ink\":\"1 s100 cxy 300,100 10,0\"},{\"id\":\"s1\",\"tool\":\"pen\",\"brush\":\"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\",\"color\":\"#0072b2\",\"anchor\":{\"kind\":\"free\"},\"ink\":\"1 s100 cxy 100,100 10,0\"},{\"id\":\"s2\",\"tool\":\"pen\",\"brush\":\"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\",\"color\":\"#0072b2\",\"anchor\":{\"kind\":\"free\"},\"ink\":\"1 s100 cxy 200,100 10,0\"}\n  ]}\n}\n"
+  }
+}

@@ -142,6 +142,22 @@ describe("la barra multifunzione", () => {
     expect(bold.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("annulla e ripete col fuoco su un pulsante della barra, non in un suo campo (IMP-035)", () => {
+    const press = (target: HTMLElement, name: string, shiftKey = false) =>
+      target.dispatchEvent(new KeyboardEvent("keydown", { key: name, ctrlKey: true, shiftKey, bubbles: true, cancelable: true }));
+    const bold = control("Grassetto");
+    press(bold, "z");
+    press(bold, "y");
+    press(bold, "Z", true);
+    expect(f.calls).toEqual([["edit.undo", {}], ["edit.redo", {}], ["edit.redo", {}]]);
+    const field = f.root.querySelector<HTMLInputElement>(".grid-ribbon input")!;
+    expect(press(field, "z")).toBe(true);
+    expect(f.calls).toHaveLength(3);
+    ribbon.destroy();
+    press(bold, "z");
+    expect(f.calls).toHaveLength(3);
+  });
+
   it("spegne un comando spento e toglie quello che il catalogo non serve", () => {
     f.commands = f.commands
       .filter((command) => command.id !== "home.italic")
@@ -379,16 +395,34 @@ describe("la barra multifunzione", () => {
   });
 });
 
+describe("la sola lettura", () => {
+  it("la barra resta, coi comandi che cambiano spenti e quelli che leggono o mostrano accesi", () => {
+    ribbon.destroy();
+    f.on = false;
+    const engine = { ...f.engine, writable: () => false, servesCommands: () => true };
+    ribbon = mountRibbon(engine);
+    ribbon.refresh();
+    expect(ribbon.element.hidden).toBe(false);
+    const off = (id: string): boolean => {
+      const item = ribbon.element.querySelector<HTMLElement>(`[data-command="${id}"]`)!;
+      return item.matches('[aria-disabled="true"]') || item.querySelector('[aria-disabled="true"]') !== null;
+    };
+    expect(off("home.bold")).toBe(true);
+    expect(off("file.printPreview")).toBe(false);
+  });
+});
+
 describe("il menu del tasto destro e la mini-barra", () => {
   it("una cella offre ciò che il catalogo serve; una voce spenta dice perché, una non servita non c'è", () => {
-    f.commands = f.commands.map((command) => (command.id === "home.deleteCells" ? { ...command, enabled: false, reason: "foglio protetto" } : command));
+    f.commands = f.commands.map((command) => (command.id === "home.deleteCells" ? { ...command, enabled: false, reason: "not available" } : command));
     f.commands = f.commands.filter((command) => command.id !== "insert.link");
     const items = ribbon.contextMenu("cell");
     const ids = items.map((item) => item.id);
     expect(ids).toContain("home.formatCells");
     expect(ids).not.toContain("insert.link");
     const deleting = items.find((item) => item.id === "home.deleteCells")!;
-    expect(deleting).toMatchObject({ enabled: false, description: "foglio protetto" });
+    // Il perché del motore arriva nella lingua della shell (`motivi.ts`).
+    expect(deleting).toMatchObject({ enabled: false, description: "Non è disponibile." });
     items.find((item) => item.id === "home.formatCells")!.run!();
     expect(f.dialogs[f.dialogs.length - 1]).toEqual(["formatCells", {}]);
   });

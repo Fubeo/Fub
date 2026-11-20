@@ -520,3 +520,97 @@ fn the_annotations_export_to_an_annotated_and_a_redacted_pdf() {
         ]
     );
 }
+
+/// Un export che non può partire dice perché, a parole (IMP-130): il PDF
+/// annotato manca, o le annotazioni sono di un'altra versione del PDF e il
+/// redatto aspetta la conferma. L'errore è `BadArgs` con la frase del
+/// catalogo di `fub.draw`, che ha scritto l'exporter, risolta prima di uscire:
+/// sia dal job dei trasferimenti, la strada dell'app, sia dall'export del
+/// workspace. Prima la chiave usciva non risolta e il centro attività
+/// leggeva soltanto «bad_args».
+#[test]
+fn an_export_that_cannot_start_says_why() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    // Il PDF di `manca/` non c'è; quello di `cambiato/` non è la versione che
+    // le annotazioni dicono.
+    let annotations = |extra: &str| {
+        format!(
+            concat!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\"{}>\n",
+                "  <g id=\"p0001\" fub:page=\"1\" fub:page-size=\"612 792\">\n",
+                "    <rect id=\"o1a2b3c4d\" x=\"60\" y=\"60\" width=\"220\" height=\"50\" fill=\"#000000\"/>\n",
+                "  </g>\n",
+                "</svg>\n",
+            ),
+            extra
+        )
+    };
+    write(&root, "manca/Lungo.pdf.fubann", annotations(""));
+    write(&root, "cambiato/Lungo.pdf", one_page_pdf("RISERVATO"));
+    write(
+        &root,
+        "cambiato/Lungo.pdf.fubann",
+        annotations(&format!(
+            " fub:digest=\"sha256:{}\" fub:pages=\"1\"",
+            "0".repeat(64)
+        )),
+    );
+    let request = |target: &str, doc: &str| {
+        ExportRequest::new(target, ExportSelection::Documents(vec![id(doc)]))
+    };
+    // La lingua è quella del sistema che fa girare la prova: vale la frase
+    // di una delle due, mai la chiave né la sola specie.
+    let missing = [
+        "Il PDF «manca/Lungo.pdf», annotato da «manca/Lungo.pdf.fubann», non è nel vault.",
+        "The PDF «manca/Lungo.pdf», annotated by «manca/Lungo.pdf.fubann», is not in the vault.",
+    ];
+    let changed = [
+        "Le annotazioni «cambiato/Lungo.pdf.fubann» sono di un'altra versione di «cambiato/Lungo.pdf», e una copertura potrebbe non stare più su ciò che nasconde. Apri le annotazioni e conferma questa versione prima di esportare il PDF redatto.",
+        "The annotations «cambiato/Lungo.pdf.fubann» belong to another version of «cambiato/Lungo.pdf», and a cover may no longer sit on what it hides. Open the annotations and confirm this version before exporting the redacted PDF.",
+    ];
+    let cases = [
+        ("draw.annotated-pdf", "manca/Lungo.pdf.fubann", missing),
+        ("draw.redacted-pdf", "manca/Lungo.pdf.fubann", missing),
+        ("draw.redacted-pdf", "cambiato/Lungo.pdf.fubann", changed),
+    ];
+    let says = |error: &fub_abi::error::PluginError, why: [&str; 2], case: &str| {
+        let text = error.message().as_literal();
+        assert!(
+            text.is_some_and(|text| why.contains(&text)),
+            "{case}: {error:?}"
+        );
+    };
+
+    // La strada dell'app: `export.run` mette in coda il job dei
+    // trasferimenti, che chiama l'exporter di un altro bundle.
+    let host = fub_host::Host::without_watcher();
+    host.open(&root).unwrap();
+    host.wait_indexed(None).unwrap();
+    for (target, doc, why) in cases {
+        let error = host
+            .invoke_job(
+                None,
+                "fub.importers",
+                "import.transfer",
+                serde_json::json!({"op": "export", "request": request(target, doc)}),
+            )
+            .expect_err("l'export non parte");
+        assert!(
+            matches!(error, fub_abi::error::PluginError::BadArgs(_)),
+            "{error:?}"
+        );
+        says(&error, why, &format!("job {target} {doc}"));
+    }
+    drop(host);
+
+    // L'export del workspace: la stessa frase.
+    let mounted = mount(&root);
+    for (target, doc, why) in cases {
+        let error = mounted
+            .workspace
+            .export(&request(target, doc))
+            .expect_err("l'export non parte");
+        says(&error, why, &format!("workspace {target} {doc}"));
+    }
+}

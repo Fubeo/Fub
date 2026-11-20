@@ -29,7 +29,7 @@ vi.mock("../host/ipc", () => ({
 vi.mock("../host/query", () => ({ settings: fake.settings }));
 vi.mock("../state/kernel", () => ({ onEvent: () => () => {} }));
 
-import { mountWebViewer, openWebLink, openWebPage, viewerSite, type WebViewerPorts } from "./web-viewer";
+import { mountWebViewer, openWebEmbed, openWebLink, openWebPage, viewerSite, type WebViewerPorts } from "./web-viewer";
 import { openLifetime } from "./lifetime";
 
 const entry = (key: string, value: SettingEntry["value"]): SettingEntry =>
@@ -73,6 +73,28 @@ describe("visore web", () => {
     expect(viewerSite("javascript:alert(1)")).toBeNull();
   });
 
+  it("un host con un carattere di controllo non è un sito, come per `viewer_host` in Rust", () => {
+    for (const control of ["\u0000", "\u0001", "\u001f", "\u007f", "\u0085"]) {
+      expect(viewerSite(`https://esem${control}pio.it/`)).toBeNull();
+    }
+  });
+
+  it("senza visore il browser di sistema riceve soltanto un indirizzo http(s)", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    try {
+      for (const url of ["javascript:alert(1)", "data:text/html,x", "file:///etc/passwd"]) {
+        expect(await openWebPage(url)).toBe(false);
+        openWebLink(url, false);
+      }
+      expect(open).not.toHaveBeenCalled();
+      expect(await openWebPage("https://esempio.it/")).toBe(true);
+      openWebLink("http://esempio.it/", false);
+      expect(open.mock.calls.map((call) => call[0])).toEqual(["https://esempio.it/", "http://esempio.it/"]);
+    } finally {
+      open.mockRestore();
+    }
+  });
+
   it("un sito nuovo si apre dopo il sì, che lo ricorda; la volta dopo non si chiede", async () => {
     const p = ports(true);
     const viewer = mountWebViewer(openLifetime(), document.body, p);
@@ -104,6 +126,22 @@ describe("visore web", () => {
     const viewer = mountWebViewer(openLifetime(), document.body, p);
     expect(await viewer.open("http://esempio.it/")).toBe(false);
     expect(p.openExternal).toHaveBeenCalledWith("http://esempio.it/");
+    expect(p.confirm).not.toHaveBeenCalled();
+    expect(fake.open).not.toHaveBeenCalled();
+  });
+
+  it("con il visore montato il browser di sistema riceve soltanto un indirizzo http(s)", async () => {
+    const p = ports(true);
+    const viewer = mountWebViewer(openLifetime(), document.body, p);
+    await settle();
+    for (const url of ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "ftp://esempio.it/"]) {
+      expect(await viewer.open(url)).toBe(false);
+      expect(await openWebPage(url)).toBe(false);
+      viewer.openLink(url, false);
+      openWebLink(url, true);
+    }
+    await settle();
+    expect(p.openExternal).not.toHaveBeenCalled();
     expect(p.confirm).not.toHaveBeenCalled();
     expect(fake.open).not.toHaveBeenCalled();
   });
@@ -143,6 +181,48 @@ describe("visore web", () => {
     await settle();
     expect(again.openExternal).not.toHaveBeenCalled();
     expect(fake.open).toHaveBeenCalledTimes(2);
+  });
+
+  it("una pagina incorporata si apre soltanto nel visore, col consenso di sempre (T37)", async () => {
+    const external = vi.spyOn(window, "open").mockReturnValue(null);
+    try {
+      // Senza visore montato non si apre niente: nemmeno il browser.
+      const gone = openLifetime();
+      mountWebViewer(gone, document.body, ports());
+      gone.close();
+      expect(await openWebEmbed("https://www.youtube.com/watch?v=abc")).toBe("unavailable");
+      expect(external).not.toHaveBeenCalled();
+
+      const refusing = ports(false);
+      const life = openLifetime();
+      mountWebViewer(life, document.body, refusing);
+      await settle();
+      expect(await openWebEmbed("https://www.youtube.com/watch?v=abc")).toBe("refused");
+      expect(refusing.confirm).toHaveBeenCalledWith(expect.stringContaining("www.youtube.com"), expect.anything());
+      expect(fake.open).not.toHaveBeenCalled();
+      // Chiesto di nuovo, il consenso si richiede: il no vale per i redirect.
+      expect(await openWebEmbed("https://www.youtube.com/watch?v=abc")).toBe("refused");
+      expect(refusing.confirm).toHaveBeenCalledTimes(2);
+      // Ciò che il visore non apre non va al browser di sistema.
+      expect(await openWebEmbed("http://www.youtube.com/watch?v=abc")).toBe("unavailable");
+      expect(refusing.openExternal).not.toHaveBeenCalled();
+      life.close();
+
+      const accepting = ports(true);
+      mountWebViewer(openLifetime(), document.body, accepting);
+      await settle();
+      expect(await openWebEmbed("https://www.youtube.com/watch?v=abc")).toBe("opened");
+      expect(fake.open).toHaveBeenCalledWith("https://www.youtube.com/watch?v=abc", "www.youtube.com", {
+        allowRemote: true,
+        allowlist: ["www.youtube.com"],
+      });
+      fake.open.mockRejectedValueOnce(new Error("finestra assente"));
+      expect(await openWebEmbed("https://www.youtube.com/watch?v=def")).toBe("unavailable");
+      expect(accepting.notify).toHaveBeenCalledWith(expect.any(String), "guasto");
+      expect(external).not.toHaveBeenCalled();
+    } finally {
+      external.mockRestore();
+    }
   });
 
   it("salva la pagina mostrata come nota dall'host e la apre", async () => {

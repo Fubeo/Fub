@@ -12,6 +12,9 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   BundleInfo,
+  ComponentAction,
+  ComponentsApplied,
+  ComponentsMap,
   InstalledPluginInfo,
   CommandOutcome,
   CommandSpec,
@@ -19,6 +22,13 @@ import type {
   DocumentWindowEvent,
   DocumentWindowRequest,
   FieldValue,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingGesture,
+  DrawingOpen,
+  DrawingOutcome,
+  DrawingSync,
+  DrawingSynced,
   GridApplyRequest,
   GridBytesSession,
   GridBytesWindow,
@@ -34,10 +44,15 @@ import type {
   InvokeMode,
   KernelNotice,
   ResourceDescriptor,
+  ResourceWriteOptions,
   Locale,
   PluginError,
   SettingValue,
+  ThemeFolderCheck,
+  ThemeFolderInstall,
+  ThemeFolderLink,
   ThemeInfo,
+  ThemeLink,
   ThemeLight,
   ThemePayload,
   KnownVault,
@@ -60,7 +75,7 @@ import type {
   SettingScope,
   CatalogEntry,
 } from "./contract";
-import { openViewer, saveViewer, writeResource } from "../editors/media/transport";
+import { openViewer, ReuseSupport, saveViewer, writeResource } from "../editors/media/transport";
 import { readCraftPreview, type CraftPreview, type CraftPreviewSize } from "./craft";
 import { createMobileBridge } from "../shells/mobile/bridge";
 import type { MobileBridge } from "../shells/mobile/bridge";
@@ -82,6 +97,10 @@ const mediaInvoke = <T>(
 ): Promise<T> => options?.headers
   ? invoke<T>(cmd, args, { headers: options.headers })
   : invoke<T>(cmd, args);
+
+// Se l'host di questa seduta ha già rifiutato `reuse` (un host di prima): i
+// depositi dopo vanno subito senza (T32b). Uno per finestra, quanto l'host.
+const reuseSupport = new ReuseSupport();
 
 
 // Mirror esatto dei record serde in fub-host::support e fub-app::support.
@@ -208,8 +227,26 @@ export const api = {
   // revisione arrivi da qui invece di essere ricalcolata di qua è la stessa
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
+  //
+  // `readDocument` è una **lettura semplice**: l'anteprima, una ricerca, un
+  // confronto. Il documento non conta come aperto e l'host non tiene niente.
+  // `openDocument` è la stessa lettura sotto la chiave di apertura `open` di
+  // una sessione (da 1 a 64 fra lettere, cifre, `-` e `_`): la revisione resta
+  // segnata sotto la chiave finché `documentClosed(open)` non la chiude.
   readDocument: (id: string, vault?: string | null) =>
     invoke<DocumentSource>("read_document", toVault({ id }, vault)),
+  openDocument: (id: string, open: string, vault?: string | null) =>
+    invoke<DocumentSource>("read_document", toVault({ id, open }, vault)),
+  // I motori dei formati (fogli, documenti) si costruiscono alla prima
+  // apertura. Scaldare quello di un'estensione lo prepara prima, in
+  // sottofondo: un'estensione senza motore non fa niente e non è un errore.
+  warmEngine: (extension: string) => invoke<void>("warm_engine", { extension }),
+  // La shell ha chiuso la sessione con la chiave di apertura `open`: l'host
+  // dimentica le prove a vuoto che nessun'altra chiave tiene, e le cache dei
+  // documenti se non resta aperta nessuna chiave. Una chiave sconosciuta o già
+  // chiusa non è un errore.
+  documentClosed: (open: string, vault?: string | null) =>
+    invoke<void>("document_closed", toVault({ open }, vault)),
   resourceOpen: (id: string, vault: string | null = null) =>
     invoke<ResourceDescriptor>("resource_open", { id, vault }),
   resourceReadChunk: (handle: string, offset: number, len: number) =>
@@ -221,12 +258,18 @@ export const api = {
   /// e la sa soltanto Tauri: costruirla a mano rompeva le immagini delle note
   /// su Windows. L'handle è un numero: niente percorso, niente query.
   assetUrl: (handle: string) => convertFileSrc(handle, "fub-asset"),
-  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null) =>
-    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined),
+  /// Deposita byte grezzi: `expected` null crea soltanto, una stringa è il CAS.
+  /// `options.reuse: "same-content"` non scrive se il vault ha già questi byte
+  /// (vedi `writeResource` e la sezione «Depositare un file» del contratto).
+  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null, options?: ResourceWriteOptions) =>
+    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined, options, reuseSupport),
   viewerOpen: (url: string, title: string, policy: { allowRemote: boolean; allowlist: readonly string[] }) =>
     openViewer(mediaInvoke, url, title, policy),
   viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>
     saveViewer(mediaInvoke, url, title, allowlist, attachmentFolder, vault),
+  /** Una tessera della vista Mappa di una Base, in byte: la scarica l'host,
+   * soltanto da un sito che `map.tile-hosts` ammette su questa macchina. */
+  mapTile: (url: string, kind: "raster" | "vector") => invoke<ArrayBuffer>("map_tile", { url, kind }),
   /** Indietro, avanti, ricarica, chiudi o porta davanti la finestra del visore. */
   viewerControl: (action: ViewerAction) => invoke<void>("viewer_control", { action }),
   /** Le navigazioni del visore, ammesse o fermate, e la sua chiusura. */
@@ -275,15 +318,37 @@ export const api = {
     invoke<GridCommandOutcome>("grid_bytes_command", { surface, instance, request }),
   closeGridBytes: (surface: string, instance: string) =>
     invoke<void>("close_grid_bytes", { surface, instance }),
+  // Il disegno sul motore (K5): il motore tiene una copia del disegno che
+  // segue il testo della `DocumentSession` e risponde ai gesti con operazioni
+  // di scena che il client applica (`editors/spatial/motore/sessione.ts`).
+  // Sei porte tipate con il vault in coda; senza il motore in questa build
+  // l'host rifiuta con `unserved` e la sessione dà il motore spento.
+  openDrawing: (doc: string, text: string, vault?: string | null) =>
+    invoke<DrawingOpen>("open_drawing", toVault({ doc, text }, vault)),
+  drawingSync: (instance: string, sync: DrawingSync, vault?: string | null) =>
+    invoke<DrawingSynced>("drawing_sync", toVault({ instance, sync }, vault)),
+  drawingGesture: (instance: string, gesture: DrawingGesture, vault?: string | null) =>
+    invoke<DrawingOutcome>("drawing_gesture", toVault({ instance, gesture }, vault)),
+  drawingCommands: (instance: string, selection: string[], vault?: string | null) =>
+    invoke<DrawingCommandInfo[]>("drawing_commands", toVault({ instance, selection }, vault)),
+  drawingCommand: (instance: string, request: DrawingCommandRequest, vault?: string | null) =>
+    invoke<DrawingOutcome>("drawing_command", toVault({ instance, request }, vault)),
+  closeDrawing: (instance: string, vault?: string | null) =>
+    invoke<void>("close_drawing", toVault({ instance }, vault)),
   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è
   // stato scritto niente**; `dictated` = «copri, è voluto». Prima era
   // `base: string | null = null`, cioè la guardia si perdeva non passandola —
   // e chi la perdeva non lo scriveva da nessuna parte. Torna la revisione
-  // prodotta, cioè la base della scrittura dopo.
-  writeDocument: (id: string, source: string, base: WriteBase, vault?: string | null) =>
-    invoke<string>("write_document", toVault({ id, source, base }, vault)),
+  // prodotta, cioè la base della scrittura dopo. Con `open`, la chiave della
+  // sessione che scrive, la revisione sovrascritta e quella nuova restano
+  // segnate sotto la chiave; senza, l'host non tiene niente.
+  writeDocument: (id: string, source: string, base: WriteBase, vault?: string | null, open?: string) =>
+    invoke<string>(
+      "write_document",
+      toVault(open === undefined ? { id, source, base } : { id, source, base, open }, vault),
+    ),
   // Il **buffer di crash** (§15.2): ciò che è nell'editor e non è ancora sul
   // disco. Due porte e non due comandi del registro, ed è l'unica coppia di
   // questo file la cui capacità mancante è voluta per sempre: il testo non
@@ -442,6 +507,36 @@ export const api = {
   listThemes: () => invoke<ThemeInfo[]>("list_themes"),
   readTheme: (id: string, light: ThemeLight) =>
     invoke<ThemePayload>("read_theme", { id, light }),
+  // «Installa da cartella…»: apre la finestra nativa di scelta (il titolo lo
+  // scrive l'host) e legge la cartella scelta senza installarla: i fasci di
+  // ogni luce, per i cancelli della shell, e l'impronta dei byte. La webview
+  // non passa un path. Solo con `developer.mode` acceso: lo decide l'host, che
+  // altrimenti risponde `permission_denied`.
+  checkThemeFolder: () => invoke<ThemeFolderCheck>("check_theme_folder"),
+  // Scarta il permesso del controllo: «no» a «Sostituisci», o la shell rifiuta
+  // la cartella col suo cancello.
+  discardThemeFolder: () => invoke<void>("discard_theme_folder"),
+  // Installa la cartella che l'ultimo controllo ha letto, se `digest` è la sua
+  // impronta, e consuma il permesso: senza (controllo superato, già usato o
+  // scartato) l'esito è `unchecked`, e una cartella cambiata è `changed`;
+  // niente si scrive. Solo con `developer.mode` acceso. Senza `replace` un id
+  // già installato torna come `collision`, e niente si tocca.
+  installThemeFromFolder: (replace: boolean, digest: string) =>
+    invoke<ThemeFolderInstall>("install_theme_from_folder", { replace, digest }),
+  // «Collega una cartella…»: la finestra nativa di scelta (il titolo lo scrive
+  // l'host), poi l'host legge la cartella con le porte dell'installazione e,
+  // se è pronta, la collega al posto di quella di prima e la guarda. Solo con
+  // `developer.mode` acceso. La webview non passa un path.
+  linkThemeFolder: () => invoke<ThemeFolderLink>("link_theme_folder"),
+  // «Scollega»: la cartella collegata si dimentica e non si guarda più.
+  unlinkThemeFolder: () => invoke<void>("unlink_theme_folder"),
+  // Il tema collegato com'è adesso, `null` se nessuna cartella è collegata
+  // o la modalità sviluppatore è spenta.
+  themeLink: () => invoke<ThemeLink | null>("theme_link"),
+  // Il campanello del tema collegato: la cartella è cambiata (un salvataggio,
+  // un rifiuto, la cartella sparita), col suo stato. Il debounce è dell'host.
+  onThemeChanged: (handler: (link: ThemeLink) => void): Promise<() => void> =>
+    listen<ThemeLink>("fub://theme-changed", ({ payload }) => handler(payload)),
   // Chi questo host sa montare, e chi è acceso: non è `VaultInfo.plugins`, che
   // elenca chi è dichiarato nel kernel — un componente spento non lo è.
   listBundles: () => invoke<BundleInfo[]>("list_bundles"),
@@ -450,6 +545,15 @@ export const api = {
   // può ramificare.
   setPluginEnabled: (id: string, enabled: boolean) =>
     invoke<PluginError[]>("set_plugin_enabled", { id, enabled }),
+  // La pagina «Componenti» (A7): la mappa con lo stato del vault, e la scelta.
+  // `apply` assente è una prova: dice che cosa cambierebbe e non scrive. Un
+  // rifiuto (`{ risposta: "rifiuto" }`) è una risposta, non un errore; l'errore
+  // resta per il vault non aperto. Non passa dalle porte generiche: lo stato
+  // dei componenti lo cambia solo la shell, come `set_plugin_enabled`.
+  componentsMap: (vault?: string | null) =>
+    invoke<ComponentsMap>("components_map", { vault: vault ?? null }),
+  componentsApply: (azione: ComponentAction, apply?: boolean, vault?: string | null) =>
+    invoke<ComponentsApplied>("components_apply", { vault: vault ?? null, azione, apply: apply ?? null }),
   // L'inventario installato è macchina, quindi resta leggibile anche senza un
   // guest montato. `vault` serve soltanto a riferire lo stato runtime.
   listInstalledPlugins: (vault?: string) =>

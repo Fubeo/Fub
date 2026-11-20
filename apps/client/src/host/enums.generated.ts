@@ -31,6 +31,26 @@ export type DateOrder = "dmy" | "mdy" | "ymd";
 
 export type DocChange = "body" | "frontmatter" | "tags" | "links" | "outline" | "anchors";
 
+export type DrawingLossKind = "unmapped" | "approximated" | "unsupported";
+
+export type DrawingPhase = "preview" | "commit" | "cancel";
+
+export type DrawingPointerKind = "down" | "drag" | "up" | "move" | "double_click";
+
+export type DrawingRefusal =
+  | "stale"
+  | "unmapped"
+  | "empty"
+  | "unsupported"
+  | "too_large"
+  | "closed"
+  | "not_ready"
+  | "locked"
+  | "hidden"
+;
+
+export type DrawingTool = "select" | "rect" | "ellipse" | "line" | "arrow" | "text";
+
 export type EntryKind = "document" | "asset" | "unknown";
 
 export type EventKind =
@@ -158,6 +178,18 @@ export type NoteLevel = "info" | "warning" | "error";
 
 export type PaneMode = "source" | "live_preview" | "reading";
 
+export type PropertyColor =
+  | "gray"
+  | "brown"
+  | "orange"
+  | "yellow"
+  | "green"
+  | "blue"
+  | "purple"
+  | "pink"
+  | "red"
+;
+
 export type PropertyType =
   | "text"
   | "list"
@@ -166,6 +198,10 @@ export type PropertyType =
   | "date"
   | "date_time"
   | "tags"
+  | "select"
+  | "status"
+  | "url"
+  | "relation"
 ;
 
 export type RenderTarget = "screen" | "print" | "pdf" | "static_site";
@@ -178,6 +214,8 @@ export type Severity = "warning" | "failure";
 
 export type SourceKind = "text" | "bytes";
 
+export type StatusGroup = "todo" | "doing" | "done";
+
 export type TaskStatus = "open" | "done";
 
 export type TextField = "name" | "body" | "tags" | "heading";
@@ -189,6 +227,8 @@ export type TextScope = "line" | "block" | "section";
 export type TextTolerance = "exact" | "typos";
 
 export type ThemeEngine = "theme-1" | "theme-2";
+
+export type ThemeFontStyle = "normal" | "italic";
 
 export type ThemeLight = "dark" | "light";
 

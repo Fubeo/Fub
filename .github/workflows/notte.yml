@@ -1,0 +1,68 @@
+name: CI completa di notte
+
+# Una PR in bozza riceve la CI corta (Linux, niente banchi): un difetto che si
+# vede soltanto su Windows o nelle foto si scopriva quando la PR diventava
+# pronta, cioè a pacchetto finito. Ogni notte questo workflow lancia la CI
+# completa (`ci.yml` con `workflow_dispatch`, che su un ramo fa girare tutto)
+# sulla testa delle PR in bozza con l'etichetta `notte`: le integrazioni lunghe
+# la mettono, le altre bozze no.
+#
+# - Una testa che ha già avuto una corsa a mano di `ci.yml` non si rilancia:
+#   la notte dopo un giorno fermo non costa niente.
+# - La corsa è sul ramo così com'è (non sull'unione con `main`) e non è un
+#   controllo richiesto: nessuna PR la aspetta. `baseline.yml` la ignora (segue
+#   soltanto le corse `pull_request`), quindi il banco visivo può essere rosso
+#   per le scene nuove senza baseline: le foto le fa il robot quando la PR è
+#   pronta.
+# - Si legge la mattina dopo: `gh run list --workflow ci.yml --event
+#   workflow_dispatch --branch <ramo>`.
+
+on:
+  # Alle 2:15 UTC, fuori dal cron di `ci.yml` (lunedì alle 6) e di
+  # `macos-in-pausa.yml` (domenica alle 2:30).
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notte
+  cancel-in-progress: false
+
+jobs:
+  lancia:
+    name: lancia la CI completa sulle bozze con «notte»
+    runs-on: ubuntu-latest
+    # `actions: write` per `gh workflow run`; `pull-requests: read` per
+    # l'elenco delle bozze. Nient'altro: il job non fa il checkout del codice.
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: le bozze con «notte» senza una corsa sulla loro testa
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh pr list --repo "$REPO" --state open --draft --label notte \
+            --json number,headRefName,headRefOid,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository | not) | "\(.number) \(.headRefName) \(.headRefOid)"' \
+            > "$RUNNER_TEMP/bozze"
+          if [ ! -s "$RUNNER_TEMP/bozze" ]; then
+            echo "Nessuna bozza con l'etichetta «notte»."
+            exit 0
+          fi
+          while read -r numero ramo testa; do
+            fatte=$(gh run list --repo "$REPO" --workflow ci.yml \
+              --event workflow_dispatch --branch "$ramo" --limit 20 \
+              --json headSha --jq "[.[] | select(.headSha == \"$testa\")] | length")
+            if [ "$fatte" -gt 0 ]; then
+              echo "#$numero ($ramo): la testa ${testa:0:9} ha già una corsa completa."
+              continue
+            fi
+            gh workflow run ci.yml --repo "$REPO" --ref "$ramo"
+            echo "#$numero ($ramo): CI completa lanciata su ${testa:0:9}."
+          done < "$RUNNER_TEMP/bozze"

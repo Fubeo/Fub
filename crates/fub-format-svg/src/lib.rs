@@ -96,7 +96,7 @@ fn refuses(format: &str, source: &DocumentSource) -> FormatError {
 
 impl FormatProvider for SvgProvider {
     fn descriptor(&self) -> FormatDescriptor {
-        FormatDescriptor::text(FORMAT_ID, "SVG (FubDraw)", &["svg"])
+        FormatDescriptor::text(FORMAT_ID, "Disegno SVG", &["svg"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {
@@ -165,11 +165,7 @@ impl FormatProvider for FubannProvider {
     fn descriptor(&self) -> FormatDescriptor {
         // L'estensione è l'ultimo segmento del nome: `Bando.pdf.fubann` è un
         // `fubann`, e il PDF accanto resta un PDF.
-        FormatDescriptor::text(
-            ANNOTATIONS_FORMAT_ID,
-            "Annotazioni PDF (FubDraw)",
-            &["fubann"],
-        )
+        FormatDescriptor::text(ANNOTATIONS_FORMAT_ID, "Annotazioni PDF", &["fubann"])
     }
 
     fn capabilities(&self) -> FormatCapabilities {

@@ -11,6 +11,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;
 use fub_abi::model::DocId;
+use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{HostApi, Plugin, PluginManifest, ReadApi};
 use fub_abi::transfer::{
     ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportSelection, ExportTarget,
@@ -25,6 +26,11 @@ const OWNER: &str = "test.zz";
 const TARGET: &str = "test.zz";
 const IMPORTERS: &str = "fub.importers";
 const TRANSFER_JOB: &str = "import.transfer";
+/// L'errore dell'importer quando la nota è vuota: una chiave del catalogo
+/// del bundle `test.zz`, che il job degli importer non conosce.
+const E_EMPTY: &str = "e_zz_empty";
+const EMPTY_IT: &str = "La nota «Vuota.zz» è vuota: scrivici una riga e riprova.";
+const EMPTY_EN: &str = "The note «Vuota.zz» is empty: write a line in it and try again.";
 
 /// Un `.zz` è una nota di una riga: diventa `<nome>.md` con quella riga.
 struct ZzImport;
@@ -42,6 +48,12 @@ impl ImportProvider for ZzImport {
     ) -> Result<ImportReport, PluginError> {
         let text = String::from_utf8(source.read_all(host)?)
             .map_err(|_| PluginError::BadArgs("not text".into()))?;
+        if text.is_empty() {
+            return Err(PluginError::BadArgs(Text::message(
+                E_EMPTY,
+                vec![Arg::text("name", source.name.clone())],
+            )));
+        }
         let doc = DocId::new(format!("{}.md", source.stem().unwrap_or_default()));
         if request.mode == fub_abi::transfer::ImportMode::Apply {
             host.create_document(&doc, &format!("zz: {text}"))?;
@@ -91,7 +103,19 @@ struct ZzBundle;
 
 impl Bundle for ZzBundle {
     fn manifest(&self) -> PluginManifest {
-        PluginManifest::core(OWNER, "ZZ")
+        PluginManifest::core(OWNER, "ZZ").speaking(
+            "it",
+            vec![
+                StringCatalog::new("it").with(
+                    E_EMPTY,
+                    "La nota «{name}» è vuota: scrivici una riga e riprova.",
+                ),
+                StringCatalog::new("en").with(
+                    E_EMPTY,
+                    "The note «{name}» is empty: write a line in it and try again.",
+                ),
+            ],
+        )
     }
 
     fn trust(&self) -> Trust {
@@ -165,6 +189,33 @@ fn a_registered_importer_is_chosen_by_the_staged_import() {
     );
 }
 
+/// L'errore dell'importer esce nel catalogo di chi l'ha registrato, nella
+/// lingua dell'interfaccia: il job degli importer è di un altro bundle, e
+/// senza la risoluzione al centro attività arrivava la chiave.
+#[test]
+fn an_import_that_cannot_start_says_why() {
+    let (_dir, root, host) = open(&[]);
+    let source = ImportSource::text_source("Vuota.zz", "");
+    let error = host
+        .invoke_job(
+            None,
+            IMPORTERS,
+            TRANSFER_JOB,
+            serde_json::json!({
+                "op": "prepare", "job": "vuota", "source": source,
+                "request": ImportRequest::apply(),
+            }),
+        )
+        .expect_err("una nota vuota non si importa");
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+    let text = error.message().as_literal();
+    assert!(
+        text.is_some_and(|text| [EMPTY_IT, EMPTY_EN].contains(&text)),
+        "{error:?}"
+    );
+    assert!(!root.join("Vuota.md").exists());
+}
+
 #[test]
 fn a_registered_export_target_is_accepted_and_run() {
     let (_dir, _root, host) = open(&[("Nota.md", "# Nota\n")]);
@@ -215,6 +266,11 @@ fn export_run_queues_the_job_for_real() {
         let notice = events
             .recv_timeout(std::time::Duration::from_secs(30))
             .expect("the job ends");
+        // Il job non scrive frasi d'avanzamento: non sa in che lingua parla
+        // chi guarda, e un «export» arrivava così al centro attività.
+        if let fub_abi::Event::JobProgress { progress, .. } = &notice.event {
+            assert_eq!(progress.label, None, "{progress:?}");
+        }
         if let fub_abi::Event::JobDone { job, result, .. } = notice.event {
             if job == TRANSFER_JOB {
                 break result;

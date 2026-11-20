@@ -196,3 +196,39 @@ describe("quadtree — nearest", () => {
     }
   });
 });
+
+describe("quadtree — crescita del pool durante uno split", () => {
+  it("se newNode rialloca a metà split, nessun punto si perde", () => {
+    // Nove nodi quasi coincidenti e uno lontano: la cella dei nove si
+    // dimezza per una ventina di livelli prima di separarli, e ogni split
+    // chiede 4 nodi. Il pool nuovo parte da 2n + 16 = 36 slot: la
+    // riallocazione arriva per forza dentro uno split, e i figli scritti
+    // nell'array vecchio sparivano. Con 36 slot la riallocazione cade sul
+    // quarto figlio (destra-sotto): il nodo lontano sta in alto a sinistra,
+    // così il gruppo scende sempre proprio in quel figlio.
+    const s = graphTest(10, 0);
+    for (let j = 0; j < 9; j++) {
+      s.x[j] = j * 1e-3;
+      s.y[j] = (j % 3) * 1e-3;
+    }
+    s.x[9] = -1000;
+    s.y[9] = -1000;
+    const q = build(s, new QuadtreePool());
+    expect(q.used).toBeGreaterThan(36); // il pool è davvero cresciuto
+    // nearest ritrova ogni nodo nella sua posizione.
+    for (let j = 0; j < s.n; j++) {
+      expect(nearest(q, s.x[j], s.y[j], 1e-4)).toBe(j);
+    }
+    // visit a theta 0 vede tutti i nodi, ciascuno con la sua massa.
+    let seen = 0;
+    let mass = 0;
+    visit(q, 0, 500, -500, (_dx, _dy, _d2, m) => {
+      seen++;
+      mass += m;
+    });
+    let total = 0;
+    for (let j = 0; j < s.n; j++) total += s.mass[j];
+    expect(seen).toBe(s.n);
+    expect(mass).toBeCloseTo(total, 5);
+  });
+});

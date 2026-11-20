@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "K0 del piano dei componenti. tetti: il peso del programma di prova senza simboli (profilo spoglio), le librerie che il motore porta e Fub non ha, e quelle in due versioni con il Cargo.lock di Fub; misura.mjs esce con 1 se una prova li supera. Si possono soltanto abbassare. obiettivi: la prima apertura a freddo e la memoria che resta dopo tutto chiuso e malloc_trim, rispetto alla partenza, misurate sulla macchina della pagina docs/misure/motori-2026-10-31-linux-ryzen.md: valgono soltanto lì, e misura.mjs li segnala senza fallire.",
+  "note": "K0 del piano dei componenti. tetti: il peso del programma di prova senza simboli (profilo spoglio), le librerie che il motore porta e Fub non ha, e quelle in due versioni con il Cargo.lock di Fub; misura.mjs esce con 1 se una prova li supera. Si possono soltanto abbassare. obiettivi: la prima apertura a freddo e la memoria che resta dopo tutto chiuso e malloc_trim, rispetto alla partenza, misurate sulla macchina della pagina docs/misure/2026-10-31-motori-linux-ryzen.md: valgono soltanto lì, e misura.mjs li segnala senza fallire.",
   "tetti": {
     "vettori": {
       "spoglio_mib": 65,
@@ -39,7 +39,7 @@
     }
   },
   "obiettivi": {
-    "macchina": "motori-2026-10-31-linux-ryzen",
+    "macchina": "2026-10-31-motori-linux-ryzen",
     "vettori": {
       "Foglio.svg": {
         "prima_apertura_ms": 43,

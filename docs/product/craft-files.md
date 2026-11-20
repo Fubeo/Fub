@@ -38,8 +38,9 @@ lettura.
 
 Quando il file cambia sul disco la scheda lo rilegge da sola. Il nome di
 un'app che Fub non conosce si mostra come il file lo scrive. Con il
-componente `fub.craft` spento la scheda dice «Nessuna superficie
-disponibile», come per ogni file che Fub non sa mostrare.
+componente `fub.craft` spento il file si apre «solo come file», come quello
+di ogni componente spento: nome, dimensione, «Accendi …» e «Apri con
+un'altra app».
 
 Un XMP di LightCraft mostra invece i dati della foto: il voto in stelle
 («Scartata» per una foto scartata), l'etichetta col suo colore, la scelta, le
@@ -123,7 +124,11 @@ puntatore.
   come figura, con il filo e l'ombra di un foglio e il nome del file sotto,
   quando l'anteprima c'è; un clic apre il PDF nella sua scheda. Senza
   anteprima, con `#page=N` o con un PDF che l'app non ha saputo leggere
-  (protetto o rovinato), resta il link al file. Un `.docx` incorporato
+  (protetto o rovinato), resta il link al file. Il link con `#page=N`, come
+  `[[contratto.pdf#page=N]]`, apre il PDF alla pagina N: oltre l'ultima
+  apre l'ultima, e un numero che non è un intero positivo (`#page=0`,
+  `#page=abc`, `#page=`) apre la prima. Se il PDF è già aperto in una
+  scheda, quella scheda torna attiva e va alla pagina. Un `.docx` incorporato
   mostra il suo testo, come prima. La figura è larga quanto la sua
   immagine, mai più della colonna, e il nome sta sotto di lei. Se il PDF
   cambia, la figura si rifà con la revisione nuova.

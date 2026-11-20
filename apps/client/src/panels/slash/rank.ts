@@ -76,11 +76,36 @@ export function rank(entry: { readonly id: string; readonly label: string; reado
     const at = label.indexOf(q);
     match = { score: 2, span: [at, at + q.length] };
   } else if (q.length >= 3 && words.some((word) => word.includes(q))) match = { score: 2.5, span: null };
-  else if (q.length >= 4 && words.some((word) => editDistanceAtMost1(word, q) || editDistanceAtMost1(word.slice(0, q.length), q))) {
+  else if (/\s/.test(q) && q.split(/\s+/).every((part) => words.some((word) => word.startsWith(part)))) {
+    // Più parole («da fare», «elenco attività»): ognuna è l'inizio di una
+    // parola del nome o dei sinonimi.
+    match = { score: 2.5, span: null };
+  } else if (q.length >= 4 && words.some((word) => editDistanceAtMost1(word, q) || editDistanceAtMost1(word.slice(0, q.length), q))) {
     match = { score: 3, span: null, why: "forse" };
   }
   if (!match) return null;
   // Al più mezzo punto: le abitudini riordinano fra pari, non scavalcano.
   match.score -= 0.3 * ctx.recency(entry.id) + 0.2 * ctx.fits(entry.id);
   return match;
+}
+
+/// L'uso di questa macchina: i preferiti nell'ordine scelto, i recenti dal
+/// più recente.
+export interface SlashUsage {
+  readonly favorites: readonly string[];
+  readonly recent: readonly string[];
+}
+
+/// I più usati, per le tessere in cima al «/»: prima i preferiti, poi ciò che
+/// si è scelto di recente, poi l'ordine scritto (`defaults`), che vale da solo
+/// in un vault nuovo. Soltanto fra le voci `offered` (una voce nascosta, o che
+/// la superficie non sa fare, non c'è e la seguente prende il suo posto),
+/// senza doppioni, al più `count`.
+export function byUse(offered: ReadonlySet<string>, usage: SlashUsage, defaults: readonly string[], count: number): string[] {
+  const out: string[] = [];
+  for (const id of [...usage.favorites, ...usage.recent, ...defaults]) {
+    if (out.length >= count) break;
+    if (offered.has(id) && !out.includes(id)) out.push(id);
+  }
+  return out;
 }

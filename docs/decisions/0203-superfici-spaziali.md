@@ -68,7 +68,10 @@ I vincoli che contano:
    destinazione cambia nome.
 7. Un disegno incorporato in una nota resta un'immagine del vault:
    `hydrateVaultMedia` lo mostra in un `<img>` servito come `image/svg+xml` con
-   `nosniff`. Non nasce un secondo percorso per gli embed.
+   `nosniff`. Non nasce un secondo percorso per gli embed. (Aggiornato dalla
+   [0248](0248-il-disegno-nella-nota-si-modifica-sul-posto.md): nella nota,
+   da attiva, la scheda di un disegno di Fub monta questa superficie,
+   compatta; a riposo resta l'immagine.)
 8. Le fixture del formato sono generate da `fub-scene` e lette dai test della
    superficie, con il meccanismo `UPDATE_MIRROR` dei test di mirror.
 9. La camera di `apps/client/src/graph/render/camera.ts` diventa un modulo
@@ -154,3 +157,9 @@ riferimenti esterni, stili e script, mentre un `<img>` non esegue nulla.
 - mount e unmount ripetuti senza listener residui, con un test della superficie
   oltre al controllo statico di `check-listeners`;
 - `axe` e baseline visuali della scena nel banco.
+
+> **Nota (2026-11-08).** FubDraw resta il nome tecnico del formato: il
+> namespace `fub:`, lo stato `fubdraw`, gli id e le pagine di riferimento lo
+> portano ancora. Chi usa Fub non lo legge: l'interfaccia, gli avvisi e i
+> messaggi che arrivano a MCP dicono «Fub» o «il disegno», e i formati si
+> chiamano «Disegno SVG» e «Annotazioni PDF». La decisione non cambia.

@@ -18,36 +18,38 @@ import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
 import type { RichRibbon } from "./ribbon";
 import type { RichSide } from "./side";
-import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem, SurfaceMiniBar } from "../core/editor-menu";
+import { menuBelow, type SurfaceMenu, type SurfaceMenuEntry, type SurfaceMenuItem, type SurfaceMiniBar } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { iconEl } from "../../ui/icons";
 import { closeContextMenu } from "../../ui/menu";
 import { focusZone } from "../../ui/a11y";
 import type { DrawingImagePort } from "../canvas/surface";
 import { relativeRef } from "../../rules/mirrored";
+import { RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE } from "../core/component-surfaces";
 import { adaptedPaper, shownLook, type Look } from "../../theme/content-look";
 import type { Paper } from "../../theme/adapt";
 
-export const RICH_OWNER = "fub.shell.rich";
-export const RICH_FAMILY = "rich";
-export const RICH_PROFILE = "document";
+// Proprietario, famiglia, profilo e formati stanno nel modulo leggero dei
+// descrittori, che la shell legge all'avvio senza caricare i documenti.
+export { RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE };
 /// Le modalità del documento, come in Word: Pagina (il foglio del file),
 /// Scrittura (la colonna della nota, vestita dal tema) e Lettura (la carta,
 /// senza barra e senza cursore). Pagina conserva l'id di quando era l'unica.
 export const RICH_PAGE_MODE = "document";
 export const RICH_WRITING_MODE = "writing";
 export const RICH_READING_MODE = "reading";
+/// Pagina e Lettura mostrano il file sulla sua carta, o adattato a quella del
+/// tema; Scrittura è del tema, e del file tiene struttura ed enfasi. Le
+/// figure le registra la barra del documento (`useRichIcons`); dove non ci
+/// sono, il menu delle modalità usa quelle del ruolo.
+export const RICH_MODES: readonly SurfaceMode[] = [
+  { id: "document", label: () => t("mode.page"), presentation: "surface", contextMode: "live_preview", looks: ["file", "adattato"], icon: "rc-mode-page" },
+  { id: "writing", label: () => t("mode.writing"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], icon: "rc-mode-writing" },
+  { id: "reading", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file", "adattato"], icon: "rc-mode-reading" },
+];
 /// Sotto questa larghezza (px) la vista è stretta: la carta le sta dentro, e
 /// il pannello del documento è un foglio che sale dal basso.
 export const NARROW_PX = 600;
-/// I formati che questa superficie apre, con il loro profilo. Se un documento
-/// si scrive lo dice la sua proiezione (`readonly`), non il formato.
-export const RICH_FORMATS: Readonly<Record<string, string>> = {
-  docx: RICH_PROFILE,
-  odt: RICH_PROFILE,
-  rtf: RICH_PROFILE,
-  doc: RICH_PROFILE,
-};
 
 /// I formati che scrivono commenti nuovi e registrano le modifiche: il codec
 /// ODT non li scrive ancora.
@@ -163,6 +165,10 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
   "markdown.table.column.delete": "Mod-Alt-Shift-Backspace",
 };
 
+/// Dopo quanto silenzio (ms) un altro tentativo in un blocco chiuso torna a
+/// dirlo.
+export const CLOSED_QUIET_MS = 4000;
+
 /// L'immagine più pesante che un documento accoglie, come il codec.
 export const RICH_IMAGE_LIMIT = 16 * 1024 * 1024;
 
@@ -187,9 +193,18 @@ export interface RichSurfaceCallbacks {
 export function mountRichSurface(profile: string, context: SurfaceMountContext, callbacks: RichSurfaceCallbacks): EditorSurface {
   if (profile !== RICH_PROFILE) throw new Error(`rich surface profile ${profile} is not registered`);
   const parent = context.parent;
+  /// Il percorso del documento: cambia con una rinomina (`followRename`), che
+  /// non rimonta la pagina.
+  let documentId = context.documentId;
   parent.replaceChildren();
   const root = document.createElement("div");
   root.className = "rich-surface";
+  /// Dentro una scheda (`SurfaceMountContext.compact`, T44) il documento è
+  /// una colonna: in Scrittura, senza la carta, senza la barra multifunzione
+  /// e senza il pulsante del pannello. Si scrive lo stesso testo con le
+  /// stesse azioni; stili e impaginazione restano del file.
+  const compact = context.compact === true;
+  if (compact) root.dataset.compact = "true";
   const notice = document.createElement("p");
   notice.className = "rich-notice";
   notice.setAttribute("role", "status");
@@ -201,6 +216,10 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   parent.append(root);
 
   let engine: RichEngine | null = null;
+  // Il fuoco chiesto prima che il motore arrivasse (una scheda che si attiva
+  // col primo clic): lo prende appena c'è, se il fuoco sta ancora dove stava
+  // allora. Esc o un clic altrove nel frattempo lo hanno spostato: resta lì.
+  let focusAsked: { readonly holder: Element | null } | null = null;
   // La barra multifunzione arriva col motore; la mini-barra è la sua.
   let ribbon: RichRibbon | null = null;
   // Il pannello del documento arriva anche lui col motore.
@@ -210,7 +229,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   const reveals = new Set<(viewId: string) => void>();
   let pending: string | null = null;
   let readOnly = false;
-  let mode = RICH_PAGE_MODE;
+  let mode = compact ? RICH_WRITING_MODE : RICH_PAGE_MODE;
   /// In Lettura il documento non si scrive, qualunque cosa dica il file.
   const locked = () => readOnly || mode === RICH_READING_MODE;
   let closed = false;
@@ -249,10 +268,12 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     const pick = images?.pick;
     if (!images || !pick) return undefined;
     return async () => {
-      const doc = await pick(context.documentId);
+      const doc = await pick(documentId);
       if (doc === null) return null;
-      const ref = relativeRef(context.documentId, doc);
-      const blob = await images.read(ref.startsWith(".") ? ref : `./${ref}`, context.documentId, RICH_IMAGE_LIMIT);
+      // Il nome di adesso: durante la scelta il documento può aver cambiato nome.
+      const from = documentId;
+      const ref = relativeRef(from, doc);
+      const blob = await images.read(ref.startsWith(".") ? ref : `./${ref}`, from, RICH_IMAGE_LIMIT);
       return blob ?? "unreadable";
     };
   }
@@ -267,6 +288,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onChange: (change) => callbacks.onChange(context.paneId, change),
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
+        onClosedWrite: warnClosed,
+        ...(context.escapeLeaves === true ? { escapeLeaves: true } : {}),
       });
       const ribbonHost = document.createElement("div");
       ribbonHost.className = "rich-ribbon-host";
@@ -305,7 +328,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       if (mark) opener.append(mark);
       opener.append(document.createElement("span"));
       opener.addEventListener("click", () => opened.show("comments"));
-      root.append(opener);
+      if (!compact) root.append(opener);
       engine.followView([parent, root], ribbonHost);
       stopEngine = engine.subscribe(() => {
         showNotice();
@@ -316,9 +339,11 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       engine.setReadOnly(locked());
       engine.setPaper(paper());
       applyFit();
-      ribbonHost.hidden = mode === RICH_READING_MODE;
+      ribbonHost.hidden = compact || mode === RICH_READING_MODE;
       if (pending !== null) engine.setDoc(pending);
       pending = null;
+      if (focusAsked !== null && document.activeElement === focusAsked.holder) engine.focus();
+      focusAsked = null;
       showNotice();
       notify();
     },
@@ -335,13 +360,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     engine?.refresh();
   });
 
-  // Pagina e Lettura mostrano il file sulla sua carta, o adattato a quella
-  // del tema; Scrittura è del tema, e del file tiene struttura ed enfasi.
-  const modes: SurfaceMode[] = [
-    { id: "document", label: () => t("mode.page"), presentation: "surface", contextMode: "live_preview", looks: ["file", "adattato"] },
-    { id: "writing", label: () => t("mode.writing"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
-    { id: "reading", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file", "adattato"] },
-  ];
+  const modes = RICH_MODES;
 
   /// L'aspetto che il contenitore mostra adesso: lo decide la shell, con la
   /// classe `look-*`.
@@ -401,6 +420,16 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   };
 
   const tell = (message: string) => callbacks.proof?.notify?.(message);
+
+  // Una battuta in un blocco chiuso non entra (`closed.ts`): lo si dice con
+  // un avviso, uno solo finché chi scrive ci riprova senza fermarsi.
+  let closedTriedAt = Number.NEGATIVE_INFINITY;
+  function warnClosed(): void {
+    const now = Date.now();
+    const quiet = now - closedTriedAt > CLOSED_QUIET_MS;
+    closedTriedAt = now;
+    if (quiet) tell(t("rich.locked.refused"));
+  }
 
   /// Una voce per un'azione del motore, col nome della striscia: le azioni
   /// `rich.*` non le dichiara un comando, e la striscia le mostra comunque.
@@ -500,7 +529,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     const box = engine.selectionBox();
     return {
       target: { kind: target.href !== null ? "link" : target.table ? "table" : hasSelection ? "selection" : "text" },
-      at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined,
+      at: box ? menuBelow(box) : undefined,
       context,
       clipboard: {
         offers: { cut: writable && hasSelection, copy: hasSelection, paste: writable, "paste-plain": writable, "select-all": true },
@@ -573,6 +602,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     profile: RICH_PROFILE,
     surfaceId: context.paneId,
     modes,
+    ...(compact ? { defaultMode: RICH_WRITING_MODE } : {}),
     setMode(next) {
       if (!modes.some((each) => each.id === next)) throw new Error(`rich surface mode ${next} is not registered`);
       mode = next;
@@ -581,7 +611,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       if (engine) {
         // La barra si ritira in Lettura: resta la carta.
         const host = root.querySelector<HTMLElement>(":scope > .rich-ribbon-host");
-        if (host) host.hidden = next === RICH_READING_MODE;
+        if (host) host.hidden = compact || next === RICH_READING_MODE;
         if (next === RICH_READING_MODE) ribbon?.closeFind();
         engine.setReadOnly(locked());
         applyFit();
@@ -602,7 +632,17 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       },
       getDoc: () => (engine ? engine.getDoc() : pending ?? ""),
     },
-    focus: () => engine?.focus(),
+    // Una rinomina con la stessa estensione è lo stesso documento: la pagina
+    // resta col suo fuoco, cursore e annulla; cambia solo da dove si leggono
+    // le immagini scelte nel vault. Le battute arrivano alla shell per
+    // riquadro, non per nome.
+    followRename(next) {
+      documentId = next;
+    },
+    focus: () => {
+      if (engine) engine.focus();
+      else focusAsked = { holder: document.activeElement };
+    },
     // La barra multifunzione è della superficie: la barra di formattazione
     // della shell non si mostra sopra.
     ownBar: true,
@@ -689,6 +729,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       engine?.setPaper(paper());
     },
     editorActions,
+    history: (step) => !!engine && editable() && engine.history(step),
     contextMenu,
     miniBar: () => (editable() ? miniBar : null),
     destroy() {

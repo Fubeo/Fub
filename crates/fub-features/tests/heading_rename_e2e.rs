@@ -164,3 +164,19 @@ fn markdown_links_keep_the_way_their_fragment_was_written() {
     );
     assert_eq!(vault.read("Altra.md"), ALTRA);
 }
+
+/// Il campo «Documento» scritto a mano (#486): «nota» è la sola nota che si
+/// chiama così, e il titolo si rinomina lì.
+#[test]
+fn a_heading_of_a_note_written_by_name_is_renamed() {
+    let vault = Vault::new();
+    vault.put("Nota.md", NOTA);
+    let mut ws = vault.open();
+    let args = serde_json::json!({"doc": "nota", "heading": "Piano iniziale", "new_heading": "Piano finale"});
+    ws.invoke_command(HEADING_RENAME, args, InvokeMode::Apply, Actor::User)
+        .expect("il nome nomina la sola nota");
+    assert_eq!(
+        vault.read("Nota.md"),
+        "# Nota\n\n## Piano finale ##\n\nVedi [[#Piano finale]].\n\n## Altro\n"
+    );
+}

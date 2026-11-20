@@ -12,6 +12,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
 import { dismissChildren, openLayer } from "./layers";
 import { adopt } from "./owned";
 import { textButton, type ButtonKind } from "./button";
+import { composingKey } from "./ime";
 
 export type DialogActionKind = ButtonKind;
 
@@ -182,7 +183,7 @@ export function openDialog<T>(options: DialogOptions<T>): DialogHandle<T> {
       const field =
         (target instanceof HTMLInputElement && !["button", "checkbox", "radio", "submit", "reset"].includes(target.type)) ||
         target instanceof HTMLSelectElement;
-      if (event.key !== "Enter" || !field || event.defaultPrevented || event.isComposing || event.repeat) return;
+      if (event.key !== "Enter" || !field || event.defaultPrevented || composingKey(event) || event.repeat) return;
       event.preventDefault();
       choose(submit);
     });
@@ -207,7 +208,9 @@ export function openDialog<T>(options: DialogOptions<T>): DialogHandle<T> {
     if (event.target === scrim && !inside) finish(options.dismissValue);
   });
 
-  own.add(trapFocus(dialog, () => finish(options.dismissValue)));
+  // Il fuoco lo mette il dialogo, qui sotto, senza scorrere: con le azioni in
+  // fondo a un corpo lungo il dialogo si apre comunque dall'inizio.
+  own.add(trapFocus(dialog, () => finish(options.dismissValue), { moveFocus: false }));
   const kinds = options.actions.map((action) => action.kind ?? "normal");
   const wanted = options.actions.findIndex((action) => action.autofocus);
   const field = body ? focusableElements(body)[0] : undefined;

@@ -76,9 +76,18 @@ interface OpVector {
   };
 }
 
-/** I vettori di una cartella in ordine di nome; un file che non si legge fa fallire il test. */
+/** Il numero davanti al nome del file (`07-…` → 7), per mettere `100-…` dopo `99-…`. */
+function number(path: string): number {
+  const match = /^(\d+)-/.exec(path.slice(path.lastIndexOf("/") + 1));
+  return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * I vettori di una cartella in ordine di numero e poi di nome; un file che non
+ * si legge fa fallire il test.
+ */
 function read<T>(files: Record<string, string>): [string, T][] {
-  return Object.keys(files).sort().map((path) => {
+  return Object.keys(files).sort((a, b) => number(a) - number(b) || (a < b ? -1 : a > b ? 1 : 0)).map((path) => {
     const file = path.slice(path.lastIndexOf("/") + 1);
     if (!file.endsWith(".json")) throw new Error(`${file}: nella cartella solo vettori .json`);
     try {

@@ -17,6 +17,10 @@ import type { SurfaceExport, SurfaceMode } from "../core/registry";
 import { PDF_EXPORTS, PDF_MODES, PDF_PROFILE, VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import type { PdfSurfaceOptions } from "./pdf/surface";
 import type { VectorSurfaceOptions } from "./surface";
+import type { EditorChange } from "../core/text-operation";
+import type { DrawingImagePort } from "../canvas/surface";
+import type { VaultFontPort } from "./fonts/vault";
+import type { PdfPorts } from "./pdf/surface";
 
 type SurfaceModule = typeof import("./surface");
 type PdfSurfaceModule = typeof import("./pdf/surface");
@@ -27,6 +31,67 @@ function docTitle(id: string): string {
   const base = id.split("/").pop() || id;
   const point = base.lastIndexOf(".");
   return point > 0 ? base.slice(0, point) : base;
+}
+
+/// Ciò che la shell dà a un disegno o alle annotazioni di un PDF.
+export interface DrawingSurfaceCallbacks {
+  readonly onChange: (paneId: string, change: EditorChange) => void;
+  readonly onSelectionChange: (paneId: string) => void;
+  readonly onOpenPath?: (path: string, from?: string) => void | Promise<void>;
+  /** The vault document a drawing's link goes to, chosen by the user: `from` is the drawing, `current` the `href` of the link being changed. */
+  readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
+  /** The vault images of drawing `from`, resolved by the shell. */
+  readonly drawingImages?: DrawingImagePort;
+  /** The vault's font files, listed and read by the shell, that a drawing's text can use. */
+  readonly drawingFonts?: VaultFontPort;
+  /** Where annotations read their PDF: without it the pages are blank. */
+  readonly pdf?: PdfPorts;
+  /** Runs a shell command, like the export window a drawing's «Export» opens. */
+  readonly shellCommand?: (id: string) => void;
+}
+
+/// La superficie di un disegno (`vector`) o delle annotazioni di un PDF
+/// (`pdf`) della famiglia `canvas`. La registra la shell da sé, senza la
+/// lavagna: i disegni sono un componente (`fub.draw`), la lavagna un altro.
+export function mountDrawingSurface(
+  profile: string,
+  context: SurfaceMountContext,
+  callbacks: DrawingSurfaceCallbacks,
+): EditorSurface {
+  if (profile === VECTOR_PROFILE) {
+    // I collegamenti di un disegno sono percorsi relativi al disegno: la shell
+    // li risolve da lì, come quelli di una nota.
+    const openPath = callbacks.onOpenPath;
+    const pickLink = callbacks.onPickDrawingLink;
+    const shellCommand = callbacks.shellCommand;
+    const images = callbacks.drawingImages;
+    const pickImage = images?.pick;
+    return mountVectorSurfaceLazily(context, {
+      onChange: (change) => callbacks.onChange(context.paneId, change),
+      onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
+      onOpenPath: openPath === undefined ? undefined : async (path) => {
+        await openPath(path, context.documentId);
+      },
+      onPickLink: pickLink === undefined ? undefined : (current) => pickLink(context.documentId, current),
+      // Le immagini, come i collegamenti, si risolvono dal disegno.
+      images: images === undefined ? undefined : {
+        url: (path, life) => images.url(path, context.documentId, life),
+        read: (path, limit) => images.read(path, context.documentId, limit),
+        pick: pickImage === undefined ? undefined : () => pickImage(context.documentId),
+      },
+      vaultFonts: callbacks.drawingFonts,
+      // «Esporta» apre la finestra dello Scrittoio.
+      onExport: shellCommand === undefined ? undefined : () => shellCommand("shell.doc.export"),
+    });
+  }
+  if (profile === PDF_PROFILE) {
+    return mountPdfSurfaceLazily(context, {
+      onChange: (change) => callbacks.onChange(context.paneId, change),
+      onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
+      pdf: callbacks.pdf,
+    });
+  }
+  throw new Error(`drawing surface profile ${profile} is not registered`);
 }
 
 export function mountVectorSurfaceLazily(
@@ -80,6 +145,8 @@ function lazily(
   let text: string | null = null;
   let mode = "draw";
   let readOnly = false;
+  /// La scheda a tutta pagina (T46), per la superficie che arriva.
+  let fullPage = false;
   let reveal: SurfaceLocation | null = null;
   /// Chi segue le schede dell'ispettore: le tiene l'involucro, e passano alla
   /// superficie quando arriva.
@@ -87,6 +154,8 @@ function lazily(
   const panelReveals = new Set<(id: string) => void>();
   /// Chi segue la banda di stato, allo stesso modo.
   const statusListeners = new Set<() => void>();
+  /// Chi segue il chip dello stato del documento, allo stesso modo.
+  const standingListeners = new Set<() => void>();
   let stopPanels: (() => void) | null = null;
 
   const settle = (mount: () => EditorSurface): void => {
@@ -104,17 +173,23 @@ function lazily(
     const unsubscribeStatus = mounted.status?.subscribe(() => {
       for (const listener of [...statusListeners]) listener();
     });
+    const unsubscribeStanding = mounted.standing?.subscribe(() => {
+      for (const listener of [...standingListeners]) listener();
+    });
     stopPanels = () => {
       unsubscribeList?.();
       offShow?.();
       unsubscribeStatus?.();
+      unsubscribeStanding?.();
     };
     if (text !== null) mounted.buffer?.setDoc(text);
     if (mode !== "draw") mounted.setMode(mode);
     if (readOnly) mounted.setReadOnly?.(true);
+    if (fullPage) mounted.setFullPage?.(true);
     if (focused) mounted.focus?.();
     for (const listener of [...panelListeners]) listener();
     for (const listener of [...statusListeners]) listener();
+    for (const listener of [...standingListeners]) listener();
     if (reveal !== null && !mounted.reveal?.(reveal)) {
       // La shell ha già avuto il suo sì: il no lo dice la superficie, con le
       // stesse parole.
@@ -197,12 +272,31 @@ function lazily(
         return () => statusListeners.delete(listener);
       },
     },
+    // Il chip dello stato del documento, quando la superficie ne ha uno: prima,
+    // niente da dire.
+    standing: {
+      current: () => surface?.standing?.current() ?? null,
+      subscribe(listener) {
+        standingListeners.add(listener);
+        return () => standingListeners.delete(listener);
+      },
+    },
     selections: (): EditorSelections | undefined => surface?.selections?.(),
     selectedText: (): SelectedText | null => surface?.selectedText?.() ?? null,
     setReadOnly: (next) => {
       if (surface !== null) surface.setReadOnly?.(next);
       else readOnly = next;
     },
+    // In una scheda (T46) «A tutta pagina» passa alla superficie, o aspetta
+    // che arrivi.
+    ...(context.compact === true && profile === VECTOR_PROFILE
+      ? {
+          setFullPage: (full: boolean) => {
+            fullPage = full;
+            surface?.setFullPage?.(full);
+          },
+        }
+      : {}),
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
@@ -211,6 +305,7 @@ function lazily(
       panelListeners.clear();
       panelReveals.clear();
       statusListeners.clear();
+      standingListeners.clear();
       surface?.destroy();
       surface = null;
       pending.remove();

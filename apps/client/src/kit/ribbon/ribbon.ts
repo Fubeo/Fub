@@ -15,19 +15,25 @@
 // resta quella scelta.
 //
 // Quando la barra è stretta i gruppi si raccolgono da destra, ciascuno in un
-// pulsante che apre il suo contenuto in un riquadro.
+// pulsante che apre il suo contenuto in un riquadro; con `openInPlace` il
+// gruppo raccolto si apre invece sul posto, nella barra, e gli altri gli
+// fanno posto.
 //
 // Come il resto del kit non ha testo suo: le etichette e le frasi arrivano da
-// chi la monta, e le classi portano il suo prefisso (`grid-ribbon-…`), perché
-// le pelli che lo vestono restino le sue.
+// chi la monta. Ogni pezzo porta due classi: quella col prefisso di chi la
+// monta (`grid-ribbon-…`), per le parti solo sue, e quella del kit
+// (`kit-ribbon-…`), che dà a ogni barra a schede la stessa forma e la stessa
+// pelle.
 import { labelButton, setPressed, type ButtonChord } from "../button";
 import { openPopover, type PopoverHandle } from "../popover";
+import { pressable } from "../press";
 import { createTabs, type TabsHandle } from "../tabs";
 import { identifier } from "../../ui/a11y";
 import { iconEl } from "../../ui/icons";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { setTooltip } from "../../ui/tooltip";
+import { STILL_RIBBON, ribbonMotion, type RibbonMotion, type RibbonSection } from "./ribbon-motion";
 import {
   groupControls,
   type ButtonControl,
@@ -37,6 +43,7 @@ import {
   type KitControl,
   type MenuControl,
   type MenuEntry,
+  type MenuSession,
   type Params,
   type RibbonColumn,
   type RibbonGroup,
@@ -45,6 +52,35 @@ import {
   type SplitControl,
   type Text,
 } from "./types";
+import { composingKey } from "../ime";
+
+/// La classe della forma comune: la radice porta `kit-ribbon`, ogni pezzo
+/// `kit-ribbon-<pezzo>` accanto alla classe col prefisso. La forma e la pelle
+/// di serie stanno su queste (`structure.css`, `skin/kit.css`); a chi monta la
+/// barra restano le regole delle parti solo sue.
+const KIT = "kit-ribbon";
+
+/// I pezzi della forma comune. Un controllo disegnato da chi monta la barra
+/// (`RibbonOptions.extra`) che ne mette uno col prefisso, a mano, prende
+/// anche la classe del kit: il pulsante del colore dei fogli è un pulsante
+/// diviso come gli altri.
+const KIT_PARTS: ReadonlySet<string> = new Set([
+  "arrow",
+  "button",
+  "check",
+  "chevron",
+  "color-bar",
+  "field",
+  "glyph",
+  "input",
+  "item",
+  "label",
+  "large",
+  "select",
+  "small",
+  "split",
+  "split-large",
+]);
 
 /// Lo stato di un comando del catalogo: se c'è, è servito.
 export interface RibbonCommandState {
@@ -149,8 +185,9 @@ export interface RibbonOptions<V, K extends string, X extends ExtraControl<V, K>
   openDialog(id: string, params: string, anchor: HTMLElement): void;
   /// L'accordo del comando `id`, per il suggerimento e `aria-keyshortcuts`.
   chord?(id: string): ButtonChord | null;
-  /// I pulsanti accanto alle schede, sempre a portata (Annulla, Ripeti).
-  readonly quick?: readonly ButtonControl<V, K>[];
+  /// I pulsanti accanto alle schede, sempre a portata (Annulla, Ripeti), e
+  /// i menu che stanno con loro (tutti i comandi).
+  readonly quick?: readonly (ButtonControl<V, K> | MenuControl<V, K>)[];
   /// Scrive il testo di una voce `write`.
   write?(text: string): void;
   /// L'azione della shell `action`, se la shell la offre adesso.
@@ -159,6 +196,13 @@ export interface RibbonOptions<V, K extends string, X extends ExtraControl<V, K>
   focus(): void;
   /// Si iscrive al cambio di lingua, e torna come smettere.
   languages(listener: () => void): () => void;
+  /// Il gruppo raccolto si apre sul posto, nella barra, invece che in un
+  /// riquadro: gli altri gruppi si raccolgono per fargli posto, e se la fila
+  /// non ci sta ancora il pannello prende `data-dense`.
+  readonly openInPlace?: boolean;
+  /// La barra si muove (`ribbon-motion.ts`): le sezioni, il ritiro, i gruppi
+  /// aperti sul posto, la pressione dei pulsanti. Di serie ferma.
+  readonly motion?: boolean;
   /// Disegna un controllo di una specie che la barra non conosce.
   extra?(control: X, group: RibbonGroup<KitControl<V, K> | X, K>, parts: RibbonParts<V, K>): RibbonItem<V, KitControl<V, K> | X, K>;
 }
@@ -204,11 +248,19 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   const host = options.host;
   const root = host.parentElement ?? host;
   const { strings, t } = options;
-  const cls = (name: string): string => `${options.prefix}-${name}`;
+  /// La classe `name` col prefisso della barra: quella con cui si cerca un
+  /// pezzo, e quella che vestono le regole di chi la monta.
+  const own = (name: string): string => `${options.prefix}-${name}`;
+  /// Le classi di un pezzo: quella del prefisso e `kit-ribbon-<name>`, che
+  /// porta la forma e la pelle comuni a ogni barra a schede. Si mettono, non
+  /// si cercano: per cercare c'è `own`.
+  const cls = (name: string): string => `${own(name)} ${KIT}-${name}`;
+  const mark = (el: Element, name: string): void => el.classList.add(own(name), `${KIT}-${name}`);
+  const inPlace = options.openInPlace === true;
   const text = (value: Text<K>): string => (typeof value === "string" ? t(value) : value.raw);
 
   const element = document.createElement("div");
-  element.className = options.prefix;
+  element.className = `${options.prefix} ${KIT}`;
   const head = document.createElement("div");
   head.className = cls("head");
   const tablist = document.createElement("div");
@@ -226,6 +278,18 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   panels.className = cls("panels");
   element.append(head, panels);
   host.append(element);
+  /// Ferma finché la barra non è montata: il primo stato non entra.
+  let motion: RibbonMotion = STILL_RIBBON;
+  /// Il pulsante cede alla pressione, se la barra si muove.
+  const yielding = (el: HTMLElement): void => {
+    if (options.motion) pressable(el, life);
+  };
+  /// Rifà la misura: con il movimento subito, perché chi anima misuri prima e
+  /// dopo nello stesso giro; senza, al prossimo fotogramma.
+  const refit = (): void => {
+    if (motion !== STILL_RIBBON) fit();
+    else scheduleFit();
+  };
 
   let states = new Map<string, RibbonCommandState>();
   const served = (id: string): boolean => states.has(id);
@@ -494,6 +558,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     };
     life.listen(el, "keydown", hold);
     life.listen(el, "keyup", hold);
+    yielding(el);
     return el;
   }
 
@@ -522,6 +587,20 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     return el;
   }
 
+  /// Dà la classe del kit ai pezzi che un controllo di chi monta la barra ha
+  /// messo a mano col prefisso (`KIT_PARTS`): la forma comune li veste come
+  /// quelli del kit.
+  function adopt(top: Element): void {
+    const stem = `${options.prefix}-`;
+    for (const el of [top, ...top.querySelectorAll("*")]) {
+      for (const name of [...el.classList]) {
+        if (!name.startsWith(stem)) continue;
+        const part = name.slice(stem.length);
+        if (KIT_PARTS.has(part)) el.classList.add(`${KIT}-${part}`);
+      }
+    }
+  }
+
   /// La freccia di un pulsante diviso, che apre un menu o un riquadro.
   function arrowButton(popup: "menu" | "dialog"): HTMLButtonElement {
     const arrow = document.createElement("button");
@@ -532,6 +611,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     arrow.setAttribute("aria-haspopup", popup);
     arrow.setAttribute("aria-expanded", "false");
     arrow.append(chevron());
+    yielding(arrow);
     return arrow;
   }
 
@@ -569,7 +649,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   function splitItem(control: SplitControl<V, K>, group: RibbonGroup<C, K>): Item {
     const el = wrap(control);
-    el.classList.add(cls("split"));
+    mark(el, "split");
     let last: Params | undefined = control.params;
     let view: V | null = null;
     const main = button(
@@ -591,7 +671,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     const open = () => openMenu(arrow, control.menu(view ?? options.view()), remember);
     life.listen(arrow, "click", open);
     el.append(main, arrow);
-    if (control.size === "large") el.classList.add(cls("split-large"));
+    if (control.size === "large") mark(el, "split-large");
     return {
       control,
       group,
@@ -612,11 +692,49 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   function menuItem(control: MenuControl<V, K>, group: RibbonGroup<C, K>): Item {
     const el = wrap(control);
     let view: V | null = null;
+    // Il menu che si apre da sé, finché è aperto, e se l'ha aperto il
+    // puntatore: un clic comincia con `pointerdown`, la tastiera no.
+    let session: MenuSession<V> | null = null;
+    let pointer = false;
+    const openOwn = (anchor: HTMLElement, open: NonNullable<MenuControl<V, K>["open"]>): void => {
+      // Premuto di nuovo, si chiude.
+      if (session !== null) {
+        closeContextMenu();
+        return;
+      }
+      closePopover();
+      endPeek();
+      closeContextMenu();
+      menuTicket++;
+      const how = pointer;
+      pointer = false;
+      anchor.setAttribute("aria-expanded", "true");
+      menuOpen = true;
+      let mine = true;
+      const opened = open(anchor, view ?? options.view(), {
+        pointer: how,
+        closed: () => {
+          if (!mine) return;
+          mine = false;
+          session = null;
+          menuOpen = false;
+          anchor.setAttribute("aria-expanded", "false");
+        },
+      });
+      if (mine) session = opened;
+    };
     const press = button(
       control,
       () => t(control.label),
-      (anchor) => openMenu(anchor, control.items(view ?? options.view())),
+      (anchor) => {
+        if (control.open) openOwn(anchor, control.open);
+        else openMenu(anchor, control.items(view ?? options.view()));
+      },
     );
+    if (control.open) {
+      life.listen(press, "pointerdown", () => (pointer = true));
+      life.listen(press, "keydown", () => (pointer = false));
+    }
     press.setAttribute("aria-haspopup", "menu");
     press.setAttribute("aria-expanded", "false");
     press.append(chevron());
@@ -629,6 +747,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       update(next) {
         view = next;
         availability(press, undefined, t(control.label));
+        session?.update(next);
       },
       activate: () => press.click(),
       relabel: () => {},
@@ -637,7 +756,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   function selectItem(control: SelectControl<V, K>, group: RibbonGroup<C, K>): Item {
     const el = wrap(control);
-    el.classList.add(cls("field"));
+    mark(el, "field");
     const select = document.createElement("select");
     select.className = cls("select");
     select.id = identifier(options.prefix);
@@ -740,7 +859,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   function fieldItem(control: FieldControl<V, K>, group: RibbonGroup<C, K>): Item {
     const el = wrap(control);
-    el.classList.add(cls("field"));
+    mark(el, "field");
     const caption = document.createElement("label");
     caption.className = cls("field-label");
     const input = document.createElement("input");
@@ -768,6 +887,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     };
     life.listen(input, "change", commit);
     life.listen(input, "keydown", (event) => {
+      if (composingKey(event)) return;
       if (event.key === "Enter") {
         event.preventDefault();
         commit();
@@ -801,7 +921,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   const parts: RibbonParts<V, K> = {
     life,
-    cls,
+    cls: own,
     id: () => identifier(options.prefix),
     t,
     wrap: (control) => wrap(control as C),
@@ -835,7 +955,9 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
         return fieldItem(kit, group);
       default: {
         if (!options.extra) throw new Error(`controllo senza disegno: ${(control as X).kind}`);
-        return options.extra(control as X, group, parts);
+        const item = options.extra(control as X, group, parts);
+        adopt(item.wrap);
+        return item;
       }
     }
   }
@@ -847,6 +969,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     if (kit.kind === "button" && kit.shell && !options.shell?.(kit.shell)) return false;
     if (kit.kind !== "menu") return served((control as { readonly id: string }).id);
     if (kit.requires) return kit.requires.every(served);
+    if (kit.open) return true;
     const items = kit.items(view);
     return !(items instanceof Promise) && items.some(entryServed);
   }
@@ -913,7 +1036,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     into.append(stack);
   }
 
-  function mountGroup(spec: RibbonGroup<C, K>, toolbar: HTMLElement): Group {
+  function mountGroup(spec: RibbonGroup<C, K>, tab: string, toolbar: HTMLElement): Group {
     const element = document.createElement("div");
     element.className = cls("group");
     element.setAttribute("role", "group");
@@ -930,7 +1053,13 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     toggle.className = `${cls("button")} ${cls("large")} ${cls("group-toggle")}`;
     toggle.tabIndex = -1;
     toggle.hidden = true;
-    toggle.setAttribute("aria-haspopup", "dialog");
+    if (inPlace) {
+      // Il corpo resta nel gruppo: il pulsante lo nomina e dice se è aperto.
+      body.id = identifier(`${options.prefix}-body-${tab}-${spec.id}`);
+      toggle.setAttribute("aria-controls", body.id);
+    } else {
+      toggle.setAttribute("aria-haspopup", "dialog");
+    }
     toggle.setAttribute("aria-expanded", "false");
     const shape = iconEl(spec.icon);
     if (shape) toggle.append(shape);
@@ -956,11 +1085,17 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     group.relabel();
     relabels.push(group.relabel);
     life.listen(toggle, "click", () => openGroup(group));
+    yielding(toggle);
     return group;
   }
 
-  /// Il contenuto di un gruppo raccolto, in un riquadro sotto il suo pulsante.
+  /// Il contenuto di un gruppo raccolto, in un riquadro sotto il suo pulsante;
+  /// con `openInPlace`, sul posto.
   function openGroup(group: Group): void {
+    if (inPlace) {
+      unfold(group, true);
+      return;
+    }
     closePopover();
     closeContextMenu();
     const local = openLifetime();
@@ -981,6 +1116,82 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     group.toggle.hidden = !on;
   }
 
+  // ── Il gruppo aperto sul posto (`openInPlace`) ────────────────────────
+  /// Il gruppo raccolto che si è aperto nella barra: uno alla volta.
+  let pinned: Group | null = null;
+
+  function pin(group: Group | null): void {
+    if (pinned && pinned !== group) {
+      delete pinned.element.dataset.open;
+      pinned.toggle.setAttribute("aria-expanded", "false");
+    }
+    pinned = group;
+    if (group) {
+      group.element.dataset.open = "true";
+      group.toggle.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  /// Apre `group` sul posto: gli altri si raccolgono subito (`fit`, non al
+  /// prossimo fotogramma, perché chi anima misuri prima e dopo nello stesso
+  /// giro) e il gruppo, se la barra scorre, si porta in vista.
+  function unfold(group: Group, focus: boolean): void {
+    closePopover();
+    closeContextMenu();
+    motion.fold(siblingsOf(group), group.element, () => {
+      pin(group);
+      fit(true);
+      group.element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    });
+    if (focus) focusables(group.body)[0]?.focus();
+  }
+
+  /// Richiude il gruppo aperto sul posto; il fuoco torna al suo pulsante, o
+  /// al suo primo comando se adesso il gruppo ci sta tutto.
+  function refold(group: Group, focus: boolean): void {
+    if (pinned !== group) return;
+    motion.fold(siblingsOf(group), null, () => {
+      pin(null);
+      fit(focus);
+    });
+    if (!focus) return;
+    const target = group.collapsed ? group.toggle : focusables(group.element)[0];
+    target?.focus();
+  }
+
+  /// I gruppi in vista della scheda di `group`, lui compreso: scivolano
+  /// insieme quando uno si apre o si richiude.
+  function siblingsOf(group: Group): HTMLElement[] {
+    const tab = tabs.find((each) => each.groups.includes(group));
+    return (tab?.groups ?? [group]).filter((each) => !each.element.hidden).map((each) => each.element);
+  }
+
+  /// L'ultimo raccolto di una fila dispari di raccolti, nell'ordine della
+  /// scheda, prende `data-alone`: resta solo nella sua colonna. Un gruppo
+  /// aperto spezza la fila; i nascosti non contano.
+  function markAlone(groups: readonly Group[]): void {
+    let run: Group[] = [];
+    const close = () => {
+      run.forEach((group, at) => {
+        if (run.length % 2 === 1 && at === run.length - 1) group.element.dataset.alone = "true";
+        else delete group.element.dataset.alone;
+      });
+      run = [];
+    };
+    for (const group of groups) {
+      if (group.element.hidden) {
+        delete group.element.dataset.alone;
+        continue;
+      }
+      if (group.collapsed) run.push(group);
+      else {
+        delete group.element.dataset.alone;
+        close();
+      }
+    }
+    close();
+  }
+
   const tabs: Tab[] = options.tabs.map((spec) => {
     const panel = document.createElement("div");
     panel.className = cls("panel");
@@ -992,7 +1203,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     toolbar.setAttribute("aria-orientation", "horizontal");
     panel.append(toolbar);
     panels.append(panel);
-    const groups = spec.groups.map((group) => mountGroup(group, toolbar));
+    const groups = spec.groups.map((group) => mountGroup(group, spec.id, toolbar));
     relabels.push(() => toolbar.setAttribute("aria-label", t(spec.label)));
     const settle = roving(life, toolbar);
     return { spec, panel, toolbar, groups, settle };
@@ -1001,7 +1212,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   // ── I pulsanti accanto alle schede ────────────────────────────────────
   const quickGroup: RibbonGroup<C, K> = { id: "quick", label: (options.quick?.[0]?.label ?? "") as K, icon: "", keytip: "", columns: options.quick ?? [] };
   const quickItems: Item[] = (options.quick ?? []).map((control) => {
-    const one = buttonItem(control, quickGroup);
+    const one = control.kind === "menu" ? menuItem(control, quickGroup) : buttonItem(control, quickGroup);
     quickBar.append(one.wrap);
     return one;
   });
@@ -1024,7 +1235,9 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       (control) =>
         !(control as HTMLButtonElement).disabled &&
         !hiddenWithin(control, container) &&
-        control.closest(`[data-collapsed="true"] > .${cls("group-body")}`) === null,
+        // L'immagine di un foglietto che esce non è un posto del Tab.
+        control.closest("[inert]") === null &&
+        control.closest(`[data-collapsed="true"] > .${own("group-body")}`) === null,
     );
   }
 
@@ -1048,14 +1261,19 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     });
     lifetime.listen(container, "keydown", (event) => {
       const target = event.target as HTMLElement;
+      if (composingKey(event)) return;
       if (event.key === "Escape") {
-        if (container.classList.contains(cls("popup-group"))) return;
+        if (container.classList.contains(own("popup-group"))) return;
         event.preventDefault();
-        options.focus();
+        // Il primo Esc richiude il gruppo aperto sul posto, il secondo torna
+        // all'editor.
+        const open = pinned;
+        if (open && open.element.contains(target)) refold(open, true);
+        else options.focus();
         return;
       }
       if (target instanceof HTMLInputElement && target.type === "text") return;
-      if (event.key === "ArrowDown" && target.getAttribute("aria-haspopup")) {
+      if (event.key === "ArrowDown" && (target.getAttribute("aria-haspopup") || (inPlace && target.classList.contains(own("group-toggle"))))) {
         event.preventDefault();
         target.click();
         return;
@@ -1086,6 +1304,13 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   function mountTabs(visible: readonly Tab[], force: boolean): void {
     const signature = visible.map((tab) => tab.spec.id).join(" ");
     if (signature === shownTabs && !force) return;
+    const before = shownTabs === "" ? null : new Set(shownTabs.split(" "));
+    // Una sezione che scompare mentre stava ancora comparendo svanisce da
+    // dov'era (la sua immagine si misura prima che la scheda se ne vada).
+    const gone = before && tabsHandle
+      ? [...before].filter((id) => !visible.some((tab) => tab.spec.id === id)).flatMap((id) => tabsHandle?.tab(id) ?? [])
+      : [];
+    const vanish = motion.leave(gone);
     shownTabs = signature;
     tabsLife?.close();
     const local = openLifetime();
@@ -1103,16 +1328,28 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       label: strings.label(),
       lifetime: local,
       onSelect: (id) => {
+        const from = selected;
+        if (id !== selected) pin(null);
         selected = id;
-        scheduleFit();
+        refit();
+        sectionChanged(from, id);
       },
     });
     for (const tab of visible) {
       const button = tabsHandle.tab(tab.spec.id);
       if (!button) continue;
       button.dataset.keytip = tab.spec.keytip;
-      if (tab.spec.contextual) button.classList.add(cls("contextual"));
+      // Il nome ripetuto per la pelle: un doppio invisibile in grassetto
+      // tiene la larghezza della scelta, e il cambio di peso non sposta le
+      // vicine.
+      const label = button.querySelector<HTMLElement>(".kit-tab-label");
+      if (label) label.dataset.label = label.textContent ?? "";
+      if (tab.spec.contextual) mark(button, "contextual");
+      // Una sezione che compare dopo il primo montaggio (la tabella, per la
+      // selezione) entra; al primo montaggio c'era già.
+      if (before && !before.has(tab.spec.id)) motion.appear([button]);
     }
+    vanish();
     // Una scheda scelta mentre la barra è ritirata si apre finché non si
     // torna all'editor; due click la ritirano o la riaprono, come in Office.
     local.listen(tablist, "click", (event) => {
@@ -1129,19 +1366,40 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   function chooseTab(id: string): void {
     if (!tabsHandle) return;
     tabsHandle.select(id);
-    selected = tabsHandle.selected() ?? selected;
-    scheduleFit();
+    const now = tabsHandle.selected() ?? selected;
+    const from = selected;
+    if (now !== selected) pin(null);
+    selected = now;
+    refit();
+    sectionChanged(from, now);
+  }
+
+  /// I gruppi della sezione `to` entrano dal verso in cui sta rispetto a
+  /// `from`; nel vassoio ritirato non c'è niente da vedere.
+  function sectionChanged(from: string, to: string): void {
+    if (from === to || panels.hidden) return;
+    const order = shownTabs.split(" ");
+    const section = (id: string): RibbonSection | null => {
+      const tab = tabs.find((each) => each.spec.id === id);
+      return tab ? { panel: tab.panel, groups: tab.groups.map((group) => group.element) } : null;
+    };
+    const next = section(to);
+    if (!next) return;
+    motion.section(next, section(from), order.indexOf(to) >= order.indexOf(from) ? 1 : -1);
   }
 
   /// La barra ritirata mostra una scheda per un gesto: un comando, un clic o
   /// il fuoco fuori dalla barra la ritirano di nuovo.
   let peeking = false;
   function peek(on: boolean): void {
-    peeking = on && collapsed;
-    if (peeking) element.dataset.peek = "true";
-    else delete element.dataset.peek;
-    panels.hidden = collapsed && !peeking;
-    if (peeking) scheduleFit();
+    const next = on && collapsed;
+    motion.tray(!collapsed || next, () => {
+      peeking = next;
+      if (peeking) element.dataset.peek = "true";
+      else delete element.dataset.peek;
+      panels.hidden = collapsed && !peeking;
+      if (peeking) refit();
+    });
   }
   function endPeek(): void {
     if (peeking) peek(false);
@@ -1154,18 +1412,23 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   });
 
   function setCollapsed(on: boolean): void {
-    collapsed = on;
-    peeking = false;
-    delete element.dataset.peek;
-    element.dataset.collapsed = String(on);
-    panels.hidden = on;
-    toggle.setAttribute("aria-expanded", String(!on));
-    labelButton(toggle, on ? strings.expand() : strings.collapse());
-    toggle.replaceChildren(iconEl(on ? options.chevrons.down : options.chevrons.up) ?? "");
-    if (on) closePopover();
-    else scheduleFit();
+    motion.tray(!on, () => {
+      collapsed = on;
+      peeking = false;
+      delete element.dataset.peek;
+      element.dataset.collapsed = String(on);
+      panels.hidden = on;
+      toggle.setAttribute("aria-expanded", String(!on));
+      labelButton(toggle, on ? strings.expand() : strings.collapse());
+      toggle.replaceChildren(iconEl(on ? options.chevrons.down : options.chevrons.up) ?? "");
+      if (on) {
+        closePopover();
+        pin(null);
+      } else refit();
+    });
   }
   life.listen(toggle, "click", () => setCollapsed(!collapsed));
+  yielding(toggle);
   life.listen(toggle, "mousedown", (event) => event.preventDefault());
 
   // ── Quando la barra è stretta ─────────────────────────────────────────
@@ -1182,37 +1445,188 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     fitFrame = null;
   });
 
+  // La misura costa: ogni lettura di `scrollWidth` dopo una scrittura fa
+  // impaginare la pagina intera, e la barra si rilegge a ogni cambio di
+  // selezione (`refresh`). Così `fit` ricorda che cosa ha misurato:
+  // - `fitted`, la chiave dell'ultima misura: se la scheda mostra le stesse
+  //   cose (`contentKey`) nella stessa larghezza, la barra è già com'era e non
+  //   si legge niente;
+  // - per ogni scheda (`FitState`), il passo della raccolta (`stepCount`) che
+  //   mostra e, finché mostra le stesse cose, quanto è larga la fila in ogni
+  //   passo che ha traboccato e la barra più stretta in cui ognuno è entrato:
+  //   a un cambio di larghezza la scelta si fa coi numeri, con una lettura e
+  //   un solo lotto di scritture. I foglietti sono larghi quanto il loro
+  //   contenuto (`max-content`), non quanto la barra: la fila di un passo non
+  //   cambia larghezza con lei.
+  /// La larghezza di ogni barra come la dà il `ResizeObserver`, senza
+  /// impaginare. Una barra che l'osservatore non ha ancora visto si legge.
+  const seenWidths = new WeakMap<Element, number>();
+  /// Cresce quando i caratteri finiscono di caricarsi: le misure di prima non
+  /// valgono più.
+  let fontEpoch = 0;
+  let fitted: string | null = null;
+  interface FitState {
+    /// L'ordine di raccolta (`order`) del passo mostrato.
+    order: string;
+    /// Il passo mostrato; -1 se non è un passo di questo ordine.
+    step: number;
+    /// Ciò che la scheda mostrava quando si sono presi i numeri.
+    content: string;
+    /// La fila di ogni passo che ha traboccato: `scrollWidth`.
+    readonly over: Map<number, number>;
+    /// La barra più stretta (`clientWidth`) in cui ogni passo è entrato.
+    readonly fits: Map<number, number>;
+  }
+  const fitStates = new Map<Tab, FitState>();
+
+  /// Ciò da cui dipende la larghezza della fila di `tab`, senza leggere il
+  /// layout: i foglietti e i comandi che si vedono, i loro nomi, l'ordine in
+  /// cui si raccolgono, il gruppo aperto sul posto, gli attributi della radice
+  /// (tema, contrasto, densità) e i caratteri caricati.
+  function contentKey(tab: Tab, order: string): string {
+    const parts: string[] = [tab.spec.id, String(fontEpoch), pinned?.spec.id ?? "", order];
+    for (const attribute of document.documentElement.attributes) parts.push(`${attribute.name}=${attribute.value}`);
+    for (const group of tab.groups) {
+      let bits = group.element.hidden ? "h" : "v";
+      for (const one of group.items) bits += one.wrap.hidden ? "0" : "1";
+      parts.push(bits);
+    }
+    parts.push(tab.toolbar.textContent ?? "");
+    return parts.join("\u0000");
+  }
+
+  /// I passi della raccolta, dal più largo: 0 tutti aperti coi nomi, 1 i
+  /// pulsanti piccoli senza nome, 1 + n i primi `n` gruppi di `order`
+  /// raccolti; con `openInPlace`, l'ultimo è il pannello denso.
+  function stepCount(order: readonly Group[]): number {
+    return order.length + (inPlace ? 3 : 2);
+  }
+
+  /// Mette la barra di `tab` al passo `step` (`stepCount`): solo scritture.
+  function showStep(tab: Tab, order: readonly Group[], step: number): void {
+    const folded = new Set(order.slice(0, Math.max(0, step - 1)));
+    tab.panel.dataset.compact = String(step > 0);
+    if (inPlace) tab.panel.dataset.dense = String(step === order.length + 2);
+    for (const group of tab.groups) collapseGroup(group, folded.has(group));
+    if (inPlace) markAlone(tab.groups);
+  }
+
   /// Raccoglie i gruppi da destra finché la scheda non sta nella barra:
-  /// prima i pulsanti piccoli perdono il nome, poi i gruppi si chiudono.
-  function fit(): void {
+  /// prima i pulsanti piccoli perdono il nome, poi i gruppi si chiudono. Con
+  /// `openInPlace` il gruppo aperto sul posto resta aperto, e se la fila non
+  /// ci sta ancora il pannello prende `data-dense` (i gettoni perdono il nome).
+  /// `keepFocus`: chi chiama mette il fuoco da sé, subito dopo.
+  function fit(keepFocus = false): void {
     const tab = tabs.find((each) => each.spec.id === selected);
     if (!tab || collapsed || element.hidden) return;
-    if (popover && tab.groups.some((group) => group.toggle.getAttribute("aria-expanded") === "true")) return;
+    if (!inPlace && popover && tab.groups.some((group) => group.toggle.getAttribute("aria-expanded") === "true")) return;
     const toolbar = tab.toolbar;
-    const overflows = () => toolbar.scrollWidth > toolbar.clientWidth + 1;
-    tab.panel.dataset.compact = "false";
-    for (const group of tab.groups) collapseGroup(group, false);
-    if (!overflows()) return;
-    tab.panel.dataset.compact = "true";
+    if (pinned && (!tab.groups.includes(pinned) || pinned.element.hidden)) pin(null);
     // Nell'ordine della scheda, se lo dichiara; altrimenti da destra.
-    const open = tab.groups.filter((group) => !group.element.hidden);
+    const open = tab.groups.filter((group) => !group.element.hidden && group !== pinned);
     const order = tab.spec.fold
       ? tab.spec.fold.flatMap((id) => open.filter((group) => group.spec.id === id))
       : [...open].reverse();
-    for (const group of order) {
-      if (!overflows()) break;
-      collapseGroup(group, true);
+    const orderKey = order.map((group) => group.spec.id).join(",");
+    const content = contentKey(tab, orderKey);
+    const widthKey = (): string => `${content}\u0000${seenWidths.get(toolbar) ?? toolbar.clientWidth}`;
+    if (widthKey() === fitted) return;
+
+    let state = fitStates.get(tab);
+    if (!state) {
+      state = { order: orderKey, step: -1, content, over: new Map(), fits: new Map() };
+      fitStates.set(tab, state);
+    }
+    const known = state;
+    if (known.order !== orderKey) {
+      known.order = orderKey;
+      known.step = -1;
+    }
+    if (known.content !== content) {
+      known.content = content;
+      known.over.clear();
+      known.fits.clear();
+    }
+    const last = stepCount(order) - 1;
+    const show = (step: number): void => {
+      if (known.step === step) return;
+      showStep(tab, order, step);
+      known.step = step;
+    };
+    /// Legge se il passo mostrato trabocca, e lo ricorda.
+    const measure = (): boolean => {
+      const scroll = toolbar.scrollWidth;
+      const room = toolbar.clientWidth;
+      const over = scroll > room + 1;
+      if (over) known.over.set(known.step, scroll);
+      else known.fits.set(known.step, Math.min(known.fits.get(known.step) ?? Infinity, room));
+      return over;
+    };
+    /// Se il passo `step` trabocca in una barra larga `room`: dai numeri, o
+    /// mostrandolo e leggendo.
+    const overflowsAt = (step: number, room: number): boolean => {
+      const width = known.over.get(step);
+      if (width !== undefined) return width > room + 1;
+      const fits = known.fits.get(step);
+      if (fits !== undefined && room >= fits) return false;
+      show(step);
+      return measure();
+    };
+
+    // Dal passo che la barra mostra (dal primo, se non è un passo di questo
+    // ordine) una lettura; poi avanti finché trabocca, o indietro finché il
+    // passo prima ci sta. Un passo di cui si sa già non si scrive e non si
+    // legge.
+    show(Math.max(0, known.step));
+    let step = known.step;
+    let over = measure();
+    const room = toolbar.clientWidth;
+    if (over) {
+      while (over && step < last) {
+        step += 1;
+        over = overflowsAt(step, room);
+      }
+    } else {
+      while (step > 0 && !overflowsAt(step - 1, room)) step -= 1;
+    }
+    show(step);
+    // La scelta fatta coi numeri si controlla con una lettura: se la fila
+    // trabocca lo stesso, i numeri erano vecchi, e si misura da capo da qui.
+    if (step < last && measure()) {
+      known.over.clear();
+      known.fits.clear();
+      while (step < last && measure()) show((step += 1));
+    }
+    fitted = widthKey();
+    if (step === 0) {
+      // C'è posto per tutti: niente resta da aprire.
+      if (pinned) {
+        pin(null);
+        fitted = null;
+      }
+      return;
     }
     // Dentro i gruppi raccolti il fuoco non ha più dove stare.
     const focus = document.activeElement as HTMLElement | null;
-    if (focus && toolbar.contains(focus) && !focusables(toolbar).includes(focus)) options.focus();
+    if (!keepFocus && focus && toolbar.contains(focus) && !focusables(toolbar).includes(focus)) options.focus();
     tab.settle(null);
   }
 
   if (typeof ResizeObserver !== "undefined") {
-    const observer = new ResizeObserver(() => scheduleFit());
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) if (entry.target !== element) seenWidths.set(entry.target, entry.contentRect.width);
+      scheduleFit();
+    });
     observer.observe(element);
+    for (const tab of tabs) observer.observe(tab.toolbar);
     life.add(() => observer.disconnect());
+  }
+  const fonts = typeof document === "undefined" ? undefined : document.fonts;
+  if (fonts && typeof fonts.addEventListener === "function") {
+    life.listen(fonts, "loadingdone", () => {
+      fontEpoch += 1;
+      scheduleFit();
+    });
   }
 
   // ── Le lettere ────────────────────────────────────────────────────────
@@ -1256,20 +1670,31 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
         tips.push({
           keytip: group.spec.keytip,
           anchor: group.toggle,
-          run: () => openGroup(group),
+          run: () => {
+            if (!inPlace) {
+              openGroup(group);
+              return;
+            }
+            // Sul posto: il gruppo si apre e mostra subito le lettere dei
+            // suoi comandi; Esc lo richiude e torna alle lettere della scheda.
+            unfold(group, false);
+            showTips(itemTips(group), () => {
+              refold(group, false);
+              showTips(controlTips(tab), () => showTips(tabTips(), null));
+            });
+          },
         });
         continue;
       }
-      for (const one of group.items) {
-        if (one.shown)
-          tips.push({
-            keytip: one.control.keytip,
-            anchor: one.wrap,
-            run: () => one.activate(),
-          });
-      }
+      tips.push(...itemTips(group));
     }
     return tips;
+  }
+
+  function itemTips(group: Group): Tip[] {
+    return group.items
+      .filter((one) => one.shown)
+      .map((one) => ({ keytip: one.control.keytip, anchor: one.wrap, run: () => one.activate() }));
   }
 
   function hideTips(): void {
@@ -1295,6 +1720,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       local.add(() => badge.remove());
       return badge;
     });
+    motion.tips(badges, local);
     const narrow = () => {
       tips.forEach((tip, at) => {
         badges[at]!.hidden = !tip.keytip.startsWith(typed);
@@ -1439,6 +1865,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   relabel();
   setCollapsed(false);
+  if (options.motion) motion = ribbonMotion({ element, panels, host }, life);
   life.add(
     options.languages(() => {
       relabel();

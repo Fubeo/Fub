@@ -164,6 +164,13 @@ impl PreparedGridBytesCall {
             )));
         }
         journal.validate()?;
+        // Chi chiama ha letto i byte e ne ha calcolato la revisione, una
+        // volta sola (`GridBytesProvider::open`).
+        debug_assert_eq!(
+            Revision::of_bytes(source),
+            revision,
+            "grid open: revision of other bytes"
+        );
         let expected = grid_bytes_revision(&revision, &journal.to_text());
         let session = self.invoke("grid open", |provider| {
             provider.open(surface, source, revision.clone(), journal)
@@ -804,7 +811,7 @@ impl Workspace {
         permit: &RegistrationPermit,
     ) -> std::result::Result<PreparedPluginDeactivation, RegistryError> {
         self.validate_registration_permit(permit)?;
-        if self.dispatch.in_provider_call() {
+        if self.dispatch.in_provider_call() || self.reads_in_flight.busy(&permit.owner) {
             return Err(RegistryError::Busy(permit.owner.clone()));
         }
         self.providers.plugins.begin_retirement(&permit.owner);

@@ -11,10 +11,17 @@ vi.mock("./notify", () => ({
     return notify;
   },
 }));
+// Le icone delle pagine si fingono: la cache vera chiede all'indice.
+const pageIcons = vi.hoisted(() => Object.assign(new Map<string, string>(), { revision: 0 }));
+vi.mock("../state/page-icons", () => ({
+  pageIcon: (doc: string) => pageIcons.get(doc) ?? null,
+  pageIconsRevision: () => pageIcons.revision,
+}));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
-import { pair, activeFields, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
+import { pair, activeFields, LIST_PAGE, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 import { registerIcon } from "./icons";
+import { WEBKIT_COMPOSING } from "../kit/testing";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
 //
@@ -141,6 +148,14 @@ describe("l'azione di un campo riusato è quella del nodo nuovo (§2.8)", () => 
     const { input, mandate } = reconciled(search("prima"), search("dopo"));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     expect(mandate).toEqual(["dopo"]);
+  });
+
+  it("l'Invio a metà di una composizione non manda l'azione: sceglie il candidato", () => {
+    const { input, mandate } = reconciled(search("prima"), search("dopo"));
+    for (const composing of [{ isComposing: true }, WEBKIT_COMPOSING]) {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, ...composing }));
+    }
+    expect(mandate).toEqual([]);
   });
 
   it("l'Invio manda l'azione nuova, non quella del primo disegno", () => {
@@ -303,6 +318,36 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
     handlers[0]!({ action: "tocca", payload: null }, []);
     expect(newItem).toEqual(["tocca"]);
     expect(old).toEqual([]);
+  });
+  it("un widget custom non si ridisegna con un payload uguale in un oggetto nuovo", () => {
+    // Il payload di un grafo vero: ogni render del provider ne fa uno nuovo,
+    // con gli stessi dati. Una chiave `undefined` non conta (come in JSON),
+    // l'ordine delle chiavi sì, e un dato cambiato in fondo rifà il widget.
+    const NS = "prova.grafo";
+    const drawn: unknown[] = [];
+    registerCustomRenderer(NS, (_host, payload) => {
+      drawn.push(payload);
+    });
+    const graph = (last: string, extra?: Record<string, unknown>): UiNode => {
+      const nodes = Array.from({ length: 300 }, (_, i) => `Note/n${i}.md`);
+      nodes.push(last);
+      const edges = nodes.slice(1).map((to, i) => ({ from: nodes[i], to }));
+      return { node: "custom", ns: NS, payload: { nodes, edges, query: "", group_by: "folder", ...extra }, fallback: [] } as UiNode;
+    };
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const noop = async () => {};
+    mountTree(host, graph("Note/z.md"), noop);
+    const el = host.querySelector(".ui-custom");
+    mountTree(host, graph("Note/z.md"), noop);
+    mountTree(host, graph("Note/z.md", { local: undefined }), noop);
+    expect(drawn).toHaveLength(1);
+    expect(host.querySelector(".ui-custom")).toBe(el);
+
+    mountTree(host, graph("Note/y.md"), noop);
+    expect(drawn).toHaveLength(2);
+    unmountTree(host);
+    host.remove();
   });
   it("un renderer custom riceve il contesto del montaggio e si rifà quando cambia", () => {
     const NS = "prova.contesto";
@@ -871,9 +916,111 @@ describe("controlli statici e righe valide", () => {
     expect(host.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
   });
 
+  // IMP-108, IMP-112: «Aggiungi» delle proprietà e «Salva» delle query sono
+  // form i cui campi non hanno un'azione propria. Il form li manda tutti
+  // all'invio (`UiKind::Form`), quindi devono potersi scrivere: disabilitati,
+  // l'invio partiva sempre con chiave e nome vuoti.
+  const addForm = (extra: UiNode[] = []): UiNode =>
+    ({
+      node: "form",
+      submit_label: "Aggiungi",
+      submit: { action: "add", payload: null },
+      children: [
+        { node: "text_input", field: "new_key", label: "Chiave", value: "", placeholder: null, action: null },
+        {
+          node: "stack", dir: "row", gap: 4, children: [
+            { node: "text_area", field: "note", label: null, value: "", rows: 2, action: null },
+            { node: "radio", field: "r", label: null, value: null, options: [{ label: "A", value: "a" }], action: null },
+          ],
+        },
+        ...extra,
+      ],
+    }) as UiNode;
+
+  it("dentro un form un campo senza azione si può scrivere, anche annidato e dopo un ridisegno", () => {
+    const host = mount(addForm());
+    const controls = () => [...host.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea")];
+    expect(controls()).toHaveLength(3);
+    for (const control of controls()) expect(control.disabled, control.outerHTML).toBe(false);
+    // Il riuso del riconciliatore passa da `applyField` e non deve rimettere `disabled`.
+    mountTree(host, addForm([
+      { node: "text_input", field: "new_value", label: "Valore", value: "", placeholder: null, action: null },
+    ] as UiNode[]), async () => {});
+    expect(controls()).toHaveLength(4);
+    for (const control of controls()) expect(control.disabled, control.outerHTML).toBe(false);
+  });
+
+  it("l'invio del form manda ciò che si è scritto nei suoi campi", async () => {
+    const seen: FieldValue[][] = [];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, addForm(), async (_action, fields) => {
+      seen.push(fields);
+    });
+    const key = host.querySelector<HTMLInputElement>('[data-field="new_key"] input')!;
+    key.value = "stato";
+    host.querySelector<HTMLButtonElement>(".ui-submit")!.click();
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toContainEqual({ field: "new_key", value: { type: "text", value: "stato" } });
+  });
+
+  it("un campo patchato dentro un form resta scrivibile, uno patchato fuori resta disabilitato", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const field = (key: string): UiNode =>
+      ({ node: "text_input", field: key, label: null, value: "", placeholder: null, action: null, key }) as UiNode;
+    mountTree(host, {
+      node: "stack", dir: "column", gap: 0, children: [
+        { node: "form", submit_label: "Vai", submit: { action: "vai", payload: null }, children: [field("dentro")] },
+        field("fuori"),
+      ],
+    } as UiNode, async () => {});
+    expect(patchTree(host, "dentro", { ...field("dentro"), node: "text_area", rows: 2 } as UiNode)).toBe(true);
+    expect(patchTree(host, "fuori", field("fuori"))).toBe(true);
+    expect(host.querySelector<HTMLTextAreaElement>('[data-field="dentro"] textarea')!.disabled).toBe(false);
+    expect(host.querySelector<HTMLInputElement>('[data-field="fuori"] input')!.disabled).toBe(true);
+  });
+
   it("una riga senza celle resta una riga HTML valida", () => {
     const host = mount({ node: "row", cells: [], action: null } as UiNode);
     expect(host.querySelectorAll("tr > td")).toHaveLength(1);
+  });
+
+  it("una tabella ridisegnata tiene ogni cella nella sua colonna, senza una seconda griglia", () => {
+    // IMP-4801: il mese della Scrivania, al secondo disegno, aveva i bottoni dei
+    // giorni attaccati alla riga fuori dalle celle, accanto a quelle vecchie.
+    const day = (n: number, intent: "neutral" | "primary" = "neutral"): UiNode =>
+      ({ node: "button", label: String(n), intent, action: { action: "giorno", payload: n }, key: `d${n}` }) as UiNode;
+    const table = (today: number): UiNode =>
+      ({
+        node: "table",
+        columns: [{ title: "lun", align: "center" }, { title: "mar", align: "center" }],
+        rows: [
+          { node: "row", key: "w1", action: null, cells: [day(1, today === 1 ? "primary" : "neutral"), day(2, today === 2 ? "primary" : "neutral")] },
+          { node: "row", key: "w2", action: null, cells: [day(8), { node: "text", text: "" }] },
+        ],
+      }) as UiNode;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, table(1), async () => {});
+    const firstRow = host.querySelector("tbody > tr");
+    mountTree(host, table(2), async () => {});
+    const rows = Array.from(host.querySelectorAll("tbody > tr"));
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(Array.from(row.children).map((c) => c.tagName)).toEqual(["TD", "TD"]);
+    }
+    expect(host.querySelectorAll("button")).toHaveLength(3);
+    // La riga si riusa, e la cella porta il disegno nuovo.
+    expect(host.querySelector("tbody > tr")).toBe(firstRow);
+    expect(host.querySelector('[data-key="d2"]')!.className).toContain("primary");
+    // Una riga che perde celle le perde davvero, una che ne prende le prende.
+    mountTree(host, {
+      node: "table",
+      columns: [{ title: "lun", align: "center" }],
+      rows: [{ node: "row", key: "w1", action: null, cells: [day(1)] }],
+    } as UiNode, async () => {});
+    expect(Array.from(host.querySelectorAll("tbody > tr > *")).map((c) => c.tagName)).toEqual(["TD"]);
   });
 });
 
@@ -912,6 +1059,103 @@ describe("le voci di una lista", () => {
     } as UiNode, vi.fn());
     const inner = host.querySelector<HTMLElement>(".ui-list-item")!;
     expect(inner.getAttribute("role")).toBe("button");
+  });
+});
+
+describe("il secondo clic di un doppio clic (IMP-103)", () => {
+  const row = (doc: string): UiNode =>
+    ({
+      node: "list_item",
+      title: doc,
+      subtitle: null,
+      action: { action: "open", payload: { doc } },
+      selected: false,
+      key: `${doc}#0`,
+    }) as UiNode;
+  const list = (...docs: string[]): UiNode => ({ node: "list", items: docs.map(row) }) as UiNode;
+
+  /// Una pressione del mouse con il suo clic, come li manda il browser: la
+  /// seconda di un doppio clic porta `detail` 2.
+  function press(el: HTMLElement, detail: number): { mousedown: boolean; click: boolean } {
+    const mousedown = el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail }));
+    const click = el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail }));
+    return { mousedown, click };
+  }
+
+  it("il secondo clic sulla voce scivolata sotto il puntatore non apre niente", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      const doc = (a.payload as { doc: string }).doc;
+      opened.push(doc);
+      // Il primo clic apre la nota, e il pannello si ridisegna con le voci
+      // della nota nuova: al posto della voce cliccata ce n'è un'altra.
+      if (doc === "Nota B.md") mountTree(host, list("Indice.md"), onAction);
+    };
+    mountTree(host, list("Nota B.md"), onAction);
+    press(host.querySelector<HTMLElement>(".ui-list-item")!, 1);
+    const slid = host.querySelector<HTMLElement>(".ui-list-item")!;
+    expect(slid.textContent).toContain("Indice.md");
+    const second = press(slid, 2);
+    expect(opened).toEqual(["Nota B.md"]);
+    // La pressione non sposta nemmeno il fuoco: resta dove l'ha messo il primo.
+    expect(second.mousedown).toBe(false);
+  });
+
+  /// Fra due pressioni l'azione della prima torna (`aria-busy` si toglie),
+  /// come fra i 180 ms di un doppio clic vero.
+  const settle = (el: HTMLElement) => vi.waitFor(() => expect(el.hasAttribute("aria-busy")).toBe(false));
+
+  it("il doppio clic sulla stessa voce resta un doppio clic, e un clic nuovo apre l'altra", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      opened.push((a.payload as { doc: string }).doc);
+    };
+    mountTree(host, list("Uno.md", "Due.md"), onAction);
+    const [uno, due] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    press(uno!, 1);
+    await settle(uno!);
+    expect(press(uno!, 2).mousedown).toBe(true);
+    await settle(uno!);
+    expect(opened).toEqual(["Uno.md", "Uno.md"]);
+    // Una serie nuova comincia dove cade: la regola tocca solo i clic che
+    // continuano una serie.
+    press(due!, 1);
+    await settle(due!);
+    expect(opened).toEqual(["Uno.md", "Uno.md", "Due.md"]);
+    // Il clic da tastiera (`detail` 0) e `click()` passano sempre.
+    uno!.click();
+    expect(opened[opened.length - 1]).toBe("Uno.md");
+  });
+
+  it("lo stesso elemento riusato per una voce diversa non prende il secondo clic", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const opened: string[] = [];
+    const onAction = (a: ActionRef): void => {
+      opened.push((a.payload as { doc: string }).doc);
+    };
+    const tree = (doc: string): UiNode =>
+      ({
+        node: "tree",
+        roots: [
+          { node: "tree_item", label: doc, action: { action: "open", payload: { doc } }, selected: false, expanded: true, children: [], key: "riga" },
+        ],
+      }) as unknown as UiNode;
+    mountTree(host, tree("Uno.md"), onAction);
+    const el = host.querySelector<HTMLElement>(".ui-tree-label")!;
+    press(el, 1);
+    await settle(el);
+    mountTree(host, tree("Due.md"), onAction);
+    // Il riconciliatore ha riusato l'elemento: senza confrontare l'azione il
+    // secondo clic aprirebbe la voce nuova.
+    expect(host.querySelector(".ui-tree-label")).toBe(el);
+    press(el, 2);
+    await settle(el);
+    expect(opened).toEqual(["Uno.md"]);
   });
 });
 
@@ -1323,5 +1567,407 @@ describe("un nodo che nomina una nota si trascina (decisione 0157)", () => {
     el.dispatchEvent(late);
     expect(late.defaultPrevented).toBe(true);
     expect(offers).toBe(1);
+  });
+});
+
+describe("le righe di un elenco e di un albero non hanno stile in linea (S2 T9)", () => {
+  // Altezza, allineamento ed ellissi li scrive `structure.css`: uno stile in
+  // linea vincerebbe sulla pelle, che non potrebbe più cambiarli.
+  const tree = (label: string): UiNode =>
+    ({
+      node: "stack",
+      dir: "column",
+      gap: 0,
+      children: [
+        { node: "list", items: [{ node: "list_item", title: "Voce", subtitle: "sotto", action: null, selected: false }] },
+        {
+          node: "tree",
+          roots: [{ node: "tree_item", label, action: null, selected: false, expanded: true, children: [] }],
+        },
+      ],
+    }) as unknown as UiNode;
+
+  const rows = (host: HTMLElement) => [
+    ...host.querySelectorAll<HTMLElement>(".ui-list-item, .ui-tree-label, .ui-tree-label > span"),
+  ];
+
+  it("né quando nascono né quando si riusano", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, tree("Titolo"), async () => {});
+    expect(rows(host)).toHaveLength(3);
+    expect(rows(host).filter((el) => el.hasAttribute("style"))).toEqual([]);
+    const label = host.querySelector(".ui-tree-label")!;
+    mountTree(host, tree("Titolo nuovo"), async () => {});
+    // La riga dell'albero è la stessa, con il testo nuovo e ancora senza stile.
+    expect(host.querySelector(".ui-tree-label")).toBe(label);
+    expect(label.textContent).toBe("Titolo nuovo");
+    expect(rows(host).filter((el) => el.hasAttribute("style"))).toEqual([]);
+    unmountTree(host);
+    host.remove();
+  });
+});
+
+describe("una voce che nomina una nota ne porta l'icona (S2 T13)", () => {
+  const item = (title: string, doc?: string): UiNode =>
+    ({
+      node: "list_item",
+      title,
+      subtitle: null,
+      action: null,
+      selected: false,
+      ...(doc ? { drag: { kind: "document", doc } } : {}),
+    }) as unknown as UiNode;
+
+  afterEach(() => pageIcons.clear());
+
+  it("in testa: la sua, la figura del formato, o nessuna senza `drag`", () => {
+    pageIcons.set("Diario/Oggi.md", "🌞");
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(
+      host,
+      {
+        node: "list",
+        items: [
+          item("Oggi", "Diario/Oggi.md"),
+          item("Conti", "Dati/Conti.xlsx"),
+          item("Benvenuto", "Benvenuto.md"),
+          item("e altri 2"),
+        ],
+      } as unknown as UiNode,
+      async () => {},
+    );
+    const [own, sheet, note, more] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    const icon = (el: HTMLElement) => el.querySelector<HTMLElement>(":scope > .ui-list-item-icon");
+    // L'icona è il primo figlio, decorazione: il nome lo dice il titolo.
+    expect(own!.firstElementChild).toBe(icon(own!));
+    expect(icon(own!)!.textContent).toBe("🌞");
+    expect(icon(own!)!.getAttribute("aria-hidden")).toBe("true");
+    expect(icon(sheet!)!.querySelector("svg")).not.toBeNull();
+    expect(icon(note!)!.querySelector("svg")).not.toBeNull();
+    expect(icon(more!)).toBeNull();
+    // Il contratto non cambia: titolo e trascinamento restano quelli di prima.
+    expect(own!.querySelector(".ui-list-item-title")!.textContent).toBe("Oggi");
+    expect(own!.draggable).toBe(true);
+    unmountTree(host);
+    host.remove();
+  });
+});
+
+describe("un sottoalbero uguale non si tocca", () => {
+  const item = (title: string, doc: string): UiNode =>
+    ({
+      node: "list_item",
+      key: doc,
+      title,
+      subtitle: "Riga 1: un contesto",
+      action: { action: "open", payload: { doc } },
+      selected: false,
+      drag: { kind: "document", doc },
+    }) as unknown as UiNode;
+  const view = (titles: string[]): UiNode =>
+    ({
+      node: "stack",
+      dir: "column",
+      gap: 4,
+      children: [
+        { node: "heading", level: 3, content: "In uscita" },
+        { node: "list", items: titles.map((title, i) => item(title, `Nota ${i}.md`)) },
+        { node: "web_view", url: "about:blank", height: 40 },
+      ],
+    }) as unknown as UiNode;
+
+  let host: HTMLElement;
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    unmountTree(host);
+    host.remove();
+    pageIcons.clear();
+  });
+
+  /// Le mutazioni che un secondo montaggio fa nel DOM, dopo il primo.
+  function mutationsOf(first: UiNode, second: UiNode): MutationRecord[] {
+    mountTree(host, first, async () => {});
+    const observer = new MutationObserver(() => {});
+    observer.observe(host, { subtree: true, childList: true, attributes: true, characterData: true });
+    mountTree(host, second, async () => {});
+    const records = observer.takeRecords();
+    observer.disconnect();
+    return records;
+  }
+
+  it("lo stesso albero rimandato non cambia niente: nessuna mutazione", () => {
+    const titles = ["Uno", "Due", "Tre"];
+    // Una copia, non lo stesso oggetto: dal kernel arriva sempre un JSON nuovo.
+    expect(mutationsOf(view(titles), JSON.parse(JSON.stringify(view(titles))) as UiNode)).toEqual([]);
+  });
+
+  it("il frame di un web_view uguale non si ricarica", () => {
+    mountTree(host, view(["Uno"]), async () => {});
+    const frame = host.querySelector("iframe");
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector("iframe")).toBe(frame);
+  });
+
+  it("si rifà solo la voce cambiata, le sorelle restano loro", () => {
+    mountTree(host, view(["Uno", "Due", "Tre"]), async () => {});
+    const heading = host.querySelector(".ui-heading");
+    const [one, , three] = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    mountTree(host, view(["Uno", "Due bis", "Tre"]), async () => {});
+    const after = [...host.querySelectorAll<HTMLElement>(".ui-list-item")];
+    expect(host.querySelector(".ui-heading")).toBe(heading);
+    expect(after[0]).toBe(one);
+    expect(after[2]).toBe(three);
+    expect(after[1]!.querySelector(".ui-list-item-title")!.textContent).toBe("Due bis");
+  });
+
+  it("l'azione di una voce saltata è quella dell'ultimo montaggio", async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    mountTree(host, view(["Uno"]), first);
+    mountTree(host, view(["Uno"]), second);
+    host.querySelector<HTMLElement>(".ui-list-item")!.click();
+    await Promise.resolve();
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it("un'icona di pagina cambiata rifà la voce anche se il nodo è lo stesso", () => {
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector(".ui-list-item-icon svg")).not.toBeNull();
+    pageIcons.set("Nota 0.md", "🌞");
+    pageIcons.revision += 1;
+    mountTree(host, view(["Uno"]), async () => {});
+    expect(host.querySelector(".ui-list-item-icon")!.textContent).toBe("🌞");
+  });
+
+  it("una figura registrata dopo il disegno compare al giro dopo", () => {
+    const tree = { node: "icon", name: "cometa-di-prova" } as unknown as UiNode;
+    mountTree(host, tree, async () => {});
+    expect(host.querySelector(".ui-icon svg")).toBeNull();
+    const retire = registerIcon("cometa-di-prova", ["M3 3h18v18H3z"]);
+    try {
+      mountTree(host, tree, async () => {});
+      expect(host.querySelector(".ui-icon svg")).not.toBeNull();
+    } finally {
+      retire();
+    }
+  });
+
+  it("un campo uguale riprende il valore del provider, come prima del salto", () => {
+    const field = {
+      node: "stack",
+      dir: "column",
+      gap: 0,
+      children: [{ node: "text_input", field: "q", label: "Cerca", value: "dal provider", placeholder: null, action: null }],
+    } as unknown as UiNode;
+    mountTree(host, field, async () => {});
+    const input = host.querySelector("input")!;
+    input.value = "scritto e lasciato";
+    mountTree(host, JSON.parse(JSON.stringify(field)) as UiNode, async () => {});
+    expect(host.querySelector("input")).toBe(input);
+    expect(input.value).toBe("dal provider");
+  });
+});
+
+describe("il frame di un web_view", () => {
+  it("carica soltanto un indirizzo https; ogni altro schema lascia il frame vuoto", () => {
+    const frameFor = (url: string): HTMLIFrameElement => {
+      const host = document.createElement("div");
+      mountTree(host, { node: "web_view", url, height: 80 } as UiNode, vi.fn());
+      const frame = host.querySelector("iframe")!;
+      unmountTree(host);
+      return frame;
+    };
+    expect(frameFor("https://esempio.it/").getAttribute("src")).toBe("https://esempio.it/");
+    for (const url of ["javascript:alert(1)", "data:text/html,<script>x</script>", "about:blank", "http://esempio.it/", "fub-asset://localhost/a.html"]) {
+      expect(frameFor(url).hasAttribute("src")).toBe(false);
+    }
+  });
+});
+
+describe("un elenco lungo mostra una pagina di voci", () => {
+  const item = (i: number): UiNode =>
+    ({
+      node: "list_item",
+      key: `Nota ${i}.md#${i}`,
+      title: `Nota ${i}`,
+      subtitle: `Riga ${i}: un contesto`,
+      action: { action: "open", payload: { i } },
+      selected: false,
+    }) as unknown as UiNode;
+  const list = (count: number, from = 0): UiNode =>
+    ({ node: "list", items: Array.from({ length: count }, (_, i) => item(from + i)) }) as unknown as UiNode;
+
+  let host: HTMLElement;
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    unmountTree(host);
+    host.remove();
+  });
+
+  const voices = () => host.querySelectorAll(".ui-list > .ui-list-item");
+  const more = () => host.querySelector<HTMLElement>(".ui-list > .ui-list-more");
+
+  it("oltre la soglia le voci restano nel nodo e una riga in coda offre le altre", () => {
+    // È la regola che toglie i 33.000 elementi dei collegamenti in uscita di
+    // una nota lunga: senza, ogni voce sta nel DOM anche a cassetto chiuso.
+    mountTree(host, list(LIST_PAGE * 2 + 50), async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE);
+    const row = more();
+    expect(row).not.toBeNull();
+    expect(row!.getAttribute("role")).toBe("listitem");
+    expect(row!.parentElement!.lastElementChild).toBe(row);
+    expect(row!.querySelector("button")!.textContent).toContain(String(LIST_PAGE * 2 + 50));
+  });
+
+  it("sotto la soglia l'elenco è intero e non ha la riga", () => {
+    mountTree(host, list(LIST_PAGE), async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE);
+    expect(more()).toBeNull();
+  });
+
+  it("«mostra altre» aggiunge una pagina e, finite le voci, passa il fuoco alla prima nuova", () => {
+    mountTree(host, list(LIST_PAGE * 2 + 50), async () => {});
+    const button = more()!.querySelector("button")!;
+    button.focus();
+    button.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    // Il bottone non si sposta: resta lui, in coda, col fuoco.
+    expect(more()!.querySelector("button")).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(button.textContent).toContain("50");
+    button.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2 + 50);
+    expect(more()).toBeNull();
+    expect(document.activeElement).toBe(voices()[LIST_PAGE * 2]);
+  });
+
+  it("un ridisegno della view tiene le voci già chieste e non sposta la riga", () => {
+    mountTree(host, list(LIST_PAGE * 3), async () => {});
+    const row = more()!;
+    row.querySelector("button")!.click();
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    // Un salvataggio ridisegna la view con una voce in più in testa.
+    mountTree(host, { node: "list", items: [item(-1), ...(list(LIST_PAGE * 3) as { items: UiNode[] }).items] } as unknown as UiNode, async () => {});
+    expect(voices()).toHaveLength(LIST_PAGE * 2);
+    expect(voices()[0]!.textContent).toContain("Nota -1");
+    expect(more()).toBe(row);
+    expect(row.parentElement!.lastElementChild).toBe(row);
+  });
+
+  it("un elenco che si accorcia sotto la soglia perde la riga", () => {
+    mountTree(host, list(LIST_PAGE + 10), async () => {});
+    expect(more()).not.toBeNull();
+    mountTree(host, list(5), async () => {});
+    expect(voices()).toHaveLength(5);
+    expect(more()).toBeNull();
+  });
+});
+
+// IMP-110: la domanda prima di un ripristino non si chiudeva con Esc. È un
+// nodo `fub.confirm`: il fallback è la domanda, il payload dice qual è il «no».
+describe("la domanda prima di un gesto distruttivo (fub.confirm)", () => {
+  let host: HTMLElement;
+  const yes: ActionRef = { action: "restore_confirm", payload: { doc: "Uno.md", ts: "7" } };
+  const no: ActionRef = { action: "restore_cancel", payload: null };
+  const opener: ActionRef = { action: "restore", payload: { doc: "Uno.md", ts: "7" } };
+  const compare: ActionRef = { action: "compare", payload: null };
+  const row = (first: UiNode): UiNode =>
+    ({
+      node: "stack", dir: "row", gap: 4, children: [
+        first,
+        { node: "button", label: "Confronta", intent: "neutral", action: compare },
+      ],
+    }) as UiNode;
+  const asking = (): UiNode =>
+    row({
+      key: "restore",
+      node: "custom",
+      ns: "fub.confirm",
+      payload: { cancel: no },
+      fallback: [
+        { node: "text", content: "Riportare la nota a questa versione?" },
+        { node: "button", label: "Sì, ripristina", intent: "danger", action: yes },
+        { node: "button", label: "Annulla", intent: "neutral", action: no },
+      ],
+    } as UiNode);
+  const button = (): UiNode =>
+    row({ key: "restore", node: "button", label: "Ripristina", intent: "primary", action: opener } as UiNode);
+  const labelled = (text: string): HTMLButtonElement =>
+    [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === text)!;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    host.className = "declared-view";
+    document.body.appendChild(host);
+  });
+  afterEach(() => {
+    unmountTree(host);
+    host.remove();
+  });
+
+  it("disegna la domanda nella fila, e porta il fuoco al «no»", async () => {
+    mountTree(host, button(), async () => {});
+    labelled("Ripristina").focus();
+    mountTree(host, asking(), async () => {});
+    await Promise.resolve();
+    expect(host.querySelector(".ui-custom.ui-confirm")).not.toBeNull();
+    expect(labelled("Sì, ripristina")).toBeDefined();
+    expect(document.activeElement).toBe(labelled("Annulla"));
+  });
+
+  it("Esc manda il «no», e il fuoco torna al bottone che l'aveva aperta", async () => {
+    const sent: ActionRef[] = [];
+    const handler = async (action: ActionRef, _fields: FieldValue[]): Promise<void> => {
+      sent.push(action);
+      // Il provider risponde al «no» ridisegnando il bottone di prima.
+      mountTree(host, button(), handler);
+    };
+    mountTree(host, asking(), handler);
+    await Promise.resolve();
+    // Esc che chiude una composizione (WebKit: codice 229) non risponde.
+    const composing = new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(composing);
+    await Promise.resolve();
+    expect(composing.defaultPrevented).toBe(false);
+    expect(sent).toEqual([]);
+    const outside = vi.fn();
+    document.addEventListener("keydown", outside);
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(escape);
+    document.removeEventListener("keydown", outside);
+    await vi.waitFor(() => expect(sent).toEqual([no]));
+    expect(escape.defaultPrevented).toBe(true);
+    expect(outside, "Esc non chiude anche ciò che contiene la domanda").not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(document.activeElement).toBe(labelled("Ripristina")));
+    expect(host.querySelector(".ui-confirm")).toBeNull();
+  });
+
+  it("Esc da qualunque bottone della domanda, anche dal sì, è il «no»", async () => {
+    const sent: ActionRef[] = [];
+    mountTree(host, asking(), async (action) => {
+      sent.push(action);
+    });
+    labelled("Sì, ripristina").focus();
+    labelled("Sì, ripristina").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await vi.waitFor(() => expect(sent).toEqual([no]));
+  });
+
+  it("non ruba il fuoco a chi sta scrivendo altrove", async () => {
+    const elsewhere = document.createElement("input");
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    mountTree(host, asking(), async () => {});
+    await Promise.resolve();
+    expect(document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
   });
 });

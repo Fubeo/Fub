@@ -193,6 +193,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/base.rs::contains",
+            (
+                Family::ContextualCase,
+                "è `rules/properties.rs::contains` detta sul valore valutato di una Base \
+                 (`BaseValue`), che non è un `PropertyValue` e non passa da quella funzione: \
+                 piega i due capi allo stesso modo perché `[stato:arrivata]` nella ricerca e \
+                 «stato contiene arrivata» nel filtro di una Base trovino le stesse note.",
+            ),
+        ),
+        (
             "crates/fub-features/src/tags.rs::matches_case_insensitive",
             (
                 Family::ContextualCase,
@@ -296,6 +306,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-motori/src/registro.rs::normale",
+            (
+                Family::ContextualCase,
+                "è la chiave delle estensioni nel registro dei motori: piega in minuscolo \
+                 full-Unicode come `checked_extensions`, perché `scalda_per` deve accendere il \
+                 motore del provider che il registro dei formati sceglie per la stessa \
+                 estensione. Toglie in più il punto davanti, perché chi chiama passa anche \
+                 l'estensione scritta come nel nome di un file.",
+            ),
+        ),
+        (
             "crates/fub-kernel/src/registry.rs::provider_for_ext",
             (
                 Family::ContextualCase,
@@ -341,6 +362,19 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  costruzione. Diverge da `media.rs::kind_of`, che sulla stessa estensione è \
                  ASCII, perché quella risponde a «che specie di file è» e questa a «chi lo sa \
                  parsare».",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/same_content.rs::extension_of",
+            (
+                Family::ContextualCase,
+                "è il «tipo» con cui lo stesso contenuto (T101) confronta due nomi del vault fra \
+                 loro: l'estensione grezza, piegata in minuscolo e confrontata uguale, senza \
+                 interrogare il registro. `.md` e `.markdown` sono quindi due tipi, anche se il \
+                 registro li servisse con lo stesso formato: è prudente di proposito, perché \
+                 riusare un file non deve cambiare l'estensione del collegamento che lo nomina. \
+                 Prende l'estensione del solo nome, come `media.rs`, perché un file senza \
+                 estensione in una cartella col punto non diventi un tipo.",
             ),
         ),
         (
@@ -443,6 +477,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
+        (
+            "crates/fub-kernel/src/locale.rs::language_base",
+            (
+                Family::AsciiCase,
+                "prende la lingua di un tag BCP 47 (`it-IT` → `it`) per sapere se la lingua \
+                 scelta è quella del sistema, e se il primo giorno della settimana del sistema \
+                 vale anche per lei (IMP-4801). I sottotag BCP 47 sono ASCII e non badano al \
+                 maiuscolo per definizione (RFC 5646 §2.1.1): non è il nome di una nota, di un \
+                 tag Fub o di un path.",
+            ),
+        ),
         (
             "crates/fub-format-markdown/src/render.rs::html_tag",
             (
@@ -557,6 +602,52 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/map_tiles.rs::tile_host",
+            (
+                Family::AsciiCase,
+                "riconosce lo schema `https://` e abbassa l'host DNS di una tessera della vista \
+                 Mappa: è la domanda di `web_clip.rs::viewer_host`, ma qui l'indirizzo vuole anche \
+                 un percorso e rifiuta query e frammento, perché una tessera non ne ha bisogno.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::allowed_hosts",
+            (
+                Family::AsciiCase,
+                "abbassa i siti di `map.tile-hosts` per confrontarli con l'host della tessera, come \
+                 `web_clip.rs::approved` fa con `viewer.hosts`: i nomi DNS sono ASCII e senza \
+                 maiuscole. È un'altra lista perché scaricare tessere non è aprire pagine.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::sniffed",
+            (
+                Family::AsciiCase,
+                "cerca `<svg`, `<!doctype` e `<!entity` in una tessera vettoriale senza badare al \
+                 maiuscolo, come il parser XML del browser per i nomi dei tag: sono ASCII. Non è \
+                 un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::declared",
+            (
+                Family::AsciiCase,
+                "legge il `Content-Type` di una tessera scaricata: i tipi MIME sono ASCII e senza \
+                 distinzione di maiuscole per RFC 9110. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/engines.rs::extension",
+            (
+                Family::AsciiCase,
+                "piega l'estensione che la shell manda per scaldare un motore (K3) solo dopo averla \
+                 ridotta a lettere e cifre ASCII: su quell'alfabeto la piega ASCII e quella \
+                 full-Unicode del registro (`checked_extensions`) danno gli stessi byte, e la \
+                 sonda passa comunque da `format_of`, che piega di nuovo. Non decide un'identità \
+                 sua: sceglie solo se e quale motore scaldare.",
+            ),
+        ),
+        (
             "crates/fub-format-rich/src/odt/styles.rs::hex",
             (
                 Family::AsciiCase,
@@ -584,12 +675,21 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-ink/src/inkml.rs::hex_color",
+            (
+                Family::AsciiCase,
+                "porta il colore del pennello InkML in minuscolo, la forma di `fub-ink`, in lettura \
+                 e prima di scriverlo, dopo aver controllato sei cifre esadecimali ASCII. \
+                 Normalizza un numero, non confronta nomi.",
+            ),
+        ),
+        (
             "crates/fub-ink/src/inkml.rs::brush_of",
             (
                 Family::AsciiCase,
-                "legge il colore del pennello InkML in minuscolo, la forma di `fub-ink`, dopo \
-                 aver controllato sei cifre esadecimali ASCII. Normalizza un numero, non \
-                 confronta nomi.",
+                "legge i valori `rectangle` di `tip` e `true` di `ignorePressure` del pennello \
+                 InkML senza badare al caso, come li scrivono Word e OneNote: sono parole \
+                 chiuse di un vocabolario ASCII, non nomi di file o di chiavi.",
             ),
         ),
         (
@@ -742,6 +842,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/base.rs::is_base_definition",
+            (
+                Family::AsciiCase,
+                "riconosce un file di definizione di una Base (`.base`, anche `.BASE`) per toglierlo \
+                 dalle righe di ogni Base (IMP-1804). L'estensione è un letterale ASCII fisso \
+                 scritto qui, non testo di un provider né un nome di nota: non chiede «chi lo sa \
+                 parsare» come `documents.rs::extension_of`, chiede solo se il file è una Base, e \
+                 piega come `media.rs::kind_of` per la specie di un file.",
+            ),
+        ),
+        (
             "crates/fub-kernel/src/workspace.rs::new_notes_id",
             (
                 Family::AsciiCase,
@@ -787,6 +898,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 "riconosce l'input `TRUE` e `FALSE` di una cella, le due costanti logiche di \
                  Excel: il vocabolario è chiuso e ASCII, come quello di `formula.rs`, e una \
                  piegatura Unicode attribuirebbe equivalenze che il formato non conosce.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/parts.rs::name_key",
+            (
+                Family::ContextualCase,
+                "trova la parte che una nota incorpora (`fub.part`) fra i fogli, i nomi definiti e \
+                 le tabelle di una cartella: Excel tiene uguali due nomi che differiscono soltanto \
+                 per le maiuscole, anche fuori dall'ASCII («Città» e «CITTÀ»), e la piegatura \
+                 contestuale è quella che lo segue. Sono nomi dentro un file, non del vault, e la \
+                 risposta sceglie soltanto che cosa mostrare: non scrive niente.",
             ),
         ),
         (
@@ -977,6 +1099,27 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/theme.rs::check_fonts",
+            (
+                Family::AsciiCase,
+                "confronta la famiglia di un carattere con le altre facce dello stesso \
+                 manifest, dopo che `theme_font_fault` ne ha fissato l'alfabeto ASCII. Il \
+                 motore confronta i nomi di `font-family` senza badare a maiuscole e \
+                 minuscole ASCII: `Carta` e `carta` sono la stessa faccia.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/theme_font.rs::theme_font_fault",
+            (
+                Family::AsciiCase,
+                "confronta la famiglia di un carattere del tema con quelle di serie e con le \
+                 parole chiave del CSS. Il motore confronta i nomi di `font-family` senza \
+                 badare a maiuscole e minuscole ASCII, e la famiglia ammette solo lettere e \
+                 cifre ASCII, `-` e spazi: piegare di più o di meno lascerebbe passare un \
+                 nome che si mescola a un altro. La gemella TS la rispecchia per fixture.",
+            ),
+        ),
+        (
             "crates/fub-host/src/theme.rs::css_collect_image_set",
             (
                 Family::AsciiCase,
@@ -1103,10 +1246,21 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             "crates/fub-features/src/base.rs::derive",
             (
                 Family::ContextualCase,
-                "piega il filtro di ricerca della vista e le etichette diagnostiche dei riepiloghi \
-                 con `str::to_lowercase`: la query è testo libero dell'utente, non un vocabolario \
-                 chiuso. Diverge da `matches_case_insensitive` perché qui l'ago si piega una sola \
-                 volta per tutte le righe, mentre là si piega a ogni confronto.",
+                "piega il filtro di ricerca della vista con `str::to_lowercase`: la query è testo \
+                 libero dell'utente, non un vocabolario chiuso. Diverge da \
+                 `matches_case_insensitive` perché qui l'ago si piega una sola volta per tutte le \
+                 righe, mentre là si piega a ogni confronto.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/base.rs::summary_label",
+            (
+                Family::ContextualCase,
+                "piega con `str::to_lowercase` l'etichetta diagnostica di un riepilogo senza nome \
+                 (`chiave:aggregato`), che il piano e `derive` danno allo stesso modo perché il \
+                 piede della Base trovi il valore. Non confronta due nomi: produce una chiave \
+                 sola, letta per uguaglianza esatta dal client, quindi non è la regola di \
+                 `derive` né quella di `matches_case_insensitive`.",
             ),
         ),
         (
@@ -1137,6 +1291,44 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  `matches_case_insensitive` lo riceve già minuscolo. Diverge da lei perché l'albero \
                  qui ordina per conteggio e mostra il campo di filtro anche a elenco vuoto, ma \
                  l'identità del confronto resta quella della corsia lenta.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::words",
+            (
+                Family::ContextualCase,
+                "piega le parole di una riga del recinto ```tasks per riconoscere il vocabolario \
+                 del plugin Tasks (`not done`, `due before`, `sort by`), che il plugin legge senza \
+                 badare al caso. Non decide quando due nomi sono lo stesso nome: confronta con un \
+                 vocabolario chiuso, e la piegatura è quella di chi lo ha scritto.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::day_of",
+            (
+                Family::ContextualCase,
+                "riconosce `today`, `tomorrow`, `yesterday` in una riga del recinto ```tasks, \
+                 senza badare al caso come il plugin. Gemella di `words`: un vocabolario chiuso, \
+                 non un'identità di nomi.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::understood",
+            (
+                Family::ContextualCase,
+                "prepara l'ago di `path includes` **una volta**, minuscolo, perché `keeps` lo \
+                 cerca nel percorso piegato allo stesso modo. Diverge da `resolution_key` perché \
+                 non risolve un percorso: è una ricerca di testo dentro il percorso, come la fa \
+                 il plugin Tasks, letterale e senza caso.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/tasks/query.rs::reads",
+            (
+                Family::ContextualCase,
+                "l'altro capo di `understood`: piega il percorso della nota per cercarci l'ago \
+                 di `path includes`, prima di leggerla e per ogni compito. Un contenimento di testo, non un'identità: «lavoro» trova \
+                 `Lavoro/Note.md` e `Archivio lavoro.md`, come nel plugin.",
             ),
         ),
         (
@@ -1177,16 +1369,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  hash è esadecimale e la piegatura larga non inventa collisioni, si limita a \
                  tollerare la grafia del file. Diverge da `edit.rs::matches_bytes` perché là la \
                  tolleranza è la compatibilità dichiarata, qui è igiene d'importazione.",
-            ),
-        ),
-        (
-            "crates/fub-importers/src/export_pdf.rs::block",
-            (
-                Family::ContextualCase,
-                "va **verso l'alto** come `log.rs::compose`: i titoli stampati si alzano di caso \
-                 per tipografia, e nessuno li riconverte. Diverge da lei perché qui la sorgente è \
-                 il modello del documento dell'utente e non un livello di log, ma la direzione \
-                 resta decorativa e non d'identità.",
             ),
         ),
         (
@@ -1282,6 +1464,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-importers/src/html.rs::safe_destination",
+            (
+                Family::AsciiCase,
+                "confronta lo schema di un `href` importato con gli schemi attivi (`javascript`, \
+                 `vbscript`, `data`) in ASCII: gli schemi sono ASCII e si travestono di maiuscole. \
+                 Diverge da `is_safe_href` perché qui la lista è di ciò che si toglie, non di ciò \
+                 che passa: un importatore porta i suoi schemi (`evernote://`) e la resa li \
+                 filtra di nuovo; il link tolto resta testo.",
+            ),
+        ),
+        (
             "crates/fub-services/src/publish/guard.rs::is_safe_href",
             (
                 Family::AsciiCase,
@@ -1367,6 +1560,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  come dichiara `net.rs::header`. Diverge da lei perché qui gli header si leggono da \
                  un socket grezzo e il valore di `100-continue` si riconosce abbassato, non per \
                  tabella.",
+            ),
+        ),
+        (
+            "crates/fub-services/src/main.rs::is_loopback_bind",
+            (
+                Family::AsciiCase,
+                "riconosce `localhost` in `--bind` senza distinguere le maiuscole: un nome DNS è \
+                 ASCII e non distingue le maiuscole. Diverge da `handle_static` perché qui la \
+                 domanda è «l'indirizzo d'ascolto è loopback», decisa all'avvio, non quale sito \
+                 serve una richiesta.",
             ),
         ),
         (
@@ -1583,10 +1786,19 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-services/src/site_isolation.rs::html5_doctype",
+            (
+                Family::AsciiCase,
+                "riconosce `<!doctype html>` in qualunque grafia: parola chiave e nome sono ASCII \
+                 e HTML non distingue le maiuscole. Diverge da `html_has_script` perché qui si \
+                 lascia passare l'unica dichiarazione `<!` innocua, là si giudicano i tag.",
+            ),
+        ),
+        (
             "crates/fub-services/src/site_isolation.rs::commit_has_custom_js",
             (
                 Family::AsciiCase,
-                "abbassa il path per riconoscere il suffisso `.js`: le estensioni dei file serviti \
+                "abbassa il path per riconoscere i suffissi `.js`, `.mjs` e `.cjs`: le estensioni dei file serviti \
                  sono ASCII e la domanda è «porta codice eseguibile». Diverge da `html_has_script` \
                  perché qui il segnale è nel nome del file, là nel suo contenuto.",
             ),
@@ -1754,6 +1966,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  stretta — là la chiave è del registro dei formati e la piegatura è larga.",
             ),
         ),
+        (
+            "crates/fub-canvas-core/src/parts.rs::of",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se un estratto \
+                 `fub:parts` le va bene (`.pdf`, `.md`, `.png`, …): sono token di formato, ASCII \
+                 per definizione. Diverge da `parse.rs::is_media_path` perché il nucleo della \
+                 lavagna non vede `fub-format-canvas`, e la lista è quella di `cardKindOf` \
+                 nella shell, che i vettori di `canvas-parts/` tengono uguale.",
+            ),
+        ),
         // -- CasoAscii: importatori (estensioni e nomi di formato) -------------
         (
             "crates/fub-importers/src/archive.rs::route_entry",
@@ -1784,6 +2007,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-importers/src/notion_export.rs::has_extension",
+            (
+                Family::AsciiCase,
+                "confronta l'estensione di una voce di un export di Notion (`md`, `markdown`, \
+                 `csv`) per riconoscere pagine e database: token di formato, ASCII per \
+                 definizione. Diverge da `route_entry` perché qui la risposta decide come si \
+                 legge l'export intero (quali voci si uniscono), là la strada di una voce sola; \
+                 gli id e i titoli dell'export si confrontano come sono scritti.",
+            ),
+        ),
+        (
             "crates/fub-importers/src/common.rs::sanitize_component",
             (
                 Family::AsciiCase,
@@ -1799,6 +2033,77 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 "abbassa la chiave per riconoscere `null|true|false|~` prima di citarla in YAML: \
                  sono parole riservate del formato, ASCII per specifica. Diverge da \
                  `sanitize_component` perché qui la regola decide la citazione, non la pulizia.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/note_types.rs::frontmatter_line",
+            (
+                Family::AsciiCase,
+                "abbassa la chiave per riconoscere `null|true|false|~` prima di citarla in YAML, \
+                 come `properties.rs::encoded_key`: parole riservate del formato, ASCII per \
+                 specifica. Diverge da lei perché scrive una riga nuova di una nota che nasce da \
+                 un tipo, nel modulo condiviso che i modelli usano senza le proprietà.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/note_types.rs::property_kind",
+            (
+                Family::AsciiCase,
+                "abbassa la parola con cui un tipo di nota dice il tipo di una proprietà \
+                 (`Numero`, `casella`, `date_time`) per confrontarla con un elenco fisso di \
+                 parole ASCII. Non confronta due nomi: riconosce una parola chiave, e una parola \
+                 con altri caratteri non è nessuna di quelle.",
+            ),
+        ),
+        // -- CasoAscii: il nome più vicino di un'operazione o di un campo -------
+        (
+            "crates/fub-canvas-core/src/spec.rs::distance",
+            (
+                Family::AsciiCase,
+                "abbassa il nome che il modello ha scritto per dire quale nome gli somiglia \
+                 (`Add-Card` è vicino a `add_card`, `dX` a `dx`): i nomi delle operazioni e dei \
+                 campi sono ASCII. Non decide se un nome esiste: `validate` riconosce un nome solo \
+                 se è esatto, come serde, e la distanza serve al suggerimento e alla correzione. \
+                 Diverge da `kind_of_path` perché qui la piegatura non dice la specie di niente.",
+            ),
+        ),
+        // -- CasoAscii: la specie di una scheda della lavagna -------------------
+        (
+            "crates/fub-canvas-core/src/layout.rs::kind_of_path",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione di un file per dire la specie della sua scheda sulla lavagna \
+                 (`Foto.PNG` è un'immagine come `foto.png`), in minuscolo come `cardKindOf` della \
+                 GUI: la specie deve coincidere con la sua. Non riusa `mime_for_ext` di \
+                 `rules/media.rs`: `fub-canvas-core` dipende solo da serde, serde_json e thiserror \
+                 (`dependency_invariant`), e non può chiamare fub-abi. Diverge da `route_entry` e \
+                 `import_entry` perché l'estensione qui non sceglie un importatore: decide la misura \
+                 e la specie di una scheda, e non identifica né un nome né un path.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ink.rs::scales",
+            (
+                Family::AsciiCase,
+                "abbassa l'estensione del file di una scheda per dire se il suo inchiostro scala \
+                 (`SCAN.PNG` scala come `scan.png`), in minuscolo come `extOf` di \
+                 `media-types.ts`, che la resa usa in `inkFitMode`: il modo deve coincidere col \
+                 suo, provato coi vettori di `canvas-ink-fit/`. Diverge da `kind_of_path` perché \
+                 la resa non taglia il nome al primo `#` (`foto#1.png` scala) e la specie della \
+                 scheda sì; non identifica né un nome né un path, decide solo dove si leggono i \
+                 punti.",
+            ),
+        ),
+        (
+            "crates/fub-canvas-core/src/ops/color.rs::parse_hex",
+            (
+                Family::AsciiCase,
+                "abbassa le cifre di un `#rrggbb` per scriverlo in minuscolo come nel file \
+                 (`#FF8800` diventa `#ff8800`). Le cifre sono già controllate con \
+                 `is_ascii_hexdigit`, quindi sono ASCII per costruzione: la corsia ASCII dà la \
+                 stessa risposta della contestuale. Non decide se il colore esiste: lo decide \
+                 `parse`, con la tavola dei nomi e questo controllo; un nome non è un esadecimale \
+                 e non passa di qui.",
             ),
         ),
         // -- CasoAscii: miscellanea (canali con la loro ragione) ---------------
@@ -1821,11 +2126,12 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-host/src/remote/bundle.rs::http_request",
+            "crates/fub-host/src/remote/mod.rs::request_path_is_clean",
             (
                 Family::AsciiCase,
-                "abbassa il path per rifiutare quelli che contengono `password=`: il nome del \
-                 parametro è ASCII e il travestimento di maiuscole non deve passare. Diverge da \
+                "abbassa il path per rifiutare quelli che contengono `password=`, per i due client \
+                 dei servizi (host e bundle sync): il nome del parametro è ASCII e il \
+                 travestimento di maiuscole non deve passare. Diverge da \
                  `is_safe_href` perché qui la perdita è una credenziale nel log di sincronizzazione, \
                  là un link pericoloso pubblicato.",
             ),
@@ -1931,7 +2237,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-scene/src/analysis.rs::active_content",
+            "crates/fub-scene/src/analysis.rs::is_active_attr",
             (
                 Family::AsciiCase,
                 "riconosce i gestori di evento `on*` senza badare al caso, per l'avviso S005: \
@@ -1997,6 +2303,48 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  nome resta com'è.",
             ),
         ),
+        // -- Il PDF delle note (ADR 0247) --------------------------------------
+        (
+            "crates/fub-features/src/pdf_export/lavoro.rs::destinazione",
+            (
+                Family::AsciiCase,
+                "riconosce `.pdf` in fondo alla destinazione del PDF di una nota senza badare al \
+                 caso ASCII, come `print.rs::file_name`: `Bando.PDF` è già un PDF e non ne \
+                 riceve un secondo. Non decide l'identità del nome, che resta a \
+                 `path_policy::check` subito dopo.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/command.rs::esporta",
+            (
+                Family::AsciiCase,
+                "riconosce `.md` in fondo alla nota che `pdf.export_note` deve esportare senza \
+                 badare al caso ASCII, come `destinazione` fa con `.pdf`: `Nota.MD` è una nota \
+                 Markdown, la sola che la vista sa impaginare. Non decide l'identità del nome: \
+                 la nota la risolve l'host (`document_revision`) prima di questo controllo.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/lavoro.rs::carattere",
+            (
+                Family::FolderBoundary,
+                "toglie lo `/` iniziale dall'indirizzo di un carattere (`/fonts/<nome>`, come \
+                 l'app lo serve) per riconoscere i caratteri di Fub nel binario: è un indirizzo \
+                 della webview, non un path del vault, e ogni altro nome passa intero a \
+                 `path_policy::from_outside`.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/pdf_export/writer.rs::indirizzo_ammesso",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema di un link prima di scriverlo nel PDF e lo confronta con \
+                 `http`, `https` e `mailto`: gli schemi URI sono ASCII per la RFC 3986, e il \
+                 confronto è un cancello che tiene fuori `javascript:` e `file:`. Diverge da \
+                 `validate_callback` perché la lista è di ciò che si lascia passare in un file \
+                 che altri apriranno, non di dove richiamare.",
+            ),
+        ),
         // -- ConfineDiCartella: comporre cartella e nome ----------------------
         (
             "crates/fub-cli/src/capture.rs::uri",
@@ -2039,6 +2387,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  taglia da entrambi i capi perché qui non c'è un rifiuto accanto a coprirne uno. \
                  Diverge da `vault_archive` perché là il `/` iniziale è un assoluto da rifiutare \
                  altrove, qui è cortesia da tollerare qui.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/note_types.rs::folder_path",
+            (
+                Family::FolderBoundary,
+                "è la regola di `template.rs::valid_folder` (stessi tagli, stessa sonda \
+                 `{cartella}/_`) per la cartella dei tipi e per il campo `folder` di un tipo. \
+                 Diverge da lei perché `note_types` è un modulo condiviso fra i modelli e le \
+                 proprietà e non può chiamare una feature; e perché qui una cartella che non va \
+                 non è un rifiuto: spegne i tipi o dice che il tipo non si legge.",
             ),
         ),
         (

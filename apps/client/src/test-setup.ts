@@ -45,3 +45,48 @@ if (typeof Element !== "undefined") {
     }
   }
 }
+
+// `selectionchange` arriva **dopo**, come in un browser. La Selection API
+// mette l'evento in coda, uno solo in attesa per documento, e Chromium,
+// Firefox e WebKit fanno così; happy-dom invece lo manda subito, dentro
+// `Selection.collapse`. CodeMirror scrive la selezione del DOM a metà del suo
+// `update` (`DocView.updateSelection`): con l'evento sincrono il suo
+// `DOMObserver` rilegge la selezione e fa un dispatch dentro l'update ancora
+// aperto, e CodeMirror lancia «Calls to EditorView.update are not allowed
+// while an update is in progress». Succedeva anche da solo, nel timer con cui
+// CodeMirror annuncia un cambio di fuoco, a caso già finito
+// (`properties.e2e.test.ts`, PR #421). Qui lo si rimanda una volta per tutta
+// la suite: una microtask e non un timer, così arriva subito dopo il codice
+// sincrono che ha cambiato la selezione anche coi timer finti. La prova è in
+// `editors/text/selectionchange.dom.test.ts`.
+// Il prototipo è quello del `document` vero (`HTMLDocument`): il `Document`
+// globale di happy-dom è una classe della finestra fuori dalla sua catena.
+if (typeof document !== "undefined") {
+  const prototype = Object.getPrototypeOf(document) as Document;
+  const dispatch = prototype.dispatchEvent;
+  const released = new WeakSet<Event>();
+  const pending = new WeakSet<Document>();
+  prototype.dispatchEvent = function (this: Document, event: Event): boolean {
+    if (event.type !== "selectionchange" || released.has(event)) return dispatch.call(this, event);
+    if (pending.has(this)) return true;
+    pending.add(this);
+    queueMicrotask(() => {
+      pending.delete(this);
+      released.add(event);
+      dispatch.call(this, event);
+    });
+    return true;
+  };
+}
+
+// Le pagine di Fub hanno il doctype, quindi il loro documento è in modo
+// standard (`CSS1Compat`). happy-dom non ha `document.compatMode`. KaTeX lo
+// legge quando il suo modulo si carica: senza il valore giusto crede di stare
+// in modo quirks, scrive un avviso su stderr e spegne `render`. L'avviso arriva
+// quando KaTeX si carica in ritardo, a volte dopo la fine del file, e allora
+// Vitest lo conta come errore («Closing rpc while "onUserConsoleLog" was
+// pending», CI della PR #474). Qui il documento dei test dice ciò che dice
+// quello vero.
+if (typeof document !== "undefined" && !("compatMode" in document)) {
+  Object.defineProperty(Object.getPrototypeOf(document), "compatMode", { configurable: true, get: () => "CSS1Compat" });
+}

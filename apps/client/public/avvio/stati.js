@@ -17,7 +17,6 @@
 
   /** I tempi, contati da `performance.now()` della pagina. */
   var MARCHIO = 120;
-  var MARCHIO_AL_PIU = 1000;
   var ATTESA = 2000;
   var LENTO = 10000;
   var GUASTO = 30000;
@@ -191,30 +190,10 @@
     osservatore.observe(avvio, { attributes: true, attributeFilter: ["data-fase", "data-nome"] });
   }
 
-  // Il marchio entra a 120 ms se il suo carattere è pronto, se no appena lo è,
-  // e al più tardi a 1 s: con `font-display: block` prima si vedrebbe la
-  // piastrella senza la effe.
-  var carattere = true;
-  try {
-    if (document.fonts && typeof document.fonts.load === "function") {
-      carattere = false;
-      document.fonts.load('italic 500 38px "Avvio Newsreader"', "f").then(function () {
-        carattere = true;
-        if (adesso() >= MARCHIO) entraMarchio();
-      }, function () {
-        carattere = true;
-      });
-    }
-  } catch (errore) {
-    carattere = true;
-  }
-
   disegnaFase();
   scriptMancato();
-  a(MARCHIO, function () {
-    if (carattere) entraMarchio();
-  });
-  a(MARCHIO_AL_PIU, entraMarchio);
+  // Il marchio è un SVG in linea: non aspetta nessun carattere.
+  a(MARCHIO, entraMarchio);
   a(ATTESA, function () {
     stato("attesa");
   });

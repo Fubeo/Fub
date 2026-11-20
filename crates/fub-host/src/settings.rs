@@ -115,6 +115,20 @@ pub const VERSIONING_ENABLED: &str = "versioning.enabled";
 /// Gli id dei bundle che l'utente ha spento (chiave dell'app).
 pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 
+/// Le righe senza bundle spente a mano (Lavagna, PDF): ciò che
+/// `plugins.disabled` non sa dire. Le legge e le scrive `crate::componenti`.
+pub const COMPONENTS_OFF: &str = "components.off";
+
+/// I componenti di supporto tenuti accesi con «Tienili».
+pub const COMPONENTS_KEPT: &str = "components.kept";
+
+/// I componenti che non servono più a nessuno, accesi in attesa di «Togli» o
+/// «Tienili».
+pub const COMPONENTS_WAITING: &str = "components.waiting";
+
+/// Il profilo scelto; vuoto (o assente) vuol dire «personalizzato».
+pub const COMPONENTS_PROFILE: &str = "components.profile";
+
 /// In che luce si guarda Fub: `""` (come il sistema), `light`, `dark`.
 ///
 /// Il valore vuoto è «come il sistema» per la stessa convenzione delle chiavi
@@ -131,6 +145,11 @@ pub const APPEARANCE_THEME: &str = "appearance.theme";
 pub const APPEARANCE_THEME_ID: &str = "appearance.theme-id";
 pub const APPEARANCE_CONTRAST: &str = "appearance.contrast";
 pub const APPEARANCE_DENSITY: &str = "appearance.density";
+/// Il vassoio sotto le schede, le barre dei comandi e la colonna degli
+/// strumenti: `light` (di serie, appena più chiaro della carta) o `marked`
+/// (il tono di `--sheet-2`, che si stacca di più). Lo legge `theme.ts`, che
+/// mette l'attributo `data-bars` sulla radice; la pelle fa il resto.
+pub const APPEARANCE_BARS: &str = "appearance.bars";
 pub const APPEARANCE_BODY: &str = "appearance.body";
 pub const APPEARANCE_LINE_HEIGHT: &str = "appearance.line-height";
 pub const APPEARANCE_MEASURE: &str = "appearance.measure";
@@ -177,6 +196,9 @@ pub const EDITOR_CURSOR_BLINK: &str = "editor.cursor-blink";
 /// Nei Blocchi il cursore scivola fra due posizioni invece di saltare (N13).
 /// Di serie salta.
 pub const EDITOR_SOFT_CURSOR: &str = "editor.soft-cursor";
+/// La macchina da scrivere: la riga del cursore resta a metà altezza del
+/// foglio e il testo le scorre sotto. Di serie spenta.
+pub const EDITOR_TYPEWRITER: &str = "editor.typewriter";
 /// Il testo dell'editor e della Lettura va da destra a sinistra (arabo, ebraico).
 pub const EDITOR_RTL: &str = "editor.rtl";
 /// L'anteprima di un link al passaggio vuole sempre Ctrl/Cmd, anche in Lettura.
@@ -190,10 +212,21 @@ pub const EDITOR_INDENT: &str = "editor.indent";
 /// YAML. Il default è quello di prima che fosse una scelta.
 pub const EDITOR_PROPERTIES: &str = "editor.properties";
 /// Quando compare la mini-barra di formattazione accanto al puntatore:
-/// `auto` col tasto destro e, a barra del foglio spenta, sul testo scelto;
-/// `always` anche sul testo scelto a barra accesa; `menu` soltanto col tasto
+/// `auto` col tasto destro e sul testo scelto, tranne con la barra `completa`;
+/// `always` anche sul testo scelto con la barra completa; `menu` soltanto col tasto
 /// destro; `off` mai.
 pub const EDITOR_MINIBAR: &str = "editor.minibar";
+/// La forma della barra di formato del foglio: `compatta` (poche cose fisse,
+/// lo stile e il gruppo del blocco del cursore, «+ Inserisci»), `completa`
+/// (tutti i pulsanti, la fila della pre-alpha), `nascosta` (resta la
+/// mini-barra sulla selezione). Finché nessuno la sceglie,
+/// `chrome.formatbar.visible` spento da un Fub di prima vale `nascosta`; quella
+/// chiave non si riscrive più.
+pub const EDITOR_TOOLBAR: &str = "editor.toolbar";
+/// Che cosa fa il clic che apre un link a una nota: `apri` la porta nel
+/// riquadro, come sempre; `sbircia` la apre nella sbirciata, sopra la destra
+/// del foglio. Alt col clic (o Alt-Invio) sbircia comunque.
+pub const EDITOR_LINK_CLICK: &str = "editor.link-click";
 /// Il «/» a inizio riga o dopo uno spazio apre il menu dei blocchi e dei
 /// comandi, filtrato da ciò che si scrive dopo. Spento, il «/» resta testo.
 pub const EDITOR_SLASH: &str = "editor.slash";
@@ -203,8 +236,35 @@ pub const EDITOR_SLASH_HIDDEN: &str = "editor.slash.hidden";
 /// L'ordine delle sezioni del menu «/», dopo Suggeriti, Preferiti e Recenti.
 /// Le sezioni non dette seguono nel loro ordine, gli id sconosciuti non contano.
 pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
-/// In che modalità si apre un riquadro nuovo: `source`, `live_preview`,
-/// `blocks` o `reading`, gli id delle modalità della superficie testuale.
+/// La riga dei suggerimenti al centro della banda: i tasti utili per ciò che
+/// si sta facendo, letti dalle scorciatoie della persona. Accesa di serie;
+/// non c'è al telefono né sotto i 620 px.
+pub const EDITOR_HINTS: &str = "editor.hints";
+/// La tipografia italiana mentre si scrive: `"` diventa « o » (“ ” dentro
+/// una citazione già aperta), `--` diventa —, `...` diventa … e l'apostrofo
+/// diventa ’. Spenta di serie. Vale nella prosa delle note in italiano (la
+/// lingua dichiarata nella nota, altrimenti quella dell'app), mai in codice,
+/// formule, link, frontmatter, nell'incolla e nella composizione (IME).
+pub const EDITOR_TYPOGRAPHY: &str = "editor.typography";
+/// Il segno che resta su ciò che si è copiato in un foglio di calcolo:
+/// `dash-pulse` (di serie) un tratteggio largo e un battito, `dash` soltanto
+/// il tratteggio, `pulse` soltanto il battito. Il taglio resta un tratteggio
+/// fitto e le formiche del riempimento non cambiano. La legge la griglia
+/// (`apps/client/src/editors/grid/grid-motion.ts`); un valore che non
+/// conosce vale `dash-pulse`.
+pub const EDITOR_GRID_COPY_MARK: &str = "editor.grid.copy-mark";
+/// Come la selezione di un foglio di calcolo va alla cella nuova, coi tasti,
+/// coi comandi e col puntatore: `quick`, `normal` (di serie) e `soft` la
+/// fanno scivolare con una molla più svelta, quella di sempre o una più
+/// morbida; `none` la sposta a scatti di cella. Col movimento ridotto di
+/// `appearance.motion` si ferma subito con ogni scelta. Un valore che la
+/// griglia non conosce vale `normal`.
+pub const EDITOR_GRID_SELECTION_SPEED: &str = "editor.grid.selection-speed";
+/// In che modalità si apre un riquadro nuovo: `live_preview` (Scrittura),
+/// `source` o `reading`, gli id delle modalità della superficie testuale.
+/// `blocks`, scritto da un Fub che aveva la modalità Blocchi, resta un valore
+/// valido e vale Scrittura: non si riscrive e non si mostra
+/// (`editor_settings`).
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
 /// Quanto della sintassi Markdown si vede in Live: `mai` scrive come in Word,
 /// senza segni nemmeno col cursore dentro; `elemento` rivela, attenuati, i
@@ -215,6 +275,37 @@ pub const EDITOR_LIVE_REVEAL: &str = "editor.live-reveal";
 /// segue e mostra in grigio la chiusura che manca; lo spazio chiude apice e
 /// pedice. Spenta, i segni restano testo finché non si chiudono.
 pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
+/// I blocchi di Scrittura: accesi (di serie) ogni blocco ha maniglia e «+», Esc
+/// seleziona il blocco, Mod+A prende il blocco e poi tutti i blocchi, Mod+D
+/// duplica il blocco; spenti, Scrittura si comporta come un editor di testo
+/// (Mod+A il corpo della nota, Mod+D la prossima occorrenza). La testata della
+/// pagina resta in tutti e due i casi. Cambia senza riaprire la nota.
+pub const EDITOR_BLOCKS: &str = "editor.blocks";
+/// Le formule di Scrittura mostrano il loro LaTeX: accesa, la formula toccata
+/// ha sotto di sé il campo del suo LaTeX, e il clic sulla formula porta
+/// soltanto agli spazi vuoti. Spenta (di serie) la formula si modifica
+/// toccandola: resta disegnata, col cursore dentro, e il LaTeX nel file non si
+/// vede. Coi tasti di Vim le formule si aprono col riquadro di prima.
+pub const EDITOR_MATH_SOURCE: &str = "editor.math.source";
+/// Quanto aiuta il campo del LaTeX delle formule (con `editor.math.source`):
+/// `piene` (di serie) chiude le parentesi, completa dopo `\`, trasforma la
+/// scrittura veloce (`a/b`, `->`, `alpha`) e mostra la tavolozza; `discrete`
+/// lascia parentesi e completamento, e la tavolozza a richiesta; `spente`
+/// lascia il LaTeX e la sua anteprima, nient'altro.
+pub const EDITOR_MATH_HELP: &str = "editor.math.help";
+/// Il nome di chi scrive su questa macchina (Impostazioni › Profilo): firma i
+/// commenti delle note (`{>>@Nome 2026-11-08 17:40: …<<}`). Vuoto finché la
+/// persona non lo sceglie; il primo commento lo chiede, con l'avviso che il
+/// nome finisce nel file della nota. È della macchina perché dice chi siede
+/// davanti allo schermo, non di che cosa parla il vault.
+pub const PROFILE_NAME: &str = "profile.name";
+/// Come firma i commenti questo vault: col nome di [`PROFILE_NAME`], con le
+/// sue iniziali o senza firma. È del vault perché la scelta segue le note: il
+/// nome nel vault del lavoro, niente in quello personale. Un commento senza
+/// firma si legge «Senza nome», come quelli scritti da un altro programma.
+pub const COMMENTS_AUTHOR: &str = "comments.author";
+/// Le firme che [`COMMENTS_AUTHOR`] offre, la predefinita per prima.
+pub const COMMENTS_AUTHOR_CHOICES: [&str; 3] = ["nome", "iniziali", "niente"];
 /// Le animazioni della shell: `""` segue il sistema, `calm` toglie rimbalzi e
 /// scene, `reduced` le spegne anche quando il sistema non lo chiede. Nessun
 /// valore scavalca la richiesta di moto ridotto del sistema.
@@ -224,7 +315,93 @@ pub const APPEARANCE_MOTION: &str = "appearance.motion";
 /// Lo rispettano i loop di disegno della shell e, su macOS, la webview.
 pub const APPEARANCE_FRAME_RATE: &str = "appearance.frame-rate";
 /// I tetti offerti dal pannello, dal più alto.
-pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
+pub const FRAME_RATE_CAPS: [u32; 8] = [240, 180, 165, 144, 120, 90, 60, 30];
+/// Chi disegna le pagine della webview su Linux (WebKitGTK): `auto` lascia
+/// il percorso di WebKit e avvisa dei problemi noti, `gpu` lo stesso senza
+/// proposte, `cpu` chiede il disegno col processore
+/// (`WEBKIT_SKIA_ENABLE_CPU_RENDERING`). Si legge una volta, prima che parta
+/// GTK (`fub_app::disegno`): cambiarla vale dal prossimo avvio. Dichiarata
+/// solo su Linux.
+pub const APPEARANCE_RENDERING: &str = "appearance.rendering";
+/// I percorsi offerti, il predefinito per primo.
+pub const RENDERING_MODES: [&str; 3] = ["auto", "gpu", "cpu"];
+
+/// La webview su cui gira la shell, per quel tanto che decide un default.
+///
+/// È un fatto della piattaforma, e lo dichiara l'app (`fub_app::run`, con
+/// [`declare_webview`]) leggendo la versione **dalla libreria caricata** —
+/// non dal nome del pacchetto né dal momento della compilazione: chi ha
+/// compilato con la 2.52 può girare con la 2.54, e viceversa.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Webview {
+    /// WebKitGTK, con la versione `major.minor.micro` della libreria caricata.
+    WebKitGtk(u32, u32, u32),
+}
+
+impl Webview {
+    /// La WebKitGTK di una versione scritta `major.minor.micro`, come la dà
+    /// `webkit_get_{major,minor,micro}_version` (via `tauri::webview_version`).
+    /// Una stringa che non è tre numeri non dice niente: `None`.
+    pub fn webkitgtk(version: &str) -> Option<Self> {
+        let mut parts = version.trim().split('.').map(str::parse::<u32>);
+        let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(micro)), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return None;
+        };
+        Some(Self::WebKitGtk(major, minor, micro))
+    }
+
+    /// Questa webview ha il difetto che fa sfarfallare le animazioni
+    /// ([`WEBKITGTK_FLICKER_FROM`])?
+    pub fn flickers_after_animations(self) -> bool {
+        match self {
+            Self::WebKitGtk(major, minor, micro) => (major, minor, micro) >= WEBKITGTK_FLICKER_FROM,
+        }
+    }
+}
+
+/// **La prima WebKitGTK che sfarfalla dopo un'animazione**, ed è l'unico posto
+/// in cui l'intervallo difettoso è scritto.
+///
+/// Dalla 2.54.0 il renderer DMA-BUF di WebKitGTK, finita un'animazione,
+/// ripresenta per un istante fotogrammi vecchi; su ogni GPU, non solo NVIDIA
+/// (janhq/jan#9588, cjpais/Handy#2166 e #2360). La 2.52 non lo fa. Con
+/// Impostazioni → Aspetto → Animazioni = «ridotte» lo sfarfallio sparisce
+/// (verificato su Debian 13, WebKitGTK 2.54, 2026-11-16).
+///
+/// L'intervallo è aperto in alto: nessuna versione corretta è ancora
+/// verificata. Il giorno che una lo è, si aggiunge qui un limite superiore
+/// escluso (per esempio `WEBKITGTK_FLICKER_UNTIL = (2, 54, 4)`) e
+/// [`Webview::flickers_after_animations`] lo confronta; i test di questo file
+/// dicono quale versione resta difettosa e quale no.
+pub const WEBKITGTK_FLICKER_FROM: (u32, u32, u32) = (2, 54, 0);
+
+static WEBVIEW: std::sync::OnceLock<Webview> = std::sync::OnceLock::new();
+
+/// Dichiara la webview del processo. La chiama l'app **prima** di costruire
+/// l'[`Host`](crate::Host), perché il livello macchina riceve lo schema (e i
+/// suoi default) nel costruttore. Vale una volta sola, come la libreria che
+/// il processo ha caricato: una seconda dichiarazione è ignorata e la funzione
+/// dice `false`. Chi non dichiara niente — le altre piattaforme, la CLI, i
+/// test — ha i default di sempre.
+pub fn declare_webview(webview: Webview) -> bool {
+    WEBVIEW.set(webview).is_ok()
+}
+
+/// Il default di [`APPEARANCE_MOTION`] su questa webview: `reduced` dove la
+/// webview sfarfalla dopo le animazioni, altrimenti `""` (segue il sistema).
+///
+/// Cambia **solo il default**: un valore che la persona ha scritto — anche
+/// `""` — resta il suo, perché il livello macchina legge il default soltanto
+/// dove non c'è un valore. La shell mostra il perché sotto la riga quando il
+/// default è `reduced` (`decorateMotion` in `apps/client/src/panels/settings.ts`).
+pub fn motion_default(webview: Option<Webview>) -> &'static str {
+    match webview {
+        Some(webview) if webview.flickers_after_animations() => "reduced",
+        _ => fub_kernel::locale::AS_SYSTEM,
+    }
+}
 /// Lo stile dei diagrammi Mermaid: uno degli id di [`DIAGRAM_STYLES`]. Lo
 /// disegna la shell (`apps/client/src/ui/mermaid-styles.ts`); una nota può
 /// sceglierne un altro per un diagramma solo, con `%% stile: <id>`.
@@ -348,6 +525,13 @@ pub const FILES_STARTUP_NOTE: &str = "files.startup-note";
 /// scrive `[[Persone/Nome|Nome]]`; una persona nuova vi nasce. Vuota, `@` non
 /// propone persone.
 pub const FILES_PEOPLE_FOLDER: &str = "files.people-folder";
+/// La cartella dei tipi di nota (E5): ogni nota che ci sta, sottocartelle
+/// comprese, è un tipo, e il suo testo è il modello delle note nuove. Del
+/// vault, di serie `Tipi`; vuota, i tipi sono spenti. La legge
+/// `fub-features` (`note_types`).
+pub const FILES_TYPES_FOLDER: &str = "files.types-folder";
+/// Il valore di serie di [`FILES_TYPES_FOLDER`].
+pub const DEFAULT_TYPES_FOLDER: &str = "Tipi";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -392,6 +576,27 @@ pub const LOG_VERBOSE: &str = "log.verbose";
 /// niente esce dall'app.
 pub const PERF_PROBE: &str = "perf.probe";
 
+/// La modalità sviluppatore: apre a chi scrive un tema i gesti che un tema
+/// finito non chiede, a cominciare da «Installa da cartella…». Di **macchina**
+/// (è uno strumento di questo PC, non una preferenza su un vault), spenta di
+/// default, e **non** scrivibile da un programma: un componente che potesse
+/// accenderla aprirebbe da sé la porta che lei tiene chiusa. La regola la
+/// applica l'host (`Host::install_theme_from_folder`), non il bottone nascosto.
+pub const DEVELOPER_MODE: &str = "developer.mode";
+
+/// La cartella del tema collegato, in sviluppo (vedi
+/// [`Host::link_theme_folder`](crate::Host::link_theme_folder)): il percorso
+/// che la persona ha scelto nella finestra nativa di «Collega una cartella…»,
+/// vuoto se nessuna è collegata. Di **macchina** come la modalità che la apre,
+/// e **non** scrivibile da un programma; nemmeno la webview la scrive
+/// (`Host::set_setting_for_user` la rifiuta): la scrive solo l'host quando
+/// collega, e azzerarla è scollegare. **Non viaggia coi profili** di macchina:
+/// un'importazione o una copia la scartano, un'esportazione non la porta
+/// fuori, e cambiare o azzerare un profilo lascia il valore di prima
+/// (`PROFILE_LOCAL_KEYS` in `session.rs`). L'host la rilegge con le stesse
+/// porte di un'installazione, e guarda la cartella solo se è un tema pronto.
+pub const DEVELOPER_THEME_FOLDER: &str = "developer.theme-folder";
+
 /// Preferenze locali della replica; identità, pairing e chiavi non sono impostazioni.
 pub const SYNC_SERVER_URL: &str = "sync.server_url";
 pub const SYNC_PAUSED: &str = "sync.paused";
@@ -416,6 +621,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     let mut settings = appearance_settings();
     settings.extend(chrome_settings());
     settings.extend(editor_settings());
+    settings.extend(profile_settings());
     settings.push(
         SettingSpec::new(
             ATTACHMENT_FOLDER,
@@ -504,6 +710,17 @@ pub fn core_settings() -> Vec<SettingSpec> {
         .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
+        SettingSpec::new(
+            FILES_TYPES_FOLDER,
+            Text::key(C_FILES_TYPES_FOLDER),
+            SettingKind::Text {
+                default: DEFAULT_TYPES_FOLDER.into(),
+            },
+        )
+        .describing(Text::key(C_FILES_TYPES_FOLDER_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
         SettingSpec::toggle(FILES_CONFIRM_TRASH, Text::key(C_FILES_CONFIRM_TRASH), true)
             .describing(Text::key(C_FILES_CONFIRM_TRASH_DESC))
             .grouped(Text::key(C_GROUP_FILES)),
@@ -581,14 +798,20 @@ pub fn core_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_PLUGINS_DISABLED_DESC))
         .grouped(Text::key(C_GROUP_COMPONENTS)),
     );
+    // Lo stato dei componenti che `plugins.disabled` non sa dire. Come lei,
+    // **non** `program_writable`: lo scrive soltanto chi accende e spegne.
+    settings.extend(components_settings());
     settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
     settings.push(perf_probe_spec());
+    settings.push(developer_mode_spec());
+    settings.push(developer_theme_folder_spec());
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
     settings.extend(live_settings());
     settings.extend(viewer_settings());
+    settings.push(map_tile_hosts_spec());
     #[cfg(feature = "craft")]
     settings.extend(craft_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
@@ -625,6 +848,39 @@ pub fn core_machine_settings() -> Vec<SettingSpec> {
         .collect()
 }
 
+/// Chi scrive (D11 A): il nome della persona, di macchina, e la firma dei
+/// commenti scelta per il vault. Nessuna delle due è `program_writable`: il
+/// nome che finisce nei file lo sceglie la persona, dalla shell.
+fn profile_settings() -> Vec<SettingSpec> {
+    let [name_choice, initials_choice, none_choice] = COMMENTS_AUTHOR_CHOICES;
+    vec![
+        SettingSpec::new(
+            PROFILE_NAME,
+            Text::key(C_PROFILE_NAME),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_PROFILE_NAME_DESC))
+        .grouped(Text::key(C_GROUP_PROFILE))
+        .for_machine(),
+        SettingSpec::new(
+            COMMENTS_AUTHOR,
+            Text::key(C_COMMENTS_AUTHOR),
+            SettingKind::Choice {
+                default: name_choice.into(),
+                options: vec![
+                    UiOption::new(name_choice, Text::key(C_COMMENTS_AUTHOR_NAME)),
+                    UiOption::new(initials_choice, Text::key(C_COMMENTS_AUTHOR_INITIALS)),
+                    UiOption::new(none_choice, Text::key(C_COMMENTS_AUTHOR_NONE)),
+                ],
+            },
+        )
+        .describing(Text::key(C_COMMENTS_AUTHOR_DESC))
+        .grouped(Text::key(C_GROUP_PROFILE)),
+    ]
+}
+
 fn editor_settings() -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
@@ -645,10 +901,18 @@ fn editor_settings() -> Vec<SettingSpec> {
         C_EDITOR_DEFAULT_MODE_DESC,
         "live_preview",
         vec![
-            UiOption::new("live_preview", Text::key(C_MODE_LIVE)),
-            UiOption::new("blocks", Text::key(C_MODE_BLOCKS)),
+            UiOption::new("live_preview", Text::key(C_MODE_WRITING)),
             UiOption::new("source", Text::key(C_MODE_SOURCE)),
             UiOption::new("reading", Text::key(C_MODE_READING)),
+            // I Blocchi sono dentro Scrittura (E1). Chi li aveva scelti ha
+            // `blocks` nel file della macchina, e quel valore resta suo: non si
+            // riscrive, e una scelta tolta lo farebbe ignorare con un avviso e
+            // ricadere sul predefinito. Resta allora fra le scelte, in fondo,
+            // con l'etichetta di Scrittura: due scelte con la stessa etichetta
+            // sono la stessa scelta, e il pannello mostra soltanto la prima
+            // (`visibleChoices` in `apps/client/src/panels/settings-model.ts`).
+            // La shell apre `blocks` in Scrittura (`SurfaceMode.formerIds`).
+            UiOption::new("blocks", Text::key(C_MODE_WRITING)),
         ],
     )];
     settings.push(choice(
@@ -662,6 +926,14 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("riga", Text::key(C_EDITOR_LIVE_REVEAL_LINE)),
         ],
     ));
+    // I blocchi come preferenza (D1, E2): una voce a sé, subito dopo i segni
+    // di Scrittura, perché sono la prima scelta su come si scrive.
+    settings.push(
+        SettingSpec::toggle(EDITOR_BLOCKS, Text::key(C_EDITOR_BLOCKS), true)
+            .describing(Text::key(C_EDITOR_BLOCKS_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
     settings.extend(
         [
             (
@@ -693,6 +965,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 C_EDITOR_LIVE_GUIDE,
                 C_EDITOR_LIVE_GUIDE_DESC,
                 true,
+            ),
+            (
+                EDITOR_MATH_SOURCE,
+                C_EDITOR_MATH_SOURCE,
+                C_EDITOR_MATH_SOURCE_DESC,
+                false,
             ),
             (
                 EDITOR_FOLD_GUTTER,
@@ -731,6 +1009,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 false,
             ),
             (
+                EDITOR_TYPEWRITER,
+                C_EDITOR_TYPEWRITER,
+                C_EDITOR_TYPEWRITER_DESC,
+                false,
+            ),
+            (
                 EDITOR_PASTE_HTML,
                 C_EDITOR_PASTE_HTML,
                 C_EDITOR_PASTE_HTML_DESC,
@@ -753,6 +1037,17 @@ fn editor_settings() -> Vec<SettingSpec> {
         }),
     );
     settings.push(choice(
+        EDITOR_MATH_HELP,
+        C_EDITOR_MATH_HELP,
+        C_EDITOR_MATH_HELP_DESC,
+        "piene",
+        vec![
+            UiOption::new("piene", Text::key(C_EDITOR_MATH_HELP_FULL)),
+            UiOption::new("discrete", Text::key(C_EDITOR_MATH_HELP_DISCREET)),
+            UiOption::new("spente", Text::key(C_EDITOR_MATH_HELP_OFF)),
+        ],
+    ));
+    settings.push(choice(
         EDITOR_INDENT,
         C_EDITOR_INDENT,
         C_EDITOR_INDENT_DESC,
@@ -767,7 +1062,7 @@ fn editor_settings() -> Vec<SettingSpec> {
         EDITOR_PROPERTIES,
         C_EDITOR_PROPERTIES,
         C_EDITOR_PROPERTIES_DESC,
-        "source",
+        "visible",
         vec![
             UiOption::new("visible", Text::key(C_EDITOR_PROPERTIES_VISIBLE)),
             UiOption::new("hidden", Text::key(C_EDITOR_PROPERTIES_HIDDEN)),
@@ -786,9 +1081,65 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("off", Text::key(C_EDITOR_MINIBAR_OFF)),
         ],
     ));
+    settings.push(choice(
+        EDITOR_TOOLBAR,
+        C_EDITOR_TOOLBAR,
+        C_EDITOR_TOOLBAR_DESC,
+        "compatta",
+        vec![
+            UiOption::new("compatta", Text::key(C_EDITOR_TOOLBAR_COMPACT)),
+            UiOption::new("completa", Text::key(C_EDITOR_TOOLBAR_FULL)),
+            UiOption::new("nascosta", Text::key(C_EDITOR_TOOLBAR_HIDDEN)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_LINK_CLICK,
+        C_EDITOR_LINK_CLICK,
+        C_EDITOR_LINK_CLICK_DESC,
+        "apri",
+        vec![
+            UiOption::new("apri", Text::key(C_EDITOR_LINK_CLICK_OPEN)),
+            UiOption::new("sbircia", Text::key(C_EDITOR_LINK_CLICK_PEEK)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_GRID_COPY_MARK,
+        C_EDITOR_GRID_COPY_MARK,
+        C_EDITOR_GRID_COPY_MARK_DESC,
+        "dash-pulse",
+        vec![
+            UiOption::new("dash-pulse", Text::key(C_EDITOR_GRID_COPY_MARK_BOTH)),
+            UiOption::new("dash", Text::key(C_EDITOR_GRID_COPY_MARK_DASH)),
+            UiOption::new("pulse", Text::key(C_EDITOR_GRID_COPY_MARK_PULSE)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_GRID_SELECTION_SPEED,
+        C_EDITOR_GRID_SELECTION_SPEED,
+        C_EDITOR_GRID_SELECTION_SPEED_DESC,
+        "normal",
+        vec![
+            UiOption::new("quick", Text::key(C_EDITOR_GRID_SELECTION_SPEED_QUICK)),
+            UiOption::new("normal", Text::key(C_EDITOR_GRID_SELECTION_SPEED_NORMAL)),
+            UiOption::new("soft", Text::key(C_EDITOR_GRID_SELECTION_SPEED_SOFT)),
+            UiOption::new("none", Text::key(C_EDITOR_GRID_SELECTION_SPEED_NONE)),
+        ],
+    ));
     settings.push(
         SettingSpec::toggle(EDITOR_SLASH, Text::key(C_EDITOR_SLASH), true)
             .describing(Text::key(C_EDITOR_SLASH_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
+    settings.push(
+        SettingSpec::toggle(EDITOR_HINTS, Text::key(C_EDITOR_HINTS), true)
+            .describing(Text::key(C_EDITOR_HINTS_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
+    settings.push(
+        SettingSpec::toggle(EDITOR_TYPOGRAPHY, Text::key(C_EDITOR_TYPOGRAPHY), false)
+            .describing(Text::key(C_EDITOR_TYPOGRAPHY_DESC))
             .grouped(Text::key(C_GROUP_EDITOR))
             .for_machine(),
     );
@@ -836,6 +1187,12 @@ fn editor_settings() -> Vec<SettingSpec> {
 /// un pezzo di 6.2, dove si decide se un componente possa avere in mano
 /// l'aspetto e con che permesso.
 fn appearance_settings() -> Vec<SettingSpec> {
+    appearance_settings_on(WEBVIEW.get().copied())
+}
+
+/// Le chiavi dell'aspetto su una webview data: i test scelgono la webview che
+/// il processo, una volta dichiarata, non può più cambiare.
+fn appearance_settings_on(webview: Option<Webview>) -> Vec<SettingSpec> {
     let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
         SettingSpec::new(
             key,
@@ -870,7 +1227,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .for_machine()
     };
 
-    vec![
+    let mut settings = vec![
         choice(
             APPEARANCE_THEME,
             C_THEME,
@@ -907,7 +1264,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_ACCENT,
             C_ACCENT,
             C_ACCENT_DESC,
-            265.0,
+            160.0,
             0.0,
             360.0,
         ),
@@ -920,6 +1277,16 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("compact", Text::key(C_DENSITY_COMPACT)),
                 UiOption::new("comfortable", Text::key(C_DENSITY_COMFORTABLE)),
                 UiOption::new("relaxed", Text::key(C_DENSITY_RELAXED)),
+            ],
+        ),
+        choice(
+            APPEARANCE_BARS,
+            C_BARS,
+            C_BARS_DESC,
+            "light",
+            vec![
+                UiOption::new("light", Text::key(C_BARS_LIGHT)),
+                UiOption::new("marked", Text::key(C_BARS_MARKED)),
             ],
         ),
         number(
@@ -935,7 +1302,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MOTION,
             C_MOTION,
             C_MOTION_DESC,
-            fub_kernel::locale::AS_SYSTEM,
+            motion_default(webview),
             vec![
                 system(),
                 UiOption::new("calm", Text::key(C_MOTION_CALM)),
@@ -1015,7 +1382,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
-        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 17.0, 12.0, 28.0),
+        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 18.0, 12.0, 28.0),
         number(
             APPEARANCE_LINE_HEIGHT,
             C_LINE_HEIGHT,
@@ -1028,7 +1395,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MEASURE,
             C_MEASURE,
             C_MEASURE_DESC,
-            68.0,
+            58.0,
             40.0,
             100.0,
         ),
@@ -1042,7 +1409,30 @@ fn appearance_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_CSS_SNIPPETS_DESC))
         .grouped(Text::key(C_GROUP_APPEARANCE))
         .for_machine(),
-    ]
+    ];
+    // Solo dove c'è WebKitGTK: su Windows e macOS la scelta non avrebbe
+    // niente da cambiare, e una riga che non fa niente è una riga che mente.
+    if cfg!(target_os = "linux") {
+        let at = settings
+            .iter()
+            .position(|spec| spec.key == APPEARANCE_FRAME_RATE)
+            .map_or(settings.len(), |index| index + 1);
+        settings.insert(
+            at,
+            choice(
+                APPEARANCE_RENDERING,
+                C_RENDERING,
+                C_RENDERING_DESC,
+                RENDERING_MODES[0],
+                vec![
+                    UiOption::new(RENDERING_MODES[0], Text::key(C_RENDERING_AUTO)),
+                    UiOption::new(RENDERING_MODES[1], Text::key(C_RENDERING_GPU)),
+                    UiOption::new(RENDERING_MODES[2], Text::key(C_RENDERING_CPU)),
+                ],
+            ),
+        );
+    }
+    settings
 }
 
 fn chrome_settings() -> Vec<SettingSpec> {
@@ -1150,6 +1540,36 @@ pub fn frame_rate_cap(value: &str) -> Option<u32> {
         .parse()
         .ok()
         .filter(|cap| FRAME_RATE_CAPS.contains(cap))
+}
+
+/// I valori di testo di macchina che servono **prima che parta GTK**, letti dal
+/// file di macchina senza montare l'host: oggi `appearance.rendering` e
+/// `appearance.motion`, per il percorso di disegno di `fub_app::run`.
+///
+/// Si legge come lo legge l'host: schema del core, profilo attivo, un valore
+/// sconosciuto che vale il predefinito, un file assente o illeggibile che vale
+/// i predefiniti. Il file non si scrive. Senza cartella di configurazione
+/// valgono i predefiniti. Una chiave non dichiarata (`appearance.rendering`
+/// fuori da Linux) non compare.
+pub fn startup_machine_texts(
+    config_dir: Option<&camino::Utf8Path>,
+    keys: &[&str],
+) -> BTreeMap<String, String> {
+    let machine = match config_dir {
+        Some(dir) => {
+            fub_kernel::MachineSettings::open(&crate::config::machine_settings_path(dir)).0
+        }
+        None => fub_kernel::MachineSettings::in_memory(),
+    };
+    if machine.declare(&core_machine_settings()).is_err() {
+        return BTreeMap::new();
+    }
+    keys.iter()
+        .filter_map(|key| {
+            let (value, _) = machine.effective(key).ok()?;
+            Some(((*key).to_owned(), value.as_text()?.to_owned()))
+        })
+        .collect()
 }
 
 pub fn setting_requires_reopen(key: &str) -> bool {
@@ -1268,6 +1688,61 @@ fn service_settings() -> Vec<SettingSpec> {
     ]
 }
 
+/// **Il cancello della persona**: le chiavi il cui valore ha una forma che la
+/// specie dello schema non sa dire, controllata prima che arrivi al suo livello.
+///
+/// Lo schema dice «testo» per un fuso e per un indirizzo, e il kernel accetta
+/// quindi qualunque testo; chi sa se un nome è un fuso, o un testo un indirizzo
+/// a cui l'host accetta di collegarsi, è l'host — il database dei fusi sta in
+/// [`crate::wall`], la regola degli indirizzi in
+/// [`validate_base_url`](crate::remote::validate_base_url). Senza questo
+/// cancello `Mars/Olympus` si salvava, e le sveglie a un orario di parete
+/// smettevano di suonare senza che nessuno lo dicesse; un server di
+/// sincronizzazione `ftp://…` si salvava, e falliva soltanto alla prima replica.
+///
+/// Vuoto resta ammesso: per il fuso vuol dire «come il sistema», per un server
+/// «nessun server configurato». Il rifiuto è un [`PluginError::BadArgs`] con una
+/// chiave del catalogo del core, che chi lo porta alla shell risolve nella
+/// lingua di chi guarda.
+pub fn user_value_problem(
+    key: &str,
+    value: &fub_abi::settings::SettingValue,
+) -> Option<fub_abi::PluginError> {
+    if key == crate::map_tiles::MAP_TILE_HOSTS {
+        let fub_abi::settings::SettingValue::List(hosts) = value else {
+            return None;
+        };
+        let wrong = hosts
+            .iter()
+            .find(|host| !crate::map_tiles::is_host_name(host.trim()))?;
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_TILE_HOST,
+            vec![Arg::text("value", wrong)],
+        )));
+    }
+    let text = value.as_text()?;
+    if key == fub_kernel::locale::TIMEZONE {
+        if text.is_empty() || crate::wall::known_zone(text) {
+            return None;
+        }
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_TIMEZONE,
+            vec![Arg::text("name", text)],
+        )));
+    }
+    #[cfg(feature = "http-client")]
+    if key == SYNC_SERVER_URL || key == PUBLISH_SERVER_URL {
+        if text.trim().is_empty() || crate::remote::validate_base_url(text).is_ok() {
+            return None;
+        }
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_SERVER_URL,
+            vec![Arg::text("value", text)],
+        )));
+    }
+    None
+}
+
 /// Il visore web: di macchina, perché fidarsi di un sito è una scelta di chi
 /// usa questo PC, non un dato del vault che si sincronizza altrove.
 fn viewer_settings() -> Vec<SettingSpec> {
@@ -1291,6 +1766,24 @@ fn viewer_settings() -> Vec<SettingSpec> {
         .grouped(Text::key(C_GROUP_VIEWER))
         .for_machine(),
     ]
+}
+
+/// Gli host delle tessere della vista Mappa: di macchina, perché far uscire
+/// una richiesta è una scelta di chi usa questo PC — un vault scaricato non
+/// la porta con sé. Vuota di serie: nessuna richiesta senza un sì. Non
+/// `program_writable`: un componente non si apre la rete da solo. Nella
+/// Privacy, accanto a ciò che decide cosa lascia la macchina.
+fn map_tile_hosts_spec() -> SettingSpec {
+    SettingSpec::new(
+        crate::map_tiles::MAP_TILE_HOSTS,
+        Text::key(C_MAP_TILE_HOSTS),
+        SettingKind::List {
+            default: Vec::new(),
+        },
+    )
+    .describing(Text::key(C_MAP_TILE_HOSTS_DESC))
+    .grouped(Text::key(C_GROUP_PRIVACY))
+    .for_machine()
 }
 
 /// La sessione live: di macchina, perché la porta è una regola del firewall di
@@ -1403,6 +1896,32 @@ fn perf_probe_spec() -> SettingSpec {
     .for_machine()
 }
 
+/// La modalità sviluppatore come [`SettingSpec`]: vedi [`DEVELOPER_MODE`].
+fn developer_mode_spec() -> SettingSpec {
+    SettingSpec::new(
+        DEVELOPER_MODE,
+        Text::key(C_DEVELOPER_MODE),
+        SettingKind::Toggle { default: false },
+    )
+    .describing(Text::key(C_DEVELOPER_MODE_DESC))
+    .grouped(Text::key(C_GROUP_DEVELOPMENT))
+    .for_machine()
+}
+
+/// La cartella collegata come [`SettingSpec`]: vedi [`DEVELOPER_THEME_FOLDER`].
+fn developer_theme_folder_spec() -> SettingSpec {
+    SettingSpec::new(
+        DEVELOPER_THEME_FOLDER,
+        Text::key(C_DEVELOPER_THEME_FOLDER),
+        SettingKind::Text {
+            default: String::new(),
+        },
+    )
+    .describing(Text::key(C_DEVELOPER_THEME_FOLDER_DESC))
+    .grouped(Text::key(C_GROUP_DEVELOPMENT))
+    .for_machine()
+}
+
 /// Le chiavi delle stringhe del core. Le `locale.*` non stanno qui: stanno
 /// accanto alle impostazioni che descrivono, in `fub_kernel::locale`, e
 /// arrivano al montaggio come secondo catalogo della stessa lingua.
@@ -1459,9 +1978,19 @@ const C_FILES_STARTUP_NOTE: &str = "core.files_startup_note";
 const C_FILES_STARTUP_NOTE_DESC: &str = "core.files_startup_note.desc";
 const C_FILES_PEOPLE_FOLDER: &str = "core.files_people_folder";
 const C_FILES_PEOPLE_FOLDER_DESC: &str = "core.files_people_folder.desc";
+const C_FILES_TYPES_FOLDER: &str = "core.files_types_folder";
+const C_FILES_TYPES_FOLDER_DESC: &str = "core.files_types_folder.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
+const C_GROUP_PROFILE: &str = "core.group.profile";
+const C_PROFILE_NAME: &str = "core.profile.name";
+const C_PROFILE_NAME_DESC: &str = "core.profile.name.desc";
+const C_COMMENTS_AUTHOR: &str = "core.comments.author";
+const C_COMMENTS_AUTHOR_DESC: &str = "core.comments.author.desc";
+const C_COMMENTS_AUTHOR_NAME: &str = "core.comments.author.name";
+const C_COMMENTS_AUTHOR_INITIALS: &str = "core.comments.author.initials";
+const C_COMMENTS_AUTHOR_NONE: &str = "core.comments.author.none";
 const C_EDITOR_SPELLCHECK: &str = "core.editor.spellcheck";
 const C_EDITOR_SPELLCHECK_DESC: &str = "core.editor.spellcheck.desc";
 const C_EDITOR_VIM: &str = "core.editor.vim";
@@ -1484,6 +2013,8 @@ const C_EDITOR_CURSOR_BLINK: &str = "core.editor.cursor_blink";
 const C_EDITOR_CURSOR_BLINK_DESC: &str = "core.editor.cursor_blink.desc";
 const C_EDITOR_SOFT_CURSOR: &str = "core.editor.soft_cursor";
 const C_EDITOR_SOFT_CURSOR_DESC: &str = "core.editor.soft_cursor.desc";
+const C_EDITOR_TYPEWRITER: &str = "core.editor.typewriter";
+const C_EDITOR_TYPEWRITER_DESC: &str = "core.editor.typewriter.desc";
 const C_EDITOR_PREVIEW_MODIFIER: &str = "core.editor.preview_modifier";
 const C_EDITOR_PREVIEW_MODIFIER_DESC: &str = "core.editor.preview_modifier.desc";
 const C_EDITOR_PASTE_HTML: &str = "core.editor.paste_html";
@@ -1506,8 +2037,32 @@ const C_EDITOR_MINIBAR_AUTO: &str = "core.editor.minibar.auto";
 const C_EDITOR_MINIBAR_ALWAYS: &str = "core.editor.minibar.always";
 const C_EDITOR_MINIBAR_MENU: &str = "core.editor.minibar.menu";
 const C_EDITOR_MINIBAR_OFF: &str = "core.editor.minibar.off";
+const C_EDITOR_TOOLBAR: &str = "core.editor.toolbar";
+const C_EDITOR_TOOLBAR_DESC: &str = "core.editor.toolbar.desc";
+const C_EDITOR_TOOLBAR_COMPACT: &str = "core.editor.toolbar.compatta";
+const C_EDITOR_TOOLBAR_FULL: &str = "core.editor.toolbar.completa";
+const C_EDITOR_TOOLBAR_HIDDEN: &str = "core.editor.toolbar.nascosta";
+const C_EDITOR_LINK_CLICK: &str = "core.editor.link_click";
+const C_EDITOR_LINK_CLICK_DESC: &str = "core.editor.link_click.desc";
+const C_EDITOR_LINK_CLICK_OPEN: &str = "core.editor.link_click.open";
+const C_EDITOR_LINK_CLICK_PEEK: &str = "core.editor.link_click.peek";
+const C_EDITOR_GRID_COPY_MARK: &str = "core.editor.grid.copy_mark";
+const C_EDITOR_GRID_COPY_MARK_DESC: &str = "core.editor.grid.copy_mark.desc";
+const C_EDITOR_GRID_COPY_MARK_BOTH: &str = "core.editor.grid.copy_mark.dash_pulse";
+const C_EDITOR_GRID_COPY_MARK_DASH: &str = "core.editor.grid.copy_mark.dash";
+const C_EDITOR_GRID_COPY_MARK_PULSE: &str = "core.editor.grid.copy_mark.pulse";
+const C_EDITOR_GRID_SELECTION_SPEED: &str = "core.editor.grid.selection_speed";
+const C_EDITOR_GRID_SELECTION_SPEED_DESC: &str = "core.editor.grid.selection_speed.desc";
+const C_EDITOR_GRID_SELECTION_SPEED_QUICK: &str = "core.editor.grid.selection_speed.quick";
+const C_EDITOR_GRID_SELECTION_SPEED_NORMAL: &str = "core.editor.grid.selection_speed.normal";
+const C_EDITOR_GRID_SELECTION_SPEED_SOFT: &str = "core.editor.grid.selection_speed.soft";
+const C_EDITOR_GRID_SELECTION_SPEED_NONE: &str = "core.editor.grid.selection_speed.none";
 const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
+const C_EDITOR_HINTS: &str = "core.editor.hints";
+const C_EDITOR_HINTS_DESC: &str = "core.editor.hints.desc";
+const C_EDITOR_TYPOGRAPHY: &str = "core.editor.typography";
+const C_EDITOR_TYPOGRAPHY_DESC: &str = "core.editor.typography.desc";
 const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
 const C_EDITOR_SLASH_HIDDEN_DESC: &str = "core.editor.slash.hidden.desc";
 const C_EDITOR_SLASH_SECTIONS: &str = "core.editor.slash.sections";
@@ -1526,9 +2081,17 @@ const C_EDITOR_LIVE_REVEAL_ELEMENT: &str = "core.editor.live_reveal.element";
 const C_EDITOR_LIVE_REVEAL_LINE: &str = "core.editor.live_reveal.line";
 const C_EDITOR_LIVE_GUIDE: &str = "core.editor.live_guide";
 const C_EDITOR_LIVE_GUIDE_DESC: &str = "core.editor.live_guide.desc";
+const C_EDITOR_MATH_SOURCE: &str = "core.editor.math_source";
+const C_EDITOR_MATH_SOURCE_DESC: &str = "core.editor.math_source.desc";
+const C_EDITOR_MATH_HELP: &str = "core.editor.math_help";
+const C_EDITOR_MATH_HELP_DESC: &str = "core.editor.math_help.desc";
+const C_EDITOR_MATH_HELP_FULL: &str = "core.editor.math_help.piene";
+const C_EDITOR_MATH_HELP_DISCREET: &str = "core.editor.math_help.discrete";
+const C_EDITOR_MATH_HELP_OFF: &str = "core.editor.math_help.spente";
+const C_EDITOR_BLOCKS: &str = "core.editor.blocks";
+const C_EDITOR_BLOCKS_DESC: &str = "core.editor.blocks.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
-const C_MODE_LIVE: &str = "core.mode.live";
-const C_MODE_BLOCKS: &str = "core.mode.blocks";
+const C_MODE_WRITING: &str = "core.mode.writing";
 const C_MODE_READING: &str = "core.mode.reading";
 const C_GROUP_DIAGNOSTICS: &str = "core.group.diagnostics";
 const C_GROUP_PRIVACY: &str = "core.group.privacy";
@@ -1536,6 +2099,14 @@ const C_HISTORY: &str = "core.history";
 const C_HISTORY_DESC: &str = "core.history.desc";
 const C_PLUGINS_DISABLED: &str = "core.plugins_disabled";
 const C_PLUGINS_DISABLED_DESC: &str = "core.plugins_disabled.desc";
+const C_COMPONENTS_OFF: &str = "core.components_off";
+const C_COMPONENTS_OFF_DESC: &str = "core.components_off.desc";
+const C_COMPONENTS_KEPT: &str = "core.components_kept";
+const C_COMPONENTS_KEPT_DESC: &str = "core.components_kept.desc";
+const C_COMPONENTS_WAITING: &str = "core.components_waiting";
+const C_COMPONENTS_WAITING_DESC: &str = "core.components_waiting.desc";
+const C_COMPONENTS_PROFILE: &str = "core.components_profile";
+const C_COMPONENTS_PROFILE_DESC: &str = "core.components_profile.desc";
 const C_THEME: &str = "core.theme";
 const C_THEME_DESC: &str = "core.theme.desc";
 const C_THEME_LIGHT: &str = "core.theme.light";
@@ -1551,6 +2122,10 @@ const C_CSS_SNIPPETS: &str = "core.css_snippets";
 const C_CSS_SNIPPETS_DESC: &str = "core.css_snippets.desc";
 const C_DENSITY_COMFORTABLE: &str = "core.density.comfortable";
 const C_DENSITY_RELAXED: &str = "core.density.relaxed";
+const C_BARS: &str = "core.bars";
+const C_BARS_DESC: &str = "core.bars.desc";
+const C_BARS_LIGHT: &str = "core.bars.light";
+const C_BARS_MARKED: &str = "core.bars.marked";
 const C_BODY: &str = "core.body";
 const C_BODY_DESC: &str = "core.body.desc";
 const C_LINE_HEIGHT: &str = "core.line_height";
@@ -1586,6 +2161,11 @@ const C_FRAME_RATE: &str = "core.frame_rate";
 const C_FRAME_RATE_DESC: &str = "core.frame_rate.desc";
 const C_FRAME_RATE_DISPLAY: &str = "core.frame_rate.display";
 const C_FRAME_RATE_CAP: &str = "core.frame_rate.cap";
+const C_RENDERING: &str = "core.rendering";
+const C_RENDERING_DESC: &str = "core.rendering.desc";
+const C_RENDERING_AUTO: &str = "core.rendering.auto";
+const C_RENDERING_GPU: &str = "core.rendering.gpu";
+const C_RENDERING_CPU: &str = "core.rendering.cpu";
 const C_DIAGRAM_STYLE: &str = "core.diagram_style";
 const C_DIAGRAM_STYLE_DESC: &str = "core.diagram_style.desc";
 const C_DIAGRAM_STYLE_ARMONIA: &str = "core.diagram_style.armonia";
@@ -1627,6 +2207,11 @@ const C_LOG_VERBOSE: &str = "core.log.verbose";
 const C_LOG_VERBOSE_DESC: &str = "core.log.verbose.desc";
 const C_PERF_PROBE: &str = "core.perf.probe";
 const C_PERF_PROBE_DESC: &str = "core.perf.probe.desc";
+const C_GROUP_DEVELOPMENT: &str = "core.group.development";
+const C_DEVELOPER_MODE: &str = "core.developer.mode";
+const C_DEVELOPER_MODE_DESC: &str = "core.developer.mode.desc";
+const C_DEVELOPER_THEME_FOLDER: &str = "core.developer.theme_folder";
+const C_DEVELOPER_THEME_FOLDER_DESC: &str = "core.developer.theme_folder.desc";
 const C_GROUP_SYNC: &str = "core.group.sync";
 const C_SYNC_SERVER_URL: &str = "core.sync.server_url";
 const C_SYNC_SERVER_URL_DESC: &str = "core.sync.server_url.desc";
@@ -1638,6 +2223,11 @@ const C_GROUP_PUBLISH: &str = "core.group.publish";
 const C_PUBLISH_SERVER_URL: &str = "core.publish.server_url";
 const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
 const C_GROUP_LIVE: &str = "core.group.live";
+const C_REJECTED_TIMEZONE: &str = "core.settings.rejected.timezone";
+const C_REJECTED_SERVER_URL: &str = "core.settings.rejected.server_url";
+const C_REJECTED_TILE_HOST: &str = "core.settings.rejected.tile_host";
+const C_MAP_TILE_HOSTS: &str = "core.map.tile_hosts";
+const C_MAP_TILE_HOSTS_DESC: &str = "core.map.tile_hosts.desc";
 const C_GROUP_VIEWER: &str = "core.group.viewer";
 const C_VIEWER_HOSTS: &str = "core.viewer.hosts";
 const C_VIEWER_HOSTS_DESC: &str = "core.viewer.hosts.desc";
@@ -1755,7 +2345,9 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "Un template vale solo per una cattura che crea una nota.")
         .with("host.capture.moved", "«{doc}» è cambiata durante la cattura: riprova.")
         .with("host.vault.moved", "«{doc}» è cambiata dopo aver letto la sua revisione: riprova.")
+        .with("host.open_key.malformed", "La chiave di apertura del documento non è valida: da 1 a 64 lettere, cifre, «-» o «_».")
         .with("host.rich.encrypted", "«{doc}» è protetto da una password: Fub non lo apre.")
+        .with("host.rich.unreadable", "«{doc}» non si apre: il file è vuoto, rovinato o non è un documento di questo tipo.")
         .with("host.rich.readonly.revisions", "«{doc}» ha revisioni tracciate: si legge, ma non si scrive da qui.")
         .with("host.rich.readonly.track_changes", "«{doc}» registra le modifiche: si legge, ma non si scrive da qui.")
         .with("host.rich.readonly.protected", "«{doc}» è protetto contro le modifiche: si legge, ma non si scrive da qui.")
@@ -1770,25 +2362,31 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.missing", "Il contenuto da salvare in «{doc}» nomina {what}, che il documento non ha.")
         .with("host.rich.duplicate", "Il contenuto da salvare in «{doc}» mostra due volte la stessa nota o casella di testo.")
         .with("host.rich.fidelity", "«{doc}» non è stato salvato: il file nuovo non si rileggeva uguale a ciò che si voleva scrivere.")
-        .with("host.rich.locked.block", "«{doc}» non è stato salvato: il paragrafo o la tabella {block} del testo ha parti che Fub non sa riscrivere senza perderle, e da qui non si cambia.")
-        .with("host.rich.locked.outside", "«{doc}» non è stato salvato: la modifica tocca parti del file fuori dal testo che Fub non sa riscrivere senza perderle. Si salvano soltanto i paragrafi e le tabelle del testo.")
+        .with("host.rich.locked.block", "il paragrafo o la tabella {block} di «{doc}» è una parte chiusa: Fub non sa riscriverla senza perderne qualcosa, e da qui non si cambia.")
+        .with("host.rich.locked.outside", "la modifica tocca parti di «{doc}» fuori dal testo che Fub non sa riscrivere senza perderle: si salvano soltanto i paragrafi e le tabelle del testo.")
         .with("host.rich.codec", "«{doc}» non si legge o non si scrive nel suo formato: {why}")
-        .with("host.xlsx.readonly", "«{doc}» è una cartella di Excel: Fub ne cambia soltanto i valori delle celle, e non la copre con altri byte.")
-        .with("host.xlsx.missing", "«{doc}» non c'è più: Fub non crea una cartella di Excel dalle celle cambiate.")
+        .with("host.resource.reuse_with_expected", "«{doc}» non si deposita: riusare un file con gli stessi byte vale solo per un file nuovo, non per ricoprirne uno.")
+        .with("host.xlsx.readonly", "«{doc}» è una cartella .xlsx: Fub ne cambia soltanto i valori delle celle, e non la copre con altri byte.")
+        .with("host.xlsx.missing", "«{doc}» non c'è più: Fub non crea una cartella .xlsx dalle celle cambiate.")
         .with("host.xlsx.journal", "Le celle cambiate da salvare in «{doc}» non sono leggibili: {why}")
         .with("host.xlsx.encrypted", "«{doc}» è protetta da una password: Fub non la apre.")
         .with("host.xlsx.too_large", "«{doc}» pesa {bytes} byte, più di quanto Fub apra.")
-        .with("host.xlsx.not_xlsx", "«{doc}» non è una cartella di Excel, anche se ne ha il nome ({found}).")
-        .with("host.xlsx.codec", "«{doc}» non si legge come cartella di Excel: {why}")
+        .with("host.xlsx.not_xlsx", "«{doc}» non è una cartella .xlsx, anche se ne ha il nome ({found}).")
+        .with("host.xlsx.codec", "«{doc}» non si legge come cartella .xlsx: {why}")
         .with("xlsx.rewrite.loses", "La cartella non si salva: riscriverla perderebbe parti del file che Fub non sa scrivere, e il file resta com'era ({why}).")
         .with("host.grid.protocol", "La superficie della griglia parla un'altra versione del protocollo: questa porta non la serve.")
         .with("host.grid.no_surface", "Un provider della griglia deve dichiarare almeno una superficie.")
+        .with("host.drawing.unserved", "Il Motore del disegno non c'è in questa versione di Fub: il disegno usa gli strumenti semplici.")
+        .with("host.drawing.engine_off", "Il Motore del disegno è spento in questo vault: il disegno usa gli strumenti semplici.")
+        .with("host.drawing.instance", "Il disegno aperto «{instance}» non c'è più: va riaperto.")
+        .with("host.drawing.stopped", "Il Motore del disegno si è fermato sul disegno «{instance}»: si può riprovare.")
+        .with("host.drawing.poisoned", "Il Motore del disegno si è fermato: si può riprovare.")
         .with("host.grid.not_bytes", "La superficie della griglia «{surface}» non è della versione a byte.")
         .with("host.grid.surface_format", "La superficie della griglia «{surface}» non apre «{doc}»: è di un altro formato.")
         .with("host.grid.source_too_large", "La sorgente della griglia pesa {bytes} byte, più del limite.")
-        .with("host.grid.source_revision", "La sorgente della griglia non ha la revisione con cui è arrivata.")
         .with("host.wasm.reentrant", "Il componente è stato richiamato mentre era già al lavoro.")
         .with("host.wasm.missing_export", "Il componente non esporta «{interface}».")
+        .with("host.wasm.memory_budget", "I componenti hanno finito la memoria: ne tengono già {used} MiB su {ceiling}. Chiudi o disattiva un plugin e riprova.")
         .with("host.turn.cycle", "Il vault sta salvando una nota che aspetta questo componente, e questo componente aspetta il vault: il lavoro si ferma per lasciar finire il salvataggio. Riprova.")
         .with("host.instance.cycle", "Questo componente aspetta un altro componente che a sua volta aspetta questo: il lavoro si ferma per non bloccarli entrambi. Riprova.")
         .with("host.capture.source", "Fonte: {url}")
@@ -1848,6 +2446,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "Nessun vault aperto: il collegamento non ha dove scrivere.")
         .with("host.uri.reads", "«{action}» non scrive: lo esegue la finestra.")
         .with("host.uri.capture_missing", "La cattura chiede anche «{what}».")
+        .with("host.uri.capture_replayed", "Questa cattura è già stata scritta: un nuovo invio con lo stesso nonce non la scrive di nuovo.")
         .with("host.web.clip.title", "Salva la pagina web come nota")
         .with("host.web.clip.desc", "Scarica di nuovo una pagina di un sito approvato e la scrive come nota Markdown, con la fonte; in prova dice soltanto dove.")
         .with("host.param.url", "Indirizzo")
@@ -1856,12 +2455,28 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.web.clip.plan", "Salverebbe {url} come nuova nota nella cartella «{folder}».")
         .with("host.web.clip.plan_root", "Salverebbe {url} come nuova nota nella radice del vault.")
         .with("host.web.clip.no_network", "Questa finestra non ha accesso alla rete: la pagina non si può scaricare.")
+        .with("host.net.relay_unavailable", "Fub non è riuscito ad avviare la richiesta di rete: chiudi qualche finestra o programma e riprova.")
+        .with("host.map.tile.not_https", "«{url}» non è un indirizzo https di tessere: servono https, nessuna porta diversa da 443, niente credenziali, query o frammento.")
+        .with("host.map.tile.not_allowed", "Le tessere di {site} non sono ammesse su questo computer: aggiungi il sito in Impostazioni › Privacy › Tessere delle mappe.")
+        .with("host.map.tile.no_network", "Questa finestra non ha accesso alla rete: le tessere non si possono scaricare.")
+        .with("host.map.tile.busy", "Troppe tessere in attesa: riprova fra poco.")
+        .with("host.map.tile.timeout", "{site} non ha mandato la tessera in tempo.")
+        .with("host.map.tile.network", "{site} non risponde: controlla la connessione.")
+        .with("host.map.tile.redirect", "{site} ha mandato altrove la richiesta della tessera: i redirect non si seguono.")
+        .with("host.map.tile.status", "{site} ha risposto {status} alla richiesta della tessera.")
+        .with("host.map.tile.too_large", "Una tessera di {site} supera 1 MiB e non si mostra.")
+        .with("host.map.tile.bad_type", "Una tessera di {site} non è un'immagine che la mappa accetti ({kind}).")
         .with("host.control.not_base64", "I byte non sono in base64.")
         .with("host.wasm.render_parts", "Una resa con parti UI non si consegna ancora a un componente.")
         .with("host.control.no_answer", "L'app non risponde sul canale di controllo: {reason}")
         .with("host.control.closed", "L'app ha chiuso il canale di controllo senza rispondere.")
         .with("host.control.bad_reply", "La risposta del canale di controllo non si legge: {reason}")
         .with("host.control.busy", "L'app sta già servendo troppe domande: riprova.")
+        .with("host.sync.kdf_unsupported", "Il server della sincronizzazione è di un'altra versione e non accetta la protezione di questa chiave del vault: aggiorna Fub o il server, poi riprova.")
+        .with("host.sync.key_epoch_changed", "La chiave del vault è cambiata su un altro dispositivo: chiedi un invito nuovo e accettalo qui prima di sincronizzare.")
+        .with("host.sync.rekey_epoch_changed", "La chiave del vault è cambiata mentre preparavi il cambio: sincronizza di nuovo, poi riprova.")
+        .with("host.sync.read_only_no_key", "Questo vault non ha ancora una chiave sul server, e la sincronizzazione in sola lettura non può crearla: sincronizza prima da un dispositivo che invia.")
+        .with("host.sync.outbox_unserved_key", "Le modifiche in attesa di sincronizzazione sono cifrate con una chiave del vault che il server non ha più. Restano su questo dispositivo, intatte; la sincronizzazione si ferma finché non vengono recuperate.")
         .with("host.control.too_large", "Domanda troppo grande o interrotta.")
         .with("host.control.unreadable", "Domanda illeggibile.")
         .with("host.control.bad_token", "Il token del canale di controllo non è valido.")
@@ -1891,6 +2506,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.craft_render.no_cli", "Fub non trova il programma a riga di comando dell'app.")
         .with("host.craft_render.ticket", "Fub non è riuscito a preparare l'anteprima: riprova.")
+        .with(
+            "host.theme_folder.developer_off",
+            "Per installare un tema da una cartella accendi la modalità sviluppatore.",
+        )
+        .with("host.theme_folder.unavailable", "Fub non ha una cartella per i temi su questo computer.")
+        .with(
+            "host.theme_folder.desktop_only",
+            "Su questo dispositivo non si sceglie una cartella: i temi da cartella si installano da Fub sul computer.",
+        )
+        .with("host.theme_folder.pick_title", "Scegli la cartella del tema")
+        .with("host.theme_folder.link_title", "Scegli la cartella del tema da collegare")
+        .with(
+            "host.theme_folder.link_only",
+            "La cartella collegata si sceglie con «Collega una cartella…» in Aspetto.",
+        )
+        .with(
+            "host.theme_folder.pick_failed",
+            "La finestra per scegliere la cartella non ha risposto: riprova.",
+        )
+        .with(
+            "host.theme_folder.unreadable_path",
+            "Fub non sa leggere il percorso di questa cartella: spostala in una con un nome semplice.",
+        )
         .with(
             "host.craft_render.over_limit",
             "Il file supera il peso massimo per un'anteprima fatta dall'app.",
@@ -2017,7 +2655,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
         .with(
             C_URI_ALLOWED_DESC,
-            "Le azioni scelte (nota nuova, giornaliera, nota unica, cattura) scrivono appena il collegamento arriva, senza conferma. Aprire un altro vault chiede sempre. Vale su questo computer.",
+            "Le azioni scelte (nota nuova, giornaliera, nota unica) scrivono appena il collegamento arriva, senza conferma. Una cattura e l'apertura di un altro vault chiedono sempre. Vale su questo computer.",
         )
         .with(C_FILES_LINK_STYLE, "Nuovi link")
         .with(
@@ -2053,6 +2691,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_PEOPLE_FOLDER_DESC,
             "@ in una nota propone le note di questa cartella e scrive il link alla persona; una persona nuova nasce qui. Vuota, @ non propone persone.",
         )
+        .with(C_FILES_TYPES_FOLDER, "Cartella dei tipi di nota")
+        .with(
+            C_FILES_TYPES_FOLDER_DESC,
+            "Ogni nota di questa cartella è un tipo: il suo frontmatter dice icona, proprietà e cartella delle note nuove, il suo testo è il modello. Vuota, i tipi sono spenti.",
+        )
         .with(C_GROUP_APPEARANCE, "Aspetto")
         .with(C_GROUP_CHROME, "Interfaccia")
         .with(C_CHROME_SCHEMA, "Versione configurazione dell'interfaccia")
@@ -2080,6 +2723,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_FRAME_DESC, "Il cambio di cornice richiede la riapertura e dipende dalle capacità del sistema.")
         .with(C_FRAME_SYSTEM, "Del sistema")
         .with(C_FRAME_CUSTOM, "Personalizzata")
+        .with(C_GROUP_PROFILE, "Profilo")
+        .with(C_PROFILE_NAME, "Il tuo nome")
+        .with(
+            C_PROFILE_NAME_DESC,
+            "Firma i commenti che scrivi nelle note. Il nome finisce nel file della nota: chi lo apre, anche con un altro programma, lo legge. Cambiarlo vale per i commenti nuovi.",
+        )
+        .with(C_COMMENTS_AUTHOR, "Firma dei commenti in questo vault")
+        .with(
+            C_COMMENTS_AUTHOR_DESC,
+            "Che cosa scrive Fub accanto a ogni commento nuovo di questo vault. Senza firma il commento si legge «Senza nome».",
+        )
+        .with(C_COMMENTS_AUTHOR_NAME, "Il nome")
+        .with(C_COMMENTS_AUTHOR_INITIALS, "Le iniziali")
+        .with(C_COMMENTS_AUTHOR_NONE, "Nessuna firma")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Controllo ortografico")
         .with(C_EDITOR_SPELLCHECK_DESC, "Usa il controllo ortografico del sistema mentre scrivi.")
@@ -2103,6 +2760,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_CURSOR_BLINK_DESC, "Il cursore dell'editor si accende e si spegne. Di serie sta fermo, per non distrarre mentre si legge.")
         .with(C_EDITOR_SOFT_CURSOR, "Cursore morbido")
         .with(C_EDITOR_SOFT_CURSOR_DESC, "Nei Blocchi il cursore scivola fino al punto nuovo invece di saltarci. Mai mentre scrivi, e mai col movimento ridotto.")
+        .with(C_EDITOR_TYPEWRITER, "Macchina da scrivere")
+        .with(C_EDITOR_TYPEWRITER_DESC, "La riga del cursore resta a metà altezza del foglio e il testo le scorre sotto, come il foglio in una macchina da scrivere. In cima a una nota corta il testo non scende oltre l'inizio.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Anteprima dei link solo con Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Passando sopra un link, l'anteprima della nota si apre solo tenendo premuto Ctrl (Cmd sul Mac), anche in Lettura. Mentre si scrive serve sempre.")
         .with(C_EDITOR_PASTE_HTML, "Converti l'HTML incollato")
@@ -2115,34 +2774,66 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_2, "2 spazi")
         .with(C_EDITOR_INDENT_4, "4 spazi")
         .with(C_EDITOR_PROPERTIES, "Proprietà nel testo")
-        .with(C_EDITOR_PROPERTIES_DESC, "Come Live mostra il frontmatter in cima alla nota. Un click sulle proprietà riapre lo YAML da scrivere; in Sorgente resta sempre YAML.")
+        .with(C_EDITOR_PROPERTIES_DESC, "Come Scrittura mostra il frontmatter in cima alla nota. Un click sulle proprietà riapre lo YAML da scrivere; in Sorgente resta sempre YAML.")
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visibili")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Nascoste")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_MINIBAR, "Mini-barra di formattazione")
         .with(C_EDITOR_MINIBAR_DESC, "I gesti di formattazione accanto al puntatore: sopra il menu del tasto destro e, se si vuole, sul testo scelto.")
-        .with(C_EDITOR_MINIBAR_AUTO, "Col tasto destro, e sul testo scelto a barra spenta")
+        .with(C_EDITOR_MINIBAR_AUTO, "Col tasto destro, e sul testo scelto se la barra non è completa")
         .with(C_EDITOR_MINIBAR_ALWAYS, "Col tasto destro e su ogni testo scelto")
         .with(C_EDITOR_MINIBAR_MENU, "Soltanto col tasto destro")
         .with(C_EDITOR_MINIBAR_OFF, "Mai")
+        .with(C_EDITOR_TOOLBAR, "Barra di formato")
+        .with(C_EDITOR_TOOLBAR_DESC, "Sopra il foglio. Compatta: poche cose fisse, lo stile e gli strumenti del blocco in cui sta il cursore. Completa: tutti i pulsanti. Nascosta: resta la mini-barra sul testo scelto.")
+        .with(C_EDITOR_TOOLBAR_COMPACT, "Compatta")
+        .with(C_EDITOR_TOOLBAR_FULL, "Completa")
+        .with(C_EDITOR_TOOLBAR_HIDDEN, "Nascosta")
+        .with(C_EDITOR_LINK_CLICK, "Clic su un link a una nota")
+        .with(C_EDITOR_LINK_CLICK_DESC, "Che cosa fa il clic che apre un link: portare la nota nel riquadro, o aprirla nella sbirciata, sopra la destra del foglio, dove si scrive senza lasciare la nota di prima. Alt col clic, o Alt Invio, sbircia sempre.")
+        .with(C_EDITOR_LINK_CLICK_OPEN, "Apre la nota")
+        .with(C_EDITOR_LINK_CLICK_PEEK, "Sbircia la nota")
+        .with(C_EDITOR_GRID_COPY_MARK, "Segno della copia nei fogli di calcolo")
+        .with(C_EDITOR_GRID_COPY_MARK_DESC, "Che cosa resta sulle celle che copi: un tratteggio largo finché non incolli, un battito che si accende e svanisce, o tutti e due. Il taglio resta sempre un tratteggio fitto.")
+        .with(C_EDITOR_GRID_COPY_MARK_BOTH, "Tratteggio e battito")
+        .with(C_EDITOR_GRID_COPY_MARK_DASH, "Solo il tratteggio")
+        .with(C_EDITOR_GRID_COPY_MARK_PULSE, "Solo il battito")
+        .with(C_EDITOR_GRID_SELECTION_SPEED, "Velocità della selezione nei fogli di calcolo")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_DESC, "Come la selezione va alla cella nuova, coi tasti e col puntatore: scivola più svelta, come di norma o più morbida, oppure salta di cella in cella. Col movimento ridotto si ferma subito, qualunque sia la scelta.")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_QUICK, "Svelta")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_NORMAL, "Come di norma")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_SOFT, "Morbida")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_NONE, "A scatti")
         .with(C_EDITOR_SLASH, "Menu «/» nel testo")
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
+        .with(C_EDITOR_HINTS, "Riga dei suggerimenti")
+        .with(C_EDITOR_HINTS_DESC, "Al centro della banda in basso, i tasti utili per ciò che stai facendo, con le tue scorciatoie. Non c'è al telefono né in una finestra più stretta di 620 px.")
+        .with(C_EDITOR_TYPOGRAPHY, "Tipografia italiana")
+        .with(C_EDITOR_TYPOGRAPHY_DESC, "Mentre scrivi, le virgolette diventano « », due trattini —, tre punti … e l'apostrofo ’. Vale nelle note in italiano, fuori da codice, formule e link; Backspace subito dopo rimette ciò che avevi scritto.")
         .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "Gli id dei comandi che il menu «/» non mostra. Restano nella palette e da tastiera.")
         .with(C_EDITOR_SLASH_SECTIONS, "Ordine delle sezioni del menu «/»")
         .with(C_EDITOR_SLASH_SECTIONS_DESC, "Le sezioni dopo Suggeriti, Preferiti e Recenti. Quelle non elencate seguono nel loro ordine.")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
-        .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Live")
-        .with(C_EDITOR_LIVE_REVEAL_DESC, "I segni del Markdown si vedono in Sorgente; qui si sceglie se mostrarli anche in Live.")
-        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Mai, come in Word")
+        .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Scrittura")
+        .with(C_EDITOR_LIVE_REVEAL_DESC, "I segni del Markdown si vedono in Sorgente; qui si sceglie se mostrarli anche in Scrittura.")
+        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Mai")
         .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Dell'elemento del cursore")
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Della riga del cursore")
         .with(C_EDITOR_LIVE_GUIDE, "Guida mentre scrivi")
-        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Live un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Scrittura un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
+        .with(C_EDITOR_MATH_SOURCE, "Mostra il LaTeX delle formule")
+        .with(C_EDITOR_MATH_SOURCE_DESC, "Accesa, sotto la formula toccata c'è il campo del suo LaTeX e si scrive lì; il clic sulla formula porta solo agli spazi vuoti. Spenta, la formula resta disegnata e si modifica toccandola: si clicca dove si vuole scrivere.")
+        .with(C_EDITOR_MATH_HELP, "Aiuti nel LaTeX delle formule")
+        .with(C_EDITOR_MATH_HELP_DESC, "Con «Mostra il LaTeX delle formule» accesa. Pieni: parentesi che si chiudono, completamento dopo \\, scrittura veloce (a/b, alpha, ->) e tavolozza. Discreti: solo parentesi e completamento, la tavolozza a richiesta. Spenti: il LaTeX che scrivi e la sua anteprima, nient'altro.")
+        .with(C_EDITOR_MATH_HELP_FULL, "Pieni")
+        .with(C_EDITOR_MATH_HELP_DISCREET, "Discreti")
+        .with(C_EDITOR_MATH_HELP_OFF, "Spenti")
+        .with(C_EDITOR_BLOCKS, "Blocchi: maniglie e selezione")
+        .with(C_EDITOR_BLOCKS_DESC, "Accesi, ogni blocco ha la maniglia e il «+», Esc seleziona il blocco e Ctrl A prende il blocco, poi tutti. Spenti, Scrittura è un editor di testo: Ctrl A seleziona tutto il testo e Ctrl D la prossima occorrenza.")
         .with(C_MODE_SOURCE, "Sorgente")
-        .with(C_MODE_LIVE, "Live")
-        .with(C_MODE_BLOCKS, "Blocchi")
+        .with(C_MODE_WRITING, "Scrittura")
         .with(C_MODE_READING, "Lettura")
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Ricerche e note recenti")
@@ -2158,6 +2849,30 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Gli id dei componenti che non vengono montati all'apertura di questo \
              vault. Si cambiano accendendo e spegnendo un componente, non scrivendo \
              qui dentro.",
+        )
+        .with(C_COMPONENTS_OFF, "Altri componenti spenti")
+        .with(
+            C_COMPONENTS_OFF_DESC,
+            "I componenti spenti che non sono fra quelli montati, come la lavagna \
+             e il PDF. Si cambiano accendendo e spegnendo un componente.",
+        )
+        .with(C_COMPONENTS_KEPT, "Componenti tenuti")
+        .with(
+            C_COMPONENTS_KEPT_DESC,
+            "I componenti tenuti accesi con «Tienili» anche se non servono più a \
+             nessun altro.",
+        )
+        .with(C_COMPONENTS_WAITING, "Componenti in attesa")
+        .with(
+            C_COMPONENTS_WAITING_DESC,
+            "I componenti che non servono più a nessuno e sono ancora accesi, in \
+             attesa che tu scelga «Togli» o «Tienili».",
+        )
+        .with(C_COMPONENTS_PROFILE, "Profilo")
+        .with(
+            C_COMPONENTS_PROFILE_DESC,
+            "Il profilo dei componenti scelto per questo vault. Vuoto vuol dire \
+             personalizzato: lo diventa appena accendi o spegni un componente.",
         )
         .with(C_THEME, "Tema")
         .with(
@@ -2183,6 +2898,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DENSITY_COMPACT, "Compatta")
         .with(C_DENSITY_COMFORTABLE, "Comoda")
         .with(C_DENSITY_RELAXED, "Rilassata")
+        .with(C_BARS, "Le barre")
+        .with(
+            C_BARS_DESC,
+            "Il vassoio sotto le schede, le barre dei comandi e la colonna degli strumenti: chiaro, vicino alla carta, o marcato, che si stacca di più.",
+        )
+        .with(C_BARS_LIGHT, "Chiare")
+        .with(C_BARS_MARKED, "Marcate")
         .with(C_BODY, "Corpo del testo (px)")
         .with(
             C_BODY_DESC,
@@ -2227,6 +2949,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.")
         .with(C_FRAME_RATE_DISPLAY, "Massimo dello schermo")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_RENDERING, "Disegno delle pagine")
+        .with(
+            C_RENDERING_DESC,
+            "Chi disegna le finestre di Fub. Automatico lascia la scelta a WebKit e ti avvisa dei problemi noti; Processore aiuta con alcuni driver che sfarfallano. Vale dal prossimo avvio.",
+        )
+        .with(C_RENDERING_AUTO, "Automatico")
+        .with(C_RENDERING_GPU, "Scheda grafica")
+        .with(C_RENDERING_CPU, "Processore")
         .with(C_DIAGRAM_STYLE, "Stile dei diagrammi")
         .with(
             C_DIAGRAM_STYLE_DESC,
@@ -2269,6 +2999,25 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_PUBLISH_SERVER_URL_DESC,
             "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
         )
+        .with(
+            C_REJECTED_TIMEZONE,
+            "«{name}» non è un fuso orario conosciuto. Scrivi un nome IANA come Europe/Rome, \
+             oppure lascia vuoto per usare quello del sistema.",
+        )
+        .with(
+            C_REJECTED_SERVER_URL,
+            "«{value}» non è un indirizzo di server valido. Scrivi un indirizzo https://, \
+             oppure http:// solo verso 127.0.0.1, ::1 o localhost; vuoto vuol dire nessun server.",
+        )
+        .with(
+            C_REJECTED_TILE_HOST,
+            "«{value}» non è un nome di host. Scrivi soltanto il nome, per esempio tile.openstreetmap.org: senza https://, porta o percorso.",
+        )
+        .with(C_MAP_TILE_HOSTS, "Tessere delle mappe")
+        .with(
+            C_MAP_TILE_HOSTS_DESC,
+            "I siti da cui la vista Mappa di una Base può scaricare le tessere, quando premi «Attiva». Vuota, le mappe restano offline e nessuna richiesta esce dal computer.",
+        )
         .with(C_GROUP_VIEWER, "Visore web")
         .with(C_VIEWER_HOSTS, "Siti approvati")
         .with(
@@ -2307,6 +3056,21 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Misura quanto passa da un tasto, un clic o un tratto di penna al \
              fotogramma che lo mostra, e conta i fotogrammi lunghi. I numeri \
              restano su questo computer: servono ai banchi di misura.",
+        )
+        .with(C_GROUP_DEVELOPMENT, "Sviluppo")
+        .with(C_DEVELOPER_MODE, "Modalità sviluppatore")
+        .with(
+            C_DEVELOPER_MODE_DESC,
+            "Per chi scrive un tema: in «Temi installati» compaiono «Installa da \
+             cartella…», che lo controlla e lo installa dalla sua cartella, \
+             «Collega una cartella…», che lo rimonta a ogni salvataggio, e \
+             «Tutti i componenti», che mostra ogni componente in ogni stato.",
+        )
+        .with(C_DEVELOPER_THEME_FOLDER, "Cartella collegata")
+        .with(
+            C_DEVELOPER_THEME_FOLDER_DESC,
+            "La cartella del tema in sviluppo: Fub la guarda e rimonta il tema a \
+             ogni salvataggio. Si sceglie e si scollega da «Temi installati».",
         );
     for level in fub_kernel::log::Level::ALL {
         it = it.with(
@@ -2356,7 +3120,9 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "A template only applies to a capture that creates a note.")
         .with("host.capture.moved", "“{doc}” changed during the capture: try again.")
         .with("host.vault.moved", "“{doc}” changed after its revision was read: try again.")
+        .with("host.open_key.malformed", "The document's open key is not valid: 1 to 64 letters, digits, “-” or “_”.")
         .with("host.rich.encrypted", "“{doc}” is protected by a password: Fub does not open it.")
+        .with("host.rich.unreadable", "“{doc}” does not open: the file is empty, damaged, or not a document of this kind.")
         .with("host.rich.readonly.revisions", "“{doc}” has tracked changes: it can be read, but not written from here.")
         .with("host.rich.readonly.track_changes", "“{doc}” tracks changes: it can be read, but not written from here.")
         .with("host.rich.readonly.protected", "“{doc}” is protected against editing: it can be read, but not written from here.")
@@ -2371,25 +3137,31 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.missing", "The content to save into “{doc}” names {what}, which the document does not have.")
         .with("host.rich.duplicate", "The content to save into “{doc}” shows the same note or text box twice.")
         .with("host.rich.fidelity", "“{doc}” was not saved: the new file did not read back the same as what was to be written.")
-        .with("host.rich.locked.block", "“{doc}” was not saved: paragraph or table {block} of the text has parts Fub cannot rewrite without losing them, and it cannot be changed from here.")
-        .with("host.rich.locked.outside", "“{doc}” was not saved: the change touches parts of the file outside the text that Fub cannot rewrite without losing them. Only the paragraphs and tables of the text are saved.")
+        .with("host.rich.locked.block", "paragraph or table {block} of “{doc}” is a closed part: Fub cannot rewrite it without losing something, and it cannot be changed from here.")
+        .with("host.rich.locked.outside", "the change touches parts of “{doc}” outside the text that Fub cannot rewrite without losing them: only the paragraphs and tables of the text are saved.")
         .with("host.rich.codec", "“{doc}” cannot be read or written in its format: {why}")
-        .with("host.xlsx.readonly", "“{doc}” is an Excel workbook: Fub only changes the values of its cells and does not overwrite it with other bytes.")
-        .with("host.xlsx.missing", "“{doc}” no longer exists: Fub does not create an Excel workbook from changed cells.")
+        .with("host.resource.reuse_with_expected", "“{doc}” was not deposited: reusing a file with the same bytes only applies to a new file, not to overwriting one.")
+        .with("host.xlsx.readonly", "“{doc}” is an .xlsx workbook: Fub only changes the values of its cells and does not overwrite it with other bytes.")
+        .with("host.xlsx.missing", "“{doc}” no longer exists: Fub does not create an .xlsx workbook from changed cells.")
         .with("host.xlsx.journal", "The changed cells to save in “{doc}” cannot be read: {why}")
         .with("host.xlsx.encrypted", "“{doc}” is protected by a password: Fub does not open it.")
         .with("host.xlsx.too_large", "“{doc}” is {bytes} bytes, more than Fub opens.")
-        .with("host.xlsx.not_xlsx", "“{doc}” is not an Excel workbook, even though it has the name of one ({found}).")
-        .with("host.xlsx.codec", "“{doc}” cannot be read as an Excel workbook: {why}")
+        .with("host.xlsx.not_xlsx", "“{doc}” is not an .xlsx workbook, even though it has the name of one ({found}).")
+        .with("host.xlsx.codec", "“{doc}” cannot be read as an .xlsx workbook: {why}")
         .with("xlsx.rewrite.loses", "The workbook was not saved: rewriting it would lose parts of the file that Fub cannot write, so the file stays as it was ({why}).")
         .with("host.grid.protocol", "The grid surface speaks another protocol version: this port does not serve it.")
         .with("host.grid.no_surface", "A grid provider must declare at least one surface.")
+        .with("host.drawing.unserved", "The drawing engine is not in this build of Fub: the drawing uses the simple tools.")
+        .with("host.drawing.engine_off", "The drawing engine is off in this vault: the drawing uses the simple tools.")
+        .with("host.drawing.instance", "The open drawing “{instance}” is gone: open it again.")
+        .with("host.drawing.stopped", "The drawing engine stopped on the drawing “{instance}”: you can try again.")
+        .with("host.drawing.poisoned", "The drawing engine stopped: you can try again.")
         .with("host.grid.not_bytes", "The grid surface “{surface}” is not a byte surface.")
         .with("host.grid.surface_format", "The grid surface “{surface}” does not open “{doc}”: it belongs to another format.")
         .with("host.grid.source_too_large", "The grid source is {bytes} bytes, more than the limit.")
-        .with("host.grid.source_revision", "The grid source does not have the revision it arrived with.")
         .with("host.wasm.reentrant", "The component was called again while it was already working.")
         .with("host.wasm.missing_export", "The component does not export “{interface}”.")
+        .with("host.wasm.memory_budget", "Components have run out of memory: they already hold {used} MiB of {ceiling}. Close or turn off a plugin and try again.")
         .with("host.turn.cycle", "The vault is saving a note that waits for this component, and this component waits for the vault: the work stops so the save can finish. Try again.")
         .with("host.instance.cycle", "This component waits for another one that in turn waits for this one: the work stops so neither blocks. Try again.")
         .with("host.capture.source", "Source: {url}")
@@ -2449,6 +3221,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "No vault is open: the link has nowhere to write.")
         .with("host.uri.reads", "“{action}” does not write: the window runs it.")
         .with("host.uri.capture_missing", "The capture also needs “{what}”.")
+        .with("host.uri.capture_replayed", "This capture has already been written: sending it again with the same nonce does not write it twice.")
         .with("host.web.clip.title", "Save the web page as a note")
         .with("host.web.clip.desc", "Downloads a page of an approved site again and writes it as a Markdown note, with its source; a dry run only says where.")
         .with("host.param.url", "Address")
@@ -2457,12 +3230,28 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.web.clip.plan", "Would save {url} as a new note in the folder “{folder}”.")
         .with("host.web.clip.plan_root", "Would save {url} as a new note at the root of the vault.")
         .with("host.web.clip.no_network", "This window has no network access: the page cannot be downloaded.")
+        .with("host.net.relay_unavailable", "Fub could not start the network request: close a few windows or programs and try again.")
+        .with("host.map.tile.not_https", "“{url}” is not an https tile address: it needs https, no port other than 443, and no credentials, query or fragment.")
+        .with("host.map.tile.not_allowed", "Tiles from {site} are not allowed on this computer: add the site in Settings › Privacy › Map tiles.")
+        .with("host.map.tile.no_network", "This window has no network access: tiles cannot be downloaded.")
+        .with("host.map.tile.busy", "Too many tiles waiting: try again shortly.")
+        .with("host.map.tile.timeout", "{site} did not send the tile in time.")
+        .with("host.map.tile.network", "{site} does not answer: check the connection.")
+        .with("host.map.tile.redirect", "{site} sent the tile request elsewhere: redirects are not followed.")
+        .with("host.map.tile.status", "{site} answered {status} to the tile request.")
+        .with("host.map.tile.too_large", "A tile from {site} is larger than 1 MiB and is not shown.")
+        .with("host.map.tile.bad_type", "A tile from {site} is not an image the map accepts ({kind}).")
         .with("host.control.not_base64", "The bytes are not base64.")
         .with("host.wasm.render_parts", "A render with UI parts cannot be handed to a component yet.")
         .with("host.control.no_answer", "The app does not answer on the control channel: {reason}")
         .with("host.control.closed", "The app closed the control channel without answering.")
         .with("host.control.bad_reply", "The control channel answer cannot be read: {reason}")
         .with("host.control.busy", "The app is already serving too many requests: try again.")
+        .with("host.sync.kdf_unsupported", "The sync server is a different version and does not accept the protection of this vault key: update Fub or the server, then try again.")
+        .with("host.sync.key_epoch_changed", "The vault key changed on another device: ask for a new invite and accept it here before syncing.")
+        .with("host.sync.rekey_epoch_changed", "The vault key changed while you were preparing the change: sync again, then retry.")
+        .with("host.sync.read_only_no_key", "This vault has no key on the server yet, and read-only sync cannot create one: sync first from a device that sends.")
+        .with("host.sync.outbox_unserved_key", "The changes waiting to sync are encrypted with a vault key the server no longer has. They stay on this device, intact; sync stops until they are recovered.")
         .with("host.control.too_large", "Request too large or interrupted.")
         .with("host.control.unreadable", "Unreadable request.")
         .with("host.control.bad_token", "The control channel token is not valid.")
@@ -2492,6 +3281,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.craft_render.no_cli", "Fub cannot find the app's command-line program.")
         .with("host.craft_render.ticket", "Fub could not prepare the preview: try again.")
+        .with(
+            "host.theme_folder.developer_off",
+            "To install a theme from a folder, turn on developer mode.",
+        )
+        .with("host.theme_folder.unavailable", "Fub has no theme folder on this computer.")
+        .with(
+            "host.theme_folder.desktop_only",
+            "A folder cannot be chosen on this device: themes from a folder are installed from Fub on a computer.",
+        )
+        .with("host.theme_folder.pick_title", "Choose the theme folder")
+        .with("host.theme_folder.link_title", "Choose the theme folder to link")
+        .with(
+            "host.theme_folder.link_only",
+            "The linked folder is chosen with «Link a folder…» in Appearance.",
+        )
+        .with(
+            "host.theme_folder.pick_failed",
+            "The window to choose the folder did not answer: try again.",
+        )
+        .with(
+            "host.theme_folder.unreadable_path",
+            "Fub cannot read the path of this folder: move it to one with a plain name.",
+        )
         .with(
             "host.craft_render.over_limit",
             "The file is over the maximum size for a preview made by the app.",
@@ -2641,7 +3453,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_URI_ALLOWED, "fub:// links that write without asking")
         .with(
             C_URI_ALLOWED_DESC,
-            "The chosen actions (new note, daily note, unique note, capture) write as soon as the link arrives, without a confirmation. Opening another vault always asks. Applies on this computer.",
+            "The chosen actions (new note, daily note, unique note) write as soon as the link arrives, without a confirmation. A capture and opening another vault always ask. Applies on this computer.",
         )
         .with(C_FILES_LINK_STYLE, "New links")
         .with(
@@ -2677,7 +3489,26 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_PEOPLE_FOLDER_DESC,
             "@ in a note offers the notes in this folder and writes the link to the person; a new person is created here. Empty, @ offers no people.",
         )
+        .with(C_FILES_TYPES_FOLDER, "Note types folder")
+        .with(
+            C_FILES_TYPES_FOLDER_DESC,
+            "Every note in this folder is a type: its frontmatter gives the icon, the properties and the folder for new notes, its text is the template. Empty, note types are off.",
+        )
         .with(C_GROUP_APPEARANCE, "Appearance")
+        .with(C_GROUP_PROFILE, "Profile")
+        .with(C_PROFILE_NAME, "Your name")
+        .with(
+            C_PROFILE_NAME_DESC,
+            "Signs the comments you write in notes. The name ends up in the note's file: anyone who opens it, even with another program, reads it. Changing it applies to new comments.",
+        )
+        .with(C_COMMENTS_AUTHOR, "Comment signature in this vault")
+        .with(
+            C_COMMENTS_AUTHOR_DESC,
+            "What Fub writes next to every new comment in this vault. Without a signature the comment reads “No name”.",
+        )
+        .with(C_COMMENTS_AUTHOR_NAME, "The name")
+        .with(C_COMMENTS_AUTHOR_INITIALS, "The initials")
+        .with(C_COMMENTS_AUTHOR_NONE, "No signature")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Spellcheck")
         .with(C_EDITOR_SPELLCHECK_DESC, "Use the system spellchecker while editing.")
@@ -2701,6 +3532,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_CURSOR_BLINK_DESC, "The editor cursor turns on and off. By default it stays still, so it does not distract while reading.")
         .with(C_EDITOR_SOFT_CURSOR, "Soft cursor")
         .with(C_EDITOR_SOFT_CURSOR_DESC, "In Blocks the cursor glides to its new place instead of jumping there. Never while you type, and never with reduced motion.")
+        .with(C_EDITOR_TYPEWRITER, "Typewriter")
+        .with(C_EDITOR_TYPEWRITER_DESC, "The cursor line stays at half the height of the sheet and the text scrolls under it, like paper in a typewriter. At the top of a short note the text does not move past the start.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Link preview only with Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Hovering a link opens the note preview only while Ctrl (Cmd on Mac) is held, in Reading too. While writing it is always needed.")
         .with(C_EDITOR_PASTE_HTML, "Convert pasted HTML")
@@ -2713,34 +3546,66 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_2, "2 spaces")
         .with(C_EDITOR_INDENT_4, "4 spaces")
         .with(C_EDITOR_PROPERTIES, "Properties in the text")
-        .with(C_EDITOR_PROPERTIES_DESC, "How Live shows the frontmatter at the top of the note. A click on the properties reopens the YAML for writing; Source always shows YAML.")
+        .with(C_EDITOR_PROPERTIES_DESC, "How Writing shows the frontmatter at the top of the note. A click on the properties reopens the YAML for writing; Source always shows YAML.")
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visible")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Hidden")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_MINIBAR, "Formatting mini toolbar")
         .with(C_EDITOR_MINIBAR_DESC, "Formatting gestures next to the pointer: above the right-click menu and, if you like, on selected text.")
-        .with(C_EDITOR_MINIBAR_AUTO, "On right-click, and on selected text with the bar off")
+        .with(C_EDITOR_MINIBAR_AUTO, "On right-click, and on selected text unless the bar is full")
         .with(C_EDITOR_MINIBAR_ALWAYS, "On right-click and on any selected text")
         .with(C_EDITOR_MINIBAR_MENU, "Only on right-click")
         .with(C_EDITOR_MINIBAR_OFF, "Never")
+        .with(C_EDITOR_TOOLBAR, "Formatting toolbar")
+        .with(C_EDITOR_TOOLBAR_DESC, "Above the sheet. Compact: a few fixed buttons, the style and the tools of the block the cursor is in. Full: every button. Hidden: the mini toolbar on selected text remains.")
+        .with(C_EDITOR_TOOLBAR_COMPACT, "Compact")
+        .with(C_EDITOR_TOOLBAR_FULL, "Full")
+        .with(C_EDITOR_TOOLBAR_HIDDEN, "Hidden")
+        .with(C_EDITOR_LINK_CLICK, "Clicking a link to a note")
+        .with(C_EDITOR_LINK_CLICK_DESC, "What the click that opens a link does: bring the note into the pane, or open it in the peek, over the right of the sheet, where you write without leaving the note you were in. Alt with the click, or Alt Enter, always peeks.")
+        .with(C_EDITOR_LINK_CLICK_OPEN, "Opens the note")
+        .with(C_EDITOR_LINK_CLICK_PEEK, "Peeks at the note")
+        .with(C_EDITOR_GRID_COPY_MARK, "Copy mark in spreadsheets")
+        .with(C_EDITOR_GRID_COPY_MARK_DESC, "What stays on the cells you copy: a wide dashed outline until you paste, a pulse that lights up and fades, or both. Cut always keeps a dense dashed outline.")
+        .with(C_EDITOR_GRID_COPY_MARK_BOTH, "Dashes and pulse")
+        .with(C_EDITOR_GRID_COPY_MARK_DASH, "Dashes only")
+        .with(C_EDITOR_GRID_COPY_MARK_PULSE, "Pulse only")
+        .with(C_EDITOR_GRID_SELECTION_SPEED, "Selection speed in spreadsheets")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_DESC, "How the selection moves to the new cell, with the keys and the pointer: it glides faster, as usual or softer, or it jumps from cell to cell. With reduced motion it stops at once, whatever you choose.")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_QUICK, "Quick")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_NORMAL, "As usual")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_SOFT, "Soft")
+        .with(C_EDITOR_GRID_SELECTION_SPEED_NONE, "In steps")
         .with(C_EDITOR_SLASH, "«/» menu in the text")
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
+        .with(C_EDITOR_HINTS, "Hints row")
+        .with(C_EDITOR_HINTS_DESC, "In the middle of the bottom band, the keys useful for what you are doing, with your shortcuts. Not on the phone nor in a window narrower than 620 px.")
+        .with(C_EDITOR_TYPOGRAPHY, "Italian typography")
+        .with(C_EDITOR_TYPOGRAPHY_DESC, "As you type, quotes become « », two hyphens —, three dots … and the apostrophe ’. It applies to notes in Italian, outside code, formulas and links; Backspace right after puts back what you typed.")
         .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
         .with(C_EDITOR_SLASH_HIDDEN_DESC, "The ids of the commands the «/» menu leaves out. They stay in the palette and on the keyboard.")
         .with(C_EDITOR_SLASH_SECTIONS, "Order of the «/» menu sections")
         .with(C_EDITOR_SLASH_SECTIONS_DESC, "The sections after Suggested, Favorites and Recent. Those not listed follow in their own order.")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
-        .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Live")
-        .with(C_EDITOR_LIVE_REVEAL_DESC, "Markdown marks are visible in Source; here you choose whether Live shows them too.")
-        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Never, as in Word")
+        .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Writing")
+        .with(C_EDITOR_LIVE_REVEAL_DESC, "Markdown marks are visible in Source; here you choose whether Writing shows them too.")
+        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Never")
         .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Of the element at the cursor")
         .with(C_EDITOR_LIVE_REVEAL_LINE, "Of the line at the cursor")
         .with(C_EDITOR_LIVE_GUIDE, "Guide while typing")
-        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Live an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Writing an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
+        .with(C_EDITOR_MATH_SOURCE, "Show the LaTeX of formulas")
+        .with(C_EDITOR_MATH_SOURCE_DESC, "On, under the touched formula there is the field with its LaTeX, and you write there; clicking the formula only reaches the empty slots. Off, the formula stays drawn and you edit it by touching it: click where you want to write.")
+        .with(C_EDITOR_MATH_HELP, "Help in the LaTeX of formulas")
+        .with(C_EDITOR_MATH_HELP_DESC, "With “Show the LaTeX of formulas” on. Full: brackets that close themselves, completion after \\, quick writing (a/b, alpha, ->) and the palette. Light: only brackets and completion, the palette on request. Off: the LaTeX you write and its preview, nothing else.")
+        .with(C_EDITOR_MATH_HELP_FULL, "Full")
+        .with(C_EDITOR_MATH_HELP_DISCREET, "Light")
+        .with(C_EDITOR_MATH_HELP_OFF, "Off")
+        .with(C_EDITOR_BLOCKS, "Blocks: handles and selection")
+        .with(C_EDITOR_BLOCKS_DESC, "On, every block has its handle and «+», Esc selects the block and Ctrl A takes the block, then all of them. Off, Writing is a text editor: Ctrl A selects all the text and Ctrl D the next occurrence.")
         .with(C_MODE_SOURCE, "Source")
-        .with(C_MODE_LIVE, "Live")
-        .with(C_MODE_BLOCKS, "Blocks")
+        .with(C_MODE_WRITING, "Writing")
         .with(C_MODE_READING, "Reading")
         .with(C_PLUGINS_DISABLED, "Disabled components")
         .with(
@@ -2748,6 +3613,30 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "The ids of the components that are not mounted when this vault is \
              opened. You change them by turning a component on and off, not by \
              writing in here.",
+        )
+        .with(C_COMPONENTS_OFF, "Other disabled components")
+        .with(
+            C_COMPONENTS_OFF_DESC,
+            "The disabled components that are not among the mounted ones, such as \
+             the whiteboard and PDF. You change them by turning a component on and off.",
+        )
+        .with(C_COMPONENTS_KEPT, "Kept components")
+        .with(
+            C_COMPONENTS_KEPT_DESC,
+            "The components kept on with «Keep them» even though nothing else \
+             needs them any more.",
+        )
+        .with(C_COMPONENTS_WAITING, "Waiting components")
+        .with(
+            C_COMPONENTS_WAITING_DESC,
+            "The components nothing needs any more that are still on, waiting for \
+             you to choose «Remove» or «Keep them».",
+        )
+        .with(C_COMPONENTS_PROFILE, "Profile")
+        .with(
+            C_COMPONENTS_PROFILE_DESC,
+            "The component profile chosen for this vault. Empty means custom: it \
+             becomes so as soon as you turn a component on or off.",
         )
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Recent searches and notes")
@@ -2781,6 +3670,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DENSITY_COMPACT, "Compact")
         .with(C_DENSITY_COMFORTABLE, "Comfortable")
         .with(C_DENSITY_RELAXED, "Relaxed")
+        .with(C_BARS, "Bars")
+        .with(
+            C_BARS_DESC,
+            "The tray under the tabs, the command bars and the tools column: light, close to the paper, or marked, standing out more.",
+        )
+        .with(C_BARS_LIGHT, "Light")
+        .with(C_BARS_MARKED, "Marked")
         .with(C_BODY, "Text size (px)")
         .with(C_BODY_DESC, "Text size on reading surfaces.")
         .with(C_LINE_HEIGHT, "Line height")
@@ -2819,6 +3715,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FRAME_RATE_DESC, "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.")
         .with(C_FRAME_RATE_DISPLAY, "Display maximum")
         .with(C_FRAME_RATE_CAP, "{fps} fps")
+        .with(C_RENDERING, "Page rendering")
+        .with(
+            C_RENDERING_DESC,
+            "What draws Fub's windows. Automatic leaves the choice to WebKit and warns you about known problems; Processor helps with some drivers that flicker. Applies from the next start.",
+        )
+        .with(C_RENDERING_AUTO, "Automatic")
+        .with(C_RENDERING_GPU, "Graphics card")
+        .with(C_RENDERING_CPU, "Processor")
         .with(C_DIAGRAM_STYLE, "Diagram style")
         .with(
             C_DIAGRAM_STYLE_DESC,
@@ -2861,6 +3765,25 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_PUBLISH_SERVER_URL_DESC,
             "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
         )
+        .with(
+            C_REJECTED_TIMEZONE,
+            "“{name}” is not a known time zone. Write an IANA name such as Europe/Rome, \
+             or leave it empty to use the system one.",
+        )
+        .with(
+            C_REJECTED_SERVER_URL,
+            "“{value}” is not a valid server address. Write an https:// address, \
+             or http:// only towards 127.0.0.1, ::1 or localhost; empty means no server.",
+        )
+        .with(
+            C_REJECTED_TILE_HOST,
+            "“{value}” is not a host name. Write only the name, for example tile.openstreetmap.org: no https://, port or path.",
+        )
+        .with(C_MAP_TILE_HOSTS, "Map tiles")
+        .with(
+            C_MAP_TILE_HOSTS_DESC,
+            "The sites from which a Base's Map view may download tiles, when you press “Enable”. Empty, maps stay offline and no request leaves the computer.",
+        )
         .with(C_GROUP_VIEWER, "Web viewer")
         .with(C_VIEWER_HOSTS, "Approved sites")
         .with(
@@ -2899,6 +3822,21 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Measures the time from a key, a click or a pen stroke to the frame \
              that shows it, and counts the long frames. The numbers stay on this \
              computer: they feed the measurement benches.",
+        )
+        .with(C_GROUP_DEVELOPMENT, "Development")
+        .with(C_DEVELOPER_MODE, "Developer mode")
+        .with(
+            C_DEVELOPER_MODE_DESC,
+            "For theme authors: «Install from folder…» appears under \
+             «Installed themes», and checks and installs a theme from its folder, \
+             with «Link a folder…», which remounts it at every save, and with \
+             «All components», which shows every component in every state.",
+        )
+        .with(C_DEVELOPER_THEME_FOLDER, "Linked folder")
+        .with(
+            C_DEVELOPER_THEME_FOLDER_DESC,
+            "The folder of the theme in development: Fub watches it and remounts \
+             the theme at every save. It is chosen and unlinked under «Installed themes».",
         );
     for level in fub_kernel::log::Level::ALL {
         en = en.with(
@@ -2907,6 +3845,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         );
     }
 
+    // `trash.os` legge il campo «Documento» anche scritto per nome.
+    let (it, en) = crate::doc_names::speaking(crate::doc_names::CORE_KEYS, it, en);
     vec![it, en]
 }
 
@@ -3032,6 +3972,39 @@ pub fn versioning_enabled(ws: &fub_kernel::Workspace) -> bool {
         .unwrap_or(true)
 }
 
+/// Le quattro chiavi `components.*` (D-5), nel gruppo «Componenti».
+pub fn components_settings() -> Vec<SettingSpec> {
+    let list = |key: &str, name: &str, desc: &str| {
+        SettingSpec::new(
+            key,
+            Text::key(name),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(desc))
+        .grouped(Text::key(C_GROUP_COMPONENTS))
+    };
+    vec![
+        list(COMPONENTS_OFF, C_COMPONENTS_OFF, C_COMPONENTS_OFF_DESC),
+        list(COMPONENTS_KEPT, C_COMPONENTS_KEPT, C_COMPONENTS_KEPT_DESC),
+        list(
+            COMPONENTS_WAITING,
+            C_COMPONENTS_WAITING,
+            C_COMPONENTS_WAITING_DESC,
+        ),
+        SettingSpec::new(
+            COMPONENTS_PROFILE,
+            Text::key(C_COMPONENTS_PROFILE),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_COMPONENTS_PROFILE_DESC))
+        .grouped(Text::key(C_GROUP_COMPONENTS)),
+    ]
+}
+
 /// Gli id spenti per questo vault.
 pub fn disabled_plugins(ws: &fub_kernel::Workspace) -> Vec<String> {
     ws.setting(PLUGINS_DISABLED)
@@ -3106,6 +4079,8 @@ fn set_log_levels(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::settings::{SettingSource, SettingValue};
+    use fub_kernel::MachineSettings;
 
     /// Senza la feature `craft` nessuna delle cinque di «App esterne» c'è.
     #[cfg(not(feature = "craft"))]
@@ -3157,6 +4132,22 @@ mod tests {
         assert!(matches!(
             &spec.kind,
             SettingKind::Text { default } if default == "Persone"
+        ));
+    }
+
+    /// La cartella dei tipi di nota (E5) è del vault, viaggia con lui, e
+    /// parte da `Tipi`.
+    #[test]
+    fn the_types_folder_is_a_vault_text_starting_at_tipi() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == FILES_TYPES_FOLDER)
+            .expect("la cartella dei tipi è fra le impostazioni");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
+        assert_eq!(spec.group, Text::key(C_GROUP_FILES));
+        assert!(matches!(
+            &spec.kind,
+            SettingKind::Text { default } if default == DEFAULT_TYPES_FOLDER
         ));
     }
 
@@ -3215,6 +4206,41 @@ mod tests {
         assert!(core_machine_settings()
             .iter()
             .any(|spec| spec.key == PERF_PROBE));
+    }
+
+    #[test]
+    fn developer_mode_is_a_machine_switch_off_by_default_that_no_program_writes() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == DEVELOPER_MODE)
+            .expect("il core dichiara la modalità sviluppatore");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        assert_eq!(spec.kind, SettingKind::Toggle { default: false });
+        // Un programma che potesse accenderla aprirebbe da sé
+        // l'installazione da cartella.
+        assert!(!spec.program_writable);
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == DEVELOPER_MODE));
+    }
+
+    #[test]
+    fn the_linked_theme_folder_is_machine_text_that_no_program_writes() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == DEVELOPER_THEME_FOLDER)
+            .expect("il core dichiara la cartella del tema collegato");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        assert_eq!(
+            spec.kind,
+            SettingKind::Text {
+                default: String::new()
+            }
+        );
+        // Un programma che potesse scriverla sceglierebbe da sé la cartella
+        // che l'host legge.
+        assert!(!spec.program_writable);
+        assert!(crate::shell::SETTINGS_WITH_THEIR_OWN_GESTURE.contains(&DEVELOPER_THEME_FOLDER));
     }
 
     #[test]
@@ -3280,6 +4306,44 @@ mod tests {
         }
     }
 
+    /// La tipografia italiana è della macchina e spenta di serie (D8 A): chi
+    /// non la accende scrive i caratteri della tastiera, e un programma non
+    /// la cambia.
+    #[test]
+    fn typography_is_an_opt_in_machine_toggle_of_the_editor() {
+        let machine = core_machine_settings();
+        let spec = machine
+            .iter()
+            .find(|spec| spec.key == EDITOR_TYPOGRAPHY)
+            .expect("la tipografia fra le impostazioni");
+        assert!(matches!(&spec.kind, SettingKind::Toggle { default: false }));
+        assert_eq!(spec.label, Text::key(C_EDITOR_TYPOGRAPHY));
+        assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
+        assert!(!spec.program_writable);
+    }
+
+    /// Gli aiuti del LaTeX delle formule sono una scelta della macchina, pieni
+    /// di serie, subito dopo gli interruttori dell'editor (fra cui «Mostra il
+    /// LaTeX»), con le tre misure nell'ordine del riquadro (T63).
+    #[test]
+    fn math_help_is_a_machine_choice_full_by_default() {
+        let machine = core_machine_settings();
+        let spec = machine
+            .iter()
+            .find(|spec| spec.key == EDITOR_MATH_HELP)
+            .expect("gli aiuti delle formule fra le impostazioni");
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("gli aiuti sono una scelta");
+        };
+        assert_eq!(default, "piene");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["piene", "discrete", "spente"]);
+        assert_eq!(spec.label, Text::key(C_EDITOR_MATH_HELP));
+        assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
+        assert!(!spec.program_writable);
+        assert!(machine.iter().any(|spec| spec.key == EDITOR_MATH_SOURCE));
+    }
+
     /// La Live si scrive come in Word se nessuno sceglie altro: i segni si
     /// vedono soltanto in Sorgente, e le Preferenze offrono le altre due
     /// politiche, subito dopo la modalità iniziale.
@@ -3299,6 +4363,241 @@ mod tests {
         let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
         assert_eq!(values, ["mai", "elemento", "riga"]);
         assert!(!spec.program_writable);
+    }
+
+    /// I blocchi sono una preferenza della macchina, accesa di serie, subito
+    /// dopo i segni di Scrittura: chi la spegne scrive come in un editor di
+    /// testo, e un programma non la cambia.
+    #[test]
+    fn blocks_are_a_machine_switch_on_by_default_after_the_writing_marks() {
+        let machine = core_machine_settings();
+        let at = |key: &str| machine.iter().position(|spec| spec.key == key);
+        assert_eq!(at(EDITOR_BLOCKS), at(EDITOR_LIVE_REVEAL).map(|i| i + 1));
+        let spec = &machine[at(EDITOR_BLOCKS).expect("i blocchi fra le impostazioni")];
+        assert!(matches!(spec.kind, SettingKind::Toggle { default: true }));
+        assert_eq!(spec.group, Text::key(C_GROUP_EDITOR));
+        assert_eq!(spec.label, Text::key(C_EDITOR_BLOCKS));
+        assert!(!spec.program_writable);
+    }
+
+    /// Chi firma i commenti (D11 A): il nome è della macchina, vuoto finché la
+    /// persona non lo sceglie; la firma è del vault, col nome di serie e le
+    /// iniziali o niente come scelte. Un programma non le cambia, e tutte e
+    /// due stanno nel gruppo «Profilo», con le parole nelle due lingue.
+    #[test]
+    fn the_comment_signature_is_a_machine_name_and_a_vault_choice() {
+        let all = core_settings();
+        let spec = |key: &str| {
+            all.iter()
+                .find(|spec| spec.key == key)
+                .unwrap_or_else(|| panic!("{key} fra le impostazioni"))
+        };
+        let name = spec(PROFILE_NAME);
+        assert_eq!(name.scope, fub_abi::settings::SettingScope::Machine);
+        assert!(matches!(&name.kind, SettingKind::Text { default } if default.is_empty()));
+        assert_eq!(name.group, Text::key(C_GROUP_PROFILE));
+        assert!(!name.program_writable);
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == PROFILE_NAME));
+
+        let author = spec(COMMENTS_AUTHOR);
+        assert_eq!(author.scope, fub_abi::settings::SettingScope::Vault);
+        let SettingKind::Choice { default, options } = &author.kind else {
+            panic!("la firma è una scelta");
+        };
+        assert_eq!(default, "nome");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, COMMENTS_AUTHOR_CHOICES);
+        assert_eq!(author.group, Text::key(C_GROUP_PROFILE));
+        assert!(!author.program_writable);
+        assert!(!core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == COMMENTS_AUTHOR));
+
+        for catalog in core_catalog() {
+            for key in [
+                C_GROUP_PROFILE,
+                C_PROFILE_NAME,
+                C_PROFILE_NAME_DESC,
+                C_COMMENTS_AUTHOR,
+                C_COMMENTS_AUTHOR_DESC,
+                C_COMMENTS_AUTHOR_NAME,
+                C_COMMENTS_AUTHOR_INITIALS,
+                C_COMMENTS_AUTHOR_NONE,
+            ] {
+                assert!(
+                    catalog.entries.contains_key(key),
+                    "{key} in {}",
+                    catalog.locale
+                );
+            }
+        }
+    }
+
+    /// Le scelte della modalità iniziale sono Scrittura, Sorgente e Lettura;
+    /// `blocks` resta valido in fondo, con l'etichetta di Scrittura, perché il
+    /// pannello lo nasconda (due scelte con la stessa etichetta sono una) e la
+    /// shell lo apra in Scrittura.
+    #[test]
+    fn the_initial_mode_offers_writing_source_reading_and_keeps_blocks_as_writing() {
+        let spec = core_machine_settings()
+            .into_iter()
+            .find(|spec| spec.key == EDITOR_DEFAULT_MODE)
+            .expect("il core dichiara la modalità iniziale");
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("la modalità iniziale è una scelta");
+        };
+        assert_eq!(default, "live_preview");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["live_preview", "source", "reading", "blocks"]);
+        let label = |value: &str| {
+            options
+                .iter()
+                .find(|option| option.value == value)
+                .map(|option| option.label.clone())
+        };
+        assert_eq!(label("blocks"), label("live_preview"));
+        assert_eq!(label("live_preview"), Some(Text::key(C_MODE_WRITING)));
+        assert!(spec
+            .kind
+            .rejects(&fub_abi::settings::SettingValue::Text("blocks".into()))
+            .is_none());
+        let said = |locale: &str| {
+            core_catalog()
+                .into_iter()
+                .find(|catalog| catalog.locale == locale)
+                .and_then(|catalog| catalog.entries.get(C_MODE_WRITING).cloned())
+        };
+        assert_eq!(said("it").as_deref(), Some("Scrittura"));
+        assert_eq!(said("en").as_deref(), Some("Writing"));
+    }
+
+    /// Il file della macchina di chi aveva scelto i Blocchi: `blocks` si legge
+    /// com'è scritto, da lui e non dal predefinito, e il file resta byte per
+    /// byte quello di prima, dopo l'apertura, la dichiarazione e la lettura.
+    /// Un valore sconosciuto vale il predefinito, come sempre, e nemmeno lui si
+    /// riscrive.
+    #[test]
+    fn blocks_in_the_machine_file_reads_back_as_written_and_the_file_stays_byte_for_byte() {
+        use fub_abi::settings::{SettingSource, SettingValue};
+        use fub_kernel::MachineSettings;
+
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("settings.json"))
+            .expect("percorso UTF-8");
+        // Il file come lo scriveva un Fub che aveva la modalità Blocchi.
+        {
+            let (old, warning) = MachineSettings::open(&path);
+            assert_eq!(warning, None);
+            old.declare(&core_machine_settings()).expect("schema");
+            old.set(EDITOR_DEFAULT_MODE, SettingValue::Text("blocks".into()))
+                .expect("`blocks` è una scelta valida");
+        }
+        let before = std::fs::read(&path).expect("il file della macchina");
+        assert!(String::from_utf8_lossy(&before).contains("\"blocks\""));
+
+        let read = |path: &camino::Utf8Path| {
+            let (machine, warning) = MachineSettings::open(path);
+            assert_eq!(warning, None);
+            machine.declare(&core_machine_settings()).expect("schema");
+            let entry = machine
+                .entries()
+                .into_iter()
+                .find(|entry| entry.spec.key == EDITOR_DEFAULT_MODE)
+                .expect("la riga della modalità iniziale");
+            assert_eq!(
+                machine.effective(EDITOR_DEFAULT_MODE).expect("dichiarata"),
+                (entry.value.clone(), entry.source)
+            );
+            (entry.value, entry.source)
+        };
+        assert_eq!(
+            read(&path),
+            (SettingValue::Text("blocks".into()), SettingSource::Machine)
+        );
+        assert_eq!(std::fs::read(&path).expect("il file"), before);
+
+        let unknown = String::from_utf8(before.clone())
+            .expect("JSON")
+            .replace("\"blocks\"", "\"pagine\"")
+            .into_bytes();
+        std::fs::write(&path, &unknown).expect("scrive il valore sconosciuto");
+        assert_eq!(
+            read(&path),
+            (
+                SettingValue::Text("live_preview".into()),
+                SettingSource::Default
+            )
+        );
+        assert_eq!(std::fs::read(&path).expect("il file"), unknown);
+    }
+
+    /// Il percorso di disegno si legge prima di GTK, senza host: senza file,
+    /// senza cartella o con un valore sconosciuto vale `auto`; una scelta
+    /// scritta si legge com'è; il file non cambia di un byte. Solo Linux
+    /// dichiara la chiave.
+    #[test]
+    fn rendering_is_read_before_the_host_and_unknown_values_are_auto() {
+        use fub_abi::settings::SettingValue;
+        use fub_kernel::MachineSettings;
+
+        let keys = [APPEARANCE_RENDERING, APPEARANCE_MOTION];
+        let dir = tempfile::tempdir().expect("cartella temporanea");
+        let config =
+            camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("percorso UTF-8");
+        let rendering = |config: Option<&camino::Utf8Path>| {
+            startup_machine_texts(config, &keys)
+                .get(APPEARANCE_RENDERING)
+                .cloned()
+        };
+        if !cfg!(target_os = "linux") {
+            assert_eq!(rendering(Some(&config)), None);
+            assert!(!core_machine_settings()
+                .iter()
+                .any(|spec| spec.key == APPEARANCE_RENDERING));
+            return;
+        }
+        // Un file di prima, che la chiave non la conosce.
+        assert_eq!(rendering(None).as_deref(), Some("auto"));
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        let path = crate::config::machine_settings_path(&config);
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine.declare(&core_machine_settings()).expect("schema");
+            machine
+                .set(APPEARANCE_MOTION, SettingValue::Text("calm".into()))
+                .expect("motion");
+        }
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        assert_eq!(
+            startup_machine_texts(Some(&config), &keys)
+                .get(APPEARANCE_MOTION)
+                .map(String::as_str),
+            Some("calm")
+        );
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine.declare(&core_machine_settings()).expect("schema");
+            machine
+                .set(APPEARANCE_RENDERING, SettingValue::Text("cpu".into()))
+                .expect("`cpu` è una scelta valida");
+            assert!(machine
+                .set(APPEARANCE_RENDERING, SettingValue::Text("never".into()))
+                .is_err());
+        }
+        let before = std::fs::read(&path).expect("il file della macchina");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("cpu"));
+        assert_eq!(std::fs::read(&path).expect("il file"), before);
+
+        let unknown = String::from_utf8(before)
+            .expect("JSON")
+            .replace("\"cpu\"", "\"never\"");
+        std::fs::write(&path, &unknown).expect("valore sconosciuto");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        std::fs::write(&path, b"{ rotto").expect("file rotto");
+        assert_eq!(rendering(Some(&config)).as_deref(), Some("auto"));
+        assert_eq!(std::fs::read(&path).expect("il file"), b"{ rotto");
     }
 
     /// Il default è il massimo dello schermo, e ogni tetto offerto dal pannello
@@ -3323,5 +4622,174 @@ mod tests {
         assert_eq!(caps, FRAME_RATE_CAPS.map(Some).to_vec());
         assert_eq!(frame_rate_cap("59"), None);
         assert_eq!(frame_rate_cap("veloce"), None);
+    }
+
+    /// Le barre sono una scelta di macchina fra due, di serie il vassoio
+    /// chiaro, e la riga sta subito dopo «Densità», come nel prototipo.
+    #[test]
+    fn the_bars_are_a_machine_choice_of_light_or_marked_after_density() {
+        let machine = core_machine_settings();
+        let at = |key: &str| machine.iter().position(|spec| spec.key == key);
+        assert_eq!(at(APPEARANCE_BARS), at(APPEARANCE_DENSITY).map(|i| i + 1));
+        let spec = &machine[at(APPEARANCE_BARS).expect("le barre sono dichiarate")];
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("le barre sono una scelta");
+        };
+        assert_eq!(default, "light");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["light", "marked"]);
+        assert!(!spec.program_writable);
+    }
+
+    fn bars_file(dir: &tempfile::TempDir) -> camino::Utf8PathBuf {
+        camino::Utf8PathBuf::from_path_buf(dir.path().join("settings.json"))
+            .expect("una cartella di prova con un percorso UTF-8")
+    }
+
+    /// La scelta sopravvive al riavvio: la macchina la scrive sul suo file, e
+    /// aprendolo di nuovo la rilegge, senza che la shell la ricordi.
+    #[test]
+    fn the_marked_tray_survives_a_restart() {
+        let dir = tempfile::tempdir().expect("una cartella di prova");
+        let path = bars_file(&dir);
+        {
+            let (machine, _) = MachineSettings::open(&path);
+            machine
+                .declare(&core_machine_settings())
+                .expect("lo schema della macchina");
+            machine
+                .set(APPEARANCE_BARS, SettingValue::Text("marked".into()))
+                .expect("la scelta si scrive");
+        }
+        let (reopened, warning) = MachineSettings::open(&path);
+        assert!(warning.is_none(), "{warning:?}");
+        reopened
+            .declare(&core_machine_settings())
+            .expect("lo schema della macchina");
+        assert_eq!(
+            reopened.effective(APPEARANCE_BARS).expect("dichiarata"),
+            (SettingValue::Text("marked".into()), SettingSource::Machine)
+        );
+    }
+
+    /// Un valore che non è né `light` né `marked` (un file scritto a mano, o una
+    /// versione futura con un'altra scelta) vale il predefinito: non spegne il
+    /// vassoio, come per ogni scelta di macchina.
+    #[test]
+    fn an_unknown_bars_value_falls_back_to_the_light_tray() {
+        let dir = tempfile::tempdir().expect("una cartella di prova");
+        let path = bars_file(&dir);
+        std::fs::write(
+            &path,
+            r#"{"version":2,"values":{"appearance.bars":"neon"}}"#,
+        )
+        .expect("il file di prova");
+        let (machine, _) = MachineSettings::open(&path);
+        machine
+            .declare(&core_machine_settings())
+            .expect("lo schema della macchina");
+        assert_eq!(
+            machine.effective(APPEARANCE_BARS).expect("dichiarata"),
+            (SettingValue::Text("light".into()), SettingSource::Default)
+        );
+    }
+
+    fn motion_spec(webview: Option<Webview>) -> SettingSpec {
+        appearance_settings_on(webview)
+            .into_iter()
+            .find(|spec| spec.key == APPEARANCE_MOTION)
+            .expect("l'aspetto dichiara le animazioni")
+    }
+
+    fn motion_spec_default(webview: Option<Webview>) -> String {
+        let SettingKind::Choice { default, options } = motion_spec(webview).kind else {
+            panic!("le animazioni sono una scelta");
+        };
+        assert!(
+            options.iter().any(|option| option.value == default),
+            "il default `{default}` è fra le scelte"
+        );
+        default
+    }
+
+    /// Sulla WebKitGTK che sfarfalla (dalla 2.54.0, senza limite superiore
+    /// finché nessuna versione corretta è verificata) le animazioni partono
+    /// ridotte; sulla 2.52 e su ogni webview non dichiarata seguono il sistema.
+    #[test]
+    fn motion_starts_reduced_only_on_the_flickering_webkitgtk() {
+        for faulty in ["2.54.0", "2.54.3", "2.55.1", "2.56.0", "3.0.0"] {
+            let webview = Webview::webkitgtk(faulty).expect("una versione");
+            assert_eq!(motion_spec_default(Some(webview)), "reduced", "{faulty}");
+        }
+        for sound in ["2.52.3", "2.53.90", "2.50.0", "2.44.1"] {
+            let webview = Webview::webkitgtk(sound).expect("una versione");
+            assert_eq!(motion_spec_default(Some(webview)), "", "{sound}");
+        }
+        // Le altre piattaforme non dichiarano una webview: come prima.
+        assert_eq!(motion_spec_default(None), "");
+        // Il processo dei test non ne dichiara nessuna.
+        assert_eq!(
+            core_machine_settings()
+                .into_iter()
+                .find(|spec| spec.key == APPEARANCE_MOTION)
+                .map(|spec| spec.kind),
+            Some(motion_spec(None).kind)
+        );
+    }
+
+    /// Solo tre numeri sono una versione: altrimenti la webview resta non
+    /// dichiarata e il default non cambia.
+    #[test]
+    fn a_webkitgtk_version_is_three_numbers() {
+        assert_eq!(
+            Webview::webkitgtk("2.54.0"),
+            Some(Webview::WebKitGtk(2, 54, 0))
+        );
+        assert_eq!(
+            Webview::webkitgtk(" 2.52.3\n"),
+            Some(Webview::WebKitGtk(2, 52, 3))
+        );
+        for junk in [
+            "",
+            "2.54",
+            "2.54.0.1",
+            "2.54.x",
+            "webkit 2.54.0",
+            "130.0.2849.80x",
+        ] {
+            assert_eq!(Webview::webkitgtk(junk), None, "{junk:?}");
+        }
+    }
+
+    /// Il default nuovo non scavalca una scelta: un valore scritto — anche
+    /// `""`, «segue il sistema» — si legge com'è, con la provenienza della
+    /// macchina; senza un valore si legge `reduced`, con la provenienza del
+    /// default.
+    #[test]
+    fn a_written_motion_value_beats_the_webkitgtk_default() {
+        use fub_abi::settings::{SettingSource, SettingValue};
+        use fub_kernel::MachineSettings;
+
+        let specs: Vec<SettingSpec> = appearance_settings_on(Webview::webkitgtk("2.54.0"))
+            .into_iter()
+            .filter(|spec| spec.scope == fub_abi::settings::SettingScope::Machine)
+            .collect();
+        let machine = MachineSettings::in_memory();
+        machine.declare(&specs).expect("schema");
+        let read = || machine.effective(APPEARANCE_MOTION).expect("dichiarata");
+        assert_eq!(
+            read(),
+            (SettingValue::Text("reduced".into()), SettingSource::Default)
+        );
+        for written in ["", "calm", "reduced"] {
+            machine
+                .set(APPEARANCE_MOTION, SettingValue::Text(written.into()))
+                .expect("una scelta valida");
+            assert_eq!(
+                read(),
+                (SettingValue::Text(written.into()), SettingSource::Machine),
+                "{written:?}"
+            );
+        }
     }
 }

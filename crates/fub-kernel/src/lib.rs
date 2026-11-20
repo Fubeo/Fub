@@ -75,6 +75,7 @@ pub mod registry;
 mod rename_recovery;
 pub mod renderer;
 pub mod safety;
+pub mod same_content;
 pub mod session;
 pub mod settings;
 pub mod snapshot;
@@ -97,7 +98,7 @@ pub use host::{
     authorize_query, filter_query_result, Capability, CapabilitySet, Granted, Guard, Policy,
     ReadOnly,
 };
-pub use index::plan::{PlanStep, QueryPlan};
+pub use index::plan::{PlanStep, QueryFailure, QueryPlan};
 pub use index::{RouteConflict, CORE_ID};
 pub use journal::{journal_path, JournalOp, JournalRead, JournalRecord};
 pub use locale::SystemLocale;
@@ -129,11 +130,13 @@ pub use syntax::{SyntaxConflict, SyntaxRegistry, SyntaxSnapshot};
 pub use vault::{data_root, PreparedIgnoreCheck, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
 pub use workspace::{
-    new_doc_id, valid_doc_id, CatchUpSnapshot, CompletedExternalAssetRename, CompletedSyncChange,
-    ExternalRenamePlan, GraphUpdate, IndexBatchStep, Indexing, Opening, ParsedBatch, ParsedChange,
-    ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
-    PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedDocumentBytesWrite,
-    PreparedExplicitRename, PreparedExternalAssetRename, PreparedResourceOpen,
-    PreparedResourceRead, PreparedTimerCursors, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB,
-    INDEX_WRITE_BUDGET, MAIN_PANE,
+    new_doc_id, valid_doc_id, Barred, CatchUpSnapshot, CompletedExternalAssetRename,
+    CompletedRejoin, CompletedSyncChange, ExternalRenamePlan, GraphUpdate, IndexBatchStep,
+    Indexing, JournalFailure, Opening, ParsedBatch, ParsedChange, ParsedExplicitRename,
+    ParsedExternalAssetRename, ParsedExternalRename, PendingExternalAssetRename,
+    PendingJournalRecord, PendingRejoin, PendingSyncChange, PlacedDocumentBytesWrite,
+    PlacedDocumentWrite, PreparedCatchUp, PreparedDocumentBytesWrite, PreparedExplicitRename,
+    PreparedExternalAssetRename, PreparedReadOnlyCommand, PreparedResourceOpen,
+    PreparedResourceRead, PreparedTimerCursors, ReadsInFlight, Rejected, SyncPlan, Trust,
+    Workspace, INDEX_JOB, INDEX_WRITE_BUDGET, MAIN_PANE, UNDO_STALE_MANY, UNDO_STALE_ONE,
 };

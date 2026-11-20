@@ -41,12 +41,14 @@ import { vaultFolders } from "../host/query";
 import type { CommandOutcome } from "../host/contract";
 import { t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
+import { nameJob, queuedJob } from "../panels/activity";
 import { state } from "../state/store";
 import { identifier } from "./a11y";
 import { actions, openFrame } from "./dialogs";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { buildPart, partName, planParts, readDirectory, type ZipEntry } from "./zip-parts";
 import type { PaletteHost } from "./palette";
+import { composingKey } from "../kit/ime";
 
 /// Il comando che apre la finestra: è quello che la palette mostra.
 export const IMPORT_PREPARE = "import.prepare";
@@ -96,13 +98,9 @@ export interface ImportPlan {
   losses: string[];
 }
 
-/// L'id del job che un comando di transfer ha accodato, dall'esito tipizzato.
-export function queuedJob(outcome: CommandOutcome): string | null {
-  const effect = outcome.effect;
-  if (effect.kind !== "custom" || effect.ns !== "fub.transfer.queued") return null;
-  const id = (effect.payload as { job_id?: unknown } | null)?.job_id;
-  return typeof id === "string" ? id : null;
-}
+// L'id del job accodato si legge dove il lavoro prende il nome, nel centro
+// attività: qui resta per chi lo importava da questo modulo.
+export { queuedJob };
 
 /// La sorgente come `ImportSource` serializzato. I byte si scrivono con un
 /// `join`, senza passare da un array di numeri JavaScript: per un archivio da
@@ -137,17 +135,20 @@ export function savedTokens(outcome: CommandOutcome): ConnectorId[] {
   return Array.isArray(saved) ? saved.filter((id): id is ConnectorId => id === "notion" || id === "airtable") : [];
 }
 
-/// Un id di job nuovo: lettere, cifre e trattini, come vuole lo staging.
-function newJobId(): string {
-  return `shell-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+/// Un id di job nuovo: lettere, cifre e trattini, come vuole lo staging. È
+/// la chiave di `import.prepare/cancel/commit/rollback`: viene dal generatore
+/// crittografico, non da un orologio e da `Math.random`.
+export function newJobId(): string {
+  return `shell-${crypto.randomUUID()}`;
 }
 
 /// Esegue un comando di transfer e aspetta il suo job. Rifiuta con l'errore
-/// del job, o se il vault si chiude prima.
+/// del job, o se il vault si chiude prima. `name` è il nome del lavoro nel
+/// centro attività, nella lingua dell'interfaccia: il job non ne ha uno suo.
 ///
 /// Gli ascolti hanno una vita propria, che finisce con la risposta: un commit
 /// chiesto da una finestra che poi si chiude arriva lo stesso al suo esito.
-export async function runTransfer(command: string, args: Record<string, unknown>): Promise<unknown> {
+export async function runTransfer(command: string, args: Record<string, unknown>, name: () => string): Promise<unknown> {
   const life = openLifetime();
   // Ci si iscrive prima di chiedere: un job veloce può finire prima che
   // l'esito del comando torni.
@@ -177,6 +178,7 @@ export async function runTransfer(command: string, args: Record<string, unknown>
     const outcome = await api.invokeCommand(command, args, "apply");
     const id = queuedJob(outcome);
     if (id === null) throw new Error(t("import.error.no_job", { command }));
+    nameJob(id, name);
     return await new Promise((resolve, reject) => {
       if (closedVault) {
         reject(new Error(t("import.error.vault_closed")));
@@ -237,6 +239,10 @@ function docLine(doc: ImportedDoc): string {
 function dropStaged(job: string): void {
   void Promise.resolve()
     .then(() => api.invokeCommand("import.cancel", { job }, "apply"))
+    .then((outcome) => {
+      const id = queuedJob(outcome);
+      if (id !== null) nameJob(id, () => t("activity.job.import_drop"));
+    })
     .catch(() => {});
 }
 
@@ -282,6 +288,10 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
   let staged: string[] = [];
   /// I job importati, finché li si può annullare.
   let committed: string[] = [];
+  /// Il nome della sorgente di ogni job, per nominarne i lavori nel centro
+  /// attività: «Importazione di «Diario.enex»».
+  const sources = new Map<string, string>();
+  const sourceOf = (job: string): string => sources.get(job) ?? t("import.title");
 
   const finish = (): void => {
     if (closed) return;
@@ -575,7 +585,12 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
         const job = newJobId();
         const request = { mode: "apply", folder: folder.value.trim().replace(/^\/+|\/+$/g, ""), on_conflict: conflict.value, options: piece.extra };
         jobs.push(job);
-        const result = planOf(await runTransfer(IMPORT_PREPARE, { job, source_json: sourceJson(piece.name, piece.mediaType, bytes), request_json: JSON.stringify(request) }));
+        sources.set(job, piece.name);
+        const result = planOf(await runTransfer(
+          IMPORT_PREPARE,
+          { job, source_json: sourceJson(piece.name, piece.mediaType, bytes), request_json: JSON.stringify(request) },
+          () => t("activity.job.import_preview", { name: piece.name }),
+        ));
         merged.documents.push(...result.documents);
         merged.log.push(...result.log);
         merged.losses.push(...result.losses);
@@ -617,7 +632,7 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
       while (staged.length > 0) {
         const job = staged[0]!;
         if (total > 1) status.textContent = t("import.parts.committing", { index: committed.length + 1, count: total });
-        const report = await runTransfer("import.commit", { job });
+        const report = await runTransfer("import.commit", { job }, () => t("activity.job.import", { name: sourceOf(job) }));
         staged = staged.slice(1);
         committed = [...committed, job];
         const result = planOf({ preview: report });
@@ -653,7 +668,7 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
     try {
       while (committed.length > 0) {
         const job = committed[committed.length - 1]!;
-        await runTransfer("import.rollback", { job });
+        await runTransfer("import.rollback", { job }, () => t("activity.job.import_undo", { name: sourceOf(job) }));
         committed = committed.slice(0, -1);
       }
       if (closed) return;
@@ -703,7 +718,7 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
   life.listen(forgetToken, "click", () => void storeToken(""));
   life.listen(tokenInput, "keydown", (event) => {
     // Invio nel campo del token salva il token, non avvia l'anteprima.
-    if (event.key !== "Enter") return;
+    if (event.key !== "Enter" || composingKey(event)) return;
     event.preventDefault();
     saveToken.click();
   });

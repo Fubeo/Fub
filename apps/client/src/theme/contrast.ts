@@ -51,7 +51,12 @@ export function channels(color: string): [number, number, number] {
 
 /// La luminanza relativa (WCAG, *relative luminance*).
 export function luminance(color: string): number {
-  const [r, g, b] = channels(color).map((v) => {
+  return channelLuminance(channels(color));
+}
+
+/// La stessa luminanza dai tre canali a otto bit, senza passare dal testo.
+export function channelLuminance(rgb: readonly [number, number, number]): number {
+  const [r, g, b] = rgb.map((v) => {
     const c = v / 255;
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   }) as [number, number, number];
@@ -62,6 +67,11 @@ export function luminance(color: string): number {
 /// più chiaro sopra. È simmetrico — quale dei due sia l'inchiostro non cambia
 /// il numero, e infatti chi lo chiama li ordina per leggibilità e non per conto.
 export function contrast(a: string, b: string): number {
-  const [x, y] = [luminance(a), luminance(b)];
+  return luminanceRatio(luminance(a), luminance(b));
+}
+
+/// Lo stesso rapporto a partire da due luminanze già contate: chi confronta
+/// molti colori con gli stessi fondi conta i fondi una volta sola.
+export function luminanceRatio(x: number, y: number): number {
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }

@@ -47,10 +47,12 @@ export type TableEdit =
   | { readonly kind: "clear"; readonly range: Range }
   | { readonly kind: "insert-rows"; readonly at: number; readonly count: number }
   | { readonly kind: "delete-rows"; readonly from: number; readonly to: number }
-  | { readonly kind: "move-rows"; readonly from: number; readonly to: number; readonly by: -1 | 1 }
+  /// Le righe da `from` a `to` spostate di `by` posti (in su se negativo):
+  /// un passo con Alt+freccia, di più trascinando le intestazioni.
+  | { readonly kind: "move-rows"; readonly from: number; readonly to: number; readonly by: number }
   | { readonly kind: "insert-columns"; readonly at: number; readonly count: number }
   | { readonly kind: "delete-columns"; readonly from: number; readonly to: number }
-  | { readonly kind: "move-columns"; readonly from: number; readonly to: number; readonly by: -1 | 1 }
+  | { readonly kind: "move-columns"; readonly from: number; readonly to: number; readonly by: number }
   | { readonly kind: "sort"; readonly column: number; readonly direction: 1 | -1 }
   | { readonly kind: "align"; readonly from: number; readonly to: number; readonly align: TableAlign }
   | { readonly kind: "merge"; readonly range: Range }

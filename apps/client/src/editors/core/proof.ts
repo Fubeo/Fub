@@ -31,9 +31,19 @@ export const LANGUAGE_AUTO = "auto";
 const MAX_SEGMENTS = 512;
 const MAX_SEGMENT_BYTES = 64 * 1024;
 const MAX_REQUEST_BYTES = 1024 * 1024;
-/// Quanti segmenti già controllati si ricordano: chi scrive cambia un paragrafo
-/// alla volta, e gli altri non si richiedono.
-const CACHE_ENTRIES = 4096;
+/// Quanti segmenti già controllati ricorda la cache condivisa. Una nota lunga
+/// (30 KB) ne ha qualche centinaio: 8192 coprono le note di una sessione
+/// normale, e chi torna su una linguetta non rimanda niente.
+const CACHE_ENTRIES = 8192;
+/// Quanti code unit di testo tiene in tutto la cache: vive quanto l'app, e
+/// questo tetto (circa 4 MB di stringhe nel caso peggiore, due byte per unità)
+/// la tiene piccola anche con paragrafi lunghi. Un segmento più lungo del tetto
+/// non si ricorda.
+const CACHE_UNITS = 2 * 1024 * 1024;
+/// Quante configurazioni (lingua, opzioni, parole) si ricordano insieme: una
+/// per lingua di nota, più quelle lasciate indietro da «Aggiungi al
+/// dizionario». Quella dimenticata porta via i suoi segmenti.
+const CACHE_SCOPES = 16;
 
 export type ProofKind = "spelling" | "grammar";
 
@@ -161,6 +171,9 @@ export interface ProseSegment {
   readonly from: number;
   readonly to: number;
   readonly pieces: readonly ProsePiece[];
+  /// Il blocco è una voce d'elenco (un paragrafo dentro la voce, o un
+  /// compito): la prima parola può cominciare in minuscolo.
+  readonly listItem?: boolean;
 }
 
 /// Dove sta nel documento un intervallo del segmento. `exact` quando sta dentro
@@ -196,18 +209,158 @@ export function ignoreKey(issue: ProofIssue, text: string): string {
   return issue.kind === "spelling" ? `s\u0000${text.toLocaleLowerCase()}` : `g\u0000${issue.message}\u0000${text}`;
 }
 
-/// Il client del correttore per una superficie. Va chiuso con `dispose`.
+/// Una configurazione del controllo nella cache: i segmenti si ricordano sotto
+/// il suo `id`, e `language` è cosa il motore sa fare in quella lingua.
+interface ProofScope {
+  readonly id: number;
+  language: ProofLanguage | null;
+}
+
+interface CachedSegment {
+  readonly issues: readonly ProofIssue[];
+  readonly units: number;
+}
+
+/// La chiave di un segmento: lo scope, se è una voce d'elenco, il testo. Il
+/// prefisso dello scope resta il primo pezzo, perché `dropScope` lo cerca.
+function cacheKey(scope: ProofScope, text: string, listItem: boolean): string {
+  return `${scope.id}\u0000${listItem ? "l" : "p"}\u0000${text}`;
+}
+
+/// I segmenti già controllati, condivisi da tutti i client: una superficie che
+/// si rimonta (un cambio di linguetta) o una seconda vista della stessa nota
+/// non richiedono ciò che un'altra ha già chiesto.
+///
+/// La risposta del motore dipende soltanto da ciò che la richiesta porta (la
+/// lingua, le opzioni, le parole del dizionario personale, il testo) e dai
+/// dizionari della macchina: la chiave è l'impronta di quei campi più il testo
+/// del segmento, e due vault con la stessa configurazione condividono i
+/// risultati senza errore. Ogni avviso di `watch` (un'impostazione, la lingua,
+/// un vault aperto) svuota comunque tutto e cambia `epoch`: un risultato
+/// partito prima non entra più.
+///
+/// I dizionari della macchina non danno avvisi: una risposta che dice che il
+/// dizionario della lingua manca (`missingDictionary`) non entra nella cache,
+/// né i suoi rilievi né la sua lingua. Chi installa il dizionario con Fub
+/// aperto lo vede appena la superficie si rimonta.
+///
+/// È una LRU con tre tetti, segmenti, testo e configurazioni, perché vive
+/// quanto l'app.
+export class ProofCache {
+  private epochValue = 0;
+  private units = 0;
+  private nextScope = 0;
+  private readonly entries = new Map<string, CachedSegment>();
+  private readonly scopes = new Map<string, ProofScope>();
+  private readonly told = new Set<string>();
+
+  constructor(
+    private readonly maxEntries = CACHE_ENTRIES,
+    private readonly maxUnits = CACHE_UNITS,
+    private readonly maxScopes = CACHE_SCOPES,
+  ) {}
+
+  /// Cambia a ogni `clear`: chi ha cominciato prima non scrive più.
+  get epoch(): number {
+    return this.epochValue;
+  }
+
+  /// Quanti segmenti ricorda.
+  get size(): number {
+    return this.entries.size;
+  }
+
+  /// La configurazione con questa impronta, creata se manca.
+  scope(fingerprint: string): ProofScope {
+    let scope = this.scopes.get(fingerprint);
+    if (scope) {
+      this.scopes.delete(fingerprint);
+    } else {
+      scope = { id: this.nextScope++, language: null };
+      if (this.scopes.size >= this.maxScopes) {
+        const oldest = this.scopes.keys().next().value;
+        if (oldest !== undefined) this.dropScope(oldest);
+      }
+    }
+    this.scopes.set(fingerprint, scope);
+    return scope;
+  }
+
+  /// I rilievi di `text`; `listItem` perché una voce d'elenco ha una regola
+  /// in meno (la maiuscola della prima parola) e la stessa frase in un
+  /// paragrafo risponde diversamente.
+  get(scope: ProofScope, text: string, listItem = false): readonly ProofIssue[] | undefined {
+    const key = cacheKey(scope, text, listItem);
+    const entry = this.entries.get(key);
+    if (!entry) return undefined;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry.issues;
+  }
+
+  /// Ricorda i rilievi di `text`, se nessuno ha svuotato la cache da `epoch`.
+  set(epoch: number, scope: ProofScope, text: string, issues: readonly ProofIssue[], listItem = false): void {
+    if (epoch !== this.epochValue || text.length > this.maxUnits) return;
+    const key = cacheKey(scope, text, listItem);
+    this.remove(key);
+    while (this.entries.size >= this.maxEntries || this.units + text.length > this.maxUnits) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) break;
+      this.remove(oldest);
+    }
+    this.entries.set(key, { issues, units: text.length });
+    this.units += text.length;
+  }
+
+  /// Vero la prima volta che una risposta dice che manca `dictionary`: il
+  /// dizionario mancante si dice una volta sola finché l'app è aperta, per
+  /// tutte le superfici. `clear` non lo dimentica.
+  firstMissing(dictionary: string): boolean {
+    if (this.told.has(dictionary)) return false;
+    this.told.add(dictionary);
+    return true;
+  }
+
+  clear(): void {
+    this.epochValue += 1;
+    this.entries.clear();
+    this.scopes.clear();
+    this.units = 0;
+  }
+
+  private remove(key: string): void {
+    const entry = this.entries.get(key);
+    if (!entry) return;
+    this.entries.delete(key);
+    this.units -= entry.units;
+  }
+
+  private dropScope(fingerprint: string): void {
+    const scope = this.scopes.get(fingerprint);
+    if (!scope) return;
+    this.scopes.delete(fingerprint);
+    const prefix = `${scope.id}\u0000`;
+    for (const key of [...this.entries.keys()]) if (key.startsWith(prefix)) this.remove(key);
+  }
+}
+
+/// La cache di tutti i client dell'app.
+export const sharedProofCache = new ProofCache();
+
+/// Il client del correttore per una superficie. Va chiuso con `dispose`, che
+/// non tocca la cache condivisa.
 export class ProofClient {
   private config: Promise<Config | null> | null = null;
   private available = true;
   private generation = 0;
-  private readonly cache = new Map<string, readonly ProofIssue[]>();
-  private readonly languages = new Map<string, ProofLanguage>();
   private readonly listeners = new Set<() => void>();
   private readonly stopWatching: () => void;
   private disposed = false;
 
-  constructor(private readonly ports: ProofPorts) {
+  constructor(
+    private readonly ports: ProofPorts,
+    private readonly cache: ProofCache = sharedProofCache,
+  ) {
     this.stopWatching = ports.watch(() => this.invalidate());
   }
 
@@ -219,25 +372,43 @@ export class ProofClient {
   }
 
   /// Controlla `segments` nella lingua del documento (`documentLanguage`, se ne
-  /// dichiara una) o in quella delle impostazioni. `null` quando il correttore
-  /// non c'è, o quando la configurazione è cambiata durante l'attesa: chi
-  /// chiama non applica niente e aspetta il prossimo `onChange`.
-  async check(segments: readonly string[], documentLanguage?: string | null): Promise<ProofResult | null> {
+  /// dichiara una) o in quella delle impostazioni. `listItems[i]` dice che il
+  /// segmento `i` è una voce d'elenco: spesso un frammento, la sua prima parola
+  /// non chiede la maiuscola. `null` quando il correttore non c'è, o quando la
+  /// configurazione è cambiata durante l'attesa: chi chiama non applica niente
+  /// e aspetta il prossimo `onChange`.
+  async check(
+    segments: readonly string[],
+    documentLanguage?: string | null,
+    listItems: readonly boolean[] = [],
+  ): Promise<ProofResult | null> {
     if (this.disposed || !this.available) return null;
     const generation = this.generation;
+    const epoch = this.cache.epoch;
     const config = await this.loadConfig();
-    if (!config || generation !== this.generation || this.disposed) return null;
+    if (!config || generation !== this.generation || epoch !== this.cache.epoch || this.disposed) return null;
     const language = primaryLanguage(documentLanguage) ?? config.language;
-    const keyOf = (text: string) => `${language}\u0000${text}`;
+    const options = { ...config.options, ignore_internet: true };
+    // L'impronta è la richiesta senza i segmenti: ciò da cui la risposta dipende.
+    const scope = this.cache.scope(JSON.stringify([language, options, config.words]));
+    // I risultati di questa chiamata stanno qui e non solo nella cache: la LRU
+    // può dimenticare un segmento prima che la chiamata finisca.
+    const results = new Array<readonly ProofIssue[] | undefined>(segments.length);
     const pending: number[] = [];
+    // Cosa sa fare il motore, secondo l'ultima risposta di questa chiamata.
+    let answered: ProofLanguage | null = null;
     for (let i = 0; i < segments.length; i += 1) {
-      if (this.cache.has(keyOf(segments[i]))) continue;
+      results[i] = this.cache.get(scope, segments[i], listItems[i] === true);
+      if (results[i]) continue;
       // Un segmento oltre il limite della route non si chiede: non ha rilievi.
-      if (utf8Length(segments[i]) > MAX_SEGMENT_BYTES) this.remember(keyOf(segments[i]), []);
+      if (utf8Length(segments[i]) > MAX_SEGMENT_BYTES) results[i] = [];
       else pending.push(i);
     }
     try {
       for (const batch of this.batches(segments, pending)) {
+        // Gli indici nella richiesta, non nella chiamata; il campo manca
+        // quando non c'è nessuna voce, e la richiesta resta quella di prima.
+        const lists = batch.flatMap((index, at) => (listItems[index] === true ? [at] : []));
         const response = await this.ports.queryIndex({
           kind: "custom",
           ns: PROOF_NS,
@@ -245,22 +416,34 @@ export class ProofClient {
             op: "check",
             version: 1,
             language,
-            options: { ...config.options, ignore_internet: true },
+            options,
             words: config.words,
             segments: batch.map((i) => segments[i]),
+            ...(lists.length > 0 ? { list_items: lists } : {}),
           },
         });
-        if (generation !== this.generation || this.disposed) return null;
+        if (generation !== this.generation || epoch !== this.cache.epoch || this.disposed) return null;
         if (response.kind !== "custom") throw new Error("proof: risposta fuori tema");
         const wire = wireResult(response.value);
-        this.languages.set(language, {
+        answered = {
           code: wire.language.code,
           spelling: wire.language.spelling,
           grammar: wire.language.grammar,
           missingDictionary: wire.language.missing_dictionary ?? null,
-        });
+        };
+        // Senza il dizionario della lingua la risposta vale solo per questa
+        // chiamata: il dizionario può arrivare senza avvisi.
+        const missing = answered.missingDictionary;
+        const lasting = missing === null;
+        // E chi scrive lo sa, invece di credere che il testo sia senza refusi.
+        if (missing !== null && this.cache.firstMissing(missing)) this.ports.missingDictionary?.(missing, answered.code);
+        // Dopo un `clear` lo scope è staccato dalla cache: scriverci non tocca
+        // le configurazioni nuove.
+        if (lasting) scope.language = answered;
         batch.forEach((index, at) => {
-          this.remember(keyOf(segments[index]), this.convert(segments[index], wire.segments[at] ?? []));
+          const issues = this.convert(segments[index], wire.segments[at] ?? []);
+          results[index] = issues;
+          if (lasting) this.cache.set(epoch, scope, segments[index], issues, listItems[index] === true);
         });
       }
     } catch (error) {
@@ -270,15 +453,10 @@ export class ProofClient {
       }
       throw error;
     }
-    const known = this.languages.get(language) ?? {
-      code: language,
-      spelling: false,
-      grammar: false,
-      missingDictionary: null,
-    };
     return {
-      language: known,
-      segments: segments.map((segment) => this.cache.get(keyOf(segment)) ?? []),
+      language: answered ??
+        scope.language ?? { code: language, spelling: false, grammar: false, missingDictionary: null },
+      segments: results.map((issues) => issues ?? []),
     };
   }
 
@@ -294,7 +472,6 @@ export class ProofClient {
     this.disposed = true;
     this.stopWatching();
     this.listeners.clear();
-    this.cache.clear();
   }
 
   private invalidate(): void {
@@ -302,8 +479,9 @@ export class ProofClient {
     this.generation += 1;
     this.config = null;
     this.available = true;
+    // L'avviso arriva a ogni client: svuotare più volte non costa, e il primo
+    // che lo riceve chiude la porta ai risultati partiti prima.
     this.cache.clear();
-    this.languages.clear();
     for (const listener of [...this.listeners]) listener();
   }
 
@@ -361,13 +539,5 @@ export class ProofClient {
       message: issue.message,
       suggestions: [...issue.suggestions],
     }));
-  }
-
-  private remember(key: string, issues: readonly ProofIssue[]): void {
-    if (this.cache.size >= CACHE_ENTRIES) {
-      const oldest = this.cache.keys().next().value;
-      if (oldest !== undefined) this.cache.delete(oldest);
-    }
-    this.cache.set(key, issues);
   }
 }

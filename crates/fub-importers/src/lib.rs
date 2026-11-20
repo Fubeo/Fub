@@ -35,7 +35,6 @@
 //! registrar.register_import_provider(fub_importers::NotionApiImport::boxed())?;
 //! registrar.register_import_provider(fub_importers::AirtableApiImport::boxed())?;
 //! registrar.register_export_provider(fub_importers::CsvExport::boxed())?;
-//! registrar.register_export_provider(fub_importers::PdfExport::boxed())?;
 //! registrar.register_command_provider(Box::new(fub_importers::ImportCommands))?;
 //! ```
 //!
@@ -59,6 +58,7 @@ pub mod json_import;
 pub mod migration;
 pub mod normalize;
 pub mod notion;
+mod notion_export;
 pub mod onenote;
 pub mod pipeline;
 pub mod receipts;
@@ -83,7 +83,7 @@ pub use csv::CsvImport;
 pub use enex::EnexImport;
 pub use export_csv::{CsvExport, TARGET_CSV};
 pub use export_html::{HtmlExport, TARGET_HTML};
-pub use export_pdf::{PdfExport, TARGET_PDF};
+pub use export_pdf::{TARGET_PDF, TARGET_PDF_SINGLE};
 pub use html::HtmlImport;
 pub use json_import::JsonImport;
 pub use normalize::{ImportCommands, IMPORT_CONVERT_LEGACY, IMPORT_DEDUPE, IMPORT_NORMALIZE};
@@ -201,7 +201,7 @@ pub fn import_providers_with(
 
 /// Every export provider in this bundle.
 pub fn export_providers() -> Vec<Box<dyn ExportProvider>> {
-    vec![CsvExport::boxed(), PdfExport::boxed(), HtmlExport::boxed()]
+    vec![CsvExport::boxed(), HtmlExport::boxed()]
 }
 
 /// The conversion commands of P10.5.

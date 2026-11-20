@@ -17,12 +17,13 @@
 //! Il codec di GridCraft non scrive mai il file: lo riscriverebbe dal suo
 //! modello, e ciò che quel modello non conosce andrebbe perso.
 //!
-//! I valori sono quelli che il file ha salvato, e niente si ricalcola: aprire
-//! una cartella costa la sua lettura, qualunque formula contenga, e un valore
-//! casuale o di oggi resta quello del file. Le celle versate dalle matrici
-//! hanno il valore che il file ha salvato (la patch `0003` di
-//! `vendor/gridcraft`); una formula salvata senza valore resta vuota, e la
-//! sessione della griglia lo dice.
+//! I valori sono quelli che il file ha salvato: aprire una cartella costa la sua
+//! lettura, e un valore casuale o di oggi resta quello del file. Le celle
+//! versate dalle matrici hanno il valore che il file ha salvato (la patch
+//! `0003` di `vendor/gridcraft`). La sessione della griglia ricalcola
+//! (`ricalcolo.rs`) soltanto le formule che leggono una cella cambiata e quelle
+//! che il file ha salvato senza valore; una che il motore non sa calcolare
+//! resta col valore del file, e la sessione lo dice.
 //!
 //! Il codec gira in un thread suo con uno stack grande, e un suo panic diventa
 //! un errore: una formula annidata a fondo non abbatte l'host.
@@ -37,7 +38,10 @@ use fub_abi::{
 use gridcraft_model::Workbook;
 use gridcraft_xlsx::{Format, ReadReport};
 
+pub mod catalogo;
+mod circular;
 mod commands;
+mod cronologia;
 pub mod export;
 // Le cartelle di prova dei test d'integrazione, anche per quelli interni.
 #[cfg(test)]
@@ -50,9 +54,13 @@ pub mod input;
 mod inventory;
 pub mod locks;
 mod model;
+pub mod motore;
 mod objects;
 mod package;
+pub mod parts;
+mod ricalcolo;
 mod sheet_xml;
+pub mod values;
 
 /// L'id del formato.
 pub const FORMAT_ID: &str = "xlsx";
@@ -106,6 +114,37 @@ pub fn read(bytes: &[u8]) -> Result<Read, XlsxError> {
             .map(|(workbook, report)| Read { workbook, report })
             .map_err(|error| XlsxError::Codec(error.to_string()))
     })
+}
+
+/// I byte di una cartella nuova e vuota: un foglio solo, `first_sheet`, nel
+/// pacchetto `.xlsx` che il codec di GridCraft scrive per `Workbook::new()`.
+///
+/// È l'unico caso in cui il codec scrive un file intero: una cartella che non
+/// c'è ancora non ha niente che il suo modello possa perdere. `file_name` è il
+/// nome del file che nascerà, quello che il pacchetto ricorda come proprio. I
+/// byte si rileggono prima di tornare, e una rilettura con avvisi è un errore:
+/// non si promette una cartella che la griglia aprirebbe a metà.
+pub fn blank(file_name: &str, first_sheet: &str) -> Result<Vec<u8>, XlsxError> {
+    let bytes = guarded(|| {
+        let mut workbook = Workbook::new();
+        workbook
+            .check_sheet_name(first_sheet, Some(0))
+            .map_err(XlsxError::Codec)?;
+        if let Some(sheet) = workbook.sheet_mut(0) {
+            sheet.name = first_sheet.to_string();
+        }
+        gridcraft_engine::io::save_bytes_as(
+            &workbook,
+            file_name,
+            gridcraft_engine::io::FileKind::Xlsx,
+        )
+        .map_err(|error| XlsxError::Codec(error.to_string()))
+    })?;
+    let read = read(&bytes)?;
+    if let Some(warning) = read.report.warnings.first() {
+        return Err(XlsxError::Codec(warning.clone()));
+    }
+    Ok(bytes)
 }
 
 /// Il contenuto prima del codec: le dimensioni e la firma. Non legge il
@@ -171,7 +210,7 @@ impl FormatProvider for XlsxProvider {
     fn descriptor(&self) -> FormatDescriptor {
         FormatDescriptor {
             id: FORMAT_ID.to_string(),
-            name: "Excel".to_string(),
+            name: "XLSX".to_string(),
             extensions: EXTENSIONS.iter().map(|e| e.to_string()).collect(),
             source: SourceKind::Bytes,
         }
@@ -221,5 +260,41 @@ impl FormatProvider for XlsxProvider {
         _rewrites: &[LinkRewrite],
     ) -> Result<Option<Vec<TextEdit>>, FormatError> {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod blank_tests {
+    use super::*;
+
+    #[test]
+    fn una_cartella_vuota_ha_un_foglio_col_suo_nome_e_si_rilegge_senza_avvisi() {
+        let bytes = blank("Foglio senza titolo.xlsx", "Foglio1").unwrap();
+        check(&bytes).unwrap();
+        let read = read(&bytes).unwrap();
+        assert!(
+            read.report.warnings.is_empty(),
+            "{:?}",
+            read.report.warnings
+        );
+        let names: Vec<_> = read
+            .workbook
+            .sheets
+            .iter()
+            .map(|sheet| sheet.name.as_str())
+            .collect();
+        assert_eq!(names, ["Foglio1"]);
+        assert!(read.workbook.sheets[0].cells.is_empty());
+    }
+
+    #[test]
+    fn un_nome_di_foglio_che_excel_rifiuta_non_scrive_niente() {
+        let long = "x".repeat(32);
+        for name in ["", "a/b", "History", long.as_str()] {
+            assert!(
+                matches!(blank("Conti.xlsx", name), Err(XlsxError::Codec(_))),
+                "{name:?}"
+            );
+        }
     }
 }

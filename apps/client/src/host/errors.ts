@@ -36,16 +36,105 @@ export function isErrorKind(e: unknown, kind: PluginErrorKind): boolean {
   return asPluginError(e)?.kind === kind;
 }
 
-// La frase da mostrare a una persona.
+// Il motivo di un errore, da mettere in una riga che dice che cosa non è
+// riuscito.
 //
-// Il messaggio è **già risolto** quando arriva: lo traduce il kernel col
-// catalogo di chi l'ha prodotto, prima di lasciarlo uscire (§12.1). Qui non si
-// traduce niente, si sceglie soltanto cosa stampare.
+// # La regola, una sola
 //
-// Un `Error` della webview dà il suo messaggio e non `"Error: …"`: il prefisso
-// è inglese in ogni lingua e non dice niente a chi legge.
-export function errorText(e: unknown): string {
+// Una riga d'errore davanti a una persona dice **che cosa** non è riuscito e
+// **perché**: «Non ho potuto creare la nota «Idee»: esiste già qualcosa con lo
+// stesso nome». Le due metà vengono da due posti diversi, e non si scambiano:
+//
+// - **il soggetto lo dà chi chiama**, con una chiave sua del catalogo che ha il
+//   segnaposto `{reason}` («… non è riuscito: {reason}», «Non ho potuto …:
+//   {reason}»). Solo chi chiama sa che cosa stava facendo; un avviso con il solo
+//   motivo («non esiste più») lascia chi legge senza sapere *che cosa*;
+// - **il motivo lo dà questa funzione**, e il parametro dice da dove si prende.
+//
+// `"messaggio"` (il default) è il motivo detto da chi ha prodotto l'errore: un
+// comando, una view, un servizio di un componente escono dal kernel già
+// tradotti col catalogo di chi li ha scritti (§12.1), e un `Error` della
+// webview è uno dei nostri, scritto con `t()`. Qui non si traduce niente.
+// La scelta è di chi chiama e non della specie: lo stesso `conflict` è l'id
+// di una nota quando esce da una primitiva e «La nota è cambiata: riprova»
+// quando lo scrive un comando.
+//
+// `"specie"` è la frase della specie dell'errore (`error.kind.*`), nella lingua
+// di chi guarda. È per gli errori delle **primitive dell'host su un
+// documento** (aprire, creare, rinominare, spostare, leggere i modelli o i
+// tipi, ridisegnare un pannello, cercare): lì il messaggio non è una frase per
+// chi legge. Per `not_found`, `already_exists` e `conflict` è l'id del
+// documento, per `internal` la prosa del codec in inglese («parse failed: rich
+// codec…»), per `io` quella del sistema operativo. Il messaggio resta nel
+// registro dell'host, dove lo cerca chi sviluppa.
+//
+// Un errore del contratto il cui messaggio **non** è una stringa è una chiave
+// che nessuno ha risolto (un `Text::Message` uscito dal confine senza passare
+// dal catalogo): è un difetto di chi l'ha lasciato uscire, ma chi guarda non
+// deve pagarlo con «[object Object]» né con una chiave. Riceve la frase della
+// specie anche col parametro `"messaggio"`; ogni altro oggetto, la frase di un
+// problema imprevisto. Un `Error` dà il suo messaggio e non `"Error: …"`: il
+// prefisso è inglese in ogni lingua e non dice niente a chi legge.
+//
+// Ciò che va **solo nel registro** (un `console.warn`, un `logWarn`) non passa
+// di qui: lì serve il messaggio intero, in qualunque lingua sia.
+export type ErrorReason = "messaggio" | "specie";
+
+export function errorText(e: unknown, reason: ErrorReason = "messaggio"): string {
+  if (reason === "specie") {
+    const kind = typeof e === "object" && e !== null ? (e as { kind?: unknown }).kind : undefined;
+    return kindPhrase(typeof kind === "string" ? kind : "internal");
+  }
   const plugin = asPluginError(e);
   if (plugin) return plugin.message;
-  return e instanceof Error ? e.message : String(e);
+  if (e instanceof Error) return e.message;
+  if (typeof e === "object" && e !== null) {
+    const kind = (e as { kind?: unknown }).kind;
+    return kindPhrase(typeof kind === "string" ? kind : "internal");
+  }
+  return String(e);
+}
+
+export type ErrorKindKey =
+  | "error.kind.io"
+  | "error.kind.not_found"
+  | "error.kind.permission_denied"
+  | "error.kind.conflict"
+  | "error.kind.cancelled"
+  | "error.kind.already_exists"
+  | "error.kind.bad_args"
+  | "error.kind.unavailable"
+  | "error.kind.internal";
+
+// La specie del contratto → la chiave della sua frase. Le specie che dicono
+// «questo non c'è» (un comando, una view, un job sconosciuti, un servizio non
+// servito) si leggono tutte come una funzione che non è disponibile.
+const KIND_KEYS: Readonly<Record<PluginErrorKind, ErrorKindKey>> = {
+  io: "error.kind.io",
+  not_found: "error.kind.not_found",
+  permission_denied: "error.kind.permission_denied",
+  conflict: "error.kind.conflict",
+  cancelled: "error.kind.cancelled",
+  already_exists: "error.kind.already_exists",
+  bad_args: "error.kind.bad_args",
+  unserved: "error.kind.unavailable",
+  unknown_command: "error.kind.unavailable",
+  unknown_view: "error.kind.unavailable",
+  unknown_job: "error.kind.unavailable",
+  internal: "error.kind.internal",
+};
+
+// Chi traduce le frasi delle specie: lo registra `i18n/strings.ts` quando si
+// carica. Questo file non importa le stringhe di proposito: lo leggono in
+// molti, e le stringhe si portano dietro le impostazioni e il kernel. Prima
+// della registrazione (un test che non carica le stringhe) resta la chiave,
+// che è comunque meglio di «[object Object]».
+let translate: (key: ErrorKindKey) => string = (key) => key;
+
+export function setErrorKindTranslator(fn: (key: ErrorKindKey) => string): void {
+  translate = fn;
+}
+
+function kindPhrase(kind: string): string {
+  return translate(KIND_KEYS[kind as PluginErrorKind] ?? "error.kind.internal");
 }

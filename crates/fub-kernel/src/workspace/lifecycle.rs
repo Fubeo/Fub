@@ -181,7 +181,7 @@ impl Workspace {
         &mut self,
         owner: &str,
     ) -> std::result::Result<PreparedPluginTeardown, RegistryError> {
-        if self.dispatch.in_provider_call() {
+        if self.dispatch.in_provider_call() || self.reads_in_flight.busy(owner) {
             return Err(RegistryError::Busy(owner.to_string()));
         }
         let entry = self

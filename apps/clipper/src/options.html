@@ -11,8 +11,12 @@ body { font: 13px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 16px; max-
 h1 { font-size: 16px; }
 section { border-top: 1px solid #8885; padding: 12px 0; }
 label { display: block; margin: 8px 0 2px; font-weight: 600; }
-input[type=text], select, textarea { width: 100%; box-sizing: border-box; background: #fff; color: #111; border: 1px solid #888; }
-@media (prefers-color-scheme: dark) { input[type=text], select, textarea { background: #2c2c2e; color: #f2f2f7; border-color: #636366; } }
+input[type=text], input[type=password], select, textarea { width: 100%; box-sizing: border-box; background: #fff; color: #111; border: 1px solid #888; }
+@media (prefers-color-scheme: dark) { input[type=text], input[type=password], select, textarea { background: #2c2c2e; color: #f2f2f7; border-color: #636366; } }
+.keyrow { display: flex; gap: 6px; align-items: stretch; }
+.keyrow input { flex: 1 1 auto; min-width: 0; }
+.keyrow button { flex: 0 0 auto; }
+label.inline { display: inline; font-weight: 600; }
 textarea { font-family: ui-monospace, monospace; font-size: 11px; }
 .hint { color: #666; font-size: 12px; }
 @media (prefers-color-scheme: dark) { .hint, .small { color: #aeaeb2; } }
@@ -59,7 +63,12 @@ textarea { font-family: ui-monospace, monospace; font-size: 11px; }
 <div class="row"><label for="aiLocalModel">Local model</label><input type="text" id="aiLocalModel" maxlength="128"></div>
 <div class="row"><label for="aiRemoteBase">Remote base URL (https only recommended)</label><input type="text" id="aiRemoteBase" maxlength="512" placeholder="https://api.example.com"></div>
 <div class="row"><label for="aiRemoteModel">Remote model</label><input type="text" id="aiRemoteModel" maxlength="128"></div>
-<div class="row"><label for="aiKey">Remote API key (stored in extension storage only, never in pages or URIs)</label><input type="text" id="aiKey" maxlength="512" autocomplete="off"></div>
+<div class="row"><label for="aiKey" data-i18n="options.key.label">Remote API key (never in pages, addresses or captures)</label>
+<div class="keyrow"><input type="password" id="aiKey" maxlength="512" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="aiKeyState">
+<button type="button" id="aiKeyToggle" aria-controls="aiKey" data-i18n="options.key.show">Show key</button></div>
+<div id="aiKeyState" class="small" aria-live="polite"></div></div>
+<div class="row"><input type="checkbox" id="aiKeyRemember" aria-describedby="aiKeyRememberHint"> <label for="aiKeyRemember" class="inline" data-i18n="options.key.remember">Remember the key on this device</label>
+<p id="aiKeyRememberHint" class="hint" data-i18n="options.key.remember.hint">Off: the key stays in the browser's memory and is gone when you close the browser. On: the key is written to the browser profile on this disk, where programs running as you, or a copy of your profile, can read it.</p></div>
 <div class="row"><label for="aiContext">Default context sent on Ask</label>
 <select id="aiContext">
 <option value="selection">Selection</option>
@@ -68,7 +77,7 @@ textarea { font-family: ui-monospace, monospace; font-size: 11px; }
 <option value="custom">Custom (typed per request)</option>
 </select></div>
 <div class="row"><button id="saveAi">Save assistant settings</button>
-<button id="clearKey">Forget API key</button></div>
+<button type="button" id="clearKey" data-i18n="options.key.forget">Forget the key</button></div>
 </section>
 
 <section>
@@ -92,6 +101,7 @@ textarea { font-family: ui-monospace, monospace; font-size: 11px; }
 <script src="matcher.js"></script>
 <script src="templates.js"></script>
 <script src="interpreter.js"></script>
+<script src="keystore.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

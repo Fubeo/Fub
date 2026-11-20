@@ -28,6 +28,37 @@ export function rangeBetween(anchor: { readonly row: number; readonly column: nu
   };
 }
 
+/// Se gli intervalli prendono più di una cella, contando l'intestazione: con
+/// una cella sola la banda non somma. Due intervalli sono sempre celle
+/// diverse, che `withRange` non ne ripete uno uguale.
+export function selectsSeveral(ranges: readonly Range[]): boolean {
+  if (ranges.length > 1) return true;
+  const range = ranges[0];
+  return range !== undefined && (range.r1 > range.r0 || range.c1 > range.c0);
+}
+
+/// Ogni cella scelta una volta sola, intervallo per intervallo e riga per
+/// riga, senza le prime `headerRows` righe (l'intestazione): la cella che due
+/// intervalli prendono tutti e due conta nel primo. È ciò che la banda somma
+/// (E24); chi chiama legge i valori mostrati da queste coordinate, una volta
+/// per cambio di selezione.
+export function* selectedCells(ranges: readonly Range[], headerRows = 0): Generator<Cell, void, undefined> {
+  for (let index = 0; index < ranges.length; index++) {
+    const range = ranges[index]!;
+    const top = Math.max(range.r0, headerRows);
+    if (top > range.r1) continue;
+    // Solo gli intervalli di prima che toccano questo possono avere una cella
+    // già contata: di solito nessuno, e il giro resta lineare.
+    const earlier = ranges.slice(0, index).filter((other) => touches(other, top, range.c0, range.r1, range.c1));
+    for (let row = top; row <= range.r1; row++) {
+      for (let column = range.c0; column <= range.c1; column++) {
+        if (earlier.length > 0 && earlier.some((other) => touches(other, row, column))) continue;
+        yield { row, column };
+      }
+    }
+  }
+}
+
 /// Il riempimento che la maniglia porta da `source` verso la cella `over`:
 /// come in Excel, lungo l'asse su cui il puntatore è uscito di più, fino alla
 /// sua riga o colonna. Dentro la sorgente non c'è riempimento (`null`).
@@ -39,4 +70,65 @@ export function fillRange(source: Range, over: Cell): Range | null {
     return over.row > source.r1 ? { ...source, r1: over.row } : { ...source, r0: over.row };
   }
   return over.column > source.c1 ? { ...source, c1: over.column } : { ...source, c0: over.column };
+}
+
+/// Il doppio clic sulla maniglia, come in Excel: la serie di `source` scende
+/// quanto la colonna accanto (quella a sinistra, se sotto la sorgente ha un
+/// valore, altrimenti quella a destra), e si ferma prima di una cella già
+/// piena nelle colonne della sorgente, così non scrive sopra niente.
+/// `filled` dice se una cella ha un valore, `rows` quante righe ha la
+/// tabella, `first` la prima riga del corpo: dall'intestazione non si
+/// scende. `null` se non c'è niente da riempire.
+export function fillToEndRange(source: Range, rows: number, columns: number, filled: (row: number, column: number) => boolean, first = 0): Range | null {
+  if (source.r0 < first) return null;
+  const below = source.r1 + 1;
+  if (below >= rows) return null;
+  const left = source.c0 - 1;
+  const right = source.c1 + 1;
+  const guide = left >= 0 && filled(below, left) ? left : right < columns && filled(below, right) ? right : null;
+  if (guide === null) return null;
+  let last = source.r1;
+  while (last + 1 < rows && filled(last + 1, guide)) {
+    let free = true;
+    for (let c = source.c0; c <= source.c1 && free; c++) free = !filled(last + 1, c);
+    if (!free) break;
+    last += 1;
+  }
+  return last > source.r1 ? { ...source, r1: last } : null;
+}
+
+/// Se `range` prende le righe intere (tutte le colonne di `bounds`) o le
+/// colonne intere (tutte le righe). `bounds` è la tabella: la prima e
+/// l'ultima riga e colonna che si vedono.
+export function covers(range: Range, bounds: Range): { readonly wholeRows: boolean; readonly wholeColumns: boolean } {
+  return {
+    wholeRows: range.c0 <= bounds.c0 && range.c1 >= bounds.c1,
+    wholeColumns: range.r0 <= bounds.r0 && range.r1 >= bounds.r1,
+  };
+}
+
+/// La riga, la colonna o la tabella intera attorno a `range`: Maiusc+Spazio,
+/// Ctrl+Spazio e tutti e due.
+export function wholeRange(range: Range, which: "row" | "column" | "table", bounds: Range): Range {
+  if (which === "table") return { ...bounds };
+  if (which === "row") return { r0: range.r0, c0: bounds.c0, r1: range.r1, c1: bounds.c1 };
+  return { r0: bounds.r0, c0: range.c0, r1: bounds.r1, c1: range.c1 };
+}
+
+/// Ctrl+D e Ctrl+R, come nei fogli di calcolo: con più righe (o colonne)
+/// scelte la prima si copia nelle altre; con una sola, si copia quella sopra
+/// (o a sinistra), che non può stare prima di `first` (l'intestazione non si
+/// copia nel corpo). Le righe d'intestazione scelte non contano: con una
+/// colonna intera scende la prima riga del corpo. `null` se non c'è niente
+/// da copiare.
+export function fillCopy(range: Range, direction: "down" | "right", first = 0): { readonly source: Range; readonly target: Range } | null {
+  if (direction === "down") {
+    const r0 = Math.max(range.r0, first);
+    if (range.r1 > r0) return { source: { ...range, r0, r1: r0 }, target: { ...range, r0: r0 + 1 } };
+    if (range.r1 < first || r0 - 1 < first || r0 !== range.r0) return null;
+    return { source: { ...range, r0: r0 - 1, r1: r0 - 1 }, target: range };
+  }
+  if (range.c1 > range.c0) return { source: { ...range, c1: range.c0 }, target: { ...range, c0: range.c0 + 1 } };
+  if (range.c0 - 1 < 0) return null;
+  return { source: { ...range, c0: range.c0 - 1, c1: range.c0 - 1 }, target: range };
 }

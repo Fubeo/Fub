@@ -16,9 +16,9 @@ use tauri::window::Color;
 use tauri::{Runtime, Theme, WebviewWindow};
 
 /// Il `--bg` dei fogli scuri (`sheet-dark.css`, `sheet-dark-high.css`).
-const SCURO: Color = Color(0x0a, 0x0e, 0x16, 0xff);
+const SCURO: Color = Color(0x08, 0x11, 0x0b, 0xff);
 /// Il `--bg` dei fogli chiari (`sheet-light.css`, `sheet-light-high.css`).
-const CHIARO: Color = Color(0xe8, 0xed, 0xf5, 0xff);
+const CHIARO: Color = Color(0xe7, 0xef, 0xe9, 0xff);
 /// Gli alti contrasti hanno oggi lo stesso fondo delle luci normali: restano
 /// voci a sé perché il test li confronta foglio per foglio.
 const SCURO_ALTO: Color = SCURO;

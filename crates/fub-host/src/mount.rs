@@ -76,12 +76,18 @@ struct CoreBundle {
     strings: Vec<StringCatalog>,
     provides: Vec<&'static str>,
     requires: Vec<&'static str>,
+    /// I permessi oltre a quelli del core, dalla riga dell'inventario
+    /// (`OfficialFeature::permissions`): nel manifest come quelli di un plugin.
+    permissions: Vec<&'static str>,
     /// Dalla riga della mappa dei componenti (`fub_features::componenti`),
     /// per chi ne ha una: usa se c'è, tipo, gruppo e pezzi del client.
     uses: Vec<&'static str>,
     kind: ComponentKind,
     group: Option<&'static str>,
     ui: Vec<&'static str>,
+    /// Il corpo dei lavori che i suoi comandi accodano, dalla riga
+    /// dell'inventario (`OfficialFeature::jobs`).
+    jobs: Option<fub_features::Jobs>,
     #[allow(clippy::type_complexity)]
     register: Box<dyn Fn(&mut Registrar<'_>) -> Vec<String> + Send + Sync>,
 }
@@ -100,12 +106,19 @@ impl CoreBundle {
             strings: Vec::new(),
             provides: Vec::new(),
             requires: Vec::new(),
+            permissions: Vec::new(),
             uses: Vec::new(),
             kind: ComponentKind::default(),
             group: None,
             ui: Vec::new(),
+            jobs: None,
             register: Box::new(register),
         }
+    }
+
+    fn running(mut self, jobs: Option<fub_features::Jobs>) -> Self {
+        self.jobs = jobs;
+        self
     }
 
     fn configuring(mut self, settings: Vec<SettingSpec>) -> Self {
@@ -126,6 +139,11 @@ impl CoreBundle {
 
     fn requiring(mut self, services: &[&'static str]) -> Self {
         self.requires.extend_from_slice(services);
+        self
+    }
+
+    fn permitting(mut self, permissions: &[&'static str]) -> Self {
+        self.permissions.extend_from_slice(permissions);
         self
     }
 
@@ -172,6 +190,9 @@ impl Bundle for CoreBundle {
             .speaking(self.default_locale, self.strings.clone())
             .providing(&self.provides)
             .requiring(&self.requires);
+        for permission in &self.permissions {
+            manifest.permissions.granted.set(*permission, true);
+        }
         manifest.uses = self.uses.iter().map(|id| id.to_string()).collect();
         manifest.kind = self.kind;
         manifest.group = self.group.map(str::to_string);
@@ -184,11 +205,54 @@ impl Bundle for CoreBundle {
     }
 
     fn plugin(&self) -> Box<dyn Plugin> {
-        OnlyProviders::boxed(self.manifest())
+        match self.jobs {
+            Some(jobs) => Box::new(CoreJobs {
+                manifest: self.manifest(),
+                jobs,
+            }),
+            None => OnlyProviders::boxed(self.manifest()),
+        }
     }
 
     fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
         (self.register)(registrar)
+    }
+}
+
+/// Il corpo di un bundle ufficiale che accoda lavori: i provider li tiene il
+/// kernel, come per [`OnlyProviders`], e `run_job` è la funzione della riga
+/// dell'inventario.
+struct CoreJobs {
+    manifest: PluginManifest,
+    jobs: fub_features::Jobs,
+}
+
+impl Plugin for CoreJobs {
+    fn manifest(&self) -> PluginManifest {
+        self.manifest.clone()
+    }
+
+    fn activate(
+        &mut self,
+        _host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<(), fub_abi::PluginError> {
+        Ok(())
+    }
+
+    fn deactivate(
+        &mut self,
+        _host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<(), fub_abi::PluginError> {
+        Ok(())
+    }
+
+    fn run_job(
+        &self,
+        job: &str,
+        payload: serde_json::Value,
+        host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<serde_json::Value, fub_abi::PluginError> {
+        (self.jobs)(job, payload, host)
     }
 }
 
@@ -307,6 +371,25 @@ fn mount_error_with_resource_disposal(
     })
 }
 
+/// Se la lavagna è spenta nel file delle impostazioni di `root`.
+fn lavagna_spenta(
+    root: &Utf8Path,
+    storage: &Arc<dyn VaultStorage>,
+    machine: &Arc<MachineSettings>,
+) -> bool {
+    let mut settings =
+        fub_kernel::SettingsStore::open(root, Arc::clone(storage), Arc::clone(machine));
+    // Basta la chiave dei bundle spenti: la lavagna è un bundle.
+    let specs: Vec<_> = crate::settings::core_settings()
+        .into_iter()
+        .filter(|spec| spec.key == crate::settings::PLUGINS_DISABLED)
+        .collect();
+    if settings.declare(crate::settings::CORE_ID, &specs).is_err() {
+        return false;
+    }
+    crate::componenti::lavagna_spenta(&settings)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mount_with_formats(
     root: &Utf8Path,
@@ -326,9 +409,16 @@ pub(crate) fn mount_with_formats(
     #[cfg_attr(not(any(feature = "draw", feature = "craft")), allow(unused_mut))]
     let mut builtin = vec![
         MarkdownProvider::boxed(),
-        fub_format_canvas::CanvasProvider::boxed(),
         fub_format_base::BaseProvider::boxed(),
     ];
+    // La lavagna spenta (`fub.lavagna` in `plugins.disabled`) non registra
+    // nemmeno il formato `.canvas`: un `.canvas` resta un file di specie
+    // sconosciuta. Si legge dal file prima che il workspace esista, perché i
+    // formati si registrano prima di lui; riaccenderla dalla pagina
+    // «Componenti» rimonta il vault (`crate::componenti`).
+    if !lavagna_spenta(root, &storage, &machine) {
+        builtin.insert(1, fub_format_canvas::CanvasProvider::boxed());
+    }
     // Le scene di FubDraw (ADR 0203). Senza la feature un `.svg` resta un
     // allegato, e la shell lo apre come testo col profilo `svg`.
     #[cfg(feature = "draw")]
@@ -434,16 +524,9 @@ pub(crate) fn mount_with_formats(
     // vengono col codec, e un vault senza la feature non li vede.
     #[cfg(feature = "rich")]
     bundles.push(Arc::new(
-        CoreBundle::new(
-            crate::rich::RICH_ID,
-            "Word processing",
-            crate::rich::register,
-        )
-        .speaking(
-            crate::settings::CORE_DEFAULT_LOCALE,
-            fub_format_rich::export::catalog(),
-        )
-        .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
+        CoreBundle::new(crate::rich::RICH_ID, "Documents", crate::rich::register)
+            .speaking(crate::settings::CORE_DEFAULT_LOCALE, crate::rich::catalog())
+            .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
     ));
 
     // La griglia delle cartelle di Excel, sui byte del file, e la loro stampa
@@ -452,12 +535,12 @@ pub(crate) fn mount_with_formats(
     bundles.push(Arc::new(
         CoreBundle::new(
             crate::workbook::WORKBOOK_ID,
-            "Excel workbooks",
+            "Spreadsheets",
             crate::workbook::register,
         )
         .speaking(
             crate::settings::CORE_DEFAULT_LOCALE,
-            fub_format_xlsx::export::catalog(),
+            crate::workbook::catalog(),
         )
         .described_by(componenti::riga(crate::workbook::WORKBOOK_ID).as_ref()),
     ));
@@ -493,6 +576,8 @@ pub(crate) fn mount_with_formats(
         )
         .providing(feature.provides)
         .requiring(feature.requires)
+        .permitting(feature.permissions)
+        .running(feature.jobs)
         .described_by(rows.iter().find(|row| row.id == feature.id));
         bundles.push(Arc::new(bundle));
     }

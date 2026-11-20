@@ -62,6 +62,7 @@ use fub_abi::{
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::host::authorize_path;
 use fub_kernel::os_trash::{FallbackReason, OsTrashBackend, OsTrashReceipt, TrashVia};
+use fub_kernel::same_content::SameContent;
 use fub_kernel::{
     Capability, Guard, JournalRead, MachineSettings, MountRegistry, MountRoute, ReadOnly,
     Subscription, SystemLocale, ViewStates, Workspace,
@@ -70,6 +71,7 @@ use fub_kernel::{
 use crate::automation::VaultWriterLock;
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
+use crate::engines::OpenKey;
 use crate::jobs::{
     drain_events, finish_events, run_detached_rebuild_index, with_event_drain, JobHost,
 };
@@ -436,9 +438,33 @@ pub trait EventSink: Send + Sync + 'static {
     /// esiste. Chi tiene il conto è il ponte, che è uno solo
     /// (`bridge::consegna`); chi implementa questo trait deve solo **non
     /// mentire**.
+    ///
+    /// **`vault` dice di quale vault è il fatto** (#216): la radice canonica
+    /// della sessione il cui ponte lo consegna, la stessa stringa di
+    /// `VaultInfo::root`. `None` è un fatto che non appartiene a un vault (una
+    /// chiave della macchina). L'host tiene una sessione per vault aperto, ma
+    /// il canale verso chi guarda è uno: senza questo un `document_changed
+    /// "Nota.md"` di un vault lasciato aperto arriverebbe identico a uno del
+    /// vault che la shell mostra. L'uscita deve portarlo fino a chi riceve
+    /// ([`ShellNotice`]); chi riceve decide cosa è suo.
     #[must_use = "un'uscita che non dice se ha consegnato è una perdita silenziosa: \
                   chi riceve resta indietro e nessuno gli dice di riconciliare"]
-    fn emit(&self, notice: &Notice) -> Delivery;
+    fn emit(&self, notice: &Notice, vault: Option<&str>) -> Delivery;
+}
+
+/// Un notice **come lo riceve una shell**: l'evento, la sua origine e il vault
+/// da cui viene (#216).
+///
+/// È la forma di `fub://event`: i campi di [`Notice`] allo stesso livello, più
+/// `vault` quando il fatto è di un vault. Il campo è additivo — una shell che
+/// non lo legge riceve il notice di sempre — e assente, non `null`, per un
+/// fatto della macchina.
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+pub struct ShellNotice<'a> {
+    #[serde(flatten)]
+    pub notice: &'a Notice,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vault: Option<&'a str>,
 }
 
 /// Cosa è successo a un notice arrivato a un'[uscita](EventSink).
@@ -486,6 +512,9 @@ pub struct VaultSession {
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
     /// chiude deve poterci passare mentre un export cammina il vault.
     registry: Custody<BundleRegistry>,
+    /// I documenti ricchi che la shell ha aperti in questo vault, con le
+    /// revisioni che ha ricevuto ([`crate::engines`]): cadono con la sessione.
+    open_rich: Arc<crate::engines::OpenRich>,
     /// Risorse preparate dalla `FormatSource`, vive quanto la sessione.
     _format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
     /// Diagnostica tipizzata prodotta dalla sorgente di startup per questa apertura.
@@ -653,6 +682,21 @@ fn close_session_resources(
     if let Err(error) = drain_events(workspace) {
         errors.push(error);
     }
+    // I comandi di sola lettura non tengono il turno: chi era in volo quando
+    // la chiusura è cominciata si ferma alla prossima chiamata all'host e si
+    // aspetta qui, prima che i provider vengano smontati. Si aspetta senza
+    // il lucchetto del workspace (una lettura, per finire, ne prende un
+    // prestito condiviso); le letture lanciate dalla chiusura stessa non sono
+    // in volo e non fanno aspettare.
+    match workspace.read() {
+        Ok(ws) => {
+            let reads = ws.reads_in_flight();
+            drop(ws);
+            reads.cancel_all();
+            reads.wait_idle();
+        }
+        Err(error) => errors.push(error),
+    }
 
     // Flush globale, corpi plugin e indici sono callback distinte. Ogni
     // errore viene raccolto, senza saltare il resto del teardown.
@@ -774,6 +818,7 @@ impl<'a> OpeningTransaction<'a> {
             workspace: self.workspace.clone(),
             registry: self.registry.clone(),
             mounts: Custody::new("i mount esterni", mounts),
+            open_rich: Arc::default(),
             startup_diagnostics: std::mem::take(&mut self.startup_diagnostics),
             _format_resources: std::mem::take(&mut self.format_resources),
             unread,
@@ -874,8 +919,11 @@ impl From<fub_kernel::snapshot::SnapshotError> for SnapshotHostError {
 /// `Closing` resta nella mappa per tutta la durata del teardown: è il confine
 /// atomico che impedisce a un'apertura concorrente di montare una seconda
 /// sessione sulla stessa radice.
+///
+/// La sessione aperta sta in una `Box`: è grande, gli altri due stati sono un
+/// puntatore, e la mappa non deve pagare la sessione per ogni slot.
 enum SessionSlot {
-    Open(VaultSession),
+    Open(Box<VaultSession>),
     Closing(Arc<ClosingToken>),
     Applying(Arc<ApplyingToken>),
 }
@@ -922,6 +970,30 @@ impl Drop for ApplyClaim<'_> {
     }
 }
 
+/// Ciò che una scrittura di un documento di videoscrittura lascia a chi
+/// l'ha chiesta ([`crate::engines`]).
+#[derive(Default)]
+struct RichWrite {
+    /// Il documento è di videoscrittura: la revisione dei byte che la
+    /// scrittura copre, `None` se il file non c'era.
+    overwritten: Option<Option<Revision>>,
+    /// Le revisioni di cui il codec può aver ricordato la prova a vuoto, anche
+    /// se il salvataggio è fallito.
+    left: Vec<Revision>,
+}
+
+/// I registri delle chiavi di apertura dei vault aperti.
+fn open_registers(sessions: &Sessions) -> Vec<Arc<crate::engines::OpenRich>> {
+    sessions
+        .slots
+        .values()
+        .filter_map(|slot| match slot {
+            SessionSlot::Open(session) => Some(Arc::clone(&session.open_rich)),
+            SessionSlot::Closing(_) | SessionSlot::Applying(_) => None,
+        })
+        .collect()
+}
+
 /// Possesso esclusivo del teardown di una sessione.
 ///
 /// Il marker viene ritirato da `Drop`, quindi anche un panic proveniente da un
@@ -945,12 +1017,24 @@ impl CloseClaim<'_> {
 
     fn close(mut self) -> Vec<PluginError> {
         let mut errors: Vec<_> = self.revoke_resources().err().into_iter().collect();
+        // Le chiavi di apertura del vault cadono con la sessione.
         errors.extend(
             self.session
                 .take()
                 .expect("una pretesa di chiusura possiede la sessione")
                 .close(),
         );
+        // Ritirato il marker, se non resta un altro vault, aperto o in
+        // chiusura, nessun documento ha più bisogno delle cache dei motori:
+        // si svuotano. Se resta, o se la mappa non si legge, decide il budget.
+        let sessions = self.sessions;
+        drop(self);
+        let last = sessions
+            .read()
+            .is_ok_and(|sessions| sessions.slots.is_empty());
+        if last {
+            crate::rich::empty_engine_caches();
+        }
         errors
     }
 }
@@ -1064,6 +1148,10 @@ pub struct Host {
     /// forma di `Custodia::denuncia` serve a chi deve rispondere a ogni
     /// chiamata, non a chi risponde alla prima.
     session_notice: Mutex<Option<String>>,
+    /// Gli altri avvisi nati prima della shell, in coda dopo la diagnosi del
+    /// log: oggi il percorso di disegno della webview che `fub_app::run`
+    /// sceglie prima di GTK. Stessa forma di consegna, un tiraggio per volta.
+    startup_notices: Mutex<std::collections::VecDeque<Notice>>,
     /// I `fub://` che il sistema ha consegnato e la shell non ha ancora
     /// preso: la coda è della macchina, come l'app che li riceve.
     uris: crate::uri_inbox::UriInbox,
@@ -1110,6 +1198,28 @@ pub struct Host {
     /// della stessa radice in questo host condividono lo stesso lease invece
     /// di escludersi a vicenda.
     writers: Mutex<BTreeMap<Utf8PathBuf, std::sync::Weak<VaultWriterLock>>>,
+    /// **I disegni aperti nel motore del disegno**, per vault
+    /// ([`crate::drawing`]): la chiusura di un vault chiude i suoi.
+    pub(crate) drawings: crate::drawing::Drawings,
+    /// **La cartella di tema controllata** ([`Host::check_theme_folder`]): il
+    /// path che la finestra di scelta nativa ha dato e l'impronta dei byte
+    /// letti. È il permesso, che vale una volta, di installarla
+    /// ([`Host::install_theme_from_folder`]); la regola, con la sua
+    /// generazione, sta in [`crate::theme::ThemeFolderGrant`].
+    theme_folder: Mutex<crate::theme::ThemeFolderGrant>,
+    /// **Il custode del tema collegato** ([`Host::link_theme_folder`]): la
+    /// cartella guardata e il suo osservatore, montato e smontato secondo la
+    /// chiave [`crate::settings::DEVELOPER_THEME_FOLDER`] e la modalità
+    /// sviluppatore ([`Host::sync_theme_link`]).
+    theme_keeper: Arc<crate::theme_watch::ThemeKeeper>,
+    /// **Il turno delle chiavi locali** ([`PROFILE_LOCAL_KEYS`]): lo tengono
+    /// il cambio e l'azzeramento di un profilo di macchina per tutto il passo
+    /// (cambio e ripristino), e i gesti che scrivono la cartella collegata
+    /// («Collega una cartella…», «Scollega»). Così un collegamento che arriva
+    /// a metà di un cambio di profilo non viene sovrascritto dal ripristino.
+    /// Il turno di scrittura della macchina è privato del kernel: questo è il
+    /// turno dell'host, attorno a lui.
+    local_keys_turn: Mutex<()>,
 }
 
 impl Default for Host {
@@ -1206,6 +1316,10 @@ impl Host {
             format_source: None,
             startup_source: None,
             session_notice: Mutex::new(None),
+            theme_folder: Mutex::new(crate::theme::ThemeFolderGrant::default()),
+            theme_keeper: Arc::default(),
+            local_keys_turn: Mutex::new(()),
+            startup_notices: Mutex::new(std::collections::VecDeque::new()),
             uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -1215,6 +1329,7 @@ impl Host {
             system_locale: Arc::new(SystemLocale::default()),
             levels: Arc::new(fub_kernel::log::Levels::default()),
             writers: Mutex::new(BTreeMap::new()),
+            drawings: crate::drawing::Drawings::default(),
         }
     }
 
@@ -1496,6 +1611,19 @@ impl Host {
             .session_notice
             .lock()
             .unwrap_or_else(|and| and.into_inner()) = warning;
+        self
+    }
+
+    /// Mette in coda un avviso nato prima della shell, dopo la diagnosi del
+    /// log: [`Self::session_notice`] li consegna uno per chiamata, nell'ordine.
+    /// Lo chiama `fub_app::run` con l'esito del percorso di disegno
+    /// (`disegno.rs`), che esiste prima di GTK e quindi prima di ogni
+    /// ascoltatore.
+    pub fn with_startup_notice(self, notice: Notice) -> Self {
+        self.startup_notices
+            .lock()
+            .unwrap_or_else(|and| and.into_inner())
+            .push_back(notice);
         self
     }
 
@@ -2060,7 +2188,7 @@ impl Host {
         })?;
 
         if let (Some(sink), Some(live)) = (&self.sink, live) {
-            crate::bridge::spawn(live, sink.clone());
+            crate::bridge::spawn(live, sink.clone(), root.to_string());
         }
 
         // **La seconda fase nasce dopo il subscriber live**, e l'ordine è la
@@ -2158,7 +2286,7 @@ impl Host {
                                     let (session, lease) = opening.into_session_with_lease();
                                     sessions
                                         .slots
-                                        .insert(root.clone(), SessionSlot::Open(session));
+                                        .insert(root.clone(), SessionSlot::Open(Box::new(session)));
                                     drop(lease);
                                     (Ok(info), None)
                                 }
@@ -2189,7 +2317,7 @@ impl Host {
                             let (session, lease) = opening.into_session_with_lease();
                             sessions
                                 .slots
-                                .insert(root.clone(), SessionSlot::Open(session));
+                                .insert(root.clone(), SessionSlot::Open(Box::new(session)));
                             drop(lease);
                             (Ok(info), None)
                         }
@@ -2312,13 +2440,21 @@ impl Host {
         self.vaults.handle()
     }
 
-    /// Elenca i temi installati con un manifest e fogli completi.
+    /// Elenca i temi installati con un manifest e fogli completi, e il tema
+    /// collegato quando la sua cartella è pronta (fiducia `development`).
     pub fn themes(&self) -> Result<Vec<crate::theme::ThemeInfo>, PluginError> {
-        Ok(self
+        let mut themes = self
             .config_dir
             .as_deref()
             .map(crate::theme::list_themes)
-            .unwrap_or_default())
+            .unwrap_or_default();
+        if let Some(folder) = self.linked_theme_folder() {
+            themes.extend(crate::theme::linked_theme_info(
+                self.config_dir.as_deref(),
+                &folder,
+            ));
+        }
+        Ok(themes)
     }
 
     /// Legge una luce di un tema installato senza esporre il filesystem.
@@ -2327,11 +2463,267 @@ impl Host {
         id: &str,
         light: fub_abi::theme::ThemeLight,
     ) -> Result<crate::theme::ThemePayload, PluginError> {
+        if let Some(folder) = self.linked_theme_folder() {
+            if let Some(read) =
+                crate::theme::read_linked_theme(self.config_dir.as_deref(), &folder, id, light)
+            {
+                return read.map_err(Into::into);
+            }
+        }
         let dir = self
             .config_dir
             .as_deref()
             .ok_or_else(|| PluginError::Unserved("theme inventory unavailable".into()))?;
         crate::theme::read_theme(dir, id, light).map_err(Into::into)
+    }
+
+    // --- il tema collegato (modalità sviluppatore) ---------------------------
+
+    /// La cartella collegata, se la modalità sviluppatore è accesa e la chiave
+    /// ne nomina una: è la sola fonte di [`Host::themes`], [`Host::read_theme`]
+    /// e dell'osservatore.
+    fn linked_theme_folder(&self) -> Option<camino::Utf8PathBuf> {
+        linked_folder(&self.machine)
+    }
+
+    /// Installa l'uscita degli eventi del tema collegato: l'app ci mette
+    /// l'evento `fub://theme-changed` verso la finestra principale.
+    pub fn set_theme_link_sink(&self, sink: crate::theme_watch::ThemeLinkSink) {
+        self.theme_keeper.set_sink(sink);
+    }
+
+    /// Il tema collegato com'è adesso, `None` se nessuna cartella è collegata
+    /// o la modalità sviluppatore è spenta. Lo chiede Aspetto, e l'app
+    /// all'avvio per dire che la cartella non c'è più.
+    ///
+    /// Aspetta prima che un cambio di collegamento in volo sia deciso, così
+    /// `watched` dice com'è davvero: chi la chiama è già fuori dal thread
+    /// principale.
+    ///
+    /// Se la cartella è pronta ma nessuno la guarda (sparita e tornata, un
+    /// osservatore che il sistema ha perso), chiede al custode di riprovare
+    /// adesso: chiedere com'è vale anche come «riprova».
+    pub fn theme_link(&self) -> Option<crate::theme::ThemeLink> {
+        self.theme_keeper.settle();
+        let folder = self.linked_theme_folder()?;
+        let mut link = crate::theme::theme_link(self.config_dir.as_deref(), &folder);
+        if link.state == crate::theme::ThemeLinkState::Ready
+            && !self.theme_keeper.is_watching(&folder)
+        {
+            self.theme_keeper.revive();
+        }
+        link.watched = self.theme_keeper.is_watching(&folder);
+        Some(link)
+    }
+
+    /// Monta o smonta l'osservatore secondo la chiave e la modalità
+    /// sviluppatore, rilette adesso: la cartella collegata si guarda, niente
+    /// altrimenti. Lo chiamano l'avvio dell'app e ogni scrittura di una delle
+    /// due chiavi (`tell_observer`), quindi spegnere la modalità, azzerare la
+    /// chiave o collegare un'altra cartella smonta il vecchio.
+    ///
+    /// Non si ferma: la lettura della chiave, della cartella e il montaggio
+    /// girano su un thread del custode, perché chi chiama può essere un
+    /// comando sincrono sul thread principale (`set_setting`, il cambio di
+    /// profilo, l'avvio). Fra due sincronizzazioni vince l'ultima; nessun
+    /// lucchetto del workspace attraversa la chiamata.
+    pub fn sync_theme_link(&self) {
+        let machine = Arc::clone(&self.machine);
+        let config_dir = self.config_dir.clone();
+        self.theme_keeper
+            .request(move || (config_dir, linked_folder(&machine)));
+    }
+
+    /// Smonta l'osservatore alla chiusura dell'app; la chiave resta, e al
+    /// prossimo avvio [`Host::sync_theme_link`] lo rimonta.
+    pub fn close_theme_link(&self) {
+        self.theme_keeper.close();
+    }
+
+    /// La cartella guardata adesso da un osservatore vivo, se c'è, dopo che
+    /// i cambi in volo sono decisi: per i test del ciclo di vita.
+    pub fn watched_theme_folder(&self) -> Option<camino::Utf8PathBuf> {
+        self.theme_keeper.settle();
+        self.theme_keeper.watched()
+    }
+
+    /// Il titolo della finestra di scelta nativa di «Collega una cartella…»,
+    /// nella lingua di chi guarda: come [`Host::theme_folder_pick_title`].
+    pub fn theme_link_pick_title(&self) -> String {
+        let mut title = fub_abi::Text::key("host.theme_folder.link_title");
+        self.localize_core(None, &mut title);
+        title.to_string()
+    }
+
+    /// «Collega una cartella…»: `source` lo dà soltanto la finestra di scelta
+    /// nativa dell'app, mai la webview, e solo con la modalità sviluppatore
+    /// accesa. La cartella si legge con le porte dell'installazione
+    /// ([`crate::theme::theme_link`]); se è pronta (e il suo id non è di un
+    /// tema installato) il suo percorso canonico va nella chiave
+    /// [`crate::settings::DEVELOPER_THEME_FOLDER`] sotto il lucchetto del suo
+    /// id, e l'osservatore si rimonta su di lei. Un rifiuto lascia il
+    /// collegamento di prima.
+    pub fn link_theme_folder(
+        &self,
+        source: &camino::Utf8Path,
+    ) -> Result<crate::theme::ThemeFolderLink, PluginError> {
+        self.theme_folder_allowed()?;
+        let folder = source
+            .canonicalize_utf8()
+            .unwrap_or_else(|_| source.to_owned());
+        let (link, recorded) =
+            crate::theme::link_folder(self.config_dir.as_deref(), &folder, || {
+                let _turn = self
+                    .local_keys_turn
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                self.machine.set(
+                    crate::settings::DEVELOPER_THEME_FOLDER,
+                    fub_abi::settings::SettingValue::Text(folder.to_string()),
+                )
+            })?;
+        if !recorded {
+            return Ok(crate::theme::ThemeFolderLink::Refused { link });
+        }
+        // La stessa cartella collegata di nuovo si guarda da capo; chi chiama è
+        // già fuori dal thread principale.
+        self.theme_keeper
+            .watch_now(self.config_dir.as_deref(), Some(&folder), true);
+        let mut link = link;
+        link.watched = self.theme_keeper.is_watching(&folder);
+        self.tell_observer(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        Ok(crate::theme::ThemeFolderLink::Linked { link })
+    }
+
+    /// «Scollega»: azzera la chiave e smonta l'osservatore. Senza modalità
+    /// sviluppatore, come buttare un permesso: si può sempre.
+    pub fn unlink_theme_folder(&self) -> Result<(), PluginError> {
+        {
+            let _turn = self
+                .local_keys_turn
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            self.machine
+                .reset(crate::settings::DEVELOPER_THEME_FOLDER)?;
+        }
+        self.tell_observer(crate::settings::DEVELOPER_THEME_FOLDER)
+    }
+
+    /// La modalità sviluppatore ([`crate::settings::DEVELOPER_MODE`]), riletta
+    /// a ogni chiamata: spenta, o illeggibile, vuol dire no
+    /// (`PermissionDenied`). L'app la chiede prima di aprire la finestra di
+    /// scelta, e le due chiamate qui sotto la richiedono da sé.
+    pub fn theme_folder_allowed(&self) -> Result<(), PluginError> {
+        let on = matches!(
+            self.machine.effective(crate::settings::DEVELOPER_MODE),
+            Ok((fub_abi::settings::SettingValue::Toggle(true), _))
+        );
+        if on {
+            Ok(())
+        } else {
+            Err(PluginError::PermissionDenied(fub_abi::Text::key(
+                "host.theme_folder.developer_off",
+            )))
+        }
+    }
+
+    /// Il titolo della finestra di scelta nativa di «Installa da cartella…»,
+    /// nella lingua di chi guarda. Lo decide l'host e non la webview: quella
+    /// finestra è il punto in cui la persona dà il suo permesso.
+    pub fn theme_folder_pick_title(&self) -> String {
+        let mut title = fub_abi::Text::key("host.theme_folder.pick_title");
+        self.localize_core(None, &mut title);
+        title.to_string()
+    }
+
+    /// Scarta la cartella controllata, se c'è: la persona ha risposto «no» a
+    /// «Sostituisci», la shell l'ha rifiutata col suo cancello, o sta per
+    /// aprire una finestra di scelta nuova. Senza modalità sviluppatore: un
+    /// permesso si può sempre buttare.
+    pub fn forget_theme_folder(&self) {
+        self.theme_folder_grant().forget();
+    }
+
+    fn theme_folder_grant(&self) -> std::sync::MutexGuard<'_, crate::theme::ThemeFolderGrant> {
+        self.theme_folder
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Legge la cartella di chi scrive un tema senza installarla
+    /// ([`crate::theme::check_theme_folder`]), solo con la modalità
+    /// sviluppatore accesa. `source` lo dà soltanto la finestra di scelta
+    /// nativa dell'app, mai la webview: una cartella pronta resta qui come
+    /// **la** cartella controllata, ed è il permesso di installarla una volta
+    /// sola. Un controllo nuovo prende il posto del precedente; un rifiuto lo
+    /// scarta. Un controllo o uno scarto arrivati mentre questo legge vincono:
+    /// questo non dà più il permesso.
+    pub fn check_theme_folder(
+        &self,
+        source: &camino::Utf8Path,
+    ) -> Result<crate::theme::ThemeFolderCheck, PluginError> {
+        let generation = self.theme_folder_grant().forget();
+        self.theme_folder_allowed()?;
+        let check = crate::theme::check_theme_folder(source);
+        if let Ok(crate::theme::ThemeFolderCheck::Ready {
+            digest, manifest, ..
+        }) = &check
+        {
+            self.theme_folder_grant().grant(
+                generation,
+                crate::theme::CheckedThemeFolder {
+                    source: source.to_owned(),
+                    digest: digest.clone(),
+                    manifest: manifest.clone(),
+                    replace_only: false,
+                },
+            );
+        }
+        check.map_err(Into::into)
+    }
+
+    /// Installa la cartella che [`Host::check_theme_folder`] ha controllato
+    /// ([`crate::theme::install_theme_from_folder`]), solo con la modalità
+    /// sviluppatore accesa e solo se `digest` è l'impronta di quel controllo:
+    /// la webview dice quale controllo ha visto, non quale path installare.
+    ///
+    /// Il controllo è un permesso che vale **una volta e per un esito**: la
+    /// chiamata lo consuma. Una collisione lo rinnova solo per la risposta
+    /// «Sostituisci» (`replace`), una volta; il «no», un rifiuto del cancello
+    /// della shell o una scelta nuova lo scartano
+    /// ([`Host::forget_theme_folder`]). Dopo una collisione una chiamata
+    /// senza `replace` vale come quel «no»: consuma il permesso e risponde
+    /// `Unchecked`, e un «Sostituisci» che arriva dopo trova `Unchecked` anche
+    /// lui. La persona sceglie di nuovo la cartella, come dopo un «no» nella
+    /// finestra. Senza permesso, o con un'impronta che
+    /// non è la sua, l'esito è `Unchecked` e niente si scrive; un'impronta
+    /// diversa non tocca il permesso di un controllo più recente.
+    ///
+    /// La regola sta qui e non nel bottone che la shell nasconde: la chiave si
+    /// rilegge a ogni chiamata, quindi spegnerla fra la collisione e
+    /// «Sostituisci» ferma la richiesta che arriva dopo (`PermissionDenied`).
+    pub fn install_theme_from_folder(
+        &self,
+        replace: bool,
+        digest: &str,
+    ) -> Result<crate::theme::ThemeFolderInstall, PluginError> {
+        self.theme_folder_allowed()?;
+        let dir = self.config_dir.as_deref().ok_or_else(|| {
+            PluginError::Unserved(fub_abi::Text::key("host.theme_folder.unavailable"))
+        })?;
+        let Some((generation, pending)) = self.theme_folder_grant().take(digest) else {
+            return Ok(crate::theme::ThemeFolderInstall::Unchecked);
+        };
+        if pending.replace_only && !replace {
+            // Il «no» alla domanda: il permesso preso non torna.
+            return Ok(crate::theme::ThemeFolderInstall::Unchecked);
+        }
+        let outcome = crate::theme::install_theme_from_folder(dir, &pending, replace);
+        if matches!(outcome, crate::theme::ThemeFolderInstall::Collision { .. }) && !replace {
+            // Solo se niente ha controllato o scartato nel frattempo.
+            self.theme_folder_grant().rearm(generation, pending);
+        }
+        Ok(outcome)
     }
 
     /// I vault conosciuti: prima i preferiti, poi i recenti.
@@ -2749,6 +3141,20 @@ impl Host {
         key: &str,
         value: fub_abi::settings::SettingValue,
     ) -> Result<(), PluginError> {
+        if key == crate::settings::DEVELOPER_THEME_FOLDER {
+            // Il percorso lo dà solo la finestra nativa di «Collega una
+            // cartella…» ([`Host::link_theme_folder`]), mai la webview.
+            return Err(PluginError::PermissionDenied(fub_abi::Text::key(
+                "host.theme_folder.link_only",
+            )));
+        }
+        // Una forma che lo schema non sa dire (un fuso, un indirizzo): il
+        // valore rifiutato non arriva a nessun livello, e il motivo esce nella
+        // lingua di chi guarda.
+        if let Some(mut problem) = crate::settings::user_value_problem(key, &value) {
+            self.localize_core_waiting(vault, &mut problem);
+            return Err(problem);
+        }
         if self.machine_only(vault, key) {
             self.machine.set(key, value)?;
             crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
@@ -2758,6 +3164,7 @@ impl Host {
             ws.set_setting(key, value)
         })??;
         crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
+        self.follow_theme_link_key(key);
         self.if_key_remember_it(vault, key)
     }
 
@@ -2775,6 +3182,7 @@ impl Host {
         }
         with_event_drain(&self.session_workspace(vault)?, |ws| ws.reset_setting(key))??;
         crate::settings::reapply_log_levels(key, &self.machine, &self.levels);
+        self.follow_theme_link_key(key);
         self.if_key_remember_it(vault, key)
     }
 
@@ -2819,6 +3227,7 @@ impl Host {
             fub_abi::settings::SettingScope::Machine => self
                 .machine
                 .export_profile(name)
+                .and_then(|json| without_local_keys(&json, None))
                 .map_err(|e| PluginError::BadArgs(e.into())),
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 session.workspace.read()?.export_settings_profile(name)
@@ -2833,9 +3242,8 @@ impl Host {
         json: &str,
     ) -> Result<(), PluginError> {
         match scope {
-            fub_abi::settings::SettingScope::Machine => self
-                .machine
-                .import_profile(json)
+            fub_abi::settings::SettingScope::Machine => without_local_keys(json, None)
+                .and_then(|json| self.machine.import_profile(&json))
                 .map_err(|e| PluginError::BadArgs(e.into())),
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 with_event_drain(&session.workspace, |ws| ws.import_settings_profile(json))?
@@ -2851,9 +3259,13 @@ impl Host {
         name: &str,
     ) -> Result<(), PluginError> {
         match scope {
+            // La copia passa da fuori, come un'esportazione e un'importazione:
+            // così le chiavi di questa macchina restano fuori anche da lei.
             fub_abi::settings::SettingScope::Machine => self
                 .machine
-                .duplicate_profile(source, name)
+                .export_profile(source)
+                .and_then(|json| without_local_keys(&json, Some(name)))
+                .and_then(|json| self.machine.import_profile(&json))
                 .map_err(|e| PluginError::BadArgs(e.into())),
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 with_event_drain(&session.workspace, |ws| {
@@ -2871,14 +3283,17 @@ impl Host {
     ) -> Result<(), PluginError> {
         match scope {
             fub_abi::settings::SettingScope::Machine => {
-                self.machine
-                    .switch_profile(name)
-                    .map_err(|e| PluginError::BadArgs(e.into()))?;
-                // A profile can alter any machine key; subscribers must reread the index.
+                let restored = self.keeping_local_keys(|machine| {
+                    machine
+                        .switch_profile(name)
+                        .map_err(|e| PluginError::BadArgs(e.into()))
+                })?;
+                // A profile can alter any machine key; subscribers must reread
+                // the index, even when restoring a local key failed.
                 for entry in self.machine.entries() {
                     self.tell_observer(&entry.spec.key)?;
                 }
-                Ok(())
+                restored
             }
             fub_abi::settings::SettingScope::Vault => {
                 with_event_drain(&self.session_workspace(vault)?, |ws| {
@@ -2897,13 +3312,17 @@ impl Host {
     ) -> Result<(), PluginError> {
         match scope {
             fub_abi::settings::SettingScope::Machine => {
-                self.machine
-                    .reset_profile(name)
-                    .map_err(|e| PluginError::BadArgs(e.into()))?;
+                let restored = self.keeping_local_keys(|machine| {
+                    machine
+                        .reset_profile(name)
+                        .map_err(|e| PluginError::BadArgs(e.into()))
+                })?;
+                // A profile can alter any machine key; subscribers must reread
+                // the index, even when restoring a local key failed.
                 for entry in self.machine.entries() {
                     self.tell_observer(&entry.spec.key)?;
                 }
-                Ok(())
+                restored
             }
             fub_abi::settings::SettingScope::Vault => self.in_session(vault, |session| {
                 with_event_drain(&session.workspace, |ws| ws.reset_settings_profile(name))?
@@ -3005,6 +3424,36 @@ impl Host {
         query_workspace(&self.session_workspace(vault)?, query)
     }
 
+    /// Il `Guard` di un componente concede questa famiglia, **adesso**?
+    ///
+    /// È per chi agisce a nome di un componente fuori dal kernel, con una
+    /// capacità che nessun metodo dell'host esercita: il notificatore dei
+    /// promemoria dell'app, che mostra una notifica a nome di `fub.tasks` solo
+    /// se il permesso `fub:notifications` è dichiarato e non spento. La politica
+    /// si legge a ogni chiamata, come la legge il cancello: un interruttore
+    /// spento vale dalla notifica dopo. Un componente spento o sconosciuto
+    /// non è dichiarato, e la risposta è no.
+    pub fn component_allows(
+        &self,
+        vault: Option<&str>,
+        component: &str,
+        capability: Capability,
+    ) -> Result<bool, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let ws = workspace.read()?;
+        Ok(fub_kernel::Policy::denies(&ws.granted_policy(component), capability).is_none())
+    }
+
+    /// L'orologio e il locale del vault, dalla stessa fotografia: i
+    /// millisecondi UTC e la lingua e il fuso con cui li legge chi guarda.
+    /// Sono quelli che l'`HostEnv` dà ai componenti, così l'ora del muro del
+    /// notificatore è la stessa che leggerebbe un provider.
+    pub fn vault_clock(&self, vault: Option<&str>) -> Result<(u64, fub_abi::Locale), PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let ws = workspace.read()?;
+        Ok((ws.now_unix_millis(), ws.locale()))
+    }
+
     /// Questa scrittura riguarda una chiave che **un vault non le serve**, e
     /// vault aperti non ce ne sono?
     ///
@@ -3015,6 +3464,62 @@ impl Host {
     /// pannelli aspettano; senza la terza, una chiave di vault scritta senza
     /// vault direbbe «non dichiarata» invece di «nessun vault aperto», che è la
     /// frase che dice cosa fare.
+    /// Una scrittura passata da un vault aperto (il `Workspace` la dice sul suo
+    /// bus, non a [`Host::tell_observer`]): l'osservatore del tema collegato
+    /// segue lo stesso le sue due chiavi.
+    fn follow_theme_link_key(&self, key: &str) {
+        if key == crate::settings::DEVELOPER_MODE || key == crate::settings::DEVELOPER_THEME_FOLDER
+        {
+            self.sync_theme_link();
+        }
+    }
+
+    /// Cambia o azzera un profilo di macchina tenendo le chiavi che non
+    /// viaggiano coi profili ([`PROFILE_LOCAL_KEYS`]): il loro valore di
+    /// prima torna com'era, qualunque cosa il profilo portasse. Un profilo
+    /// non collega una cartella, e non la scollega.
+    ///
+    /// Tiene il turno delle chiavi locali per tutto il passo. Il risultato di
+    /// fuori dice se il cambio è riuscito (se no niente è cambiato); quello di
+    /// dentro se il ripristino è riuscito: se no il profilo è cambiato lo
+    /// stesso, e chi chiama deve dirlo agli osservatori prima di rispondere
+    /// con l'errore.
+    fn keeping_local_keys(
+        &self,
+        change: impl FnOnce(&MachineSettings) -> Result<(), PluginError>,
+    ) -> Result<Result<(), PluginError>, PluginError> {
+        let _turn = self
+            .local_keys_turn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let before: Vec<_> = PROFILE_LOCAL_KEYS
+            .iter()
+            .map(|key| (*key, explicit_value(&self.machine, key)))
+            .collect();
+        change(&self.machine)?;
+        let mut restored = Ok(());
+        for (key, value) in before {
+            if explicit_value(&self.machine, key) == value {
+                continue;
+            }
+            let put_back = match value {
+                Some(value) => self.machine.set(key, value),
+                None => self.machine.reset(key),
+            };
+            if let Err(error) = put_back {
+                tracing::warn!(
+                    target: "fub.host",
+                    key,
+                    "a machine-local key could not be restored after a profile change: {error:?}"
+                );
+                if restored.is_ok() {
+                    restored = Err(error);
+                }
+            }
+        }
+        Ok(restored)
+    }
+
     fn machine_only(&self, vault: Option<&str>, key: &str) -> bool {
         vault.is_none() && !self.has_current_vault() && self.machine.declares(key)
     }
@@ -3053,12 +3558,22 @@ impl Host {
     /// consuma una volta. L'origine è `Kernel` (0012): la diagnosi non è di
     /// nessun altro — non l'ha chiesta la persona e non l'ha prodotta un
     /// plugin.
+    ///
+    /// Dopo la diagnosi vengono gli avvisi di [`Self::with_startup_notice`],
+    /// uno per chiamata: la shell tira finché la risposta è `None`.
     pub fn session_notice(&self) -> Option<Notice> {
         let warning = self
             .session_notice
             .lock()
             .unwrap_or_else(|and| and.into_inner())
-            .take()?;
+            .take();
+        let Some(warning) = warning else {
+            return self
+                .startup_notices
+                .lock()
+                .unwrap_or_else(|and| and.into_inner())
+                .pop_front();
+        };
         Some(Notice::new(
             fub_abi::Event::Trouble {
                 severity: fub_abi::event::Severity::Warning,
@@ -3084,14 +3599,23 @@ impl Host {
     /// che si fa è dirlo, perché l'unico modo in cui questo caso finiva era in
     /// silenzio.
     fn tell_observer(&self, key: &str) -> Result<(), PluginError> {
+        if key == crate::settings::DEVELOPER_MODE || key == crate::settings::DEVELOPER_THEME_FOLDER
+        {
+            // L'osservatore del tema collegato segue le due chiavi.
+            self.sync_theme_link();
+        }
         if let Some(sink) = &self.sink {
-            let delivers = sink.emit(&fub_abi::Notice::new(
-                fub_abi::Event::SettingChanged {
-                    key: key.to_string(),
-                    scope: fub_abi::settings::SettingScope::Machine,
-                },
-                fub_abi::event::Origin::by(fub_abi::event::Actor::User),
-            ));
+            // Una chiave della macchina non è di nessun vault.
+            let delivers = sink.emit(
+                &fub_abi::Notice::new(
+                    fub_abi::Event::SettingChanged {
+                        key: key.to_string(),
+                        scope: fub_abi::settings::SettingScope::Machine,
+                    },
+                    fub_abi::event::Origin::by(fub_abi::event::Actor::User),
+                ),
+                None,
+            );
             if delivers == Delivery::Dropped {
                 tracing::error!(
                     target: "fub.host",
@@ -3110,9 +3634,11 @@ impl Host {
     /// decidere se una domanda si può servire senza vault.
     /// Un `fub://` che il sistema ha consegnato all'app: resta in coda finché
     /// la shell non lo prende con `uri.pending`, anche se arriva prima che
-    /// la shell esista. `false` se la coda è piena e l'URI resta fuori.
+    /// la shell esista. `false` se la coda è piena e l'URI resta fuori. Un
+    /// nuovo tentativo di una cattura già in coda o già scritta (stesso
+    /// `nonce`) non si accoda di nuovo, e non è un rifiuto: dà `true`.
     pub fn receive_uri(&self, raw: &str) -> bool {
-        self.uris.push(raw)
+        self.uris.push(raw) != crate::uri_inbox::Received::Refused
     }
 
     pub fn has_current_vault(&self) -> bool {
@@ -3174,12 +3700,15 @@ impl Host {
                     else {
                         unreachable!("lo slot verificato era aperto")
                     };
-                    session
+                    *session
                 }
                 SessionSlot::Closing(_) => return Err(closing_conflict(&root)),
                 SessionSlot::Applying(_) => return Err(applying_conflict(&root)),
             }
         };
+        // I disegni del vault cadono con lui, fuori dal lock delle sessioni;
+        // un gesto in corso tiene il suo finché non finisce.
+        self.drawings.forget_vault(&session.root);
         // Il claim conserva il marker, ma non la guardia della mappa: watcher,
         // runner e provider terminano tutti fuori dal lock delle sessioni.
         Ok(CloseClaim {
@@ -3222,7 +3751,7 @@ impl Host {
                         else {
                             unreachable!("lo slot verificato era aperto")
                         };
-                        claimed.push((root.clone(), token, session));
+                        claimed.push((root.clone(), token, *session));
                     }
                 }
                 claimed
@@ -3237,6 +3766,7 @@ impl Host {
                 session: Some(session),
             })
             .collect();
+        self.drawings.forget_all();
         // Costruire prima tutti i claim è parte della garanzia di unwind: se
         // una chiusura panica, gli elementi non ancora visitati vengono
         // comunque lasciati cadere e ritirano ciascuno il proprio marker.
@@ -3329,6 +3859,84 @@ impl Host {
         self.with_session(vault, f)?
     }
 
+    /// La radice canonica della sessione di `vault` (`None`: la corrente).
+    pub(crate) fn session_root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
+        self.with_session(vault, |session| session.root.clone())
+    }
+
+    /// Il valore di alcune chiavi del vault, e da dove viene ciascuno: per
+    /// chi deve sapere se una chiave sta davvero nel file (`crate::componenti`).
+    pub(crate) fn settings_with_source(
+        &self,
+        vault: Option<&str>,
+        keys: &[&str],
+    ) -> Result<
+        Vec<(
+            fub_abi::settings::SettingValue,
+            fub_abi::settings::SettingSource,
+        )>,
+        PluginError,
+    > {
+        self.read_workspace(vault, |workspace| {
+            keys.iter()
+                .map(|key| workspace.setting_source(key))
+                .collect()
+        })
+    }
+
+    /// Scrive (`Some`) o azzera (`None`) chiavi del vault per conto
+    /// dell'utente, in un turno solo. Solo per chiavi che non sono di
+    /// macchina e non sono scorciatoie: chi le ha (`crate::componenti`) lo sa.
+    pub(crate) fn write_vault_settings(
+        &self,
+        vault: Option<&str>,
+        writes: Vec<(&str, Option<fub_abi::settings::SettingValue>)>,
+    ) -> Result<(), PluginError> {
+        self.write_workspace(vault, |workspace| {
+            for (key, value) in writes {
+                match value {
+                    Some(value) => workspace.set_setting(key, value)?,
+                    None => workspace.reset_setting(key)?,
+                }
+            }
+            Ok(())
+        })
+    }
+
+    /// Chiude e riapre il vault di `root` (canonica), per ciò che si decide
+    /// solo montando: i formati registrati, come la lavagna. Il lease di
+    /// scrittura resta di questo processo fra la chiusura e la riapertura,
+    /// come per lo snapshot; il corrente resta quello di prima.
+    ///
+    /// **E lo dice a chi guarda.** La chiusura esce dal ponte come
+    /// `VaultClosed`; il `VaultOpened` della riapertura invece no, perché il
+    /// kernel lo emette durante la scansione, prima che il ponte nuovo si
+    /// abboni (è voluto: l'apertura non è un temporale di eventi). Senza un
+    /// secondo avviso la shell vedrebbe un vault chiuso e mai riaperto: qui
+    /// lo si emette sul bus del vault riaperto, che lo porta soltanto agli
+    /// abbonati (il ponte, cioè `fub://event`) e non agli handler dei plugin,
+    /// che il loro `VaultOpened` l'hanno già ricevuto dal kernel. Vale per
+    /// ogni strada che arriva qui: `components_apply` dell'app e il canale di
+    /// controllo (CLI, MCP).
+    pub(crate) fn remount(&self, root: &Utf8Path) -> Result<Vec<PluginError>, PluginError> {
+        let current = self.current();
+        let _writer = self.writer_lease(root)?;
+        let faults = self.close_vault(root)?;
+        self.open(root)?;
+        self.read_workspace(Some(root.as_str()), |workspace| {
+            workspace
+                .bus()
+                .emit(Notice::of(fub_abi::Event::VaultOpened {
+                    root: workspace.root().to_string(),
+                }));
+            Ok(())
+        })?;
+        if let Some(current) = current.filter(|current| current != root) {
+            self.set_current(&current)?;
+        }
+        Ok(faults)
+    }
+
     /// Esegue una lettura breve sul workspace selezionato. La custodia non
     /// attraversa questa porta: i consumer dell'host ricevono operazioni, non
     /// l'oggetto monolitico che le implementa.
@@ -3366,23 +3974,57 @@ impl Host {
     fn session_workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
         self.with_session(vault, |session| session.workspace.clone())
     }
-    /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
+    /// Sorgente, revisione e formato dalla stessa fotografia del workspace:
+    /// una **lettura semplice**.
     ///
     /// Per un documento di videoscrittura la sorgente è la sua proiezione, per
     /// una cartella di Excel il suo giornale vuoto; la revisione è quella dei
     /// byte del file ([`crate::rich`], [`crate::workbook`]): i byte si leggono
-    /// nella fotografia, la proiezione si calcola fuori.
+    /// nella fotografia, la proiezione si calcola fuori. Il documento non
+    /// conta come aperto, e la prova a vuoto della proiezione non resta
+    /// ricordata ([`crate::engines`]): è la lettura dell'anteprima, della CLI,
+    /// della cattura e dei lavori. Chi lo tiene aperto per salvarlo lo apre
+    /// con [`Host::open_document_with_format`].
     pub fn read_document_with_format(
         &self,
         vault: Option<&str>,
         id: &DocId,
+    ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
+        self.read_document_as(vault, id, None)
+    }
+
+    /// **Apre** un documento sotto la chiave di apertura di una sessione della
+    /// shell: la stessa proiezione, la stessa revisione e lo stesso formato di
+    /// [`Host::read_document_with_format`], ma un documento di videoscrittura
+    /// conta come aperto, la sua revisione si segna sotto la chiave e la prova
+    /// a vuoto dei suoi byte resta ricordata per il salvataggio, finché la
+    /// shell non chiude la chiave ([`Host::document_closed`]). Un documento
+    /// che non è di videoscrittura si legge e non segna niente; una lettura
+    /// che fallisce non apre la chiave.
+    pub fn open_document_with_format(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        key: &OpenKey,
+    ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
+        self.read_document_as(vault, id, Some(key))
+    }
+
+    fn read_document_as(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        key: Option<&OpenKey>,
     ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
         enum Read {
             Source(String),
             Rich(crate::rich::Codec, Vec<u8>),
             Workbook(Vec<u8>),
         }
-        let (read, format) = self.read_workspace(vault, |workspace| {
+        // Il registro dei documenti ricchi aperti si prende dalla stessa
+        // sessione della lettura, e si usa fuori dal prestito.
+        let (read, format, open_rich) = self.in_session(vault, |session| {
+            let workspace = session.workspace.read()?;
             let format = workspace.format_of(id);
             let bytes = || workspace.read_source_bytes(id).map_err(PluginError::from);
             let read = match crate::rich::codec(format.as_ref()) {
@@ -3390,7 +4032,7 @@ impl Host {
                 None if crate::workbook::is_workbook(format.as_ref()) => Read::Workbook(bytes()?),
                 None => Read::Source(workspace.read_source(id).map_err(PluginError::from)?),
             };
-            Ok((read, format))
+            Ok((read, format, Arc::clone(&session.open_rich)))
         })?;
         match read {
             Read::Source(source) => {
@@ -3399,7 +4041,25 @@ impl Host {
             }
             Read::Rich(codec, bytes) => {
                 let revision = Revision::of_bytes(&bytes);
-                let projection = crate::rich::open(codec, id, &bytes)?;
+                let Some(key) = key else {
+                    let projection =
+                        crate::rich::open(codec, id, &bytes, crate::rich::Opening::Plain)?;
+                    return Ok((projection, revision, format));
+                };
+                let opened = crate::rich::open(codec, id, &bytes, crate::rich::Opening::Kept);
+                drop(bytes);
+                let projection = match opened {
+                    Ok(projection) => projection,
+                    Err(error) => {
+                        // La chiave non si apre: una prova che l'apertura
+                        // avesse ricordato prima di fallire non resta senza
+                        // chi la tiene.
+                        self.forget_unheld(&[revision]);
+                        return Err(error);
+                    }
+                };
+                let closed = open_rich.hold(key, std::slice::from_ref(&revision));
+                self.forget_unheld(&closed);
                 Ok((projection, revision, format))
             }
             // Il testo di una cartella è il suo giornale, vuoto finché la shell
@@ -3602,6 +4262,13 @@ impl Host {
         self.with_grid_bytes(vault, surface, |provider| provider.close(instance))
     }
 
+    /// Scrive un documento intero da `source`, dichiarando da che cosa parte.
+    ///
+    /// Senza chiave di apertura: le prove a vuoto che il salvataggio di un
+    /// documento di videoscrittura ha lasciato nel motore, e che nessuna
+    /// chiave aperta tiene, si dimenticano subito ([`crate::engines`]). È la
+    /// scrittura della CLI, della cattura e dei lavori; la shell, che tiene il
+    /// documento aperto, scrive con [`Host::write_open_document`].
     pub fn write_document(
         &self,
         vault: Option<&str>,
@@ -3609,8 +4276,155 @@ impl Host {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
-        self.write_document_in(workspace, id, source, base)
+        self.write_document_as(vault, id, source, base, None)
+    }
+
+    /// [`Host::write_document`] sotto la chiave di apertura di una sessione
+    /// della shell: per un documento di videoscrittura, la revisione dei byte
+    /// sovrascritti e quella dei byte nuovi si segnano sotto la chiave, che si
+    /// apre se non lo era (una sessione nuova può scrivere prima di leggere).
+    /// Una scrittura che fallisce non apre la chiave, e non lascia prove che
+    /// nessuna chiave tiene.
+    pub fn write_open_document(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+        key: &OpenKey,
+    ) -> Result<Revision, PluginError> {
+        self.write_document_as(vault, id, source, base, Some(key))
+    }
+
+    fn write_document_as(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+        key: Option<&OpenKey>,
+    ) -> Result<Revision, PluginError> {
+        let (workspace, open_rich) = self.with_session(vault, |session| {
+            (session.workspace.clone(), Arc::clone(&session.open_rich))
+        })?;
+        let mut trace = RichWrite::default();
+        let written = self.write_document_in(workspace, id, source, base, &mut trace);
+        if let (Ok(revision), Some(key), Some(overwritten)) = (&written, key, &trace.overwritten) {
+            // Sotto la chiave, i byte sovrascritti e quelli nuovi: la prova
+            // dei primi l'ha fatta il salvataggio, quella dei secondi la farà
+            // il prossimo.
+            let mut held: Vec<Revision> = overwritten.iter().cloned().collect();
+            held.push(revision.clone());
+            trace.left.extend(open_rich.hold(key, &held));
+        }
+        self.forget_unheld(&trace.left);
+        written
+    }
+
+    /// Dimentica le prove a vuoto di queste revisioni che nessuna chiave
+    /// aperta, in nessun vault, tiene ([`crate::engines`]). I registri si
+    /// prendono sotto il prestito delle sessioni, e si leggono e si
+    /// dimenticano dopo averlo lasciato. Vero se non resta aperta nessuna
+    /// chiave in nessun vault.
+    fn forget_unheld(&self, left: &[Revision]) -> bool {
+        let registers = self.open_registers();
+        crate::engines::forget_proofs(left, &registers);
+        registers.iter().all(|register| register.is_empty())
+    }
+
+    /// I registri delle chiavi di ogni vault aperto.
+    fn open_registers(&self) -> Vec<Arc<crate::engines::OpenRich>> {
+        self.sessions
+            .read()
+            .map(|sessions| open_registers(&sessions))
+            .unwrap_or_default()
+    }
+
+    /// Scalda in sottofondo il motore che apre questa estensione (`"docx"`,
+    /// `".XLSX"`), se un vault aperto ha un provider attivo per lei: la shell
+    /// lo chiede quando il puntatore si ferma su un file o una cartella si
+    /// apre ([`crate::engines`]). Un motore già acceso, o già in costruzione,
+    /// non rifà niente. Non apre nessun file.
+    ///
+    /// Vero se un motore si sta preparando o è pronto. Un'estensione senza
+    /// motore, senza provider attivo o malformata dà falso, senza errore:
+    /// scaldare è un suggerimento, e non c'è niente da dire alla shell.
+    pub fn warm_engine(&self, extension: &str) -> bool {
+        let Some(extension) = crate::engines::extension(extension) else {
+            tracing::debug!(extension, "scaldare: non è un'estensione");
+            return false;
+        };
+        // Le custodie si prendono sotto il prestito delle sessioni; i
+        // workspace si leggono dopo averlo lasciato.
+        let workspaces: Vec<Custody<Workspace>> = self
+            .sessions
+            .read()
+            .map(|sessions| {
+                sessions
+                    .slots
+                    .values()
+                    .filter_map(|slot| match slot {
+                        SessionSlot::Open(session) => Some(session.workspace.clone()),
+                        SessionSlot::Closing(_) | SessionSlot::Applying(_) => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let served = workspaces.iter().any(|workspace| {
+            workspace
+                .read()
+                .is_ok_and(|workspace| crate::engines::serves(&workspace, &extension))
+        });
+        if !served {
+            tracing::debug!(%extension, "scaldare: nessun vault aperto ha un provider attivo");
+            return false;
+        }
+        // Fuori da ogni lucchetto dell'host: il registro prende la voce e la
+        // scalda, e la costruzione va sul gruppo di thread dei motori.
+        match fub_motori::Motori::processo().scalda_per(&extension) {
+            Ok(warming) => {
+                if !warming {
+                    tracing::debug!(%extension, "scaldare: nessun motore apre l'estensione");
+                }
+                warming
+            }
+            Err(error) => {
+                tracing::debug!(%extension, %error, "scaldare: il registro dei motori non risponde");
+                false
+            }
+        }
+    }
+
+    /// La shell ha chiuso la sessione di documento della chiave `key`.
+    ///
+    /// La chiave si toglie, e si dimenticano le prove a vuoto delle sue
+    /// revisioni che nessun'altra chiave aperta, in nessun vault, tiene; se
+    /// non resta aperta nessuna chiave in nessun vault, si svuota la cache del
+    /// motore dei documenti ([`crate::engines`]). Una chiave sconosciuta, già
+    /// chiusa o di un vault non aperto (o di un nome che non si risolve) non
+    /// fa niente e non è un errore. Il disco non si legge.
+    pub fn document_closed(&self, vault: Option<&str>, key: &OpenKey) -> Result<(), PluginError> {
+        let open_rich = match self.with_session(vault, |session| Arc::clone(&session.open_rich)) {
+            Ok(open_rich) => open_rich,
+            // Un vault che non è aperto, o un nome che non si risolve: non
+            // c'è niente di aperto da chiudere.
+            Err(PluginError::NotFound(_) | PluginError::Io(_)) => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let Some(closed) = open_rich.close(key) else {
+            return Ok(());
+        };
+        if self.forget_unheld(&closed) {
+            crate::engines::empty_document_caches();
+        }
+        Ok(())
+    }
+
+    /// Quante chiavi di apertura sono aperte nel vault (`None`: il corrente).
+    /// Un vault non aperto non ne ha.
+    pub fn open_keys(&self, vault: Option<&str>) -> usize {
+        self.with_session(vault, |session| session.open_rich.len())
+            .unwrap_or(0)
     }
 
     /// Deposita byte grezzi: creazione esclusiva oppure CAS della revisione raw.
@@ -3626,12 +4440,91 @@ impl Host {
         Self::write_bytes_in(&workspace, id, bytes, expected)
     }
 
+    /// Cerca fra i file del vault (`None`: il vault corrente) quello che ha
+    /// questi byte e lo stesso tipo di `target`, il nome che si vorrebbe
+    /// scrivere, anche con un altro nome: vedi [`SameContent`].
+    ///
+    /// Il vault si risolve **una volta**: la domanda e le impronte imparate
+    /// rispondendo vanno alla stessa custodia anche se nel frattempo il vault
+    /// corrente cambia. I candidati vengono dall'indice vivo, presi sotto la
+    /// custodia per un attimo; il confronto si fa fuori da essa, sui byte già
+    /// in memoria. Nessuna chiamata a un provider col lucchetto preso, e
+    /// nessuna scrittura di `entries.json` fuori dall'anagrafe.
+    ///
+    /// Un «non so» per budget finito ([`UnknownReason::BudgetExhausted`]) non è
+    /// stabile come gli altri: le impronte che quel giro ha imparato rendono il
+    /// giro dopo più economico, e il giro dopo può arrivare a un candidato che
+    /// il primo non ha letto. Allora, e solo se il primo giro ha davvero
+    /// insegnato qualcosa all'indice, si fa **un** secondo giro, qui dentro:
+    /// chi chiede fa sempre una domanda sola, e nessuna per nome occupato.
+    ///
+    /// [`UnknownReason::BudgetExhausted`]: fub_kernel::same_content::UnknownReason::BudgetExhausted
+    pub fn same_content(
+        &self,
+        vault: Option<&str>,
+        target: &DocId,
+        bytes: &[u8],
+    ) -> Result<SameContent, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let (answer, kept) = Self::same_content_round(&workspace, target, bytes)?;
+        let exhausted = matches!(
+            answer,
+            SameContent::Unknown {
+                reason: fub_kernel::same_content::UnknownReason::BudgetExhausted
+            }
+        );
+        if exhausted && kept > 0 {
+            return Ok(Self::same_content_round(&workspace, target, bytes)?.0);
+        }
+        Ok(answer)
+    }
+
+    /// Un giro della domanda di [`same_content`](Self::same_content): la
+    /// risposta, e quante impronte imparate l'indice ha tenuto.
+    ///
+    /// Le impronte tornano all'indice con [`Custody::write`], che **prende il
+    /// turno di scrittura** prima del lucchetto (la presa lo porta con sé fino
+    /// al rilascio): se un altro writer ha il turno aperto attraverso il codice
+    /// di un provider (decisione 0120), la consegna aspetta che lo chiuda e non
+    /// entra a metà del suo lavoro. Non si drenano eventi: imparare
+    /// un'impronta non ne produce, e l'indice non ha un lucchetto suo fuori dal
+    /// workspace. L'indice le ricontrolla contro l'anagrafe; un'impronta che
+    /// non si riesce a riportare costa solo una rilettura la prossima volta.
+    fn same_content_round(
+        workspace: &Custody<Workspace>,
+        target: &DocId,
+        bytes: &[u8],
+    ) -> Result<(SameContent, usize), PluginError> {
+        let prepared = workspace
+            .read()?
+            .prepare_same_content(target, bytes.len() as u64);
+        let fub_kernel::same_content::SameContentOutcome { answer, learned } =
+            prepared.invoke(bytes);
+        let mut kept = 0;
+        if !learned.is_empty() {
+            match workspace.write() {
+                Ok(mut workspace) => {
+                    kept = workspace.learn_fingerprints(learned);
+                }
+                Err(and) => {
+                    tracing::warn!(target: "fub.host", "impronte non riportate nell'indice: {and}");
+                }
+            }
+        }
+        Ok((answer, kept))
+    }
+
     /// Scrive la proiezione `source` di un documento di videoscrittura.
     ///
     /// Tutto dentro il turno di scrittura, che è rientrante: i byte su cui la
     /// shell ha lavorato si leggono e si confrontano con la base, il codec
     /// salva fuori dal lucchetto, e i byte nuovi passano dal CAS della stessa
     /// revisione. Una proiezione che descrive il file com'è non scrive niente.
+    ///
+    /// `trace` dice che il documento è di videoscrittura, quali byte si sono
+    /// sovrascritti e di quali revisioni il codec può aver ricordato la prova,
+    /// anche quando il salvataggio fallisce: chi scrive le dimentica se nessuna
+    /// chiave le tiene ([`crate::engines`]).
     fn write_rich_in(
         &self,
         workspace: &Custody<Workspace>,
@@ -3639,6 +4532,7 @@ impl Host {
         id: &DocId,
         source: &str,
         base: WriteBase,
+        trace: &mut RichWrite,
     ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
         let current = {
@@ -3646,6 +4540,7 @@ impl Host {
             fub_kernel::error::optional(ws.read_source_bytes(id)).map_err(PluginError::from)?
         };
         let revision = current.as_deref().map(Revision::of_bytes);
+        trace.overwritten = Some(revision.clone());
         if let Some(want) = base.expected() {
             if revision.as_ref() != Some(want) {
                 return Err(PluginError::from(fub_kernel::KernelError::Stale(
@@ -3653,8 +4548,9 @@ impl Host {
                 )));
             }
         }
+        trace.left.extend(revision.iter().cloned());
         let bytes = match current.as_deref() {
-            None => crate::rich::create(codec, id, source)?,
+            None => crate::rich::create(codec, id, source, &mut trace.left)?,
             Some(current) => match crate::rich::save(codec, id, current, source)? {
                 crate::rich::Save::Unchanged => return Ok(Revision::of_bytes(current)),
                 crate::rich::Save::Bytes(bytes) => bytes,
@@ -3738,10 +4634,15 @@ impl Host {
             let mut detached = JobHost::new(workspace.clone(), hook.owner());
             hook.invoke(&mut detached)
         });
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(bytes, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_bytes_write(prepared, bytes, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_bytes_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -3760,11 +4661,12 @@ impl Host {
         id: &DocId,
         source: &str,
         base: WriteBase,
+        trace: &mut RichWrite,
     ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
         let format = workspace.read()?.format_of(id);
         if let Some(codec) = crate::rich::codec(format.as_ref()) {
-            return self.write_rich_in(&workspace, codec, id, source, base);
+            return self.write_rich_in(&workspace, codec, id, source, base, trace);
         }
         // Il testo di una cartella è il suo giornale, e scriverlo è innestarlo.
         if crate::workbook::is_workbook(format.as_ref()) {
@@ -3780,10 +4682,15 @@ impl Host {
             let mut detached = JobHost::new(workspace.clone(), hook.owner());
             hook.invoke(&mut detached)
         });
+        // Il disco si scrive fuori dal prestito esclusivo e sotto il turno
+        // (IMP-1805): la CAS resta quella preparata, e il prestito serve solo
+        // alle tabelle.
+        let placed = prepared
+            .place(source, before_write)
+            .map_err(PluginError::from)?;
         let pending = {
             let mut ws = workspace.write()?;
-            ws.commit_document_write(prepared, source, model, before_write)
-                .map_err(PluginError::from)?
+            ws.commit_placed_document_write(placed, model)
         };
         let pending = pending.invoke_indexes();
         let deferred = {
@@ -3793,6 +4700,14 @@ impl Host {
         finish_events(&workspace, deferred)
     }
 
+    /// Scrive la bozza di un documento **senza il turno di scrittura** (#485).
+    ///
+    /// La bozza esiste per coprire il tempo in cui il disco non ha ancora il
+    /// testo: se aspettasse il turno, aspetterebbe proprio il salvataggio lento
+    /// che deve coprire, e un crash in quei secondi perderebbe l'ultimo testo.
+    /// Le bozze non toccano lo stato del workspace, quindi se ne prende la porta
+    /// con un prestito condiviso e la si usa dopo averlo lasciato; l'ordine fra
+    /// le bozze di un documento lo tiene la coda delle bozze della shell.
     pub fn save_draft(
         &self,
         vault: Option<&str>,
@@ -3800,19 +4715,28 @@ impl Host {
         text: &str,
         base: Option<Revision>,
     ) -> Result<(), PluginError> {
-        self.write_workspace(vault, |workspace| {
-            workspace.save_draft(id, text, base).map_err(|error| {
-                PluginError::Internal(format!("draft not written: {error}").into())
-            })
-        })
+        self.draft_port(vault)?
+            .save(id, text, base)
+            .map_err(|error| PluginError::Internal(format!("draft not written: {error}").into()))
     }
 
+    /// Butta la bozza di un documento, senza il turno come [`Self::save_draft`].
     pub fn discard_draft(&self, vault: Option<&str>, id: &DocId) -> Result<(), PluginError> {
-        self.write_workspace(vault, |workspace| {
-            workspace.discard_draft(id).map_err(|error| {
-                PluginError::Internal(format!("draft not discarded: {error}").into())
-            })
-        })
+        self.draft_port(vault)?
+            .discard(id)
+            .map_err(|error| PluginError::Internal(format!("draft not discarded: {error}").into()))
+    }
+
+    /// La porta delle bozze del vault, presa con un prestito condiviso breve:
+    /// i reader non guardano il turno, quindi un salvataggio in volo non la
+    /// ferma se non nei tratti in cui tiene il workspace in esclusiva.
+    fn draft_port(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<fub_kernel::drafts::DraftPort, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let port = workspace.read()?.draft_port();
+        Ok(port)
     }
 
     pub fn set_active_context(
@@ -4158,7 +5082,24 @@ impl Host {
             .get("doc")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| PluginError::BadArgs("doc obbligatorio".into()))?;
+        // Il recinto prima di tutto, come per un id scelto dall'elenco; poi il
+        // nome scritto a mano, fra tutti i documenti: che cosa si può
+        // cestinare lo dicono i permessi e il cestino, qui sotto.
         let id = fenced_doc_id(&DocId::new(id))?;
+        let id = {
+            let ws = workspace.read()?;
+            fub_abi::command::resolve_document_name(
+                id.as_str(),
+                |doc| {
+                    &ws.free_name(doc) != doc
+                        && (ws.format_of(doc).is_some() || ws.document_revision(doc).is_ok())
+                },
+                || Ok(ws.documents()),
+                |_| true,
+                crate::doc_names::CORE_KEYS,
+            )?
+        };
+        let id = fenced_doc_id(&id)?;
         let _turn = workspace.write_turn();
         let prepared = {
             let ws = workspace.read()?;
@@ -4199,6 +5140,24 @@ impl Host {
         Ok(os_trash_outcome(receipt))
     }
 
+    /// **La lingua di chi guarda** il vault `vault`: le sue `locale.*` sopra la
+    /// lingua del sistema (`Workspace::locale`), o la sola lingua del sistema
+    /// se il vault non c'è.
+    ///
+    /// Serve ai testi che l'host scrive da sé con un catalogo che non è di un
+    /// bundle montato — i nomi della mappa dei componenti
+    /// ([`crate::componenti::Testi`]). A differenza di
+    /// [`localize_core`](Self::localize_core) **aspetta** il workspace: chi la
+    /// chiama ha appena letto il vault e non sta dentro un `mount.*`, e un nome
+    /// che esce nella lingua sbagliata perché un altro scriveva sarebbe un
+    /// cambio di lingua a caso.
+    pub fn speaking_locale(&self, vault: Option<&str>) -> fub_abi::locale::Locale {
+        self.with_session(vault, |session| session.workspace.clone())
+            .ok()
+            .and_then(|workspace| workspace.read().ok().map(|ws| ws.locale()))
+            .unwrap_or_else(|| self.system_locale.get())
+    }
+
     /// Un valore dell'host nella lingua di chi guarda, col catalogo del core.
     /// Non **aspetta** il workspace: `mount.*` deve finire anche mentre un
     /// altro writer lo tiene, quindi se il lock non è libero — o un vault non
@@ -4217,17 +5176,38 @@ impl Host {
             .and_then(|workspace| workspace.try_read())
         {
             Some(ws) => ws.localize_as(crate::settings::CORE_ID, value),
-            None => {
-                let catalogs = crate::settings::core_catalog_assembled();
-                let locale = self.system_locale.get();
-                fub_abi::text::Strings::new(
-                    &catalogs,
-                    crate::settings::CORE_DEFAULT_LOCALE,
-                    &locale,
-                )
-                .localize(value);
-            }
+            None => self.localize_core_as_system(value),
         };
+    }
+
+    /// Come [`localize_core`](Self::localize_core), ma **aspetta** il
+    /// workspace, come [`speaking_locale`](Self::speaking_locale): per chi
+    /// risponde a un gesto della persona, fuori da ogni `mount.*` e senza
+    /// prestiti in mano. Subito dopo l'apertura l'indice lavora a fette e
+    /// tiene il workspace un attimo alla volta; non aspettarlo voleva dire
+    /// rispondere a caso nella lingua del sistema invece che in quella del
+    /// vault (il rifiuto di un fuso in italiano a chi ha scelto l'inglese).
+    fn localize_core_waiting<T: fub_abi::text::Localize + ?Sized>(
+        &self,
+        vault: Option<&str>,
+        value: &mut T,
+    ) {
+        let workspace = self
+            .with_session(vault, |session| session.workspace.clone())
+            .ok();
+        match workspace.as_ref().map(|workspace| workspace.read()) {
+            Some(Ok(ws)) => ws.localize_as(crate::settings::CORE_ID, value),
+            _ => self.localize_core_as_system(value),
+        };
+    }
+
+    /// Il catalogo del core nella lingua del sistema: quando un vault non c'è,
+    /// o non risponde.
+    fn localize_core_as_system<T: fub_abi::text::Localize + ?Sized>(&self, value: &mut T) {
+        let catalogs = crate::settings::core_catalog_assembled();
+        let locale = self.system_locale.get();
+        fub_abi::text::Strings::new(&catalogs, crate::settings::CORE_DEFAULT_LOCALE, &locale)
+            .localize(value);
     }
 
     /// L'esito (o l'errore) di un comando dell'host nella lingua di chi guarda.
@@ -4333,6 +5313,26 @@ impl Host {
             let result = invoke_folder_create(&workspace, args, mode);
             return self.localized_host_result(vault, result);
         }
+        // Un comando che si è dichiarato di sola lettura ha il suo frame e
+        // **non** prende il turno: una lettura lunga (un'anteprima, uno
+        // strumento dell'AI) non ferma i salvataggi di chi scrive.
+        // La bandiera è quella che la chiusura del vault o lo spegnimento del
+        // suo plugin alzano per fermarlo; fuori non c'è nessuno da fermare.
+        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let read_only = workspace.read()?.prepare_read_only_provider_command(
+            command,
+            args.clone(),
+            mode,
+            &[],
+            &cancel,
+            &[],
+        )?;
+        if let Some(prepared) = read_only {
+            let host = JobHost::new(workspace.clone(), prepared.owner().to_string())
+                .in_mode(prepared.host_mode())
+                .cancelled_by(cancel);
+            return crate::jobs::run_read_only_command(&workspace, host, prepared);
+        }
         // Il turno serializza gli altri writer ma **non** è il RwLock del
         // workspace: fra prepare e finalize i reader possono entrare, e il
         // callback può rientrare sullo stesso thread per singola capacità.
@@ -4424,7 +5424,7 @@ impl Host {
 
     #[cfg(test)]
     pub(crate) fn debug_sessions_write_available(&self) -> bool {
-        self.sessions.try_write().is_some()
+        crate::legacy_tests::write_comes_free(&self.sessions)
     }
     pub fn root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
         self.with_session(vault, |s| s.root.clone())
@@ -4620,8 +5620,18 @@ impl crate::resources::ResourceWrite for Host {
         id: &DocId,
         bytes: &[u8],
         expected: Option<Revision>,
+        reuse: crate::resources::ResourceReuse,
     ) -> Result<crate::resources::ResourceWriteReceipt, PluginError> {
         let id = doc_id(id.as_str())?;
+        let reuse_same = reuse == crate::resources::ResourceReuse::SameContent;
+        // Riusare un file che c'è e ricoprirne uno alla sua revisione sono due
+        // domande diverse: insieme non hanno un senso da indovinare.
+        if reuse_same && expected.is_some() {
+            return Err(PluginError::BadArgs(Text::message(
+                "host.resource.reuse_with_expected",
+                vec![Arg::text("doc", id.as_str())],
+            )));
+        }
         // La shell scrive una cartella di Excel soltanto creandola: coprirne
         // una con dei byte suoi aggirerebbe la sola lettura.
         if expected.is_some() {
@@ -4630,8 +5640,57 @@ impl crate::resources::ResourceWrite for Host {
                 return Err(crate::workbook::read_only(&id));
             }
         }
+        if reuse_same {
+            if let Some(receipt) = self.reused_resource(vault, &id, bytes) {
+                return Ok(receipt);
+            }
+        }
         let revision = self.write_document_bytes(vault, &id, bytes, expected)?;
-        Ok(crate::resources::ResourceWriteReceipt { id, revision })
+        Ok(crate::resources::ResourceWriteReceipt {
+            id,
+            revision,
+            reused: false,
+        })
+    }
+}
+
+impl Host {
+    /// La ricevuta del file che il vault ha già con questi byte, o `None`:
+    /// allora si scrive. `None` vale anche per «non so» (limiti, indice non
+    /// ancora pronto) e per una domanda che fallisce: nel dubbio si deposita,
+    /// mai si perde un deposito.
+    ///
+    /// Il confronto è quello di [`Host::same_content`] (candidati dello stesso
+    /// tipo di `target` presi dall'indice vivo sotto la custodia, byte
+    /// confrontati fuori). Prima di rispondere si ricontrolla, coi soli
+    /// metadati e fuori dalla custodia, che il file trovato ci sia ancora e
+    /// abbia ancora questa misura: un file sparito fra il confronto e la
+    /// risposta non si nomina, si scrive.
+    fn reused_resource(
+        &self,
+        vault: Option<&str>,
+        target: &DocId,
+        bytes: &[u8],
+    ) -> Option<crate::resources::ResourceWriteReceipt> {
+        let SameContent::Found { id } = self.same_content(vault, target, bytes).ok()? else {
+            return None;
+        };
+        let prepared = self
+            .read_workspace(vault, |workspace| {
+                workspace
+                    .prepare_resource_open(&id)
+                    .map_err(PluginError::from)
+            })
+            .ok()?;
+        let lease = prepared.invoke().ok()?;
+        let still_there = lease.stat.is_file() && lease.stat.size == bytes.len() as u64;
+        still_there.then(|| crate::resources::ResourceWriteReceipt {
+            id,
+            // I byte trovati sono questi, confrontati uno per uno: la loro
+            // revisione è quella dei byte che arrivano.
+            revision: Revision::of_bytes(bytes),
+            reused: true,
+        })
     }
 }
 
@@ -4756,6 +5815,56 @@ pub fn document_text(format: Option<&DocumentFormat>) -> DocumentText {
         DocumentText::GridJournal
     } else {
         DocumentText::Source
+    }
+}
+
+/// Le chiavi di macchina che **non viaggiano coi profili**: non entrano da
+/// un'importazione o da una copia, non escono da un'esportazione, e cambiare
+/// o azzerare un profilo lascia il loro valore. Sono le chiavi che solo un
+/// gesto dell'host scrive: la cartella del tema collegato, che sceglie la
+/// finestra nativa di «Collega una cartella…». Un profilo arrivato da fuori
+/// (anche da una webview che non regge) non le scrive mai.
+const PROFILE_LOCAL_KEYS: &[&str] = &[crate::settings::DEVELOPER_THEME_FOLDER];
+
+/// Il profilo `json` senza [`PROFILE_LOCAL_KEYS`] fra i valori, e col nome
+/// `rename` se c'è. Si legge con la forma del kernel
+/// ([`fub_kernel::settings::SettingsProfile`]), quindi un JSON che non è un
+/// profilo, o con una chiave doppia, si rifiuta come prima.
+fn without_local_keys(json: &str, rename: Option<&str>) -> Result<String, String> {
+    let mut profile: fub_kernel::settings::SettingsProfile =
+        serde_json::from_str(json).map_err(|e| e.to_string())?;
+    if let Some(name) = rename {
+        profile.name = name.into();
+    }
+    for key in PROFILE_LOCAL_KEYS {
+        profile.values.remove(*key);
+    }
+    serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())
+}
+
+/// Il valore scritto di `key` nel livello macchina, `None` se vale il default.
+fn explicit_value(machine: &MachineSettings, key: &str) -> Option<fub_abi::settings::SettingValue> {
+    match machine.effective(key) {
+        Ok((value, source)) if source != fub_abi::settings::SettingSource::Default => Some(value),
+        _ => None,
+    }
+}
+
+/// La cartella collegata, se la modalità sviluppatore è accesa e la chiave ne
+/// nomina una.
+fn linked_folder(machine: &MachineSettings) -> Option<camino::Utf8PathBuf> {
+    let on = matches!(
+        machine.effective(crate::settings::DEVELOPER_MODE),
+        Ok((fub_abi::settings::SettingValue::Toggle(true), _))
+    );
+    if !on {
+        return None;
+    }
+    match machine.effective(crate::settings::DEVELOPER_THEME_FOLDER) {
+        Ok((fub_abi::settings::SettingValue::Text(folder), _)) if !folder.trim().is_empty() => {
+            Some(camino::Utf8PathBuf::from(folder))
+        }
+        _ => None,
     }
 }
 
@@ -4987,12 +6096,10 @@ mod side_data_lock_tests {
         entered_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("the organization update reaches storage");
-        let read = workspace.try_read();
-        let read_progressed = read.is_some();
-        drop(read);
-        let write = workspace.try_write();
-        let write_progressed = write.is_some();
-        drop(write);
+        // Entro una scadenza e prima di liberare lo storage: un prestito
+        // trattenuto dall'aggiornamento resterebbe preso fino in fondo.
+        let read_progressed = crate::legacy_tests::read_comes_free(&workspace);
+        let write_progressed = crate::legacy_tests::write_comes_free(&workspace);
         release_tx.send(()).expect("the storage update resumes");
 
         worker
@@ -5098,7 +6205,12 @@ mod tests {
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .clone();
-                if workspace.is_some_and(|workspace| workspace.try_write().is_some()) {
+                // Basta una lettura con il lucchetto libero: chi l'ha già vista
+                // non riprova, e chi no la cerca entro una scadenza.
+                if !self.write_progressed.load(Ordering::Acquire)
+                    && workspace
+                        .is_some_and(|workspace| crate::legacy_tests::write_comes_free(&workspace))
+                {
                     self.write_progressed.store(true, Ordering::Release);
                 }
             }
@@ -5370,11 +6482,9 @@ mod os_trash_command_tests {
     impl OsTrashBackend for FakeTrash {
         fn move_file_to_os_trash(&self, from: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
             assert!(
-                self.workspace
-                    .get()
-                    .expect("workspace aperto")
-                    .try_read()
-                    .is_some(),
+                crate::legacy_tests::read_comes_free(
+                    self.workspace.get().expect("workspace aperto")
+                ),
                 "nessun prestito workspace attraversa il backend OS"
             );
             if self.unsupported {
@@ -5484,6 +6594,40 @@ mod os_trash_command_tests {
             &r.op,
             JournalOp::Trashed { doc, .. } if doc.as_str() == "Nota.md"
         )));
+    }
+
+    /// Il campo «Documento» scritto a mano (#486): «nota» è la sola nota che
+    /// si chiama così; un nome che nessuno porta si dice con una frase.
+    #[test]
+    fn os_trash_takes_a_note_written_by_name() {
+        let (vault, os, host) = fixture(false);
+        let missing = host
+            .invoke_user_command(
+                None,
+                OS_TRASH_COMMAND,
+                serde_json::json!({ "doc": "Preventivo" }),
+                InvokeMode::Apply,
+            )
+            .expect_err("nessun documento si chiama così");
+        let PluginError::BadArgs(text) = missing else {
+            panic!("atteso BadArgs, arrivato {missing:?}")
+        };
+        assert!(
+            text.as_literal()
+                .is_some_and(|t| t.contains("«Preventivo»") && t.contains("elenco del campo")),
+            "{text:?}"
+        );
+        assert!(vault.path().join("Nota.md").exists());
+
+        host.invoke_user_command(
+            None,
+            OS_TRASH_COMMAND,
+            serde_json::json!({ "doc": "nota" }),
+            InvokeMode::Apply,
+        )
+        .expect("il nome nomina la sola nota");
+        assert!(!vault.path().join("Nota.md").exists());
+        assert!(os.path().join("Nota.md").exists());
     }
 }
 
@@ -5994,5 +7138,61 @@ mod command_titles_tests {
             panic!("l'export consegna un intento")
         };
         assert_eq!(ns, fub_abi::ui::SETTINGS_EXPORT_NS);
+    }
+}
+
+#[cfg(test)]
+mod user_value_refusal_tests {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use super::*;
+
+    /// Il rifiuto di un valore aspetta il workspace e parla la lingua del
+    /// vault, anche mentre qualcun altro lo tiene: subito dopo l'apertura
+    /// l'indice lavora a fette, e sul runner Windows la risposta usciva nella
+    /// lingua del sistema (corsa 44420733378, `settings_user_values.rs:114`).
+    #[test]
+    fn the_refusal_waits_for_the_vault_and_speaks_its_language() {
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        std::fs::write(root.join("Nota.md"), "# Nota\n").unwrap();
+        let host = Host::without_watcher();
+        // Il sistema parla italiano, il vault inglese: le due lingue si
+        // distinguono nella frase.
+        host.publish_locale(fub_abi::Locale {
+            language: "it".to_owned(),
+            ..fub_abi::Locale::default()
+        });
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        host.set_setting_for_user(
+            None,
+            fub_kernel::locale::LANGUAGE,
+            fub_abi::settings::SettingValue::Text("en".into()),
+        )
+        .unwrap();
+
+        let workspace = host.debug_workspace(None).unwrap();
+        let (held, is_held) = mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            let guard = workspace.write().unwrap();
+            held.send(()).unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+            drop(guard);
+        });
+        is_held.recv().unwrap();
+        let refused = host.set_setting_for_user(
+            None,
+            fub_kernel::locale::TIMEZONE,
+            fub_abi::settings::SettingValue::Text("Mars/Olympus".into()),
+        );
+        holder.join().unwrap();
+
+        let Err(PluginError::BadArgs(message)) = refused else {
+            panic!("atteso un BadArgs, non {refused:?}")
+        };
+        let said = message.as_literal().expect("una frase risolta");
+        assert!(said.contains("is not a known time zone"), "{said}");
     }
 }

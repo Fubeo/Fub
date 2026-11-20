@@ -5,6 +5,7 @@
 // (`Element.animate`), istantaneo (dove `Element.animate` non esiste, cioè
 // sotto happy-dom) e manuale (i test e il banco, che hanno il tempo fermo). Il
 // motore possiede anche l'orologio dei cicli in proprio: `now` e i fotogrammi.
+import { probeScreenPeriod } from "../theme/frame-rate";
 
 export interface DriverTiming {
   /// Durata della parte attiva (ms).
@@ -74,6 +75,9 @@ const waapiDriver: MotionDriver = {
   instant: false,
   ...browserFrames,
   play(el, keyframes, timing, done) {
+    // Le molle si campionano al ritmo dello schermo (`samplePeriodMs`): la
+    // prima corsa lo fa misurare, per le successive.
+    probeScreenPeriod(browserFrames);
     const animation = el.animate(keyframes, effect(timing));
     let timer: ReturnType<typeof setTimeout> | undefined;
     let open = true;

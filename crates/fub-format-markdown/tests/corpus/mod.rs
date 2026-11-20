@@ -106,6 +106,21 @@ pub fn corpus() -> Vec<Case> {
         case("task vuota", "- [ ] da fare\n"),
         case("task fatta", "- [x] fatta\n"),
         case("task a stato personalizzato", "- [/] in corso\n"),
+        // La scadenza `📅` (`fub_abi::rules::tasks`): la regola legge il testo
+        // del compito, e le tre letture — modello, Live, Lettura — devono
+        // vedere la stessa data negli stessi posti.
+        case(
+            "task con scadenze",
+            "- [ ] Chiama [[Mario]] 📅 [[2026-10-19]]\n\
+             - [ ] Pagare 📅 `2026-10-20` poi\n\
+             - [ ] Su due righe\n  📅 2026-10-21\n\
+             - [x] Fatta 📅 2026-02-30\n\
+             - [ ] Un [link](https://esempio.it/📅/2026-10-22) e basta\n\
+             - [ ] ==Evidente 📅 2026-10-23==\n\
+             - [ ] Con alias [[Nota|📅 2026-10-24]]\n\
+             - [ ] Padre\n  - [ ] Figlio 📅 2026-10-25\n\
+             - [ ] Codice sotto\n  ```\n  📅 2026-10-26\n  ```\n",
+        ),
         // --- Inline ---
         case("enfasi", "*enfasi*\n"),
         case("forte", "**forte**\n"),
@@ -264,6 +279,44 @@ pub fn corpus() -> Vec<Case> {
         case(
             "commenti ed evidenziati attorno a tag e wikilink",
             "%%a #uno c%% e %%d [[due]] f%%\n\n==g #tre h== ==i [[quattro]]==\n",
+        ),
+        // --- i commenti con la discussione (CriticMarkup) ---
+        //
+        // I casi il cui nome comincia con «discussione» sono scritti nella forma
+        // che il serializzatore genera, e tornano byte per byte
+        // (`the_corpus.rs::comments_return_byte_for_byte`). La passata della
+        // shell taglia gli stessi pezzi (la famiglia `comment` della fixture).
+        case(
+            "discussione, commento su un passo con più messaggi",
+            "Il {==passo **forte** con [[Nota]] e #tag==}{>>@Anna Bianchi 2026-11-08 17:40: va riscritto<<}{>>@Bruno Neri 2026-11-09 09:15: d'accordo<<} poi.\n",
+        ),
+        case(
+            "discussione, commento su un punto, senza autore",
+            "Qui {>>2026-11-08: un messaggio senza nome<<} e il resto.\n",
+        ),
+        case(
+            "discussione, commento in un titolo, in una voce, in un riquadro e in una cella",
+            "# Titolo {==t==}{>>@Anna 2026-11-08: sul titolo<<}\n\n- voce {==v==}{>>@Anna: sulla voce<<}\n\n> [!note]\n> riquadro {==r==}{>>@Anna: sul riquadro<<}\n\n| a | b |\n| --- | --- |\n| {==c==}{>>@Anna: uno \\| due<<} | d |\n",
+        ),
+        case(
+            "discussione, commento con i segni di chiusura nel messaggio",
+            "{==a==}{>>@Anna: x >> y << z<<} fine\n",
+        ),
+        case(
+            "discussione, commento scritto a mano da una app che non conosce la convenzione",
+            "Un {==passo==}{>>scritto a mano, senza intestazione<<}.\n",
+        ),
+        // Un messaggio non è testo della nota: il suo link, il suo tag e il suo
+        // grassetto non sono della nota, per nessuna delle due passate.
+        case(
+            "commento col messaggio che porta link, tag e stili",
+            "Il {==passo con [[Nota]]==}{>>@Anna: vedi [[Altra]] e #etichetta e **forte**<<} e *{==dentro==}{>>@Bruno: qui<<}* fine.\n",
+        ),
+        // Ciò che resta testo: il segno sotto escape, il passo senza messaggio,
+        // il segno che non si chiude nel paragrafo, il codice e la formula.
+        case(
+            "segni di commento che restano testo",
+            "\\{==letterale==}{>>vero<<} e {==senza messaggio==} e {>>aperto\n\nnuovo<<} paragrafo\n\n`{==a==}{>>b<<}` e $x{>>y<<}$\n",
         ),
         // --- frontmatter ---
         case("frontmatter", "---\ntitolo: X\n---\n\n# Corpo\n"),

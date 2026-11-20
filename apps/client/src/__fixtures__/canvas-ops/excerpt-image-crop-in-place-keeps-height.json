@@ -1,0 +1,60 @@
+{
+  "about": "Sul posto l'altezza non cambia: un'immagine 2:1 in una scheda 480×240 ritagliata a metà sinistra (una zona quadrata) resta 480×240 col suo `fub:parts`. Il ritaglio della GUI la porterebbe a 480×480 (`#cropHeightFor`); `excerpt` fa come il selettore delle sezioni.",
+  "before": {
+    "nodes": [
+      {
+        "id": "i",
+        "type": "file",
+        "x": 0,
+        "y": 0,
+        "width": 480,
+        "height": 240,
+        "file": "Corsi/foto.png"
+      }
+    ],
+    "edges": []
+  },
+  "seed": 1,
+  "ops": [
+    {
+      "op": "excerpt",
+      "id": "i",
+      "part": {
+        "kind": "image",
+        "rect": [
+          0,
+          0,
+          0.5,
+          1
+        ]
+      },
+      "in_place": true
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "i",
+          "type": "file",
+          "x": 0,
+          "y": 0,
+          "width": 480,
+          "height": 240,
+          "file": "Corsi/foto.png",
+          "fub:parts": {
+            "kind": "image",
+            "rect": [
+              0,
+              0,
+              0.5,
+              1
+            ]
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+}

@@ -1,225 +1,174 @@
-// L'anteprima del «/»: un campione della voce scelta, nei caratteri della
-// nota, e sotto come la si scrive senza menu. Sopra una selezione mostra il
-// prima e il dopo. Tutto è disegnato col DOM, senza toccare la nota.
+// Il disegno del blocco scelto, in fondo al «/»: una miniatura della sua forma
+// (96 × 60, a tratti e fondi del tema), che cosa fa e come lo si scrive senza
+// menu, con gli argomenti rapidi. Sopra una selezione dice il dopo. Tutto col
+// DOM, senza toccare la nota.
+//
+// Le miniature sono quelle del prototipo dell'editor (`slThumb`), rifatte coi
+// nodi SVG e con le classi della pelle al posto dei colori.
 import type { SlashMenuEntry, SlashTransform } from "../../editors/core/editor-menu";
-import { t } from "../../i18n/strings";
+import { t, type Key } from "../../i18n/strings";
 import { iconEl } from "../../ui/icons";
-import { COLOR_ENTRY, markdownHint } from "./entries";
-import { calloutLabel, longDay } from "./quick";
+import { COLOR_ENTRY, REMINDER_ENTRY, markdownHint } from "./entries";
 
-export interface PreviewContext {
-  /// I titoli della pagina, per l'Indice.
-  outline(): readonly { readonly level: number; readonly text: string }[];
-  readonly transform?: SlashTransform;
-  /// Il giorno di oggi, per la data d'esempio.
-  readonly today: Date;
-}
-
-export interface Preview {
-  /// Il campione, decorativo.
-  readonly stage: HTMLElement;
-  /// La scorciatoia, o che cosa fa Invio: si legge.
-  readonly tip: readonly Node[];
-}
-
-/// I colori della tavolozza, nell'ordine dei campioni.
+/// I colori della tavolozza, nell'ordine dei campioni del passo del colore.
 export const PALETTE = ["default", "gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"] as const;
 
-/// Le voci che sono un blocco intero: la loro scorciatoia va a inizio riga.
-const BLOCK_SECTIONS = new Set(["text", "lists", "blocks", "code"]);
+const NS = "http://www.w3.org/2000/svg";
 
-function el(tag: string, className: string, text?: string): HTMLElement {
-  const node = document.createElement(tag);
-  node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
+/// Le tinte della miniatura, come le veste la pelle (`.slash-thumb-<tinta>`).
+type Tint = "line" | "ink" | "accent" | "wash" | "tray" | "stroke" | "stroke-accent" | "text" | "check" | "formula";
+
+type Attrs = Readonly<Record<string, string | number>>;
+
+function node(tag: string, tint: Tint, attrs: Attrs, text?: string): SVGElement {
+  const out = document.createElementNS(NS, tag);
+  out.setAttribute("class", `slash-thumb-${tint}`);
+  for (const [name, value] of Object.entries(attrs)) out.setAttribute(name, String(value));
+  if (text !== undefined) out.textContent = text;
+  return out;
 }
 
-/// Un blocco d'esempio, `kind` come lo chiama il CSS del pannello.
-function block(kind: string, text: string): HTMLElement {
-  const node = el("div", "slash-sample", text);
-  node.dataset["kind"] = kind;
-  return node;
+type Shape = SVGElement[];
+
+/// Un rettangolo pieno (le righe di testo sono alte 4).
+const R = (x: number, y: number, width: number, height = 4, tint: Tint = "line", rx = 2): Shape =>
+  [node("rect", tint, { x, y, width, height, rx })];
+/// Righe di testo, una ogni 10 px.
+const L = (x: number, y: number, widths: readonly number[]): Shape => widths.flatMap((width, i) => R(x, y + i * 10, width));
+/// Un rettangolo a tratto.
+const B = (x: number, y: number, width: number, height: number, tint: Tint = "stroke", rx = 3): Shape =>
+  [node("rect", tint, { x, y, width, height, rx })];
+const P = (d: string, tint: Tint = "stroke", extra: Attrs = {}): Shape => [node("path", tint, { d, ...extra })];
+const C = (cx: number, cy: number, r: number, tint: Tint): Shape => [node("circle", tint, { cx, cy, r })];
+/// La griglia di una tabella, con la testata `head`.
+const G = (head: Tint): Shape => [...R(10.6, 10.6, 74.8, 12.4, head, 3.4), ...B(10, 10, 76, 40, "stroke", 4), ...P("M10 23h76M10 36.5h76M35 10v40M60 10v40")];
+
+const TASK: Shape = [
+  ...B(10, 13, 10, 10), ...R(26, 16, 54),
+  ...R(10, 33, 10, 10, "accent", 3), ...P("M12.6 38.2l2 2 3.2-4", "check"), ...R(26, 36, 38),
+];
+const PARAGRAPH: Shape = L(10, 15, [76, 76, 48]);
+const heading = (y: number, width: number, height: number, below: number): Shape => [...R(10, y, width, height, "ink", 3), ...L(10, below, [76, 58])];
+const NOTE_LINK: Shape = [...R(10, 16, 22), ...R(36, 16, 30, 4, "accent"), ...P("M36 24h30", "stroke-accent", { "stroke-width": 1 }), ...R(70, 16, 16), ...L(10, 34, [76, 40])];
+
+/// La forma di ogni blocco, per id. Un titolo da 4 a 6 è quella del 3.
+const SHAPES: Readonly<Record<string, () => Shape>> = {
+  "markdown.paragraph": () => PARAGRAPH,
+  "markdown.heading.1": () => heading(12, 52, 10, 32),
+  "markdown.heading.2": () => heading(14, 42, 8, 32),
+  "markdown.heading.3": () => heading(15, 32, 6, 31),
+  "markdown.quote": () => [...R(10, 12, 3, 36, "accent", 1.5), ...L(20, 16, [62, 66, 40])],
+  "markdown.list.bullet": () => [16, 28, 40].flatMap((y, i) => [...C(13, y, 2, "ink"), ...R(22, y - 2, [60, 48, 56][i]!)]),
+  "markdown.list.ordered": () => [1, 2, 3].flatMap((n, i) => [node("text", "text", { x: 10, y: 19 + i * 12 }, `${n}.`), ...R(22, 14 + i * 12, [60, 48, 56][i]!)]),
+  "markdown.list.task": () => TASK,
+  "markdown.callout": () => [...R(10, 12, 76, 36, "wash", 6), ...C(21, 23, 3.5, "accent"), ...R(30, 21, 36, 4, "ink"), ...R(18, 34, 58, 4, "ink")],
+  "markdown.details": () => [...P("M12 15l4 4-4 4"), ...R(22, 17, 44, 4, "ink"), ...L(22, 30, [58, 42])],
+  "markdown.columns": () => [...L(10, 15, [33, 33, 24]), ...L(53, 15, [33, 33, 18]), ...P("M48 11v38", "stroke", { "stroke-dasharray": "1 4" })],
+  "markdown.table": () => G("line"),
+  "markdown.rule": () => [...R(10, 15, 76), ...P("M10 30h76"), ...R(10, 41, 50)],
+  "markdown.codeblock": () => [...R(10, 10, 76, 40, "tray", 5), ...R(17, 18, 14, 4, "accent"), ...R(35, 18, 30, 4, "ink"), ...R(23, 28, 40, 4, "ink"), ...R(23, 38, 12, 4, "accent"), ...R(39, 38, 24, 4, "ink")],
+  "markdown.mathblock": () => [node("text", "formula", { x: 48, y: 36, "text-anchor": "middle" }, "a² + b² = c²")],
+  "markdown.math": () => [node("text", "formula", { x: 48, y: 36, "text-anchor": "middle" }, "a² + b² = c²")],
+  "markdown.diagram": () => [...B(10, 22, 24, 16, "stroke", 4), ...B(62, 22, 24, 16, "stroke", 4), ...P("M37 30h21M54 26l4 4-4 4", "stroke-accent")],
+  "markdown.embed": () => [...R(10, 10, 76, 40, "wash", 5), ...R(10, 10, 3, 40, "accent", 1.5), ...R(20, 18, 36, 4, "ink"), ...R(20, 28, 58, 4, "ink"), ...R(20, 38, 44, 4, "ink")],
+  "markdown.wikilink": () => NOTE_LINK,
+  "markdown.link": () => NOTE_LINK,
+  "markdown.linkcard": () => [
+    ...B(10, 14, 76, 32, "stroke", 5), ...C(25, 30, 7, "stroke"), ...P("M18 30h14M25 23c-4 4-4 10 0 14M25 23c4 4 4 10 0 14"),
+    ...R(39, 24, 40, 4, "ink"), ...R(39, 33, 28),
+  ],
+  "markdown.image": () => [...R(10, 10, 76, 40, "tray", 5), ...C(26, 22, 4, "accent"), ...P("M12 48l18-18 14 10 12-8 28 16z", "ink", { opacity: 0.5 })],
+  "markdown.mention": () => [...R(10, 18, 22), ...R(36, 13, 42, 14, "wash", 7), ...C(44, 20, 3.5, "accent"), ...R(51, 18, 21, 4, "ink"), ...L(10, 36, [76])],
+  "markdown.date": () => [...R(10, 18, 26), ...R(40, 13, 44, 14, "wash", 4), ...B(45, 16.5, 7, 7, "stroke-accent", 1.5), ...R(56, 18, 22, 4, "ink"), ...L(10, 36, [60])],
+  // Il compito con la sveglia accanto (T36), come la miniatura del prototipo.
+  [REMINDER_ENTRY]: () => [...B(10, 15, 10, 10), ...R(26, 18, 30), ...C(72, 20, 6.5, "stroke-accent"), ...P("M72 16.5v4l2.5 1.5", "stroke-accent"), ...R(26, 36, 40)],
+  // Le voci che il prototipo non disegna, nella stessa lingua.
+  "markdown.toc": () => [...R(10, 12, 40, 4, "ink"), ...R(18, 22, 50), ...R(18, 32, 42), ...R(26, 42, 36)],
+  "markdown.footnote": () => [...L(10, 15, [70, 52]), ...R(64, 33, 5, 5, "accent", 1), ...P("M10 44h30"), ...R(10, 48, 4, 2, "accent", 1)],
+  "markdown.comment": () => [...L(10, 15, [76]), ...B(10, 26, 76, 16, "stroke", 4), ...R(16, 32, 48, 4, "ink")],
+  "markdown.property.add": () => [...R(10, 14, 22), ...R(40, 14, 40, 4, "ink"), ...R(10, 26, 18), ...R(40, 26, 30, 4, "ink"), ...R(10, 38, 24), ...R(40, 38, 36, 4, "ink")],
+  "markdown.underline": () => [...R(10, 20, 60, 4, "ink"), ...P("M10 30h60", "stroke-accent"), ...L(10, 40, [44])],
+  [COLOR_ENTRY]: () => [...R(10, 14, 76, 12, "wash", 4), ...R(14, 18, 50, 4, "accent"), ...L(10, 34, [76, 52])],
+};
+
+/// La miniatura di una voce: la forma del blocco, o l'icona di un comando
+/// che non mette niente nella nota.
+export function thumbOf(entry: SlashMenuEntry): Element {
+  const level = /^markdown\.heading\.([4-6])$/.exec(entry.id) ? "markdown.heading.3" : entry.id;
+  const draw = SHAPES[level] ?? (/^markdown\.(color|background)\./.test(entry.id) ? SHAPES[COLOR_ENTRY] : undefined);
+  if (!draw) {
+    const figure = entry.icon ? iconEl(entry.icon) : null;
+    if (figure) {
+      const box = document.createElement("span");
+      box.className = "slash-thumb-icon";
+      box.append(figure);
+      return box;
+    }
+  }
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 96 60");
+  svg.setAttribute("aria-hidden", "true");
+  svg.append(...(draw ?? (() => PARAGRAPH))());
+  return svg;
+}
+
+/// Gli argomenti rapidi che la voce accetta dopo il «/» (`quick.ts`), da
+/// mostrare: «/tab 3x4», «/h2», «/venerdì». `null` se non ne ha, o se in
+/// questa lingua non si scrivono.
+export function quickHintOf(id: string): string | null {
+  const heading = /^markdown\.heading\.([1-6])$/.exec(id);
+  if (heading) return `/h${heading[1]}`;
+  const keys: Readonly<Record<string, Key>> = {
+    "markdown.table": "slash.detail.args.table",
+    "markdown.columns": "slash.detail.args.columns",
+    "markdown.codeblock": "slash.detail.args.code",
+    "markdown.callout": "slash.detail.args.callout",
+    "markdown.date": "slash.detail.args.date",
+    [REMINDER_ENTRY]: "slash.detail.args.reminder",
+  };
+  const key = keys[id];
+  const text = key ? t(key) : "";
+  return text === "" ? null : text;
 }
 
 /// Il segno che spezza una frase del catalogo dove va il suo pezzo.
 const MARK = "\u0001";
 
-type SentenceKey = "slash.sample.date" | "slash.sample.mention" | "slash.sample.note" | "slash.sample.link" | "slash.sample.comment";
-
-/// Una frase con un pezzo in mezzo: «Vedi [Media] per il confronto.».
-function sentence(key: SentenceKey, middle: HTMLElement): HTMLElement {
-  const [before = "", after = ""] = t(key, { chip: MARK }).split(MARK);
-  const node = block("paragraph", "");
-  node.append(before, middle, after);
-  return node;
+/// Una frase del catalogo, già scritta con `MARK` al posto del tasto, col
+/// tasto disegnato: «Scrivendo [##]».
+function withKey(sentence: string, keys: string): Node[] {
+  const [before = "", after = ""] = sentence.split(MARK);
+  const kbd = document.createElement("kbd");
+  kbd.textContent = keys;
+  return [document.createTextNode(before), kbd, document.createTextNode(after)].filter((part) => part.textContent !== "");
 }
 
-function chip(kind: string, text: string, icon?: string): HTMLElement {
-  const node = el("span", "slash-chip");
-  node.dataset["kind"] = kind;
-  const figure = icon ? iconEl(icon) : null;
-  if (figure) node.append(figure);
-  node.append(text);
-  return node;
+/// Che cosa fa la voce, con la sintassi fra apici inversi (le descrizioni di
+/// `fub.formatting`: «in un riquadro `> [!note]`») scritta in monospazio, non
+/// coi suoi apici.
+export function descriptionOf(text: string): Node[] {
+  return text.split(/`([^`]+)`/).flatMap((part, index): Node[] => {
+    if (part === "") return [];
+    if (index % 2 === 0) return [document.createTextNode(part)];
+    const code = document.createElement("code");
+    code.textContent = part;
+    return [code];
+  });
 }
 
-function table(rows: number, cols: number): HTMLElement {
-  const grid = el("div", "slash-sample-table");
-  grid.style.setProperty("--slash-cols", String(cols));
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cell = el("span", r === 0 ? "is-head" : "");
-      grid.append(cell);
-    }
+/// Come la si scrive senza menu: la sintassi Markdown (o la scorciatoia) e
+/// gli argomenti rapidi, divisi da « · ». Sopra una selezione, il dopo.
+export function syntaxOf(entry: SlashMenuEntry, transform?: SlashTransform): Node[] {
+  if (transform) {
+    const after = entry.action ? transform.after(entry.id) : null;
+    const text = after === null ? t("slash.panel.after.command") : after.replace(/\s*\n\s*/g, " ⏎ ");
+    return [document.createTextNode(t("slash.detail.after", { text }))];
   }
-  return grid;
-}
-
-function code(text: string): HTMLElement {
-  return block("code", text);
-}
-
-const numberParam = (params: Readonly<Record<string, unknown>>, key: string, fallback: number): number => {
-  const value = params[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-};
-
-function dateOf(params: Readonly<Record<string, unknown>>, today: Date): Date {
-  const iso = params["date"];
-  if (typeof iso === "string") {
-    const [y, m, d] = iso.split("-").map(Number);
-    if (y && m && d) return new Date(y, m - 1, d);
-  }
-  return new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-}
-
-/// Il campione di una voce.
-function sample(entry: SlashMenuEntry, context: PreviewContext): HTMLElement {
-  const id = entry.id;
-  const params = entry.params;
-  const color = /^markdown\.(color|background)\.([a-z]+)$/.exec(id);
-  if (color) {
-    const node = block("paragraph", t("slash.sample.color"));
-    node.dataset[color[1] === "color" ? "color" : "fill"] = color[2]!;
-    return node;
-  }
-  if (id === COLOR_ENTRY) {
-    const swatches = el("div", "slash-sample-palette");
-    for (const name of PALETTE) {
-      const text = el("span", "", "A");
-      text.dataset["color"] = name;
-      const fill = el("span", "");
-      fill.dataset["fill"] = name;
-      swatches.append(text, fill);
-    }
-    return swatches;
-  }
-  const heading = /^markdown\.heading\.([1-6])$/.exec(id);
-  if (heading) {
-    const node = block("heading", entry.quick ? t("slash.sample.heading") : entry.label);
-    node.dataset["level"] = heading[1]!;
-    return node;
-  }
-  switch (id) {
-    case "markdown.paragraph": return block("paragraph", t("slash.sample.paragraph"));
-    case "markdown.list.bullet": return block("bullet", t("slash.sample.bullet"));
-    case "markdown.list.ordered": return block("ordered", t("slash.sample.ordered"));
-    case "markdown.list.task": return block("task", t("slash.sample.task"));
-    case "markdown.details": return block("details", t("slash.sample.details"));
-    case "markdown.quote": return block("quote", t("slash.sample.quote"));
-    case "markdown.rule": return el("hr", "slash-sample-rule");
-    case "markdown.mathblock": return block("math", "σ = √σ²");
-    case "markdown.math": return block("paragraph", "σ = √σ²");
-    case "markdown.callout": {
-      const type = typeof params["type"] === "string" ? params["type"] : "note";
-      const node = block("callout", "");
-      node.dataset["type"] = type;
-      node.append(el("b", "", calloutLabel(type)), el("span", "", t("slash.sample.callout")));
-      return node;
-    }
-    case "markdown.table": return table(Math.min(numberParam(params, "rows", 3), 5), Math.min(numberParam(params, "cols", 3), 5));
-    case "markdown.columns": {
-      const count = Math.min(numberParam(params, "count", 2), 4);
-      const node = el("div", "slash-sample-columns");
-      for (let i = 0; i < count; i++) node.append(el("span", ""));
-      return node;
-    }
-    case "markdown.date": return sentence("slash.sample.date", chip("date", longDay(dateOf(params, context.today)), "fmt-date"));
-    case "markdown.mention": return sentence("slash.sample.mention", chip("person", t("slash.sample.person")));
-    case "markdown.wikilink":
-    case "markdown.embed": return sentence("slash.sample.note", chip("note", t("slash.sample.note.name"), "fmt-wikilink"));
-    case "markdown.link":
-    case "markdown.linkcard": return sentence("slash.sample.link", chip("link", t("slash.sample.link.name"), "fmt-webpage"));
-    case "markdown.footnote": {
-      const node = block("paragraph", t("slash.sample.footnote"));
-      node.append(el("sup", "", "1"));
-      return node;
-    }
-    case "markdown.comment": return sentence("slash.sample.comment", chip("comment", "%% " + t("slash.sample.comment.text") + " %%"));
-    case "markdown.property.add": {
-      const node = el("div", "slash-sample-properties");
-      node.append(el("span", "", "tags"), el("b", "", t("slash.sample.property.tags")), el("span", "", t("slash.sample.property.due")), el("b", "", longDay(dateOf({}, context.today))));
-      return node;
-    }
-    case "markdown.codeblock": {
-      const language = typeof params["language"] === "string" ? params["language"] : "python";
-      return code(language === "python" ? "def varianza(xs):\n    m = sum(xs) / len(xs)" : `${language}…`);
-    }
-    case "markdown.diagram": return code("graph LR\n  Media --> Varianza");
-    case "markdown.toc": {
-      const titles = context.outline().filter((heading) => heading.level <= 3);
-      if (titles.length === 0) return el("div", "slash-sample-faint", t("slash.panel.toc.empty"));
-      const node = el("div", "slash-sample-toc");
-      for (const title of titles.slice(0, 6)) {
-        const row = el("span", "", title.text);
-        row.dataset["level"] = String(title.level);
-        node.append(row);
-      }
-      return node;
-    }
-  }
-  // Un comando del registro: la sua icona, grande.
-  const node = el("div", "slash-sample-command");
-  const figure = entry.icon ? iconEl(entry.icon) : null;
-  if (figure) node.append(figure);
-  node.append(el("span", "", entry.label));
-  return node;
-}
-
-/// Il prima e il dopo, sopra una selezione.
-function beforeAfter(entry: SlashMenuEntry, transform: SlashTransform): HTMLElement {
-  const node = el("div", "slash-sample-transform");
-  const after = entry.action ? transform.after(entry.id) : null;
-  node.append(
-    el("span", "slash-sample-label", t("slash.panel.before")),
-    el("pre", "slash-sample-text", transform.before),
-    el("span", "slash-sample-label", t("slash.panel.after")),
-    el("pre", "slash-sample-text", after ?? t("slash.panel.after.command")),
-  );
-  return node;
-}
-
-/// La riga sotto il campione.
-function tipOf(entry: SlashMenuEntry, transform: boolean): Node[] {
-  if (transform) return [];
-  if (entry.picker) return [document.createTextNode(t("slash.panel.opens"))];
+  const parts: Node[][] = [];
   const markdown = markdownHint(entry.id);
-  if (markdown) {
-    const keys = el("code", "", markdown.length < 4 ? `${markdown}␣` : markdown);
-    const [before = "", after = ""] = t(BLOCK_SECTIONS.has(entry.section) ? "slash.panel.without" : "slash.panel.without.inline", { hint: MARK }).split(MARK);
-    return [document.createTextNode(before), keys, document.createTextNode(after)];
-  }
-  if (entry.hint) {
-    const [before = "", after = ""] = t("slash.panel.without.chord", { hint: MARK }).split(MARK);
-    return [document.createTextNode(before), el("kbd", "", entry.hint), document.createTextNode(after)];
-  }
-  return [];
-}
-
-export function previewOf(entry: SlashMenuEntry, context: PreviewContext): Preview {
-  const stage = document.createElement("div");
-  stage.className = "slash-sample-stage";
-  stage.append(context.transform ? beforeAfter(entry, context.transform) : sample(entry, context));
-  return { stage, tip: tipOf(entry, context.transform !== undefined) };
+  if (markdown) parts.push(withKey(t("slash.detail.typing", { syntax: MARK }), markdown));
+  else if (entry.hint) parts.push(withKey(t("slash.detail.chord", { keys: MARK }), entry.hint));
+  const quick = entry.quick ? null : quickHintOf(entry.id);
+  if (quick) parts.push(withKey(parts.length ? t("slash.detail.also", { quick: MARK }) : t("slash.detail.also.first", { quick: MARK }), quick));
+  return parts.flatMap((part, index) => (index === 0 ? part : [document.createTextNode(" · "), ...part]));
 }

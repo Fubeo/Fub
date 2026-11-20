@@ -45,6 +45,7 @@ import type {
   InstalledPluginInfo,
   CatalogEntry,
   SettingEntry,
+  SettingKind,
   SettingValue,
   ThemeInfo,
   SettingScope,
@@ -52,40 +53,56 @@ import type {
   UiOption,
 } from "../host/contract";
 import { onEvent } from "../state/kernel";
-import { state } from "../state/store";
+import { on, state } from "../state/store";
 import { $ } from "../ui/dom";
 import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
 import {
   allCommands,
+  commandOfKeybindingKey,
   displayBinding,
   keybindingIssues,
   keybindingKey,
   keyboardPlatform,
+  registerComponentRow,
   reservedChord,
   validateKeybinding,
   type CommandEntry,
+  type KeybindingValidation,
 } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
 import { errorText } from "../host/errors";
-import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, t, type Key } from "../i18n/strings";
+import { LANGUAGE_KEY, catalogLanguages, onLanguage, plural, resolvedLanguage, t, type Key } from "../i18n/strings";
 import {
+  MOTION_KEY,
   SERIES_THEME_ID,
   THEME_KEY,
   cancelThemePreview,
   currentThemeId,
   currentThemePreview,
   previewTheme,
+  refreshThemeLink,
   selectTheme,
   themeCatalog,
 } from "../theme/theme";
 import { setTooltip } from "../ui/tooltip";
+import { mountComponentsPage, type ComponentsPage } from "./components-page";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { icon } from "../ui/icons";
+import { marcuzzoElement } from "../ui/marcuzzo";
 import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
 import { vaultNameEditor } from "./vault-rename";
 import { reducedMotion } from "../theme/reduced-motion";
+import {
+  DEVELOPER_MODE_KEY,
+  installFolderButton,
+  linkFolderButton,
+  renderDiagnosis,
+  renderLinkedFolder,
+  themeDiagnoses,
+} from "./theme-folder";
+import { loadCatalogPage } from "../dev/catalogo/carica";
 import {
   CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
   cssSnippetCatalog, disableCssSnippet, parseCssSnippets, previewCssSnippets,
@@ -99,12 +116,16 @@ import {
   matchesTerms,
   normalizeSearch,
   optionLabel,
+  parseSettingNumber,
   searchTerms,
   searchText,
   sectionAnchor,
   show,
+  shownChoice,
   type Control,
+  type NumberProblem,
 } from "./settings-model";
+import { composingKey } from "../kit/ime";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
 /// una chiave che ha composto invece di leggerla da un elenco.
@@ -225,6 +246,15 @@ let tab: SettingsTab = "settings";
 /// ridisegno della stessa lo conserva.
 let renderedTab: SettingsTab | null = null;
 
+/// La sezione scelta con un clic nell'indice. Resta la voce attiva finché chi
+/// legge non scorre di suo: lo scorrimento che il clic avvia non può portare
+/// in cima le sezioni dell'ultimo schermo, e l'osservatore ne sceglierebbe
+/// un'altra.
+let chosenSection: string | null = null;
+
+/// I tasti con cui si scorre il corpo da tastiera.
+const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+
 const settingsTabsId = "settings-body";
 
 function tabButtons(): HTMLButtonElement[] {
@@ -304,6 +334,16 @@ function settleRadioGroup(group: HTMLElement): void {
 }
 
 function selectTab(next: SettingsTab, focus: boolean): void {
+  const owner = settingsLifetime;
+  void changeTab(next).then(() => {
+    if (!focus || owner?.closed || owner !== settingsLifetime) return;
+    tabButtons().find((button) => button.dataset.tab === next)?.focus();
+  });
+}
+
+/// Passa alla scheda `next` e la disegna: lascia l'anteprima del tema se si
+/// esce dalla configurazione, e la riga tenuta in vista non vale più.
+function changeTab(next: SettingsTab): Promise<void> {
   if (tab === "settings" && next !== "settings") {
     void cancelThemePreview();
     cancelCssSnippetsPreview();
@@ -312,11 +352,76 @@ function selectTab(next: SettingsTab, focus: boolean): void {
   pinnedRow = null;
   componentsGeneration++;
   syncToolbar();
+  return render();
+}
+
+/// **Apre le Impostazioni su una voce** (`files.attachment-folder` per
+/// «Cambia cartella» della lavagna): le apre come `#open-settings`, sceglie la
+/// scheda dove la voce sta, la tiene in vista anche sotto un filtro
+/// (`pinnedRow`), la scorre in vista e dà il fuoco al suo campo. Una chiave che
+/// il vault non ha apre le Impostazioni e basta; con le Impostazioni già
+/// aperte cambia soltanto scheda e riga.
+export async function revealSetting(key: string): Promise<void> {
   const owner = settingsLifetime;
-  void render().then(() => {
-    if (!focus || owner?.closed || owner !== settingsLifetime) return;
-    tabButtons().find((button) => button.dataset.tab === next)?.focus();
-  });
+  if (!owner || owner.closed) return;
+  const entries = await settings().catch((): SettingEntry[] => []);
+  if (owner.closed || owner !== settingsLifetime) return;
+  const where = entries.some((entry) => entry.spec.key === key) ? tabOfSetting(key) : null;
+  if (!release) {
+    // Chiuse: la scheda giusta si sceglie prima di aprire, così il primo
+    // disegno è già quello (l'anteprima del tema è caduta con la chiusura).
+    if (where !== null && where !== tab) {
+      tab = where;
+      componentsGeneration++;
+    }
+    if (where !== null) pinnedRow = key;
+    await open();
+  } else if (where !== null && where !== tab) {
+    await changeTab(where);
+  }
+  if (where === null || owner.closed || owner !== settingsLifetime || tab !== where) return;
+  pinnedRow = key;
+  applyFilter();
+  const item = bodyEl.querySelector<HTMLElement>(`[data-setting-key="${CSS.escape(key)}"]`);
+  if (!item) return;
+  const details = item.closest("details");
+  if (details) details.open = true;
+  item.scrollIntoView?.({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
+  const field = item.querySelector<HTMLElement>(`[id="setting-${CSS.escape(key)}"]`)
+    ?? item.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+  field?.focus({ preventScroll: true });
+}
+
+/// La scheda che disegna la voce `key`: i permessi stanno coi componenti, le
+/// scorciatoie nella loro scheda, il resto nella configurazione (lo stesso
+/// conto di `renderForm`).
+function tabOfSetting(key: string): SettingsTab {
+  if (isPermissionKey(key)) return "components";
+  if (allCommands().some((command) => keybindingKey(command.id) === key)) return "shortcuts";
+  return "settings";
+}
+
+/// Apre le impostazioni sulla riga del componente `id` nella scheda
+/// «Componenti» (la porta `showComponent`, per «Accendi…» del disegno). Il
+/// pannello già aperto cambia scheda come col clic; chiuso si apre su quella
+/// scheda. Un `id` che la mappa non ha apre la scheda e basta; un pannello
+/// chiuso prima che la riga arrivi non si riapre.
+async function openComponentRow(id: string): Promise<void> {
+  const owner = settingsLifetime;
+  if (!owner || owner.closed) return;
+  if (release) {
+    if (tab !== "components") await changeTab("components");
+  } else {
+    if (tab !== "components") {
+      tab = "components";
+      pinnedRow = null;
+      componentsGeneration++;
+      syncToolbar();
+    }
+    await open();
+  }
+  if (owner.closed || owner !== settingsLifetime || !release || tab !== "components") return;
+  await componentsPage.focusRow(id);
 }
 
 export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
@@ -336,6 +441,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
 
   tab = "settings";
   renderedTab = null;
+  renderedForm = null;
   resetFilters();
   settingsHooks = nextHooks;
   panelEl = $("#settings-panel");
@@ -373,7 +479,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
       figure.innerHTML = icon(TAB_ICONS[value]);
       button.prepend(figure);
     }
-    lifetime.listen(button, "click", () => selectTab(value, true));
+    lifetime.listen(button, "click", () => void selectTab(value, true));
     lifetime.listen(button, "keydown", (event) => {
       const buttons = tabButtons();
       const index = buttons.indexOf(button);
@@ -381,7 +487,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
       if (next === null) return;
       event.preventDefault();
       const nextTab = buttons[next]?.dataset.tab as SettingsTab | undefined;
-      if (nextTab) selectTab(nextTab, true);
+      if (nextTab) void selectTab(nextTab, true);
     });
   }
   const selectedTab = tabButtons().find((button) => button.dataset.tab === tab);
@@ -394,6 +500,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     lifetime.listen(field, "input", () => {
       if (!isFilterable(tab)) return;
       pinnedRow = null;
+      chosenSection = null;
       filters[tab].query = field.value;
       scrollEl.scrollTop = 0;
       applyFilter();
@@ -403,6 +510,7 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     lifetime.listen(modifiedEl, "click", () => {
       if (!isFilterable(tab)) return;
       pinnedRow = null;
+      chosenSection = null;
       filters[tab].modified = !filters[tab].modified;
       scrollEl.scrollTop = 0;
       syncToolbar();
@@ -410,6 +518,25 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
     });
   }
   lifetime.listen(scrollEl, "scroll", () => updateTocCurrent());
+  // Chi scorre di suo (rotella, dito, barra, tasti) riprende la voce attiva
+  // dalla posizione, anche se in fondo lo scorrimento non si muove più.
+  const ownScroll = (): void => {
+    if (chosenSection === null) return;
+    chosenSection = null;
+    updateTocCurrent();
+  };
+  lifetime.listen(scrollEl, "wheel", ownScroll, { passive: true });
+  lifetime.listen(scrollEl, "touchmove", ownScroll, { passive: true });
+  lifetime.listen(scrollEl, "pointerdown", (event) => {
+    if (event.target === scrollEl) ownScroll();
+  });
+  lifetime.listen(scrollEl, "keydown", (event) => {
+    if (!SCROLL_KEYS.has(event.key)) return;
+    // I tasti di un controllo sono del controllo, non dello scorrimento.
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("input, textarea, select, button, [contenteditable]") || target?.matches("[role]")) return;
+    ownScroll();
+  });
   if (tocListEl) {
     lifetime.listen(tocListEl, "click", (event) => {
       const target = (event.target as Element | null)?.closest<HTMLButtonElement>("button[data-target]");
@@ -433,26 +560,92 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
   // L'errore per-campo della chiave che è cambiata decade con esso: il valore
   // autorevole è appena stato riletto, e un esito vecchio contraddirrebbe la
   // riga. Gli errori delle altre chiavi restano, perché il loro valore no.
+  //
+  // Una chiave che ha una scrittura in volo da una riga di qui la ridisegna
+  // quella scrittura, al suo esito: l'evento che la scrittura stessa provoca
+  // sarebbe un secondo aggiornamento uguale.
   const stopSetting = onEvent("setting_changed", (event) => {
     rowErrors.delete(event.key);
-    if (!lifetime.closed && !panelEl.hidden) void render();
+    if (lifetime.closed || panelEl.hidden) return;
+    if (typeof event.key === "string" && pendingRows.has(event.key)) return;
+    void refresh(event.key);
   });
   if (typeof stopSetting === "function") lifetime.add(stopSetting);
+  // Il tema collegato si rimonta a ogni salvataggio dell'autore: la riga
+  // «Ricaricato alle…» e la diagnosi si ridisegnano con lui.
+  lifetime.add(on("theme-link", () => {
+    if (!lifetime.closed && !panelEl.hidden) void render();
+  }));
+  // Quali campi ha toccato chi scrive: solo quelli possono avere una bozza da
+  // portare oltre il ridisegno (#401).
+  lifetime.listen(bodyEl, "input", (event) => {
+    if (isDraftControl(event.target)) typedControls.add(event.target);
+    forgetRowError(event.target);
+  });
+  // Chromium, togliendo dal documento il campo che ha il fuoco, gli manda
+  // `blur` e con esso il `change` di una casella modificata: il ridisegno per
+  // un'altra chiave salvava così da solo il testo a metà. Quello non è un
+  // gesto di chi scrive, e la bozza resta bozza; in cattura, prima del campo.
+  lifetime.listen(bodyEl, "change", (event) => {
+    if (replacingBody) event.stopImmediatePropagation();
+  }, { capture: true });
   // Chiudere il vault mentre il pannello è aperto lascerebbe un form che parla
-  // di un vault che non c'è: le impostazioni sono per-vault.
-  const stopVault = onEvent("vault_closed", () => close());
+  // di un vault che non c'è: le impostazioni sono per-vault. Ma una scelta della
+  // pagina «Componenti» che accende o spegne un formato (la lavagna) rimonta il
+  // vault: `vault_closed` e subito `vault_opened` dello stesso `root`. Quella
+  // non è una chiusura, e il pannello resta dov'è; per saperlo si aspetta un
+  // momento prima di chiudere. Un altro vault che si apre chiude subito.
+  let closing: { root: string; timer: ReturnType<typeof setTimeout> } | null = null;
+  const stopClosing = () => {
+    if (closing) clearTimeout(closing.timer);
+    closing = null;
+  };
+  const stopVault = onEvent("vault_closed", (event) => {
+    stopClosing();
+    if (lifetime.closed) return;
+    if (!release) {
+      close();
+      return;
+    }
+    const timer = setTimeout(() => {
+      closing = null;
+      if (!lifetime.closed) close();
+    }, VAULT_REMOUNT_GRACE_MS);
+    closing = { root: event.root, timer };
+  });
   if (typeof stopVault === "function") lifetime.add(stopVault);
+  const stopReopen = onEvent("vault_opened", (event) => {
+    const pending = closing;
+    if (!pending || lifetime.closed) return;
+    stopClosing();
+    if (event.root !== pending.root) close();
+  });
+  if (typeof stopReopen === "function") lifetime.add(stopReopen);
+  lifetime.add(stopClosing);
+  componentsPage = mountComponentsPage(lifetime, {
+    visible: () => !lifetime.closed && !panelEl.hidden && tab === "components",
+    reloadProvider: () => settingsHooks.reloadProvider(),
+  });
+  lifetime.add(registerComponentRow((id) => void openComponentRow(id)));
   lifetime.add(() => {
     cancelCssSnippetsPreview();
     race.cancel();
     release?.();
     release = null;
+    openedLifetime?.close();
+    openedLifetime = null;
   });
   syncToolbar();
   return teardown;
 }
 
 let mountedTeardown: Teardown | null = null;
+/// La pagina «Componenti»: vive quanto il pannello, così la sua ricerca e il suo
+/// avviso non si ricostruiscono a ogni ridisegno della scheda.
+let componentsPage: ComponentsPage;
+/// Quanto il pannello aspetta, dopo un `vault_closed`, il `vault_opened` dello
+/// stesso vault che dice «era un rimontaggio».
+const VAULT_REMOUNT_GRACE_MS = 2000;
 let settingsLifetime: Lifetime | null = null;
 /// Il controllo degli aggiornamenti della scheda «Informazioni»: vive quanto il
 /// pannello, e il suo esito ridisegna la scheda se è quella aperta.
@@ -465,6 +658,9 @@ let updateChecker: UpdateChecker | null = null;
 /// lo chiamano il pulsante, Escape e l'evento `vault_closed`, e senza questa
 /// guardia il secondo giro rimetterebbe il fuoco dove stava *prima del primo*.
 let release: (() => void) | null = null;
+/// La vita di un'apertura del pannello: si chiude con lui. Ci vive ciò che sta
+/// sopra le impostazioni e non deve restarci senza (`Tutti i componenti`).
+let openedLifetime: Lifetime | null = null;
 
 async function open(): Promise<void> {
   if (settingsLifetime?.closed || release) return;
@@ -477,6 +673,7 @@ async function open(): Promise<void> {
   // chi non vede a parlare con la UI sotto, che è ancora lì e non è più quella
   // che ha davanti.
   release = trapFocus(panelEl, close);
+  openedLifetime = openLifetime();
   // La trappola mette il fuoco sul primo controllo, che nella scocca è la
   // chiusura: si comincia invece dalla scheda corrente, che dice dove si è.
   tabButtons().find((button) => button.dataset.tab === tab)?.focus();
@@ -506,16 +703,23 @@ export async function openSettingsAt(key: string): Promise<void> {
 }
 
 function close(): void {
+  openedLifetime?.close();
+  openedLifetime = null;
   release?.();
   race.cancel();
   cancelCssSnippetsPreview();
   void cancelThemePreview();
   componentsGeneration++;
+  componentsPage?.reset();
   pendingRows.clear();
+  blockedRows.clear();
+  nextWrites.clear();
   rowErrors.clear();
+  writtenRows.clear();
   openDetails.clear();
   release = null;
   renderedTab = null;
+  renderedForm = null;
   resetFilters();
   if (searchEl) searchEl.value = "";
   exitSurface(panelEl, () => {
@@ -526,16 +730,25 @@ function close(): void {
 /// Quale disegno è l'ultimo chiesto.
 ///
 /// Serve perché `disegna` è **ri-entrante**, e non per un caso di laboratorio:
-/// ogni scrittura ne fa partire due — quella di `scrivi`, e quella che il
-/// `setting-changed` del kernel fa scattare — e due schede cliccate di fila ne
-/// fanno partire altre due. Svuotare *prima* dell'`await` e appendere *dopo*
-/// darebbe «svuota, svuota, appendi N, appendi N», cioè il contenuto doppio o
-/// due schede mescolate. Qui si costruisce prima e si sostituisce dopo, in un
+/// un evento che arriva mentre un disegno legge ne fa partire un altro, e due
+/// schede cliccate di fila ne fanno partire due. Svuotare *prima*
+/// dell'`await` e appendere *dopo* darebbe «svuota, svuota, appendi N,
+/// appendi N», cioè il contenuto doppio o due schede mescolate. Qui si costruisce prima e si sostituisce dopo, in un
 /// colpo solo, e il disegno che arriva in ritardo si accorge di non essere più
 /// l'ultimo e si ritira.
 const race = new Race();
 
 async function render(): Promise<void> {
+  renderStarts++;
+  rendersInFlight++;
+  try {
+    await renderWhole();
+  } finally {
+    rendersInFlight--;
+  }
+}
+
+async function renderWhole(): Promise<void> {
   const owner = settingsLifetime;
   if (!owner || owner.closed || owner !== settingsLifetime) return;
   const buttons = tabButtons();
@@ -572,12 +785,59 @@ async function render(): Promise<void> {
   // Sostituire tutto il corpo lo accorcia per un istante: lo scroll si rimette
   // a mano dov'era, e torna in cima solo quando cambia la scheda.
   const scrollTop = scrollEl.scrollTop;
-  bodyEl.replaceChildren(...nodes);
+  // Il fuoco dentro il corpo resta dov'era se il suo controllo sopravvive al
+  // ridisegno (la pagina «Componenti» è sempre la stessa). Se invece il
+  // controllo è stato ricostruito — ogni riga lo è, a ogni `setting_changed`,
+  // anche per una chiave che non è la sua — il fuoco va sul controllo nuovo
+  // della stessa riga: senza, cadeva su BODY e chi usa la tastiera ripartiva
+  // dall'inizio della pagina (A03). Solo nella stessa scheda: cambiandola, il
+  // controllo di prima non c'è più per nessuno.
+  const focused = bodyEl.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+  const snapshot = focused ? focusSnapshot() : null;
+  // Il testo scritto e non ancora salvato passa sul controllo nuovo prima che
+  // il fuoco ci torni, così anche la selezione ritrova il suo testo (#401).
+  const drafts = takeDrafts(bodyEl);
+  writtenRows.clear();
+  // Una riga in volo passa com'è nel disegno nuovo: mostra la scelta che la
+  // persona sta facendo, non il salvato di prima, e la sua scrittura la
+  // ridisegnerà all'esito.
+  const carried = renderedTab === tab ? carryPendingRows(nodes) : [];
+  replacingBody = true;
+  try {
+    bodyEl.replaceChildren(...nodes);
+  } finally {
+    replacingBody = false;
+  }
+  renderedForm = tab === "settings" ? formSnapshots.get(nodes) ?? null : null;
+  for (const key of carried) renderedForm?.rows.set(key, "");
+  if (renderedTab === tab) restoreDrafts(drafts, bodyEl);
+  else chosenSection = null;
+  rememberSavedValues(bodyEl);
+  if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   scrollEl.scrollTop = renderedTab === tab ? scrollTop : 0;
+  if (snapshot && !focused?.isConnected && renderedTab === tab && document.activeElement === document.body) {
+    restoreFocus(snapshot);
+  }
   renderedTab = tab;
   syncToolbar();
   buildToc();
   applyFilter();
+}
+
+/// Mette nel disegno nuovo, al posto della loro riga nuova, le righe in volo del
+/// corpo di adesso; torna le loro chiavi.
+function carryPendingRows(nodes: readonly HTMLElement[]): string[] {
+  const carried: string[] = [];
+  for (const key of pendingRows) {
+    const selector = `.setting-row[data-setting-key="${CSS.escape(key)}"]`;
+    const old = bodyEl.querySelector<HTMLElement>(selector);
+    const fresh = nodes.map((node) => node.matches(selector) ? node : node.querySelector<HTMLElement>(selector)).find(Boolean);
+    if (!old || !fresh) continue;
+    old.hidden = false;
+    fresh.replaceWith(old);
+    carried.push(key);
+  }
+  return carried;
 }
 
 function tabContent(): Promise<HTMLElement[]> {
@@ -586,6 +846,219 @@ function tabContent(): Promise<HTMLElement[]> {
   if (tab === "shortcuts") return renderShortcuts();
   if (tab === "about") return renderAbout();
   return renderVault();
+}
+
+// --- l'aggiornamento per riga ------------------------------------------------
+//
+// Un `setting_changed` col pannello aperto cambiava di solito una riga sola, e
+// ricostruiva tutto il corpo: centinaia di nodi rifatti, lo stile ricalcolato
+// per tutti e una lettura dello scroll che lo forzava subito, a ogni passo del
+// cursore dell'accento. Qui la scheda della configurazione rilegge le
+// impostazioni, confronta ciò che ogni riga mostra con ciò che dovrebbe
+// mostrare, e sostituisce solo le righe diverse, con il conto della loro
+// sezione, il suo «Ripristina gruppo» e il numero nell'indice.
+//
+// Ricade sul ridisegno intero ciò che una riga sola non sa dire: un evento
+// senza chiave («può essere cambiato tutto»), uno schema diverso (righe
+// comparse, sparite o ridichiarate), le chiavi che cambiano più di una riga
+// (`WHOLE_FORM_KEYS`) e ogni altra scheda.
+
+/// Ciò che la scheda della configurazione disegnata mostra: lo schema delle sue
+/// righe e, per ogni riga, ciò da cui dipende il suo disegno.
+interface FormSnapshot {
+  schema: string;
+  rows: Map<string, string>;
+}
+
+/// Il disegno della scheda della configurazione nel corpo adesso, o `null` se il
+/// corpo mostra altro (un'altra scheda, un errore di lettura).
+let renderedForm: FormSnapshot | null = null;
+/// Lo stato di ogni disegno costruito, che diventa `renderedForm` solo quando
+/// quel disegno entra davvero nel corpo.
+const formSnapshots = new WeakMap<HTMLElement[], FormSnapshot>();
+/// Quanti ridisegni interi sono partiti e quanti sono in volo: un
+/// aggiornamento per riga che ne incrocia uno si ritira e lascia fare a lui.
+let renderStarts = 0;
+let rendersInFlight = 0;
+/// L'ultimo aggiornamento per riga chiesto: uno più vecchio si ritira, perché
+/// quello nuovo rilegge e confronta tutte le righe comunque.
+let rowsGeneration = 0;
+
+/// Le righe della scheda della configurazione, fra tutte le impostazioni.
+function formRows(all: readonly SettingEntry[]): SettingEntry[] {
+  const shortcuts = new Set(allCommands().map((command) => keybindingKey(command.id)));
+  return all.filter(
+    (e) => !shortcuts.has(e.spec.key) && !isPermissionKey(e.spec.key) && !MANAGED_ELSEWHERE.has(e.spec.key),
+  );
+}
+
+function schemaOf(entries: readonly SettingEntry[]): string {
+  return JSON.stringify(entries.map((entry) => entry.spec));
+}
+
+/// Ciò da cui dipende il disegno di una riga oltre il suo schema.
+function rowSignature(entry: SettingEntry): string {
+  const key = entry.spec.key;
+  return JSON.stringify([entry.value, entry.source, pendingRows.has(key), rowErrors.get(key) ?? null]);
+}
+
+/// I nodi che la vista mette nel controllo di una riga (il campo, l'esito):
+/// tutto il resto che ci si trova l'ha messo qualcun altro — la veste di una
+/// shell — e l'aggiornamento della riga lo lascia dov'è.
+const viewParts = new WeakSet<Element>();
+
+/// Aggiorna `old` **sul posto** con il disegno di `next`: gli attributi della
+/// riga, il testo e i nodi della vista nel controllo. La riga resta lo stesso
+/// nodo, e i nodi di altri nel controllo — una veste col fuoco — non si
+/// staccano mai: staccarli toglieva il fuoco a chi stava trascinando il
+/// cursore. `hidden` è del filtro, e resta. Una riga che non ha la forma
+/// attesa si sostituisce intera.
+function patchRow(old: HTMLElement, next: HTMLElement): HTMLElement {
+  const oldText = old.querySelector(":scope > .setting-text");
+  const newText = next.querySelector(":scope > .setting-text");
+  const oldControl = old.querySelector(":scope > .setting-control");
+  const newControl = next.querySelector(":scope > .setting-control");
+  if (!oldText || !newText || !oldControl || !newControl) {
+    old.replaceWith(next);
+    return next;
+  }
+  for (const name of old.getAttributeNames()) {
+    if (name !== "hidden" && !next.hasAttribute(name)) old.removeAttribute(name);
+  }
+  for (const name of next.getAttributeNames()) {
+    const value = next.getAttribute(name)!;
+    if (name !== "hidden" && old.getAttribute(name) !== value) old.setAttribute(name, value);
+  }
+  oldText.replaceWith(newText);
+  for (const child of [...oldControl.children]) if (viewParts.has(child)) child.remove();
+  // I nodi della vista vanno prima: una veste sta subito dopo il campo che
+  // pilota, e così lo ritrova al suo posto.
+  oldControl.prepend(...newControl.children);
+  return old;
+}
+
+/// Il corpo dopo un cambio di `key`: le righe sole quando si può, tutto se no.
+function refresh(key: string | null | undefined): Promise<void> {
+  const rowsWillDo =
+    typeof key === "string" && key !== "" && !WHOLE_FORM_KEYS.has(key) &&
+    tab === "settings" && renderedTab === "settings" && renderedForm !== null && rendersInFlight === 0;
+  return rowsWillDo ? refreshRows() : render();
+}
+
+async function refreshRows(): Promise<void> {
+  const owner = settingsLifetime;
+  if (!owner || owner.closed) return;
+  const generation = ++rowsGeneration;
+  const starts = renderStarts;
+  let entries: SettingEntry[];
+  try {
+    entries = formRows(await settings());
+    await loadOwnListFields(entries);
+  } catch {
+    // Chi non riesce a rileggere lo dice col disegno intero, che ha già il
+    // suo avviso.
+    if (generation === rowsGeneration && starts === renderStarts) await render();
+    return;
+  }
+  if (owner.closed || owner !== settingsLifetime || generation !== rowsGeneration || starts !== renderStarts) return;
+  const form = renderedForm;
+  if (!form || tab !== "settings" || renderedTab !== "settings" || schemaOf(entries) !== form.schema) {
+    await render();
+    return;
+  }
+  const dirty = entries.filter((entry) => form.rows.get(entry.spec.key) !== rowSignature(entry));
+  if (dirty.length === 0) return;
+  if (dirty.some((entry) => WHOLE_FORM_KEYS.has(entry.spec.key))) {
+    await render();
+    return;
+  }
+  const touched = new Set<HTMLElement>();
+  for (const entry of dirty) {
+    const key = entry.spec.key;
+    // Una riga in volo la ridisegna la sua scrittura, quando la fila è vuota:
+    // qui mostrerebbe un salvato che la persona sta già cambiando.
+    if (pendingRows.has(key)) continue;
+    const old = bodyEl.querySelector<HTMLElement>(`.setting-row[data-setting-key="${CSS.escape(key)}"]`);
+    if (!old) {
+      await render();
+      return;
+    }
+    const focused = old.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+    const drafts = takeDrafts(old);
+    if (focused && drafts.length > 0) {
+      // La riga in cui si sta scrivendo resta quella che è: il testo, il
+      // cursore e la selezione non si toccano. Il valore salvato nuovo lo
+      // dice la riga sotto il campo, e la riga si ridisegna al suo esito.
+      noteSavedValues(old, renderRow(entry), drafts);
+      continue;
+    }
+    const snapshot = focused ? focusSnapshot(false) : null;
+    let next: HTMLElement;
+    replacingBody = true;
+    try {
+      next = patchRow(old, renderFormRow(entry));
+    } finally {
+      replacingBody = false;
+    }
+    writtenRows.delete(key);
+    restoreDrafts(drafts, next);
+    rememberSavedValues(next);
+    if (snapshot && (!focused?.isConnected || document.activeElement !== focused)) restoreFocus(snapshot);
+    form.rows.set(key, rowSignature(entry));
+    const section = next.closest<HTMLElement>(".settings-section");
+    if (section) touched.add(section);
+  }
+  if (touched.size > 0) {
+    const groups = groupEntries(entries);
+    for (const [index, group] of groups.entries()) {
+      const section = document.getElementById(sectionAnchor(group.title, index));
+      if (section && touched.has(section)) refreshSectionHead(section, group);
+    }
+  }
+  const { query, modified } = filters.settings;
+  if (modified || searchTerms(query).length > 0) applyFilter();
+}
+
+/// Il conto delle modificate e «Ripristina gruppo» di una sezione, rifatti
+/// sulle sue righe di adesso, e il numero della sua voce nell'indice.
+function refreshSectionHead(section: HTMLElement, group: Group): void {
+  const head = section.querySelector<HTMLElement>(":scope > .settings-section-head");
+  if (!head) return;
+  head.querySelector(".settings-section-meta")?.remove();
+  const oldReset = head.querySelector<HTMLButtonElement>(".settings-section-reset");
+  const resetHadFocus = oldReset !== null && oldReset === document.activeElement;
+  oldReset?.remove();
+  delete section.dataset.modifiedCount;
+  const changed = group.rows.filter(isModified);
+  markModified({ section, head, body: head }, changed.length);
+  const reset = groupReset(group, changed);
+  if (reset) {
+    head.append(reset);
+    if (resetHadFocus) reset.focus({ preventScroll: true });
+  }
+  const link = tocListEl?.querySelector<HTMLButtonElement>(`button[data-target="${CSS.escape(section.id)}"]`);
+  const item = link?.closest("li");
+  if (!link || !item) return;
+  const next = tocItem(section);
+  next.hidden = item.hidden;
+  const nextLink = next.querySelector<HTMLButtonElement>("button")!;
+  if (link.hasAttribute("aria-current")) nextLink.setAttribute("aria-current", "true");
+  const linkHadFocus = document.activeElement === link;
+  item.replaceWith(next);
+  if (linkHadFocus) nextLink.focus({ preventScroll: true });
+}
+
+/// La riga tenuta perché ci si sta scrivendo: il valore salvato che la sua
+/// bozza ora contraddice si ricorda, e se è cambiato da fuori una riga lo dice,
+/// come dopo un ridisegno intero.
+function noteSavedValues(row: HTMLElement, fresh: HTMLElement, drafts: readonly Draft[]): void {
+  for (const draft of drafts) {
+    const el = row.querySelector(`[id="${draft.id}"]`);
+    const now = fresh.querySelector(`[id="${draft.id}"]`);
+    if (!isDraftControl(el) || !isDraftControl(now)) continue;
+    savedValues.set(el, { saved: now.value, base: draft.base });
+    if (now.value !== draft.base && !document.getElementById(`${el.id}-changed`)) showSavedChanged(el);
+  }
 }
 
 // --- ricerca e filtro -------------------------------------------------------
@@ -708,29 +1181,31 @@ function sections(): HTMLElement[] {
 function buildToc(): void {
   if (!tocEl || !tocListEl) return;
   const all = sections();
-  tocListEl.replaceChildren(...all.map((section) => {
-    const item = document.createElement("li");
-    const link = document.createElement("button");
-    link.type = "button";
-    link.className = "settings-toc-link";
-    link.dataset.target = section.id;
-    const name = document.createElement("span");
-    name.className = "settings-toc-name";
-    name.textContent = section.querySelector(".settings-section-title")?.textContent ?? "";
-    link.append(name);
-    const count = Number(section.dataset.modifiedCount ?? "0");
-    if (count > 0) {
-      const badge = document.createElement("span");
-      badge.className = "settings-toc-badge";
-      badge.textContent = String(count);
-      badge.setAttribute("aria-hidden", "true");
-      link.append(badge);
-      setTooltip(link, plural(count, "settings.group.modified.one", "settings.group.modified"));
-    }
-    item.append(link);
-    return item;
-  }));
+  tocListEl.replaceChildren(...all.map(tocItem));
   tocEl.hidden = all.length < 2;
+}
+
+function tocItem(section: HTMLElement): HTMLLIElement {
+  const item = document.createElement("li");
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "settings-toc-link";
+  link.dataset.target = section.id;
+  const name = document.createElement("span");
+  name.className = "settings-toc-name";
+  name.textContent = section.querySelector(".settings-section-title")?.textContent ?? "";
+  link.append(name);
+  const count = Number(section.dataset.modifiedCount ?? "0");
+  if (count > 0) {
+    const badge = document.createElement("span");
+    badge.className = "settings-toc-badge";
+    badge.textContent = String(count);
+    badge.setAttribute("aria-hidden", "true");
+    link.append(badge);
+    setTooltip(link, plural(count, "settings.group.modified.one", "settings.group.modified"));
+  }
+  item.append(link);
+  return item;
 }
 
 /// Le voci seguono il filtro: una sezione nascosta non ha voce.
@@ -749,7 +1224,8 @@ function syncTocEntries(): void {
   updateTocCurrent();
 }
 
-/// La sezione in lettura: l'ultima il cui titolo è salito oltre il bordo alto
+/// La sezione in lettura: quella scelta nell'indice, finché chi legge non
+/// scorre di suo; sennò l'ultima il cui titolo è salito oltre il bordo alto
 /// del corpo. In fondo allo scroll è l'ultima, anche se è corta e il suo titolo
 /// non può salire fin lassù.
 function updateTocCurrent(): void {
@@ -758,8 +1234,11 @@ function updateTocCurrent(): void {
   if (visible.length === 0) return;
   const top = scrollEl.getBoundingClientRect().top;
   let current = visible[0]!;
+  const chosen = chosenSection === null ? undefined : visible.find((section) => section.id === chosenSection);
+  if (chosenSection !== null && !chosen) chosenSection = null;
   const atEnd = scrollEl.scrollTop > 0 && scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 2;
-  if (atEnd) current = visible[visible.length - 1]!;
+  if (chosen) current = chosen;
+  else if (atEnd) current = visible[visible.length - 1]!;
   else {
     for (const section of visible) {
       if (section.getBoundingClientRect().top - top <= 32) current = section;
@@ -777,6 +1256,7 @@ function updateTocCurrent(): void {
 function jumpTo(id: string): void {
   const section = document.getElementById(id);
   if (!section || !bodyEl.contains(section)) return;
+  chosenSection = id;
   section.scrollIntoView?.({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
   section.querySelector<HTMLElement>(".settings-section-title")?.focus({ preventScroll: true });
   for (const link of tocListEl?.querySelectorAll<HTMLButtonElement>("button[data-target]") ?? []) {
@@ -837,7 +1317,6 @@ function markModified(parts: SectionParts, count: number): void {
 /// il confine: rifà il conto invece di leggere una convenzione.
 /// **Tutti i comandi**, e non più i soli comandi del kernel: da quando anche
 async function renderForm(): Promise<HTMLElement[]> {
-  const shortcuts = new Set(allCommands().map((command) => keybindingKey(command.id)));
   // Le scorciatoie **non stanno qui**: sono impostazioni come le altre, e
   // proprio per questo sarebbero venti righe senza gruppo in fondo alla scheda
   // della configurazione. Hanno una scheda loro, ed è la stessa forma — un
@@ -847,14 +1326,15 @@ async function renderForm(): Promise<HTMLElement[]> {
   // come settanta righe senza gruppo la cui etichetta è una chiave nuda. Le
   // disegna la scheda dei componenti, accanto a chi le ha chieste, che è
   // l'unico posto in cui significano qualcosa.
-  const entries = (await settings()).filter(
-    (e) => !shortcuts.has(e.spec.key) && !isPermissionKey(e.spec.key) && !MANAGED_ELSEWHERE.has(e.spec.key),
-  );
+  const entries = formRows(await settings());
   const nodes: HTMLElement[] = [];
   if (entries.length === 0) nodes.push(row("muted settings-note", t("settings.none")));
   const themes = await themeCatalog().catch(() => []);
   await loadOwnListFields(entries);
   const groups = groupEntries(entries);
+  // Ciò che ogni riga mostra si annota quando la riga si disegna: fra una riga
+  // e l'altra può finire una scrittura in volo.
+  const snapshot: FormSnapshot = { schema: schemaOf(entries), rows: new Map() };
   for (const [index, group] of groups.entries()) {
     const parts = sectionBlock(group.title, index);
     const changed = group.rows.filter(isModified);
@@ -862,6 +1342,7 @@ async function renderForm(): Promise<HTMLElement[]> {
     const reset = groupReset(group, changed);
     if (reset) parts.head.append(reset);
     for (const entry of group.rows) {
+      snapshot.rows.set(entry.spec.key, rowSignature(entry));
       // I frammenti CSS e il catalogo dei temi sono blocchi, non righe, e
       // stanno **nel loro gruppo**: in fondo al form finivano sotto
       // «Diagnostica», lontani dall'aspetto che cambiano.
@@ -869,16 +1350,26 @@ async function renderForm(): Promise<HTMLElement[]> {
         parts.body.append(renderCssSnippets(entry));
         continue;
       }
-      const item = renderRow(entry);
+      const item = renderFormRow(entry);
       if (entry.spec.key === FRAME_KEY) await decorateFrame(item, entry);
       parts.body.append(item);
     }
-    if (themes.length > 0 && group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
-      parts.body.append(renderThemeCatalog(themes));
+    if (group.rows.some((entry) => entry.spec.key === THEME_KEY)) {
+      // Con la modalità sviluppatore il blocco c'è anche senza temi
+      // installati: è da lì che se ne installa uno.
+      const developer = entries.some((entry) => entry.spec.key === DEVELOPER_MODE_KEY && entry.value === true);
+      if (themes.length > 0 || developer) parts.body.append(renderThemeCatalog(themes, developer));
+      // La cartella collegata si chiede all'host a ogni disegno: è lui che la
+      // guarda, e la storia dei rimontaggi resta in `theme/theme.ts`.
+      const link = developer ? await refreshThemeLink().catch(() => null) : null;
+      const owner = settingsLifetime;
+      if (link !== null && owner) parts.body.append(renderLinkedFolder({ lifetime: owner, rerender: render }, link));
+      for (const diagnosis of themeDiagnoses()) parts.body.append(renderDiagnosis(diagnosis));
     }
     nodes.push(parts.section);
   }
   nodes.push(await renderProfiles(groups.length));
+  formSnapshots.set(nodes, snapshot);
   return nodes;
 }
 
@@ -892,6 +1383,21 @@ const MANAGED_ELSEWHERE = new Set(SETTINGS_WITH_THEIR_OWN_GESTURE);
 /// offre, e cambiarla può chiedere di riaprire la finestra.
 const FRAME_KEY = "chrome.frame";
 
+/// Le chiavi il cui valore cambia più della loro riga: il tema (il catalogo
+/// accanto), i frammenti CSS (un blocco, non una riga), la cornice (le scelte
+/// dipendono dal sistema e dall'avviso di riapertura) e la lingua (tutte le
+/// parole).
+const WHOLE_FORM_KEYS = new Set([THEME_KEY, CSS_SNIPPETS_KEY, FRAME_KEY, LANGUAGE_KEY]);
+
+/// Una riga della scheda della configurazione con le sue note: la stessa nel
+/// disegno intero e nell'aggiornamento per riga, che sennò la perderebbe. La
+/// cornice no: è in `WHOLE_FORM_KEYS`, e la sua veste chiede all'host.
+function renderFormRow(entry: SettingEntry): HTMLElement {
+  const item = renderRow(entry);
+  if (entry.spec.key === MOTION_KEY) decorateMotion(item, entry);
+  return item;
+}
+
 async function decorateFrame(item: HTMLElement, entry: SettingEntry): Promise<void> {
   const [capabilities, reopen] = await Promise.allSettled([
     Promise.resolve().then(() => api.frameCapabilities()),
@@ -904,8 +1410,8 @@ async function decorateFrame(item: HTMLElement, entry: SettingEntry): Promise<vo
     choice instanceof HTMLOptionElement ? choice.value : choice.dataset.choice ?? "";
   if (capabilities.status === "fulfilled") {
     for (const choice of choices) {
-      // Solo spegnere: una riga in volo ha già i suoi controlli disabilitati,
-      // e riaccenderli qui aprirebbe una seconda scrittura della stessa chiave.
+      // Solo spegnere: una scelta che il sistema non offre non si sceglie; le
+      // altre restano come le ha disegnate la riga.
       if (valueOf(choice) === "system" && !capabilities.value.system) choice.disabled = true;
       if (valueOf(choice) === "custom" && !capabilities.value.custom) choice.disabled = true;
     }
@@ -918,6 +1424,20 @@ async function decorateFrame(item: HTMLElement, entry: SettingEntry): Promise<vo
     text?.append(row("setting-source", t("settings.frame.reopen")));
   }
   if (control?.getAttribute("role") === "radiogroup") settleRadioGroup(control);
+}
+
+/// Il perché del valore di partenza delle animazioni, quando non è «segue il
+/// sistema». Il default lo decide l'host (`fub_host::settings::motion_default`),
+/// e oggi è «ridotte» per una sola ragione: la WebKitGTK di questo sistema
+/// sfarfalla dopo un'animazione. Un'altra ragione domani vorrà la sua frase.
+function decorateMotion(item: HTMLElement, entry: SettingEntry): void {
+  if (entry.spec.kind.kind !== "choice" || entry.spec.kind.default !== "reduced") return;
+  const note = row("setting-source", t("settings.motion.webkitgtk_default"));
+  note.id = `setting-${entry.spec.key}-default-why`;
+  item.querySelector(".setting-text")?.append(note);
+  const control = item.querySelector<HTMLElement>("select, [role=radiogroup]");
+  const existing = control?.getAttribute("aria-describedby");
+  control?.setAttribute("aria-describedby", [existing, note.id].filter(Boolean).join(" "));
 }
 
 function disableControl(control: HTMLElement | null): void {
@@ -979,6 +1499,9 @@ function renderCssSnippets(entry: SettingEntry): HTMLElement {
   blockHead(panel, entry.spec.label, t("settings.css.hint"));
   const source = document.createElement("textarea");
   source.className = "setting-code";
+  // L'id è l'identità del campo fra due ridisegni: con lui tornano il fuoco
+  // e il testo non ancora salvato (#401).
+  source.id = `setting-${CSS_SNIPPETS_KEY}`;
   source.setAttribute("aria-label", entry.spec.label);
   source.rows = 7;
   source.spellcheck = false;
@@ -1044,10 +1567,23 @@ function renderCssSnippets(entry: SettingEntry): HTMLElement {
   return panel;
 }
 
+/// Il profilo che il kernel crea di serie: il suo nome è un id (`Default`, come
+/// `default_profile_name` in `settings.rs`), e si mostra nella lingua di chi
+/// guarda. L'id resta quello che si manda all'host.
+const DEFAULT_PROFILE = "Default";
+
+function profileLabel(profile: string): string {
+  return profile === DEFAULT_PROFILE ? t("settings.profiles.default") : profile;
+}
+
 /// I profili: una sezione in fondo alla configurazione, una scheda per
 /// ambito. In vista resta il gesto comune — quale profilo è attivo e come
 /// cambiarlo —; quelli rari (duplicare, esportare, importare, azzerare) stanno
 /// in un riquadro che si apre.
+///
+/// Un errore dell'host qui dice **che cosa** non è riuscito, con la frase della
+/// sua specie (`errorText(e, "specie")`): il suo messaggio è in inglese e lo scrive il
+/// kernel per chi lo cerca nel registro, non per chi guarda il pannello.
 async function renderProfiles(index: number): Promise<HTMLElement> {
   const scopes: { scope: SettingScope; vault?: string }[] = [{ scope: "machine" }];
   if (state.vaultRoot) scopes.push({ scope: "vault", vault: state.vaultRoot });
@@ -1075,11 +1611,11 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     parts.body.append(box);
     const result = results[position]!;
     if (result.status === "rejected") {
-      text.append(row("muted", t("settings.profiles.unavailable", { reason: errorText(result.reason) })));
+      text.append(row("muted", t("settings.profiles.unavailable", { reason: errorText(result.reason, "specie") })));
       continue;
     }
     const { active, names } = result.value;
-    text.append(row("setting-source", t("settings.profiles.active", { profile: active })));
+    text.append(row("setting-source", t("settings.profiles.active", { profile: profileLabel(active) })));
     const feedback = row("setting-source", t("settings.profiles.hint"));
     feedback.setAttribute("role", "status");
     text.append(feedback);
@@ -1088,7 +1624,7 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     for (const profile of names) {
       const option = document.createElement("option");
       option.value = profile;
-      option.textContent = profile;
+      option.textContent = profileLabel(profile);
       option.selected = profile === active;
       choice.append(option);
     }
@@ -1100,10 +1636,13 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     const nameInput = document.createElement("input");
     nameInput.type = "text";
     nameInput.className = "setting-input";
+    // Gli id tengono nome e JSON non ancora usati attraverso un ridisegno (#401).
+    nameInput.id = `settings-profile-${scope}-name`;
     nameInput.placeholder = t("settings.profiles.new_name");
     nameInput.setAttribute("aria-label", t("settings.profiles.new_name"));
     const json = document.createElement("textarea");
     json.className = "setting-code";
+    json.id = `settings-profile-${scope}-json`;
     json.rows = 5;
     json.spellcheck = false;
     json.placeholder = t("settings.profiles.json_placeholder");
@@ -1118,10 +1657,14 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
         if (settingsLifetime?.closed || !box.isConnected) return;
         if (redraw) {
           feedback.textContent = t("settings.profiles.saved");
+          // Il gesto riuscito ha usato nome e JSON: il ridisegno riparte
+          // vuoto, come sempre, e non li riporta come bozza.
+          nameInput.value = "";
+          json.value = "";
           await render();
         }
       } catch (error) {
-        if (box.isConnected) feedback.textContent = t("settings.profiles.not_changed", { reason: errorText(error) });
+        if (box.isConnected) feedback.textContent = t("settings.profiles.not_changed", { reason: errorText(error, "specie") });
       } finally {
         busy = false;
         for (const button of box.querySelectorAll<HTMLButtonElement>("button")) button.disabled = false;
@@ -1158,21 +1701,26 @@ async function renderProfiles(index: number): Promise<HTMLElement> {
     });
     button(transfer, t("settings.profiles.reset"), () => {
       void (async () => {
-        const accepted = await confirm(t("settings.profiles.reset_confirm", { profile: choice.value }), {
+        const accepted = await confirm(t("settings.profiles.reset_confirm", { profile: profileLabel(choice.value) }), {
           title: t("settings.profiles.reset_title"), okLabel: t("settings.profiles.reset_ok"), danger: true,
         });
         if (accepted && box.isConnected) await perform(() => api.resetSettingsProfile(scope, choice.value, vault));
-      })().catch((error: unknown) => { feedback.textContent = t("settings.profiles.reset_cancelled", { reason: errorText(error) }); });
+      })().catch((error: unknown) => { feedback.textContent = t("settings.profiles.reset_cancelled", { reason: errorText(error, "specie") }); });
     }, true);
     inside.append(duplicateRow, json, transfer, row("muted", t("settings.profiles.frame_hint")));
   }
   return parts.section;
 }
 
-function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
+function renderThemeCatalog(themes: ThemeInfo[], developer: boolean): HTMLElement {
   const panel = document.createElement("div");
   panel.className = "setting-row setting-block";
-  const text = blockHead(panel, t("settings.themes.title"), t("settings.themes.preview_hint"));
+  panel.dataset.themeCatalog = "";
+  const text = blockHead(
+    panel,
+    t("settings.themes.title"),
+    t(themes.length > 0 ? "settings.themes.preview_hint" : "settings.themes.none_installed"),
+  );
   panel.dataset.search = normalizeSearch([
     t("settings.themes.title"),
     t("settings.themes.preview_hint"),
@@ -1259,19 +1807,62 @@ function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
   cancelButton.addEventListener("click", () => {
     void write(() => cancelThemePreview());
   });
-  actions.append(applyButton, cancelButton, status);
+  if (themes.length > 0) actions.append(applyButton, cancelButton);
+  // Il gesto di chi scrive un tema; l'host lo rifiuta comunque a chiave spenta.
+  if (developer) {
+    const owner = settingsLifetime;
+    if (owner) {
+      const host = { lifetime: owner, rerender: render };
+      actions.append(installFolderButton(host), linkFolderButton(host), catalogPageButton());
+    }
+  }
   refreshPreviewState();
 
-  text.append(
-    row(
-      "setting-source",
-      t("settings.themes.source", {
-        ids: themes.map((theme) => theme.manifest.id).join(", "),
-      }),
-    ),
-  );
-  panel.append(control, actions);
+  if (themes.length > 0) {
+    text.append(
+      row(
+        "setting-source",
+        t("settings.themes.source", {
+          ids: themes.map((theme) => theme.manifest.id).join(", "),
+        }),
+      ),
+    );
+    panel.append(control);
+  }
+  panel.append(actions);
+  if (themes.length > 0) panel.append(status);
   return panel;
+}
+
+/// Il bottone che apre «Tutti i componenti» (`dev/catalogo/pagina.ts`): la
+/// pagina arriva con un `import()` (`dev/catalogo/carica.ts`), così non pesa
+/// su chi non scrive temi.
+/// Vive quanto l'apertura del pannello: chiuse le impostazioni (anche da un
+/// `vault_closed`), si chiude anche lei.
+function catalogPageButton(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "settings-btn";
+  button.dataset.devAction = "catalog";
+  button.textContent = t("settings.themes.catalog");
+  button.addEventListener("click", () => {
+    // L'apertura del pannello di questo clic. Quando la pagina arriva, si apre
+    // solo se il pannello è ancora quello e il bottone ancora lì: chiuse (e
+    // magari riaperte) le Impostazioni, o cambiata scheda, il clic è vecchio.
+    const owner = openedLifetime;
+    if (!owner) return;
+    const current = (): boolean => owner === openedLifetime && !owner.closed && button.isConnected;
+    loadCatalogPage()
+      .then((page) => {
+        if (current()) page.openCatalogPage(owner);
+      })
+      .catch((error: unknown) => {
+        if (current()) {
+          notify(t("commands.failed", { command: t("settings.themes.catalog"), reason: errorText(error) }), "guasto");
+        }
+      });
+  });
+  return button;
 }
 
 /// Una riga di impostazione.
@@ -1332,6 +1923,7 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   const control = document.createElement("div");
   control.className = "setting-control";
   control.append(field(entry));
+  for (const part of control.children) viewParts.add(part);
   // Chi arriva al campo col lettore di schermo sente anche cosa fa e dove
   // vale, non solo l'etichetta: la prosa sotto la riga era solo per gli occhi.
   for (const focusable of control.querySelectorAll<HTMLElement>("input, select, textarea, [role=radiogroup], [role=group]")) {
@@ -1346,9 +1938,9 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   if (pending) text.append(rowPending());
   else if (failure) text.append(rowErrorNode(failure));
 
-  // Disabilitare solo la riga in volo, «azzera» compreso: le altre righe
-  // restano scrivibili.
-  if (pending) {
+  // Spegnere solo la riga in volo che scrive un cambio (`block`), «azzera»
+  // compreso; le altre righe in volo restano usabili (A03).
+  if (blockedRows.has(entry.spec.key)) {
     for (const node of el.querySelectorAll("input, select, button")) {
       (node as HTMLInputElement | HTMLSelectElement | HTMLButtonElement).disabled = true;
     }
@@ -1435,8 +2027,16 @@ const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
     () => import("../editors/spatial/toolbar-field").then(({ toolbarField, describeToolbar }) => ({ field: toolbarField, describe: describeToolbar })),
   ],
   [
+    "canvas.toolbar",
+    () => import("../editors/canvas/toolbar-field").then(({ canvasToolbarField, describeCanvasToolbar }) => ({ field: canvasToolbarField, describe: describeCanvasToolbar })),
+  ],
+  [
     "uri.allowed",
     () => import("../ui/uri-allowed-field").then(({ uriAllowedField, describeUriAllowed }) => ({ field: uriAllowedField, describe: describeUriAllowed })),
+  ],
+  [
+    "map.tile-hosts",
+    () => import("../ui/map-tile-hosts-field").then(({ mapTileHostsField, describeMapTileHosts }) => ({ field: mapTileHostsField, describe: describeMapTileHosts })),
   ],
   [
     "sync.exclude",
@@ -1551,7 +2151,7 @@ function listField(entry: SettingEntry, id: string): HTMLElement {
             entry.spec.key,
             values.filter((_, candidate) => candidate !== index),
           ),
-        );
+        { block: true });
       });
       item.append(remove);
       list.append(item);
@@ -1592,7 +2192,7 @@ function listField(entry: SettingEntry, id: string): HTMLElement {
     input.removeAttribute("aria-invalid");
     void writeRow(entry.spec.key, checked.value, async () => {
       await api.setSetting(entry.spec.key, [...values, checked.value]);
-    });
+    }, { block: true });
   });
   editor.append(form);
   return editor;
@@ -1626,7 +2226,7 @@ function field(entry: SettingEntry): HTMLElement {
       const own = ownListFields.get(entry.spec.key);
       if (own !== undefined) {
         return own.field(entry, id, (value, part, checked) => {
-          void writeRow(entry.spec.key, `${part}: ${show(checked)}`, () => api.setSetting(entry.spec.key, value));
+          void writeRow(entry.spec.key, `${part}: ${show(checked)}`, () => api.setSetting(entry.spec.key, value), { block: true });
         });
       }
       return editableListKeys.has(entry.spec.key)
@@ -1672,24 +2272,56 @@ function switchField(entry: SettingEntry, id: string): HTMLElement {
 /// controllano i due estremi, che è ciò che il kernel verifica davvero.
 function numberInput(entry: SettingEntry, id: string, min: number | null, max: number | null): HTMLInputElement {
   const input = document.createElement("input");
-  input.type = "number";
+  // Un testo e non un `input[type=number]`: quello legge a modo suo ciò che si
+  // scrive («1,5» diventava 15 in WebKit) e al codice dà un valore vuoto per
+  // tutto ciò che non capisce. Il numero lo legge `parseSettingNumber`, e ciò
+  // che non è il numero scritto si rifiuta col suo motivo, sotto la riga.
+  input.type = "text";
+  input.inputMode = "decimal";
+  input.autocomplete = "off";
+  input.spellcheck = false;
   input.className = "setting-number";
   input.id = id;
   input.value = String(entry.value);
-  if (min !== null) input.min = String(min);
-  if (max !== null) input.max = String(max);
-  input.step = "any";
+  const kind = numberKind(entry, min, max);
   input.addEventListener("change", () => {
-    // `Number("")` è **zero**, non `NaN`: con il solo controllo su `NaN`,
-    // svuotare il campo (o scriverci del testo, che per un `input[number]`
-    // dà lo stesso `value` vuoto) manderebbe uno zero al kernel — accettato
-    // in silenzio ovunque non ci sia un `min` sopra lo zero.
-    if (input.value.trim() === "") return;
-    const n = Number(input.value);
-    if (Number.isNaN(n)) return;
+    const read = parseSettingNumber(input.value, kind, resolvedLanguage());
+    if (!("value" in read)) {
+      refuseRow(entry.spec.key, numberProblemText(read), input.value);
+      return;
+    }
+    const n = read.value;
     void writeRow(entry.spec.key, input.value, () => api.setSetting(entry.spec.key, n));
   });
   return input;
+}
+
+/// La specie numerica di una riga, con gli estremi del suo controllo.
+function numberKind(entry: SettingEntry, min: number | null, max: number | null): Extract<SettingKind, { kind: "number" }> {
+  const kind = entry.spec.kind;
+  return { kind: "number", default: kind.kind === "number" ? kind.default : 0, min, max };
+}
+
+/// Perché un numero non si scrive, nelle parole dell'interfaccia.
+function numberProblemText(read: NumberProblem): string {
+  const bound = (n: number) =>
+    new Intl.NumberFormat(resolvedLanguage(), { useGrouping: false, maximumFractionDigits: 20 }).format(n);
+  switch (read.problem) {
+    case "min":
+      return t("settings.not_changed", { reason: t("settings.number.min", { min: bound(read.min) }) });
+    case "max":
+      return t("settings.not_changed", { reason: t("settings.number.max", { max: bound(read.max) }) });
+    default: {
+      const reasons: Record<typeof read.problem, Key> = {
+        empty: "settings.number.empty",
+        syntax: "settings.number.syntax",
+        finite: "settings.number.finite",
+        precision: "settings.number.precision",
+        ambiguous: "settings.number.ambiguous",
+      };
+      return t("settings.not_changed", { reason: t(reasons[read.problem]) });
+    }
+  }
 }
 
 /// Un numero con un intervallo: il cursore per il gesto, il campo per il
@@ -1723,8 +2355,10 @@ function rangeField(entry: SettingEntry, id: string, control: Extract<Control, {
     if (!Number.isFinite(n)) return;
     void writeRow(entry.spec.key, slider.value, () => api.setSetting(entry.spec.key, n));
   });
+  const kind = numberKind(entry, control.min, control.max);
   number.addEventListener("input", () => {
-    if (number.value.trim() !== "" && Number.isFinite(Number(number.value))) slider.value = number.value;
+    const read = parseSettingNumber(number.value, kind, resolvedLanguage());
+    if ("value" in read) slider.value = String(read.value);
   });
   wrap.append(name, slider, number);
   return wrap;
@@ -1738,9 +2372,24 @@ function textField(entry: SettingEntry, id: string): HTMLElement {
   input.value = String(entry.value);
   const zones = entry.spec.key === TIMEZONE_KEY ? timezoneSuggestions(input) : null;
   input.addEventListener("change", () => {
-    const shortcut = allCommands().some((command) => keybindingKey(command.id) === entry.spec.key);
-    if (shortcut && !validateKeybinding(input.value).valid) {
+    // Una scorciatoia si riconosce dalla forma della chiave (`keys.…`), come
+    // fa il kernel, e non soltanto dall'elenco dei comandi di adesso: quelle
+    // che l'elenco non porta finivano fra le righe sciolte, e lì «xx» si
+    // salvava (IMP-026).
+    const shortcut = commandOfKeybindingKey(entry.spec.key) !== null ||
+      allCommands().some((command) => keybindingKey(command.id) === entry.spec.key);
+    const validation = shortcut ? validateKeybinding(input.value) : null;
+    if (validation && !validation.valid) {
       input.setAttribute("aria-invalid", "true");
+      // Nella scheda delle scorciatoie lo dice già la diagnosi sotto il campo,
+      // mentre si scrive; altrove lo dice la riga, come ogni rifiuto.
+      if (tab !== "shortcuts") {
+        refuseRow(
+          entry.spec.key,
+          t("settings.not_changed", { reason: t(KEYBINDING_REASONS[validation.reason]) }),
+          input.value,
+        );
+      }
       return;
     }
     input.removeAttribute("aria-invalid");
@@ -1760,8 +2409,9 @@ function selectField(entry: SettingEntry, id: string, options: UiOption[]): HTML
   // `settings.json` scritto a mano, o uno schema che ha cambiato le proprie
   // scelte fra due versioni del plugin. Senza questa riga nessuna `option`
   // risulterebbe scelta e il browser mostrerebbe la prima — cioè un valore
-  // falso, che è peggio di un valore strano.
-  const current = String(entry.value);
+  // falso, che è peggio di un valore strano. Una scelta nascosta (un valore di
+  // prima con l'etichetta di un'altra, `visibleChoices`) mostra quella.
+  const current = shownChoice(entry);
   if (!options.some((o) => o.value === current)) {
     const outside = document.createElement("option");
     outside.value = current;
@@ -1773,7 +2423,7 @@ function selectField(entry: SettingEntry, id: string, options: UiOption[]): HTML
     const el = document.createElement("option");
     el.value = option.value;
     el.textContent = optionLabel(option);
-    el.selected = option.value === entry.value;
+    el.selected = option.value === current;
     select.append(el);
   }
   // Di nuovo a tendina piena: `selected` messo su un'opzione non ancora
@@ -1868,7 +2518,7 @@ function timezoneSuggestions(input: HTMLInputElement): HTMLDataListElement | nul
 /// un gesto suo: sceglie la luce della serie, e con un tema installato attivo
 /// nessuna delle tre luci è quella corrente.
 function segmentedField(entry: SettingEntry, id: string, options: UiOption[]): HTMLElement {
-  const current = String(entry.value);
+  const current = shownChoice(entry);
   const customThemeActive = entry.spec.key === THEME_KEY && currentThemeId() !== SERIES_THEME_ID;
   const group = document.createElement("div");
   group.className = "segmented segmented--wide setting-segmented";
@@ -1919,11 +2569,11 @@ const rowErrors = new Map<string, RowError>();
 /// L'esito di una scrittura in volo, vicino al controllo che l'ha chiesta.
 ///
 /// Il testo riusa una chiave esistente via `t()` (nessuna attesa P8): la riga
-/// è marcata `aria-busy` e i suoi controlli sono disabilitati, quindi un
-/// secondo invio dalla stessa riga non parte con valori catturati vecchi.
-/// Le altre righe restano abilitate (blocco minimo).
+/// è marcata `aria-busy`, e un secondo invio dalla stessa riga si mette in fila
+/// dietro quello in volo (`writeRow`).
 function rowPending(): HTMLElement {
   const el = row("setting-pending", t("save.saving"));
+  viewParts.add(el);
   el.setAttribute("role", "status");
   return el;
 }
@@ -1935,6 +2585,7 @@ function rowPending(): HTMLElement {
 /// `role="alert"` lo annuncia a chi non guarda lo schermo.
 function rowErrorNode(err: RowError): HTMLElement {
   const box = document.createElement("div");
+  viewParts.add(box);
   box.className = "setting-error";
   box.setAttribute("role", "alert");
   box.append(row("setting-error-message", err.message));
@@ -1942,64 +2593,145 @@ function rowErrorNode(err: RowError): HTMLElement {
   return box;
 }
 
-/// Scrive una riga, e ridisegna: la sourceLabel cambia insieme al valore, e
-/// un form che non si ridisegnasse mostrerebbe «valore predefinito» sotto un
-/// valore appena scelto.
+/// Come si scrive una riga, oltre al suo valore.
+interface RowWriteOptions {
+  /// La frase da dire se non è andata: un permesso non cambiato e
+  /// un'impostazione non cambiata sono due cose diverse per chi legge, e dirle
+  /// uguali manderebbe a cercare il difetto nella scheda sbagliata.
+  failure?: Key;
+  /// La scrittura è un **cambio rispetto al valore disegnato** (una voce
+  /// aggiunta o tolta da una lista), non un valore intero: una seconda
+  /// scrittura partita dallo stesso disegno perderebbe la prima. La riga in
+  /// volo allora si spegne finché l'esito non la ridisegna.
+  block?: boolean;
+}
+
+/// Una scrittura chiesta da una riga.
+interface RowWrite {
+  attempted: string | null;
+  action: () => Promise<void>;
+  failure: Key;
+}
+
+/// La scrittura che aspetta quella in volo della stessa chiave: una sola, la
+/// più recente. Le richieste di mezzo non partono mai.
+const nextWrites = new Map<string, RowWrite>();
+
+/// Le righe in volo spente (`block`): le sole i cui controlli si disabilitano.
+const blockedRows = new Set<string>();
+
+/// Scrive una riga, e la ridisegna (con `refresh`, la riga sola quando si
+/// può): la sourceLabel cambia insieme al valore, e un form che non si
+/// ridisegnasse mostrerebbe «valore predefinito» sotto un valore appena scelto.
+///
+/// La riga in volo **resta usabile** e il fuoco resta dov'è (A03): dice
+/// l'attesa con `aria-busy` e la riga «Salvataggio…», e chi continua a
+/// scegliere — un cursore tenuto premuto, due clic di fila — non perde il gesto.
+/// Le scritture della stessa chiave sono in fila: una sola in volo, e dietro
+/// solo l'ultima chiesta, che prende il posto di quella che aspettava. Così
+/// all'host arrivano in ordine, l'ultima vince e una vecchia non la può
+/// sovrascrivere. Il ridisegno arriva una volta, quando la fila è vuota.
 ///
 /// `attempted` è l'input che l'utente aveva provato, come lo scriverebbe un
-/// umano (`null` dove non c'è un input: azzera): su errore resta sotto la riga
-/// mentre il controllo torna al valore autorevole. `failure` è la frase da
-/// dire se non è andata: un permesso non cambiato e un'impostazione non
-/// cambiata sono due cose diverse per chi legge, e dirle uguali manderebbe a
-/// cercare il difetto nella scheda sbagliata.
+/// umano (`null` dove non c'è un input: azzera): se l'ultima scrittura della
+/// fila non va, resta sotto la riga mentre il controllo torna al valore
+/// autorevole. L'esito di una scrittura superata da una più nuova non conta:
+/// vale quello della volontà più recente.
 async function writeRow(
   key: string,
   attempted: string | null,
   action: () => Promise<void>,
-  failure: Key = "settings.not_changed",
+  options: RowWriteOptions = {},
 ): Promise<void> {
-  // Dove stava guardando l'utente **prima** di disabilitare la riga: il giro
-  // di pending toglie il focus dal controllo disabilitato, e senza questa
-  // istantanea il giro finale — fotografato a focus già caduto su BODY —
-  // non saprebbe dove rimetterlo (A03).
-  const snapshot = focusSnapshot();
+  const request: RowWrite = { attempted, action, failure: options.failure ?? "settings.not_changed" };
   pinnedRow = key;
+  if (pendingRows.has(key)) {
+    nextWrites.set(key, request);
+    return;
+  }
+  // Dove stava guardando l'utente: se il ridisegno dell'esito toglie il
+  // controllo che aveva il fuoco (lo ricostruisce), il fuoco torna sul
+  // controllo nuovo della stessa riga invece di cadere su BODY (A03). Senza lo
+  // scroll: lo rimette già il ridisegno intero, e la riga sola non lo cambia.
+  const snapshot = focusSnapshot(false);
   pendingRows.add(key);
+  if (options.block) blockedRows.add(key);
   rowErrors.delete(key);
   // Dopo il gesto che l'ha chiesta, non dentro: un radiogroup attiva e poi
-  // sposta il fuoco nello stesso giro, e un bottone disabilitato lì in mezzo
-  // perderebbe il fuoco prima di averlo.
+  // sposta il fuoco nello stesso giro.
   await Promise.resolve();
-  if (pendingRows.has(key)) markPending(key);
-  try {
-    await action();
-    rowErrors.delete(key);
-  } catch (e) {
-    rowErrors.set(key, {
-      message: t(failure, { reason: errorText(e) }),
-      input: attempted ?? "",
-    });
+  if (pendingRows.has(key)) markPending(key, options.block === true);
+  let failed: RowError | null = null;
+  for (let current: RowWrite | undefined = request; current; current = nextWrites.get(key)) {
+    nextWrites.delete(key);
+    try {
+      await current.action();
+      failed = null;
+    } catch (e) {
+      failed = { message: t(current.failure, { reason: errorText(e) }), input: current.attempted ?? "" };
+    }
   }
+  if (failed) rowErrors.set(key, failed);
+  else rowErrors.delete(key);
   pendingRows.delete(key);
-  await render();
-  // Ripara solo ciò che il pending ha rotto: se nel frattempo l'utente si è
-  // spostato (o il watcher ha ridisegnato per un'altra chiave), il focus
-  // attuale non si tocca.
+  blockedRows.delete(key);
+  // Il testo di questa riga ha avuto il suo esito: il ridisegno mostra il
+  // valore autorevole e non lo riporta come bozza (l'input provato, se è
+  // andata male, sta già sotto la riga).
+  writtenRows.add(key);
+  await refresh(key);
+  // Ripara solo ciò che il ridisegno ha rotto: se nel frattempo l'utente si è
+  // spostato, il focus attuale non si tocca.
   if (document.activeElement === document.body) restoreFocus(snapshot);
 }
 
-/// Il giro di pending **sulla riga sola**: ridisegnare l'intero pannello per
-/// disabilitare un controllo faceva lampeggiare tutto e perdere lo scroll. Il
-/// ridisegno completo resta uno, dopo l'esito, perché cambia la provenienza.
-function markPending(key: string): void {
+/// Il giro di pending **sulla riga sola**: la riga dice l'attesa, e solo una
+/// riga `block` spegne i suoi controlli. Il ridisegno resta uno, dopo l'esito,
+/// perché cambia la provenienza.
+function markPending(key: string, block: boolean): void {
   const el = bodyEl.querySelector<HTMLElement>(`[data-setting-key="${key}"]`);
   if (!el) return;
+  // La riga ora mostra l'attesa, che nessuno stato salvato dice: il prossimo
+  // aggiornamento la ridisegna comunque.
+  renderedForm?.rows.set(key, "");
   el.setAttribute("aria-busy", "true");
   el.querySelector(".setting-error")?.remove();
   el.querySelector(".setting-text")?.append(rowPending());
+  if (!block) return;
   for (const node of el.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>("input, select, button")) {
     node.disabled = true;
   }
+}
+
+/// Un valore che la riga stessa rifiuta prima di scriverlo (un numero che non
+/// è il numero scritto, una scorciatoia che non si sa premere): come per un
+/// rifiuto dell'host, il controllo torna al valore salvato e sotto la riga
+/// restano il motivo e ciò che si era scritto. Niente parte verso l'host, e il
+/// valore salvato resta quello che era.
+function refuseRow(key: string, message: string, attempted: string): void {
+  rowErrors.set(key, { message, input: attempted });
+  // Il testo rifiutato non è una bozza da portare oltre il ridisegno: sta già
+  // sotto la riga.
+  writtenRows.add(key);
+  pinnedRow = key;
+  const snapshot = focusSnapshot(false);
+  void refresh(key).then(() => {
+    if (document.activeElement === document.body) restoreFocus(snapshot);
+  });
+}
+
+/// Chi torna a scrivere in una riga rifiutata non porta con sé l'esito di
+/// prima: il motivo valeva per ciò che aveva scritto allora (IMP-022).
+function forgetRowError(target: EventTarget | null): void {
+  if (!(target instanceof Element)) return;
+  const row = target.closest<HTMLElement>("[data-setting-key]");
+  const key = row?.dataset.settingKey;
+  if (!row || key === undefined || !rowErrors.has(key)) return;
+  rowErrors.delete(key);
+  row.querySelector(".setting-error")?.remove();
+  // La riga non dice più ciò che il suo stato ricordato dice: il prossimo
+  // aggiornamento la ridisegna.
+  renderedForm?.rows.set(key, "");
 }
 
 /// Scrive senza una riga (banner dei tasti proposti, catalogo dei temi,
@@ -2028,10 +2760,12 @@ interface FocusSnapshot {
   rowKey: string | null;
   selectionStart: number | null;
   selectionEnd: number | null;
-  scrollTop: number;
+  /// `null` quando lo scroll non va rimesso: un aggiornamento per riga non
+  /// cambia l'altezza di ciò che sta sopra, e leggerlo forzerebbe il layout.
+  scrollTop: number | null;
 }
 
-function focusSnapshot(): FocusSnapshot {
+function focusSnapshot(withScroll = true): FocusSnapshot {
   const focused = document.activeElement;
   return {
     controlId: focused instanceof HTMLElement ? focused.id : "",
@@ -2040,18 +2774,28 @@ function focusSnapshot(): FocusSnapshot {
       focused instanceof HTMLElement
         ? focused.closest("[data-setting-key]")?.getAttribute("data-setting-key") ?? null
         : null,
-    selectionStart:
-      focused instanceof HTMLInputElement && focused.type === "text" ? focused.selectionStart : null,
-    selectionEnd:
-      focused instanceof HTMLInputElement && focused.type === "text" ? focused.selectionEnd : null,
-    scrollTop: scrollEl.scrollTop,
+    selectionStart: hasTextSelection(focused) ? focused.selectionStart : null,
+    selectionEnd: hasTextSelection(focused) ? focused.selectionEnd : null,
+    scrollTop: withScroll ? scrollEl.scrollTop : null,
   };
+}
+
+/// Un campo di testo o un'area: quelli la cui selezione si ritrova dopo il
+/// ridisegno.
+function hasTextSelection(el: Element | null | undefined): el is HTMLInputElement | HTMLTextAreaElement {
+  return el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && el.type === "text");
 }
 
 /// Rimette il focus sullo stesso controllo della stessa riga dopo il rebuild.
 function restoreFocus(snapshot: FocusSnapshot): void {
-  scrollEl.scrollTop = snapshot.scrollTop;
-  if (snapshot.rowKey === null || snapshot.rowKey === "") return;
+  if (snapshot.scrollTop !== null) scrollEl.scrollTop = snapshot.scrollTop;
+  if (snapshot.rowKey === null || snapshot.rowKey === "") {
+    // Fuori da una riga (un bottone di sezione, il catalogo dei temi) vale
+    // soltanto l'id: senza, non c'è un posto sicuro dove rimettere il fuoco.
+    const own = snapshot.controlId ? bodyEl.querySelector<HTMLElement>(`[id="${snapshot.controlId}"]`) : null;
+    if (own && document.activeElement !== own) own.focus({ preventScroll: true });
+    return;
+  }
   const selector = `[data-setting-key="${snapshot.rowKey}"]`;
   const scope = bodyEl.querySelector(selector);
   // Niente `CSS.escape`: gli id contengono punti (`setting-editor.line_numbers`)
@@ -2070,8 +2814,7 @@ function restoreFocus(snapshot: FocusSnapshot): void {
     null;
   if (next && document.activeElement !== next) next.focus({ preventScroll: true });
   if (
-    next instanceof HTMLInputElement &&
-    next.type === "text" &&
+    hasTextSelection(next) &&
     snapshot.selectionStart !== null &&
     snapshot.selectionEnd !== null
   ) {
@@ -2081,6 +2824,133 @@ function restoreFocus(snapshot: FocusSnapshot): void {
       // Un tipo di input che non ammette selezione: il focus basta.
     }
   }
+}
+
+// --- le bozze dei campi (#401) ----------------------------------------------
+//
+// Un ridisegno intero ricostruisce tutte le righe col valore salvato, e un
+// aggiornamento per riga quelle cambiate. Un campo in cui si stava scrivendo —
+// il testo non ancora confermato con Invio o uscendo, la cartella da
+// aggiungere, il CSS — perdeva così quello che c'era scritto. Qui il testo non
+// salvato passa dal controllo vecchio a quello nuovo della stessa riga,
+// riconosciuto dal suo `id`; la riga col fuoco e una bozza, nell'aggiornamento
+// per riga, non si sostituisce affatto.
+//
+// Una bozza resta una bozza: niente la salva da sola. Torna solo nella stessa
+// scheda (cambiandola, o chiudendo il pannello, la pagina di prima non c'è più
+// per nessuno, come il suo fuoco), e cade quando la sua riga ha appena avuto
+// l'esito di una scrittura (`writtenRows`): lì vale il valore autorevole, con
+// l'input provato sotto se è andata male.
+
+/// I controlli in cui si scrive del testo: le caselle, i numeri, le aree.
+function isDraftControl(target: EventTarget | null): target is HTMLInputElement | HTMLTextAreaElement {
+  if (target instanceof HTMLTextAreaElement) return true;
+  return target instanceof HTMLInputElement && DRAFT_INPUT_TYPES.has(target.type);
+}
+
+const DRAFT_INPUT_TYPES = new Set(["text", "number", "search", "url", "email"]);
+
+/// Chi scrive ha toccato questi controlli: un valore messo dal codice non è
+/// una bozza.
+const typedControls = new WeakSet<HTMLInputElement | HTMLTextAreaElement>();
+
+/// Il valore salvato che il controllo mostrava quando è stato disegnato
+/// (`saved`), e quello da cui la bozza è partita (`base`): sono diversi solo
+/// se il salvato della sua chiave è cambiato mentre si scriveva.
+const savedValues = new WeakMap<HTMLInputElement | HTMLTextAreaElement, { saved: string; base: string }>();
+
+/// Le righe la cui scrittura ha appena avuto un esito: il prossimo ridisegno
+/// non porta oltre il loro testo.
+const writtenRows = new Set<string>();
+
+/// Vero mentre il corpo si svuota: un browser che toglie il controllo col
+/// fuoco può dargli un `blur`, e quello non è un'uscita di chi scrive.
+let replacingBody = false;
+
+interface Draft {
+  id: string;
+  value: string;
+  base: string;
+}
+
+/// Il testo non salvato dei controlli di adesso sotto `root`, prima che cambi.
+function takeDrafts(root: HTMLElement): Draft[] {
+  const drafts: Draft[] = [];
+  for (const el of root.querySelectorAll("input, textarea")) {
+    if (!isDraftControl(el) || el.id === "" || !typedControls.has(el)) continue;
+    const state = savedValues.get(el);
+    if (!state || el.value === state.saved) continue;
+    const key = el.closest("[data-setting-key]")?.getAttribute("data-setting-key") ?? null;
+    if (key !== null && writtenRows.has(key)) continue;
+    drafts.push({ id: el.id, value: el.value, base: state.base });
+  }
+  return drafts;
+}
+
+/// Rimette ogni bozza sul controllo nuovo con lo stesso `id`.
+///
+/// Se il salvato nel frattempo è diventato proprio la bozza, non c'è più niente
+/// da portare. Se il salvato della sua chiave è cambiato da fuori mentre si
+/// scriveva, la bozza resta — cancellarla in silenzio era il difetto — e una
+/// riga sotto lo dice: chi conferma sceglie il suo testo sapendolo.
+///
+/// L'`input` sintetico rifà ciò che il controllo ricalcola mentre si scrive: il
+/// cursore accanto al numero, la diagnosi di una scorciatoia.
+function restoreDrafts(drafts: readonly Draft[], root: HTMLElement): void {
+  for (const draft of drafts) {
+    const el = root.querySelector(`[id="${draft.id}"]`);
+    if (!isDraftControl(el)) continue;
+    const saved = el.value;
+    if (saved === draft.value) continue;
+    el.value = draft.value;
+    savedValues.set(el, { saved, base: draft.base });
+    typedControls.add(el);
+    if (el instanceof HTMLInputElement) keepConfirmGesture(el);
+    if (saved !== draft.base) showSavedChanged(el);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+}
+
+/// Il valore salvato di ogni controllo appena disegnato sotto `root` che non
+/// porta già una bozza.
+function rememberSavedValues(root: HTMLElement): void {
+  for (const el of root.querySelectorAll("input, textarea")) {
+    if (isDraftControl(el) && !savedValues.has(el)) savedValues.set(el, { saved: el.value, base: el.value });
+  }
+}
+
+/// Un campo con la bozza rimessa dal codice si conferma ancora come prima:
+/// uscendo o con Invio. Il browser non lo sa — per lui il valore è cambiato
+/// da programma, e il `change` non partirebbe — e allora lo si manda qui, una
+/// volta sola e solo se il browser non l'ha già fatto.
+function keepConfirmGesture(el: HTMLInputElement): void {
+  let changed = false;
+  el.addEventListener("change", () => { changed = true; });
+  const settle = () => {
+    if (changed || replacingBody || !el.isConnected || el.disabled) return;
+    if (el.value === savedValues.get(el)?.saved) return;
+    changed = true;
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  el.addEventListener("blur", settle);
+  // Al rilascio di Invio e non alla pressione: il `change` che il browser
+  // manda su Invio, quando lo manda, è già arrivato.
+  el.addEventListener("keyup", (event) => {
+    if (event.key === "Enter") settle();
+  });
+}
+
+/// La riga che dice che il salvato è cambiato da fuori mentre si scriveva.
+function showSavedChanged(el: HTMLInputElement | HTMLTextAreaElement): void {
+  const note = row("setting-source", t("settings.draft.saved_changed"));
+  viewParts.add(note);
+  note.id = `${el.id}-changed`;
+  note.setAttribute("role", "status");
+  const text = el.closest("[data-setting-key]")?.querySelector(".setting-text");
+  if (text) text.append(note);
+  else el.insertAdjacentElement("afterend", note);
+  const existing = el.getAttribute("aria-describedby");
+  el.setAttribute("aria-describedby", [note.id, ...(existing ? [existing] : [])].join(" "));
 }
 
 // --- la scheda delle scorciatoie (§18.2) ------------------------------------
@@ -2152,18 +3022,23 @@ async function drawSuggestedKeys(): Promise<HTMLElement[]> {
   return [box];
 }
 
+/// Le parole di ciò che non va in una scorciatoia scritta.
+const KEYBINDING_REASONS: Record<Extract<KeybindingValidation, { valid: false }>["reason"], Key> = {
+  "empty-alternative": "settings.shortcut.empty_alternative",
+  "too-many": "settings.shortcut.too_many",
+  "invalid-chord": "settings.shortcut.invalid_chord",
+  duplicate: "settings.shortcut.duplicate",
+};
+
 function shortcutDiagnostic(command: CommandEntry, binding: string, commands: CommandEntry[]): string {
   const validation = validateKeybinding(binding);
   if (!validation.valid) {
-    const descriptions: Record<typeof validation.reason, Key> = {
-      "empty-alternative": "settings.shortcut.empty_alternative",
-      "too-many": "settings.shortcut.too_many",
-      "invalid-chord": "settings.shortcut.invalid_chord",
-      duplicate: "settings.shortcut.duplicate",
-    };
-    return t("settings.shortcut.invalid_unsaved", { reason: t(descriptions[validation.reason]) });
+    return t("settings.shortcut.invalid_unsaved", { reason: t(KEYBINDING_REASONS[validation.reason]) });
   }
-  const proposed = commands.map((item) => item.id === command.id ? { ...item, binding } : item);
+  // Il campo vuoto è «nessuna scorciatoia», come nel modello dei comandi
+  // (`binding: null`), non una scorciatoia scritta male (IMP-140).
+  const proposed = commands.map((item) =>
+    item.id === command.id ? { ...item, binding: binding.trim() === "" ? null : binding } : item);
   const issues = keybindingIssues(proposed)
     .filter((issue) => issue.type === "invalid"
       ? issue.command.id === command.id
@@ -2208,7 +3083,12 @@ async function renderShortcuts(): Promise<HTMLElement[]> {
       diagnostic.id = `shortcut-issue-${command.id.replace(/[^a-z0-9_-]/gi, "-")}`;
       input.setAttribute("aria-describedby", diagnostic.id);
       const update = () => {
-        diagnostic.textContent = shortcutDiagnostic(command, input.value, commands);
+        const issue = shortcutDiagnostic(command, input.value, commands);
+        diagnostic.textContent = issue;
+        // La riga dice da sé che c'è un problema: la pelle la veste con
+        // `[data-issue]`. Un `:has(… :not(:empty)) + *` costava in WebKit
+        // ogni testo cambiato in tutta la finestra (vedi `performance-webview.md`).
+        element.toggleAttribute("data-issue", issue !== "");
         if (validateKeybinding(input.value).valid) input.removeAttribute("aria-invalid");
         else input.setAttribute("aria-invalid", "true");
       };
@@ -2256,6 +3136,7 @@ async function renderComponents(): Promise<HTMLElement[]> {
     settings(),
     Promise.resolve().then(() => api.pluginBudgetSnapshot()),
     Promise.resolve().then(() => api.pluginLimitedMode()),
+    componentsPage.show(),
   ]);
   const installed = installedResult.status === "fulfilled" ? installedResult.value : [];
   const bundles = bundleResult.status === "fulfilled" ? bundleResult.value : [];
@@ -2274,7 +3155,6 @@ async function renderComponents(): Promise<HTMLElement[]> {
   // contenuto, e non deve pesare quanto i componenti.
   const notes = document.createElement("div");
   notes.className = "settings-note";
-  notes.append(row("muted", t("settings.components_hint")));
   const status = document.createElement("div");
   status.className = "settings-status";
   status.setAttribute("aria-label", t("settings.components.runtime"));
@@ -2297,7 +3177,7 @@ async function renderComponents(): Promise<HTMLElement[]> {
     status.append(row("setting-source", t("settings.read_failed", { reason: errorText(entryResult.reason) })));
   }
   notes.append(status);
-  const nodes: HTMLElement[] = [notes];
+  const nodes: HTMLElement[] = [componentsPage.element, notes];
   let index = 0;
 
   const add = sectionBlock(t("settings.components.add"), index++, { card: false });
@@ -2307,9 +3187,10 @@ async function renderComponents(): Promise<HTMLElement[]> {
   add.body.append(installCard, renderCatalogSearch(installed));
   nodes.push(add.section);
 
-  if (native.length > 0) {
-    const bundled = sectionBlock(t("settings.components.bundled"), index++, { card: false });
-    for (const bundle of native) bundled.body.append(renderComponent(bundle, forKey));
+  const guarded = native.filter((bundle) => rows(bundle).length > 0);
+  if (guarded.length > 0) {
+    const bundled = sectionBlock(t("settings.components.bundled_permissions"), index++, { card: false });
+    for (const bundle of guarded) bundled.body.append(renderBundlePermissions(bundle, forKey));
     nodes.push(bundled.section);
   }
 
@@ -2364,7 +3245,7 @@ function renderCatalogSearch(installed: InstalledPluginInfo[]): HTMLElement {
     });
   });
   search.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") { event.preventDefault(); run.click(); }
+    if (event.key === "Enter" && !composingKey(event)) { event.preventDefault(); run.click(); }
   });
   const form = document.createElement("div");
   form.className = "settings-actions";
@@ -2535,37 +3416,21 @@ function permissionDetails(
   return details;
 }
 
-/// Un componente distribuito con Fub conserva il proprio interruttore runtime e
-/// le preferenze granulari dei permessi. Il percorso installato sotto è
-/// separato: l'autorità persistita è l'identità dell'installazione.
-function renderComponent(bundle: BundleInfo, forKey: EntryMap): HTMLElement {
+/// I permessi di un componente distribuito con Fub. Acceso e spento si
+/// decidono nella pagina «Componenti» qui sopra (`components_apply`): qui
+/// restano soltanto le preferenze granulari dei permessi, che sono sicurezza e
+/// non scelta di che cosa usare.
+function renderBundlePermissions(bundle: BundleInfo, forKey: EntryMap): HTMLElement {
   const card = document.createElement("div");
   card.className = "settings-card settings-component";
-  const el = document.createElement("div");
-  el.className = "setting-row";
+  card.dataset.bundlePermissions = bundle.id;
   const text = document.createElement("div");
   text.className = "setting-text";
-  const label = document.createElement("label");
+  const label = document.createElement("span");
+  label.className = "setting-label";
   label.textContent = bundle.name;
-  label.htmlFor = `bundle-${bundle.id}`;
   text.append(label, row("muted", `${bundle.id} · ${t(TRUST_LABELS[bundle.trust])}`));
-  const input = switchInput(`bundle-${bundle.id}`, bundle.mounted);
-  const pendingKey = `bundle:${bundle.id}`;
-  input.disabled = pendingComponents.has(pendingKey);
-  input.addEventListener("change", () => {
-    beginComponentAction(
-      pendingKey,
-      [card],
-      () => api.setPluginEnabled(bundle.id, input.checked),
-      "settings.component_not_changed",
-    );
-  });
-  const control = document.createElement("div");
-  control.className = "setting-control";
-  control.append(input);
-  el.append(text, control);
-  card.append(el);
-
+  card.append(text);
   const hints = [t("settings.permissions.hint")];
   if (!bundle.mounted) hints.push(t("settings.permissions.off_hint"));
   card.append(permissionDetails(`bundle:${bundle.id}`, rows(bundle), hints, (permission) => renderPermission(permission, forKey.get(permission.key))));
@@ -2846,7 +3711,7 @@ function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HT
   const input = switchInput(`permission-${p.key}`, granted);
   input.setAttribute("aria-label", t("settings.permission.grant", { cosa: p.message }));
   input.addEventListener("change", () => {
-    void writeRow(p.key, show(input.checked), () => api.setSetting(p.key, input.checked), "settings.permission_not_changed");
+    void writeRow(p.key, show(input.checked), () => api.setSetting(p.key, input.checked), { failure: "settings.permission_not_changed" });
   });
   const control = document.createElement("div");
   control.className = "setting-control";
@@ -2854,7 +3719,7 @@ function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HT
   el.append(control);
   if (pending) {
     text.append(rowPending());
-    input.disabled = true;
+    if (blockedRows.has(p.key)) input.disabled = true;
   } else if (failure) text.append(rowErrorNode(failure));
   if (!granted) text.append(row("setting-source", t("settings.permission.denied")));
   return el;
@@ -2891,7 +3756,9 @@ async function renderAbout(): Promise<HTMLElement[]> {
   source.target = "_blank";
   source.rel = "noopener noreferrer";
   source.textContent = t("about.source");
-  versionRow.append(versionText, source);
+  // Marcuzzo, il logo (D26), accanto alla versione.
+  versionRow.classList.add("about-version");
+  versionRow.append(marcuzzoElement("about-logo marcuzzo"), versionText, source);
   about.body.append(versionRow);
 
   const check = updateChecker?.state() ?? { kind: "idle" as const };

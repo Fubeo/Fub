@@ -9,7 +9,8 @@ description = "Official features as native trait implementations: backlink, sear
 # Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
 # (`src/inventory.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
 # quindi non è mai il documento a dire cosa esiste. Il default è **tutto**, cioè
-# l'app che spediamo, con una sola eccezione dichiarata (`draw`, più sotto):
+# l'app che spediamo, con le eccezioni dichiarate (`draw` e `engine-drawing`,
+# che lo accende, più sotto):
 # spegnere è una scelta di chi compila, non un difetto da ricordarsi di
 # correggere.
 #
@@ -35,6 +36,7 @@ default = [
     "commands",
     "blocks",
     "base",
+    "tasks",
     "formatting",
     "proof",
     "rich",
@@ -45,7 +47,7 @@ default = [
     "lavagna",
     "craft",
 ]
-search = ["dep:tantivy", "dep:regex"]
+search = ["dep:tantivy", "dep:regex", "dep:regex-syntax"]
 versioning = []
 backlinks = []
 outline = []
@@ -77,18 +79,33 @@ blocks = []
 # sono comandi di `properties`: stessa dipendenza di funzionamento del template,
 # ripetuta nel manifest.
 base = ["dep:fub-format-base", "properties"]
+# I compiti del vault: la vista che raccoglie i compiti aperti di tutte le note e ne
+# spunta uno col comando `note.task.toggle`. Le note con compiti aperti le dà
+# `query_index` (la foglia `task:todo`, che risponde l'indice di ricerca), quindi
+# la vista non può leggere senza `search`: è una dipendenza di funzionamento,
+# come quella di `trash` da `commands`. Nel manifest non è un `requires` perché
+# `search` non offre un servizio; se il vault spegne la ricerca, la vista lo dice.
+# La domanda del compito successivo (`tasks/reminders.rs`) applica la regola
+# della ricorrenza di `note.task.toggle`, che sta in `commands::recurrence`:
+# dipendenza di compilazione.
+tasks = ["search", "commands"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
 # I disegni: il comando che ne fa nascere uno e l'export in PNG, JPEG, SVG,
-# PDF, Excalidraw e draw.io. È l'unica feature **fuori** dal default, ed è una scelta e non una
+# PDF, Excalidraw e draw.io. È fuori dal default (con `engine-drawing`, che
+# la accende), ed è una scelta e non una
 # dimenticanza: porta un rasterizzatore, un convertitore PDF e i caratteri di
 # Fub incorporati nel binario, e li porta solo con il formato dei disegni, che
 # sta dietro la feature `draw` di `fub-host`. Chi compila senza disegni non
 # paga niente di tutto questo; la regola è presidiata da
 # `.github/scripts/check-cargo-feature-default.mjs` e da
 # `tests/cargo_features.rs`. Con i disegni viene l'export delle annotazioni dei
-# PDF, che porta un lettore e scrittore di PDF e un rasterizzatore di PDF.
+# PDF, che porta un lettore e scrittore di PDF e un rasterizzatore di PDF. E
+# con i disegni viene la prova del motore del PDF delle note (`pdf_export`,
+# ADR 0247), che ne usa i caratteri, `svg2pdf`, `lopdf` e `hayro`, e aggiunge
+# lo scrittore dei PDF e il sotto-insieme dei caratteri che `svg2pdf` porta
+# già: nessun crate nuovo nel `Cargo.lock`.
 draw = [
     "dep:fub-format-svg",
     "dep:fub-scene",
@@ -106,13 +123,21 @@ draw = [
     "dep:write-fonts",
     "dep:kurbo",
     "dep:wuff",
+    "dep:pdf-writer",
+    "dep:subsetter",
 ]
+# Il Motore del disegno: solo la sua riga della mappa (`src/componenti.rs`); il
+# motore sta in `fub-disegno`, che porta `fub-host` con la sua feature omonima.
+# Il motore porta i disegni, i disegni non portano il motore: spento lui, si
+# disegna con gli strumenti semplici. Fuori dal default come `draw`, che
+# accende.
+engine-drawing = ["draw"]
 # La lavagna: il comando `canvas.apply`, che porta in un `.canvas` le
 # operazioni del suo nucleo. Il nucleo è puro (`serde`, `serde_json`,
 # `thiserror`) e nessun'altra feature lo tira dentro.
 lavagna = ["dep:fub-canvas-core"]
 # Il correttore porta il motore di WordCraft, e nessun altro lo tira dentro.
-proof = ["dep:wordcraft-proof"]
+proof = ["dep:wordcraft-proof", "dep:fub-motori"]
 # I componenti che non sono moduli di questo crate: il codice sta in
 # `fub-host` (e nei formati che porta), qui c'è solo la loro riga della mappa
 # (`src/componenti.rs`). Sono marcatori senza dipendenze, e `fub-host` li
@@ -121,7 +146,11 @@ proof = ["dep:wordcraft-proof"]
 # un'altra riga accende la sua feature, così la mappa di una build parziale si
 # costruisce sempre (`tests/cargo_features.rs`).
 rich = ["engine-documents"]
-xlsx = ["engine-sheets"]
+# `xlsx` non è più soltanto un marcatore: porta anche il comando
+# `note.table.sheet` («Trasforma in foglio»), che scrive il foglio nuovo con
+# `fub-format-xlsx` (i valori e il loro formato numerico). Il motore resta
+# dietro quell'adattatore: qui non entra nessun crate di GridCraft.
+xlsx = ["engine-sheets", "dep:fub-format-xlsx"]
 engine-documents = []
 engine-sheets = []
 # Sincronizzazione, pubblicazione, aggiornamenti e anteprime dei link: i bundle
@@ -139,6 +168,10 @@ fub-abi = { workspace = true }
 fub-componenti = { workspace = true }
 serde = { workspace = true }
 fub-format-base = { workspace = true, optional = true }
+# Dietro `xlsx`: «Trasforma in foglio» scrive la cartella nuova coi valori
+# della tabella (`fub_format_xlsx::values`). Come gli altri formati qui sopra
+# non porta il kernel; GridCraft lo vede soltanto lui.
+fub-format-xlsx = { workspace = true, optional = true }
 # Dietro `draw`: un disegno nuovo lo scrive `serialize` del provider dei
 # disegni, e l'id del formato è il suo. Come `fub-format-base` per `base`, il
 # formato è una libreria del contratto e non porta il kernel.
@@ -162,15 +195,20 @@ tantivy = { version = "0.26", optional = true, default-features = false, feature
     "stemmer",
 ] }
 regex = { workspace = true, optional = true }
-# Dietro `draw`, e solo lì. `resvg` senza i default, che sono `system-fonts` e
+regex-syntax = { workspace = true, optional = true }
+# Dietro `draw`, e solo lì. `resvg` senza i default (lo dice la radice), che sono `system-fonts` e
 # `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.
 # Restano il testo e la decodifica delle immagini raster, incorporate come
 # `data:` o lette dal vault. `fontdb` sa comunque leggere dal disco, perché `svg2pdf` lo prende
 # con le sue feature di serie e le feature si sommano: che non lo faccia lo
 # garantisce il codice, che costruisce il database dai soli byte incorporati, e
 # lo prova un test.
-resvg = { version = "0.45.1", default-features = false, features = ["text", "raster-images"], optional = true }
+resvg = { workspace = true, features = ["text", "raster-images"], optional = true }
 svg2pdf = { version = "0.13.0", optional = true }
+# Dietro `draw`, per `pdf_export`: lo scrittore dei PDF e il sotto-insieme dei caratteri,
+# alle stesse versioni che `svg2pdf` porta già.
+pdf-writer = { version = "0.12.1", optional = true }
+subsetter = { version = "0.2.6", optional = true }
 # L'encoder del PNG: quello di `tiny-skia` non scrive né la risoluzione
 # (`pHYs`) né il titolo (`iTXt`). È la stessa 0.18 che `image` porta già.
 png = { version = "0.18.1", optional = true }
@@ -200,12 +238,16 @@ fub-scene = { workspace = true, optional = true }
 # parallelismo di `rayon`: le date non si scrivono, e un PDF si legge in un
 # thread solo.
 lopdf = { version = "0.45.0", default-features = false, optional = true }
-# Il rasterizzatore delle pagine del PDF redatto. La 0.5 perché le successive
-# chiedono un compilatore più nuovo di quello del workspace. I caratteri
-# standard del PDF (`embed-fonts`, di serie) sono sostituti con licenza
-# permissiva incorporati nel binario: una pagina che li usa senza incorporarli
-# esce col testo.
-hayro = { version = "0.5.0", optional = true }
+# Il rasterizzatore delle pagine del PDF redatto. La 0.6 perché legge i JPEG
+# 2000 e i fax con le stesse `hayro-jpeg2000` 0.3.5 e `hayro-ccitt` 0.3 del
+# motore del disegno, e disegna con `peniko` 0.6 e `fearless_simd` 0.4 come
+# lui: dalla 0.8 queste salgono di nuovo, e tornerebbero doppie
+# (docs/misure/disegno-versioni-2026-11.md). I caratteri standard del PDF
+# (`embed-fonts`) sono sostituti con licenza permissiva incorporati nel
+# binario: una pagina che li usa senza incorporarli esce col testo. Le CMap
+# incorporate (`embed-cmaps`, di serie dalla 0.6) restano spente, come nella
+# 0.5.
+hayro = { version = "0.6.0", default-features = false, features = ["embed-fonts"], optional = true }
 # L'immagine di una pagina redatta, compressa come un PNG dentro il PDF.
 flate2 = { workspace = true, optional = true }
 # L'impronta del PDF, per dire se è cambiato da quando è stato annotato.
@@ -223,6 +265,8 @@ kurbo = { version = "0.13.1", optional = true }
 wuff = { version = "0.2.9", optional = true }
 # Dietro `proof`: ortografia e grammatica di WordCraft, vendorizzate.
 wordcraft-proof = { workspace = true, optional = true }
+# Dietro `proof`: i dizionari letti sono una cache del budget dei motori.
+fub-motori = { workspace = true, optional = true }
 # La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
 # questo crate il kernel non lo vede per invariante — che è esattamente il
 # motivo per cui `tracing` è diviso in due crate.
@@ -259,3 +303,10 @@ flate2 = { workspace = true }
 [[example]]
 name = "search"
 required-features = ["search"]
+
+# La prova del motore del PDF (ADR 0247): scrive il PDF di un elenco di pagine
+# misurato dal banco (`apps/client/bench/pdf-prova.mjs`), lo ridisegna con
+# `hayro` e ne estrae il testo con `lopdf`.
+[[example]]
+name = "pdf_prova"
+required-features = ["draw"]

@@ -1,0 +1,23 @@
+{
+  "name": "read-two-cards",
+  "description": "Due schede col campo, nell'ordine di nodes; quella senza non compare.",
+  "source": "{\n  \"nodes\": [\n    { \"id\": \"t2\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 1, \"align\": \"end\", \"size\": \"l\" } },\n    { \"id\": \"t0\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120 },\n    { \"id\": \"t1\", \"type\": \"text\", \"text\": \"nota\", \"x\": 0, \"y\": 0, \"width\": 300, \"height\": 120,\n      \"fub:text\": { \"v\": 3 } }\n  ],\n  \"edges\": []\n}\n",
+  "expect": {
+    "cards": [
+      {
+        "node": "t2",
+        "state": "ok",
+        "text": "{\"v\":1,\"size\":\"l\",\"align\":\"end\"}",
+        "size": "l",
+        "align": "end"
+      },
+      {
+        "node": "t1",
+        "state": "kept",
+        "reason": "version",
+        "size": "m",
+        "align": "start"
+      }
+    ]
+  }
+}

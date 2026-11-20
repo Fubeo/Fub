@@ -1,0 +1,4 @@
+{
+  "$comment": "Eccezioni all'audit npm (ADR 0179, .github/scripts/npm-audit.mjs). Solo per pacchetti che non entrano nell'app; ognuna scade e va riguardata.",
+  "eccezioni": []
+}

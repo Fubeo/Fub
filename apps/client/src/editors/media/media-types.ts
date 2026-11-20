@@ -114,11 +114,19 @@ function extOf(path: string): string | null {
   return ext ? ext : null;
 }
 
-/// Un peso leggibile: byte, KiB, MiB.
+/// Un peso leggibile: byte, KiB, MiB, coi decimali nella lingua della shell
+/// («47,1 KiB» in italiano). La lingua è quella che `i18n/strings.ts` scrive
+/// sulla radice del documento, come per gli altri numeri del client; senza,
+/// l'inglese.
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  if (bytes < 1024 * 1024) return `${oneDecimal(bytes / 1024)} KiB`;
+  return `${oneDecimal(bytes / (1024 * 1024))} MiB`;
+}
+
+function oneDecimal(value: number): string {
+  const language = (typeof document === "undefined" ? "" : document.documentElement.lang) || "en";
+  return new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(value);
 }
 
 /// Il MIME dedotto dal nome, o `null` quando non si sa (risposta onesta).

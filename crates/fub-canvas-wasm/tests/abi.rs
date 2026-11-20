@@ -16,8 +16,9 @@ use std::cell::Cell;
 use common::{expect_code, Via};
 use fub_canvas_core::model::MAX_SOURCE_BYTES;
 use fub_canvas_wasm::abi::{
-    canvas_close, canvas_commit, canvas_compile, canvas_model, canvas_node_at, canvas_open,
-    canvas_preview, canvas_reset, fub_alloc, fub_free, result_len, result_ptr,
+    canvas_check, canvas_close, canvas_commit, canvas_compile, canvas_describe, canvas_ink_layers,
+    canvas_model, canvas_node_at, canvas_open, canvas_preview, canvas_reset, fub_alloc, fub_free,
+    result_len, result_ptr,
 };
 use fub_canvas_wasm::api::MAX_INPUT_BYTES;
 use serde_json::{json, Value};
@@ -177,6 +178,21 @@ impl Via for Abi {
             index => Ok(Some(usize::try_from(index).expect("un indice"))),
         }
     }
+    fn ink_layers(&mut self, handle: u32) -> Result<Value, Value> {
+        status(canvas_ink_layers(handle))
+    }
+    fn describe(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value> {
+        // SAFETY: come in `open`.
+        status(with_input(request, |ptr, len| unsafe {
+            canvas_describe(handle, ptr, len)
+        }))
+    }
+    fn check(&mut self, handle: u32, request: &[u8]) -> Result<Value, Value> {
+        // SAFETY: come in `open`.
+        status(with_input(request, |ptr, len| unsafe {
+            canvas_check(handle, ptr, len)
+        }))
+    }
     fn close(&mut self, handle: u32) -> Result<(), Value> {
         match canvas_close(handle) {
             0 => {
@@ -192,6 +208,31 @@ impl Via for Abi {
 #[test]
 fn every_vector_gives_the_text_the_edit_and_the_error() {
     common::every_vector(&mut Abi);
+}
+
+#[test]
+fn every_ink_vector_gives_the_layers_of_the_core() {
+    common::every_ink_vector(&mut Abi);
+}
+
+#[test]
+fn ink_layers_follow_the_commits() {
+    common::ink_layers_follow_commits(&mut Abi);
+}
+
+#[test]
+fn stroke_commits_follow_the_model() {
+    common::stroke_commits_follow_the_model(&mut Abi);
+}
+
+#[test]
+fn describe_gives_the_code_that_rebuilds_the_board() {
+    common::describe_gives_the_code(&mut Abi);
+}
+
+#[test]
+fn check_gives_the_report_of_the_core() {
+    common::check_gives_the_report(&mut Abi);
 }
 
 #[test]
@@ -245,6 +286,15 @@ fn zero_lengths_and_null_pointers() {
         assert_eq!(error_result()["code"], "request");
         assert_eq!(canvas_reset(handle, std::ptr::null(), 2), -1);
         assert_eq!(error_result()["code"], "request");
+        assert_eq!(canvas_describe(handle, std::ptr::null(), 2), -1);
+        assert_eq!(error_result()["code"], "request");
+        assert_eq!(canvas_check(handle, std::ptr::null(), 2), -1);
+        assert_eq!(error_result()["code"], "request");
+        // Una richiesta vuota non è JSON, neanche per le due che leggono.
+        assert_eq!(canvas_describe(handle, std::ptr::null(), 0), -1);
+        assert_eq!(error_result()["code"], "request");
+        assert_eq!(canvas_check(handle, std::ptr::null(), 0), -1);
+        assert_eq!(error_result()["code"], "request");
         // Una richiesta vuota non è JSON.
         assert_eq!(canvas_commit(handle, std::ptr::null(), 0), -1);
         assert_eq!(error_result()["code"], "request");
@@ -293,6 +343,39 @@ fn ten_thousand_rounds_leave_no_memory_behind() {
         // Un errore libera come un successo.
         expect_code(Abi.commit(handle, &request), "stale");
         Abi.close(handle).expect("close");
+    };
+    round();
+    let after_first = live();
+    for _ in 1..10_000 {
+        round();
+    }
+    assert_eq!(
+        live(),
+        after_first,
+        "la memoria viva è cambiata di {} byte in 10 000 giri",
+        live() - after_first
+    );
+}
+
+/// Dopo 10 000 giri di `open`, `canvas_ink_layers`, un `commit`
+/// d'inchiostro, di nuovo `canvas_ink_layers`, `close` e una chiamata su
+/// l'handle chiuso, la memoria viva del filo è quella dopo il primo giro.
+#[test]
+fn ten_thousand_ink_rounds_leave_no_memory_behind() {
+    let source = r#"{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":10,"height":10,"text":"😀"}],"edges":[]}"#;
+    let add = common::add_free_stroke("s-1");
+    let round = || {
+        let (handle, _) = Abi.open(source.as_bytes()).expect("si apre");
+        assert_eq!(
+            Abi.ink_layers(handle).expect("vuota"),
+            json!({ "layers": [] })
+        );
+        Abi.commit(handle, &add).expect("commit");
+        let layers = Abi.ink_layers(handle).expect("dopo");
+        assert_eq!(layers["layers"][0]["strokes"][0]["drawn"], true);
+        Abi.close(handle).expect("close");
+        // Un errore libera come un successo.
+        expect_code(Abi.ink_layers(handle), "handle");
     };
     round();
     let after_first = live();

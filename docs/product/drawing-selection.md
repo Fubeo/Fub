@@ -11,7 +11,7 @@ isolati; e gli oggetti si bloccano e si nascondono uno per uno, non
 solo per livello. Scegliere e isolare non cambiano il file; bloccare e
 nascondere sì, e sono passi di annulla
 (`apps/client/src/editors/spatial/tools/selecting.ts`, l'indice in
-`apps/client/src/editors/spatial/tools/hit.ts`). Lo strumento Lazo se n'è
+`apps/client/src/editors/spatial/tools/hit/`). Lo strumento Lazo se n'è
 andato col livello Standard (decisione 0231): il riquadro che la freccia tira
 sul vuoto sceglie ciò che racchiude per intero.
 
@@ -79,7 +79,7 @@ destro su un oggetto che non è scelto prima lo sceglie.
   gruppo dentro un gruppo isolato, e Menu radiale: sempre meno di nove voci.
 
 Il resto, Incolla nello stesso punto con una selezione, Inverti la
-selezione, Rinomina, Sblocca tutto e Mostra tutto, si trova scrivendo, come dice il piede «Scrivi per cercare».
+selezione, Rinomina, Sblocca tutto e Mostra tutto, si trova scrivendo, come dice il piede «Scrivi per trovare altro».
 
 - **Seleziona tutto** (`Ctrl+A`) e **Inverti la selezione**, che sceglie
   tutto il resto: di un gruppo con dentro un oggetto scelto, gli altri oggetti

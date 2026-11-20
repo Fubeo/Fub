@@ -10,7 +10,7 @@
 // Una coreografia è un gesto che fa partire un movimento, e il gesto che lo
 // disfa. Sta scritta come le scene di `scene.mjs`: da che scena si parte, che
 // cosa si preme, come si riconosce l'arrivo. L'elenco è **chiuso**: ogni file
-// di `src/shells/scrittoio`, di `src/panels`, di `src/kit`, di `src/editors/rich` e dei Blocchi
+// di `src/shells/scrittoio`, di `src/panels`, di `src/kit`, di `src/editors/rich`, della griglia e dei Blocchi
 // che fa partire una corsa di `moto` è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
 // ragione. Lo verifica `motion.test.ts`, perché un movimento nuovo che il banco
 // non guarda è un verde che non dice niente.
@@ -22,7 +22,8 @@
 // 1. lo stato finale col movimento è, al pixel, quello senza;
 // 2. a corsa finita non resta niente: nessuna animazione viva, nessuna
 //    proprietà in linea che il moto ridotto non lascia;
-// 3. si muovono soltanto `transform` e `opacity` (e le loro proprietà singole);
+// 3. si muovono soltanto `transform` e `opacity` (e le loro proprietà singole),
+//    anche fotogramma per fotogramma durante un trascinamento (`perFrame`);
 // 4. a metà corsa si può tornare indietro: si arriva dove si era, e niente
 //    riparte da zero;
 // 5. un'uscita (una coreografia con `exit`) finisce entro `EXIT_LIMIT_MS`:
@@ -36,6 +37,20 @@ export const ALLOWED = Object.freeze(["transform", "opacity", "translate", "scal
 
 /// Quanto può durare un'uscita, ritardo compreso (ms). È la regola 5.
 export const EXIT_LIMIT_MS = 140;
+
+/// Le opzioni di Chromium di questo banco, oltre a quelle di tutti.
+///
+/// `--disable-partial-raster`: le regole 1 e 4 confrontano due scatti al pixel,
+/// arrivati per strade diverse. Col raster parziale Chromium, quando una
+/// tessera cambia solo in parte (l'immagine che esce lascia scoperta la pagina
+/// sotto), rifà solo il rettangolo toccato sopra la tessera di prima, e
+/// l'antialiasing di ciò che quel rettangolo taglia può uscire di qualche
+/// livello diverso da come esce rifatto intero. Le Preferenze fallivano così
+/// la regola 4 circa una volta su quattro per un pixel solo, sempre lo stesso
+/// (l'angolo della prima lettera del titolo della nota, 94 contro 96 su 255),
+/// che nessuna corsa aveva mosso; col raster intero, 0 su 16. La regola resta
+/// al pixel: si toglie la strada dallo scatto, non la tolleranza dal confronto.
+export const BROWSER_ARGS = Object.freeze(["--disable-partial-raster"]);
 
 /// Le corse di un'uscita che durano più di `limit`, ritardo compreso. `runs`
 /// sono `{ target, pseudo, duration, delay }` delle corse partite col gesto
@@ -79,6 +94,20 @@ export function foreignProperties(names) {
     found.add(css);
   }
   return [...found].sort();
+}
+
+/// Da quanti fotogrammi di fila una proprietà in linea cambiata durante un
+/// gesto è scritta «a ogni fotogramma» (regola 3). Uno è un cambio di stato
+/// (il posto del blocco in mano che scatta al vicino dopo); due di fila, col
+/// puntatore che avanza di pochi px per fotogramma, è un ciclo che la scrive.
+export const FRAME_STREAK = 2;
+
+/// Le scritture in linea di un gesto che la regola 3 non ammette: le
+/// proprietà estranee cambiate in almeno `FRAME_STREAK` fotogrammi di fila.
+/// `entries` sono `{ target, property, frames }`, con `frames` la fila più
+/// lunga di quella proprietà su quell'elemento.
+export function perFrame(entries, streak = FRAME_STREAK) {
+  return entries.filter((entry) => entry.frames >= streak && foreignProperties([entry.property]).length > 0);
 }
 
 /// Lo stesso, da fotogrammi chiave: ogni chiave di ogni fotogramma.
@@ -135,6 +164,15 @@ function distance(a, b) {
   return { px, opacity: Math.abs(a.opacity - b.opacity) };
 }
 
+/// Un riquadro arrotondato, per il rapporto.
+const shape = (box) => ({
+  left: Math.round(box.left * 10) / 10,
+  top: Math.round(box.top * 10) / 10,
+  width: Math.round(box.width * 10) / 10,
+  height: Math.round(box.height * 10) / 10,
+  opacity: Math.round(box.opacity * 1000) / 1000,
+});
+
 /// I salti all'inversione (regola 4). `before` sono i riquadri di ciò che si
 /// stava muovendo un attimo prima del gesto, `after` quelli di ciò che si vede
 /// subito dopo, allo stesso istante. Ogni riquadro di prima deve proseguire in
@@ -149,7 +187,7 @@ export function jumps(before, after, tolerance = CONTINUITY) {
       const within = gap.px <= tolerance.px && gap.opacity <= tolerance.opacity;
       const better =
         !nearest || (within && !nearest.within) || (within === nearest.within && gap.px + gap.opacity * 100 < nearest.px + nearest.opacity * 100);
-      if (better) nearest = { ...gap, within, key: candidate.key };
+      if (better) nearest = { ...gap, within, key: candidate.key, box: candidate };
     }
     if (nearest?.within) continue;
     found.push({
@@ -157,6 +195,8 @@ export function jumps(before, after, tolerance = CONTINUITY) {
       px: nearest ? Math.round(nearest.px * 100) / 100 : null,
       opacity: nearest ? Math.round(nearest.opacity * 1000) / 1000 : null,
       nearest: nearest?.key ?? null,
+      was: shape(box),
+      is: nearest ? shape(nearest.box) : null,
     });
   }
   return found;
@@ -197,6 +237,9 @@ async function hover(page, selector) {
 
 const has = (selector) => (page) => page.evaluate((s) => document.querySelector(s) !== null, selector);
 const lacks = (selector) => (page) => page.evaluate((s) => document.querySelector(s) === null, selector);
+/// Nel menu aperto è accesa la voce `index` dell'elenco.
+const menuLit = (index) => (page) =>
+  page.evaluate((i) => document.querySelectorAll("#context-menu .menu-items [role^=menuitem]")[i]?.classList.contains("menu-lit") ?? false, index);
 /// Il menu «/» della scena chiuso togliendo il «/», poi riaperto con `query`
 /// scritto dopo (vuota: resta chiuso, la apre il gesto).
 const slashAgain = (query) => async (page) => {
@@ -204,12 +247,9 @@ const slashAgain = (query) => async (page) => {
   await page.waitForSelector(".slash-panel", { state: "detached" });
   if (query !== "") {
     await page.keyboard.type(`/${query}`);
-    await page.waitForSelector(".slash-panel .slash-row.is-selected");
+    await page.waitForSelector(".slash-panel [role=option][aria-selected=true]");
   }
 };
-/// La riga scelta del menu «/» dice `label`.
-const slashSelected = (label) => (page) =>
-  page.evaluate((l) => document.querySelector(".slash-panel .slash-row.is-selected")?.textContent?.includes(l) ?? false, label);
 
 /// Le righe e le linguette del kit hanno id a contatore: si scelgono per posto.
 const TAB = (index) => `#sample-tabs .kit-tab >> nth=${index}`;
@@ -255,15 +295,24 @@ const sheets = (count) => (page) =>
 /// Un comando della shell dal registro che servono menu, lanciatore e tastiera.
 /// Senza passare da un bottone della cornice: il suo hover e la sua pressione
 /// hanno transizioni loro, che non sono il moto di questo gesto.
-/// Un punto sull'ultima riga della nota, dove un menu deve aprirsi sopra il
-/// puntatore.
+/// Un punto sull'ultima riga **che si vede** della nota, dove un menu deve
+/// aprirsi sopra il puntatore. CodeMirror disegna anche righe oltre il bordo
+/// del foglio: l'ultima del DOM può stare sotto la banda di stato (con la riga
+/// dei dati sotto il titolo, S2 T12, a 640 px di altezza ci sta), e il clic
+/// destro lì cade sulla banda, che non apre nessun menu. Vale la riga più in
+/// basso il cui punto sta dentro il riquadro visibile dello scorritore. Si
+/// misura la geometria e non `elementFromPoint`: a menu aperto il punto è
+/// coperto dal menu, e la stessa domanda deve dare lo stesso punto prima e dopo.
 const menuEdgePoint = (page) =>
   page.evaluate(() => {
-    const lines = document.querySelectorAll(".pane.focus .cm-line");
-    const line = lines[lines.length - 1]?.getBoundingClientRect();
-    return line
-      ? { x: Math.round(line.left + 40), y: Math.round(line.top + line.height / 2) }
-      : { x: 400, y: window.innerHeight - 40 };
+    const scroller = document.querySelector(".pane.focus .pane-editor .cm-scroller")?.getBoundingClientRect();
+    const lines = [...document.querySelectorAll(".pane.focus .pane-editor .cm-line")].reverse();
+    for (const line of lines) {
+      const box = line.getBoundingClientRect();
+      const point = { x: Math.round(box.left + 40), y: Math.round(box.top + box.height / 2) };
+      if (!scroller || (point.y > scroller.top && point.y < scroller.bottom)) return point;
+    }
+    return { x: 400, y: window.innerHeight - 40 };
   });
 const shellCommand = (id) => (page) =>
   page.evaluate(async (command) => {
@@ -345,7 +394,7 @@ const commentShown = (yes) => (page) =>
 /// Nei Blocchi, la riga con `first` viene prima di quella con `second`.
 const blockOrder = (first, second) => (page) =>
   page.evaluate(([a, b]) => {
-    const texts = [...document.querySelectorAll(".pane.focus .cm-content > .cm-line")].map((line) => line.textContent);
+    const texts = [...document.querySelectorAll(".pane.focus .pane-editor .cm-content > .cm-line")].map((line) => line.textContent);
     const at = (text) => texts.findIndex((line) => line.includes(text));
     return at(a) >= 0 && at(b) >= 0 && at(a) < at(b);
   }, [first, second]);
@@ -354,26 +403,232 @@ const blockOrder = (first, second) => (page) =>
 const cursorLine = (text, yes) => (page) =>
   page.evaluate(([want, inside]) => {
     const node = document.getSelection()?.focusNode;
-    const line = (node instanceof Element ? node : node?.parentElement)?.closest(".pane.focus .cm-line");
+    const line = (node instanceof Element ? node : node?.parentElement)?.closest(".pane.focus .pane-editor .cm-line");
     return !!line && line.textContent.includes(want) === inside;
   }, [text, yes]);
+/// Il cursore disegnato sta dove andrà la prima lettera: il suo riquadro e
+/// quello che CodeMirror dà alla posizione del cursore coincidono (entro un
+/// pixel). Una riga ancora in corsa quando il livello dei cursori si misura
+/// lascia il cursore dove la riga stava in quel momento, finché qualcosa non
+/// lo ridisegna.
+const caretOnHead = (page) =>
+  page.evaluate(async () => {
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const host = document.querySelector(".pane.focus .pane-editor .cm-editor")?.parentElement;
+    if (!host) return false;
+    const view = findTextEditorOrThrow(host);
+    const drawn = view.dom.querySelector(".cm-cursor-primary")?.getBoundingClientRect();
+    const head = view.coordsAtPos(view.state.selection.main.head);
+    return !!drawn && !!head && Math.abs(drawn.left - head.left) <= 1.5 && Math.abs(drawn.top - head.top) <= 1;
+  });
+/// Tutte le condizioni insieme.
+const every = (...checks) => async (page) => {
+  for (const check of checks) if (!(await check(page))) return false;
+  return true;
+};
 /// Il blocco «Il treno» preso per la maniglia e portato 90 px più giù, col
 /// tasto ancora premuto.
 const liftBlock = async (page) => {
-  await page.hover(".pane.focus .cm-content .cm-line:has-text('Il treno')");
-  await page.waitForSelector('.pane.focus .cm-fub-block-handles[data-active="true"]');
-  const grip = await page.$(".pane.focus .cm-fub-block-grip");
+  await page.hover(".pane.focus .pane-editor .cm-content .cm-line:has-text('Il treno')");
+  await page.waitForSelector('.pane.focus .pane-editor .cm-fub-block-handles[data-active="true"]');
+  const grip = await page.$(".pane.focus .pane-editor .cm-fub-block-grip");
   const box = await grip.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 30, { steps: 3 });
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 90, { steps: 6 });
 };
+
+// ── I gesti dei Blocchi ai bordi (E2, T2) ────────────────────────────────────
+//
+// Un trascinamento vero muove il puntatore di pochi px per fotogramma: qui
+// ogni passo è seguito da un fotogramma (`frame` del banco), così la regola 3
+// vede che cosa il gesto scrive fotogramma per fotogramma. Il gesto che disfa
+// è invece un salto solo del puntatore, senza fotogrammi: la regola 4 guarda
+// i riquadri subito prima e subito dopo, e nel mezzo il tempo non deve
+// passare.
+
+const EDITOR = ".pane.focus .pane-editor";
+/// Un fotogramma del gesto. In `setup` gli attrezzi del banco non ci sono
+/// ancora, e non serve.
+const gestureFrame = (page) => page.evaluate(() => window.__banco?.frame?.());
+/// Dove sta il puntatore del gesto in corso, per pagina: il gesto che disfa
+/// torna da lì al punto della presa.
+const pointers = new WeakMap();
+
+/// La maniglia del blocco sotto `selector`, col puntatore sopra il blocco.
+async function gripOf(page, selector) {
+  await page.hover(`${EDITOR} ${selector}`);
+  await page.waitForSelector(`${EDITOR} .cm-fub-block-handles[data-active="true"]`);
+  const box = await page.locator(`${EDITOR} .cm-fub-block-grip`).boundingBox();
+  if (!box) throw new Error("la maniglia non si vede");
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/// Quanti px al più fa il puntatore in un fotogramma: 8 px a 60 Hz, quasi
+/// mezzo metro di schermo al secondo, è una mano che trascina svelta.
+const STEP_PX = 8;
+
+/// Il puntatore da dov'è a `to`, un fotogramma per passo di al più `STEP_PX`.
+async function sweep(page, to) {
+  const state = pointers.get(page);
+  const from = state.at;
+  const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / STEP_PX));
+  for (let step = 1; step <= steps; step += 1) {
+    const at = { x: from.x + ((to.x - from.x) * step) / steps, y: from.y + ((to.y - from.y) * step) / steps };
+    await page.mouse.move(at.x, at.y);
+    state.at = at;
+    await gestureFrame(page);
+  }
+}
+
+/// Prende il blocco sotto `selector` per la maniglia: preme, e si sposta di
+/// `lift` px (la presa scatta a 4) in un passo. Dà il punto della presa.
+async function pick(page, selector, lift = { x: 0, y: 6 }) {
+  const grip = await gripOf(page, selector);
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  pointers.set(page, { grip, at: grip });
+  await sweep(page, { x: grip.x + lift.x, y: grip.y + lift.y });
+  return grip;
+}
+
+/// Il gesto che disfa uno spostamento col puntatore: un salto solo, di nuovo
+/// sopra la presa (`dx`, `dy` dalla maniglia), col tasto ancora premuto.
+const backTo = (dx = 0, dy = 6) => async (page) => {
+  const state = pointers.get(page);
+  const at = { x: state.grip.x + dx, y: state.grip.y + dy };
+  await page.mouse.move(at.x, at.y);
+  state.at = at;
+};
+
+/// Il punto a metà dell'ultimo ottavo a destra della colonna dei Blocchi (il
+/// riquadro di `.cm-content`, rientri compresi): dove il posto diventa
+/// «Accanto».
+const besideX = (page) =>
+  page.evaluate((editor) => {
+    const box = document.querySelector(`${editor} .cm-content`).getBoundingClientRect();
+    return box.right - box.width / 16;
+  }, EDITOR);
+/// Il bordo destro del testo della nota, sullo schermo.
+const textRight = (page) =>
+  page.evaluate((editor) => {
+    const content = document.querySelector(`${editor} .cm-content`);
+    const box = content.getBoundingClientRect();
+    return box.right - (Number.parseFloat(getComputedStyle(content).paddingRight) || 0);
+  }, EDITOR);
+/// Il centro sullo schermo di ciò che `selector` trova nella nota.
+const middleOf = async (page, selector) => {
+  const box = await page.locator(`${EDITOR} ${selector}`).first().boundingBox();
+  if (!box) throw new Error(`non si vede: ${selector}`);
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+};
+
+/// La nota delle scene dei Blocchi scorsa fin dove il codice e la tabella
+/// (151 px, più alta del blocco in mano) stanno tutti e due nel foglio.
+const showTable = async (page) => {
+  await page.evaluate((editor) => {
+    document.querySelector(`${editor} .cm-scroller`).scrollTop = 520;
+  }, EDITOR);
+  await page.waitForSelector(`${EDITOR} .tb-frame`);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+};
+
+const TRAIN = ".cm-content .cm-line:has-text('Il treno')";
+const LIFT = `${EDITOR} .cm-fub-block-lift`;
+const SLOT = `${EDITOR} .cm-fub-block-slot`;
+/// Il blocco in mano, col posto ancora sull'origine (`home`) o altrove.
+const held = (home) => (page) =>
+  page.evaluate(
+    ([lift, slot, want]) => {
+      const el = document.querySelector(slot);
+      return document.querySelector(lift) !== null && !!el && !el.hidden && (el.dataset.home === "true") === want;
+    },
+    [LIFT, SLOT, home],
+  );
 const light = (theme) => (page) =>
   page.evaluate(
     (t) => document.documentElement.dataset.theme === t && document.querySelector(".light-scene") === null,
     theme,
   );
+
+/// La barra dei fogli del riquadro col fuoco.
+const GRID_RIBBON = ".pane.focus .grid-ribbon";
+/// Una cella della griglia col fuoco (riga e colonna da zero), con le classi
+/// in più che deve avere.
+const gridCell = (row, column, extra = "") => `.pane.focus .grid-cell${extra}[data-row="${row}"][data-column="${column}"]`;
+/// Il lato alto del rettangolo della selezione, nel livello del corpo.
+const GRID_EDGE = '.pane.focus .grid-marks-body .grid-mark-edge[data-mark="rect-top"]';
+/// Sceglie una cella con un clic vero e aspetta che sia la cella attiva.
+const pickCell = async (page, row, column) => {
+  const at = await centre(page, gridCell(row, column));
+  await page.mouse.click(at.x, at.y);
+  await page.waitForSelector(gridCell(row, column, ".active"));
+};
+/// La maniglia di fine del tocco lungo, quando si vede.
+const GRID_GRIP_B = '.pane.focus .grid-mark-touch[data-handle="b"]:not([hidden])';
+/// Il dito del CDP su una pagina, col tocco acceso: passa dal browser vero
+/// (`Input.dispatchTouchEvent`), dove `touch-action` decide chi scorre.
+const fingers = new WeakMap();
+async function finger(page) {
+  let cdp = fingers.get(page);
+  if (!cdp) {
+    cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+    fingers.set(page, cdp);
+  }
+  return cdp;
+}
+const touch = async (page, type, points) =>
+  (await finger(page)).send("Input.dispatchTouchEvent", { type, touchPoints: points.map(({ x, y }) => ({ x, y, id: 1 })) });
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/// Un tocco lungo su una cella: giù più di `LONG_PRESS_MS` (450) della griglia.
+const longPressCell = async (page, row, column) => {
+  const at = await centre(page, gridCell(row, column));
+  await touch(page, "touchStart", [at]);
+  await wait(700);
+  await touch(page, "touchEnd", []);
+};
+/// La maniglia di fine del tocco lungo tirata col dito fino a una cella.
+const dragGrip = async (page, row, column) => {
+  const from = await centre(page, GRID_GRIP_B);
+  const to = await centre(page, gridCell(row, column));
+  await touch(page, "touchStart", [from]);
+  for (let step = 1; step <= 12; step += 1) {
+    await wait(16);
+    await touch(page, "touchMove", [{ x: from.x + ((to.x - from.x) * step) / 12, y: from.y + ((to.y - from.y) * step) / 12 }]);
+  }
+  await touch(page, "touchEnd", []);
+};
+/// Tira di `by` px il bordo destro dell'intestazione di colonna `label` e lo
+/// rilascia. Il bordo si legge dalla misura della colonna, non dal disegno:
+/// a metà di una corsa le colonne dopo sono ancora spostate.
+const pullColumnEdge = async (page, label, by) => {
+  const edge = await page.evaluate((name) => {
+    const header = [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === name);
+    const box = header.getBoundingClientRect();
+    return { x: box.right - 1, y: box.top + box.height / 2 };
+  }, label);
+  await page.mouse.move(edge.x, edge.y);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + by / 2, edge.y);
+  await page.mouse.move(edge.x + by, edge.y);
+  await page.mouse.up();
+};
+const columnWidthOf = (page, label) => page.evaluate((name) => {
+  const header = [...document.querySelectorAll(".pane.focus .grid-column-header")].find((element) => element.textContent === name);
+  return header ? parseFloat(header.style.width) : 0;
+}, label);
+const columnWider = (label, width) => async (page) => (await columnWidthOf(page, label)) > width;
+const columnNarrower = (label, width) => async (page) => {
+  const now = await columnWidthOf(page, label);
+  return now > 0 && now < width;
+};
+/// La cella scelta cinque colonne più a destra, fuori dalla tabella della
+/// scena `grid-ribbon-table`.
+const stepRight = async (page) => {
+  for (let step = 0; step < 5; step += 1) await page.keyboard.press("ArrowRight");
+};
 
 /// Le coreografie. Ognuna dice:
 ///
@@ -515,6 +770,39 @@ export const CHOREOGRAPHIES = [
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks("#context-menu"),
     exit: true,
+  },
+  {
+    id: "menu-punto",
+    title: "Menu del tasto destro: nasce dal punto del clic, le parti entrano una dopo l'altra; esce sfumando, ferma",
+    sources: ["src/ui/menu.ts"],
+    scene: "startup",
+    act: (page) => page.click('.pane.focus .pane-editor .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } }),
+    arrived: has("#context-menu .menu-foot"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks("#context-menu"),
+    exit: true,
+  },
+  {
+    id: "menu-pastiglia",
+    title: "Menu: la pastiglia della scelta scivola da una voce all'altra",
+    sources: ["src/ui/menu.ts"],
+    scene: "menu-testo",
+    // La prima freccia accende la prima voce, senza scivolare: da lì si misura.
+    setup: (page) => page.keyboard.press("ArrowDown"),
+    act: (page) => page.keyboard.press("ArrowDown"),
+    arrived: menuLit(1),
+    undo: (page) => page.keyboard.press("ArrowUp"),
+    returned: menuLit(0),
+  },
+  {
+    id: "menu-linguetta",
+    title: "Barra degli appunti: la linguetta chiara scivola da una parte all'altra",
+    sources: ["src/ui/menu.ts"],
+    scene: "menu-appunti-accesi",
+    act: (page) => page.keyboard.press("ArrowRight"),
+    arrived: has("#context-menu .menu-clipboard .menu-quick:nth-child(4).menu-lit"),
+    undo: (page) => page.keyboard.press("ArrowLeft"),
+    returned: has("#context-menu .menu-clipboard .menu-quick:nth-child(3).menu-lit"),
   },
   {
     id: "preferences",
@@ -804,37 +1092,27 @@ export const CHOREOGRAPHIES = [
   // Il menu «/» (N12): parte dalle sue scene, sulla riga vuota della Live.
   {
     id: "slash-apre",
-    title: "Menu «/»: si apre dal cursore e le prime righe entrano una dopo l'altra; cancellato il «/», esce",
+    title: "Menu «/»: si apre dal cursore con la prima tessera accesa; cancellato il «/», esce",
     sources: ["src/panels/slash/panel.ts"],
     scene: "slash-01-aperto",
     // La scena lo lascia aperto: lo si chiude togliendo il «/».
     setup: slashAgain(""),
     act: (page) => page.keyboard.type("/"),
-    arrived: has(".slash-panel .slash-row.is-selected"),
+    arrived: has(".slash-panel [role=option][aria-selected=true]"),
     undo: (page) => page.keyboard.press("Backspace"),
     returned: lacks(".slash-panel"),
     exit: true,
   },
   {
-    id: "slash-scorre",
-    title: "Menu «/»: la pillola scivola da una riga all'altra, l'anteprima arriva dopo",
-    sources: ["src/panels/slash/panel.ts"],
-    scene: "slash-02-filtro",
-    act: (page) => page.keyboard.press("ArrowDown"),
-    arrived: slashSelected("Titolo 2"),
-    undo: (page) => page.keyboard.press("ArrowUp"),
-    returned: slashSelected("Titolo 1"),
-  },
-  {
     id: "slash-passo",
-    title: "Menu «/»: una voce con «›» apre il suo passo di lato, e Backspace torna all'elenco",
+    title: "Menu «/»: una voce con «›» apre il suo passo nello stesso riquadro, e Backspace torna all'elenco",
     sources: ["src/panels/slash/panel.ts"],
     scene: "slash-01-aperto",
     setup: slashAgain("tabella"),
     act: (page) => page.keyboard.press("Enter"),
     arrived: has(".slash-panel.is-step .slash-step-cell.is-selected"),
     undo: (page) => page.keyboard.press("Backspace"),
-    returned: has(".slash-panel:not(.is-step) .slash-row.is-selected"),
+    returned: has(".slash-panel:not(.is-step) [role=option][aria-selected=true]"),
   },
   {
     id: "slash-chiude",
@@ -849,7 +1127,7 @@ export const CHOREOGRAPHIES = [
       await page.keyboard.press("Backspace");
       await page.keyboard.type("/");
     },
-    returned: has(".slash-panel .slash-row.is-selected"),
+    returned: has(".slash-panel [role=option][aria-selected=true]"),
   },
   // Il blocco vivo (N13): i gesti dei Blocchi, sulla nota delle loro scene,
   // col cursore nel paragrafo «Il treno».
@@ -869,9 +1147,9 @@ export const CHOREOGRAPHIES = [
     sources: ["src/editors/text/profiles/markdown/blocks/motion.ts"],
     scene: "blocchi-01-passaggio",
     act: (page) => page.keyboard.press("Control+Alt+2"),
-    arrived: (page) => page.evaluate(() => [...document.querySelectorAll(".pane.focus .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
+    arrived: (page) => page.evaluate(() => [...document.querySelectorAll(".pane.focus .pane-editor .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
     undo: (page) => page.keyboard.press("Control+Alt+0"),
-    returned: (page) => page.evaluate(() => ![...document.querySelectorAll(".pane.focus .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
+    returned: (page) => page.evaluate(() => ![...document.querySelectorAll(".pane.focus .pane-editor .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
   },
   {
     id: "blocchi-nasce",
@@ -885,7 +1163,8 @@ export const CHOREOGRAPHIES = [
       await page.keyboard.press("End");
     },
     act: (page) => page.keyboard.press("Enter"),
-    arrived: cursorLine("Il treno", false),
+    // Arrivata la riga, il cursore è sulla riga nuova e dove andrà il testo.
+    arrived: every(cursorLine("Il treno", false), caretOnHead),
     undo: (page) => page.keyboard.press("Backspace"),
     returned: cursorLine("Il treno", true),
     exit: true,
@@ -896,9 +1175,9 @@ export const CHOREOGRAPHIES = [
     sources: ["src/editors/text/profiles/markdown/blocks/motion.ts"],
     scene: "blocchi-01-passaggio",
     act: (page) => page.keyboard.press("Escape"),
-    arrived: has(".pane.focus .cm-fub-block-mark"),
+    arrived: has(".pane.focus .pane-editor .cm-fub-block-mark"),
     undo: (page) => page.keyboard.press("Escape"),
-    returned: lacks(".pane.focus .cm-fub-block-mark"),
+    returned: lacks(".pane.focus .pane-editor .cm-fub-block-mark"),
   },
   {
     id: "blocchi-solleva",
@@ -906,10 +1185,418 @@ export const CHOREOGRAPHIES = [
     sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
     scene: "blocchi-01-passaggio",
     act: liftBlock,
-    arrived: has(".pane.focus .cm-fub-block-lift"),
+    arrived: has(".pane.focus .pane-editor .cm-fub-block-lift"),
     undo: (page) => page.keyboard.press("Escape"),
-    returned: lacks(".pane.focus .cm-fub-block-lift, .pane.focus .cm-fub-block-lifted"),
+    returned: lacks(".pane.focus .pane-editor .cm-fub-block-lift, .pane.focus .pane-editor .cm-fub-block-lifted"),
     holds: true,
+  },
+  // I gesti del trascinamento ai bordi (E2, T2): una coreografia per voce
+  // dell'elenco di E2. Ognuna gira col moto pieno e col moto ridotto (regola
+  // 1), e il blocco in mano, che segue il puntatore scrivendo `transform` in
+  // linea, è fra ciò che la regola 4 guarda.
+  {
+    id: "blocchi-presa",
+    title: "Blocchi: la presa di un blocco basso, che cresce dell'1,5% con la sua ombra mentre niente si sposta; Esc lo posa",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
+    scene: "blocchi-01-passaggio",
+    act: (page) => pick(page, TRAIN),
+    arrived: held(true),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(`${LIFT}, ${EDITOR} .cm-fub-block-lifted`),
+    holds: true,
+    track: [LIFT],
+  },
+  {
+    id: "blocchi-presa-alta",
+    title: "Blocchi: la presa della tabella, più alta di 104 px: si fa compatta, tagliata col suo nome, e ciò che sta sotto sale; Esc la rimette",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
+    scene: "blocchi-01-passaggio",
+    setup: showTable,
+    act: (page) => pick(page, ".tb-frame"),
+    arrived: async (page) =>
+      (await held(true)(page)) && (await has(`${LIFT} .cm-fub-block-lift-card[data-clipped="true"]`)(page)),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(`${LIFT}, ${EDITOR} .cm-fub-block-lifted`),
+    holds: true,
+    track: [LIFT],
+  },
+  {
+    id: "blocchi-passa-alto",
+    title: "Blocchi: il codice portato oltre la tabella apre il posto dopo di lei, e tornando un poco indietro il posto non trema; il salto all'origine lo richiude",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts", "src/editors/text/profiles/markdown/blocks/place.ts"],
+    scene: "blocchi-01-passaggio",
+    setup: showTable,
+    act: async (page) => {
+      const grip = await pick(page, ".cm-fub-code-line:has-text('const giorni')");
+      await sweep(page, { x: grip.x, y: grip.y + 200 });
+      // Meno di un blocco indietro: il posto resta dopo la tabella.
+      await sweep(page, { x: grip.x, y: grip.y + 170 });
+    },
+    arrived: held(false),
+    undo: backTo(),
+    returned: held(true),
+    holds: true,
+    track: [LIFT],
+  },
+  {
+    id: "blocchi-accanto",
+    title: "Blocchi: sull'ultimo ottavo a destra del titolo il posto diventa la barra di «Accanto»; tornato sulla presa, il posto si riapre",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
+    scene: "blocchi-01-passaggio",
+    act: async (page) => {
+      await pick(page, TRAIN);
+      const x = await besideX(page);
+      const heading = await middleOf(page, ".cm-line:has-text('Cose da fare')");
+      await sweep(page, { x, y: heading.y });
+    },
+    arrived: has(`${EDITOR} .cm-fub-block-drop[data-beside="true"]:not([hidden])`),
+    undo: backTo(),
+    returned: async (page) => (await lacks(`${EDITOR} .cm-fub-block-drop[data-beside]`)(page)) && (await held(true)(page)),
+    holds: true,
+    track: [LIFT],
+  },
+  {
+    id: "blocchi-annida",
+    title: "Blocchi: una voce portata 24 px a destra si annida sotto quella sopra, e il posto si sposta di un rientro; a sinistra torna",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
+    scene: "blocchi-01-passaggio",
+    act: async (page) => {
+      const grip = await pick(page, ".cm-line:has-text('Comprare i biglietti')", { x: 8, y: 0 });
+      await sweep(page, { x: grip.x + 40, y: grip.y });
+    },
+    arrived: held(false),
+    undo: backTo(0, 0),
+    returned: held(true),
+    holds: true,
+    track: [LIFT],
+  },
+  {
+    id: "blocchi-stacca",
+    title: "Blocchi: la voce annidata portata 24 px a sinistra esce dalla sua voce, e il posto si sposta di un rientro; a destra torna",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
+    scene: "blocchi-01-passaggio",
+    act: async (page) => {
+      const grip = await pick(page, ".cm-line:has-text('Spazzolino')", { x: -8, y: 0 });
+      await sweep(page, { x: grip.x - 40, y: grip.y });
+    },
+    arrived: held(false),
+    undo: backTo(0, 0),
+    returned: held(true),
+    holds: true,
+    track: [LIFT],
+  },
+  {
+    id: "blocchi-cartellino",
+    title: "Blocchi: oltre 90 px dal testo il blocco diventa il cartellino appeso al puntatore e il posto torna all'origine; tornato nel testo, si riapre",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
+    scene: "blocchi-01-passaggio",
+    act: async (page) => {
+      const grip = await pick(page, TRAIN);
+      const right = await textRight(page);
+      await sweep(page, { x: right + 150, y: grip.y + 40 });
+    },
+    arrived: async (page) => (await has(`${LIFT}[data-free="true"]`)(page)) && (await held(true)(page)),
+    undo: backTo(),
+    // Tornato nel testo il cartellino si riattacca (`reversing`); il ritorno è
+    // il posto di nuovo sull'origine, col blocco in mano. Non chiede che sia
+    // ancora attaccato: il banco, alla fine, porta il puntatore in (0, 0), fuori
+    // dal testo, dove il blocco torna cartellino.
+    reversing: lacks(`${LIFT}[data-free]`),
+    returned: held(true),
+    holds: true,
+    track: [LIFT],
+  },
+  {
+    id: "blocchi-scorre",
+    title: "Blocchi: col blocco in mano entro 72 px dal bordo basso la nota scorre fino in fondo, e il blocco resta nel foglio",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts", "src/editors/text/profiles/markdown/blocks/autoscroll.ts"],
+    scene: "blocchi-01-passaggio",
+    act: async (page) => {
+      const grip = await pick(page, TRAIN);
+      const bottom = await page.evaluate((editor) => document.querySelector(`${editor} .cm-scroller`).getBoundingClientRect().bottom, EDITOR);
+      await sweep(page, { x: grip.x, y: bottom - 12 });
+    },
+    arrived: async (page) =>
+      (await has(LIFT)(page)) &&
+      (await page.evaluate((editor) => {
+        const scroller = document.querySelector(`${editor} .cm-scroller`);
+        return scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1;
+      }, EDITOR)),
+    undo: null,
+    irreversible: "lo scorrimento si ferma dov'è: tornare su è un altro scorrimento, col blocco al bordo alto",
+    holds: true,
+  },
+  {
+    id: "blocchi-rilascio",
+    title: "Blocchi: il rilascio posa il blocco dov'è il posto, scendendo alla sua altezza mentre l'ombra si scioglie; Mod+Maiusc+↑ lo riporta su",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts", "src/editors/text/profiles/markdown/blocks/motion.ts"],
+    scene: "blocchi-01-passaggio",
+    act: async (page) => {
+      const grip = await pick(page, TRAIN);
+      await sweep(page, { x: grip.x, y: grip.y + 90 });
+      await page.mouse.up();
+    },
+    arrived: async (page) => (await blockOrder("Cose da fare", "Il treno")(page)) && (await lacks(LIFT)(page)),
+    // Il contrario è un gesto di blocco, che si muove: Ctrl Z, come ogni
+    // annullamento, rimette il testo senza moto (`motion.ts`).
+    undo: (page) => page.keyboard.press("Control+Shift+ArrowUp"),
+    returned: blockOrder("Il treno", "Cose da fare"),
+  },
+  {
+    id: "blocchi-esc",
+    title: "Blocchi: Esc col blocco in mano lo riporta a casa da dov'è, con lo stesso moto; i vicini tornano al loro posto",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
+    scene: "blocchi-01-passaggio",
+    setup: async (page) => {
+      const grip = await pick(page, TRAIN);
+      await sweep(page, { x: grip.x, y: grip.y + 90 });
+    },
+    act: (page) => page.keyboard.press("Escape"),
+    arrived: lacks(`${LIFT}, ${EDITOR} .cm-fub-block-lifted`),
+    undo: null,
+    irreversible: "il contrario di Esc è riprendere il blocco: un altro trascinamento, che misura «blocchi-solleva»",
+    holds: true,
+  },
+  {
+    id: "fogli-sezione",
+    title: "Barra dei fogli: cambiando sezione i foglietti della nuova entrano uno dopo l'altro dal suo verso",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    scene: "grid-ribbon",
+    act: (page) => press(page, `${GRID_RIBBON} .kit-tab[data-tab="insert"]`),
+    arrived: has(`${GRID_RIBBON} .grid-ribbon-panel[data-tab="insert"]:not([hidden])`),
+    undo: (page) => press(page, `${GRID_RIBBON} .kit-tab[data-tab="home"]`),
+    returned: has(`${GRID_RIBBON} .grid-ribbon-panel[data-tab="home"]:not([hidden])`),
+  },
+  {
+    id: "fogli-ritiro",
+    title: "Barra dei fogli: riaperta, la formula e la griglia scendono e il vassoio riappare; ritirata, gli salgono sopra mentre svanisce",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    // Si parte ritirati: l'uscita è il gesto che disfa (regola 5).
+    scene: "grid-ribbon-collapsed",
+    act: (page) => page.keyboard.press("Control+F1"),
+    arrived: has(`${GRID_RIBBON}[data-collapsed="false"]`),
+    undo: (page) => page.keyboard.press("Control+F1"),
+    returned: has(`${GRID_RIBBON}[data-collapsed="true"]`),
+    exit: true,
+  },
+  {
+    id: "fogli-fisarmonica",
+    title: "Barra dei fogli a 700 px: il foglietto «Numeri» si apre sul posto e gli altri scivolano; Esc lo richiude",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    // La scena stretta è quella della tabella: si torna alla Home. Il clic è
+    // quello del DOM, perché la pressione del pulsante non entri nella misura.
+    scene: "grid-ribbon-table",
+    setup: async (page) => {
+      await click(`${GRID_RIBBON} .kit-tab[data-tab="home"]`)(page);
+      await page.waitForSelector(`${GRID_RIBBON} .grid-ribbon-panel[data-tab="home"]:not([hidden])`);
+    },
+    act: click(`${GRID_RIBBON} [data-group="number"] .grid-ribbon-group-toggle`),
+    arrived: has(`${GRID_RIBBON} [data-group="number"][data-open="true"]`),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(`${GRID_RIBBON} [data-open="true"]`),
+  },
+  {
+    id: "fogli-fisarmonica-telefono",
+    title: "Barra dei fogli al telefono: il foglietto in fondo si apre, il vassoio scorre e gli altri scivolano nella stessa corsa",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    scene: "mobile-grid-ribbon",
+    act: click(`${GRID_RIBBON} [data-group="editing"] .grid-ribbon-group-toggle`),
+    arrived: has(`${GRID_RIBBON} [data-group="editing"][data-open="true"]`),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(`${GRID_RIBBON} [data-open="true"]`),
+  },
+  {
+    id: "fogli-sezione-tabella",
+    title: "Barra dei fogli: la sezione della tabella compare quando la cella scelta entra nella tabella",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    scene: "grid-ribbon-table",
+    // La cella scelta esce dalla tabella (A1:D6): la sua sezione se ne va.
+    setup: async (page) => {
+      await click(`${GRID_RIBBON} .kit-tab[data-tab="home"]`)(page);
+      await stepRight(page);
+      await page.waitForSelector(`${GRID_RIBBON} .kit-tab[data-tab="table"]`, { state: "detached" });
+    },
+    act: (page) => page.keyboard.press("Control+Home"),
+    arrived: has(`${GRID_RIBBON} .kit-tab[data-tab="table"]`),
+    undo: stepRight,
+    returned: lacks(`${GRID_RIBBON} .kit-tab[data-tab="table"]`),
+  },
+  // **I segni della griglia** (`grid-motion.ts`): un motore solo li fa
+  // scivolare dai dieci numeri della selezione, per i tasti e per il
+  // puntatore allo stesso modo. Il motore scrive il `transform` in linea a
+  // ogni fotogramma: `track` lo guarda sul lato alto del rettangolo.
+  {
+    id: "griglia-freccia",
+    title: "Griglia: una freccia, e il rettangolo scivola sulla cella accanto",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: (page) => page.keyboard.press("ArrowRight"),
+    arrived: has(gridCell(1, 2, ".active")),
+    undo: (page) => page.keyboard.press("ArrowLeft"),
+    returned: has(gridCell(1, 1, ".active")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-maiusc-freccia",
+    title: "Griglia: Maiusc+freccia, e il rettangolo si allarga dal bordo; anello e velo crescono da lì",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: (page) => page.keyboard.press("Shift+ArrowDown"),
+    arrived: has(gridCell(2, 1, ".selected")),
+    undo: (page) => page.keyboard.press("Shift+ArrowUp"),
+    returned: lacks(gridCell(2, 1, ".selected")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-ctrl-freccia",
+    title: "Griglia: Ctrl+freccia, un salto lontano che scivola senza passare la cella d'arrivo",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 0, 0),
+    act: (page) => page.keyboard.press("Control+ArrowDown"),
+    arrived: lacks(gridCell(0, 0, ".active")),
+    undo: (page) => page.keyboard.press("Control+ArrowUp"),
+    returned: has(gridCell(0, 0, ".active")),
+    track: [GRID_EDGE],
+  },
+  {
+    id: "griglia-trascina",
+    title: "Griglia: trascinando col puntatore il rettangolo si allarga e segue, nello stesso modo dei tasti",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 1, 1),
+    act: async (page) => {
+      const from = await centre(page, gridCell(1, 1));
+      const to = await centre(page, gridCell(3, 2));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 8 });
+      await page.mouse.up();
+    },
+    arrived: has(gridCell(3, 2, ".selected")),
+    undo: (page) => pickCell(page, 1, 1),
+    returned: lacks(gridCell(3, 2, ".selected")),
+    track: [GRID_EDGE],
+  },
+  // **Il dito** (griglia T7): le maniglie del tocco lungo sono pezzi dello
+  // stesso motore. Il tocco si accende nel `setup`, prima del primo scatto,
+  // perché accenderlo può cambiare ciò che la pagina mostra a un dito.
+  {
+    id: "griglia-tocco-lungo",
+    title: "Griglia: un tocco lungo, e le due maniglie crescono dal centro agli angoli della selezione",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await finger(page);
+      await pickCell(page, 1, 1);
+    },
+    act: (page) => longPressCell(page, 1, 1),
+    arrived: has(GRID_GRIP_B),
+    undo: (page) => pickCell(page, 1, 1),
+    returned: lacks(GRID_GRIP_B),
+    track: [GRID_GRIP_B],
+  },
+  {
+    id: "griglia-maniglia-tirata",
+    title: "Griglia: la maniglia del tocco tirata col dito, e il rettangolo la segue scivolando",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await finger(page);
+      await pickCell(page, 1, 1);
+      await longPressCell(page, 1, 1);
+      await page.waitForSelector(GRID_GRIP_B);
+    },
+    act: (page) => dragGrip(page, 3, 2),
+    arrived: has(gridCell(3, 2, ".selected")),
+    undo: (page) => dragGrip(page, 1, 1),
+    returned: lacks(gridCell(3, 2, ".selected")),
+    track: [GRID_EDGE, GRID_GRIP_B],
+  },
+  // **La cella aperta** (griglia T4): F2 su B4, la cui formula è più lunga
+  // della cella. La cella aperta è subito al suo posto, cresciuta a colonne
+  // intere; compare soltanto la cornice, una dissolvenza in `DURATION.state`.
+  {
+    id: "griglia-cella-aperta",
+    title: "Griglia: F2 su una cella col testo lungo, la cella aperta è già al suo posto e la cornice compare",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => pickCell(page, 3, 1),
+    act: (page) => page.keyboard.press("F2"),
+    arrived: has(".pane.focus .grid-cell-editor:not([hidden])"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: has(".pane.focus .grid-cell-editor[hidden]"),
+    track: [".pane.focus .grid-cell-editor-frame"],
+  },
+  // **Il bordo tirato** (griglia T5): al rilascio la misura nuova vale già,
+  // e le colonne dopo scivolano col `flip` di SLIDE. Nella prima il provider
+  // resta in volo (`throttle`) e il bordo si ritira: l'anteprima nuova parte
+  // da dov'è la corsa. Nella seconda il finto rifiuta la misura (non la
+  // serve), e le colonne tornano indietro scivolando.
+  {
+    id: "griglia-bordo-tirato",
+    title: "Griglia: il bordo di B tirato di 40 px e rilasciato, le colonne dopo scivolano al posto nuovo",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: (page) => page.evaluate(() => { window.bench.throttle("gridBytesCommand"); }),
+    act: (page) => pullColumnEdge(page, "B", 40),
+    arrived: columnWider("B", 110),
+    undo: (page) => pullColumnEdge(page, "B", -40),
+    returned: columnNarrower("B", 95),
+  },
+  {
+    id: "griglia-bordo-no",
+    title: "Griglia: il provider rifiuta la larghezza tirata, le colonne tornano scivolando e l'avviso dice perché",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    act: (page) => pullColumnEdge(page, "B", 40),
+    arrived: has(".pane.focus .grid-notice:not([hidden])"),
+    undo: null,
+    irreversible: "il ritorno è la risposta del provider: tirare di nuovo è un altro gesto, con la sua anteprima",
+  },
+  // **Copiare e riempire** (griglia T6): Ctrl+C lascia il tratteggio largo e
+  // un battito, un velo che svanisce in `DURATION.swap`; Esc toglie il segno.
+  // Il riempimento tirato, nella cartella grande che lo accetta, aspetta la
+  // risposta con le formiche (che non sono una coreografia: le ferma la
+  // risposta, e la prova di `grid-motion.test.ts` lo dimostra); poi le
+  // formiche escono, la selezione scivola sul riempimento e i valori nuovi
+  // entrano sfalsati.
+  {
+    id: "griglia-copia-battito",
+    title: "Griglia: Ctrl+C su B2:B3, il tratteggio largo resta e il battito svanisce",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-workbook",
+    setup: async (page) => {
+      await pickCell(page, 1, 1);
+      await page.keyboard.press("Shift+ArrowDown");
+    },
+    act: (page) => page.keyboard.press("Control+c"),
+    arrived: has(".pane.focus .grid-mark-copy:not([hidden])"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(".pane.focus .grid-mark-copy:not([hidden])"),
+  },
+  {
+    id: "griglia-riempimento-risposta",
+    title: "Griglia: C4:C5 tirata col quadratino fino a C12; alla risposta le formiche escono e i valori entrano sfalsati",
+    sources: ["src/editors/grid/grid-motion.ts"],
+    scene: "grid-large-appunti",
+    setup: async (page) => {
+      await pickCell(page, 3, 2);
+      await page.keyboard.press("Shift+ArrowDown");
+    },
+    act: async (page) => {
+      const from = await centre(page, ".pane.focus .grid-mark-handle:not([hidden])");
+      const to = await centre(page, gridCell(11, 2));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 6 });
+      await page.mouse.up();
+    },
+    arrived: (page) => page.evaluate((selector) => document.querySelector(`${selector} .grid-cell-text`)?.textContent === "90", gridCell(11, 2)),
+    undo: null,
+    irreversible: "il ritorno è Annulla, un comando che il provider esegue: un altro gesto, con la sua risposta",
   },
 ];
 

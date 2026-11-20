@@ -10,6 +10,7 @@
 import { api } from "../host/ipc";
 import type { DocumentMatch } from "../host/contract";
 import { pageName } from "../rules/mirrored";
+import { pageMarkValue } from "../ui/page-mark";
 import { Race } from "../ui/race";
 import type { Lifetime } from "../ui/lifetime";
 import { onEvent } from "./kernel";
@@ -27,6 +28,14 @@ let byDoc = new Map<string, string>();
 /// diverse, perché un `[[Nome]]` ambiguo non sa di quale si parla.
 let byName = new Map<string, string | null>();
 const race = new Race();
+/// Quante volte le mappe sono cambiate: la legge chi riusa righe già
+/// disegnate (`ui/node.ts`) per sapere se le loro icone valgono ancora.
+let revision = 0;
+
+/// La revisione delle icone delle pagine: cambia con le mappe.
+export function pageIconsRevision(): number {
+  return revision;
+}
 
 /// L'icona di un documento, se il suo frontmatter ne ha una.
 export function pageIcon(doc: string): string | null {
@@ -46,13 +55,12 @@ export function linkedPageIcon(target: string): string | null {
   return byName.get(pageName(written).toLowerCase()) ?? null;
 }
 
-/// Un valore che si mostra come icona: un testo breve (un'emoji, una lettera),
-/// non un path o un indirizzo che un'altra app ha messo nella stessa chiave.
+/// Un valore che si mostra come icona: un testo breve (un'emoji, una lettera)
+/// o una figura del set (`fub:<nome>`), non un path o un indirizzo che
+/// un'altra app ha messo nella stessa chiave. La regola è di `ui/page-mark.ts`,
+/// il solo posto che sa leggere un valore d'icona.
 export function iconValue(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const icon = value.trim();
-  if (!icon || icon.length > 16 || /[/\\:]/.test(icon)) return null;
-  return icon;
+  return pageMarkValue(value);
 }
 
 /// Le mappe da una risposta dell'indice; esportata per i test.
@@ -92,6 +100,7 @@ async function refresh(): Promise<void> {
     if (same(byDoc, next.byDoc)) return;
     byDoc = next.byDoc;
     byName = next.byName;
+    revision += 1;
     emit("page-icons");
   });
 }
@@ -101,6 +110,7 @@ function clear(): void {
   if (byDoc.size === 0) return;
   byDoc = new Map();
   byName = new Map();
+  revision += 1;
   emit("page-icons");
 }
 

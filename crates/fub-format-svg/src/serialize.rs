@@ -156,7 +156,7 @@ pub fn retitle(source: &str, title: &str) -> Result<String, FormatError> {
         .map_err(|error| FormatError::Serialize(format!("il disegno non si legge: {error}")))?;
     if !before.editable() {
         return Err(FormatError::Serialize(
-            "non è una scena FubDraw che si possa modificare".into(),
+            "non è un disegno di Fub che si possa modificare".into(),
         ));
     }
     let text = escape::text(&title);
@@ -165,7 +165,7 @@ pub fn retitle(source: &str, title: &str) -> Result<String, FormatError> {
         None => insert_title(source, &before, &text),
     }
     .ok_or_else(|| {
-        FormatError::Serialize("la radice del disegno non ha la forma di una scena FubDraw".into())
+        FormatError::Serialize("la radice del disegno non ha la forma di un disegno di Fub".into())
     })?;
 
     let after = fub_scene::read(&written)

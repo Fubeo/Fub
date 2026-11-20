@@ -28,7 +28,7 @@
 //! # Cosa questo banco **non** vede, dichiarato
 //!
 //! **Gli altri file del kernel tengono ancora i loro lucchetti nudi.** Sono
-//! **sette** [conta: lucchetti-nudi-del-kernel], e restano fuori dal primo conto
+//! **nove** [conta: lucchetti-nudi-del-kernel], e restano fuori dal primo conto
 //! **apposta**: è lo stesso buco che la 0120 aveva dichiarato («il conto vede
 //! `fub-host` e `fub-app`, non gli altri crate») e che la 0126 aveva rifiutato
 //! di chiudere, perché estenderlo vorrebbe dire un'allowlist lunga come

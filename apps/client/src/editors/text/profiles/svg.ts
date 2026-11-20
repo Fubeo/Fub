@@ -36,7 +36,7 @@ const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
 export const SVG_MODES: readonly SurfaceMode[] = [
   { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
-  { id: "live_preview", label: () => t("svg.mode.split"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
+  { id: "live_preview", label: () => t("svg.mode.split"), presentation: "surface", contextMode: "live_preview", looks: ["tema"], icon: "split" },
   { id: "reading", label: () => t("svg.mode.preview"), presentation: "rendered", contextMode: "reading", looks: ["file"] },
 ];
 

@@ -116,7 +116,7 @@ fn an_svg_is_a_document_only_with_the_draw_feature() {
         assert_eq!(kind_of(ws, "schizzo.svg"), EntryKind::Document);
         let format = ws.format_of(&drawing).expect("il formato svg");
         assert_eq!(format.descriptor.id, fub_format_svg::FORMAT_ID);
-        assert_eq!(format.descriptor.name, "SVG (FubDraw)");
+        assert_eq!(format.descriptor.name, "Disegno SVG");
         assert!(ws.extensions().iter().any(|ext| ext == "svg"));
         assert!(ws.documents().contains(&drawing));
         let backlinks = ws.backlinks(&DocId::new("nota.md"));

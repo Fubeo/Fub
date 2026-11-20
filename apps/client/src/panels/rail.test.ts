@@ -22,7 +22,9 @@ vi.mock("../state/kernel", () => ({ onEvent: () => () => {} }));
 
 import type { ParamSpec, ViewSpec } from "../host/contract";
 import { setPrimaryViews } from "../ui/primary-views";
+import { setSidePanelController } from "../ui/side-panels";
 import { mountRail, syncRail } from "./rail";
+import { enterVaultPanel, lastShownPanel, showPanel } from "./sidebar";
 
 function mainView(id: string, title: string, params: ParamSpec[] = []): ViewSpec {
   return {
@@ -83,4 +85,148 @@ describe("la rail e le view principali", () => {
     syncRail();
     expect(mainButtons()).toEqual([]);
   });
+});
+
+describe("la barra di ogni vault (#237 R07)", () => {
+  let unmount: (() => void) | undefined;
+
+  beforeEach(() => {
+    document.body.innerHTML = PAGE;
+    unmount = mountRail();
+  });
+
+  afterEach(() => unmount?.());
+
+  /// Le view della barra che un vault dichiara: `mountDeclaredViews` le
+  /// rifà da zero a ogni apertura, e la rail le scopre col giro dopo.
+  function mountSideViews(...ids: string[]): void {
+    const left = document.getElementById("views-left")!;
+    left.replaceChildren(...ids.map((id) => {
+      const panel = document.createElement("section");
+      panel.className = "declared-view-panel";
+      panel.dataset.viewId = id;
+      const title = document.createElement("h2");
+      title.className = "panel-title";
+      title.textContent = id;
+      panel.append(title);
+      return panel;
+    }));
+  }
+  /// Il pannello acceso, come lo dice la rail.
+  const pressed = () =>
+    [...document.querySelectorAll<HTMLButtonElement>('#views-ribbon .rail-btn[aria-pressed="true"]')]
+      .map((button) => button.dataset.panel);
+  /// Ciò che fa l'apertura di un vault, nell'ordine di `vault-session.ts`.
+  function openVault(root: string, ...views: string[]): void {
+    enterVaultPanel(root);
+    mountSideViews(...views);
+    syncRail();
+  }
+
+  it("un vault non eredita la vista di un altro, e ritrova la sua tornandoci o riaprendolo", () => {
+    openVault("/r07/a", "trash");
+    showPanel("trash");
+    // Un giro della rail sullo stesso vault (una lingua, un componente acceso)
+    // non chiude la view che si stava guardando.
+    syncRail();
+    expect(pressed()).toEqual(["trash"]);
+
+    // Due cambi di fila: nessuno dei due vault eredita la scelta di prima.
+    openVault("/r07/b", "trash");
+    expect(pressed()).toEqual(["files"]);
+    showPanel("search");
+    openVault("/r07/c", "trash");
+    expect(pressed()).toEqual(["files"]);
+
+    openVault("/r07/a", "trash");
+    expect(pressed()).toEqual(["trash"]);
+    // Riaprire lo stesso vault (il «Riapri» del watcher) non è un vault nuovo.
+    openVault("/r07/a", "trash");
+    expect(pressed()).toEqual(["trash"]);
+    openVault("/r07/b", "trash");
+    expect(pressed()).toEqual(["search"]);
+  });
+
+  it("una view che il vault non dichiara più ricade sui file", () => {
+    openVault("/r07/d", "trash");
+    showPanel("trash");
+    openVault("/r07/e");
+    openVault("/r07/d");
+    expect(pressed()).toEqual(["files"]);
+    expect(lastShownPanel()).toBe("files");
+  });
+});
+
+describe("l'icona della rail fa la strada della scorciatoia (#411 B-05)", () => {
+  let unmount: (() => void) | undefined;
+
+  beforeEach(() => {
+    document.body.innerHTML = PAGE;
+    document.getElementById("search-panel")!.innerHTML = '<input id="search-input" value="banco">';
+    document.getElementById("files-panel")!.innerHTML =
+      '<ul id="file-list" role="tree"><li role="treeitem" tabindex="0">Benvenuto</li></ul>';
+    unmount = mountRail();
+  });
+
+  afterEach(() => unmount?.());
+
+  const railButton = (panel: string) =>
+    document.querySelector<HTMLButtonElement>(`#views-ribbon .rail-btn[data-panel="${panel}"]`)!;
+
+  it("il clic sulla lente porta il fuoco nel campo della ricerca, col testo scelto", () => {
+    showPanel("files");
+    railButton("search").focus();
+    railButton("search").click();
+    const input = document.getElementById("search-input") as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, "banco".length]);
+    expect(lastShownPanel()).toBe("search");
+  });
+
+  it("il clic sui file entra nell'albero, come il comando", () => {
+    showPanel("search");
+    railButton("files").click();
+    expect(document.activeElement).toBe(document.querySelector('#file-list li[role="treeitem"]'));
+  });
+});
+
+describe("sul telefono la barra è un foglio, e il fuoco resta alla maniglia (#423 mobile-sheet)", () => {
+  let unmount: (() => void) | undefined;
+  let release: (() => void) | undefined;
+
+  beforeEach(() => {
+    document.body.innerHTML = `${PAGE}<aside id="sidebar" hidden><button class="sheet-grip"></button></aside>`;
+    document.getElementById("search-panel")!.innerHTML = '<input id="search-input" value="banco">';
+    document.getElementById("files-panel")!.innerHTML =
+      '<ul id="file-list" role="tree"><li role="treeitem" tabindex="0">Benvenuto</li></ul>';
+    const sidebar = document.getElementById("sidebar")!;
+    // Come il cassetto del telefono: aperto, dà il fuoco alla sua maniglia.
+    release = setSidePanelController({
+      visible: () => !sidebar.hidden,
+      reveal: () => {
+        sidebar.hidden = false;
+        sidebar.querySelector<HTMLElement>(".sheet-grip")!.focus();
+      },
+      toggle: () => {
+        sidebar.hidden = !sidebar.hidden;
+      },
+      dismiss: () => {
+        sidebar.hidden = true;
+      },
+    });
+    unmount = mountRail();
+  });
+
+  afterEach(() => {
+    unmount?.();
+    release?.();
+  });
+
+  for (const panel of ["files", "search"]) {
+    it(`il tocco su «${panel}» apre il foglio senza portare il fuoco in un campo`, () => {
+      document.querySelector<HTMLButtonElement>(`#views-ribbon .rail-btn[data-panel="${panel}"]`)!.click();
+      expect(lastShownPanel()).toBe(panel);
+      expect(document.activeElement).toBe(document.querySelector("#sidebar > .sheet-grip"));
+    });
+  }
 });

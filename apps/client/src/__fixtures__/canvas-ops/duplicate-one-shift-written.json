@@ -1,0 +1,53 @@
+{
+  "about": "duplicate con il solo dx scritto: in orizzontale 13+34 = 47 senza aggancio, in verticale lo spostamento di serie, 5+32 = 37 agganciato a 40. Ogni asse segue la sua regola.",
+  "before": {
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 13,
+        "y": 5,
+        "width": 200,
+        "height": 100,
+        "text": "a"
+      }
+    ]
+  },
+  "ops": [
+    {
+      "op": "duplicate",
+      "ids": [
+        "a"
+      ],
+      "dx": 34
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        {
+          "id": "a",
+          "type": "text",
+          "x": 13,
+          "y": 5,
+          "width": 200,
+          "height": 100,
+          "text": "a"
+        },
+        {
+          "id": "e220a8397b1dcdaf",
+          "type": "text",
+          "x": 47,
+          "y": 40,
+          "width": 200,
+          "height": 100,
+          "text": "a"
+        }
+      ]
+    },
+    "created": [
+      "e220a8397b1dcdaf"
+    ]
+  }
+}

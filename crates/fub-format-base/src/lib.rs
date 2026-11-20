@@ -9,6 +9,7 @@
 pub mod embed;
 pub mod formula;
 pub mod model;
+pub mod patch;
 pub use embed::{
     catalog as embed_catalog, BaseRenderer, BaseRule, BASE_CUSTOM_KIND,
     BASE_FORMAT as BASE_EMBED_FORMAT, BASE_NS as BASE_EMBED_NS, BASE_RENDERER_ID, BASE_RULE_ID,
@@ -20,6 +21,7 @@ pub use model::{
     MAX_BASE_SOURCE_BYTES, MAX_COLUMNS, MAX_DEFINITION_BYTES, MAX_FILTER_BYTES, MAX_FORMULA_DEFS,
     MAX_SUMMARIES, MAX_VIEWS, MAX_VIEW_BYTES,
 };
+pub use patch::{BaseChange, PatchError, ViewKey};
 
 use fub_abi::custom::SECTIONS_ATTR;
 use fub_abi::format::{

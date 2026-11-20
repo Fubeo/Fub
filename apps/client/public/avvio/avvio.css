@@ -5,23 +5,15 @@
    (--avvio-*), non tocca i ruoli del tema e se ne va alla consegna
    (src/avvio/consegna.ts).
 
-   È un file e non un <style> in linea per la CSP: Tauri mette un nonce a ogni
-   <style> delle pagine e lo aggiunge a style-src, e con un nonce la WebView
-   ignora 'unsafe-inline'. Gli elementi <style> che CodeMirror e gli altri
-   moduli aggiungono a pagina avviata verrebbero rifiutati, e gli editor
-   resterebbero senza stile. src/avvio/pagine.test.ts tiene le pagine senza
-   <style>.
+   È un file e non un <style> in linea per la CSP: style-src è 'self', senza
+   'unsafe-inline'. Il solo <style> delle pagine è il portatore vuoto del
+   nonce (data-fub-nonce), che Tauri riempie servendo la pagina e CodeMirror
+   rilegge (src/ui/stylesheets.ts). src/avvio/pagine.test.ts tiene le pagine
+   così.
 
    Le famiglie hanno un nome loro, così non toccano quelle di
    theme/scrittoio/fonts.css; i file sono gli stessi, e la cache del browser
    non li scarica due volte. */
-@font-face {
-  font-family: "Avvio Newsreader";
-  font-style: italic;
-  font-display: block;
-  font-weight: 200 800;
-  src: url("/fonts/newsreader-latin-opsz-italic.woff2") format("woff2-variations");
-}
 @font-face {
   font-family: "Avvio Hanken";
   font-style: normal;
@@ -33,73 +25,91 @@
 /* I colori di serie delle quattro luci, da theme/scrittoio/sheet-dark.css,
    sheet-light.css, sheet-dark-high.css, sheet-light-high.css (--bg, --text,
    --muted, --accent, --accent-contrast, --border, --danger, --focus-ring,
-   --overlay-hover, --overlay-active, --shadow-2). Senza attributo la luce è
+   --overlay-hover, --overlay-active, --shadow-2, e i cinque --logo-* della
+   cartella di Marcuzzo, D26). Senza attributo la luce è
    scura, come il ripiego di theme.ts; senza JS decide il sistema. Un tema
-   installato o un accento scelto arrivano da luce.js, in linea su <html>. */
+   installato o un accento scelto arrivano da luce.js, in linea su <html>.
+   src/avvio/colori.test.ts li tiene uguali alla ricetta: cambiata la ricetta,
+   si ricopiano qui i colori dei fogli rigenerati. */
 :root,
 :root[data-avvio-luce="dark"] {
   color-scheme: dark;
-  --avvio-sfondo: #0a0e16;
-  --avvio-testo: #e5e8ed;
-  --avvio-tenue: #a0a5ae;
-  --avvio-accento: #82a8fd;
-  --avvio-inchiostro: #070d1a;
-  --avvio-bordo: #2b303a;
+  --avvio-sfondo: #08110b;
+  --avvio-testo: #e4e9e6;
+  --avvio-tenue: #9ea7a1;
+  --avvio-accento: #53c48e;
+  --avvio-inchiostro: #021109;
+  --avvio-bordo: #29332d;
   --avvio-guasto: #f66d67;
-  --avvio-fuoco: #82a8fd;
-  --avvio-velo: rgb(229 232 237 / 7%);
-  --avvio-velo-forte: rgb(229 232 237 / 12%);
-  --avvio-ombra: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
+  --avvio-fuoco: #53c48e;
+  --avvio-velo: rgb(228 233 230 / 7%);
+  --avvio-velo-forte: rgb(228 233 230 / 12%);
+  --avvio-cartella: #89cca8;
+  --avvio-cartella-retro: #67ad88;
+  --avvio-cartella-ombra: #77b493;
+  --avvio-foglio-1: #006e46;
+  --avvio-foglio-2: #238b8b;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-avvio-luce]) {
     color-scheme: light;
-    --avvio-sfondo: #e8edf5;
-    --avvio-testo: #1a1f29;
-    --avvio-tenue: #5a5f6a;
-    --avvio-accento: #2b56cc;
-    --avvio-inchiostro: #fafcff;
-    --avvio-bordo: #d3d8e0;
+    --avvio-sfondo: #e7efe9;
+    --avvio-testo: #17221b;
+    --avvio-tenue: #57625b;
+    --avvio-accento: #006e46;
+    --avvio-inchiostro: #f9fdfb;
+    --avvio-bordo: #d1dad4;
     --avvio-guasto: #ca131b;
-    --avvio-fuoco: #2b56cc;
-    --avvio-velo: rgb(26 31 41 / 5%);
-    --avvio-velo-forte: rgb(26 31 41 / 9%);
-    --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+    --avvio-fuoco: #006e46;
+    --avvio-velo: rgb(23 34 27 / 5%);
+    --avvio-velo-forte: rgb(23 34 27 / 9%);
+    --avvio-cartella: #37996c;
+    --avvio-cartella-retro: #267853;
+    --avvio-cartella-ombra: #36805d;
+    --avvio-foglio-1: #8ec3c2;
+    --avvio-foglio-2: #95a982;
   }
 }
 :root[data-avvio-luce="light"] {
   color-scheme: light;
-  --avvio-sfondo: #e8edf5;
-  --avvio-testo: #1a1f29;
-  --avvio-tenue: #5a5f6a;
-  --avvio-accento: #2b56cc;
-  --avvio-inchiostro: #fafcff;
-  --avvio-bordo: #d3d8e0;
+  --avvio-sfondo: #e7efe9;
+  --avvio-testo: #17221b;
+  --avvio-tenue: #57625b;
+  --avvio-accento: #006e46;
+  --avvio-inchiostro: #f9fdfb;
+  --avvio-bordo: #d1dad4;
   --avvio-guasto: #ca131b;
-  --avvio-fuoco: #2b56cc;
-  --avvio-velo: rgb(26 31 41 / 5%);
-  --avvio-velo-forte: rgb(26 31 41 / 9%);
-  --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+  --avvio-fuoco: #006e46;
+  --avvio-velo: rgb(23 34 27 / 5%);
+  --avvio-velo-forte: rgb(23 34 27 / 9%);
+  --avvio-cartella: #37996c;
+  --avvio-cartella-retro: #267853;
+  --avvio-cartella-ombra: #36805d;
+  --avvio-foglio-1: #8ec3c2;
+  --avvio-foglio-2: #95a982;
 }
 :root[data-avvio-luce="dark"][data-avvio-contrasto="high"] {
-  --avvio-testo: #f2f5fb;
-  --avvio-tenue: #bac0c9;
-  --avvio-accento: #a2c0ff;
-  --avvio-bordo: #868d9a;
+  --avvio-testo: #f1f7f3;
+  --avvio-tenue: #bcc6bf;
+  --avvio-accento: #68d8a1;
+  --avvio-bordo: #829087;
   --avvio-guasto: #ff938b;
-  --avvio-fuoco: #a2c0ff;
-  --avvio-velo: rgb(242 245 251 / 7%);
-  --avvio-velo-forte: rgb(242 245 251 / 12%);
+  --avvio-fuoco: #68d8a1;
+  --avvio-velo: rgb(241 247 243 / 7%);
+  --avvio-velo-forte: rgb(241 247 243 / 12%);
 }
 :root[data-avvio-luce="light"][data-avvio-contrasto="high"] {
-  --avvio-testo: #090d16;
-  --avvio-tenue: #3e434d;
-  --avvio-accento: #1235ab;
-  --avvio-bordo: #666b76;
+  --avvio-testo: #06100a;
+  --avvio-tenue: #3b463f;
+  --avvio-accento: #004e30;
+  --avvio-bordo: #636e67;
   --avvio-guasto: #980009;
-  --avvio-fuoco: #1235ab;
-  --avvio-velo: rgb(9 13 22 / 5%);
-  --avvio-velo-forte: rgb(9 13 22 / 9%);
+  --avvio-fuoco: #004e30;
+  --avvio-velo: rgb(6 16 10 / 5%);
+  --avvio-velo-forte: rgb(6 16 10 / 9%);
+  --avvio-cartella: #077b50;
+  --avvio-cartella-retro: #005b39;
+  --avvio-cartella-ombra: #116442;
 }
 
 /* Il fondo del documento è già quello dell'app: niente bianco fra un disegno
@@ -142,43 +152,49 @@ body:has(> .avvio) {
   text-align: center;
 }
 
-/* Il marchio della barra, due volte più grande: 56 px, raggio 16, la effe di
-   Newsreader in corsivo. Alla consegna, in scala 0,5, è esattamente
-   #brand-menu (28 px, raggio 8, glifo 19 px). */
+/* Il marchio: Marcuzzo intero (`marcuzzo.svg`, D26) a 56 px, senza tessera
+   né ombra. Il gufo ha i colori del disegno; la cartella e i fogli quelli
+   della luce risolta: di serie i ruoli `--logo-*` dei quattro fogli della
+   ricetta, scritti qui sopra perché l'avvio si disegna prima di ogni foglio;
+   con un tema o una tinta scelti arrivano da luce.js, salvati alla consegna
+   con le chiavi `cartella`, `cartella-retro`, `cartella-ombra`, `foglio-1` e
+   `foglio-2`. */
 .avvio-marchio {
   position: relative;
   display: grid;
   place-items: center;
   width: 56px;
   height: 56px;
+  /* Senza tessera serve solo al bordo dei colori forzati, qui sotto. */
   border-radius: 16px;
-  background: var(--avvio-accento);
-  color: var(--avvio-inchiostro);
   opacity: 0;
   transform: scale(0.96);
   transition:
     opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.avvio-marchio::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: var(--avvio-ombra);
-  pointer-events: none;
-}
 .avvio[data-marchio] .avvio-marchio {
   opacity: 1;
   transform: none;
 }
-.avvio-glifo {
-  font-family: "Avvio Newsreader", Georgia, "Times New Roman", serif;
-  font-size: 38px;
-  font-style: italic;
-  font-weight: 500;
-  line-height: 1;
-  transform: translateY(-2px);
+.avvio-logo {
+  width: 56px;
+  height: 56px;
+}
+.avvio-logo .logo-cartella {
+  fill: var(--avvio-cartella);
+}
+.avvio-logo .logo-cartella-retro {
+  fill: var(--avvio-cartella-retro);
+}
+.avvio-logo .logo-cartella-ombra {
+  fill: var(--avvio-cartella-ombra);
+}
+.avvio-logo .logo-foglio-1 {
+  fill: var(--avvio-foglio-1);
+}
+.avvio-logo .logo-foglio-2 {
+  fill: var(--avvio-foglio-2);
 }
 /* Il segnale del guasto: un punto rosso sull'angolo, staccato dal fondo. */
 .avvio-segnale {
@@ -429,10 +445,33 @@ body:has(> .avvio) {
   pointer-events: none;
 }
 /* Colori forzati (alto contrasto di Windows): il marchio tiene un bordo, la
-   scia prende il colore di sistema. */
+   scia prende il colore di sistema. Il logo diventa una sagoma, come quello
+   della pelle (skin/frame.css): la cartella nel colore del testo, il gufo nel
+   grigio del sistema, le facce, gli occhi e i fogli nel colore del fondo. */
 @media (forced-colors: active) {
   .avvio-marchio {
     outline: 1px solid CanvasText;
+  }
+  .avvio-logo {
+    forced-color-adjust: none;
+  }
+  .avvio-logo path[class] {
+    fill: CanvasText;
+    stroke: none;
+  }
+  .avvio-logo path.logo-piumaggio,
+  .avvio-logo path.logo-pancia,
+  .avvio-logo path.logo-ali,
+  .avvio-logo path.logo-ombra,
+  .avvio-logo path.logo-zampe {
+    fill: GrayText;
+  }
+  .avvio-logo path.logo-bianco,
+  .avvio-logo path.logo-occhi,
+  .avvio-logo path.logo-becco-luce,
+  .avvio-logo path.logo-foglio-1,
+  .avvio-logo path.logo-foglio-2 {
+    fill: Canvas;
   }
   .avvio-scia {
     background: Highlight;

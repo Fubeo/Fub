@@ -24,7 +24,9 @@ pub use crate::dict;
 
 pub use crate::patterns;
 
-use std::sync::OnceLock;
+use std::sync::Arc;
+
+use crate::slot::Slot;
 
 pub use crate::lang::ProofLang;
 pub use dict::Dictionary;
@@ -43,11 +45,20 @@ static IT_PAT: &str = include_str!("../../../assets/hyphenation/it.pat");
 /// file's header).
 static DE_PAT: &str = include_str!("../../../assets/hyphenation/de.pat");
 
+/// The decoded US English word list (hyphenation and English spelling) and the parsed patterns,
+/// kept from first use until [`release_hyphenation`].
+static EN_US: Slot<Dictionary> = Slot::new();
+static EN_US_PATTERNS: Slot<Patterns> = Slot::new();
+static PL: Slot<Patterns> = Slot::new();
+static PT: Slot<Patterns> = Slot::new();
+static IT: Slot<Patterns> = Slot::new();
+static DE: Slot<Patterns> = Slot::new();
+
 impl Dictionary {
-    /// The bundled US English dictionary (decoded on first use).
-    pub fn en_us() -> &'static Dictionary {
-        static D: OnceLock<Dictionary> = OnceLock::new();
-        D.get_or_init(|| {
+    /// The bundled US English dictionary (decoded on first use, and again after
+    /// [`release_hyphenation`]).
+    pub fn en_us() -> Arc<Dictionary> {
+        EN_US.get(|| {
             if EN_US_DIC.is_empty() {
                 return Dictionary::default();
             }
@@ -61,34 +72,44 @@ impl Dictionary {
 
 impl Patterns {
     /// The bundled US English patterns (parsed on first use).
-    pub fn en_us() -> &'static Patterns {
-        static P: OnceLock<Patterns> = OnceLock::new();
-        P.get_or_init(|| Patterns::parse(EN_US_PAT))
+    pub fn en_us() -> Arc<Patterns> {
+        EN_US_PATTERNS.get(|| Patterns::parse(EN_US_PAT))
     }
 
     /// The bundled Polish patterns and exception words (parsed on first use).
-    pub fn pl() -> &'static Patterns {
-        static P: OnceLock<Patterns> = OnceLock::new();
-        P.get_or_init(|| Patterns::parse(PL_PAT))
+    pub fn pl() -> Arc<Patterns> {
+        PL.get(|| Patterns::parse(PL_PAT))
     }
 
     /// The bundled Portuguese patterns and exception words (parsed on first use).
-    pub fn pt() -> &'static Patterns {
-        static P: OnceLock<Patterns> = OnceLock::new();
-        P.get_or_init(|| Patterns::parse(PT_PAT))
+    pub fn pt() -> Arc<Patterns> {
+        PT.get(|| Patterns::parse(PT_PAT))
     }
 
     /// The bundled Italian patterns (parsed on first use; the file has no exception words).
-    pub fn it() -> &'static Patterns {
-        static P: OnceLock<Patterns> = OnceLock::new();
-        P.get_or_init(|| Patterns::parse(IT_PAT))
+    pub fn it() -> Arc<Patterns> {
+        IT.get(|| Patterns::parse(IT_PAT))
     }
 
     /// The bundled German patterns (parsed on first use; the file has no exception words).
-    pub fn de() -> &'static Patterns {
-        static P: OnceLock<Patterns> = OnceLock::new();
-        P.get_or_init(|| Patterns::parse(DE_PAT))
+    pub fn de() -> Arc<Patterns> {
+        DE.get(|| Patterns::parse(DE_PAT))
     }
+}
+
+/// Estimated heap bytes of the hyphenation data decoded so far: the US English word list and the
+/// patterns of each language used, by the capacity of their tables and strings. The bundled
+/// files they come from stay in the binary and aren't counted.
+pub fn loaded_bytes() -> usize {
+    [EN_US.loaded_bytes(), EN_US_PATTERNS.loaded_bytes(), PL.loaded_bytes(), PT.loaded_bytes(), IT.loaded_bytes(), DE.loaded_bytes()].iter().sum()
+}
+
+/// Drop the decoded hyphenation data (the US English word list, which English spelling reads too,
+/// and every language's patterns); each is decoded again from the bundled file on next use, and
+/// a word being hyphenated meanwhile finishes with the data it has. Returns the estimated bytes
+/// released ([`loaded_bytes`]).
+pub fn release_hyphenation() -> usize {
+    [EN_US.release(), EN_US_PATTERNS.release(), PL.release(), PT.release(), IT.release(), DE.release()].iter().sum()
 }
 
 /// Hyphenation limits from the paragraph's Hyphenation settings.
@@ -143,9 +164,9 @@ fn core_breaks(core: &[char], lang: ProofLang) -> (Vec<usize>, Source) {
         return (crate::tr::hyphen::points(core), Source::Rules);
     }
     match lang {
-        ProofLang::Pt => return core_breaks_patterns(Patterns::pt(), core),
-        ProofLang::It => return core_breaks_patterns(Patterns::it(), core),
-        ProofLang::De => return core_breaks_patterns(Patterns::de(), core),
+        ProofLang::Pt => return core_breaks_patterns(&Patterns::pt(), core),
+        ProofLang::It => return core_breaks_patterns(&Patterns::it(), core),
+        ProofLang::De => return core_breaks_patterns(&Patterns::de(), core),
         _ => {}
     }
     if lang == ProofLang::Ru && core.iter().all(|&c| crate::ru::is_cyrillic(c)) {
@@ -456,6 +477,20 @@ mod tests {
 
     fn h(w: &str) -> String {
         hyphenate_word(w, &Limits::default())
+    }
+
+    #[test]
+    fn released_hyphenation_data_comes_back() {
+        let lim = Limits::default();
+        let before = (hyphenate_word("information", &lim), hyphenate_word_in("chrząszcze", &lim, ProofLang::Pl));
+        assert!(EN_US.loaded_bytes() > 0 && PL.loaded_bytes() > 0);
+        // Other tests hyphenate meanwhile (and may decode the data again at once), so this test
+        // only counts on what it uses itself.
+        crate::release_hyphenation();
+        crate::release_hyphenation();
+        assert_eq!((hyphenate_word("information", &lim), hyphenate_word_in("chrząszcze", &lim, ProofLang::Pl)), before);
+        assert!(EN_US.loaded_bytes() > 0 && PL.loaded_bytes() > 0);
+        assert!(crate::loaded_hyphenation_bytes() >= EN_US.loaded_bytes() + PL.loaded_bytes());
     }
 
     #[test]

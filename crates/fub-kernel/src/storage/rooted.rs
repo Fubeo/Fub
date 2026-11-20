@@ -8,8 +8,8 @@ use cap_std::fs::{Dir, Metadata, OpenOptions};
 use cap_std::{ambient_authority, AmbientAuthority};
 
 use super::{
-    same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry, EntryKind, FileIdentity,
-    Merge, Stat, VaultStorage,
+    refuse_read_only, same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry,
+    EntryKind, FileIdentity, FileWitness, Merge, Stat, VaultStorage, WriteBits,
 };
 
 /// Filesystem di produzione ancorato alla directory aperta al mount.
@@ -356,11 +356,32 @@ impl RootedFsStorage {
         Ok(!metadata.is_file())
     }
 
+    /// I nomi del file a `path`. Su Unix bastano i metadati già letti; su
+    /// Windows il numero sta soltanto sull'handle, e il file si apre per
+    /// chiederlo a [`Self::handle_link_count`].
     fn link_count(&self, path: &Utf8Path, metadata: &Metadata) -> io::Result<u64> {
         #[cfg(unix)]
         {
             use cap_std::fs::MetadataExt;
             let _ = path;
+            Ok(metadata.nlink())
+        }
+        #[cfg(windows)]
+        {
+            let file = self.dir.open(self.rel(path)?)?;
+            Self::handle_link_count(&file, metadata)
+        }
+    }
+
+    /// I nomi del file **già aperto**: su Unix dai suoi metadati, su Windows
+    /// dal suo handle. [`Self::link_count`] su Windows riapre il path, e fra
+    /// la prima apertura e la seconda il nome può portare a un altro file:
+    /// chi ha già un handle conta su quello.
+    fn handle_link_count(file: &cap_std::fs::File, metadata: &Metadata) -> io::Result<u64> {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let _ = file;
             Ok(metadata.nlink())
         }
         #[cfg(windows)]
@@ -371,10 +392,9 @@ impl RootedFsStorage {
                 GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
             };
             let _ = metadata;
-            let file = self.dir.open(self.rel(path)?)?;
             let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
             // SAFETY: `info` è storage valido per la syscall e l'handle resta
-            // vivo per l'intera chiamata.
+            // vivo per l'intera chiamata (lo tiene `file`, preso in prestito).
             let ok =
                 unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) };
             if ok == 0 {
@@ -463,7 +483,15 @@ impl RootedFsStorage {
         let rel = self.rel_buf(path)?;
         let name = path.file_name().unwrap_or("senza-nome");
         let parent = path.parent().unwrap_or(&self.root);
-        let permissions = self.dir.metadata(&rel).ok().map(|m| m.permissions());
+        // Ciò che c'è già al nome: un'assenza vuol dire file nuovo, ogni altro
+        // guasto risale, perché senza guardarlo non si sa se lo si può
+        // sovrascrivere. Un file in sola lettura si rifiuta qui, prima del
+        // temporaneo, così la cartella resta com'era (PA T59).
+        let existing = crate::error::optional(self.dir.metadata(&rel))?;
+        if let Some(metadata) = &existing {
+            refuse_read_only(path, WriteBits::of_cap(metadata))?;
+        }
+        let permissions = existing.map(|m| m.permissions());
 
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -544,14 +572,37 @@ impl RootedFsStorage {
         // La creazione concorrente non esclusiva del lock nuovo può restituire
         // ENOENT su macOS. Si elegge invece un creatore con create_new: soltanto
         // AlreadyExists autorizza ad aprire il lock pubblicato dall'altro writer.
-        // Il file resta stabile: non si tronca, sostituisce o rimuove al rilascio.
-        // Nessun retry su NotFound o sugli altri errori del filesystem.
-        let lock = match self.dir.open_with(&lock_rel, &options) {
-            Ok(lock) => Ok(lock),
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => self
-                .dir
-                .open_with(&lock_rel, OpenOptions::new().write(true)),
-            Err(error) => Err(error),
+        // Il file non si tronca e non si sostituisce; lo toglie chi lo tiene, al
+        // rilascio ([`HeldLock`]). Per questo il lock visto con AlreadyExists può
+        // sparire prima dell'apertura: NotFound in quel punto è un rilascio
+        // avvenuto nel frattempo, e si torna a creare. Su Windows un lock appena
+        // tolto ma ancora aperto da qualcuno («delete pending») risponde
+        // «accesso negato» finché l'ultimo handle non si chiude: si riprova, per
+        // un tempo limitato, perché un vero divieto non passa da sé.
+        let patience = std::time::Instant::now() + super::LOCK_RETRY_INTERVAL;
+        let lock = loop {
+            let attempt = match self.dir.open_with(&lock_rel, &options) {
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    match self
+                        .dir
+                        .open_with(&lock_rel, OpenOptions::new().write(true))
+                    {
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                        other => other,
+                    }
+                }
+                other => other,
+            };
+            match attempt {
+                Err(error)
+                    if cfg!(windows)
+                        && error.kind() == io::ErrorKind::PermissionDenied
+                        && std::time::Instant::now() < patience =>
+                {
+                    std::thread::sleep(super::RETRY_LOCK);
+                }
+                other => break other,
+            }
         }
         .inspect_err(|error| {
             tracing::error!(target: "fub.storage", %path, %error,
@@ -571,6 +622,63 @@ impl RootedFsStorage {
         })
     }
 
+    /// L'identità del file dietro un handle già aperto: su Unix dai suoi
+    /// metadati, su Windows dal suo handle, come [`Self::handle_link_count`].
+    fn handle_identity(file: &std::fs::File) -> io::Result<FileIdentity> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let metadata = file.metadata()?;
+            Ok(FileIdentity {
+                volume: metadata.dev(),
+                file: metadata.ino(),
+            })
+        }
+        #[cfg(windows)]
+        {
+            use std::mem::MaybeUninit;
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::{
+                GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+            };
+            let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+            // SAFETY: l'handle resta vivo per l'intera chiamata (lo tiene
+            // `file`, preso in prestito) e il puntatore indica storage valido.
+            let ok =
+                unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) };
+            if ok == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: un ritorno non-zero inizializza la struttura.
+            let info = unsafe { info.assume_init() };
+            Ok(FileIdentity {
+                volume: info.dwVolumeSerialNumber as u64,
+                file: ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+            })
+        }
+    }
+
+    /// Il nome `lock` porta ancora al file `held` appena acquisito?
+    ///
+    /// È la metà del protocollo che rende sicuro togliere il lock al rilascio.
+    /// Chi aspettava sull'handle di un lock che il detentore ha poi tolto
+    /// ottiene il lock di un file **senza nome**: un terzo writer ne crea uno
+    /// nuovo e lo prende subito, e i due starebbero insieme nella sezione
+    /// protetta. Chi si accorge che il nome non porta più al suo file lascia
+    /// l'handle e riparte da capo. Un nome sparito (o, su Windows, in
+    /// cancellazione) è la stessa risposta: il lock non è più quello.
+    fn still_names(&self, lock: &Utf8Path, held: &std::fs::File) -> io::Result<bool> {
+        let held = Self::handle_identity(held)?;
+        match self.identity(lock) {
+            Ok(named) => Ok(named == held),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(error) if cfg!(windows) && error.kind() == io::ErrorKind::PermissionDenied => {
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn locked_operation<T>(path: &Utf8Path, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
         // Il log distingue il guasto del lock da quello della transazione,
         // senza sostituire l'errore I/O né perdere kind e raw_os_error.
@@ -580,9 +688,24 @@ impl RootedFsStorage {
         })
     }
 
+    /// Prende il lock di `path` e lo rende come [`HeldLock`], che al rilascio
+    /// toglie il proprio file.
+    fn hold_lock(&self, path: &Utf8Path, create_parent: bool) -> io::Result<HeldLock<'_>> {
+        loop {
+            let (lock_path, lock) = self.open_lock(path, create_parent)?;
+            Self::acquire_lock(path, &lock)?;
+            if self.still_names(&lock_path, &lock)? {
+                return Ok(HeldLock {
+                    storage: self,
+                    names: vec![lock_path],
+                    file: lock,
+                });
+            }
+        }
+    }
+
     fn with_lock<T>(&self, path: &Utf8Path, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
-        let (_, lock) = self.open_lock(path, true)?;
-        Self::acquire_lock(path, &lock)?;
+        let _held = self.hold_lock(path, true)?;
         Self::locked_operation(path, f)
     }
 
@@ -600,26 +723,98 @@ impl RootedFsStorage {
     /// diversi possono indicare lo stesso lock dove il caso non conta. In quel
     /// caso (`nota` → `Nota`) il lock si prende una volta sola: un secondo
     /// lock dello stesso processo sullo stesso file aspetterebbe sé stesso.
+    ///
+    /// Al rilascio si tolgono tutti e due i compagni: quello della sorgente
+    /// resterebbe altrimenti accanto a un file che non c'è più, ed è il lock
+    /// che il cestino lasciava nella cartella della nota.
     fn with_move_locks<T>(
         &self,
         from: &Utf8Path,
         to: &Utf8Path,
         f: impl FnOnce() -> io::Result<T>,
     ) -> io::Result<T> {
-        let (from_lock_path, from_lock) = self.open_lock(from, false)?;
-        let (to_lock_path, to_lock) = self.open_lock(to, true)?;
-        let from_identity = self.identity(&from_lock_path)?;
-        let to_identity = self.identity(&to_lock_path)?;
-        if from_identity == to_identity {
-            Self::acquire_lock(from, &from_lock)?;
-        } else if from_identity < to_identity {
-            Self::acquire_lock(from, &from_lock)?;
-            Self::acquire_lock(to, &to_lock)?;
-        } else {
-            Self::acquire_lock(to, &to_lock)?;
-            Self::acquire_lock(from, &from_lock)?;
-        }
+        let _held = loop {
+            let (from_lock_path, from_lock) = self.open_lock(from, false)?;
+            let (to_lock_path, to_lock) = self.open_lock(to, true)?;
+            let from_identity = Self::handle_identity(&from_lock)?;
+            let to_identity = Self::handle_identity(&to_lock)?;
+            if from_identity == to_identity {
+                Self::acquire_lock(from, &from_lock)?;
+                if self.still_names(&from_lock_path, &from_lock)?
+                    && self.still_names(&to_lock_path, &from_lock)?
+                {
+                    drop(to_lock);
+                    break vec![HeldLock {
+                        storage: self,
+                        names: vec![from_lock_path, to_lock_path],
+                        file: from_lock,
+                    }];
+                }
+                continue;
+            }
+            let (first, second) = if from_identity < to_identity {
+                (
+                    (from, from_lock_path, from_lock),
+                    (to, to_lock_path, to_lock),
+                )
+            } else {
+                (
+                    (to, to_lock_path, to_lock),
+                    (from, from_lock_path, from_lock),
+                )
+            };
+            Self::acquire_lock(first.0, &first.2)?;
+            Self::acquire_lock(second.0, &second.2)?;
+            let first_named = self.still_names(&first.1, &first.2)?;
+            let second_named = self.still_names(&second.1, &second.2)?;
+            if first_named && second_named {
+                // Il vettore si lascia cadere in ordine: il primo preso si
+                // rilascia per primo, e l'ordine non conta per chi aspetta.
+                break vec![
+                    HeldLock {
+                        storage: self,
+                        names: vec![first.1],
+                        file: first.2,
+                    },
+                    HeldLock {
+                        storage: self,
+                        names: vec![second.1],
+                        file: second.2,
+                    },
+                ];
+            }
+            // Un lock il cui nome porta ancora a lui torna libero senza
+            // toglierlo: chi lo aspetta lo troverà valido al prossimo giro.
+        };
         Self::locked_operation(to, f)
+    }
+
+    /// Toglie un compagno di lock **tenuto**: è l'ultima mossa del detentore,
+    /// prima di chiudere l'handle che lo tiene. Un lock che non è vuoto non è
+    /// nato qui — Fub non ci scrive mai — e non si toglie: è un file di
+    /// qualcun altro che porta lo stesso nome. Un errore resta nel log e non
+    /// cambia l'esito dell'operazione protetta, che è già avvenuta: il file
+    /// rimasto lo toglie la prossima apertura del vault
+    /// ([`VaultStorage::remove_abandoned_lock`]).
+    fn remove_held_lock(&self, lock: &Utf8Path, held: &std::fs::File) {
+        match held.metadata() {
+            Ok(metadata) if metadata.len() == 0 => {}
+            Ok(_) => return,
+            Err(error) => {
+                tracing::warn!(target: "fub.storage", %lock, %error,
+                    "lock non tolto: metadati illeggibili");
+                return;
+            }
+        }
+        let removed = self
+            .rel_buf(lock)
+            .and_then(|relative| self.dir.remove_file(relative));
+        match removed {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => tracing::warn!(target: "fub.storage", %lock, %error,
+                "lock non tolto al rilascio"),
+        }
     }
 
     fn current_bytes(&self, path: &Utf8Path) -> io::Result<Option<Vec<u8>>> {
@@ -702,6 +897,32 @@ impl RootedFsStorage {
     }
 }
 
+/// Un compagno di lock **tenuto**: i nomi che portano al file e l'handle che
+/// tiene il lock.
+///
+/// Il file si toglie al rilascio, e nell'ordine che rende la rimozione sicura:
+/// prima il nome, finché il lock è ancora tenuto, poi l'handle. Chi arriva dopo
+/// la rimozione non trova il nome e ne crea uno nuovo; chi aspettava
+/// sull'handle vecchio lo ottiene e si accorge, con
+/// [`still_names`](RootedFsStorage::still_names), che il nome non porta più a
+/// lui. Così nessun compagno resta nel vault dopo un'operazione finita — la
+/// cartella che si sincronizza con un altro programma non vede file nascosti
+/// di Fub — e l'esclusione fra i writer resta quella di prima.
+struct HeldLock<'a> {
+    storage: &'a RootedFsStorage,
+    names: Vec<Utf8PathBuf>,
+    file: std::fs::File,
+}
+
+impl Drop for HeldLock<'_> {
+    fn drop(&mut self) {
+        for name in &self.names {
+            self.storage.remove_held_lock(name, &self.file);
+        }
+        // `file` si chiude dopo questo corpo, e con lui si rilascia il lock.
+    }
+}
+
 impl VaultStorage for RootedFsStorage {
     fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>> {
         self.dir.read(self.rel(path)?)
@@ -771,11 +992,39 @@ impl VaultStorage for RootedFsStorage {
         })
     }
 
+    /// La stessa regola della scrittura ([`Self::unsafe_write_target`]): un
+    /// symlink, un hardlink o un target non regolare dentro il vault non si
+    /// appende, perché le righe finirebbero nel file a cui il collegamento
+    /// porta (un registro `.fub/journal.jsonl` che punta a una nota la
+    /// riempirebbe di JSON). Si guarda prima di aprire e di nuovo sul file
+    /// aperto, prima di scrivere un byte: un collegamento messo al posto del
+    /// file fra le due cose ha un'altra identità e si rifiuta.
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
         self.create_parent(path)?;
+        let refuse =
+            |why: &str| io::Error::new(io::ErrorKind::InvalidInput, format!("{why}: {path}"));
+        if self.unsafe_write_target(path)? {
+            return Err(refuse(
+                "append rifiutato su symlink, hardlink o target non regolare",
+            ));
+        }
         let mut options = OpenOptions::new();
         options.append(true).create(true);
         let mut file = self.dir.open_with(self.rel(path)?, &options)?;
+        let opened = file.metadata()?;
+        if !opened.is_file() || Self::handle_link_count(&file, &opened)? != 1 {
+            return Err(refuse("append rifiutato su un target non regolare"));
+        }
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let named = self.dir.symlink_metadata(self.rel(path)?)?;
+            if named.file_type().is_symlink()
+                || (named.dev(), named.ino()) != (opened.dev(), opened.ino())
+            {
+                return Err(refuse("target cambiato durante l'append"));
+            }
+        }
         file.write_all(bytes)
     }
 
@@ -793,6 +1042,69 @@ impl VaultStorage for RootedFsStorage {
         // Windows la sorgente serializzata evita inoltre due successi sullo
         // stesso file verso destinazioni differenti.
         self.with_move_locks(from, to, || self.rename_no_replace_locked(from, to))
+    }
+
+    fn move_in_no_replace(&self, outside: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        if outside.starts_with(&self.root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{outside} è dentro la root montata: si sposta con rename_no_replace"),
+            ));
+        }
+        let (Some(source_parent), Some(source_name)) = (outside.parent(), outside.file_name())
+        else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{outside} non è un file rinominabile"),
+            ));
+        };
+        self.create_parent_synced(to)?;
+        self.with_lock(to, || {
+            // La sorgente è del sistema e si apre per nome; la destinazione
+            // passa dalla capability, come ogni scrittura del vault.
+            let source_dir =
+                Dir::open_ambient_dir(source_parent.as_std_path(), ambient_authority())?;
+            let source_name = Path::new(source_name);
+            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::io::AsRawFd;
+                let moved = super::rename_no_replace_at(
+                    source_dir.as_raw_fd(),
+                    source_name,
+                    to_parent.as_raw_fd(),
+                    &to_name,
+                )?;
+                if !moved {
+                    // Senza la primitiva del sistema: il lucchetto di `to`
+                    // tiene fuori gli altri writer fra la verifica e la mossa.
+                    match to_parent.symlink_metadata(&to_name) {
+                        Ok(_) => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::AlreadyExists,
+                                format!("{to}: esiste già"),
+                            ))
+                        }
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                        Err(error) => return Err(error),
+                    }
+                    source_dir.rename(source_name, &to_parent, &to_name)?;
+                }
+            }
+            #[cfg(windows)]
+            rename_no_replace_windows(&source_dir, source_name, &to_parent, &to_name)?;
+            #[cfg(not(any(unix, windows)))]
+            {
+                if to_parent.symlink_metadata(&to_name).is_ok() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!("{to}: esiste già"),
+                    ));
+                }
+                source_dir.rename(source_name, &to_parent, &to_name)?;
+            }
+            self.sync_parents(to, None)
+        })
     }
 
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
@@ -891,6 +1203,44 @@ impl VaultStorage for RootedFsStorage {
         }
     }
 
+    /// Timbro e identità con una domanda sola: lo stesso `stat` su unix, lo
+    /// stesso handle su Windows (vedi [`VaultStorage::witness`]).
+    fn witness(&self, path: &Utf8Path) -> io::Result<FileWitness> {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let metadata = self.dir.metadata(self.rel(path)?)?;
+            Ok(FileWitness {
+                change_stamp: Some(super::unix_change_stamp(
+                    metadata.ctime(),
+                    metadata.ctime_nsec(),
+                )),
+                identity: Some(FileIdentity {
+                    volume: metadata.dev(),
+                    file: metadata.ino(),
+                }),
+            })
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+            let mut options = OpenOptions::new();
+            options.read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS);
+            let file = self.dir.open_with(self.rel(path)?, &options)?;
+            let handle = file.as_raw_handle();
+            Ok(FileWitness {
+                change_stamp: Some(super::windows_change_stamp(handle)?),
+                identity: Some(super::windows_identity(handle)?),
+            })
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = path;
+            Ok(FileWitness::default())
+        }
+    }
+
     fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
         if a == b {
             return true;
@@ -915,6 +1265,46 @@ impl VaultStorage for RootedFsStorage {
     fn remove_dir_all(&self, dir: &Utf8Path) -> io::Result<()> {
         self.dir.remove_dir_all(self.rel(dir)?)?;
         self.sync_parents(dir, None)
+    }
+
+    /// Il lock si prende senza aspettare e si toglie solo se il nome porta
+    /// ancora al file preso, con lo stesso controllo del detentore
+    /// ([`still_names`](Self::still_names)): un writer che l'aveva aperto e non
+    /// ancora preso lo trova tolto e riparte da capo. Un collegamento, un file
+    /// non vuoto — Fub nel lock non scrive mai — o un supporto che il lock non
+    /// lo sa fare restano dove sono.
+    fn remove_abandoned_lock(&self, path: &Utf8Path) -> io::Result<bool> {
+        if !path.file_name().is_some_and(super::is_write_lock) {
+            return Ok(false);
+        }
+        let relative = self.rel_buf(path)?;
+        match self.dir.symlink_metadata(&relative) {
+            Ok(metadata) if metadata.is_file() && metadata.len() == 0 => {}
+            Ok(_) => return Ok(false),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error),
+        }
+        let lock = match self
+            .dir
+            .open_with(&relative, OpenOptions::new().write(true))
+        {
+            Ok(lock) => lock.into_std(),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        match lock.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => return Ok(false),
+            Err(std::fs::TryLockError::Error(error)) => return Err(error),
+        }
+        if lock.metadata()?.len() != 0 || !self.still_names(path, &lock)? {
+            return Ok(false);
+        }
+        match self.dir.remove_file(&relative) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> io::Result<()> {
@@ -1316,6 +1706,93 @@ mod tests {
         assert!(!moved.join("source.txt").exists());
         assert_eq!(std::fs::read(&from).unwrap(), b"outside");
         assert!(!to.exists());
+    }
+
+    /// Un registro del vault che è un collegamento a una nota: appendere
+    /// scriverebbe le righe del registro dentro la nota. Come la scrittura,
+    /// l'append rifiuta symlink, hardlink e target non regolari, e la nota
+    /// resta com'era.
+    #[cfg(unix)]
+    #[test]
+    fn append_refuses_links_inside_the_vault() {
+        use std::os::unix::fs::symlink;
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_owned()).unwrap();
+        let note = root.join("Nota.md");
+        std::fs::write(&note, b"# Nota\n").unwrap();
+        std::fs::create_dir_all(root.join(".fub")).unwrap();
+        symlink("../Nota.md", root.join(".fub/journal.jsonl")).unwrap();
+        std::fs::hard_link(&note, root.join(".fub/entries.jsonl")).unwrap();
+        std::fs::create_dir_all(root.join(".fub/cartella")).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+
+        for name in ["journal.jsonl", "entries.jsonl", "cartella"] {
+            let error = storage
+                .append(&root.join(".fub").join(name), b"{\"op\":1}\n")
+                .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput, "{name}: {error}");
+        }
+        assert_eq!(std::fs::read(&note).unwrap(), b"# Nota\n");
+
+        // Un file regolare, o uno che non c'è ancora, si appende.
+        let log = root.join(".fub/nuovo.jsonl");
+        storage.append(&log, b"uno\n").unwrap();
+        storage.append(&log, b"due\n").unwrap();
+        assert_eq!(std::fs::read(&log).unwrap(), b"uno\ndue\n");
+    }
+
+    /// Una voce del cestino del sistema torna nel vault passando dalla
+    /// capability: se la sua cartella è diventata un collegamento che porta
+    /// fuori, la mossa si rifiuta e il file resta nel cestino (B11 dell'audit).
+    #[cfg(unix)]
+    #[test]
+    fn moving_in_from_outside_stays_inside_the_capability() {
+        use std::os::unix::fs::symlink;
+        let vault = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_owned()).unwrap();
+        let trash = tempfile::tempdir().unwrap();
+        let trash = Utf8PathBuf::from_path_buf(trash.path().to_owned()).unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let elsewhere = Utf8PathBuf::from_path_buf(elsewhere.path().to_owned()).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+
+        // La cartella è un collegamento verso fuori: la mossa non passa.
+        let trashed = trash.join("Nota.md");
+        std::fs::write(&trashed, b"# Nota\n").unwrap();
+        symlink(&elsewhere, root.join("dir")).unwrap();
+        assert!(storage
+            .move_in_no_replace(&trashed, &root.join("dir/Nota.md"))
+            .is_err());
+        assert!(
+            !elsewhere.join("Nota.md").exists(),
+            "the file left the vault"
+        );
+        assert_eq!(std::fs::read(&trashed).unwrap(), b"# Nota\n");
+
+        // Una destinazione occupata resta com'era, e la sorgente pure.
+        std::fs::write(root.join("Nota.md"), b"nuova").unwrap();
+        let error = storage
+            .move_in_no_replace(&trashed, &root.join("Nota.md"))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(root.join("Nota.md")).unwrap(), b"nuova");
+        assert!(trashed.exists());
+
+        // Una sorgente dentro il vault non è «da fuori».
+        let error = storage
+            .move_in_no_replace(&root.join("Nota.md"), &root.join("Altra.md"))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+
+        // Il caso buono: torna al suo posto, creando la cartella che manca.
+        storage
+            .move_in_no_replace(&trashed, &root.join("sotto/Nota.md"))
+            .unwrap();
+        assert_eq!(
+            std::fs::read(root.join("sotto/Nota.md")).unwrap(),
+            b"# Nota\n"
+        );
+        assert!(!trashed.exists());
     }
 
     #[cfg(unix)]

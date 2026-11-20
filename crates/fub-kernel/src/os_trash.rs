@@ -83,10 +83,25 @@ fn escaped_trash_path(path: &Utf8Path) -> String {
 
 #[cfg(target_os = "linux")]
 fn linux_move_to_trash(abs: &Utf8Path) -> io::Result<Utf8PathBuf> {
+    move_to_trash_in(&trash_base()?, abs)
+}
+
+/// La mossa nel cestino freedesktop che sta in `base`.
+///
+/// Il file esce dal vault con [`FsStorage`], senza passare dal supporto del
+/// vault, e non lascia niente accanto a dove stava: `rename_no_replace` è
+/// `renameat2` con `RENAME_NOREPLACE`, che non prende lock, e dove il
+/// filesystem non la offre il lock del ripiego è quello della **destinazione**,
+/// nel cestino del sistema. Un backend che spostasse con [`FsStorage`] su
+/// Windows lascerebbe invece `.<nome>.lock` nella cartella della nota, perché
+/// lì la mossa serializza la sorgente con il protocollo stabile: là il passo
+/// dentro il vault va fatto con il supporto del vault, che il suo lock lo
+/// toglie al rilascio.
+#[cfg(target_os = "linux")]
+fn move_to_trash_in(base: &Utf8Path, abs: &Utf8Path) -> io::Result<Utf8PathBuf> {
     use crate::storage::VaultStorage as _;
     use std::io::Write;
 
-    let base = trash_base()?;
     let files = base.join("files");
     let info = base.join("info");
     std::fs::create_dir_all(files.as_std_path())?;
@@ -150,5 +165,39 @@ impl OsTrashBackend for FsStorage {
                 "backend OS non disponibile",
             ))
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    /// **Il cestino del sistema non lascia lock nel vault.** La mossa esce dal
+    /// vault con [`FsStorage`], fuori dal supporto che il proprio lock lo
+    /// toglie: qui si guarda che non ne prenda nessuno accanto alla nota. Il
+    /// ramo di Windows non ha un backend (risponde `Unsupported` e il
+    /// workspace ripiega sul cestino del vault): lo presidia
+    /// `tests/no_lock_left_behind.rs`.
+    #[test]
+    fn the_system_trash_leaves_no_lock_beside_the_note() {
+        let vault = tempfile::tempdir().unwrap();
+        let system = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(vault.path()).unwrap();
+        let base = Utf8Path::from_path(system.path()).unwrap().join("Trash");
+        std::fs::create_dir(root.join("Note")).unwrap();
+        std::fs::write(root.join("Note/Nota.md"), b"testo").unwrap();
+
+        let dest = move_to_trash_in(&base, &root.join("Note/Nota.md")).unwrap();
+
+        assert_eq!(dest, base.join("files/Nota.md"));
+        assert_eq!(std::fs::read(&dest).unwrap(), b"testo");
+        let left: Vec<_> = std::fs::read_dir(root.join("Note"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert!(
+            left.is_empty(),
+            "il cestino del sistema ha lasciato {left:?}"
+        );
     }
 }

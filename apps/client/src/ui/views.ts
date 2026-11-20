@@ -44,7 +44,7 @@ import { activatable, stableIdentifier, trapFocus } from "./a11y";
 import { applyIntent } from "./intents";
 import { mountTree, patchTree, unmountTree } from "./node";
 import { onEvent } from "../state/kernel";
-import { flushPendingSave } from "../state/document-session";
+import { expectDocumentWrite, flushPendingSave } from "../state/document-session";
 import { openVaultRoot, vaultArg } from "../state/store";
 import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
 import { notify } from "./notify";
@@ -59,6 +59,13 @@ import { setContextMenuViews } from "./context-views";
 import { activeDoc } from "../state/layout";
 import { on } from "../state/store";
 import { pageName } from "../rules/mirrored";
+import { embeddedViewsDiscovered, setEmbeddedViewHost } from "./embedded-views";
+import { dropOffersChanged, offerDropTargets, type SurfaceDropDocument, type SurfaceDropOffer, type SurfaceRect } from "../editors/core/registry";
+import { registerDeskRenderer } from "./desk";
+
+// I riquadri della Scrivania si trascinano e si spostano da tastiera: la riga
+// di comandi che la view dichiara (`fub:desk-tile`) la disegna `ui/desk.ts`.
+registerDeskRenderer();
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -93,6 +100,17 @@ interface Mounted {
   /// manderebbe al vault **corrente**, che cambia aprendone un altro mentre
   /// la view è ancora sullo schermo.
   vault: string | undefined;
+  /// Un albero arrivato mentre la view era nascosta — la risposta a una
+  /// richiesta partita quando si vedeva, o il `replace` di un'azione: lo
+  /// disegna `drawOpenedTab` quando la view torna in vista, se nel frattempo
+  /// non è invecchiata (`stale`).
+  pending: UiNode | null;
+  /// La view è invecchiata mentre nessuno la guardava (#518): un invito a
+  /// ridisegnare arrivato a scheda chiusa, o a ispettore chiuso, non chiede
+  /// niente al kernel e si segna qui. La view che torna in vista chiede
+  /// l'albero una volta sola, anche dopo N inviti: è ciò che toglie le view
+  /// nascoste dal lavoro di ogni salvataggio automatico.
+  stale: boolean;
 }
 
 /// Le istanze montate, per **id di pannello**: il registro dei pannelli sa
@@ -106,6 +124,151 @@ interface Mounted {
 /// stesso pannello, anche quando il contenitore DOM viene riutilizzato.
 let mountedEpoch = 0;
 const mounted = new Map<string, Mounted>();
+
+/// Quanto resta l'annuncio di una scrittura dopo la risposta di un'azione di
+/// view. L'evento della scrittura parte mentre il comando scrive, prima della
+/// risposta, ma attraversa un altro canale: questa è l'attesa per lui. Oltre,
+/// l'annuncio si ritira, perché l'azione forse non ha scritto niente (un
+/// filtro, un'apertura) e un annuncio rimasto zittirebbe un cambio vero.
+/// Uguale all'attesa di «Annulla» della Base (`editors/base/surface.ts`).
+const VIEW_WRITE_GRACE_MS = 1500;
+
+/// Annuncia alla sessione della nota a fuoco che un'azione di view sta per
+/// riscriverla (`expectDocumentWrite`), e torna come ritirare l'annuncio.
+/// La nota a fuoco è quella che l'ispettore segue: le sue view scrivono lì.
+/// Il ritiro accorcia la scadenza dell'annuncio a `VIEW_WRITE_GRACE_MS`: la
+/// scadenza la tiene la sessione, e qui non resta nessun timer da spegnere.
+function announceViewWrite(): () => void {
+  const doc = activeDoc();
+  if (doc === null) return () => {};
+  const withdraw = expectDocumentWrite(doc);
+  return () => withdraw(VIEW_WRITE_GRACE_MS);
+}
+
+// # Le righe che nominano un posto di un documento
+//
+// Una riga d'albero la cui azione porta nel payload un documento e un
+// intervallo (`{doc, start, end}`, byte UTF-8 della sorgente disegnata: il
+// salto a un titolo della Struttura) nomina un posto di quel documento. La
+// riga lo dice con tre attributi, e la shell la offre come posto dove far
+// cadere un blocco portato fuori dalla colonna del testo (`offerDropTargets`
+// di `editors/core/registry.ts`): l'editor decide che cosa fa il rilascio,
+// qui si sa soltanto dove sta la riga e come si chiama.
+
+/// Il posto che un'azione nomina, se il suo payload ne porta uno.
+function placeOf(action: ActionRef | null): { doc: string; start: number; end: number } | null {
+  const payload = action?.payload;
+  if (!payload || typeof payload !== "object") return null;
+  const { doc, start, end } = payload as Record<string, unknown>;
+  const offset = (value: unknown): number | null => {
+    const n = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+    return typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? n : null;
+  };
+  const from = offset(start);
+  const to = offset(end);
+  if (typeof doc !== "string" || doc === "" || from === null || to === null || to < from) return null;
+  return { doc, start: from, end: to };
+}
+
+/// Le righe d'albero di `node`, in ordine di disegno (in profondità, prima il
+/// padre): è l'ordine in cui `node.ts` mette i loro elementi.
+function treeItemActions(node: UiNode, out: (ActionRef | null)[]): void {
+  if (node.node === "tree_item") out.push(node.action);
+  for (const value of Object.values(node)) {
+    if (!Array.isArray(value)) continue;
+    for (const child of value) {
+      if (child && typeof child === "object" && typeof (child as { node?: unknown }).node === "string") {
+        treeItemActions(child as UiNode, out);
+      }
+    }
+  }
+}
+
+/// Scrive sulle righe d'albero disegnate da `node` dentro `root` il posto che
+/// nominano. Se le righe nel DOM non sono quante quelle dell'albero (un
+/// disegno che non si capisce) non segna niente: meglio nessun posto che uno
+/// sbagliato.
+function markPlaces(root: HTMLElement, node: UiNode): void {
+  const actions: (ActionRef | null)[] = [];
+  treeItemActions(node, actions);
+  const items = [
+    ...(root.matches(".ui-tree-item") ? [root] : []),
+    ...Array.from(root.querySelectorAll<HTMLElement>(".ui-tree-item")),
+  ];
+  const rows = items.map((item) => item.querySelector<HTMLElement>(":scope > .ui-tree-label"));
+  const fits = rows.length === actions.length;
+  rows.forEach((row, i) => {
+    if (!row) return;
+    const place = fits ? placeOf(actions[i]!) : null;
+    if (!place) {
+      delete row.dataset.placeDoc;
+      delete row.dataset.placeStart;
+      delete row.dataset.placeEnd;
+      delete row.dataset.dropHot;
+      return;
+    }
+    row.dataset.placeDoc = place.doc;
+    row.dataset.placeStart = String(place.start);
+    row.dataset.placeEnd = String(place.end);
+  });
+  // Righe ridisegnate: un blocco già fuori dalla colonna rimisura i posti.
+  dropOffersChanged();
+}
+
+/// La parte di `el` che si vede: il suo rettangolo tagliato da ogni antenato
+/// che taglia ciò che sborda e dalla finestra. `null` se non se ne vede niente.
+export function visibleRect(el: HTMLElement): SurfaceRect | null {
+  const rect = el.getBoundingClientRect();
+  let left = rect.left;
+  let top = rect.top;
+  let right = rect.right;
+  let bottom = rect.bottom;
+  for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+    if (up.hidden) return null;
+    const style = getComputedStyle(up);
+    if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+    const clip = up.getBoundingClientRect();
+    left = Math.max(left, clip.left);
+    top = Math.max(top, clip.top);
+    right = Math.min(right, clip.right);
+    bottom = Math.min(bottom, clip.bottom);
+  }
+  right = Math.min(right, window.innerWidth);
+  bottom = Math.min(bottom, window.innerHeight);
+  left = Math.max(left, 0);
+  top = Math.max(top, 0);
+  return right > left && bottom > top ? { left, top, right, bottom } : null;
+}
+
+/// I posti di `document` che le view montate mostrano adesso: soltanto quelle
+/// montate nel suo stesso vault (FUB-001), perché lo stesso percorso in un
+/// altro vault è un'altra nota.
+function placesOn(document: SurfaceDropDocument): SurfaceDropOffer[] {
+  const out: SurfaceDropOffer[] = [];
+  for (const mountedView of mounted.values()) {
+    const container = mountedView.container;
+    if (!container.isConnected || mountedView.vault !== document.vault) continue;
+    for (const row of Array.from(container.querySelectorAll<HTMLElement>(".ui-tree-label[data-place-doc]"))) {
+      if (row.dataset.placeDoc !== document.documentId) continue;
+      const rect = visibleRect(row);
+      if (!rect) continue;
+      out.push({
+        kind: "place",
+        document,
+        span: { start: Number(row.dataset.placeStart), end: Number(row.dataset.placeEnd) },
+        title: row.textContent?.trim() ?? "",
+        rect,
+        hover: (on) => {
+          if (on) row.dataset.dropHot = "true";
+          else delete row.dataset.dropHot;
+        },
+      });
+    }
+  }
+  return out;
+}
+
+offerDropTargets({ offers: placesOn });
 
 // Le view che dichiarano la superficie principale non sono montate: sono
 // **disponibili**. Chi apre una linguetta di view le cerca in
@@ -138,6 +301,8 @@ function unmountMounted(id: string, mountedView: Mounted): void {
   mounted.delete(id);
   unregisterPanel(id);
   unmountTree(mountedView.container);
+  // Le sue righe non sono più posti: chi ne tiene di prima li rimisura.
+  dropOffersChanged();
 }
 
 /// Monta (o rimonta) una view dichiarata dentro il riquadro `pane`.
@@ -159,6 +324,10 @@ export async function mountViewInPane(
   const already = mounted.get(id);
   if (!already || already.container !== container) {
     if (already) unmountMounted(id, already);
+    // Quale view il contenitore mostra, come `.declared-view` nelle barre: la
+    // pelle ci appende ciò che una view sola vuole (lo scorrere e il margine
+    // della Scrivania).
+    container.dataset.viewId = view;
     // L'esemplare **è il riquadro**: è la stessa identità che il `ViewContext`
     // porta di là dal confine (`pane`), quindi lo stato di vista di una view
     // aperta in due riquadri si separa esattamente dove l'utente vede due cose.
@@ -170,6 +339,8 @@ export async function mountViewInPane(
       epoch: ++mountedEpoch,
       race: new Race(),
       vault: openVaultRoot(),
+      pending: null,
+      stale: false,
     });
     registerPanel({
       id,
@@ -195,7 +366,17 @@ export function unmountViewFromPane(view: string, pane: string): void {
   const mountedView = mounted.get(id);
   if (!mountedView) return;
   unmountMounted(id, mountedView);
+  if (mountedView.container.dataset.viewId === view) delete mountedView.container.dataset.viewId;
 }
+
+// Una view dell'area principale si monta anche dentro un documento (il recinto
+// ```tasks```): l'esemplare è il recinto invece del riquadro, e il resto è lo
+// stesso giro — ridisegno a maschera, azioni, corse. Vedi `embedded-views.ts`.
+setEmbeddedViewHost({
+  known: (view) => primaryView(view) !== undefined,
+  mount: mountViewInPane,
+  unmount: unmountViewFromPane,
+});
 
 /// La superficie di una view → il contenitore che la ospita, o `null` se questa
 /// shell non ce l'ha ancora.
@@ -400,6 +581,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
   setPrimaryViews(mains);
   setSidePanelViews(lefts);
   setContextMenuViews(contextSpecs);
+  embeddedViewsDiscovered();
 
   viewsBottomEl.hidden = viewsBottomEl.childElementCount === 0;
   viewsStatusEl.hidden = viewsStatusEl.childElementCount === 0;
@@ -537,6 +719,8 @@ function mountSpec(spec: ViewSpec, host: HTMLElement): void {
     epoch: ++mountedEpoch,
     race: new Race(),
     vault: openVaultRoot(),
+    pending: null,
+    stale: false,
   });
 
   registerPanel({
@@ -580,6 +764,15 @@ async function renderDeclaredView(id: string): Promise<void> {
   // evidentemente concorrente. Riparandola al posto nominato sarebbero rimasti
   // scoperti il ramo `replace` e ogni ridisegno che arriva da un evento, che
   // sono i più frequenti.
+  //
+  // Una view che nessuno vede non chiede l'albero (#518): si segna invecchiata
+  // e lo chiede `drawOpenedTab` quando torna in vista. Un giro già in volo non
+  // si annulla: se risponde a view nascosta, `draw` lo mette da parte.
+  if (!viewShown(mountedView)) {
+    mountedView.stale = true;
+    return;
+  }
+  mountedView.stale = false;
   await mountedView.race.last(async (expected) => {
     const tree = await expected(
       api.renderView(
@@ -604,10 +797,98 @@ async function renderDeclaredView(id: string): Promise<void> {
   });
 }
 
+/// Vero se la scheda che ospita `mountedView` è quella accesa. Fuori
+/// dall'ispettore è sempre vero: le altre superfici non hanno schede, e la loro
+/// visibilità la decide chi le apre. Dentro l'ispettore, una scheda chiusa è un
+/// pannello con `hidden` (vedi `activateTab`).
+///
+/// Con l'ispettore chiuso non basta: lo dice `viewShown`.
+function inspectorTabOpen(mountedView: Mounted): boolean {
+  const panel = mountedView.container.parentElement;
+  if (panel === null || panel.parentElement !== viewsRightEl) return true;
+  return !panel.hidden;
+}
+
+/// Vero se l'ispettore si vede: aperto (`hidden` è la preferenza, e un
+/// cassetto aperto lo toglie), oppure chiuso ma affacciato dal bordo
+/// (`peek-inspector` su `#layout`, vedi `frame/peek.ts`). La concentrazione lo
+/// ritira anche aperto. Senza `#right-pane` attorno conta solo la scheda.
+function inspectorShown(): boolean {
+  const pane = viewsRightEl.closest<HTMLElement>("#right-pane");
+  if (pane === null) return true;
+  if (pane.closest("#app")?.hasAttribute("data-focus-mode")) return false;
+  if (!pane.hidden) return true;
+  return pane.parentElement?.classList.contains("peek-inspector") ?? false;
+}
+
+/// Vero se qualcuno può vedere `mountedView`: le view fuori dall'ispettore
+/// sempre (la loro visibilità la decide chi le apre), quelle dell'ispettore
+/// solo con la loro scheda accesa e l'ispettore in vista.
+function viewShown(mountedView: Mounted): boolean {
+  return inspectorTabOpen(mountedView) && (!inRightSidebar(mountedView) || inspectorShown());
+}
+
+function inRightSidebar(mountedView: Mounted): boolean {
+  return mountedView.container.parentElement?.parentElement === viewsRightEl;
+}
+
+/// Porta in pari la view che torna in vista: chiede l'albero se è invecchiata
+/// mentre era nascosta, altrimenti disegna quello arrivato nel frattempo.
+/// Chiamata da `activateTab`, dopo che il pannello è diventato visibile, e
+/// quando l'ispettore stesso torna in vista (`watchInspectorShown`).
+function drawOpenedTab(panel: HTMLElement): void {
+  const id = panel.dataset.viewId;
+  if (id === undefined) return;
+  const mountedView = mounted.get(id);
+  if (!mountedView) return;
+  if (mountedView.container.parentElement !== panel) return;
+  if (!viewShown(mountedView)) return;
+  if (mountedView.stale) {
+    // Passa dal registro come ogni ridisegno: un guasto si dice una volta.
+    void refreshPanel(id);
+    return;
+  }
+  if (mountedView.pending === null) return;
+  draw(id, mountedView, mountedView.pending);
+}
+
+/// Osserva i tre interruttori di `inspectorShown` e, quando l'ispettore torna
+/// in vista, porta in pari la scheda accesa. Torna il disposer.
+function watchInspectorShown(current: () => HTMLElement | undefined): Teardown {
+  const pane = viewsRightEl.closest<HTMLElement>("#right-pane");
+  if (pane === null || typeof MutationObserver === "undefined") return () => {};
+  let shown = inspectorShown();
+  const observer = new MutationObserver(() => {
+    const now = inspectorShown();
+    if (now === shown) return;
+    shown = now;
+    const panel = current();
+    if (now && panel) drawOpenedTab(panel);
+  });
+  observer.observe(pane, { attributes: true, attributeFilter: ["hidden"] });
+  if (pane.parentElement) observer.observe(pane.parentElement, { attributes: true, attributeFilter: ["class"] });
+  const app = pane.closest("#app");
+  if (app) observer.observe(app, { attributes: true, attributeFilter: ["data-focus-mode"] });
+  return () => observer.disconnect();
+}
+
 /// Disegna un albero nel contenitore della sua istanza e chiude il giro
 /// azione→`ViewUpdate`: un click torna al provider via `view_action` con le sue
 /// due metà, e la risposta si interpreta qui.
+///
+/// Una view nascosta (scheda chiusa, ispettore chiuso) non si disegna: un
+/// albero che le arriva lo stesso — una risposta partita quando si vedeva — resta
+/// in `pending` e si disegna quando torna in vista, se nel frattempo un invito
+/// non l'ha invecchiata (allora si chiede di nuovo, vedi `drawOpenedTab`).
+/// Un'azione parte da una scheda aperta, ma la risposta può arrivare a scheda
+/// chiusa: un `patch` allora segna la view da ridisegnare (vedi sotto), un
+/// `replace` va in attesa come gli altri.
 function draw(id: string, mountedView: Mounted, tree: UiNode): void {
+  if (!viewShown(mountedView)) {
+    mountedView.pending = tree;
+    return;
+  }
+  mountedView.pending = null;
   mountTree(mountedView.container, tree, async (action: ActionRef, fields: FieldValue[]) => {
     const actionContainer = mountedView.container;
     const actionEpoch = mountedView.epoch;
@@ -629,21 +910,36 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
     // toglie l'unico caso in cui la corsa la perdeva sempre lo stesso.
     await flushPendingSave();
     if (!isAuthoritative()) return;
-    // **Qui non c'è un `try`, ed è deliberato.** Un'azione che va storta la dice
+    // **La scrittura si annuncia.** Un'azione di view che riscrive la nota
+    // aperta — una proprietà cambiata dall'ispettore, una versione ripristinata
+    // — è un gesto di chi la guarda, non un cambio da fuori: senza annuncio la
+    // sessione la diceva con «è cambiato su disco ed è stato ricaricato»
+    // (IMP-109). Annunciata prima, perché l'evento parte mentre il comando
+    // scrive; ritirata poco dopo la risposta, perché qui non si sa se l'azione
+    // ha scritto, e un annuncio rimasto zittirebbe un cambio vero.
+    const withdraw = announceViewWrite();
+    // **Qui non c'è un `catch`, ed è deliberato.** Un'azione che va storta la dice
     // la `Port` di `ui/node.ts` — l'unica strada che un'azione ha per uscire da
     // un albero montato — e scriverne uno anche qui vorrebbe dire due frasi per
     // lo stesso guasto, o una qui e nessuna per il prossimo `mountTree`. Il
     // difetto misurato nominava questa riga: era il testimone, non l'autore.
-    const update = await api.viewAction(
-      // La view, non il pannello: vedi la nota su `renderDeclaredView`.
-      mountedView.view,
-      mountedView.instance,
-      mountedView.params,
-      action.action,
-      action.payload,
-      fields,
-      ...vaultArg(mountedView.vault),
-    );
+    // Il `finally` ritira l'annuncio anche quando l'azione fallisce; non
+    // cattura niente.
+    let update: Awaited<ReturnType<typeof api.viewAction>>;
+    try {
+      update = await api.viewAction(
+        // La view, non il pannello: vedi la nota su `renderDeclaredView`.
+        mountedView.view,
+        mountedView.instance,
+        mountedView.params,
+        action.action,
+        action.payload,
+        fields,
+        ...vaultArg(mountedView.vault),
+      );
+    } finally {
+      withdraw();
+    }
     if (!isAuthoritative()) return;
     if (update.kind === "replace") {
       draw(id, mountedView, update.root);
@@ -651,16 +947,22 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
     }
     if (update.kind === "patch") {
       // Una chiave che non c'è più non è un errore: è una view cambiata sotto,
-      // e la si ridisegna intera invece di lasciarla stantia.
-      if (!patchTree(actionContainer, update.key, update.node)) {
+      // e la si ridisegna intera invece di lasciarla stantia. Una scheda chiusa
+      // non ha un DOM da ritoccare, e il suo albero in attesa sarebbe rimasto
+      // indietro: si chiede di nuovo, come per una chiave perduta.
+      if (!viewShown(mountedView) || !patchTree(actionContainer, update.key, update.node)) {
         if (!isAuthoritative()) return;
         await renderDeclaredView(id);
+        return;
       }
+      const patched = Array.from(actionContainer.querySelectorAll<HTMLElement>("[data-key]")).find((el) => el.dataset.key === update.key);
+      if (patched) markPlaces(patched, update.node);
       return;
     }
     if (!isAuthoritative()) return;
     await applyIntent(update);
   });
+  markPlaces(mountedView.container, tree);
 }
 
 
@@ -859,6 +1161,8 @@ function buildInspector(): void {
       tab.setAttribute("aria-selected", String(selected));
     }
     const current = panels[safe];
+    // La scheda che si apre disegna ciò che ha ricevuto mentre era chiusa.
+    if (current) drawOpenedTab(current);
     const titleEl = current?.querySelector<HTMLElement>(".panel-title");
     // Il titolo testuale è quello dichiarato dalla view: il registro, non un
     // elenco scritto qui. Sparito il pannello, resta l'id onesto — brutto e
@@ -877,14 +1181,19 @@ function buildInspector(): void {
     follows.hidden = !onDocument;
     if (!onDocument) return;
     const doc = activeDoc();
-    follows.textContent = doc ? t("inspector.follows", { doc: pageName(doc) }) : t("inspector.follows_none");
+    // «Segue la nota», a voce bassa: quale nota lo dice il suggerimento, così
+    // un nome lungo non spinge via il titolo della vista.
+    follows.textContent = doc ? t("inspector.follows_doc") : t("inspector.follows_none");
+    setTooltip(follows, doc ? t("inspector.follows", { doc: pageName(doc) }) : "");
     follows.dataset.state = doc ? "doc" : "none";
   }
   const offLayout = on("layout", drawFollows);
   const offDoc = on("active-doc", drawFollows);
+  const offShown = watchInspectorShown(() => panels[active]);
   stopFollowing = () => {
     offLayout();
     offDoc();
+    offShown();
   };
 
   // Il tablist va in cima, prima dei pannelli — e il titolo sopra di lui.

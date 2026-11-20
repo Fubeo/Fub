@@ -49,6 +49,7 @@
 // proverebbero solo aprendo l'app.
 import { existingDocuments, settings } from "../host/query";
 import { onEvent } from "./kernel";
+import { settingTouches } from "./setting-change";
 import { readState, on, writeState } from "./store";
 
 /// Quante se ne ricordano, **per elenco**.
@@ -79,6 +80,11 @@ export const HISTORY_KEY = "history.enabled";
 
 let opens: string[] = [];
 let searches: string[] = [];
+
+/// Il giro di lettura che vale: ogni `loadHistory` e ogni svuotamento lo
+/// avanzano. Al cambio di vault veloce la lettura del vault di prima può
+/// rispondere dopo quella del nuovo, e una risposta vecchia non scrive.
+let generation = 0;
 
 /// L'interruttore, come l'ha letto l'ultima volta.
 ///
@@ -164,6 +170,7 @@ export function rememberSearch(text: string): void {
 /// dimenticarlo, e riaprirlo domani deve ritrovare le sue cose. Chi vuole
 /// cancellare chiama [`dimenticaTutto`].
 export function forgetRecent(): void {
+  generation += 1;
   opens = [];
   searches = [];
 }
@@ -244,8 +251,10 @@ async function rereadToggle(): Promise<void> {
 /// Rilegge le due liste dal disco: l'interruttore prima, perché a memoria spenta
 /// non c'è niente da rileggere e c'è semmai qualcosa da cancellare.
 export async function loadHistory(): Promise<void> {
+  const mine = ++generation;
   await rereadToggle();
   const saved = await readState<unknown>(STATE_KEY);
+  if (mine !== generation) return;
   if (!enabled) {
     // Spenta all'avvio, e sul disco c'era ancora qualcosa: si cancella qui.
     // Il caso vero è chi spegne, chiude l'app e la riapre — o chi riapre con
@@ -281,9 +290,11 @@ export function rememberOpens(): () => void {
     void loadHistory();
   });
   // L'interruttore che cambia: da questo pannello, da un'altra finestra, da un
-  // `settings.json` riscritto sotto. L'evento non porta il valore (§11.1), e
-  // quindi si rilegge.
-  const stopSetting = onEvent("setting_changed", () => void rereadToggle());
+  // `settings.json` riscritto sotto. L'evento porta la chiave ma non il valore
+  // (§11.1): si rilegge solo quando la chiave è la sua.
+  const stopSetting = onEvent("setting_changed", ({ key }) => {
+    if (settingTouches(key, (changed) => changed === HISTORY_KEY)) void rereadToggle();
+  });
   return () => {
     stopActive();
     stopVault();

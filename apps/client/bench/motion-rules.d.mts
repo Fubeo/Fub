@@ -77,6 +77,7 @@ export interface Jump {
 
 export declare const ALLOWED: readonly string[];
 export declare const EXIT_LIMIT_MS: number;
+export declare const BROWSER_ARGS: readonly string[];
 export declare function longExits(
   runs: readonly { target: string; pseudo?: string; duration: number; delay: number }[],
   limit?: number,
@@ -88,6 +89,13 @@ export declare function cssName(name: string): string;
 export declare function family(name: string): "allowed" | "paint" | "layout";
 export declare function foreignProperties(names: readonly string[]): string[];
 export declare function foreignInKeyframes(keyframes: readonly object[]): string[];
+export interface FramedEntry {
+  target: string;
+  property: string;
+  frames: number;
+}
+export declare const FRAME_STREAK: number;
+export declare function perFrame(entries: readonly FramedEntry[], streak?: number): FramedEntry[];
 export declare function editorLayerIdentity(entry: InlineEntry): boolean;
 export declare function residue(
   moving: readonly InlineEntry[],

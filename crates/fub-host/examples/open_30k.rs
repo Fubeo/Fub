@@ -2,7 +2,7 @@
 //! grande, e dove va il tempo.
 //!
 //! ```text
-//! cargo run --release -p fub-host --example apertura_30k
+//! cargo run --release -p fub-host --example open_30k
 //! ```
 //!
 //! Tre scenari sulla stessa cartella, e tre domande diverse:
@@ -178,8 +178,11 @@ fn print_report(name: &str, sub: &OpeningSub, open_ms: Duration, index_ms: Durat
     println!("{:<18} {:>9} {:>5}", "phase", "ms", "n");
     for phase in [
         "open",
+        "entries_load",
+        "entries_decode",
         "scan_vault",
         "catch_up",
+        "restore",
         "fotografia",
         "fetta",
         "plan_batch",
@@ -187,6 +190,7 @@ fn print_report(name: &str, sub: &OpeningSub, open_ms: Duration, index_ms: Durat
         "graph_sources",
         "rebuild_graph",
         "reconcile",
+        "rejoin",
         "flush_indexes",
         "store_entries",
         "collect_doc_data",

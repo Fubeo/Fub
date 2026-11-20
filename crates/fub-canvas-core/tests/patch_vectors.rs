@@ -23,14 +23,24 @@ fn folder() -> PathBuf {
         .join("../../apps/client/src/__fixtures__/canvas-patches")
 }
 
-/// I vettori, in ordine di nome: `(file, json)`. Un file che non si legge fa
-/// fallire il test.
+/// Il numero davanti al nome del file (`07-…` → 7), per mettere `100-…` dopo
+/// `99-…`.
+fn number(path: &std::path::Path) -> u32 {
+    let name = path.file_name().unwrap().to_string_lossy();
+    name.split('-')
+        .next()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(u32::MAX)
+}
+
+/// I vettori, in ordine di numero e poi di nome: `(file, json)`. Un file che
+/// non si legge fa fallire il test.
 fn read_vectors() -> Vec<(String, Value)> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(folder())
         .expect("la cartella dei vettori")
         .map(|entry| entry.expect("una voce della cartella").path())
         .collect();
-    files.sort();
+    files.sort_by(|a, b| number(a).cmp(&number(b)).then_with(|| a.cmp(b)));
     files
         .into_iter()
         .map(|path| {

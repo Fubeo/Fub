@@ -384,6 +384,130 @@ export function taskChecked(symbol: string | null): boolean {
   return symbol === "x" || symbol === "X";
 }
 
+/// Il segno che introduce la scadenza di un compito. Gemello di
+/// `fub_abi::rules::tasks::DUE_MARK`.
+export const DUE_MARK = "📅";
+
+/// La scadenza trovata nel testo di un compito: il tratto che occupa (segno
+/// compreso, in unità UTF-16 della stringa) e la data, `null` se non si legge.
+export interface TaskDue {
+  from: number;
+  to: number;
+  date: string | null;
+}
+
+/// La scadenza di un testo, se ha una `📅`.
+///
+/// Gemella di `fub_abi::rules::tasks::task_due`: l'ultima `📅`; dopo, spazi e
+/// tabulazioni saltati; dieci caratteri `AAAA-MM-GG` non seguiti da un'altra
+/// cifra. Se esistono come giorno sono la data; altrimenti la scadenza c'è e non
+/// si legge, e il tratto arriva alla fine della parola che doveva esserlo.
+export function taskDue(text: string): TaskDue | null {
+  const from = text.lastIndexOf(DUE_MARK);
+  if (from < 0) return null;
+  const markEnd = from + DUE_MARK.length;
+  let start = markEnd;
+  while (text[start] === " " || text[start] === "\t") start++;
+  const after = text.slice(start);
+  const date = after.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date) && !/^\d/.test(after.slice(10))) {
+    return { from, to: start + 10, date: civilDate(date) ? date : null };
+  }
+  const word = after.search(/[ \t]/);
+  const length = word < 0 ? after.length : word;
+  return { from, to: length === 0 ? markEnd : start + length, date: null };
+}
+
+/// Quanti giorni da oggi una scadenza resta vicina. Gemello di
+/// `fub_abi::rules::tasks::NEAR_DAYS`.
+export const NEAR_DAYS = 7;
+
+/// Quanto preme una scadenza leggibile. Gemello di
+/// `fub_abi::rules::tasks::DueUrgency`.
+export type DueUrgency = "overdue" | "near" | "later";
+
+/// Quanto preme la scadenza `date` rispetto a `today` (tutte e due
+/// `AAAA-MM-GG`): scaduta prima di oggi, vicina oggi o entro [`NEAR_DAYS`]
+/// giorni, lontana dopo. Gemella di `fub_abi::rules::tasks::due_urgency`, che
+/// conta in giorni dall'epoca: le date `AAAA-MM-GG` si confrontano come
+/// stringhe.
+export function dueUrgency(date: string, today: string): DueUrgency {
+  if (date < today) return "overdue";
+  const [year, month, day] = today.split("-").map(Number) as [number, number, number];
+  const limit = new Date(Date.UTC(year, month - 1, day + NEAR_DAYS));
+  const iso = `${String(limit.getUTCFullYear()).padStart(4, "0")}-${String(limit.getUTCMonth() + 1).padStart(2, "0")}-${String(limit.getUTCDate()).padStart(2, "0")}`;
+  return date < iso ? "near" : "later";
+}
+
+/// Il segno che introduce il promemoria di un compito. Gemello di
+/// `fub_abi::rules::tasks::REMINDER_MARK`.
+export const REMINDER_MARK = "⏰";
+
+/// L'ora di un promemoria scritto senza ora. Gemella di
+/// `fub_abi::rules::tasks::DEFAULT_REMINDER_MINUTE` (le nove).
+export const DEFAULT_REMINDER_TIME = "09:00";
+
+/// Il promemoria trovato nel testo di un compito: il tratto che occupa (segno
+/// compreso, in unità UTF-16), l'ora del muro `AAAA-MM-GG HH:MM` a cui suona,
+/// `null` se non si legge, e se l'ora era scritta.
+export interface TaskReminder {
+  from: number;
+  to: number;
+  when: string | null;
+  timed: boolean;
+}
+
+/// Il promemoria di un testo, se ha un `⏰`.
+///
+/// Gemella di `fub_abi::rules::tasks::task_reminder`: l'ultimo `⏰`; dopo,
+/// spazi e tabulazioni saltati; la data `AAAA-MM-GG` non seguita da un'altra
+/// cifra, poi un'ora `HH:MM` facoltativa. Senza ora suona alle nove; ciò che
+/// dopo la data comincia con una cifra è un'ora o un refuso (`25:00` non
+/// suona alle nove). Un promemoria che non si legge ha il tratto fino alla
+/// fine della parola che doveva esserlo.
+export function taskReminder(text: string): TaskReminder | null {
+  const from = text.lastIndexOf(REMINDER_MARK);
+  if (from < 0) return null;
+  const markEnd = from + REMINDER_MARK.length;
+  const blanks = (at: number) => {
+    while (text[at] === " " || text[at] === "\t") at++;
+    return at;
+  };
+  const digitAt = (at: number) => /^[0-9]$/.test(text[at] ?? "");
+  const unreadable = (at: number): TaskReminder => {
+    const rest = text.slice(at);
+    const word = rest.search(/[ \t]/);
+    const length = word < 0 ? rest.length : word;
+    return { from, to: length === 0 ? markEnd : at + length, when: null, timed: false };
+  };
+  const start = blanks(markEnd);
+  const date = text.slice(start, start + 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || digitAt(start + 10) || !civilDate(date)) return unreadable(start);
+  const dateEnd = start + 10;
+  const timeStart = blanks(dateEnd);
+  if (timeStart === dateEnd || !digitAt(timeStart)) {
+    return { from, to: dateEnd, when: `${date} ${DEFAULT_REMINDER_TIME}`, timed: false };
+  }
+  const clock = text.slice(timeStart, timeStart + 5);
+  const shaped = /^(\d{2}):(\d{2})$/.exec(clock);
+  if (shaped && Number(shaped[1]) < 24 && Number(shaped[2]) < 60 && !digitAt(timeStart + 5)) {
+    return { from, to: timeStart + 5, when: `${date} ${clock}`, timed: true };
+  }
+  return unreadable(timeStart);
+}
+
+/// `AAAA-MM-GG` è un giorno che esiste? Gemella di
+/// `fub_abi::rules::tasks::civil_day` (che risponde coi giorni dall'epoca).
+function civilDate(text: string): boolean {
+  const year = Number(text.slice(0, 4));
+  const month = Number(text.slice(5, 7));
+  const day = Number(text.slice(8, 10));
+  if (month < 1 || month > 12 || day < 1) return false;
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!;
+  return day <= days;
+}
+
 /// Questo topic sta sotto questo prefisso?
 ///
 /// Gemella di `fub_abi::rules::events::topic_matches` (§10.1). I separatori
@@ -490,4 +614,144 @@ export function subjectHolds(subject: Subject, doc: string): boolean {
   return subject.kind === "document"
     ? subject.id === doc
     : folderContains(subject.path, doc);
+}
+
+/// Perché una voce di `fonts` di un tema non regge: la prima cosa che non va,
+/// nell'ordine famiglia, file, peso, stile. Gemella di
+/// `fub_abi::rules::theme_font::ThemeFontFault` (l'etichetta, non la frase).
+export type ThemeFontFault =
+  | "family"
+  | "series_family"
+  | "reserved_family"
+  | "file"
+  | "weight"
+  | "style";
+
+/// I limiti e gli elenchi di nomi della regola dei caratteri. La fixture porta
+/// i valori di Rust (`theme_font_limit`), e il mirror pretende che siano questi.
+export const THEME_FONT_LIMITS = {
+  fonts: 8,
+  font_bytes: 2 * 1024 * 1024,
+  font_total_bytes: 6 * 1024 * 1024,
+  family_chars: 64,
+  file_name_chars: 64,
+  weights: [100, 900] as readonly [number, number],
+  series_families: [
+    "Newsreader Variable",
+    "Hanken Grotesk Variable",
+    "IBM Plex Mono",
+    "Inter Variable",
+    "Literata Variable",
+    "JetBrains Mono Variable",
+  ] as readonly string[],
+  reserved_families: [
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "math",
+    "emoji",
+    "fangsong",
+    "inherit",
+    "initial",
+    "unset",
+    "revert",
+    "revert-layer",
+    "default",
+  ] as readonly string[],
+} as const;
+
+const FONT_FAMILY = /^[A-Za-z0-9-]+(?: [A-Za-z0-9-]+)*$/;
+const FONT_FILE_NAME = /^[A-Za-z0-9_-]+$/;
+
+/// Una voce di `fonts` regge? `null` se sì, altrimenti la prima cosa che non
+/// va. Gemella di `fub_abi::rules::theme_font::theme_font_fault`: gli argomenti
+/// arrivano da un fascio non fidato, quindi possono essere qualunque valore.
+export function themeFontFault(
+  family: unknown,
+  file: unknown,
+  weight: unknown,
+  style: unknown,
+): ThemeFontFault | null {
+  const limits = THEME_FONT_LIMITS;
+  if (typeof family !== "string" || family.length > limits.family_chars || !FONT_FAMILY.test(family)) {
+    return "family";
+  }
+  const folded = family.toLowerCase();
+  if (limits.series_families.some((series) => series.toLowerCase() === folded)) return "series_family";
+  if (limits.reserved_families.includes(folded)) return "reserved_family";
+  const name = typeof file === "string" && file.startsWith("fonts/") && file.endsWith(".woff2")
+    ? file.slice("fonts/".length, -".woff2".length)
+    : null;
+  if (name === null || name.length === 0 || name.length > limits.file_name_chars || !FONT_FILE_NAME.test(name)) {
+    return "file";
+  }
+  const [lightest, heaviest] = limits.weights;
+  if (typeof weight !== "number" || !Number.isInteger(weight) || weight < lightest || weight > heaviest) {
+    return "weight";
+  }
+  if (style !== "normal" && style !== "italic") return "style";
+  return null;
+}
+
+/// Perché una voce del set di icone di un tema non regge: la prima cosa che non
+/// va, nell'ordine nome, numero di tracciati, forma di un tracciato, peso.
+/// Gemella di `fub_abi::rules::theme_icons::ThemeIconFault`.
+export type ThemeIconFault = "name" | "paths" | "path_data" | "bytes";
+
+/// I limiti della regola delle icone. La fixture porta i valori di Rust
+/// (`theme_icon_limit`), e il mirror pretende che siano questi.
+export const THEME_ICON_LIMITS = {
+  icons: 1024,
+  paths: 8,
+  icon_bytes: 4 * 1024,
+  set_bytes: 256 * 1024,
+  name_chars: 64,
+  file_name_chars: 64,
+} as const;
+
+/// Solo i comandi e i numeri di un tracciato SVG, e gli spazi ASCII: niente
+/// markup, virgolette, attributi o riferimenti. È ciò che può stare fra le
+/// virgolette di `d="…"` senza fughe. Gemella di
+/// `fub_abi::rules::theme_icons::is_path_data`.
+const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,+\- \t\n\r\f]+$/;
+const ICON_NAME = /^[a-z0-9][a-z0-9-]*$/;
+const ICONS_FILE_NAME = /^[a-z0-9_-]+$/;
+
+/// Un `d` di un tracciato SVG regge? La regola con cui la shell accetta le
+/// icone registrate dai moduli e quelle di un tema.
+export function isPathData(d: unknown): d is string {
+  return typeof d === "string" && PATH_DATA.test(d);
+}
+
+/// Una voce del set di icone regge? `null` se sì, altrimenti la prima cosa che
+/// non va. Gemella di `fub_abi::rules::theme_icons::theme_icon_fault`: i
+/// tracciati arrivano da un fascio non fidato, quindi possono essere qualunque
+/// valore (un elenco che non è un elenco di testi è `paths` o `path_data`).
+export function themeIconFault(name: unknown, paths: unknown): ThemeIconFault | null {
+  const limits = THEME_ICON_LIMITS;
+  if (typeof name !== "string" || name.length > limits.name_chars || !ICON_NAME.test(name)) return "name";
+  if (!Array.isArray(paths) || paths.length === 0 || paths.length > limits.paths) return "paths";
+  if (!paths.every(isPathData)) return "path_data";
+  // I tracciati sono ASCII: la lunghezza in unità UTF-16 è quella in byte.
+  const bytes = (paths as string[]).reduce((sum, d) => sum + d.length, 0);
+  if (bytes > limits.icon_bytes) return "bytes";
+  return null;
+}
+
+/// Il file del set regge? `<nome>.json` accanto al manifest, minuscolo, e mai
+/// `manifest`. Gemella di `fub_abi::rules::theme_icons::theme_icons_file_holds`.
+export function themeIconsFileHolds(file: unknown): boolean {
+  if (typeof file !== "string" || !file.endsWith(".json")) return false;
+  const name = file.slice(0, -".json".length);
+  return name.length > 0 &&
+    name.length <= THEME_ICON_LIMITS.file_name_chars &&
+    name !== "manifest" &&
+    ICONS_FILE_NAME.test(name);
 }

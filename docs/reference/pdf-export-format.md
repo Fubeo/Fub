@@ -1,0 +1,549 @@
+# Il formato dell'esportazione in PDF
+
+> **Ambito:** i file che l'esportazione delle note in PDF tiene nel vault (i
+> profili d'esportazione, i predefiniti e la memoria d'esportazione di ogni
+> nota), l'elenco delle pagine che la vista passa al core, e i comandi e il
+> lavoro che scrivono il PDF.
+> **Fonti autorevoli:** in `crates/fub-features/src/pdf_export/`,
+> `profile.rs`, `command.rs` (predefiniti, profili ed esportazione come
+> comando), `memory.rs`, `aperta.rs`, `mod.rs` (l'elenco), `writer.rs` (lo
+> scrittore), `tags.rs` (la struttura del PDF accessibile), `pdfa.rs` (il
+> PDF/A), `lavoro.rs` (comando e lavoro), `book.rs` (più note in un PDF);
+> `crates/fub-importers/src/export_pdf.rs` (i sinonimi dei vecchi id).
+
+L'esportazione non scrive niente nella nota. Le regolazioni stanno nello
+spazio dati `fub.draw` del vault, quello del bundle dei disegni che porta i
+comandi del PDF (vedi [layout su disco](on-disk-layout.md)):
+
+| Che cosa | Dove | Vale per |
+|---|---|---|
+| un profilo | `.fub/plugins/fub.draw/profili/<id>.json` | ogni nota del vault |
+| il profilo predefinito del vault | `.fub/plugins/fub.draw/predefinito.json` | le note senza un predefinito per il tipo |
+| il profilo predefinito di un tipo | `.fub/plugins/fub.draw/doc/<nota del tipo codificata>/profilo-pdf.json` | le note di quel tipo |
+| la memoria di una nota | `.fub/plugins/fub.draw/doc/<nota codificata>/esportazione-pdf.json` | quella nota |
+
+Tutti e due sono dati autorevoli: non si ricostruiscono da niente. Si
+scrivono con la scrittura atomica dello spazio dati, quindi una scrittura che
+non riesce lascia il file di prima intero. Il perché della strada (la vista
+impagina, il core scrive) è nella
+[ADR 0247](../decisions/0247-la-prova-del-motore-del-pdf.md); l'elenco delle
+pagine e il comando sono [qui sotto](#lelenco-delle-pagine).
+
+## I profili
+
+Un profilo mette sotto un nome tutte le regolazioni dello spazio «Esporta in
+PDF» («Relazione per il Comune», «Bozza con i commenti»). È un file JSON per
+profilo nella cartella `profili/`. Il profilo «Di serie» c'è sempre e non è
+un file.
+
+L'`id` è il nome del file senza `.json`, e non cambia quando il profilo
+cambia nome: il nome che la persona vede sta dentro il file. Un profilo nuovo
+prende come id il suo nome, con ogni carattere ASCII che non sia una
+lettera, una cifra, lo spazio o uno fra `- . _ ( ) [ ] , '` codificato come
+`%XX` (anche il punto iniziale, che farebbe un file nascosto), e un numero
+dopo (`Bozza 2`) se il file c'è già. Fub elenca solo i file `.json` della
+cartella, non quelli delle sottocartelle né quelli nascosti.
+
+### La forma
+
+```json
+{
+  "versione": 1,
+  "nome": "Relazione per il Comune",
+  "tema": "relazione",
+  "colori": { "accento": "#1f4f8f" },
+  "inchiostro": { "bianco_e_nero": false, "risparmio": false },
+  "testo": { "corpo": 10.5, "sillabazione": true },
+  "pagina": {
+    "formato": "A4",
+    "orizzontale": false,
+    "margini": { "sopra": 25.0, "destra": 22.0, "sotto": 25.0, "sinistra": 22.0 },
+    "specchio": false,
+    "filigrana": ""
+  },
+  "testata": {
+    "posti": {
+      "sopra-destra": { "voce": "titolo" },
+      "sotto-centro": { "voce": "pagina-di-pagine" }
+    },
+    "filo": true,
+    "prima_pagina_senza": false,
+    "numeri_romani": false
+  },
+  "frontespizio": { "frontespizio": true, "indice": true, "profondita_indice": 2, "segnalibri": true },
+  "contenuto": {
+    "proprieta": "in-evidenza", "commenti": "no", "link": "colorati",
+    "compiti_fatti": true, "ripiegabili": "aperti", "schede": "anteprima",
+    "tabelle": "linee", "codice_numerato": false
+  },
+  "diagrammi": { "stile": "nota", "fondo": true },
+  "interruzioni": { "ogni_titolo_2": false, "separatore": true, "ripeti_intestazione": true },
+  "uscita": { "pagine": "", "immagini": "piene", "accessibile": true, "pdfa": false }
+}
+```
+
+Solo `versione` e `nome` sono obbligatori: ogni sezione o campo che manca
+vale quello di serie, cioè quello dell'esempio salvo `tema` (`fub`), `colori`
+e `testo` (nessuna scelta tua), `frontespizio.frontespizio` e
+`frontespizio.indice` (`false`) e `contenuto.proprieta` (`nessuna`). Fub scrive il file indentato e con le
+chiavi sempre nello stesso ordine, una riga vuota in fondo; al più 256 KiB.
+
+| Campo | Che cosa vale |
+|---|---|
+| `versione` | `1` |
+| `nome` | il nome che la persona vede, da 1 a 120 caratteri |
+| `tema` | il tema di stampa: `fub`, `classico`, `relazione`, `rivista`, `accademico`, `quaderno`, `essenziale`, `notte` |
+| `colori` | i colori tuoi, in `#rrggbb` (vedi sotto) |
+| `inchiostro` | bianco e nero, risparmio d'inchiostro: valgono sopra ogni tema |
+| `testo` | i caratteri e l'impostazione tuoi (vedi sotto), e la sillabazione |
+| `pagina` | `formato` (`A4`, `A5`, `A3`, `Lettera`, `proprio` con `misura_propria`: `[larghezza, altezza]` in mm), `orizzontale`, `margini` in mm, `specchio`, `filigrana` (vuota: nessuna) |
+| `testata` | i sei `posti` (`sopra-` e `sotto-` con `sinistra`, `centro`, `destra`), ognuno con una `voce` (`titolo`, `sezione`, `data`, `pagina`, `pagina-di-pagine`, `autore`, `percorso`, `testo` col suo `testo`); un posto che manca è vuoto |
+| `frontespizio` | frontespizio, indice fino al Titolo `profondita_indice` (2 o 3), segnalibri |
+| `contenuto` | `proprieta` (`nessuna`, `in-evidenza`, `tutte`), `commenti` (`no`, `margine`, `in-fondo`), `link` (`colorati`, `sottolineati`, `come-il-testo`), `ripiegabili` (`aperti`, `chiusi`), `schede` (`anteprima`, `solo-nome`, `pagine-in-coda`), `tabelle` (`linee`, `righe-alterne`, `griglia`) |
+| `diagrammi` | `stile`: `nota` (com'è nella nota), `tema` (come il tema di stampa) o il nome di uno stile del diagramma; `fondo` |
+| `interruzioni` | ogni Titolo 2 una pagina, il separatore che volta pagina, l'intestazione ripetuta nelle tabelle lunghe |
+| `uscita` | le `pagine` da esportare (`1-3, 5`; vuoto: tutte), `immagini` (`piene`, `alleggerite`), PDF accessibile, PDF/A |
+
+Le interruzioni messe a mano non stanno nel profilo: stanno nella nota.
+
+### Il tema e ciò che è «tuo»
+
+I colori, i caratteri e l'impostazione di ogni tema li conosce la vista che
+disegna le pagine. Il profilo nomina il tema e tiene soltanto ciò che la
+persona ha cambiato:
+
+- `colori` ha una chiave per ogni colore cambiato: `carta`, `testo`, `titoli`,
+  `accento`, `link`, `testo-secondario`, `linee`, `evidenziato`, `riquadri`,
+  `codice`, `intestazioni-tabella` e i quattro dei diagrammi,
+  `diagramma-nodi`, `diagramma-decisioni`, `diagramma-inizio-fine`,
+  `diagramma-linee`, che vincono sullo stile del diagramma;
+- `testo` ha un campo per ogni scelta che il tema decide e la persona ha
+  cambiato: `carattere_testo` e `carattere_titoli` (l'id di un carattere di
+  Fub, `newsreader`, `literata`, `hanken`, `inter` o, solo per i titoli,
+  `plex`, o il percorso di uno del vault; `georgia` e `palatino`, dei
+  profili di prima, si leggono `literata`), `corpo` (punti), `interlinea` (multipli
+  del corpo), `paragrafi` (`spazio`, `rientro`), `giustificato`,
+  `titoli_numerati`, `scala_titoli`, `allineamento_titoli` (`sinistra`,
+  `centro`), `colonne`. Un campo che manca lo decide il tema.
+
+Cambiando tema questi valori restano, ed è questo che li segna «tuoi». «Torna
+al tema» toglie la chiave, una per una o tutte insieme. Fub scrive un colore
+solo in `#rrggbb` minuscolo, e chi lo scrive accetta anche `#rgb` e le
+maiuscole; un colore scritto male a mano nel file resta com'è, conta come
+scelta tua (lo si toglie con «torna al tema») ma non vale: la pagina usa
+quello del tema.
+
+### Nomi uguali, file che non si leggono, versioni più nuove
+
+- **Nomi uguali.** Un file copiato col gestore dei file fa due profili con lo
+  stesso nome: Fub li elenca tutti e due, e la vista mostra accanto il nome
+  del file. Fub non crea né rinomina un profilo col nome di un altro; due nomi
+  sono uguali se differiscono solo per le maiuscole o per gli spazi ai lati.
+- **Un file che non si legge** (non è JSON né un profilo, o supera 256 KiB)
+  resta nell'elenco col motivo; salvarci sopra è un errore e non lo tocca.
+- **Una versione più nuova** si legge per ciò che si conosce: le chiavi
+  sconosciute, a ogni livello, si riscrivono uguali; un valore a elenco
+  sconosciuto (un formato `B5`, un tema nuovo) resta, e la vista usa quello
+  di serie. Con `versione` più alta di 1 il file non si riscrive (salvare o
+  rinominare è un errore), ma si copia, con tutto ciò che porta.
+
+## I predefiniti
+
+Un predefinito è `{ "versione": 1, "profilo": "<id>" }`. Per una nota vale
+quello del suo tipo, poi quello del vault, poi «Di serie»; uno che nomina un
+profilo sparito lascia il posto al livello dopo, e «Di serie» toglie il file.
+Una `versione` più alta di 1 si legge e non si riscrive. I comandi
+(`fub.draw`): `pdf.profiles` (con `note`, anche `effective`: `id` e `from`),
+`pdf.profile_save`, `pdf.profile_copy`, `pdf.profile_rename` e
+`pdf.profile_default` (`scope` `vault` o `type`); argomenti ed effetti
+nelle loro spec (`pdf_export/command.rs`).
+
+## La memoria di una nota
+
+Tiene ciò che vale solo per il PDF di quella nota: lo stile dato a un
+diagramma solo per l'esportazione e i blocchi lasciati fuori. Lo stile scritto
+nel diagramma (`%% stile:`) resta quello della nota e non viene toccato.
+
+Sta nello spazio per-documento dello spazio dati, quindi segue la nota senza
+ascoltare eventi: la rinomina, anche fatta da un altro programma, la porta
+sotto il nome nuovo; il cestino la parcheggia e il ripristino la riporta; una
+nota che prende il nome di una cestinata comincia senza memoria; quando la
+nota non c'è più né nel vault né nel cestino, la raccolta all'apertura del
+vault la toglie (vedi [layout su disco](on-disk-layout.md#cestino)).
+
+### La forma
+
+```json
+{
+  "versione": 1,
+  "fuori": [
+    { "sezione": ["Metodo"], "impronta": "9f86d0…", "occorrenza": 0, "anteprima": "| a | b |" }
+  ],
+  "diagrammi": [
+    {
+      "blocco": { "sezione": ["Metodo"], "impronta": "1b4f0e…", "occorrenza": 0, "anteprima": "```mermaid" },
+      "stile": "tema"
+    }
+  ]
+}
+```
+
+Una memoria vuota non ha file. Al più 1 MiB e 10.000 voci.
+
+### Come si riconosce un blocco
+
+Dalla sezione e dal contenuto:
+
+| Campo | Che cosa vale |
+|---|---|
+| `sezione` | i titoli sopra il blocco, dal più alto; vuota prima del primo titolo |
+| `impronta` | SHA-256 in esadecimale del testo del blocco, con i capo riga in `\n`, senza spazi in fondo alle righe e senza righe vuote ai lati |
+| `occorrenza` | quale, fra i blocchi uguali nella stessa sezione, contando da 0 |
+| `anteprima` | la prima riga del blocco, al più 80 caratteri: serve a dire quale voce non vale più |
+
+Una voce vale finché nella stessa sezione c'è un blocco con la stessa
+impronta e la stessa occorrenza, anche se intorno la nota è cambiata. Se il
+blocco cambia, si sposta in un'altra sezione o sparisce, la voce non vale più:
+il blocco non è lasciato fuori e il diagramma torna allo stile del profilo, e
+il pannello lo dice. La voce resta finché la persona non la toglie.
+
+### Errori
+
+Una memoria che non si legge resta e non si sostituisce: salvare risponde con
+l'errore, e solo «ricomincia» la toglie. Una memoria di una versione più nuova
+si legge per ciò che si conosce, conserva il resto e non si riscrive.
+
+## L'elenco delle pagine
+
+La vista impagina la nota e manda al core ciò che ha disegnato, pagina per
+pagina: un JSON (`ElencoPagine`, versione 1) che il core scrive senza andare a
+capo né impaginare. Le misure sono in pixel CSS, con l'origine in alto a
+sinistra della pagina e la `y` verso il basso; un pixel CSS è 3/4 di punto
+PDF. Un campo che il formato non conosce rende l'elenco illeggibile.
+
+```json
+{
+  "versione": 1,
+  "larghezza": 794, "altezza": 1123,
+  "titolo": "Relazione", "autore": "Ada Lovelace", "lingua": "it",
+  "facce": [
+    { "famiglia": "Literata Variable", "file": "/fonts/literata-latin-wght-normal.woff2",
+      "corsivo": false, "assi": [{ "tag": "wght", "valore": 400 }] }
+  ],
+  "pagine": [
+    {
+      "pezzi": [
+        { "tipo": "testo", "x": 72, "y": 90, "larghezza": 30, "faccia": 0, "corpo": 16,
+          "colore": [42, 40, 38, 1], "testo": "Ciao", "posizioni": [0, 9.1, 13.2, 21.5] },
+        { "tipo": "riquadro", "x": 72, "y": 100, "w": 300, "h": 1, "colore": [0, 0, 0, 0.2] },
+        { "tipo": "vettore", "x": 72, "y": 120, "w": 300, "h": 200, "svg": "<svg …>" },
+        { "tipo": "immagine", "x": 72, "y": 340, "w": 300, "h": 200, "file": "Foto/mare.jpg" }
+      ],
+      "collegamenti": [
+        { "x": 72, "y": 76, "w": 30, "h": 18,
+          "destinazione": { "tipo": "fuori", "url": "https://example.org/" } },
+        { "x": 72, "y": 400, "w": 80, "h": 18,
+          "destinazione": { "tipo": "dentro", "pagina": 1, "y": 72 } }
+      ]
+    }
+  ],
+  "segnalibri": [
+    { "titolo": "Introduzione", "livello": 1, "pagina": 0, "y": 72 }
+  ]
+}
+```
+
+| Campo | Che cosa vale |
+|---|---|
+| `titolo`, `autore` | i dati del PDF (`Title`, `Author`); vuoti, il PDF non li porta. Con un titolo il lettore lo mostra al posto del nome del file |
+| `lingua` | un'etichetta BCP 47 (`it`, `en-GB`), nel catalogo del PDF (`Lang`); una che non lo è resta fuori con l'avviso `lingua_scartata` |
+| `facce[].file` | `/fonts/<nome>` per un carattere dell'app, altrimenti il percorso di un file del vault |
+| `pezzi[].posizioni` | dove comincia ogni lettera del testo, dalla `x` del pezzo: una per lettera |
+| `pezzi[].file` (immagine) | il percorso di un file del vault: PNG, JPEG, GIF o WebP |
+| `collegamenti[]` | un riquadro della pagina che porta fuori (`url`) o a un punto di un'altra pagina (`pagina` dalla prima, che è la 0, e `y`) |
+| `segnalibri[]` | in fila, ognuno col suo `livello` da 1 a 6: un segnalibro sta sotto l'ultimo di livello più basso che lo precede |
+
+`titolo`, `autore`, `lingua`, `collegamenti`, `segnalibri`, `struttura` e
+ogni `nodo` si possono omettere. La struttura e i nodi servono al
+[PDF accessibile](#il-pdf-accessibile-e-il-pdfa).
+
+### Che cosa scrive il core
+
+- **Il testo** è testo vero, che si seleziona e si cerca: ogni faccia diventa
+  un carattere incorporato in sotto-insieme, con la tabella che riporta ogni
+  glifo alla sua lettera. Un carattere variabile si fissa nel punto dei suoi
+  assi. Un carattere che manca, non si legge o la cui licenza non lascia
+  incorporarlo esce in Literata, con un avviso; una lettera che né il
+  carattere né Literata hanno esce nel riquadro vuoto e resta nel testo che si
+  copia (`lettere_mancanti`).
+- **I vettori** restano vettori, e il testo che contengono resta testo, coi
+  caratteri di serie di Fub.
+- **Le immagini** sono *piene* (i byte del file: un JPEG resta il suo JPEG) o
+  *alleggerite*: una più fitta di 150 punti per pollice alla misura in cui sta
+  sulla pagina si riduce a quella risoluzione e si ricomprime (JPEG se è
+  opaca, PNG se ha trasparenza); una GIF, una già leggera o una che ridotta non
+  pesa meno resta com'è. Un'immagine che manca o non si legge lascia il suo
+  posto vuoto (`immagine_mancante`), una oltre 64 MiB anche
+  (`immagine_troppo_grande`).
+- **I collegamenti verso fuori** si aprono solo per `http`, `https` e
+  `mailto`: ogni altro schema (`file:`, `javascript:`, quello di un'app) resta
+  testo che non si clicca, con l'avviso `collegamento_scartato`. I collegamenti
+  dentro il documento portano alla pagina e all'altezza dette.
+- **Il file** non porta date: lo stesso elenco con le stesse risorse dà gli
+  stessi byte.
+
+Gli avvisi non fermano la scrittura: tornano con l'esito, ognuno col suo nome
+(`{"avviso": "immagine_mancante", "file": "Foto/mare.jpg"}`).
+
+### I caratteri
+
+Lo scrittore legge ogni faccia dal suo `file`: `/fonts/<nome>` è un carattere
+che Fub porta con sé (i quattordici dell'app, gli stessi byte), ogni altro
+percorso è un file del vault. Il comando `pdf.vault_fonts` del bundle
+`fub.draw`, in sola lettura, elenca i caratteri del vault per la sezione
+Caratteri: torna l'effetto `fub.pdf.vault_fonts` con `caratteri` (per ogni
+famiglia `famiglia`, `file`, `corsivo`, `incorporabile` e le `facce`, ognuna
+col suo `file`, `corsivo`, `pesi` e `incorporabile`), `illeggibili` (i
+percorsi che non si leggono) e `tralasciati` (quanti file restano fuori).
+
+Le famiglie sono quelle scritte nei file, senza badare alle maiuscole, in
+ordine di percorso; `file` è la faccia diritta più vicina al peso 400 ed è
+l'id che il profilo ricorda. Basta una faccia che la licenza (`fsType`) non
+lascia incorporare perché la famiglia sia `incorporabile: false`. Il comando
+legge al più 200 file e 256 MiB.
+
+### I limiti
+
+Oltre un limite l'elenco non si scrive, e l'errore dice quale:
+
+| Limite | Valore |
+|---|---|
+| peso del JSON dell'elenco | 64 MiB |
+| pagine | da 1 a 5.000 |
+| lato della pagina | 20.000 px |
+| pezzi per pagina | 50.000 |
+| vettore | 8 MiB |
+| collegamenti per pagina | 10.000 |
+| indirizzo di un collegamento | 8 KiB |
+| segnalibri | 20.000, di livello da 1 a 6 |
+| titolo, autore, lingua, titolo di un segnalibro | 2.000 caratteri |
+| nodi della struttura | 1.000.000 |
+| testo alternativo di un nodo | 10.000 caratteri |
+| durata della scrittura | 10 minuti |
+
+## Il PDF accessibile e il PDF/A
+
+Il PDF **accessibile** porta i tag: un lettore di schermo vi legge titoli,
+paragrafi, elenchi, tabelle con le celle d'intestazione, figure col loro testo
+alternativo, collegamenti, nella lingua e nell'ordine giusti. Lo chiede chi
+esporta (`accessible` nel [comando](#il-comando-e-il-lavoro)); la vista dice
+la specie di ogni cosa che ha disegnato con la `struttura` dell'elenco e il
+`nodo` di ogni pezzo e collegamento:
+
+```json
+{
+  "struttura": [
+    { "specie": "titolo", "livello": 1 },
+    { "specie": "paragrafo" },
+    { "specie": "collegamento", "genitore": 1 },
+    { "specie": "figura", "alt": "Il flusso: si scrive, si impagina, si esporta." },
+    { "specie": "tabella" },
+    { "specie": "riga", "genitore": 4 },
+    { "specie": "intestazione", "genitore": 5, "ambito": "colonna" }
+  ],
+  "pagine": [{
+    "pezzi": [{ "tipo": "testo", "nodo": 0, "…": "…" }, { "tipo": "vettore", "nodo": 3, "…": "…" }],
+    "collegamenti": [{ "nodo": 2, "…": "…" }]
+  }]
+}
+```
+
+| Campo di un nodo | Che cosa vale |
+|---|---|
+| `specie` | che cosa è (tabella sotto); obbligatoria |
+| `genitore` | l'indice del nodo che lo contiene, sempre **prima** di lui; senza, sta sotto il documento |
+| `livello` | da 1 a 6, solo e sempre per `titolo` |
+| `alt` | il testo alternativo: ciò che un lettore di schermo dice al posto di una figura o di una formula, o di un collegamento |
+| `lingua` | un'etichetta BCP 47 se il nodo è in un'altra lingua dalla nota; una che non lo è resta fuori con `lingua_scartata` |
+| `ambito` | solo per `intestazione`: `colonna`, `riga` o `entrambi` |
+| `numerato` | solo per `elenco`: `true` numerato, `false` puntato |
+
+| Specie | Tag del PDF |
+|---|---|
+| `sezione`, `paragrafo`, `citazione`, `codice`, `testo` | `Sect`, `P`, `BlockQuote`, `Code`, `Span` |
+| `titolo` | `H1`…`H6` secondo il `livello` |
+| `elenco`, `voce`, `etichetta`, `corpo-voce` | `L`, `LI`, `Lbl`, `LBody` |
+| `tabella`, `testata-tabella`, `corpo-tabella`, `piede-tabella`, `riga`, `intestazione`, `cella` | `Table`, `THead`, `TBody`, `TFoot`, `TR`, `TH`, `TD` |
+| `figura`, `formula`, `didascalia` | `Figure`, `Formula`, `Caption` |
+| `collegamento`, `nota` | `Link`, `Note` |
+| `indice`, `voce-indice` | `TOC`, `TOCI` |
+
+Che cosa scrive il core:
+
+- l'albero della struttura (`StructTreeRoot`, un `Document` con i nodi), il
+  catalogo marcato (`MarkInfo`), la lingua, e i metadati XMP col titolo;
+- ogni pezzo con un nodo in una sequenza marcata del suo nodo (`MCID`); un
+  pezzo senza nodo (un riquadro, un numero di pagina, un'intestazione
+  ripetuta) è un **artefatto**, che il lettore di schermo salta;
+- l'ordine di lettura è quello della struttura, non quello dei pezzi sulla
+  pagina; un nodo che continua sulla pagina dopo resta un nodo solo;
+- un collegamento con un nodo `collegamento` sta nel suo elemento `Link`, e
+  la sua descrizione (`Contents`) è il testo alternativo del nodo, se no il
+  testo che il nodo contiene, se no l'indirizzo; le pagine coi collegamenti
+  li ordinano secondo la struttura (`Tabs /S`).
+
+Avvisi propri: `struttura_mancante` (chiesto accessibile senza struttura: il
+PDF esce senza tag), `testo_alternativo_mancante` (una figura o una formula
+senza `alt`, col `nodo` e la `pagina`, dalla 1, dove comincia),
+`tabella_senza_intestazione` (col `nodo` e la `pagina`). Un nodo che sbaglia
+(un genitore che non viene prima, un titolo senza livello, un campo dove non
+va) è l'errore `nodo_rotto`; un pezzo che nomina un nodo che non c'è è
+`nodo_sconosciuto`; un collegamento il cui nodo non è un `collegamento` è
+`collegamento_rotto`.
+
+Il **PDF/A** (`pdfa` nel comando) è il PDF per l'archivio: PDF/A-2, al
+livello B (l'aspetto si conserva). Il core scrive i metadati XMP in chiaro,
+uguali ai dati del PDF (`pdfaid` parte 2, livello B), l'`OutputIntent` col
+profilo di colore sRGB (un ICC v2 scritto dal core), l'identificativo del
+file (l'impronta dell'elenco: lo stesso elenco dà gli stessi byte),
+collegamenti che si stampano, e nessuna data. I caratteri sono già tutti
+incorporati, anche quelli dei vettori. Il PDF/A e il PDF accessibile si
+chiedono separati o insieme; il livello A, che vuole anche i tag, non si
+dichiara.
+
+Ciò che il PDF/A non permette **lo dice prima di scrivere**, con l'errore
+`pdfa_non_possibile` e i suoi `ostacoli`, e nessun file:
+`lettere_senza_glifo` (le lettere che né il carattere né Literata disegnano,
+spazi compresi, che senza PDF/A uscirebbero nel riquadro vuoto) e
+`vettore_non_conforme` (un vettore che non si converte in PDF/A, con la sua
+`pagina` dalla 1).
+
+Nel workspace non c'è un validatore di PDF/A o di PDF/UA (veraPDF è Java):
+le prove (`tags_tests.rs`, `pdfa_tests.rs`, `tests/pdf_export_e2e.rs`)
+rileggono il file e ne controllano le regole che lo scrittore tocca.
+
+## Il comando e il lavoro
+
+Il comando `pdf.write_pages` del bundle `fub.draw` scrive nel vault il PDF di
+un elenco. Non c'è una porta IPC sua: si chiama con `invoke_command`, e il
+lavoro è un lavoro del core.
+
+| Parametro | Che cosa vale |
+|---|---|
+| `pages` | il JSON dell'elenco (obbligatorio) |
+| `target` | il percorso del PDF nel vault, con l'estensione `.pdf` (obbligatorio) |
+| `images` | `full` (di serie) o `light`, le immagini alleggerite |
+| `replace` | `true` per sostituire un PDF che c'è già; senza, un PDF che c'è è un errore |
+| `accessible` | `true` per il [PDF accessibile](#il-pdf-accessibile-e-il-pdfa), coi tag della struttura dell'elenco |
+| `pdfa` | `true` per il PDF/A-2b; ciò che non permette è un errore, senza file |
+| `note` | la nota da cui prendere titolo, autore e lingua (`title`/`titolo`, `author`/`autore`, `lang`/`lingua` del frontmatter; il titolo, se manca, è il nome del file) quando l'elenco li lascia vuoti |
+
+Il comando controlla subito ciò che può controllare senza scrivere: l'elenco
+si legge ed è nei limiti, la destinazione è un nome di PDF valido e libero (o
+da sostituire). Il piano (`DryRun`) dice il PDF e le pagine e non accoda
+niente. Altrimenti accoda il lavoro `pdf.write_pages` e torna con l'effetto
+`fub.pdf.queued`, `{ "job_id": "<id>", "path": "<pdf>" }`: l'id è una stringa.
+
+Il lavoro avanza una pagina per passo (`done` su `total`), così il centro
+attività ne mostra la barra e lo sa annullare. Deposita il PDF nel vault **una
+volta sola, alla fine**, con un file temporaneo rinominato: arriva intero o
+non arriva. Annullato, scaduto o fallito non lascia file; un disco pieno o una
+cartella in sola lettura sono l'errore della scrittura, e un PDF da sostituire
+resta quello di prima. La sostituzione confronta la revisione letta un attimo
+prima: una scrittura in mezzo è un conflitto, mai una sovrascrittura cieca.
+Il lavoro torna con `{ "path", "bytes", "pages", "warnings" }`.
+
+### L'esportazione come comando
+
+`pdf.export_note` (`note`, `profile`, `target`, `replace`) vuole l'app: la
+shell rinnova ogni 30 s la presenza con `pdf.export_listen` (scade dopo
+120 s); senza, risponde `Unserved`, anche in prova. Altrimenti manda l'evento
+`custom` `fub.draw:pdf.export` e torna con `fub.pdf.export_requested`; la shell
+(`export/headless.ts`) salva la nota, la impagina fuori dallo schermo con i
+fogli dello spazio (`export/decor.ts`) e chiama `pdf.write_pages`.
+
+I vecchi id `importers.pdf.single` e `importers.pdf` restano sinonimi:
+`export.run` con una nota sola ne invoca `pdf.export_note` e ne torna l'esito;
+più note o nessuna sono `BadArgs`, senza il comando `Unserved`. Non sono più
+destinazioni registrate, e `with_meta` si ignora.
+
+## Più note in un PDF
+
+Il comando `pdf.write_book` del bundle `fub.draw` scrive nel vault un PDF
+con più note, ognuna un capitolo. La vista impagina ogni nota come per il
+PDF di una nota sola e manda un **libro** (`Libro`, versione 1, in
+`crates/fub-features/src/pdf_export/book.rs`): i capitoli in fila, ognuno
+col suo elenco delle pagine e i suoi rimandi, i collegamenti che portano a
+un'altra nota. Un campo che il formato non conosce rende il libro
+illeggibile.
+
+```json
+{
+  "versione": 1,
+  "titolo": "Progetto", "autore": "Ada Lovelace", "lingua": "it",
+  "capitoli": [
+    {
+      "nota": "Progetto/Alfa.md",
+      "titolo": "Alfa",
+      "pagine": { "versione": 1, "larghezza": 794, "altezza": 1123, "facce": [], "pagine": [{ "pezzi": [] }] },
+      "rimandi": [
+        { "pagina": 0, "x": 72, "y": 90, "w": 40, "h": 18,
+          "nota": "Progetto/Beta.md", "sezione": "Metodo" },
+        { "pagina": 0, "x": 72, "y": 120, "w": 40, "h": 18,
+          "nota": "Fuori.md", "url": "https://example.org/fuori" }
+      ]
+    }
+  ]
+}
+```
+
+| Campo | Che cosa vale |
+|---|---|
+| `titolo`, `autore`, `lingua` | i dati del PDF, come nell'elenco delle pagine |
+| `capitoli[].nota` | il percorso della nota nel vault; senza, il capitolo è fatto di pagine del libro (il frontespizio, l'indice), e i suoi rimandi portano alle note |
+| `capitoli[].titolo` | il titolo del capitolo nei segnalibri; vuoto, il `titolo` del suo elenco, poi il nome del file |
+| `capitoli[].pagine` | un elenco delle pagine: le sue pagine e i suoi collegamenti interni contano dalla prima pagina del capitolo |
+| `rimandi[].pagina` | la pagina del capitolo, dalla sua prima, che è la 0 |
+| `rimandi[].nota`, `sezione` | la nota a cui porta, e il titolo della sezione se il collegamento la nomina |
+| `rimandi[].url` | dove porta se la nota non è nel libro (solo `http`, `https`, `mailto` si aprono) |
+| `rimandi[].nodo` | facoltativo: il nodo `collegamento` della `struttura` del capitolo a cui appartiene, come per un collegamento della pagina |
+
+Il core ne fa un elenco solo, quello che scrive per una nota:
+
+- le pagine dei capitoli una dopo l'altra, e i collegamenti dentro una nota
+  spostati con le sue pagine;
+- le facce di tutti i capitoli in una tavola, una volta sola ciascuna;
+- le `struttura` dei capitoli una dopo l'altra, ognuna un ramo del
+  documento: i genitori e i `nodo` dei pezzi, dei collegamenti e dei
+  rimandi si spostano dei nodi dei capitoli prima;
+- **un indice solo**: un segnalibro per nota, col suo titolo, e i titoli
+  della nota un livello sotto (al più il 6); le pagine senza nota tengono i
+  loro segnalibri. Due note con lo stesso titolo (con la chiave dei nomi
+  del vault, `resolution_key`) prendono accanto il percorso senza
+  estensione: «Diario (2024/Diario)»;
+- un rimando a una nota del libro diventa un collegamento interno: alla
+  prima pagina della nota, o al segnalibro della sezione con quel titolo
+  (con la regola di `[[Nota#Sezione]]`, `heading_matches`: lo slug o il
+  titolo com'è, senza badare alle maiuscole); una sezione che non
+  c'è porta all'inizio della nota, con l'avviso `sezione_non_trovata`;
+- un rimando a una nota che il libro non ha porta all'`url`; senza, resta
+  testo, con l'avviso `nota_non_esportata` (uno per nota).
+
+I parametri sono quelli di `pdf.write_pages`, con `book` (il JSON del
+libro, obbligatorio) al posto di `pages` e senza `note`. Il comando compone
+il libro e lo passa a `pdf.write_pages`: il lavoro è uno solo, lo stesso
+`pdf.write_pages`, con la sua barra, il suo annullamento e i suoi limiti
+sull'elenco intero (le pagine, il peso, i collegamenti, i segnalibri).
+L'effetto `fub.pdf.queued` porta in più `warnings`, gli avvisi del libro.
+
+Un libro non si scrive, e l'errore dice perché, se:
+
+| Errore | Quando |
+|---|---|
+| `illeggibile`, `troppo_grande` | il JSON non è un libro di questa forma, o pesa più di 64 MiB |
+| `versione` | `versione` non è 1 |
+| `numero_capitoli` | nessun capitolo, o più di 2.000 |
+| `misure_diverse` | un capitolo ha la pagina di un'altra misura |
+| `nota_ripetuta` | la stessa nota in due capitoli |
+| `capitolo` | l'elenco di un capitolo non è valido (anche un collegamento interno che esce dal capitolo) |
+| `rimando_rotto` | un rimando su una pagina che il capitolo non ha, o con una misura che non è un numero |

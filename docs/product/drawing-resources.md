@@ -17,7 +17,7 @@ scena, risorse](../reference/scene-format-resources.md).
 
 - **Un oggetto che usa una risorsa del disegno** si sceglie, si sposta, si
   trasforma e si cambia come gli altri, se la risorsa è nelle risorse del
-  disegno e il formato la conosce tutta. È il caso dei disegni di FubDraw
+  disegno e il formato la conosce tutta. È il caso dei disegni di Fub
   e di molti SVG di altri programmi.
 - **Ciò che il formato non conosce resta estraneo**, insieme a chi lo usa:
   una sfumatura che ne eredita un'altra, come Inkscape le scrive spesso, una

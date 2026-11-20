@@ -2,17 +2,19 @@
 //
 // Ctrl/Cmd-clic aggiunge o toglie una nota dalla scelta, Maiusc-clic sceglie
 // tutte le note visibili fra l'ultima toccata e questa, Ctrl-Spazio fa come il
-// Ctrl-clic da tastiera. Una barra sopra l'albero dice quante sono e offre i
+// Ctrl-clic da tastiera. Una barra sotto l'albero dice quante sono e offre i
 // gesti che hanno senso su un gruppo — **sposta in…**, **in una cartella
 // nuova** e **cestina** — più «deseleziona»; Esc la azzera. Un clic normale riprende a funzionare com'è:
-// azzera la scelta e apre la nota.
+// azzera la scelta e apre la nota. Un gesto della barra prende le note scelte
+// quando parte, e la scelta resta vuota: le note spostate non restano scelte.
 //
 // # Solo ciò che si vede
 //
 // La scelta è sulle note che l'albero disegna adesso. Una cartella che si
 // chiude, una rinomina, un vault che cambia: ciò che esce dal DOM esce dalla
-// scelta, perché un gesto distruttivo non deve mai toccare una nota che chi
-// lo fa non sta guardando.
+// scelta (e una voce che il kernel dice sparita esce subito, con `forget`),
+// perché un gesto distruttivo non deve mai toccare una nota che chi lo fa non
+// sta guardando.
 //
 // # Chi fa che cosa
 //
@@ -28,14 +30,20 @@ export interface TreeSelectionHost {
   readonly list: HTMLElement;
   /// La nota aperta: la sua riga è già «selezionata» per un altro motivo.
   currentDoc(): string | null;
-  trash(paths: string[]): Promise<unknown>;
-  move(paths: string[]): Promise<unknown>;
+  /// I tre gesti che portano via le note scelte. Rispondono `false` quando non
+  /// è successo niente (il dialogo annullato, la cartella che non nasce): la
+  /// scelta allora torna com'era. Qualunque altra risposta vuol dire che il
+  /// gesto è partito.
+  trash(paths: string[]): Promise<boolean | void>;
+  move(paths: string[]): Promise<boolean | void>;
   /// Una cartella nuova, con dentro le note scelte.
-  group(paths: string[]): Promise<unknown>;
+  group(paths: string[]): Promise<boolean | void>;
   /// Le note scelte negli appunti dell'albero, per incollarle altrove.
   copy(paths: string[]): void;
   /// I link alle note scelte negli appunti del sistema.
   copyLinks(paths: string[]): Promise<unknown>;
+  /// Le note scelte in un PDF solo, nell'ordine della scelta (T78).
+  exportPdf?(paths: string[]): Promise<unknown>;
   readonly lifetime: Lifetime;
 }
 
@@ -44,6 +52,10 @@ export interface TreeSelection {
   repaint(): void;
   clear(): void;
   paths(): string[];
+  /// Una voce che non c'è più (cestinata, rinominata, spostata, anche da
+  /// fuori): esce dalla scelta subito, con ciò che le stava sotto, senza
+  /// aspettare che l'albero si ridisegni.
+  forget(path: string): void;
   /// Il menu del tasto destro su `path` quando è scelta insieme ad altre: i
   /// gesti del gruppo, che valgono per tutte, e quelli che si trovano
   /// scrivendo. `null` se `path` non è in una scelta di almeno due, e allora
@@ -76,7 +88,11 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
   const trash = button("", "tree-selection-trash", () => void act(host.trash));
   const clearButton = button("", "tree-selection-clear", () => clear());
   bar.append(count, move, group, trash, clearButton);
-  list.before(bar);
+  // **Sotto** l'albero, e ferma in fondo alla colonna mentre l'albero scorre.
+  // Sopra spingeva giù tutte le righe al primo Ctrl-clic: la riga appena
+  // scelta scappava da sotto il puntatore, e il Ctrl-clic dopo cadeva sulla
+  // riga di prima e la toglieva (IMP-010). Sotto, nessuna riga si muove.
+  list.after(bar);
   lifetime.add(() => bar.remove());
   list.setAttribute("aria-multiselectable", "true");
   lifetime.add(() => list.removeAttribute("aria-multiselectable"));
@@ -145,16 +161,56 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
     repaint();
   };
 
-  async function act(run: (paths: string[]) => Promise<unknown>): Promise<void> {
+  /// Un gesto della barra o del menu del gruppo. **Prende** le note scelte nel
+  /// momento in cui parte: la scelta si svuota subito, così mentre le note
+  /// viaggiano (uno spostamento lungo, IMP-1803) la barra non le offre a un
+  /// secondo gesto, e ciò che si sceglie intanto è una scelta nuova, che la
+  /// fine di questo gesto non tocca. Se il gesto dice che non è successo
+  /// niente e intanto non si è scelto altro, la scelta torna, senza le voci
+  /// che nel frattempo sono sparite.
+  async function act(run: (paths: string[]) => Promise<boolean | void>): Promise<void> {
     const paths = [...picked];
     if (paths.length === 0) return;
+    const fromBar = bar.contains(document.activeElement);
+    picked.clear();
+    anchor = null;
+    repaint();
+    let outcome: boolean | void = undefined;
     try {
-      await run(paths);
+      outcome = await run(paths);
     } finally {
-      // Qualunque cosa sia successa, la scelta ha fatto il suo lavoro: le note
-      // rimaste (un rifiuto, un guasto) si riscelgono guardandole.
-      if (!lifetime.closed) clear();
+      if (!lifetime.closed) {
+        if (outcome === false && picked.size === 0) {
+          for (const path of paths) picked.add(path);
+          repaint();
+        }
+        if (fromBar) backToList();
+      }
     }
+  }
+
+  function forget(path: string): void {
+    let gone = false;
+    for (const each of [...picked]) {
+      if (each === path || each.startsWith(`${path}/`)) {
+        picked.delete(each);
+        gone = true;
+      }
+    }
+    if (anchor !== null && (anchor === path || anchor.startsWith(`${path}/`))) anchor = null;
+    if (gone) repaint();
+  }
+
+  /// La barra si nasconde a scelta vuota: il pulsante premuto da tastiera
+  /// perderebbe il fuoco, che cadrebbe su `body` (IMP-154). Torna all'albero,
+  /// sulla voce che il tab vi troverebbe. Un fuoco già andato altrove (un
+  /// dialogo, il selettore della cartella) non si tocca.
+  function backToList(): void {
+    const now = document.activeElement;
+    if (now instanceof HTMLElement && now !== document.body && now.isConnected && !now.closest("[hidden]")) return;
+    const item = list.querySelector<HTMLElement>('li[role="treeitem"][tabindex="0"]')
+      ?? list.querySelector<HTMLElement>('li[role="treeitem"]');
+    item?.focus({ preventScroll: true });
   }
 
   const rowOf = (target: EventTarget | null): HTMLElement | null => {
@@ -217,6 +273,7 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
         { label: t("explorer.selection.move"), run: () => void act(host.move) },
         { label: t("explorer.selection.group_menu"), run: () => void act(host.group) },
         { separator: true, label: t("explorer.selection.copy_links"), run: () => void host.copyLinks([...picked]) },
+        ...(host.exportPdf ? [{ label: t("pane.export_pdf"), run: () => void host.exportPdf?.([...picked]) }] : []),
         { separator: true, label: t("explorer.selection.trash"), danger: true, run: () => void act(host.trash) },
       ],
       searchable: [
@@ -226,5 +283,5 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
     };
   };
 
-  return { repaint, clear, paths: () => [...picked], menuFor };
+  return { repaint, clear, paths: () => [...picked], forget, menuFor };
 }

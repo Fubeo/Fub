@@ -150,6 +150,42 @@ fn unsafe_hrefs_are_refused() {
     assert_eq!(escape_html("<&>"), "&lt;&amp;&gt;");
 }
 
+/// M4: i due punti dopo `/`, `?` o `#` non fanno uno schema: ancore e path
+/// relativi con `:` passano, gli schemi veri restano giudicati per nome.
+#[test]
+fn a_colon_after_the_path_starts_is_not_a_scheme() {
+    for safe in [
+        "#nota:1",
+        "#h:2:3",
+        "cartella/a:b.html",
+        "./nota:1.html",
+        "/s/blog/ore-10:30.html",
+        "pagina.html?ora=10:30",
+        "pagina.html#sez:1",
+        "%6Aavascript:alert(1)",
+        "HTTPS://example.com/a",
+        "mailto:chi@example.com",
+    ] {
+        assert!(is_safe_href(safe), "{safe}");
+    }
+    for unsafe_href in [
+        "javascript:alert(1)",
+        "JavaScript:alert(1)",
+        " javascript:alert(1)",
+        "jav\tascript:alert(1)",
+        "vbscript:x",
+        "data:text/html,x",
+        "nota:1",
+        "ftp://example.com",
+        "x-custom+app.v1:open",
+        ":senza-schema",
+        "//evil.test/x",
+        "\\\\evil\\x",
+    ] {
+        assert!(!is_safe_href(unsafe_href), "{unsafe_href}");
+    }
+}
+
 // --- manifest: linked closure needs explicit allow ------------------------
 
 #[test]
@@ -694,6 +730,71 @@ fn handle_revoked_collaborator_cannot_publish() {
     assert_eq!(response.status, 200);
 }
 
+/// A `Writer` from the live ACL may publish, and publishing does not make
+/// it an owner: after its own commit it still cannot administer (C1). The
+/// owner keeps its grant.
+#[test]
+fn a_writer_who_commits_stays_a_writer() {
+    let data = temp_data_dir("writer-commit");
+    let (mut state, auth, alice) = authed_state(&data);
+    let bob_id = state.accounts.create_account("bob", "password123").unwrap();
+    let bob_token = state.accounts.issue_session_token(&bob_id).unwrap();
+    let bob_auth = format!("Bearer {bob_token}");
+
+    let (manifest, pages) = manifest_v1();
+    let commit = CommitRequest {
+        protocol: "fub-publish/1".to_string(),
+        site_id: "blog".to_string(),
+        manifest,
+        pages,
+        assets: vec![],
+        excluded_private: vec![],
+    };
+    let body = serde_json::to_vec(&commit).unwrap();
+    let response =
+        fub_services::publish::handle(&mut state, "POST", COMMIT_PATH, Some(&auth), &body);
+    assert_eq!(response.status, 200);
+    state
+        .acl_mut("site:blog")
+        .grant(&bob_id, fub_services::acl::Role::Writer);
+
+    let mut next = commit;
+    next.manifest.version = 2;
+    let body = serde_json::to_vec(&next).unwrap();
+    let response =
+        fub_services::publish::handle(&mut state, "POST", COMMIT_PATH, Some(&bob_auth), &body);
+    assert_eq!(response.status, 200, "a Writer publishes");
+    assert_eq!(
+        state
+            .acls
+            .get("site:blog")
+            .and_then(|acl| acl.role_of(&bob_id)),
+        Some(fub_services::acl::Role::Writer),
+        "the commit does not promote the Writer"
+    );
+    assert_eq!(
+        fub_services::publish::authorize_administer(&state, "blog", &bob_id)
+            .unwrap_err()
+            .status,
+        403
+    );
+    let unpublish = serde_json::to_vec(&serde_json::json!({
+        "protocol": "fub-publish/1",
+        "site_id": "blog",
+    }))
+    .unwrap();
+    let response = fub_services::publish::handle(
+        &mut state,
+        "POST",
+        UNPUBLISH_PATH,
+        Some(&bob_auth),
+        &unpublish,
+    );
+    assert_eq!(response.status, 403, "a Writer cannot unpublish");
+    assert_eq!(load_record(&data, "blog").unwrap().owner, alice);
+    assert!(fub_services::publish::authorize_administer(&state, "blog", &alice).is_ok());
+}
+
 #[test]
 fn handle_locked_site_needs_password_or_grant() {
     let data = temp_data_dir("locked-handle");
@@ -956,6 +1057,67 @@ fn parsed_html_policy_detects_event_handlers_and_entity_schemes() {
     assert!(!fub_services::site_isolation::commit_has_custom_js(&body(
         "<p><a href=\"https://example.test/path?a=1&amp;b=2\">safe</a></p>"
     )));
+}
+
+/// C2: il doctype di una pagina normale non è script, in qualunque grafia
+/// (HTML non distingue le maiuscole); un `<!` qualsiasi resta attivo.
+#[test]
+fn a_doctype_in_any_case_is_not_custom_js() {
+    let body = |html: &str| {
+        serde_json::to_vec(&serde_json::json!({
+            "site_id": "blog", "pages": [{"html": html}], "assets": []
+        }))
+        .unwrap()
+    };
+    for doctype in [
+        "<!doctype html>",
+        "<!DOCTYPE html>",
+        "<!DocType HTML>",
+        "<!DOCTYPE  html >",
+    ] {
+        let html = format!("{doctype}<html><body><p>ciao</p></body></html>");
+        assert!(
+            !fub_services::site_isolation::commit_has_custom_js(&body(&html)),
+            "{html}"
+        );
+    }
+    for active in [
+        "<!DOCTYPE html PUBLIC \"x\"><p>ciao</p>",
+        "<!DOCTYPEhtml><p>ciao</p>",
+        "<!ENTITY x><p>ciao</p>",
+        "<![CDATA[x]]><p>ciao</p>",
+    ] {
+        assert!(
+            fub_services::site_isolation::commit_has_custom_js(&body(active)),
+            "{active}"
+        );
+    }
+}
+
+/// C2: i moduli JavaScript (`.mjs`, `.cjs`) sono custom JS come `.js`, in
+/// qualunque grafia dell'estensione.
+#[test]
+fn javascript_modules_are_custom_js() {
+    let body = |path: &str| {
+        serde_json::to_vec(&serde_json::json!({
+            "site_id": "blog",
+            "pages": [{"html": "<p>ciao</p>"}],
+            "assets": [{"path": path}],
+        }))
+        .unwrap()
+    };
+    for path in ["a.js", "b.mjs", "c.cjs", "D.MJS", "e.Cjs"] {
+        assert!(
+            fub_services::site_isolation::commit_has_custom_js(&body(path)),
+            "{path}"
+        );
+    }
+    for path in ["img/logo.png", "style.css", "note.json", "a.jsx.txt"] {
+        assert!(
+            !fub_services::site_isolation::commit_has_custom_js(&body(path)),
+            "{path}"
+        );
+    }
 }
 
 #[test]
@@ -1226,6 +1388,12 @@ fn an_admin_cannot_revoke_or_demote_another_admin() {
         admin(&first_auth, serde_json::json!({ "revoke": writer })),
         200
     );
+    // Un Admin non nomina altri Admin: né un nuovo collaboratore né un
+    // Writer che c'è già.
+    let peer = serde_json::json!({ "grant": { "account_id": newcomer, "role": "admin" } });
+    assert_eq!(admin(&first_auth, peer), 403);
+    let promote = serde_json::json!({ "grant": { "account_id": writer, "role": "admin" } });
+    assert_eq!(admin(&first_auth, promote), 403);
     let invite = serde_json::json!({ "grant": { "account_id": newcomer, "role": "reader" } });
     assert_eq!(admin(&first_auth, invite), 200);
     assert_eq!(admin(&alice, serde_json::json!({ "revoke": second })), 200);
@@ -1235,4 +1403,38 @@ fn an_admin_cannot_revoke_or_demote_another_admin() {
         left.sort();
         left
     });
+}
+
+/// A2: l'origine isolata confronta il nome dell'host senza porta e senza
+/// distinguere le maiuscole; un IPv6 tra parentesi non si spezza ai `:`.
+#[test]
+fn isolated_origin_matches_the_host_name_without_its_port() {
+    use fub_services::site_isolation::{save_mode, serve_headers, ServeDecision};
+    let data = temp_data_dir("isolated-host");
+    create_site(&data, "blog", "alice", None).unwrap();
+    save_mode(&data, "blog", "isolated-origin", Some("blog.example.test")).unwrap();
+    let allowed = |host: Option<&str>| {
+        matches!(
+            serve_headers(&data, "blog", host, "text/html", b"<p>ciao</p>"),
+            ServeDecision::Allow(_)
+        )
+    };
+    for host in [
+        "blog.example.test",
+        "Blog.Example.TEST:8443",
+        " blog.example.test:80 ",
+    ] {
+        assert!(allowed(Some(host)), "{host}");
+    }
+    for host in [
+        "example.test",
+        "blog.example.test.evil.test",
+        "[::1]:7749",
+        "[blog.example.test]:80",
+        "blog.example.test:",
+        "",
+    ] {
+        assert!(!allowed(Some(host)), "{host}");
+    }
+    assert!(!allowed(None));
 }

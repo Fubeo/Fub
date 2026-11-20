@@ -75,7 +75,12 @@ export async function createNote(name?: string, folder?: string): Promise<string
 /// `undefined` lascia decidere a lui.
 export async function folderOfOpenNote(): Promise<string | undefined> {
   const doc = state.currentDoc;
-  if (!doc) return undefined;
+  return doc ? folderOfNote(doc) : undefined;
+}
+
+/// Come [`folderOfOpenNote`] per la nota `doc`: la nota che contiene il link
+/// da cui nasce la nuova (una sbirciata, che non è la nota aperta).
+export async function folderOfNote(doc: string): Promise<string | undefined> {
   const declared = (await settings().catch(() => []))
     .find((item) => item.spec.key === "files.new-note-folder")?.value;
   if (typeof declared !== "string") return undefined;
@@ -132,8 +137,11 @@ export async function createFolder(path: string): Promise<string> {
 /// l'evento `document_renamed`, perché l'identità è il path e chi la migra deve
 /// essere un punto solo.
 export async function renameNote(from: string, to: string): Promise<void> {
-  await api.invokeCommand(COMMANDS.rename, { doc: from, to }, undefined, openVaultRoot());
+  const outcome = await api.invokeCommand(COMMANDS.rename, { doc: from, to }, undefined, openVaultRoot());
   refreshDocuments();
+  // La rinomina è fatta; se qualche collegamento in una proprietà è rimasto
+  // col nome vecchio, il comando lo dice per nome e qui non si tace.
+  if (outcome.partial && outcome.notify) notify(outcome.notify, "guasto");
 }
 
 /// Rinomina o sposta una cartella intera (`folder.rename`): ogni voce passa

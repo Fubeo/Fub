@@ -16,6 +16,7 @@ import {
   recentSearches,
   rememberSearch,
   forgetRecent,
+  rememberOpens,
 } from "./recent";
 
 const viewState = vi.fn();
@@ -34,7 +35,13 @@ vi.mock("../host/query", () => ({
   existingDocuments: (docs: string[]) => Promise.resolve(new Set(docs)),
 }));
 
-vi.mock("./kernel", () => ({ onEvent: () => {} }));
+const settingHandlers = vi.hoisted(() => [] as ((event: { key?: string }) => void)[]);
+vi.mock("./kernel", () => ({
+  onEvent: (type: string, handler: (event: { key?: string }) => void) => {
+    if (type === "setting_changed") settingHandlers.push(handler);
+    return () => settingHandlers.splice(settingHandlers.indexOf(handler), 1);
+  },
+}));
 
 /// L'interruttore come lo vede la shell: una voce nell'elenco che il canale
 /// dati risponde, trovata per chiave.
@@ -199,5 +206,47 @@ describe("cancellare", () => {
     // `null` e non due liste vuote: per un dato di privacy la differenza fra
     // «assente» e «vuoto» è quella che si vede aprendo il file.
     expect(setViewState).toHaveBeenCalledWith("history", null);
+  });
+});
+
+describe("chi segue l'interruttore", () => {
+  it("rilegge le impostazioni solo per la sua chiave, o per un evento senza chiave", async () => {
+    const stop = rememberOpens();
+    try {
+      settings.mockClear();
+      const fire = (key?: string) => { for (const handler of [...settingHandlers]) handler({ key }); };
+      fire("chrome.sidebar.visible");
+      fire("appearance.theme");
+      expect(settings).not.toHaveBeenCalled();
+      fire(HISTORY_KEY);
+      expect(settings).toHaveBeenCalledTimes(1);
+      fire(undefined);
+      fire("");
+      expect(settings).toHaveBeenCalledTimes(3);
+    } finally {
+      stop();
+    }
+  });
+});
+
+describe("il cambio di vault veloce", () => {
+  it("la lettura del vault di prima che arriva tardi non copre quella del vault nuovo", async () => {
+    let old!: (value: unknown) => void;
+    let fresh!: (value: unknown) => void;
+    viewState.mockClear();
+    viewState
+      .mockReturnValueOnce(new Promise((resolve) => { old = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { fresh = resolve; }));
+    // Vault A, poi subito vault B: lo stesso giro dell'evento `vault`.
+    forgetRecent();
+    const first = loadHistory();
+    forgetRecent();
+    const second = loadHistory();
+    await vi.waitFor(() => expect(viewState).toHaveBeenCalledTimes(2));
+    fresh({ note: ["b.md"], searches: ["di B"] });
+    await second;
+    old({ note: ["a.md"], searches: ["di A"] });
+    await first;
+    expect(recentSearches()).toEqual(["di B"]);
   });
 });

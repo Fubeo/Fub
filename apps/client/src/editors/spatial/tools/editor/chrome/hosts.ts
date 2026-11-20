@@ -9,6 +9,8 @@
 // - `inspectorChrome` (C1) tiene barra, colonna e foglio nella radice e dà i
 //   pannelli all'ispettore dello Scrittoio, in cinque schede: Design,
 //   Livelli, Risorse, Cronologia, Accessibilità.
+// - `cardChrome` (T46) è quella di un disegno dentro una scheda della nota:
+//   strumenti e barra in una fila sopra il foglio, nessuna colonna di lato.
 
 import type { SurfacePanel, SurfacePanels } from "../../../../core/registry";
 
@@ -80,6 +82,26 @@ function placeBody(host: HTMLElement, parts: DrawChromeParts, dock: boolean): vo
 /// pannelli in fila.
 export function inlineChrome(): DrawChrome {
   return { place: (host, parts) => placeBody(host, parts, true) };
+}
+
+/// La cromatura di un disegno in una scheda (T46): niente colonna di lato.
+/// Gli strumenti (la colonna, che l'editor in una scheda mette in fila) e la
+/// barra in alto stanno in una fila sopra il foglio; i pannelli restano
+/// accanto al foglio, chiusi finché non servono (un testo da scrivere apre
+/// le proprietà), e la pelle della scheda li mette sopra il foglio.
+export function cardChrome(): DrawChrome {
+  return {
+    place(host, parts) {
+      const bar = document.createElement("div");
+      bar.className = "draw-card-bar";
+      bar.append(parts.rail, parts.top);
+      const body = document.createElement("div");
+      body.className = "draw-body";
+      body.append(parts.stage, parts.dock);
+      parts.root.append(bar, body, ...parts.tail);
+      host.append(parts.root);
+    },
+  };
 }
 
 /// La cromatura dello Scrittoio: i pannelli nell'ispettore, come `panels`

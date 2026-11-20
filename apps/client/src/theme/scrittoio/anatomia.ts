@@ -10,6 +10,7 @@
 import { ORDER } from "./skin/order";
 import { CENTRES } from "./anatomia/centres";
 import { CONTROLS } from "./anatomia/controls";
+import { DIAGRAMS } from "./anatomia/diagrams";
 import { DOCUMENT } from "./anatomia/document";
 import { DRAW } from "./anatomia/draw";
 import { DRAW_DIALOGS } from "./anatomia/draw-dialogs";
@@ -20,7 +21,10 @@ import { FRAME } from "./anatomia/frame";
 import { GRAPH } from "./anatomia/graph";
 import { KIT } from "./anatomia/kit";
 import { LAUNCHER } from "./anatomia/launcher";
+import { EXPORT } from "./anatomia/export";
+import { LIVE_CARDS } from "./anatomia/live-cards";
 import { MEDIA } from "./anatomia/media";
+import { MATH } from "./anatomia/math";
 import { MENUS } from "./anatomia/menus";
 import { MOTION } from "./anatomia/motion";
 import { NODES } from "./anatomia/nodes";
@@ -47,14 +51,18 @@ const DECLARED: readonly PartAnatomy[] = [
   SHEETS,
   DOCUMENT,
   TABELLA,
+  MATH,
   EDITORS,
+  LIVE_CARDS,
   DRAW,
   MEDIA,
   NODES,
   GRAPH,
   MENUS,
+  DIAGRAMS,
   LAUNCHER,
   CENTRES,
+  EXPORT,
   DRAW_DIALOGS,
   SETTINGS,
   WELCOME,

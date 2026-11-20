@@ -1,10 +1,12 @@
 import type { DocumentWindowRequest } from "../host/contract";
 export type { DocumentWindowRequest } from "../host/contract";
 import { operationFromText, transformPair, tryApplyOperation, validateOperation, type TextOperation } from "../editors/core/text-operation";
+import { releaseSession } from "./card-writes";
 import { documentSessions, type DocumentSession, type DocumentSurfaceDescriptor } from "./document-session";
 import { on, state } from "./store";
 import { mountedTheme, type MirroredTheme } from "../theme/loader";
 import { t } from "../i18n/strings";
+import { errorText } from "../host/errors";
 export type { MirroredTheme } from "../theme/loader";
 
 const normalized = (text: string): string => text.replace(/\r\n?/g, "\n");
@@ -29,10 +31,22 @@ export type RemoteMessage = Identity & (
   | { kind: "freeze"; epoch: string; token: string }
   | { kind: "thaw"; epoch: string; token: string }
   | { kind: "drain-ready"; epoch: string; token: string; seq: number; revision: number }
+  /** Child to main: it cannot freeze, because it holds text the session lacks. */
+  | { kind: "freeze-refused"; token: string; reason: string }
   /** Child to main: a link or tag the child cannot follow itself. */
   | { kind: "navigate"; target: NavigateTarget }
   /** Main to child: the theme as mounted, since the child has no IPC to mount its own. */
   | { kind: "theme"; theme: MirroredTheme }
+  /** Child to main: would discarding the window's text keep it in History first? */
+  | { kind: "keep-probe"; token: string }
+  /** Main to child: the answer to `keep-probe`. */
+  | { kind: "keep-mode"; token: string; keeps: boolean }
+  /** Child to main: keep this text in History before the child discards it. */
+  | { kind: "keep"; token: string; text: string }
+  /** Main to child: the text of `keep` is in History. */
+  | { kind: "kept"; token: string }
+  /** Main to child: the text of `keep` is not in History; the child discards nothing. */
+  | { kind: "keep-failed"; token: string; reason: string }
 );
 
 export type NavigateTarget =
@@ -50,6 +64,45 @@ let navigation: DocumentWindowNavigation | null = null;
 /** Set by the shell that can open documents; `null` takes it back. */
 export function setDocumentWindowNavigation(port: DocumentWindowNavigation | null): void {
   navigation = port;
+}
+
+/** How the main window keeps the text a child window is about to discard:
+ * the same rule as «Usa la versione su disco» (`state/conflict-keep.ts`),
+ * since the child has no IPC to run `version.keep` itself. */
+export interface DocumentWindowKeeper {
+  /** Whether discarding on `doc` keeps the text first (History mounted). */
+  keeps(doc: string): boolean;
+  /** Keeps `text` in the History of `doc`; a rejection means not kept. */
+  keep(doc: string, text: string): Promise<void>;
+}
+
+let keeper: DocumentWindowKeeper | null = null;
+/** Set by the shell that owns the History commands; `null` takes it back. */
+export function setDocumentWindowKeeper(port: DocumentWindowKeeper | null): void {
+  keeper = port;
+}
+
+/** How long the main window waits for the child to answer a freeze. */
+export const FREEZE_WAIT_MS = 5000;
+
+/// La finestra non ha risposto al congelamento entro `FREEZE_WAIT_MS`: né un
+/// sì né un no. Il silenzio non dice che la sua coda è vuota; chi svuota le
+/// finestre decide quanto aspettarla ancora (`document-windows.ts`).
+export class DocumentWindowSilent extends Error {
+  constructor(message = "La finestra non ha risposto: sessione mantenuta") {
+    super(message);
+    this.name = "DocumentWindowSilent";
+  }
+}
+
+/// La finestra ha risposto al congelamento con un no (`freeze-refused`): ha
+/// testo suo che la sessione non ha (un conflitto, la sorgente sostituita).
+/// È un rifiuto vero: la finestra resta aperta, e il testo resta in lei.
+export class DocumentWindowRefused extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = "DocumentWindowRefused";
+  }
 }
 
 /** The document has no text surface: a separate window cannot show it. */
@@ -112,6 +165,12 @@ export function isRemoteMessage(value: unknown): value is RemoteMessage {
       && !!m.token && counter(m.seq) && counter(m.revision);
     case "navigate": return validNavigateTarget(m.target);
     case "theme": return validMirroredTheme(m.theme);
+    case "keep-probe":
+    case "kept": return typeof m.token === "string" && !!m.token;
+    case "keep-mode": return typeof m.token === "string" && !!m.token && typeof m.keeps === "boolean";
+    case "keep": return typeof m.token === "string" && !!m.token && typeof m.text === "string";
+    case "keep-failed":
+    case "freeze-refused": return typeof m.token === "string" && !!m.token && typeof m.reason === "string";
     default: return false;
   }
 }
@@ -125,6 +184,9 @@ interface Authority {
   steps: Step[];
   endpoints: Set<Endpoint>;
   applyingSurface: string | null;
+  /// La sessione si è chiusa per sempre (cancellata, sparita dal disco,
+  /// rilasciata): lo dice lei alle sue superfici con `closed()`.
+  closed: boolean;
   detach: () => void;
 }
 interface Endpoint {
@@ -136,9 +198,15 @@ interface Endpoint {
   lastReply: RemoteMessage | null;
   frozenToken: string | null;
   drain: { token: string; resolve: () => void; reject: (reason: Error) => void; timer: number } | null;
+  /// L'ultimo congelamento scaduto in silenzio e la risposta arrivata dopo.
+  late: { token: string; answer: LateAnswer | null } | null;
 }
-const authorities = new Map<string, Authority>();
-const keyOf = (vault: string, doc: string): string => `${vault}\0${doc}`;
+/// Una autorità per **sessione**, non per percorso: una rinomina sposta la
+/// stessa sessione sotto un altro nome e la sua autorità resta sua, e il nome
+/// lasciato libero apre la finestra di una nota nuova con un'autorità nuova
+/// (audit #513). Le sessioni di un vault si chiudono tutte quando il vault
+/// cambia, quindi la sessione porta con sé anche il vault.
+const authorities = new Map<DocumentSession, Authority>();
 const identity = (request: DocumentWindowRequest): Identity => ({
   v: 1, doc: request.document, vault: request.vault, session: request.session, surfaceId: request.surfaceId,
 });
@@ -155,8 +223,18 @@ export interface RemoteSurfaceHandle {
   surfaceId: string;
   freeze(): Promise<void>;
   thaw(): void;
+  /// La sessione della finestra si è chiusa per sempre (la nota cancellata o
+  /// sparita dal disco): non c'è più niente da congelare né da salvare.
+  ownerClosed(): boolean;
+  /// La risposta arrivata dopo che l'ultimo `freeze` è scaduto in silenzio
+  /// (`DocumentWindowSilent`): la coda svuotata o un rifiuto. `null` finché
+  /// non arriva niente; un `freeze` o un `thaw` nuovo la azzera.
+  lateAnswer(): LateAnswer | null;
   dispose(): Promise<void>;
 }
+
+/** What a child said after its freeze had already timed out. */
+export type LateAnswer = { kind: "drained" } | { kind: "refused"; reason: string };
 
 /** `profileFor` names the text profile the shell's registry shows the read
  * document with, or `null` when its surface is not text: then no window. */
@@ -174,17 +252,23 @@ export async function attachRemoteSurface(
     if (profile === null) throw new DocumentWindowUnsupported(doc);
     const owner = documentSessions.get(doc);
     if (state.vaultRoot !== vault || !owner || owner.snapshot().lifecycle !== "open") throw new Error(t("errors.bridge.session_changed"));
-    const key = keyOf(vault, doc);
-    const old = authorities.get(key);
-    if (old && old.owner === owner) {
+    // Nata la sessione, il prestito passa dal nome a lei: dopo una rinomina
+    // tiene la sessione sotto il nome nuovo, e il nome di prima resta libero
+    // per una nota nuova (#513).
+    const ownerLease = documentSessions.retainSession(owner);
+    releaseLease();
+    releaseLease = ownerLease;
+    const old = authorities.get(owner);
+    if (old) {
       authority = old;
     } else {
-      if (old?.endpoints.size) throw new Error(t("errors.bridge.windows_open"));
-      const created: Authority = { owner, session: unique(), epoch: unique(), revision: 0, steps: [], endpoints: new Set(), applyingSurface: null, detach: () => {} };
+      const created: Authority = { owner, session: unique(), epoch: unique(), revision: 0, steps: [], endpoints: new Set(),
+        applyingSurface: null, closed: false, detach: () => {} };
       const detachSurface = documentSessions.attachSurface(doc, {
         id: `bridge:${created.session}`,
+        closed: () => { created.closed = true; },
         sync: (update) => {
-          if (authorities.get(key) !== created || state.vaultRoot !== vault || documentSessions.get(owner.id) !== owner) return;
+          if (authorities.get(owner) !== created || state.vaultRoot !== vault || documentSessions.get(owner.id) !== owner) return;
           if (update.kind === "operation") {
             const base = created.revision++;
             created.steps.push({ base, operation: update.operation });
@@ -215,7 +299,7 @@ export async function attachRemoteSurface(
         stopTheme();
         detachSurface();
       };
-      authorities.set(key, created);
+      authorities.set(owner, created);
       authority = created;
     }
     const request: DocumentWindowRequest = {
@@ -223,13 +307,13 @@ export async function attachRemoteSurface(
       session: authority.session, surfaceId: `remote:${unique()}`, profile,
     };
     const port = new BroadcastChannel(request.channel);
-    const endpoint: Endpoint = { request, port, active: true, ready: false, lastSeq: 0, lastReply: null, frozenToken: null, drain: null };
+    const endpoint: Endpoint = { request, port, active: true, ready: false, lastSeq: 0, lastReply: null, frozenToken: null, drain: null, late: null };
     authority.endpoints.add(endpoint);
     // La finestra resta della sessione anche dopo una rinomina: la si cerca col
     // suo id di adesso (`owner.id`), mentre `doc` resta l'identità del canale
     // con cui la finestra è nata e con cui firma i messaggi.
     const scoped = (): boolean => endpoint.active && state.vaultRoot === vault && documentSessions.get(owner.id) === owner
-      && authorities.get(key) === authority;
+      && authorities.get(owner) === authority;
     const reply = (message: RemoteMessage): void => { if (endpoint.active) port.postMessage(message); };
     port.onmessage = (event: MessageEvent<unknown>) => {
       if (!endpoint.active || !isRemoteMessage(event.data)) return;
@@ -241,6 +325,10 @@ export async function attachRemoteSurface(
         } else if (message.kind === "operation") {
           reply({ ...identity(request), kind: "conflict", epoch: authority.epoch, seq: message.seq,
             revision: authority.revision, reason: "session-unavailable" });
+        } else if (message.kind === "keep-probe") {
+          reply({ ...identity(request), kind: "keep-mode", token: message.token, keeps: false });
+        } else if (message.kind === "keep") {
+          reply({ ...identity(request), kind: "keep-failed", token: message.token, reason: t("errors.bridge.session_changed") });
         }
         return;
       }
@@ -251,11 +339,30 @@ export async function attachRemoteSurface(
           revision: authority.revision, appliedSeq: endpoint.lastSeq,
           diskRevision: snapshot.base.kind === "descends_from" ? snapshot.base.value : "" });
         sendTheme(endpoint);
+        if (endpoint.drain) reply({ ...identity(request), kind: "freeze", epoch: authority.epoch, token: endpoint.drain.token });
         return;
       }
       if (!endpoint.ready) return;
       if (message.kind === "navigate") {
         navigation?.navigate(message.target, owner.id);
+        return;
+      }
+      // Before discarding its text the child asks whether it will be kept,
+      // then hands it over: it discards only after `kept`.
+      if (message.kind === "keep-probe") {
+        reply({ ...identity(request), kind: "keep-mode", token: message.token, keeps: keeper?.keeps(owner.id) ?? false });
+        return;
+      }
+      if (message.kind === "keep") {
+        const port = keeper;
+        if (!port || !port.keeps(owner.id)) {
+          reply({ ...identity(request), kind: "keep-failed", token: message.token, reason: t("errors.bridge.keep_unavailable") });
+          return;
+        }
+        port.keep(owner.id, message.text).then(
+          () => reply({ ...identity(request), kind: "kept", token: message.token }),
+          (error: unknown) => reply({ ...identity(request), kind: "keep-failed", token: message.token, reason: errorText(error) }),
+        );
         return;
       }
       if (message.kind === "operation") {
@@ -308,12 +415,29 @@ export async function attachRemoteSurface(
         reply(endpoint.lastReply);
         return;
       }
-      if (message.kind === "drain-ready" && endpoint.drain && message.token === endpoint.drain.token
-        && message.epoch === authority.epoch && message.seq === endpoint.lastSeq && message.revision === authority.revision) {
-        const pending = endpoint.drain;
-        endpoint.drain = null;
-        clearTimeout(pending.timer);
-        pending.resolve();
+      if (message.kind === "drain-ready" && message.epoch === authority.epoch && message.seq === endpoint.lastSeq
+        && message.revision === authority.revision) {
+        if (endpoint.drain && message.token === endpoint.drain.token) {
+          const pending = endpoint.drain;
+          endpoint.drain = null;
+          clearTimeout(pending.timer);
+          pending.resolve();
+        } else if (endpoint.late && !endpoint.late.answer && message.token === endpoint.late.token) {
+          endpoint.late.answer = { kind: "drained" };
+        }
+        return;
+      }
+      if (message.kind === "freeze-refused") {
+        if (endpoint.drain && message.token === endpoint.drain.token) {
+          const pending = endpoint.drain;
+          endpoint.drain = null;
+          endpoint.frozenToken = null;
+          clearTimeout(pending.timer);
+          pending.reject(new DocumentWindowRefused(message.reason));
+        } else if (endpoint.late && !endpoint.late.answer && message.token === endpoint.late.token) {
+          endpoint.frozenToken = null;
+          endpoint.late.answer = { kind: "refused", reason: message.reason };
+        }
       }
     };
     let disposed = false;
@@ -321,36 +445,50 @@ export async function attachRemoteSurface(
     return { request, handle: {
       channel: request.channel, surfaceId: request.surfaceId,
       freeze: () => {
-        if (!scoped() || !endpoint.ready) return Promise.reject(new Error("Finestra non connessa alla sessione"));
+        if (!scoped()) return Promise.reject(new Error("Finestra non connessa alla sessione"));
         if (endpoint.drain) return Promise.reject(new Error("Drain già in corso"));
         const token = unique();
+        endpoint.late = null;
         return new Promise<void>((resolve, reject) => {
           const timer = globalThis.setTimeout(() => {
             endpoint.drain = null;
-            reject(new Error("Timeout acknowledgement della finestra: sessione mantenuta"));
-          }, 5000);
+            // Una risposta che arriva adesso vale ancora: chi svuota le
+            // finestre la legge con `lateAnswer()` prima di arrendersi.
+            endpoint.late = { token, answer: null };
+            reject(new DocumentWindowSilent());
+          }, FREEZE_WAIT_MS);
           endpoint.drain = { token, resolve, reject, timer };
           endpoint.frozenToken = token;
-          reply({ ...identity(request), kind: "freeze", epoch: authority.epoch, token });
+          // Una finestra che non ha ancora salutato riceve il congelamento
+          // subito dopo la sua fotografia; se non saluta mai, è silenzio.
+          if (endpoint.ready) reply({ ...identity(request), kind: "freeze", epoch: authority.epoch, token });
         });
       },
       thaw: () => {
+        endpoint.late = null;
         if (endpoint.active && endpoint.frozenToken) {
           reply({ ...identity(request), kind: "thaw", epoch: authority.epoch, token: endpoint.frozenToken });
           endpoint.frozenToken = null;
         }
       },
+      ownerClosed: () => authority.closed,
+      lateAnswer: () => endpoint.late?.answer ?? null,
       dispose: () => {
         if (disposed) return Promise.resolve();
         if (disposing) return disposing;
         if (endpoint.drain) return Promise.reject(new Error("Drain in corso: impossibile rilasciare la sessione"));
         disposing = (async () => {
           releaseLease();
-          try {
-            await documentSessions.release(owner.id);
-          } catch (error) {
-            releaseLease = documentSessions.retain(doc);
-            throw error;
+          // Si rilascia soltanto la propria sessione, sotto il suo nome di
+          // adesso: una sessione nuova nata sotto lo stesso nome (la nota
+          // cancellata e ricreata) non è di questa finestra.
+          if (documentSessions.get(owner.id) === owner) {
+            try {
+              await releaseSession(owner.id);
+            } catch (error) {
+              releaseLease = documentSessions.retainSession(owner);
+              throw error;
+            }
           }
           disposed = true;
           endpoint.active = false;
@@ -359,7 +497,7 @@ export async function attachRemoteSurface(
           authority.endpoints.delete(endpoint);
           if (authority.endpoints.size === 0) {
             authority.detach();
-            if (authorities.get(key) === authority) authorities.delete(key);
+            if (authorities.get(owner) === authority) authorities.delete(owner);
           }
         })();
         return disposing.finally(() => { disposing = null; });
@@ -371,9 +509,20 @@ export async function attachRemoteSurface(
   }
 }
 
+/** How long the child waits for the main window to say whether it keeps. */
+const PROBE_WAIT_MS = 5000;
+/** How long the child waits for the text to be kept (a write to disk). */
+const KEEP_WAIT_MS = 15000;
+
 export interface ChildBridge {
   sendEdit(text: string, operation: TextOperation): void;
   resolveConflict(choice: "mine" | "theirs"): void;
+  /** Whether discarding the window's text keeps it in History first: the
+   * main window answers, since it owns the History commands. */
+  discardKeeps(): Promise<boolean>;
+  /** Keeps the window's text in History, then discards it. A keep that fails
+   * (or gets no answer) discards nothing and rejects with the reason. */
+  discardKeeping(): Promise<void>;
   /** Hands a link or tag to the main window, which can open it. */
   navigate(target: NavigateTarget): void;
   dispose(): boolean;
@@ -402,13 +551,52 @@ export function attachChildBridge(
   let freezeToken: string | null = null;
   let frozenToken: string | null = null;
   let recovery: string | null = null;
+  /// The questions to the main window still waiting for an answer.
+  const asks = new Map<string, { settle: (message: RemoteMessage) => void; fail: (error: Error) => void }>();
+  const ask = (message: RemoteMessage & { token: string }, waitMs: number): Promise<RemoteMessage> =>
+    new Promise<RemoteMessage>((resolve, reject) => {
+      const done = (): void => {
+        clearTimeout(timer);
+        asks.delete(message.token);
+      };
+      const timer = globalThis.setTimeout(() => {
+        done();
+        reject(new Error(t("errors.bridge.no_answer")));
+      }, waitMs);
+      asks.set(message.token, {
+        settle: (answer) => { done(); resolve(answer); },
+        fail: (error) => { done(); reject(error); },
+      });
+      port.postMessage(message);
+    });
   const sendNext = (): void => {
     if (!initialized || outstanding || failed || !pending.length || !alive) return;
     outstanding = true;
     port.postMessage({ ...id, kind: "operation", epoch, seq: pending[0].seq, base: revision,
       revision: revision + 1, operation: pending[0].operation } satisfies RemoteMessage);
   };
-  const report = (reason: string): void => { failed = true; onState({ kind: "error", reason }); };
+  let failedReason = "";
+  /// La finestra può avere testo suo soltanto dopo una fotografia (`sendEdit`
+  /// la richiede) o mentre tiene `recovery`, il testo scelto con «tengo il
+  /// mio» in attesa della fotografia nuova. Prima della prima fotografia non
+  /// ha mostrato né scritto niente.
+  const holdsText = (): boolean => initialized || recovery !== null;
+  /// Una finestra fallita che ha testo suo (un conflitto, la sorgente
+  /// sostituita, la fotografia nuova rifiutata mentre tiene `recovery`) al
+  /// congelamento risponde di no, con la ragione, invece di tacere: il
+  /// silenzio, per la principale, vuol dire soltanto «non risponde».
+  const refuseFreeze = (token: string): void => {
+    port.postMessage({ ...id, kind: "freeze-refused", token, reason: failedReason } satisfies RemoteMessage);
+  };
+  const report = (reason: string): void => {
+    failed = true;
+    failedReason = reason;
+    onState({ kind: "error", reason });
+    if (freezeToken && holdsText()) {
+      refuseFreeze(freezeToken);
+      freezeToken = null;
+    }
+  };
   const finishFreeze = (): void => {
     if (!freezeToken || outstanding || pending.length || failed) return;
     port.postMessage({ ...id, kind: "drain-ready", epoch, token: freezeToken, seq: nextSeq, revision } satisfies RemoteMessage);
@@ -419,6 +607,10 @@ export function attachChildBridge(
     const message = event.data;
     if (message.doc !== id.doc || message.vault !== id.vault || message.session !== id.session || message.surfaceId !== id.surfaceId) return;
     if (message.kind === "theme") { onTheme?.(message.theme); return; }
+    if (message.kind === "keep-mode" || message.kind === "kept" || message.kind === "keep-failed") {
+      asks.get(message.token)?.settle(message);
+      return;
+    }
     if (message.kind === "snapshot-error") { report(message.reason); return; }
     if (message.kind === "snapshot") {
       if (initialized || pending.length) return;
@@ -450,8 +642,10 @@ export function attachChildBridge(
       }
       return;
     }
+    if (message.kind === "freeze" && failed && holdsText()) { refuseFreeze(message.token); return; }
     if (!initialized || failed) return;
-    if (message.kind === "hello" || message.kind === "drain-ready" || message.kind === "navigate") return;
+    if (message.kind === "hello" || message.kind === "drain-ready" || message.kind === "freeze-refused" || message.kind === "navigate"
+      || message.kind === "keep-probe" || message.kind === "keep") return;
     if (message.kind !== "resync" && message.epoch !== epoch) return;
     if (message.kind === "freeze") {
       frozenToken = message.token;
@@ -517,6 +711,15 @@ export function attachChildBridge(
       finishFreeze();
     }
   };
+  function resolveConflict(choice: "mine" | "theirs"): void {
+    if (!alive || !failed || frozen) throw new Error(t("errors.bridge.drain_conflict"));
+    recovery = choice === "mine" ? current() : null;
+    pending.length = 0;
+    outstanding = false;
+    failed = false;
+    initialized = false;
+    port.postMessage({ ...id, kind: "hello" } satisfies RemoteMessage);
+  }
   port.postMessage({ ...id, kind: "hello" } satisfies RemoteMessage);
   return {
     sendEdit: (text, operation) => {
@@ -537,19 +740,27 @@ export function attachChildBridge(
     navigate: (target) => {
       if (alive) port.postMessage({ ...id, kind: "navigate", target } satisfies RemoteMessage);
     },
-    resolveConflict: (choice) => {
+    resolveConflict,
+    discardKeeps: async () => {
+      if (!alive) throw new Error(t("errors.bridge.not_ready"));
+      const answer = await ask({ ...id, kind: "keep-probe", token: crypto.randomUUID() }, PROBE_WAIT_MS);
+      return answer.kind === "keep-mode" && answer.keeps;
+    },
+    discardKeeping: async () => {
       if (!alive || !failed || frozen) throw new Error(t("errors.bridge.drain_conflict"));
-      recovery = choice === "mine" ? current() : null;
-      pending.length = 0;
-      outstanding = false;
-      failed = false;
-      initialized = false;
-      port.postMessage({ ...id, kind: "hello" } satisfies RemoteMessage);
+      const text = current();
+      const answer = await ask({ ...id, kind: "keep", token: crypto.randomUUID(), text }, KEEP_WAIT_MS);
+      if (answer.kind === "keep-failed") throw new Error(answer.reason);
+      if (answer.kind !== "kept") throw new Error(t("errors.bridge.no_answer"));
+      // Only the text that was kept is discarded.
+      if (current() !== text) throw new Error(t("errors.bridge.text_changed"));
+      resolveConflict("theirs");
     },
     dispose: () => {
       if (!alive) return true;
       if (pending.length || outstanding) return false;
       alive = false;
+      for (const waiting of [...asks.values()]) waiting.fail(new Error(t("errors.bridge.not_ready")));
       port.onmessage = null;
       port.close();
       return true;

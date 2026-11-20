@@ -51,11 +51,9 @@ Il mirror non è una seconda implementazione della logica. Contiene soltanto:
 
 ## Interi
 
-JSON non preserva tutti gli interi `u64`. Identità, revisioni e hash che possono
-superare `2^53 - 1` attraversano IPC come stringhe.
-
-Un valore temporale in millisecondi può restare `number` quando il proprio
-dominio è dimostrabilmente sicuro e viene usato per aritmetica.
+Le identità, revisioni e hash `u64` attraversano IPC come stringhe; la regola
+canonica (e quando un valore può restare `number`) è in
+[`ipc-contract.md`](../reference/ipc-contract.md#u64).
 
 ## Porte generiche
 
@@ -149,23 +147,23 @@ della revisione verificata dalla scrittura.
 La bozza di recupero ha una cadenza, non un debounce: la prima modifica arma
 un timer di un secondo (`DRAFT_MS`) che le battute successive non riarmano,
 così chi scrive senza pause perde al più un secondo se il processo muore. Il
-salvataggio resta un debounce sulla pausa.
+salvataggio è un debounce sulla pausa, e la bozza non lo aspetta ([regola](runtime-events-and-jobs.md#bozze-e-salvataggio)).
 
 ### Il testo in sospeso
 
 Una superficie può tenere testo che non è ancora nel buffer della sessione,
-come il campo di una scheda della lavagna. Lo dichiara con una porta
-facoltativa del `SurfaceBuffer` (`editors/core/registry.ts`): `watchPending`
-avvisa quando c'è o non c'è più testo in sospeso, `pendingText` dà il testo
-del documento con quel testo già dentro (per la lavagna una `preview` del
-nucleo, senza commit) e `commitPending` lo registra. La sessione tiene
-l'elenco delle superfici con testo in sospeso: la prima battuta arma la bozza
-come un buffer sporco, e la bozza scrive `pendingText`. Prima di ogni passo
-che legge o sostituisce il buffer (flush, chiusura, rilascio, ricarica, cambio
-da fuori, conflitto, recupero, rinomina, cancellazione) la sessione chiede
-`commitPending`, e il controller lo chiede prima di staccare una superficie:
-nessuna superficie si distrugge con testo in sospeso. Se l'anteprima non
-riesce, la bozza tiene l'ultimo testo accettato e la console lo dice.
+come il campo di una scheda della lavagna o la cella aperta di un foglio. Lo
+dichiara con una porta facoltativa del `SurfaceBuffer`: `watchPending` avvisa
+a ogni suo cambio, `pendingText` dà il documento con quel testo dentro (per la
+lavagna una `preview` del nucleo, per il foglio il giornale con la cella), e
+`commitPending` lo registra, con la promessa del passo se passa dal provider.
+La prima battuta arma la bozza come un buffer sporco, e la bozza scrive
+`pendingText`. Prima di ogni passo che legge o sostituisce il buffer (flush,
+chiusura, rilascio, ricarica, cambio da fuori, conflitto, recupero, rinomina,
+cancellazione) la sessione chiede `commitPending`, e nei passi asincroni ne
+aspetta la promessa (`settled`); il controller lo chiede prima di staccare una
+superficie. Se l'anteprima non riesce (una formula, un foglio a comandi) la
+bozza tiene l'ultimo testo accettato.
 
 Ogni sessione fissa alla nascita il vault in cui il documento è stato letto e lo
 nomina (`vault`) in ogni lettura, scrittura, bozza e scarto di bozza: il vault
@@ -195,6 +193,48 @@ selezione effimera senza IPC di scrittura: `cancelThemePreview`, la chiusura
 delle Impostazioni o un'applicazione esplicita terminano la preview. Solo
 `selectTheme` persiste la scelta.
 
+`setting_changed` porta la chiave cambiata, e il backend ne manda uno per
+chiave (anche un cambio di profilo). Ogni ascoltatore della shell rilegge le
+impostazioni solo per le chiavi che legge: il tema per quelle di `reread`
+(`THEME_READS` in `theme/theme.ts`) e per le scelte dei temi (`<id>:<nome>`), le
+stringhe per `locale.language`, la cronologia per `history.enabled`, la cornice
+per `chrome.*` tranne i due pannelli laterali, che hanno l'ascoltatore loro.
+Un evento senza chiave vale «tutto» (`state/setting-change.ts`). Il tema
+raccoglie una raffica in al più due riletture, e l'ultima parte dopo l'ultimo
+evento. Così aprire la barra laterale dal comando scrive
+`chrome.sidebar.visible` e la rilegge una volta, invece di cinque riletture e
+un rimontaggio del tema. Anche per una sua chiave il tema rimonta il bundle
+solo se il contenuto è cambiato (`mountThemeBundle`): una preferenza come
+`appearance.accent` riscrive soltanto il canale delle preferenze, senza
+ripassare foglio e pelle dal sanitizer.
+
+Il pannello Impostazioni aperto sulla scheda della configurazione, a un
+`setting_changed` con chiave, rilegge le impostazioni e aggiorna solo le righe
+il cui valore, provenienza, attesa o errore è cambiato, con il conto delle
+modificate della loro sezione, «Ripristina gruppo» e il numero nell'indice
+(`refreshRows` in `panels/settings.ts`); le altre righe restano gli stessi
+nodi, e lo scroll non si tocca. La riga si aggiorna sul posto (`patchRow`):
+resta lo stesso nodo, testo e campo della vista si rifanno, e i nodi che una
+shell ha messo nel controllo (le vesti delle preferenze) non si staccano. La riga che ha il fuoco e una bozza non
+si sostituisce: il valore salvato nuovo lo dice una riga sotto il campo.
+Ridisegnano il corpo intero un evento senza chiave, uno schema cambiato (righe
+comparse, sparite o ridichiarate), il tema, i frammenti CSS, `chrome.frame`, la
+lingua e ogni altra scheda. Una scrittura partita da una riga aggiorna una volta
+sola, al suo esito: l'evento della sua chiave che arriva mentre è in volo non
+ridisegna, e uno che arriva dopo trova la riga già uguale.
+
+Una riga in volo resta usabile e il fuoco resta sul controllo della persona:
+lo dicono `aria-busy` e la riga «Salvataggio…» (`role="status"`). Le scritture
+della stessa chiave vanno in fila: una sola in volo, e dietro solo l'ultima
+chiesta, che sostituisce quella che aspettava; così all'host arrivano in
+ordine e una vecchia non sovrascrive mai la nuova. L'esito che conta è quello
+dell'ultima: se non va, la riga torna al valore salvato e mette sotto
+l'errore con l'input provato ([chi controlla il valore](setting-values.md)).
+Si spengono invece, finché l'esito non arriva, le righe la cui scrittura cambia
+il valore disegnato (aggiungere o togliere una voce di lista): una seconda
+scrittura dallo stesso disegno perderebbe la prima. Un ridisegno intero porta
+le righe in volo com'erano, con la scelta della persona.
+
 Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
 il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la
@@ -203,6 +243,12 @@ fuoco; una chiusura trasferisce il focus a una linguetta vicina o al menu del
 riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
 nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
 la vista porta il focus sulla superficie montata al posto della precedente.
+
+Una view dell'ispettore nascosta (scheda o ispettore chiusi, concentrazione)
+non chiede `render_view`: un invito la segna da ridisegnare (`ui/views.ts`,
+`stale`) e tornando in vista chiede l'albero una volta sola; una risposta giunta
+a view nascosta aspetta in `pending`, se nessun invito l'ha invecchiata. Niente
+lavoro nel kernel a ogni salvataggio per ciò che nessuno guarda.
 
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
@@ -221,7 +267,7 @@ prima dei moduli perché dipinga subito: il foglio `public/avvio/avvio.css`
 (un file e non un `<style>`, per la CSP: vedi
 [Permessi e sicurezza](../reference/permissions-and-security.md)),
 `luce.js` sceglie luce, contrasto, moto e colori, `stati.js` i tempi. Il fondo c'è dal primo
-fotogramma, il marchio entra a 120 ms (1 s al più), la fase (`data-fase`) a
+fotogramma, il marchio (un SVG, che non aspetta caratteri) entra a 120 ms, la fase (`data-fase`) a
 2 s, l'avvio è lento a 10 s e un guasto con Riprova a 30 s; sotto, l'app è
 `inert` e `aria-busy`. Lo consegna `avvio/consegna.ts` a fine avvio
 (`bootstrap.ts`, `mobile/compose.ts` col tema definitivo, 1,5 s al più;
@@ -249,17 +295,48 @@ pannelli) lo Scrittoio compone:
   primitiva ha un owner e un disposer per ciò che registra. `kit/ribbon/` è
   la barra multifunzione comune (schede e schede contestuali, gruppi raccolti
   da destra, lettere con Alt e F10, mini-barra), generica sulla vista e sulle
-  etichette di chi la monta; non sta nell'indice del kit, perché arriva con
-  l'editor che la carica a parte;
-- `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
-  chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
-  e la preferenza del sistema decidono quanto movimento esiste, e lo stato
-  finale è lo stesso con e senza movimento. Nel livello calmo le molle non
-  superano il bersaglio; ciò che entra o esce fa metà strada, con una molla
-  critica più rigida che non dura più di quella piena. Menu, modali,
-  pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`, sopra
-  `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
-  un'uscita è un'immagine che se ne va in 140 ms al più;
+  etichette di chi la monta (i fogli accendono `openInPlace` e `motion`);
+  non sta nell'indice del kit, perché arriva con
+  l'editor che la carica a parte. Le barre degli editor hanno tre forme,
+  scritte una volta nel tema e non in ogni editor: la barra a schede
+  (`kit/ribbon/`), la barra in una fila e la colonna degli strumenti. La
+  barra a schede mette su ogni pezzo due classi, quella col prefisso di chi
+  la monta (`grid-ribbon-…`, `rich-ribbon-…`) e `kit-ribbon-…`, che porta la
+  forma e la pelle comuni; le regole col prefisso restano alle parti solo di
+  quell'editor. La fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
+  `kit-bar` (il vassoio), `kit-bar-group` (un foglietto), `kit-bar-button`
+  e `kit-bar-field`, e per ciò che non ci sta usa `kit/options-bar.ts`
+  (`kit-options`, «…»: un popover con gli stessi controlli, Su e Giù fra
+  loro, Esc che riporta il fuoco su «…»; `onFit` dopo ogni conto, per chi
+  rimette il punto di tabulazione). Le frecce della fila sono `kit/toolbar-keys.ts`
+  (`rovingToolbar`): un solo punto di tabulazione, destra e sinistra che
+  girano ai capi, Home ed End, soltanto fra i controlli visibili e accesi;
+  in un campo di testo le frecce passano oltre solo ai capi del testo, ed
+  Escape resta a chi monta la barra. La prima ad adottarla è la barra di
+  formato delle note. La colonna è `kit/tool-rail.ts` (`kit-rail`). Fila
+  e colonna hanno la forma in `theme/scrittoio/structure.css` e la pelle in
+  `theme/scrittoio/skin/kit.css`; il vassoio è il ruolo facoltativo
+  `--bar-tray` della ricetta (ripiego `--sheet-2`); `appearance.bars`
+  «marcate» mette `data-bars="marked"` sulla radice e il vassoio su `--sheet-2`;
+- `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi chiave
+  WAAPI di sola `transform` e `opacity`. Le molle si campionano al ritmo dello
+  schermo (60–240 Hz, `samplePeriodMs`), con chiavi diradate sopra i 60 Hz. Il
+  livello `appearance.motion` e la preferenza del sistema decidono quanto
+  movimento esiste, e lo stato finale è lo stesso con e senza movimento. Nel
+  livello calmo le molle non superano il bersaglio; ciò che entra o esce fa metà
+  strada, con una molla critica più rigida che non dura più di quella piena.
+  Menu, modali, pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`,
+  sopra `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
+  un'uscita è un'immagine che se ne va in 140 ms al più. Il default di
+  `appearance.motion` lo decide l'host (`fub_host::settings::motion_default`):
+  `""` (segue il sistema), tranne su Linux con WebKitGTK dalla 2.54.0, che dopo
+  un'animazione ripresenta fotogrammi vecchi; lì parte da `reduced`. La versione
+  è quella della libreria caricata, che l'app dichiara per prima cosa, prima del
+  percorso di disegno e dell'host (`declare_the_webview` in
+  `crates/fub-app/src/lib.rs`); l'intervallo difettoso è la costante
+  `WEBKITGTK_FLICKER_FROM`, aperta in alto finché una versione corretta non è
+  verificata. Un valore scritto, anche `""`, vale sempre; sotto la riga
+  Animazioni le Impostazioni dicono perché il valore di partenza è «ridotte»;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
@@ -267,110 +344,31 @@ pannelli) lo Scrittoio compone:
   contratto del tema lo esporta in `layers`
   ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
-I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
-giustezza)
-li dichiara l'host e coincidono con quelli della serie; un test Rust lo
-verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
-400 px, ispettore da 248 a 440 px. Un tema `theme-1` installato non si monta, e
-la diagnosi del catalogo nomina il motore.
+I predefiniti dell'aspetto (accento, i tre caratteri, corpo di 18 px,
+interlinea, giustezza di 58 caratteri) li dichiara l'host e coincidono con
+quelli della serie; un test Rust lo verifica. Un valore scelto in Aspetto resta
+quello scelto. L'accento di serie è lo smeraldo, 160; i colori di stato ne
+restano a 30° (`statusHue`); `avvio/colori.test.ts` lega l'avvio alla
+ricetta, logo compreso
+([`--logo-*`](../reference/permissions-and-security.md)). I divisori dei
+cassetti sono il divisore del kit: sidebar da 208 a 400 px, ispettore da 248 a
+440 px. Un tema `theme-1` non si monta; uno con
+`extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
+dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
+
+`theme/loader.ts` monta gli strati del tema (caratteri, foglio, pelli,
+preferenze, frammenti) come fogli costruiti in `document.adoptedStyleSheets`,
+non come elementi `<style>`, che la CSP rifiuterebbe: un foglio per canale,
+nell'ordine dichiarato, sostituiti tutti insieme; le `@font-face` diventano
+`FontFace` in `document.fonts`. Ordine, cascata e caratteri:
+[Gli stili e la CSP](../reference/styles-and-csp.md#il-caricatore-del-tema).
 
 ### Comportamenti della shell
 
-Ciò che la shell fa sopra le porte generiche, senza contratti propri:
-
-- **Avvisi.** I toast si impilano (al più tre visibili), portano azioni e un
-  «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
-  centro attività tiene lo storico dei lavori. Cestinare più note insieme non
-  ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
-  le note tornano dal cestino una a una. Avvisi e attività dicono l'ora come
-  «adesso», «2 min fa», poi l'ora senza secondi (i secondi nel suggerimento).
-  Un vault senza rilevamento delle modifiche esterne lo dice in testa al
-  centro con «Riapri il vault», che scrive ciò che è in sospeso, chiude il
-  vault nell'host e lo riapre.
-- **Scrittura.** Con la barra di formattazione spenta
-  (`chrome.formatbar.visible`) compare la mini-barra sulla selezione;
-  l'impostazione `editor.minibar` (`auto`, `always`, `menu`, `off`) dice se
-  compare anche col tasto destro e su ogni selezione. Il «/» a inizio riga o
-  dopo uno spazio apre nella nota il menu dei blocchi e dei comandi, filtrato
-  da ciò che si scrive dopo (`editor.slash` lo spegne); con una selezione il
-  menu «/» ha il suo campo. Entrambi passano per l'interfaccia della
-  superficie testuale, mai per oggetti CodeMirror.
-- **Tasto destro negli editor.** Un solo ascoltatore sul riquadro
-  (`panels/document.ts`) chiede alla superficie il suo `contextMenu(at)` e lo
-  compone in `panels/editor-menu.ts` con le stesse sezioni, nello stesso
-  ordine, in ogni editor: ciò che sta sotto il puntatore (prima le correzioni
-  del correttore), gli appunti, «Formato», «Trasforma in» e «Inserisci»,
-  «Comandi» (i comandi del registro dichiarati per il «/») con le voci dei
-  plugin per la nota o il file, e le utilità. Al primo livello stanno al più
-  dodici voci, il resto scende in «Altro». Un id d'azione o di comando prende
-  nome, icona, stato e accordo da chi lo dichiara, e senza dichiarazione non
-  si vede. Il menu si apre senza IPC; Maiusc+tasto destro e un evento già
-  gestito (la griglia delle tabelle, il disegno) lasciano passare il menu del
-  sistema o quello proprio; il tasto Menu e Maiusc+F10 lo aprono sotto il
-  cursore. Sui collegamenti una scheda al passaggio mostra
-  la destinazione (`render_embed`) con apri, di fianco e nuova linguetta; un
-  collegamento irrisolto offre «Crea». In Live, col cursore in un
-  collegamento, Maiusc+Alt+Invio apre la scheda col fuoco sulla prima azione;
-  Esc riporta il fuoco nel testo.
-- **Cerca.** Il cassetto espone le opzioni che la porta regge (maiuscole,
-  regex, tolleranza, parola intera) e «Sostituisci nel vault»: prima il piano
-  (`vault.replace` in `dry_run`), poi «Applica». La sostituzione è letterale e
-  sensibile alle maiuscole, solo sulle note dei risultati. Una ricerca si
-  salva come segnalibro.
-- **Scrivania.** Il riquadro vuoto offre nota nuova, nota del giorno, da
-  modello (solo se il comando è nel registro), recenti, bozze da recuperare e
-  «Da sistemare» (una riga per nota con collegamenti rotti, da
-  `vault_health`; se la query fallisce il gruppo manca).
-- **Albero.** Ctrl/Cmd-clic e Ctrl-Spazio aggiungono o tolgono una nota dalla
-  scelta, Maiusc-clic sceglie l'intervallo fra le note visibili, Esc la
-  azzera. Una barra sopra l'albero dice quante sono e offre «Sposta in…»,
-  «Sposta nel cestino» e «Deseleziona»; il tasto destro su una nota scelta
-  apre lo stesso menu, con «Copia» e «In una cartella nuova». La scelta è solo
-  su ciò che l'albero mostra, e ciò che esce dal DOM esce dalla scelta.
-- **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
-  `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
-  riporta a `[]`.
-- **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
-  insieme di interruttori di visibilità per gruppo, che si compone con la
-  maschera della linea del tempo.
-- **Linguette.** Rilasciata sul corpo di un foglio, una linguetta si
-  divide (quattro bordi) o si sposta in coda al riquadro (centro);
-  `splitWithTab` in `state/layout.ts` è la regola pura. Fuori dalla finestra
-  una linguetta di nota diventa finestra, solo con
-  `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
-  fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
-- **Menu contestuale estendibile.** Le view sulla superficie `context_menu`
-  (`ui/context-views.ts`) si aggiungono in coda al menu di una nota, di una
-  cartella o di un file dell'albero. Il bersaglio del clic non è nel contesto
-  di sessione: viaggia nei `params` di `render_view` e `view_action`, e la
-  shell manda solo le chiavi che la view dichiara fra i propri `ParamSpec`
-  (`target`, l'id cliccato; `target_kind`, `note`, `folder` o `file`). Dall'albero
-  restituito si prendono i `button` e i `list_item` con un'azione, al più
-  quattro view e otto voci per view, con trecento millisecondi per rispondere:
-  una view che sbaglia o tarda non compare e il menu resta quello della shell.
-- **Ricerca nel menu dell'applicazione.** «Cerca» è il sesto menu del
-  marchio (`ui/app-menu-search.ts`): un campo con elenco che filtra, senza
-  accenti né maiuscole, le voci di tutti gli altri menu, ciascuna col nome del
-  suo menu e la sua scorciatoia. Non ha un elenco proprio: legge quelli dei
-  menu.
-- **Cartelle che si aprono sostando.** Trascinando una nota, una cartella
-  chiusa si apre dopo 700 ms sopra di lei (`scheduleHoverOpen` in
-  `panels/explorer.ts`); il timer è uno solo, e passare oltre, lasciare o
-  finire il trascinamento lo azzera.
-- **Rinomina nell'albero.** Un nome rifiutato (non valido, già in uso, errore
-  del kernel) riapre il campo con ciò che è stato scritto e la frase accanto,
-  `role="alert"`, che sparisce alla prima battuta; il toast non serve.
-- **Avvisi dentro il foglio.** Sotto il banner del conflitto (`drawNotices` in
-  `panels/document.ts`) il foglio tiene una riga per avviso: errore di
-  salvataggio con «Riprova» (`shell.doc.save`), sola lettura mentre una
-  cancellazione aspetta la risposta, bozza ritrovata, nota cambiata o
-  riscritta su disco con buffer sporco, nota ricaricata, e la modalità
-  limitata dei componenti, che è del vault. Quelli derivati dalla sessione
-  durano quanto il suo stato; gli altri sono fatti del controllore
-  (`state/sheet-notices.ts`) che restano finché non si chiudono, e un
-  salvataggio riuscito toglie «cambiato su disco» ma non la bozza. Una nota
-  rimossa da fuori chiude la sua linguetta: l'avviso resta sul riquadro che la
-  mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude.
+Avvisi, scrittura, menu delle modalità, tasto destro negli editor, ricerca,
+scrivania, albero, binario, grafo, linguette, menu contestuale estendibile e
+avvisi dentro il foglio stanno sopra le porte generiche, senza contratti
+propri: li descrive [Comportamenti della shell](shell-behaviours.md).
 
 ## Shell e piattaforma
 
@@ -417,8 +415,8 @@ o il disegno resta agli eventi di copia e incolla del browser.
 
 ## Superfici di editing
 
-Sessione documento, superfici, motori e profili, insieme al confine di
-CodeMirror e al suo guard, sono in [Superfici dell'editor](editor-surfaces.md).
+Sessione, superfici, motori, profili e confine di CodeMirror sono in
+[Superfici dell'editor](editor-surfaces.md), i componenti in [Editor dei componenti](component-editors.md).
 
 ## Guard del frontend
 
@@ -426,15 +424,17 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 
 - nuovi import Tauri fuori dal seam;
 - usi degli appunti della webview fuori da `platform/clipboard.ts`;
-- listener globali senza owner;
+- ascoltatori, timer e osservatori senza owner e attese di un giro di `Race` fuori
+  dal suo cancello (`check-listeners.mjs`, `check-races.mjs`: regole e limiti
+  noti in testa a ciascuno, casi nella sua `--self-test`);
 - ruoli del tema scritti sull'elemento negli editor, oltre l'elenco delle eccezioni
   (`check-inline-theme.mjs`);
-- attese concorrenti senza il primitivo di cancellazione;
+- un `<style>` creato da uno script o uno `style` scritto come markup, che la
+  CSP rifiuterebbe (`check-inline-styles.mjs`);
 - mirror TypeScript non aggiornati;
 - parole del codice nei testi italiani dell'interfaccia: il glossario in
-  `apps/client/src/i18n/gergo.ts` dà per ognuna la parola da usare (per
-  esempio «copia completa» invece di «snapshot», «vista» invece di «view»), e
-  `gergo.test.ts` la cerca nel catalogo.
+  `apps/client/src/i18n/gergo.ts` dà per ognuna la parola da usare («copia
+  completa» per «snapshot»), e `gergo.test.ts` la cerca nel catalogo.
 
 ## Dove si trova
 

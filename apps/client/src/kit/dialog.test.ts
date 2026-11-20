@@ -132,6 +132,30 @@ describe("il fuoco iniziale", () => {
     const dialog = open({ actions: [] });
     expect(document.activeElement).toBe(dialog.element);
   });
+
+  it("un dialogo lungo si apre in cima, col fuoco sull'azione in fondo", () => {
+    // Il browser porta in vista chi prende il fuoco, a meno di `preventScroll`.
+    // happy-dom non scorre: il finto qui sotto lo fa come il browser, sul
+    // dialogo che scorre, così un fuoco che trascina la vista si vede.
+    const focus = HTMLElement.prototype.focus;
+    vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+      focus.call(this, options);
+      const scroller = this.closest<HTMLElement>(".kit-dialog");
+      if (scroller && !options?.preventScroll) scroller.scrollTop = 900;
+    });
+    const body = document.createElement("div");
+    for (let i = 0; i < 40; i += 1) {
+      const line = document.createElement("p");
+      line.textContent = `Passo ${i + 1}`;
+      body.append(line);
+    }
+    const dialog = open({ body });
+    expect(document.activeElement).toBe(action(dialog.element, "yes"));
+    expect(dialog.element.scrollTop, "nessun fuoco ha fatto scorrere il dialogo").toBe(0);
+    // Il ritorno del fuoco resta quello di sempre: sul comando che lo ha aperto.
+    press(document.activeElement!, "Escape");
+    expect(document.activeElement).toBe(opener);
+  });
 });
 
 describe("la trappola", () => {

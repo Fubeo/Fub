@@ -147,24 +147,27 @@ impl Matcher {
     /// `None` se il testo non ha parole: come per la foglia di testo, una
     /// domanda vuota non seleziona niente.
     pub(super) fn new(text: &TextQuery) -> Option<Matcher> {
-        let words: Vec<&str> = text
-            .text
-            .split(|c: char| !c.is_alphanumeric())
-            .filter(|w| !w.is_empty())
-            .collect();
+        // Le parole e i confini sono quelli di `words`: un accento
+        // combinante resta nella sua lettera, e `\b` non serve più.
+        let words = super::words::words(&text.text);
         if words.is_empty() {
             return None;
         }
         let flags = if text.case_sensitive { "" } else { "(?i)" };
-        let tail = if text.partial_last_term { "" } else { r"\b" };
+        let (before, after, gap) = (
+            super::words::BEFORE.as_str(),
+            super::words::AFTER.as_str(),
+            super::words::GAP.as_str(),
+        );
+        let tail = if text.partial_last_term { "" } else { after };
         let patterns: Vec<String> = match text.mode {
             TextMode::Phrase => {
                 let body = words
                     .iter()
                     .map(|w| regex::escape(w))
                     .collect::<Vec<_>>()
-                    .join(r"[^\p{L}\p{N}]+");
-                vec![format!(r"{flags}\b{body}\b")]
+                    .join(gap);
+                vec![format!("{flags}{before}{body}{after}")]
             }
             TextMode::Terms => {
                 let last = words.len() - 1;
@@ -172,8 +175,8 @@ impl Matcher {
                     .iter()
                     .enumerate()
                     .map(|(at, w)| {
-                        let end = if at == last { tail } else { r"\b" };
-                        format!(r"{flags}\b{}{end}", regex::escape(w))
+                        let end = if at == last { tail } else { after };
+                        format!("{flags}{before}{}{end}", regex::escape(w))
                     })
                     .collect()
             }
@@ -280,6 +283,30 @@ mod tests {
             .unwrap()
             .within(&layout, TextScope::Line));
         assert!(Matcher::new(&TextQuery::terms(" , ")).is_none());
+    }
+
+    /// Una lettera con l'accento combinante è una lettera: il confine cade
+    /// dopo l'accento, non fra la `e` e l'accento. Emoji e bandiere stanno fra
+    /// le parole come la punteggiatura.
+    #[test]
+    fn combining_marks_and_emoji_keep_their_words_whole() {
+        let layout = layout(&doc(vec![para(vec![t(
+            "Un caffe\u{301} 🗺 al bar 👨‍👩‍👧 東京タワー",
+        )])]));
+        let found = |q: TextQuery| Matcher::new(&q).unwrap().within(&layout, TextScope::Line);
+        assert!(found(TextQuery::terms("caffe\u{301}")));
+        assert!(found(TextQuery::terms("caffe\u{301} 🗺 bar")));
+        assert!(
+            !found(TextQuery::terms("caffe")),
+            "la parola intera ha l'accento"
+        );
+        assert!(found(TextQuery::terms("caffe").while_typing()));
+        assert!(found(TextQuery {
+            mode: TextMode::Phrase,
+            ..TextQuery::terms("caffe\u{301} 🗺 al")
+        }));
+        assert!(found(TextQuery::terms("東京").while_typing()));
+        assert!(Matcher::new(&TextQuery::terms("🗺 🇮🇹 👨‍👩‍👧")).is_none());
     }
 
     #[test]

@@ -274,6 +274,80 @@ fn scoped_text_wants_every_word_in_the_same_line_block_or_section() {
     assert_eq!(ids_after(TextScope::Line), ["Elenco.md"]);
 }
 
+/// `comment:` cerca nei messaggi dei commenti (`{>>…<<}`), autore compreso;
+/// il testo di un messaggio non è testo della nota, e `content:` o una
+/// ricerca semplice non lo trovano. Il passo commentato invece è testo.
+#[test]
+fn comment_finds_the_messages_and_content_does_not() {
+    let v = Vault::new();
+    v.put(
+        "Bozza.md",
+        "Il {==passo commentato==}{>>@Anna Bianchi 2026-11-08 17:40: frase zoppicante<<}{>>@Bruno: Rivedere<<} qui.\n",
+    );
+    v.put(
+        "Punto.md",
+        "Un punto {>>2026-11-09: zoppicante anche qui<<} e basta.\n",
+    );
+    v.put(
+        "Testo.md",
+        "Una frase zoppicante nel corpo, senza commenti.\n",
+    );
+    let ws = v.open();
+    let ids = |line: &str| {
+        let expr = fub_abi::rules::search_syntax::parse(line, false).expect("una ricerca");
+        let mut names = matching(&ws, expr)
+            .into_iter()
+            .map(|m| m.doc.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(ids("comment:zoppicante"), ["Bozza.md", "Punto.md"]);
+    assert_eq!(ids("comment:Anna"), ["Bozza.md"]);
+    assert_eq!(ids("comment:\"frase zoppicante\""), ["Bozza.md"]);
+    assert_eq!(ids("match-case:Rivedere"), Vec::<String>::new());
+    assert_eq!(ids("content:zoppicante"), ["Testo.md"]);
+    assert_eq!(ids("zoppicante"), ["Testo.md"]);
+    assert_eq!(ids("content:commentato"), ["Bozza.md"]);
+    assert_eq!(ids("zoppicante -comment:zoppicante"), ["Testo.md"]);
+    assert!(ids("Anna").is_empty(), "l'autore non è testo della nota");
+    // La grafia esatta si confronta sul testo memorizzato dei messaggi.
+    let exact = |word: &str| {
+        let text = TextQuery {
+            case_sensitive: true,
+            ..TextQuery::terms(word)
+        };
+        matching(
+            &ws,
+            QueryExpr::of(QueryPredicate::Custom {
+                ns: fub_abi::rules::search_syntax::COMMENT_PREDICATE_NS.into(),
+                predicate: serde_json::to_value(text).unwrap(),
+            }),
+        )
+        .into_iter()
+        .map(|m| m.doc.to_string())
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(exact("Rivedere"), ["Bozza.md"]);
+    assert!(exact("rivedere").is_empty());
+    // Un predicato che non porta un TextQuery è una domanda malposta.
+    let wrong = ws.query_index(IndexQuery::Documents {
+        matching: QueryExpr::of(QueryPredicate::Custom {
+            ns: fub_abi::rules::search_syntax::COMMENT_PREDICATE_NS.into(),
+            predicate: serde_json::json!(5),
+        }),
+        sort: None,
+        select: PropertySelect::None,
+        page: Some(Page::first(20)),
+        excerpts: Excerpts::Attach,
+    });
+    let wrong = format!("{wrong:?}");
+    assert!(
+        wrong.starts_with("Err(") && wrong.contains("comment_query_shape"),
+        "{wrong}"
+    );
+}
+
 #[test]
 fn finds_notes_by_content_title_and_tag() {
     let v = Vault::new();
@@ -311,6 +385,133 @@ fn highlights_land_on_the_right_bytes_in_accented_text() {
         .expect("un match di testo ha un estratto");
     assert_eq!(&snippet[span.start..span.end], "metropoli");
     assert!(!snippet.contains('<'), "lo snippet è testo, non markup");
+}
+
+/// Mentre si scrive l'ultimo termine è un prefisso, cioè una regex sul
+/// dizionario dei termini: un'emoji o un simbolo che il tokenizer tiene non
+/// devono diventare una fuga che la sintassi rifiuta («è 🗺» falliva tutta).
+#[test]
+fn an_emoji_being_typed_is_searched_and_not_a_regex_error() {
+    let v = Vault::new();
+    v.put("Mappa.md", "La mappa è qui 🗺 e <ancora>.\n");
+    let ws = v.open();
+
+    for typed in ["è 🗺", "🗺", "è", "<anc", "a.c", "(mappa"] {
+        let answer = ws.query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms(typed).while_typing())),
+            sort: None,
+            select: PropertySelect::None,
+            page: Some(Page::first(20)),
+            excerpts: Excerpts::Omit,
+        });
+        assert!(
+            matches!(answer, Ok(IndexResult::Documents(_))),
+            "«{typed}»: {answer:?}"
+        );
+    }
+}
+
+/// La riga del cassetto (IMP-113) compilata dalla regola del contratto, come
+/// la compila la shell mentre si scrive, sui caratteri di più byte: emoji
+/// semplici, composte con ZWJ, bandiere, lettere con l'accento combinante e
+/// CJK. Nessuna risposta è un errore; dove resta una parola che il tokenizer
+/// tiene la nota si trova, e ogni evidenziazione cade su confini di carattere.
+///
+/// I simboli da soli (`🗺`, `🇮🇹`) non sono parole per il tokenizer `default`:
+/// cercarli dà nessun risultato e non un errore. Lo stesso vale per una lettera
+/// precomposta contro la stessa lettera scritta con l'accento combinante: oggi
+/// l'indice non normalizza (NFC), e quella è una regola di schema, non di query.
+#[test]
+fn the_drawer_line_with_multibyte_characters_finds_and_never_fails() {
+    let v = Vault::new();
+    v.put("Mappa.md", "La mappa è qui 🗺 e <ancora>.\n");
+    v.put("Famiglia.md", "Foto di famiglia 👨‍👩‍👧 in Italia 🇮🇹.\n");
+    v.put("Bar.md", "Un caffe\u{301} al bar.\n");
+    v.put("Tokyo.md", "東京タワー の 夜景.\n");
+    let ws = v.open();
+
+    let answer = |line: &str| {
+        let expr = fub_abi::rules::search_syntax::parse(line, true)
+            .unwrap_or_else(|fault| panic!("«{line}» è una riga valida: {fault:?}"));
+        let hits = match ws.query_index(IndexQuery::Documents {
+            matching: expr,
+            sort: None,
+            select: PropertySelect::None,
+            page: Some(Page::first(20)),
+            excerpts: Excerpts::Attach,
+        }) {
+            Ok(IndexResult::Documents(hits)) => hits.items,
+            other => panic!("«{line}»: attesi documenti, trovato {other:?}"),
+        };
+        for hit in &hits {
+            let snippet = hit.snippet.as_deref().unwrap_or_default();
+            for span in &hit.highlights {
+                assert!(
+                    snippet.get(span.start..span.end).is_some(),
+                    "«{line}»: evidenziazione {span:?} fuori dai confini di carattere in «{snippet}»"
+                );
+            }
+        }
+        let mut ids: Vec<String> = hits.into_iter().map(|h| h.doc.to_string()).collect();
+        ids.sort();
+        ids
+    };
+
+    // Il caso del collaudo, e i suoi pezzi.
+    assert_eq!(answer("è 🗺"), ["Mappa.md"]);
+    assert_eq!(answer("è"), ["Mappa.md"]);
+    assert_eq!(answer("mappa 🗺"), ["Mappa.md"]);
+    assert_eq!(answer("🗺 mappa"), ["Mappa.md"]);
+    assert_eq!(answer("\"è qui 🗺\""), ["Mappa.md"]);
+    assert!(answer("🗺").is_empty());
+    assert_eq!(answer("è🗺"), ["Mappa.md"]);
+    // ZWJ e bandiere: la sequenza intera, a metà, e accanto a una parola.
+    assert_eq!(answer("famiglia 👨‍👩‍👧"), ["Famiglia.md"]);
+    assert_eq!(answer("👨‍👩"), Vec::<String>::new());
+    assert_eq!(answer("🇮🇹 italia"), ["Famiglia.md"]);
+    assert_eq!(answer("ital 🇮"), ["Famiglia.md"]);
+    // L'accento combinante, anche da solo e come ultimo carattere scritto.
+    assert_eq!(answer("caffe\u{301}"), ["Bar.md"]);
+    assert_eq!(answer("caffe\u{301} bar"), ["Bar.md"]);
+    assert!(answer("\u{301}").is_empty());
+    // La lettera precomposta contro quella combinata: nessun errore, e oggi
+    // nessun risultato, perché l'indice non normalizza (vedi sopra).
+    assert!(answer("caffè").is_empty());
+    // CJK: una parola per il tokenizer, cercata come prefisso mentre si scrive.
+    assert_eq!(answer("東京"), ["Tokyo.md"]);
+    assert_eq!(answer("夜景 東"), ["Tokyo.md"]);
+    // Gli stessi caratteri dentro gli operatori della barra.
+    assert_eq!(answer("(è OR 東京) mappa"), ["Mappa.md"]);
+    assert_eq!(answer("(è OR 夜景) (🗺 OR の)"), ["Tokyo.md"]);
+    // Un simbolo che resta da solo in una foglia (qui dopo un gruppo) non ha
+    // parole per l'indice: la foglia non seleziona niente, ma non è un errore.
+    assert!(answer("(è OR 東京) 🗺").is_empty());
+    assert_eq!(answer("-🗺 famiglia"), ["Famiglia.md"]);
+    assert_eq!(answer("match-case:è mappa"), ["Mappa.md"]);
+    assert_eq!(answer("match-case:\"è qui 🗺\""), ["Mappa.md"]);
+    assert_eq!(answer("match-case:\"🗺 e\""), ["Mappa.md"]);
+    assert_eq!(answer("match-case:\"famiglia 👨‍👩‍👧\""), ["Famiglia.md"]);
+    assert_eq!(answer("match-case:\"caffe\u{301}\""), ["Bar.md"]);
+    assert_eq!(answer("match-case:caffe\u{301} bar"), ["Bar.md"]);
+    assert!(answer("match-case:🗺").is_empty());
+    // L'ambito (riga, blocco, sezione) confronta il testo grezzo come le
+    // maiuscole esatte: stesse parole, stessi confini.
+    assert_eq!(answer("line:(è 🗺)"), ["Mappa.md"]);
+    assert_eq!(answer("line:(caffe\u{301} bar)"), ["Bar.md"]);
+    assert_eq!(answer("block:\"famiglia 👨‍👩‍👧 in\""), ["Famiglia.md"]);
+}
+
+/// Una riga davvero sbagliata resta un guasto tipizzato della sintassi, con il
+/// suo motivo e la colonna, anche dopo caratteri di più byte: non arriva
+/// all'indice e non diventa un errore generico della ricerca.
+#[test]
+fn a_wrong_line_stays_a_typed_fault_after_multibyte_characters() {
+    use fub_abi::rules::search_syntax::{parse, SearchFaultKind};
+    let fault = parse("\\ * ? (", true).expect_err("una parentesi aperta");
+    assert_eq!(fault.kind, SearchFaultKind::UnclosedGroup);
+    let fault = parse("🗺 è \"aperta", true).expect_err("una virgolette aperta");
+    assert_eq!(fault.kind, SearchFaultKind::UnclosedQuote);
+    assert_eq!(fault.at, "🗺 è ".len(), "la colonna è in byte, sul confine");
 }
 
 #[test]
@@ -796,4 +997,26 @@ fn due_dates_of_open_tasks_filter_by_day_and_by_side() {
     assert_eq!(ids("due:>=2026-01-01"), ["Dopo.md", "Oggi.md"]);
     assert_eq!(ids("due:>=2026-10-01 due:<2026-11-01"), ["Oggi.md"]);
     assert_eq!(ids("task:todo -due:>=2000-01-01"), ["Senza.md"]);
+}
+
+/// La scadenza che la ricerca indicizza è quella della regola del contratto
+/// (`fub_abi::rules::tasks`), la stessa della vista dei compiti: una data che
+/// non esiste non è una scadenza, e la data scritta come `code` lo è.
+#[test]
+fn the_due_date_follows_the_rule_of_the_contract() {
+    let v = Vault::new();
+    v.put("Refuso.md", "- [ ] refuso 📅 2026-02-30\n");
+    v.put("Codice.md", "- [ ] in codice 📅 `2026-10-19`\n");
+    let ws = v.open();
+    let ids = |line: &str| {
+        let expr = fub_abi::rules::search_syntax::parse(line, false).expect("sintassi valida");
+        let mut names = matching(&ws, expr)
+            .into_iter()
+            .map(|m| m.doc.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(ids("due:>=2026-01-01"), ["Codice.md"]);
+    assert_eq!(ids("due:2026-10-19"), ["Codice.md"]);
 }

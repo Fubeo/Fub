@@ -1,18 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
-import { EditorState } from "@codemirror/state";
+import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { type ChangeSpec, EditorState } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
-import { blockAt, blockModel, buildBlocks, type Block } from "./model";
+import { parsed } from "../test-support";
+import { blockAt, blockModel, buildBlocks, updateBlocks, type Block } from "./model";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 
 // Il modello dei blocchi (H2): la regola sul corpus e la parità fra il modello
 // che segue le modifiche e quello rifatto da capo.
 
 function stateOf(doc: string): EditorState {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] }));
+}
+
+/// `run` con `Date.now()` fermo: il tempo che CodeMirror concede all'analisi
+/// di una transazione non scade mai, qualunque sia il carico.
+function withStoppedClock<T>(run: () => T): T {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    return run();
+  } finally {
+    vi.useRealTimers();
+  }
 }
 
 const shape = (blocks: readonly Block[]) => blocks.map((b) => `${b.kind}${b.level || ""}@${b.depth}:${b.from}-${b.to}^${b.parent}`);
@@ -123,9 +133,8 @@ describe("le modifiche", () => {
     it(`segue «${edit.name}» come il modello rifatto`, () => {
       const state = stateOf(base);
       const next = state.update({ changes: edit.at(base) }).state;
-      ensureSyntaxTree(next, next.doc.length, 5000);
       // Un passo vuoto prende l'albero finito, se l'analisi era rimasta a metà.
-      const settled = next.update({}).state;
+      const settled = parsed(next);
       expect(shape(settled.field(blockModel).blocks)).toEqual(shape(buildBlocks(settled).blocks));
       checkRule(settled.doc.toString(), settled.field(blockModel).blocks);
     });
@@ -141,10 +150,65 @@ describe("le modifiche", () => {
       const from = Math.floor(random() * (length + 1));
       const remove = random() < 0.3 ? Math.min(length - from, Math.floor(random() * 4)) : 0;
       const insert = remove > 0 && random() < 0.5 ? "" : pieces[Math.floor(random() * pieces.length)]!;
-      state = state.update({ changes: { from, to: from + remove, insert } }).state;
-      ensureSyntaxTree(state, state.doc.length, 5000);
-      state = state.update({}).state;
+      state = parsed(state.update({ changes: { from, to: from + remove, insert } }).state);
       expect(shape(state.field(blockModel).blocks), `passo ${step}`).toEqual(shape(buildBlocks(state).blocks));
+    }
+  });
+
+  // Su una macchina carica il parser si ferma a metà nei suoi 20 ms: il
+  // modello nato da quell'albero non ha i gruppi dopo il punto dove si era
+  // fermato, e quando l'albero arriva in fondo non può tenere quelli di prima.
+  it("un modello letto da un albero a metà si rifà quando l'albero arriva in fondo", () => {
+    const long = Array.from({ length: 80 }, (_, i) => base.replace("Titolo", `Titolo ${i}`)).join("\n\n");
+    const start = EditorState.create({ doc: long, extensions: [markdown({ base: markdownGrammar }), blockModel] });
+    expect(syntaxTree(start).length).toBeLessThan(start.doc.length);
+    let model = buildBlocks(start);
+    const first = start.update({ changes: { from: 3, insert: "a" } });
+    model = updateBlocks(model, first);
+    ensureSyntaxTree(first.state, first.state.doc.length, 5000);
+    // Lo stato nuovo rianalizza la nota nei 20 ms che CodeMirror concede a
+    // ogni transazione, misurati con `Date.now()`: con la macchina carica non
+    // bastano, l'albero resta a metà e la prova guarderebbe un altro caso
+    // (#451). Con l'orologio fermo l'analisi arriva sempre in fondo.
+    const second = withStoppedClock(() => first.state.update({ changes: { from: 4, insert: "b" } }));
+    expect(syntaxTree(second.state).length).toBe(second.state.doc.length);
+    model = updateBlocks(model, second);
+    expect(shape(model.blocks)).toEqual(shape(buildBlocks(second.state).blocks));
+  });
+
+  // Il modello cerca il punto da rifare e i gruppi che tornano uguali per
+  // posizione, senza scorrere l'elenco: transazioni con più modifiche lontane,
+  // su una nota lunga, seguite senza mai rifare da capo.
+  it("più modifiche per transazione, su una nota lunga, restano uguali al modello rifatto", () => {
+    const long = Array.from({ length: 12 }, (_, i) => base.replace("Titolo", `Titolo ${i}`)).join("\n\n");
+    const pieces = ["a", " ", "\n", "\n\n", "- ", "# ", "> ", "```", "1. ", "  - ", "|", "\n\n^id1\n\n", "^x", "---\n"];
+    for (let seed = 1; seed <= 12; seed++) {
+      let state = stateOf(long);
+      let model = buildBlocks(state);
+      let next = seed;
+      const random = () => (next = (next * 1103515245 + 12345) % 2147483648) / 2147483648;
+      for (let step = 0; step < 120; step++) {
+        const length = state.doc.length;
+        const points = Array.from({ length: 1 + Math.floor(random() * 3) }, () => Math.floor(random() * (length + 1)))
+          .sort((a, b) => a - b);
+        const changes: ChangeSpec[] = [];
+        let floor = 0;
+        for (const point of points) {
+          if (point < floor) continue;
+          const remove = random() < 0.3 ? Math.min(length - point, Math.floor(random() * 4)) : 0;
+          changes.push({ from: point, to: point + remove, insert: pieces[Math.floor(random() * pieces.length)]! });
+          floor = point + remove + 1;
+        }
+        const tr = state.update({ changes });
+        // Voluto: il modello seguito e quello rifatto leggono lo stesso albero
+        // di `tr.state`, anche se a metà, e devono coincidere comunque.
+        // `ensureSyntaxTree` non lo cambia: porta avanti l'analisi condivisa,
+        // così il passo dopo nasce, di solito, con l'albero intero.
+        ensureSyntaxTree(tr.state, tr.state.doc.length, 5000);
+        model = updateBlocks(model, tr);
+        state = tr.state;
+        expect(shape(model.blocks), `seme ${seed} passo ${step}`).toEqual(shape(buildBlocks(state).blocks));
+      }
     }
   });
 });

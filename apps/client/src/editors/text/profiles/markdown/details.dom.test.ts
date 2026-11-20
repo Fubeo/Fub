@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { detailsHead, isDetailsClose, pairDetails, type TopBlock } from "./details";
 import { renderMarkdown } from "./render";
 import { mountMarkdown } from "./mount";
+import { parsed } from "./test-support";
 
 // Il ripiegabile (K2): l'apertura, la chiusura, l'accoppiamento.
 
@@ -66,15 +67,12 @@ describe("la Lettura", () => {
     const { EditorState } = await import("@codemirror/state");
     const { renderMarkdownState } = await import("./render");
     const { markdown } = await import("@codemirror/lang-markdown");
-    const { ensureSyntaxTree } = await import("@codemirror/language");
     const { markdownGrammar } = await import("./grammar");
-    const state = EditorState.create({ doc: note, extensions: markdown({ base: markdownGrammar }) });
-    ensureSyntaxTree(state, state.doc.length, 1000);
+    const state = parsed(EditorState.create({ doc: note, extensions: markdown({ base: markdownGrammar }) }));
     const first = renderMarkdownState(state);
     const at = note.indexOf("</details>");
     const tr = state.update({ changes: { from: at, to: at + "</details>".length } });
-    ensureSyntaxTree(tr.state, tr.state.doc.length, 1000);
-    const second = renderMarkdownState(tr.state, undefined, { document: first, changes: tr.changes });
+    const second = renderMarkdownState(parsed(tr.state), undefined, { document: first, changes: tr.changes });
     expect(first.html).toContain("fub-details");
     expect(second.html).not.toContain("fub-details");
   });

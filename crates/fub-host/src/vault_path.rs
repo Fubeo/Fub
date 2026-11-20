@@ -8,7 +8,13 @@
 //! canonico, assoluto: comincia con `/` o con la lettera del disco, quindi chi
 //! lo riceve come argomento non lo prende mai per un'opzione, nemmeno quando
 //! il nome del file comincia con `-`.
+//!
+//! Qui sta anche la forma normale di un percorso canonico ([`plain`],
+//! [`plain_text`]): su Windows senza il prefisso `\\?\`, per ogni percorso che
+//! l'host mostra alla persona (i temi, il rapporto di supporto) o passa a un
+//! altro programma.
 
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use fub_abi::text::{Arg, Text};
@@ -53,15 +59,46 @@ pub fn inside(root: &Path, relative: &str) -> Result<PathBuf, PluginError> {
 /// forma `\\?\C:\…`, che `explorer.exe` non apre.
 pub fn plain(path: PathBuf) -> PathBuf {
     if cfg!(windows) {
-        let text = path.to_string_lossy();
-        if let Some(rest) = text
-            .strip_prefix(r"\\?\")
-            .filter(|rest| !rest.starts_with("UNC\\"))
-        {
-            return PathBuf::from(rest);
+        if let Some(normal) = path.to_str().and_then(without_verbatim_prefix) {
+            return PathBuf::from(normal);
         }
     }
     path
+}
+
+/// Il percorso da mostrare alla persona, o da passare a un altro programma:
+/// su Windows senza il prefisso `\\?\` che `canonicalize` aggiunge
+/// ([`without_verbatim_prefix`]), altrove com'è. Chi confronta dei percorsi
+/// lo fa sempre sulla forma canonica, mai su questa.
+pub fn plain_text(text: &str) -> Cow<'_, str> {
+    match cfg!(windows)
+        .then(|| without_verbatim_prefix(text))
+        .flatten()
+    {
+        Some(normal) => Cow::Owned(normal),
+        None => Cow::Borrowed(text),
+    }
+}
+
+/// La forma normale di un percorso esteso di Windows, se ne ha una:
+/// `\\?\C:\…` è `C:\…`, `\\?\UNC\server\…` è `\\server\…`. Le altre forme
+/// estese (un volume per GUID, `\\?\GLOBALROOT…`) non hanno una forma normale
+/// che si legga uguale, e restano come sono (`None`); così un percorso che non
+/// comincia col prefisso.
+///
+/// È una regola sulle stringhe, uguale su ogni sistema, così le prove girano
+/// anche fuori da Windows; chi la applica solo su Windows è [`plain_text`].
+pub fn without_verbatim_prefix(text: &str) -> Option<String> {
+    let rest = text.strip_prefix(r"\\?\")?;
+    if let Some(share) = rest.strip_prefix(r"UNC\") {
+        return (!share.is_empty()).then(|| format!(r"\\{share}"));
+    }
+    // Solo `X:\`: senza la barra, `C:` è la cartella corrente di quel disco,
+    // non la sua radice.
+    let bytes = rest.as_bytes();
+    let disk =
+        bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\';
+    disk.then(|| rest.to_string())
 }
 
 #[cfg(test)]
@@ -107,17 +144,56 @@ mod tests {
         }
     }
 
+    /// La regola sulle stringhe, provata su ogni sistema (#482).
+    #[test]
+    fn the_normal_form_drops_only_the_verbatim_prefix_of_a_disk_or_a_share() {
+        for (extended, normal) in [
+            (r"\\?\C:\Users\Anna\temi", r"C:\Users\Anna\temi"),
+            (r"\\?\d:\v\nota.md", r"d:\v\nota.md"),
+            (r"\\?\C:\", r"C:\"),
+            (r"\\?\UNC\server\condivisa\v", r"\\server\condivisa\v"),
+        ] {
+            assert_eq!(
+                without_verbatim_prefix(extended).as_deref(),
+                Some(normal),
+                "{extended}"
+            );
+        }
+        for kept in [
+            r"C:\Users\Anna",
+            r"\\server\condivisa",
+            "/home/anna/temi",
+            r"\\?\Volume{0b1c}\temi",
+            r"\\?\GLOBALROOT\Device\x",
+            r"\\?\UNC\",
+            r"\\?\C:temi",
+            r"\\?\C:",
+            r"\\?\",
+            "",
+        ] {
+            assert_eq!(without_verbatim_prefix(kept), None, "{kept}");
+        }
+    }
+
     #[test]
     fn a_plain_path_keeps_everything_but_the_verbatim_prefix() {
         let unix = PathBuf::from("/v/nota.md");
         assert_eq!(plain(unix.clone()), unix);
-        if cfg!(windows) {
+        assert_eq!(plain_text("/v/nota.md"), "/v/nota.md");
+        // Fuori da Windows `\\?\` è un nome come un altro: resta com'è.
+        #[cfg(not(windows))]
+        assert_eq!(plain_text(r"\\?\C:\v"), r"\\?\C:\v");
+        #[cfg(windows)]
+        {
             assert_eq!(
                 plain(PathBuf::from(r"\\?\C:\v\nota.md")),
                 PathBuf::from(r"C:\v\nota.md")
             );
-            let unc = PathBuf::from(r"\\?\UNC\server\v");
-            assert_eq!(plain(unc.clone()), unc);
+            assert_eq!(
+                plain(PathBuf::from(r"\\?\UNC\server\v")),
+                PathBuf::from(r"\\server\v")
+            );
+            assert_eq!(plain_text(r"\\?\C:\v"), r"C:\v");
         }
     }
 }

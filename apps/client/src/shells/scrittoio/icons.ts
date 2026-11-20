@@ -30,7 +30,14 @@ const GLYPHS: Readonly<Record<string, readonly string[]>> = {
   cloud: ["M7 18a4 4 0 0 1-.6-7.95A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5z"],
   split: ["M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z", "M12 4v16"],
   ring: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z"],
-  more: ["M6 12h.01M12 12h.01M18 12h.01"],
+  // La maniglia dei blocchi (E2): i due occhi del marchio, due punti pieni
+  // affiancati (un anello e il suo centro, col tratto di serie); presi, si
+  // socchiudono in due archetti.
+  "grip-eyes": [
+    "M5.45 12a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0M6.4 12a.8 .8 0 1 0 1.6 0a.8 .8 0 1 0-1.6 0",
+    "M15.05 12a1.75 1.75 0 1 0 3.5 0a1.75 1.75 0 1 0-3.5 0M16 12a.8 .8 0 1 0 1.6 0a.8 .8 0 1 0-1.6 0",
+  ],
+  "grip-eyes-held": ["M4.5 11.1q2.55 2.4 5.1 0", "M14.4 11.1q2.55 2.4 5.1 0"],
 };
 
 /** Registra le figure della cornice per la vita che riceve. */

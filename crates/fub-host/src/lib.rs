@@ -86,6 +86,10 @@ mod bridge;
 /// La cattura rapida: il comando dell'host `capture.apply`, uno per ogni
 /// trasporto (clipper, condivisione mobile, CLI).
 pub mod capture;
+/// I componenti di un vault: la mappa (le righe stanno in `fub-features`, il
+/// risolutore in `fub-componenti`), lo stato nelle chiavi del vault, e come
+/// si accendono e si spengono.
+pub mod componenti;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
 mod connector_tokens;
@@ -99,18 +103,26 @@ pub mod craft;
 /// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
 pub mod craft_render;
 mod custody;
+mod doc_names;
+/// I disegni aperti nel motore del disegno e le sei porte lato host (K5).
+mod drawing;
+mod engines;
 mod export_folder;
 pub mod format_source;
 pub mod jobs;
 /// La scheda di un collegamento: titolo e icona di un URL, soltanto su richiesta.
 #[cfg(feature = "http-client")]
 pub mod link_card;
+/// Le tessere della vista Mappa di una Base, dagli host che questa macchina ammette.
+pub mod map_tiles;
 pub mod mount;
 /// Il filo verso fuori (§23.3), dietro la cargo feature `http-client` per la
 /// ragione del watcher: il trait esiste anche per i montaggi che una rete non
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+#[cfg(any(feature = "rich", feature = "xlsx"))]
+mod new_file;
 pub mod obsidian_import;
 /// «Apri con»: quali app Craft aprono un file del vault, e aprirlo con una.
 pub mod open_with;
@@ -119,6 +131,7 @@ pub mod publish;
 mod query;
 pub mod records;
 pub mod registry;
+pub mod regular_file;
 #[cfg(feature = "http-client")]
 pub mod remote;
 pub mod resources;
@@ -128,9 +141,13 @@ mod secret_file;
 pub mod session;
 pub mod settings;
 pub mod shell;
+/// Una bandiera di annullamento sola per chi ne ha più d'una, o un tempo limite.
+mod stop_relay;
 pub mod support;
 mod teardown;
 pub mod theme;
+/// Il custode del tema collegato e l'osservatore della sua cartella.
+pub mod theme_watch;
 #[cfg(feature = "http-client")]
 pub mod updates;
 pub mod uri_inbox;
@@ -146,9 +163,7 @@ pub mod web_clip;
 mod workbook;
 extern crate self as fub_host;
 pub use custody::Custody;
-/// La mappa dei componenti (K1): le righe e il risolutore stanno in
-/// `fub-features`, da cui `mount` costruisce i manifest.
-pub use fub_features::componenti;
+pub use engines::OpenKey;
 #[cfg(feature = "notify-watcher")]
 pub use watcher::NotifyWatcher;
 #[cfg(test)]
@@ -159,6 +174,21 @@ pub(crate) use watcher::{ExternalChange, ExternalSync};
 pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
 #[cfg(test)]
 mod legacy_tests;
+#[cfg(test)]
+mod quiet_panic;
+
+/// I promemoria dei compiti per chi li notifica fuori dal kernel, cioè l'app:
+/// la domanda e la risposta della rotta, la regola di quando suonano e le
+/// parole della notifica. Passano di qui perché chi monta è il solo che
+/// raggiunge le feature ufficiali (`the_glue_does_not_bypass_the_mounter`).
+#[cfg(feature = "tasks")]
+pub mod reminders {
+    pub use fub_features::tasks::reminders::{
+        notification_more, notification_words, NotificationWords, ReminderEntry, ReminderList,
+        ReminderWatch, RemindersQuery, WatchStep,
+    };
+    pub use fub_features::TASKS_ID;
+}
 
 pub use config::{config_dir, install_logging, log_path};
 pub use format_source::{FormatSource, PreparedFormatSource};
@@ -175,7 +205,8 @@ pub use resources::{
 };
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{
-    doc_id, document_text, Delivery, DocumentText, EventSink, Host, SnapshotHostError, VaultSession,
+    doc_id, document_text, Delivery, DocumentText, EventSink, Host, ShellNotice, SnapshotHostError,
+    VaultSession,
 };
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use theme::{ThemeInfo, ThemePayload};

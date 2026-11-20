@@ -431,6 +431,21 @@ describe("createChart", () => {
     expect([...tiers]).toEqual([2]);
   });
 
+  it("a 180 Hz, quando i frame sforano il periodo dello schermo, il grafo alleggerisce la resa", () => {
+    // Prima il budget non scendeva mai sotto i 16,7 ms: a 180 Hz un grafo che
+    // perdeva un fotogramma su due (11 ms) restava al livello pieno, a 90 fps.
+    g.unmount();
+    g = createChart(baseOptions(f));
+    g.mount(fakeHost());
+    runAt(f, 1000 / 180, 40);
+    expect(lastPainter!.states.every((state) => state.tier === 1)).toBe(true);
+    runAt(f, 2000 / 180, 40);
+    // dopo pochi frame lenti, e fino all'ultimo, che dorme al livello del grafo
+    const overrun = lastPainter!.states.slice(40).map((state) => state.tier);
+    expect(overrun.length).toBeGreaterThan(10);
+    expect(overrun.slice(5, -1).every((tier) => tier === 2)).toBe(true);
+  });
+
   it("col tetto dei fotogrammi il loop salta i callback di troppo e la sim avanza per tempo", () => {
     g.unmount();
     g = createChart({ ...baseOptions(f), pacer: createFramePacer(() => 30) });
@@ -469,6 +484,40 @@ describe("createChart", () => {
     } finally {
       setReducedMotionPreference(false);
     }
+  });
+
+  it("qualche frame lento all'apertura non lascia il grafo fermo senza etichette", () => {
+    // Pochi frame lenti mentre il grafo si distende (il motore che si carica,
+    // un riscaldamento, una macchina carica) portavano l'EMA sopra 22 ms: il
+    // livello scendeva al gradino economico, il grafo si fermava lì, e l'ultimo
+    // fotogramma, quello che resta a schermo, era senza le etichette minori
+    // finché non lo si toccava.
+    const settle = (): number => {
+      const w = emptyWindow();
+      const chart = createChart(baseOptions(w));
+      chart.mount(fakeHost());
+      const frames = run(w);
+      chart.unmount();
+      return frames;
+    };
+    // Gli ultimi frame prima che il grafo si fermi, ben dentro i 5 s in cui il
+    // gradino economico non si revoca.
+    const frames = settle();
+    expect(frames).toBeGreaterThan(25);
+    g.mount(fakeHost());
+    run(f, frames - 20);
+    runAt(f, 50, 6);
+    expect(lastPainter!.states[lastPainter!.states.length - 1].tier).toBe(2);
+    run(f);
+    expect(f.queue.length).toBe(0);
+    expect(lastPainter!.states[lastPainter!.states.length - 1].tier).toBe(1);
+    // E al risveglio la lentezza di prima non conta: il primo gesto non
+    // rispegne le etichette.
+    const drawn = lastPainter!.states.length;
+    f.t += 5000;
+    g.setOpenDocuments(new Set(["n0"]));
+    run(f);
+    expect(lastPainter!.states.slice(drawn).every((state) => state.tier === 1)).toBe(true);
   });
 
   it("i risvegli del loop non contano come frame lenti: il livello resta quello del grafo", () => {

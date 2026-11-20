@@ -66,10 +66,10 @@ impl Probe {
         }
         let workspace = self.workspace.lock().unwrap().as_ref().unwrap().clone();
         let registry = self.registry.lock().unwrap().as_ref().unwrap().clone();
-        let workspace_read = workspace.try_read().is_some();
-        let workspace_write = workspace.try_write().is_some();
-        let registry_read = registry.try_read().is_some();
-        let registry_write = registry.try_write().is_some();
+        let workspace_read = super::read_comes_free(&workspace);
+        let workspace_write = super::write_comes_free(&workspace);
+        let registry_read = super::read_comes_free(&registry);
+        let registry_write = super::write_comes_free(&registry);
         self.entered
             .send(Observation {
                 id,
@@ -279,7 +279,7 @@ fn exercise(close: bool, fault: Fault) {
         // La callback è ancora ferma su release: il progresso del reader è
         // una relazione causale a canali, non un'inferenza da un timeout.
         let other_workspace = workspace.clone();
-        let reader = std::thread::spawn(move || other_workspace.try_read().is_some());
+        let reader = std::thread::spawn(move || super::read_comes_free(&other_workspace));
         let reader_free = reader.join().expect("reader does not panic");
         release.send(()).expect("callback still waiting");
         all_free &= reader_free;

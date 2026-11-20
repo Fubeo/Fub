@@ -261,12 +261,8 @@ struct CompletionHandler {
 impl CompletionHandler {
     fn observe(&self, callback: EventCallback) -> EventObservation {
         let workspace = self.workspace.custody();
-        let read = workspace.try_read();
-        let read_free = read.is_some();
-        drop(read);
-        let write = workspace.try_write();
-        let write_free = write.is_some();
-        drop(write);
+        let read_free = super::read_comes_free(&workspace);
+        let write_free = super::write_comes_free(&workspace);
         EventObservation {
             callback,
             read: read_free,

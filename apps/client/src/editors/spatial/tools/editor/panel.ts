@@ -7,7 +7,8 @@ import { apply, IDENTITY, translate, type Matrix } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
 import { plural, t, type DrawKey } from "../../strings";
 import { gesture as asGesture, moveOps, roundDelta } from "../edit";
-import { orderOps, type Order } from "../arrange";
+import { elemOf, orderOps, type Order } from "../arrange";
+import { textLines, wordsOf } from "../text";
 import { orderChanges } from "../order-changes";
 import { lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf } from "../outline";
 import { boundsAfter, numericOps } from "../transform";
@@ -33,6 +34,7 @@ import { BAR_FEATURES, ORDERS, RATIO_ROLES } from "./constants";
 import type { EditorContext } from "./context";
 import { translated, union } from "./helpers";
 import type { PanelReading } from "./types";
+import { composingKey } from "../../../../kit/ime";
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -68,6 +70,10 @@ export interface PanelContext {
   resizeFromPanel: (axis: FrameAxis, value: number) => string | null;
   rotateFromPanel: (value: number) => string | null;
   styleFromPanel: (id: FieldId, value: number | string | boolean) => string | null;
+  /// Apre il pannello, se è chiuso, e dà il fuoco al campo «Testo» del testo
+  /// scelto, con le parole scelte: chi scrive le sostituisce. Falso se il
+  /// campo non c'è.
+  focusWords: () => boolean;
 }
 
 /// Monta il pannello delle proprietà, gli attributi e la descrizione delle immagini.
@@ -185,7 +191,7 @@ export function installPanel(ctx: EditorContext): void {
   });
   life.listen(describeSkip, "click", () => nextDescription(true));
   life.listen(describeInput, "keydown", (event) => {
-    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.key !== "Enter" || composingKey(event)) return;
     event.preventDefault();
     writeAsked();
   });
@@ -281,9 +287,20 @@ export function installPanel(ctx: EditorContext): void {
       syncProperties();
       if (focus) panel.focus();
     }
-    if (remember && ctx.grid.panel !== open) ctx.changeGrid({ ...ctx.grid, panel: open });
+    // In una scheda (T46) il pannello si apre quando serve e basta: la scelta
+    // è del disegno aperto, non della scheda.
+    if (remember && ctx.options.compact !== true && ctx.grid.panel !== open) ctx.changeGrid({ ...ctx.grid, panel: open });
   }
   ctx.showPanel = showPanel;
+
+  ctx.focusWords = (): boolean => {
+    if (!has("properties")) return false;
+    // Aperto per il testo, non per scelta: non si ricorda.
+    showPanel(true, false, false);
+    ctx.panelShown = null;
+    syncProperties();
+    return panel.focusField("content");
+  };
 
   ctx.panelPending = false;
 
@@ -295,6 +312,9 @@ export function installPanel(ctx: EditorContext): void {
     ctx.panelPending = false;
     // Nell'ispettore le schede le apre chi lo tiene.
     if (ctx.chrome.reveal !== undefined) return;
+    // In una scheda il foglio è piccolo: il pannello resta chiuso finché non
+    // serve.
+    if (ctx.options.compact === true) return;
     if (!has("properties") || !panel.element.hidden) return;
     if (ctx.grid.panel !== null) {
       if (ctx.grid.panel) showPanel(true, false, false);
@@ -339,7 +359,30 @@ export function installPanel(ctx: EditorContext): void {
       drawn: ctx.drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => changes.has(order)) : []),
       tips: has("tips") ? tipsLookOf(model, units) : null,
+      words: units.length === 1 ? wordsOfUnit(units[0]!) : null,
     };
+  };
+
+  /// Le parole di `unit` per il campo «Testo», se è un testo libero con un
+  /// id che l'operazione `text` riscrive senza perdite.
+  const wordsOfUnit = (unit: Unit): string | null => {
+    if (unit.role !== "text" || unit.id === null || unit.node.details?.textPath !== undefined) return null;
+    const elem = elemOf(unit.node);
+    return elem === null ? null : wordsOf(elem);
+  };
+
+  /// Le parole del testo scelto, dal campo «Testo»: le righe come le scrive
+  /// il file (`textLines`), con l'operazione `text`; svuotato, il testo se ne
+  /// va, come un testo senza niente da leggere.
+  const wordsFromPanel = (value: string): string | null => {
+    const units = selectedUnits();
+    const unit = units.length === 1 ? units[0]! : null;
+    const before = unit === null ? null : wordsOfUnit(unit);
+    if (unit === null || unit.id === null || before === null) return null;
+    const lines = textLines(value);
+    if (lines.length === 0) return changeFromPanel("draw.action.delete", [{ op: "remove", target: unit.target }], []);
+    if (lines.join("\n") === textLines(before).join("\n")) return null;
+    return changeFromPanel("draw.action.text", [{ op: "text", id: unit.id, lines }], null);
   };
 
 
@@ -384,8 +427,10 @@ export function installPanel(ctx: EditorContext): void {
     const units = ctx.selection.length === 0 || model === null ? [] : selectedUnits();
     const swatches = model === null ? [] : documentSwatches(model);
     const facts = units.length === 0 ? null : (reading.facts ??= selectionFacts(units));
+    // Con il motore del disegno, i campi dei comandi che lui adesso non sa
+    // fare si mostrano disattivati (`motore/colori.ts`).
     panel.update(
-      propertiesView({
+      ctx.campiDelMotore(propertiesView({
         features: ctx.features,
         unit,
         editable: canEdit,
@@ -398,7 +443,7 @@ export function installPanel(ctx: EditorContext): void {
         recent: ctx.recentColors,
         paper: model === null ? null : paperColor(model),
         fonts: { families: [], notes: drawingFonts.fontNotes(), shown: drawingFonts.shown },
-      }),
+      })),
     );
   }
   ctx.syncProperties = syncProperties;
@@ -559,6 +604,9 @@ export function installPanel(ctx: EditorContext): void {
 
   /// L'aspetto o il contorno degli oggetti scelti, da un campo del pannello.
   const styleFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
+    // Le parole di un testo, come gli altri campi della sezione del testo:
+    // le scrive il pannello, con il motore e senza.
+    if (id === "content") return wordsFromPanel(String(value));
     const model = ctx.engine.model;
     const units = selectedUnits();
     if (model === null || units.length === 0) return null;

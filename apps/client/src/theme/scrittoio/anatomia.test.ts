@@ -108,7 +108,7 @@ describe("lo strato di ogni hook", () => {
     for (const hook of [
       "rich-proof-spelling", "rich-proof-grammar", "ProseMirror-selectednode", "rich-ins", "rich-del", "rich-find", "rich-comment",
       "cm-searchMatch", "cm-searchMatch-selected", "cm-cursor", "cm-selectionBackground",
-      "grid-comment-mark", "grid-fill-handle", "canvas-node-handle",
+      "grid-comment-mark", "grid-mark-handle", "canvas-node-handle",
     ]) {
       expect(HOOK_LAYERS[hook], hook).toBe("segno");
     }
@@ -118,7 +118,7 @@ describe("lo strato di ogni hook", () => {
     for (const hook of ["rich-para", "rich-heading", "rich-content", "grid-cell", "cm-line", "markdown-rendered", ...LOOK_HOOKS]) {
       expect(HOOK_LAYERS[hook], hook).toBe("contenuto");
     }
-    for (const hook of ["rich-ribbon", "rich-findbar", "rich-page", "rich-sheet-paper", "grid-ribbon", "grid-header", "pane-editor", "pane-toolbar", "media-surface"]) {
+    for (const hook of ["rich-ribbon-quick", "rich-findbar", "rich-page", "rich-sheet-paper", "kit-ribbon", "grid-ribbon-quick", "grid-header", "pane-editor", "pane-toolbar", "media-surface"]) {
       expect(HOOK_LAYERS[hook], hook).toBe("cornice");
     }
   });

@@ -11,6 +11,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec } from "./host/contract";
 import type { FakeHost } from "./host/fake";
+import { FIRST_IMPORT_MS, waiter } from "./test-wait";
+import { withoutTypeReads } from "./state/note-type-commands";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -121,14 +123,7 @@ async function settle(rounds = 6): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
 }
 
-async function waitFor(thing: string, cond: () => boolean, within = 3000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(3000);
 
 async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");
@@ -185,7 +180,7 @@ describe("«Annota» dal visore del PDF", () => {
     expect(annotateButton()!.textContent).toBe("Annota");
     annotateButton()!.click();
     await waitFor("le annotazioni si aprono", () => focusedPane().querySelector(".pdf-surface .draw-editor") !== null);
-    expect(host.atGate("invokeCommand").map((call) => call.args)).toEqual([["pdf.annotate", { pdf: PDF }, "apply"]]);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args)).toEqual([["pdf.annotate", { pdf: PDF }, "apply"]]);
     expect(host.files()[NOTES]).toBe(
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="Bando%20di%20gara.pdf">\n  <title>Bando di gara.pdf</title>\n</svg>\n',
     );
@@ -200,6 +195,27 @@ describe("«Annota» dal visore del PDF", () => {
     expect(saved).toContain(`fub:digest="${DIGEST}" fub:pages="2"`);
     expect(saved).toContain('<g id="p0001" fub:page="1" fub:page-size="600 800">');
     expect(saved).toContain('fub:tool="highlighter"');
+  });
+
+  // IMP-131: una scheda ripristinata all'avvio monta il visore prima che
+  // l'elenco dei comandi arrivi; «Annota» mancava finché non la si chiudeva e
+  // riapriva. Qui il visore si monta con l'elenco vuoto, e l'elenco arriva
+  // dopo.
+  it("«Annota» arriva anche sul visore montato prima dell'elenco dei comandi", async () => {
+    const host = await start();
+    const store = await import("./state/store");
+    const specs = store.state.commandSpecs;
+    store.setCommandSpecs([]);
+    await open(PDF);
+    await waitFor("il visore è montato", () => focusedPane().querySelector(".media-pdf-toolbar") !== null);
+    await settle();
+    expect(annotateButton(), "senza il comando non c'è").toBeNull();
+    store.setCommandSpecs(specs);
+    await waitFor("il visore offre «Annota»", () => annotateButton() !== null);
+    expect(focusedPane().querySelectorAll(".media-pdf-annotate")).toHaveLength(1);
+    annotateButton()!.click();
+    await waitFor("le annotazioni si aprono", () => focusedPane().querySelector(".pdf-surface") !== null);
+    expect(withoutTypeReads(host.atGate("invokeCommand")).map((call) => call.args)).toEqual([["pdf.annotate", { pdf: PDF }, "apply"]]);
   });
 
   it("la seconda volta apre soltanto, e la Lettura elenca le annotazioni", async () => {
@@ -227,7 +243,7 @@ describe("«Annota» dal visore del PDF", () => {
   it("senza la feature `draw` il visore non offre «Annota»", async () => {
     await start(false);
     await open(PDF);
-    await waitFor("il visore si monta", () => focusedPane().querySelector(".media-pdf-toolbar") !== null);
+    await waitFor("il visore si monta", () => focusedPane().querySelector(".media-pdf-toolbar") !== null, FIRST_IMPORT_MS);
     expect(annotateButton()).toBeNull();
   });
 });
@@ -252,13 +268,20 @@ describe("«Esporta…» sulle annotazioni", () => {
       t("pdf.export.redacted"),
     ]);
     choices()[1]!.click();
-    await waitFor("l'export è chiesto", () => host.atGate("invokeCommand").length === 2);
-    const [, call] = host.atGate("invokeCommand");
+    await waitFor("l'export è chiesto", () => withoutTypeReads(host.atGate("invokeCommand")).length === 2);
+    const [, call] = withoutTypeReads(host.atGate("invokeCommand"));
     expect(call!.args[0]).toBe("export.run");
     expect(JSON.parse(String((call!.args[1] as { request_json: string }).request_json))).toEqual({
       target: "draw.redacted-pdf",
       selection: { kind: "documents", value: [NOTES] },
       options: { suffix: "redatto" },
     });
+    // Il lavoro nel centro attività si chiama come lo direbbe chi l'ha
+    // chiesto, nella lingua dell'interfaccia: non «import.transfer» né «export».
+    const rows = () => [...document.querySelectorAll<HTMLElement>("#activity-list .activity-label")].map((el) => el.textContent);
+    await waitFor("il lavoro ha il suo nome", () => rows().some((text) => text?.startsWith("Esportazione di «") === true));
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatch(/^Esportazione di «Bando di gara[^»]*» come /);
+    expect(rows()[0]).toContain(t("pdf.export.redacted"));
   });
 });

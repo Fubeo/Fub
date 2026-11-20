@@ -42,7 +42,7 @@ export { flip } from "./flip";
 export type { FlipOptions } from "./flip";
 
 export { enter, exitGhost, prepareExit } from "./presence";
-export type { ExitSpec, Ghost } from "./presence";
+export type { ExitSpec, Ghost, PrepareOptions } from "./presence";
 
 export { stagger } from "./stagger";
 export type { StaggerOptions } from "./stagger";

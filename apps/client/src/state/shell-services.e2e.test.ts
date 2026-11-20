@@ -25,7 +25,8 @@ import {
   mountedTextEditors as editorViews,
 } from "../editors/text/test-support";
 import type { FakeHost } from "../host/fake";
-import type { DraftInfo } from "../host/contract";
+import type { DraftInfo, SettingEntry, ViewSpec } from "../host/contract";
+import { waiter } from "../test-wait";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -46,6 +47,8 @@ const box = vi.hoisted(() => {
     draftsFail: false,
     /// L'aggancio alla chiusura della finestra fallisce.
     closeHookFails: false,
+    /// Le impostazioni che l'host dichiara: di solito nessuna.
+    settings: [] as SettingEntry[],
     /// Porte e segnali, nell'ordine in cui la shell li ha toccati.
     trace: [] as string[],
     /// Ciò che una prova vuole guardare **nell'istante** di un passo.
@@ -170,12 +173,10 @@ interface Mounted extends Shell {
 async function mount(
   file: Record<string, string>,
   watch: (shell: Shell) => void = () => {},
+  view: ViewSpec[] = [testViewSpec(TRASH_VIEW, "left_sidebar")],
 ): Promise<Mounted> {
   vi.resetModules();
-  const host = createFakeHost({
-    file,
-    view: [testViewSpec(TRASH_VIEW, "left_sidebar")],
-  });
+  const host = createFakeHost({ file, view, settings: box.settings });
   box.host = host;
   box.trace = [];
   const store = await import("./store");
@@ -220,8 +221,9 @@ async function mount(
 async function start(
   file: Record<string, string>,
   watch?: (shell: Shell) => void,
+  view?: ViewSpec[],
 ): Promise<Mounted> {
-  const mounted = await mount(file, watch);
+  const mounted = await mount(file, watch, view);
   await mounted.startup;
   await settle();
   return mounted;
@@ -234,14 +236,7 @@ async function settle(rounds = 6): Promise<void> {
 }
 
 /// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
-async function waitFor(thing: string, cond: () => boolean, within = 2000): Promise<void> {
-  const deadline = Date.now() + within;
-  while (Date.now() < deadline) {
-    if (cond()) return;
-    await new Promise((r) => setTimeout(r, 10));
-  }
-  throw new Error(`non è mai successo: ${thing}`);
-}
+const waitFor = waiter(2000);
 
 /// Il testo dell'editor, letto dal DOM di CodeMirror come lo legge chi guarda.
 function textToVideo(): string {
@@ -278,12 +273,12 @@ function firstEditor(): ReturnType<typeof editorViews>[number] {
 /// così non resta un canale aperto dopo la prova.
 async function holdWindowOpening(shell: Shell): Promise<{ abandon(): Promise<void> }> {
   const { openCurrentInNewWindow } = await import("./document-windows");
-  const reads = shell.host.atGate("readDocument").length;
-  const unlock = shell.host.throttle("readDocument");
+  const reads = shell.host.atGate("openDocument").length;
+  const unlock = shell.host.throttle("openDocument");
   const opening = openCurrentInNewWindow("note/Spesa.md");
   await waitFor(
     "la finestra comincia ad aprirsi",
-    () => shell.host.atGate("readDocument").length === reads + 1,
+    () => shell.host.atGate("openDocument").length === reads + 1,
   );
   return {
     abandon: async () => {
@@ -320,6 +315,7 @@ beforeEach(() => {
   box.drafts = [];
   box.draftsFail = false;
   box.closeHookFails = false;
+  box.settings = [];
   box.probes.clear();
 });
 
@@ -347,7 +343,7 @@ describe("aprire un vault: i passi e il loro ordine", () => {
       "pendingKeybindings",
       "queryIndex:vault_status",
       // La prima nota: il layout era vuoto, quindi nessuno aveva letto niente.
-      "readDocument",
+      "openDocument",
     ];
     expect(firstOccurrences(box.trace, steps)).toEqual(steps);
   });
@@ -371,7 +367,7 @@ describe("aprire un vault: i passi e il loro ordine", () => {
       "viewState:layout",
       "viewState:expanded",
       "viewState:activeSpace",
-      "readDocument",
+      "openDocument",
       "queryIndex:drafts",
       "signal:vault:/altro",
       "signal:documents",
@@ -549,6 +545,24 @@ describe("aprire un vault: i passi e il loro ordine", () => {
     await pending.abandon();
   });
 
+  /// Audit #513, scenario B: una finestra documento morta da sola non ferma
+  /// il cambio di vault per sempre. Ciò che la finestra principale tiene di
+  /// quella nota va sul disco del vault che si lascia, poi si cambia.
+  it("una finestra documento morta da sola non ferma il cambio di vault", async () => {
+    const shell = await start(VAULT);
+    const windows = await import("./document-windows");
+    await windows.openCurrentInNewWindow("note/Spesa.md");
+    const [label] = windows.pendingDocumentWindows();
+    shell.host.destroyDocumentWindow(label!);
+    const { openVault } = await import("../desktop-shell");
+
+    await openVault("/altro");
+
+    expect(shell.host.atGate("openVault").map((c) => c.args[0])).toEqual(["/vault", "/altro"]);
+    expect(shell.store.state.vaultRoot).toBe("/altro");
+    expect(windows.pendingDocumentWindows()).toEqual([]);
+  });
+
   /// Fra lo svuotamento della coda e lo smontaggio c'è una chiamata all'host, e
   /// l'utente può continuare a battere nel documento che sta lasciando. Il vault
   /// di prima resta aperto nell'host, e la sessione scrive in quello in cui è
@@ -598,6 +612,208 @@ describe("aprire un vault: i passi e il loro ordine", () => {
   });
 });
 
+describe("i fatti di un vault lasciato non sono del vault aperto (#216)", () => {
+  /// Le letture di un documento che la shell fa da sé: è ciò che un
+  /// `document_changed` provoca su una nota aperta e pulita.
+  const reads = (shell: Shell): number =>
+    shell.host.calls.filter((call) => call.gate === "readDocument" || call.gate === "openDocument").length;
+  const changed = { type: "document_changed", id: "Benvenuto.md" } as const;
+
+  /// L'host finto ha un vault solo: `/vault` e `/altro` hanno le stesse note,
+  /// che è proprio il caso — due vault con una `Benvenuto.md` ciascuno.
+  it("un cambio di una nota di A non rilegge la nota con lo stesso id in B; uno di B sì, e tornando ad A anche i suoi", async () => {
+    const shell = await start(VAULT);
+    const { openVault } = await import("../desktop-shell");
+    const { openDocument } = await import("./document-controller");
+
+    await openVault("/altro");
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+    expect(shell.sessions.get("Benvenuto.md")).toBeDefined();
+
+    // Il fatto di A: nessuna rilettura, nessun avviso sul foglio di B.
+    const before = reads(shell);
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(before);
+    expect(document.querySelector(".sheet-notice[data-notice]")).toBeNull();
+
+    // Lo stesso fatto di B passa: chi ascolta è vivo.
+    await shell.host.module.api.writeDocument("Benvenuto.md", "testo cambiato in B\n", { kind: "dictated" }, "/altro");
+    expect(shell.host.emit(changed, "/altro")).toBe(true);
+    await waitFor("la nota di B si rilegge", () => reads(shell) > before);
+
+    // Un ritorno ad A che l'host rifiuta lascia la finestra in B, e A fra i
+    // lasciati.
+    const repair = shell.host.fault("openVault", "cartella illeggibile");
+    await expect(openVault("/vault")).rejects.toThrow("cartella illeggibile");
+    repair();
+    expect(shell.store.state.vaultRoot).toBe("/altro");
+    await settle();
+    const refused = reads(shell);
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(refused);
+
+    // Tornare ad A: i suoi fatti tornano a passare, quelli di B no.
+    await openVault("/vault");
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+    const back = reads(shell);
+    expect(shell.host.emit(changed, "/altro")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(back);
+    await shell.host.module.api.writeDocument("Benvenuto.md", "testo cambiato in A\n", { kind: "dictated" }, "/vault");
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await waitFor("la nota di A si rilegge", () => reads(shell) > back);
+  });
+
+  /// Il salvataggio di A in volo durante il cambio finisce in A, e la sua eco —
+  /// il `document_changed` che A emette scrivendolo — arriva quando la
+  /// finestra mostra già B: non è un cambio della `Benvenuto.md` di B.
+  it("un salvataggio di A in volo durante il cambio finisce in A, e la sua eco non tocca B", async () => {
+    const shell = await start(VAULT);
+    const { openVault } = await import("../desktop-shell");
+    const { openDocument } = await import("./document-controller");
+    typeInEditor("battuta in volo");
+    const unlock = shell.host.throttle("writeDocument");
+
+    const opening = openVault("/altro");
+    await waitFor("il salvataggio di A parte", () => shell.host.atGate("writeDocument").length > 0);
+    unlock();
+    await opening;
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+
+    const writes = shell.host.atGate("writeDocument");
+    expect(writes.map((c) => c.args[3])).toEqual(writes.map(() => "/vault"));
+    expect(shell.host.files()["Benvenuto.md"]).toContain("battuta in volo");
+    const before = reads(shell);
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    expect(shell.host.emit({ type: "index_updated" }, "/vault")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(before);
+    expect(document.querySelector(".sheet-notice[data-notice]")).toBeNull();
+  });
+
+  /// La demo lascia aperto nell'host il vault di prima, col suo watcher: ciò
+  /// che vi cambia mentre si guarda la demo non è della demo. Chiusa la demo,
+  /// il vault di prima torna a parlare.
+  it("con la demo aperta i fatti del vault di prima non arrivano, e tornano alla chiusura", async () => {
+    const shell = await start(VAULT, (shell) => {
+      const api = shell.host.module.api as unknown as Record<string, unknown>;
+      api.demoRoot = () => Promise.resolve("/demo");
+      api.openDemo = () => Promise.resolve({ root: "/demo", previous: "/vault" });
+      api.closeDemo = () => Promise.resolve({ errors: [], current: "/vault" });
+    });
+    const { openDocument } = await import("./document-controller");
+    const press = async (label: string): Promise<void> => {
+      const target = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === shell.t(label as never) && !b.disabled && !b.hidden);
+      expect(target, label).toBeDefined();
+      const since = box.trace.length;
+      target!.click();
+      await vi.waitFor(() => expect(box.trace.slice(since)).toContain(label === "demo.open" ? "signal:vault:/demo" : "signal:vault:/vault"));
+    };
+    await press("demo.open");
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+    const before = reads(shell);
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await settle();
+    expect(reads(shell)).toBe(before);
+
+    await press("demo.close");
+    if (!shell.sessions.get("Benvenuto.md")) await openDocument("Benvenuto.md");
+    await settle();
+    const back = reads(shell);
+    await shell.host.module.api.writeDocument("Benvenuto.md", "cambiato fuori\n", { kind: "dictated" }, "/vault");
+    expect(shell.host.emit(changed, "/vault")).toBe(true);
+    await waitFor("la nota del vault di prima si rilegge", () => reads(shell) > back);
+  });
+});
+
+describe("la scheda di una view principale quando il vault cambia (#237 R08)", () => {
+  /// Una view che si apre in un riquadro, come il grafo: l'host finto sa
+  /// disegnare soltanto il cestino, e qui basta che sia una view principale.
+  const mainViews = (): ViewSpec[] => [testViewSpec(TRASH_VIEW, "main")];
+  /// Il vault che ha nominato l'ultimo disegno della view, o `null` se non
+  /// l'ha disegnata nessuno.
+  const lastRenderVault = (shell: Shell): unknown => {
+    const calls = shell.host.atGate("renderView");
+    return calls[calls.length - 1]?.args[3] ?? null;
+  };
+  const renders = (shell: Shell): number => shell.host.atGate("renderView").length;
+  /// La view si vede nel riquadro: la sua superficie è accesa e ha un albero.
+  const paneShowsView = (): boolean => {
+    const surface = document.querySelector<HTMLElement>(".pane .pane-view");
+    return !!surface && !surface.hidden && surface.childElementCount > 0;
+  };
+
+  async function openTab(shell: Shell): Promise<void> {
+    const { openPrimaryView } = await import("../ui/primary-views");
+    openPrimaryView(TRASH_VIEW);
+    await waitFor("la view si disegna nel riquadro", () => lastRenderVault(shell) === "/vault" && paneShowsView());
+  }
+
+  it("dopo due cambi di fila la scheda si ridisegna nel vault aperto, e riaprendolo pure", async () => {
+    const shell = await start(VAULT, undefined, mainViews());
+    await openTab(shell);
+    const { openVault } = await import("../desktop-shell");
+
+    await openVault("/altro");
+    await openVault("/terzo");
+    await settle();
+    expect(lastRenderVault(shell)).toBe("/terzo");
+    expect(paneShowsView()).toBe(true);
+    // Nessun disegno, dopo l'apertura, nomina un vault lasciato.
+    const before = renders(shell);
+    await openVault("/terzo");
+    await settle();
+    expect(renders(shell)).toBeGreaterThan(before);
+    expect(shell.host.atGate("renderView").slice(before).map((call) => call.args[3])).toEqual(
+      Array(renders(shell) - before).fill("/terzo"),
+    );
+    expect(paneShowsView()).toBe(true);
+  });
+
+  /// La seconda `synchronize()` dell'apertura sembra in più: la prima ha già
+  /// rimesso le schede. Ma la prima gira con le view **del vault di prima**, e
+  /// una scheda la cui view quel vault non dichiarava resta vuota finché le
+  /// view del vault nuovo non sono montate e non si rifà il giro.
+  it("una view che il vault di prima non dichiarava torna nella sua scheda", async () => {
+    const views = mainViews();
+    const shell = await start(VAULT, undefined, views);
+    await openTab(shell);
+    const { openVault } = await import("../desktop-shell");
+
+    const declared = views.splice(0);
+    await openVault("/senza");
+    await settle();
+    expect(paneShowsView()).toBe(false);
+    // Il vault che non la dichiara non si sente chiedere di disegnarla: con
+    // l'host vero sarebbe un errore, e un avviso, per una view che non c'è.
+    expect(shell.host.atGate("renderView").filter((call) => call.args[3] === "/senza")).toEqual([]);
+
+    views.push(...declared);
+    await openVault("/con");
+    await settle();
+    expect(lastRenderVault(shell)).toBe("/con");
+    expect(paneShowsView()).toBe(true);
+  });
+
+  it("smontata la shell, la scheda non si ridisegna più", async () => {
+    const shell = await start(VAULT, undefined, mainViews());
+    await openTab(shell);
+    const stop = await shell.startup;
+
+    stop();
+    const before = renders(shell);
+    shell.host.writeFromOutside("Benvenuto.md", "cambiato da fuori\n");
+    await settle();
+    expect(renders(shell)).toBe(before);
+  });
+});
+
 describe("i gesti nominano il vault in cui nascono (FUB-001)", () => {
   /// Crea e rinomina passano dal registro dei comandi, e senza `vault` l'host
   /// risponde con il corrente: un gesto che aspetta mentre se ne apre un altro
@@ -623,9 +839,11 @@ describe("i gesti nominano il vault in cui nascono (FUB-001)", () => {
   it("la lettura di un documento aperto nomina il vault aperto", async () => {
     const shell = await start(VAULT);
 
-    const reads = shell.host.atGate("readDocument").map((call) => call.args);
-    expect(reads.length).toBeGreaterThan(0);
-    for (const args of reads) expect(args[1]).toBe("/vault");
+    // Una sessione legge sotto la sua chiave: `[id, chiave, vault]`.
+    const opens = shell.host.atGate("openDocument").map((call) => call.args);
+    expect(opens.length).toBeGreaterThan(0);
+    for (const args of opens) expect(args[2]).toBe("/vault");
+    for (const args of shell.host.atGate("readDocument").map((call) => call.args)) expect(args[1]).toBe("/vault");
   });
 
   /// Le letture che compongono la shell — l'elenco delle view, il disegno delle
@@ -661,6 +879,9 @@ describe("recuperare le bozze", () => {
     let atAnnouncement: unknown = "il vault non si è mai annunciato";
 
     const shell = await start(VAULT, (early) => {
+      // Il disco non prende il testo: la fascia si guarda senza la corsa col
+      // salvataggio automatico, che la toglierebbe (IMP-146, la prova sotto).
+      early.host.fault("writeDocument", "disco pieno");
       box.probes.set("signal:vault:/vault", () => {
         atAnnouncement = early.sessions.inspect("Benvenuto.md") ?? "nessuna sessione";
       });
@@ -670,7 +891,8 @@ describe("recuperare le bozze", () => {
     expect(textToVideo()).toContain("testo ritrovato nella bozza");
     expect(shell.notices()).toContain(`Benvenuto.md: ${shell.t("draft.case.intatta")}`);
     expect(shell.notices()).toContain(shell.plural(1, "draft.found.one", "draft.found"));
-    // E il foglio lo tiene scritto sopra il testo finché non lo si chiude.
+    // E il foglio lo tiene scritto sopra il testo finché non lo si chiude, o
+    // finché il testo ritrovato non è sul disco.
     const recovered = document.querySelector<HTMLElement>('.sheet-notice[data-notice="recovered"]');
     expect(recovered?.textContent).toContain(shell.t("draft.case.intatta"));
   });
@@ -698,6 +920,32 @@ describe("recuperare le bozze", () => {
     expect(await recoverDrafts()).toBe(0);
     expect(textToVideo()).toContain("battuta dopo il recupero");
     expect(textToVideo()).not.toContain("una bozza più vecchia del buffer");
+  });
+
+  /// La fascia dice che il testo è una copia non salvata da recuperare: finché
+  /// il disco non lo ha resta, anche dopo un salvataggio fallito; quando
+  /// «Riprova» lo scrive, il fatto è passato e la fascia se ne va (IMP-146).
+  /// La bozza sul disco non si tocca prima della scrittura riuscita.
+  it("la fascia della bozza ritrovata resta finché il testo non è sul disco, poi se ne va", async () => {
+    box.drafts = [draftOfWelcome("testo ritrovato nella bozza\n")];
+    let repair = (): void => {};
+    const shell = await start(VAULT, (early) => {
+      repair = early.host.fault("writeDocument", { kind: "permission_denied", message: "file in sola lettura" });
+    });
+    const banner = () => document.querySelector<HTMLElement>('.sheet-notice[data-notice="recovered"]');
+    await waitFor("il salvataggio automatico fallisce", () => shell.sessions.saveState("Benvenuto.md") === "fallito");
+    expect(banner()?.textContent).toContain(shell.t("draft.case.intatta"));
+    expect(shell.host.atGate("discardDraft")).toHaveLength(0);
+
+    repair();
+    const retry = [...document.querySelectorAll<HTMLElement>('.sheet-notice[data-notice="save_failed"] button')]
+      .find((button) => button.textContent === shell.t("app.retry"));
+    expect(retry).toBeDefined();
+    retry!.click();
+    await waitFor("il testo è sul disco", () => shell.sessions.saveState("Benvenuto.md") === "salvato");
+
+    expect(shell.host.files()["Benvenuto.md"]).toBe("testo ritrovato nella bozza\n");
+    await waitFor("la fascia se ne va", () => banner() === null);
   });
 
   /// Il recupero è una rete di sicurezza: se non parte, il vault si apre lo
@@ -777,6 +1025,45 @@ describe("chiudere la finestra: la guardia", () => {
     expect(view.state.readOnly).toBe(false);
     expect(shell.sessions.inspect("Benvenuto.md")).toMatchObject({ dirty: true });
     await pending.abandon();
+  });
+
+  /// Audit #513, scenario B: una finestra documento morta da sola (crash, il
+  /// sistema che la chiude) non tiene Fub aperto per sempre. La sessione della
+  /// finestra principale si salva, la finestra si lascia, e Fub si chiude
+  /// dicendo che le ultime battute non confermate potrebbero mancare.
+  it("una finestra documento morta da sola non impedisce di chiudere Fub", async () => {
+    const shell = await start(VAULT);
+    const windows = await import("./document-windows");
+    await windows.openCurrentInNewWindow("note/Spesa.md");
+    const [label] = windows.pendingDocumentWindows();
+    expect(label).toBeDefined();
+
+    shell.host.destroyDocumentWindow(label!);
+    await shell.host.close();
+
+    expect(shell.host.atGate("finishMainClose")).toHaveLength(1);
+    expect(windows.pendingDocumentWindows()).toEqual([]);
+    expect(shell.notices()).toContain(shell.t("windows.closed_alone", { doc: "Spesa" }));
+    expect(shell.notices()).not.toContain(shell.t("windows.closed_gone", { doc: "Spesa" }));
+  });
+
+  /// Audit #513, scenario A: la nota della finestra è stata cancellata da fuori.
+  /// Non c'è niente da salvare: la finestra si chiude con un avviso, e Fub con
+  /// lei.
+  it("la finestra di una nota cancellata si chiude con Fub, senza salvare", async () => {
+    const shell = await start(VAULT);
+    const windows = await import("./document-windows");
+    await windows.openCurrentInNewWindow("note/Spesa.md");
+    expect(windows.pendingDocumentWindows()).toHaveLength(1);
+
+    shell.host.removeFromOutside("note/Spesa.md");
+    await waitFor("la sessione della nota si chiude", () => shell.sessions.get("note/Spesa.md") === undefined);
+    await shell.host.close();
+
+    expect(shell.host.atGate("finishMainClose")).toHaveLength(1);
+    expect(windows.pendingDocumentWindows()).toEqual([]);
+    expect(shell.host.files()["note/Spesa.md"]).toBeUndefined();
+    expect(shell.notices()).toContain(shell.t("windows.closed_gone", { doc: "Spesa" }));
   });
 
   /// Dopo il via libera la finestra può ancora non chiudersi: allora la shell
@@ -875,5 +1162,38 @@ describe("rilasciare una linguetta", () => {
       () => shell.sessions.get("Benvenuto.md") === undefined,
     );
     expect(shell.host.files()["Benvenuto.md"]).toContain("battuta in due riquadri");
+  });
+});
+
+describe("ricordare un pannello laterale", () => {
+  const machine = (key: string, kind: SettingEntry["spec"]["kind"], value: SettingEntry["value"]): SettingEntry => ({
+    spec: { key, label: key, description: "", group: "Cornice", scope: "machine", kind, program_writable: false },
+    value,
+    source: "default",
+  });
+
+  /// Aprire e chiudere la barra dal comando scrive `chrome.sidebar.visible`, e
+  /// l'host risponde con un `setting_changed`. Prima ogni ascoltatore rileggeva
+  /// tutte le impostazioni (tema, lingua, cronologia, cornice: cinque letture a
+  /// gesto, e il tema rimontato); adesso le rilegge solo chi possiede la chiave.
+  it("la barra dal comando rilegge le impostazioni una volta sola, dalla shell che la possiede", async () => {
+    box.settings = [
+      machine("chrome.schema", { kind: "number", default: 1, min: 0, max: 9 }, 1),
+      machine("chrome.sidebar.visible", { kind: "toggle", default: true }, true),
+      machine("chrome.inspector.visible", { kind: "toggle", default: true }, true),
+    ];
+    await start(VAULT);
+    const { toggleSidePanel } = await import("../ui/side-panels");
+    const sidebar = document.getElementById("sidebar")!;
+    expect(sidebar.hidden).toBe(false);
+    for (const hidden of [true, false]) {
+      box.trace = [];
+      toggleSidePanel("sidebar");
+      await settle();
+      await settle();
+      expect(sidebar.hidden).toBe(hidden);
+      expect(box.trace.filter((step) => step === "setSetting")).toHaveLength(1);
+      expect(box.trace.filter((step) => step === "queryIndex:settings")).toHaveLength(1);
+    }
   });
 });

@@ -17,6 +17,7 @@ import { parseFragment, scopeOf, type LeafNode } from "../scene/model";
 import type { Elem } from "../scene/serialize";
 import { NS_FUB, SVG_NS, valueOf } from "../scene/xml";
 import { t } from "../strings";
+import { composingKey } from "../../../kit/ime";
 
 /// Il carattere delle note, come nell'esempio del formato.
 export const NOTE_FONT = "Inter, sans-serif";
@@ -145,7 +146,7 @@ export function promptNote(options: NoteDialog = {}): Promise<NoteText | null> {
     });
     // Ctrl+Invio conferma anche dal corpo, dove Invio va a capo.
     body.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !composingKey(event)) {
         event.preventDefault();
         form.requestSubmit();
       }

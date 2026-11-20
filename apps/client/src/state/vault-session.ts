@@ -8,7 +8,7 @@
 // shell compone.
 //
 // Non disegna. I pochi passi che toccano la resa — il nome del vault, la
-// ricerca, le view dichiarate, la rail, gli avvisi — sono **porte**: la shell
+// barra laterale, le view dichiarate, la rail, gli avvisi — sono **porte**: la shell
 // le dichiara quando crea la sessione, nella forma di `setSidePanelController`
 // (`ui/side-panels.ts`).
 import { api } from "../host/ipc";
@@ -17,12 +17,14 @@ import { vaultStatus } from "../host/query";
 import { plural, t } from "../i18n/strings";
 import { allCommands, conflictMessage, keybindingKey, loadKeyOverrides } from "../ui/commands";
 import type { NoticeAction, Tone } from "../ui/notify";
-import { openDocument, recoverDrafts, resetDocumentsForVault, synchronize } from "./document-controller";
+import { openDocument, openingsSoFar, recoverDrafts, resetDocumentsForVault, synchronize } from "./document-controller";
 import { flushPendingSave } from "./document-session";
 import { drainDocumentWindows } from "./document-windows";
-import { activeDoc, loadLayout } from "./layout";
+import { activeTab, loadLayout } from "./layout";
+import { setPrimaryViews } from "../ui/primary-views";
 import { loadOrganization } from "./organization";
 import { preferredPaneMode } from "./pane-mode";
+import { enterVault, leaveVault } from "./kernel";
 import { emit, loadActiveSpace, loadExpanded, loadExplorerSort, state } from "./store";
 import { beforeNote, loadCommandSpecs } from "./vault";
 
@@ -44,9 +46,11 @@ export interface VaultSessionPorts {
   /// Mostra il nome del vault appena aperto. Arriva **prima** che
   /// `state.vaultRoot` cambi.
   showVaultName(root: string): void;
-  /// Svuota la ricerca: i risultati erano del vault di prima. Arriva fra il
-  /// segnale `vault` e il segnale `documents`.
-  clearSearch(): void;
+  /// La barra laterale del vault che entra: la vista che aveva se ci si era
+  /// già stati (anche riaprendolo), i file altrimenti — mai quella del vault
+  /// di prima (#237 R07). Arriva fra il segnale `vault` e il segnale
+  /// `documents`; la ricerca scritta la ritrova il suo pannello sul segnale.
+  enterSidebar(root: string): void;
   /// Scopre e monta le view che il vault dichiara. La sequenza l'attende
   /// insieme all'elenco dei comandi e agli accordi; se rifiuta, l'apertura
   /// rifiuta.
@@ -106,7 +110,17 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     }
     if (!alive()) return;
     const left = state.vaultRoot;
-    const info = await api.openVault(dir);
+    // Rientrare in un vault lasciato (tornare da B ad A, chiudere la demo):
+    // i suoi fatti tornano a passare **prima** dell'apertura, perché i primi
+    // partono mentre l'host apre (#216). La radice canonica si sa solo dalla
+    // risposta, e si toglie anche quella. Un'apertura rifiutata lascia la
+    // finestra dov'era: il vault lasciato torna fra i lasciati.
+    const wasLeft = enterVault(dir);
+    const info = await api.openVault(dir).catch((error: unknown) => {
+      if (wasLeft) leaveVault(dir);
+      throw error;
+    });
+    enterVault(info.root);
     if (!alive()) return;
     // **Ciò che è stato battuto mentre l'host apriva il vault nuovo** (FUB-001).
     // Il vault di prima resta aperto nell'host finché non lo si chiude, e ogni
@@ -118,6 +132,18 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     await flushPendingSave();
     if (!alive()) return;
     const unsaved = await resetDocumentsForVault();
+    // Le sessioni del vault lasciato non ci sono più: da qui i suoi fatti —
+    // l'eco dei salvataggi appena scritti, il suo watcher se resta aperto (la
+    // demo), un `document_changed` di una nota con lo stesso id — non arrivano
+    // più alla finestra, che sta per mostrare l'altro (#216).
+    if (left && left !== info.root) leaveVault(left);
+    // Le view principali erano quelle che il vault lasciato dichiarava: la
+    // prima `synchronize()` qui sotto, con quell'elenco, disegnerebbe nel vault
+    // nuovo la view di una scheda ripristinata anche se questo non la dichiara
+    // (con l'host vero, un errore e un avviso). Senza elenco la scheda resta
+    // vuota finché `mountDeclaredViews` non dà quello di questo vault, e la
+    // seconda `synchronize()` la monta (#237 R08).
+    setPrimaryViews([]);
     if (unsaved.length > 0) ports.notify(t("demo.unsaved", { files: unsaved.join(", ") }), "guasto");
     if (!alive()) return;
     // **Il vault lasciato si chiude** (#216), dopo il flush e dopo le sue
@@ -180,7 +206,7 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     // Da qui in poi lo stato del vault è coerente: chi ne dipende può ripartire.
     emit("vault", info.root);
 
-    ports.clearSearch();
+    ports.enterSidebar(info.root);
     emit("documents");
 
     // Le view dichiarative si scoprono dal backend, non da id cablati. E come le
@@ -206,6 +232,8 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     // riquadro e rimonta le view dichiarate (`montaVistaInRiquadro` in
     // document.ts è idempotente): è il passaggio che rimette a posto la tab del
     // grafo dopo l'azzeramento di `mountDeclaredViews`.
+    // Non è un doppione della prima: lo prova la scheda della view in
+    // `shell-services.e2e.test.ts` (#237 R08).
     await synchronize();
     if (!alive()) return;
     // Le view dichiarate `left_sidebar` sono state montate in `#views-left`:
@@ -230,12 +258,18 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     // **Solo se non c'era niente da ripristinare.** Aprire la prima nota era la
     // cosa giusta quando la finestra ripartiva sempre vuota; adesso che si
     // ricorda com'era, farlo comunque vorrebbe dire scavalcare con una nota
-    // qualunque le tab che l'utente aveva lasciato aperte.
-    if (!activeDoc()) {
+    // qualunque le tab che l'utente aveva lasciato aperte. Una linguetta di
+    // view (il grafo) è una tab da ripristinare come un documento: chiedere
+    // «c'è un documento attivo?» la scavalcava con la prima nota (#237 R08).
+    //
+    // La decisione si prende adesso e la risposta arriva dopo: se intanto si è
+    // aperto qualcosa, la prima nota non scavalca ciò che è stato chiesto dopo.
+    if (!activeTab()) {
+      const decided = openingsSoFar();
       const before = await beforeNote();
       if (!alive()) return;
-      if (before) {
-        await openDocument(before);
+      if (before && !activeTab()) {
+        await openDocument(before, { unlessOpenedSince: decided });
         if (!alive()) return;
       }
     }

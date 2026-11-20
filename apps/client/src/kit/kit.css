@@ -169,3 +169,20 @@
   right: 3px;
   bottom: 3px;
 }
+
+/* ── La lingua dei menu ──────────────────────────────────────────────────── */
+
+/* Riga e tessera stanno sopra la pastiglia che scivola di chi le monta (il
+   menu, lo spazio comandi, il «/»), che è sul piano di sotto. */
+.kit-row,
+.kit-tile {
+  position: relative;
+  z-index: 1;
+}
+
+/* L'etichetta che resta in cima mentre l'elenco scorre, sopra le righe. */
+.kit-group-label[data-sticky] {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}

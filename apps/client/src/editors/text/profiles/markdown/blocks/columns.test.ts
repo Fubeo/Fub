@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { parsed } from "../test-support";
 import { EditorState, type TransactionSpec } from "@codemirror/state";
 import { markdownGrammar } from "../grammar";
 import { renderMarkdown } from "../render";
@@ -11,9 +11,7 @@ import { columnCount, columnsRun, dropAsColumn, intoColumns } from "./columns";
 // destro di un altro, a byte esatti; il risultato si legge in griglia.
 
 function stateOf(doc: string): EditorState {
-  const state = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] });
-  ensureSyntaxTree(state, state.doc.length, 5000);
-  return state;
+  return parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), blockModel] }));
 }
 const blocksOf = (state: EditorState) => state.field(blockModel).blocks;
 const at = (state: EditorState, text: string) => blocksOf(state).findIndex((block) => state.sliceDoc(block.from, block.to).startsWith(text));
@@ -84,6 +82,19 @@ describe("il blocco lasciato sul bordo destro", () => {
     const out = apply(state, dropAsColumn(state, blocks, { first: 2, last: 2 }, 1)!);
     expect(out).toBe("- a\n\n> [!columns]\n> > [!column]\n> > - b\n>\n> > [!column]\n> > - c");
     expect(grid(out)).toBe("2");
+  });
+
+  it("sul bordo sinistro va prima: due colonne, o la prima delle colonne che ci sono", () => {
+    const state = stateOf("Ospite\n\nOspitato");
+    const out = apply(state, dropAsColumn(state, blocksOf(state), { first: 1, last: 1 }, 0, "left")!);
+    expect(out).toBe("> [!columns]\n> > [!column]\n> > Ospitato\n>\n> > [!column]\n> > Ospite");
+    expect(grid(out)).toBe("2");
+    const two = "> [!columns]\n> > [!column]\n> > 1\n>\n> > [!column]\n> > 2";
+    const cols = stateOf(`${two}\n\nZero`);
+    const zero = at(cols, "Zero");
+    const first = apply(cols, dropAsColumn(cols, blocksOf(cols), { first: zero, last: zero }, 0, "left")!);
+    expect(first).toBe("> [!columns]\n> > [!column]\n> > Zero\n>\n> > [!column]\n> > 1\n>\n> > [!column]\n> > 2");
+    expect(grid(first)).toBe("3");
   });
 
   it("un blocco con righe vuote dentro le tiene citate", () => {
