@@ -87,6 +87,17 @@ describe("gli editor dei componenti", () => {
     bootstrap = await import("./bootstrap");
   });
 
+  // Il riquadro chiede le forme sintattiche al kernel soltanto per chi le
+  // legge: un foglio di Excel no (il suo testo è il giornale delle celle),
+  // una nota, una lavagna, un documento di Word sì.
+  it("solo un file che un editor senza grammatica apre salta le forme sintattiche", () => {
+    expect(bootstrap.readsSyntaxForms("Conti.xlsx")).toBe(false);
+    expect(bootstrap.readsSyntaxForms("cartella/Modello.XLTM")).toBe(false);
+    for (const doc of ["Nota.md", "Testo.txt", "lavagna.canvas", "Lettera.docx", "senza-estensione"]) {
+      expect(bootstrap.readsSyntaxForms(doc), doc).toBe(true);
+    }
+  });
+
   it("spento, il codice dell'editor non si importa mai", async () => {
     const surfaces = registry();
     setComponentEditors(surfaces, (ui) => !OFF.has(ui));

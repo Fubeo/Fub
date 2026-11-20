@@ -28,10 +28,11 @@
 // nessun selettore. La vista della shell di oggi è `panels/document.ts`.
 import { pickFromList } from "../ui/dialogs";
 import { lineFeeds, operationFromText, rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
-import { createDocumentSurfaceRegistry, loadPdf, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
+import { createDocumentSurfaceRegistry, loadPdf, readsSyntaxForms, setComponentEditors, type CanvasCardPorts } from "../editors/core/bootstrap";
 import type { CanvasNotesPort } from "../editors/canvas/engine";
 import { UI_CRAFT, VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
 import { components, componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
+import { cachedGridSurfaces } from "./grid-surfaces";
 import {
   selectionSetOf,
   type DocumentSurfaceRegistry,
@@ -344,9 +345,9 @@ export interface Pane {
   /// RAW), e non dal suo testo. Quando l'elenco dei comandi cambia, un
   /// riquadro il cui documento ha cambiato legame coi byte si rimonta.
   bytes: boolean;
-  /// Le superfici delle schede di testo aperte ma non attive, dalla meno
-  /// recente: nascoste, non smontate (`parkSurface`). Tornare su una di quelle
-  /// la rimostra invece di ricostruire l'editor.
+  /// Le superfici delle schede aperte ma non attive, dalla meno recente:
+  /// nascoste, non smontate (`parkSurface`). Tornare su una di quelle la
+  /// rimostra invece di ricostruire l'editor.
   parked: ParkedSurface[];
   /// Una rinomina che rimonta la superficie mostrata (`followRenameInPanes`)
   /// mentre aveva il fuoco: il nome nuovo e il cursore in byte, se la
@@ -355,8 +356,9 @@ export interface Pane {
   renameCaret: { readonly doc: string; readonly at: number | null } | null;
 }
 
-/// La superficie di una scheda di testo che il riquadro tiene da parte mentre
-/// ne mostra un'altra.
+/// La superficie di una scheda che il riquadro tiene da parte mentre ne
+/// mostra un'altra: una nota (Markdown o testo semplice) o una superficie che
+/// lo dichiara (`EditorSurface.parking`, il foglio di Excel).
 ///
 /// Ricostruire l'editor a ogni cambio di scheda costava il montaggio di un
 /// `EditorView` nuovo, il testo rimesso da capo e, per una nota lunga, il
@@ -375,11 +377,29 @@ export interface Pane {
 /// tasti): due superfici nello stesso genitore si pesterebbero. Il contenitore
 /// a riposo non porta la classe `pane-editor`, così chi cerca «la superficie
 /// del riquadro» (i fogli, il CSS, le prove) trova soltanto quella attiva.
+///
+/// Le regole, oltre a quelle del testo:
+/// - il file che cambia revisione mentre la superficie è da parte (un
+///   salvataggio, un'altra app) arriva al ritorno con `syncDoc` anche se il
+///   testo della sessione è lo stesso: il foglio riapre la sua sessione
+///   dell'host sui byte nuovi, come quando è in vista (`base`);
+/// - una modifica che una superficie da parte finisce di scrivere dopo lo
+///   stacco (la conferma di una formula) va al suo documento, che la
+///   superficie nomina (`written`);
+/// - componenti accesi o spenti, un vault chiuso o cambiato, un riquadro
+///   chiuso, una scheda chiusa smontano la superficie da parte
+///   (`dropParked`, `pruneParked`), e con lei la sessione dell'host;
+/// - le superfici da parte di un riquadro pesano al più `MAX_PARKED`.
 interface ParkedSurface {
   readonly tab: Extract<Tab, { k: "doc" }>;
   readonly surface: EditorSurface;
   readonly host: HTMLElement;
   readonly sourceView: SourceView | null;
+  /// Quanto pesa fra le superfici da parte del riquadro (`parkingWeight`).
+  readonly weight: number;
+  /// La revisione dei byte da cui il testo della sessione discendeva quando
+  /// la superficie è andata da parte.
+  readonly base: string | null;
   /// Il tema che la superficie ha ricevuto per ultimo: al ritorno si rimette
   /// soltanto se nel frattempo è cambiato.
   theme: Theme | null;
@@ -388,9 +408,11 @@ interface ParkedSurface {
   redraw: boolean;
 }
 
-/// Quante superfici di testo un riquadro tiene da parte. Una nota di 5.000
-/// righe con il suo albero sintattico pesa qualche MB: oltre questo numero la
-/// meno recente si smonta, e tornarci la ricostruisce come prima.
+/// Quanto pesano al più le superfici che un riquadro tiene da parte. Una nota
+/// di 5.000 righe con il suo albero sintattico pesa qualche MB e conta uno;
+/// un foglio tiene anche la sua cartella aperta nell'host e conta di più
+/// (`EditorSurface.parking`). Oltre, la meno recente si smonta, e tornarci la
+/// ricostruisce come prima.
 const MAX_PARKED = 4;
 
 /// La classe del contenitore di una superficie a riposo (vedi `ParkedSurface`).
@@ -1386,8 +1408,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   lifetime.add(offerDropTargets({ offers: boardOffers }));
  surfaceRegistry = createDocumentSurfaceRegistry({
     // Una superficie di scheda scrive dalla sua porta; le altre sono riquadri.
-    onChange: (paneId, change) => {
-      if (!cardEditors.written(paneId, change)) written(paneId, change);
+    onChange: (paneId, change, from) => {
+      if (!cardEditors.written(paneId, change)) written(paneId, change, from);
     },
     onSelectionChange: (paneId) => {
       if (layout.focus === paneId || peekSurfaceIn(layout.focus)?.surfaceId === paneId) scheduleContext();
@@ -1627,15 +1649,12 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       people: { folder: peopleFolder, search: searchPeople, create: createPerson },
       dates: { dailyPath, dailyDate, firstDay: firstWeekday },
     },
-    gridHost: api,
+    gridHost: cachedGridSurfaces(api, lifetime),
     exportDocument: {
       available: () => state.commandSpecs.some((spec) => spec.id === EXPORT_COMMAND),
       run: (doc, chosen) => void runExport(doc, chosen),
     },
-    documentBase: (doc) => {
-      const base = documentSessions.inspect(doc)?.base;
-      return base?.kind === "descends_from" ? base.value : null;
-    },
+    documentBase: sessionBase,
     documentDiskRevision: (doc) => api.readDocument(doc, documentSessions.vaultFor(doc)).then((source) => source.revision),
     documentWriting: (doc) => documentSessions.writing(doc),
     documentWrites: { flush: flushPendingSave, expect: (doc) => documentSessions.expectWrite(doc) },
@@ -3292,9 +3311,12 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   let source: DocumentSurfaceSource;
   let forms: SyntaxForm[];
   try {
+    // Le forme sintattiche servono soltanto a un editor che le legge: per un
+    // foglio di Excel la domanda al kernel non parte (`readsSyntaxForms`).
+    // Una scelta di superficie (la vista sorgente) le chiede comunque.
     [source, forms] = await Promise.all([
       readBuffer(tab.doc),
-      syntaxForms(tab.doc),
+      tab.override || readsSyntaxForms(tab.doc) ? syntaxForms(tab.doc) : Promise.resolve([]),
     ]);
   } catch (error) {
     if (isDocumentDeletedDuringRead(error)) return;
@@ -3811,18 +3833,35 @@ function releaseSurfaceExtras(r: Pane): void {
 
 // --- le superfici da parte (`ParkedSurface`) --------------------------------
 
-/// Mette da parte la superficie del riquadro, se è una superficie di testo
-/// montata di una scheda che resta aperta; `false` altrimenti, e chi chiama la
-/// smonta come prima. Va chiamata con `r.shown` ancora sulla scheda che si
-/// lascia.
+/// La revisione dei byte da cui il testo della sessione di `doc` discende
+/// adesso, o `null` se la sessione non ne ha una.
+function sessionBase(doc: string): string | null {
+  const base = documentSessions.inspect(doc)?.base;
+  return base?.kind === "descends_from" ? base.value : null;
+}
+
+/// Quanto pesa la superficie fra quelle da parte del riquadro, o `null` se
+/// non si tiene da parte. Una nota sì, se il file non è di un componente: un
+/// file di un componente segue l'acceso e lo spento dei componenti, che
+/// smontano e rimontano da sé. Le altre superfici lo dichiarano
+/// (`EditorSurface.parking`), e un cambio dei componenti le smonta comunque
+/// (`componentsChanged`).
+function parkingWeight(surface: EditorSurface, doc: string): number | null {
+  if (surface.parking) return surface.parking.weight;
+  if (surface.family !== "text" || (surface.profile !== "markdown" && surface.profile !== "plain-text")) return null;
+  return uisForFile(doc).length > 0 ? null : 1;
+}
+
+/// Mette da parte la superficie del riquadro, se è montata, si tiene da parte
+/// (`parkingWeight`) e la sua scheda resta aperta; `false` altrimenti, e chi
+/// chiama la smonta come prima. Va chiamata con `r.shown` ancora sulla scheda
+/// che si lascia.
 function parkSurface(r: Pane): boolean {
   const surface = r.surface;
   const tab = r.shown;
   if (!surface || tab?.k !== "doc" || !r.disposeSurface || r.bytes) return false;
-  if (surface.family !== "text" || (surface.profile !== "markdown" && surface.profile !== "plain-text")) return false;
-  // Un file di un componente segue l'acceso e lo spento dei componenti, che
-  // smontano e rimontano da sé: resta fuori.
-  if (uisForFile(tab.doc).length > 0) return false;
+  const weight = parkingWeight(surface, tab.doc);
+  if (weight === null) return false;
   // Una scheda chiusa o portata altrove non torna: la sua superficie si smonta.
   const stays = paneState(r.id)?.tabs.some((each) => sameParked(each, tab)) ?? false;
   if (!stays) return false;
@@ -3839,9 +3878,14 @@ function parkSurface(r: Pane): boolean {
   r.viewEl.before(next);
   r.editorEl = next;
   r.surface = null;
-  r.parked.push({ tab, surface, host, sourceView: r.sourceView, theme, redraw: false });
-  while (r.parked.length > MAX_PARKED) destroyParked(r.parked.shift()!);
+  r.parked.push({ tab, surface, host, sourceView: r.sourceView, weight, base: sessionBase(tab.doc), theme, redraw: false });
+  while (parkedWeight(r) > MAX_PARKED) destroyParked(r.parked.shift()!);
   return true;
+}
+
+/// Il peso delle superfici da parte del riquadro.
+function parkedWeight(r: Pane): number {
+  return r.parked.reduce((sum, entry) => sum + entry.weight, 0);
 }
 
 /// Rimostra la superficie messa da parte per `tab` nel riquadro, che in quel
@@ -3870,8 +3914,11 @@ function unparkSurface(r: Pane, tab: Extract<Tab, { k: "doc" }>, entry: ParkedSu
     surface.setMode(mode.id);
     markMode(r, mode.id);
     // Il testo cambiato mentre era da parte arriva come ogni aggiornamento
-    // venuto da fuori: non entra nella cronologia locale.
-    if (buffer.getDoc() !== text || (entry.redraw && mode.presentation === "rendered")) buffer.syncDoc(text);
+    // venuto da fuori: non entra nella cronologia locale. Anche i byte
+    // cambiati sotto lo stesso testo (un salvataggio, un'altra app): chi
+    // legge i byte, come il foglio, li rilegge.
+    if (buffer.getDoc() !== text || sessionBase(tab.doc) !== entry.base
+      || (entry.redraw && mode.presentation === "rendered")) buffer.syncDoc(text);
   } catch (error) {
     console.error(error);
     destroySurface(r);
@@ -4929,10 +4976,19 @@ export async function openFigure(doc: string): Promise<void> {
 /// riceve soltanto ciò che gli mancava, fuori dalla sua history, e la battuta
 /// resta sua e annullabile. Soltanto se le due modifiche si toccano vince il
 /// testo autorevole, senza coprire la battuta arrivata altrove.
-function written(paneId: string, change: EditorChange): void {
+function written(paneId: string, change: EditorChange, from?: string): void {
   // Il documento che il riquadro mostra: durante un cambio di tab la scheda
   // attiva è già l'altra, e il testo registrato allo stacco è di questo.
+  // Una superficie che nomina il suo documento e non è più davanti (un
+  // foglio da parte che finisce di confermare una formula) scrive in quello:
+  // il riquadro mostra già un'altra scheda. La sessione controlla comunque il
+  // testo di prima; se è rimasta indietro, la superficie riceve ciò che la
+  // sessione ha quando torna davanti (`unparkSurface`).
   const shown = panes.get(paneId)?.shown;
+  if (from !== undefined && !(shown?.k === "doc" && shown.doc === from)) {
+    documentSessions.acceptSurfaceChange(from, paneId, change);
+    return;
+  }
   const doc = shown?.k === "doc" ? shown.doc : activeDoc(paneId);
   if (!doc) return;
   const outcome = documentSessions.acceptSurfaceChange(doc, paneId, change);

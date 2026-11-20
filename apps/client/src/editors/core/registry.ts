@@ -635,6 +635,19 @@ export interface EditorSurface {
    * document session follows without it.
    */
   followRename?(documentId: string): void;
+  /**
+   * The pane may keep this surface aside while another tab is shown, hidden
+   * and detached from the document session, and show it again as it was
+   * (selection, scroll, local undo): what changed meanwhile arrives with
+   * `buffer.syncDoc`. Opt-in, for a surface that listens to nothing outside
+   * its own element while hidden and that names its document in every
+   * change it emits (`SurfaceBootstrapOptions.onChange`), so a change that
+   * lands after the pane moved on still reaches its own document. `weight`
+   * counts against the pane's budget of kept surfaces: 1 for a surface that
+   * is only DOM, more for one that also holds a session in the host. The
+   * Markdown and plain-text surfaces are kept without declaring it.
+   */
+  readonly parking?: { readonly weight: number };
   focus?(): void;
   /**
    * Opens the surface's own find bar, the one its editor offers inside the
@@ -1274,7 +1287,10 @@ export class DocumentSurfaceRegistry {
 }
 
 export interface SurfaceCallbacks {
-  onChange(paneId: string, change: EditorChange): void;
+  /// `documentId`: the document of the surface that wrote, from a surface
+  /// that may be kept aside (`EditorSurface.parking`): its change belongs to
+  /// that document even when the pane already shows another one.
+  onChange(paneId: string, change: EditorChange, documentId?: string): void;
   onSelectionChange(paneId: string): void;
   /// Una superficie montata che scopre dopo, da sola, di non poter tenere il
   /// testo (una lavagna rotta che arriva mentre il nucleo si carica): il

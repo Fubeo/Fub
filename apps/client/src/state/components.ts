@@ -24,6 +24,12 @@ import { on, openVaultRoot, vaultArg } from "./store";
 const COMPONENT_KEYS = /^components\./;
 const DISABLED_KEY = "plugins.disabled";
 
+/// La chiave è una scelta dei componenti o dei plugin spenti: dopo di lei
+/// l'host rimonta i provider del vault, e ciò che dichiaravano può cambiare.
+export function componentChoiceKey(key: string): boolean {
+  return COMPONENT_KEYS.test(key) || key === DISABLED_KEY;
+}
+
 /// I componenti di un vault, come li ha detti l'host.
 export class Components {
   readonly #rows: ReadonlyMap<string, ComponentRow>;
@@ -263,7 +269,7 @@ export function mountComponents(lifetime: Lifetime): void {
     });
   };
   lifetime.add(onEvent("setting_changed", ({ key }) => {
-    if (COMPONENT_KEYS.test(key) || key === DISABLED_KEY || key === LANGUAGE_KEY) refresh();
+    if (componentChoiceKey(key) || key === LANGUAGE_KEY) refresh();
   }));
   lifetime.add(onEvent("vault_opened", ({ root }) => {
     if (root === openVaultRoot()) refresh();
