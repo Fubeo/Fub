@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { history } from "@codemirror/commands";
@@ -13,6 +13,8 @@ import { renderMarkdown } from "../render";
 import { blocksMode } from "../blocks/index";
 import { mountReadingHeader } from "./header";
 import { mountMarkdown } from "../mount";
+import { loadKatex } from "../math";
+import { loadLazyParts } from "../../../../../ui/lazy-part";
 import type { MarkdownResourceChange, MarkdownResources } from "../../../../../ui/markdown-resources";
 import corpus from "../../../../../__fixtures__/corpus-syntax.json";
 import skin from "../../../../../theme/scrittoio/skin.css?raw";
@@ -27,6 +29,18 @@ afterEach(() => {
   for (const view of views.splice(0)) view.destroy();
   document.body.replaceChildren();
   vi.unstubAllGlobals();
+});
+// La Lettura del corpus chiede KaTeX (`loadKatex`) e le righe delle proprietà
+// scaldano i loro pezzi (`lazyPart`): `import()` che il caso non aspetta. Sotto
+// carico arrivavano dopo la fine del file, e il primo `console` di un modulo
+// arrivato tardi (l'avviso di KaTeX sul modo quirks) trovava il worker già in
+// chiusura: «Closing rpc while "onUserConsoleLog" was pending» (#444). Prima di
+// finire il file carica e aspetta KaTeX e ogni pezzo pigro creato dai moduli
+// che importa, chiesto o no da un caso: né `loadKatex` né `lazyPart` dicono
+// quali richieste sono già partite, e così ciò che i casi hanno chiesto
+// arriva di sicuro dentro il file.
+afterAll(async () => {
+  await Promise.all([loadKatex(), loadLazyParts()]);
 });
 
 const NOTE = [

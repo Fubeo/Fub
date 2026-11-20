@@ -25,6 +25,16 @@ describe("misura.sh e gli scenari del banco WebView", () => {
     expect(scenarios().length).toBeGreaterThan(10);
   });
 
+  it("l'ordine di giro di run.mjs contiene ogni scenario, una volta", () => {
+    // `order` filtra l'elenco scelto: uno scenario che manca qui non gira
+    // mai, nemmeno chiesto con `--only`, e nessuno lo dice.
+    const order = run.match(/const order = \[([^\]]+)\]\.filter\(/);
+    expect(order, "l'ordine di giro in run.mjs").not.toBeNull();
+    const ids = [...order[1].matchAll(/"([A-Z]\d+)"/g)].map((match) => match[1]);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect([...ids].sort()).toEqual(scenarios());
+  });
+
   it("misura.sh non sceglie gli scenari: li sceglie run.mjs, o chi lo lancia", () => {
     const commands = misura
       .split("\n")

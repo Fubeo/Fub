@@ -10,6 +10,11 @@
 // legge, fallisce se non ne trova nessuno, e ha un'autoprova
 // (`--self-test`) coi casi che le sfuggivano: il parametro tipato, quello
 // senza parentesi, il corpo senza graffe, una graffa dentro una stringa.
+// Il giro di #509 ha chiuso le forme che passavano ancora: un `await` senza
+// parentesi col cancello più avanti sulla stessa riga, il cancello passato
+// come valore, un `.catch` attaccato al cancello, un `.then` fuori dal
+// cancello, il giro con un tipo generico, il metodo staccato dalla corsa.
+// Ciò che resta fuori, e perché, sta sopra `violations`.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -42,15 +47,80 @@ function closingOf(code, opening, open = "(", close = ")") {
   return code.length;
 }
 
-function awaitedExpression(body, awaitIndex) {
-  const rest = body.slice(awaitIndex + "await".length);
-  const opening = rest.indexOf("(");
-  const newline = rest.indexOf("\n");
-  if (opening === -1 || (newline !== -1 && newline < opening)) {
-    return rest.slice(0, newline === -1 ? rest.length : newline);
+const NAME = /^#?[A-Za-z_$][\w$]*/;
+
+/// Gli argomenti di tipo di una chiamata (`<T>`, `<Map<K, V[]>>`), seguiti
+/// dalla sua parentesi. Il codice è già senza letterali, e le parentesi tonde
+/// non ci stanno: un confronto (`a < b && c(d)`) non lo è.
+const TYPE_ARGUMENTS = String.raw`<[\w$\s,.<>[\]|&?]*>(?=\s*\()`;
+const TYPE_CALL = new RegExp(`^${TYPE_ARGUMENTS}`);
+
+/// Dove finisce l'espressione attesa che comincia in `from`: un primario (un
+/// nome, un gruppo fra parentesi o quadre, un letterale già svuotato) e la
+/// sua catena (`.a`, `?.a`, `(…)`, `[…]`, `!`), anche spezzata a capo da
+/// Prettier, con gli argomenti di tipo di una chiamata (`e<T>(p)`). Non legge
+/// gli operatori binari: `await a + b` attende `a`, come in JavaScript.
+///
+/// Prima leggeva fino alla prima parentesi chiusa o, senza parentesi, fino a
+/// fine riga: `const a = await p; await e(q);` passava, perché `e` stava
+/// sulla stessa riga del primo `await` (#509).
+function awaitedEnd(code, from) {
+  let index = skipSpace(code, from);
+  for (let word; (word = /^(?:await|new|void|typeof)\b/.exec(code.slice(index))); ) {
+    index = skipSpace(code, index + word[0].length);
   }
-  return rest.slice(0, closingOf(rest, opening) + 1);
+  const char = code[index];
+  if (char === "(") index = closingOf(code, index) + 1;
+  else if (char === "[") index = closingOf(code, index, "[", "]") + 1;
+  else if (char === '"' || char === "'" || char === "`") {
+    const end = code.indexOf(char, index + 1);
+    index = end === -1 ? code.length : end + 1;
+  } else {
+    const name = NAME.exec(code.slice(index));
+    if (name === null) return index;
+    index += name[0].length;
+  }
+  for (;;) {
+    const next = skipSpace(code, index);
+    const typed = TYPE_CALL.exec(code.slice(next));
+    if (typed) index = next + typed[0].length;
+    else if (code[next] === "(") index = closingOf(code, next) + 1;
+    else if (code[next] === "[") index = closingOf(code, next, "[", "]") + 1;
+    else if (code[next] === "!" && code[next + 1] !== "=") index = next + 1;
+    else if (code.startsWith("?.", next) || (code[next] === "." && code[next + 1] !== ".")) {
+      const after = skipSpace(code, next + (code[next] === "?" ? 2 : 1));
+      if (code[after] === "(" || code[after] === "[") index = after;
+      else {
+        const name = NAME.exec(code.slice(after));
+        if (name === null) return index;
+        index = after + name[0].length;
+      }
+    } else return index;
+  }
 }
+
+/// `gate` chiamato come cancello (`gate(…)`, `gate?.(…)`, `gate<T>(…)`), non
+/// nominato come valore (`f(gate)`) né come proprietà di qualcos'altro
+/// (`this.gate(…)`).
+function gateCallPattern(gate, flags = "g") {
+  return new RegExp(
+    `(?<![\\w$.#])${gate.replace(/\$/g, "\\$")}\\s*(?:\\?\\.\\s*)?(?:${TYPE_ARGUMENTS}\\s*)?\\(`,
+    flags,
+  );
+}
+
+/// Vero se l'espressione attesa è una chiamata del cancello, con al più la
+/// sua catena dopo (`gate(p).then(…)`): il cancello è la chiamata più
+/// esterna. Prima bastava che comparisse in un punto qualsiasi, e
+/// `await save(e(p))` passava con `save` fuori dal cancello (revisione di
+/// GUARDIE-1).
+function awaitsGate(expression, gate) {
+  const head = expression.replace(/^\s*(?:(?:await|void)\b\s*)*/, "");
+  return gateCallPattern(gate, "").exec(head)?.index === 0;
+}
+
+/// I metodi di una promessa che le appendono un callback.
+const CALLBACK = /(?:\?\.|\.)\s*(then|catch|finally)\s*\(/g;
 
 /// Gli argomenti di primo livello fra `from` e `to`: le virgole dentro
 /// parentesi, quadre, graffe o le angolari di un tipo generico
@@ -145,16 +215,50 @@ function readHead(argument) {
 
 /// Le violazioni di un file e quanti giri ci ha letto.
 ///
-/// Ogni chiamata `.last(` con un argomento solo è un giro (`Race.last` ne
-/// prende uno, il corpo; un altro `last` con più argomenti non è un giro). Il
-/// corpo deve essere scritto lì, come freccia o `function`: un nome o
-/// un'espressione che la guardia non sa leggere (`race.last(run)`, con `run`
-/// definita altrove) è una violazione, non un giro che sfugge in silenzio.
+/// Ogni chiamata `.last(` (anche `.last<T>(`) con un argomento solo è un giro
+/// (`Race.last` ne prende uno, il corpo; un altro `last` con più argomenti
+/// non è un giro). Il corpo deve essere scritto lì, come freccia o
+/// `function`: un nome o un'espressione che la guardia non sa leggere
+/// (`race.last(run)`, con `run` definita altrove) è una violazione, non un
+/// giro che sfugge in silenzio; così il metodo staccato dal suo oggetto
+/// (`race.last.bind(race)`).
+///
+/// Nel corpo:
+/// - ogni `await` attende una chiamata del cancello (`await expected(p)`,
+///   anche con la sua catena dopo); nominarlo come valore
+///   (`await f(expected)`) o chiamarlo dentro un'altra chiamata
+///   (`await save(expected(p))`, `await Promise.all([expected(a()), b()])`)
+///   non basta, perché la chiamata di fuori può aspettare quello che vuole;
+/// - nessun `try … catch`, e nessun `.catch`, `.finally` o `.then(ok, ko)`
+///   attaccato a una chiamata del cancello: ingoierebbero la scadenza;
+/// - nessun `.then`, `.catch` o `.finally` fuori dal cancello: il loro
+///   callback corre anche a giro scaduto. Dentro l'argomento del cancello
+///   (`expected(p.then(trasforma))`) si può, e il callback deve solo dare
+///   forma al valore: anche lui corre a giro scaduto, e la guardia non lo
+///   distingue da uno che scrive.
+///
+/// Limiti noti, che senza un parser vero non si chiudono: un cancello
+/// passato a una funzione (`hydrate(…, expected)`) porta le attese di quella
+/// funzione fuori dalla guardia; un cancello rinominato in un nome locale
+/// (`const g = expected`) dà una violazione anche quando è giusto; un nome
+/// interno che copre il cancello (`const expected = (p) => p`) passa;
+/// `race["last"](…)` e `const { last } = race` non si vedono; un cancello
+/// che arriva da una funzione (`const g = makeGate(expected)`) non è
+/// riconosciuto come cancello, e il corpo che lo usa dà una violazione anche
+/// quando è giusto.
 export function violations(text, relative) {
   const code = codeOnly(text);
   const found = [];
   let races = 0;
-  for (const match of code.matchAll(/\.last\s*\(/g)) {
+  const lineOf = (offset) => code.slice(0, offset).split("\n").length;
+  for (const match of code.matchAll(/\.last\s*\.\s*(?:bind|call|apply)\s*\(/g)) {
+    races++;
+    found.push(
+      `${relative}:${lineOf(match.index)}: \`.last\` taken off its race (\`${match[0].replace(/\s+/g, "")}…\`); ` +
+        "call `race.last(…)` with the body inline.",
+    );
+  }
+  for (const match of code.matchAll(/\.last\s*(?:<[\w$\s,.<>[\]]*>)?\s*\(/g)) {
     const call = match.index + match[0].length - 1;
     const close = closingOf(code, call);
     const args = topLevelArguments(code, call + 1, close);
@@ -162,7 +266,6 @@ export function violations(text, relative) {
     races++;
     const argument = code.slice(call + 1, close);
     const head = readHead(argument);
-    const lineOf = (offset) => code.slice(0, offset).split("\n").length;
     if (head === null) {
       found.push(
         `${relative}:${lineOf(call)}: cannot read the body of this race (\`.last(${argument.trim()})\`); ` +
@@ -173,19 +276,59 @@ export function violations(text, relative) {
     const gate = head.gate;
     const start = call + 1 + head.start;
     const body = code.slice(start, close);
+    const at = (offset) => `${relative}:${lineOf(start + offset)}`;
+    // Le chiamate del cancello: dentro i loro argomenti un callback si può.
+    const calls = gate === null
+      ? []
+      : [...body.matchAll(gateCallPattern(gate))].map((call) => {
+          const open = call.index + call[0].length - 1;
+          return { open, close: closingOf(body, open) };
+        });
+    const insideGate = (offset) => calls.some((call) => offset > call.open && offset < call.close);
     for (const awaited of body.matchAll(/\bawait\b/g)) {
-      const expression = awaitedExpression(body, awaited.index);
-      if (gate !== null && new RegExp(`\\b${gate}\\b`).test(expression)) continue;
+      const from = awaited.index + "await".length;
+      const expression = body.slice(from, awaitedEnd(body, from));
+      if (gate !== null && awaitsGate(expression, gate)) continue;
       found.push(
         gate === null
-          ? `${relative}:${lineOf(start + awaited.index)}: an \`await\` inside a race whose body takes no gate.`
-          : `${relative}:${lineOf(start + awaited.index)}: an \`await\` inside a race does not name \`${gate}\`.`,
+          ? `${at(awaited.index)}: an \`await\` inside a race whose body takes no gate.`
+          : `${at(awaited.index)}: an \`await\` inside a race does not go through \`${gate}(…)\`.`,
       );
     }
     for (const caught of body.matchAll(/\}\s*catch\b/g)) {
       found.push(
-        `${relative}:${lineOf(start + caught.index)}: a \`catch\` inside a race can swallow expiry; ` +
+        `${at(caught.index)}: a \`catch\` inside a race can swallow expiry; ` +
           `use \`await ${gate ?? "expected"}(promise.catch(…))\`.`,
+      );
+    }
+    // La catena che segue una chiamata del cancello.
+    const chained = new Set();
+    for (const call of calls) {
+      let index = call.close + 1;
+      for (;;) {
+        const link = /^\s*(?:\?\.|\.)\s*([A-Za-z_$][\w$]*)\s*(\()?/.exec(body.slice(index));
+        if (link === null) break;
+        const linkAt = index + link[0].search(/\S/);
+        chained.add(linkAt);
+        const open = index + link[0].length - 1;
+        const end = link[2] ? closingOf(body, open) : open;
+        const method = link[1];
+        const swallows = method === "catch" || method === "finally" ||
+          (method === "then" && topLevelArguments(body, open + 1, end).length > 1);
+        if (link[2] && swallows && !insideGate(linkAt)) {
+          found.push(
+            `${at(linkAt)}: a \`.${method}\` after \`${gate}(…)\` runs even when the race has expired; ` +
+              `put it inside: \`${gate}(promise.${method}(…))\`.`,
+          );
+        }
+        index = link[2] ? end + 1 : index + link[0].length;
+      }
+    }
+    for (const callback of body.matchAll(CALLBACK)) {
+      if (chained.has(callback.index) || insideGate(callback.index)) continue;
+      found.push(
+        `${at(callback.index)}: a \`.${callback[1]}\` inside a race runs its callback even after the race has expired; ` +
+          `await it through \`${gate ?? "expected"}(…)\`.`,
       );
     }
   }
@@ -238,6 +381,34 @@ function selfTest() {
     ["una function col tipo di ritorno a graffe", "r.last(async function (e): Promise<{ a: T }> { await f(); });", 1, 1],
     ["un confronto, letto come un giro solo", "x.last(a < b, c);", 1, 1],
     ["un confronto all'altro verso, due argomenti", "x.last(a > b, c);", 0, 0],
+    // Il giro di #509: forme che la guardia di prima lasciava passare.
+    ["un'attesa senza parentesi col cancello sulla riga (sfuggiva)", "r.last(async (e) => { const a = await p; await e(f(a)); });", 1, 1],
+    ["un'attesa senza parentesi e il cancello dopo (sfuggiva)", "r.last(async (e) => { const a = await p, g = e; });", 1, 1],
+    ["il cancello passato come valore (sfuggiva)", "r.last(async (e) => { await load(e); });", 1, 1],
+    ["il cancello di un altro oggetto (sfuggiva)", "r.last(async (e) => { await this.e(f()); });", 1, 1],
+    ["un .catch dopo il cancello (sfuggiva)", "r.last(async (e) => { const v = await e(f()).catch(() => null); });", 1, 1],
+    ["un .catch dopo il cancello, a capo (sfuggiva)", "r.last(async (e) => {\n  const v = await e(f())\n    .catch(() => null);\n});", 1, 1],
+    ["un .then a due rami dopo il cancello (sfuggiva)", "r.last((e) => e(f()).then(ok, ko));", 1, 1],
+    ["un .finally dopo il cancello (sfuggiva)", "r.last((e) => e(f()).finally(done));", 1, 1],
+    ["un .then a un ramo dopo il cancello", "r.last((e) => e(f()).then(show));", 1, 0],
+    ["un .then fuori dal cancello (sfuggiva)", "r.last(async (e) => { f().then((v) => { state = v; }); });", 1, 1],
+    ["un .then nel cancello", "r.last(async (e) => { const v = await e(f().then((x) => x.items)); });", 1, 0],
+    ["un'attesa nel callback del cancello", "r.last(async (e) => { await e(Promise.all(xs.map(async (x) => { await e(g(x)); }))); });", 1, 0],
+    // La revisione di GUARDIE-1: il cancello deve essere la chiamata più
+    // esterna dell'attesa, non un pezzo qualsiasi dell'espressione.
+    ["il cancello dentro un'altra chiamata (sfuggiva)", "r.last(async (e) => { await save(e(p)); });", 1, 1],
+    ["Promise.all attorno ai cancelli (sfuggiva)", "r.last(async (e) => { await Promise.all([e(a()), b()]); });", 1, 1],
+    ["il cancello con la catena dopo", "r.last(async (e) => { const v = await e(f()).then(show); });", 1, 0],
+    ["il cancello opzionale", "r.last(async (e) => { const v = await e?.(f()); });", 1, 0],
+    ["il cancello con un argomento di tipo (falso rosso)", "r.last(async (e) => { const v = await e<T>(p); });", 1, 0],
+    ["il cancello con un tipo annidato (falso rosso)", "r.last(async (e) => { const v = await e<Map<K, V[]>>(p); });", 1, 0],
+    ["un'altra chiamata con un argomento di tipo", "r.last(async (e) => { const v = await f<T>(p); });", 1, 1],
+    ["il giro con un tipo generico (sfuggiva)", "r.last<Item[]>(async (e) => { await f(); });", 1, 1],
+    ["il giro con un generico annidato (sfuggiva)", "r.last<Map<K, V>>(async (e) => { await f(); });", 1, 1],
+    ["un confronto con last non è un giro", "if (x.last < y && z(w)) go();", 0, 0],
+    ["il metodo staccato dalla corsa (sfuggiva)", "const go = race.last.bind(race);\ngo(async (e) => { await f(); });", 1, 1],
+    ["un'attesa a capo del cancello", "r.last(async (e) => {\n  const v = await e(\n    f(),\n  );\n});", 1, 0],
+    ["un'attesa di un await", "r.last(async (e) => { const v = await await e(f()); });", 1, 0],
   ];
   const failures = [];
   try {

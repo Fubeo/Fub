@@ -194,4 +194,8 @@ node .github/scripts/check-locale-loop.mjs
 
 Le guardie trovano i file di `docs/` con `.github/scripts/doc-files.mjs`, che
 salta le cartelle nascoste: un vault aperto su `docs/` lascia i suoi dati in
-`docs/.fub/`, e quelli non sono documentazione.
+`docs/.fub/`, e quelli non sono documentazione. Per lo stesso motivo
+`check-doc-links.mjs` rifiuta un link che punta dentro una `.fub/` che git
+non traccia: il file c'è solo in quel vault locale. I vault di prova
+tracciati delle fixture restano target validi (casi nella sua autoprova, che
+gira a ogni lancio).

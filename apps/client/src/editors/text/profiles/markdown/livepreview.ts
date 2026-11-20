@@ -33,6 +33,7 @@ import { resolvedLanguage, t } from "../../../../i18n/strings";
 import { dueLook, liveProjection, liveTaskEnd, localDay, projectedDue } from "./task-due";
 import { alarmFigure, projectedReminder, reminderLabel, reminderLong, reminderNotificationsOn, reminderPassed, reminderTimeOf } from "./task-reminder";
 import { isAllowedLink } from "../../../../ui/sanitize";
+import { openLifetime } from "../../../../ui/lifetime";
 import { figureMask, PAGE_FIGURES, readPageMark } from "../../../../ui/page-mark";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
@@ -3296,14 +3297,15 @@ export function livePreview(
               : view.posAtCoords({ x: next.clientX, y: next.clientY });
             if (head !== null) view.dispatch({ selection: { anchor, head }, userEvent: "select.pointer" });
           };
+          // Una vita per trascinamento: la chiudono il rilascio e `destroy`.
+          const drag = openLifetime();
           const end = () => {
-            view.dom.ownerDocument.removeEventListener("mousemove", move);
-            view.dom.ownerDocument.removeEventListener("mouseup", end);
+            drag.close();
             owner.endDrag = undefined;
           };
           owner.endDrag = end;
-          view.dom.ownerDocument.addEventListener("mousemove", move);
-          view.dom.ownerDocument.addEventListener("mouseup", end, { once: true });
+          drag.listen(view.dom.ownerDocument, "mousemove", move);
+          drag.listen(view.dom.ownerDocument, "mouseup", end);
         }
         return true;
       },
