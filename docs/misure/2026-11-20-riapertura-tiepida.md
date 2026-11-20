@@ -231,3 +231,48 @@ Fuori dalla domanda dell'issue, ma misurati nello stesso giro:
   255 su `trentamila`, e resta anche con la forzatura.
 
 Ognuno merita la sua issue, misurata dopo la strada c.
+
+## Dopo la correzione
+
+La strada c è entrata con #521: Base, Disegni e Prove rispondono con tutti i
+documenti, i promemoria si ricordano ciò che hanno visto nella cache `reminders.json`,
+e il kernel chiede `up_to_date` a ogni indice anche quando l'intersezione è
+già vuota (senza, la riapertura diventava tiepida solo dalla terza apertura).
+Per #524 l'anagrafe di una riapertura ferma si confronta con quella del file
+senza ricomporla; non si scriveva già prima.
+
+- build di rilascio di `67691ecb0` (`perf/tiepido-c`) con la stessa sonda
+  senza la forzatura, che non serve più; 20 novembre 2026, misura di un
+  agente, stessa macchina;
+- carico medio a un minuto fra 43 e 52, contro 10–14 della corsa di prima:
+  le fasi che girano in parallelo e l'apertura (`Host::open`) ne escono
+  gonfiate, e i loro numeri non si confrontano con quelli di prima;
+- il giro: un'apertura a freddo, quattro riaperture, 50 note toccate ad app
+  chiusa, una riapertura e un'altra dopo; solo `cinquemila` e `ricche`.
+
+Fase d'indicizzazione (`wait_indexed`), mediana delle quattro riaperture, in
+millisecondi.
+
+| Vault | Prima, com'era | Prima, forzata | Dopo | Fette di lettura dopo |
+|---|---|---|---|---|
+| `cinquemila` | 119 | 28 | 31 | nessuna |
+| `ricche` | 727 | 117 | 145 | nessuna |
+
+- **La riapertura non rilegge niente.** Nessuna fetta di lettura nelle
+  quattro riaperture e in quella dopo le note toccate: la domanda
+  `up_to_date` (5–20 ms) è tutto ciò che resta del lavoro per documento. Il
+  «dopo» è vicino al «forzato» di prima pur con un carico tre o quattro volte
+  più alto, e a differenza della forzatura i promemoria restano giusti
+  (`crates/fub-host/tests/warm_reopening.rs`).
+- **Le note toccate si rileggono da sole.** Con 50 note cambiate ad app
+  chiusa la riapertura legge una fetta sola (2 ms su `cinquemila`, 10 su
+  `ricche`); il costo che resta è il commit della ricerca (`flush_host`,
+  267 e 164 ms), cioè #522.
+- **L'anagrafe.** Nessuna scrittura nelle riaperture ferme, come prima (lo
+  conta il presidio). `store_entries` costa 30–41 ms su `cinquemila` e
+  50–110 su `ricche` sotto questo carico, contro 31 e 94 prima: il
+  confronto al suo posto toglie la copia dei metadati, ma resta il giro su
+  ogni voce col suo testimone, e a questo carico il guadagno non si vede.
+  Caricarla resta la voce più cara della riapertura (140–300 ms su
+  `ricche`), cioè #523.
+- `PROMEMORIA 0` su entrambi i vault è giusto: le loro note non hanno `⏰`.

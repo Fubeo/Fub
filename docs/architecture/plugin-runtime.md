@@ -84,6 +84,33 @@ non serve alcun cambiamento al contratto Rust o al WIT.
 - [Capability, sandbox e UI non fidata](plugin-security.md): capability,
   sandbox, validazione della UI e limiti non promessi.
 
+## La riapertura tiepida
+
+Riaprendo un vault, un documento che nessuno ha toccato non si rilegge. Il
+kernel chiede a **ogni** indice montato quali documenti ha già alla revisione
+dell'anagrafe (`IndexProvider::up_to_date`) e salta solo quelli che tutti
+dicono di avere, anche quando l'intersezione è già vuota: la domanda porta
+anche l'annuncio della revisione, e un indice che non la ricevesse non
+saprebbe che revisione scrivere (#521). Il core rimette i metadati dalla riga
+dell'anagrafe, senza parse; il resto si legge, si analizza e si consegna.
+
+- `fub.search` e `fub.tasks` (i promemoria) si ricordano fra due aperture ciò
+  che hanno visto, con la revisione del sorgente: l'indice Tantivy e la cache
+  `reminders.json` ([la mappa del disco](../reference/on-disk-layout.md#promemoria)).
+- Chi dice «questa ce l'ho» si prende la revisione annunciata anche se la
+  nota gli arriva lo stesso; una voce senza impronta ritira l'annuncio, e lo
+  stesso fa un'apertura interrotta per le note che non ha consegnato.
+- `fub.base`, `fub.draw` e `fub.proof` non tengono niente per documento e
+  rispondono con tutti i documenti.
+- Un file degli indici illeggibile, di un altro schema o di un'altra versione
+  si butta: quell'indice risponde «niente», e si rilegge tutto; così anche un
+  indice in panico (o un ospite in trap) dentro la domanda.
+- Una riapertura ferma non riscrive l'anagrafe e non la ricompone: la tabella
+  in memoria si confronta con quella del file al suo posto (#524).
+
+Il presidio è `crates/fub-host/tests/warm_reopening.rs`; i numeri sono in
+[la misura](../misure/2026-11-20-riapertura-tiepida.md#dopo-la-correzione).
+
 ## Renderer nativi
 
 I renderer nativi `Html`/`Ui` restano sul percorso kernel in

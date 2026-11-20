@@ -1106,6 +1106,44 @@ fn the_bytes_in_hand_are_not_copied_when_the_candidate_matches() {
     );
 }
 
+/// **L'anagrafe interroga ogni file una volta per scrittura** (#524). Il
+/// confronto con la tabella sul disco e la tabella nuova vengono dagli stessi
+/// testimoni: chiederli due volte raddoppiava le domande al supporto proprio
+/// sulla riapertura che cambia qualcosa, e fra le due domande un file poteva
+/// cambiare, dando una tabella diversa da quella confrontata.
+#[test]
+fn the_entry_store_asks_each_file_once_even_when_it_writes() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = root_of(&dir);
+    put(&root, "a.md", b"ciao!");
+    put(&root, "b.md", b"bene");
+    put(&root, "c.bin", b"x");
+    let storage = Arc::new(Interposed::over(&root));
+    let mut workspace = open_on(&root, Arc::clone(&storage));
+    // Un'impronta imparata: la tabella sul disco non la porta, la prossima
+    // scrittura la deve scrivere.
+    assert_eq!(ask(&mut workspace, "z.md", b"altr!"), SameContent::NotFound);
+    let before = fs::read(table_path(&root)).expect("la tabella");
+
+    storage.witness_questions.store(0, Ordering::SeqCst);
+    workspace.store_entries();
+    let writing = storage.witness_questions.load(Ordering::SeqCst);
+    assert_ne!(
+        fs::read(table_path(&root)).expect("la tabella"),
+        before,
+        "this store had something to write"
+    );
+
+    storage.witness_questions.store(0, Ordering::SeqCst);
+    workspace.store_entries();
+    let still = storage.witness_questions.load(Ordering::SeqCst);
+    assert!(still > 0, "the comparison asks the files");
+    assert_eq!(
+        writing, still,
+        "writing asks the same questions as finding nothing to write"
+    );
+}
+
 /// Aspetta che i timbri di cambiamento dei file appena scritti siano **fermi**
 /// per l'anagrafe: più vecchi di una grana
 /// ([`CHANGE_STAMP_GRAIN`](fub_kernel::storage::CHANGE_STAMP_GRAIN), due

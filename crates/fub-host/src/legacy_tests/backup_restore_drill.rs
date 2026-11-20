@@ -322,8 +322,16 @@ fn validate_after_host(root: &Path, expected: &[ExpectedEntry]) {
         let allowed_search_manifest = path == ".fub/plugins/fub.search/manifest.json";
         let allowed_search_index = path.starts_with(".fub/plugins/fub.search/index/");
         let allowed_versioning_index = path == ".fub/plugins/fub.versioning/versions.json";
+        // Lo spazio cache dei plugin è fuori dal backup per definizione
+        // (`snapshot.rs`): ciò che un indice ci riscrive aprendo il vault
+        // ripristinato (i promemoria di `fub.tasks`, #521) è una cache, non
+        // un dato che il ripristino avrebbe dovuto riportare.
+        let allowed_plugin_cache = path.starts_with(".fub/data/plugins/");
         assert!(
-            allowed_search_manifest || allowed_search_index || allowed_versioning_index,
+            allowed_search_manifest
+                || allowed_search_index
+                || allowed_versioning_index
+                || allowed_plugin_cache,
             "verify: unexpected Host output {path}"
         );
     }

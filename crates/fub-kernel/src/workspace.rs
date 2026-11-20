@@ -127,7 +127,8 @@ use crate::index::plan::{QueryCore, QueryPlan};
 use crate::index::{
     feed_handles as feed_index_handles, reconcile_handles as reconcile_index_handles,
     release_handles as release_index_handles, up_to_date_handles as up_to_date_index_handles,
-    CompletedIndexQuery, Indexes, PreparedIndexQuery, SharedIndexProvider,
+    withdraw_handles as withdraw_index_handles, CompletedIndexQuery, Indexes, PreparedIndexQuery,
+    SharedIndexProvider,
 };
 use crate::journal::{Journal, JournalOp, JournalRead};
 use crate::locale::SystemLocale;
@@ -3399,6 +3400,9 @@ pub struct PreparedIndexFinish {
     work: Indexing,
     graph: BuiltGraph,
     ids: Vec<DocId>,
+    /// I documenti di cui ritirare le dichiarazioni, se l'apertura si è
+    /// interrotta ([`Workspace::withdrawn_ids`]); vuoto se è finita.
+    withdrawn: Vec<DocId>,
     providers: Vec<(String, SharedIndexProvider)>,
 }
 
@@ -3414,11 +3418,13 @@ impl PreparedIndexFinish {
             work,
             graph,
             ids,
+            withdrawn,
             providers,
         } = self;
         let mut external_losses = if work.finished() {
             reconcile_index_handles(&providers, &ids)
         } else {
+            withdraw_index_handles(&providers, &withdrawn);
             Vec::new()
         };
         if let Err(error) = release_index_handles(providers) {
@@ -6624,6 +6630,7 @@ impl Workspace {
         let external_losses = if work.finished() {
             reconcile_index_handles(&self.indexes.feed_handles(), &ids)
         } else {
+            withdraw_index_handles(&self.indexes.feed_handles(), &self.withdrawn_ids(&work));
             Vec::new()
         };
         let (opening, _) = self.close_indexing(work, external_losses, false);
@@ -6645,10 +6652,12 @@ impl Workspace {
         graph: BuiltGraph,
     ) -> PreparedIndexFinish {
         let ids = self.reconcile_ids(&work);
+        let withdrawn = self.withdrawn_ids(&work);
         PreparedIndexFinish {
             work,
             graph,
             ids,
+            withdrawn,
             providers: self.indexes.feed_handles(),
         }
     }
@@ -6713,6 +6722,34 @@ impl Workspace {
                 .discarded
                 .iter()
                 .map(|discard| discard.id.clone()),
+        );
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    /// I documenti a cui un'apertura interrotta può aver lasciato una
+    /// dichiarazione di revisione in volo: tutti quelli che la scansione ha
+    /// chiesto agli indici, cioè i documenti già in memoria (anche quelli
+    /// saltati perché ogni indice li aveva) e quelli ancora da esaminare.
+    /// Vuoto per un'apertura finita: lì chiude `reconcile`.
+    ///
+    /// Comprende **anche le note consegnate**, ed è voluto: il ritiro toglie
+    /// solo la dichiarazione in volo, mai ciò che un indice tiene, e una nota
+    /// consegnata la sua dichiarazione l'ha già spesa, quindi per lei il ritiro
+    /// non cambia niente e la prossima apertura non rilegge di più. Restringere
+    /// l'elenco alle non consegnate vorrebbe dire tenere il conto di ogni
+    /// consegna per non risparmiare nulla.
+    fn withdrawn_ids(&self, work: &Indexing) -> Vec<DocId> {
+        if work.finished() {
+            return Vec::new();
+        }
+        let mut ids: Vec<DocId> = self.documents();
+        ids.extend(
+            work.from_do
+                .iter()
+                .filter(|entry| entry.kind == EntryKind::Document)
+                .map(|entry| entry.id.clone()),
         );
         ids.sort();
         ids.dedup();
@@ -6927,7 +6964,12 @@ impl Workspace {
     pub fn store_entries(&self) {
         let _phase = tracing::info_span!(target: "fub.apertura", "store_entries").entered();
         let core = &self.indexes.core;
-        let table = core
+        // Ogni file si guarda **una volta**, qui, fuori dal lucchetto
+        // dell'anagrafe: il confronto e la tabella nuova vengono dalle stesse
+        // risposte. Guardarli due volte raddoppiava le domande al supporto
+        // proprio sulla riapertura che scrive, e un file cambiato fra le due
+        // avrebbe dato una tabella diversa da quella confrontata.
+        let rows: Vec<(&VaultEntry, StoredEntry)> = core
             .entries
             .values()
             .filter_map(|entry| {
@@ -6977,17 +7019,44 @@ impl Workspace {
                     read_on.is_some_and(|witness| witness.agrees(&now))
                         && crate::transfer::change_stamp_settled(now.change_stamp, settled)
                 });
-                (
-                    entry.id.clone(),
-                    StoredEntry {
-                        size: entry.size,
-                        mtime: entry.mtime,
-                        change_stamp,
-                        identity: now.identity,
-                        fingerprint,
-                        metadata: self.indexes.core.stored_metadata(&entry.id),
-                    },
-                )
+                // I metadati si confrontano al loro posto e si copiano solo se
+                // la tabella si scrive davvero (#524).
+                let row = StoredEntry {
+                    size: entry.size,
+                    mtime: entry.mtime,
+                    change_stamp,
+                    identity: now.identity,
+                    fingerprint,
+                    metadata: None,
+                };
+                (entry, row)
+            })
+            .collect();
+        // Una riapertura ferma compone la stessa tabella che il file ha già:
+        // la si confronta al suo posto, senza copiare i metadati di ogni
+        // documento per buttarli via in fondo a `store` (#524). Il confronto
+        // è lo stesso di `store`, campo per campo, e ogni dubbio scrive.
+        let unchanged = self.entry_store.already_holds(|known| {
+            rows.len() == known.len()
+                && rows.iter().all(|(entry, row)| {
+                    known.get(&entry.id).is_some_and(|stored| {
+                        stored.size == row.size
+                            && stored.mtime == row.mtime
+                            && stored.change_stamp == row.change_stamp
+                            && stored.identity == row.identity
+                            && stored.fingerprint == row.fingerprint
+                            && core.stores_metadata_as(&entry.id, stored.metadata.as_ref())
+                    })
+                })
+        });
+        if unchanged {
+            return;
+        }
+        let table = rows
+            .into_iter()
+            .map(|(entry, row)| {
+                let metadata = core.stored_metadata(&entry.id);
+                (entry.id.clone(), StoredEntry { metadata, ..row })
             })
             .collect();
         if let Err(and) = self.entry_store.store(table) {

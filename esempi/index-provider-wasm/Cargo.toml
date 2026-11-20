@@ -13,6 +13,7 @@ wit-bindgen = "0.60"
 
 [features]
 trap-routes = []
+trap-up-to-date = []
 
 [profile.release]
 strip = true

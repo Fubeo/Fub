@@ -83,16 +83,18 @@ impl IndexProvider for SearchIndex {
                 && self.fingerprints.contains_key(&entry.id)
             {
                 current.push(entry.id.clone());
-                // **Non** si dichiara ciò che si è appena detto di avere: quel
-                // documento non arriverà, e una dichiarazione che resta lì ad
-                // aspettare verrebbe raccolta dalla prima consegna successiva —
-                // cioè dal primo salvataggio a sessione aperta, che porta un
-                // testo nuovo e si prenderebbe la revisione di quello vecchio.
-                // Se poi arrivasse lo stesso (un altro indice non ce l'aveva),
-                // si resta senza revisione e lo si rilegge alla prossima
-                // apertura: il verso sicuro dello sbaglio.
-                continue;
             }
+            // **Si dichiara anche ciò che si è appena detto di avere.** Se
+            // arriva lo stesso — un altro indice, un ospite che risponde
+            // sempre «mandami tutto», non ce l'aveva — il testo che arriva è
+            // quello della revisione dichiarata per questa apertura, e
+            // tenerla è vero. Non dichiararlo lo lasciava senza revisione: il
+            // primo manifest scritto dopo lo perdeva, e alla riapertura lo si
+            // rileggeva, un'apertura sì e una no. Una dichiarazione che resta
+            // senza consegna non arriva a un salvataggio a sessione aperta:
+            // la toglie `reconcile` a fine apertura, o il ritiro del kernel
+            // (una domanda senza impronta, qui sopra) se l'apertura si
+            // interrompe.
             announced.insert(entry.id.clone(), revision.clone());
         }
         current

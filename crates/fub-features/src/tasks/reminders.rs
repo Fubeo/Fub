@@ -1,16 +1,30 @@
 //! **L'indice dei promemoria**: i compiti aperti che portano un `⏰`, con
 //! l'ora del muro a cui suonano.
 //!
-//! # Un indice derivato, e soltanto in memoria
+//! # Un indice derivato, che si ricorda ciò che ha visto
 //!
 //! Il kernel lo alimenta come ogni indice ([`IndexProvider`]): ogni nota che
 //! entra o esce dal vault passa di qui con il suo modello, e il riallineamento
-//! dopo la scansione toglie ciò che è sparito ad app chiusa. Non persiste
-//! niente: alla riapertura del vault il kernel gli consegna tutte le note
-//! (non dichiara di averne nessuna, [`IndexProvider::up_to_date`]), quindi si
-//! ricostruisce da sé dall'indice delle note e non ha un formato su disco da
-//! migrare. Un compito spuntato, un `⏰` cancellato o una nota cestinata
-//! escono al primo salvataggio, perché la nota rientra con il modello nuovo.
+//! dopo la scansione toglie ciò che è sparito ad app chiusa. Un compito
+//! spuntato, un `⏰` cancellato o una nota cestinata escono al primo
+//! salvataggio, perché la nota rientra con il modello nuovo.
+//!
+//! È l'unico indice di serie, oltre alla ricerca, che ricava qualcosa dal
+//! **corpo** delle note, e per questo è durevole come lei (#521): al `flush`
+//! scrive nella sua cache i promemoria di ogni nota con la revisione del
+//! sorgente da cui li ha ricavati ([`stored`]), all'`activate` li rilegge, e a
+//! [`IndexProvider::up_to_date`] risponde «ce l'ho» per le note la cui
+//! revisione dichiarata dal kernel è quella che ha. Senza, la riapertura di un
+//! vault rileggeva e rianalizzava ogni nota per lui solo: la domanda è
+//! un'intersezione, e il suo «mandami tutto» vinceva su tutti. Il file è un
+//! derivato: illeggibile o di un altro schema si butta e si rifà dalle note.
+//!
+//! Un derivato che non si scrive non è un errore per chi usa Fub: un vault su
+//! un supporto in sola lettura, o un disco pieno, lo dicono **una volta** nel
+//! registro, e la sessione va avanti senza riprovare a ogni `flush`. La
+//! prossima apertura rilegge le note, come prima che il file esistesse. E un
+//! vault di cui l'indice non conosce nessuna nota non ha un file: non c'è
+//! niente da ricordare.
 //!
 //! Cosa è un promemoria lo dice la regola del contratto
 //! ([`fub_abi::rules::tasks::task_reminder`]) sul testo del compito, lo stesso
@@ -53,8 +67,11 @@
 //! arretra (un viaggio verso ovest, l'ora legale che finisce) i promemoria di
 //! quell'ora ripetuta non suonano una seconda volta.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Bound;
+use std::sync::Mutex;
+
+use fub_abi::edit::Revision;
 
 use fub_abi::error::PluginError;
 use fub_abi::locale::Locale;
@@ -64,7 +81,8 @@ use fub_abi::rules::tasks::{
 };
 use fub_abi::text::{Arg, Strings, Text};
 use fub_abi::traits::{
-    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind, QueryRoute, ReadApi,
+    EntryKind, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind, QueryRoute,
+    ReadApi, VaultEntry,
 };
 use serde::{Deserialize, Serialize};
 
@@ -213,7 +231,7 @@ pub struct ReminderEntry {
 
 /// Un promemoria tenuto dall'indice.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Reminder {
+pub(super) struct Reminder {
     minute: i64,
     at: usize,
     text: String,
@@ -235,6 +253,29 @@ pub struct ReminderIndex {
     /// `(minuto, nota, posizione)` di ogni promemoria: l'ordine della
     /// risposta.
     by_minute: BTreeSet<(i64, DocId, usize)>,
+    /// La revisione del sorgente da cui è ricavato ciò che l'indice tiene di
+    /// ogni nota — **anche delle note senza promemoria**, che sono la
+    /// maggioranza: «nessun promemoria» è una risposta, e va ricordata come le
+    /// altre. Una nota che manca qui è una nota da rileggere.
+    sources: HashMap<DocId, Revision>,
+    /// Le revisioni che il kernel ha dichiarato rispondendo a
+    /// [`IndexProvider::up_to_date`], in attesa della consegna di quelle
+    /// note: la consegna se le prende ([`ReminderIndex::notes_source`]). È lo
+    /// stesso giro della ricerca (`SearchIndex::up_to_date`), e per le stesse
+    /// ragioni è per documento e non si azzera a ogni domanda. Si azzera alla
+    /// fine dell'apertura (`reconcile`), e una domanda senza impronta ritira la
+    /// dichiarazione di quella nota: è ciò che il kernel fa quando
+    /// un'apertura si interrompe.
+    announced: Mutex<HashMap<DocId, Revision>>,
+    /// Ciò che è in memoria è cambiato dall'ultima scrittura del file. Una
+    /// riapertura di un vault fermo non consegna niente e quindi non scrive.
+    dirty: bool,
+    /// Il file c'era all'apertura, o l'indice l'ha scritto: da qui in poi
+    /// riscriverlo è tenerlo vero, anche se le note sono finite tutte.
+    on_disk: bool,
+    /// Una scrittura del file è fallita in questa sessione: lo si è detto nel
+    /// registro, e non si riprova fino alla prossima apertura.
+    gave_up: bool,
 }
 
 impl ReminderIndex {
@@ -251,9 +292,125 @@ impl ReminderIndex {
         self.by_doc.is_empty()
     }
 
-    /// Prende i promemoria di una nota, al posto di quelli che aveva.
+    /// Prende i promemoria di una nota, al posto di quelli che aveva, e la
+    /// revisione che il kernel aveva dichiarato per lei. Una nota che torna
+    /// uguale — stessa revisione, stessi promemoria — non sporca il file: è
+    /// ciò che succede a ogni apertura quando un altro indice chiede tutto.
     fn take(&mut self, model: &DocumentModel) {
-        self.put(model.id.clone(), reminders_of(model));
+        let found = reminders_of(model);
+        let source_before = self.sources.get(&model.id).cloned();
+        let same_reminders = match self.by_doc.get(&model.id) {
+            Some(held) => *held == found,
+            None => found.is_empty(),
+        };
+        self.put(model.id.clone(), found);
+        self.notes_source(&model.id);
+        if !same_reminders || self.sources.get(&model.id) != source_before.as_ref() {
+            self.dirty = true;
+        }
+    }
+
+    /// Prende nota di **che revisione** è la nota appena presa, consumando la
+    /// dichiarazione del kernel. Senza dichiarazione — una consegna a sessione
+    /// aperta — si dimentica quella di prima: tenerla attribuirebbe al testo di
+    /// adesso la revisione del testo di allora, e alla riapertura la nota
+    /// salterebbe con i promemoria vecchi. Dimenticarla la fa rileggere una
+    /// volta, il verso sicuro.
+    fn notes_source(&mut self, doc: &DocId) {
+        match self.announced.lock().expect("mutex").remove(doc) {
+            Some(revision) => self.sources.insert(doc.clone(), revision),
+            None => self.sources.remove(doc),
+        };
+    }
+
+    /// Dimentica tutto di una nota: i promemoria, la revisione e la
+    /// dichiarazione in volo. Le tre insieme: una revisione che sopravvivesse
+    /// ai promemoria direbbe «ce l'ho» di una nota che l'indice non ha più.
+    fn forget(&mut self, doc: &DocId) {
+        self.drop_doc(doc);
+        self.sources.remove(doc);
+        self.announced.lock().expect("mutex").remove(doc);
+        self.dirty = true;
+    }
+
+    /// Rilegge il file dei promemoria ([`stored`]). Un file che non c'è, che
+    /// non si legge o che non è di questo schema lascia l'indice vuoto: le
+    /// note arriveranno tutte, perché a `up_to_date` non risponderà niente.
+    fn load(&mut self, host: &dyn HostApi) {
+        self.by_doc.clear();
+        self.by_minute.clear();
+        self.sources.clear();
+        self.announced.lock().expect("mutex").clear();
+        self.gave_up = false;
+        // Partire vuoti scrive il file al primo `flush`: è così che un file
+        // rotto o di prima viene sostituito.
+        self.dirty = true;
+        self.on_disk = false;
+        let raw = match host.cache_read(stored::FILE) {
+            Ok(Some(raw)) => raw,
+            Ok(None) => return,
+            Err(error) => {
+                // Il supporto non ha risposto: il file può essere intatto, ma
+                // un derivato non vale un'apertura bloccata. Si rilegge dalle
+                // note, e lo si dice nel registro.
+                tracing::warn!(target: "fub.tasks", "promemoria non letti: {error:?}");
+                self.on_disk = true;
+                return;
+            }
+        };
+        self.on_disk = true;
+        let Some(loaded) = stored::decode(&raw) else {
+            return;
+        };
+        for (doc, source, reminders) in loaded {
+            self.put(doc.clone(), reminders);
+            self.sources.insert(doc, source);
+        }
+        self.dirty = false;
+    }
+
+    /// Scrive il file dei promemoria, se qualcosa è cambiato dall'ultima
+    /// volta e c'è qualcosa da ricordare.
+    ///
+    /// Non fallisce mai: il file è un derivato, e non scriverlo costa una
+    /// riapertura che rilegge le note, non un dato perso. Una scrittura che
+    /// non riesce lo dice una volta nel registro e chiude i tentativi per la
+    /// sessione; il file di prima, intero, dice ancora il vero per le
+    /// revisioni che nomina.
+    fn persist(&mut self, host: &mut dyn HostApi) {
+        if !self.dirty || self.gave_up {
+            return;
+        }
+        // Nessuna nota con la sua revisione, e nessun file da tenere vero: un
+        // vault vuoto, o di sole note prese a sessione aperta. Non si crea
+        // un file per dire «niente».
+        if self.sources.is_empty() && !self.on_disk {
+            self.dirty = false;
+            return;
+        }
+        const NONE: &[Reminder] = &[];
+        let written = stored::encode(self.sources.iter().map(|(doc, source)| {
+            let reminders = self.by_doc.get(doc).map_or(NONE, Vec::as_slice);
+            (doc, source, reminders)
+        }))
+        .map_err(|error| format!("{error}"))
+        .and_then(|raw| {
+            host.cache_write(stored::FILE, &raw)
+                .map_err(|error| format!("{error:?}"))
+        });
+        match written {
+            Ok(()) => {
+                self.dirty = false;
+                self.on_disk = true;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "fub.tasks",
+                    "promemoria non scritti, la prossima apertura rilegge le note: {error}"
+                );
+                self.gave_up = true;
+            }
+        }
     }
 
     /// I promemoria `found` della nota `doc`, al posto di quelli che aveva.
@@ -371,7 +528,10 @@ impl IndexProvider for ReminderIndex {
         vec![QueryRoute::Query(QueryKind::Custom(TASKS_ID.into()))]
     }
 
-    fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+    /// Rilegge il file dei promemoria. Non fallisce mai: un file perso o
+    /// rotto è un derivato da rifare, non un'apertura da fermare.
+    fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.load(host);
         Ok(())
     }
 
@@ -384,33 +544,81 @@ impl IndexProvider for ReminderIndex {
 
     fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         for id in ids {
-            self.drop_doc(id);
+            self.forget(id);
         }
         Vec::new()
     }
 
     fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+        // Fine del giro d'apertura: ciò che resta dichiarato è di una nota che
+        // non è arrivata (un parse fallito, un file sparito fra la scansione e
+        // la lettura), e tenerlo vorrebbe dire darlo alla consegna dopo.
+        self.announced.lock().expect("mutex").clear();
         let alive: HashSet<&DocId> = ids.iter().collect();
-        let gone: Vec<DocId> = self
+        let gone: BTreeSet<DocId> = self
             .by_doc
             .keys()
+            .chain(self.sources.keys())
             .filter(|doc| !alive.contains(doc))
             .cloned()
             .collect();
         for doc in &gone {
-            self.drop_doc(doc);
+            self.forget(doc);
         }
         Vec::new()
     }
 
-    fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+    /// Scrive il file, se serve. Non fallisce mai: vedi [`ReminderIndex::persist`].
+    fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.persist(host);
         Ok(())
     }
 
-    fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+    /// Scrive ciò che resta, poi lascia andare la memoria. Il kernel ha già
+    /// chiamato `flush`, e rifarlo non costa niente (`dirty` è spento): copre
+    /// chi chiama `close` da solo.
+    fn close(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.persist(host);
         self.by_doc.clear();
         self.by_minute.clear();
+        self.sources.clear();
+        self.announced.lock().expect("mutex").clear();
         Ok(())
+    }
+
+    /// **Di queste note, quali ho già così come sono?** Quelle la cui
+    /// revisione dichiarata dal kernel è la revisione da cui l'indice ha
+    /// ricavato i promemoria che tiene.
+    ///
+    /// Ogni nota con un'impronta si dichiara, **anche quelle che l'indice dice
+    /// di avere**: è la revisione che il kernel ha dato per questa apertura,
+    /// quindi se la nota arriva lo stesso — un altro indice, un ospite che
+    /// risponde sempre «mandami tutto», non ce l'aveva — il testo che arriva è
+    /// quello. Senza, la nota arrivata perdeva la revisione, la volta dopo si
+    /// annunciava di nuovo, e il file si riscriveva intero un'apertura sì e
+    /// una no. Una dichiarazione che resta senza consegna la toglie la fine
+    /// dell'apertura (`reconcile`), o il ritiro del kernel se l'apertura si
+    /// interrompe: non arriva mai a un salvataggio a sessione aperta.
+    ///
+    /// Le altre cautele sono quelle della ricerca, nello stesso verso: senza
+    /// impronta dichiarata non si risponde, e una domanda senza impronta
+    /// ritira la dichiarazione che c'era; ciò che non è un documento non è
+    /// affar suo.
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        let mut announced = self.announced.lock().expect("mutex");
+        let mut current = Vec::new();
+        for entry in entries {
+            announced.remove(&entry.id);
+            let (EntryKind::Document, Some(revision)) = (entry.kind, entry.fingerprint.as_ref())
+            else {
+                continue;
+            };
+            if self.sources.get(&entry.id) == Some(revision) {
+                current.push(entry.id.clone());
+            }
+            announced.insert(entry.id.clone(), revision.clone());
+        }
+        current
     }
 
     fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {
@@ -609,6 +817,8 @@ impl ReminderWatch {
         }
     }
 }
+
+mod stored;
 
 #[cfg(test)]
 mod tests;

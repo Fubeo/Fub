@@ -329,6 +329,23 @@ impl EntryStore {
         })
     }
 
+    /// Se la tabella che si sa — che è quella del file — passa la prova
+    /// `holds`, senza comporne una nuova (#524).
+    ///
+    /// Serve a chi scriverebbe una tabella uguale: costruirla vuol dire copiare
+    /// i metadati di ogni documento del vault per scoprire, in fondo a
+    /// [`store`](Self::store), che il file li ha già. Con un guasto
+    /// all'apertura risponde `false`, perché sia `store` a dirlo.
+    pub(crate) fn already_holds(
+        &self,
+        holds: impl FnOnce(&BTreeMap<DocId, StoredEntry>) -> bool,
+    ) -> bool {
+        if self.unread.is_some() {
+            return false;
+        }
+        self.known.read().is_ok_and(|known| holds(&known))
+    }
+
     /// Cosa si sapeva di questo file l'ultima volta.
     pub(crate) fn known(&self, id: &DocId) -> Option<StoredEntry> {
         self.known.read().ok()?.get(id).cloned()

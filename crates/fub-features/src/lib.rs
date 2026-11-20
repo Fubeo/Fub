@@ -231,3 +231,54 @@ pub use template::{
 pub use trash::{TrashView, TRASH_ID, TRASH_VIEW};
 #[cfg(feature = "versioning")]
 pub use versioning::{VersionRef, VersionStore, VersioningHandler, VERSIONING_ID};
+
+// I documenti di un indice che **non tiene niente per documento**: la base,
+// il disegno e il correttore rispondono a domande che non leggono le note
+// consegnate, quindi «ce l'ho» è vero per ogni documento mostrato, e solo per
+// quelli. Il filtro sta in ciascuno dei tre (i moduli di feature non si parlano,
+// `tests/independent_modules.rs`); la prova comune è qui sotto, la riapertura
+// senza riletture la presidia `crates/fub-host/tests/warm_reopening.rs`.
+#[cfg(all(test, feature = "base", feature = "proof"))]
+mod nothing_kept_tests {
+    use fub_abi::edit::Revision;
+    use fub_abi::traits::{EntryKind, IndexProvider, VaultEntry};
+    use fub_abi::DocId;
+    use fub_sdk::testing::conformance::up_to_date_only_reported_what_it_saw;
+
+    fn entry(id: &str, kind: EntryKind, fingerprint: Option<&str>) -> VaultEntry {
+        VaultEntry {
+            id: DocId::new(id),
+            kind,
+            size: 3,
+            mtime: 1,
+            fingerprint: fingerprint.map(Revision::new),
+        }
+    }
+
+    /// Base, disegno e correttore dicono di avere ogni documento mostrato,
+    /// anche senza impronta, e niente di ciò che non è un documento.
+    #[test]
+    fn indexes_without_per_document_state_have_every_document_shown() {
+        #[allow(unused_mut)]
+        let mut indexes: Vec<(&str, Box<dyn IndexProvider>)> = vec![
+            ("base", Box::new(crate::BaseIndex::new())),
+            ("proof", Box::new(crate::ProofIndex::bundled_only())),
+        ];
+        #[cfg(feature = "draw")]
+        indexes.push(("draw", Box::new(crate::draw::DrawIndex)));
+        let shown = [
+            entry("a.md", EntryKind::Document, Some("sha256:a")),
+            entry("b.fubase", EntryKind::Document, None),
+            entry("c.png", EntryKind::Asset, None),
+        ];
+        for (name, index) in &indexes {
+            up_to_date_only_reported_what_it_saw(index.as_ref());
+            let current = index.up_to_date(&shown);
+            assert_eq!(
+                current,
+                vec![DocId::new("a.md"), DocId::new("b.fubase")],
+                "{name}"
+            );
+        }
+    }
+}

@@ -60,7 +60,7 @@ use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind,
-    QueryRoute,
+    QueryRoute, VaultEntry,
 };
 use fub_abi::ui::UiOption;
 use fub_abi::{DocId, DocumentModel};
@@ -524,6 +524,19 @@ impl IndexProvider for ProofIndex {
 
     fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
+    }
+
+    /// Il correttore riceve il testo da controllare con la domanda, non dalle
+    /// note consegnate: non tiene niente per documento.
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        // Niente può restare indietro in chi non tiene niente: ogni documento
+        // mostrato, e solo quelli (conformità di `up_to_date`). Un indice che
+        // tenesse stato per documento risponderebbe come `ReminderIndex`.
+        entries
+            .iter()
+            .filter(|entry| entry.kind == fub_abi::traits::EntryKind::Document)
+            .map(|entry| entry.id.clone())
+            .collect()
     }
 
     fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {

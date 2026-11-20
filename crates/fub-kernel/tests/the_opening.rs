@@ -77,11 +77,18 @@ impl FormatProvider for FallibleProvider {
 /// Un indice che annota **cosa gli è arrivato**: è il solo modo di distinguere
 /// «il documento è in anagrafe» da «il documento è stato indicizzato», che è
 /// esattamente la distinzione che uno scarto crea.
+/// Una domanda di `up_to_date` come la vede la spia: per voce, l'id e se
+/// portava un'impronta.
+type Question = Vec<(String, bool)>;
+
 #[derive(Clone, Default)]
 struct SpyIndex {
     seen: Arc<Mutex<Vec<String>>>,
     /// L'insieme che `reconcile` ha dichiarato completo, dell'ultimo giro.
     existing: Arc<Mutex<Vec<String>>>,
+    /// Le domande di `up_to_date`, in ordine: per voce, l'id e se portava
+    /// un'impronta.
+    questions: Arc<Mutex<Vec<Question>>>,
 }
 
 impl IndexProvider for SpyIndex {
@@ -93,7 +100,13 @@ impl IndexProvider for SpyIndex {
         Ok(())
     }
 
-    fn up_to_date(&self, _entries: &[VaultEntry]) -> Vec<DocId> {
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        self.questions.lock().unwrap().push(
+            entries
+                .iter()
+                .map(|e| (e.id.to_string(), e.fingerprint.is_some()))
+                .collect(),
+        );
         Vec::new()
     }
 
@@ -717,4 +730,181 @@ fn a_indexing_interrupted_not_declares_complete_nothing() {
         probe.existing.lock().unwrap().is_empty(),
         "`reconcile` non è stato chiamato: un insieme incompleto non si dichiara completo"
     );
+}
+
+/// **Chi smette a metà ritira ciò che ha dichiarato.** La domanda di
+/// `up_to_date` dichiara a un indice persistente la revisione di ogni
+/// documento in arrivo, e senza `reconcile` niente la chiudeva: la prima
+/// consegna a sessione aperta (un salvataggio, testo nuovo) se la prendeva.
+/// Il ritiro è la stessa domanda senza impronta, su ogni documento chiesto.
+fn assert_withdrawn(probe: &SpyIndex, notes: usize) {
+    let questions = probe.questions.lock().unwrap();
+    let asked: Vec<&(String, bool)> = questions.iter().flatten().filter(|(_, f)| *f).collect();
+    assert!(
+        !asked.is_empty(),
+        "the scan declared revisions: {questions:?}"
+    );
+    let last = questions.last().expect("asked");
+    let mut withdrawn: Vec<&str> = last
+        .iter()
+        .filter(|(_, fingerprint)| !fingerprint)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    assert_eq!(
+        withdrawn.len(),
+        last.len(),
+        "the last question carries no fingerprint"
+    );
+    withdrawn.sort();
+    withdrawn.dedup();
+    assert_eq!(
+        withdrawn.len(),
+        notes,
+        "every note asked about is withdrawn"
+    );
+    for asked in asked {
+        assert!(
+            withdrawn.contains(&asked.0.as_str()),
+            "{} withdrawn",
+            asked.0
+        );
+    }
+}
+
+/// Un vault di una fetta e un documento: la prima fetta si chiede e si
+/// consegna, la seconda non arriva mai.
+fn two_slices(bench: &Mounted) -> usize {
+    let notes = 513;
+    for n in 0..notes {
+        std::fs::write(
+            bench.root().join(format!("n{n:03}.md")),
+            format!("nota {n}"),
+        )
+        .expect("semina");
+    }
+    notes
+}
+
+#[test]
+fn a_indexing_interrupted_withdraws_its_declarations() {
+    let (mut bench, probe) = bench_from_open();
+    let notes = two_slices(&bench);
+    let mut work = bench.scan_vault().expect("scansiona");
+    let batch = bench.plan_batch(&mut work);
+    bench.index_batch_prepared(batch);
+    let opening = bench.finish_index(work);
+    assert!(opening.interrupted);
+    assert_withdrawn(&probe, notes);
+}
+
+#[test]
+fn a_indexing_interrupted_withdraws_also_on_the_runner_path() {
+    let (mut bench, probe) = bench_from_open();
+    let notes = two_slices(&bench);
+    let mut work = bench.scan_vault().expect("scansiona");
+    let batch = bench.plan_batch(&mut work);
+    bench.index_batch_prepared(batch);
+    let built = bench.graph_sources().build();
+    let opening = bench.finish_index_with_graph(work, built);
+    assert!(opening.interrupted);
+    assert_withdrawn(&probe, notes);
+}
+
+#[test]
+fn a_finished_indexing_withdraws_nothing() {
+    let (mut bench, probe) = bench_from_open();
+    std::fs::write(bench.root().join("una.md"), "prima").expect("semina");
+    bench.reindex().expect("apre");
+    // La scansione chiede anche dei documenti di cui non conosce l'impronta
+    // (la prima apertura): l'ultima domanda è quella della fetta, con le
+    // impronte, e dopo non c'è un ritiro.
+    let questions = probe.questions.lock().unwrap();
+    assert!(
+        questions
+            .last()
+            .expect("asked")
+            .iter()
+            .all(|(_, fingerprint)| *fingerprint),
+        "a finished opening closes with `reconcile`, not with a withdrawal: {questions:?}"
+    );
+    assert_eq!(*probe.existing.lock().unwrap(), ["una.md"]);
+}
+
+/// Un indice che va in panico **dentro `up_to_date`**: il caso nativo
+/// dell'ospite che va in trap o scade. Annota ciò che riceve dopo.
+#[derive(Clone, Default)]
+struct PanickyIndex {
+    seen: Arc<Mutex<Vec<String>>>,
+}
+
+impl IndexProvider for PanickyIndex {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn up_to_date(&self, _entries: &[VaultEntry]) -> Vec<DocId> {
+        panic!("la domanda va in panico");
+    }
+
+    fn on_documents_indexed(&mut self, docs: &[DocumentModel]) -> Vec<IndexLoss> {
+        let mut seen = self.seen.lock().unwrap();
+        seen.extend(docs.iter().map(|doc| doc.id.to_string()));
+        Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::BadArgs("non risponde".into()))
+    }
+
+    fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+}
+
+/// **La domanda va a ogni indice a ogni fetta** (#521), e un indice che ci
+/// va in panico non ferma l'apertura: la sua risposta è «mandami tutto».
+/// L'apertura finisce intera, lui riceve ogni documento, e l'indice dopo di
+/// lui viene interrogato e alimentato come se niente fosse.
+#[test]
+fn a_index_that_panics_in_up_to_date_gets_everything_and_stops_nothing() {
+    let probe = SpyIndex::default();
+    let panicky = PanickyIndex::default();
+    let mut bench = Bench::new()
+        .with_plugin("test.panico")
+        .with_plugin("test.spia")
+        .with_spy()
+        .without_scan()
+        .mounts();
+    bench
+        .register_index_provider("test.panico".to_string(), Box::new(panicky.clone()))
+        .expect("si registra");
+    bench
+        .register_index_provider("test.spia".to_string(), Box::new(probe.clone()))
+        .expect("si registra");
+    let notes = two_slices(&bench);
+    let opening = bench.reindex().expect("l'apertura finisce");
+    assert!(!opening.interrupted && opening.whole());
+    assert_eq!(
+        panicky.seen.lock().unwrap().len(),
+        notes,
+        "ogni documento a lui"
+    );
+    assert_eq!(probe.seen.lock().unwrap().len(), notes, "e agli altri");
+    assert_eq!(probe.existing.lock().unwrap().len(), notes);
 }

@@ -14,7 +14,7 @@ use fub_abi::model::{DateFormats, LinkTarget, PropertyDate, PropertyScalar, Prop
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind,
-    QueryRoute,
+    QueryRoute, VaultEntry,
 };
 use fub_abi::{DocId, DocumentModel};
 use fub_format_base::formula::{
@@ -1396,6 +1396,19 @@ impl IndexProvider for BaseIndex {
     }
     fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
+    }
+    /// Le basi si leggono dal loro file a ogni domanda, non da ciò che il
+    /// kernel consegna: non c'è niente per documento che possa restare
+    /// indietro.
+    fn up_to_date(&self, entries: &[VaultEntry]) -> Vec<DocId> {
+        // Niente può restare indietro in chi non tiene niente: ogni documento
+        // mostrato, e solo quelli (conformità di `up_to_date`). Un indice che
+        // tenesse stato per documento risponderebbe come `ReminderIndex`.
+        entries
+            .iter()
+            .filter(|entry| entry.kind == fub_abi::traits::EntryKind::Document)
+            .map(|entry| entry.id.clone())
+            .collect()
     }
     fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         match query {
