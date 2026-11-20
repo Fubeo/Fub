@@ -81,6 +81,11 @@ export const HISTORY_KEY = "history.enabled";
 let opens: string[] = [];
 let searches: string[] = [];
 
+/// Il giro di lettura che vale: ogni `loadHistory` e ogni svuotamento lo
+/// avanzano. Al cambio di vault veloce la lettura del vault di prima può
+/// rispondere dopo quella del nuovo, e una risposta vecchia non scrive.
+let generation = 0;
+
 /// L'interruttore, come l'ha letto l'ultima volta.
 ///
 /// Parte **acceso**, che è il default dello schema: partire spento e poi
@@ -165,6 +170,7 @@ export function rememberSearch(text: string): void {
 /// dimenticarlo, e riaprirlo domani deve ritrovare le sue cose. Chi vuole
 /// cancellare chiama [`dimenticaTutto`].
 export function forgetRecent(): void {
+  generation += 1;
   opens = [];
   searches = [];
 }
@@ -245,8 +251,10 @@ async function rereadToggle(): Promise<void> {
 /// Rilegge le due liste dal disco: l'interruttore prima, perché a memoria spenta
 /// non c'è niente da rileggere e c'è semmai qualcosa da cancellare.
 export async function loadHistory(): Promise<void> {
+  const mine = ++generation;
   await rereadToggle();
   const saved = await readState<unknown>(STATE_KEY);
+  if (mine !== generation) return;
   if (!enabled) {
     // Spenta all'avvio, e sul disco c'era ancora qualcosa: si cancella qui.
     // Il caso vero è chi spegne, chiude l'app e la riapre — o chi riapre con
