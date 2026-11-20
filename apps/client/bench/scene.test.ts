@@ -153,21 +153,53 @@ describe("le baseline", () => {
   // Ciò che questo presidio non lascia esistere è la via di mezzo dentro una
   // scena — una luce sì e l'altra no — che è il modo in cui una scena smette
   // di coprire senza che nessuno lo dica.
-  const expected = scene.flatMap((s) => lights.map((l) => foto(s, l)));
+  const gaps = baselineGaps(scene, baseline);
 
   it("ogni scena ha le foto di tutte le luci, o non ne ha ancora nessuna", () => {
-    const halves = scene
-      .map((s) => ({ id: s.id, present: lights.filter((l) => baseline.includes(foto(s, l))).length }))
-      .filter(({ present }) => present !== 0 && present !== lights.length)
-      .map(({ id }) => id);
-    expect(halves, "una scena con una luce sola: l'altra va fotografata dal runner").toEqual([]);
+    expect(gaps.halves, "una scena con una luce sola: l'altra va fotografata dal runner").toEqual([]);
   });
 
   it("non ne avanza nessuna senza la sua scena", () => {
-    const orphans = baseline.filter((n) => !expected.includes(n));
-    expect(orphans, "una foto senza scena: è il ritratto di qualcosa che non c'è più").toEqual([]);
+    expect(gaps.orphans, "una foto senza scena: è il ritratto di qualcosa che non c'è più").toEqual([]);
+  });
+
+  // La regola su un elenco finto, perché sulle foto vere i suoi tre casi non
+  // si vedono mai tutti: oggi ogni scena ha le sue foto.
+  describe("la regola, su un elenco finto", () => {
+    const known = [{ id: "vecchia" }, { id: "nuova" }] as unknown as typeof scene;
+    const old = ["vecchia-dark.png", "vecchia-light.png"];
+
+    it("ammette una scena nuova senza nessuna foto: le porta il runner", () => {
+      expect(baselineGaps(known, old)).toEqual({ halves: [], orphans: [] });
+    });
+
+    it("non ammette una scena con la foto di una luce sola", () => {
+      expect(baselineGaps(known, [...old, "nuova-light.png"]).halves).toEqual(["nuova"]);
+      expect(baselineGaps(known, ["vecchia-dark.png"]).halves).toEqual(["vecchia"]);
+    });
+
+    it("non ammette una foto rimasta senza la sua scena", () => {
+      expect(baselineGaps(known, [...old, "tolta-dark.png", "tolta-light.png"]).orphans).toEqual([
+        "tolta-dark.png",
+        "tolta-light.png",
+      ]);
+    });
   });
 });
+
+/// Il presidio delle baseline come funzione, per provarlo anche su un elenco
+/// finto. `halves`: le scene che hanno le foto di alcune luci e non di altre
+/// (una scena nuova non ne ha nessuna, ed è ammessa: #483). `orphans`: le foto
+/// che non sono di nessuna scena.
+function baselineGaps(scenes: typeof scene, present: readonly string[]) {
+  const halves = scenes
+    .map((s) => ({ id: s.id, count: lights.filter((l) => present.includes(foto(s, l))).length }))
+    .filter(({ count }) => count !== 0 && count !== lights.length)
+    .map(({ id }) => id);
+  const expected = new Set(scenes.flatMap((s) => lights.map((l) => foto(s, l))));
+  const orphans = present.filter((n) => !expected.has(n));
+  return { halves, orphans };
+}
 
 // ---------------------------------------------------------------------------
 // «Ogni componente in ogni stato» — dimostrato, non affermato.
