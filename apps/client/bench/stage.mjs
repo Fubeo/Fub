@@ -102,6 +102,18 @@ export const BASELINE = here("./baseline");
 /// il termine di paragone.
 export const OUTPUT = here("./.output");
 
+/// Il plugin che spegne il guardiano dei file di Vite. Non basta
+/// `server: { watch: null }` nella configurazione in linea: `mergeConfig` salta
+/// i `null` e il server guarderebbe lo stesso tutta la cartella (152 cartelle
+/// del client, con `CHOKIDAR_USEPOLLING` interrogate di continuo, o osservatori
+/// di inotify che altri server di Vite possono avere esaurito: ENOSPC). Il
+/// `null` lo mette quindi un plugin, a configurazione risolta, prima che il
+/// server crei il guardiano.
+export const UNWATCHED = {
+  name: "bench:no-watch",
+  configResolved: (config) => void (config.server.watch = null),
+};
+
 /// Apre il palco: server di Vite e browser. Restituisce anche come si chiude,
 /// perché un banco che lascia in giro un server è un banco che alla seconda
 /// corsa non parte.
@@ -112,21 +124,31 @@ export const OUTPUT = here("./.output");
 /// `browserArgs` aggiunge opzioni di Chromium a quelle di tutti i banchi, per
 /// il banco che ne ha bisogno e per lui solo (il moto: `BROWSER_ARGS` di
 /// `motion-rules.mjs`).
+///
+/// `watch: false` apre un server che non guarda il disco e non manda
+/// aggiornamenti (vedi `UNWATCHED`): per i banchi che misurano per minuti, a
+/// cui un file salvato intanto ricaricherebbe la pagina sotto la misura.
 export async function openStage({
   quiet = true,
   port,
   strictPort = true,
   browserArgs = [],
+  watch = true,
   createServer: createServerImpl = createServer,
   chromium: chromiumImpl = chromium,
 } = {}) {
   let server;
   let browser;
   try {
+    const serverOptions = {
+      ...(port === undefined ? {} : { port, strictPort }),
+      ...(watch ? {} : { hmr: false }),
+    };
     server = await createServerImpl({
       configFile: here("../vite.bench.config.ts"),
       logLevel: quiet ? "warn" : "info",
-      ...(port === undefined ? {} : { server: { port, strictPort } }),
+      ...(Object.keys(serverOptions).length === 0 ? {} : { server: serverOptions }),
+      ...(watch ? {} : { plugins: [UNWATCHED] }),
     });
     await server.listen();
     // Il riscaldamento della config (`server.warmup`, #395) parte con

@@ -128,6 +128,75 @@ describe("stage lifecycle", () => {
   });
 });
 
+// I banchi che misurano per minuti (il moto, la prova del PDF) aprono un server
+// che non guarda il disco. Si prova sul server vero, con la config vera del
+// banco: è `mergeConfig` di Vite, non il nostro codice, a decidere se il
+// `null` arriva al guardiano.
+describe("the unwatched stage", () => {
+  type Watcher = { constructor: { name: string } };
+  type RealServer = { config: { server: { watch: unknown; hmr: unknown } }; watcher: Watcher; close(): Promise<void> };
+
+  /// Crea il server vero con la config che `openStage` gli passa, senza
+  /// metterlo in ascolto né aprire un browser.
+  async function realServer(options: Record<string, unknown>, rewrite = (c: Record<string, unknown>) => c) {
+    // Lo specificatore non è letterale apposta: i tipi di `vite` portano con sé
+    // quelli di Node, che `tsconfig.json` tiene fuori dal client (un
+    // `setTimeout` diventerebbe un `Timeout` in tutto `src/`).
+    const vite = "vite";
+    const { createServer } = (await import(/* @vite-ignore */ vite)) as {
+      createServer(config: Record<string, unknown>): Promise<unknown>;
+    };
+    let created: RealServer | undefined;
+    const stage = await openStage({
+      ...options,
+      createServer: async (config: Record<string, unknown>) => {
+        created = (await createServer({ ...rewrite(config), logLevel: "silent" })) as unknown as RealServer;
+        return { config: { server: { port: 1431 } }, listen: async () => {}, close: () => created!.close() };
+      },
+      chromium: { launch: async () => ({ close: async () => {} }) },
+    });
+    return { server: created!, close: stage.close };
+  }
+
+  it("does not watch the disk nor push updates", async () => {
+    const { server, close } = await realServer({ watch: false });
+    try {
+      expect(server.config.server.watch).toBeNull();
+      expect(server.config.server.hmr).toBe(false);
+      expect(server.watcher.constructor.name).toBe("NoopWatcher");
+    } finally {
+      await close();
+    }
+  }, 60_000);
+
+  it("keeps a port given by the caller", async () => {
+    const configs: Array<Record<string, unknown>> = [];
+    const stage = await openStage({
+      watch: false,
+      port: 1448,
+      createServer: async (config: Record<string, unknown>) => {
+        configs.push(config);
+        return { config: { server: { port: 1448 } }, listen: async () => {}, close: async () => {} };
+      },
+      chromium: { launch: async () => ({ close: async () => {} }) },
+    });
+    await stage.close();
+    expect(configs[0]?.server).toEqual({ port: 1448, strictPort: true, hmr: false });
+  });
+
+  it("would still watch with an inline `watch: null`, which `mergeConfig` drops", async () => {
+    // Il modo di prima del moto: se un giorno Vite rispettasse il `null` in
+    // linea, questo test cade e il plugin si può togliere.
+    const { server, close } = await realServer({}, (config) => ({ ...config, server: { hmr: false, watch: null } }));
+    try {
+      expect(server.config.server.watch).not.toBeNull();
+      expect(server.watcher.constructor.name).not.toBe("NoopWatcher");
+    } finally {
+      await close();
+    }
+  }, 60_000);
+});
+
 describe("waitUntilSettled", () => {
   it("aspetta che nessun elemento porti data-pending", async () => {
     const calls: unknown[][] = [];
