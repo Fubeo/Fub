@@ -101,8 +101,10 @@ pub(super) fn adopt_legacy(sync_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn load_folded(dir: &Path) -> Result<SyncState, HttpResponse> {
-    versions::load(dir).map_err(|e| HttpResponse::err(500, &e))
+/// Lo stato del vault per una richiesta: dalla memoria se `state.json` non è
+/// cambiato, altrimenti riletto e validato ([`cache`]).
+pub(super) fn open_vault(dir: &Path) -> Result<VaultState, HttpResponse> {
+    VaultState::open(dir).map_err(|e| HttpResponse::err(500, &e))
 }
 
 pub(super) fn cap_seen(state: &mut SyncState) {
