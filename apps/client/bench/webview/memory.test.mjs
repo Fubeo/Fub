@@ -104,6 +104,24 @@ describe("la quiete dopo una chiusura di R1", () => {
     expect(result.reads.map((r) => r.atMs)).toEqual([2_000, 3_000]);
   });
 
+  it("una raccolta più lunga del tetto non lascia il giro con una lettura sola", async () => {
+    // Sotto carico una raccolta forzata è durata 70 s: la prima lettura
+    // arriva dopo il tetto, e la seconda raccolta abbassa ancora la memoria.
+    const clock = fakeClock(12_000);
+    const result = await quiet(clock.reader([1400, 1340, 1300]), clock.pause, { ...QUIET, now: clock.now });
+    expect(result.reads.map((r) => r.pss)).toEqual([1400, 1340]);
+    expect(result.lowest.pss).toBe(1340);
+    expect(result.stillAtMs).toBeNull();
+  });
+
+  it("senza letture la quiete finisce al tetto duro", async () => {
+    const clock = fakeClock(1_000);
+    const result = await quiet(clock.reader([null]), clock.pause, { ...QUIET, hardMaxMs: 20_000, now: clock.now });
+    expect(result.lowest).toBeNull();
+    // Non comincia una lettura dopo il tetto duro: l'ultima finisce entro una lettura.
+    expect(result.reads.at(-1).atMs).toBeLessThanOrEqual(20_000 + 1_000);
+  });
+
   it("una lettura che manca non ferma la quiete e non è la più bassa", async () => {
     const clock = fakeClock();
     const result = await quiet(clock.reader([1200, null, 1199]), clock.pause, { ...QUIET, now: clock.now });

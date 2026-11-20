@@ -365,8 +365,8 @@ appena qualcuno inserisce un item nel mezzo.
   `.cargo/`, una `rust-toolchain` o `ci.yml`, perché leggono soltanto quelli;
   su `main` sempre. I test del workspace non hanno un filtro così: leggono
   anche `apps/client/` e `docs/`.
-- La WebView vera gira in due job: R1 (la memoria) da sola, e gli altri
-  scenari insieme. Non gira su una PR in bozza, né su una pronta che non tocca
+- La WebView vera gira in due job: R1 (la memoria, quindici giri) da sola, e
+  gli altri scenari insieme. Non gira su una PR in bozza, né su una pronta che non tocca
   ciò che finisce nell'app (`webview` del job `cosa cambia`).
 - La cache Rust salva solo da `main` (budget di 10 GB); gli altri job leggono
   la test cache di Linux (`shared-key: test`) senza risalvarla.
