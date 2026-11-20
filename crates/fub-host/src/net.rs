@@ -18,7 +18,8 @@
 //! quanto una decisione. Un `302` da un host dichiarato verso uno che non lo è
 //! porterebbe fuori dal recinto senza che nessuno l'abbia deciso — e il client
 //! non ha l'allowlist per accorgersene, né deve averla. Il `3xx` torna a chi ha
-//! chiesto; seguirlo è una seconda chiamata, che ripassa dal cancello.
+//! chiesto; seguirlo è una seconda chiamata, che ripassa dal cancello. Così
+//! anche un `4xx` o un `5xx`: sono risposte, con il loro stato, non errori.
 //!
 //! **Non decide quanto aspettare** più di una volta: il tetto è qui, è
 //! dell'host, e non attraversa il confine — la regola della
@@ -153,6 +154,10 @@ impl UreqNetwork {
             .timeout_global(Some(TOTAL_TIMEOUT))
             .max_redirects(0)
             .max_redirects_will_error(false)
+            // Un `4xx` o un `5xx` è una risposta, non un guasto del filo
+            // (`HostNetwork::fetch`): arriva con il suo stato e chi chiama
+            // risponde a quello. Come errore diventerebbe un `Io` «la rete».
+            .http_status_as_error(false)
             .tls_config(
                 ureq::tls::TlsConfig::builder()
                     .root_certs(ureq::tls::RootCerts::PlatformVerifier)
@@ -165,6 +170,7 @@ impl UreqNetwork {
             .timeout_recv_body(Some(CANCEL_POLL))
             .max_redirects(0)
             .max_redirects_will_error(false)
+            .http_status_as_error(false)
             .tls_config(
                 ureq::tls::TlsConfig::builder()
                     .root_certs(ureq::tls::RootCerts::PlatformVerifier)
@@ -496,6 +502,13 @@ mod tests {
             "a `3xx` must return to whoever asked, not become an error: it \
              is the caller who decides whether to follow it"
         );
+        for agent in [&net.agent, &net.cancellable_agent] {
+            assert!(
+                !agent.config().http_status_as_error(),
+                "a `4xx` or `5xx` is a response (HostNetwork::fetch), not a \
+                 transport fault"
+            );
+        }
     }
 
     /// E che ci si fidi della **macchina** e non delle radici imbarcate. È il
@@ -1032,14 +1045,18 @@ mod tests {
         server.join().expect("server");
     }
 
-    /// Una `Content-Length` oltre il tetto su un redirect è ancora `TooLarge`,
-    /// ma con lo stato vero dentro: chi chiama decide guardando prima lo stato.
-    /// (Un `4xx` o un `5xx` qui non arriva al corpo: `ureq` lo ferma prima come
-    /// stato inatteso.)
+    /// Una `Content-Length` oltre il tetto su un redirect o su un errore è
+    /// ancora `TooLarge`, ma con lo stato vero dentro: chi chiama decide
+    /// guardando prima lo stato.
     #[test]
     fn a_too_large_error_carries_the_status() {
         within(|| {
-            for (status, code) in [("301 Moved Permanently", 301), ("302 Found", 302)] {
+            for (status, code) in [
+                ("301 Moved Permanently", 301),
+                ("302 Found", 302),
+                ("404 Not Found", 404),
+                ("500 Internal Server Error", 500),
+            ] {
                 let (url, server) = serve_once(status, 4 * MAX_BODY, Framing::Length, false);
                 let error = UreqNetwork::new()
                     .fetch_limited(HttpRequest::get(url), &AtomicBool::new(false), MIB)
@@ -1052,6 +1069,34 @@ mod tests {
                     }
                 );
                 server.join().expect("server");
+            }
+        });
+    }
+
+    /// **Un `4xx` o un `5xx` sono `Ok`**, come promette `HostNetwork::fetch`:
+    /// arrivano con il loro stato e il loro corpo da tutte e tre le porte, e
+    /// chi chiama risponde guardando la risposta invece di dire «la rete».
+    #[test]
+    fn an_error_status_is_a_response_not_a_transport_fault() {
+        within(|| {
+            for (status, code) in [("404 Not Found", 404), ("500 Internal Server Error", 500)] {
+                for door in 0..3 {
+                    let (url, server) = serve_once(status, 5, Framing::Length, false);
+                    let net = UreqNetwork::new();
+                    let request = HttpRequest::get(url);
+                    let flag = AtomicBool::new(false);
+                    let response = match door {
+                        0 => net.fetch(request),
+                        1 => net.fetch_cancelled(request, &flag),
+                        _ => net
+                            .fetch_limited(request, &flag, MIB)
+                            .map_err(|e| PluginError::Internal(format!("{e:?}").into())),
+                    }
+                    .unwrap_or_else(|error| panic!("{status} door {door}: {error:?}"));
+                    assert_eq!(response.status, code, "door {door}");
+                    assert_eq!(response.body, b"xxxxx", "door {door}");
+                    assert_eq!(server.join().expect("server"), 5);
+                }
             }
         });
     }
