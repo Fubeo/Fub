@@ -252,6 +252,29 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  // Le celle che lo scorrimento aggiunge non si serializzano: l'HTML serve
+  // solo a confrontare una cella che resta con quella rifatta, e costava
+  // un `outerHTML` per cella nuova a ogni passo.
+  it("scorrendo non serializza le celle che entrano", async () => {
+    const cells: Record<string, string> = {};
+    for (let row = 0; row < 400; row += 1) for (let column = 0; column < 4; column += 1) cells[`${row},${column}`] = `r${row}c${column}`;
+    const { engine, host, viewport } = await mounted(bytesHost({ rows: 400, cells }));
+    await frames();
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "outerHTML")!;
+    let serialized = 0;
+    const spy = vi.spyOn(Element.prototype, "outerHTML", "get").mockImplementation(function (this: Element) {
+      if (this.classList.contains("grid-cell")) serialized += 1;
+      return descriptor.get!.call(this);
+    });
+    const writes = await scrollWrites(host, viewport, 18, 14);
+    spy.mockRestore();
+    expect(writes.added.length).toBeGreaterThan(0);
+    expect(serialized).toBe(0);
+    const last = writes.added[writes.added.length - 1];
+    expect(cellAt(host, last, 2)!.textContent).toBe(`r${last}c2`);
+    engine.destroy();
+  });
+
   it("annida ogni intestazione e cella alla propria riga semantica", async () => {
     const { engine, viewport } = await mounted();
     const rows = [...viewport.querySelectorAll<HTMLElement>('[role="row"]')];
