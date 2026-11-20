@@ -12,7 +12,9 @@
 // vorrebbe dire che cercare `progetti/2026` crea una nota dentro una cartella
 // che nessuno ha chiesto, e che cercare `a:b` sbatte contro la convalida del
 // kernel o, peggio, contro quella di un filesystem — un errore che parla di
-// caratteri illegali a chi stava soltanto cercando.
+// caratteri illegali a chi stava soltanto cercando. Dove la barra deve voler
+// dire cartella, come nella ricerca rapida, c'è [`searchedPath`], che pulisce
+// ogni segmento con la stessa regola e tiene le barre.
 //
 // # Cosa non fa, ed è la metà importante
 //
