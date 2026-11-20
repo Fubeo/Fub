@@ -283,8 +283,7 @@ redirect, entro il limite delle risorse in linea, nella cartella degli allegati
 una modifica annullabile; una definizione di riferimento cambia soltanto se la
 usano solo immagini. La webview non chiede mai l'immagine alla rete. Una nota
 nella radice con una cartella relativa alla nota (`./`) non ha dove scaricarla
-e lo dice. Le tessere della vista Mappa le scarica l'host:
-[Le tessere delle mappe](map-tiles.md).
+e lo dice. Le tessere della vista Mappa: [Le tessere delle mappe](map-tiles.md).
 
 ## Visore web
 

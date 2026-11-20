@@ -28,7 +28,6 @@ test usano un fake.
 | eventi | ascolto del canale tipizzato |
 | sessione live | avviare, interrogare e fermare la sessione di un disegno, rispondere allo scrittore |
 | componenti | leggere la mappa dei componenti di un vault e applicare una scelta |
-| tessere delle mappe | `map_tile`, i byte di una tessera da un sito ammesso ([il contratto](map-tiles.md)) |
 
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
@@ -508,7 +507,7 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 
 `resource_write` deposita byte grezzi, coi parametri nella testata
 `x-fub-resource-write`; il contratto intero (campi, `reuse: "same-content"`,
-ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md).
+ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md). I byte di una tessera della vista Mappa (`map_tile`): [Le tessere delle mappe](map-tiles.md).
 
 ## Percorsi
 
