@@ -1023,6 +1023,67 @@ fn parsed_html_policy_detects_event_handlers_and_entity_schemes() {
     )));
 }
 
+/// C2: il doctype di una pagina normale non è script, in qualunque grafia
+/// (HTML non distingue le maiuscole); un `<!` qualsiasi resta attivo.
+#[test]
+fn a_doctype_in_any_case_is_not_custom_js() {
+    let body = |html: &str| {
+        serde_json::to_vec(&serde_json::json!({
+            "site_id": "blog", "pages": [{"html": html}], "assets": []
+        }))
+        .unwrap()
+    };
+    for doctype in [
+        "<!doctype html>",
+        "<!DOCTYPE html>",
+        "<!DocType HTML>",
+        "<!DOCTYPE  html >",
+    ] {
+        let html = format!("{doctype}<html><body><p>ciao</p></body></html>");
+        assert!(
+            !fub_services::site_isolation::commit_has_custom_js(&body(&html)),
+            "{html}"
+        );
+    }
+    for active in [
+        "<!DOCTYPE html PUBLIC \"x\"><p>ciao</p>",
+        "<!DOCTYPEhtml><p>ciao</p>",
+        "<!ENTITY x><p>ciao</p>",
+        "<![CDATA[x]]><p>ciao</p>",
+    ] {
+        assert!(
+            fub_services::site_isolation::commit_has_custom_js(&body(active)),
+            "{active}"
+        );
+    }
+}
+
+/// C2: i moduli JavaScript (`.mjs`, `.cjs`) sono custom JS come `.js`, in
+/// qualunque grafia dell'estensione.
+#[test]
+fn javascript_modules_are_custom_js() {
+    let body = |path: &str| {
+        serde_json::to_vec(&serde_json::json!({
+            "site_id": "blog",
+            "pages": [{"html": "<p>ciao</p>"}],
+            "assets": [{"path": path}],
+        }))
+        .unwrap()
+    };
+    for path in ["a.js", "b.mjs", "c.cjs", "D.MJS", "e.Cjs"] {
+        assert!(
+            fub_services::site_isolation::commit_has_custom_js(&body(path)),
+            "{path}"
+        );
+    }
+    for path in ["img/logo.png", "style.css", "note.json", "a.jsx.txt"] {
+        assert!(
+            !fub_services::site_isolation::commit_has_custom_js(&body(path)),
+            "{path}"
+        );
+    }
+}
+
 #[test]
 fn approved_image_is_atomic_and_leak_never_reaches_staging() {
     use base64::Engine as _;

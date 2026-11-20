@@ -123,7 +123,7 @@ pub fn save_mode(
 }
 
 /// Il corpo JSON di commit contiene custom JS? (`pages[].html` con script o
-/// `assets[]` con `.js`). Parsing generico su `Value`: nessuna dipendenza dai
+/// `assets[]` con `.js`, `.mjs` o `.cjs`). Parsing generico su `Value`: nessuna dipendenza dai
 /// tipi dello slice.
 pub fn commit_has_custom_js(body: &[u8]) -> bool {
     let value: serde_json::Value = match serde_json::from_slice(body) {
@@ -144,7 +144,12 @@ pub fn commit_has_custom_js(body: &[u8]) -> bool {
         asset
             .get("path")
             .and_then(|p| p.as_str())
-            .is_none_or(|path| path.to_ascii_lowercase().ends_with(".js"))
+            .is_none_or(|path| {
+                let path = path.to_ascii_lowercase();
+                [".js", ".mjs", ".cjs"]
+                    .iter()
+                    .any(|ext| path.ends_with(ext))
+            })
     })
 }
 
@@ -181,6 +186,34 @@ pub fn preflight_commit(data_dir: &Path, body: &[u8]) -> Result<(), HttpResponse
     }
 }
 
+/// The HTML5 doctype right after a `<`, in any letter case (`!doctype html>`,
+/// `!DOCTYPE html>`, `!DocType  HTML >`): its length, or `None` for any other
+/// `<!` markup, which stays active.
+fn html5_doctype(rest: &[u8]) -> Option<usize> {
+    const KEYWORD: &[u8] = b"!doctype";
+    let mut at = KEYWORD.len();
+    if !rest.get(..at)?.eq_ignore_ascii_case(KEYWORD) {
+        return None;
+    }
+    let spaces = |at: usize| {
+        rest[at..]
+            .iter()
+            .take_while(|byte| byte.is_ascii_whitespace())
+            .count()
+    };
+    let gap = spaces(at);
+    if gap == 0 {
+        return None;
+    }
+    at += gap;
+    if !rest.get(at..at + 4)?.eq_ignore_ascii_case(b"html") {
+        return None;
+    }
+    at += 4;
+    at += spaces(at);
+    (rest.get(at) == Some(&b'>')).then_some(at + 1)
+}
+
 /// Tokenize HTML tags and attributes rather than scanning needles. Ambiguous
 /// markup is classified as active: malformed tags, unquoted attribute values,
 /// entity-obfuscated schemes, CSS, SVG and unknown tags cannot bypass deny.
@@ -196,8 +229,8 @@ fn html_has_script(html: &str) -> bool {
         if i >= bytes.len() {
             return true;
         }
-        if bytes[i..].starts_with(b"!doctype html>") {
-            i += b"!doctype html>".len();
+        if let Some(len) = html5_doctype(&bytes[i..]) {
+            i += len;
             continue;
         }
         if bytes[i] == b'!' {
