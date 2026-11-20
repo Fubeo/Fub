@@ -1842,10 +1842,18 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   width: var(--grid-w, 0px);
   height: var(--grid-top-h, 0px);
 }
+/* Il corpo: le righe vi stanno posate (`top`, `left`), e lui non ha misura,
+   come i livelli dei segni. WebKit, quando un figlio entra o esce, ridipinge
+   tutto il riquadro del genitore: con un corpo grande quanto il foglio ogni
+   riga aggiunta o tolta ai bordi ridipingeva il foglio intero, testo di
+   ogni cella compreso, uno o due fotogrammi su tre dello scorrimento
+   (IMP-6600). Senza misura entra e esce solo la riga. Le righe danno
+   comunque la misura da scorrere al riquadro, che la prende anche dal
+   piano. */
 .grid-rows {
   position: relative;
-  width: var(--grid-w, 0px);
-  height: var(--grid-h, 0px);
+  width: 0;
+  height: 0;
 }
 /* Nella riga, ciò che sta fermo a sinistra (l'intestazione, le celle delle
    colonne bloccate) è nel flusso senza occuparvi posto; il resto è
