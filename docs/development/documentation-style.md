@@ -191,3 +191,7 @@ node .github/scripts/check-prose.mjs
 node .github/scripts/check-tables.mjs
 node .github/scripts/check-locale-loop.mjs
 ```
+
+Le guardie trovano i file di `docs/` con `.github/scripts/doc-files.mjs`, che
+salta le cartelle nascoste: un vault aperto su `docs/` lascia i suoi dati in
+`docs/.fub/`, e quelli non sono documentazione.
