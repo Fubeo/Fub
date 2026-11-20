@@ -63,7 +63,9 @@ Shared files, in the orchestrator's skill:
    A task that touches a contract (ABI, WIT, IPC), an on-disk format,
    concurrency or security, or whose cause is still unclear after a first
    look, first goes to one read-only design agent: `Agent` with
-   `model: "opus"`, `effort: "high"`, `run_in_background: true`. Its brief:
+   `model: "opus"`, `run_in_background: true`, and `effort: "xhigh"` for a
+   contract, an on-disk format or security, `effort: "high"` otherwise
+   (concurrency, an unclear cause). Its brief:
    the task's section, what you already know and ruled out, and the output
    file `scratchpad/<task>/soluzione.md`, with the cause, the owning layer,
    the files and functions to change, the test that must fail first, the
