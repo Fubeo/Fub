@@ -623,9 +623,19 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   function updateTimeline(): void {
     visible.clear();
     const cutoff = cutoffIndex === times.length ? Infinity : times[cutoffIndex];
+    // Un tag o una nota mancante non è un file: non ha data né cartella, e
+    // vive dell'arco dalla nota che lo scrive. Si vede finché si vede almeno
+    // una di quelle note; tenuto da solo, era un nodo senza archi (la nota
+    // nascosta dalla linea del tempo o dalla legenda si portava via l'arco).
+    const hangs = (id: string): boolean => data.tags.has(id) || data.missing.has(id);
     for (const id of data.nodes) {
+      if (hangs(id)) continue;
       if (hiddenGroups.has(data.groups[id] ?? "\u0000")) continue;
       if (data.modified[id] === undefined || dayOf(data.modified[id]) <= cutoff) visible.add(id);
+    }
+    for (const edge of data.edges) {
+      if (hangs(edge.to) && !hangs(edge.from) && visible.has(edge.from)) visible.add(edge.to);
+      if (hangs(edge.from) && !hangs(edge.to) && visible.has(edge.to)) visible.add(edge.from);
     }
     chart?.setVisibleNodes(masked() ? visible : null);
     timeInput.value = String(cutoffIndex);

@@ -456,3 +456,39 @@ fn search_groups_take_the_first_query_that_finds_the_note() {
     assert_eq!(p["groups"]["B.md"], "tag:beta");
     assert_eq!(p["groups"]["C.md"], "");
 }
+
+/// Ogni nota mancante arriva con l'arco da chi la scrive, anche quando la
+/// scrive soltanto una proprietà, con un'ancora, un alias, un percorso o
+/// l'estensione, e anche con le orfane nascoste: il disegno non riceve mai un
+/// nodo mancante senza arco.
+#[test]
+fn a_missing_note_named_only_in_a_property_comes_with_its_edge() {
+    let vault = Vault::new();
+    vault.put(
+        "A.md",
+        "---\nprogetto: \"[[Sparita]]\"\nfonti: [\"[[Persa#Titolo]]\", \"[[cartella/Via|alias]]\"]\nsu: \"[[Altra.md]]\"\n---\n\nniente nel corpo\n",
+    );
+    vault.put("B.md", "---\nrel: \"[[Sparita]]\"\n---\n\nniente\n");
+    let mut ws = vault.open();
+    let with_orphans = toggle(&mut ws, "show_missing");
+    let without_orphans = toggle(&mut ws, "show_orphans");
+    for p in [with_orphans, without_orphans] {
+        assert_eq!(
+            p["missing"],
+            serde_json::json!(["Altra.md", "Persa", "Sparita", "cartella/Via"])
+        );
+        let got = edges(&p);
+        for (from, to) in [
+            ("A.md", "Altra.md"),
+            ("A.md", "Persa"),
+            ("A.md", "Sparita"),
+            ("A.md", "cartella/Via"),
+            ("B.md", "Sparita"),
+        ] {
+            assert!(
+                got.contains(&(from.to_string(), to.to_string())),
+                "manca l'arco {from} → {to}: {got:?}"
+            );
+        }
+    }
+}

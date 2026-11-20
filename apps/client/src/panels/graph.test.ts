@@ -329,6 +329,47 @@ describe("lifecycle del renderer graph", () => {
     stop();
   });
 
+  it("una nota mancante o un tag sparisce con le note che lo scrivono, mai senza arco", async () => {
+    mountTestGraph();
+    fakes.groups = ["", "sotto"];
+    const render = customRenderer(GRAPH_NS, null)!;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const stop = render(host, {
+      nodes: ["a.md", "b.md", "#alfa", "Sparita", "Comune"],
+      edges: [
+        { from: "a.md", to: "b.md" },
+        { from: "b.md", to: "Sparita" },
+        { from: "b.md", to: "#alfa" },
+        { from: "a.md", to: "Comune" },
+        { from: "b.md", to: "Comune" },
+      ],
+      modified: { "a.md": "1700000000000", "b.md": "1700200000000" },
+      groups: { "a.md": "", "b.md": "sotto" },
+      tags: ["#alfa"],
+      missing: ["Sparita", "Comune"],
+      filter: { show_orphans: true, show_attachments: false, show_tags: true, show_missing: true },
+    }, vi.fn(), NO_RENDER_CONTEXT)!;
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1];
+    // La linea del tempo nasconde b.md: «Sparita» e «#alfa», che solo lui
+    // scrive, se ne vanno con lui; «Comune» resta, perché lo scrive anche a.md.
+    const slider = host.querySelector<HTMLInputElement>(".graph-timeline input")!;
+    slider.value = "0";
+    slider.dispatchEvent(new Event("input"));
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set(["a.md", "Comune"]));
+    // Lo stesso con la legenda: spento il gruppo di b.md.
+    slider.value = "2";
+    slider.dispatchEvent(new Event("input"));
+    const sotto = [...host.querySelectorAll<HTMLButtonElement>(".graph-legend-group")]
+      .find((button) => button.textContent === "sotto")!;
+    sotto.click();
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set(["a.md", "Comune"]));
+    sotto.click();
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(null);
+    stop();
+  });
+
   it("la legenda accende e spegne i gruppi: i loro nodi escono dalla vista e rientrano", async () => {
     fakes.groups = ["a", "b"];
     mountTestGraph();

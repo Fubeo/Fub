@@ -272,6 +272,8 @@ Due altri filtri, spenti di default, aggiungono nodi che non sono file:
 
 Spento, il grafo mostra solo i file che esistono. Non è orfana una nota legata
 solo a un tag o in una proprietà; tag e note mancanti non hanno gruppo di cartella.
+Non hanno nemmeno una data: quando la linea del tempo o la legenda nascondono le
+note che li scrivono, spariscono con loro, e nessuno resta senza arco.
 
 Il campo **Filtro** della barra accetta la sintassi della barra di ricerca:
 restano le note che la ricerca trova, gli allegati collegati a loro e il seme
