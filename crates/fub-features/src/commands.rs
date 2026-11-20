@@ -509,7 +509,24 @@ pub fn recover_archive_batch(host: &mut dyn HostApi) -> Result<ArchiveRecovery, 
                 continue;
             }
             ArchiveStatus::Pending => match archive_position(host, item)? {
-                ArchivePosition::Moved => ArchiveStatus::Done,
+                ArchivePosition::Moved => {
+                    // Spostata prima del crollo, e lo stato non si era scritto:
+                    // i link delle proprietà possono essere rimasti al posto
+                    // vecchio. Il nome vecchio non si risolve più, quindi si
+                    // cercano fra le proprietà (stessa regola, nessun link
+                    // riscritto due volte); una domanda che fallisce li dice
+                    // da guardare.
+                    let moved = [(item.from.clone(), item.to.clone())];
+                    match relink::property_links_left_behind(&*host, &item.from, &item.to) {
+                        Ok(found) => report
+                            .link_failures
+                            .extend(relink::rewrite_property_links(host, &found, &moved)),
+                        Err(error) => report
+                            .link_failures
+                            .push(Failure::of(item.from.clone(), error)),
+                    }
+                    ArchiveStatus::Done
+                }
                 ArchivePosition::Conflict => ArchiveStatus::Failed(archive_conflict(item)),
                 ArchivePosition::Ready => {
                     // I link delle proprietà si cercano col nome vecchio, prima

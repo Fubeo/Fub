@@ -309,6 +309,67 @@ fn archiving_a_note_rewrites_its_property_links_like_the_body() {
     );
 }
 
+/// Un'archiviazione interrotta fra la rinomina e la riscrittura dei link:
+/// sul disco la nota è già in `Archivio/`, il lotto la dice ancora da fare e
+/// le proprietà nominano il posto vecchio. La ripresa (qui, la richiesta
+/// successiva) le riscrive con la regola della rinomina; un link già scritto
+/// col posto nuovo e uno che porta a un'altra nota restano come sono, e una
+/// seconda ripresa non riscrive niente.
+#[test]
+fn an_archive_interrupted_after_the_move_still_rewrites_property_links() {
+    const SCORTE: &str = "# Scorte\n";
+    const INDICE: &str = "---\nprogetto: \"[[Progetti/Scorte]]\"\nvia_nome: \"[[Scorte]]\"\n---\n\nVedi [[Scorte]].\n";
+    const GIA: &str = "---\nprogetto: \"[[Archivio/Scorte]]\"\n---\n";
+    const ALTRA: &str = "---\nprogetto: \"[[Altri/Scorte]]\"\n---\n";
+    let vault = Vault::with(&[
+        ("Archivio/Scorte.md", SCORTE),
+        ("Altri/Scorte.md", "# Altre scorte\n"),
+        ("Indice.md", INDICE),
+        ("Gia.md", GIA),
+        ("Altra.md", ALTRA),
+        ("Dopo.md", "# Dopo\n"),
+    ]);
+    let data = vault.root.join(".fub/plugins").join(COMMANDS_ID);
+    std::fs::create_dir_all(&data).unwrap();
+    let intent = serde_json::json!({
+        "schema_version": 1,
+        "items": [{
+            "from": "Progetti/Scorte.md",
+            "to": "Archivio/Scorte.md",
+            "preimage": fub_abi::edit::Revision::of(SCORTE),
+            "status": { "kind": "pending" }
+        }]
+    });
+    std::fs::write(
+        data.join("archive-recovery.json"),
+        serde_json::to_vec(&intent).unwrap(),
+    )
+    .unwrap();
+    let mut ws = vault.open();
+
+    let done = run(
+        &mut ws,
+        VAULT_ARCHIVE,
+        serde_json::json!({ "docs": ["Dopo.md"] }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert!(
+        done.partial.as_ref().is_none_or(|p| p.failures.is_empty()),
+        "{:?}",
+        done.partial
+    );
+    assert!(!data.join("archive-recovery.json").exists());
+    assert_eq!(
+        vault.read("Indice.md"),
+        INDICE.replace("[[Progetti/Scorte]]", "[[Archivio/Scorte]]"),
+        "the old path follows the note; the name already reached it"
+    );
+    assert_eq!(vault.read("Gia.md"), GIA, "already rewritten: not again");
+    assert_eq!(vault.read("Altra.md"), ALTRA, "another note's link stays");
+    assert!(vault.read("Archivio/Dopo.md").starts_with("# Dopo"));
+}
+
 /// Dal cestino la nota torna nel grafo con i suoi link di proprietà, nei due
 /// versi: chi la nominava la ritrova, e lei ritrova chi nomina. Una rinomina
 /// dopo il ripristino li riscrive come prima del cestino.
