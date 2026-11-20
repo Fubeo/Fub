@@ -101,7 +101,13 @@ più tre righe nuove del margine (`GRID_FRAME_NEW_ROWS`), rifà al più 48 celle
 nei fotogrammi. Sotto c'è la carta (`.grid-paper`, copiata nelle fasce
 ferme), grande e ferma quanto il riquadro: fili delle righe sull'altezza di
 serie (`--grid-row`), un filo per colonna, celle opache, e la griglia vuota
-dove lo scorrimento precede il disegno. In G2 (quattro giri) la fascia
+dove lo scorrimento precede il disegno. La carta sta nel riquadro prima del
+piano, non dentro: WebKitGTK dà un livello del compositore a un elemento
+`sticky` e uno suo a ogni elemento posato che lo copre nello stesso contesto,
+e con la carta nel piano ogni riga aggiunta ai bordi ridipingeva migliaia di
+celle a ogni passo (IMP-6600). Le fasce ferme del piano stanno sopra le
+celle; uno scorrimento scrive solo le righe che entrano ed escono e la fase
+della carta, mai un attributo uguale (`setAttributeIfChanged`). In G2 (quattro giri) la fascia
 uniforme più alta è 1 px; p90 (peggiore) del gestore 6–9 ms (17–20), del
 fotogramma 11–13 ms (15–17).
 

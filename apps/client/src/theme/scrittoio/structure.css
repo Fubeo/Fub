@@ -1864,7 +1864,17 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
    griglia vuota, mai il bianco. La carta è grande quanto il riquadro e sta
    ferma nel riquadro (`sticky`): così il browser l'ha sempre già dipinta,
    anche quando lo scorrimento salta più in là delle righe dipinte, dove una
-   carta grande quanto il foglio sarebbe ancora da dipingere. I suoi fili
+   carta grande quanto il foglio sarebbe ancora da dipingere. Sta nel
+   riquadro, prima del piano, non dentro: WebKitGTK dà un livello del
+   compositore a un elemento `sticky` che scorre, e uno suo a ogni elemento
+   posato che si dipinge dopo di lui nello stesso contesto e lo copre. Nel
+   piano erano tutte le celle, e ogni riga aggiunta o tolta ai bordi faceva
+   ridipingere migliaia di livelli a ogni passo dello scorrimento (IMP-6600).
+   Fuori, sopra la carta c'è solo il piano, che è un contesto suo
+   (`isolation`) e prende un livello solo, con le celle dentro. Il margine
+   sotto la carta, negativo quanto lei, non le fa occupare posto nel
+   riquadro. Le fasce ferme del piano stanno sopra le celle (`z-index`
+   positivo), e non trascinano altri livelli. I suoi fili
    seguono lo scorrimento: le righe con la fase che la griglia scrive
    (`background-position`) sull'altezza di serie (`--grid-row`), le colonne
    in `.grid-paper-rules`, spostato di lato, un elemento sottile dove ogni
@@ -1881,8 +1891,11 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   left: 0;
   overflow: hidden;
 }
+/* Fuori dal piano non eredita il suo `pointer-events`: dove non c'è una
+   riga, il puntatore va al riquadro, non alla carta. */
 .grid-paper {
   z-index: 0;
+  pointer-events: none;
 }
 .grid-paper-rules {
   position: absolute;
