@@ -364,6 +364,35 @@ describe("document-window protocol", () => {
     expect(first.handle.ownerClosed()).toBe(false);
   });
 
+  // Il prestito della finestra è della sessione, non del nome con cui la si è
+  // aperta: dopo A→B chiudere la scheda di B non chiude la sessione che la
+  // finestra mostra ancora, e il nome A lasciato libero non resta prestato a
+  // nessuno. Chiusa la finestra, una nota nuova A aperta in finestra si
+  // lascia del tutto: nessun prestito orfano, nessuna sessione tenuta viva.
+  it("dopo una rinomina il prestito della finestra segue la sessione, non il nome di prima", async () => {
+    const doc = `${number}-prestito.md`;
+    const renamed = `${number}-prestito-dopo.md`;
+    const first = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(first.handle);
+    expect(documentSessions.rename(doc, renamed)).toMatchObject({ kind: "renamed" });
+
+    // La scheda di B si chiude: la finestra tiene ancora la sessione.
+    expect((await documentSessions.release(renamed)).kind).toBe("active");
+    expect(first.handle.ownerClosed()).toBe(false);
+    // Una nota nuova A, letta e lasciata da un riquadro, si chiude.
+    await documentSessions.readForSurface(doc);
+    expect((await documentSessions.release(doc)).kind).toBe("closed");
+
+    await first.handle.dispose();
+    handles.pop();
+    expect(documentSessions.get(renamed)).toBeUndefined();
+
+    const second = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    await second.handle.dispose();
+    expect(documentSessions.get(doc)).toBeUndefined();
+    expect(documentSessions.get(renamed)).toBeUndefined();
+  });
+
   // Audit #513, scenario A: la nota della finestra sparisce. La finestra sa
   // che la sua sessione è chiusa per sempre; chiusa, non tocca la sessione
   // nuova che nel frattempo ha preso lo stesso nome.

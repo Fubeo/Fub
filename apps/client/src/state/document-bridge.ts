@@ -217,6 +217,12 @@ export async function attachRemoteSurface(
     if (profile === null) throw new DocumentWindowUnsupported(doc);
     const owner = documentSessions.get(doc);
     if (state.vaultRoot !== vault || !owner || owner.snapshot().lifecycle !== "open") throw new Error(t("errors.bridge.session_changed"));
+    // Nata la sessione, il prestito passa dal nome a lei: dopo una rinomina
+    // tiene la sessione sotto il nome nuovo, e il nome di prima resta libero
+    // per una nota nuova (#513).
+    const ownerLease = documentSessions.retainSession(owner);
+    releaseLease();
+    releaseLease = ownerLease;
     const old = authorities.get(owner);
     if (old) {
       authority = old;
@@ -419,7 +425,7 @@ export async function attachRemoteSurface(
             try {
               await releaseSession(owner.id);
             } catch (error) {
-              releaseLease = documentSessions.retain(owner.id);
+              releaseLease = documentSessions.retainSession(owner);
               throw error;
             }
           }
