@@ -269,6 +269,14 @@ il testo, quindi non aspetta la scrittura del file che deve coprire (#485).
   per byte, la bozza si scarta e non diventa un conflitto. Una lettura
   fallita, un testo diverso anche di un a capo o una sessione già aperta
   tengono la bozza.
+- **Bozza di un documento non aperto.** La sessione che nasce da una bozza
+  sa che file salva prima del primo salvataggio: `rejoin` la descrive con la
+  sorgente che `withoutSuperseded` ha già letto, e se manca la legge il
+  salvataggio stesso, sotto la chiave della sessione. Così il giornale di una
+  cartella si svuota dopo la scrittura (non resta nel buffer per essere
+  riapplicato dalla griglia) e un file senza formato si scrive a byte. Un
+  file che non c'è più si ricrea dalla porta dei documenti; una lettura che
+  fallisce per altro fa fallire il salvataggio e la bozza resta.
 - **Host.** `save_draft` e `discard_draft` girano fuori dal thread principale
   e non prendono il turno di scrittura, che il salvataggio tiene per tutta la
   sua durata: prendono la porta delle bozze (`Workspace::draft_port`) con un
