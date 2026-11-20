@@ -34,7 +34,7 @@ function titles(node: UiNode): string[] {
   return [];
 }
 
-const outline = () => ipc.api.renderView("outline", null, null);
+const outline = () => ipc.api.renderView("outline");
 
 describe("la Struttura del finto", () => {
   it("senza un documento davanti dice che nessuna nota è aperta", async () => {
