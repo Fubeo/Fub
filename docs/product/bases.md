@@ -256,18 +256,13 @@ contenuto, fino al riquadro; dentro una nota sta in colonna col testo.
 
 Sopra la Base c'è una barra. A sinistra le viste del file come linguette, con
 la figura del loro tipo: un clic sceglie la vista. Quando manca spazio (sotto i
-700 px della pagina, o quando le viste sono tante da non stare nella barra) le
-viste non scelte restano solo la figura, col nome nel titolo, e quella scelta
-resta in vista; sotto i 420 px anche quella scelta. Se nemmeno così stanno,
-le ultime passano in «Altre N viste», l'ultima delle linguette (una freccia e
-il numero), che le elenca in un menu; la vista scelta resta sempre nella
-barra. Subito dopo le linguette, «+» aggiunge una vista nuova (vedi sotto). A
-destra gli attrezzi. Se nemmeno la vista scelta sta accanto agli attrezzi (al
-telefono, dove ogni bottone è largo un dito) la barra va su due file: sopra
-le linguette e «+», con il nome della vista scelta; sotto gli attrezzi e, in
-fondo a destra, «Nuova».
-
-Gli attrezzi:
+700 px della pagina, o con tante viste) le viste non scelte restano la figura,
+col nome nel titolo; sotto i 420 px anche la scelta. Se nemmeno così stanno, le
+ultime passano in «Altre N viste» (una freccia e il numero), che le elenca in un
+menu; la scelta resta sempre nella barra. Se nemmeno lei sta accanto agli
+attrezzi (al telefono) la barra va su due file: sopra le linguette, col nome
+della scelta, e «+»; sotto gli attrezzi e «Nuova». Subito dopo le linguette,
+«+» aggiunge una vista nuova (vedi sotto). A destra gli attrezzi:
 
 | Attrezzo | Che cosa fa | Che cosa scrive |
 |---|---|---|
