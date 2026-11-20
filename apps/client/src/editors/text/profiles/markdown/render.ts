@@ -41,10 +41,9 @@ import type {
 // Initial `---` block (optional BOM) closed by `---`/`...`. The body must hold
 // a `:` (or be empty) so a leading rule plus heading is not misread.
 export function detectFrontmatter(source: string): { from: number; to: number } | null {
-  let start = 0;
-  if (source.startsWith("﻿")) start = 1;
-  const firstEnd = source.indexOf("\n", start);
-  if (firstEnd === -1 || source.slice(start, firstEnd).trim() !== "---") return null;
+  const first = openingLine(source, true)!;
+  if (!first.opens) return null;
+  const firstEnd = first.end;
   let pos = firstEnd + 1;
   for (;;) {
     const next = source.indexOf("\n", pos);
@@ -64,14 +63,37 @@ export function detectFrontmatter(source: string): { from: number; to: number } 
 /// documento enorme non va copiato per intero a ogni battuta.
 const FRONTMATTER_WINDOW = 64 * 1024;
 
+/// Quanta cima basta per dire se la prima riga apre un frontmatter: una riga
+/// più lunga non è `---`, salvo che sia `---` fra tanti spazi.
+const FIRST_LINE_WINDOW = 256;
+
+/// La prima riga di una sorgente: dove finisce (l'indice del suo `\n`, -1 se
+/// non c'è nella cima guardata) e se è `---`, cioè se il frontmatter potrebbe
+/// cominciare qui.
+export interface FirstLine {
+  readonly end: number;
+  readonly opens: boolean;
+}
+
+/// La regola unica di «la prima riga apre un frontmatter», per
+/// `frontmatterRange` e per la resa a ogni battuta (`firstLineOf`): dopo un
+/// BOM facoltativo, una riga che tolti gli spazi è `---` e finisce con un a
+/// capo, come la legge `detectFrontmatter`. `head` è la cima della sorgente,
+/// `whole` dice se è tutta. `null` quando la cima non basta a decidere: niente
+/// a capo, e ciò che c'è potrebbe ancora diventare `---` fra spazi.
+function openingLine(head: string, whole: boolean): FirstLine | null {
+  const start = head.startsWith("﻿") ? 1 : 0;
+  const end = head.indexOf("\n", start);
+  if (end !== -1) return { end, opens: head.slice(start, end).trim() === "---" };
+  if (whole || !/^\s*-{0,3}\s*$/.test(head.slice(start))) return { end: -1, opens: false };
+  return null;
+}
+
 /// Il frontmatter di un documento CodeMirror, guardando solo la sua cima: un
 /// documento che non comincia con `---` non si copia affatto.
 export function frontmatterRange(doc: { length: number; sliceString(from: number, to?: number): string }): { from: number; to: number } | null {
-  const head = doc.sliceString(0, Math.min(doc.length, 256));
-  const end = head.indexOf("\n");
-  if ((end !== -1 || head.length === doc.length) && head.slice(0, end === -1 ? undefined : end).replace(/^\uFEFF/, "").trim() !== "---") {
-    return null;
-  }
+  const head = doc.sliceString(0, Math.min(doc.length, FIRST_LINE_WINDOW));
+  if (openingLine(head, head.length === doc.length)?.opens === false) return null;
   return detectFrontmatter(doc.sliceString(0, Math.min(doc.length, FRONTMATTER_WINDOW)));
 }
 
@@ -1644,18 +1666,12 @@ const inert = (top: { readonly name: string; readonly toc: boolean; readonly fou
   top.name !== "HTMLBlock" && !top.toc
   && top.found.defs.length === 0 && top.found.headings.length === 0 && top.found.references.length === 0;
 
-/// La prima riga di una sorgente: dove finisce (l'indice del suo `\n`, -1 se
-/// il testo è una riga sola) e se è `---`, cioè se il frontmatter potrebbe
-/// cominciare qui.
-export interface FirstLine {
-  readonly end: number;
-  readonly opens: boolean;
-}
-
+/// La prima riga di `source` (`openingLine`), guardando soltanto la sua cima:
+/// un documento di una riga sola lunga non si scandisce tutto a ogni battuta.
+/// La sorgente intera si legge solo nel caso che la cima non decide.
 export function firstLineOf(source: string): FirstLine {
-  const start = source.startsWith("﻿") ? 1 : 0;
-  const end = source.indexOf("\n", start);
-  return { end, opens: end !== -1 && source.slice(start, end).trim() === "---" };
+  const whole = source.length <= FIRST_LINE_WINDOW;
+  return (whole ? null : openingLine(source.slice(0, FIRST_LINE_WINDOW), false)) ?? openingLine(source, true)!;
 }
 
 /// La prima riga dopo una modifica che comincia a `fromA`: quella di prima se
