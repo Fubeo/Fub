@@ -1448,6 +1448,29 @@ fn user_exclude_is_additive_never_subtractive() {
     assert!(truncated);
 }
 
+/// M3: un nome senza punto, o con il solo punto iniziale, non ha
+/// estensione: `ext:makefile` non esclude il file `Makefile`, e una lista di
+/// estensioni ammesse non lo scambia per un'estensione.
+#[test]
+fn a_name_without_a_dot_has_no_extension() {
+    let (sel, _) = sync::parse_user_exclude(&[
+        "ext:makefile".to_string(),
+        "ext:gitignore".to_string(),
+        "ext:md".to_string(),
+    ]);
+    assert!(sync::is_selected(&sel, "notes/Makefile"));
+    assert!(sync::is_selected(&sel, "notes/.gitignore"));
+    assert!(!sync::is_selected(&sel, "notes/a.MD"));
+    assert!(!sync::is_selected(&sel, "notes/build.makefile"));
+    let only_md = sync::SyncSelection {
+        include_ext: vec!["md".to_string()],
+        ..Default::default()
+    };
+    assert!(sync::is_selected(&only_md, "notes/a.md"));
+    assert!(!sync::is_selected(&only_md, "notes/md"));
+    assert!(!sync::is_selected(&only_md, "notes/.md"));
+}
+
 #[test]
 fn no_secret_in_persisted_state() {
     // Passwords, KEKs, VDK cleartext and session tokens must never appear in

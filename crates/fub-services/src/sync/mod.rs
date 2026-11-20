@@ -380,15 +380,15 @@ pub fn is_syncable_doc(doc_id: &str) -> bool {
     true
 }
 
+/// The extension of the file name, lowercased: what follows its last dot.
+/// A name without a dot (`Makefile`) or with only a leading one
+/// (`.gitignore`) has none, as for `std::path::Path::extension`.
 fn ext_of(doc_id: &str) -> String {
-    doc_id
-        .rsplit('/')
-        .next()
-        .unwrap_or(doc_id)
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_ascii_lowercase()
+    let name = doc_id.rsplit('/').next().unwrap_or(doc_id);
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => ext.to_ascii_lowercase(),
+        _ => String::new(),
+    }
 }
 
 /// Apply [`SyncSelection`] on top of [`is_syncable_doc`].
