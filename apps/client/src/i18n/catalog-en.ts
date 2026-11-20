@@ -3730,6 +3730,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "errors.zip.directory_large": "ZIP: central directory too large",
   "errors.zip.bad_entry": "ZIP: unreadable directory entry",
   "errors.zip.truncated_entry": "ZIP: truncated directory entry",
+  "errors.zip.bad_extra": "ZIP: unreadable extra field of the entry “{name}”",
   "errors.zip.overlap": "ZIP: the entry “{name}” overlaps the next one",
   "errors.zip.bad_local": "ZIP: unreadable local header of “{name}”",
   "errors.zip.data_outside": "ZIP: the data of “{name}” runs past the archive",

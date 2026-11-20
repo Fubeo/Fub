@@ -95,8 +95,10 @@ export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
   const tail = await bytesOf(blob, tailStart, size);
   const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
   let eocd = -1;
+  // Cercando all'indietro, la firma può comparire dentro il commento
+  // finale: vale solo il candidato il cui commento finisce col file.
   for (let at = tail.length - 22; at >= 0; at--) {
-    if (tailView.getUint32(at, true) === EOCD) {
+    if (tailView.getUint32(at, true) === EOCD && at + 22 + tailView.getUint16(at + 20, true) === tail.length) {
       eocd = at;
       break;
     }
@@ -142,10 +144,16 @@ export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
     const extraStart = nameStart + nameLength;
     const next = extraStart + extraLength + commentLength;
     if (next > directory.length) throw new Error(t("errors.zip.truncated_entry"));
+    const nameBytes = directory.slice(nameStart, extraStart);
+    const name = nameOf(nameBytes, flags);
     // I campi pieni stanno nel campo esteso ZIP64, in quest'ordine.
-    for (let extra = extraStart; extra + 4 <= extraStart + extraLength; ) {
+    const extraEnd = extraStart + extraLength;
+    for (let extra = extraStart; extra + 4 <= extraEnd; ) {
       const id = view.getUint16(extra, true);
       const length = view.getUint16(extra + 2, true);
+      // Un campo che esce dal suo spazio leggerebbe la voce seguente, o oltre
+      // la directory.
+      if (extra + 4 + length > extraEnd) throw new Error(t("errors.zip.bad_extra", { name }));
       if (id === 0x0001) {
         let field = extra + 4;
         if (uncompressed === FULL32 && field + 8 <= extra + 4 + length) {
@@ -160,10 +168,9 @@ export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
       }
       extra += 4 + length;
     }
-    const nameBytes = directory.slice(nameStart, extraStart);
     found.push({
       nameBytes,
-      name: nameOf(nameBytes, flags),
+      name,
       flags,
       method: view.getUint16(at + 10, true),
       time: view.getUint16(at + 12, true),

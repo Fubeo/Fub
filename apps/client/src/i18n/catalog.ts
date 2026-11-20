@@ -3886,6 +3886,7 @@ export const IT = { // --- la scocca -------------------------------------------
   "errors.zip.directory_large": "ZIP: directory centrale troppo grande",
   "errors.zip.bad_entry": "ZIP: voce della directory illeggibile",
   "errors.zip.truncated_entry": "ZIP: voce della directory troncata",
+  "errors.zip.bad_extra": "ZIP: campo esteso della voce «{name}» illeggibile",
   "errors.zip.overlap": "ZIP: la voce «{name}» si sovrappone alla seguente",
   "errors.zip.bad_local": "ZIP: intestazione locale di «{name}» illeggibile",
   "errors.zip.data_outside": "ZIP: i dati di «{name}» escono dall'archivio",

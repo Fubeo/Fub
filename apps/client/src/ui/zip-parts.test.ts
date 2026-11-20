@@ -85,4 +85,43 @@ describe("un archivio diviso in parti", () => {
     await expect(readDirectory(new Blob([text("non sono un archivio, solo testo lungo abbastanza")]))).rejects.toThrow(/ZIP/);
     expect(partName("Export Notion.zip", "parte 2 di 5")).toBe("Export Notion (parte 2 di 5).zip");
   });
+
+  it("un campo esteso più lungo del suo spazio si rifiuta con un errore leggibile", async () => {
+    // Una voce ZIP64 il cui campo esteso dichiara 24 byte ma nella voce ne
+    // restano 8: prima la lettura usciva dalla directory con un RangeError.
+    const source = await zip([{ name: "a.md", body: text("# a\n"), zip64: true }]);
+    const view = new DataView(source.buffer);
+    const eocd = source.length - 22;
+    const directoryStart = view.getUint32(eocd + 16, true);
+    const extraStart = directoryStart + 46 + view.getUint16(directoryStart + 28, true);
+    const cut = 16;
+    const broken = new Uint8Array(source.length - cut);
+    broken.set(source.subarray(0, extraStart + 12));
+    broken.set(source.subarray(extraStart + 12 + cut), extraStart + 12);
+    const brokenView = new DataView(broken.buffer);
+    brokenView.setUint16(directoryStart + 30, 12, true);
+    brokenView.setUint32(broken.length - 22 + 12, view.getUint32(eocd + 12, true) - cut, true);
+    const error = await readDirectory(new Blob([broken])).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(RangeError);
+    expect((error as Error).message).toMatch(/^ZIP: .*a\.md/);
+  });
+
+  it("una firma di fine archivio dentro il commento non inganna la ricerca", async () => {
+    // Il commento finale contiene una finta fine dell'archivio (zero voci),
+    // seguita da due byte: è lei la prima che si incontra cercando
+    // all'indietro, ma la sua lunghezza del commento non porta alla fine
+    // del file.
+    const source = await zip([{ name: "a.md", body: text("# a\n") }]);
+    const comment = new Uint8Array(24);
+    new DataView(comment.buffer).setUint32(0, 0x06054b50, true);
+    comment[22] = 0x78;
+    comment[23] = 0x78;
+    const withComment = new Uint8Array(source.length + comment.length);
+    withComment.set(source);
+    withComment.set(comment, source.length);
+    new DataView(withComment.buffer).setUint16(source.length - 2, comment.length, true);
+    const entries = await readDirectory(new Blob([withComment]));
+    expect(entries.map((entry) => entry.name)).toEqual(["a.md"]);
+  });
 });
