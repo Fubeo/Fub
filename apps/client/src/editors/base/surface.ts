@@ -630,7 +630,11 @@ export function mountBaseSurface(
       const found = await fetchAllDocuments(deps, EVERY_DOCUMENT, { kind: "all" }, { offset: 0, limit: 256 }, request.signal);
       if (!valid(ticket)) return;
       // Le note legate dai riepiloghi di Relazione (T35): nessuna domanda in
-      // più se la vista non ne ha.
+      // più se la vista non ne ha. Si risolvono per tutte le note e non per
+      // quelle che il filtro tiene, e a `derive` vanno tutte le righe: il
+      // filtro gira in `derive` (fub-features) e può leggere una formula che
+      // fa un `rollup` su quelle note, quindi qui non si sa ancora quali
+      // righe restano (#520).
       const linked = await linkedNotes(deps, nextPlan, found.rows, request.signal);
       if (!valid(ticket)) return;
       const result = await deriveBaseRows(deps, definition, nextPlan.view, found.rows, Date.now(), container, linked, nextPlan.allProperties ? null : nextPlan.requiredProps);
@@ -2342,13 +2346,38 @@ export function mountBaseSurface(
   // every open view, including embeds. Coalesce one event burst and let the
   // generation/AbortController discard stale in-flight derivations.
   let refreshQueued = false;
-  const memberChanged = () => {
+  let refreshes = 0;
+  const refresh = () => {
     if (destroyed || !source || refreshQueued) return;
     refreshQueued = true;
     queueMicrotask(() => {
       refreshQueued = false;
-      if (!destroyed) void reload(false);
+      if (destroyed) return;
+      const mine = ++refreshes;
+      void reload(false).finally(() => { if (mine === refreshes) indexOwed = false; });
     });
+  };
+  // Un salvataggio è una ricarica sola (#520). Il kernel scrive la nota
+  // nell'indice e poi annuncia `document_changed` e subito dopo
+  // `index_updated` (`announce_file_change`): i due arrivano qui in due giri
+  // separati, che `queueMicrotask` non unisce. La ricarica partita dal primo
+  // legge già la nota scritta, quindi il primo `index_updated` dopo un fatto
+  // di una nota non dice niente di nuovo e si lascia cadere. Se fra i due il
+  // ponte ha fuso un altro `index_updated`, il suo cambiamento era già scritto
+  // prima che il fatto arrivasse, e la stessa ricarica lo legge. Un host che
+  // non manda `index_updated` (il finto del banco) non lascia il debito
+  // aperto: lo chiude la ricarica finita, e da lì un `index_updated` ricarica
+  // di nuovo. `batch_ended` e `overflow` ricaricano sempre: possono portare
+  // cambiamenti dell'indice senza un fatto di nota.
+  let indexOwed = false;
+  const memberChanged = () => {
+    if (destroyed || !source) return;
+    indexOwed = true;
+    refresh();
+  };
+  const indexUpdated = () => {
+    if (indexOwed) { indexOwed = false; return; }
+    refresh();
   };
   void readPropertyTypes();
   void readTileHosts();
@@ -2360,9 +2389,9 @@ export function mountBaseSurface(
     onEvent("document_changed", (event) => { if (!event.changes || event.changes.aspects.length) memberChanged(); }),
     onEvent("document_removed", memberChanged),
     onEvent("document_renamed", memberChanged),
-    onEvent("index_updated", memberChanged),
-    onEvent("batch_ended", memberChanged),
-    onEvent("overflow", memberChanged),
+    onEvent("index_updated", indexUpdated),
+    onEvent("batch_ended", refresh),
+    onEvent("overflow", refresh),
   ];
   const relabel = () => {
     groupBy.setAttribute("aria-label", t("base.group.by"));

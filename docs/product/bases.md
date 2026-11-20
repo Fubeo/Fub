@@ -142,8 +142,7 @@ date si perdono; passare fra calendario e linea del tempo lascia solo `view`.
 
 Un filtro è `all` (nessun filtro), oppure un albero con `and`, `or` o `not`,
 oppure una condizione. Una condizione dice su che cosa agisce (`property`,
-`file`, `formula` o `tag`), con quale operatore (`op`) e con quale valore
-(`value`).
+`file`, `formula` o `tag`), con quale operatore (`op`) e con quale valore (`value`).
 
 | Operatore | Vero quando |
 |---|---|
@@ -180,6 +179,7 @@ Il modello ha dei limiti fissi. Oltre, il file non si legge come Base.
 | una vista | 64 KiB |
 | i riepiloghi di una vista | 32 |
 | la lunghezza di una formula | 8 KiB |
+| le note del vault che una Base legge (due domande all'indice; oltre, lo dice e non ne mostra una parte) | 20000 |
 
 ## Come si scrive il file
 
