@@ -49,7 +49,6 @@ view e la shell le ridisegna nello stesso giro: ognuna costa pochi
 millisecondi, ma in fila sul thread principale fermavano la finestra per un
 centinaio di millisecondi. I disegni restano in fila fra loro; la shell tiene
 comunque l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
-Le porte del foglio sui byte hanno la loro corsia ([griglia](grid-ipc.md)).
 
 ## La griglia
 
@@ -57,8 +56,8 @@ I fogli di calcolo usano la famiglia Grid, con porte strettamente tipate:
 `list_grid_surfaces` elenca i binding, e una superficie con
 `protocol_version` 2 si apre sui byte di un documento (`open_grid_bytes`,
 `grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
-`grid_bytes_command`, `close_grid_bytes`). Sessione, finestra, comandi e
-limiti: [le porte della griglia](grid-ipc.md).
+`grid_bytes_command`, `close_grid_bytes`), in una corsia sua. Sessione,
+finestra, comandi, corsia e limiti: [le porte della griglia](grid-ipc.md).
 
 
 ## Disegno
