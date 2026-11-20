@@ -592,14 +592,8 @@ fn rollup(args: &[BaseValue], ctx: &RowContext) -> Result<BaseValue, EvalError> 
 fn call_known(name: &str, args: Vec<BaseValue>, ctx: &RowContext) -> Result<BaseValue, EvalError> {
     match name {
         "rollup" => rollup(&args, ctx),
-        "if" => {
-            let cond = truthy(&args[0]);
-            Ok(if cond {
-                args[1].clone()
-            } else {
-                args[2].clone()
-            })
-        }
+        // `if` non arriva qui: è una forma speciale di `eval_call`, che valuta
+        // solo il ramo scelto.
         "number" => to_number(&args[0]),
         "text" | "string" => Ok(BaseValue::Text(args[0].display())),
         "bool" => Ok(BaseValue::Bool(truthy(&args[0]))),
@@ -1054,6 +1048,57 @@ mod tests {
         ];
         for (source, expected) in cases {
             assert_eq!(value_of(source), expected, "{source}");
+        }
+    }
+
+    /// `if` valuta la condizione e poi solo il ramo scelto: le guardie
+    /// difensive non cadono sull'errore del ramo scartato.
+    #[test]
+    fn if_valuta_solo_il_ramo_scelto() {
+        let mut row = ctx();
+        row.props.insert("totale".into(), BaseValue::Number(0.0));
+        row.props
+            .insert("completati".into(), BaseValue::Number(3.0));
+        row.props
+            .insert("x".into(), BaseValue::Text("testo".into()));
+        let of = |source: &str| {
+            Formula::parse(source)
+                .unwrap()
+                .evaluate(&row, &mut EvalBudget::new(MAX_FORMULA_STEPS))
+        };
+        let div = BaseValue::Error(FormulaErrorCode::DivZero);
+        let value = BaseValue::Error(FormulaErrorCode::Value);
+        let cases = [
+            // I quattro esempi dell'audit.
+            (
+                "if(totale > 0, completati / totale, 0)",
+                BaseValue::Number(0.0),
+            ),
+            (
+                "if(isEmpty(prezzo), 0, prezzo * 1.22)",
+                BaseValue::Number(0.0),
+            ),
+            (
+                "if(isEmpty(scadenza), \"—\", format(scadenza, \"YYYY-MM-DD\"))",
+                BaseValue::Text("—".into()),
+            ),
+            (
+                "if(isType(x, \"number\"), round(x, 2), 0)",
+                BaseValue::Number(0.0),
+            ),
+            // Il ramo scelto si valuta davvero, errori compresi.
+            ("if(completati > 0, completati / totale, 0)", div.clone()),
+            ("if(false, 1 / 0, \"ok\")", BaseValue::Text("ok".into())),
+            ("if(true, \"ok\", 1 / 0)", BaseValue::Text("ok".into())),
+            // L'errore della condizione si propaga.
+            ("if(1 / 0 > 1, 1, 2)", div),
+            ("if(round('a', 2), 1, 2)", value.clone()),
+            // L'arità resta controllata come prima.
+            ("if(true, 1)", value.clone()),
+            ("if(true, 1, 2, 3)", value),
+        ];
+        for (source, expected) in cases {
+            assert_eq!(of(source), expected, "{source}");
         }
     }
 

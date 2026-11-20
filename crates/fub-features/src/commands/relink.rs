@@ -303,8 +303,15 @@ fn frontmatter_block(source: &str) -> Option<std::ops::Range<usize>> {
 }
 
 /// Gli edit che, nel frontmatter di `source`, cambiano la pagina di ogni
-/// `[[…]]` scritto come una delle chiavi di `pages` nel valore che le
+/// link scritto come una delle chiavi di `pages` nel valore che le
 /// corrisponde. Ogni edit porta la pagina che ha cambiato.
+///
+/// Si riscrive esattamente ciò che l'indice conta come link della proprietà
+/// ([`fub_abi::rules::properties::links`]), così le pagine raccolte prima
+/// della rinomina e gli edit coincidono: una stringa YAML che è **soltanto**
+/// un `[[…]]`, come valore o come voce di un elenco. Un `[[…]]` dentro altro
+/// testo, in un commento YAML o in una chiave non è un link della proprietà e
+/// resta com'è; un `[[` letterale non chiuso non nasconde il link che segue.
 fn frontmatter_link_edits(
     source: &str,
     pages: &BTreeMap<String, String>,
@@ -314,18 +321,22 @@ fn frontmatter_link_edits(
     };
     let text = &source[block.clone()];
     let mut edits = Vec::new();
-    let mut at = 0;
-    while let Some(open) = text[at..].find("[[") {
-        let inner_start = at + open + 2;
-        let Some(close) = text[inner_start..].find("]]") else {
-            break;
+    for value in yaml_string_values(text) {
+        let raw = &text[value.clone()];
+        let lead = raw.len() - raw.trim_start().len();
+        let Some(inner) = raw
+            .trim()
+            .strip_prefix("[[")
+            .and_then(|rest| rest.strip_suffix("]]"))
+        else {
+            continue;
         };
-        let inner_end = inner_start + close;
-        at = inner_end + 2;
-        let inner = &text[inner_start..inner_end];
-        if inner.contains('\n') || inner.contains("[[") {
+        // La stessa regola di `lone_wikilink`; in più, un interno su più
+        // righe non si riscrive (piegato dallo YAML non è più il testo).
+        if inner.contains("[[") || inner.contains("]]") || inner.contains('\n') {
             continue;
         }
+        let inner_start = value.start + lead + 2;
         let LinkTarget::Wiki { page, .. } = parse_wikilink_inner(inner).target else {
             continue;
         };
@@ -342,6 +353,175 @@ fn frontmatter_link_edits(
         edits.push((page, TextEdit::replace(Span::new(start, end), next.clone())));
     }
     edits
+}
+
+/// Gli intervalli di byte, nel frontmatter `text`, del contenuto grezzo di
+/// ogni **valore** stringa che può essere un link solo: le stringhe fra
+/// virgolette (`"…"`, `'…'`, anche su più righe) e i blocchi `|`/`>`.
+/// Restano fuori i commenti, le chiavi e gli scalari senza virgolette: uno
+/// scalare nudo non comincia con `[` in YAML (`a: [[X]]` è un elenco di
+/// elenchi, non una stringa), quindi non è mai un link solo.
+///
+/// Non è un parser YAML: è il lessico che basta a dire dove sta una stringa.
+/// Uno YAML che non si legge non ha link per l'indice, e un link che qui
+/// sfuggisse fa fallire la nota in modo dichiarato (`E_RELINK_CHANGED`), mai
+/// una riscrittura al posto sbagliato.
+fn yaml_string_values(text: &str) -> Vec<std::ops::Range<usize>> {
+    let b = text.as_bytes();
+    let blank = |c: u8| matches!(c, b' ' | b'\t' | b'\r' | b'\n');
+    let ends_token = |i: usize| i >= b.len() || blank(b[i]);
+    let line_end = |from: usize| {
+        b[from..]
+            .iter()
+            .position(|&c| c == b'\n')
+            .map_or(b.len(), |n| from + n)
+    };
+    let mut out = Vec::new();
+    let mut i = 0;
+    // Quanti `[`/`{` aperti: dentro, `,` `]` `}` sono segni e non testo.
+    let mut depth = 0usize;
+    // Il prossimo segno apre un nodo (a inizio riga, dopo `: `, `- `, `[`…).
+    let mut node = true;
+    // Dentro uno scalare nudo, fino a `: `, a un commento o alla riga dopo.
+    let mut plain = false;
+    let mut line_start = true;
+    let mut indent = 0;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'\n' {
+            i += 1;
+            line_start = true;
+            node = true;
+            plain = false;
+            indent = b[i..].iter().take_while(|&&c| c == b' ').count();
+            continue;
+        }
+        if matches!(c, b' ' | b'\t' | b'\r') {
+            i += 1;
+            continue;
+        }
+        let at_line_start = std::mem::replace(&mut line_start, false);
+        // Un commento comincia con `#` dopo uno spazio, o a inizio riga.
+        if c == b'#' && (i == 0 || blank(b[i - 1])) {
+            i = line_end(i);
+            continue;
+        }
+        if plain {
+            let flow_end = depth > 0 && matches!(b.get(i + 1), Some(b',' | b']' | b'}'));
+            match c {
+                b':' if ends_token(i + 1) || flow_end => {
+                    plain = false;
+                    node = true;
+                }
+                b',' if depth > 0 => {
+                    plain = false;
+                    node = true;
+                }
+                b']' | b'}' if depth > 0 => {
+                    plain = false;
+                    depth -= 1;
+                }
+                _ => {}
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            b'"' | b'\'' if node => {
+                let Some(close) = quoted_end(b, i) else {
+                    break;
+                };
+                // Una stringa seguita da `:` è una chiave; una a inizio riga
+                // fuori da `[…]` continua uno scalare nudo della riga sopra.
+                let after = b[close + 1..]
+                    .iter()
+                    .find(|&&c| c != b' ' && c != b'\t')
+                    .copied();
+                if after != Some(b':') && !(at_line_start && depth == 0) {
+                    out.push(i + 1..close);
+                }
+                i = close + 1;
+                node = false;
+            }
+            b'|' | b'>' if node && depth == 0 => {
+                // L'intestazione (`|-`, `>+2`, un commento) finisce la riga;
+                // il contenuto sono le righe più rientrate di quella.
+                let mut at = line_end(i);
+                let first = (at + 1).min(b.len());
+                let mut last = first;
+                while at < b.len() {
+                    let line = at + 1;
+                    let end = line_end(line);
+                    let row = &b[line..end];
+                    let empty = row.iter().all(|&c| blank(c));
+                    if !empty && row.iter().take_while(|&&c| c == b' ').count() <= indent {
+                        break;
+                    }
+                    if !empty {
+                        last = end;
+                    }
+                    at = end;
+                }
+                if last > first {
+                    out.push(first..last);
+                }
+                // Riparte dal `\n` che chiude il blocco: la riga dopo
+                // ricalcola il suo rientro.
+                i = at;
+                node = false;
+            }
+            b'[' | b'{' if node || depth > 0 => {
+                depth += 1;
+                node = true;
+                i += 1;
+            }
+            b']' | b'}' if depth > 0 => {
+                depth -= 1;
+                node = false;
+                i += 1;
+            }
+            b',' if depth > 0 => {
+                node = true;
+                i += 1;
+            }
+            b':' if ends_token(i + 1) || depth > 0 => {
+                node = true;
+                i += 1;
+            }
+            b'-' | b'?' if node && depth == 0 && ends_token(i + 1) => {
+                node = true;
+                i += 1;
+            }
+            _ => {
+                plain = true;
+                node = false;
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// L'indice della virgoletta che chiude la stringa aperta in `open`: fra le
+/// doppie `\` salta il carattere dopo, fra le singole `''` è un apostrofo.
+/// `None` se non si chiude.
+fn quoted_end(b: &[u8], open: usize) -> Option<usize> {
+    let quote = b[open];
+    let mut i = open + 1;
+    while i < b.len() {
+        match b[i] {
+            b'\\' if quote == b'"' => i += 2,
+            c if c == quote => {
+                if quote == b'\'' && b.get(i + 1) == Some(&b'\'') {
+                    i += 2;
+                } else {
+                    return Some(i);
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -365,6 +545,118 @@ mod tests {
             apply(source, frontmatter_link_edits(source, &pages)),
             "---\nprogetto: \"[[Nuovo|Il progetto]]\"\naltri: [\"[[ Nuovo#Fasi ]]\", \"[[Altro]]\"]\n---\n\nNel testo [[Vecchio]] resta al kernel.\n"
         );
+    }
+
+    /// Quante volte l'indice conta `page` fra i link del frontmatter: lo
+    /// YAML letto come lo legge il provider Markdown, poi la regola unica
+    /// `fub_abi::rules::properties::links`.
+    fn counted_by_index(source: &str, page: &str) -> usize {
+        let block = frontmatter_block(source).expect("un frontmatter");
+        let serde_json::Value::Object(map) =
+            serde_yaml_ng::from_str::<serde_json::Value>(&source[block]).expect("YAML valido")
+        else {
+            panic!("il frontmatter non è una mappa");
+        };
+        let fm = fub_abi::model::Frontmatter(map);
+        fub_abi::rules::properties::links(&fm)
+            .into_iter()
+            .filter(|(_, target)| matches!(target, LinkTarget::Wiki { page: p, .. } if p == page))
+            .count()
+    }
+
+    fn vecchio() -> BTreeMap<String, String> {
+        BTreeMap::from([("Vecchio".to_string(), "Nuovo".to_string())])
+    }
+
+    /// Un `[[` non chiuso (in una stringa o in un commento) non fa saltare
+    /// il link valido che lo segue: altrimenti la nota fallisce con
+    /// `E_RELINK_CHANGED` e il link resta col nome vecchio.
+    #[test]
+    fn an_unclosed_bracket_does_not_hide_the_next_link() {
+        let pages = vecchio();
+        for (source, expected) in [
+            (
+                "---\ntitolo: \"Appunti [[ bozza\"\nprogetto: \"[[Vecchio]]\"\n---\n",
+                "---\ntitolo: \"Appunti [[ bozza\"\nprogetto: \"[[Nuovo]]\"\n---\n",
+            ),
+            (
+                "---\n# [[ in corso\nprogetto: \"[[Vecchio]]\"\n---\n",
+                "---\n# [[ in corso\nprogetto: \"[[Nuovo]]\"\n---\n",
+            ),
+            (
+                "---\ntitolo: Appunti [[ bozza\nlibri: [\"[[Vecchio]]\", '[[Vecchio|V]]']\n---\n",
+                "---\ntitolo: Appunti [[ bozza\nlibri: [\"[[Nuovo]]\", '[[Nuovo|V]]']\n---\n",
+            ),
+        ] {
+            let edits = frontmatter_link_edits(source, &pages);
+            assert_eq!(edits.len(), counted_by_index(source, "Vecchio"), "{source}");
+            assert_eq!(apply(source, edits), expected, "{source}");
+        }
+    }
+
+    /// Si riscrive esattamente ciò che l'indice conta come link della
+    /// proprietà (`fub_abi::rules::properties::links`): una stringa che è
+    /// soltanto un `[[…]]`, come valore o voce di un elenco. Un commento
+    /// YAML, un `[[…]]` dentro altro testo, una chiave restano come sono.
+    #[test]
+    fn only_what_the_index_counts_is_rewritten() {
+        let source = "---\n\
+            # vedi [[Vecchio]]\n\
+            progetto: \"[[Vecchio]]\" # era \"[[Vecchio]]\"\n\
+            nota: \"vedi [[Vecchio]] e altro\"\n\
+            due: \"[[Vecchio]] e [[Vecchio]]\"\n\
+            \"[[Vecchio]]\": chiave\n\
+            frase: l'amico [[Vecchio]]\n\
+            elenco:\n  - \"[[Vecchio]]\"\n  - testo [[Vecchio]]\n  # - \"[[Vecchio]]\"\n\
+            citato: 'l''amico \"[[Vecchio]]\"'\n\
+            ---\n";
+        let expected = source
+            .replacen("progetto: \"[[Vecchio]]\"", "progetto: \"[[Nuovo]]\"", 1)
+            .replacen("  - \"[[Vecchio]]\"", "  - \"[[Nuovo]]\"", 1);
+        let edits = frontmatter_link_edits(source, &vecchio());
+        assert_eq!(counted_by_index(source, "Vecchio"), 2);
+        assert_eq!(edits.len(), 2);
+        assert_eq!(apply(source, edits), expected);
+    }
+
+    /// Il controllo del chiamante: ogni pagina raccolta dall'indice ha il suo
+    /// edit, anche dopo un `[[` letterale dentro una stringa.
+    #[test]
+    fn every_page_the_index_found_gets_an_edit() {
+        let source = "---\na: \"[[ x\"\nb: \"[[Vecchio]]\"\nc: [\"[[Altro]]\"]\n---\n";
+        let pages = BTreeMap::from([
+            ("Vecchio".to_string(), "Nuovo".to_string()),
+            ("Altro".to_string(), "Diverso".to_string()),
+        ]);
+        let seen: BTreeSet<String> = frontmatter_link_edits(source, &pages)
+            .into_iter()
+            .map(|(page, _)| page)
+            .collect();
+        assert_eq!(seen.len(), pages.len());
+    }
+
+    /// Una stringa su più righe, o un blocco `|`/`>`, che è soltanto un link
+    /// è un link per l'indice: si riscrive anche lei.
+    #[test]
+    fn a_multiline_scalar_that_is_only_a_link_is_rewritten() {
+        let source = "---\na: \"\n  [[Vecchio]]\n  \"\nb: >-\n  [[Vecchio#Fasi]]\nc: |\n  vedi [[Vecchio]]\nd: 1\n---\n";
+        assert_eq!(counted_by_index(source, "Vecchio"), 2);
+        let expected = "---\na: \"\n  [[Nuovo]]\n  \"\nb: >-\n  [[Nuovo#Fasi]]\nc: |\n  vedi [[Vecchio]]\nd: 1\n---\n";
+        assert_eq!(
+            apply(source, frontmatter_link_edits(source, &vecchio())),
+            expected
+        );
+    }
+
+    /// Uno YAML troncato in ogni punto (virgolette aperte, `\` in fondo, un
+    /// blocco senza righe) non fa mai cadere la lettura.
+    #[test]
+    fn a_truncated_frontmatter_never_panics() {
+        let full = "a: \"x\\\" [[Vecchio]]\"\nb: 'l''è [[Vecchio]]'\nc: [ \"[[Vecchio]]\", {d: '[[Vecchio]]'} ]\ne: |-\n  [[Vecchio]]\n# è [[\nf: ►\n";
+        for (cut, _) in full.char_indices() {
+            let source = format!("---\n{}\n---\n", &full[..cut]);
+            let _ = frontmatter_link_edits(&source, &vecchio());
+        }
     }
 
     #[test]
