@@ -114,7 +114,9 @@ volta ([entrare e uscire](../reference/canvas-input.md#entrare-e-uscire)).
 
 Un clic su una scheda, dopo un pulsante della colonna o della riga delle
 opzioni, riporta il fuoco sulla lavagna: Canc, Ctrl+Z e gli altri tasti
-valgono subito.
+valgono subito. Ctrl+Z e Ctrl+Y annullano e ripetono anche col fuoco rimasto
+su un pulsante della colonna, della riga o della barra della scelta; in un
+campo di testo restano del campo.
 
 ## Spostare e agganciare
 
@@ -148,7 +150,7 @@ disco ([scrivere dentro una scheda](../reference/canvas-cards.md#scrivere-dentro
   più vicino se coprirebbe un'altra scheda. Il testo resta nel `.canvas`. La scheda cresce col testo fino a
   480 px di larghezza, poi va a capo; Ctrl+Invio apre una scheda nuova sotto,
   Ctrl+Maiusc+Invio a destra con un filo. «Aggiungi testo» (la riga delle
-  opzioni, il menu, Ctrl+/) apre la scheda già in scrittura in un posto libero
+  opzioni, il menu, o cercato per nome con Ctrl+/) apre la scheda già in scrittura in un posto libero
   vicino al centro della vista. Una scheda nuova lasciata vuota se ne va
   uscendo, anche con Esc, e non lascia niente da annullare. Mentre si scrive,
   Ctrl+W chiude la linguetta come fuori
@@ -374,8 +376,8 @@ scrive. L'elenco completo sta in [comandi e tasti](../reference/canvas-input.md#
 
 Sulla tastiera italiana `Ctrl+[` si preme con `Ctrl+è`; Porta davanti si fa
 dal menu o da `Ctrl+/`. Da tastiera e col lettore di schermo: F6 passa fra la
-lavagna, il navigatore, la colonna e la riga; Maiusc+F10 apre il menu della
-scheda ([da tastiera](../reference/canvas-view.md#da-tastiera-e-col-lettore-di-schermo)).
+lavagna, il navigatore, la colonna e la riga; Maiusc+F10 o il tasto Menu
+aprono il menu della scheda scelta, accanto a lei ([da tastiera](../reference/canvas-view.md#da-tastiera-e-col-lettore-di-schermo)).
 
 ## Per chi cambia la lavagna
 
