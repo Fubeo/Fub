@@ -59,10 +59,21 @@ Shared files, in the orchestrator's skill:
    `Dipende da` is `[x]`; phases are not gates. Prefer the one that unblocks
    the most others. Set its `Stato` to `[~] in corso · base <sha>`, commit and
    push the plan branch.
-2. **Effort.** The session runs at Opus effort medium. Before a task that
-   touches a contract (ABI, WIT, IPC), an on-disk format, concurrency or
-   security, say in one line that a higher effort helps there (`/effort high`)
-   and go on: don't wait for an answer.
+2. **Hard tasks get a design pass.** The session runs at Opus effort medium.
+   A task that touches a contract (ABI, WIT, IPC), an on-disk format,
+   concurrency or security, or whose cause is still unclear after a first
+   look, first goes to one read-only design agent: `Agent` with
+   `model: "opus"`, `effort: "high"`, `run_in_background: true`. Its brief:
+   the task's section, what you already know and ruled out, and the output
+   file `scratchpad/<task>/soluzione.md`, with the cause, the owning layer,
+   the files and functions to change, the test that must fail first, the
+   steps, the risks and what it ruled out. It reads code and runs read-only
+   commands; it doesn't edit the repository, commit or start agents. While it
+   works, do something else (the next task's reading, the review of the
+   previous one). Then read the file, check in the code the claims that decide
+   the outcome, and implement it yourself. If the design is wrong or thin, fix
+   it yourself; never a second design agent for the same task. It doesn't
+   count toward the two Haiku helpers.
 3. **Implement** as a coder would: reproduce first with a test that fails,
    fix in the owning layer, update the canonical `docs/` page. Decide the
    technical how yourself; ask only what `DECISIONS.md` lists under "Chiede
