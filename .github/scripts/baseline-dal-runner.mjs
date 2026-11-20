@@ -323,7 +323,7 @@ export function convalida(zipFile, baselineRamo, baselineMain, uscita) {
  * il banco visivo. Vale soltanto se il commit della corsa ha un solo genitore,
  * è il `head_sha` di `corsa`, e aggiunge o cambia soltanto baseline; se
  * `corsa` è una `pull_request` dello stesso repository e workflow, sullo stesso
- * ramo (mai il predefinito), con la PR pronta (i test sui tre sistemi) e ogni
+ * ramo (mai il predefinito), con la PR pronta (i test su Linux e Windows) e ogni
  * job verde o saltato tranne il banco visivo, che è caduto.
  */
 export function valutaRiuso({ corsa, job, genitori, diff, repo, workflowId, ramo, predefinito }) {
