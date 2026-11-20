@@ -88,6 +88,18 @@ Files of this skill:
      bench port and the machine block;
    - set the task's `Stato` to `[~] in corso · coder · base <sha>`.
 
+   **A hard task gets a design pass first**, when you judge it needs one: it
+   touches a contract (ABI, WIT, IPC), an on-disk format, concurrency or
+   security, or its cause is unclear after a first look. Launch the
+   [`progettista`](../../agents/progettista.md) agent
+   (`subagent_type: "progettista"`, `run_in_background: true`,
+   `effort: "xhigh"` for a contract, an on-disk format or security, its
+   default `high` otherwise). It doesn't take a coder slot. When it returns,
+   read its file, check in the code the claims that decide the outcome, and
+   put the file's path in the coder's brief: the coder follows it and says
+   where the code proved it wrong. Never a second design pass for the same
+   task.
+
    A graphic task also adds its pieces to the prototype map in
    `apps/client/bench/conformita/`, and passes `npm run bench:conformita`
    through the heavy-check queue; say so in its brief. When the user names an

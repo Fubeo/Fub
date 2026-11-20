@@ -55,6 +55,10 @@ expected.
   with `BLOCCATO` (the question, the options, your recommendation first) only
   for what `DECISIONS.md` lists under "Chiede sempre", or when the brief and
   the code disagree on what the person using Fub sees.
+- **A design file.** When the brief names a `soluzione.md` from the
+  [`progettista`](progettista.md), read it first and follow it; where the
+  code proves it wrong, the code wins, and the report says where under
+  `DIFFERENZE DAL PIANO`.
 - **Your scratch space.** In a shared scratchpad, use only a subfolder named
   after your task; never loose files with generic names (`check.log`,
   `build.sh`) that another coder overwrites.

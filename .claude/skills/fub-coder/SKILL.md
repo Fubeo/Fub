@@ -62,20 +62,17 @@ Shared files, in the orchestrator's skill:
 2. **Hard tasks get a design pass.** The session runs at Opus effort medium.
    A task that touches a contract (ABI, WIT, IPC), an on-disk format,
    concurrency or security, or whose cause is still unclear after a first
-   look, first goes to one read-only design agent: `Agent` with
-   `model: "opus"`, `run_in_background: true`, and `effort: "xhigh"` for a
-   contract, an on-disk format or security, `effort: "high"` otherwise
-   (concurrency, an unclear cause). Its brief:
-   the task's section, what you already know and ruled out, and the output
-   file `scratchpad/<task>/soluzione.md`, with the cause, the owning layer,
-   the files and functions to change, the test that must fail first, the
-   steps, the risks and what it ruled out. It reads code and runs read-only
-   commands; it doesn't edit the repository, commit or start agents. While it
-   works, do something else (the next task's reading, the review of the
-   previous one). Then read the file, check in the code the claims that decide
-   the outcome, and implement it yourself. If the design is wrong or thin, fix
-   it yourself; never a second design agent for the same task. It doesn't
-   count toward the two Haiku helpers.
+   look, first goes to the [`progettista`](../../agents/progettista.md) agent
+   (`subagent_type: "progettista"`, `run_in_background: true`,
+   `effort: "xhigh"` for a contract, an on-disk format or security, its
+   default `high` otherwise). Its brief: the task's section, what you already
+   know and ruled out, the worktree and commit to read, and the output file
+   `scratchpad/<task>/soluzione.md`. While it works, do something else (the
+   next task's reading, the review of the previous one). Then read the file,
+   check in the code the claims that decide the outcome, and implement it
+   yourself. If the design is wrong or thin, fix it yourself; never a second
+   design pass for the same task. It doesn't count toward the two Haiku
+   helpers.
 3. **Implement** as a coder would: reproduce first with a test that fails,
    fix in the owning layer, update the canonical `docs/` page. Decide the
    technical how yourself; ask only what `DECISIONS.md` lists under "Chiede
