@@ -401,10 +401,9 @@ predefinito, se il ramo è andato avanti o se la PR ha l'etichetta
 `baseline-a-mano`; non esegue codice della PR e convalida l'artefatto prima di
 scrivere un file. Le regole e le loro prove stanno in
 [`baseline-dal-runner.mjs`](../../.github/scripts/baseline-dal-runner.mjs).
-Una scena nuova senza foto fa cadere solo il banco visivo, che fa partire il
-bot e senza baseline non lascia unire la PR; il presidio di
-`bench/scene.test.ts` vuole che ogni scena abbia tutte le sue luci o nessuna.
-L'autoprova copre scene solo nuove, nuove più cambiate e client rosso.
+Una scena nuova senza foto fa cadere solo il banco visivo (che non lascia
+unire la PR e fa partire il bot): `bench/scene.test.ts` vuole che ogni scena
+abbia tutte le sue luci o nessuna, e l'autoprova copre anche questo caso.
 
 Nella corsa rilanciata il job `cosa cambia` decide il **riuso**: se il commit
 ha per unico genitore la testa della corsa `riuso_di`, cambia solo
