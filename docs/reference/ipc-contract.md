@@ -507,7 +507,7 @@ finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
 
 `resource_write` deposita byte grezzi, coi parametri nella testata
 `x-fub-resource-write`; il contratto intero (campi, `reuse: "same-content"`,
-ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md).
+ricevuta, errori e limiti) sta in [Depositare un file](resource-write.md). I byte di una tessera della vista Mappa (`map_tile`): [Le tessere delle mappe](map-tiles.md).
 
 ## Percorsi
 

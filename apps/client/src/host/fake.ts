@@ -384,6 +384,10 @@ export interface Options {
   draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
+  /// Chi serve le tessere della vista Mappa da un sito che la riga
+  /// `map.tile-hosts` ammette. Il finto rifiuta da solo, come l'host, i siti
+  /// che la riga non ha; senza questa porta un sito ammesso risponde `io`.
+  mapTile?: (url: string, kind: "raster" | "vector") => Promise<ArrayBuffer>;
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
   /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
   revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
@@ -2239,6 +2243,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       viewerSave: (url, title, allowlist, attachmentFolder, vault) =>
         gate("viewerSave", [url, title, allowlist, attachmentFolder, vault], Promise.reject(new Error("host fake: viewer download is unavailable"))),
+      mapTile: (url, kind) => gate("mapTile", [url, kind], Promise.resolve().then(() => {
+        // La regola dell'host (`Host::map_tile`): soltanto un sito della riga.
+        const row = settings.find((entry) => entry.spec.key === "map.tile-hosts");
+        const hosts = Array.isArray(row?.value) ? row.value : [];
+        let site = "";
+        try { site = new URL(url).hostname.toLowerCase(); } catch { /* non è un indirizzo */ }
+        if (!url.startsWith("https://") || !hosts.some((host) => host.trim().toLowerCase() === site)) {
+          throw { kind: "permission_denied", message: `Le tessere di ${site || url} non sono ammesse su questo computer.` } satisfies PluginError;
+        }
+        if (!options.mapTile) throw { kind: "io", message: "host fake: nessuno serve le tessere" } satisfies PluginError;
+        return options.mapTile(url, kind);
+      })),
       viewerControl: (action) =>
         gate("viewerControl", [action], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       // Il finto non ha una finestra del visore: niente da raccontare.

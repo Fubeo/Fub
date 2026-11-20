@@ -811,6 +811,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.extend(service_settings());
     settings.extend(live_settings());
     settings.extend(viewer_settings());
+    settings.push(map_tile_hosts_spec());
     #[cfg(feature = "craft")]
     settings.extend(craft_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
@@ -1707,6 +1708,18 @@ pub fn user_value_problem(
     key: &str,
     value: &fub_abi::settings::SettingValue,
 ) -> Option<fub_abi::PluginError> {
+    if key == crate::map_tiles::MAP_TILE_HOSTS {
+        let fub_abi::settings::SettingValue::List(hosts) = value else {
+            return None;
+        };
+        let wrong = hosts
+            .iter()
+            .find(|host| !crate::map_tiles::is_host_name(host.trim()))?;
+        return Some(fub_abi::PluginError::BadArgs(Text::message(
+            C_REJECTED_TILE_HOST,
+            vec![Arg::text("value", wrong)],
+        )));
+    }
     let text = value.as_text()?;
     if key == fub_kernel::locale::TIMEZONE {
         if text.is_empty() || crate::wall::known_zone(text) {
@@ -1753,6 +1766,24 @@ fn viewer_settings() -> Vec<SettingSpec> {
         .grouped(Text::key(C_GROUP_VIEWER))
         .for_machine(),
     ]
+}
+
+/// Gli host delle tessere della vista Mappa: di macchina, perché far uscire
+/// una richiesta è una scelta di chi usa questo PC — un vault scaricato non
+/// la porta con sé. Vuota di serie: nessuna richiesta senza un sì. Non
+/// `program_writable`: un componente non si apre la rete da solo. Nella
+/// Privacy, accanto a ciò che decide cosa lascia la macchina.
+fn map_tile_hosts_spec() -> SettingSpec {
+    SettingSpec::new(
+        crate::map_tiles::MAP_TILE_HOSTS,
+        Text::key(C_MAP_TILE_HOSTS),
+        SettingKind::List {
+            default: Vec::new(),
+        },
+    )
+    .describing(Text::key(C_MAP_TILE_HOSTS_DESC))
+    .grouped(Text::key(C_GROUP_PRIVACY))
+    .for_machine()
 }
 
 /// La sessione live: di macchina, perché la porta è una regola del firewall di
@@ -2194,6 +2225,9 @@ const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
 const C_GROUP_LIVE: &str = "core.group.live";
 const C_REJECTED_TIMEZONE: &str = "core.settings.rejected.timezone";
 const C_REJECTED_SERVER_URL: &str = "core.settings.rejected.server_url";
+const C_REJECTED_TILE_HOST: &str = "core.settings.rejected.tile_host";
+const C_MAP_TILE_HOSTS: &str = "core.map.tile_hosts";
+const C_MAP_TILE_HOSTS_DESC: &str = "core.map.tile_hosts.desc";
 const C_GROUP_VIEWER: &str = "core.group.viewer";
 const C_VIEWER_HOSTS: &str = "core.viewer.hosts";
 const C_VIEWER_HOSTS_DESC: &str = "core.viewer.hosts.desc";
@@ -2422,6 +2456,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.web.clip.plan", "Salverebbe {url} come nuova nota nella cartella «{folder}».")
         .with("host.web.clip.plan_root", "Salverebbe {url} come nuova nota nella radice del vault.")
         .with("host.web.clip.no_network", "Questa finestra non ha accesso alla rete: la pagina non si può scaricare.")
+        .with("host.map.tile.not_https", "«{url}» non è un indirizzo https di tessere: servono https, nessuna porta diversa da 443, niente credenziali, query o frammento.")
+        .with("host.map.tile.not_allowed", "Le tessere di {site} non sono ammesse su questo computer: aggiungi il sito in Impostazioni › Privacy › Tessere delle mappe.")
+        .with("host.map.tile.no_network", "Questa finestra non ha accesso alla rete: le tessere non si possono scaricare.")
+        .with("host.map.tile.busy", "Troppe tessere in attesa: riprova fra poco.")
+        .with("host.map.tile.timeout", "{site} non ha mandato la tessera in tempo.")
+        .with("host.map.tile.network", "{site} non risponde: controlla la connessione.")
+        .with("host.map.tile.redirect", "{site} ha mandato altrove la richiesta della tessera: i redirect non si seguono.")
+        .with("host.map.tile.status", "{site} ha risposto {status} alla richiesta della tessera.")
+        .with("host.map.tile.too_large", "Una tessera di {site} supera 1 MiB e non si mostra.")
+        .with("host.map.tile.bad_type", "Una tessera di {site} non è un'immagine che la mappa accetti ({kind}).")
         .with("host.control.not_base64", "I byte non sono in base64.")
         .with("host.wasm.render_parts", "Una resa con parti UI non si consegna ancora a un componente.")
         .with("host.control.no_answer", "L'app non risponde sul canale di controllo: {reason}")
@@ -2961,6 +3005,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "«{value}» non è un indirizzo di server valido. Scrivi un indirizzo https://, \
              oppure http:// solo verso 127.0.0.1, ::1 o localhost; vuoto vuol dire nessun server.",
         )
+        .with(
+            C_REJECTED_TILE_HOST,
+            "«{value}» non è un nome di host. Scrivi soltanto il nome, per esempio tile.openstreetmap.org: senza https://, porta o percorso.",
+        )
+        .with(C_MAP_TILE_HOSTS, "Tessere delle mappe")
+        .with(
+            C_MAP_TILE_HOSTS_DESC,
+            "I siti da cui la vista Mappa di una Base può scaricare le tessere, quando premi «Attiva». Vuota, le mappe restano offline e nessuna richiesta esce dal computer.",
+        )
         .with(C_GROUP_VIEWER, "Visore web")
         .with(C_VIEWER_HOSTS, "Siti approvati")
         .with(
@@ -3174,6 +3227,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.web.clip.plan", "Would save {url} as a new note in the folder “{folder}”.")
         .with("host.web.clip.plan_root", "Would save {url} as a new note at the root of the vault.")
         .with("host.web.clip.no_network", "This window has no network access: the page cannot be downloaded.")
+        .with("host.map.tile.not_https", "“{url}” is not an https tile address: it needs https, no port other than 443, and no credentials, query or fragment.")
+        .with("host.map.tile.not_allowed", "Tiles from {site} are not allowed on this computer: add the site in Settings › Privacy › Map tiles.")
+        .with("host.map.tile.no_network", "This window has no network access: tiles cannot be downloaded.")
+        .with("host.map.tile.busy", "Too many tiles waiting: try again shortly.")
+        .with("host.map.tile.timeout", "{site} did not send the tile in time.")
+        .with("host.map.tile.network", "{site} does not answer: check the connection.")
+        .with("host.map.tile.redirect", "{site} sent the tile request elsewhere: redirects are not followed.")
+        .with("host.map.tile.status", "{site} answered {status} to the tile request.")
+        .with("host.map.tile.too_large", "A tile from {site} is larger than 1 MiB and is not shown.")
+        .with("host.map.tile.bad_type", "A tile from {site} is not an image the map accepts ({kind}).")
         .with("host.control.not_base64", "The bytes are not base64.")
         .with("host.wasm.render_parts", "A render with UI parts cannot be handed to a component yet.")
         .with("host.control.no_answer", "The app does not answer on the control channel: {reason}")
@@ -3703,6 +3766,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_REJECTED_SERVER_URL,
             "“{value}” is not a valid server address. Write an https:// address, \
              or http:// only towards 127.0.0.1, ::1 or localhost; empty means no server.",
+        )
+        .with(
+            C_REJECTED_TILE_HOST,
+            "“{value}” is not a host name. Write only the name, for example tile.openstreetmap.org: no https://, port or path.",
+        )
+        .with(C_MAP_TILE_HOSTS, "Map tiles")
+        .with(
+            C_MAP_TILE_HOSTS_DESC,
+            "The sites from which a Base's Map view may download tiles, when you press “Enable”. Empty, maps stay offline and no request leaves the computer.",
         )
         .with(C_GROUP_VIEWER, "Web viewer")
         .with(C_VIEWER_HOSTS, "Approved sites")

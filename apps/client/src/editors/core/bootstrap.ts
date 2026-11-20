@@ -891,7 +891,7 @@ export function createDocumentSurfaceRegistry(
     // shell condivide con gli altri editor.
     factory: {
       load: async () => {
-        const { mountBaseSurface, vaultPropertyTypes } = await import("../base/surface");
+        const { appMapTiles, mountBaseSurface, vaultPropertyTypes } = await import("../base/surface");
         return {
           mount(profile, context) {
             // Il vault in cui la superficie nasce (FUB-001).
@@ -907,6 +907,9 @@ export function createDocumentSurfaceRegistry(
               documentWrites: options.documentWrites,
               // Il registro dei tipi: le corsie della Bacheca su Selezione e Stato.
               propertyTypes: vaultPropertyTypes,
+              // Le tessere della Mappa: dall'host, dai siti che questa
+              // macchina ammette; il rimando porta alla riga che li ammette.
+              mapTiles: appMapTiles(options.onOpenSettings),
             });
           },
         };

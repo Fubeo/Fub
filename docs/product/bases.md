@@ -46,7 +46,7 @@ facoltative:
 | `summaries` | i riepiloghi (conteggio, somma, media, minimo, massimo…) |
 | `limit` | quante righe al massimo, da 1 a 10000 |
 | `search` | un testo da cercare fra i valori delle righe |
-| `map` | le coordinate e il fornitore dei tasselli, per la vista mappa |
+| `map` | le coordinate e il fornitore dei tasselli, per [la vista mappa](bases-map.md) |
 | `fub` | il blocco di Fub per il calendario e la linea del tempo (vedi sotto) |
 
 ## Calendario e linea del tempo

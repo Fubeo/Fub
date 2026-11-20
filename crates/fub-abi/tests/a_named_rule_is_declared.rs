@@ -602,6 +602,41 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/map_tiles.rs::tile_host",
+            (
+                Family::AsciiCase,
+                "riconosce lo schema `https://` e abbassa l'host DNS di una tessera della vista \
+                 Mappa: è la domanda di `web_clip.rs::viewer_host`, ma qui l'indirizzo vuole anche \
+                 un percorso e rifiuta query e frammento, perché una tessera non ne ha bisogno.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::allowed_hosts",
+            (
+                Family::AsciiCase,
+                "abbassa i siti di `map.tile-hosts` per confrontarli con l'host della tessera, come \
+                 `web_clip.rs::approved` fa con `viewer.hosts`: i nomi DNS sono ASCII e senza \
+                 maiuscole. È un'altra lista perché scaricare tessere non è aprire pagine.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::sniffed",
+            (
+                Family::AsciiCase,
+                "cerca `<svg`, `<!doctype` e `<!entity` in una tessera vettoriale senza badare al \
+                 maiuscolo, come il parser XML del browser per i nomi dei tag: sono ASCII. Non è \
+                 un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/map_tiles.rs::declared",
+            (
+                Family::AsciiCase,
+                "legge il `Content-Type` di una tessera scaricata: i tipi MIME sono ASCII e senza \
+                 distinzione di maiuscole per RFC 9110. Non è un nome di Fub.",
+            ),
+        ),
+        (
             "crates/fub-host/src/engines.rs::extension",
             (
                 Family::AsciiCase,

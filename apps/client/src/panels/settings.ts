@@ -2035,6 +2035,10 @@ const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
     () => import("../ui/uri-allowed-field").then(({ uriAllowedField, describeUriAllowed }) => ({ field: uriAllowedField, describe: describeUriAllowed })),
   ],
   [
+    "map.tile-hosts",
+    () => import("../ui/map-tile-hosts-field").then(({ mapTileHostsField, describeMapTileHosts }) => ({ field: mapTileHostsField, describe: describeMapTileHosts })),
+  ],
+  [
     "sync.exclude",
     () => import("../ui/sync-exclude-field").then(({ syncExcludeField, describeSyncExclude }) => ({ field: syncExcludeField, describe: describeSyncExclude })),
   ],

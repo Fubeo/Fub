@@ -13,21 +13,36 @@ import { declaredType, OPTION_GROUPS, optionsOf, type PropertyOption, type Prope
 import { BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
 
 export { BASE_FAMILY, BASE_FORMAT, BASE_OWNER, BASE_PROFILE, BASE_QUERY_NS, BASE_RENDERER_NS } from "./ids";
-export const BASE_MAP_ATTRIBUTION_FALLBACK = "Offline coordinates";
 export const BASE_STATE_KEY = "base.active-view";
-/** YAML is not a network grant. Only an explicit gesture plus a host-owned
- * exact-host allowlist may turn a tile template into a browser resource URL. */
-export function allowedBaseTileUrl(template: string, kind: "raster" | "vector", allowedHosts: readonly string[], z: number, x: number, y: number): string | null {
-  if (!allowedHosts.length || !["{z}", "{x}", "{y}"].every((part) => template.includes(part))) return null;
+/// La chiave di macchina con gli host da cui la vista Mappa può scaricare
+/// tessere (`fub-host`, `map_tiles::MAP_TILE_HOSTS`). Vuota di serie.
+export const MAP_TILE_HOSTS_KEY = "map.tile-hosts";
+
+/// L'indirizzo di una tessera dal modello del `.base`, se ha la forma che
+/// l'host accetta (`https`, porta 443, niente credenziali, query o frammento;
+/// un fornitore vettoriale dà SVG). Non guarda gli host ammessi: per quello
+/// c'è `allowedBaseTileUrl`.
+export function baseTileUrl(template: string, kind: "raster" | "vector", z: number, x: number, y: number): URL | null {
+  if (!["{z}", "{x}", "{y}"].every((part) => template.includes(part))) return null;
   if (![z, x, y].every((n) => Number.isSafeInteger(n) && n >= 0) || z > 3 || x >= 2 ** z || y >= 2 ** z) return null;
   try {
     const url = new URL(template.replace(/\{z\}/g, String(z)).replace(/\{x\}/g, String(x)).replace(/\{y\}/g, String(y)));
-    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || /[{}]/.test(url.href)) return null;
-    if (!allowedHosts.some((host) => host.toLowerCase() === url.hostname.toLowerCase())) return null;
+    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || url.search || url.hash || /[{}]/.test(url.href)) return null;
     // Vector tiles here are SVG imagery, not executable HTML or PBF bytes.
     if (kind === "vector" && !url.pathname.toLowerCase().endsWith(".svg")) return null;
-    return url.href;
+    return url;
   } catch { return null; }
+}
+
+/** YAML is not a network grant. Only an explicit gesture plus a host-owned
+ * exact-host allowlist may turn a tile template into a tile request. The
+ * authority is the host (`Host::map_tile`): this check only avoids asking for
+ * what it would refuse. */
+export function allowedBaseTileUrl(template: string, kind: "raster" | "vector", allowedHosts: readonly string[], z: number, x: number, y: number): string | null {
+  if (!allowedHosts.length) return null;
+  const url = baseTileUrl(template, kind, z, x, y);
+  if (!url || !allowedHosts.some((host) => host.trim().toLowerCase() === url.hostname.toLowerCase())) return null;
+  return url.href;
 }
 
 export interface BaseSurfaceDeps {
