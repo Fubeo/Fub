@@ -574,7 +574,7 @@ async function hydrateEmbeds(
     // `![[disegno.svg]]` che non passa nemmeno di qui.
     const drawing = mediaKindOfId(content.doc_id) === "image" ? scenePlaceholder(content.html) : null;
     if (drawing?.doc === content.doc_id) {
-      await expected(showEmbeddedDrawing(container, slot, drawing, life));
+      await expected(showEmbeddedDrawing(container, slot, drawing, expected, life));
       return;
     }
     // Un file Craft (`![[logo.vectorcraft]]`) torna come il segnaposto del

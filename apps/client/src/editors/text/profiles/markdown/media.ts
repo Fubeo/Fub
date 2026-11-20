@@ -391,16 +391,20 @@ function leaseNamed(
 /// risolto e reso col segnaposto del suo formato (`scenePlaceholder`). Vale la
 /// specie del media: lo slot diventa l'immagine che `![[disegno.svg]]`
 /// darebbe, con un lease suo, e il segnaposto non entra nella nota.
+///
+/// Il lease passa dal cancello del giro: nato a resa smontata torna `null`, e
+/// senza il cancello il giro scaduto scriveva «non risolto» sullo slot.
 export async function showEmbeddedDrawing(
   container: HTMLElement,
   slot: HTMLElement,
   drawing: { doc: string; name: string },
+  expected: Expected,
   life: Lifetime,
   port: MediaPort = hostPort,
 ): Promise<void> {
   const own = embedOwnText(slot);
   slot.dataset.vaultMedia = "pending";
-  const url = await lease(port, drawing.doc, life).catch(() => null);
+  const url = await expected(lease(port, drawing.doc, life).catch(() => null));
   if (!url) {
     slot.dataset.vaultMedia = "unresolved";
     slot.classList.add("unresolved");
