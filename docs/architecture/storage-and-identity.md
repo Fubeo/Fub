@@ -386,19 +386,12 @@ usano l'anagrafe quando eredita impronta e metadati da una riga, il riuso
 delle righe alla riapertura, `learn_fingerprints`, lo svuotamento del cestino
 e il prestito delle letture a pezzi. Sui supporti dove il timbro è la data
 (FAT) l'identità resta l'unico segno di un file messo sopra un altro.
-Timbro e identità si chiedono insieme, con `VaultStorage::witness`: su
-Windows è un handle solo, aperto una volta; gli altri supporti hanno un
-default che chiama `change_stamp` e `file_identity`.
-
-La riga di `entries.json` porta il timbro del file **letto**, non di quello
-che c'è quando la si scrive. La voce viva ricorda da quale file viene la sua
-impronta (`CoreIndex::learned_on`): la lettura della seconda fase, con il
-testimone preso prima di leggere, la riga certificata alla riapertura, una
-domanda sul contenuto. `store_entries` scrive il timbro solo se quel
-testimone coincide ancora con il file di adesso; una voce che non lo sa (una
-scrittura di Fub, il rilevatore) va senza timbro, e la riapertura la rilegge.
-Così un file rinominato sopra un altro con lo stesso peso e la stessa data,
-dopo la lettura, non viene certificato con i byte di prima.
+Timbro e identità si chiedono insieme (`VaultStorage::witness`: su Windows un
+handle solo). La riga di `entries.json` porta il timbro del file **letto**:
+la voce ricorda da quale file viene l'impronta (`CoreIndex::learned_on`:
+lettura della seconda fase, riga certificata, domanda sul contenuto), e
+`store_entries` scrive il timbro solo se quel file è ancora lo stesso; una
+voce che non lo sa (una scrittura di Fub, il rilevatore) va senza timbro.
 
 Un timbro ricordato vale solo se era già fermo quando si è guardato il file:
 più vecchio di una grana, presa larga a due secondi (`CHANGE_STAMP_GRAIN`),

@@ -388,6 +388,13 @@ fn a_vault_rebuilt_while_it_is_open_still_knows_its_files() {
     // il gancio fa la domanda, dopo che l'anagrafe è stata svuotata e
     // rimessa.
     aged(&root, "Foto/lenta.png", b"PNG di prova: lenta");
+    // «originale.md» si ritrova a metà del rebuild perché l'anagrafe la
+    // certifica, senza rileggerla: la sua riga porta il timbro solo se era
+    // già fermo quando la si è guardata, più vecchio di una grana di due
+    // secondi. Senza, la domanda del gancio la rileggerebbe e vorrebbe
+    // consegnare l'impronta col turno di scrittura, che il rebuild tiene
+    // finché il gancio non torna: un'attesa che non finisce.
+    std::thread::sleep(Duration::from_millis(2_100));
     let reads = Arc::new(AtomicUsize::new(0));
     let hook: Hook = Arc::new(Mutex::new(None));
     let failing = Arc::new(AtomicBool::new(true));
