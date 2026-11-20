@@ -171,6 +171,7 @@ vendor_guards() {
   run "craft-docpath = upstream" node tools/vendor-craft/vendor.mjs craft-docpath check
   run "craft-vectorcraft-format = upstream" node tools/vendor-craft/vendor.mjs craft-vectorcraft-format check
   run "patch dei motori a tre vie" node tools/vendor-craft/vendor.mjs self-test
+  run "mappa del disegno = VectorCraft" bash -c 'node --test tools/disegno-mappa/estrai.test.mjs && node .github/scripts/check-disegno-mappa.mjs --self-test && node .github/scripts/check-disegno-mappa.mjs'
   run "dati di vendor = dati.mjs, cartelle dichiarate" bash -c 'node tools/vendor-craft/provenienza.mjs self-test && node tools/vendor-craft/provenienza.mjs check && node tools/vendor-craft/provenienza.mjs elenco'
 }
 

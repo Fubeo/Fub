@@ -2,10 +2,8 @@
 
 > **Domanda:** come un gesto in un disegno passa dal motore vettoriale e
 > torna nel file, e chi possiede che cosa fra client, motore, penna e file?
-> **Fonti autorevoli:** `crates/fub-disegno/`,
-> `crates/fub-host/src/drawing.rs`,
-> `apps/client/src/editors/spatial/motore/`,
-> `crates/fub-abi/src/drawing.rs`.
+> **Fonti autorevoli:** `crates/fub-disegno/`, `crates/fub-host/src/drawing.rs`,
+> `apps/client/src/editors/spatial/motore/`, `crates/fub-abi/src/drawing.rs`.
 > **Decisioni:** [ADR 0239](../decisions/0239-il-disegno-sul-motore-vettoriale.md),
 > [ADR 0231](../decisions/0231-la-chiusura-di-fubdraw.md),
 > [ADR 0204](../decisions/0204-nucleo-inchiostro.md).
@@ -292,6 +290,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 |---|---|
 | `vendor/vectorcraft/` | la copia di VectorCraft, con le patch numerate e `UPSTREAM.md` |
 | `crates/fub-disegno/` | l'adattatore: apertura, mappa, sincronia, differenza, gesti, comandi, perdite |
+| `crates/fub-disegno/mappa.tsv`, `tools/disegno-mappa/` | la mappa delle funzioni di VectorCraft (non `src/mappa.rs`, che lega gli elementi agli oggetti), il suo estrattore e, in `.github/scripts/check-disegno-mappa.mjs`, la sua guardia: [colonne, stati e regole](../../tools/disegno-mappa/README.md) |
 | `crates/fub-host/src/drawing.rs` | le istanze per vault e i sei comandi lato host |
 | `crates/fub-abi/src/drawing.rs` | le forme condivise e i limiti |
 | `apps/client/src/editors/spatial/motore/` | la sessione, i gesti, i colori e il chip delle perdite e del motore che manca (`standing.ts`) |
@@ -301,8 +300,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 `Cargo.toml` e nei sorgenti (`.github/scripts/check-engine-boundary.mjs` e
 `VECTORCRAFT_OWNERS` in `crates/fub-abi/tests/dependency_invariant.rs`). La prova
 che il motore fa ciò che facevano gli strumenti TypeScript sono i vettori di
-`apps/client/src/__fixtures__/disegno-gesti/`; quella
-senza perdite è il cancello, `node tools/disegno-cancello/cancello.mjs`
+`apps/client/src/__fixtures__/disegno-gesti/`; quella senza perdite è il cancello, `node tools/disegno-cancello/cancello.mjs`
 ([come funziona](../../tools/disegno-cancello/README.md), [le misure di K5](../misure/2026-11-12-disegno-linux-13600kf.md)).
 
 Il motore entra senza le feature di serie di `vectorcraft-engine`: niente
