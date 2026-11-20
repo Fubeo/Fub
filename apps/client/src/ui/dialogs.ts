@@ -50,11 +50,24 @@ export function openFrame(title: string, onDismiss: () => void): Frame {
     closed = true;
     life.close();
   };
-  life.listen(overlay, "mousedown", (event) => {
+  // Il clic fuori si legge da `pointerdown` e non da `mousedown`: il tocco di
+  // un dito che apre la finestra al rilascio, come lo strumento Nota delle
+  // annotazioni, manda i suoi eventi del mouse di compatibilità dopo che il
+  // dito si è alzato, su ciò che sta sotto in quel momento, cioè lo sfondo
+  // appena comparso; quel `mousedown` non è un clic fuori, e la finestra si
+  // chiudeva da sola (IMP-3807). Un tocco o un clic nuovo fuori manda sempre
+  // il suo `pointerdown`.
+  life.listen(overlay, "pointerdown", (event) => {
     if (event.target === overlay) {
       close();
       onDismiss();
     }
+  });
+  // Lo stesso `mousedown` sullo sfondo non porta il fuoco sullo sfondo, che
+  // ha `tabIndex` -1: il campo che la finestra ha scelto resta col fuoco, e
+  // ciò che si scrive dopo il tocco ci entra.
+  life.listen(overlay, "mousedown", (event) => {
+    if (event.target === overlay) event.preventDefault();
   });
   document.body.append(overlay);
   enterSurface(overlay);
