@@ -3154,13 +3154,9 @@ fn percorso_di_disegno(
     let webkit = webkit
         .and_then(fub_host::settings::Webview::webkitgtk)
         .map(|fub_host::settings::Webview::WebKitGtk(a, b, c)| (a, b, c));
-    let scelta = disegno::scegli(
-        modo,
-        &diagnosi,
-        webkit,
-        &|nome| std::env::var_os(nome).is_some(),
-        movimento_calmo,
-    );
+    let gia_messa = |nome: &str| std::env::var_os(nome).is_some();
+    let mut scelta = disegno::scegli(modo, &diagnosi, webkit, &gia_messa, movimento_calmo);
+    disegno::barre_fisse(&mut scelta, &gia_messa);
     disegno::applica(&scelta);
     (modo, diagnosi, scelta)
 }

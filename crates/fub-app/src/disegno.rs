@@ -27,6 +27,7 @@
 //! | `auto` | ogni altro caso (X11, AMD, Intel, VM, nessuna GPU) | nessuna | nessuno |
 //! | `gpu` | ogni altro caso | nessuna | solo quello del driver disallineato |
 //! | `cpu` | qualunque | `WEBKIT_SKIA_ENABLE_CPU_RENDERING=1`, se l'utente non l'ha messa | solo quello del driver disallineato |
+//! | qualunque | qualunque, se l'utente non l'ha messa | `GTK_OVERLAY_SCROLLING=0` ([`barre_fisse`]) | nessuno |
 //!
 //! Perché `auto` non sceglie il renderer: col disegno software (llvmpipe)
 //! Skia CPU è pari al default di WebKit a PC scarico e peggiore sotto carico,
@@ -218,6 +219,10 @@ const FORZA_DMABUF: &str = "WEBKIT_FORCE_DMABUF_RENDERER";
 /// La composizione con TextureMapper invece che con Skia.
 const SKIA_COMPOSIZIONE: &str = "WEBKIT_USE_SKIA_FOR_COMPOSITION";
 
+/// Le barre di scorrimento sovrapposte di GTK: `0` le tiene sempre visibili,
+/// senza la dissolvenza.
+const BARRE_SOVRAPPOSTE: &str = "GTK_OVERLAY_SCROLLING";
+
 /// Come GTK3 prepara la superficie di ogni disegno di una finestra. GTK la
 /// legge in `gdk_init` (`gdk/gdk.c`): `similar` (di serie), `image` o
 /// `recording`.
@@ -313,6 +318,21 @@ pub fn scegli(
         .iter()
         .all(|(name, _)| !VIETATE.contains(name)));
     scelta
+}
+
+/// **Le barre di scorrimento sempre visibili**, su ogni Linux e in ogni modo,
+/// se l'utente non ha già scritto `GTK_OVERLAY_SCROLLING`. Le barre
+/// sovrapposte di WebKitGTK compaiono a ogni scorrimento, ridimensionamento o
+/// passaggio del puntatore e sfumano a 60 fotogrammi al secondo per circa
+/// 3 s: con Fub fermo e una nota aperta 35–37 ridisegni della finestra al
+/// secondo invece di 1,6, e il thread principale al 5–8% di un core invece
+/// dello 0–1% (misure del 19-11-2026). Le barre fisse prendono la loro
+/// larghezza alla colonna che scorre: è una scelta del maintainer del
+/// 20-11-2026, per un Fub fermo che non lavora, come su Windows.
+pub fn barre_fisse(scelta: &mut Scelta, gia_messa: &dyn Fn(&str) -> bool) {
+    if !gia_messa(BARRE_SOVRAPPOSTE) {
+        scelta.variabili.push((BARRE_SOVRAPPOSTE, "0"));
+    }
 }
 
 /// Scrive le variabili scelte nell'ambiente del processo.
@@ -798,6 +818,33 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Le barre fisse valgono su ogni macchina e in ogni modo, e il valore
+    /// dell'utente vince.
+    #[test]
+    fn le_barre_fisse_ovunque_tranne_che_col_valore_dell_utente() {
+        for modo in [Modo::Auto, Modo::Gpu, Modo::Cpu] {
+            for pc in [
+                Macchina::nuova()
+                    .nvidia("595.112.07", "595.112.07")
+                    .wayland(),
+                Macchina::nuova().wayland(),
+                Macchina::nuova()
+                    .env("XDG_SESSION_TYPE", "x11")
+                    .env("DISPLAY", ":0"),
+            ] {
+                let mut scelta = pc.scelta(modo);
+                barre_fisse(&mut scelta, &|_| false);
+                assert!(
+                    scelta.variabili.contains(&("GTK_OVERLAY_SCROLLING", "0")),
+                    "{modo:?}"
+                );
+            }
+        }
+        let mut scelta = Scelta::default();
+        barre_fisse(&mut scelta, &|nome| nome == "GTK_OVERLAY_SCROLLING");
+        assert!(scelta.variabili.is_empty());
     }
 
     #[test]

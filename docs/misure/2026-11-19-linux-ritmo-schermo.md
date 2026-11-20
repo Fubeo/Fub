@@ -166,6 +166,8 @@ secondo, ogni 606 ms).
   sfumano: senza (`GTK_OVERLAY_SCROLLING=0`) restano solo i giri del
   cursore. Senza barre sovrapposte la barra si vede sempre e la colonna
   della nota si sposta di circa 10 px: non è una scelta di questa misura.
+  Il 20-11-2026 il maintainer ha scelto le barre fisse: Fub scrive la
+  variabile su ogni Linux ([La webview del desktop su Linux](../architecture/desktop-webview.md#le-barre-di-scorrimento-fisse)).
 
 ### Il costo della pagina
 

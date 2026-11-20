@@ -322,6 +322,17 @@ con GL. Si eredita nei programmi che Fub avvia, dove non cambia il
 risultato. Numeri in
 [Il ritmo dello schermo su NVIDIA](../misure/2026-11-19-linux-ritmo-schermo.md#la-superficie-di-gtk3).
 
+### Le barre di scorrimento fisse
+
+Le barre sovrapposte di WebKitGTK sfumano per circa 3 s dopo ogni gesto, e
+in quei secondi la finestra si ridisegna a 60 fotogrammi al secondo anche
+con Fub fermo. Su Linux Fub scrive `GTK_OVERLAY_SCROLLING=0` in ogni modo e
+su ogni scheda, se l'utente non l'ha già messa (`disegno::barre_fisse`): le
+barre restano sempre visibili, prendono la loro larghezza alla colonna che
+scorre, e con una nota aperta e ferma la finestra passa da 35–37 a 1,6
+ridisegni al secondo (solo il cursore). È una scelta del maintainer del
+20-11-2026; Windows e macOS non leggono la variabile.
+
 ## Come si verifica
 
 - La riga `WebKitGTK emulated vblank` dice se l'emulazione è attiva o
