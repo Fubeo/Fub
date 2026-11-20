@@ -191,7 +191,12 @@ fn percent_decode(text: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(byte) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
+            // `get`, not a slice: a letter of several bytes after the `%`
+            // must not panic.
+            if let Some(Ok(byte)) = text
+                .get(i + 1..i + 3)
+                .map(|pair| u8::from_str_radix(pair, 16))
+            {
                 out.push(byte);
                 i += 3;
                 continue;
