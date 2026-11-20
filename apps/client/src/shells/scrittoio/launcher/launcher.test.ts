@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listenerLedger, press } from "../../../kit/testing";
+import { listenerLedger, press, WEBKIT_COMPOSING } from "../../../kit/testing";
 import { trapFocus } from "../../../ui/a11y";
 import { activeMotions, createManualDriver, setMotionDriver, setMotionPreference } from "../../../moto";
 import { currentHints, resetHintSources } from "../../../editors/core/hints";
@@ -763,6 +763,21 @@ describe("scegliere una riga", () => {
     await settle();
     expect(world.log).toEqual(["create Idea nuova in -", "open Nuova.md", "focus editor"]);
     expect(surface()).toBeNull();
+  });
+
+  it("Invio, Maiusc-Invio ed Esc che chiudono una composizione (WebKit: codice 229) non scelgono, non creano e non chiudono", async () => {
+    world.answer = () => offer("Idea nuova");
+    launcher.open("all");
+    typed("Idea nuova");
+    press(field(), "Enter", { ...WEBKIT_COMPOSING, shiftKey: true });
+    press(field(), "Enter", WEBKIT_COMPOSING);
+    press(field(), "Escape", WEBKIT_COMPOSING);
+    await settle();
+    expect(world.log).toEqual([]);
+    expect(surface()).not.toBeNull();
+    press(field(), "Enter", { shiftKey: true });
+    await settle();
+    expect(world.log).toEqual(["create Idea nuova in -", "open Nuova.md", "focus editor"]);
   });
 
   it("una creazione rifiutata non apre niente", async () => {

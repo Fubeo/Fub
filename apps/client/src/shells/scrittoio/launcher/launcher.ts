@@ -53,6 +53,7 @@ import {
 } from "./model";
 import { createPreview, folderOf, type PreviewCard, type PreviewFact } from "./preview";
 import { answersAtOnce, listing, prefetchFiles, rereadFiles, selectable, type ActionId, type Listing, type Row } from "./sources";
+import { composingKey } from "../../../kit/ime";
 
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere a una sorgente
 /// che risponde da lontano (ms).
@@ -1013,7 +1014,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     });
     // In cattura: è un Invio, e l'elenco non deve prenderlo per una scelta.
     life.listen(surface, "keydown", (event) => {
-      if (event.isComposing || mode !== "all" || !matchesBinding(event, PANEL_CHORD)) return;
+      if (composingKey(event) || mode !== "all" || !matchesBinding(event, PANEL_CHORD)) return;
       event.preventDefault();
       event.stopPropagation();
       carry();
@@ -1021,7 +1022,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     // Esc, dalle azioni, torna all'elenco e non chiude. Il giro del fuoco lo
     // ascolta dal documento in cattura: qui si arriva prima, dalla finestra.
     life.listen(window, "keydown", (event) => {
-      if (actionsOf === null || event.key !== "Escape" || event.isComposing) return;
+      if (actionsOf === null || event.key !== "Escape" || composingKey(event)) return;
       event.preventDefault();
       event.stopPropagation();
       leaveActions();
@@ -1035,12 +1036,12 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     // si vede lo offre: non con righe, non mentre l'indice lavora, non con una
     // sintassi a metà o un guasto, non mentre una risposta nuova è in arrivo.
     life.listen(input, "keydown", (event) => {
-      if (event.isComposing || event.key !== "Enter" || !event.shiftKey) return;
+      if (composingKey(event) || event.key !== "Enter" || !event.shiftKey) return;
       if (create()) event.preventDefault();
     });
 
     life.listen(surface, "keydown", (event) => {
-      if (event.isComposing) return;
+      if (composingKey(event)) return;
       if (event.key === "Tab") {
         // Tab non esce e non cambia modo: mostra le azioni della riga, o le lascia.
         event.preventDefault();

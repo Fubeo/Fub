@@ -42,6 +42,7 @@ import type {
 import { notify } from "./notify";
 import { withPageNonce } from "./stylesheets";
 import { attributeValue, external, isAllowedLink } from "./sanitize";
+import { composingKey } from "../kit/ime";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const XLINK_NAMESPACE = "http://www.w3.org/1999/xlink";
@@ -1430,7 +1431,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
     life.listen(captionText, "keydown", (event: KeyboardEvent) => {
       // I tasti della didascalia sono suoi, non della nota attorno.
       event.stopPropagation();
-      if (event.isComposing) return;
+      if (composingKey(event)) return;
       if (event.key === "Enter" || event.key === "Escape") {
         event.preventDefault();
         if (event.key === "Escape") {

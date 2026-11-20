@@ -34,6 +34,7 @@ import { BAR_FEATURES, ORDERS, RATIO_ROLES } from "./constants";
 import type { EditorContext } from "./context";
 import { translated, union } from "./helpers";
 import type { PanelReading } from "./types";
+import { composingKey } from "../../../../kit/ime";
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -190,7 +191,7 @@ export function installPanel(ctx: EditorContext): void {
   });
   life.listen(describeSkip, "click", () => nextDescription(true));
   life.listen(describeInput, "keydown", (event) => {
-    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.key !== "Enter" || composingKey(event)) return;
     event.preventDefault();
     writeAsked();
   });

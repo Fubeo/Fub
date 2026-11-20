@@ -24,6 +24,7 @@ import { loadKatex, readOptions } from "../math";
 import { liveStrings } from "../strings";
 import type { MathEditor } from "./editor";
 import { commandName, GROUPS, SYMBOLS, symbolName, type MathSymbol, type SymbolGroup } from "./symbols";
+import { composingKey } from "../../../../../kit/ime";
 
 /// Quanti pezzi stanno nella fila sotto la formula: i primi del catalogo.
 export const QUICK_COUNT = 8;
@@ -501,7 +502,7 @@ export class MathPalette {
   }
 
   private keydown(event: KeyboardEvent): void {
-    if (event.defaultPrevented || event.isComposing) return;
+    if (event.defaultPrevented || composingKey(event)) return;
     const target = event.target;
     const handled = () => {
       event.preventDefault();

@@ -33,7 +33,7 @@ import type { PdfEngineLoader } from "../media/pdf-view";
 import type { Spring } from "../../moto/spring";
 import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
 import { writeClipboardText } from "../../platform/clipboard";
-import { createTabs, textButton, type TabsHandle } from "../../kit";
+import { composingKey, createTabs, textButton, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../text/engine";
 import { createFormulaProfile, formulaReferences, operandSlot, type FormulaMove } from "../text/profiles/formula";
@@ -435,7 +435,7 @@ function joinNotices(...parts: readonly (string | null)[]): string {
 export type GridEditMode = "ready" | "insert" | "edit";
 
 /// Che cosa fa una battuta su una cella scelta. Un tasto vero (`isTrusted`)
-/// stampabile, morto o di composizione (`Process`, `isComposing`) apre la
+/// stampabile, morto o di composizione (`Process`, `composingKey`) apre la
 /// cella e lascia che il browser ci scriva: così passano tasti morti e IME.
 /// Un evento sintetico non scrive niente da sé, e la cella si apre col suo
 /// carattere. Le scorciatoie (Ctrl, Cmd, Alt senza AltGr) non aprono.
@@ -443,7 +443,7 @@ export function typingOpens(event: KeyboardEvent): "browser" | "seed" | null {
   const altGraph = event.getModifierState?.("AltGraph") ?? false;
   if (event.ctrlKey && !altGraph) return null;
   if (event.metaKey || (event.altKey && !altGraph)) return null;
-  const composing = event.isComposing || event.key === "Process" || event.key === "Dead";
+  const composing = composingKey(event) || event.key === "Process" || event.key === "Dead";
   if (event.isTrusted && (composing || event.key.length === 1)) return "browser";
   return !composing && event.key.length === 1 ? "seed" : null;
 }

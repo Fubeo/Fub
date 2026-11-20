@@ -62,6 +62,7 @@ import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./revie
 import { BlockWriter, lookVariables, richSchema, toDoc } from "./schema";
 import { closedBlocks, keepsOutside, selectionInClosed } from "./closed";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
+import { composingKey } from "../../kit/ime";
 
 export { mountRichRibbon } from "./ribbon";
 export { mountRichSide } from "./side";
@@ -94,7 +95,7 @@ const escapePassesThrough = new Plugin({
   props: {
     handleDOMEvents: {
       keydown: (view, event) => {
-        if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return false;
+        if (event.key !== "Escape" || composingKey(event) || event.defaultPrevented) return false;
         if (view.someProp("handleKeyDown", (handle) => handle(view, event))) event.preventDefault();
         return true;
       },
@@ -122,7 +123,7 @@ export interface RichPendingEdit {
 /// Il tasto scrive un carattere: una lettera, una cifra, un segno, lo spazio.
 /// Ctrl o ⌘ fanno un gesto, salvo con AltGr (Ctrl+Alt su Windows).
 function writesText(event: KeyboardEvent): boolean {
-  if (event.isComposing || [...event.key].length !== 1) return false;
+  if (composingKey(event) || [...event.key].length !== 1) return false;
   return !(event.ctrlKey || event.metaKey) || event.getModifierState("AltGraph");
 }
 
@@ -593,7 +594,7 @@ export class RichEngine {
   /// `event` scrive una lettera, e il cursore sta in un blocco chiuso: nello
   /// stato del motore o, dove il browser lo ha messo col clic, nel DOM.
   #typesIntoClosed(view: EditorView, event: KeyboardEvent): boolean {
-    if (!this.editable() || !this.hasClosed() || event.isComposing) return false;
+    if (!this.editable() || !this.hasClosed() || composingKey(event)) return false;
     if (event.ctrlKey || event.metaKey || [...event.key].length !== 1) return false;
     if (selectionInClosed(view.state.selection)) return true;
     const at = view.dom.ownerDocument.getSelection()?.anchorNode ?? null;

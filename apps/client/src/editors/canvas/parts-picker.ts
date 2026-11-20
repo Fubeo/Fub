@@ -14,6 +14,7 @@ import { createList } from "../../kit/list";
 import { openPopover, type AnchorBox, type PopoverCloseReason } from "../../kit/popover";
 import { iconEl } from "../../ui/icons";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { composingKey } from "../../kit/ime";
 
 /// Un titolo della nota come lo dà il sommario dell'indice (`Heading`).
 export interface PartsHeading {
@@ -416,7 +417,7 @@ export function openPartsPicker(options: PartsPickerOptions): PartsPickerHandle 
   let inList = false;
   // Prima della lista: Spazio e Invio senza righe sono di questo selettore.
   life.listen(input, "keydown", (event) => {
-    if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (composingKey(event) || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "PageDown" || event.key === "PageUp") {
       inList = true;
       return;

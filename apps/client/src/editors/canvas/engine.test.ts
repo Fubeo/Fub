@@ -1198,6 +1198,21 @@ describe("CanvasEngine: il testo di una scheda", () => {
     engine.destroy();
   });
 
+  it("Invio ed Esc che chiudono una composizione (WebKit: dopo compositionend, col codice 229) non chiudono il campo", () => {
+    const { engine, host } = mounted();
+    const input = openField(host, "t");
+    input.dispatchEvent(new CompositionEvent("compositionstart"));
+    type(input, "日本");
+    input.dispatchEvent(new CompositionEvent("compositionend"));
+    expect(press(input, "Escape", { keyCode: 229 }).defaultPrevented).toBe(false);
+    expect(press(input, "Enter", { keyCode: 229, ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(host.querySelector(".canvas-text-editor")).toBe(input);
+    expect(press(input, "Escape").defaultPrevented).toBe(true);
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    expect(cardText(engine)).toBe("日本");
+    engine.destroy();
+  });
+
   it("con i CRLF la TextOperation conta sui \\n", () => {
     vi.useFakeTimers();
     const source = JSON.stringify(JSON.parse(canvasSource()), null, "\t").replace(/\n/g, "\r\n");

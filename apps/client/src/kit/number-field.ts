@@ -19,6 +19,7 @@
 import { identifier } from "../ui/a11y";
 import type { Lifetime } from "../ui/lifetime";
 import { evaluate, type QuantityProblem } from "./quantity";
+import { composingKey } from "./ime";
 
 /// Quanti pixel di trascinamento fanno un passo.
 export const SCRUB_PX = 4;
@@ -230,7 +231,7 @@ export function numberField(options: NumberFieldOptions): NumberField {
   };
 
   listen(input, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     if (event.key === "Enter") {
       event.preventDefault();
       commitTyped();

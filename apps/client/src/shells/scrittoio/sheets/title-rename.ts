@@ -89,7 +89,7 @@ export function proposedName(from: string, typed: string): string | null {
 /// Una battuta che scrive un carattere: non una scorciatoia, non un tasto con
 /// nome (Tab, Maiusc, un tasto morto), non lo Spazio, che preme il bottone.
 function writes(event: KeyboardEvent): boolean {
-  if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return false;
+  if (event.ctrlKey || event.metaKey || event.altKey || composingKey(event)) return false;
   return event.key !== " " && [...event.key].length === 1;
 }
 

@@ -1894,6 +1894,12 @@ describe("la domanda prima di un gesto distruttivo (fub.confirm)", () => {
     };
     mountTree(host, asking(), handler);
     await Promise.resolve();
+    // Esc che chiude una composizione (WebKit: codice 229) non risponde.
+    const composing = new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, bubbles: true, cancelable: true });
+    document.activeElement!.dispatchEvent(composing);
+    await Promise.resolve();
+    expect(composing.defaultPrevented).toBe(false);
+    expect(sent).toEqual([]);
     const outside = vi.fn();
     document.addEventListener("keydown", outside);
     const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });

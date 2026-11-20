@@ -866,6 +866,9 @@ describe("GridEngine", () => {
     expect(typingOpens(event({ key: "a", isTrusted: true }))).toBe("browser");
     expect(typingOpens(event({ key: "Dead", isTrusted: true }))).toBe("browser");
     expect(typingOpens(event({ key: "Process", isTrusted: true }))).toBe("browser");
+    // WebKit: la composizione che parte su una cella chiusa ha il codice 229,
+    // e il tasto può non avere nome.
+    expect(typingOpens(event({ key: "Unidentified", keyCode: 229, isTrusted: true }))).toBe("browser");
     expect(typingOpens(event({ key: "a" }))).toBe("seed");
     expect(typingOpens(event({ key: "Dead" }))).toBeNull();
     expect(typingOpens(event({ key: "a", ctrlKey: true, isTrusted: true }))).toBeNull();
