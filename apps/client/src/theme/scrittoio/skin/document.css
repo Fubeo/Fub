@@ -4,11 +4,80 @@
    sembrare la stessa pagina. Ogni regola qui sotto ha perciò due facce — le
    classi `cm-fub-*` della Live e gli elementi dentro `.markdown-rendered` —
    con gli stessi numeri. Le regole di CodeMirror hanno specificità (0,2,0) o
-   più e arrivano dopo la pelle: quelle sulla Live portano sempre il prefisso
-   `.cm-editor .cm-content`, che le batte senza `!important`.
+   più: quelle sulla Live portano sempre il prefisso `.cm-editor .cm-content`,
+   che le batte senza `!important`.
 
    Dentro il foglio niente si muove: il pezzo del moto spegne ogni transizione
    sotto `.pane-editor`, e qui non se ne dichiarano. */
+
+/* ── Ciò che i profili Markdown davano a CodeMirror ──────────────────────── */
+
+/* Il corpo di lettura, i caratteri del codice e del frontmatter, la scala dei
+   titoli, il riquadro delle proprietà: prima stavano nel tema di CodeMirror
+   dei profili Markdown (`editors/text/profiles/markdown/`), fuori dalla pelle,
+   e un tema non li poteva vestire (issue #242). Là restano le misure fisse e
+   ciò che solo CodeMirror sa fare.
+
+   Ogni selettore pesa quanto quello che CodeMirror generava (la sua classe
+   d'ambito diventa `.cm-editor`, o `.cm-fub-markdown` per il corpo, che vale
+   solo sotto il profilo) e sta in testa al pezzo: il foglio di CodeMirror è
+   montato prima della pelle, e ogni regola che segue, qui o nei pezzi dopo,
+   lo ritocca come lo ritoccava prima. */
+.cm-fub-markdown .cm-content {
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+}
+/* Il codice resta monospaziato in Sorgente e in Live; il frontmatter è YAML. */
+.cm-editor .cm-fub-code-line {
+  font-family: var(--font-mono, monospace);
+  line-height: var(--leading-normal);
+}
+.cm-editor .cm-fub-frontmatter {
+  font-family: var(--font-mono, monospace);
+  line-height: var(--leading-normal);
+  color: var(--syn-comment, var(--doc-muted));
+  background: var(--doc-fill-soft, rgba(135, 135, 135, 0.08));
+}
+.cm-editor .cm-fub-code {
+  font-family: var(--font-mono, monospace);
+}
+/* La scala dei titoli della Live, nei passi che leggono quella del tema. */
+.cm-editor .cm-fub-h1 {
+  font-size: max(1.75em, var(--text-3xl, 1.75em));
+}
+.cm-editor .cm-fub-h2 {
+  font-size: max(1.45em, var(--text-2xl, 1.45em));
+}
+.cm-editor .cm-fub-h5,
+.cm-editor .cm-fub-h6 {
+  letter-spacing: var(--tracking-caps, 0.06em);
+}
+.cm-editor .cm-fub-h1,
+.cm-editor .cm-fub-h2,
+.cm-editor .cm-fub-h3,
+.cm-editor .cm-fub-h4,
+.cm-editor .cm-fub-h5,
+.cm-editor .cm-fub-h6 {
+  line-height: var(--leading-tight, 1.2);
+}
+.cm-editor .cm-fub-image img {
+  border-radius: var(--radius-sm, 4px);
+}
+/* Le proprietà della Live (`editor.properties`): la tabella, la riga che si
+   apre, il vuoto. */
+.cm-editor .cm-fub-properties {
+  border-radius: var(--radius-sm, 4px);
+  background: var(--doc-fill-soft, rgba(135, 135, 135, 0.08));
+  line-height: var(--leading-normal, 1.5);
+}
+.cm-editor .cm-fub-properties-hidden,
+.cm-editor .cm-fub-properties-empty {
+  color: var(--doc-muted, var(--doc-gutter-fg, inherit));
+}
+.cm-editor .cm-fub-properties dt {
+  color: var(--doc-muted, var(--doc-gutter-fg, inherit));
+}
 
 /* ── La colonna ──────────────────────────────────────────────────────────── */
 

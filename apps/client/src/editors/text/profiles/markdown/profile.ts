@@ -28,13 +28,11 @@ import type { NoteFactsExtensions } from "./note-facts";
 import { italianTypography } from "./typography";
 import { taskRecurrence, type NextOccurrence } from "./task-toggle";
 
-const typography = Prec.high(EditorView.theme({
-  ".cm-content": {
-    fontFamily: "var(--font-reading)",
-    fontSize: "var(--text-reading)",
-    lineHeight: "var(--leading-relaxed)",
-  },
-}));
+/// Il profilo dice di sé con una classe sull'editor: il corpo di lettura
+/// (carattere, misura, interlinea) glielo dà la pelle sotto
+/// `.cm-fub-markdown .cm-content` (`theme/scrittoio/skin/document.css`), come
+/// ogni altro colore e carattere del documento (issue #242).
+const typography = EditorView.editorAttributes.of({ class: "cm-fub-markdown" });
 
 /// Il codice resta monospaziato in Sorgente e in Live: il corpo di lettura
 /// vale per la prosa, non per l'indentazione di un blocco di codice.
@@ -80,12 +78,10 @@ const monospaceCode: Extension = [
     },
     { decorations: (plugin) => plugin.decorations },
   ),
+  // La misura sta qui, il carattere e l'interlinea nella pelle
+  // (`document.css`).
   Prec.high(EditorView.theme({
-    ".cm-fub-code-line": {
-      fontFamily: "var(--font-mono, monospace)",
-      fontSize: "0.9em",
-      lineHeight: "var(--leading-normal)",
-    },
+    ".cm-fub-code-line": { fontSize: "0.9em" },
   })),
 ];
 
@@ -130,14 +126,10 @@ const frontmatter: Extension = [
     },
     { decorations: (plugin) => plugin.decorations },
   ),
+  // La misura sta qui; carattere, interlinea, inchiostro e fondo nella pelle
+  // (`document.css`).
   Prec.highest(EditorView.theme({
-    ".cm-fub-frontmatter": {
-      fontFamily: "var(--font-mono, monospace)",
-      fontSize: "0.85em",
-      lineHeight: "var(--leading-normal)",
-      color: "var(--syn-comment, var(--doc-muted))",
-      background: "var(--doc-fill-soft, rgba(135, 135, 135, 0.08))",
-    },
+    ".cm-fub-frontmatter": { fontSize: "0.85em" },
     ".cm-fub-frontmatter *": {
       fontWeight: "inherit !important",
       fontSize: "inherit !important",
