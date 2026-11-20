@@ -61,7 +61,7 @@ use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, TaskMarker};
-use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::net::{HttpRequest, HttpResponse, LimitedFetchError};
 use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
@@ -1796,6 +1796,37 @@ impl HostNetwork for JobHost {
     /// token arriva al transport e il suo reader chiude la connessione al primo
     /// controllo, senza aspettare il tetto globale dell'host.
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        let (client, granted) = self.network_wire()?;
+        // Lo stesso `Guard` di tutti gli altri: il cancello è uno solo, e chi
+        // gira dentro un job non ne attraversa uno più largo.
+        Guard::new(client.as_ref(), granted).fetch_cancelled(request, self.cancelled.as_ref())
+    }
+
+    /// Come [`fetch`](HostNetwork::fetch), con il tetto di byte del chiamante
+    /// portato fino al filo. La bandiera che ferma il trasferimento è quella
+    /// del job, come per `fetch` e per il `fetch_cancelled` di default: dentro
+    /// un job annulla il job.
+    fn fetch_limited(
+        &self,
+        request: HttpRequest,
+        _cancelled: &AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        let (client, granted) = self.network_wire()?;
+        Guard::new(client.as_ref(), granted).fetch_limited(
+            request,
+            self.cancelled.as_ref(),
+            max_bytes,
+        )
+    }
+}
+
+impl JobHost {
+    /// Il filo e il permesso di adesso, presi per un istante: vedi
+    /// [`fetch`](HostNetwork::fetch) qui sopra per il perché.
+    fn network_wire(
+        &self,
+    ) -> Result<(Arc<dyn HostNetwork>, fub_kernel::host::Granted), PluginError> {
         self.stopped()?;
         if self.mode == InvokeMode::DryRun {
             authorize_family(
@@ -1816,9 +1847,7 @@ impl HostNetwork for JobHost {
                 "this host is mounted without a network client".into(),
             ));
         };
-        // Lo stesso `Guard` di tutti gli altri: il cancello è uno solo, e chi
-        // gira dentro un job non ne attraversa uno più largo.
-        Guard::new(client.as_ref(), granted).fetch_cancelled(request, self.cancelled.as_ref())
+        Ok((client, granted))
     }
 }
 
