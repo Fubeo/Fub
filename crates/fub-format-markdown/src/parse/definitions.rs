@@ -67,6 +67,14 @@ pub(super) fn recover_definitions<'a>(
     let mut real_spans = Vec::new();
     if shadow_needed {
         paragraph_spans(root, offsets, &mut real_spans);
+        // L'albero non è in ordine di sorgente: comrak porta in fondo al
+        // documento le note citate, e i loro paragrafi arrivano dopo quelli
+        // che nel file stanno più giù. `walk_shadow` cerca per bisezione, e
+        // su una lista fuori ordine mancava il paragrafo vero che copre il
+        // suo: la definizione, già letta dal giro vero, entrava due volte
+        // (#507). I paragrafi non si annidano, quindi in ordine di inizio
+        // sono in ordine anche di fine.
+        real_spans.sort_unstable_by_key(|s| s.start);
     }
     walk_definitions(root, source, offsets, &mut defs, &mut containers);
     if !shadow_needed {
@@ -365,8 +373,8 @@ fn walk_shadow<'a>(
 ) {
     if matches!(node.data.borrow().value, NodeValue::Paragraph) {
         let span = span_of(node, offsets);
-        // `reali` è ordinato per inizio e disgiunto (pre-order di
-        // `span_dei_paragrafi`): il solo candidato a contenere `span` è il
+        // `real_spans` è ordinato per inizio e disgiunto (ordinato in
+        // `recover_definitions`): il solo candidato a contenere `span` è il
         // primo che non finisce prima di lui.
         let idx = real_spans.partition_point(|r| r.end <= span.start);
         if real_spans.get(idx).is_some_and(|r| contains_span(*r, span)) {
@@ -638,6 +646,7 @@ fn shift_node<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isiz
 mod tests {
     use super::{FORCE_SHADOW, SHADOW_PARSES};
     use fub_abi::format::ParseContext;
+    use fub_abi::model::Block;
 
     /// Il parse di una nota e quante ombre ha rifatto.
     fn parse_counting(source: &str) -> (String, usize) {
@@ -693,6 +702,43 @@ mod tests {
                 "{src:?}: la definizione resta nel modello"
             );
             assert_eq!(model, parse_forced(src), "{src:?}");
+        }
+    }
+
+    /// Gli span di tutte le definizioni del modello, a ogni profondità.
+    fn definition_spans(source: &str) -> Vec<fub_abi::model::Span> {
+        fn walk(blocks: &[Block], out: &mut Vec<fub_abi::model::Span>) {
+            for block in blocks {
+                match block {
+                    Block::ReferenceDefinition { span, .. } => out.push(*span),
+                    Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => walk(blocks, out),
+                    Block::List { items, .. } => {
+                        for item in items {
+                            walk(&item.blocks, out);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let model = super::super::parse_markdown(source, &ParseContext::obsidian("nota.md"))
+            .expect("il parse non fallisce");
+        let mut out = Vec::new();
+        walk(&model.body, &mut out);
+        out
+    }
+
+    /// #507: una nota citata, che comrak porta in fondo all'albero, metteva
+    /// fuori ordine i paragrafi veri; l'ombra non trovava quello che copre il
+    /// suo e rileggeva una definizione già letta.
+    #[test]
+    fn a_definition_after_a_cited_footnote_enters_once() {
+        for src in [
+            "\r\n[^1]: [!\r> # ```\n    *e*---\n[^a b]: >\n| - |[^1][[w]]^[^1]: [![!a",
+            "[^1]: nota\n\n[rif]: u\ntesto[^1]\n",
+        ] {
+            let spans = definition_spans(src);
+            assert_eq!(spans.len(), 1, "{src:?}: {spans:?}");
         }
     }
 
@@ -814,6 +860,15 @@ mod tests {
                 model,
                 parse_forced(&src),
                 "caso {case}: il filtro ha tolto un'ombra che serviva per {src:?}"
+            );
+            let mut spans = definition_spans(&src);
+            let all = spans.len();
+            spans.sort_unstable_by_key(|s| (s.start, s.end));
+            spans.dedup();
+            assert_eq!(
+                spans.len(),
+                all,
+                "caso {case}: una definizione due volte nel modello per {src:?}"
             );
         }
         // Il confronto ha senso solo se il filtro ha davvero detto no spesso.
