@@ -7,13 +7,14 @@
 //! scheda che c'è torna subito nell'effetto `Custom` con `ns = fub.linkcard`.
 //! Se manca e gli è stato chiesto di scaricarla, accoda il job
 //! `linkcard.fetch`, che fuori dal lock del workspace scarica la pagina con
-//! `fetch`, cioè attraverso la `Guard` e il permesso `fub:network` del bundle,
-//! e consegna la scheda col suo `job_done`.
+//! `fetch_limited`, cioè attraverso la `Guard` e il permesso `fub:network` del
+//! bundle, e consegna la scheda col suo `job_done`.
 //! Spento l'interruttore del permesso, il job riceve il rifiuto e la nota
 //! resta col suo link. Della pagina si leggono soltanto i metadati della testa
 //! (`<title>`, `og:*`, `description`, l'icona): niente si esegue, e una pagina
-//! più grande di [`MAX_PAGE`] non diventa una scheda. Il tempo è il tetto
-//! dell'host (`net.rs`).
+//! più grande di [`MAX_PAGE`] non diventa una scheda. I due tetti (pagina e
+//! [`MAX_ICON`]) vanno alla rete, che smette di leggere appena li supera. Il
+//! tempo è il tetto dell'host (`net.rs`).
 //!
 //! La cache sta in `.fub/` come ogni cache di bundle, una scheda per URL in
 //! `cards/<hash>.json` con la sua [`CARD_VERSION`]: è ricostruibile, e una
@@ -22,7 +23,7 @@
 use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandScope, CommandSpec, ParamKind, ParamSpec,
 };
-use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::net::{HttpRequest, LimitedFetchError};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{HostApi, JobSpec, Plugin};
 use fub_abi::{CommandProvider, PluginError, PluginManifest};
@@ -267,25 +268,40 @@ fn card(url: &str, fetch: bool, host: &mut dyn HostApi) -> Result<serde_json::Va
         total: None,
         label: Some(host_of(url).to_string()),
     });
-    let response = host.fetch(
+    let failed = |why: &str, status: u16| {
+        Ok(serde_json::json!({ "url": url, "failed": why, "status": status }))
+    };
+    // Il tetto va alla rete, che smette di leggere appena lo supera. Il
+    // chiamante non ha un annullamento suo (`no_stop`): dentro il job ferma il
+    // trasferimento la bandiera del job, che l'host guarda da sé, senza filo
+    // di guardia.
+    let response = match host.fetch_limited(
         HttpRequest::get(url)
             .with_header("Accept", "text/html,application/xhtml+xml")
             .with_header("User-Agent", format!("Fub/{}", env!("CARGO_PKG_VERSION"))),
-    )?;
-    let failed = |why: &str, response: &HttpResponse| {
-        Ok(serde_json::json!({ "url": url, "failed": why, "status": response.status }))
+        crate::stop_relay::no_stop(),
+        MAX_PAGE as u64,
+    ) {
+        Ok(response) => response,
+        // Lo stato prima del tetto, come per una risposta letta.
+        Err(LimitedFetchError::TooLarge { status, .. }) if status != 200 => {
+            return failed("status", status)
+        }
+        Err(LimitedFetchError::TooLarge { status, .. }) => return failed("too_large", status),
+        Err(LimitedFetchError::Failed(error)) => return Err(error),
     };
     if response.status != 200 {
-        return failed("status", &response);
+        return failed("status", response.status);
     }
+    // Per una rete che rifiuta dopo aver letto (il default del contratto).
     if response.body.len() > MAX_PAGE {
-        return failed("too_large", &response);
+        return failed("too_large", response.status);
     }
     let html = response
         .header("Content-Type")
         .is_none_or(|kind| kind.to_ascii_lowercase().contains("html"));
     if !html {
-        return failed("not_html", &response);
+        return failed("not_html", response.status);
     }
     let page = Page::read(&String::from_utf8_lossy(&response.body));
     let icon = page
@@ -318,7 +334,15 @@ fn icon_data(url: &str, host: &mut dyn HostApi) -> Option<String> {
     if !valid_url(url) {
         return None;
     }
-    let response = host.fetch(HttpRequest::get(url)).ok()?;
+    // Un'icona oltre il tetto si ferma al filo, ed è «niente icona» come ogni
+    // altro errore.
+    let response = host
+        .fetch_limited(
+            HttpRequest::get(url),
+            crate::stop_relay::no_stop(),
+            MAX_ICON as u64,
+        )
+        .ok()?;
     if response.status != 200 || response.body.is_empty() || response.body.len() > MAX_ICON {
         return None;
     }
@@ -568,7 +592,7 @@ fn decoded(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fub_abi::net::HttpHeader;
+    use fub_abi::net::{HttpHeader, HttpResponse};
     use fub_abi::traits::{DataRead, DataWrite};
     use fub_abi::InvokeMode;
     use fub_sdk::testing::MemoryHost;

@@ -99,6 +99,7 @@ impl HostNetwork for Capped {
                 return Err(LimitedFetchError::TooLarge {
                     limit: max_bytes,
                     status: self.status,
+                    headers: Vec::new(),
                 });
             }
         }
@@ -402,4 +403,108 @@ fn the_setting_accepts_only_bare_host_names() {
         SettingValue::List(vec!["tile.openstreetmap.org".into()]),
     )
     .unwrap();
+}
+
+/// Il filo vero davanti a un server locale: la richiesta per
+/// `https://tiles.example.test/...` va a `http://127.0.0.1:<porta>/...`, così
+/// la tessera passa da `UreqNetwork` senza TLS né DNS.
+#[cfg(feature = "http-client")]
+struct Local {
+    base: String,
+    wire: fub_host::net::UreqNetwork,
+}
+
+#[cfg(feature = "http-client")]
+impl Local {
+    fn moved(&self, mut request: HttpRequest) -> HttpRequest {
+        let path = request
+            .url
+            .strip_prefix("https://tiles.example.test")
+            .expect("a tile address")
+            .to_owned();
+        request.url = format!("{}{path}", self.base);
+        request
+    }
+}
+
+#[cfg(feature = "http-client")]
+impl HostNetwork for Local {
+    fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.wire.fetch(self.moved(request))
+    }
+
+    fn fetch_limited(
+        &self,
+        request: HttpRequest,
+        cancelled: &AtomicBool,
+        max_bytes: u64,
+    ) -> Result<HttpResponse, LimitedFetchError> {
+        self.wire
+            .fetch_limited(self.moved(request), cancelled, max_bytes)
+    }
+}
+
+/// Un server HTTP di una richiesta sull'anello locale che risponde `status`
+/// con un corpo breve.
+#[cfg(feature = "http-client")]
+fn serve_status(status: &'static str) -> (String, std::thread::JoinHandle<()>) {
+    use std::io::{BufRead, BufReader, Write};
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("bind");
+    let base = format!("http://{}", listener.local_addr().expect("addr"));
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("accept");
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .expect("read timeout");
+        let mut lines = BufReader::new(stream.try_clone().expect("clone"));
+        let mut line = String::new();
+        while lines.read_line(&mut line).is_ok_and(|n| n > 0) && line != "\r\n" {
+            line.clear();
+        }
+        let body = "assente";
+        let mut stream = stream;
+        let _ = stream.write_all(
+            format!(
+                "HTTP/1.1 {status}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\
+                 Connection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .as_bytes(),
+        );
+    });
+    (base, server)
+}
+
+/// Un `404` o un `500` dal filo vero arrivano come errore di stato, con il
+/// numero, e non come «la rete non risponde».
+#[cfg(feature = "http-client")]
+#[test]
+fn a_real_error_status_is_the_status_refusal_not_the_network() {
+    for (status, code, test) in [
+        ("404 Not Found", "404", "filo-404"),
+        ("500 Internal Server Error", "500", "filo-500"),
+    ] {
+        let (base, server) = serve_status(status);
+        let host = Host::without_watcher().with_network(Arc::new(Local {
+            base,
+            wire: fub_host::net::UreqNetwork::new(),
+        }));
+        host.set_setting_for_user(
+            None,
+            MAP_TILE_HOSTS,
+            SettingValue::List(vec!["tiles.example.test".to_owned()]),
+        )
+        .unwrap();
+        let failed = host.map_tile(&url(test), TileKind::Raster).unwrap_err();
+        let PluginError::Io(Text::Message(message)) = &failed else {
+            panic!("{status}: {failed:?}");
+        };
+        assert_eq!(message.key, "host.map.tile.status", "{status}");
+        let said = message
+            .args
+            .iter()
+            .any(|arg| arg.name == "status" && format!("{:?}", arg.value).contains(code));
+        assert!(said, "{status}: {message:?}");
+        server.join().expect("server");
+    }
 }

@@ -309,8 +309,8 @@ label. Nega le nuove finestre e i download.
 - **Salvataggio come nota.** `web.clip` è un comando dell'host. Rilegge da sé
   `viewer.hosts`, riscarica la pagina dalla rete dell'host, che non segue i
   redirect, e scrive Markdown con la fonte, attraverso la cattura. Una
-  risposta che non è 2xx, che non è HTML o che supera 2 MiB non scrive niente
-  e lo dice. In prova il comando non chiama la rete.
+  risposta non 2xx, non HTML o oltre 2 MiB (tetto portato al filo con
+  `fetch_limited`) non scrive niente e lo dice. In prova non chiama la rete.
 
 Un link `https` di una nota va al browser di sistema. Va al visore con Alt+clic
 o quando `viewer.links` è acceso. Un indirizzo `http` che il visore non apre
@@ -463,10 +463,10 @@ Il file di log della macchina nasce `0600` su Unix, e uno di prima più
 aperto si stringe alla riapertura (`fub_kernel::log::FileSink`); se non si
 lascia stringere, il log si apre lo stesso e lo scrive in fondo al file, una
 volta per episodio, non a ogni riapertura.
-Gli errori della rete dell'host nominano l'indirizzo letto dal parser, senza
-credenziali, query e frammento, e il motivo con parole fisse, mai il testo
-dell'errore di trasporto; un indirizzo che non si legge non si mostra
-(`fub_host::net`), perché arrivano al log e al plugin.
+Gli errori della rete dell'host (`fub_host::net`) nominano l'indirizzo letto dal
+parser, senza credenziali, query e frammento, e il motivo con parole fisse; un
+indirizzo illeggibile non si mostra. Un `4xx` o `5xx` è una risposta (64 KiB di
+corpo al più); in un job ferma la rete ogni bandiera alzata.
 
 I file di stato della macchina che devono essere regolari (il lock dello
 scrittore del vault, il lock del sync, il file degli abbinamenti del

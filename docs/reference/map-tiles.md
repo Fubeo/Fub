@@ -60,4 +60,6 @@ Le tessere arrivate restano nella memoria dell'host, fino a 8 MiB, e non si
 riscaricano: niente va su disco né nel vault. Gli errori sono tipizzati:
 `permission_denied` per un sito o un indirizzo non ammesso e per un redirect,
 `unserved` senza un filo verso fuori, `io` per la rete, uno stato non 2xx, una
-tessera troppo grande o di un tipo che la mappa non accetta.
+tessera troppo grande o di un tipo che la mappa non accetta. Un `4xx` o un
+`5xx` arrivano dal filo come risposta con il loro stato, quindi la tessera
+dice l'errore di stato col suo numero, non «la rete».

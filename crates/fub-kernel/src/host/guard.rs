@@ -2657,6 +2657,7 @@ mod tests {
             Err(LimitedFetchError::TooLarge {
                 limit: max_bytes,
                 status: 200,
+                headers: Vec::new(),
             })
         }
     }
@@ -2674,7 +2675,8 @@ mod tests {
             err,
             LimitedFetchError::TooLarge {
                 limit: 1024,
-                status: 200
+                status: 200,
+                headers: Vec::new(),
             }
         );
         assert_eq!(*guard.inner.0.lock().unwrap(), Some(1024));

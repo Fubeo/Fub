@@ -167,10 +167,7 @@ impl HttpResponse {
     /// Il valore del primo header con questo nome, confrontato **senza
     /// distinzione di maiuscole** come vuole HTTP.
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|h| h.name.eq_ignore_ascii_case(name))
-            .map(|h| h.value.as_str())
+        header(&self.headers, name)
     }
 
     /// Il `Content-Type`, se c'è. È il campo che **non** sta nel record: sta
@@ -190,6 +187,16 @@ impl HttpResponse {
             .then(|| self.header("location"))
             .flatten()
     }
+}
+
+/// Il valore del primo header di nome `name`, confrontato **senza distinzione
+/// di maiuscole** come vuole HTTP: la regola sta qui sola, per la risposta
+/// intera e per quella troppo grande.
+fn header<'a>(headers: &'a [HttpHeader], name: &str) -> Option<&'a str> {
+    headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case(name))
+        .map(|h| h.value.as_str())
 }
 
 /// Perché [`fetch_limited`](crate::traits::HostNetwork::fetch_limited) non ha
@@ -214,11 +221,27 @@ pub enum LimitedFetchError {
         /// enorme restano un redirect e un errore di stato, non «troppo
         /// grande».
         status: u16,
+        /// Gli header della risposta, arrivati prima del corpo: chi chiama
+        /// guarda il `Content-Type` (o il `Location` di un `3xx`) prima del
+        /// tetto, perché un file che non voleva resta «non è quello che ho
+        /// chiesto» anche quando è enorme.
+        headers: Vec<HttpHeader>,
     },
     /// Ogni altro esito: gli stessi errori di
     /// [`fetch_cancelled`](crate::traits::HostNetwork::fetch_cancelled),
     /// annullamento compreso.
     Failed(crate::PluginError),
+}
+
+impl LimitedFetchError {
+    /// Il `Content-Type` della risposta troppo grande, se c'era: `None` anche
+    /// per [`Failed`](LimitedFetchError::Failed), che una risposta non l'ha.
+    pub fn content_type(&self) -> Option<&str> {
+        match self {
+            LimitedFetchError::TooLarge { headers, .. } => header(headers, "content-type"),
+            LimitedFetchError::Failed(_) => None,
+        }
+    }
 }
 
 impl From<crate::PluginError> for LimitedFetchError {
@@ -232,7 +255,7 @@ impl From<crate::PluginError> for LimitedFetchError {
 impl std::fmt::Display for LimitedFetchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LimitedFetchError::TooLarge { limit, status } => write!(
+            LimitedFetchError::TooLarge { limit, status, .. } => write!(
                 f,
                 "response body (status {status}) above the caller limit of {limit} bytes"
             ),
@@ -310,5 +333,19 @@ mod tests {
         };
         assert_eq!(r.status, 404);
         assert!(!r.body.is_empty(), "and the body of an error is readable");
+    }
+
+    /// Il `Content-Type` di una risposta troppo grande si legge come quello di
+    /// una risposta intera, senza distinzione di maiuscole.
+    #[test]
+    fn a_too_large_answer_keeps_its_content_type() {
+        let too_large = LimitedFetchError::TooLarge {
+            limit: 10,
+            status: 200,
+            headers: vec![HttpHeader::new("CONTENT-type", "application/pdf")],
+        };
+        assert_eq!(too_large.content_type(), Some("application/pdf"));
+        let failed = LimitedFetchError::Failed(crate::PluginError::Io("reset".into()));
+        assert_eq!(failed.content_type(), None);
     }
 }

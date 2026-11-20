@@ -18,7 +18,8 @@
 //! quanto una decisione. Un `302` da un host dichiarato verso uno che non lo è
 //! porterebbe fuori dal recinto senza che nessuno l'abbia deciso — e il client
 //! non ha l'allowlist per accorgersene, né deve averla. Il `3xx` torna a chi ha
-//! chiesto; seguirlo è una seconda chiamata, che ripassa dal cancello.
+//! chiesto; seguirlo è una seconda chiamata, che ripassa dal cancello. Così
+//! anche un `4xx` o un `5xx`: sono risposte, con il loro stato, non errori.
 //!
 //! **Non decide quanto aspettare** più di una volta: il tetto è qui, è
 //! dell'host, e non attraversa il confine — la regola della
@@ -57,6 +58,17 @@ const CANCEL_POLL: Duration = Duration::from_millis(50);
 /// risposta di API e su ogni PDF di un articolo, e chi li supera lo **sente**
 /// invece di riceverne sedici e non saperlo.
 const MAX_BODY: u64 = 16 * 1024 * 1024;
+
+/// Quanti byte si leggono del corpo di una risposta che non è un `2xx`: oltre,
+/// il corpo arriva troncato e la risposta resta `Ok` con il suo stato.
+///
+/// Con `http_status_as_error(false)` un `4xx` o un `5xx` è una risposta, e
+/// senza questo tetto un server rotto farebbe scaricare fino a [`MAX_BODY`] ad
+/// aggiornamenti, pubblicazione, sync e importatori, che di quel corpo leggono
+/// al più un messaggio. 64 KiB stanno larghi su una pagina d'errore di un
+/// server o di un proxy (pochi KiB) e sul JSON d'errore di un'API (meno di
+/// uno), e non pesano su nessuno.
+const MAX_ERROR_BODY: u64 = 64 * 1024;
 
 /// Il client vero.
 ///
@@ -153,6 +165,10 @@ impl UreqNetwork {
             .timeout_global(Some(TOTAL_TIMEOUT))
             .max_redirects(0)
             .max_redirects_will_error(false)
+            // Un `4xx` o un `5xx` è una risposta, non un guasto del filo
+            // (`HostNetwork::fetch`): arriva con il suo stato e chi chiama
+            // risponde a quello. Come errore diventerebbe un `Io` «la rete».
+            .http_status_as_error(false)
             .tls_config(
                 ureq::tls::TlsConfig::builder()
                     .root_certs(ureq::tls::RootCerts::PlatformVerifier)
@@ -165,6 +181,7 @@ impl UreqNetwork {
             .timeout_recv_body(Some(CANCEL_POLL))
             .max_redirects(0)
             .max_redirects_will_error(false)
+            .http_status_as_error(false)
             .tls_config(
                 ureq::tls::TlsConfig::builder()
                     .root_certs(ureq::tls::RootCerts::PlatformVerifier)
@@ -247,7 +264,8 @@ fn transport_reason(error: &ureq::Error) -> Cow<'static, str> {
         ureq::Error::TooManyRedirects | ureq::Error::RedirectFailed => "redirect failed",
         ureq::Error::Tls(_) => "TLS failure",
         ureq::Error::Http(_) | ureq::Error::BadUri(_) => "invalid request",
-        ureq::Error::StatusCode(_) => "unexpected status",
+        // Anche `StatusCode`, che non arriva più: gli agent hanno
+        // `http_status_as_error(false)`, e lo stato è una risposta.
         _ => "transport failure",
     })
 }
@@ -329,7 +347,7 @@ impl UreqNetwork {
             }
         };
         let status = response.status().as_u16();
-        let headers = response
+        let headers: Vec<HttpHeader> = response
             .headers()
             .iter()
             .filter_map(|(name, value)| {
@@ -342,10 +360,21 @@ impl UreqNetwork {
         // Il tetto del chiamante conta solo se è più stretto di quello
         // dell'host: oltre, risponde il tetto dell'host con il suo `Io`.
         let cap = max_bytes.filter(|cap| *cap < MAX_BODY);
+        // Il corpo di una risposta che non è un `2xx` si tronca, non si
+        // rifiuta: lo stato è già la risposta, e il corpo serve al più a dire
+        // cosa è andato storto.
+        let succeeded = (200..300).contains(&status);
+        let truncate_at =
+            (!succeeded).then(|| cap.map_or(MAX_ERROR_BODY, |cap| cap.min(MAX_ERROR_BODY)));
+        let cap = cap.filter(|_| succeeded);
+        let too_large = |limit: u64| LimitedFetchError::TooLarge {
+            limit,
+            status,
+            headers: headers.clone(),
+        };
         // Chi dichiara già una lunghezza oltre il tetto non si legge, ma solo
         // dove lo stato porta un corpo: `HEAD`, `1xx`, `204` e `304` dichiarano
-        // la lunghezza di un corpo che non arriva. Lo stato va nell'errore, e
-        // chi chiama lo guarda prima del tetto.
+        // la lunghezza di un corpo che non arriva.
         if let Some(cap) = cap.filter(|_| carries_body(request.method, status)) {
             let declared = response
                 .headers()
@@ -353,7 +382,7 @@ impl UreqNetwork {
                 .and_then(|value| value.to_str().ok())
                 .and_then(|value| value.trim().parse::<u64>().ok());
             if declared.is_some_and(|declared| declared > cap) {
-                return Err(LimitedFetchError::TooLarge { limit: cap, status });
+                return Err(too_large(cap));
             }
         }
         let read = |and: io::Error| {
@@ -374,11 +403,16 @@ impl UreqNetwork {
             }),
             None => Box::new(inner),
         };
-        let body = match cap {
-            Some(cap) => read_capped(reader, cap)
+        let body = match (truncate_at, cap) {
+            (Some(limit), _) => {
+                let mut body = Vec::new();
+                reader.take(limit).read_to_end(&mut body).map_err(read)?;
+                body
+            }
+            (None, Some(cap)) => read_capped(reader, cap)
                 .map_err(read)?
-                .ok_or(LimitedFetchError::TooLarge { limit: cap, status })?,
-            None => {
+                .ok_or_else(|| too_large(cap))?,
+            (None, None) => {
                 let mut body = Vec::new();
                 let mut reader = reader;
                 reader.read_to_end(&mut body).map_err(read)?;
@@ -496,6 +530,13 @@ mod tests {
             "a `3xx` must return to whoever asked, not become an error: it \
              is the caller who decides whether to follow it"
         );
+        for agent in [&net.agent, &net.cancellable_agent] {
+            assert!(
+                !agent.config().http_status_as_error(),
+                "a `4xx` or `5xx` is a response (HostNetwork::fetch), not a \
+                 transport fault"
+            );
+        }
     }
 
     /// E che ci si fidi della **macchina** e non delle radici imbarcate. È il
@@ -726,6 +767,7 @@ mod tests {
         let too_large = LimitedFetchError::TooLarge {
             limit: MIB,
             status: 200,
+            headers: Vec::new(),
         };
         assert_eq!(
             settle_limited(Err(too_large.clone()), &raised),
@@ -939,12 +981,16 @@ mod tests {
         let error = UreqNetwork::new()
             .fetch_limited(HttpRequest::get(url), &AtomicBool::new(false), MIB)
             .expect_err("too large");
-        assert_eq!(
-            error,
-            LimitedFetchError::TooLarge {
-                limit: MIB,
-                status: 200
-            }
+        assert!(
+            matches!(
+                error,
+                LimitedFetchError::TooLarge {
+                    limit: MIB,
+                    status: 200,
+                    ..
+                }
+            ),
+            "{error:?}"
         );
         let written = server.join().expect("server");
         assert!(written < MAX_BODY, "the server wrote {written} bytes");
@@ -969,12 +1015,16 @@ mod tests {
             let error = UreqNetwork::new()
                 .fetch_limited(HttpRequest::get(url), &AtomicBool::new(false), MIB)
                 .expect_err("one byte over");
-            assert_eq!(
-                error,
-                LimitedFetchError::TooLarge {
-                    limit: MIB,
-                    status: 200
-                }
+            assert!(
+                matches!(
+                    error,
+                    LimitedFetchError::TooLarge {
+                        limit: MIB,
+                        status: 200,
+                        ..
+                    }
+                ),
+                "{error:?}"
             );
             server.join().expect("server");
         }
@@ -1032,26 +1082,101 @@ mod tests {
         server.join().expect("server");
     }
 
-    /// Una `Content-Length` oltre il tetto su un redirect è ancora `TooLarge`,
-    /// ma con lo stato vero dentro: chi chiama decide guardando prima lo stato.
-    /// (Un `4xx` o un `5xx` qui non arriva al corpo: `ureq` lo ferma prima come
-    /// stato inatteso.)
+    /// Un redirect o un errore con un corpo oltre il tetto del chiamante non è
+    /// `TooLarge`: arriva `Ok` con il suo stato e il corpo troncato, anche
+    /// quando la `Content-Length` dichiara già troppo. Chi chiama risponde
+    /// allo stato.
     #[test]
-    fn a_too_large_error_carries_the_status() {
+    fn an_oversized_redirect_or_error_arrives_truncated_with_its_status() {
         within(|| {
-            for (status, code) in [("301 Moved Permanently", 301), ("302 Found", 302)] {
+            for (status, code) in [
+                ("301 Moved Permanently", 301),
+                ("302 Found", 302),
+                ("404 Not Found", 404),
+                ("500 Internal Server Error", 500),
+            ] {
                 let (url, server) = serve_once(status, 4 * MAX_BODY, Framing::Length, false);
-                let error = UreqNetwork::new()
+                let response = UreqNetwork::new()
                     .fetch_limited(HttpRequest::get(url), &AtomicBool::new(false), MIB)
-                    .expect_err("too large");
-                assert_eq!(
-                    error,
-                    LimitedFetchError::TooLarge {
-                        limit: MIB,
-                        status: code
-                    }
-                );
+                    .unwrap_or_else(|error| panic!("{status}: {error:?}"));
+                assert_eq!(response.status, code);
+                assert_eq!(response.body.len() as u64, MAX_ERROR_BODY, "{status}");
                 server.join().expect("server");
+            }
+            // Un tetto del chiamante più stretto tronca prima.
+            let (url, server) = serve_once("404 Not Found", MIB, Framing::Chunked, false);
+            let response = UreqNetwork::new()
+                .fetch_limited(HttpRequest::get(url), &AtomicBool::new(false), 10)
+                .expect("a 404 under a tiny cap");
+            assert_eq!((response.status, response.body.len()), (404, 10));
+            server.join().expect("server");
+        });
+    }
+
+    /// Il corpo di un errore si legge al più per [`MAX_ERROR_BODY`] byte anche
+    /// senza tetto del chiamante: un `500` di due mebibyte arriva `Ok`, con lo
+    /// stato e i primi 64 KiB, e un server che manderebbe quattro volte il
+    /// tetto dell'host smette di scrivere ben prima.
+    #[test]
+    fn the_body_of_an_error_is_read_only_up_to_its_ceiling() {
+        within(|| {
+            for door in 0..2 {
+                let (url, server) = serve_once(
+                    "500 Internal Server Error",
+                    2 * MIB,
+                    Framing::Chunked,
+                    false,
+                );
+                let net = UreqNetwork::new();
+                let flag = AtomicBool::new(false);
+                let response = match door {
+                    0 => net.fetch(HttpRequest::get(url)),
+                    _ => net.fetch_cancelled(HttpRequest::get(url), &flag),
+                }
+                .unwrap_or_else(|error| panic!("door {door}: {error:?}"));
+                assert_eq!(response.status, 500, "door {door}");
+                assert_eq!(response.body.len() as u64, MAX_ERROR_BODY, "door {door}");
+                server.join().expect("server");
+            }
+            let (url, server) = serve_once(
+                "500 Internal Server Error",
+                4 * MAX_BODY,
+                Framing::Chunked,
+                false,
+            );
+            let response = UreqNetwork::new()
+                .fetch(HttpRequest::get(url))
+                .expect("a huge 500");
+            assert_eq!(response.status, 500);
+            let written = server.join().expect("server");
+            assert!(written < MAX_BODY, "the server wrote {written} bytes");
+        });
+    }
+
+    /// **Un `4xx` o un `5xx` sono `Ok`**, come promette `HostNetwork::fetch`:
+    /// arrivano con il loro stato e il loro corpo da tutte e tre le porte, e
+    /// chi chiama risponde guardando la risposta invece di dire «la rete».
+    #[test]
+    fn an_error_status_is_a_response_not_a_transport_fault() {
+        within(|| {
+            for (status, code) in [("404 Not Found", 404), ("500 Internal Server Error", 500)] {
+                for door in 0..3 {
+                    let (url, server) = serve_once(status, 5, Framing::Length, false);
+                    let net = UreqNetwork::new();
+                    let request = HttpRequest::get(url);
+                    let flag = AtomicBool::new(false);
+                    let response = match door {
+                        0 => net.fetch(request),
+                        1 => net.fetch_cancelled(request, &flag),
+                        _ => net
+                            .fetch_limited(request, &flag, MIB)
+                            .map_err(|e| PluginError::Internal(format!("{e:?}").into())),
+                    }
+                    .unwrap_or_else(|error| panic!("{status} door {door}: {error:?}"));
+                    assert_eq!(response.status, code, "door {door}");
+                    assert_eq!(response.body, b"xxxxx", "door {door}");
+                    assert_eq!(server.join().expect("server"), 5);
+                }
             }
         });
     }
