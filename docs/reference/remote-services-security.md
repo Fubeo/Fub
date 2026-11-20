@@ -22,6 +22,22 @@ WASM, contenuto non fidato) è in [Permessi e sicurezza](permissions-and-securit
   `bad wrap version`, `bad wrap iterations`), mostra un errore tipizzato
   (`BadArgs` con `host.sync.kdf_unsupported`) che chiede di aggiornare Fub o
   il server; non è un'assenza di rete e non si ritenta.
+- Epoca della chiave: la prima chiave di un vault ha epoca 1
+  (`fub_services::sync::INITIAL_KEY_EPOCH`, con il mirror
+  `fub_host::remote::INITIAL_KEY_EPOCH`); ogni rekey la alza di uno. Il
+  server rifiuta una prima chiave con un'altra epoca (`409`) e ogni op
+  sigillato con un'epoca diversa da quella corrente. Sul dispositivo, zero
+  nel file `key-epoch` vuol dire «nessuna chiave adottata»: il client salva
+  l'epoca restituita prima di sigillare. Un dispositivo a zero che trova il
+  vault all'epoca 1 la adotta, se la chiave si apre con la sua passphrase, e
+  risigilla la coda già scritta con la stessa chiave (stessi `op_id` e
+  vettori); una coda che quella chiave non apre resta intatta, con un
+  `Conflict` che chiede il recupero. Ogni altra differenza di epoca chiede un
+  invito nuovo.
+- La chiave accettata con un invito (`accepted-key.json`) è legata alla sua
+  epoca e vale solo per quella. Al rekey, e quando il client crea la chiave
+  da capo, esce dal passaggio e resta come `prior-accepted-key-<epoca>.json`,
+  accanto a `prior-key-<epoca>.json`, per riaprire le versioni storiche.
 - Ruoli `Owner > Admin > Writer > Reader`, nel sync e nei siti: chi non è
   Owner concede, toglie o cambia soltanto ruoli sotto il proprio
   (`fub_services::acl::may_grant`, `check_revoke`).

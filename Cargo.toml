@@ -197,6 +197,10 @@ fub-sdk = { path = "crates/fub-sdk", version = "0.1.0" }
 # kernel fra le mani, e chi lo prendesse come dipendenza normale se lo
 # porterebbe dentro la libreria.
 fub-testkit = { path = "crates/fub-testkit", version = "0.1.0" }
+# Il servizio di sync, **solo** nei `[dev-dependencies]` di `fub-host`: il
+# primo passaggio di sync end-to-end (client vero contro servizio vero, in
+# processo). L'host non lo usa e non deve.
+fub-services = { path = "crates/fub-services", version = "0.1.0" }
 fub-format-markdown = { path = "crates/fub-format-markdown", version = "0.1.0" }
 fub-format-canvas = { path = "crates/fub-format-canvas", version = "0.1.0" }
 fub-canvas-core = { path = "crates/fub-canvas-core", version = "0.1.0" }

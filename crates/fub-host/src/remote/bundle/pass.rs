@@ -45,7 +45,7 @@ pub(crate) fn run_pass_on(
         .ok_or_else(|| PluginError::PermissionDenied("missing credentials".into()))?;
     let auth = format!("Bearer {token}");
     check_external_overlap(host)?;
-    let state = JobState::open(root, vault_scope, host)?;
+    let mut state = JobState::open(root, vault_scope, host)?;
     let hello = http_get(host, &base, &auth, "/v1/hello")?;
     super::assert_hello(
         &serde_json::to_vec(&hello)
@@ -54,7 +54,7 @@ pub(crate) fn run_pass_on(
     .map_err(|_| PluginError::Internal("sync protocol mismatch".into()))?;
     super::store_endpoint_binding(root, &base)
         .map_err(|_| PluginError::Io("sync endpoint binding failed".into()))?;
-    let vdk = ensure_job_vdk(&base, &auth, &state, host)?;
+    let vdk = ensure_job_vdk(&base, &auth, &mut state, host)?;
     let queued = read_outbox(root)?;
     let cursor = read_cursor(root)?;
     let mut vv = cursor.server_vv.clone();

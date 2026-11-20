@@ -50,7 +50,7 @@ use super::{
     encrypt_envelope, fresh_vdk, is_syncable_entry, is_user_excluded, job_now_ms,
     load_vault_passphrase_from_env, new_replica_id, resolve_endpoint, store_endpoint_binding, sync,
     sync_dir, unwrap_for_passphrase, views, vv_string, wrap_for_passphrase, SyncEnvelope,
-    TokenSource, SETTING_PAUSED, SYNC_PROTOCOL,
+    TokenSource, INITIAL_KEY_EPOCH, SETTING_PAUSED, SYNC_PROTOCOL,
 };
 
 mod actions;
@@ -65,8 +65,9 @@ use apply::conflict_copy_id;
 use apply::{apply_remote_op, read_conflicts, read_versions, report_conflicts, ApplyOutcome};
 pub(crate) use pass::run_pass_on;
 use state::{
-    advance_cursor, append_outbox, drain_outbox, ensure_job_vdk, mark_applied, mark_synced,
-    read_cursor, read_id_file, read_outbox, write_cursor,
+    accepted_key_json, advance_cursor, append_outbox, drain_outbox, ensure_job_vdk, mark_applied,
+    mark_synced, prior_accepted_key_file, read_cursor, read_id_file, read_outbox,
+    retire_accepted_key, write_cursor, ACCEPTED_KEY_FILE,
 };
 
 /// Direction is explicit for this process. Read-only consumes server writes
