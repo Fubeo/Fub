@@ -85,7 +85,10 @@ base = ["dep:fub-format-base", "properties"]
 # la vista non può leggere senza `search`: è una dipendenza di funzionamento,
 # come quella di `trash` da `commands`. Nel manifest non è un `requires` perché
 # `search` non offre un servizio; se il vault spegne la ricerca, la vista lo dice.
-tasks = ["search"]
+# La domanda del compito successivo (`tasks/reminders.rs`) applica la regola
+# della ricorrenza di `note.task.toggle`, che sta in `commands::recurrence`:
+# dipendenza di compilazione.
+tasks = ["search", "commands"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
