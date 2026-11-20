@@ -73,6 +73,7 @@ import { FORMAT_ICON, formatKindOf } from "./format-kind";
 import { pageIcon, pageIconsRevision } from "../state/page-icons";
 import type { Lifetime, Teardown } from "./lifetime";
 import { composingKey } from "../kit/ime";
+import { jsonEqual } from "../kit/json-equal";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -421,7 +422,7 @@ function confirmCancel(payload: unknown): ActionRef | null {
 }
 
 function sameAction(a: ActionRef, b: ActionRef): boolean {
-  return a.action === b.action && JSON.stringify(a.payload ?? null) === JSON.stringify(b.payload ?? null);
+  return a.action === b.action && jsonEqual(a.payload ?? null, b.payload ?? null);
 }
 
 /// Il bottone del «no» fra i figli della domanda, se il provider l'ha disegnato.
@@ -686,7 +687,7 @@ function update(
       const nextRenderer = customRenderer(next.ns, next.payload);
       if (previousRenderer !== nextRenderer) return false;
       if (nextRenderer) {
-        return JSON.stringify(prev.payload) === JSON.stringify(next.payload)
+        return jsonEqual(prev.payload, next.payload)
           && drawnIn.get(el)?.container === contextOf(onAction).container;
       }
       children(el, next.fallback, onAction);
