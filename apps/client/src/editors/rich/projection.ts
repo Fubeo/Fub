@@ -19,7 +19,9 @@
 //   `h` sono suggerimenti di resa che il ritorno ignora.
 //
 // La scrittura segue l'ordine e le omissioni di serde (campi assenti quando
-// vuoti), così un blocco non toccato si riscrive com'era arrivato.
+// vuoti), così un blocco non toccato si riscrive com'era arrivato. Scrive
+// solo testo Unicode valido: un surrogato rimasto solo diventa U+FFFD
+// (vedi [`wellFormed`]), perché serde non leggerebbe la proiezione.
 //
 // La versione 2 dichiara lo schema dei dati opachi (`opaque_schema`), la 1
 // (le bozze di prima) no. La 3 aggiunge i segni di ciò che il formato non
@@ -31,6 +33,30 @@
 // (`ink`), l'SVG (`svg`) e il posto fuori dal testo (`float`).
 
 export const PROJECTION_FORMAT = "fub-rich";
+
+/// Un surrogato rimasto senza la sua metà: alto senza il basso dopo, o basso
+/// senza l'alto prima.
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+
+/// `text` con ogni surrogato rimasto solo sostituito da U+FFFD, il carattere
+/// che sta per «qui c'era un carattere che non si legge».
+///
+/// Una stringa JavaScript può tenere mezza coppia surrogata (per esempio dopo
+/// Invio con il cursore messo per programma fra le due metà di un'emoji);
+/// `JSON.stringify` la scrive come `\ud83d` da solo, che serde rifiuta come
+/// JSON malformato, e il salvataggio del documento falliva per intero (#492).
+/// Il resto del testo resta com'è; un carattere così non si può scrivere in
+/// nessun file.
+export function wellFormed(text: string): string {
+  LONE_SURROGATE.lastIndex = 0;
+  return LONE_SURROGATE.test(text) ? text.replace(LONE_SURROGATE, "\ufffd") : text;
+}
+
+/// Una stringa in JSON come la scrive serde: sempre Unicode valido.
+function jsonString(text: string): string {
+  return JSON.stringify(wellFormed(text));
+}
+
 /// Le versioni che la shell legge, ciascuna con le sue chiavi.
 export const PROJECTION_VERSIONS = [1, 2, 3, 4] as const;
 export type ProjectionVersion = (typeof PROJECTION_VERSIONS)[number];
@@ -800,7 +826,7 @@ function readRunning(value: unknown, where: string): RunningText {
 /// Un'intestazione in JSON, come la scrive serde.
 export function writeRunning(running: RunningText): string {
   const lines = running.lines.map(
-    (line) => `[${line.map((piece) => (typeof piece === "string" ? JSON.stringify(piece) : `{"field":"${piece.field}"}`)).join(",")}]`,
+    (line) => `[${line.map((piece) => (typeof piece === "string" ? jsonString(piece) : `{"field":"${piece.field}"}`)).join(",")}]`,
   );
   return `{"lines":[${lines.join(",")}]${running.locked ? `,"locked":true` : ""}}`;
 }
@@ -959,10 +985,10 @@ function writeLook(look: Look | undefined, key = "f"): string {
 
 function lookBody(look: Look | undefined): string {
   const fields: string[] = [];
-  if (look?.font !== undefined) fields.push(`"font":${JSON.stringify(look.font)}`);
+  if (look?.font !== undefined) fields.push(`"font":${jsonString(look.font)}`);
   if (look?.size !== undefined) fields.push(`"size":${float(look.size)}`);
-  if (look?.color !== undefined) fields.push(`"color":${JSON.stringify(look.color)}`);
-  if (look?.hl !== undefined) fields.push(`"hl":${JSON.stringify(look.hl)}`);
+  if (look?.color !== undefined) fields.push(`"color":${jsonString(look.color)}`);
+  if (look?.hl !== undefined) fields.push(`"hl":${jsonString(look.hl)}`);
   return `{${fields.join(",")}}`;
 }
 
@@ -1003,9 +1029,9 @@ function writeLayout(layout: Layout | undefined): string {
 function writeRev(name: "ins" | "del", rev: Rev | undefined): string {
   if (!rev) return "";
   const fields: string[] = [];
-  if (rev.by) fields.push(`"by":${JSON.stringify(rev.by)}`);
-  if (rev.at) fields.push(`"at":${JSON.stringify(rev.at)}`);
-  if (rev.mv !== undefined) fields.push(`"mv":${JSON.stringify(rev.mv)}`);
+  if (rev.by) fields.push(`"by":${jsonString(rev.by)}`);
+  if (rev.at) fields.push(`"at":${jsonString(rev.at)}`);
+  if (rev.mv !== undefined) fields.push(`"mv":${jsonString(rev.mv)}`);
   return `,"${name}":{${fields.join(",")}}`;
 }
 
@@ -1020,44 +1046,44 @@ function writeAnchor(anchor: Anchor): string {
 /// Un commento in JSON, con i campi nell'ordine di serde.
 export function writeComment(comment: CommentView): string {
   let out = `{"id":${comment.id}`;
-  if (comment.k !== undefined) out += `,"k":${JSON.stringify(comment.k)}`;
-  if (comment.by) out += `,"by":${JSON.stringify(comment.by)}`;
-  if (comment.at) out += `,"at":${JSON.stringify(comment.at)}`;
+  if (comment.k !== undefined) out += `,"k":${jsonString(comment.k)}`;
+  if (comment.by) out += `,"by":${jsonString(comment.by)}`;
+  if (comment.at) out += `,"at":${jsonString(comment.at)}`;
   if (comment.parent !== undefined) out += `,"parent":${comment.parent}`;
   if (comment.done) out += `,"done":true`;
-  if (comment.text) out += `,"text":${JSON.stringify(comment.text)}`;
+  if (comment.text) out += `,"text":${jsonString(comment.text)}`;
   return out + "}";
 }
 
 function writeInline(inline: Inline): string {
   if (inline.t === "text") {
-    let out = `{"t":"text","x":${JSON.stringify(inline.x)}`;
-    if (inline.k !== undefined) out += `,"k":${JSON.stringify(inline.k)}`;
+    let out = `{"t":"text","x":${jsonString(inline.x)}`;
+    if (inline.k !== undefined) out += `,"k":${jsonString(inline.k)}`;
     if (inline.m && inline.m.length > 0) out += `,"m":${JSON.stringify(inline.m)}`;
-    if (inline.href !== undefined) out += `,"href":${JSON.stringify(inline.href)}`;
+    if (inline.href !== undefined) out += `,"href":${jsonString(inline.href)}`;
     out += writeLook(inline.f);
     return out + writeTracked(inline) + "}";
   }
   let out = `{"t":"atom"`;
-  if (inline.k !== undefined) out += `,"k":${JSON.stringify(inline.k)}`;
+  if (inline.k !== undefined) out += `,"k":${jsonString(inline.k)}`;
   out += `,"kind":"${inline.kind}"`;
-  if (inline.label) out += `,"label":${JSON.stringify(inline.label)}`;
+  if (inline.label) out += `,"label":${jsonString(inline.label)}`;
   if (inline.w !== undefined) out += `,"w":${float(inline.w)}`;
   if (inline.h !== undefined) out += `,"h":${float(inline.h)}`;
-  if (inline.data !== undefined) out += `,"data":${JSON.stringify(inline.data)}`;
-  if (inline.note !== undefined) out += `,"note":${JSON.stringify(inline.note)}`;
+  if (inline.data !== undefined) out += `,"data":${jsonString(inline.data)}`;
+  if (inline.note !== undefined) out += `,"note":${jsonString(inline.note)}`;
   if (inline.end) out += `,"end":true`;
   if (inline.toc !== undefined) out += `,"toc":${inline.toc}`;
   if (inline.comment) out += `,"comment":${writeAnchor(inline.comment)}`;
   if (inline.ink) out += `,"ink":${writeInkShape(inline.ink)}`;
-  if (inline.svg !== undefined) out += `,"svg":${JSON.stringify(inline.svg)}`;
+  if (inline.svg !== undefined) out += `,"svg":${jsonString(inline.svg)}`;
   if (inline.float) out += `,"float":{"wrap":"${inline.float.wrap}","x":${float(inline.float.x)},"y":${float(inline.float.y)}}`;
   return out + writeTracked(inline) + "}";
 }
 
 function writeInkShape(shape: InkShape): string {
   const strokes = shape.strokes.map((line) => {
-    let out = `{"color":${JSON.stringify(line.color)},"width":${float(line.width)}`;
+    let out = `{"color":${jsonString(line.color)},"width":${float(line.width)}`;
     if (line.hl) out += `,"hl":true`;
     out += `,"xy":[${line.xy.map(float).join(",")}]`;
     if (line.p && line.p.length > 0) out += `,"p":[${line.p.map(float).join(",")}]`;
@@ -1072,20 +1098,20 @@ export function writeBlock(block: Block): string {
     let out = `{"t":"para","role":${writeRole(block.role)}`;
     if (block.locked) out += `,"locked":true`;
     if (block.align !== undefined) out += `,"align":"${block.align}"`;
-    if (block.k !== undefined) out += `,"k":${JSON.stringify(block.k)}`;
-    if (block.sect !== undefined) out += `,"sect":${JSON.stringify(block.sect)}`;
+    if (block.k !== undefined) out += `,"k":${jsonString(block.k)}`;
+    if (block.sect !== undefined) out += `,"sect":${jsonString(block.sect)}`;
     if (block.page !== undefined) out += `,"page":${writePage(block.page)}`;
     if (block.header !== undefined) out += `,"header":${writeRunning(block.header)}`;
     if (block.footer !== undefined) out += `,"footer":${writeRunning(block.footer)}`;
     out += writeLayout(block.p);
-    if (block.s !== undefined) out += `,"s":${JSON.stringify(block.s)}`;
+    if (block.s !== undefined) out += `,"s":${jsonString(block.s)}`;
     out += writeLook(block.f);
     out += writeTracked(block);
     if (block.c && block.c.length > 0) out += `,"c":[${block.c.map(writeInline).join(",")}]`;
     return out + "}";
   }
   // Una tabella, una riga o una cella nuova non ha `k`.
-  const key = (k: string | undefined, comma: string) => (k === undefined ? "" : `"k":${JSON.stringify(k)}${comma}`);
+  const key = (k: string | undefined, comma: string) => (k === undefined ? "" : `"k":${jsonString(k)}${comma}`);
   const rows = block.rows.map((row) => {
     const cells = row.cells.map((cell) => {
       const span = cell.span !== undefined && cell.span > 1 ? `"span":${cell.span},` : "";
@@ -1107,11 +1133,11 @@ export function writeHead(projection: Pick<Projection, "version" | "opaque_schem
   }
   if (projection.body_only) out += `,"body_only":true`;
   if (projection.track) out += `,"track":true`;
-  if (projection.lang !== undefined) out += `,"lang":${JSON.stringify(projection.lang)}`;
+  if (projection.lang !== undefined) out += `,"lang":${jsonString(projection.lang)}`;
   out += writeLook(projection.f);
   if (projection.styles && projection.styles.length > 0) {
     const styles = projection.styles.map(
-      (s) => `{"id":${JSON.stringify(s.id)},"name":${JSON.stringify(s.name)}${writeLook(s.f)}${s.align ? `,"align":"${s.align}"` : ""}}`,
+      (s) => `{"id":${jsonString(s.id)},"name":${jsonString(s.name)}${writeLook(s.f)}${s.align ? `,"align":"${s.align}"` : ""}}`,
     );
     out += `,"styles":[${styles.join(",")}]`;
   }
