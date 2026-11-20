@@ -166,8 +166,7 @@ tabella di testo, che resta sulla lavagna con i suoi tratti. Il fit della
 lavagna può stare sotto la soglia della scheda viva (zoom 0,35): in quel caso
 lo scenario la ingrandisce con cinque scatti di Ctrl+rotella mandati dalla
 pagina sulla scheda, fuori dalla misura, perché il Ctrl+rotella del driver non
-ingrandisce. Se la penna non
-scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
+ingrandisce. Se la penna non scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
 rifà i dieci tratti col mouse e D tenuto, e il referto lo dice (`input`).
 WebKitWebDriver sotto Xvfb manda il `pointerdown` della penna e poi niente:
 il tratto rimasto giù terrebbe la lavagna («un tratto alla volta»), quindi
