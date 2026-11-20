@@ -63,7 +63,8 @@ use fub_abi::model::DocId;
 use fub_abi::traits::VaultEntry;
 
 use crate::ignore::{IgnorePolicy, Kind};
-use crate::storage::{FileIdentity, VaultStorage};
+use crate::storage::VaultStorage;
+pub(crate) use crate::transfer::FileWitness;
 use crate::vault::{sized_fingerprint_of, Vault};
 
 /// Quante voci della stessa misura si confrontano al più per una domanda.
@@ -110,43 +111,6 @@ pub(crate) struct Candidate {
     /// Il file su cui l'impronta è stata imparata da una domanda, se è così
     /// che la voce l'ha avuta: l'impronta vale solo per quel file.
     pub(crate) witness: Option<FileWitness>,
-}
-
-/// **Quale file**, oltre a misura e data: il segno del cambio e l'identità
-/// che il supporto dà per un path, letti senza aprire il file.
-///
-/// Due testimoni dicono lo stesso file se **ogni campo che entrambi conoscono
-/// coincide** ([`FileWitness::agrees`]). Un campo che uno dei due non conosce
-/// non decide, né in un verso né nell'altro: un supporto che non sa dare il
-/// segno (una memoria, un archivio) o una riga scritta prima che lo si
-/// registrasse non bloccano per sempre l'impronta, e il «sì» lo danno
-/// comunque i byte. La regola è una per il segno e per l'identità.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct FileWitness {
-    pub(crate) change_stamp: Option<u64>,
-    pub(crate) identity: Option<FileIdentity>,
-}
-
-impl FileWitness {
-    /// Il testimone di `id` adesso, come lo dà il supporto del vault.
-    pub(crate) fn of(vault: &Vault, id: &DocId) -> FileWitness {
-        FileWitness {
-            change_stamp: vault.change_stamp(id),
-            identity: vault.file_identity(id),
-        }
-    }
-
-    /// Dicono lo stesso file? Vedi il tipo: ogni campo noto a entrambi deve
-    /// coincidere, uno ignoto da una parte non decide.
-    pub(crate) fn agrees(&self, other: &FileWitness) -> bool {
-        fn same<T: PartialEq>(a: &Option<T>, b: &Option<T>) -> bool {
-            match (a, b) {
-                (Some(a), Some(b)) => a == b,
-                _ => true,
-            }
-        }
-        same(&self.change_stamp, &other.change_stamp) && same(&self.identity, &other.identity)
-    }
 }
 
 /// Quello che si decide sotto il lucchetto, senza leggere niente: o la risposta
@@ -595,49 +559,6 @@ mod tests {
                 id: DocId::new("c.bin")
             }
         );
-    }
-
-    #[test]
-    fn a_witness_field_decides_only_when_both_sides_know_it() {
-        let id = |file| Some(FileIdentity { volume: 1, file });
-        let full = FileWitness {
-            change_stamp: Some(10),
-            identity: id(7),
-        };
-        // Lo stesso file, e due file diversi per un campo o per l'altro.
-        assert!(full.agrees(&full));
-        assert!(!full.agrees(&FileWitness {
-            change_stamp: Some(11),
-            ..full
-        }));
-        assert!(!full.agrees(&FileWitness {
-            identity: id(8),
-            ..full
-        }));
-        // Un campo che una parte non conosce non decide, per il segno come per
-        // l'identità, e nei due versi: una riga senza segno non blocca
-        // l'impronta per sempre.
-        let no_stamp = FileWitness {
-            change_stamp: None,
-            ..full
-        };
-        let no_identity = FileWitness {
-            identity: None,
-            ..full
-        };
-        for partial in [no_stamp, no_identity, FileWitness::default()] {
-            assert!(full.agrees(&partial), "{partial:?}");
-            assert!(partial.agrees(&full), "{partial:?}");
-        }
-        // Ma ciò che è noto decide anche accanto a un campo ignoto.
-        assert!(!no_stamp.agrees(&FileWitness {
-            change_stamp: None,
-            identity: id(8),
-        }));
-        assert!(!no_identity.agrees(&FileWitness {
-            change_stamp: Some(11),
-            identity: None,
-        }));
     }
 
     #[test]

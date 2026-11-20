@@ -108,6 +108,7 @@ use fub_abi::model::{Anchor, DocId, Frontmatter, Heading, Link};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::{Durable, FileIdentity, VaultStorage};
+use crate::transfer::FileWitness;
 use crate::vault::data_root;
 use fub_abi::schema::SchemaVersion;
 
@@ -255,11 +256,13 @@ impl StoredEntry {
         self.size == size && self.mtime == mtime
     }
 
-    pub(crate) fn same_change_stamp(&self, observed: Option<u64>) -> bool {
-        match (self.change_stamp, observed) {
-            (Some(stored), Some(observed)) => stored == observed,
-            (None, None) => true,
-            _ => false,
+    /// Il file che la voce descrive, oltre a misura e data: timbro di
+    /// cambiamento e identità, da confrontare con la regola unica
+    /// ([`FileWitness::agrees`]).
+    pub(crate) fn witness(&self) -> FileWitness {
+        FileWitness {
+            change_stamp: self.change_stamp,
+            identity: self.identity,
         }
     }
 }
@@ -495,26 +498,20 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEn
         let Some(previous) = old.get(id) else {
             continue;
         };
+        // Lo stesso file per misura, data, timbro e identità, con la regola di
+        // ogni altro punto che lo decide ([`FileWitness::agrees`]): un'identità
+        // nota da una parte sola è un file che può essere un altro, e il
+        // digest o i metadati di quello vecchio non passano a lui.
         if !previous.describes(entry.size, entry.mtime)
-            || !previous.same_change_stamp(entry.change_stamp)
+            || !previous.witness().agrees(&entry.witness())
         {
             continue;
         }
-
-        // Una fotografia che non ha letto il file può ereditare l'impronta
-        // durevole soltanto se l'identità che conosce non smentisce quella
-        // precedente. Se l'identità è cambiata, stessi size/mtime non bastano:
-        // sarebbe associare il digest del file vecchio a un file nuovo.
-        if entry.fingerprint.is_none()
-            && (entry.identity.is_none() || entry.identity == previous.identity)
-        {
+        if entry.fingerprint.is_none() {
             entry.fingerprint = previous.fingerprint.clone();
         }
         if entry.fingerprint != previous.fingerprint {
             continue;
-        }
-        if entry.identity.is_none() {
-            entry.identity = previous.identity;
         }
         if entry.metadata.is_none() {
             entry.metadata = previous.metadata.clone();
@@ -729,6 +726,50 @@ mod tests {
             merged.fingerprint.is_none(),
             "same size/mtime do not authorize attaching the old digest to a different file identity"
         );
+    }
+
+    /// **Un altro file non eredita i metadati di quello di prima**, nemmeno
+    /// quando nessuna delle due righe ha l'impronta: prima la fusione
+    /// guardava l'identità solo per l'impronta, e i metadati (outline, link,
+    /// tag) di un file passavano al file che lo aveva sostituito con la
+    /// stessa misura e la stessa data. E un'identità che la riga nuova non
+    /// conosce non è quella di prima: nel dubbio non si eredita niente.
+    #[test]
+    fn another_file_inherits_neither_metadata_nor_an_unknown_identity() {
+        let id = DocId::new("same.md");
+        let identity = |file| Some(FileIdentity { volume: 1, file });
+        let mut previous = entry(3, 1_000);
+        previous.identity = identity(10);
+        previous.change_stamp = Some(7);
+        previous.metadata = Some(StoredMeta {
+            frontmatter: Frontmatter::default(),
+            outline: Vec::new(),
+            links: Vec::new(),
+            anchors: Vec::new(),
+            tags: vec!["#vecchio".to_owned()],
+        });
+
+        let mut replaced = entry(3, 1_000);
+        replaced.identity = identity(11);
+        replaced.change_stamp = Some(7);
+        let old = BTreeMap::from([(id.clone(), previous.clone())]);
+        let mut new = BTreeMap::from([(id.clone(), replaced)]);
+        enrich(&mut new, &old);
+        assert!(
+            new[&id].metadata.is_none(),
+            "the metadata of a replaced file are not the new file's"
+        );
+
+        previous.fingerprint = Some(Revision::new("0123456789abcdef"));
+        let mut unknown = entry(3, 1_000);
+        unknown.change_stamp = Some(7);
+        let old = BTreeMap::from([(id.clone(), previous)]);
+        let mut new = BTreeMap::from([(id.clone(), unknown)]);
+        enrich(&mut new, &old);
+        let merged = &new[&id];
+        assert!(merged.fingerprint.is_none(), "{merged:?}");
+        assert!(merged.identity.is_none(), "{merged:?}");
+        assert!(merged.metadata.is_none(), "{merged:?}");
     }
 
     #[test]

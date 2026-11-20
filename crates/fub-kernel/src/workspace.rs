@@ -5988,9 +5988,9 @@ impl Workspace {
                 // alla riapertura incrementale di `finalize_scan_vault`, e
                 // rifarla là è un lock e una copia regalati per niente.
                 //
-                // **Il timbro si chiede per ultimo**, e solo a una voce che
-                // l'anagrafe potrebbe certificare: su Windows leggerlo è
-                // aprire il file, e alla prima apertura di un vault nessuna
+                // **Timbro e identità si chiedono per ultimi**, e solo a una
+                // voce che l'anagrafe potrebbe certificare: su Windows
+                // leggerli è aprire il file, e alla prima apertura di un vault nessuna
                 // voce è nota. Chiederlo a tutti costava cinquemila aperture
                 // buttate su un vault da cinquemila file, la parte più lenta
                 // del montaggio su Windows (issue #493).
@@ -6000,7 +6000,15 @@ impl Workspace {
                     .filter(|known| known.describes(file.size, file.mtime))
                     .filter(|known| known.fingerprint.is_some())
                     .filter(|known| {
-                        known.same_change_stamp(self.docs.vault.change_stamp(&file.id))
+                        // Timbro **e identità**, con la regola unica: un file
+                        // messo al posto di un altro da una rinomina, dove il
+                        // timbro è la data (FAT) o la rinomina non lo tocca,
+                        // ha la misura, la data e il timbro di quello di
+                        // prima, ma non la sua identità.
+                        known.witness().agrees(&crate::transfer::FileWitness::of(
+                            &self.docs.vault,
+                            &file.id,
+                        ))
                     });
                 let entry = VaultEntry {
                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
@@ -6894,12 +6902,30 @@ impl Workspace {
                         .learned_on(&entry.id)
                         .is_none_or(|witness| witness.agrees(&now))
                 });
+                // Il timbro di adesso certifica alla riapertura ciò che si è
+                // letto quando si è guardato il file solo se era già fermo
+                // allora ([`change_stamp_settled`](crate::transfer::change_stamp_settled)):
+                // ogni riscrittura dopo l'osservazione ha un timbro più nuovo
+                // di una grana prima di lei. Un timbro più giovane può essere
+                // quello di una riscrittura venuta dopo la lettura, dello
+                // stesso peso e della stessa data (un supporto con la grana
+                // di due secondi, una data rimessa), e la riga va scritta
+                // senza: la voce resta, per il ricongiungimento, ma la
+                // prossima apertura rilegge il file invece di crederle.
+                let settled = self
+                    .indexes
+                    .core
+                    .observed_at(&entry.id)
+                    .and_then(crate::storage::change_stamp_at_unix_millis);
+                let change_stamp = now
+                    .change_stamp
+                    .filter(|_| crate::transfer::change_stamp_settled(now.change_stamp, settled));
                 (
                     entry.id.clone(),
                     StoredEntry {
                         size: entry.size,
                         mtime: entry.mtime,
-                        change_stamp: now.change_stamp,
+                        change_stamp,
                         identity: now.identity,
                         fingerprint,
                         metadata: self.indexes.core.stored_metadata(&entry.id),

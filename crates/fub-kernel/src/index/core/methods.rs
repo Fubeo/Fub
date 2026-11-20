@@ -84,7 +84,7 @@ impl CoreIndex {
             metas: BTreeMap::new(),
             entries: BTreeMap::new(),
             names: EntryNames::default(),
-            observed_in_the_own_instant: BTreeSet::new(),
+            observed_at: BTreeMap::new(),
             learned_on: BTreeMap::new(),
             scanned: false,
             folders: BTreeSet::new(),
@@ -130,7 +130,7 @@ impl CoreIndex {
         self.names.clear();
         self.folders.clear();
         self.tags.clear();
-        self.observed_in_the_own_instant.clear();
+        self.observed_at.clear();
         self.learned_on.clear();
         self.scanned = false;
         self.graph_epoch = 0;
@@ -367,11 +367,12 @@ impl CoreIndex {
         // orologio letto qui avrebbe dichiarato pulito ciò che là poteva
         // ancora cambiare. Leggerlo prima di guardare sbaglia solo per
         // eccesso: rilegge qualche voce in più, mai una in meno.
-        if entry.mtime < observed_at {
-            self.observed_in_the_own_instant.remove(&entry.id);
-        } else {
-            self.observed_in_the_own_instant.insert(entry.id.clone());
-        }
+        //
+        // L'istante si tiene per ogni voce, e non solo il sì o il no della
+        // data: chi scrive l'anagrafe lo confronta anche col timbro di
+        // cambiamento che il file ha in quel momento
+        // ([`Workspace::store_entries`](crate::Workspace::store_entries)).
+        self.observed_at.insert(entry.id.clone(), observed_at);
         self.install_entry(entry);
     }
 
@@ -415,7 +416,16 @@ impl CoreIndex {
     /// scrittura arrivata subito dopo sarebbe indistinguibile da nessuna
     /// scrittura (difetto 0187). Chi scrive l'anagrafe la salta.
     pub(crate) fn observed_at_the_same_instant(&self, id: &DocId) -> bool {
-        self.observed_in_the_own_instant.contains(id)
+        match (self.entries.get(id), self.observed_at(id)) {
+            (Some(entry), Some(observed_at)) => entry.mtime >= observed_at,
+            _ => true,
+        }
+    }
+
+    /// L'orologio letto prima di guardare il file della voce `id`, se la voce
+    /// c'è (vedi [`set_entry_observed`](Self::set_entry_observed)).
+    pub(crate) fn observed_at(&self, id: &DocId) -> Option<u64> {
+        self.observed_at.get(id).copied()
     }
 
     /// Mette una cartella fra quelle che ci sono (§14.3).
@@ -487,7 +497,7 @@ impl CoreIndex {
     /// sparizione deve portare con sé.
     pub(crate) fn remove_entry(&mut self, id: &DocId) -> Option<EntryKind> {
         self.names.remove_entry(id);
-        self.observed_in_the_own_instant.remove(id);
+        self.observed_at.remove(id);
         self.learned_on.remove(id);
         self.entries.remove(id).map(|and| and.kind)
     }

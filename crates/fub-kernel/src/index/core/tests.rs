@@ -445,7 +445,7 @@ fn clearing_the_index_forgets_the_scan_and_the_instants() {
         !index.anagrafe_complete(),
         "un indice svuotato non ha finito nessuna scansione"
     );
-    assert!(!index.observed_at_the_same_instant(&id));
+    assert_eq!(index.observed_at(&id), None);
 }
 
 /// Un indice del core vuoto, coi tipi delle proprietà dichiarabili.

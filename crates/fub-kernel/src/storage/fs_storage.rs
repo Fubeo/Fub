@@ -556,11 +556,25 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
 /// Serve a dire se un timbro letto può ancora essere quello di una
 /// riscrittura che verrà: vedi [`crate::transfer::change_stamp_settled`].
 pub fn change_stamp_clock() -> Option<u64> {
+    change_stamp_of_instant(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?,
+    )
+}
+
+/// Un istante dell'orologio di sistema già letto, in millisecondi UNIX (come
+/// [`crate::time::now_unix_millis`]), nell'unità del timbro di cambiamento:
+/// vedi [`change_stamp_clock`]. Il millisecondo è troncato, cioè l'istante
+/// resta quello letto o un po' prima: chi lo usa per dire «il timbro era già
+/// fermo» sbaglia solo per eccesso di prudenza.
+pub fn change_stamp_at_unix_millis(millis: u64) -> Option<u64> {
+    change_stamp_of_instant(std::time::Duration::from_millis(millis))
+}
+
+fn change_stamp_of_instant(since: std::time::Duration) -> Option<u64> {
     #[cfg(any(unix, windows))]
     {
-        let since = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()?;
         #[cfg(unix)]
         let stamp = unix_change_stamp(
             i64::try_from(since.as_secs()).ok()?,
@@ -576,6 +590,7 @@ pub fn change_stamp_clock() -> Option<u64> {
     }
     #[cfg(not(any(unix, windows)))]
     {
+        let _ = since;
         None
     }
 }

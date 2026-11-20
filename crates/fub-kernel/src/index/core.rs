@@ -159,16 +159,16 @@ pub(crate) struct CoreIndex {
     /// [`remove_entry`](CoreIndex::remove_entry) — che è la ragione per cui un
     /// conto ricavato qui non può divergere da ciò da cui è ricavato.
     pub(crate) names: EntryNames,
-    /// Le voci di `entries` **che non si scrivono in anagrafe**: quelle la cui
-    /// data non era nel passato nel momento in cui la si è letta (difetto
-    /// 0187).
+    /// **Quando si è guardato il file** di ogni voce di `entries`: l'orologio
+    /// letto prima di guardarlo, in millisecondi UNIX.
     ///
-    /// Quasi sempre vuoto, e non è una terza anagrafe: è la stessa risposta
-    /// che la regola *racily clean* dava a `load` guardando un numero in testa
-    /// alla tabella, presa però dove la domanda ha senso — al momento
+    /// Non è una terza anagrafe: è la risposta che la regola *racily clean*
+    /// (difetto 0187) e la grana del timbro di cambiamento
+    /// ([`crate::transfer::change_stamp_settled`]) chiedono a chi scrive
+    /// l'anagrafe, presa dove la domanda ha senso — al momento
     /// dell'osservazione — e tenuta da parte fino a quando serve, cioè quando
     /// qualcuno scrive. Ci si passa dalle stesse due porte di `nomi`.
-    observed_in_the_own_instant: BTreeSet<DocId>,
+    observed_at: BTreeMap<DocId, u64>,
     /// Vero da quando una scansione ha installato l'anagrafe intera: prima
     /// `entries` non dice quali file ci sono, e chi chiede «c'è già un file
     /// con questi byte?» non può rispondere «no» (T101).
