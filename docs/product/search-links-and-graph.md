@@ -108,10 +108,10 @@ nome nudo porta prima al formato che dichiara un sorgente di prosa
 (`fub:prose-source`), e l'estensione scritta sceglie l'altro. Un nome o un path
 che finisce con l'estensione di un allegato noto (`[[Bando.pdf]]`) nomina quel
 file, mai un documento con un'estensione in più come `Bando.pdf.fubann`.
-Heading e blocchi condividono slug e ancore canoniche; un punto rinominato apre
-la nota senza inventare una destinazione. Completamento e cambio rapido
-propongono nomi per pertinenza senza riordinare nella shell, e la rinomina
-riscrive solo i wikilink che nominavano la nota, e l'estensione se era scritta.
+Heading e blocchi condividono slug e ancore; un punto rinominato apre la nota
+senza inventare una destinazione. Completamento e cambio rapido propongono
+nomi per pertinenza senza riordinare nella shell; la rinomina riscrive solo i
+wikilink che la nominavano (anche in una proprietà), e l'estensione se scritta.
 Il pannello mostra incoming, outgoing con contesto, menzioni non collegate nei
 due versi con filtro, e la conversione esplicita in wikilink. Una menzione è il
 nome o un alias, parola intera in prosa: non in un link, nel codice, in un tag,

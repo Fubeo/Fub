@@ -6,7 +6,8 @@ use super::*;
 /// Le foglie che il doppio sa verificare **con le regole condivise**, sui
 /// documenti che ha in memoria: un elenco di id, una cartella
 /// ([`in_folder`]), un link sugli archi seminati, una proprietà sul
-/// frontmatter dei modelli seminati ([`properties::test`]). La struttura —
+/// frontmatter dei modelli seminati ([`properties::test`]), i link delle
+/// proprietà (`fub:property-link`, [`properties::links`]). La struttura —
 /// OR, AND, negazione — è quella di [`QueryEvaluator`], la stessa del kernel.
 ///
 /// Il resto (testo, tag, regex, task, glob, estensione, predicati di terzi)
@@ -52,6 +53,41 @@ impl QueryEvaluator for Selection<'_> {
                 for id in &self.documents {
                     let model = models.get(id.as_str()).ok_or_else(|| unseeded(id))?;
                     if properties::test(&model.frontmatter, filter, &DateFormats::ISO) {
+                        found.push(id.clone());
+                    }
+                }
+                Ok(Matches::of_docs(found))
+            }
+            // I link delle proprietà, con la regola condivisa e la stessa
+            // risoluzione di `Resolve`: il kernel li tiene come archi, il
+            // doppio li legge dai modelli seminati.
+            QueryPredicate::Custom { ns, predicate }
+                if ns == fub_abi::query::PROPERTY_LINK_PREDICATE_NS =>
+            {
+                let leaf = fub_abi::query::PropertyLinkPredicate::from_payload(predicate)?;
+                // I link si copiano fuori dal lucchetto: `resolve` lo riprende
+                // per gli alias.
+                let mut written: Vec<(DocId, Vec<LinkTarget>)> = Vec::new();
+                {
+                    let models = self.host.models.lock().unwrap();
+                    for id in &self.documents {
+                        let model = models.get(id.as_str()).ok_or_else(|| unseeded(id))?;
+                        let targets = properties::links(&model.frontmatter)
+                            .into_iter()
+                            .filter(|(key, _)| leaf.key.as_deref().is_none_or(|want| want == *key))
+                            .map(|(_, target)| target)
+                            .collect();
+                        written.push((id.clone(), targets));
+                    }
+                }
+                let mut found = Vec::new();
+                for (id, targets) in &written {
+                    let names = targets.iter().any(|target| {
+                        self.host
+                            .resolve(target, Some(id))
+                            .is_some_and(|doc| leaf.targets.contains(&doc))
+                    });
+                    if names {
                         found.push(id.clone());
                     }
                 }

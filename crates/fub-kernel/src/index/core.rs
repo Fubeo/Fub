@@ -39,7 +39,8 @@ use fub_abi::model::{
     Frontmatter, Heading, Link, LinkTarget, PropertyTypes,
 };
 use fub_abi::query::{
-    in_folder, parent_folder, within_folder, Matches, QueryEvaluator, QueryPredicate,
+    in_folder, parent_folder, within_folder, Matches, PropertyLinkPredicate, QueryEvaluator,
+    QueryPredicate, PROPERTY_LINK_PREDICATE_NS,
 };
 use fub_abi::rules::properties;
 use fub_abi::settings::SettingValue;
@@ -123,6 +124,10 @@ impl GraphSource for DocMeta {
 
     fn graph_links(&self) -> &[Link] {
         &self.links
+    }
+
+    fn graph_property_links(&self) -> Vec<(String, LinkTarget)> {
+        crate::graph::property_links_of(&self.frontmatter)
     }
 }
 
@@ -333,6 +338,17 @@ impl QueryEvaluator for CoreIndex {
                     .into_iter()
                     .filter(|id| self.metas.contains_key(id)),
             )),
+            // I link del frontmatter, che il grafo non conosce: il kernel ha
+            // il frontmatter e chi risolve, e nessun altro li ha tutti e due.
+            QueryPredicate::Custom { ns, predicate } if ns == PROPERTY_LINK_PREDICATE_NS => {
+                let leaf = PropertyLinkPredicate::from_payload(predicate)?;
+                Ok(Matches::of_docs(
+                    self.graph
+                        .property_linked(&leaf.targets, leaf.key.as_deref())
+                        .into_iter()
+                        .filter(|id| self.metas.contains_key(id)),
+                ))
+            }
             // Ciò che il pianificatore ha già risolto per conto di qualcun
             // altro: si prende per buono, ristretto a ciò che esiste.
             QueryPredicate::Docs { docs } => Ok(Matches::of_docs(

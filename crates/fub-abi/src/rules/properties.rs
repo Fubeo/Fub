@@ -36,7 +36,8 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::model::{
-    DateFormats, DocId, Frontmatter, PropertyDate, PropertyScalar, PropertyTypes, PropertyValue,
+    parse_wikilink_inner, DateFormats, DocId, Frontmatter, LinkTarget, PropertyDate,
+    PropertyScalar, PropertyTypes, PropertyValue,
 };
 use crate::query::Matches;
 use crate::traits::{
@@ -366,10 +367,86 @@ pub fn finish_with_types<'a>(
     paged
 }
 
+/// **I link scritti nel frontmatter**, chiave per chiave, nell'ordine del
+/// file: la regola unica di «questa proprietà nomina quella nota».
+///
+/// Un link della proprietà è una stringa che è **soltanto** un `[[…]]`
+/// (spazi attorno a parte), come valore o come voce di un elenco. È la forma
+/// che la lettura senza registro fa link e che una Relazione dichiarata legge
+/// come link; e conta anche quando il registro dichiara la chiave Testo,
+/// perché `progetto: "[[Scorte]]"` nomina comunque `Scorte` e una rinomina
+/// che non lo riscrivesse lo romperebbe. Un `[[…]]` dentro altro testo non è
+/// un link della proprietà, come non lo è un URL.
+///
+/// Non dipende dal registro dei tipi, ed è voluto: il grafo dei link tiene
+/// questi link come archi suoi, e un cambio del registro non deve
+/// ricostruirlo. La usano il grafo (la foglia
+/// [`PROPERTY_LINK_PREDICATE_NS`](crate::query::PROPERTY_LINK_PREDICATE_NS)),
+/// la rinomina che riscrive i link delle proprietà e «Collegata da».
+pub fn links(fm: &Frontmatter) -> Vec<(&str, LinkTarget)> {
+    let mut out = Vec::new();
+    for (key, raw) in fm.0.iter() {
+        match raw {
+            serde_json::Value::String(text) => {
+                out.extend(lone_wikilink(text).map(|target| (key.as_str(), target)));
+            }
+            serde_json::Value::Array(items) => out.extend(
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().and_then(lone_wikilink))
+                    .map(|target| (key.as_str(), target)),
+            ),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Il link di una stringa che è soltanto un `[[…]]`, spazi attorno a parte:
+/// `"[[Nota|Testo]]"` sì, `"vedi [[Nota]]"` e `"[[a]] e [[b]]"` no.
+pub fn lone_wikilink(text: &str) -> Option<LinkTarget> {
+    let inner = text.trim().strip_prefix("[[")?.strip_suffix("]]")?;
+    if inner.contains("[[") || inner.contains("]]") {
+        return None;
+    }
+    Some(parse_wikilink_inner(inner).target)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::{DateOrder, PropertyTime};
+
+    /// I link delle proprietà: link, elenco, testo che è solo un link; non un
+    /// link dentro altro testo, non un URL, non un numero.
+    #[test]
+    fn links_reads_every_written_wikilink_by_key() {
+        let front = fm(serde_json::json!({
+            "progetto": "[[Scorte|lo scorte]]",
+            "nota": "[[Testo dichiarato]]",
+            "libri": ["[[Dune]]", "a parole", "[[Fondazione#Uno]]"],
+            "commento": "vedi [[Altro]]",
+            "due": "[[a]] e [[b]]",
+            "sito": "https://example.org",
+            "peso": 3
+        }));
+        let got: Vec<(&str, String)> = links(&front)
+            .into_iter()
+            .map(|(key, target)| match target {
+                LinkTarget::Wiki { page, .. } => (key, page),
+                other => panic!("atteso un wikilink, trovato {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("progetto", "Scorte".to_string()),
+                ("nota", "Testo dichiarato".to_string()),
+                ("libri", "Dune".to_string()),
+                ("libri", "Fondazione".to_string()),
+            ]
+        );
+    }
 
     fn fm(json: serde_json::Value) -> Frontmatter {
         Frontmatter(json.as_object().expect("oggetto").clone())

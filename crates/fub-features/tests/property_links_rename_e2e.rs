@@ -176,3 +176,92 @@ fn a_self_link_in_a_property_follows_the_note_itself() {
         "---\nsé: \"[[Nuova]]\"\n---\n\nTesto.\n"
     );
 }
+
+/// Le note che la foglia `fub:property-link` trova sul Workspace vero.
+fn named_in_properties(ws: &Workspace, target: &str, key: Option<&str>) -> Vec<String> {
+    use fub_abi::query::{PropertyLinkPredicate, QueryExpr};
+    use fub_abi::traits::{Excerpts, IndexQuery, IndexResult, PropertySelect};
+    let leaf = PropertyLinkPredicate {
+        targets: vec![fub_abi::model::DocId::new(target)],
+        key: key.map(str::to_string),
+    };
+    match ws
+        .query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(leaf.into_predicate()),
+            sort: None,
+            select: PropertySelect::None,
+            page: None,
+            excerpts: Excerpts::Omit,
+        })
+        .expect("la foglia")
+    {
+        IndexResult::Documents(rows) => rows
+            .items
+            .into_iter()
+            .map(|row| row.doc.as_str().to_string())
+            .collect(),
+        other => panic!("attesi documenti, trovato {other:?}"),
+    }
+}
+
+/// #503/#479, da capo a fondo: `query_index` risponde chi nomina una nota
+/// nel frontmatter (per nome, per alias, in un elenco; un percorso parziale
+/// come in Obsidian), senza i link del corpo; con la chiave, solo quella. Dopo
+/// la rinomina la stessa domanda trova i link riscritti sulla nota nuova.
+#[test]
+fn query_index_answers_who_names_a_note_in_its_properties() {
+    let vault = Vault::with(&[
+        ("Progetto Gestione Scorte.md", PROGETTO),
+        ("Riunioni/Verbale 1.md", VERBALE),
+        ("Riunioni/Elenco.md", ELENCO),
+        ("Altro.md", ALTRO),
+        (
+            "Archivio/Progetti/Alpha.md",
+            "---\nprogetto: \"[[Progetto Gestione Scorte]]\"\n---\n",
+        ),
+        ("Note/indice.md", "---\nrif: \"[[Progetti/Alpha]]\"\n---\n"),
+        (
+            "Corpo.md",
+            "Solo nel corpo: [[Progetto Gestione Scorte]].\n",
+        ),
+    ]);
+    let mut ws = vault.open();
+
+    assert_eq!(
+        named_in_properties(&ws, "Progetto Gestione Scorte.md", None),
+        [
+            "Archivio/Progetti/Alpha.md",
+            "Riunioni/Elenco.md",
+            "Riunioni/Verbale 1.md"
+        ]
+    );
+    assert_eq!(
+        named_in_properties(&ws, "Progetto Gestione Scorte.md", Some("progetto")),
+        ["Archivio/Progetti/Alpha.md", "Riunioni/Verbale 1.md"]
+    );
+    assert_eq!(
+        named_in_properties(&ws, "Archivio/Progetti/Alpha.md", None),
+        ["Note/indice.md"]
+    );
+
+    let done = run(
+        &mut ws,
+        NOTES_RENAME,
+        serde_json::json!({
+            "doc": "Progetto Gestione Scorte.md",
+            "to": "Scorte.md",
+        }),
+        InvokeMode::Apply,
+    )
+    .unwrap();
+    assert!(done.partial.is_none(), "{:?}", done.partial);
+    assert!(named_in_properties(&ws, "Progetto Gestione Scorte.md", None).is_empty());
+    assert_eq!(
+        named_in_properties(&ws, "Scorte.md", None),
+        [
+            "Archivio/Progetti/Alpha.md",
+            "Riunioni/Elenco.md",
+            "Riunioni/Verbale 1.md"
+        ]
+    );
+}
