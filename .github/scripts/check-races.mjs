@@ -49,11 +49,17 @@ function closingOf(code, opening, open = "(", close = ")") {
 
 const NAME = /^#?[A-Za-z_$][\w$]*/;
 
+/// Gli argomenti di tipo di una chiamata (`<T>`, `<Map<K, V[]>>`), seguiti
+/// dalla sua parentesi. Il codice è già senza letterali, e le parentesi tonde
+/// non ci stanno: un confronto (`a < b && c(d)`) non lo è.
+const TYPE_ARGUMENTS = String.raw`<[\w$\s,.<>[\]|&?]*>(?=\s*\()`;
+const TYPE_CALL = new RegExp(`^${TYPE_ARGUMENTS}`);
+
 /// Dove finisce l'espressione attesa che comincia in `from`: un primario (un
 /// nome, un gruppo fra parentesi o quadre, un letterale già svuotato) e la
 /// sua catena (`.a`, `?.a`, `(…)`, `[…]`, `!`), anche spezzata a capo da
-/// Prettier. Non legge gli operatori binari: `await a + b` attende `a`, come
-/// in JavaScript.
+/// Prettier, con gli argomenti di tipo di una chiamata (`e<T>(p)`). Non legge
+/// gli operatori binari: `await a + b` attende `a`, come in JavaScript.
 ///
 /// Prima leggeva fino alla prima parentesi chiusa o, senza parentesi, fino a
 /// fine riga: `const a = await p; await e(q);` passava, perché `e` stava
@@ -76,7 +82,9 @@ function awaitedEnd(code, from) {
   }
   for (;;) {
     const next = skipSpace(code, index);
-    if (code[next] === "(") index = closingOf(code, next) + 1;
+    const typed = TYPE_CALL.exec(code.slice(next));
+    if (typed) index = next + typed[0].length;
+    else if (code[next] === "(") index = closingOf(code, next) + 1;
     else if (code[next] === "[") index = closingOf(code, next, "[", "]") + 1;
     else if (code[next] === "!" && code[next + 1] !== "=") index = next + 1;
     else if (code.startsWith("?.", next) || (code[next] === "." && code[next + 1] !== ".")) {
@@ -91,10 +99,24 @@ function awaitedEnd(code, from) {
   }
 }
 
-/// `gate` chiamato come cancello (`gate(…)`, `gate?.(…)`), non nominato come
-/// valore (`f(gate)`) né come proprietà di qualcos'altro (`this.gate(…)`).
-function gateCallPattern(gate) {
-  return new RegExp(`(?<![\\w$.#])${gate.replace(/\$/g, "\\$")}\\s*(?:\\?\\.\\s*)?\\(`, "g");
+/// `gate` chiamato come cancello (`gate(…)`, `gate?.(…)`, `gate<T>(…)`), non
+/// nominato come valore (`f(gate)`) né come proprietà di qualcos'altro
+/// (`this.gate(…)`).
+function gateCallPattern(gate, flags = "g") {
+  return new RegExp(
+    `(?<![\\w$.#])${gate.replace(/\$/g, "\\$")}\\s*(?:\\?\\.\\s*)?(?:${TYPE_ARGUMENTS}\\s*)?\\(`,
+    flags,
+  );
+}
+
+/// Vero se l'espressione attesa è una chiamata del cancello, con al più la
+/// sua catena dopo (`gate(p).then(…)`): il cancello è la chiamata più
+/// esterna. Prima bastava che comparisse in un punto qualsiasi, e
+/// `await save(e(p))` passava con `save` fuori dal cancello (revisione di
+/// GUARDIE-1).
+function awaitsGate(expression, gate) {
+  const head = expression.replace(/^\s*(?:(?:await|void)\b\s*)*/, "");
+  return gateCallPattern(gate, "").exec(head)?.index === 0;
 }
 
 /// I metodi di una promessa che le appendono un callback.
@@ -202,9 +224,11 @@ function readHead(argument) {
 /// (`race.last.bind(race)`).
 ///
 /// Nel corpo:
-/// - ogni `await` attende un'espressione che chiama il cancello
-///   (`await expected(p)`); nominarlo come valore (`await f(expected)`) non
-///   basta, perché `f` può aspettare quello che vuole;
+/// - ogni `await` attende una chiamata del cancello (`await expected(p)`,
+///   anche con la sua catena dopo); nominarlo come valore
+///   (`await f(expected)`) o chiamarlo dentro un'altra chiamata
+///   (`await save(expected(p))`, `await Promise.all([expected(a()), b()])`)
+///   non basta, perché la chiamata di fuori può aspettare quello che vuole;
 /// - nessun `try … catch`, e nessun `.catch`, `.finally` o `.then(ok, ko)`
 ///   attaccato a una chiamata del cancello: ingoierebbero la scadenza;
 /// - nessun `.then`, `.catch` o `.finally` fuori dal cancello: il loro
@@ -218,9 +242,10 @@ function readHead(argument) {
 /// funzione fuori dalla guardia; un cancello rinominato in un nome locale
 /// (`const g = expected`) dà una violazione anche quando è giusto; un nome
 /// interno che copre il cancello (`const expected = (p) => p`) passa;
-/// `race["last"](…)` e `const { last } = race` non si vedono;
-/// `await Promise.all([expected(a()), b()])` passa, perché chiama il
-/// cancello, anche se `b()` non ci passa.
+/// `race["last"](…)` e `const { last } = race` non si vedono; un cancello
+/// che arriva da una funzione (`const g = makeGate(expected)`) non è
+/// riconosciuto come cancello, e il corpo che lo usa dà una violazione anche
+/// quando è giusto.
 export function violations(text, relative) {
   const code = codeOnly(text);
   const found = [];
@@ -263,7 +288,7 @@ export function violations(text, relative) {
     for (const awaited of body.matchAll(/\bawait\b/g)) {
       const from = awaited.index + "await".length;
       const expression = body.slice(from, awaitedEnd(body, from));
-      if (gate !== null && gateCallPattern(gate).test(expression)) continue;
+      if (gate !== null && awaitsGate(expression, gate)) continue;
       found.push(
         gate === null
           ? `${at(awaited.index)}: an \`await\` inside a race whose body takes no gate.`
@@ -368,7 +393,16 @@ function selfTest() {
     ["un .then a un ramo dopo il cancello", "r.last((e) => e(f()).then(show));", 1, 0],
     ["un .then fuori dal cancello (sfuggiva)", "r.last(async (e) => { f().then((v) => { state = v; }); });", 1, 1],
     ["un .then nel cancello", "r.last(async (e) => { const v = await e(f().then((x) => x.items)); });", 1, 0],
-    ["un'attesa nel callback del cancello", "r.last(async (e) => { await Promise.all(xs.map(async (x) => { await e(g(x)); })); });", 1, 0],
+    ["un'attesa nel callback del cancello", "r.last(async (e) => { await e(Promise.all(xs.map(async (x) => { await e(g(x)); }))); });", 1, 0],
+    // La revisione di GUARDIE-1: il cancello deve essere la chiamata più
+    // esterna dell'attesa, non un pezzo qualsiasi dell'espressione.
+    ["il cancello dentro un'altra chiamata (sfuggiva)", "r.last(async (e) => { await save(e(p)); });", 1, 1],
+    ["Promise.all attorno ai cancelli (sfuggiva)", "r.last(async (e) => { await Promise.all([e(a()), b()]); });", 1, 1],
+    ["il cancello con la catena dopo", "r.last(async (e) => { const v = await e(f()).then(show); });", 1, 0],
+    ["il cancello opzionale", "r.last(async (e) => { const v = await e?.(f()); });", 1, 0],
+    ["il cancello con un argomento di tipo (falso rosso)", "r.last(async (e) => { const v = await e<T>(p); });", 1, 0],
+    ["il cancello con un tipo annidato (falso rosso)", "r.last(async (e) => { const v = await e<Map<K, V[]>>(p); });", 1, 0],
+    ["un'altra chiamata con un argomento di tipo", "r.last(async (e) => { const v = await f<T>(p); });", 1, 1],
     ["il giro con un tipo generico (sfuggiva)", "r.last<Item[]>(async (e) => { await f(); });", 1, 1],
     ["il giro con un generico annidato (sfuggiva)", "r.last<Map<K, V>>(async (e) => { await f(); });", 1, 1],
     ["un confronto con last non è un giro", "if (x.last < y && z(w)) go();", 0, 0],
