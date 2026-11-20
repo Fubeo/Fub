@@ -22,7 +22,7 @@ manifest, generate dai lockfile. Da una copia pulita del repository (un
 la rallenterebbe):
 
 ```bash
-# 1. le sorgenti offline (Python 3.10+ con aiohttp, tomlkit e PyYAML)
+# 1. le sorgenti offline (Python 3.10+ con i moduli di requisiti-generatori.txt)
 packaging/flatpak/genera-sorgenti.sh
 
 # 2. runtime, SDK ed estensione di Node, da Flathub

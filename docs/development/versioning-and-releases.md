@@ -141,8 +141,9 @@ workflow di rilascio con il tag che lo ha avviato.
 1. passa dal cancello
    ([`check-release-gate.mjs`](../../.github/scripts/check-release-gate.mjs)):
    il commit del tag deve avere una corsa di `ci.yml` completa e verde in ogni
-   job (la corsa settimanale non conta), e un tag del canale stabile deve avere
-   i segreti di firma;
+   job, banchi, WebView vera, LibreOffice e librerie a runtime compresi (la
+   corsa settimanale non conta, e un job saltato non è verde), e un tag del
+   canale stabile deve avere i segreti di firma;
 2. controlla le versioni e crea la release **bozza**, se non esiste; si ferma
    se la release è già pubblicata;
 3. su Linux (Ubuntu 22.04) e Windows esegue `npm ci` e
@@ -154,7 +155,9 @@ workflow di rilascio con il tag che lo ha avviato.
 5. li carica come artefatti della corsa e nella release bozza, senza mai
    sostituire un asset che c'è già;
 6. riscarica la bozza e, per ogni installer, controlla digest e attestazione
-   con `gh attestation verify`, firmata da `release.yml` sul commit del tag.
+   con `gh attestation verify`, firmata da `release.yml` sul commit del tag;
+   un file della bozza senza il suo `.sha256`, o un `.sha256` che nomina un
+   altro file, ferma la verifica.
 
 Il tag va spinto dopo che la CI del suo commit è finita: se la corsa manca o è
 ancora in corso il cancello ferma il rilascio, e basta rilanciare il workflow.
@@ -208,7 +211,9 @@ sostituisce `.deb`, `.rpm` e AppImage, e non è su Flathub.
 - **La build** avviene dai sorgenti e senza rete. `genera-sorgenti.sh` ricava
   da `Cargo.lock` e da `apps/client/package-lock.json`, con i generatori di
   flatpak-builder-tools a un commit fissato, le sorgenti offline di Cargo e di
-  npm; non stanno nel repository e si rifanno a ogni build, così non restano
+  npm. I moduli Python dei generatori vengono da `requisiti-generatori.txt`,
+  con versione e impronta di ognuno, anche quelli indiretti
+  (`pip install --require-hashes`). Le sorgenti offline non stanno nel repository e si rifanno a ogni build, così non restano
   indietro rispetto ai lockfile. Rust è l'1.95 della CI, scaricato con la
   libreria per `wasm32-unknown-unknown` che serve al nucleo della lavagna;
   Node viene dall'estensione `node22` del SDK. Il job di `release.yml` genera

@@ -321,7 +321,8 @@ I guard documentali controllano:
 - raggiungibilità delle pagine;
 - dimensioni;
 - struttura Markdown;
-- blocchi Mermaid, resi in Chromium con la sandbox accesa;
+- blocchi Mermaid, resi in Chromium con la sandbox e il Mermaid dell'app
+  (Playwright e Mermaid del lockfile di `apps/client`);
 - tabelle;
 - riferimenti legacy e cronaca vietata;
 - allineamento del ciclo locale.
@@ -367,7 +368,8 @@ appena qualcuno inserisce un item nel mezzo.
   su `main` sempre. I test del workspace non hanno un filtro così: leggono
   anche `apps/client/` e `docs/`.
 - La WebView vera gira in due job: R1 (la memoria) da sola, e gli altri
-  scenari insieme.
+  scenari insieme. Non gira su una PR in bozza, né su una pronta che non tocca
+  ciò che finisce nell'app (`webview` del job `cosa cambia`).
 - La cache Rust salva solo da `main` (budget di 10 GB); i job che possono
   riutilizzarla leggono la test cache di Linux con `shared-key: test` e non la
   risalvano.
@@ -377,9 +379,13 @@ appena qualcuno inserisce un item nel mezzo.
   sulle PR che toccano `vendor/` o `tools/vendor-craft/`, con strumento e
   upstream della base: i motori di `motori.mjs` (`vendor.mjs verify-upstream`)
   e i dati di `dati.mjs` (`provenienza.mjs verify-upstream`, sha256 dell'URL
-  contro il checkout); una cartella non dichiarata è rossa.
-- Il gate di release è `.github/scripts/check-release-gate.mjs`: aggiungere o
-  rinominare un job richiede di aggiornarlo.
+  contro il checkout); una cartella non dichiarata è rossa. Su una PR anche
+  l'elenco delle copie da verificare lo calcola lo strumento della base, prima
+  di eseguire codice della PR, e l'unione con quello della PR la fa un job
+  senza checkout.
+- Il gate di release è `.github/scripts/check-release-gate.mjs`: vuole verde
+  ogni job che un push su `main` fa girare, e aggiungere o rinominare un job
+  richiede di aggiornarlo.
 - Un push fa girare la CI solo su `main`; una PR la fa girare a ogni push, e un
   push più recente annulla la corsa precedente.
 - Un test noto come instabile ha un'issue aperta: rilancia una volta i job

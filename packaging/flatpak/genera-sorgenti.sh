@@ -9,9 +9,10 @@
 # stanno nel repository: si rifanno a ogni build, così seguono sempre i lockfile.
 #
 # I generatori sono quelli di flatpak-builder-tools (MIT), al commit fissato
-# qui sotto. Servono Python 3.10+ e i moduli aiohttp, tomlkit e PyYAML:
+# qui sotto. Servono Python 3.10+ e i moduli aiohttp, tomlkit e PyYAML, con
+# le versioni e le impronte di requisiti-generatori.txt:
 #
-#   python3 -m pip install aiohttp==3.14.5 tomlkit==0.15.2 PyYAML==6.0.3
+#   python3 -m pip install --require-hashes -r packaging/flatpak/requisiti-generatori.txt
 #
 # Uso: packaging/flatpak/genera-sorgenti.sh
 # Con FLATPAK_BUILDER_TOOLS=<cartella> usa una copia di flatpak-builder-tools
@@ -27,7 +28,7 @@ out="$here/generated"
 
 if ! python3 -c 'import aiohttp, tomlkit, yaml' 2>/dev/null; then
   echo "mancano i moduli Python dei generatori:" >&2
-  echo "  python3 -m pip install aiohttp==3.14.5 tomlkit==0.15.2 PyYAML==6.0.3" >&2
+  echo "  python3 -m pip install --require-hashes -r packaging/flatpak/requisiti-generatori.txt" >&2
   exit 1
 fi
 
