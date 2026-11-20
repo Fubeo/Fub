@@ -4,12 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fub</title>
-    <!-- Lo strato d'avvio, prima di ogni altro script: i caratteri del marchio,
+    <!-- Lo strato d'avvio, prima di ogni altro script: il carattere dei suoi testi,
          il suo foglio (luce e colori dal primo disegno, anche senza JS), quello
          per chi ha il JS spento e i due script classici di public/avvio/. È lo
          stesso nelle tre pagine. Le pagine non hanno stili in linea:
          public/avvio/avvio.css dice perché. -->
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/newsreader-latin-opsz-italic.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/hanken-grotesk-latin-wght-normal.woff2" />
     <!-- L'icona della scheda nel browser: Marcuzzo, la forma minima 24
          (`assets/logo/`, copia guardata da `ui/marcuzzo.test.ts`). -->
@@ -405,6 +404,7 @@
           <span data-i18n="activity.title">Attività</span>
           <button
             id="activity-close"
+            type="button"
             class="link-button"
             data-i18n="app.close"
             data-i18n-title="app.close"
@@ -414,10 +414,11 @@
         </div>
         <ul id="activity-list" class="plain-list" role="list"></ul>
       </div>
-      <!-- Gli avvisi si **annunciano**: è l'unica superficie che dice qualcosa
-           che l'utente non ha chiesto, e `aria-live="polite"` è ciò che la fa
-           arrivare anche a chi non la sta guardando — al primo momento in cui
-           non sta leggendo altro, che è quello che «polite» significa. -->
+      <!-- Lo storico degli avvisi. Non è una regione viva: ogni avviso nuovo lo
+           annuncia `#notify-live` (`role="status"`, `aria-live="polite"`), che
+           `ui/notify.ts` crea una volta sola e a cui cambia soltanto il testo.
+           Così arriva anche a chi non guarda il pannello, al primo momento in
+           cui il lettore di schermo non sta leggendo altro. -->
       <div
         id="notify-panel"
         class="dock-panel dock-panel--notify"
@@ -430,6 +431,7 @@
           <span data-i18n="notices.title">Avvisi</span>
           <button
             id="notify-clear"
+            type="button"
             class="link-button"
             data-i18n="notices.clear"
             data-i18n-title="notices.clear.hint"
@@ -438,6 +440,7 @@
           </button>
           <button
             id="notify-close"
+            type="button"
             class="link-button"
             data-i18n="app.close"
             data-i18n-title="app.close"

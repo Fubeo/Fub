@@ -2817,6 +2817,32 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     expect(editorTexts().join("\n")).not.toContain("[[");
   });
 
+  it("una nota lasciata che l'editor non riesce a scrivere lo dice, senza un rifiuto muto", async () => {
+    await start(VAULT);
+    const { setMode } = await import("./panels/document");
+    await setMode("source");
+    await settle();
+    const { layout } = await import("./state/layout");
+    const { paneOf } = await import("./state/document-controller");
+    const surface = paneOf(layout.focus)!.surface!;
+    vi.spyOn(surface, "insertReferences").mockImplementation(() => {
+      throw new Error("editor guasto");
+    });
+    for (const [kind, value] of [
+      ["application/x-fub-note", "note/Spesa.md"],
+      ["application/x-fub-entries", JSON.stringify([{ id: "note/Spesa.md", note: true }])],
+    ] as const) {
+      const drop = new Event("drop", { bubbles: true, cancelable: true });
+      Object.defineProperty(drop, "dataTransfer", {
+        value: { types: [kind], files: [], getData: (asked: string) => (asked === kind ? value : "") },
+      });
+      document.querySelector(".pane-editor .cm-content")!.dispatchEvent(drop);
+      expect(drop.defaultPrevented).toBe(true);
+    }
+    await waitFor("l'avviso del collegamento non scritto", () =>
+      [...document.querySelectorAll(".toast")].filter((each) => each.textContent?.includes("editor guasto")).length >= 1);
+  });
+
   it("un collegamento web lasciato in una nota diventa un link, il resto un allegato", async () => {
     const host = await start(VAULT);
     const { setMode } = await import("./panels/document");

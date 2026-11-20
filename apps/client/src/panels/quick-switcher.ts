@@ -67,6 +67,7 @@ import { listStep } from "../ui/list-step";
 import { offerNote } from "../ui/drag-types";
 import { offerOutside } from "../ui/vault-transfer";
 import { openVaultRoot } from "../state/store";
+import { composingKey } from "../kit/ime";
 
 const OVERLAY_ID = "quick-switcher";
 const LIST_ID = `${OVERLAY_ID}-list`;
@@ -442,6 +443,8 @@ export function openQuickSwitcher(): void {
     timer = window.setTimeout(() => void search(), 180);
   });
   input.addEventListener("keydown", (e) => {
+    // Frecce, Invio ed Esc della composizione sono del metodo d'immissione.
+    if (composingKey(e)) return;
     const step = listStep(e);
     if (step) {
       e.preventDefault();

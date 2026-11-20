@@ -1196,6 +1196,11 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
   const fail = (error: unknown) => {
     if (!life.closed) notify(t("document.attachment_failed", { reason: errorText(error) }), "guasto");
   };
+  // Un collegamento che l'editor non riesce a scrivere si dice: mai un rifiuto
+  // che nessuno ascolta.
+  const linkFailed = (error: unknown) => {
+    if (!life.closed) notify(t("document.link_drop_failed", { reason: errorText(error) }), "guasto");
+  };
   const accept = (files: readonly File[]) => {
     if (life.closed || r.surface !== surface || heldReadOnly(doc)) {
       fail(new Error("The document is read-only or no longer open"));
@@ -1225,7 +1230,7 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
       void linkPreference().then((preference) => noteReference(doc, note, preference)).then((reference) => {
         if (life.closed || r.surface !== surface) return;
         surface.insertReferences?.([reference], { x, y });
-      });
+      }).catch(linkFailed);
       return;
     }
     // Più voci, o un file del vault: ogni nota un collegamento, ogni file un
@@ -1242,7 +1247,7 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
       ))).then((references) => {
         if (life.closed || r.surface !== surface) return;
         surface.insertReferences?.(references, at);
-      });
+      }).catch(linkFailed);
       return;
     }
     if (!event.dataTransfer?.files.length) return;

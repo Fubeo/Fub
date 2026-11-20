@@ -14,6 +14,7 @@ import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { enterSurface, exitSurface } from "./motion";
+import { composingKey } from "../kit/ime";
 
 /// Una finestra aperta: la `.modale` col suo titolo, il fuoco intrappolato
 /// ed Esc. Il contenuto va in `box`.
@@ -283,6 +284,7 @@ export function pickFromList<T>(options: PickOptions<T>): Promise<T | null> {
       render();
     });
     input.addEventListener("keydown", (event) => {
+      if (composingKey(event)) return;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         if (visible.length === 0) return;

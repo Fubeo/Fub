@@ -44,7 +44,7 @@ import "./sheets.css";
 import { retitleIn } from "../../../editors/text/profiles/markdown/page/title";
 import { errorText } from "../../../host/errors";
 import { onLanguage, t } from "../../../i18n/strings";
-import { openPopover, textButton, textField, type PopoverHandle } from "../../../kit";
+import { composingKey, openPopover, textButton, textField, type PopoverHandle } from "../../../kit";
 import { nameFault, pageName } from "../../../rules/mirrored";
 import { searchedName } from "../../../rules/searched-name";
 import { flushPendingSave, renameKeepingBuffer } from "../../../state/document-session";
@@ -318,7 +318,8 @@ export function mountTitleRename(lifetime: Lifetime): void {
     life.listen(field.input, "keydown", (event) => {
       // Da tastiera il nome proposto si raggiunge con Tab, come il prossimo
       // controllo: il riquadro del messaggio non sta accanto al campo nel DOM.
-      if (event.key === "Tab" && !event.shiftKey && !event.isComposing) {
+      if (composingKey(event)) return;
+      if (event.key === "Tab" && !event.shiftKey) {
         const use = mine.note?.element.querySelector<HTMLElement>(".sheet-title-proposal");
         if (use) {
           event.preventDefault();
@@ -326,7 +327,7 @@ export function mountTitleRename(lifetime: Lifetime): void {
         }
         return;
       }
-      if (event.key !== "Escape" || event.isComposing) return;
+      if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
       // Una rinomina partita non si annulla: Esc aspetta la risposta.

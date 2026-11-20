@@ -715,3 +715,47 @@ describe("la scelta dopo uno spostamento (IMP-1803)", () => {
     expect(Object.keys(files).filter((path) => path.startsWith("Progetti/Progetti/")), "niente si sposta due volte").toEqual([]);
   });
 });
+
+describe("Invio durante la composizione (IME) non conferma i campi dell'albero", () => {
+  const enter = (field: HTMLElement, init: KeyboardEventInit = {}) =>
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...init }));
+
+  it("la cartella nuova aspetta la fine della composizione", async () => {
+    const host = await start();
+    const registry = await import("../ui/commands");
+    registry.newEntries().find((entry) => entry.kind === "folder")!.run();
+    await quiet();
+    const field = document.querySelector<HTMLInputElement>("#file-list > input.new-folder")!;
+    field.value = "日本";
+    enter(field, { isComposing: true });
+    // WebKit chiude la composizione prima del keydown di Invio, che arriva col
+    // codice 229 e `isComposing` falso.
+    enter(field, { keyCode: 229 });
+    await quiet();
+    expect(field.isConnected).toBe(true);
+    expect(field.disabled).toBe(false);
+    expect(Object.keys(host.files()).some((path) => path.startsWith("日本"))).toBe(false);
+
+    enter(field);
+    await waitFor("il campo chiuso dopo l'Invio vero", () => !field.isConnected);
+  });
+
+  it("la rinomina in posto aspetta la fine della composizione", async () => {
+    const host = await start();
+    const li = document.querySelector<HTMLElement>('#file-list li[data-path="Benvenuto.md"]')!;
+    li.focus();
+    li.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const input = row("Benvenuto.md")!.querySelector<HTMLInputElement>("input")!;
+    expect(input).not.toBeNull();
+    input.value = "日本語";
+    enter(input, { isComposing: true });
+    enter(input, { keyCode: 229 });
+    await quiet();
+    expect(input.isConnected).toBe(true);
+    expect(input.disabled).toBe(false);
+    expect("Benvenuto.md" in host.files()).toBe(true);
+
+    enter(input);
+    await waitFor("la nota rinominata", () => "日本語.md" in host.files());
+  });
+});
