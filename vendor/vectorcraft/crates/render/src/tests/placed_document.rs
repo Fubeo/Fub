@@ -105,13 +105,23 @@ fn render(d: &Document, progressive: bool) -> Rendered {
     Renderer::new().render(d, 100, 100, Affine::IDENTITY, &opts)
 }
 
-/// Wait for the background bitmaps (at most 10 s).
+/// Wait for the background bitmaps.
+///
+/// Patch di Fub (`0007-attesa-dei-bitmap`): the wait gives up when no bitmap has been made for
+/// 10 s, not 10 s after it started. On a machine loaded far past its cores the workers make the
+/// nine large bitmaps of a test slowly, one after the other, and the whole could take longer
+/// than 10 s while they were still working; the test that gave up left its bitmaps coming into
+/// the next one. A worker that never finishes still fails the test, by its name.
 fn settle() {
-    let t = std::time::Instant::now();
-    while placed_document::busy() && t.elapsed().as_secs() < 10 {
+    let mut made = (placed_document::generation(), std::time::Instant::now());
+    while placed_document::busy() {
+        let now = placed_document::generation();
+        if now != made.0 {
+            made = (now, std::time::Instant::now());
+        }
+        assert!(made.1.elapsed().as_secs() < 10, "bitmaps still coming, none made for 10 s");
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
-    assert!(!placed_document::busy(), "bitmaps still coming");
 }
 
 #[test]
