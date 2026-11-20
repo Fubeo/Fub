@@ -152,7 +152,15 @@ function nodeSpans(text: string): [number, number][] | null {
     if (text[at] !== "\"") return null;
     const keyEnd = stringEnd(text, at);
     if (keyEnd < 0) return null;
-    const key: unknown = JSON.parse(text.slice(at, keyEnd));
+    // `stringEnd` trova soltanto le virgolette che chiudono: un escape che
+    // JSON non conosce (`\x`) o un carattere di controllo restano dentro, e
+    // la chiave non si legge. Il testo allora non è una lavagna.
+    let key: unknown;
+    try {
+      key = JSON.parse(text.slice(at, keyEnd));
+    } catch {
+      return null;
+    }
     at = skipBlank(text, keyEnd);
     if (text[at] !== ":") return null;
     at = skipBlank(text, at + 1);

@@ -921,6 +921,41 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("un link con un «%» che non codifica niente si apre col nome com'è scritto, senza URIError", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const opened: string[] = [];
+    const peeked: unknown[] = [];
+    const ed = mountMarkdownSurface({ paneId: "riquadro", documentId: "notes/current.md", parent }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: (path) => { opened.push(path); },
+      onPeekLink: (link) => { peeked.push(link); },
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    const view = EditorView.findFromDOM(parent)!;
+    ed.setMode("source");
+    const menuAt = (doc: string) => {
+      ed.buffer.setDoc(doc);
+      view.dispatch({ selection: { anchor: 3 } });
+      return ed.contextMenu!(null);
+    };
+    const run = (menu: ReturnType<NonNullable<MarkdownSurface["contextMenu"]>>, id: string) =>
+      ((menu?.context ?? []).find((entry) => typeof entry !== "string" && entry.id === id) as { run: () => void }).run();
+    const broken = menuAt("[Rapporto](report_50%.md)\n");
+    expect(() => run(broken, "markdown.link.open")).not.toThrow();
+    expect(() => run(broken, "markdown.link.peek")).not.toThrow();
+    expect(opened).toEqual(["report_50%.md"]);
+    expect(peeked).toEqual([{ kind: "path", path: "report_50%.md" }]);
+    // Il nome codificato si decodifica come prima.
+    run(menuAt("[Nota](Nota%20uno.md)\n"), "markdown.link.open");
+    expect(opened[opened.length - 1]).toBe("Nota uno.md");
+    ed.destroy();
+    parent.remove();
+  });
+
   it("caretAt mette il cursore sotto il punto, senza scrivere; fuori dal riquadro o in Lettura non tocca niente (IMP-3808)", () => {
     const { ed, view } = editor();
     ed.setMode("live_preview");
@@ -1327,6 +1362,22 @@ describe("i disegni incorporati nella Lettura", () => {
       vi.restoreAllMocks();
     }
     expect(host.closed).toHaveLength(10);
+  });
+
+  it("un <img src> scritto in HTML nella nota si risolve come l'immagine Markdown", async () => {
+    drawingHost(() => "Ciclo");
+    const { ed, reading } = editor();
+    try {
+      ed.setMode("reading");
+      ed.buffer.setDoc('<img src="../disegni/acqua.svg" alt="scritta">\n');
+      await vi.waitFor(() => expect(reading().querySelector("img")?.getAttribute("src")).toMatch(/^fub-asset:/));
+      const img = reading().querySelector<HTMLImageElement>("img")!;
+      expect(img.dataset.vaultId).toBe(ACQUA);
+      expect(img.getAttribute("data-vault-src")).toBe("../disegni/acqua.svg");
+    } finally {
+      ed.destroy();
+      vi.restoreAllMocks();
+    }
   });
 });
 

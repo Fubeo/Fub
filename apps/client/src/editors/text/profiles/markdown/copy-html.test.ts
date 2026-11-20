@@ -27,4 +27,11 @@ describe("clipboardHtml", () => {
     expect(html).not.toContain("<img");
     expect(html).toContain("schizzo");
   });
+
+  it("un'immagine esterna https resta un'immagine, senza i canali della resa", () => {
+    const html = clipboardHtml("![mappa](https://example.com/mappa.png) e ![x](javascript:alert(1))\n");
+    expect(html).toContain('<img alt="mappa" src="https://example.com/mappa.png">');
+    expect(html.match(/<img\b/gu)?.length).toBe(1);
+    expect(html).not.toMatch(/\sdata-[\w-]+=/u);
+  });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { decodeDestination, decodeEntities, decodeNamedEntity, escapeLinkLabel, linkDestination, normalizeLabel, routeHref } from "./link-syntax";
+import { decodeDestination, decodeEntities, decodeHref, decodeNamedEntity, escapeLinkLabel, linkDestination, normalizeLabel, routeHref } from "./link-syntax";
 import { renderMarkdown } from "./render";
 
 describe("le entità", () => {
@@ -106,6 +106,9 @@ describe("dove porta un href", () => {
     expect(routeHref("mailto:a@b.it")).toEqual({ kind: "system" });
     expect(routeHref("capitolo.md")).toEqual({ kind: "path", path: "capitolo.md" });
     expect(routeHref("../Su%20di%20me.md#x")).toEqual({ kind: "path", path: "../Su di me.md#x" });
+    expect(routeHref("report_50%.md"), "un «%» letterale resta com'è").toEqual({ kind: "path", path: "report_50%.md" });
+    expect(decodeHref("report_50%.md")).toBe("report_50%.md");
+    expect(decodeHref("Nota%20uno.md")).toBe("Nota uno.md");
   });
 });
 

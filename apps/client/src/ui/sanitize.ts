@@ -315,14 +315,26 @@ export function hasScheme(v: string): boolean {
 /// sanitizer pagano più cara. Chi chiama fa `append`, e non c'è nessuna seconda
 /// occasione di interpretare.
 export function sanitizeFragment(html: string): DocumentFragment {
+  return sanitizeWith(html, false);
+}
+
+/// `authored`: l'HTML viene dall'autore della nota, quindi i due canali delle
+/// immagini (`data-vault-src`, `data-remote-src`) li scrive soltanto il
+/// sanitizzatore, dal `src` che ha giudicato; scritti a mano cadono.
+function sanitizeWith(html: string, authored: boolean): DocumentFragment {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const out = document.createDocumentFragment();
   for (const child of Array.from(doc.body.childNodes)) {
-    const clean = sanitizeNode(child);
+    const clean = sanitizeNode(child, authored);
     if (clean) out.appendChild(clean);
   }
   nameTaskBoxes(out);
   return out;
+}
+
+/// I due attributi con cui il sanitizzatore lascia il `src` di un'immagine.
+function isImageChannel(name: string): boolean {
+  return name === VAULT_SRC_ATTRIBUTE || name === REMOTE_SRC_ATTRIBUTE;
 }
 
 /// Ogni casella di una voce prende per nome il testo della voce, senza le
@@ -363,16 +375,21 @@ export function contentClasses(tag: string, value: string): string {
  * impersonate wikilinks, source spans, UI slots, tags, or embed owners. The
  * only classes it keeps are the closed colour vocabulary (`contentClasses`),
  * and `style` survives only as the cell alignment the base allowlist admits.
+ * The one renderer attribute pair it keeps is the image channel the sanitizer
+ * itself writes from a vetted `src` (`data-vault-src`, `data-remote-src`):
+ * an `<img src="foto.png">` written in the note resolves like a Markdown
+ * image. The author cannot write those two by hand: they drop on the way in.
  */
 export function sanitizeMarkdownHtml(html: string): DocumentFragment {
-  const fragment = sanitizeFragment(html);
+  const fragment = sanitizeWith(html, true);
   for (const element of fragment.querySelectorAll("*")) {
     const classes = contentClasses(element.localName, element.getAttribute("class") ?? "");
     if (classes) element.setAttribute("class", classes);
     else element.removeAttribute("class");
     if (!ALLOWED_ATTRIBUTES[element.localName]?.has("style")) element.removeAttribute("style");
     for (const attribute of Array.from(element.attributes)) {
-      if (attribute.name.toLowerCase().startsWith("data-")) {
+      const name = attribute.name.toLowerCase();
+      if (name.startsWith("data-") && !(element.localName === "img" && isImageChannel(name))) {
         element.removeAttribute(attribute.name);
       }
     }
@@ -388,7 +405,7 @@ export function setSanitizedHtml(container: HTMLElement, html: string): void {
   container.replaceChildren(sanitizeFragment(html));
 }
 
-function sanitizeNode(node: Node): Node | null {
+function sanitizeNode(node: Node, authored: boolean): Node | null {
   if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent ?? "");
   if (node.nodeType !== Node.ELEMENT_NODE) return null; // commenti, CDATA, tutto il resto
 
@@ -396,12 +413,13 @@ function sanitizeNode(node: Node): Node | null {
   const tag = el.tagName.toLowerCase();
   const result = resultOfTag(tag);
   if (result === "cancella") return null;
-  if (result === "scarta-tag") return children(el, document.createDocumentFragment());
+  if (result === "scarta-tag") return children(el, document.createDocumentFragment(), authored);
 
   const newItem = document.createElement(tag);
   for (const attr of Array.from(el.attributes)) {
     const name = attr.name.toLowerCase();
     if (!allowedAttribute(tag, name)) continue;
+    if (authored && isImageChannel(name)) continue;
     if (name === "style") {
       // L'allineamento ammesso passa da CSSOM: la CSP rifiuta un `style`
       // scritto come attributo (`style-src-attr 'none'`), non uno stile
@@ -443,13 +461,13 @@ function sanitizeNode(node: Node): Node | null {
     newItem.setAttribute("rel", "noopener noreferrer");
     newItem.setAttribute("target", "_blank");
   }
-  return children(el, newItem);
+  return children(el, newItem, authored);
 }
 
 /// Ripulisce i figli di `el` e li mette dentro `inside`, che restituisce.
-function children<T extends Node>(el: Element, inside: T): T {
+function children<T extends Node>(el: Element, inside: T, authored: boolean): T {
   for (const child of Array.from(el.childNodes)) {
-    const clean = sanitizeNode(child);
+    const clean = sanitizeNode(child, authored);
     if (clean) inside.appendChild(clean);
   }
   return inside;

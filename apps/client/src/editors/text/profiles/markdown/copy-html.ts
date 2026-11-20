@@ -4,7 +4,7 @@
 // della shell, niente link che solo Fub sa aprire, niente risorse del vault.
 // Il testo semplice resta quello di CodeMirror, il Markdown della selezione.
 import type { SyntaxForm } from "../../../../host/contract";
-import { isAllowedLink, sanitizeMarkdownHtml } from "../../../../ui/sanitize";
+import { isAllowedLink, REMOTE_SRC_ATTRIBUTE, sanitizeMarkdownHtml } from "../../../../ui/sanitize";
 import { renderMarkdown } from "./render";
 
 /// Gli attributi che hanno senso fuori da Fub, per tag; gli altri cadono.
@@ -52,13 +52,16 @@ export function clipboardHtml(markdown: string, forms?: readonly SyntaxForm[]): 
       }
     }
     // Un'immagine del vault non si raggiunge da un altro programma: resta il
-    // testo alternativo.
+    // testo alternativo. Una remota il sanitizzatore la lascia inerte in
+    // `data-remote-src`: fuori da Fub torna il suo `src`, e la carica chi
+    // incolla.
     if (tag === "img") {
-      const src = element.getAttribute("src") ?? "";
+      const src = element.getAttribute(REMOTE_SRC_ATTRIBUTE) ?? "";
       if (!OUTSIDE_IMAGE.test(src)) {
         element.replaceWith(element.getAttribute("alt") ?? "");
         continue;
       }
+      element.setAttribute("src", src);
     }
     // Uno span del renderer porta solo la posizione nel sorgente, già tolta.
     if (tag === "span") {
