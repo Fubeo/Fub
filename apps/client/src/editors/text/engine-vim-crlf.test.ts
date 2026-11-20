@@ -104,6 +104,75 @@ describe("Vim in una nota CRLF (#397)", () => {
   });
 });
 
+/// Dove finisce il cursore dopo `keys`, partendo dalla prima riga di
+/// "uno\ndue\n" e della stessa nota
+/// CRLF: le posizioni contano un a capo una posizione in entrambe.
+function headAfter(...sequence: string[]) {
+  return (["\n", "\r\n"] as const).map((nl) => {
+    const editor = vimEditor(["uno", "due", ""].join(nl));
+    editor.view.dispatch({ selection: { anchor: 0 } });
+    editor.keys(...sequence);
+    const head = editor.view.state.selection.main.head;
+    const anchor = editor.view.state.selection.main.anchor;
+    editor.done();
+    return { head, anchor };
+  });
+}
+
+describe("la fine della riga in una nota CRLF", () => {
+  // `g$` passa da `goLineRight`, che dopo la fine della riga guarda il
+  // carattere sotto il cursore: in una nota CRLF era "\r\n", non "\n", e il
+  // cursore tornava indietro di un carattere.
+  it("goLineRight si ferma dopo l'ultimo carattere, non sopra", () => {
+    const [lf, crlf] = (["\n", "\r\n"] as const).map((nl) => {
+      const editor = vimEditor(["uno", "due", ""].join(nl));
+      const cm = getCM(editor.view);
+      if (!cm) throw new Error("Vim non è acceso");
+      editor.view.dispatch({ selection: { anchor: 0 } });
+      cm.execCommand("goLineRight");
+      const { head, assoc } = editor.view.state.selection.main;
+      editor.done();
+      return { head, assoc };
+    });
+    expect(lf.head, "la fine della riga «uno»").toBe(3);
+    expect(crlf).toEqual(lf);
+  });
+
+  // Il cursore a blocco di Vim prende la sua larghezza dal carattere che
+  // copre. Su una riga vuota il carattere è l'a capo, e Vim lo disegna come
+  // uno spazio: in una nota CRLF leggeva "\r\n", non lo riconosceva, e il
+  // blocco andava a capo dentro sé stesso, largo zero.
+  it("il cursore a blocco su una riga vuota copre uno spazio", async () => {
+    const letters = [];
+    for (const nl of ["\n", "\r\n"]) {
+      const editor = vimEditor(["uno", "", "due", ""].join(nl));
+      editor.view.dispatch({ selection: { anchor: editor.view.state.doc.line(2).from } });
+      editor.view.requestMeasure();
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      letters.push(editor.view.dom.querySelector(".cm-fat-cursor")?.textContent);
+      editor.done();
+    }
+    expect(letters[0], "il cursore si disegna").toBe("\xa0");
+    expect(letters[1]).toBe(letters[0]);
+  });
+
+  it("g$ arriva dove arriva in una nota LF", () => {
+    const [lf, crlf] = headAfter("g", "$");
+    expect(crlf).toEqual(lf);
+  });
+
+  it("g$ in modo visuale sceglie fin dove sceglie in una nota LF", () => {
+    const [lf, crlf] = headAfter("v", "g", "$");
+    expect(crlf).toEqual(lf);
+  });
+
+  it("$ e i suoi conti non cambiano con gli a capo della nota", () => {
+    expect(headAfter("$")[1]).toEqual(headAfter("$")[0]);
+    expect(headAfter("v", "$")[1]).toEqual(headAfter("v", "$")[0]);
+    expect(headAfter("j", "$")[1]).toEqual(headAfter("j", "$")[0]);
+  });
+});
+
 describe("inserimenti con a capo nudi in una nota CRLF, fuori da Vim", () => {
   it("un comando che compone righe con \\n o \\r scrive righe vere, in un passo solo", () => {
     const editor = vimEditor("a\r\nb\r\n", false);
@@ -122,6 +191,43 @@ describe("inserimenti con a capo nudi in una nota CRLF, fuori da Vim", () => {
     const editor = vimEditor("a\nb\n", false);
     editor.view.dispatch({ changes: { from: 1, insert: "\n1\r\n2" } });
     expect(editor.ed.getDoc()).toBe("a\n1\n2\nb\n");
+    editor.done();
+  });
+});
+
+/// Ciò che un evento "copy" mette negli appunti della vista.
+function copies(view: EditorView, from: number, to: number): string[] {
+  const copied: string[] = [];
+  view.focus();
+  view.dispatch({ selection: { anchor: from, head: to } });
+  const event = new Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: { clearData() {}, setData: (_: string, text: string) => copied.push(text) },
+  });
+  view.contentDOM.dispatchEvent(event);
+  return copied;
+}
+
+describe("l'a capo di una posizione vale \"\\n\" solo dove c'è Vim", () => {
+  // Il carattere sotto il cursore di Vim si legge dallo stato: la regola che
+  // fa dell'a capo un "\n" vale negli stati con Vim acceso, non per ogni
+  // editor della finestra.
+  it("in una nota CRLF senza Vim, con Vim acceso altrove, l'a capo si copia col separatore della nota", () => {
+    const withVim = vimEditor("uno\r\ndue\r\n");
+    expect(withVim.view.state.sliceDoc(3, 4), "con Vim l'a capo è un carattere").toBe("\n");
+
+    const plain = vimEditor("uno\r\ndue\r\n", false);
+    expect(copies(plain.view, 3, 4)).toEqual(["\r\n"]);
+    expect(plain.view.state.sliceDoc(3, 4)).toBe("\r\n");
+    plain.done();
+    withVim.done();
+  });
+
+  it("spento Vim, la stessa nota torna a copiare l'a capo intero", () => {
+    const editor = vimEditor("uno\r\ndue\r\n");
+    expect(editor.view.state.sliceDoc(3, 4)).toBe("\n");
+    editor.ed.setVim(false);
+    expect(copies(editor.view, 3, 4)).toEqual(["\r\n"]);
     editor.done();
   });
 });

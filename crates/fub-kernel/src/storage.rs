@@ -75,7 +75,9 @@ mod fs_storage;
 mod fs_trait;
 mod mem;
 
-pub use api::{ConditionalWrite, DirEntry, EntryKind, FileIdentity, Merge, Stat, VaultStorage};
+pub use api::{
+    ConditionalWrite, DirEntry, EntryKind, FileIdentity, FileWitness, Merge, Stat, VaultStorage,
+};
 #[cfg(test)]
 use durable::exclusive_lock_entro;
 pub use durable::{do_not_overwrite, update_atomic, write_atomic, Durable};
@@ -93,17 +95,20 @@ use fs_atomic::{rename_no_replace_at, rename_no_replace_paths};
 pub(crate) use fs_storage::unix_change_stamp;
 #[cfg(all(unix, test))]
 use fs_storage::unix_writable;
-#[cfg(windows)]
-pub(crate) use fs_storage::windows_change_stamp;
 pub use fs_storage::{
-    change_stamp_clock, file_names, how_to_write, identity_of_the_file, what_c_and, FileNames,
-    FsStorage, Identity, WriteMode, CHANGE_STAMP_GRAIN,
+    change_stamp_at_unix_millis, change_stamp_clock, file_names, how_to_write,
+    identity_of_the_file, what_c_and, FileNames, FsStorage, Identity, WriteMode,
+    CHANGE_STAMP_GRAIN,
 };
-use fs_storage::{change_stamp_of_file, lock_path, stat_of, stat_with, tmp_path, TMP_SEQ};
+use fs_storage::{
+    change_stamp_of_file, lock_path, stat_of, stat_with, tmp_path, witness_of_file, TMP_SEQ,
+};
 pub(crate) use fs_storage::{
     is_write_lock, is_write_temporary, refuse_read_only, temp_name, ReadOnlyFile, WriteBits,
     TEMP_FILE_EXPIRY_MS,
 };
+#[cfg(windows)]
+pub(crate) use fs_storage::{windows_change_stamp, windows_identity};
 pub use mem::MemStorage;
 
 #[cfg(test)]

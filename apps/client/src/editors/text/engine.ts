@@ -56,7 +56,7 @@ import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codem
 import type { SyntaxNode } from "@lezer/common";
 import { vim } from "@replit/codemirror-vim";
 import { insertedLineBreaks } from "./line-breaks";
-import { vimReadsLines } from "./vim-lines";
+import { vimLines } from "./vim-lines";
 import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
 import { byteToNormalizedCharIndices, charToByteIndices } from "../../rules/offsets";
@@ -244,8 +244,7 @@ function foldMarker(open: boolean): HTMLElement {
 /// per ultimo, e si esce dalla concentrazione con «Esci» nella banda o col
 /// comando (T24).
 function vimInput(): Extension {
-  vimReadsLines();
-  return [vim(), Prec.lowest(keymap.of([{ key: "Escape", run: () => concentrating() }]))];
+  return [vim(), vimLines(), Prec.lowest(keymap.of([{ key: "Escape", run: () => concentrating() }]))];
 }
 
 function layoutExtensions(layout: LayoutPreferences): Extension {

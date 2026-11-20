@@ -57,6 +57,22 @@ pub struct FileIdentity {
     pub file: u64,
 }
 
+/// **Quale file**, oltre a misura e data: il timbro di cambiamento e
+/// l'identità che il supporto dà per un path, letti senza leggere i byte.
+///
+/// È la sola regola con cui il kernel decide che un file è ancora quello che
+/// conosce, insieme a misura e data uguali e, per chi ricorda qualcosa oltre
+/// la lettura, a [`change_stamp_settled`](crate::transfer::change_stamp_settled):
+/// l'anagrafe che certifica una voce alla riapertura, la fusione di due
+/// tabelle, l'impronta imparata da una lettura, la lease fra due pezzi e il
+/// cestino fra censimento e distruzione. Il confronto è
+/// `FileWitness::agrees`, nel modulo `transfer`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FileWitness {
+    pub change_stamp: Option<u64>,
+    pub identity: Option<FileIdentity>,
+}
+
 impl Stat {
     pub fn is_dir(&self) -> bool {
         self.kind == EntryKind::Dir
@@ -430,6 +446,21 @@ pub trait VaultStorage: Send + Sync {
     /// quel caso chi chiama degrada alla regola storica size+mtime.
     fn change_stamp(&self, _path: &Utf8Path) -> io::Result<Option<u64>> {
         Ok(None)
+    }
+
+    /// [`change_stamp`](VaultStorage::change_stamp) e
+    /// [`file_identity`](VaultStorage::file_identity) **in una domanda sola**.
+    ///
+    /// Su Windows ognuna delle due apre il file: chi le vuole entrambe (ogni
+    /// voce che l'anagrafe certifica alla riapertura, issue #493) aprirebbe
+    /// due volte. Il default fa le due domande, ed è giusto per un supporto
+    /// che risponde senza aprire niente; chi sa rispondere a entrambe con un
+    /// handle solo lo sovrascrive.
+    fn witness(&self, path: &Utf8Path) -> io::Result<FileWitness> {
+        Ok(FileWitness {
+            change_stamp: self.change_stamp(path)?,
+            identity: self.file_identity(path)?,
+        })
     }
 
     /// Questi due path nominano **lo stesso file**?

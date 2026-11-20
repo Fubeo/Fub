@@ -9,7 +9,7 @@ use cap_std::{ambient_authority, AmbientAuthority};
 
 use super::{
     refuse_read_only, same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry,
-    EntryKind, FileIdentity, Merge, Stat, VaultStorage, WriteBits,
+    EntryKind, FileIdentity, FileWitness, Merge, Stat, VaultStorage, WriteBits,
 };
 
 /// Filesystem di produzione ancorato alla directory aperta al mount.
@@ -1200,6 +1200,44 @@ impl VaultStorage for RootedFsStorage {
         {
             let _ = path;
             Ok(None)
+        }
+    }
+
+    /// Timbro e identità con una domanda sola: lo stesso `stat` su unix, lo
+    /// stesso handle su Windows (vedi [`VaultStorage::witness`]).
+    fn witness(&self, path: &Utf8Path) -> io::Result<FileWitness> {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let metadata = self.dir.metadata(self.rel(path)?)?;
+            Ok(FileWitness {
+                change_stamp: Some(super::unix_change_stamp(
+                    metadata.ctime(),
+                    metadata.ctime_nsec(),
+                )),
+                identity: Some(FileIdentity {
+                    volume: metadata.dev(),
+                    file: metadata.ino(),
+                }),
+            })
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+            let mut options = OpenOptions::new();
+            options.read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS);
+            let file = self.dir.open_with(self.rel(path)?, &options)?;
+            let handle = file.as_raw_handle();
+            Ok(FileWitness {
+                change_stamp: Some(super::windows_change_stamp(handle)?),
+                identity: Some(super::windows_identity(handle)?),
+            })
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = path;
+            Ok(FileWitness::default())
         }
     }
 
