@@ -194,12 +194,15 @@ describe("un file di un componente spento", () => {
     const fake = await start(host("tutto"));
     await open("lavagna.canvas");
     await waitFor("la lavagna si apre", () => board() !== null);
-    // Un doppio clic sulla tela vuota aggiunge una scheda: una modifica che
-    // il salvataggio automatico non ha ancora scritto.
-    board()!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
-    await settle();
     const { describeTab } = await import("./state/document-controller");
     const { activeTab } = await import("./state/layout");
+    // Un doppio clic sulla tela vuota aggiunge una scheda: una modifica che
+    // il salvataggio automatico non ha ancora scritto. Fra il gesto e la
+    // domanda passano solo microtask: il salvataggio parte con un timer (400
+    // ms), e con la macchina carica un giro del ciclo degli eventi e due
+    // `import()` duravano di più, la modifica era già sul disco (#471).
+    board()!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
     expect(describeTab(activeTab()!).dirty, "la modifica non è ancora sul disco").toBe(true);
     expect(fake.files()["lavagna.canvas"]).toBe(BOARD);
 
