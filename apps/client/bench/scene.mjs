@@ -18,7 +18,7 @@
 //
 // # Perché `.mjs` e non `.ts`
 //
-// Perché lo leggono in due, e uno dei due è Node: il fotografo (`foto.mjs`) gira
+// Perché lo leggono anche programmi di Node: il fotografo (`photos.mjs`) gira
 // fuori dal browser e fuori da Vite. È la stessa riga di confine del
 // `tsconfig.json` di questa cartella — **`.ts` è del browser, `.mjs` è di
 // Node** — e tenerla vuol dire che il fotografo non ha bisogno di un

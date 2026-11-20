@@ -12,7 +12,7 @@
 //
 // # Cosa è finto e cosa no
 //
-// Il cuore è `src/host/finto.ts`, che è già l'host finto degli e2e e risponde a
+// Il cuore è `src/host/fake.ts`, che è già l'host finto degli e2e e risponde a
 // **tutta** la porta col vault in memoria. Quel file ha tre regole, e la terza
 // è «ciò che non sa fare LANCIA»: è la regola giusta per un e2e, dove una
 // risposta vuota è indistinguibile da «non c'era niente» e fa passare un
@@ -2076,7 +2076,7 @@ const KNOWN_VAULTS = [
 ] satisfies KnownVault[];
 
 // ---------------------------------------------------------------------------
-// La scenografia: le risposte del canale dati che `finto.ts` non dà.
+// La scenografia: le risposte del canale dati che `fake.ts` non dà.
 // ---------------------------------------------------------------------------
 
 /// Le icone del vault: le figure monocrome `fub:<nome>`, come il mockup. Con
@@ -2128,7 +2128,7 @@ const TAG = [
 ];
 
 /// Le risposte che la scenografia aggiunge al canale dati, per specie di query.
-/// Ciò che non è qui dentro passa a `finto.ts` **intatto**, regola del lancio
+/// Ciò che non è qui dentro passa a `fake.ts` **intatto**, regola del lancio
 /// compresa: un banco che rispondesse a tutto non direbbe più quale query la
 /// shell ha imparato a fare da sola.
 /// I dati della riga sotto il titolo, per nota: Benvenuto ha due etichette,

@@ -43,12 +43,12 @@
 //
 // Quindi:
 //
-// - `SOGLIA_COLORE` è 0,01. Sta trenta volte sopra il rumore misurato e
+// - `COLOR_THRESHOLD` è 0,01. Sta trenta volte sopra il rumore misurato e
 //   quattromila volte sotto il segnale di un cambio di tavolozza. Non serve che
 //   sia zero: due corse identiche non danno immagini identiche al bit, e
 //   pretenderlo renderebbe rosso il banco per il motivo per cui i banchi visivi
 //   si spengono.
-// - `SOGLIA_DIVERSI` resta un millesimo dei pixel — circa mille su 1280×800.
+// - `DIFF_THRESHOLD` resta un millesimo dei pixel — circa mille su 1280×800.
 //   Adesso ha sotto di sé un rumore di trenta pixel invece di uno ignoto, ed è
 //   la prima volta che quel millesimo vuol dire qualcosa.
 //
@@ -107,7 +107,7 @@ const SHEET = join(SET.output, "foglio-di-contatto.html");
 
 /// Cosa è successo a una foto. Sono cinque e sono tutte diverse fra loro: un
 /// «manca la baseline» che si confondesse con un «è cambiata» renderebbe
-/// `--aggiorna` la risposta a tutti e due, e la prima volta che qualcuno la
+/// `--update` la risposta a tutti e due, e la prima volta che qualcuno la
 /// desse per la seconda ragione le baseline smetterebbero di essere un presidio.
 const OUTCOMES = {
   equal: "uguale",
@@ -176,7 +176,7 @@ async function aPhoto(page, scene, light, base) {
 
   if (!existsSync(whereBefore)) {
     row.outcome = OUTCOMES.withoutBaseline;
-    console.error(`✗ ${name}: nessuna baseline (è una scena newItem? «${SET.updateHint}»)`);
+    console.error(`✗ ${name}: nessuna baseline (è una scena nuova? «${SET.updateHint}»)`);
     return row;
   }
 
@@ -250,7 +250,9 @@ async function sideBySide(report) {
         })
         .join("\n");
       return `<section>
-      <h2>${esc(scene.title)} <code>${esc(scene.id)}</code></h2>
+      <h2>${esc(scene.title)} <code>${esc(scene.id)}</code>${
+        scene.viewport ? ` · ${scene.viewport.width}×${scene.viewport.height}` : ""
+      }</h2>
       <div class="coppia">${columns}</div>
     </section>`;
     })
@@ -290,7 +292,7 @@ async function sideBySide(report) {
   <h1>Foglio di contatto</h1>
   <p class="sommario"><b>${SET.scenes.length}</b> scene · <b>${report.length}</b> foto ·
      ${changedItems.length === 0 ? "tutte uguali alle baseline" : `<b>${changedItems.length}</b> da guardare`}
-     · finestra 1280×800 · soglia ${DIFF_THRESHOLD * 100}% dei pixel</p>
+     · finestra ${WINDOW.width}×${WINDOW.height} se la scena non ne chiede un'altra · soglia ${DIFF_THRESHOLD * 100}% dei pixel</p>
 </header>
 ${sections}
 </body>
@@ -322,7 +324,7 @@ async function summary(report) {
     if (orphans.length) {
       console.log(`${orphans.length} baseline non corrispondono a nessuna scena: ${orphans.join(", ")}`);
     }
-    console.log(`Il sheet di contatto: ${sheet}`);
+    console.log(`Il foglio di contatto: ${sheet}`);
     return count(OUTCOMES.unstable) > 0 ? 1 : 0;
   }
 
@@ -332,7 +334,7 @@ async function summary(report) {
     `\n${count(OUTCOMES.equal)}/${report.length} foto uguali alle baseline` +
       (errors ? ` · ${errors} da guardare` : ""),
   );
-  console.log(`Il sheet di contatto: ${sheet}`);
+  console.log(`Il foglio di contatto: ${sheet}`);
   if (errors) {
     console.log(
       `Se il cambiamento è quello che volevi, il gesto è «${SET.updateHint}» — dopo aver guardato il foglio.`,
