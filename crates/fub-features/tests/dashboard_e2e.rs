@@ -421,4 +421,75 @@ mod desk {
             .count();
         assert!((28..=31).contains(&days), "{days}");
     }
+
+    #[test]
+    fn le_recenti_a_parita_di_data_in_ordine_di_path() {
+        let vault = Vault::new();
+        let same = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        let newer = same + std::time::Duration::from_secs(60);
+        // Dodici note con la stessa data e una più nuova: ne entrano otto, la
+        // nuova in cima e poi le altre per path, a ogni ridisegno uguali.
+        for name in [
+            "k", "c", "a", "j", "e", "l", "b", "i", "d", "h", "f", "g", "z",
+        ] {
+            vault.put(&format!("{name}.md"), "# N\n");
+            let file = std::fs::File::options()
+                .write(true)
+                .open(vault.root.join(format!("{name}.md")))
+                .unwrap();
+            file.set_modified(if name == "z" { newer } else { same })
+                .unwrap();
+        }
+        vault.put("foto.png", "png");
+        let ws = vault.open();
+        let recent = |tree: &UiNode| -> Vec<String> {
+            nodes(tree)
+                .into_iter()
+                .filter_map(|n| {
+                    n.key
+                        .as_deref()?
+                        .strip_prefix("recent:")
+                        .map(str::to_string)
+                })
+                .collect()
+        };
+        let first = recent(&ws.render_view(&instance()).unwrap());
+        assert_eq!(
+            first,
+            ["z.md", "a.md", "b.md", "c.md", "d.md", "e.md", "f.md", "g.md"]
+        );
+        assert_eq!(recent(&ws.render_view(&instance()).unwrap()), first);
+    }
+
+    /// La misura di un ridisegno della Scrivania su un vault grande: è il
+    /// lavoro che si rifà a ogni salvataggio con la Scrivania aperta. Non è un
+    /// controllo (il tempo dipende dalla macchina): si lancia a mano, in
+    /// release, con
+    /// `cargo test --release -p fub-features --all-features --test dashboard_e2e -- --ignored --nocapture misura`.
+    #[test]
+    #[ignore = "misura a mano, non un controllo"]
+    fn misura_il_ridisegno_su_5000_note() {
+        const NOTE: usize = 5_000;
+        const GIRI: u32 = 50;
+        let vault = Vault::new();
+        for i in 0..NOTE {
+            vault.put(
+                &format!("cartella{}/nota{i}.md", i % 50),
+                "# Nota\n\ntesto\n",
+            );
+        }
+        for i in 0..20 {
+            vault.put(&format!("Liste/lista{i}.base"), "views: []\n");
+            vault.put(&format!("allegati/foto{i}.png"), "png");
+        }
+        let ws = vault.open();
+        let first = ws.render_view(&instance()).unwrap();
+        assert_eq!(frames(&first).len(), 5);
+        let started = std::time::Instant::now();
+        for _ in 0..GIRI {
+            std::hint::black_box(ws.render_view(&instance()).unwrap());
+        }
+        let each = started.elapsed() / GIRI;
+        println!("MISURA scrivania: {NOTE} note, un ridisegno in {each:?} (media di {GIRI})");
+    }
 }

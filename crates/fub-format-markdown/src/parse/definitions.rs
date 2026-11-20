@@ -698,7 +698,11 @@ mod tests {
 
     #[test]
     fn the_gate_is_linear_on_a_line_of_openers() {
-        for line in ["[^".repeat(200_000), "[".repeat(200_000), "- [^a".repeat(100_000)] {
+        for line in [
+            "[^".repeat(200_000),
+            "[".repeat(200_000),
+            "- [^a".repeat(100_000),
+        ] {
             let started = std::time::Instant::now();
             assert!(!super::may_hide_definitions(&line, true));
             assert!(
