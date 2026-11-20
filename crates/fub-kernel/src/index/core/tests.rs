@@ -691,3 +691,66 @@ fn the_property_link_leaf_reads_the_declared_types() {
         ["a.md", "b.md"]
     );
 }
+
+/// L'anagrafe di una riapertura ferma si scopre già scritta confrontando i
+/// metadati al loro posto (#524): il confronto deve dire «diverso» per ogni
+/// campo che `stored_metadata` scriverebbe diverso, tag compresi, o una
+/// sessione lascerebbe sul disco metadati più vecchi di quelli veri.
+#[test]
+fn the_metadata_comparison_sees_every_field_the_registry_writes() {
+    let mut index = property_index();
+    let id = DocId::new("nota.md");
+    let other = DocId::new("altra.md");
+    let stored = crate::entries::StoredMeta {
+        frontmatter: Frontmatter(
+            serde_json::json!({"tipo": "progetto"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ),
+        outline: Vec::new(),
+        links: Vec::new(),
+        anchors: Vec::new(),
+        tags: vec!["#Rust".to_string(), "#casa".to_string()],
+    };
+    index.restore(&id, stored);
+    // Le grafie tornano nell'ordine delle chiavi canoniche: il riferimento è
+    // ciò che l'anagrafe scriverebbe.
+    let stored = index.stored_metadata(&id).unwrap();
+    assert_eq!(stored.tags, ["#casa", "#Rust"]);
+    assert!(index.stores_metadata_as(&id, Some(&stored)));
+    assert!(
+        !index.stores_metadata_as(&id, None),
+        "a row without metadata"
+    );
+    assert!(
+        index.stores_metadata_as(&other, None),
+        "nothing known, nothing written"
+    );
+    assert!(!index.stores_metadata_as(&other, Some(&stored)));
+
+    let mut changed = stored.clone();
+    changed.frontmatter = Frontmatter(serde_json::Map::new());
+    assert!(
+        !index.stores_metadata_as(&id, Some(&changed)),
+        "frontmatter"
+    );
+    for tags in [
+        vec!["#casa".to_string()],
+        vec!["#Rust".to_string(), "#casa".to_string()],
+        vec!["#casa".to_string(), "#rust".to_string()],
+        vec![
+            "#casa".to_string(),
+            "#Rust".to_string(),
+            "#orto".to_string(),
+        ],
+        Vec::new(),
+    ] {
+        let mut changed = stored.clone();
+        changed.tags = tags.clone();
+        assert!(
+            !index.stores_metadata_as(&id, Some(&changed)),
+            "tags {tags:?}"
+        );
+    }
+}

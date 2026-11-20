@@ -174,6 +174,22 @@ impl CoreIndex {
         })
     }
 
+    /// Se `stored` è ciò che [`stored_metadata`](Self::stored_metadata)
+    /// darebbe per `id`, senza copiare niente (#524).
+    pub(crate) fn stores_metadata_as(&self, id: &DocId, stored: Option<&StoredMeta>) -> bool {
+        match (self.metas.get(id), stored) {
+            (None, None) => true,
+            (Some(metadata), Some(stored)) => {
+                metadata.frontmatter == stored.frontmatter
+                    && metadata.outline == stored.outline
+                    && metadata.links == stored.links
+                    && metadata.anchors == stored.anchors
+                    && self.tags.names_are(id, &stored.tags)
+            }
+            _ => false,
+        }
+    }
+
     /// Il **file** che un riferimento nomina, se il vault ce l'ha — di
     /// qualunque specie (§14.1).
     pub(crate) fn resolve_entry(&self, source: &DocId, target: &LinkTarget) -> Option<DocId> {

@@ -6875,25 +6875,37 @@ impl Workspace {
     /// e se nessuno lo toccasse, per sempre.
     pub fn store_entries(&self) {
         let _phase = tracing::info_span!(target: "fub.apertura", "store_entries").entered();
-        let table = self
-            .indexes
-            .core
-            .entries
-            .values()
-            .filter(|entry| !self.indexes.core.observed_at_the_same_instant(&entry.id))
-            .map(|entry| {
-                let now = crate::same_content::FileWitness::of(&self.docs.vault, &entry.id);
-                // Un'impronta imparata da una domanda vale per il file su cui
-                // la si è imparata: se adesso al suo posto c'è un altro file,
-                // con la stessa misura e la stessa data e senza un evento, la
-                // riga non la porta, e la prossima apertura rilegge il file
-                // invece di certificarlo con i byte di prima.
-                let fingerprint = entry.fingerprint.clone().filter(|_| {
-                    self.indexes
-                        .core
-                        .learned_on(&entry.id)
-                        .is_none_or(|witness| witness.agrees(&now))
-                });
+        let core = &self.indexes.core;
+        let rows = || {
+            core.entries
+                .values()
+                .filter(|entry| !core.observed_at_the_same_instant(&entry.id))
+                .map(|entry| (entry, self.stored_witness(entry)))
+        };
+        // Una riapertura ferma compone la stessa tabella che il file ha già:
+        // la si confronta al suo posto, senza copiare i metadati di ogni
+        // documento per buttarli via in fondo a `store` (#524). Il confronto
+        // è lo stesso di `store`, campo per campo, e ogni dubbio scrive.
+        let unchanged = self.entry_store.already_holds(|known| {
+            let mut count = 0;
+            let same = rows().all(|(entry, (now, fingerprint))| {
+                count += 1;
+                known.get(&entry.id).is_some_and(|stored| {
+                    stored.size == entry.size
+                        && stored.mtime == entry.mtime
+                        && stored.change_stamp == now.change_stamp
+                        && stored.identity == now.identity
+                        && stored.fingerprint.as_ref() == fingerprint
+                        && core.stores_metadata_as(&entry.id, stored.metadata.as_ref())
+                })
+            });
+            same && count == known.len()
+        });
+        if unchanged {
+            return;
+        }
+        let table = rows()
+            .map(|(entry, (now, fingerprint))| {
                 (
                     entry.id.clone(),
                     StoredEntry {
@@ -6901,8 +6913,8 @@ impl Workspace {
                         mtime: entry.mtime,
                         change_stamp: now.change_stamp,
                         identity: now.identity,
-                        fingerprint,
-                        metadata: self.indexes.core.stored_metadata(&entry.id),
+                        fingerprint: fingerprint.cloned(),
+                        metadata: core.stored_metadata(&entry.id),
                     },
                 )
             })
@@ -6910,6 +6922,30 @@ impl Workspace {
         if let Err(and) = self.entry_store.store(table) {
             tracing::warn!(target: "fub.kernel", "anagrafe: {and}");
         }
+    }
+
+    /// Il testimone del file di una voce, e l'impronta che la sua riga può
+    /// portare.
+    ///
+    /// Un'impronta imparata da una domanda vale per il file su cui la si è
+    /// imparata: se adesso al suo posto c'è un altro file, con la stessa misura
+    /// e la stessa data e senza un evento, la riga non la porta, e la prossima
+    /// apertura rilegge il file invece di certificarlo con i byte di prima.
+    fn stored_witness<'a>(
+        &self,
+        entry: &'a VaultEntry,
+    ) -> (
+        crate::same_content::FileWitness,
+        Option<&'a fub_abi::edit::Revision>,
+    ) {
+        let now = crate::same_content::FileWitness::of(&self.docs.vault, &entry.id);
+        let fingerprint = entry.fingerprint.as_ref().filter(|_| {
+            self.indexes
+                .core
+                .learned_on(&entry.id)
+                .is_none_or(|witness| witness.agrees(&now))
+        });
+        (now, fingerprint)
     }
 
     /// Elenco ordinato dei documenti indicizzati.
