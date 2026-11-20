@@ -107,12 +107,17 @@ Files of this skill:
 
    A graphic task also adds its pieces to the prototype map in
    `apps/client/bench/conformita/`, and passes `npm run bench:conformita`
-   through the heavy-check queue; say so in its brief. When the user names an
-   artifact or prototype as the reference, the brief says:
+   through the heavy-check queue; say so in its brief. Whenever an approved
+   prototype or artifact exists for the look (a plan's `PLAN-ui/`, or one the
+   user approved anywhere else, whoever made it), the brief names it and says:
 
+   - save its HTML with `Artifact read` and give the coder the file's path;
+   - port its HTML and CSS as they are, as far as the app allows; every
+     deliberate difference goes into the conformity exceptions with its reason;
    - its code is the reference: markup, CSS, and computed styles measured from
      prototype to app in both lights;
-   - screenshots are only the final confirmation.
+   - screenshots are only the final confirmation: tried, working from them
+     drifts from the approved design.
 3. **While they work**, don't poll, and don't message a coder to inform it.
    A message to a busy coder can send its foreground command to the
    background, and the coder may end its turn "waiting" and never resume.

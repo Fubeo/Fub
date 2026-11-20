@@ -22,7 +22,13 @@ output path `<scratchpad>/<TASK>/soluzione.md`.
   in code that it still describes the present. Code and tests win over docs.
 - When the design changes what people see, read
   [`../skills/pianifica/fub.md`](../skills/pianifica/fub.md) first: what Fub
-  is, how it looks and how to choose like Fub.
+  is, how it looks and how to choose like Fub. Never describe a new look in
+  prose for the coder to draw: if an approved prototype or artifact exists,
+  name it and say which pieces of its HTML and CSS go into which files (the
+  coder ports them as they are); if none exists and the look is new, say so
+  in «Rischi e scartato»: a prototype must be made and approved first
+  (`../skills/pianifica/prototipo.md`). Your file is read in full: code,
+  pseudocode and signatures you write are what the coder follows.
 - **Read-only.** No edits in any worktree, no commits, no branch changes, no
   agents, no network beyond what the repository's own read commands need. The
   only file you write is the output file.

@@ -121,7 +121,8 @@ Checks: `.github/workflows/ci.yml` (+ `npm-supply-chain.yml`; `baseline.yml` com
 ## Looking at the UI
 
 - Look at UI changes (both lights, narrow width, empty/error states, focus), not only at the DOM; bench and pitfalls: [`banco` skill](.claude/skills/banco/SKILL.md).
-- A prototype or artifact as reference: compare its **code** (markup, CSS, computed styles in both lights) with the app's, not screenshots, which hide layers and shadows.
+- An approved prototype or artifact (a plan's `PLAN-ui/`, or one the maintainer approved anywhere else, whoever made it: the maintainer's planner, or a planner or `progettista` called by the orchestrator or a coder) is the source of the look: **read its code** in full and understand why it is built that way, because the planner chose it for a reason; port its HTML and CSS as they are wherever the app allows, and log each deliberate difference with its reason. Compare its **code** (markup, CSS, computed styles in both lights) with the app's; never work from screenshots, which hide layers and shadows and, tried, drift from the approved design. Screenshots only confirm at the end.
+- The same holds for logic: code, pseudocode or signatures in a plan or a `progettista` file are read in full and followed, not rebuilt from a summary; a departure is written down with its reason.
 
 ## Commits, PRs and Git
 
