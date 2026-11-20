@@ -16987,11 +16987,14 @@ input.canvas-toolbar-item {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+/* Il sottotitolo sta in fondo alla riga (il margine), ma il testo si allinea a
+   sinistra: allineato a destra, Chromium (WebView2) non disegna i puntini
+   delle due righe che la regola comune taglia. */
 .cm-day-page .ui-list-item-subtitle {
   flex: none;
   max-width: 40%;
   margin: 0 0 0 auto;
-  text-align: right;
+  text-align: left;
   color: var(--doc-gutter-fg);
   font-size: var(--text-xs);
 }
@@ -21553,9 +21556,14 @@ h6.ui-heading {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* La cartella sta su una riga, come il titolo: una lunga si accorcia coi
+   puntini e lascia al titolo almeno metà della voce. */
 .ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
   margin: 0;
+  -webkit-line-clamp: 1;
   /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
   color: var(--muted);
   font-size: var(--text-sm);

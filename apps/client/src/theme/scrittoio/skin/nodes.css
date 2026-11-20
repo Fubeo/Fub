@@ -843,9 +843,14 @@ h6.ui-heading {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* La cartella sta su una riga, come il titolo: una lunga si accorcia coi
+   puntini e lascia al titolo almeno metà della voce. */
 .ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
   margin: 0;
+  -webkit-line-clamp: 1;
   /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
   color: var(--muted);
   font-size: var(--text-sm);
