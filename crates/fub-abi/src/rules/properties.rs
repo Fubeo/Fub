@@ -324,13 +324,13 @@ pub fn finish_with_types<'a>(
     types: &PropertyTypes,
     frontmatter: impl Fn(&DocId) -> Option<&'a Frontmatter>,
 ) -> Paged<DocumentMatch> {
-    let mut rows = matches.into_vec();
+    let rows = matches.into_vec();
 
-    match sort {
+    let mut paged = match sort {
         // Senza chiave: prima la rilevanza (chi ha cercato si aspetta i
         // risultati migliori in cima), poi l'id. Chi non ha rilevanza va in
         // fondo, come chi non ha la chiave di ordinamento.
-        None => rows.sort_by(|a, b| {
+        None => sorted_window(rows, page, |a, b| {
             b.score
                 .partial_cmp(&a.score)
                 .unwrap_or(Ordering::Equal)
@@ -339,7 +339,7 @@ pub fn finish_with_types<'a>(
         // La chiave si normalizza una volta per riga, date comprese, e non a
         // ogni confronto: n log n letture del frontmatter diventano n.
         Some(sort) => {
-            let mut keyed: Vec<(Option<PropertyValue>, DocumentMatch)> = rows
+            let keyed: Vec<(Option<PropertyValue>, DocumentMatch)> = rows
                 .into_iter()
                 .map(|row| {
                     let value = frontmatter(&row.doc)
@@ -347,16 +347,19 @@ pub fn finish_with_types<'a>(
                     (value, row)
                 })
                 .collect();
-            keyed.sort_by(|(av, a), (bv, b)| {
+            let window = sorted_window(keyed, page, |(av, a), (bv, b)| {
                 order_of(av.as_ref(), bv.as_ref(), sort.descending).then_with(|| a.doc.cmp(&b.doc))
             });
-            rows = keyed.into_iter().map(|(_, row)| row).collect();
+            Paged {
+                items: window.items.into_iter().map(|(_, row)| row).collect(),
+                offset: window.offset,
+                total: window.total,
+            }
         }
-    }
+    };
 
     // Le colonne servono solo alla finestra: chi ne resta fuori è contato, non
     // letto. Una base che scorre il vault a pagine pagava ogni volta il vault.
-    let mut paged = Paged::window(rows, page);
     if !select.is_none() {
         for row in paged.items.iter_mut() {
             if let Some(fm) = frontmatter(&row.doc) {
@@ -365,6 +368,53 @@ pub fn finish_with_types<'a>(
         }
     }
     paged
+}
+
+/// La finestra `page` di `rows` nell'ordine di `cmp`, uguale riga per riga a
+/// ordinare tutto e poi ritagliare, ma senza ordinare ciò che resta fuori.
+///
+/// `cmp` deve essere un ordine **totale** sulle righe: qui lo è perché ogni
+/// confronto finisce sul `DocId`, che in una risposta è unico. Con un ordine
+/// totale l'ordinamento non ha pareggi, quindi stabile o no dà la stessa
+/// sequenza, e la selezione parziale trova esattamente le righe che il taglio
+/// avrebbe tenuto.
+///
+/// Il perché: chi scorre una risposta a pagine chiede P pagine, e ordinare
+/// tutte le N righe a ogni pagina costava P·N log N. Così una pagina costa N
+/// (le due selezioni) più `limit` log `limit` (l'ordine della finestra).
+/// Senza `page` la risposta è intera, e si ordina tutto.
+fn sorted_window<T>(
+    mut rows: Vec<T>,
+    page: Option<Page>,
+    cmp: impl Fn(&T, &T) -> Ordering,
+) -> Paged<T> {
+    let Some(page) = page else {
+        rows.sort_by(&cmp);
+        return Paged::all(rows);
+    };
+    let total = rows.len();
+    let start = (page.offset as usize).min(total);
+    let end = start.saturating_add(page.limit as usize).min(total);
+    if start == end {
+        rows.clear();
+    } else {
+        // Le prime `end` righe dell'ordine, in disordine: il resto si butta.
+        if end < rows.len() {
+            rows.select_nth_unstable_by(end, &cmp);
+            rows.truncate(end);
+        }
+        // Di quelle, via le prime `start`: restano quelle della finestra.
+        if start > 0 {
+            rows.select_nth_unstable_by(start, &cmp);
+            rows.drain(..start);
+        }
+        rows.sort_unstable_by(&cmp);
+    }
+    Paged {
+        items: rows,
+        offset: page.offset,
+        total: total as u32,
+    }
 }
 
 /// **I link scritti nel frontmatter**, chiave per chiave, nell'ordine del
@@ -1092,6 +1142,192 @@ mod tests {
         assert_eq!(
             entries_with_types(&vault[0].1, &PropertySelect::All, &DateFormats::ISO, &types),
             rows[1].properties
+        );
+    }
+
+    /// La finestra come la ritagliava `finish` prima della selezione parziale:
+    /// tutto ordinato (stabile), poi tagliato. È il riferimento riga per riga.
+    fn finish_by_sorting_everything<'a>(
+        matches: Matches,
+        sort: Option<&PropertySort>,
+        select: &PropertySelect,
+        page: Option<Page>,
+        frontmatter: impl Fn(&DocId) -> Option<&'a Frontmatter>,
+    ) -> Paged<DocumentMatch> {
+        let formats = DateFormats::ISO;
+        let mut rows = matches.into_vec();
+        match sort {
+            None => rows.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(Ordering::Equal)
+                    .then_with(|| a.doc.cmp(&b.doc))
+            }),
+            Some(sort) => {
+                let mut keyed: Vec<(Option<PropertyValue>, DocumentMatch)> = rows
+                    .into_iter()
+                    .map(|row| {
+                        let value = frontmatter(&row.doc).and_then(|fm| {
+                            fm.property_with_types(&sort.key, &formats, &PropertyTypes::default())
+                        });
+                        (value, row)
+                    })
+                    .collect();
+                keyed.sort_by(|(av, a), (bv, b)| {
+                    order_of(av.as_ref(), bv.as_ref(), sort.descending)
+                        .then_with(|| a.doc.cmp(&b.doc))
+                });
+                rows = keyed.into_iter().map(|(_, row)| row).collect();
+            }
+        }
+        let mut paged = Paged::window(rows, page);
+        for row in paged.items.iter_mut() {
+            if let Some(fm) = frontmatter(&row.doc) {
+                row.properties = entries(fm, select, &formats);
+            }
+        }
+        paged
+    }
+
+    /// Un vault di prova con tutto ciò che rende l'ordine delicato: pareggi
+    /// (pochi valori ripetuti), specie miste nella stessa chiave, chiavi
+    /// assenti, `-0` accanto a `0`, rilevanze uguali e rilevanze assenti.
+    fn tricky_vault(n: usize) -> (Vec<(DocId, Frontmatter)>, Vec<Option<f32>>) {
+        let mut seed: u64 = 0x5EED_2026_1120;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let mut vault = Vec::new();
+        let mut scores = Vec::new();
+        for i in 0..n {
+            let r = next();
+            let v = match r % 9 {
+                0 => None,
+                1 => Some(serde_json::json!((r >> 8) % 4)),
+                2 => Some(serde_json::json!(-0.0)),
+                3 => Some(serde_json::json!(0.0)),
+                4 => Some(serde_json::json!(["a", "b"][((r >> 8) % 2) as usize])),
+                5 => Some(serde_json::json!((r >> 8) % 2 == 0)),
+                6 => Some(serde_json::json!(format!("2026-01-0{}", 1 + (r >> 8) % 3))),
+                7 => Some(serde_json::json!(["x", (r >> 8) % 2])),
+                _ => Some(serde_json::json!("[[Nota]]")),
+            };
+            let mut json = serde_json::json!({ "altro": i });
+            if let Some(v) = v {
+                json["v"] = v;
+            }
+            // Nomi non in ordine di inserimento, per non regalare l'ordine.
+            vault.push((DocId::new(format!("n{:05}.md", (i * 7919) % n)), fm(json)));
+            scores.push(match (r >> 20) % 4 {
+                0 => None,
+                k => Some(k as f32 / 2.0),
+            });
+        }
+        (vault, scores)
+    }
+
+    /// La finestra scelta senza ordinare tutto è la stessa, riga per riga e
+    /// colonna per colonna, di quella ritagliata da tutto ordinato: con e senza
+    /// chiave, nei due versi, e per finestre in testa, in mezzo, a cavallo
+    /// della fine, oltre la fine e vuote.
+    #[test]
+    fn the_partial_window_is_the_same_as_sorting_everything_row_by_row() {
+        let n = 300;
+        let (vault, scores) = tricky_vault(n);
+        let matches = || -> Matches {
+            vault
+                .iter()
+                .zip(&scores)
+                .map(|((id, _), score)| DocumentMatch {
+                    score: *score,
+                    ..DocumentMatch::of(id.clone())
+                })
+                .collect()
+        };
+        let read = |id: &DocId| {
+            vault
+                .iter()
+                .find(|(other, _)| other == id)
+                .map(|(_, fm)| fm)
+        };
+        let select = PropertySelect::Keys {
+            keys: vec!["v".into()],
+        };
+        let sorts = [
+            None,
+            Some(PropertySort {
+                key: "v".into(),
+                descending: false,
+            }),
+            Some(PropertySort {
+                key: "v".into(),
+                descending: true,
+            }),
+            Some(PropertySort {
+                key: "assente".into(),
+                descending: false,
+            }),
+        ];
+        let mut pages = vec![None];
+        for offset in [0, 1, 7, 100, 255, 299, 300, 301, 5000] {
+            for limit in [0, 1, 3, 50, 256, 1000] {
+                pages.push(Some(Page::new(offset, limit)));
+            }
+        }
+        for sort in &sorts {
+            for page in &pages {
+                let got = finish(
+                    matches(),
+                    sort.as_ref(),
+                    &select,
+                    *page,
+                    &DateFormats::ISO,
+                    read,
+                );
+                let want =
+                    finish_by_sorting_everything(matches(), sort.as_ref(), &select, *page, read);
+                assert_eq!(got, want, "ordine {sort:?}, pagina {page:?}");
+            }
+        }
+    }
+
+    /// Scorrere una risposta a pagine non riordina tutto a ogni pagina: con
+    /// 5000 righe a pagine da 256 i confronti scendono a meno di metà di
+    /// quelli dell'ordinamento intero ripetuto.
+    #[test]
+    fn scrolling_pages_does_not_sort_every_row_on_every_page() {
+        let n: u32 = 5000;
+        let rows: Vec<u32> = (0..n).map(|i| (i * 7919) % n).collect();
+        let count = std::cell::Cell::new(0u64);
+        let cmp = |a: &u32, b: &u32| {
+            count.set(count.get() + 1);
+            a.cmp(b)
+        };
+        let mut partial = 0;
+        let mut whole = 0;
+        let mut offset = 0;
+        while offset < n {
+            count.set(0);
+            let page = sorted_window(rows.clone(), Some(Page::new(offset, 256)), cmp);
+            partial += count.get();
+            assert_eq!(
+                page.items,
+                (offset..(offset + 256).min(n)).collect::<Vec<_>>()
+            );
+            assert_eq!(page.total, n);
+            count.set(0);
+            let mut all = rows.clone();
+            all.sort_by(cmp);
+            whole += count.get();
+            offset += 256;
+        }
+        eprintln!("confronti: finestra {partial}, tutto ordinato {whole}");
+        assert!(
+            partial * 2 < whole,
+            "finestra {partial}, tutto ordinato {whole}"
         );
     }
 }
