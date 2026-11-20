@@ -47,7 +47,11 @@ vede), `contesto` (`set_active_context`: vince l'ultima), `comandi`, `stato`
 prima della chiusura del prestito si legge). Le scritture dei dati che
 l'indice legge (impostazioni e profili, scorciatoie, organizzazione, vault
 aperto, corrente o conosciuto, demo) stanno nella corsia dell'indice: la
-domanda mandata dopo le vede. Le letture senza ordine (`list_views`,
+domanda mandata dopo le vede. Lì sta anche la schermata di supporto
+(`support_preview`, `support_export`, `config_health`, `recover_config`), che
+legge e riscrive quei dati: un vault aperto subito prima dell'export è già
+escluso; il recupero di `view-state.json` va nella corsia `stato`, dove quel
+file si scrive. Le letture senza ordine (`list_views`,
 `list_commands`, `components_map`, `list_bundles`, i temi) e `cancel_job`
 escono senza corsia; un comando sincrono resta solo nell'elenco motivato di
 `lean_ipc.rs`. La shell tiene l'ultima risposta di ogni pannello (`Race`).

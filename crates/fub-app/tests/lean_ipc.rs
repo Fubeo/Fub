@@ -1161,7 +1161,8 @@ fn ports_that_can_work_run_off_the_main_thread_in_their_lane() {
 
 /// The other ports that touch the disk or the vault run off the main thread
 /// too, each through the helper that names its lane: `data_port` and
-/// `vault_port` (the index lane, where the data they write is read back),
+/// `vault_port` (the index lane, where the data they write is read back, and
+/// where the support screen reads and rewrites the same data and files),
 /// `resource_port` (the resource lane, so a chunk asked before the lease
 /// closes is read before it closes), or `host_read` for a read, or a cancel,
 /// with no order to keep.
@@ -1193,6 +1194,10 @@ fn disk_and_vault_ports_run_off_the_main_thread_through_their_lane() {
         ("pending_keybindings", "data_port("),
         ("adopt_keybindings", "data_port("),
         ("discard_keybindings", "data_port("),
+        ("support_preview", "data_port("),
+        ("support_export", "data_port("),
+        ("config_health", "data_port("),
+        ("recover_config", "host_lane("),
         ("resource_open", "resource_port("),
         ("resource_read_chunk", "resource_port("),
         ("resource_close", "resource_port("),
@@ -1223,6 +1228,11 @@ fn disk_and_vault_ports_run_off_the_main_thread_through_their_lane() {
         .is_some_and(|body| body.contains("domande::CORSIA_INDICE")));
     assert!(body_of("async fn set_current_vault_in_lane(")
         .is_some_and(|body| body.contains("domande::CORSIA_INDICE")));
+    // A configuration file is recovered in the lane where it is written
+    // (`support::recover_lane`: the view state with `set_view_state`, the
+    // rest with the index).
+    assert!(body_of("async fn recover_config_in_lane(")
+        .is_some_and(|body| body.contains("support::recover_lane(")));
     for (helper, lane) in [
         ("data_port", "domande::CORSIA_INDICE"),
         ("vault_port", "domande::CORSIA_INDICE"),
@@ -1275,23 +1285,7 @@ fn every_synchronous_command_says_why_it_stays_on_the_main_thread() {
         ),
         (
             "startup_diagnostics",
-            "support screen: reads the diagnostics kept by the open session",
-        ),
-        (
-            "support_preview",
-            "support screen, one click: a redacted summary of a few KB",
-        ),
-        (
-            "support_export",
-            "support screen, one click after consent: writes one redacted archive",
-        ),
-        (
-            "config_health",
-            "support screen, one click: stats a few configuration files",
-        ),
-        (
-            "recover_config",
-            "support screen, one click after a confirmation: rewrites one configuration file",
+            "support screen: reads the diagnostics kept in memory by the open session",
         ),
         (
             "close_document_window",
