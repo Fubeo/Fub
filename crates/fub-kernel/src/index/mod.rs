@@ -252,17 +252,29 @@ pub(crate) fn forget_handles(
 /// Interroga gli indici registrati usando soltanto handle staccati dal
 /// `Workspace`. Chi chiama può quindi rilasciare `Custody<Workspace>` prima di
 /// attraversare il confine del provider.
+///
+/// # Si chiede a tutti, anche quando la risposta è già «niente»
+///
+/// La domanda non è solo una domanda: per un indice persistente è anche il
+/// momento in cui il kernel gli **dichiara** di che revisione è ogni
+/// documento che sta per consegnargli (`SearchIndex`, `ReminderIndex`). Qui
+/// c'era un `break` appena l'intersezione si svuotava, e alla prima apertura
+/// — quando il primo indice non ha niente — gli indici dopo di lui non
+/// ricevevano la domanda: prendevano le note senza revisione, non potevano
+/// scriverla, e il vault si rileggeva intero anche alla seconda apertura
+/// (#521). Chiedere a tutti costa una scorsa di una mappa per indice.
 pub(crate) fn up_to_date_handles(
     providers: &[(String, SharedIndexProvider)],
     entries: &[VaultEntry],
 ) -> BTreeSet<DocId> {
     let mut agreed: BTreeSet<DocId> = entries.iter().map(|entry| entry.id.clone()).collect();
     for (id, index) in providers {
-        if agreed.is_empty() {
-            break;
-        }
         let Ok(_call) = IndexCall::enter(id, index) else {
-            return BTreeSet::new();
+            // Un indice che non si può interrogare non ha detto di avere
+            // niente: non si salta niente. Gli altri si interrogano lo
+            // stesso, per la ragione qui sopra.
+            agreed.clear();
+            continue;
         };
         let index = index.read();
         let theirs =
