@@ -239,9 +239,8 @@ Il chunk condiviso della shell (`search`) lascia le discussioni dei commenti
 della Live a `markdown-comments`; la build si ferma se questo fa un ciclo.
 Il ponte dei documenti lascia a chunk che importano soltanto chunk condivisi
 l'ospite Mermaid (`diagram-host`), le tabelle Markdown (`markdown-tables`) e i
-gesti di formato della Live (`markdown-format`, che come la resa importa
-soltanto i chunk attesi, o la build si ferma);
-`search` lascia i riquadri (`state/layout.ts`) a `shell-layout`; le stringhe
+gesti di formato (`markdown-format`: come la resa, solo chunk attesi o la build
+si ferma); `search` lascia i riquadri (`state/layout.ts`) a `shell-layout`; le stringhe
 hanno un chunk per lingua (`shell-strings`, `shell-strings-en`). La barra della
 formula (`editors/core/formula-bar.ts`) sta fuori dall'ospite delle schede.
 
