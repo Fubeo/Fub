@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IndexQuery, IndexResult } from "../../host/contract";
 import {
-  allowedBaseTileUrl, baseRowsToCsv, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments, linkedNotes,
+  allowedBaseTileUrl, baseRowsToCsv, baseTileUrl, cellText, deriveBaseRows, expectedProperty, fetchAllDocuments, linkedNotes,
   parseBaseEmbed, parseBaseViews, planBaseView, prepareBaseMutations,
   persistBaseView, restoreBaseView, setBaseViewKey, writtenLines, type BaseSurfaceDeps,
 } from "./data";
@@ -189,6 +189,10 @@ describe("Base contract", () => {
     expect(allowedBaseTileUrl(template, "vector", ["tiles.example.test"], 1, 0, 0)).toBeNull();
     expect(allowedBaseTileUrl(template, "raster", ["tiles.example.test"], 1, 0, 0)).toBe("https://tiles.example.test/1/0/0.png");
     expect(allowedBaseTileUrl("https://tiles.example.test/{z}/{x}/{y}.svg", "vector", ["tiles.example.test"], 1, 1, 1)).toBe("https://tiles.example.test/1/1/1.svg");
+    // Come l'host (`Host::map_tile`): niente query, che può portare una chiave.
+    expect(allowedBaseTileUrl("https://tiles.example.test/{z}/{x}/{y}.png?key=x", "raster", ["tiles.example.test"], 1, 0, 0)).toBeNull();
+    // Il sito del modello si legge anche senza host ammessi, per dire quale manca.
+    expect(baseTileUrl(template, "raster", 1, 0, 0)?.hostname).toBe("tiles.example.test");
   });
 });
 
