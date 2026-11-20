@@ -2,7 +2,7 @@
 // il motore dice su cosa si è premuto e sceglie la cella, la barra
 // multifunzione dà le voci (`ribbon/context.ts`) e la mini-barra, qui si
 // aggiungono gli appunti e il riferimento della selezione.
-import type { SurfaceMenu, SurfaceMenuItem, SurfaceMiniBar } from "../core/editor-menu";
+import { menuBelow, type SurfaceMenu, type SurfaceMenuItem, type SurfaceMiniBar } from "../core/editor-menu";
 import type { GridRibbon } from "./ribbon/ribbon";
 import type { GridEngine } from "./engine";
 import { readClipboard, writeClipboardText } from "../../platform/clipboard";
@@ -37,7 +37,7 @@ export function gridContextMenu(host: GridMenuHost, at: { x: number; y: number }
   const box = engine.activeCellBox();
   return {
     target: { kind, ref: cells ? `${refs.sheet}!${refs.range}` : undefined },
-    at: box && !at ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined,
+    at: box && !at ? menuBelow(box) : undefined,
     context: host.ribbon()?.contextMenu(kind) ?? [],
     clipboard: cells
       ? {

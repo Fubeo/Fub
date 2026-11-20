@@ -124,7 +124,7 @@ import { loadKatex, readOptions } from "./math";
 import { editFormulaAt, placeFormulaAt } from "./math-live";
 import { mathmlHtml, equationMathml } from "./math/paste";
 import { toBlock, toInline } from "./math/place";
-import { MENU_RULE, type SurfaceMenuClipboard } from "../../../core/editor-menu";
+import { MENU_RULE, menuBelow, type SurfaceMenuClipboard } from "../../../core/editor-menu";
 import { linkDialogOpener } from "./link-dialog";
 import { openImageAt, parseImage, rewriteImage, widthWritable, type ImageSource } from "./image-live";
 import { canPreviewLink, previewLink } from "../../../../ui/link-preview";
@@ -2169,7 +2169,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     }
     const menu = writingMenuAt(pos, element);
     const box = engine.anchorBox();
-    return { ...menu, at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined };
+    return { ...menu, at: box ? menuBelow(box) : undefined };
   }
 
   /// Le proprietà rese: aggiungere, copiare, svuotare.
