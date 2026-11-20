@@ -24,8 +24,8 @@
 //   `style.cssText` sono stile scritto da uno script, e la CSP non lo guarda.
 //   `styledElement` la offre a chi descrive un elemento invece di crearlo
 //   (il `toDOM` di uno schema ProseMirror, che un `style` fra gli attributi
-//   lo scriverebbe con `setAttribute`), e `cssomStyleChildren` al
-//   contenitore dove una libreria scrive lo `style` dei figli con
+//   lo scriverebbe con `setAttribute`), e `cssomStyleDescendants` al
+//   contenitore dove una libreria scrive lo `style` dei suoi elementi con
 //   `setAttribute` (Mermaid, dove misura).
 //
 // `.github/scripts/check-inline-styles.mjs` impedisce che torni un
@@ -90,45 +90,99 @@ export function styledElement(
 }
 
 /**
- * Un contenitore dove una libreria monta un elemento e poi gli scrive lo stile
- * con `setAttribute("style", …)`, che la CSP rifiuta: Mermaid, sul `<div>`
- * dove misura (`appendDivSvgG` scrive lì `font-family`). Per ogni elemento
- * che si aggiunge come figlio diretto del contenitore, lo `style` scritto come
- * attributo diventa CSSOM (`style.cssText`): lo stesso stile, che la CSP lascia
- * valere, senza allentarla. Il resto della pagina non cambia: niente prototipi
- * toccati, soltanto le proprietà dei due elementi.
+ * Un contenitore dove una libreria monta degli elementi e poi scrive il loro
+ * stile con `setAttribute("style", …)`, che la CSP rifiuta: Mermaid, dove
+ * misura. Lì d3 scrive lo `style` sul `<div>` che monta (`appendDivSvgG`,
+ * `font-family`) e sui discendenti dell'SVG di prova: `style A
+ * font-size:30px`, `linkStyle`, gli stili di un `classDef`. Il rifiuto non si
+ * vede nei colori del disegno finale (l'attributo resta scritto, e l'immagine
+ * non è sotto la CSP della pagina), ma si vede nelle misure: un'etichetta
+ * misurata senza il suo `font-size` esce dal riquadro (#528).
+ *
+ * Per ogni elemento che entra nel contenitore, a qualunque profondità
+ * (`appendChild` e `insertBefore`, le strade di d3), lo `style` scritto come
+ * attributo diventa CSSOM (`style.cssText`): lo stesso stile, che la CSP
+ * lascia valere, senza allentarla. Uno `style` che l'elemento portava già
+ * quando è entrato si riscrive allo stesso modo. Il resto della pagina non
+ * cambia: niente prototipi toccati, soltanto le proprietà degli elementi del
+ * contenitore, che spariscono con loro.
  */
-export function cssomStyleChildren(container: HTMLElement): void {
+export function cssomStyleDescendants(container: HTMLElement): void {
+  watchInsertions(container);
+}
+
+/** Gli elementi già preparati: uno spostato dentro il contenitore non si prepara due volte. */
+const adopted = new WeakSet<Element>();
+
+function watchInsertions(parent: Element): void {
   const append = Node.prototype.appendChild;
-  Object.defineProperty(container, "appendChild", {
+  const insert = Node.prototype.insertBefore;
+  Object.defineProperty(parent, "appendChild", {
     configurable: true,
     writable: true,
-    value: function appendChild<T extends Node>(this: HTMLElement, child: T): T {
-      if (child instanceof HTMLElement || child instanceof SVGElement) styleAttributeAsCssom(child);
+    value: function appendChild<T extends Node>(this: Element, child: T): T {
+      adoptInserted(child);
       return append.call(this, child) as T;
+    },
+  });
+  Object.defineProperty(parent, "insertBefore", {
+    configurable: true,
+    writable: true,
+    value: function insertBefore<T extends Node>(this: Element, child: T, reference: Node | null): T {
+      adoptInserted(child);
+      return insert.call(this, child, reference) as T;
     },
   });
 }
 
+function adoptInserted(node: Node): void {
+  // Un frammento si svuota entrando: i suoi figli si preparano prima.
+  if (node instanceof DocumentFragment) {
+    for (const child of Array.from(node.children)) adopt(child);
+  } else if (node instanceof Element) {
+    adopt(node);
+  }
+}
+
+function adopt(element: Element): void {
+  if (adopted.has(element)) return;
+  if (!(element instanceof HTMLElement || element instanceof SVGElement)) return;
+  adopted.add(element);
+  styleAttributeAsCssom(element);
+  watchInsertions(element);
+  const written = element.getAttribute("style");
+  if (written !== null) element.setAttribute("style", written);
+  for (const child of Array.from(element.children)) adopt(child);
+}
+
 function styleAttributeAsCssom(element: HTMLElement | SVGElement): void {
   const set = Element.prototype.setAttribute;
+  const setNS = Element.prototype.setAttributeNS;
   // Un DOM che riflette `cssText` sull'attributo chiamando `setAttribute`
   // (happy-dom, nei test) torna qui: quella volta l'attributo si scrive e basta.
   let reflecting = false;
+  const asCssom = (target: HTMLElement | SVGElement, value: string): void => {
+    reflecting = true;
+    try {
+      target.style.cssText = String(value);
+    } finally {
+      reflecting = false;
+    }
+  };
   Object.defineProperty(element, "setAttribute", {
     configurable: true,
     writable: true,
     value: function setAttribute(this: HTMLElement | SVGElement, name: string, value: string): void {
-      if (reflecting || name.toLowerCase() !== "style") {
-        set.call(this, name, value);
-        return;
-      }
-      reflecting = true;
-      try {
-        this.style.cssText = String(value);
-      } finally {
-        reflecting = false;
-      }
+      if (reflecting || name.toLowerCase() !== "style") set.call(this, name, value);
+      else asCssom(this, value);
+    },
+  });
+  Object.defineProperty(element, "setAttributeNS", {
+    configurable: true,
+    writable: true,
+    value: function setAttributeNS(this: HTMLElement | SVGElement, namespace: string | null, name: string, value: string): void {
+      if (reflecting || namespace !== null || name.toLowerCase() !== "style") setNS.call(this, namespace, name, value);
+      else asCssom(this, value);
     },
   });
 }
