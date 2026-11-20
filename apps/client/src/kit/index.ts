@@ -55,6 +55,9 @@ export type {
 
 export { pressable } from "./press";
 
+export { keepFocusOnPress } from "./keep-focus";
+export type { KeepFocusOptions } from "./keep-focus";
+
 // La lingua dei menu: tessera, riga ed etichetta, comuni al menu, allo spazio
 // comandi e al «/».
 export { createTile } from "./tile";

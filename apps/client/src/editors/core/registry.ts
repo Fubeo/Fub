@@ -441,6 +441,12 @@ export interface SurfaceStatusItem {
   /** A click opens more about it: the band draws a button. */
   readonly open?: () => void;
   /**
+   * With `open`: the click acts in place (resets the zoom, frames the copies)
+   * and opens nothing, so the band's button leaves the focus in the document.
+   * Without it the click opens something, which takes the focus.
+   */
+  readonly inPlace?: boolean;
+  /**
    * A sign that switches on, as Track changes: when it appears while the
    * document keeps the focus, it enters with one beat. Never on a redraw.
    */

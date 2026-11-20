@@ -37,6 +37,25 @@ export function pointer(type: string, init: PointerEventInit = {}): PointerEvent
   });
 }
 
+/// Un clic col tasto sinistro come lo dà il browser, che happy-dom non
+/// ricompone: pressione del puntatore, `mousedown` e, se nessuno ne ha fermato
+/// l'azione di serie, il fuoco al primo antenato che lo prende; poi rilascio e
+/// `click`.
+export function realClick(el: HTMLElement): void {
+  const mouse = (type: string, buttons: number): MouseEvent =>
+    new MouseEvent(type, { button: 0, buttons, detail: 1, bubbles: true, cancelable: true });
+  el.dispatchEvent(pointer("pointerdown", { buttons: 1 }));
+  const down = mouse("mousedown", 1);
+  el.dispatchEvent(down);
+  if (!down.defaultPrevented) {
+    const focusable = el.closest<HTMLElement>("button, input, select, textarea, a[href], [tabindex], [contenteditable='true']");
+    focusable?.focus();
+  }
+  el.dispatchEvent(pointer("pointerup", { buttons: 0 }));
+  el.dispatchEvent(mouse("mouseup", 0));
+  el.dispatchEvent(mouse("click", 0));
+}
+
 /// Preme un tasto su `target` e rende l'evento, per guardare se è stato
 /// consumato.
 export function press(target: EventTarget, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
