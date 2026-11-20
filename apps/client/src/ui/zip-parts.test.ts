@@ -124,4 +124,14 @@ describe("un archivio diviso in parti", () => {
     const entries = await readDirectory(new Blob([withComment]));
     expect(entries.map((entry) => entry.name)).toEqual(["a.md"]);
   });
+
+  it("un archivio con byte in più dopo la fine si legge ancora", async () => {
+    // Alcuni programmi lasciano byte dopo la fine dell'archivio: nessun
+    // candidato porta esattamente alla fine del file, e vale il primo.
+    const source = await zip([{ name: "a.md", body: text("# a\n") }]);
+    const padded = new Uint8Array(source.length + 3);
+    padded.set(source);
+    const entries = await readDirectory(new Blob([padded]));
+    expect(entries.map((entry) => entry.name)).toEqual(["a.md"]);
+  });
 });

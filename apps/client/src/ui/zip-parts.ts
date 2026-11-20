@@ -96,13 +96,19 @@ export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
   const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
   let eocd = -1;
   // Cercando all'indietro, la firma può comparire dentro il commento
-  // finale: vale solo il candidato il cui commento finisce col file.
+  // finale: vince il candidato il cui commento finisce col file. Se nessuno
+  // ci arriva (byte in più dopo l'archivio, come lasciano alcuni programmi)
+  // vale il primo trovato, come prima.
+  let loose = -1;
   for (let at = tail.length - 22; at >= 0; at--) {
-    if (tailView.getUint32(at, true) === EOCD && at + 22 + tailView.getUint16(at + 20, true) === tail.length) {
+    if (tailView.getUint32(at, true) !== EOCD) continue;
+    if (at + 22 + tailView.getUint16(at + 20, true) === tail.length) {
       eocd = at;
       break;
     }
+    if (loose < 0) loose = at;
   }
+  if (eocd < 0) eocd = loose;
   if (eocd < 0) throw new Error(t("errors.zip.no_end"));
   if (tailView.getUint16(eocd + 4, true) !== 0 || tailView.getUint16(eocd + 6, true) !== 0) {
     throw new Error(t("errors.zip.multidisk"));
