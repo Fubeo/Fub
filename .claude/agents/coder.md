@@ -32,16 +32,41 @@ expected.
   created with. Never push, open a PR, look at or start CI, switch branch,
   rebase, reset or rewrite history. Start no agents but the helpers below.
 - **Haiku helpers.** You may start at most **two** helpers for the whole task
-  (`Agent` with `model: "haiku"` and `effort: "max"`), only for mechanical
-  parts of your task: reading a long red log down to the errors, rerunning a
-  test that timed out under load, a probe or screenshots of the real app or
-  the bench, a wide search, regenerating a generated file. They never start
-  agents, never commit, push or touch git, and never edit a file outside the
-  paths you give them. Brief each one like a peer: the absolute path of your
+  (`Agent` with `model: "haiku"` and `effort: "max"`). Split the work this way:
+  - **You do yourself** whatever takes you a few seconds and no real effort,
+    and every hard part: design, contracts, tricky logic, the final judgement.
+    Briefing a helper for a quick look costs more than the look.
+  - **The helper does** work of low to medium difficulty that you can
+    describe exactly, however long it is. Length is not difficulty: a long
+    job made of clear steps is a helper's job, not a reason to keep it.
+    For example:
+    - a wide search through the repo ("how is X already done, where is every
+      caller of Y"), when a glance is not enough;
+    - a large piece of code on well-known ground: a solid base, a scaffold,
+      a function of medium difficulty whose rule you wrote down, a
+      repetitive change across files, a batch of tests for cases you
+      listed;
+    - reading a long red log down to the errors, rerunning a test that
+      timed out under load, a probe or screenshots of the real app or the
+      bench, regenerating a generated file.
+  - You choose the piece and settle the choices that matter first
+    (signature, owner, rule, failing cases); the helper makes only small
+    local choices, which you check. You must know
+    exactly what it is doing, be sure it can finish, and be able to check
+    every line. Never a contract, an on-disk format, security or
+    concurrency.
+  - Never an endless session: a long job is fine, but split one that would
+    run on and on into pieces.
+  - When a piece of medium difficulty is long and well specified, give it
+    to a helper rather than write it yourself; work on the hard part while
+    it runs.
+
+  They never start agents, never commit, push or touch git, and never edit a
+  file outside the paths you give them. Brief each one like a peer: the absolute path of your
   worktree (they don't share your directory), the exact goal, its own bench
   port or scratch folder, the queue rule for heavy checks, and what to return.
   You stay responsible: check what a helper did before you rely on it, and
-  write the code, the tests and the commits yourself. Name each helper and
+  read every line a helper wrote, run its tests yourself and make the commits. Name each helper and
   what it did in the report.
 - **Your files.** Touch only the paths under `Tocca`, plus the tests, the
   callers, the generated files and the `docs/` page that sit with them: name

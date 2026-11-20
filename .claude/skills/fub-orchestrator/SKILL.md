@@ -72,7 +72,10 @@ Files of this skill:
 1. **Slots are always full.**
    - Keep as many coders as the maintainer allows (Opus, effort medium).
    - Haiku (effort xhigh) only for very simple tasks: one or two files, a
-     clear rule, no design or contract choice. Never Sonnet.
+     clear rule, no design or contract choice, and a short session: never a
+     long one. Fairly demanding but plain pieces go to a coder's Haiku
+     helpers instead, chosen and checked by that Opus coder (`coder.md`).
+     Never Sonnet.
    - A task is ready when its `Stato` is `[ ]` and every task in its
      `Dipende da` is `[x]`. The phases of a plan are not gates.
    - Never run two tasks whose `Tocca` overlap, or two in the same crate,
