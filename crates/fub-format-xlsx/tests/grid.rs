@@ -390,19 +390,31 @@ fn una_cella_cambiata_sul_disco_e_un_conflitto_che_il_salvataggio_scrive() {
     assert_eq!(value(&saved, "A1"), Value::Number(3.0));
 }
 
+/// La revisione dei byte la calcola l'host, una volta, prima di aprire
+/// (`GridBytesProvider::open`): i byte vecchi rispetto alla base li rifiuta
+/// lui (`fub-host`, `tests/xlsx_workbooks.rs`). Il provider apre la sessione
+/// alla revisione che riceve, senza un secondo SHA-256 della cartella.
 #[test]
-fn una_sorgente_che_non_e_la_sua_revisione_non_si_apre() {
+fn la_sessione_nasce_alla_revisione_che_l_host_ha_calcolato() {
     let bytes = one_sheet(BODY);
     let mut provider = XlsxGridProvider::new();
-    assert!(matches!(
-        provider.open(
+    let revision = Revision::of_bytes(&bytes);
+    let session = provider
+        .open(
             XLSX_GRID_SURFACE,
             &bytes,
-            Revision("altra".into()),
-            &GridJournal::new()
-        ),
-        Err(PluginError::Conflict(_))
-    ));
+            revision.clone(),
+            &GridJournal::new(),
+        )
+        .unwrap();
+    assert_eq!(session.revision, grid_bytes_revision(&revision, ""));
+    provider.close(&session.instance).unwrap();
+}
+
+#[test]
+fn una_superficie_che_non_c_e_non_si_apre() {
+    let bytes = one_sheet(BODY);
+    let mut provider = XlsxGridProvider::new();
     assert!(matches!(
         provider.open(
             "altra",

@@ -2,7 +2,7 @@
 // (`cpuPercent` in `memory.mjs`).
 import { describe, expect, it } from "vitest";
 
-import { blockedPerRepetition, frameStats, parseWebkitGpu, renderPath } from "./frames.mjs";
+import { blockedPerRepetition, frameStats, medianMs, parseWebkitGpu, renderPath, switchBlocked } from "./frames.mjs";
 import { cpuPercent } from "./memory.mjs";
 
 describe("i fotogrammi rispetto al periodo", () => {
@@ -20,6 +20,24 @@ describe("i fotogrammi rispetto al periodo", () => {
   it("un buco lungo conta i fotogrammi che copre", () => {
     expect(frameStats([16.7, 16.7, 50, 16.7], 16.67)).toMatchObject({ max: 50, lost: 2 });
     expect(frameStats([], 16.67)).toBeNull();
+  });
+});
+
+describe("F4: il cambio fra la nota e il foglio", () => {
+  it("le ripetizioni pari vanno al foglio, le dispari tornano alla nota", () => {
+    const blocked = switchBlocked({
+      marks: [0, 1000, 2000, 3000],
+      gaps: [[100, 40], [200, 30], [1100, 6], [2100, 50], [3500, 8], [3600, 9]],
+      stopped: 4000,
+    });
+    expect(blocked.sheet).toEqual({ longest: [40, 50], total: [70, 50], longestMedian: 40, totalMedian: 50 });
+    expect(blocked.note).toEqual({ longest: [6, 9], total: [6, 17], longestMedian: 6, totalMedian: 6 });
+  });
+
+  it("una misura mancante non diventa un tempo", () => {
+    expect(medianMs([30, 10, 20])).toBe(20);
+    expect(medianMs([30, null])).toBeNull();
+    expect(medianMs([])).toBeNull();
   });
 });
 

@@ -83,6 +83,7 @@ import {
   UI_TEXT,
   VECTOR_PROFILE,
   VIEWER_OWNER,
+  uisForFile,
 } from "./component-surfaces";
 import type { VaultFontPort } from "../spatial/fonts/vault";
 import type { DrawingSurfaceCallbacks } from "../spatial/lazy";
@@ -295,6 +296,10 @@ const GRID_EXPORTS: readonly SurfaceExport[] = [
     options: () => ({ sheets: "all" }),
   },
 ];
+
+/// Quanto pesa un foglio tenuto da parte nel riquadro (`EditorSurface.parking`):
+/// una nota pesa uno, e un foglio tiene in più la cartella aperta nell'host.
+const GRID_PARKING_WEIGHT = 2;
 
 const VIEWER_MODES = [
   { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file"] },
@@ -1068,8 +1073,11 @@ function mountGrid(
       base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
       diskRevision: options.documentDiskRevision ? () => options.documentDiskRevision!(context.documentId) : undefined,
       writing: options.documentWriting ? () => options.documentWriting!(context.documentId) : undefined,
+      // Il documento viaggia con ogni modifica: un foglio tenuto da parte
+      // (`parking`) che finisce di scrivere quando il riquadro mostra già
+      // un'altra scheda scrive comunque nella sua cartella.
       onChange: (change) => {
-        options.onChange(context.paneId, change);
+        options.onChange(context.paneId, change, context.documentId);
         cellChanged();
       },
       onSelectionChange: () => {
@@ -1148,6 +1156,10 @@ function mountGrid(
       surfaceId: context.paneId,
       modes: GRID_MODES,
       exports: GRID_EXPORTS,
+      // Da parte il foglio tiene aperta la sua sessione nell'host (la
+      // cartella letta, le finestre): pesa per due fra le superfici che il
+      // riquadro conserva. Dentro una scheda della lavagna resta della scheda.
+      ...(compact ? {} : { parking: { weight: GRID_PARKING_WEIGHT } }),
       setMode(mode) {
         requireMode(GRID_MODES, mode);
         context.parent.dataset.surfaceMode = mode;
@@ -1210,6 +1222,12 @@ interface EditorPart {
   readonly id: string;
   /// Gli altri pezzi di interfaccia che devono essere accesi anche loro.
   readonly alsoNeeds?: readonly string[];
+  /// Le superfici del pezzo non leggono le forme sintattiche del documento
+  /// (`EditorSurface.setSyntaxForms`): il loro testo non è scritto in una
+  /// grammatica, come il giornale delle celle di un foglio. Il riquadro non
+  /// le chiede al kernel per un file che soltanto pezzi così aprono
+  /// (`readsSyntaxForms`).
+  readonly withoutSyntax?: true;
   registration(options: SurfaceBootstrapOptions): SurfaceRegistration;
 }
 
@@ -1247,6 +1265,8 @@ function drawingCallbacks(options: SurfaceBootstrapOptions): DrawingSurfaceCallb
 export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> = {
   [UI_GRID]: [{
     id: "grid",
+    // Il testo di una cartella di Excel è il giornale delle celle.
+    withoutSyntax: true,
     registration: (options) => ({
       owner: GRID_OWNER,
       family: GRID_FAMILY,
@@ -1415,6 +1435,19 @@ interface ComponentEditorState {
 
 const components = new WeakMap<DocumentSurfaceRegistry, ComponentEditorState>();
 const unknownLogged = new Set<string>();
+
+/// L'editor che apre `doc` legge le forme sintattiche del documento: vero
+/// per una nota e per ogni file che apre almeno un pezzo senza
+/// `withoutSyntax`. Il riquadro chiede le forme al kernel soltanto allora.
+export function readsSyntaxForms(doc: string): boolean {
+  const uis = uisForFile(doc);
+  if (uis.length === 0) return true;
+  // Un `ui` che la tabella non conosce le legge: nel dubbio si chiedono.
+  return uis.some((ui) => {
+    const parts = COMPONENT_EDITORS[ui];
+    return !parts || parts.some((part) => !part.withoutSyntax);
+  });
+}
 
 /// `ui` ha il suo caricatore: è del nucleo o sta in `COMPONENT_EDITORS`.
 export function hasComponentEditor(ui: string): boolean {

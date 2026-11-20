@@ -40,7 +40,12 @@ finestra o un errore di una revisione superata.
 trasporta i byte, ma il giornale canonico delle celle cambiate (il testo
 della sessione documento) e la revisione dei byte da cui parte. L'host legge
 il documento, controlla che il formato sia quello della superficie (`BadArgs`
-altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
+altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`.
+La revisione dei byte (`Revision::of_bytes`) la calcola l'host, una volta,
+e il provider la riceve già fatta (`GridBytesProvider::open`): non rifà lo
+SHA-256 della cartella. La shell tiene in memoria la risposta di
+`list_grid_surfaces` per il vault aperto finché i componenti non cambiano
+(`state/grid-surfaces.ts`). La
 sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
 `GridNotice`, celle in conflitto e il libro `GridBook`: i dodici colori del
 tema in `#RRGGBB`, i nomi definiti visibili, il modo di calcolo

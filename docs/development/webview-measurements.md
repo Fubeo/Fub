@@ -62,6 +62,7 @@ Fub si guardano `key`, `code` e `ctrlKey` del `keydown` che arriva davvero.
 | F1 | rAF a vuoto: 5 s di `requestAnimationFrame` sulla shell ferma, a indice pronto | mediana fra fotogrammi confrontata col periodo dello schermo; tetto del motore; percorso di disegno |
 | F2 | quiete: 20 s senza gesti | richieste di fotogramma della pagina; CPU dei processi della WebView, in % di un core |
 | F3 | thread principale per gesto: la barra laterale dal comando (Ctrl+Alt+B, sei volte), il cambio scheda fra la nota lunga e una corta (Ctrl+PagGiù, otto volte), una cartella di trenta note aperta e chiusa nell'albero (otto volte) | per gesto, la mediana delle ripetizioni del tempo di thread principale bloccato; fotogrammi persi e CPU nel referto |
+| F4 | il cambio scheda fra una nota e un foglio `.xlsx` (`F4/Bilancio.xlsx`, 1.000 righe × 12 colonne) nello stesso riquadro: un giro a vuoto, poi sei andate e ritorni col clic sulla scheda | per lato (`F4.foglio`, `F4.nota`), la mediana dal primo `pointerdown` sulla scheda al fotogramma dopo la prima cella con `Riga 1` (o la riga della nota), in ms, senza soglie, e del thread principale bloccato (l'anello di F3): buco più lungo (`mainBlocked`) e somma dei buchi (`mainTotal`) |
 
 S1 scrive i 200 caratteri in cinque giri (`S1_ROUNDS` in `typing.mjs`), ognuno
 su una riga nuova, e dà la mediana dei p95 dei giri, come L1
@@ -441,8 +442,7 @@ secondo, su un iPad, un tablet Android e un PC con tavoletta:
 1. Apri un disegno in Fub e, accanto, l'app di disegno nativa del sistema.
 2. Riprendi da vicino la punta e il tratto, con la stessa luce, per dieci
    tratti veloci in ciascuna app.
-3. Conta i fotogrammi fra la punta e l'inchiostro: ogni fotogramma vale
-   4,17 ms.
+3. Conta i fotogrammi fra la punta e l'inchiostro (ognuno vale 4,17 ms).
 4. Scrivi mediana e massimo di Fub e dell'app nativa, col dispositivo, la
    versione del sistema e il commit.
 

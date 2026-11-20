@@ -331,11 +331,7 @@ impl GridBytesProvider for XlsxGridProvider {
         if source.len() > MAX_GRID_BYTES_SOURCE {
             return Err(bad("grid source exceeds byte limit"));
         }
-        if Revision::of_bytes(source) != revision {
-            return Err(PluginError::Conflict(
-                "grid source does not match its declared revision".into(),
-            ));
-        }
+        // `revision` è già quella dei byte (`GridBytesProvider::open`).
         journal.validate()?;
         // La prima apertura costruisce il motore.
         let motore = self

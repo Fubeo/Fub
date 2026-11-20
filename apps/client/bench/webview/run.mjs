@@ -36,10 +36,10 @@ import { cpus, hostname, loadavg, release, tmpdir, totalmem, type as osType } fr
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { BIG_SHEET, GESTURE_FOLDER, INK_BOARD, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
+import { BIG_SHEET, GESTURE_FOLDER, INK_BOARD, SWITCH_SHEET, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
 import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, settled } from "./memory.mjs";
 import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
-import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
+import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, SWITCH_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, medianMs, switchBlocked, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
 import { CANVAS_SCRIPT, COMMITS, L1_ROUNDS, OPENS, SIZES, builtModule, l1Values } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
@@ -53,7 +53,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "F1,F2,F3,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "F1,F2,F3,F4,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 /// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
@@ -107,6 +107,8 @@ const QUIET_MS = 20_000;
 /// di partenza) e quanto si aspetta dopo ognuno.
 const GESTURE_REPS = { barra: 6, scheda: 8, cartella: 8 };
 const GESTURE_WAIT_MS = 700;
+/// F4: i giri nota → foglio → nota misurati, dopo uno di riscaldamento.
+const SWITCH_ROUNDS = 6;
 
 /// Quanto si aspetta prima di leggere la memoria: che l'app abbia finito di
 /// disegnare e di indicizzare ciò che ha appena aperto.
@@ -834,6 +836,74 @@ const SCENARIOS = {
     }
     const rows = Object.entries(gestures).map(([name, g]) => `${name}: bloccato ${g.mainBlocked.perRep.join("/")} ms, fotogrammi ${g.frames?.median ?? "—"}/${g.frames?.p90 ?? "—"} ms, persi ${g.frames?.lost ?? "—"}, CPU web ${g.cpu?.webview ?? "—"} %, long task ${Array.isArray(g.longtasks) ? g.longtasks.length : g.longtasks}`);
     return { report: { gestures, timerGapMs: TIMER_GAP_MS }, values, samples: Object.values(GESTURE_REPS).reduce((a, b) => a + b, 0), notes: rows };
+  },
+  /// Il cambio scheda fra una nota e un foglio Excel di 1.000 × 12 celle,
+  /// col clic sulla linguetta: dalla pressione alla prima cella dipinta, e
+  /// dalla pressione al testo della nota dipinto al ritorno; il thread
+  /// principale (il buco più lungo e la somma dei buchi) per ogni direzione.
+  async F4(session) {
+    const note = { doc: "S2/Nota 00001.md", selector: ".pane.focus .pane-editor .cm-content", text: noteMark(1) };
+    const sheet = { doc: SWITCH_SHEET.file, selector: ".pane.focus .pane-editor .grid-cell-text", text: "Riga 1" };
+    await openByName(session, noteName(1), noteMark(1));
+    await openByName(session, SWITCH_SHEET.name, sheet.text);
+    await session.execute(SWITCH_SCRIPT);
+    await session.execute(RECORDER_SCRIPT);
+    // La linguetta di un documento si cerca a ogni clic: l'indice cambia se
+    // il ripristino della sessione ha portato altre schede.
+    const go = async (target) => {
+      const index = await session.execute(`
+        for (const tab of document.querySelectorAll(".pane.focus .tab")) {
+          try { if (JSON.parse(tab.dataset.key).doc === arguments[0]) return tab.dataset.index; } catch {}
+        }
+        return null;`, [target.doc]);
+      if (index === null) throw new Error(`nessuna linguetta per ${target.doc}`);
+      await session.execute("window.__fubSwitchWait = window.__fubSwitch.arm(arguments[0], arguments[1]); return true;", [target.selector, target.text]);
+      await session.click(`.pane.focus .tab[data-index="${index}"]`);
+      return session.executeAsync("const done = arguments[arguments.length - 1]; window.__fubSwitchWait.then(done);");
+    };
+    // Un giro fuori dalla misura: il primo ritorno carica ciò che serve.
+    await go(note);
+    await pause(GESTURE_WAIT_MS);
+    await go(sheet);
+    await pause(GESTURE_WAIT_MS);
+    await go(note);
+    await pause(GESTURE_WAIT_MS);
+    const toSheet = [];
+    const toNote = [];
+    await session.execute("window.__fubRec.start(); return true;");
+    const before = cpuTicks(driverPid);
+    const since = performance.now();
+    for (let round = 0; round < SWITCH_ROUNDS; round++) {
+      await session.execute("window.__fubRec.mark(); return true;");
+      toSheet.push(await go(sheet));
+      await pause(GESTURE_WAIT_MS);
+      await session.execute("window.__fubRec.mark(); return true;");
+      toNote.push(await go(note));
+      await pause(GESTURE_WAIT_MS);
+    }
+    const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+    const recorded = await session.execute("return window.__fubRec.stop();");
+    const blocked = switchBlocked(recorded);
+    const values = {
+      "F4.foglio.ms": medianMs(toSheet),
+      "F4.nota.ms": medianMs(toNote),
+      "F4.foglio.mainBlocked": blocked.sheet.longestMedian,
+      "F4.foglio.mainTotal": blocked.sheet.totalMedian,
+      "F4.nota.mainBlocked": blocked.note.longestMedian,
+      "F4.nota.mainTotal": blocked.note.totalMedian,
+    };
+    const frames = frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs);
+    return {
+      report: { toSheet, toNote, blocked, frames, cpu, sheet: SWITCH_SHEET, timerGapMs: TIMER_GAP_MS },
+      values,
+      samples: toSheet.filter((ms) => ms !== null).length,
+      notes: [
+        `al foglio ${toSheet.join("/")} ms, alla nota ${toNote.join("/")} ms`,
+        `thread principale, buco più lungo: foglio ${blocked.sheet.longest.join("/")} ms, nota ${blocked.note.longest.join("/")} ms`,
+        `thread principale, somma dei buchi: foglio ${blocked.sheet.total.join("/")} ms, nota ${blocked.note.total.join("/")} ms`,
+        `fotogrammi ${frames?.median ?? "—"}/${frames?.p90 ?? "—"} ms, persi ${frames?.lost ?? "—"}, CPU web ${cpu?.webview ?? "—"} %`,
+      ],
+    };
   },
   /// Scrivere 200 caratteri in una nota di 5.000 righe, `S1_ROUNDS` giri: il
   /// valore è la mediana dei p95 dei giri (`s1Values`, #293).
@@ -1818,8 +1888,8 @@ async function main() {
     // soglie in ms, e una soglia in periodi data a uno dei due chiede di
     // spostare F1 davanti a lui. F2
     // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
-    // note che gli avvii dopo riaprono.
-    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S10", "S4", "S5", "S7", "S8", "F3", "T1", "L1", "C1"].filter((id) => only.has(id));
+    // note che gli avvii dopo riaprono, e F4 dopo F3 per la stessa ragione.
+    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S10", "S4", "S5", "S7", "S8", "F3", "F4", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // R1 con la raccolta forzata ha un driver suo, con il gancio acceso
       // nell'ambiente; lo scenario dopo torna su un driver senza.

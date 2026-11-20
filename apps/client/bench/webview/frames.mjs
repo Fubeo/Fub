@@ -216,3 +216,85 @@ export function blockedPerRepetition({ gaps, marks, stopped }) {
     over50ms: round1(gaps.filter(([, gap]) => gap > 50).reduce((sum, [, gap]) => sum + gap, 0)),
   };
 }
+
+/// F4: quanto ci mette una scheda a mostrarsi dopo il clic sulla sua
+/// linguetta. `arm(selettore, testo)` ascolta, in cattura, la prima pressione
+/// del puntatore (il suo `timeStamp` è sull'orologio di `performance.now()`)
+/// e guarda a ogni fotogramma se un elemento visibile che risponde al
+/// selettore contiene il testo: trovato, aspetta il fotogramma dopo, quello
+/// in cui il contenuto è già dipinto, e torna i ms dalla pressione. `null`
+/// se in 15 s non si vede, o se la pressione non è arrivata.
+export const SWITCH_SCRIPT = `
+if (!window.__fubSwitch) {
+  window.__fubSwitch = {
+    arm(selector, text) {
+      return new Promise((done) => {
+        let pressed = null;
+        const press = (event) => {
+          if (pressed === null) pressed = event.timeStamp;
+          document.removeEventListener("pointerdown", press, true);
+          document.removeEventListener("mousedown", press, true);
+        };
+        document.addEventListener("pointerdown", press, true);
+        document.addEventListener("mousedown", press, true);
+        const deadline = performance.now() + 15000;
+        const seen = () => {
+          for (const element of document.querySelectorAll(selector)) {
+            if (element.offsetParent !== null && (element.textContent ?? "").includes(text)) return true;
+          }
+          return false;
+        };
+        const tick = () => {
+          if (performance.now() > deadline) {
+            document.removeEventListener("pointerdown", press, true);
+            document.removeEventListener("mousedown", press, true);
+            done(null);
+            return;
+          }
+          if (pressed !== null && seen()) {
+            requestAnimationFrame((painted) => done(Math.round((painted - pressed) * 10) / 10));
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    },
+  };
+}
+return true;`;
+
+/// Il thread principale di F4, dove ogni giro ha due ripetizioni: verso il
+/// foglio (le pari) e di ritorno alla nota (le dispari). Per ciascuna delle
+/// due direzioni, il buco più lungo per giro (con la sua mediana) e la somma
+/// dei buchi del giro (con la sua mediana): il primo dice se un fotogramma si
+/// perde, la seconda quanto lavoro fa il thread principale per il cambio.
+export function switchBlocked({ gaps, marks, stopped }) {
+  const ends = [...marks.slice(1), stopped];
+  const reps = marks.map((from, i) => {
+    let longest = 0;
+    let total = 0;
+    for (const [end, gap] of gaps) {
+      if (end < from || end >= ends[i]) continue;
+      total += gap;
+      if (gap > longest) longest = gap;
+    }
+    return { longest: round1(longest), total: round1(total) };
+  });
+  const side = (parity) => {
+    const mine = reps.filter((_, i) => i % 2 === parity);
+    const median = (key) => {
+      const sorted = mine.map((rep) => rep[key]).sort((a, b) => a - b);
+      return sorted.length ? round1(percentile(sorted, 0.5)) : null;
+    };
+    return { longest: mine.map((rep) => rep.longest), total: mine.map((rep) => rep.total), longestMedian: median("longest"), totalMedian: median("total") };
+  };
+  return { sheet: side(0), note: side(1) };
+}
+
+/// La mediana di una serie di ms, `null` senza campioni o con uno mancante.
+export function medianMs(values) {
+  if (!values.length || values.some((value) => value === null)) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return round1(percentile(sorted, 0.5));
+}

@@ -622,7 +622,11 @@ export class GridEngine {
   readonly #ribbonHost: HTMLElement;
   readonly #sheetBar: HTMLElement;
   readonly #formulaEditor: TextEngine;
-  readonly #cellEditor: TextEngine;
+  /// Il campo della cella aperta, creato la prima volta che una cella si
+  /// apre (`#cellEditor`): una cartella che si guarda soltanto non monta un
+  /// secondo CodeMirror. Il tema e la sola lettura arrivano con lui.
+  #cellEngine: TextEngine | null = null;
+  #cellTheme: Theme | undefined;
   readonly #options: GridEngineOptions;
   readonly #stopLanguage: () => void;
   readonly #abort = new AbortController();
@@ -956,23 +960,7 @@ export class GridEngine {
       field: true,
       extensions: () => formulaProfile.extensions(),
     });
-    const cellProfile = createFormulaProfile({
-      singleLine: false,
-      callbacks: {
-        commit: (_value, move, arrow) => this.#commitAndMove(move, arrow),
-        cancel: () => this.#finishEditing(false, "input"),
-        arrowsCommit: () => this.#editing?.mode === "insert",
-        toggleMode: () => this.#toggleEditMode(),
-        point: (move, extend) => this.#pointByKey(move, extend),
-      },
-    });
-    this.#cellEditor = createTextEngine(this.#cellEditorField, {
-      onChange: (change) => this.#draftFromEditor("cell", change.text),
-      onSelectionChange: () => {},
-      theme: options.theme,
-      field: true,
-      extensions: () => cellProfile.extensions(),
-    });
+    this.#cellTheme = options.theme;
 
     // Le righe si disegnano nel gestore dello scorrimento, non in un
     // fotogramma dopo: quelle nuove ci sono già nel fotogramma che le mostra.
@@ -1110,6 +1098,40 @@ export class GridEngine {
     this.#openWorkbook(source, true);
   }
 
+  /// Il campo della cella aperta, creato adesso se non c'è ancora: soltanto
+  /// chi apre una cella lo chiede.
+  get #cellEditor(): TextEngine {
+    this.#cellEngine ??= this.#createCellEditor();
+    return this.#cellEngine;
+  }
+
+  /// Se il campo della cella aperta è già nato (le prove lo guardano).
+  cellEditorMounted(): boolean {
+    return this.#cellEngine !== null;
+  }
+
+  #createCellEditor(): TextEngine {
+    const profile = createFormulaProfile({
+      singleLine: false,
+      callbacks: {
+        commit: (_value, move, arrow) => this.#commitAndMove(move, arrow),
+        cancel: () => this.#finishEditing(false, "input"),
+        arrowsCommit: () => this.#editing?.mode === "insert",
+        toggleMode: () => this.#toggleEditMode(),
+        point: (move, extend) => this.#pointByKey(move, extend),
+      },
+    });
+    const engine = createTextEngine(this.#cellEditorField, {
+      onChange: (change) => this.#draftFromEditor("cell", change.text),
+      onSelectionChange: () => {},
+      theme: this.#cellTheme,
+      field: true,
+      extensions: () => profile.extensions(),
+    });
+    if (this.#readOnly) engine.setReadOnly(true);
+    return engine;
+  }
+
   syncDoc(update: { readonly text: string; readonly operation: TextOperation | null } | string): void {
     if (this.#destroyed) return;
     const source = typeof update === "string" ? update : update.text;
@@ -1226,7 +1248,7 @@ export class GridEngine {
     const changed = readOnly !== this.#readOnly;
     this.#readOnly = readOnly;
     this.#formulaEditor.setReadOnly(readOnly);
-    this.#cellEditor.setReadOnly(readOnly);
+    this.#cellEngine?.setReadOnly(readOnly);
     this.#root.dataset.readOnly = String(readOnly);
     if (readOnly) this.#finishEditing(false, "input");
     // Quali comandi si danno cambia con la sola lettura: la barra si rilegge.
@@ -1235,7 +1257,8 @@ export class GridEngine {
 
   setTheme(theme: Theme): void {
     this.#formulaEditor.setTheme(theme);
-    this.#cellEditor.setTheme(theme);
+    this.#cellTheme = theme;
+    this.#cellEngine?.setTheme(theme);
     this.#root.dataset.theme = theme;
   }
 
@@ -2012,7 +2035,8 @@ export class GridEngine {
     this.#sheetTabs?.lifetime.close();
     this.#sheetTabs = null;
     this.#formulaEditor.destroy();
-    this.#cellEditor.destroy();
+    this.#cellEngine?.destroy();
+    this.#cellEngine = null;
     this.#media.clear();
     this.#life.close();
     this.#root.remove();
@@ -5320,12 +5344,15 @@ export class GridEngine {
   /// cella, la mostra e la veste come la cella. Spostandola, il fuoco resta
   /// nel campo.
   #mountCellEditor(position: GridPosition, cell: HTMLElement): void {
+    // Il campo prima delle misure: la veste legge il carattere dal suo
+    // `.cm-content`.
+    const field = this.#cellEditor;
     const host = this.#cellEditorHost;
     const lift = this.#lifts[this.#editorZone(position)];
     if (host.parentElement !== lift) {
       const focused = host.contains(document.activeElement);
       lift.append(host);
-      if (focused) this.#cellEditor.focus();
+      if (focused) field.focus();
     }
     host.dataset.row = String(position.row);
     host.dataset.column = String(position.column);

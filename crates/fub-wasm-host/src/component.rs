@@ -702,11 +702,6 @@ fn reentrant() -> PluginError {
     PluginError::Internal(Text::key("host.wasm.reentrant"))
 }
 
-/// Una sorgente che non ha la revisione con cui arriva.
-fn source_revision() -> PluginError {
-    PluginError::Conflict(Text::key("host.grid.source_revision"))
-}
-
 /// La memoria lineare di tutte le istanze del processo è finita.
 pub(crate) fn memory_budget(budget: &crate::limits::MemoryBudgetExceeded) -> PluginError {
     const MIB: usize = 1024 * 1024;
@@ -866,9 +861,7 @@ impl GridBytesProvider for WasmGridBytesProvider {
                 vec![Arg::text("bytes", source.len().to_string())],
             )));
         }
-        if Revision::of_bytes(source) != revision {
-            return Err(source_revision());
-        }
+        // `revision` è già quella dei byte (`GridBytesProvider::open`).
         journal.validate()?;
         let revision_wit = tr::to_grid_revision(&revision);
         let journal = journal.to_text();

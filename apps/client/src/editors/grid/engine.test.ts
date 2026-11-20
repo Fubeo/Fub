@@ -89,6 +89,23 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  it("il campo della cella aperta nasce alla prima cella aperta, non con la cartella", async () => {
+    const { engine, host, viewport } = await mounted();
+    const field = host.querySelector<HTMLElement>(".grid-cell-editor")!;
+    // La cartella si guarda: un solo CodeMirror, quello della barra della formula.
+    expect(engine.cellEditorMounted()).toBe(false);
+    expect(field.querySelector(".cm-editor")).toBeNull();
+    expect(host.querySelectorAll(".cm-editor")).toHaveLength(1);
+    engine.setTheme("dark");
+    engine.setReadOnly(true);
+    engine.setReadOnly(false);
+    expect(engine.cellEditorMounted()).toBe(false);
+    typeInActiveCell(host, viewport, "42");
+    expect(engine.cellEditorMounted()).toBe(true);
+    expect(findTextEditorOrThrow(field).state.doc.toString()).toBe("42");
+    engine.destroy();
+  });
+
   it("le righe restano: uno scorrimento le aggiunge e le toglie solo ai bordi, nel suo gestore", async () => {
     const { engine, host, viewport } = await mounted(bytesHost({ rows: 400, cells: { "0,0": "1", "10,1": "x" } }));
     const rows = () => new Map([...host.querySelectorAll<HTMLElement>(".grid-rows > .grid-row")].map((row) => [Number(row.dataset.row), row]));
@@ -509,7 +526,9 @@ describe("GridEngine", () => {
   });
 
   it("barra delle formule ed editor di cella sono campi, non documenti", async () => {
-    const { engine, host } = await mounted();
+    const { engine, host, viewport } = await mounted();
+    // Il campo della cella nasce con la prima cella aperta.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true }));
     for (const selector of [".grid-formula-editor", ".grid-cell-editor"]) {
       const field = host.querySelector<HTMLElement>(selector)!;
       expect(field.querySelector(".cm-lineNumbers")).toBeNull();
