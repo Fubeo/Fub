@@ -43,30 +43,14 @@ quando giravano sul thread principale; due corsie non si aspettano, così il
 controllo lungo del correttore non ferma la ricerca. Due domande mandate nello
 stesso istante possono entrare in un ordine qualsiasi.
 
-Anche `render_view` gira fuori dal thread principale, nella corsia delle viste,
-che c'è sempre e non conta fra le 16. Un salvataggio invecchia una ventina di
-view e la shell le ridisegna nello stesso giro: ognuna costa pochi
-millisecondi, ma in fila sul thread principale fermavano la finestra per un
-centinaio di millisecondi. I disegni restano in fila fra loro; la shell tiene
-comunque l'ultima risposta di ogni pannello (`Race`), non la prima arrivata.
-
-Anche le porte che la shell chiama mentre si lavora e che chiamano un
-provider, scrivono un file o aspettano un prestito del workspace non sono
-comandi sincroni, perché Tauri li eseguirebbe sul thread principale. Ognuna ha
-una corsia fissa, fuori dalle 16, che tiene l'ordine d'arrivo come lo teneva
-il thread principale:
-
-| Corsia | Porte | Perché in fila |
-|---|---|---|
-| `viste` | `render_view`, `view_action` | un disegno chiesto dopo un'azione la vede, e le risposte escono nell'ordine in cui lo stato del provider è cambiato |
-| `contesto` | `set_active_context` | la shell pubblica senza aspettare la risposta di prima: l'ultima pubblicazione resta l'ultima |
-| `comandi` | `invoke_command` | due comandi mandati di fila si applicano in quell'ordine; un comando lungo (una pagina da catturare) non ferma contesto, viste e stato |
-| `stato` | `view_state`, `set_view_state` | la seconda scrittura di una chiave non è coperta dalla prima, e una lettura chiesta dopo una scrittura la vede |
-| `griglia` | `list_grid_surfaces` e le porte sui byte | [le porte della griglia](grid-ipc.md) |
-
-`components_map` è una lettura senza un ordine da tenere: gira fuori dal
-thread principale senza corsia. Il presidio è
-`crates/fub-app/tests/lean_ipc.rs`.
+Anche `render_view`, `view_action`, `set_active_context`, `invoke_command`,
+`view_state` e `set_view_state` girano fuori dal thread principale, in corsie
+fisse fuori dalle 16 che tengono l'ordine d'arrivo: `viste` (un disegno chiesto
+dopo un'azione la vede), `contesto` (l'ultima pubblicazione resta l'ultima),
+`comandi` e `stato` (due comandi, o due scritture di una chiave, si applicano
+nell'ordine in cui partono). Sul thread principale i venti disegni dopo un
+salvataggio fermavano la finestra per 100 ms; la shell tiene l'ultima risposta
+di ogni pannello (`Race`). Presidio: `crates/fub-app/tests/lean_ipc.rs`.
 
 ## La griglia
 
@@ -76,7 +60,6 @@ I fogli di calcolo usano la famiglia Grid, con porte strettamente tipate:
 `grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
 `grid_bytes_command`, `close_grid_bytes`), in una corsia sua. Sessione,
 finestra, comandi, corsia e limiti: [le porte della griglia](grid-ipc.md).
-
 
 ## Disegno
 
