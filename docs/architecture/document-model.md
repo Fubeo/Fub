@@ -346,6 +346,16 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   rifiuto vero (sessione cambiata, salvataggio fallito di una finestra che
   risponde) tiene la finestra aperta come prima, e la guardia di chiusura
   decide poi sul buffer rimasto come per ogni altro.
+  Il silenzio vuol dire soltanto «non risponde». Una finestra che ha testo
+  suo che la sessione non ha (un conflitto, la sorgente sostituita, oppure
+  il testo di «tengo il mio» in attesa della fotografia nuova) risponde al
+  congelamento di no, con la ragione (`freeze-refused`,
+  `DocumentWindowRefused`): è un rifiuto vero, la finestra resta aperta col
+  suo testo. Può tacere ed essere distrutta solo una finestra che non ha
+  ancora ricevuto nessuna fotografia, e quindi non ha mostrato né scritto
+  niente, o una davvero muta. Una conferma (o un rifiuto) che arriva dopo il
+  tempo limite ma prima della distruzione vale ancora: la coda svuotata
+  chiude la finestra come sempre, senza avviso; il rifiuto la tiene aperta.
 
 ## Invarianti
 

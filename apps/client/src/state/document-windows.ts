@@ -2,7 +2,7 @@ import { api } from "../host/ipc";
 import { activeDoc } from "./layout";
 import { state } from "./store";
 import { documentSessions, type DocumentSession } from "./document-session";
-import { attachRemoteSurface, DocumentWindowSilent, DocumentWindowUnsupported, FREEZE_WAIT_MS, type RemoteSurfaceHandle } from "./document-bridge";
+import { attachRemoteSurface, DocumentWindowRefused, DocumentWindowSilent, DocumentWindowUnsupported, FREEZE_WAIT_MS, type RemoteSurfaceHandle } from "./document-bridge";
 import { showsFileBytes, textProfileFor } from "./document-controller";
 import { pageName } from "../rules/mirrored";
 import { notify } from "../ui/notify";
@@ -258,8 +258,23 @@ async function freezeOrHung(entry: WindowEntry): Promise<"frozen" | "hung"> {
 }
 /// La finestra muta si distrugge **prima** di salvare: da lì non arriva più
 /// niente, e il salvataggio dalla principale prende anche le battute in volo
-/// arrivate fino all'ultimo.
+/// arrivate fino all'ultimo. Una risposta arrivata dopo il tempo limite, ma
+/// prima della distruzione, vale ancora: la coda svuotata chiude la finestra
+/// come sempre, senza avviso; un rifiuto la tiene aperta.
 async function abandonHung(entry: WindowEntry): Promise<void> {
+  const late = entry.closed ? null : entry.handle.lateAnswer();
+  if (late?.kind === "refused") throw new DocumentWindowRefused(late.reason);
+  if (late?.kind === "drained") {
+    if (ownerGone(entry)) {
+      await nativeClose(entry);
+      notify(t("windows.closed_gone", { doc: pageName(docOf(entry)) }), "info");
+      return;
+    }
+    if (!sameOwner(entry)) throw new Error(t("windows.error.changed_draining"));
+    if (!await saveConfirmed(entry)) throw new Error(t("windows.error.save_unconfirmed_doc", { doc: docOf(entry) }));
+    await nativeClose(entry);
+    return;
+  }
   if (!entry.closed) {
     try {
       await destroyNative(entry);
@@ -349,19 +364,21 @@ export async function drainDocumentWindows(): Promise<boolean> {
   let drained = false;
   try {
     const barriers = await Promise.allSettled(entries.map(freezeOrHung));
-    const rejected = barriers.find((barrier): barrier is PromiseRejectedResult => barrier.status === "rejected");
-    if (rejected) throw rejected.reason;
     // Una finestra muta oltre il tempo limite si lascia dopo le altre, senza
-    // pretendere il salvataggio confermato: lo dice l'avviso.
-    const hung = entries.filter((_entry, index) => {
-      const barrier = barriers[index];
-      return barrier.status === "fulfilled" && barrier.value === "hung";
+    // pretendere il salvataggio confermato: lo dice l'avviso. La finestra di
+    // una nota che non c'è più non ha niente da salvare; si guarda adesso:
+    // dopo il rilascio anche la sessione salvata si chiude.
+    const hung: WindowEntry[] = [];
+    const frozen: WindowEntry[] = [];
+    const gone: WindowEntry[] = [];
+    const live: WindowEntry[] = [];
+    barriers.forEach((barrier, index) => {
+      if (barrier.status === "rejected") throw barrier.reason;
+      const entry = entries[index];
+      if (barrier.value === "hung") { hung.push(entry); return; }
+      frozen.push(entry);
+      (ownerGone(entry) ? gone : live).push(entry);
     });
-    const frozen = entries.filter((entry) => !hung.includes(entry));
-    // La finestra di una nota che non c'è più non ha niente da salvare. Si
-    // guarda adesso: dopo il rilascio anche la sessione salvata si chiude.
-    const gone = frozen.filter(ownerGone);
-    const live = frozen.filter((entry) => !gone.includes(entry));
     const saved = new Set<DocumentSession>();
     for (const entry of live) {
       if (saved.has(entry.owner)) continue;

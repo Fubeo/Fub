@@ -34,6 +34,7 @@ vi.mock("./document-bridge", () => ({
   attachRemoteSurface: fixture.attach,
   DocumentWindowUnsupported: class extends Error {},
   DocumentWindowSilent: class extends Error {},
+  DocumentWindowRefused: class extends Error { constructor(readonly reason: string) { super(reason); } },
   FREEZE_WAIT_MS: 5000,
 }));
 vi.mock("./document-controller", () => ({
@@ -51,6 +52,7 @@ let dispose = vi.fn(async () => {});
 let freeze = vi.fn(async () => {});
 let thaw = vi.fn();
 let ownerClosed = (): boolean => false;
+let lateAnswer = (): { kind: "drained" } | { kind: "refused"; reason: string } | null => null;
 
 async function nextTurn(): Promise<void> {
   for (let n = 0; n < 8; n++) await Promise.resolve();
@@ -74,9 +76,10 @@ describe("native document-window close barrier", () => {
     thaw = vi.fn();
     dispose = vi.fn(async () => {});
     ownerClosed = () => false;
+    lateAnswer = () => null;
     fixture.attach.mockReset().mockImplementation(async (doc: string, vault: string) => ({
       request: { surface: "document", channel: `channel-${serial}`, document: doc, vault, session: `session-${serial}`, surfaceId: `surface-${serial}`, profile: "markdown" },
-      handle: { surfaceId: `surface-${serial}`, channel: `channel-${serial}`, freeze, thaw, dispose, ownerClosed: () => ownerClosed() },
+      handle: { surfaceId: `surface-${serial}`, channel: `channel-${serial}`, freeze, thaw, dispose, ownerClosed: () => ownerClosed(), lateAnswer: () => lateAnswer() },
     }));
     fixture.api.onDocumentWindowClosed.mockReset().mockImplementation(async (handler: (event: WindowEvent) => void) => {
       events.destroyed = handler;
@@ -396,6 +399,43 @@ describe("native document-window close barrier", () => {
       expect(pendingDocumentWindows()).toContain(label);
       expect(thaw).toHaveBeenCalledOnce();
       // Pulizia: la finestra si chiude davvero.
+      destroyOnClose();
+      await expect(drainDocumentWindows()).resolves.toBe(true);
+    });
+
+    // La conferma arrivata subito dopo il terzo tempo scaduto, prima della
+    // distruzione: la coda è vuota davvero, la chiusura è quella di sempre.
+    it("una conferma arrivata dopo il tempo limite chiude normalmente, senza avviso", async () => {
+      await openCurrentInNewWindow();
+      freeze.mockImplementation(silentFreeze);
+      lateAnswer = () => ({ kind: "drained" });
+      destroyOnClose();
+      const drained = drainDocumentWindows();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await expect(drained).resolves.toBe(true);
+      expect(fixture.sessions.flush).toHaveBeenCalled();
+      expect(fixture.sessions.flushDraft).not.toHaveBeenCalled();
+      expect(fixture.api.closeDocumentWindow).toHaveBeenCalledTimes(1);
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(fixture.notify).not.toHaveBeenCalledWith("windows.hung_closed", "guasto");
+      expect(fixture.notify).not.toHaveBeenCalledWith("windows.hung_closed_unsaved", "guasto");
+    });
+
+    // Un rifiuto arrivato dopo il tempo limite resta un rifiuto: la finestra
+    // ha testo suo, non si distrugge.
+    it("un rifiuto arrivato dopo il tempo limite tiene la finestra aperta", async () => {
+      await openCurrentInNewWindow();
+      freeze.mockImplementation(silentFreeze);
+      lateAnswer = () => ({ kind: "refused", reason: "Conflitto overlap: modifiche locali ancora nella finestra" });
+      const closing = closeDocumentWindowByLabel(label);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await expect(closing).resolves.toBe(false);
+      expect(fixture.api.closeDocumentWindow).not.toHaveBeenCalled();
+      expect(dispose).not.toHaveBeenCalled();
+      expect(pendingDocumentWindows()).toContain(label);
+      // Pulizia: la finestra si chiude davvero.
+      freeze.mockImplementation(async () => {});
+      lateAnswer = () => null;
       destroyOnClose();
       await expect(drainDocumentWindows()).resolves.toBe(true);
     });
