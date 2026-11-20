@@ -277,7 +277,9 @@ non chiede più il suo frame callback: l'intervallo resta 0 e GTK ripiega su
 anche su uno schermo a 180 Hz, con il rAF del vblank emulato a 180: i due
 `wl_callback.done` per commit delle misure del 17 novembre sono il frame
 callback di EGL e la sua `wl_display.sync`, letti insieme al commit
-successivo.
+successivo. Non frenano: GTK3 mette lo swap interval a 0 e egl-wayland2
+allora non li aspetta
+([La doppia attesa di EGL](../misure/2026-11-20-linux-egl-doppia-attesa.md)).
 
 `src/orologio.rs` scrive quell'intervallo al posto del frame callback: su
 ogni finestra, dopo ogni disegno (`after-paint`), se il campo è ancora 0 ci
