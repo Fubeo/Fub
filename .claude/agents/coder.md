@@ -36,10 +36,16 @@ expected.
   - mechanical parts: reading a long red log down to the errors, rerunning a
     test that timed out under load, a probe or screenshots of the real app or
     the bench, a wide search, regenerating a generated file;
-  - one function of moderate complexity with its unit tests, once you have
-    settled the design (signature, owner, rule and failing cases), even when
-    it takes a long session. Never a contract, an on-disk format, security
-    or concurrency.
+  - a fairly demanding but plain piece of code: one function with its unit
+    tests, or a repetitive change across a few files. You choose it and
+    settle the design first (signature, owner, rule, failing cases), so the
+    helper needs no invention and no long reasoning. You must know exactly
+    what it is doing, be sure it can finish it, and be able to check it
+    line by line. Never a contract, an on-disk format, security or
+    concurrency.
+
+  A helper never runs a long session. Split a bigger job into short pieces,
+  or write it yourself.
 
   They never start agents, never commit, push or touch git, and never edit a
   file outside the paths you give them. Brief each one like a peer: the absolute path of your

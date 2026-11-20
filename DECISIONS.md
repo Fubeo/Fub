@@ -19,12 +19,12 @@ dubbio su una scelta tecnica si decide, non si chiede.
 - l'ordine dei task pronti e quanti agenti far lavorare insieme. Dal
   2026-11-14 lavorano al massimo cinque agenti Opus con ragionamento medio,
   revisioni comprese (regola dell'utente, che la cambia solo lui; prima erano
-  due coder dal 2026-11-07 e uno dal 2026-11-04). Dal 2026-11-20 i coder
-  Haiku con ragionamento max prendono anche i task medi, come funzioni non
-  troppo complesse anche in una sessione lunga (regola dell'utente). Restano
-  a Opus le scelte di contratto, formato su disco, sicurezza o concorrenza, i
-  task grafici con prototipo, quelli su più crate e le diagnosi senza causa
-  nota. I controlli pesanti passano dalla coda della macchina (vedi
+  due coder dal 2026-11-07 e uno dal 2026-11-04). Un task particolarmente
+  semplice, e solo quello, può andare a un coder Haiku con ragionamento
+  xhigh, mai in una sessione lunga. Dal 2026-11-20 gli aiutanti Haiku di un
+  coder Opus possono fare anche pezzi di codice abbastanza impegnativi ma
+  senza invenzione, scelti e disegnati dal coder Opus, che li tiene d'occhio
+  riga per riga (regola dell'utente). Mai una sessione lunga per un Haiku. I controlli pesanti passano dalla coda della macchina (vedi
   `CLAUDE_DEVICE.md`);
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
