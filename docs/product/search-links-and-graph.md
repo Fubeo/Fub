@@ -18,9 +18,8 @@ per foglia. Le foglie testo, regex e task vivono nell'indice full-text;
 proprietà, tag, cartella, path, estensione e link usano i metadati e il grafo
 del kernel. Testo significa termini in AND o frase esatta, con tolleranza
 esatta o refusi che restringono invece di allargare; `case_sensitive` e le
-regex rileggono il testo memorizzato (pattern fino a 256 byte) solo delle note
-che l'indice dà con le parole intere della domanda: oltre 2048 note o 8 MiB si
-rifiutano con un messaggio, mai a metà. La stessa espressione vale per ricerca globale, viste,
+regex rileggono solo le note che l'indice dà con le parole intere della domanda,
+al più 2048 e 8 MiB di testo. La stessa espressione vale per ricerca globale, viste,
 query salvate e ricerca incorporata: il pianificatore instrada ogni foglia al
 proprietario e ricompone l'AND/OR senza divergenze.
 
