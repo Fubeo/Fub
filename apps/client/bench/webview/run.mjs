@@ -36,7 +36,7 @@ import { cpus, hostname, loadavg, release, tmpdir, totalmem, type as osType } fr
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
-import { BIG_SHEET, GESTURE_FOLDER, INK_BOARD, SWITCH_SHEET, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
+import { BIG_PDF, BIG_SHEET, GESTURE_FOLDER, INK_BOARD, SWITCH_SHEET, INK_STROKES, SHEET_BOARD, SHEET_CARDS, noteMark, noteName, writeFixtures } from "./fixtures.mjs";
 import { GC_ENV, buildCollector, collect, cpuPercent, cpuTicks, descendants, pendenza, quiet, settled } from "./memory.mjs";
 import { displayRate, engineCap, hasPeriodLimits, resolveLimit } from "./refresh.mjs";
 import { IDLE_RAF_SCRIPT, RAF_COUNTER_SCRIPT, RECORDER_SCRIPT, RENDERER_SCRIPT, SWITCH_SCRIPT, TIMER_GAP_MS, blockedPerRepetition, medianMs, switchBlocked, frameStats, glLibraries, renderPath, webkitGpu } from "./frames.mjs";
@@ -53,7 +53,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "F1,F2,F3,F4,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "F1,F2,F3,F4,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 /// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
@@ -373,10 +373,31 @@ const S10_KEY_REPS = 20;
 const S10_SIDEBAR_REPS = 6;
 const S10_VIEW = ".pane.focus .grid-viewport";
 
-/// S10: lo scorrimento dalla pagina, come lo fa la rotella: `scrollTop` cambia
-/// in un fotogramma, l'evento `scroll` arriva al fotogramma dopo e la griglia
-/// disegna le righe che entrano. Torna `false` se il foglio non c'è.
-const S10_SCROLL_SCRIPT = `
+/// S11: il PDF di più pagine adattato alla larghezza. Lo scorrimento percorre
+/// la pagina che si vede, giù e su in `S11_SCROLL_STEPS` fotogrammi per verso
+/// (il passo lo dà l'altezza che scorre: il visore mostra una pagina alla
+/// volta); poi `S11_PAGE_REPS` pagine sfogliate col pulsante «Pagina
+/// successiva» e altrettante indietro, ognuna una resa nuova del motore.
+const S11_SCROLL_STEPS = 60;
+const S11_PAGE_REPS = 12;
+/// Sotto quest'altezza da scorrere, in px, la pagina adattata quasi non
+/// scorre (una finestra molto alta) e il referto lo dice.
+const S11_MIN_RANGE_PX = 200;
+const S11_VIEW = ".pane.focus .media-pdf-page";
+const S11_CANVAS = `${S11_VIEW} canvas`;
+/// I pulsanti della barra del visore (`pdf-view.ts`): il primo gruppo è
+/// «Pagina precedente» e «Pagina successiva»; quello con tre interruttori è
+/// «Adatta alla larghezza», «Due pagine» e «Colori scuri», in quest'ordine.
+/// Per posto e non per nome: il nome è nella lingua dell'interfaccia.
+const S11_NEXT = ".pane.focus .media-pdf-toolbar > .media-pdf-group:first-child > button:nth-child(2)";
+const S11_PREVIOUS = ".pane.focus .media-pdf-toolbar > .media-pdf-group:first-child > button:nth-child(1)";
+const S11_FIT = ".pane.focus .media-pdf-toolbar > .media-pdf-group:has(> button[aria-pressed]:nth-child(3)) > button:first-child";
+
+/// Lo scorrimento dalla pagina, come lo fa la rotella: `scrollTop` cambia in
+/// un fotogramma, l'evento `scroll` arriva al fotogramma dopo e la vista
+/// disegna ciò che entra (le righe del foglio in S10, la pagina del PDF in
+/// S11). Torna `false` se la vista non c'è.
+const SCROLL_SCRIPT = `
   const [steps, px, view] = arguments;
   const done = arguments[arguments.length - 1];
   const viewport = document.querySelector(view);
@@ -774,6 +795,34 @@ async function gesture(session, reps, act) {
   };
 }
 
+/// Lo scorrimento misurato di S10 e S11 (`SCROLL_SCRIPT`), col registratore
+/// già montato: un giro giù e su a vuoto, perché la prima volta la vista
+/// chiede all'host ciò che le manca e la misura è dello scorrimento, poi lo
+/// stesso giro registrato. Fotogrammi, thread principale occupato (i buchi
+/// fra due giri del timer) e CPU; `null` se la vista non c'è.
+async function measuredScroll(session, steps, px, view) {
+  if (!(await session.executeAsync(SCROLL_SCRIPT, [steps, px, view]))) return null;
+  await pause(GESTURE_WAIT_MS);
+  await session.execute("window.__fubRec.start(); window.__fubRec.mark(); return true;");
+  const before = cpuTicks(driverPid);
+  const since = performance.now();
+  await session.executeAsync(SCROLL_SCRIPT, [steps, px, view]);
+  const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
+  const recorded = await session.execute("return window.__fubRec.stop();");
+  const busy = recorded.gaps.map(([, gap]) => gap).sort((a, b) => a - b);
+  const tenth = (x) => Math.round(x * 10) / 10;
+  return {
+    frames: frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs),
+    busy: {
+      count: busy.length,
+      p95: busy.length ? tenth(busy[Math.min(busy.length - 1, Math.floor(busy.length * 0.95))]) : 0,
+      max: busy.length ? tenth(busy.at(-1)) : 0,
+      totalMs: Math.round(busy.reduce((sum, gap) => sum + gap, 0)),
+    },
+    cpu,
+  };
+}
+
 const SCENARIOS = {
   /// Il rAF a vuoto: 5 s su una pagina ferma, la mediana confrontata col
   /// periodo dello schermo. Decide il tetto del motore per gli scenari dopo.
@@ -1084,27 +1133,8 @@ const SCENARIOS = {
     await session.execute(RECORDER_SCRIPT);
     // Una volta giù e su fuori dalla misura: la prima volta il foglio chiede
     // le finestre di righe all'host, e la misura è dello scorrimento.
-    if (!(await session.executeAsync(S10_SCROLL_SCRIPT, [S10_SCROLL_STEPS, S10_SCROLL_PX, S10_VIEW]))) throw new Error("il foglio grande non ha la griglia");
-    await pause(GESTURE_WAIT_MS);
-    await session.execute("window.__fubRec.start(); window.__fubRec.mark(); return true;");
-    const before = cpuTicks(driverPid);
-    const since = performance.now();
-    await session.executeAsync(S10_SCROLL_SCRIPT, [S10_SCROLL_STEPS, S10_SCROLL_PX, S10_VIEW]);
-    const cpu = cpuPercent(before, cpuTicks(driverPid), performance.now() - since);
-    const recorded = await session.execute("return window.__fubRec.stop();");
-    const busy = recorded.gaps.map(([, gap]) => gap).sort((a, b) => a - b);
-    const tenth = (x) => Math.round(x * 10) / 10;
-    const scroll = {
-      frames: frameStats(recorded.frames, cap?.effectiveMs ?? display.periodMs),
-      // Il thread principale occupato: i buchi fra due giri del timer.
-      busy: {
-        count: busy.length,
-        p95: busy.length ? tenth(busy[Math.min(busy.length - 1, Math.floor(busy.length * 0.95))]) : 0,
-        max: busy.length ? tenth(busy.at(-1)) : 0,
-        totalMs: Math.round(busy.reduce((sum, gap) => sum + gap, 0)),
-      },
-      cpu,
-    };
+    const scroll = await measuredScroll(session, S10_SCROLL_STEPS, S10_SCROLL_PX, S10_VIEW);
+    if (!scroll) throw new Error("il foglio grande non ha la griglia");
     // Le frecce: un clic su una cella, poi giù e su a turno.
     await session.click(`${S10_VIEW} .grid-cell[data-row="4"][data-column="3"]`);
     await pause(GESTURE_WAIT_MS);
@@ -1131,10 +1161,58 @@ const SCENARIOS = {
       },
       samples: (scroll.frames?.count ?? 0) + S10_KEY_REPS + S10_SIDEBAR_REPS,
       notes: [
-        `scorrimento: fotogrammi ${scroll.frames?.median ?? "—"}/${scroll.frames?.p95 ?? "—"}/${scroll.frames?.max ?? "—"} ms (mediana/p95/max), persi ${scroll.frames?.lost ?? "—"}; thread occupato p95 ${scroll.busy.p95} ms, max ${scroll.busy.max} ms, in tutto ${scroll.busy.totalMs} ms; CPU web ${cpu?.webview ?? "—"} %`,
+        `scorrimento: fotogrammi ${scroll.frames?.median ?? "—"}/${scroll.frames?.p95 ?? "—"}/${scroll.frames?.max ?? "—"} ms (mediana/p95/max), persi ${scroll.frames?.lost ?? "—"}; thread occupato p95 ${scroll.busy.p95} ms, max ${scroll.busy.max} ms, in tutto ${scroll.busy.totalMs} ms; CPU web ${scroll.cpu?.webview ?? "—"} %`,
         `frecce: bloccato ${keys.mainBlocked.perRep.join("/")} ms, fotogrammi ${keys.frames?.median ?? "—"}/${keys.frames?.p90 ?? "—"} ms`,
         `barra laterale: bloccato ${bar.mainBlocked.perRep.join("/")} ms, fotogrammi ${bar.frames?.median ?? "—"}/${bar.frames?.p90 ?? "—"} ms`,
       ],
+    };
+  },
+  /// Il PDF di quaranta pagine adattato alla larghezza: lo scorrimento della
+  /// pagina e le pagine sfogliate. Ogni pagina nuova è una resa del motore
+  /// (pdf.js) sulla tela, che non deve fermare il thread principale.
+  async S11(session) {
+    // Il PDF non ha un testo da aspettare: si aspetta la tela della pagina.
+    await openByName(session, BIG_PDF.name, "");
+    await session.waitFor("const canvas = document.querySelector(arguments[0]); return !!canvas && canvas.width > 0;", [S11_CANVAS], 60_000);
+    await session.click(S11_FIT);
+    await session.waitFor("return document.querySelector(arguments[0])?.getAttribute('aria-pressed') === 'true';", [S11_FIT], 15_000);
+    await pause(2_000);
+    const range = await session.execute("const view = document.querySelector(arguments[0]); return view ? view.scrollHeight - view.clientHeight : 0;", [S11_VIEW]);
+    // Il passo che porta in fondo alla pagina in `S11_SCROLL_STEPS` fotogrammi.
+    const px = Math.max(1, Math.ceil(range / S11_SCROLL_STEPS));
+    await session.execute(RECORDER_SCRIPT);
+    const scroll = await measuredScroll(session, S11_SCROLL_STEPS, px, S11_VIEW);
+    if (!scroll) throw new Error("il PDF non ha la pagina");
+    // Le pagine: una avanti e una indietro fuori dalla misura (il motore
+    // carica i caratteri alla prima resa), poi avanti e indietro misurate.
+    await session.click(S11_NEXT);
+    await pause(GESTURE_WAIT_MS);
+    await session.click(S11_PREVIOUS);
+    await pause(GESTURE_WAIT_MS);
+    let turned = 0;
+    const pages = await gesture(session, S11_PAGE_REPS * 2, async () => {
+      await session.click(turned < S11_PAGE_REPS ? S11_NEXT : S11_PREVIOUS);
+      turned += 1;
+    });
+    // La riga di stato dice «Pagina n di N» nella lingua dell'interfaccia:
+    // se ne legge solo il primo numero, che dopo il ritorno è di nuovo 1.
+    const back = await session.execute("const status = document.querySelector('.pane.focus .media-pdf [role=status]'); return Number(/\\d+/.exec(status?.textContent ?? '')?.[0] ?? NaN);");
+    const notes = [
+      `scorrimento: ${range} px di pagina in ${S11_SCROLL_STEPS} passi da ${px} px per verso; fotogrammi ${scroll.frames?.median ?? "—"}/${scroll.frames?.p95 ?? "—"}/${scroll.frames?.max ?? "—"} ms (mediana/p95/max), persi ${scroll.frames?.lost ?? "—"}; thread occupato p95 ${scroll.busy.p95} ms, max ${scroll.busy.max} ms, in tutto ${scroll.busy.totalMs} ms; CPU web ${scroll.cpu?.webview ?? "—"} %`,
+      `pagine: bloccato ${pages.mainBlocked.perRep.join("/")} ms, fotogrammi ${pages.frames?.median ?? "—"}/${pages.frames?.p90 ?? "—"} ms; dopo il ritorno la pagina ${Number.isFinite(back) ? back : "—"}`,
+    ];
+    if (range < S11_MIN_RANGE_PX) notes.push(`la pagina adattata scorre solo ${range} px: la finestra è più alta della pagina, lo scorrimento misura poco`);
+    if (back !== 1) notes.push("le pagine sfogliate non sono tornate alla prima: i clic su «Pagina successiva» e «Pagina precedente» non hanno girato tutte le pagine");
+    return {
+      report: { scroll, pages, range, steps: S11_SCROLL_STEPS * 2, px, back },
+      values: {
+        "S11.scroll.frameGap.p95": scroll.frames?.p95 ?? null,
+        "S11.scroll.frameGap.max": scroll.frames?.max ?? null,
+        "S11.scroll.busy.p95": scroll.busy.p95,
+        "S11.pagina.mainBlocked": pages.mainBlocked.median,
+      },
+      samples: (scroll.frames?.count ?? 0) + S11_PAGE_REPS * 2,
+      notes,
     };
   },
   async S4(session) {
@@ -1906,7 +1984,7 @@ async function main() {
     // spostare F1 davanti a lui. F2
     // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
     // note che gli avvii dopo riaprono, e F4 dopo F3 per la stessa ragione.
-    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S10", "S4", "S5", "S7", "S8", "F3", "F4", "T1", "L1", "C1"].filter((id) => only.has(id));
+    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S10", "S11", "S4", "S5", "S7", "S8", "F3", "F4", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // R1 con la raccolta forzata ha un driver suo, con il gancio acceso
       // nell'ambiente; lo scenario dopo torna su un driver senza.
