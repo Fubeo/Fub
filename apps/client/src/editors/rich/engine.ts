@@ -103,6 +103,33 @@ const escapePassesThrough = new Plugin({
   },
 });
 
+/// Il cursore non resta mai fra le due metà di una coppia surrogata: un clic o
+/// una freccia non lo mettono lì, ma una posizione calcolata sì (#492). Da lì
+/// Invio spezzerebbe l'emoji in due surrogati soli, che nessun file può
+/// scrivere; il bordo torna indietro di uno, davanti al carattere intero.
+const wholeCharacters = new Plugin({
+  appendTransaction: (transactions, _old, state) => {
+    if (!transactions.some((tr) => tr.selectionSet || tr.docChanged)) return null;
+    const { selection } = state;
+    if (!(selection instanceof TextSelection)) return null;
+    const anchor = outsidePair(state.doc, selection.anchor);
+    const head = outsidePair(state.doc, selection.head);
+    if (anchor === selection.anchor && head === selection.head) return null;
+    return state.tr.setSelection(TextSelection.create(state.doc, anchor, head));
+  },
+});
+
+/// `pos`, o la posizione prima della coppia surrogata che `pos` taglia.
+function outsidePair(doc: PmNode, pos: number): number {
+  const $pos = doc.resolve(pos);
+  const offset = $pos.textOffset;
+  if (offset === 0) return pos;
+  const text = $pos.parent.child($pos.index()).text ?? "";
+  const before = text.charCodeAt(offset - 1);
+  const after = text.charCodeAt(offset);
+  return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff ? pos - 1 : pos;
+}
+
 /// Ciò che il motore sa del testo che ha ricevuto.
 export type Intake =
   | { readonly kind: "ok"; readonly readonly: ReadOnlyReason | null }
@@ -298,6 +325,7 @@ export class RichEngine {
   #plugins(): Plugin[] {
     const plugins: Plugin[] = [
       history({ depth: RICH_HISTORY_DEPTH }),
+      wholeCharacters,
       tableShapeGuard,
       fillTableKeys,
       cellSelectionPlugin,

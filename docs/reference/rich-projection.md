@@ -178,3 +178,11 @@ shell nei due versi, e `rich-closed.json` ne porta i blocchi chiusi
 raffica di modifiche e l'annulla di tutto, e `rich-annulla.json` (snapshot di
 `apps/client/src/editors/rich/undo.test.ts`) porta le proiezioni salvate per
 strada, che il codec salva in fila tornando al contenuto di partenza.
+
+La proiezione porta solo testo Unicode valido: serde rifiuta un surrogato
+UTF-16 senza la sua metà, e il salvataggio fallirebbe per intero. La shell
+non lascia il cursore fra le due metà di una coppia (una posizione calcolata
+torna davanti al carattere intero) e, scrivendo, sostituisce un surrogato
+rimasto solo con U+FFFD; `rich-surrogato.json` (snapshot di
+`apps/client/src/editors/rich/surrogates.test.ts`) è una proiezione così, che
+il codec salva sullo stesso file.

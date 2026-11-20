@@ -325,6 +325,59 @@ fn la_raffica_annullata_salva_il_file_di_partenza() {
     assert_eq!(save_chain(&start, &saves), base);
 }
 
+/// #492: un surrogato rimasto solo nel documento della shell
+/// (`rich-surrogato.json`, snapshot di
+/// `apps/client/src/editors/rich/surrogates.test.ts`) arriva come U+FFFD, e
+/// il salvataggio del `.docx` riesce senza perdere il testo intorno.
+#[test]
+fn un_surrogato_solo_non_fa_fallire_il_salvataggio() {
+    let path = fixture("rich-surrogato.json");
+    let raw = std::fs::read_to_string(&path).unwrap();
+    let value: Value = serde_json::from_str(&raw).unwrap();
+    let start = senza_perdite();
+    let base = open(Codec::Docx, &start).unwrap().projection;
+    assert_eq!(
+        value["base"].as_str(),
+        Some(base.as_str()),
+        "rich-surrogato.json è stantia: rigenerala con \
+         `npx vitest run src/editors/rich/surrogates.test.ts -u`"
+    );
+    let source = value["source"].as_str().expect("campo source").to_string();
+    let reopened = save_chain(&start, &[source]);
+    let projection = Projection::from_json(&reopened).unwrap();
+    let Block::Para(first) = &projection.blocks[0] else {
+        panic!("il primo blocco è un paragrafo");
+    };
+    let text: String = first
+        .c
+        .iter()
+        .filter_map(|inline| match inline {
+            Inline::Text { x, .. } => Some(x.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        text.starts_with("a\u{fffd}b"),
+        "il testo scritto resta, il surrogato solo è U+FFFD: {text:?}"
+    );
+    let Block::Para(was) = &Projection::from_json(&base).unwrap().blocks[0] else {
+        panic!("il primo blocco è un paragrafo");
+    };
+    let before: String = was
+        .c
+        .iter()
+        .filter_map(|inline| match inline {
+            Inline::Text { x, .. } => Some(x.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        text,
+        format!("a\u{fffd}b{before}"),
+        "nessun altro testo cambia"
+    );
+}
+
 fn plain(blocks: &[Block], index: usize) -> (Role, String, Vec<(String, Vec<Mark>)>) {
     let Block::Para(para) = &blocks[index] else {
         panic!("il blocco {index} è una tabella");
