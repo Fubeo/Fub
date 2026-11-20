@@ -710,6 +710,24 @@ function isInkKey(event: KeyboardEvent): boolean {
 /** I comandi della vista che cambiano lo zoom: valgono anche fuori dalla vista (IMP-040). */
 const VIEW_ZOOM_COMMANDS: ReadonlySet<string> = new Set(["canvas.zoom_in", "canvas.zoom_out", "canvas.zoom_reset", "canvas.fit"]);
 
+/** I comandi della storia: valgono anche col fuoco su un pulsante fuori dalla vista (IMP-6300). */
+const HISTORY_COMMANDS: ReadonlySet<string> = new Set(["canvas.undo", "canvas.redo"]);
+
+/** Il tasto Menu o Maiusc+F10: il menu del tasto destro dalla tastiera (IMP-6301). */
+function isMenuKey(event: KeyboardEvent): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  return (event.key === "ContextMenu" && !event.shiftKey) || (event.key === "F10" && event.shiftKey);
+}
+
+/** I campi senza testo: Ctrl+Z lì non ha niente da annullare, e va alla lavagna. */
+const NO_TEXT_INPUTS: ReadonlySet<string> = new Set(["button", "checkbox", "color", "radio", "range", "reset", "submit"]);
+
+/** Un campo che ha il suo annulla (il testo che si scrive): Ctrl+Z resta a lui. */
+function keepsItsUndo(target: EventTarget | null): boolean {
+  if (target instanceof HTMLInputElement) return !NO_TEXT_INPUTS.has(target.type);
+  return isTextTarget(target);
+}
+
 /** Un campo dove i tasti scrivono. */
 function isTextTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -2443,6 +2461,9 @@ export class CanvasEngine {
     // I tasti dello zoom valgono anche fuori dalla vista (la riga, la colonna, il
     // navigatore), come Ctrl+.: col fuoco su un pulsante dello zoom «+» zooma (IMP-040).
     this.#life.listen(this.#root, "keydown", (event) => this.#zoomKeydown(event));
+    // Ctrl+Z e Ctrl+Y anche dopo un clic su un pulsante della colonna, della riga
+    // o della barra della scelta (IMP-6300); in un campo vero restano del campo.
+    this.#life.listen(this.#root, "keydown", (event) => this.#historyKeydown(event));
     const signal = this.#abort.signal;
     // Le dita giù, prima dello strato della penna (T64): in cattura e prima di
     // lui, che si monta dopo. Un dito che lo strato prende per scrivere non
@@ -11845,6 +11866,14 @@ export class CanvasEngine {
       }
       return;
     }
+    // Il tasto Menu o Maiusc+F10 su una scheda o sulla lavagna: il menu del
+    // tasto destro, sulla scelta e accanto a lei (IMP-6301). In un campo resta
+    // quello del campo.
+    if (isMenuKey(event) && !isTextTarget(event.target)) {
+      event.preventDefault();
+      this.#keyboardMenu(event.target);
+      return;
+    }
     this.#recordPending();
     // Tab e Alt+frecce muovono il fuoco fra le schede (T61): non sono comandi,
     // non cambiano il file.
@@ -11901,6 +11930,39 @@ export class CanvasEngine {
     const writing = isTextTarget(event.target) || event.target instanceof HTMLSelectElement;
     const command = commandForKey(zoom, event, { writing, onBoard: false });
     if (command) this.#runKey(event, command);
+  }
+
+  /**
+   * Annulla e Ripeti fuori dalla vista (la colonna, la riga delle opzioni, la
+   * barra della scelta, il navigatore), come i tasti dello zoom (IMP-6300). Un
+   * campo che scrive tiene il suo Ctrl+Z; dentro la vista lo prende `#keydown`.
+   */
+  #historyKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented || event.isComposing || !this.#doc || this.#isSceneOversized()) return;
+    if (event.target instanceof Node && this.#viewport.contains(event.target)) return;
+    if (keepsItsUndo(event.target)) return;
+    const history = this.commands().filter((command) => HISTORY_COMMANDS.has(command.id));
+    const command = commandForKey(history, event, { writing: false, onBoard: false });
+    if (command) this.#runKey(event, command);
+  }
+
+  /**
+   * Il menu del tasto destro aperto dalla tastiera (IMP-6301): lo stesso
+   * `contextmenu` che il riquadro apre col tasto destro, ma senza un punto
+   * (`clientX`/`clientY` a zero, nessun tasto del mouse), così il menu va sulla
+   * scelta e si apre accanto a lei. Un `contextmenu` che il sistema mandasse
+   * subito dopo per lo stesso tasto non ne apre un secondo.
+   */
+  #keyboardMenu(target: EventTarget | null): void {
+    const from = target instanceof Element && this.#viewport.contains(target) ? target : this.#viewport;
+    const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, composed: true, button: 0 });
+    this.#ownMenu = menu;
+    try {
+      from.dispatchEvent(menu);
+    } finally {
+      this.#ownMenu = null;
+    }
+    this.#menuEchoUntil = performance.now() + MENU_ECHO_MS;
   }
 
   /**

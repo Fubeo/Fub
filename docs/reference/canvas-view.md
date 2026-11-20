@@ -392,7 +392,11 @@ scrive i nomi sulle schede.
   con Maiusc di 32 e con Alt+Maiusc di 1 (`canvas.nudge.<lato>.fine`).
 - **F6 e Maiusc+F6** (`EditorSurface.zone`): la lavagna, il navigatore se si
   vede, la colonna degli strumenti, la riga delle opzioni; poi la shell passa
-  all'ispettore. **Maiusc+F10** apre il menu della scheda scelta.
+  all'ispettore. **Maiusc+F10** o il tasto **Menu**, col fuoco sulla lavagna o
+  su una scheda, aprono il menu della scheda scelta accanto a lei: la tela
+  prende il tasto e manda al riquadro un `contextmenu` senza punto, lo stesso
+  del tasto destro letto come «dalla tastiera»; un `contextmenu` del sistema
+  subito dopo non ne apre un secondo. In un campo il tasto resta del campo.
 - **Il nome di una scheda** (`cardLabel`, l'`aria-label` del nodo) dice la
   specie e il nome come la testata del menu, il gruppo che la contiene più da
   vicino, le schede collegate con l'etichetta del filo e il colore: «Scheda di

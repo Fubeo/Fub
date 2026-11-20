@@ -490,6 +490,119 @@ describe("la scheda nuova lasciata vuota se ne va (IMP-043)", () => {
   });
 });
 
+describe("Ctrl+Z e Ctrl+Y dopo un clic su un pulsante della lavagna (IMP-6300)", () => {
+  /** La scheda `id` scelta col clic sulla sua testata e tolta con Canc, come nel collaudo. */
+  function removeWithDelete(host: HTMLElement, id: string, x: number): void {
+    pointer(handleOf(host, id), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, x, 10) });
+    pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, x, 10) });
+    key(document.activeElement, { key: "Delete" });
+  }
+
+  /** Il clic del mouse su un pulsante: il fuoco ci va, poi il `click`. */
+  function clickButton(button: HTMLElement): void {
+    button.focus();
+    button.click();
+    expect(document.activeElement).toBe(button);
+  }
+
+  it("dopo il clic su «Selezione» della colonna, Ctrl+Z riporta la scheda tolta e Ctrl+Y la toglie di nuovo", async () => {
+    const { engine, host } = mounted(BOARD);
+    removeWithDelete(host, "a", 20);
+    expect(nodeOf(engine, "a")).toBeUndefined();
+    const select = host.querySelector<HTMLButtonElement>('.canvas-rail [data-slot="select"]')!;
+    expect(select).not.toBeNull();
+    clickButton(select);
+    const undo = new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true });
+    select.dispatchEvent(undo);
+    expect(undo.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(nodeOf(engine, "a")).toBeDefined());
+    key(document.activeElement, { key: "y", ctrlKey: true });
+    await vi.waitFor(() => expect(nodeOf(engine, "a")).toBeUndefined());
+    key(document.activeElement, { key: "z", ctrlKey: true, shiftKey: false });
+    await vi.waitFor(() => expect(nodeOf(engine, "a")).toBeDefined());
+    engine.destroy();
+  });
+
+  it("dopo un pulsante della riga delle opzioni Ctrl+Z annulla lo stesso", async () => {
+    const { engine, host } = mounted(BOARD);
+    removeWithDelete(host, "b", 420);
+    const zoomOut = host.querySelector<HTMLButtonElement>('[data-command="canvas.zoom_out"]')!;
+    clickButton(zoomOut);
+    key(document.activeElement, { key: "z", ctrlKey: true });
+    await vi.waitFor(() => expect(nodeOf(engine, "b")).toBeDefined());
+    engine.destroy();
+  });
+
+  it("in un campo di testo fuori dalla vista (la ricerca) Ctrl+Z resta al campo: la lavagna non annulla", async () => {
+    const { engine, host } = mounted(BOARD);
+    removeWithDelete(host, "a", 20);
+    expect(engine.find()).toBe(true);
+    const field = host.querySelector<HTMLInputElement>(".canvas-find input")!;
+    expect(field).not.toBeNull();
+    expect(viewportOf(host).contains(field)).toBe(false);
+    const undo = new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true });
+    field.dispatchEvent(undo);
+    expect(undo.defaultPrevented).toBe(false);
+    await new Promise((done) => setTimeout(done, 20));
+    expect(nodeOf(engine, "a")).toBeUndefined();
+    engine.destroy();
+  });
+});
+
+describe("il menu della scheda dalla tastiera (IMP-6301)", () => {
+  /** I `contextmenu` che arrivano al riquadro, come li legge il pannello del documento. */
+  function menusOf(host: HTMLElement): MouseEvent[] {
+    const seen: MouseEvent[] = [];
+    host.addEventListener("contextmenu", (event) => seen.push(event));
+    return seen;
+  }
+
+  /** Il pannello legge un `contextmenu` senza tasto destro o senza punto come nato dalla tastiera (`fromKeyboard`). */
+  const byKeyboard = (event: MouseEvent) => event.button !== 2 || (event.clientX === 0 && event.clientY === 0);
+
+  for (const [name, init] of [
+    ["Maiusc+F10", { key: "F10", shiftKey: true }],
+    ["il tasto Menu", { key: "ContextMenu" }],
+  ] as const) {
+    it(`con una scheda scelta, ${name} apre il suo menu accanto a lei, una volta sola`, () => {
+      const { engine, host } = mounted(BOARD);
+      const seen = menusOf(host);
+      pointer(handleOf(host, "a"), "pointerdown", { pointerId: 1, button: 0, buttons: 1, ...screenOf(host, 20, 10) });
+      pointer(viewportOf(host), "pointerup", { pointerId: 1, button: 0, buttons: 0, ...screenOf(host, 20, 10) });
+      expect(engine.selection().nodes).toEqual(["a"]);
+      const press = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      document.activeElement!.dispatchEvent(press);
+      // Il tasto è preso: il sistema non manda un secondo menu.
+      expect(press.defaultPrevented).toBe(true);
+      expect(seen).toHaveLength(1);
+      expect(byKeyboard(seen[0]!)).toBe(true);
+      expect(seen[0]!.shiftKey).toBe(false);
+      // Dalla tastiera il menu è quello della scelta, accanto alla scheda.
+      const menu = engine.contextMenu(null)!;
+      expect(menu.target).toMatchObject({ kind: "node", ref: "a" });
+      expect(menu.at).toBeDefined();
+      expect(engine.selection().nodes).toEqual(["a"]);
+      // Un `contextmenu` del sistema subito dopo, per lo stesso tasto, non ne apre un altro.
+      const echo = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 5, clientY: 5 });
+      viewportOf(host).dispatchEvent(echo);
+      expect(seen).toHaveLength(1);
+      engine.destroy();
+    });
+  }
+
+  it("mentre si scrive in una scheda Maiusc+F10 resta al campo", () => {
+    const { engine, host } = mounted(ONE);
+    const seen = menusOf(host);
+    host.querySelector<HTMLButtonElement>('[data-canvas-action="add-text"]')!.click();
+    const field = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+    const press = new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true });
+    field.dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(false);
+    expect(seen).toHaveLength(0);
+    engine.destroy();
+  });
+});
+
 describe("i tasti della shell mentre si scrive in una scheda di testo (dubbia del collaudo)", () => {
   it("Ctrl+W sale alla shell, che chiude la linguetta come fuori dalla scrittura; la tela non ne fa un suo comando", () => {
     const { engine, host, changes } = mounted(ONE);
