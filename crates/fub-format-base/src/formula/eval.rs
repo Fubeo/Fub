@@ -375,6 +375,9 @@ fn eval_call(
     let Some((min, max)) = function_arity(name) else {
         return Err(EvalError::Name(format!("funzione sconosciuta `{name}`")));
     };
+    if name == "if" {
+        return eval_if(args, (min, max), ctx, budget, depth);
+    }
     // Valuta gli argomenti una volta sola, in ordine.
     let mut values = Vec::with_capacity(args.len());
     for arg in args {
@@ -392,6 +395,30 @@ fn eval_call(
         }
     }
     call_known(name, values, ctx)
+}
+
+/// `if(cond, allora, altrimenti)` è una forma speciale, come `&&`/`||`: si
+/// valuta la condizione (un suo errore si propaga) e poi **solo** il ramo
+/// scelto, così una guardia come `if(totale > 0, fatti / totale, 0)` non cade
+/// sul `#DIV/0!` del ramo scartato. È anche ciò che fa Obsidian Bases.
+fn eval_if(
+    args: &[FormulaAst],
+    (min, max): (usize, usize),
+    ctx: &RowContext,
+    budget: &mut EvalBudget,
+    depth: usize,
+) -> Result<BaseValue, EvalError> {
+    if args.len() < min || args.len() > max {
+        return Err(EvalError::Value(format!(
+            "`if` vuole {min}..{max} argomenti"
+        )));
+    }
+    let cond = eval(&args[0], ctx, budget, depth + 1)?;
+    if let BaseValue::Error(code) = cond {
+        return Ok(BaseValue::Error(code));
+    }
+    let chosen = if truthy(&cond) { &args[1] } else { &args[2] };
+    eval(chosen, ctx, budget, depth + 1)
 }
 
 /// Le tre funzioni che ricevono un'espressione invece di un valore, come in
