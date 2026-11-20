@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it } from "vitest";
+import { createFramePacer, resetScreenPeriod } from "../theme/frame-rate";
 import {
   DURATION,
   EXIT_SAFETY_MS,
   PRESS_SCALE,
+  MIN_SAMPLE_MS,
   SAMPLE_MS,
   SKELETON_DELAY_MS,
   SPRING_MAX_MS,
@@ -15,6 +17,7 @@ import {
   critical,
   invalidateSpringTokens,
   resolveSpring,
+  samplePeriodMs,
   sampleSpring,
   springFor,
   type SpringName,
@@ -133,6 +136,68 @@ describe("sampleSpring", () => {
     const unstable = sampleSpring({ stiffness: 1e9, damping: 1 }, { from: 0, to: 1 });
     expect(unstable.values.every(Number.isFinite)).toBe(true);
     expect(unstable.values[unstable.values.length - 1]).toBe(1);
+  });
+});
+
+/// Un pacer che vede `frames` fotogrammi di uno schermo a `hz`.
+function watchScreen(hz: number, frames = 20): void {
+  const pacer = createFramePacer(() => 0);
+  for (let k = 0; k < frames; k++) pacer.admit((k * 1000) / hz);
+}
+
+/// Il valore di una tabella a `time` ms, come lo interpola il browser.
+function between(values: readonly number[], period: number, time: number): number {
+  const position = Math.min(time / period, values.length - 1);
+  const index = Math.min(Math.floor(position), values.length - 2);
+  return values[index]! + (values[index + 1]! - values[index]!) * (position - index);
+}
+
+describe("il ritmo dei campioni", () => {
+  afterEach(() => resetScreenPeriod());
+
+  it("segue lo schermo, fra 60 e 240 Hz", () => {
+    expect(samplePeriodMs()).toBeCloseTo(SAMPLE_MS, 9);
+    watchScreen(180);
+    expect(samplePeriodMs()).toBeCloseTo(1000 / 180, 9);
+    resetScreenPeriod();
+    watchScreen(360);
+    expect(samplePeriodMs()).toBeCloseTo(MIN_SAMPLE_MS, 9);
+    resetScreenPeriod();
+    watchScreen(30);
+    expect(samplePeriodMs()).toBeCloseTo(SAMPLE_MS, 9);
+  });
+
+  it("a 180 Hz è la stessa traiettoria: un campione su tre è quello a 60 Hz", () => {
+    for (const name of NAMES) {
+      for (const travel of [{ from: 0, to: 1 }, { from: 300, to: 0, velocity: -1.5, precision: 0.05 }]) {
+        const slow = sampleSpring(SPRINGS[name], travel, SAMPLE_MS);
+        const fast = sampleSpring(SPRINGS[name], travel, 1000 / 180);
+        expect(fast.period).toBeCloseTo(1000 / 180, 9);
+        expect(fast.duration).toBeCloseTo((fast.values.length - 1) * fast.period, 9);
+        // L'assestamento cade nello stesso sessantesimo di secondo.
+        expect(Math.abs(fast.duration - slow.duration)).toBeLessThanOrEqual(SAMPLE_MS);
+        for (let k = 1; k < slow.values.length - 1 && 3 * k < fast.values.length - 1; k++) {
+          expect(fast.values[3 * k]).toBeCloseTo(slow.values[k]!, 9);
+        }
+      }
+    }
+  });
+
+  it("fra due fotogrammi chiave a 180 Hz la corsa resta sulla curva; a 60 ne usciva", () => {
+    // Lo scarto massimo fra la tabella interpolata dal browser e la curva vera
+    // (presa a 1440 Hz), su una corsa di 300 px della molla più rigida.
+    const travel = { from: 300, to: 0, precision: 0.05 };
+    const truth = sampleSpring(SPRINGS.snap, travel, 1000 / 1440);
+    const gap = (period: number): number => {
+      const table = sampleSpring(SPRINGS.snap, travel, period).values;
+      let worst = 0;
+      for (let k = 0; k < truth.values.length - 1; k++) {
+        worst = Math.max(worst, Math.abs(between(table, period, k * truth.period) - truth.values[k]!));
+      }
+      return worst;
+    };
+    expect(gap(SAMPLE_MS)).toBeGreaterThan(2);
+    expect(gap(1000 / 180)).toBeLessThan(gap(SAMPLE_MS) / 6);
   });
 });
 

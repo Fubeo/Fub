@@ -315,7 +315,7 @@ pub const APPEARANCE_MOTION: &str = "appearance.motion";
 /// Lo rispettano i loop di disegno della shell e, su macOS, la webview.
 pub const APPEARANCE_FRAME_RATE: &str = "appearance.frame-rate";
 /// I tetti offerti dal pannello, dal più alto.
-pub const FRAME_RATE_CAPS: [u32; 7] = [240, 165, 144, 120, 90, 60, 30];
+pub const FRAME_RATE_CAPS: [u32; 8] = [240, 180, 165, 144, 120, 90, 60, 30];
 /// Chi disegna le pagine della webview su Linux (WebKitGTK): `auto` lascia
 /// il percorso di WebKit e avvisa dei problemi noti, `gpu` lo stesso senza
 /// proposte, `cpu` chiede il disegno col processore

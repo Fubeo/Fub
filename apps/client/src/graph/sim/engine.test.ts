@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { IMPACTS, IMPACT_STRIDE, accumulateForces, collisions, impactCount } from "./forces";
-import { ANNEAL_ALPHA, DT, TIER_BUDGET_MS, TIER_HOLD_MS, baseTier, calculateTier, energy, step, type EngineState } from "./engine";
+import { ANNEAL_ALPHA, DT, TIER_HOLD_MS, baseTier, calculateTier, energy, step, type EngineState } from "./engine";
 import { build, QuadtreePool } from "./quadtree";
 import { PRESETS, organicConfig, createStructure, seedOf, type PhysicsConfig, type GraphData, type Structure } from "./types";
 
@@ -398,49 +398,40 @@ describe("motore — casi limite", () => {
 });
 
 describe("motore — livelli", () => {
-  const B = TIER_BUDGET_MS;
-
   it("base: n ≤ 400 → 1, ≤ 2000 → 2, oltre → 3", () => {
     expect(baseTier(400)).toBe(1);
     expect(baseTier(401)).toBe(2);
     expect(baseTier(2000)).toBe(2);
     expect(baseTier(2001)).toBe(3);
-    expect(calculateTier(100, 1, 16.7, B, 0)).toBe(1);
-    expect(calculateTier(2000, 2, 16.7, B, 0)).toBe(2);
-    expect(calculateTier(2001, 3, 16.7, B, 0)).toBe(3);
+    expect(calculateTier(100, 1, 1, 0)).toBe(1);
+    expect(calculateTier(2000, 2, 1, 0)).toBe(2);
+    expect(calculateTier(2001, 3, 1, 0)).toBe(3);
   });
 
   it("frame lenti scendono di un gradino, clampato a 3", () => {
-    expect(calculateTier(100, 1, 30, B, 0)).toBe(2);
-    expect(calculateTier(500, 2, 30, B, 0)).toBe(3);
-    expect(calculateTier(3000, 3, 100, B, 0)).toBe(3);
-    // 22 ms a 60 Hz: la soglia di sempre
-    expect(calculateTier(100, 1, 21, B, 0)).toBe(1);
-    expect(calculateTier(100, 1, 22, B, 0)).toBe(2);
+    expect(calculateTier(100, 1, 1.8, 0)).toBe(2);
+    expect(calculateTier(500, 2, 1.8, 0)).toBe(3);
+    expect(calculateTier(3000, 3, 3, 0)).toBe(3);
+    // la soglia è 1,3 budget: 22 ms a 60 Hz, 7,2 ms a 180 Hz
+    expect(calculateTier(100, 1, 1.29, 0)).toBe(1);
+    expect(calculateTier(100, 1, 1.31, 0)).toBe(2);
   });
 
   it("frame veloci non salgono mai sopra la base: il tier non dipende dal refresh", () => {
     // A 144 Hz i frame durano 7 ms: prima rimettevano la repulsione esatta
     // su duemila nodi, che rallentava, e il tier rimbalzava.
     for (const n of [100, 500, 2000, 3000]) {
-      expect(calculateTier(n, baseTier(n), 1000 / 144, 1000 / 144, 0)).toBe(baseTier(n));
-      expect(calculateTier(n, baseTier(n), 1000 / 240, 1000 / 240, 0)).toBe(baseTier(n));
+      expect(calculateTier(n, baseTier(n), 0.5, 0)).toBe(baseTier(n));
+      expect(calculateTier(n, baseTier(n), 1, 0)).toBe(baseTier(n));
     }
-    // e un periodo più corto di 60 Hz non stringe il budget
-    expect(calculateTier(100, 1, 12, 1000 / 144, 0)).toBe(1);
-  });
-
-  it("col tetto a 30 fps il budget è il suo periodo", () => {
-    expect(calculateTier(100, 1, 33.3, 1000 / 30, 0)).toBe(1);
-    expect(calculateTier(100, 1, 45, 1000 / 30, 0)).toBe(2);
   });
 
   it("risale solo coi frame nel budget e dopo l'attesa", () => {
-    expect(calculateTier(100, 2, 16.7, B, TIER_HOLD_MS - 1)).toBe(2);
-    expect(calculateTier(100, 2, 16.7, B, TIER_HOLD_MS)).toBe(1);
+    expect(calculateTier(100, 2, 1, TIER_HOLD_MS - 1)).toBe(2);
+    expect(calculateTier(100, 2, 1, TIER_HOLD_MS)).toBe(1);
     // fra le due soglie resta dov'è
-    expect(calculateTier(100, 2, 20, B, TIER_HOLD_MS)).toBe(2);
-    expect(calculateTier(100, 1, 20, B, TIER_HOLD_MS)).toBe(1);
+    expect(calculateTier(100, 2, 1.2, TIER_HOLD_MS)).toBe(2);
+    expect(calculateTier(100, 1, 1.2, TIER_HOLD_MS)).toBe(1);
   });
 });
 

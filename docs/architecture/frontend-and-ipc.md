@@ -319,7 +319,12 @@ pannelli) lo Scrittoio compone:
   `--bar-tray` della ricetta (ripiego `--sheet-2`); `appearance.bars`
   «marcate» mette `data-bars="marked"` sulla radice e il vassoio su `--sheet-2`;
 - `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
-  chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
+  chiave WAAPI di sola `transform` e `opacity`. Una molla si campiona al
+  ritmo dello schermo, da 60 a 240 Hz (`samplePeriodMs`: il periodo più
+  corto che un pacer di `theme/frame-rate.ts` ha visto, o che una sonda di
+  pochi fotogrammi misura alla prima animazione), sulla stessa traiettoria a
+  ogni ritmo; sopra i 60 Hz restano fotogrammi chiave solo dove la retta fra i
+  vicini si scosterebbe dalla curva più di mezzo pixel. Il livello `appearance.motion`
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato
   finale è lo stesso con e senza movimento. Nel livello calmo le molle non
   superano il bersaglio; ciò che entra o esce fa metà strada, con una molla
