@@ -26,6 +26,8 @@ export function codeOnly(text) {
   // e una `/` apre una regex (`if (x) /"/.test(s)`); dopo ogni altra `)` è una
   // divisione (`f(x) / 2`).
   let word = "";
+  // Se `word` è il nome di una proprietà (`obj.if`).
+  let property = false;
   const parens = [];
   const template = () => {
     // Da dopo il backtick (o la `}` di un segnaposto) fino al backtick o a `${`.
@@ -107,7 +109,7 @@ export function codeOnly(text) {
       previous = ")";
       word = pair;
     } else if (char === "(") {
-      parens.push(/^(?:if|while|for|with)$/.test(word));
+      parens.push(!property && /^(?:if|while|for|with)$/.test(word));
       index++;
       previous = "(";
       word = "(";
@@ -118,8 +120,11 @@ export function codeOnly(text) {
     } else {
       // Dopo `return`, `typeof` e simili una `/` apre una regex, dopo un nome
       // o una parentesi chiusa è una divisione.
+      // Una parola dopo `.` (o `?.`) è una proprietà, non una parola chiave:
+      // `q.while(a) / 2` e `o.return / 2` sono divisioni.
       const token = /[\w$]/.test(char) ? text.slice(index).match(/^[\w$]+/)[0] : char;
-      previous = /^(?:return|typeof|case|do|else|in|of|void|yield|await)$/.test(token) ? "(" : token.at(-1);
+      property = previous === "." && /[\w$]/.test(char);
+      previous = !property && /^(?:return|typeof|case|do|else|in|of|void|yield|await)$/.test(token) ? "(" : token.at(-1);
       index += token.length;
       word = token;
     }
@@ -146,6 +151,10 @@ export function selfTestCode() {
     ["una divisione dopo una chiamata", "y = f(x) / 2; z = \"/\";", "y = f(x) / 2; z = \" \";"],
     ["una divisione dopo ++", "j = i++ / 2; w = \"/\";", "j = i++ / 2; w = \" \";"],
     ["una divisione dopo --", "j = i-- / 2 / 3; w = '{';", "j = i-- / 2 / 3; w = ' ';"],
+    // La revisione #528: una parola chiave scritta come proprietà è un nome.
+    ["una divisione dopo il metodo if", "y = obj.if(x) / 2; z = \"/\";", "y = obj.if(x) / 2; z = \" \";"],
+    ["una divisione dopo il metodo while con ?.", "y = q?.while(a) / 2 / 3; z = '{';", "y = q?.while(a) / 2 / 3; z = ' ';"],
+    ["una divisione dopo la proprietà return", "y = o.return / 2 / 3; z = '{';", "y = o.return / 2 / 3; z = ' ';"],
   ];
   for (const [label, source, expected] of cases) {
     const actual = codeOnly(source);
