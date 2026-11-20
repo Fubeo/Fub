@@ -839,14 +839,15 @@ jobs:
     # runner senza scheda grafica i numeri non sono assoluti: la sezione `ci`
     # di `bench/webview/budgets.json` è una soglia di peggioramento.
     #
-    # Due macchine: R1 da sola durava 17 minuti dei 27 del banco (trenta giri
-    # di apertura e chiusura, ognuno con dieci secondi di quiete), e gli
-    # altri scenari insieme dieci. Ognuna compila l'app per conto suo: un
+    # Due macchine: R1 da sola dura circa 8 minuti (quindici giri di apertura
+    # e chiusura, ognuno con una quiete che finisce quando la memoria si
+    # ferma, al più 10 s; fino al 20 novembre 2026 trenta giri da un minuto
+    # l'uno ne facevano 40), e gli altri scenari insieme circa dieci. Ognuna compila l'app per conto suo: un
     # artefatto passato da un job all'altro metterebbe la compilazione in
     # fila davanti a entrambe. Una macchina sola per R1 è anche una misura
     # della memoria senza altri scenari prima.
     #
-    # Due compilazioni di release e 27 minuti: come i banchi, non su una PR in
+    # Due compilazioni di release e circa 20 minuti: come i banchi, non su una PR in
     # bozza, e su una PR pronta soltanto se tocca ciò che finisce nell'app
     # (`webview` di `cosa cambia`). Su `main` gira sempre, e il cancello del
     # rilascio lo vuole verde.
