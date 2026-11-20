@@ -2,11 +2,11 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { MathEditor } from "./editor";
-import { loadLazyParts } from "../../../../../ui/lazy-part";
+import { drawn, MATH_READY_MS, mathReady } from "./test-drawn";
 
-// I pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci sono già,
-// come dopo il riscaldamento: i gesti si guardano col loro codice.
-beforeAll(loadLazyParts);
+// KaTeX e i pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci
+// sono già, come dopo il riscaldamento: i gesti si guardano col loro codice.
+beforeAll(mathReady, MATH_READY_MS);
 
 // Le proposte dei simboli nella formula toccata (T61, E27): `\` e le prime
 // lettere mostrano i simboli disegnati, col nome; Invio, Tab o lo spazio
@@ -24,9 +24,6 @@ afterEach(() => {
   Reflect.deleteProperty(document, "compatMode");
 });
 
-/// KaTeX si carica a parte e disegna al fotogramma dopo.
-const settle = () => new Promise((done) => setTimeout(done, 40));
-
 async function open(tex: string, inTable = false) {
   const life = openLifetime();
   lives.push(life);
@@ -34,7 +31,7 @@ async function open(tex: string, inTable = false) {
   const editor = new MathEditor({ tex, display: false, start: "end", inTable, onChange: (next) => changes.push(next), onLeave: () => {}, lifetime: life });
   document.body.append(editor.element);
   editor.focus();
-  await settle();
+  await drawn(".cm-fub-mx-surface", editor.element);
   const field = editor.element.querySelector("textarea")!;
   const type = (...keys: string[]) => {
     for (const key of keys) field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));

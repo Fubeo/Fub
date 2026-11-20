@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
-import { loadLazyParts } from "../../../../../ui/lazy-part";
 import { MathEditor } from "./editor";
 import { SYMBOLS } from "./symbols";
+import { drawn, drawnWhen, MATH_READY_MS, mathReady } from "./test-drawn";
 
 // Scegliere un pezzo, le celle delle matrici, il tocco (T66, E27): la formula
 // che si tocca col suo DOM, con KaTeX vero. Il disegno di happy-dom non ha
@@ -11,7 +11,9 @@ import { SYMBOLS } from "./symbols";
 // clic e il trascinamento cadono dove dice il test. Il disegno vero lo
 // guardano le scene del banco.
 
-beforeAll(loadLazyParts);
+// KaTeX e i pezzi che arrivano con un `import()` (`ui/lazy-part.ts`) qui ci
+// sono già: i gesti si guardano col loro codice.
+beforeAll(mathReady, MATH_READY_MS);
 
 const lives: Lifetime[] = [];
 let rects: ReturnType<typeof vi.spyOn> | null = null;
@@ -31,13 +33,6 @@ afterEach(() => {
   Reflect.deleteProperty(document, "compatMode");
 });
 
-const settle = () => new Promise((done) => setTimeout(done, 40));
-async function drawn(editor: MathEditor): Promise<void> {
-  await settle();
-  for (let i = 0; i < 100 && editor.element.querySelector(".cm-fub-mx-surface[data-state=loading]"); i++) await settle();
-  await settle();
-}
-
 async function open(tex: string, display = false) {
   const life = openLifetime();
   lives.push(life);
@@ -46,7 +41,7 @@ async function open(tex: string, display = false) {
   const editor = new MathEditor({ tex, display, start: "end", onChange: (next) => changes.push(next), onLeave: (reason) => left.push(reason), lifetime: life });
   document.body.append(editor.element);
   editor.focus();
-  await drawn(editor);
+  await drawn(".cm-fub-mx-surface", editor.element);
   const field = editor.element.querySelector("textarea")!;
   const press = (key: string, init: KeyboardEventInit = {}) => {
     field.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
@@ -62,7 +57,7 @@ describe("scegliere un pezzo", () => {
     press("ArrowLeft", { shiftKey: true });
     expect(editor.element.dataset.chosen).toBe("true");
     expect(status()).toBe("pezzo scelto");
-    await drawn(editor);
+    await drawn("[data-fubsel] .mfrac", editor.element);
     // Il segno della scelta abbraccia la frazione disegnata.
     expect(editor.element.querySelector("[data-fubsel] .mfrac")).not.toBeNull();
     expect(editor.element.querySelector(".cm-fub-mx-caret")).toBeNull();
@@ -70,17 +65,17 @@ describe("scegliere un pezzo", () => {
     press("Shift", { shiftKey: true });
     expect(editor.element.dataset.chosen).toBe("true");
     press("ArrowLeft", { shiftKey: true });
-    await drawn(editor);
+    await drawnWhen("la scelta allargata al +", () => chosen()?.includes("+") ?? false, editor.element);
     // La scelta si è allargata al +, con la frazione.
     expect(chosen()).toContain("+");
     expect(editor.element.querySelector("[data-fubsel] .mfrac")).not.toBeNull();
     press("ArrowRight", { shiftKey: true });
-    await drawn(editor);
+    await drawnWhen("la scelta ristretta dalla sua fine", () => chosen() !== null && !chosen()!.includes("+"), editor.element);
     expect(chosen()).not.toBeNull();
     // → lascia la scelta dalla sua fine; il cursore torna.
     press("ArrowRight");
     expect(editor.element.dataset.chosen).toBeUndefined();
-    await drawn(editor);
+    await drawnWhen("la scelta lasciata col cursore di nuovo", () => chosen() === null && editor.element.querySelector(".cm-fub-mx-caret") !== null, editor.element);
     expect(chosen()).toBeNull();
     expect(editor.element.querySelector(".cm-fub-mx-caret")).not.toBeNull();
   });
@@ -175,7 +170,7 @@ describe("il puntatore", () => {
     pointer(surface, "pointerup", 85, "mouse");
     // Dal + alla metà del numeratore: la frazione intera.
     expect(editor.element.dataset.chosen).toBe("true");
-    await drawn(editor);
+    await drawn("[data-fubsel] .mfrac", editor.element);
     expect(chosen()).not.toBeNull();
     expect(editor.element.querySelector("[data-fubsel] .mfrac")).not.toBeNull();
     pointer(surface, "pointerdown", 0, "mouse");
@@ -229,7 +224,7 @@ describe("le celle di una matrice", () => {
   it("una matrice vuota della tavolozza ha un quadretto per cella", async () => {
     const { editor } = await open("");
     expect(editor.insert(SYMBOLS.find((symbol) => symbol.template.startsWith("\\begin{pmatrix} § &  \\\\"))!)).toBe(true);
-    await drawn(editor);
+    await drawnWhen("i quattro quadretti della matrice", () => editor.element.querySelectorAll(".cm-fub-mx-surface [data-fubhole]").length === 4, editor.element);
     expect(editor.element.querySelectorAll(".cm-fub-mx-surface [data-fubhole]")).toHaveLength(4);
   });
 });

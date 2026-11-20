@@ -4,10 +4,12 @@
 // le graffe del LaTeX, gli esponenti di un segno e la chiusura `$`/`$$`.
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
-import { loadLazyParts } from "../../../../../ui/lazy-part";
 import { MathEditor, type LeaveReason } from "./editor";
+import { drawn, MATH_READY_MS, mathReady } from "./test-drawn";
 
-beforeAll(loadLazyParts);
+// KaTeX e i pezzi che arrivano con un `import()` qui ci sono già: il disegno
+// dopo ogni tasto è un fotogramma.
+beforeAll(mathReady, MATH_READY_MS);
 
 const settle = () => new Promise((done) => setTimeout(done, 20));
 const lives: Lifetime[] = [];
@@ -32,8 +34,7 @@ async function open(display: boolean) {
   });
   document.body.append(editor.element);
   editor.focus();
-  await settle();
-  await settle();
+  await drawn(".cm-fub-mx-surface", editor.element);
   const field = editor.element.querySelector("textarea")!;
   /// Un tasto alla volta: keydown, e il testo nel campo se il tasto non è
   /// stato preso, come fa il navigatore.

@@ -1,13 +1,16 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { MathEditor, PROBLEM_DELAY, type MathPreferences } from "./editor";
 import { attachPalette } from "./palette";
+import { drawn, MATH_READY_MS, mathReady } from "./test-drawn";
 
 // Gli errori in chiaro nel riquadro della formula (T64, E27): col campo del
 // LaTeX, dopo una pausa, la frase sotto il campo con la correzione quando è
 // una sola. Il TeX della nota cambia soltanto col gesto della persona, e
 // l'annulla toglie la correzione in un passo. Con KaTeX vero.
+
+beforeAll(mathReady, MATH_READY_MS);
 
 beforeEach(() => {
   // KaTeX non disegna in quirks mode, e happy-dom non dice il suo modo.
@@ -21,12 +24,6 @@ afterEach(() => {
   document.body.replaceChildren();
   Reflect.deleteProperty(document, "compatMode");
 });
-
-const settle = () => new Promise((done) => setTimeout(done, 40));
-async function drawn(): Promise<void> {
-  await settle();
-  for (let i = 0; i < 100 && document.querySelector(".cm-fub-mx-surface[data-state=loading]"); i++) await settle();
-}
 
 const SPENTE: MathPreferences = { source: true, help: "spente" };
 const PIENE: MathPreferences = { source: true, help: "piene" };
@@ -48,7 +45,7 @@ async function open(tex: string, preferences?: MathPreferences, display = false)
   attachPalette(editor, life);
   document.body.append(editor.element);
   editor.focus();
-  await drawn();
+  await drawn(".cm-fub-mx-surface", editor.element);
   // Da qui il tempo lo decide il test: il disegno (un fotogramma) e la pausa.
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame"] });
   const root = editor.element;
