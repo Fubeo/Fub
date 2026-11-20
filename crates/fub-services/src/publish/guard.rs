@@ -148,9 +148,7 @@ pub fn is_safe_href(href: &str) -> bool {
     // digits, `+`, `-` or `.`, up to a `:` that comes before any `/`, `?` or
     // `#`. `#nota:1` and `cartella/a:b.html` are relative; `nota:1` is a
     // scheme (unknown, so refused), as a browser would read it.
-    let end = target
-        .find(|c: char| matches!(c, ':' | '/' | '?' | '#'))
-        .unwrap_or(target.len());
+    let end = target.find([':', '/', '?', '#']).unwrap_or(target.len());
     if target[end..].starts_with(':') {
         let scheme = &target[..end];
         let is_scheme = scheme
