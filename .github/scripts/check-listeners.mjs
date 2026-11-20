@@ -3,11 +3,18 @@
 // cancellazione devono dichiarare un proprietario. La guardia legge i sorgenti
 // del client unificato e lascia liberi i test, che costruiscono casi negativi.
 //
-// Limiti noti, senza un parser vero (#509): un globale che arriva da una
-// funzione (`const mq = ensureMedia()`) o da un parametro non è riconosciuto;
-// un disposer nominato conta come usato se il nome torna nel file, anche
-// dove non lo chiama nessuno; un timer conta come cancellato se il suo nome
-// compare in un `clear…`, senza guardare se quel ramo gira.
+// Limiti noti, senza un parser vero (#509):
+// - un globale che arriva da una funzione (`const mq = ensureMedia()`) o da
+//   un parametro non è riconosciuto;
+// - gli alias si raccolgono per nome in tutto il file, senza ambito: un
+//   parametro o un nome locale che si chiama come un alias
+//   (`const doc = document` qui, `(doc) => doc.addEventListener(…)` là) dà
+//   un falso rosso;
+// - un disposer nominato conta come usato se il nome torna nel file, anche
+//   dove non lo chiama nessuno: un altro `stop` locale omonimo lo fa
+//   sembrare usato;
+// - un timer conta come cancellato se il suo nome compare in un `clear…`,
+//   senza guardare se quel ramo gira.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -38,12 +45,16 @@ const ALLOWED_TIMER_FILES = new Set([
 ]);
 
 /// `const nome = <un globale>`: la finestra, il documento e i loro figli
-/// fissi, il documento o la finestra di un nodo, una `matchMedia(…)`.
+/// fissi, il documento o la finestra di un nodo, una `matchMedia(…)`. Anche
+/// con gli idiomi di TypeScript dopo il valore: l'asserzione non nulla
+/// (`window.visualViewport!`) e `as Tipo` (`el.ownerDocument as Document`),
+/// che prima facevano sfuggire l'alias (revisione di GUARDIE-1).
 const GLOBAL_ALIAS = new RegExp(
   String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;\n]+)?=\s*` +
     String.raw`(?:(?:window|document|globalThis)(?:\s*\.\s*(?:body|documentElement|defaultView|visualViewport))?` +
     String.raw`|[\w$.#]*\.\s*(?:ownerDocument|defaultView)(?:\s*\??\.\s*defaultView)?` +
-    String.raw`|(?:window\s*\.\s*)?matchMedia\s*\([^()]*\))\s*[;,\n)]`,
+    String.raw`|(?:window\s*\.\s*)?matchMedia\s*\([^()]*\))` +
+    String.raw`(?:\s*!(?!=))?(?:\s+as\s+[\w$.<>[\]|&\s]+?)?\s*[;,\n)]`,
   "g",
 );
 
@@ -140,8 +151,12 @@ export function violations(text, relative) {
       // (`setTimeout(() => lifetime.listen(…))`): su una vita chiusa quella
       // riga non fa niente. Prima bastava che `lifetime.listen` stesse sulla
       // stessa riga, anche col timer dentro l'ascoltatore, che scatta a vita
-      // chiusa (#509).
-      const ownedByLifetime = /\b(?:setTimeout|requestAnimationFrame)\s*\(\s*\(\s*\)\s*=>\s*\{?\s*lifetime\s*\.\s*listen\b/.test(code);
+      // chiusa (#509). La Vita può stare su un oggetto (`this.lifetime`,
+      // `this.#lifetime`) o avere un altro nome (`drag.listen`); un secondo
+      // timer sulla stessa riga non ha più quella scusa.
+      const ownedByLifetime =
+        /\b(?:setTimeout|requestAnimationFrame|requestIdleCallback)\s*\(\s*\(\s*\)\s*=>\s*\{?\s*(?:this\s*\.\s*)?#?[A-Za-z_$][\w$]*\s*\.\s*listen\s*\(/.test(code) &&
+        (code.match(/\b(?:setTimeout|setInterval|requestAnimationFrame|requestIdleCallback)\s*\(/g)?.length ?? 0) === 1;
       const ownedBySchedule = /\boptions\s*\.\s*schedule\b/.test(code);
       let owned = ownedByLifetime || ownedBySchedule || ALLOWED_TIMER_FILES.has(relative);
       if (assignment) {
@@ -229,6 +244,16 @@ function selfTest() {
     ["un timer dentro un ascoltatore di una Vita (sfuggiva)", 'lifetime.listen(el, "x", () => setTimeout(f, 100));', 1],
     ["un timer che registra su una Vita", 'setTimeout(() => lifetime.listen(document, "click", f), 0);', 0],
     ["un PerformanceObserver senza disconnect (sfuggiva)", "new PerformanceObserver(f).observe(o);", 1],
+    // La revisione di GUARDIE-1: gli idiomi TypeScript dell'alias e i
+    // proprietari della Vita che il timer di prima accettava.
+    ["un alias con l'asserzione non nulla (sfuggiva)", 'const vv = window.visualViewport!;\nvv.addEventListener("resize", f);', 1],
+    ["un alias con `as` (sfuggiva)", 'const doc = el.ownerDocument as Document;\ndoc.addEventListener("x", f);', 1],
+    ["un alias con `as` a un tipo generico (sfuggiva)", 'const w = el.ownerDocument.defaultView as Window | null;\nw?.addEventListener("x", f);', 1],
+    ["un timer che registra sulla Vita dell'oggetto", 'setTimeout(() => this.lifetime.listen(document, "x", f), 0);', 0],
+    ["un timer che registra sulla Vita privata", 'setTimeout(() => this.#lifetime.listen(document, "x", f), 0);', 0],
+    ["un timer che registra su una Vita con un altro nome", 'setTimeout(() => drag.listen(document, "x", f), 0);', 0],
+    ["un'attesa del thread libero che registra su una Vita", 'requestIdleCallback(() => lifetime.listen(document, "x", f));', 0],
+    ["un timer che registra e poi fa altro", 'setTimeout(() => { lifetime.listen(document, "x", f); setTimeout(g, 9); }, 0);', 1],
   ];
   const failures = [];
   try {
