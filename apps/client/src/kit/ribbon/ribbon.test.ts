@@ -324,6 +324,7 @@ describe("la barra del kit, il gruppo raccolto", () => {
   let mounted: Ribbon<View, Key>;
   let focused: number;
   let room: Room;
+  let reads = 0;
   let scrolled: Element[];
   const originalScroll = HTMLElement.prototype.scrollIntoView;
 
@@ -334,6 +335,9 @@ describe("la barra del kit, il gruppo raccolto", () => {
     Object.defineProperty(toolbar, "scrollWidth", {
       configurable: true,
       get: () => {
+        // Ogni lettura, in un browser, impagina la pagina se qualcosa è
+        // cambiato: si contano.
+        reads += 1;
         const dense = toolbar.closest<HTMLElement>("[data-dense]")?.dataset.dense === "true";
         return [...toolbar.children]
           .filter((group) => !(group as HTMLElement).hidden)
@@ -568,6 +572,58 @@ describe("la barra del kit, il gruppo raccolto", () => {
     expect(collapsedNames()).toEqual([]);
     expect(openNames()).toEqual([]);
     expect(toggleOf("tre").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("una rilettura che non cambia né i comandi né la larghezza non misura la fila", async () => {
+    mount(false);
+    await settle(300);
+    expect(collapsedNames()).toEqual(["tre", "quattro"]);
+    // Il cambio di selezione rilegge la barra (`refresh`): niente è cambiato,
+    // niente si legge e niente si scrive.
+    reads = 0;
+    const writes = new MutationObserver(() => {});
+    writes.observe(panel(), { subtree: true, attributes: true });
+    for (let i = 0; i < 5; i++) await settle(300);
+    expect(reads).toBe(0);
+    expect(writes.takeRecords()).toEqual([]);
+    writes.disconnect();
+    // Un nome che cambia cambia la fila: si misura di nuovo.
+    states = states.map((state) => (state.id === "home.uno.a" ? { ...state, enabled: false } : state));
+    reads = 0;
+    await settle(300);
+    expect(reads).toBe(0);
+    group("due").querySelector<HTMLElement>(".kit-group-content button, button")!.append(document.createTextNode("!"));
+    await settle(300);
+    expect(reads).toBeGreaterThan(0);
+    expect(collapsedNames()).toEqual(["tre", "quattro"]);
+  });
+
+  it("a un cambio di larghezza sceglie coi numeri già presi: una lettura e un controllo", async () => {
+    mount(true);
+    const widths = [1000, 300, 250, 230, 200, 250, 300, 1000, 250, 300, 230];
+    const expected: string[][] = [];
+    // Da capo a ogni larghezza: la barra montata di nuovo dà la risposta di
+    // riferimento.
+    for (const width of widths) {
+      mounted.destroy();
+      mount(true);
+      await settle(width);
+      expected.push(collapsedNames());
+    }
+    mounted.destroy();
+    mount(true);
+    const seen: string[][] = [];
+    const counts: number[] = [];
+    for (const width of widths) {
+      reads = 0;
+      await settle(width);
+      seen.push(collapsedNames());
+      counts.push(reads);
+    }
+    expect(seen).toEqual(expected);
+    // Le larghezze già viste, dalla seconda volta, si decidono con la lettura
+    // del passo mostrato e il controllo di quello scelto.
+    expect(counts.slice(widths.indexOf(250, 6))).toEqual(counts.slice(widths.indexOf(250, 6)).map(() => 2));
   });
 
   it("la lettera di Alt di un gruppo raccolto lo apre e mostra le lettere dei suoi comandi", async () => {

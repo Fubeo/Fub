@@ -53,7 +53,7 @@ Fub si guardano `key`, `code` e `ctrlKey` del `keydown` che arriva davvero.
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
 | S8 | la penna sulla lavagna: dieci tratti da 300 ms sopra una scheda con una tabella di 100 × 100 celle, su una lavagna con un foglio `.xlsx` di 100 × 100 celle e 2.000 tratti già scritti; poi la scheda della tabella spostata coi suoi tratti per 2 s | massimo fra fotogrammi a penna (obiettivo 2 periodi, 33 ms a 60 Hz) e allo spostamento; path asciutti; sha256 del `.xlsx` prima e dopo |
 | S9 | la lavagna di S3 con venti fogli `.xlsx` vivi, la vista sul loro blocco a zoom 0,5: spostamento e zoom come S3; poi una nota di quella lavagna in scrittura, 200 caratteri come S1 (`S9.keyToPaint`) | numero dei fogli vivi; p95 e massimo fra fotogrammi; p95 tasto → fotogramma |
-| S10 | il foglio grande, `S10/Registro.xlsx` di 3.000 × 20 celle: 150 passi di scorrimento in giù da 60 px e 150 in su, uno per fotogramma; poi venti frecce, giù e su a turno; poi la barra laterale aperta e chiusa dal comando, sei volte | p95 e massimo fra fotogrammi allo scorrimento; per frecce e barra, la mediana del thread principale bloccato come F3; il thread occupato e la CPU nel referto |
+| S10 | il foglio grande, `S10/Registro.xlsx` di 3.000 × 20 celle: 150 passi di `scrollTop` da 60 px in giù e 150 in su, uno per fotogramma come la rotella, dopo un giro a vuoto; poi un clic su una cella e venti frecce, giù e su a turno, che cambiano la scelta e fanno rileggere la barra dei comandi; poi la barra laterale aperta e chiusa dal comando, sei volte, che cambia la larghezza del foglio e della barra. Il job `webview` della CI non lo fa girare | p95 e massimo fra fotogrammi allo scorrimento (`S10.scroll.frameGap.*`); per frecce e barra (`S10.frecce.mainBlocked`, `S10.barra.mainBlocked`) la mediana del thread principale bloccato come F3; il thread occupato (`S10.scroll.busy.p95`) e la CPU nel referto |
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
@@ -212,18 +212,6 @@ referto dà `S9.liveCards`, i fogli vivi all'inizio della misura, e
 `S9.frameGap.p95` e `S9.frameGap.max`. Gli obiettivi sono quelli di S3;
 soglie della CI non ce ne sono finché non c'è una misura del runner, e il
 job `webview` non lo fa girare.
-
-S10 apre `S10/Registro.xlsx` (un foglio solo, «Registro», con l'intestazione
-e 3.000 righe da 20 colonne) e aspetta le celle. Lo scorrimento lo fa la
-pagina, un passo di `scrollTop` per fotogramma, come la rotella: un giro a
-vuoto, poi quello misurato, coi fotogrammi (`S10.scroll.frameGap.*`) e coi
-buchi dell'anello di `setTimeout(0)` di F3 (`S10.scroll.busy.p95`, il thread
-occupato). Poi un clic su una cella e venti frecce, giù e su a turno: ognuna
-cambia la scelta, e la barra dei comandi si rilegge (`S10.frecce.mainBlocked`);
-poi la barra laterale aperta e chiusa dal comando, che cambia la larghezza
-del foglio e della barra dei comandi (`S10.barra.mainBlocked`). Il job
-`webview` della CI non lo fa girare: soglie della CI non ce ne sono finché
-non c'è una misura del runner.
 
 L1 vive in `canvas.mjs` e segue il patto del
 [modulo](../reference/canvas-operations.md#webassembly) come il caricatore
