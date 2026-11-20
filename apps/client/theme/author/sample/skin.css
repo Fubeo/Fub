@@ -21556,14 +21556,23 @@ h6.ui-heading {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* La cartella sta su una riga, come il titolo: una lunga si accorcia coi
-   puntini e lascia al titolo almeno metà della voce. */
+/* La cartella sta su una riga, come il titolo: intera finché non passa metà
+   dello spazio del testo, oltre si accorcia coi puntini e al titolo resta
+   almeno l'altra metà. Lo spazio del testo è la voce meno l'icona da 15 px
+   (qui sotto) e i due spazi fra icona, titolo e cartella. Niente scatola a
+   righe contate della voce comune: qui la riga è una. */
 .ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
-  flex: 0 1 auto;
+  display: block;
+  flex: 0 0 auto;
   min-width: 0;
-  max-width: 50%;
+  max-width: calc((100% - 15px) / 2 - var(--space-4));
+  max-height: none;
   margin: 0;
-  -webkit-line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: none;
   /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
   color: var(--muted);
   font-size: var(--text-sm);
