@@ -106,6 +106,7 @@ use fub_abi::traits::{
 };
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
+use tantivy::indexer::UserOperation;
 use tantivy::query::{
     AllQuery, BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query, RangeQuery,
     TermQuery,
@@ -183,6 +184,18 @@ const INDEX_DIR: &str = "index";
 
 /// Memoria del writer tantivy. Sotto i 15 MB tantivy rifiuta.
 const WRITER_HEAP: usize = 50_000_000;
+
+/// Quanto testo la coda delle scritture (#522) tiene prima di darlo a tantivy
+/// senza aspettare il commit.
+///
+/// La coda esiste perché un commit chiuda **un** segmento nuovo e non uno per
+/// worker (vedi [`index::Pending`]). Ma ciò che parte con un `run` è un lotto
+/// unico per un worker solo, e tantivy controlla il budget del worker solo a
+/// fine lotto: la soglia deve stare sotto l'arena di un worker, cioè
+/// `WRITER_HEAP` / 3 ≈ 16 MB meno il margine di 1 MB che tantivy tiene. A
+/// 4 MB c'è spazio, e a freddo i lotti sono abbastanza da tenere occupati
+/// tutti i worker.
+const PENDING_BYTES: usize = 4 << 20;
 
 /// Il `page_name` conta più del corpo: chi cerca "Rust" vuole prima la nota
 /// *intitolata* Rust, poi le mille che la nominano.
@@ -330,7 +343,8 @@ use catalog::{
 };
 #[cfg(test)]
 use engine::head_of;
-use engine::{item_due, term_query};
+use engine::{drain, item_due, term_query};
+use index::Pending;
 pub use index::SearchIndex;
 pub use provider::SearchSettings;
 #[cfg(test)]
