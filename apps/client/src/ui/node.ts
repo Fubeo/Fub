@@ -72,6 +72,7 @@ import { drawPageMark } from "./page-mark";
 import { FORMAT_ICON, formatKindOf } from "./format-kind";
 import { pageIcon, pageIconsRevision } from "../state/page-icons";
 import type { Lifetime, Teardown } from "./lifetime";
+import { composingKey } from "../kit/ime";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -444,7 +445,7 @@ function wireConfirm(el: HTMLElement, payload: unknown, onAction: Port): void {
   el.classList.add("ui-confirm");
   confirmCancels.set(el, confirmCancel(payload));
   el.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || e.isComposing || e.defaultPrevented) return;
+    if (e.key !== "Escape" || composingKey(e) || e.defaultPrevented) return;
     const cancel = confirmCancels.get(el);
     if (!cancel) return;
     // Esc qui è la risposta alla domanda, e basta: non chiude anche la barra

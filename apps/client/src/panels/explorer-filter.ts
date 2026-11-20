@@ -19,6 +19,7 @@ import { textField } from "../kit";
 import type { Lifetime } from "../ui/lifetime";
 import { Race } from "../ui/race";
 import { setTooltip } from "../ui/tooltip";
+import { composingKey } from "../kit/ime";
 
 export interface FilterEntry {
   path: string;
@@ -168,7 +169,7 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
     void draw();
   });
   lifetime.listen(field.input, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     if (event.key === "Escape") {
       // Vuoto, il campo non ha niente da togliere: Esc va a chi sta sopra
       // (il cassetto sul telefono, per esempio).

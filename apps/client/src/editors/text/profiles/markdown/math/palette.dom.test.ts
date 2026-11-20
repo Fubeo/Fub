@@ -129,6 +129,15 @@ describe("la tavolozza", () => {
     // Invio nel campo mette il primo trovato.
     find.value = "alfa";
     find.dispatchEvent(new Event("input", { bubbles: true }));
+    // Invio ed Esc che chiudono una composizione (WebKit: codice 229) restano
+    // del campo: niente simbolo, la tavolozza resta.
+    const before = changes.length;
+    for (const name of ["Enter", "Escape"]) {
+      const composing = new KeyboardEvent("keydown", { key: name, keyCode: 229, bubbles: true, cancelable: true });
+      find.dispatchEvent(composing);
+      expect(composing.defaultPrevented, name).toBe(false);
+    }
+    expect(changes.length).toBe(before);
     find.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(changes[changes.length - 1]).toBe("x\\alpha");
   });

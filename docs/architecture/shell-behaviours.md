@@ -212,15 +212,20 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 - **Invio ed Esc della composizione sono del metodo d'immissione.** Mentre si
   compone (cinese, giapponese, coreano, accenti morti) Invio sceglie il
   candidato ed Esc lo scarta: i campi che confermano o chiudono con quei tasti
-  li lasciano passare. Sono la rinomina in posto e la cartella nuova
-  dell'albero, il Quick Switcher, la palette dei comandi e quella del `/`, la
-  ricerca nel vault e nel documento, la rinomina del vault e del titolo, i
-  campi del kit e dei dialoghi, e l'Esc delle modali (`trapFocus`). La regola
+  li lasciano passare, e nessuna scorciatoia scatta. Vale ovunque si scriva:
+  l'albero, il Quick Switcher, le palette, le ricerche, i campi del kit e dei
+  dialoghi, l'Esc delle modali (`trapFocus`) e dei riquadri, il lanciatore, il
+  filtro dell'esplora, la testata della nota (titolo e proprietà), la
+  tavolozza delle formule, le schede della lavagna, la Tabella, il foglio e la
+  Base, l'editor ricco e la sua barra di Trova, la concentrazione. La regola
   sta in un punto solo, `composingKey` del kit (`kit/ime.ts`): vale
   `isComposing` e anche il codice 229, perché WebKit chiude la composizione
-  prima del keydown del tasto che la conferma. Guardie: `kit/ime.test.ts`,
+  prima del keydown del tasto che la conferma. Un gestore di tasti non legge
+  `isComposing` da solo; su `input` e `beforeinput` `InputEvent.isComposing`
+  basta. Guardie: `kit/ime.test.ts` (anche la guardia statica sui sorgenti),
   `panels/explorer.dom.test.ts`, `panels/quick-switcher.dom.test.ts`,
-  `ui/palette.dom.test.ts`, `kit/field.test.ts`.
+  `ui/palette.dom.test.ts`, `kit/field.test.ts` e le prove col codice 229 di
+  ogni area (`kit/testing.ts` ha `WEBKIT_COMPOSING`).
 - **Scorciatoie dietro una finestra modale.** Con una finestra modale aperta
   (una superficie che intrappola il fuoco e si dichiara `aria-modal`: le
   Impostazioni, un dialogo, la palette, un menu con la ricerca) le

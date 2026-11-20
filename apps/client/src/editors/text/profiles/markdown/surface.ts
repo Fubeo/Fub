@@ -132,6 +132,7 @@ import { openWebLink } from "../../../../ui/web-viewer";
 import { pngOf } from "../../../core/png";
 import { IMAGE_WIDTHS, MENU_CODE_LANGUAGES as CODE_LANGUAGES, markdownBlockGroup, sheetCardGroup, type DetachCard } from "./block-groups";
 import { dispatchTaskToggles } from "./task-toggle";
+import { composingKey } from "../../../../kit/ime";
 
 /// Quanti caratteri del paragrafo dice la testata del menu.
 const EXCERPT_CHARS = 34;
@@ -787,7 +788,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   life.listen(parent, "keydown", (event) => {
     const slash = opts.slash;
     if (
-      !slash || event.key !== "/" || event.defaultPrevented || event.isComposing ||
+      !slash || event.key !== "/" || event.defaultPrevented || composingKey(event) ||
       event.altKey || event.ctrlKey || event.metaKey || readOnly || mode === "reading" ||
       !(event.target instanceof Element) || !event.target.closest(".cm-content") ||
       // Una griglia di tabella scrive le sue celle, una trasclusione viva il

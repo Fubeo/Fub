@@ -40,6 +40,7 @@ import { loadDiagramTemplates, MARKDOWN_ACTIONS, markdownActionState } from "./a
 import { closeFenceEnter } from "./commands";
 import { CALLOUT_TYPES, CODE_LANGUAGES } from "./kinds";
 import { reminderTaskAt, reminderTimeOf, writeReminder, type ReminderTime } from "./task-reminder";
+import { composingKey } from "../../../../kit/ime";
 
 export { CALLOUT_TYPES, CODE_LANGUAGES };
 
@@ -544,7 +545,7 @@ export function slashMenuExtension(menu: SlashMenuSource): Extension {
     Prec.highest(keymap.of([{
       any: (view, event) => {
         const panel = panels.get(view);
-        if (!panel || !openSlashMenu(view.state) || event.isComposing) return false;
+        if (!panel || !openSlashMenu(view.state) || composingKey(event)) return false;
         return panel.key(event);
       },
     }])),

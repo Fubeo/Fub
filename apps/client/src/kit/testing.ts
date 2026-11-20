@@ -56,6 +56,11 @@ export function realClick(el: HTMLElement): void {
   el.dispatchEvent(mouse("click", 0));
 }
 
+/// Il tasto che WebKit (la WebView di Linux e di macOS) dà mentre conferma
+/// una composizione: `isComposing` è già falso, il codice è 229
+/// (`kit/ime.ts`). Va unito all'init di un `KeyboardEvent`.
+export const WEBKIT_COMPOSING: KeyboardEventInit = { isComposing: false, keyCode: 229 };
+
 /// Preme un tasto su `target` e rende l'evento, per guardare se è stato
 /// consumato.
 export function press(target: EventTarget, key: string, init: KeyboardEventInit = {}): KeyboardEvent {

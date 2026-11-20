@@ -398,6 +398,24 @@ describe("la cornice della Tabella", () => {
     expect(rows[1]![0]).toBe("");
   });
 
+  it("Invio ed Esc che chiudono una composizione (WebKit: codice 229) restano del metodo d'immissione", () => {
+    const { frame, rows } = mount([["Città"], [""], [""]]);
+    frame.focus({ row: 1, column: 0 });
+    // Sulla cella scelta l'Invio della composizione non apre il campo.
+    key("Enter", { keyCode: 229 });
+    expect(document.activeElement).not.toBeInstanceOf(HTMLInputElement);
+    key("T");
+    const input = document.activeElement as HTMLInputElement;
+    type(input, "To", "insertText");
+    key("Enter", { keyCode: 229 });
+    key("Escape", { keyCode: 229 });
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("To");
+    key("Enter");
+    expect(rows[1]).toEqual(["To"]);
+    expect(document.activeElement).not.toBe(input);
+  });
+
   it("Alt+= scrive la somma come valore e lo dice una volta; senza numeri sopra lo dice", () => {
     const { frame, rows, notices, edits } = mount([["Voce", "Importo"], ["a", "2"], ["b", "3"], ["c", ""], ["d", ""]]);
     frame.focus({ row: 3, column: 1 });

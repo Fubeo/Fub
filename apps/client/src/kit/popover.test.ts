@@ -7,7 +7,7 @@ import { attachTooltip, resetTooltips, TOOLTIP_DELAY_MS } from "../ui/tooltip";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { openLayers } from "./layers";
 import { openPopover, placePopover, type AnchorBox, type PopoverCloseReason } from "./popover";
-import { listenerLedger, pointer, press } from "./testing";
+import { listenerLedger, pointer, press, WEBKIT_COMPOSING } from "./testing";
 
 const VIEWPORT = { width: 1000, height: 800 };
 const SIZE = { width: 200, height: 100 };
@@ -252,6 +252,11 @@ describe("il fuoco", () => {
     const popover = openPopover({ anchor, content: content("uno"), lifetime: life });
     press(document.activeElement!, "Escape", { isComposing: true });
     expect(popover.closed).toBe(false);
+    // WebKit: la composizione è già chiusa, il tasto ha il codice 229.
+    expect(press(document.activeElement!, "Escape", WEBKIT_COMPOSING).defaultPrevented).toBe(false);
+    expect(popover.closed).toBe(false);
+    press(document.activeElement!, "Escape");
+    expect(popover.closed).toBe(true);
   });
 
   it("Tab dal bordo chiude e riporta il fuoco, invece di perdersi nella pagina", () => {

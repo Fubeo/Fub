@@ -70,8 +70,8 @@ function mount(doc: string, display: PropertiesDisplay = "visible", readOnly = f
 const header = (view: EditorView) => view.dom.querySelector<HTMLElement>(".cm-fub-page")!;
 const rows = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>(".cm-fub-page-prop")].map((row) => row.dataset.key);
 const toggle = (root: ParentNode) => root.querySelector<HTMLButtonElement>(".cm-fub-page-props-more");
-const press = (target: HTMLElement, key: string) =>
-  target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+const press = (target: HTMLElement, key: string, init: KeyboardEventInit = {}) =>
+  target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
 
 describe("la testata in Scrittura", () => {
   it("mette in ordine copertina, icona, titolo, proprietà e poi il testo", () => {
@@ -199,6 +199,23 @@ describe("la testata in Scrittura", () => {
     expect(root.querySelector("button.cm-fub-page-prop-value")).toBeNull();
     expect(root.querySelector(".cm-fub-page-cover-tools")).toBeNull();
     expect(toggle(root)).not.toBeNull();
+  });
+
+  it("nel titolo Invio, Esc e ↓ che chiudono una composizione (WebKit: codice 229) restano del metodo d'immissione", () => {
+    const view = mount(NOTE);
+    const title = header(view).querySelector<HTMLInputElement>(".cm-fub-page-title")!;
+    const before = view.state.doc.toString();
+    title.focus();
+    title.value = "Nota nuova";
+    for (const key of ["Enter", "Escape", "ArrowDown"]) {
+      expect(press(title, key, { keyCode: 229 }), key).toBe(true);
+    }
+    expect(document.activeElement).toBe(title);
+    expect(title.value).toBe("Nota nuova");
+    expect(view.state.doc.toString()).toBe(before);
+    press(title, "Escape");
+    expect(title.value).not.toBe("Nota nuova");
+    expect(document.activeElement).not.toBe(title);
   });
 
   it("una battuta nel testo non rifà la testata", () => {

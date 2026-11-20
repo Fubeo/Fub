@@ -26,6 +26,7 @@ import { pageName } from "../rules/mirrored";
 import { icon } from "../ui/icons";
 import { LINK_SOURCE_ATTRIBUTE } from "../ui/link-preview";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
+import { composingKey } from "../kit/ime";
 
 /// Che cosa fa il clic che apre un link a una nota (`editor.link-click`).
 export type LinkClick = "apri" | "sbircia";
@@ -253,7 +254,7 @@ export function createNotePeek(deps: NotePeekDeps): NotePeek {
         open.escArmed = false;
         return;
       }
-      if (event.isComposing) return;
+      if (composingKey(event)) return;
       if (event.defaultPrevented && !open.escArmed) {
         open.escArmed = true;
         return;

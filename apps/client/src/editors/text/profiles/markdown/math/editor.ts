@@ -37,6 +37,7 @@ import { diagnose, explain, type MathFix } from "./errors";
 import { unwrapFormula } from "./paste";
 import { holesOf, mapFormula, placeAt, snap, type Place, type Span } from "./points";
 import { commandName, propose, proposalsAddNothing, SYMBOLS, symbolName, type MathSymbol } from "./symbols";
+import { composingKey } from "../../../../../kit/ime";
 
 /// Perché il cursore lascia la formula. `close` è la chiusura scritta a mano
 /// (`$`, o `$$` in un blocco): il cursore va dopo la formula, dove scrivere.
@@ -1028,11 +1029,11 @@ export class MathEditor {
       this.life.add(() => target.removeEventListener(type, handler as EventListener));
     };
     on(this.input, "keydown", (event) => {
-      if (event.isComposing || event.keyCode === 229) return;
+      if (composingKey(event)) return;
       if (this.mode === "visual") this.keydown(event);
       else this.fieldKeydown(event);
     });
-    on(this.input, "beforeinput", (event) => {
+    on(this.input, "beforeinput", (event: InputEvent) => {
       // In vista nessun tasto scrive da sé: lo fanno le regole. Resta l'IME,
       // che si raccoglie alla fine della composizione.
       if (this.mode === "visual" && !event.isComposing && event.inputType !== "insertCompositionText") event.preventDefault();

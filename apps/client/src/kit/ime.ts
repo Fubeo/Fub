@@ -10,6 +10,15 @@
 /// macOS) chiude la composizione **prima** del keydown del tasto che la
 /// conferma: quel keydown arriva con `isComposing` falso e il codice 229 del
 /// tasto preso dal metodo d'immissione.
-export function composingKey(event: KeyboardEvent): boolean {
+///
+/// È la sola guardia dei tasti: un gestore di `keydown` o `keyup` non legge
+/// `isComposing` da solo (lo verifica `ime.test.ts`). Su `input` e
+/// `beforeinput` invece `InputEvent.isComposing` basta: lì il codice del tasto
+/// non c'è.
+export function composingKey(event: ComposingFields): boolean {
   return event.isComposing || event.keyCode === 229;
 }
+
+/// I campi di un tasto che `composingKey` legge: chi prende solo una parte di
+/// `KeyboardEvent` (una regola pura, i suoi test) li chiede così.
+export type ComposingFields = Pick<KeyboardEvent, "isComposing"> & Partial<Pick<KeyboardEvent, "keyCode">>;

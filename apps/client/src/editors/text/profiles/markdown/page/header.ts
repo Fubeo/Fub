@@ -34,6 +34,7 @@ import { featuredProperties, propertiesElement, samePageProperties, type PagePro
 import type { NoteType, NoteTypeList, NoteTypeState } from "../../../../../state/note-types";
 import { openTypeChooser, TYPE_KEY, typeIconElement, typeNoticeElement, typeStamp } from "./note-type";
 import { errorText } from "../../../../../host/errors";
+import { composingKey } from "../../../../../kit/ime";
 
 export type { PageProperties } from "./featured";
 
@@ -401,7 +402,7 @@ export function renderPageHeader(data: PageData, host: PageHost, life: Lifetime,
   // ↑ ↓ fra il titolo e le voci della testata; dall'ultima, il testo.
   if (host.writing) {
     life.listen(root, "keydown", (event) => {
-      if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (composingKey(event) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       const stops = pageStops(root);
       const index = stops.indexOf(event.target as HTMLElement);
@@ -478,7 +479,7 @@ function titleField(data: PageData, host: PageHost, root: HTMLElement, life: Lif
     host.refresh();
   };
   life.listen(title, "keydown", (event) => {
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     // Il titolo senza una modifica sua non ha niente da annullare: Ctrl+Z vale
     // per la nota, come col fuoco nel testo, invece di non fare niente (o di
     // lasciar fare a WebKit un annulla suo, un passo sì e uno no). Chi ha

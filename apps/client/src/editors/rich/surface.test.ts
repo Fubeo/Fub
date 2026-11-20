@@ -275,6 +275,11 @@ describe("la superficie ricca", () => {
       t("rich.find.next"),
       "",
     ]);
+    // Esc che chiude una composizione (anche WebKit, col codice 229) lascia
+    // la barra aperta.
+    what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", isComposing: true, bubbles: true }));
+    what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, bubbles: true }));
+    expect(bar.hidden).toBe(false);
     what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(bar.hidden).toBe(true);
     // Il commento si legge nella sua scheda; non se ne scrivono, non si
@@ -598,7 +603,11 @@ describe("la superficie ricca", () => {
       return pos;
     });
     e!.select(closedAt);
-    const type = (key: string) => e!.contentElement().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    const type = (key: string, init: KeyboardEventInit = {}) => e!.contentElement().dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }));
+    // Un tasto del metodo d'immissione (WebKit: codice 229) non è una lettera
+    // battuta: niente avviso.
+    type("Q", { keyCode: 229 });
+    expect(told).not.toHaveBeenCalled();
     // Una parola intera, un tasto ogni 200 ms: un avviso.
     for (const key of "Quadro") {
       type(key);

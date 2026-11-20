@@ -219,6 +219,7 @@ import {
   type CanvasIntentOp,
   type CanvasSourceEdit,
 } from "./wasm/core";
+import { composingKey } from "../../kit/ime";
 
 export const CANVAS_SNAP = 8;
 /** I bottoni di allineamento e di distribuzione: `align` coi sei lati, `distribute` con i due assi. */
@@ -4100,7 +4101,7 @@ export class CanvasEngine {
     const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
     const letter = event.key.toLowerCase();
     const chord = mod && letter === "z" ? (event.shiftKey ? "redo" : "undo") : mod && letter === "y" && !event.shiftKey ? "redo" : null;
-    if (chord === null || event.isComposing) {
+    if (chord === null || composingKey(event)) {
       this.#inkOverField = [];
       this.#inkOverFieldRedo = [];
       return;
@@ -11938,7 +11939,7 @@ export class CanvasEngine {
    * campo che scrive tiene il suo Ctrl+Z; dentro la vista lo prende `#keydown`.
    */
   #historyKeydown(event: KeyboardEvent): void {
-    if (event.defaultPrevented || event.isComposing || !this.#doc || this.#isSceneOversized()) return;
+    if (event.defaultPrevented || composingKey(event) || !this.#doc || this.#isSceneOversized()) return;
     if (event.target instanceof Node && this.#viewport.contains(event.target)) return;
     if (keepsItsUndo(event.target)) return;
     const history = this.commands().filter((command) => HISTORY_COMMANDS.has(command.id));
@@ -13473,7 +13474,7 @@ export class CanvasEngine {
       if (passesToShell(event)) this.#shellKeys.add(event);
       else event.stopPropagation();
       editor.recordOnInput = false;
-      if (event.isComposing || editor.composing) return;
+      if (composingKey(event) || editor.composing) return;
       if (isCommandSearchKey(event)) {
         // Ctrl+/ si apre anche mentre si scrive; Esc torna nel campo.
         event.preventDefault();
@@ -13713,7 +13714,7 @@ export class CanvasEngine {
       if (!(event instanceof KeyboardEvent)) return;
       editor.recordOnInput = false;
       escapeForEditor = false;
-      if (event.isComposing || editor.composing) return;
+      if (composingKey(event) || editor.composing) return;
       if (event.key === "Escape") {
         // Il menu «/» galleggia fuori dalla scheda: lo dice l'editor stesso
         // (`aria-haspopup`), finché è aperto.
@@ -13738,7 +13739,7 @@ export class CanvasEngine {
       // e la tela lo lascia passare.
       if (event instanceof KeyboardEvent && passesToShell(event)) this.#shellKeys.add(event);
       else event.stopPropagation();
-      if (!(event instanceof KeyboardEvent) || event.isComposing || editor.composing) return;
+      if (!(event instanceof KeyboardEvent) || composingKey(event) || editor.composing) return;
       if (event.key === "Escape" && !escapeForEditor) {
         event.preventDefault();
         this.#leaveField(true, true);
@@ -13864,7 +13865,7 @@ const FIELD_CHORDS: ReadonlySet<string> = new Set(["a", "c", "v", "x", "y", "z"]
  * annulla, ripeti). Ctrl+W chiude la linguetta anche mentre si scrive.
  */
 function passesToShell(event: KeyboardEvent): boolean {
-  if (!(event.ctrlKey || event.metaKey) || event.defaultPrevented || event.isComposing) return false;
+  if (!(event.ctrlKey || event.metaKey) || event.defaultPrevented || composingKey(event)) return false;
   if (event.key === "Enter" || event.key === "Escape") return false;
   return !FIELD_CHORDS.has(event.key.toLowerCase());
 }

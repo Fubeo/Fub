@@ -50,6 +50,7 @@ import { fillSeries, todayText } from "../series";
 import { sumAbove } from "../sum";
 import { animate } from "../../moto";
 import { motionAllowed, offsetWithin, playChange, SELECT_EASE, SELECT_MS, snapshotChange, type ChangeSnapshot } from "./motion";
+import { composingKey } from "../../kit/ime";
 
 /// Ciò che la cornice chiede a chi ospita la tabella.
 export interface TableFrameHost {
@@ -800,7 +801,7 @@ export class TableFrame {
       this.#editingKey(event);
       return;
     }
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     const intent = sheetIntent(event);
     if (!intent) return;
     const { rows, columns } = this.#host.size();
@@ -953,7 +954,7 @@ export class TableFrame {
 
   #editingKey(event: KeyboardEvent): void {
     const editing = this.#editing!;
-    if (event.isComposing) return;
+    if (composingKey(event)) return;
     const intent = editingIntent(event, editing.mode);
     if (!intent) {
       // Il resto è del campo: annulla, copia e incolla del testo compresi.

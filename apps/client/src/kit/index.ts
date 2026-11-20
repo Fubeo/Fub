@@ -16,7 +16,7 @@ export type { DialogAction, DialogActionKind, DialogHandle, DialogOptions } from
 
 export { textField } from "./field";
 
-export { composingKey } from "./ime";
+export { composingKey, type ComposingFields } from "./ime";
 export type { TextField, TextFieldOptions } from "./field";
 
 export { numberField, numberText, roundTo, SCRUB_PX, stepFactor } from "./number-field";

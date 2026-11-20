@@ -39,6 +39,7 @@ import { notify } from "../../ui/notify";
 import { keyboardPlatform } from "../../ui/commands";
 import { TEXT_INPUT_TYPES, fieldHistoryStep, isPlainTextField } from "../../ui/field-history";
 import { writeClipboardText } from "../../platform/clipboard";
+import { composingKey } from "../../kit/ime";
 
 export interface BaseMountDeps extends BaseSurfaceDeps {
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
@@ -839,7 +840,7 @@ export function mountBaseSurface(
   // disfare. Ctrl+Maiusc+Z e Ctrl+Y non passano di qui: il vault non ha un
   // «rifai» da chiamare.
   const undoKey = (event: KeyboardEvent): void => {
-    if (readOnly || event.defaultPrevented || event.isComposing) return;
+    if (readOnly || event.defaultPrevented || composingKey(event)) return;
     if (fieldHistoryStep(event, keyboardPlatform(navigator.platform)) !== "undo") return;
     const untouched = event.target instanceof HTMLElement && event.target.dataset.untouched === "true";
     if (isPlainTextField(event.target, TEXT_INPUT_TYPES) && !untouched) return;
@@ -1279,7 +1280,7 @@ export function mountBaseSurface(
       // pagina, e Ctrl+Z arriva alla Base (IMP-124). Esc lascia il testo
       // scritto e torna al valore del disco.
       control.addEventListener("keydown", (event) => {
-        if (event.isComposing) return;
+        if (composingKey(event)) return;
         if (event.key === "Enter") control.closest<HTMLElement>(".base-table-viewport")?.focus({ preventScroll: true });
         else if (event.key === "Escape") {
           const left = cellDrafts.get(key);
