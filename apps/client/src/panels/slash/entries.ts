@@ -225,7 +225,17 @@ function sectionOrder(use: SlashUse): readonly SlashSection[] {
   return [...new Set([...chosen, ...SECTION_ORDER])];
 }
 
-const NO_USE: SlashUse = { recent: [], favorites: [], chord: () => null, today: new Date() };
+// `today` si legge a ogni apertura, non al caricamento del modulo: un'app
+// aperta oltre la mezzanotte (o un test con l'orologio finto) vedrebbe se no
+// il giorno in cui il modulo è nato.
+const NO_USE: SlashUse = {
+  recent: [],
+  favorites: [],
+  chord: () => null,
+  get today() {
+    return new Date();
+  },
+};
 
 /// Le voci di un'apertura: a menu appena aperto le tessere dei più usati e
 /// le righe per gruppi; scrivendo un elenco solo, al più dodici dal più
