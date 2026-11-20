@@ -293,6 +293,57 @@ describe("le note", () => {
     // comincia dentro la pagina, a mezza misura dai bordi.
     expect(surface.buffer!.getDoc()).toMatch(/<g id="p0001" fub:page="1" fub:page-size="600 800">\n {4}<text id="o[a-z0-9]{8}" x="48" y="60"/);
   });
+
+  /// Un tocco senza movimento come lo manda il motore, con gli eventi del
+  /// mouse di compatibilità. Mouse e penna: `mousedown` subito dopo
+  /// `pointerdown`, sul foglio. Dito: `mousedown`, `mouseup` e `click` solo
+  /// dopo che il dito si è alzato, su ciò che sta sotto il punto in quel
+  /// momento: il dialogo, se il tocco l'ha appena aperto.
+  function tap(pointerType: "mouse" | "touch" | "pen", [x, y]: readonly [number, number]): void {
+    const target = sheet();
+    const init = { pointerId: pointerType === "touch" ? 2 : 1, pointerType, bubbles: true, cancelable: true, isPrimary: true, button: 0, clientX: x, clientY: y };
+    const pointer = (type: string, buttons: number): PointerEvent => {
+      const e = new PointerEvent(type, { ...init, buttons, pressure: buttons ? (pointerType === "pen" ? 0.5 : 1) : 0, width: pointerType === "touch" ? 2 : 1, height: pointerType === "touch" ? 2 : 1 });
+      Object.defineProperty(e, "timeStamp", { value: (clock += 8) });
+      return e;
+    };
+    const mouse = (type: string, at: EventTarget, buttons: number): void => {
+      at.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons, clientX: x, clientY: y }));
+    };
+    /// Ciò che sta sotto il punto adesso: happy-dom non ha impaginazione, e
+    /// il dialogo copre tutta la finestra.
+    const under = (): EventTarget => document.querySelector(".shell-dialog") ?? target;
+    target.dispatchEvent(pointer("pointerdown", 1));
+    if (pointerType !== "touch") mouse("mousedown", target, 1);
+    target.dispatchEvent(pointer("pointerup", 0));
+    if (pointerType === "touch") {
+      mouse("mousemove", under(), 0);
+      mouse("mousedown", under(), 1);
+    }
+    mouse("mouseup", under(), 0);
+    mouse("click", pointerType === "touch" ? under() : document.body, 0);
+  }
+
+  for (const pointer of ["mouse", "touch", "pen"] as const) {
+    it(`toccare la pagina con lo strumento Nota (${pointer}) apre il dialogo e la nota nasce lì (IMP-3807)`, async () => {
+      const { surface } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
+      await loaded("di 3");
+      key("n");
+      tap(pointer, [120, 200]);
+      const dialog = await vi.waitFor(() => {
+        const found = document.querySelector<HTMLElement>(".shell-dialog");
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      expect(dialog.querySelector("h2")!.textContent).toBe("Nuova nota");
+      expect(document.activeElement).toBe(dialog.querySelector("textarea"));
+      dialog.querySelector("textarea")!.value = "Verificare l'acconto.";
+      dialog.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+      await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('fub:note="Verificare l\'acconto."'));
+      // La riga della nota comincia nel punto toccato, nelle coordinate della pagina.
+      expect(surface.buffer!.getDoc()).toMatch(/<text id="o[a-z0-9]{8}" x="120" y="2\d\d(\.\d+)?"/);
+    });
+  }
 });
 
 describe("gli strumenti delle annotazioni", () => {
