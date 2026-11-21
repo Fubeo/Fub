@@ -65,6 +65,14 @@ describe("la forma", () => {
     expect(scrim().parentElement).toBe(document.body);
   });
 
+  it("con `preview` il velo porta data-preview, senza non lo porta", () => {
+    const handle = open({ preview: true });
+    expect(scrim().dataset.preview).toBe("");
+    handle.close("dismissed");
+    open();
+    expect(scrim().hasAttribute("data-preview")).toBe(false);
+  });
+
   it("senza descrizione non ne dichiara una", () => {
     const dialog = open();
     expect(dialog.element.hasAttribute("aria-describedby")).toBe(false);
