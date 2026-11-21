@@ -2,7 +2,7 @@
 // vince su chi (D1 (a)), le modifiche dell'utente, il tasto che i menu mostrano,
 // e quando un tasto parte o no.
 import { describe, expect, it } from "vitest";
-import type { KeyChord } from "../../../ui/commands";
+import { parseChords, type KeyChord } from "../../../ui/commands";
 import {
   chiaveTasto,
   decidiTasto,
@@ -276,5 +276,22 @@ describe("decidiTasto", () => {
     const regolaAlt = risolviTasti([{ id: "x.alt", tasto: "Cmd+Alt+L" }], {}, "other");
     const e = tasto("l", { ctrlKey: true, altKey: true });
     expect(decidiTasto(e, regolaAlt, { ...NESSUNO, vuoleTesto: true }, "other")).toEqual({ tipo: "esegue", comando: "x.alt" });
+  });
+});
+
+describe("il tasto che il menu mostra è quello che parte", () => {
+  it("per ogni comando con tasto, premere quel tasto fa partire quel comando", () => {
+    const voci: VoceTasto[] = [
+      { id: "shape.round", tasto: "Cmd+Alt+L" },
+      { id: "shape.star", tasto: "Cmd+Alt+S" },
+      { id: "edit.undo", tasto: "Cmd+Z" }, // di Fub: nessun tasto da mostrare
+    ];
+    const regola = risolviTasti(voci, { "shape.star": "Mod-Alt-R" }, "other");
+    for (const id of ["shape.round", "shape.star"]) {
+      const accordo = parseChords(tastoDelComando(regola, id)!)![0]!;
+      const evento = { key: accordo.key, ctrlKey: accordo.mod, metaKey: false, shiftKey: accordo.shift, altKey: accordo.alt };
+      expect(decidiTasto(evento, regola, NESSUNO, "other")).toEqual({ tipo: "esegue", comando: id });
+    }
+    expect(tastoDelComando(regola, "edit.undo")).toBeNull();
   });
 });
