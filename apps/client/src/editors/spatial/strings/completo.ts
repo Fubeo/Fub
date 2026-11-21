@@ -127,3 +127,29 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.workspace.manage.delete.done": "Workspace deleted",
   "draw.workspace.manage.failed": "The workspace could not be changed: {reason}",
 };
+
+/// La scheda Risorse dell'ispettore (K6 T10): il suo titolo, i campioni del
+/// documento e le sue parole di errore. I testi delle sezioni che le famiglie
+/// portano stanno nelle famiglie.
+export const RISORSE_IT = {
+  "draw.chrome.tab.resources": "Risorse",
+  "draw.resources.aria": "Risorse",
+  "draw.resources.swatches": "Campioni",
+  "draw.resources.swatches.document": "Documento",
+  "draw.resources.swatches.none": "Il disegno non ha campioni.",
+  "draw.resources.count": "{count} campioni",
+  "draw.resources.failed": "Questa parte non si è aperta. «Riprova» la carica di nuovo.",
+  "draw.resources.retry": "Riprova",
+} as const;
+
+/// L'inglese della scheda Risorse.
+export const RISORSE_EN: Record<keyof typeof RISORSE_IT, string> = {
+  "draw.chrome.tab.resources": "Resources",
+  "draw.resources.aria": "Resources",
+  "draw.resources.swatches": "Swatches",
+  "draw.resources.swatches.document": "Document",
+  "draw.resources.swatches.none": "The drawing has no swatches.",
+  "draw.resources.count": "{count} swatches",
+  "draw.resources.failed": "This part did not open. Try again to load it.",
+  "draw.resources.retry": "Try again",
+};

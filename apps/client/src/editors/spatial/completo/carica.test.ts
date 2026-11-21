@@ -7,6 +7,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { ComandoMotore, MotoreAssente, SessioneMotore } from "../motore/sessione";
 import { caricatore, preparaNelMotore, type ContestoCompleto, type EsitoPrepara, type ModuloFamiglia } from "./carica";
+import { creaSezioni } from "./sezioni";
 
 /// Una promessa che il test risolve quando vuole.
 function rinviata<T>(): { promessa: Promise<T>; risolvi: (v: T) => void; rifiuta: (e: unknown) => void } {
@@ -27,7 +28,7 @@ afterEach(() => {
 function contesto(motore: MotoreDelDisegno | null = null): ContestoCompleto {
   const life = openLifetime();
   lifetimes.push(life);
-  return { motore, life };
+  return { motore, life, sezioni: creaSezioni() };
 }
 
 /// I chunk finti: un modulo per famiglia, con `registra` spiato.

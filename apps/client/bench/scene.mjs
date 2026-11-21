@@ -1439,6 +1439,36 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare: openDrawing,
   })),
+  // **La scheda Risorse** (K6 T10): il Disegno completo, con la scheda Risorse
+  // aperta. `campioni` dice quanti campioni del documento ha il disegno
+  // (`?campioni=N`, vedi `fake-ipc.ts`): 24 come il prototipo, 500 per lo stato
+  // con molte voci, 0 per il vuoto.
+  ...[
+    ["disegno-risorse", 24, "La scheda Risorse con 24 campioni del documento"],
+    ["disegno-risorse-molti", 500, "La scheda Risorse con 500 campioni: scorre dentro la scheda, senza spostare il resto"],
+    ["disegno-risorse-vuoto", 0, "La scheda Risorse senza campioni: lo stato vuoto"],
+  ].map(([id, campioni, title]) => ({
+    id,
+    title,
+    query: `connectors=6&drawing=acceso&campioni=${campioni}`,
+    prepare: openRisorse,
+  })),
+  // **Design** (K6 T10): con un punto scelto (Posizione e misure), e senza
+  // nulla scelto (il documento, con le sezioni del registro), a 1280 px. Sotto
+  // gli 800 px del desktop la shell è quella del telefono, senza ispettore: il
+  // Design a 700 px non ha una scena desktop.
+  {
+    id: "disegno-design",
+    title: "Design con un punto scelto: Posizione e misure, a 1280 px",
+    query: "connectors=6&drawing=acceso",
+    prepare: openDesignoScelto,
+  },
+  {
+    id: "disegno-design-vuoto",
+    title: "Design senza nulla scelto: il documento, a 1280 px",
+    query: "connectors=6&drawing=acceso",
+    prepare: openDesignoVuoto,
+  },
   // **La finestra del comando** (K6 T6, «Sposta tracciato» del prototipo
   // `PLAN-ui/disegno-completo.html`): la famiglia pronta, con l'anteprima accesa
   // a destra del foglio; la famiglia che si carica, e quella che non si carica
@@ -5099,6 +5129,39 @@ async function focusWorkspaceButton(page) {
   await openDrawing(page);
   await page.waitForSelector("#status-workspace:not([hidden])");
   await page.evaluate(() => document.querySelector("#status-workspace")?.focus({ focusVisible: true }));
+}
+
+/// Apre il disegno e la scheda Risorse dell'ispettore (K6 T10): il pannello
+/// della scheda è quello che si vede, con i campioni del documento.
+async function openRisorse(page) {
+  await openDrawing(page);
+  await page.click('.inspector-tab[data-view-id="draw.resources"]');
+  await page.waitForSelector('#surface-panel-draw-resources:not([hidden]) .draw-resources');
+}
+
+/// Apre il disegno, sceglie lo strumento Selezione dalla colonna, clicca un
+/// punto vuoto del foglio e seleziona tutto: l'ispettore mostra il Design con la
+/// selezione (K6 T10). Il clic su una forma non la sceglie nel Completo di
+/// oggi, e il punto singolo del prototipo è di T12.
+async function openDesignoScelto(page) {
+  await openDesignoVuoto(page);
+  await page.click('.draw-rail [aria-label="Selezione"]');
+  const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+  if (!foglio) throw new Error("il foglio del disegno non c'è");
+  await page.mouse.click(foglio.x + 30, foglio.y + 30);
+  await page.keyboard.press("Control+a");
+  // Il titolo del pannello dice la selezione, non «Il disegno».
+  await page.waitForFunction(() => {
+    const soggetto = document.querySelector("#surface-panel-draw-design .draw-properties-subject");
+    return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
+  });
+}
+
+/// Apre il disegno e la scheda Design dell'ispettore, senza nulla scelto (K6 T10).
+async function openDesignoVuoto(page) {
+  await openDrawing(page);
+  await page.click('.inspector-tab[data-view-id="draw.design"]');
+  await page.waitForSelector('#surface-panel-draw-design:not([hidden]) section.draw-properties');
 }
 
 async function openDrawingStanding(page, ask) {

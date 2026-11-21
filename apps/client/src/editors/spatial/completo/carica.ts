@@ -16,6 +16,7 @@
 import { DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_FAMILIES } from "../../../host/contract";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 import type { MotoreDelDisegno } from "../motore/gesti";
+import type { Sezioni } from "./sezioni";
 
 /// Ciò che il Completo aperto dà alle sue famiglie.
 export interface ContestoCompleto {
@@ -23,6 +24,8 @@ export interface ContestoCompleto {
   readonly motore: MotoreDelDisegno | null;
   /// La vita del Completo: si chiude col disegno.
   readonly life: Lifetime;
+  /// Il registro delle sezioni dell'ispettore (`registraSezione`).
+  readonly sezioni: Sezioni;
 }
 
 /// Ciò che il file `index.ts` di una famiglia esporta di serie.

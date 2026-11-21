@@ -42,6 +42,7 @@ export const DRAW: PartAnatomy = {
         "draw-properties-unit", "draw-properties-switch", "draw-properties-note",
         "draw-properties-error", "draw-properties-actions", "draw-properties-bar", "draw-properties-export",
         "draw-properties-menu", "draw-properties-contrast",
+        "draw-resources-swatches", "draw-resources-corpo",
       ],
     },
     {

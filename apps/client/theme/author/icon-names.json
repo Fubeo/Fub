@@ -126,6 +126,7 @@
   "draw-ratio",
   "draw-rect",
   "draw-redo",
+  "draw-resources",
   "draw-rotate",
   "draw-section",
   "draw-select",

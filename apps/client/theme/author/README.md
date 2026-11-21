@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **2442 hook**, **7 stati** (1093 assegnazioni su 323 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **2444 hook**, **7 stati** (1093 assegnazioni su 323 componenti) e lascia ridichiarare alla persona **196 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -10,7 +10,7 @@ Dichiara anche **73 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
-- **cornice** (1865 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
+- **cornice** (1867 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
 - **segno** (167 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
 - **contenuto** (410 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 534 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 535 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -82,20 +82,20 @@ draw-hand draw-here draw-hidden draw-hide-ui draw-highlighter draw-history draw-
 draw-into-layer draw-keys draw-landscape draw-layers draw-line draw-link draw-lock draw-mark
 draw-menu draw-more draw-navigator draw-none draw-note draw-open-link draw-order draw-order-back
 draw-order-backward draw-order-forward draw-order-front draw-page-grid draw-pen draw-portrait
-draw-ratio draw-rect draw-redo draw-rotate draw-section draw-select draw-selection draw-simple
-draw-snap draw-suggestion draw-swap draw-symbols draw-text draw-text-bold draw-text-italic
-draw-text-strike draw-text-underline draw-tip-bar-end draw-tip-bar-start draw-tip-circle-end
-draw-tip-circle-start draw-tip-diamond-end draw-tip-diamond-start draw-tip-none draw-tip-other-end
-draw-tip-other-start draw-tip-square-end draw-tip-square-start draw-tip-triangle-end
-draw-tip-triangle-start draw-tip-vee-end draw-tip-vee-start draw-tips-swap draw-to-shape draw-undo
-draw-ungroup draw-unlink draw-unmark draw-workspace draw-zoom draw-zoom-in draw-zoom-out
-export-adjust export-back export-break export-goto export-open export-pick export-print eye flag
-fmt-alarm fmt-bold fmt-bullets fmt-callout fmt-chevron-down fmt-clear fmt-code fmt-codeblock
-fmt-color fmt-columns fmt-comment fmt-cover fmt-date fmt-details fmt-diagram fmt-embed fmt-expand
-fmt-footnote fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight fmt-icon fmt-image
-fmt-indent fmt-italic fmt-link fmt-math fmt-mathblock fmt-more fmt-numbers fmt-open fmt-outdent
-fmt-person fmt-plus fmt-property fmt-quick fmt-quote fmt-redo fmt-rule fmt-sort fmt-star fmt-strike
-fmt-subscript fmt-superscript fmt-table fmt-tasks fmt-text fmt-toc fmt-underline fmt-undo
+draw-ratio draw-rect draw-redo draw-resources draw-rotate draw-section draw-select draw-selection
+draw-simple draw-snap draw-suggestion draw-swap draw-symbols draw-text draw-text-bold
+draw-text-italic draw-text-strike draw-text-underline draw-tip-bar-end draw-tip-bar-start
+draw-tip-circle-end draw-tip-circle-start draw-tip-diamond-end draw-tip-diamond-start draw-tip-none
+draw-tip-other-end draw-tip-other-start draw-tip-square-end draw-tip-square-start
+draw-tip-triangle-end draw-tip-triangle-start draw-tip-vee-end draw-tip-vee-start draw-tips-swap
+draw-to-shape draw-undo draw-ungroup draw-unlink draw-unmark draw-workspace draw-zoom draw-zoom-in
+draw-zoom-out export-adjust export-back export-break export-goto export-open export-pick
+export-print eye flag fmt-alarm fmt-bold fmt-bullets fmt-callout fmt-chevron-down fmt-clear fmt-code
+fmt-codeblock fmt-color fmt-columns fmt-comment fmt-cover fmt-date fmt-details fmt-diagram fmt-embed
+fmt-expand fmt-footnote fmt-h1 fmt-h2 fmt-h3 fmt-h4 fmt-h5 fmt-h6 fmt-hide fmt-highlight fmt-icon
+fmt-image fmt-indent fmt-italic fmt-link fmt-math fmt-mathblock fmt-more fmt-numbers fmt-open
+fmt-outdent fmt-person fmt-plus fmt-property fmt-quick fmt-quote fmt-redo fmt-rule fmt-sort fmt-star
+fmt-strike fmt-subscript fmt-superscript fmt-table fmt-tasks fmt-text fmt-toc fmt-underline fmt-undo
 fmt-webpage fmt-wikilink focus footnote format-drawing format-odt format-photo format-sheet
 format-word gr-accounting gr-align-bottom gr-align-center gr-align-left gr-align-middle
 gr-align-right gr-align-top gr-arrow-down gr-arrow-left gr-arrow-right gr-arrow-up gr-border-all

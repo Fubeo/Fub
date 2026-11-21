@@ -8,6 +8,7 @@ import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { iconEl, iconNames } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
+import { creaSezioni } from "../completo/sezioni";
 import {
   createProperties,
   type ActionState,
@@ -1082,5 +1083,28 @@ describe("il testo di più righe", () => {
     write(desc, "Una casa\ncol tetto");
     desc.blur();
     expect(calls).toEqual(["desc=Una casa", "desc=Una casa\ncol tetto"]);
+  });
+});
+
+describe("le sezioni del Design dal registro del Completo (T10)", () => {
+  /// Un fotogramma: il giro della lista parte col suo `requestAnimationFrame`.
+  const frame = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+  const idDesign = (): string[] => [...panel.element.querySelectorAll<HTMLElement>(".draw-properties-section[data-section]")].map((each) => each.dataset.section ?? "");
+
+  it("compaiono in coda al pannello, nell'ordine della mappa, e si tolgono col Completo", async () => {
+    const sezioni = creaSezioni();
+    sezioni.registra({ id: "tavole", scheda: "design", titolo: "Tavole da disegno", ordine: 3, disegna: ({ corpo }) => { corpo.textContent = "tavole"; } });
+    sezioni.registra({ id: "griglia", scheda: "design", titolo: "Griglia", ordine: 1, disegna: ({ corpo }) => { corpo.textContent = "griglia"; } });
+    sezioni.registra({ id: "solo-risorse", scheda: "risorse", titolo: "Risorse", disegna: () => undefined });
+    mount();
+    panel.collegaSezioni(sezioni, null, () => 0);
+    await frame();
+    const ours = idDesign().filter((id) => id === "griglia" || id === "tavole");
+    expect(ours).toEqual(["griglia", "tavole"]);
+    expect(idDesign()).not.toContain("solo-risorse");
+    expect(panel.element.querySelector('[data-section="tavole"]')?.textContent).toContain("tavole");
+    panel.collegaSezioni(null, null, () => 0);
+    await frame();
+    expect(idDesign().filter((id) => id === "griglia" || id === "tavole")).toEqual([]);
   });
 });

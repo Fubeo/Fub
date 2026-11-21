@@ -1062,20 +1062,20 @@ interfaccia	window.editToolbar	Edit Toolbar		fub	—	T8	da fare	fub	—	«Modifi
 interfaccia	toolbar.addTool	Toolbar: Add Tool		fub	—	T8	da fare	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: aggiungi strumento
 interfaccia	toolbar.removeTool	Toolbar: Remove Tool		fub	—	T8	da fare	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: rimuovi strumento
 interfaccia	toolbar.reset	Toolbar: Reset		fub	—	T8	da fare	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: ripristina
-interfaccia	window.taskBar	Contextual Task Bar		fub	—	T10	da fare	fub	—	la barra contestuale diventa la fila delle opzioni della testata	Barra attività contestuale
+interfaccia	window.taskBar	Contextual Task Bar		fub	—	T10	fub	fub	—	la barra contestuale diventa la fila delle opzioni della testata	Barra attività contestuale
 interfaccia	window.taskBar.pin	Pin Bar Position		escluso	—	T2	escluso	escluso	—	la barra contestuale non si sposta: è la fila delle opzioni (D6)	Fissa posizione barra
 interfaccia	window.taskBar.reset	Reset Bar Position		escluso	—	T2	escluso	escluso	—	come sopra (D6)	Ripristina posizione barra
-interfaccia	window.dock	Panels		fub	—	T10	da fare	fub	—	mostra o nascondi l'ispettore e il cassetto	Pannelli
-interfaccia	window.panels	Panels Except Tools and Control		fub	—	T10	da fare	fub	—	le schede dell'ispettore di Fub	Pannelli tranne Strumenti e Controllo
-interfaccia	window.panel	Show Panel		fub	—	T10	da fare	fub	—	le schede dell'ispettore di Fub	Mostra pannello
+interfaccia	window.dock	Panels		fub	—	T10	fub	fub	—	mostra o nascondi l'ispettore e il cassetto	Pannelli
+interfaccia	window.panels	Panels Except Tools and Control		fub	—	T10	fub	fub	—	le schede dell'ispettore di Fub	Pannelli tranne Strumenti e Controllo
+interfaccia	window.panel	Show Panel		fub	—	T10	fub	fub	—	le schede dell'ispettore di Fub	Mostra pannello
 interfaccia	window.panel.layout	Change Panel Layout		escluso	—	T2	escluso	escluso	—	aggancio libero dei pannelli: Fub ha l'ispettore a schede (D6)	Modifica disposizione dei pannelli
 interfaccia	window.panel.move	Move Panel		escluso	—	T2	escluso	escluso	—	aggancio libero (D6)	Sposta pannello
-interfaccia	window.panel.activate	Activate Panel		fub	—	T10	da fare	fub	—	le schede dell'ispettore di Fub	Attiva pannello
-interfaccia	window.panel.close	Close Panel		fub	—	T10	da fare	fub	—	le schede dell'ispettore di Fub	Chiudi pannello
+interfaccia	window.panel.activate	Activate Panel		fub	—	T10	fub	fub	—	le schede dell'ispettore di Fub	Attiva pannello
+interfaccia	window.panel.close	Close Panel		fub	—	T10	fub	fub	—	le schede dell'ispettore di Fub	Chiudi pannello
 interfaccia	window.panel.collapse	Collapse Panel Group		escluso	—	T2	escluso	escluso	—	aggancio libero (D6)	Comprimi gruppo di pannelli
 interfaccia	window.panel.float	Float Panel		escluso	—	T2	escluso	escluso	—	pannelli fluttuanti (D6)	Rendi mobile pannello
 interfaccia	window.panel.dock	Dock Panel		escluso	—	T2	escluso	escluso	—	aggancio libero (D6)	Ancora pannello
-interfaccia	window.collapseDock	Collapse Panels to Icons		fub	—	T10	da fare	fub	—	l'ispettore di Fub	Comprimi pannelli in icone
+interfaccia	window.collapseDock	Collapse Panels to Icons		fub	—	T10	fub	fub	—	l'ispettore di Fub	Comprimi pannelli in icone
 interfaccia	window.brightness	UI Brightness		fub	—	T2	fub	fub	—	la luce di Fub (giorno/notte)	Luminosità interfaccia
 interfaccia	window.workspace	Workspace		fub	—	T7	fub	fub	—	la banda del disegno: il bottone dello spazio di lavoro (`shells/scrittoio/frame/status-band.ts`) e il suo menu (`editors/spatial/workspace-band.ts`, Semplice, Completo, i preset e gli spazi salvati)	Area di lavoro
 interfaccia	window.workspace.reset	Reset Essentials		fub	—	T7	fub	fub	—	Ripristina dal menu dello spazio: riapplica i dati dello spazio in uso (`workspace-band.ts`, `completo/spazi.ts`)	Reimposta Essentials

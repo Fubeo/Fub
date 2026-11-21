@@ -15,7 +15,10 @@
 /// niente: si scrive `none`, così due bordi assenti non differiscono per il
 /// `currentColor` che il browser restituirebbe.
 export function leggiNellaPagina({ radice, richieste }) {
-  const base = radice ? document.querySelector(radice) : document;
+  // Lo schermo del prototipo può essere un `<iframe>` (K6): si legge dal suo
+  // documento, che è dello stesso sito (`srcdoc`).
+  const contenitore = radice ? document.querySelector(radice) : null;
+  const base = !radice ? document : contenitore instanceof HTMLIFrameElement ? contenitore.contentDocument : contenitore;
   return richieste.map(({ selettore, proprieta }) => {
     if (!base) return null;
     const m = /^(.*?)(::(?:before|after))?$/.exec(selettore);

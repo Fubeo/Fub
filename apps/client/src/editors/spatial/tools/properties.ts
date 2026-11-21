@@ -36,7 +36,11 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
-import type { Lifetime } from "../../../ui/lifetime";
+import type { Lifetime, Teardown } from "../../../ui/lifetime";
+// Le sezioni del Design che il Completo registra (T10): in coda al pannello.
+import type { Sezioni } from "../completo/sezioni";
+import type { MotoreDelDisegno } from "../motore/gesti";
+import { createSezioniList, type SezioniList } from "./resources-panel";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
 import { createColorPicker, type ColorPicker } from "../../../kit/color/picker";
 import { openPopover, type PopoverHandle } from "../../../kit/popover";
@@ -298,6 +302,9 @@ export interface PropertiesOptions {
 export interface Properties {
   /// Il pannello: titolo, oggetto, sezioni.
   readonly element: HTMLElement;
+  /// Il Completo aperto dà le sezioni del Design (`ispettore/design/…`) dal
+  /// suo registro, con la selezione che `scelti` conta; `null` le toglie.
+  collegaSezioni(registro: Sezioni | null, motore: MotoreDelDisegno | null, scelti: () => number): void;
   /// Fra il titolo e le sezioni: ciò che l'editor ci mette (il titolo del
   /// disegno).
   readonly lead: HTMLElement;
@@ -593,6 +600,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   element.append(header, lead, scroller);
 
   let view: PropertiesView = { key: "", subject: "", editable: false, fields: {}, actions: {} };
+  /// Le sezioni del Design dal registro del Completo (T10); `null` senza il Completo.
+  let registrate: SezioniList | null = null;
   /// Vero mentre i campi si ridisegnano: un campo che se ne va non scrive.
   let rendering = false;
   const closed = new Set(options.closed);
@@ -1672,6 +1681,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       rendering = false;
     }
     for (const sync of roves) sync();
+    // Le sezioni del registro vedono la selezione di adesso.
+    registrate?.aggiorna();
     // Il fuoco in un campo che se n'è andato resta nel pannello: alla sua
     // sezione, se c'è ancora.
     if (lost !== null && (lost as HTMLElement).closest("[hidden]") !== null) {
@@ -1683,10 +1694,37 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
 
   relabel();
 
+  // Le sezioni del Design che le famiglie registrano (`ispettore/design/…`): in
+  // coda al pannello, dopo le sue, nell'ordine della mappa (T10).
+  const sezioniDesign = document.createElement("div");
+  scroller.append(sezioniDesign);
+  let registro: Sezioni | null = null;
+  let motoreCompleto: MotoreDelDisegno | null = null;
+  let scelti: () => number = () => 0;
+  let stopRegistro: Teardown | null = null;
+  registrate = createSezioniList(sezioniDesign, life, {
+    elenco: () => registro?.di("design") ?? [],
+    selezione: () => ({ numero: scelti() }),
+    motore: () => motoreCompleto,
+  });
+  life.add(() => {
+    stopRegistro?.();
+    stopRegistro = null;
+  });
+
   return {
     element,
     lead,
     update,
+    collegaSezioni(nuovo, motore, numero) {
+      stopRegistro?.();
+      stopRegistro = null;
+      registro = nuovo;
+      motoreCompleto = motore;
+      scelti = numero;
+      if (nuovo !== null) stopRegistro = nuovo.ascolta(() => registrate?.aggiorna());
+      registrate?.aggiorna();
+    },
     focus() {
       for (const section of sections.values()) {
         if (section.root.hidden || !section.open) continue;

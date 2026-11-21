@@ -9,6 +9,7 @@
 // `apri` porta l'indice e prepara il nucleo, e basta.
 
 import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
+import { creaSezioni, type Sezioni } from "./sezioni";
 import type { Indice } from "./indice";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
@@ -16,6 +17,7 @@ export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
 export type { Indice, VoceIndice } from "./indice";
+export { registraSezione, type ContestoSezione, type Scheda, type Selezione, type Sezione, type Sezioni } from "./sezioni";
 
 /// La famiglia che ogni Completo aperto prepara subito.
 export const NUCLEO = "nucleo";
@@ -25,6 +27,9 @@ export interface Completo {
   /// è arrivato, la chiamata dopo («Riprova») lo chiede di nuovo.
   indice(): Promise<Indice>;
   readonly carica: Caricatore;
+  /// Le sezioni dell'ispettore che le famiglie registrano (T10); il pannello
+  /// Risorse e le sezioni del Design le leggono di qui.
+  readonly sezioni: Sezioni;
   /// Il disegno si chiude: gli esiti in volo si buttano.
   chiudi(): void;
   /// Applica lo spazio `space` del Completo (un preset, o `full` per i dati di
@@ -45,17 +50,20 @@ const indiceVero = (): Promise<Indice> => import("./indice").then((m) => m.indic
 /// Apre il Completo di un disegno: chiede l'indice e prepara il nucleo. Un
 /// indice che non arriva non ferma niente: chi lo mostra (≡, Ctrl+/) lo
 /// richiede e dice che non si è caricato, con «Riprova».
-export function apri(ctx: ContestoCompleto, opzioni: OpzioniCompleto = {}): Completo {
+export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCompleto = {}): Completo {
   const indice = opzioni.indice ?? indiceVero;
-  const carica = caricatore({ ctx, moduli: opzioni.moduli, prepara: opzioni.prepara });
+  const sezioni = creaSezioni();
+  const carica = caricatore({ ctx: { ...ctx, sezioni }, moduli: opzioni.moduli, prepara: opzioni.prepara });
   let chiuso = false;
   const completo: Completo = {
     indice,
     carica,
+    sezioni,
     chiudi() {
       if (chiuso) return;
       chiuso = true;
       carica.chiudi();
+      sezioni.chiudi();
     },
     spazio(space, effetti) {
       // Il Completo di serie non apre niente: una scheda aperta farebbe

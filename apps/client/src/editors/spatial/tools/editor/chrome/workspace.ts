@@ -14,6 +14,7 @@ import { t } from "../../../strings";
 import type { ToolId, Workspace } from "../../registry";
 import { openToolbarDialog } from "../../toolbar-dialog";
 import type { EditorContext } from "../context";
+import type { Sezioni } from "../../../completo/sezioni";
 import { railLayout } from "./rail";
 import type { Completo } from "../../../completo";
 import type { EffettiSpazio, SchedaSpazio } from "../../../completo/spazi";
@@ -146,8 +147,8 @@ export function installWorkspace(ctx: EditorContext): void {
   let completo: "no" | "verifica" | "in-arrivo" | "aperto" | "fallito" = "no";
   /// Il Completo aperto: vi si applica lo spazio in uso.
   let aperto: Completo | null = null;
-  // La scheda che lo spazio apre passa dal pannello dell'ispettore; la sezione
-  // dell'ispettore arriva con T10, e finché non c'è lo spazio la salta.
+  // La scheda che lo spazio apre passa dal pannello dell'ispettore. Le sezioni
+  // dell'ispettore (T10) non si aprono ancora per nome: lo spazio le salta.
   const effetti: EffettiSpazio = {
     scheda: (scheda) => options.chrome?.reveal?.(scheda),
     sezione: () => false,
@@ -161,8 +162,19 @@ export function installWorkspace(ctx: EditorContext): void {
     }
     aperto?.spazio(ctx.space, effetti);
   };
+  // Le sezioni del Completo aperto (T10): la scheda Risorse le legge di qui.
+  let sezioniAperte: Sezioni | null = null;
   const vuoleCompleto = (): boolean =>
     !compact && !ctx.disposed && ctx.workspace === "full" && components()?.on(DISEGNO_COMPLETO) === true;
+  // La scheda Risorse è quella del Completo del motore: c'è solo col Completo
+  // aperto, col componente acceso, col motore del disegno e nello spazio
+  // «Completo». Spento il componente, senza motore o nel Semplice, si toglie.
+  const mostraRisorse = (): void => {
+    if (completo !== "aperto" || sezioniAperte === null) return;
+    const motore = options.motore ?? null;
+    const attivo = !ctx.disposed && ctx.workspace === "full" && motore !== null && components()?.on(DISEGNO_COMPLETO) === true;
+    ctx.collegaCompleto(attivo ? sezioniAperte : null, attivo ? motore : null);
+  };
   const portaCompleto = (): void => {
     if ((completo !== "no" && completo !== "fallito") || !vuoleCompleto()) return;
     completo = "verifica";
@@ -179,8 +191,10 @@ export function installWorkspace(ctx: EditorContext): void {
         ({ apri }) => {
           if (ctx.disposed) return;
           aperto = apri({ motore: options.motore ?? null, life: ctx.life });
+          sezioniAperte = aperto.sezioni;
           completo = "aperto";
           applicaSpazio();
+          mostraRisorse();
           options.onWorkspaceChange?.();
         },
         // Un chunk che non arriva: lo spazio di prima resta, e «Riprova» ci
@@ -192,7 +206,10 @@ export function installWorkspace(ctx: EditorContext): void {
       );
     });
   };
-  ctx.life.add(onComponents(portaCompleto));
+  ctx.life.add(onComponents(() => {
+    portaCompleto();
+    mostraRisorse();
+  }));
 
   ctx.setSpace = (next, toolbar) => {
     if (ctx.disposed) return;
@@ -210,6 +227,7 @@ export function installWorkspace(ctx: EditorContext): void {
     ctx.syncPenOptions();
     portaCompleto();
     applicaSpazio();
+    mostraRisorse();
   };
   ctx.resetSpace = applicaSpazio;
   ctx.retryCompleto = () => portaCompleto();

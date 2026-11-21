@@ -45,6 +45,9 @@ if (erroriTraduzioni.length) {
   process.exit(2);
 }
 const rev = opzioni.find((o) => o.startsWith("--rev="))?.slice("--rev=".length) ?? `origin/${PROTOTIPO.ramo}`;
+/// Dove stanno i selettori del prototipo: dentro `#win` di default, o dentro
+/// lo schermo di `PROTOTIPO.radice` (un `<iframe>` con un suo documento).
+const radiceSchermo = PROTOTIPO.radice ?? "#win";
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", cwd: here(".") }).trim();
 /// La radice del repository: `git archive` legge i percorsi da lì.
@@ -93,16 +96,23 @@ try {
         });
         const page = await context.newPage();
         await page.goto(pathToFileURL(sorgente).href);
-        await page.click(`[data-set="light"][data-v="${stato.prototipo.luce}"]`);
-        await page.click(`[data-set="width"][data-v="${stato.prototipo.larghezza}"]`);
-        await page.click('[data-set="motion"][data-v="ridotto"]');
+        // I comandi di luce, larghezza e moto sono quelli dell'editor, salvo
+        // che la mappa dica i suoi (`PROTOTIPO.comandi`, per un prototipo con
+        // altri controlli).
+        if (PROTOTIPO.comandi) {
+          await PROTOTIPO.comandi(page, stato.prototipo);
+        } else {
+          await page.click(`[data-set="light"][data-v="${stato.prototipo.luce}"]`);
+          await page.click(`[data-set="width"][data-v="${stato.prototipo.larghezza}"]`);
+          await page.click('[data-set="motion"][data-v="ridotto"]');
+        }
         await vista.prototipo.prepara(page);
         await fermo(page);
         const leggiPezzo = async (pezzo) => {
           const proprieta = espandi(pezzo.proprieta);
-          if (pezzo.gesto) await gesto(page, "#win", pezzo.gesto.tipo, pezzo.gesto.prototipo);
+          if (pezzo.gesto) await gesto(page, radiceSchermo, pezzo.gesto.tipo, pezzo.gesto.prototipo);
           await fermo(page);
-          const [letti] = await leggi(page, "#win", [{ selettore: pezzo.prototipo, proprieta }]);
+          const [letti] = await leggi(page, radiceSchermo, [{ selettore: pezzo.prototipo, proprieta }]);
           if (pezzo.gesto) await riposo(page);
           if (!letti) {
             throw new Error(
@@ -117,10 +127,13 @@ try {
         // ogni contesto; ogni pezzo le legge con la traduzione del suo.
         const crudi = [];
         for (const pezzo of pezzi) crudi.push(await leggiPezzo(pezzo));
-        await page.evaluate((sent) => {
-          const win = document.querySelector("#win");
-          for (const [t, [r, g, b]] of Object.entries(sent)) win.style.setProperty(t, `rgb(${r}, ${g}, ${b})`);
-        }, sentinelle(TRADUZIONI[CONTESTO_DI_BASE]));
+        await page.evaluate(({ radice: r, sent }) => {
+          const contenitore = document.querySelector(r);
+          // Lo schermo in un iframe (`PROTOTIPO.radice` su un `<iframe>`): le
+          // sentinelle vanno sulla radice del suo documento.
+          const win = contenitore instanceof HTMLIFrameElement ? contenitore.contentDocument.documentElement : contenitore;
+          for (const [t, [r2, g, b]] of Object.entries(sent)) win.style.setProperty(t, `rgb(${r2}, ${g}, ${b})`);
+        }, { radice: radiceSchermo, sent: sentinelle(TRADUZIONI[CONTESTO_DI_BASE]) });
         await fermo(page);
         for (const [i, pezzo] of pezzi.entries()) {
           const finti = await leggiPezzo(pezzo);
