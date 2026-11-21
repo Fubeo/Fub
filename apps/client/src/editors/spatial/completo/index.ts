@@ -11,7 +11,7 @@
 import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
 import type { Indice } from "./indice";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
-import { applicaSpazio, presetDi, SPAZIO_COMPLETO, type EffettiSpazio } from "./spazi";
+import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
 export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
@@ -58,7 +58,11 @@ export function apri(ctx: ContestoCompleto, opzioni: OpzioniCompleto = {}): Comp
       carica.chiudi();
     },
     spazio(space, effetti) {
-      applicaSpazio(presetDi(space) ?? SPAZIO_COMPLETO, effetti, carica);
+      // Il Completo di serie non apre niente: una scheda aperta farebbe
+      // cambiare il fuoco dell'editor appena il Completo arriva.
+      const preset = presetDi(space);
+      if (preset === null) return;
+      applicaSpazio(preset, effetti, carica);
     },
   };
   ctx.life.add(() => completo.chiudi());
