@@ -174,7 +174,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     montaTasti({
       radice: tasti.radice,
       vita: ctx.life,
-      indice,
+      indice: () => completo.indice(),
       modifiche: tasti.modifiche ?? (() => ({})),
       stato: tasti.stato,
       piattaforma: tasti.piattaforma ?? piattaformaDi(),

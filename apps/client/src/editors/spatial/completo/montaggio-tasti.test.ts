@@ -201,4 +201,35 @@ describe("montaTasti", () => {
     premi(root, TASTO_ROUND);
     expect(esegui).not.toHaveBeenCalled();
   });
+
+  it("il primo indice rifiuta: il tasto dopo lo chiede di nuovo, e poi un tasto del motore parte", async () => {
+    const root = radice().root;
+    let tentativi = 0;
+    const indice = vi.fn((): Promise<Indice> => {
+      tentativi++;
+      return tentativi === 1 ? Promise.reject(new Error("niente")) : Promise.resolve(INDICE);
+    });
+    const esegui = vi.fn((_voce: VoceIndice) => undefined);
+    montaTasti({ radice: root, vita: vita(), indice, modifiche: () => ({}), stato: () => ({ vuoleTesto: false, componendo: false }), piattaforma: "other", esegui });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(indice).toHaveBeenCalledTimes(1);
+    // Il tasto dopo il rifiuto chiede l'indice di nuovo, e non parte ancora.
+    premi(root, TASTO_ROUND);
+    expect(indice).toHaveBeenCalledTimes(2);
+    expect(esegui).not.toHaveBeenCalled();
+    // Arrivato l'indice, il tasto parte, e l'indice non si chiede più.
+    await new Promise((r) => setTimeout(r, 0));
+    premi(root, TASTO_ROUND);
+    expect(esegui).toHaveBeenCalledWith(expect.objectContaining({ id: "shape.round" }));
+    expect(indice).toHaveBeenCalledTimes(2);
+  });
+
+  it("mentre l'indice si chiede, un tasto non ne chiede un altro", () => {
+    const root = radice().root;
+    const indice = vi.fn((): Promise<Indice> => new Promise(() => undefined));
+    montaTasti({ radice: root, vita: vita(), indice, modifiche: () => ({}), stato: () => ({ vuoleTesto: false, componendo: false }), piattaforma: "other", esegui: vi.fn() });
+    premi(root, TASTO_ROUND);
+    premi(root, TASTO_ROUND);
+    expect(indice).toHaveBeenCalledTimes(1);
+  });
 });

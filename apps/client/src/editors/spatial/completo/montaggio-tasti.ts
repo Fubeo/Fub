@@ -18,7 +18,8 @@ export interface OpzioniMontaggioTasti {
   readonly radice: HTMLElement;
   /// La vita del Completo: chiusa, l'ascoltatore si toglie.
   readonly vita: Lifetime;
-  /// L'indice dei comandi, una volta sola (`completo/indice.ts`).
+  /// L'indice dei comandi del Completo (`completo.indice()`): chiesto al
+  /// montaggio, e poi col tasto dopo finché non arriva.
   readonly indice: () => Promise<Indice>;
   /// Le modifiche dell'utente (`draw.keys`, T9c), comando → tasto; `{}` finché non ci sono.
   readonly modifiche: () => ModificheTasti;
@@ -36,13 +37,17 @@ export interface MontaggioTasti {
   regola(): RegolaTasti | null;
 }
 
-/// Monta i tasti del motore sulla radice dell'editor. Senza indice (non è
-/// arrivato, o non arriva) non parte niente e il Semplice funziona come prima.
+/// Monta i tasti del motore sulla radice dell'editor. Senza indice non parte
+/// niente e il Semplice funziona come prima. L'indice si chiede al montaggio, e
+/// poi a ogni tasto finché non arriva: un rifiuto non si tiene, e il tasto dopo
+/// lo chiede di nuovo. Una richiesta alla volta.
 export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
   // Solo i comandi del motore: gli strumenti e i pezzi del client non partono qui.
   let comandi: Map<string, VoceIndice> | null = null;
   let regola: RegolaTasti | null = null;
   let chiuso = false;
+  // La richiesta dell'indice in corso, se c'è.
+  let richiesta: Promise<void> | null = null;
 
   const ricalcola = (): void => {
     if (comandi === null) return;
@@ -53,19 +58,30 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
     );
   };
 
-  void opzioni.indice().then(
-    (indice) => {
-      if (chiuso) return;
-      comandi = new Map(indice.voci.filter((voce) => "comando" in voce.chiamata).map((voce) => [voce.id, voce]));
-      ricalcola();
-    },
-    () => {
-      // L'indice non arriva: niente tasti del motore, e «Riprova» lo chiede di nuovo.
-    },
-  );
+  const chiedi = (): void => {
+    if (comandi !== null || richiesta !== null || chiuso) return;
+    richiesta = opzioni.indice().then(
+      (indice) => {
+        richiesta = null;
+        if (chiuso) return;
+        comandi = new Map(indice.voci.filter((voce) => "comando" in voce.chiamata).map((voce) => [voce.id, voce]));
+        ricalcola();
+      },
+      () => {
+        // L'indice non arriva: niente tasti del motore, e il tasto dopo lo chiede.
+        richiesta = null;
+      },
+    );
+  };
+  chiedi();
 
   const alTasto = (event: KeyboardEvent): void => {
-    if (event.defaultPrevented || regola === null || comandi === null) return;
+    if (event.defaultPrevented) return;
+    if (comandi === null || regola === null) {
+      // Senza indice il tasto non parte: lo chiede di nuovo, e il tasto dopo parte.
+      chiedi();
+      return;
+    }
     const stato = opzioni.stato();
     const decisione = decidiTasto(
       event,
