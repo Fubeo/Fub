@@ -5097,14 +5097,22 @@ async function openRisorse(page) {
   await page.waitForSelector('#surface-panel-draw-resources:not([hidden]) .draw-resources');
 }
 
-/// Apre il disegno e sceglie la prima forma con la tastiera, come
-/// `draw-selection`: l'ispettore mostra il Design con la selezione (K6 T10).
+/// Apre il disegno, sceglie lo strumento Selezione dalla colonna, clicca un
+/// punto vuoto del foglio e seleziona tutto: l'ispettore mostra il Design con la
+/// selezione (K6 T10). Il clic su una forma non la sceglie nel Completo di
+/// oggi, e il punto singolo del prototipo è di T12.
 async function openDesignoScelto(page) {
   await openDesignoVuoto(page);
-  await page.keyboard.press("v");
-  const shape = await page.locator(".draw-editor .draw-surface ellipse[data-scene-id]").first().boundingBox();
-  if (!shape) throw new Error("l'ellisse del disegno non c'è");
-  await page.mouse.click(shape.x + shape.width / 2, shape.y + shape.height / 2);
+  await page.click('.draw-rail [aria-label="Selezione"]');
+  const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+  if (!foglio) throw new Error("il foglio del disegno non c'è");
+  await page.mouse.click(foglio.x + 30, foglio.y + 30);
+  await page.keyboard.press("Control+a");
+  // Il titolo del pannello dice la selezione, non «Il disegno».
+  await page.waitForFunction(() => {
+    const soggetto = document.querySelector("#surface-panel-draw-design .draw-properties-subject");
+    return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
+  });
 }
 
 /// Apre il disegno e la scheda Design dell'ispettore, senza nulla scelto (K6 T10).
