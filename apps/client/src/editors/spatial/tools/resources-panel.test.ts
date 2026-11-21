@@ -223,6 +223,23 @@ describe("il giro di una sezione", () => {
   });
 });
 
+describe("la voce «Pannelli ›»", () => {
+  it("porta in vista una sezione: la apre se era chiusa e le dà il fuoco", () => {
+    const panel = pannello(modello(SWATCH));
+    const toggle = panel.element.querySelector<HTMLButtonElement>('[data-section="documento"] .draw-properties-toggle')!;
+    toggle.click();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.focusSection("documento")).toBe(true);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  it("una sezione che non c'è dà falso e non prende il fuoco", () => {
+    const panel = pannello();
+    expect(panel.focusSection("non-c-e")).toBe(false);
+  });
+});
+
 describe("il ciclo di vita", () => {
   it("chiudere la scheda smonta le sezioni e chiama i disposer", () => {
     const sezioni = creaSezioni();

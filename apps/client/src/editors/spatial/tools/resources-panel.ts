@@ -36,6 +36,9 @@ export interface PannelloRisorse {
   /// Il disegno o la selezione sono cambiati: si rifà, al più una volta per
   /// fotogramma.
   aggiorna(): void;
+  /// Porta in vista la sezione `id` della scheda e le dà il fuoco (la voce
+  /// «Pannelli ›» del menu). Falso se la sezione non c'è adesso.
+  focusSection(id: string): boolean;
   /// Smonta le sezioni e i loro ascolti.
   dispose(): void;
 }
@@ -52,6 +55,9 @@ export interface OpzioniPannelloRisorse {
 export interface SezioniList {
   /// Chiede un giro: al più uno per fotogramma.
   aggiorna(): void;
+  /// Porta in vista la sezione `id` (la apre, se è chiusa) e le dà il fuoco.
+  /// Falso se la sezione non c'è adesso.
+  porta(id: string): boolean;
   /// Smonta tutte le sezioni e chiama i loro disposer.
   dispose(): void;
 }
@@ -70,6 +76,7 @@ export interface OpzioniSezioniList {
 interface Montata {
   readonly sezione: Sezione;
   readonly root: HTMLElement;
+  readonly toggle: HTMLButtonElement;
   readonly body: HTMLElement;
   readonly errore: HTMLElement;
   readonly riprova: HTMLButtonElement;
@@ -188,7 +195,7 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
     corpo.className = "draw-resources-corpo";
     body.append(errore, riprova, corpo);
     root.append(heading, body);
-    const m: Montata = { sezione, root, body, errore, riprova, corpo, vita, fine: null, giro: null };
+    const m: Montata = { sezione, root, toggle, body, errore, riprova, corpo, vita, fine: null, giro: null };
     vita.listen(toggle, "click", () => {
       const aperta = toggle.getAttribute("aria-expanded") !== "true";
       toggle.setAttribute("aria-expanded", String(aperta));
@@ -302,6 +309,15 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
 
   return {
     aggiorna: pianifica,
+    porta(id) {
+      const m = [...montate.values()].find((each) => each.sezione.id === id);
+      if (m === undefined) return false;
+      m.toggle.setAttribute("aria-expanded", "true");
+      m.body.hidden = false;
+      m.root.scrollIntoView?.({ block: "nearest" });
+      m.toggle.focus({ preventScroll: true });
+      return true;
+    },
     dispose() {
       closed = true;
       smonta();
@@ -351,6 +367,9 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
     },
     aggiorna() {
       lista.aggiorna();
+    },
+    focusSection(id) {
+      return lista.porta(id);
     },
     dispose() {
       closed = true;
