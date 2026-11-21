@@ -1030,11 +1030,12 @@ function benchDrawingEngine(): DrawingFake | undefined {
       benchLastInstance = instance;
       return { instance, revision: "0", mapped: 0, unmapped: losses.length, losses };
     },
-    comando: (request) => benchWindowOutcome(request),
     gesto: (gesture, copia) => benchDrawingOutcome(gesture, copia.text),
-    // I comandi del Disegno completo: le risposte di `disegno-famiglie/`, e
-    // `unserved` per un comando che non ne ha una.
-    comando: (request) => rispostaDiFamiglia(request),
+    // Il comando delle scene della finestra ha la sua risposta; gli altri
+    // comandi del Disegno completo hanno quelle di `disegno-famiglie/`, e
+    // `unserved` un comando che non ne ha una.
+    comando: (request) =>
+      request.id === BENCH_WINDOW_COMMAND ? benchWindowOutcome(request) : rispostaDiFamiglia(request),
   };
 }
 
