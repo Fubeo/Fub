@@ -39,7 +39,7 @@ describe("la colonna del Disegno completo", () => {
     const extra: ToolSpec = { ...VECTOR.find((spec) => spec.id === "rect")!, id: "note" as ToolSpec["id"], group: "shape" };
     const layout = layoutCompleto([...solo, extra]);
     const forme = layout.find((gruppo) => gruppo.id === "shape")!;
-    expect(forme.caselle.at(-1)).toEqual(["note"]);
+    expect(forme.caselle[forme.caselle.length - 1]).toEqual(["note"]);
   });
 
   it("una colonna senza strumenti è vuota", () => {

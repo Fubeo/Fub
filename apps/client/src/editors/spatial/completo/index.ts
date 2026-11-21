@@ -14,6 +14,12 @@ import type { Indice } from "./indice";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
 export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
+// La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
+import { layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
+import type { ToolSpec } from "../tools/registry";
+import type { Lifetime } from "../../../ui/lifetime";
+import type { CassettoOptions } from "../tools/editor/chrome/drawer";
+export type { GruppoLayout } from "./colonna";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
 export type { Indice, VoceIndice } from "./indice";
@@ -35,6 +41,12 @@ export interface Completo {
   /// Applica lo spazio `space` del Completo (un preset, o `full` per i dati di
   /// serie): la scheda, la sezione, e le famiglie da preparare.
   spazio(space: string, effetti: EffettiSpazio): void;
+  /// La colonna del Completo per gli strumenti offerti (T8): sei gruppi, le
+  /// caselle che hanno strumenti pronti, nell'ordine del prototipo.
+  colonna(offerti: readonly ToolSpec[]): readonly GruppoLayout[];
+  /// Apre il cassetto «Tutti gli strumenti» dalla sua casella (T8). Il suo
+  /// pezzo arriva con un `import()`, la prima volta.
+  cassetto(anchor: HTMLElement, opzioni: Omit<CassettoOptions, "anchor" | "lifetime">, lifetime: Lifetime): void;
 }
 
 export interface OpzioniCompleto {
@@ -71,6 +83,15 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       const preset = presetDi(space);
       if (preset === null) return;
       applicaSpazio(preset, effetti, carica);
+    },
+    colonna: (offerti) => layoutCompleto(offerti, MOTORE_PRONTO),
+    cassetto(anchor, opzioni, lifetime) {
+      // Il cassetto è nel suo pezzo: si apre appena arriva, e non dopo la
+      // chiusura del disegno.
+      void import("../tools/editor/chrome/drawer").then(({ apriCassetto }) => {
+        if (chiuso) return;
+        apriCassetto({ ...opzioni, anchor, lifetime });
+      });
     },
   };
   ctx.life.add(() => completo.chiudi());

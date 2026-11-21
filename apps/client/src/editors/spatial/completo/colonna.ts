@@ -59,6 +59,12 @@ const GRUPPO_DI_FAMIGLIA: Readonly<Record<ToolSpec["group"], GruppoColonna>> = {
   text: "shape",
 };
 
+/// Gli strumenti del motore che hanno la riga «fatto». Oggi nessuna: fino ai
+/// task di famiglia (T11–T26) la colonna mostra solo gli strumenti di Fub. Un
+/// id qui sblocca `motore:<id>`, e il chrome lo deve sapere (uno strumento del
+/// motore non ha ancora un `ToolSpec`).
+export const MOTORE_PRONTO: ReadonlySet<string> = new Set();
+
 /// Un gruppo della colonna con le sue caselle; ogni casella è la lista dei
 /// suoi strumenti, già filtrati.
 export interface GruppoLayout {

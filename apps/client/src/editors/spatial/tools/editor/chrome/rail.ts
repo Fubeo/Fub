@@ -7,9 +7,25 @@
 // offerti ai gruppi, per profilo.
 
 import { createToolRail, type RailGroup, type RailTool, type ToolRail } from "../../../../../kit/tool-rail";
-import { t } from "../../../strings";
+import { t, type DrawKey } from "../../../strings";
 import { toolKeyText, type ToolId, type ToolProfile, type ToolSpec } from "../../registry";
 import type { EditorContext } from "../context";
+import type { StrumentoCassetto } from "./drawer";
+
+/// La casella «Tutti gli strumenti» della colonna del Completo: non è uno
+/// strumento, apre il cassetto.
+export const TUTTI_GLI_STRUMENTI = "fub:tutti";
+
+/// La colonna del Disegno completo, come la porta `completo/` quando è aperto
+/// e acceso (K6 T8). Le sue caselle sono strumenti per id, nel loro gruppo; il
+/// cassetto riceve gli strumenti da mostrare e chi li sceglie.
+export interface CompletoColonna {
+  colonna(offerti: readonly ToolSpec[]): readonly { readonly id: string; readonly caselle: readonly (readonly string[])[] }[];
+  cassetto(
+    anchor: HTMLElement,
+    opzioni: { readonly strumenti: readonly StrumentoCassetto[]; readonly corrente: string | null; readonly scegli: (id: string) => void; readonly modifica: () => void },
+  ): void;
+}
 
 /// Le caselle, per gruppo: ogni casella elenca i suoi strumenti, il primo è
 /// quello che mostra finché non se ne sceglie un altro.
@@ -82,6 +98,9 @@ export interface RailContext {
   /// Rifà le caselle se gli strumenti offerti sono cambiati, e mostra lo
   /// strumento scelto.
   syncRail: (editable: boolean) => void;
+  /// La colonna del Completo, se è aperto e acceso e la colonna è quella di
+  /// serie (K6 T8); `null` o assente altrimenti.
+  completo?: () => CompletoColonna | null;
 }
 
 /// Monta la colonna: la sceglie `pickTool`, il nome e il tasto vengono dal
@@ -90,8 +109,36 @@ export function installRail(ctx: EditorContext): void {
   const { life, profile, relabels, toolLabel, toolHint } = ctx;
   let shown = "";
 
-  const groups = (): RailGroup[] =>
-    railLayout(ctx.tools, profile, ctx.column).map((slots, at) => ({
+  const railTool = (id: string): RailTool => {
+    const spec = ctx.tools.find((each) => each.id === id)!;
+    const { keys, aria } = keysOf(spec);
+    return { id, label: t(toolLabel(id as ToolId)), icon: ctx.toolIcon(id as ToolId), keys, ariaKeys: aria, description: t(toolHint(id as ToolId)) };
+  };
+  /// Il cassetto di «Tutti gli strumenti»: ogni strumento col suo gruppo e il
+  /// suo tasto, e la modifica della colonna di chi lo apre.
+  const openDrawer = (completo: CompletoColonna): void => {
+    const anchor = rail.element.querySelector<HTMLElement>(`[data-slot="${TUTTI_GLI_STRUMENTI}"]`) ?? rail.element;
+    completo.cassetto(anchor, {
+      strumenti: ctx.tools.map((spec) => ({ id: spec.id, label: toolLabel(spec.id) as DrawKey, icon: spec.icon, keys: keysOf(spec).keys, famiglia: spec.group })),
+      corrente: ctx.tool,
+      scegli: (id) => ctx.pickTool(id as ToolId),
+      modifica: () => ctx.customizeToolbar(),
+    });
+  };
+  const groups = (): RailGroup[] => {
+    const completo = ctx.completo?.() ?? null;
+    // La colonna del Completo, se la colonna è quella di serie; con una
+    // colonna scelta da chi usa, quella vince.
+    if (completo !== null && ctx.column.length === 0) {
+      const gruppi: RailGroup[] = completo.colonna(ctx.tools).map((gruppo) => ({
+        id: gruppo.id,
+        slots: gruppo.caselle.map((tools) => ({ id: tools[0]!, tools: tools.map(railTool) })),
+      }));
+      const tutti: RailTool = { id: TUTTI_GLI_STRUMENTI, label: t("draw.chrome.column.all"), icon: "draw-all-tools", description: t("draw.chrome.column.all") };
+      gruppi.push({ id: "all", slots: [{ id: TUTTI_GLI_STRUMENTI, tools: [tutti] }] });
+      return gruppi;
+    }
+    return railLayout(ctx.tools, profile, ctx.column).map((slots, at) => ({
       id: GROUP_IDS[at] ?? `group-${at}`,
       slots: slots.map((tools) => ({
         id: tools[0]!,
@@ -102,7 +149,8 @@ export function installRail(ctx: EditorContext): void {
         }),
       })),
     }));
-  const signature = (): string => `${ctx.column.join("+")}|${ctx.tools.map((spec) => `${spec.id}:${ctx.toolIcon(spec.id)}:${toolLabel(spec.id)}`).join(",")}`;
+  };
+  const signature = (): string => `${ctx.column.join("+")}|${ctx.completo?.() ? "completo" : "base"}|${ctx.tools.map((spec) => `${spec.id}:${ctx.toolIcon(spec.id)}:${toolLabel(spec.id)}`).join(",")}`;
 
   const rail = createToolRail({
     label: t("draw.chrome.rail"),
@@ -110,7 +158,14 @@ export function installRail(ctx: EditorContext): void {
     active: ctx.tool,
     slotClass: "draw-tool",
     text: { more: (tool) => t("draw.chrome.rail.more", { tool }) },
-    onSelect: (tool) => ctx.pickTool(tool as ToolId),
+    onSelect: (tool) => {
+      if (tool === TUTTI_GLI_STRUMENTI) {
+        const completo = ctx.completo?.() ?? null;
+        if (completo !== null) openDrawer(completo);
+        return;
+      }
+      ctx.pickTool(tool as ToolId);
+    },
     lifetime: life,
   });
   shown = signature();
