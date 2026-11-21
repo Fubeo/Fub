@@ -199,6 +199,13 @@ questa sezione, vale questa.
     per il sì. I pezzi nuovi di K6 restano quelli. Perché: il sì vale
     per ciò che si vedrà, e la regola del prototipo vuole lo stesso
     pixel.
+
+    Fatto il 2026-11-21: la cornice è ricatturata da `integra/editor-3`
+    a `25299965f`. Con `?cornice=1` le parti che K6 non tocca hanno
+    208 stili calcolati su 208 uguali all'app, in giorno e in notte; al
+    pixel restano sotto i 450 px di sfumatura del testo per schermo.
+    Ciò che la cornice ha cambiato nei pezzi di K6 è in fondo alla
+    pagina, sotto «Modifiche del 2026-11-21».
 15. **Le ondate.** Prima: i grafici mescolati ai non grafici, e D1–D12
     attese. Dopo: prima T1, T2, T4, T28, T3, T27, T5 e T30, che non
     aspettano niente. Poi T6–T10 dopo il sì al prototipo, e T11 e le
