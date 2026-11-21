@@ -10894,7 +10894,8 @@
         "draw-commands-path",
         "draw-commands-key",
         "draw-commands-why",
-        "draw-commands-empty"
+        "draw-commands-empty",
+        "kit-list-highlight"
       ],
       "states": [
         "rest",

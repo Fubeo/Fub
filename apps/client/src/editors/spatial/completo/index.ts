@@ -8,9 +8,14 @@
 // sezioni), e dà l'indice dei comandi e il caricatore delle famiglie. Oggi
 // `apri` porta l'indice e prepara il nucleo, e basta.
 
-import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
+import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore, type StatoFamiglia } from "./carica";
 import { creaSezioni, type Sezioni } from "./sezioni";
-import type { Indice } from "./indice";
+import type { Indice, VoceIndice } from "./indice";
+// I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
+import { inviaComando, menuComando, menuNonCaricato, nomeVoce, statoComandi, vociRicerca, type VoceRicerca } from "./comandi";
+import { apriFinestra, type CampoFinestra, type EsitoComando, type ModuloFinestra } from "../motore/finestre";
+import type { DrawingOutcome, DrawingPreview } from "../../../host/contract";
+import type { MenuItem } from "../../../ui/menu";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
 export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
@@ -21,14 +26,12 @@ import type { Lifetime } from "../../../ui/lifetime";
 import type { CassettoOptions } from "../tools/editor/chrome/drawer";
 import { openPopover } from "../../../kit/popover";
 import { keyboardPlatform } from "../../../ui/commands";
-import type { DrawingPreview } from "../../../host/contract";
 import { t } from "../strings";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
 import { eseguiVoce, type AzioniEsito, type OpzioniFinestraComando } from "./esegui";
 import { montaTasti } from "./montaggio-tasti";
 import type { ModificheTasti, Piattaforma } from "./tasti";
-import type { VoceIndice } from "./indice";
 export type { GruppoLayout } from "./colonna";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
@@ -57,6 +60,25 @@ export interface Completo {
   /// Apre il cassetto «Tutti gli strumenti» dalla sua casella (T8). Il suo
   /// pezzo arriva con un `import()`, la prima volta.
   cassetto(anchor: HTMLElement, opzioni: Omit<CassettoOptions, "anchor" | "lifetime">, lifetime: Lifetime): void;
+  /// Il menu ≡ con le voci dell'indice (T9a): i sottomenu `menu/<sottomenu>`,
+  /// le voci spente col loro perché. Se l'indice non arriva, lo dice, con
+  /// «Riprova» (`azioni.riprova`).
+  menu(selezione: () => readonly string[], azioni: AzioniVoci): Promise<MenuItem[]>;
+  /// Le voci della ricerca Ctrl+/ (T9a), con il tasto, il posto e il perché.
+  /// `null` se l'indice non arriva: chi cerca lo dice, con «Riprova».
+  ricerca(selezione: () => readonly string[], azioni: AzioniVoci): Promise<VoceRicerca[] | null>;
+}
+
+/// Ciò che l'editor dà a una voce del menu o della ricerca (T9a).
+export interface AzioniVoci {
+  /// Lo strumento del motore: lo sceglie l'editor.
+  readonly strumento: (id: string) => void;
+  /// Applica al disegno l'esito di un comando: le sue operazioni, o il rifiuto.
+  readonly applica: (esito: DrawingOutcome) => void;
+  /// Mette l'anteprima di una finestra sul foglio, o la toglie con `null`.
+  readonly sulFoglio: (anteprima: DrawingPreview | null) => void;
+  /// Rifà l'indice, per chi lo mostra («Riprova»).
+  readonly riprova: () => void;
 }
 
 export interface OpzioniCompleto {
@@ -121,6 +143,41 @@ export function apriErroreCassetto(anchor: HTMLElement, lifetime: Lifetime, ripr
 /// L'indice vero, dal suo chunk (`drawing-indice`).
 const indiceVero = (): Promise<Indice> => import("./indice").then((m) => m.indice());
 
+/// Un campo come lo scrive lo schema della famiglia (`schema.generated.json`).
+interface CampoSchema {
+  readonly nome: string;
+  readonly tipo: string;
+  readonly facoltativo?: boolean;
+  readonly valori?: readonly string[];
+}
+
+/// Lo schema di una famiglia: le sue finestre, per id del comando.
+interface SchemaFamiglia {
+  readonly finestre: readonly { readonly id: string; readonly campi: readonly CampoSchema[] }[];
+}
+
+/// Un campo dello schema come lo legge la finestra di T6. I tipi che la
+/// finestra non conosce (`cella`, `json`) si leggono come testo.
+function campoDi(campo: CampoSchema): CampoFinestra {
+  if (campo.tipo === "numero") return { nome: campo.nome, tipo: "numero" };
+  if (campo.tipo === "scelta") return { nome: campo.nome, tipo: "scelta", valori: campo.valori ?? [] };
+  if (campo.tipo === "sino") return { nome: campo.nome, tipo: "sino" };
+  return { nome: campo.nome, tipo: "testo", facoltativo: campo.facoltativo === true };
+}
+
+/// Il modulo della finestra del comando `id`, dallo schema della sua famiglia
+/// (il suo chunk). `null` se lo schema non arriva o non ha il comando.
+async function moduloDi(famiglia: string, id: string): Promise<ModuloFinestra | null> {
+  try {
+    const file = (await import(`./famiglie/${famiglia}/schema.generated.json`)) as { readonly default?: unknown };
+    const schema = (file.default ?? file) as SchemaFamiglia;
+    const finestra = schema.finestre.find((one) => one.id === id);
+    return finestra === undefined ? null : { campi: finestra.campi.map(campoDi) };
+  } catch {
+    return null;
+  }
+}
+
 /// Apre il Completo di un disegno: chiede l'indice e prepara il nucleo. Un
 /// indice che non arriva non ferma niente: chi lo mostra (≡, Ctrl+/) lo
 /// richiede e dice che non si è caricato, con «Riprova».
@@ -128,6 +185,65 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
   const indice = opzioni.indice ?? indiceVero;
   const sezioni = creaSezioni();
   const carica = caricatore({ ctx: { ...ctx, sezioni }, moduli: opzioni.moduli, prepara: opzioni.prepara });
+  // Una voce del menu o della ricerca (T9a): uno strumento lo sceglie l'editor;
+  // un comando con parametri apre la finestra di T6; gli altri girano subito.
+  const avvia = (voce: VoceIndice, selezione: readonly string[], azioni: AzioniVoci): void => {
+    const chiamata = voce.chiamata;
+    if ("strumento" in chiamata) {
+      azioni.strumento(chiamata.strumento);
+      return;
+    }
+    if (!("comando" in chiamata)) return;
+    if (voce.finestra) {
+      finestraDi(voce, selezione, azioni);
+      return;
+    }
+    void inviaComando(ctx.motore, { id: chiamata.comando, selection: [...selezione], value: chiamata.valore ?? {} }).then(
+      (esito) => {
+        if (esito !== null) azioni.applica(esito);
+      },
+      (errore: unknown) => console.error(errore),
+    );
+  };
+  const finestraDi = (voce: VoceIndice, selezione: readonly string[], azioni: AzioniVoci): void => {
+    const famiglia = voce.famiglia;
+    // La famiglia pronta, o il suo errore: la finestra lo mostra con «Riprova».
+    const aspetta = (stato: StatoFamiglia): void => {
+      if (stato.kind === "errore") throw stato.perche;
+    };
+    void moduloDi(famiglia, voce.id).then(
+      (modulo) => {
+        apriFinestra(
+          modulo ?? { campi: [] },
+          modulo === null ? Promise.reject("chunk") : carica.famiglia(famiglia).then(aspetta),
+          (valori, anteprima) => eseguiFinestra(voce.id, selezione, valori, anteprima, azioni),
+          {
+            id: voce.id,
+            titolo: nomeVoce(voce),
+            campi: Object.fromEntries((modulo?.campi ?? []).map((campo) => [campo.nome, campo.nome])),
+            iniziali: {},
+            vita: ctx.life,
+            sulFoglio: azioni.sulFoglio,
+            riprova: () => carica.riprova(famiglia).then(aspetta),
+          },
+        );
+      },
+      (errore: unknown) => console.error(errore),
+    );
+  };
+  const eseguiFinestra = async (
+    id: string,
+    selezione: readonly string[],
+    valori: Readonly<Record<string, string | number | boolean>>,
+    anteprima: boolean,
+    azioni: AzioniVoci,
+  ): Promise<EsitoComando> => {
+    const esito = await inviaComando(ctx.motore, { id, selection: [...selezione], value: valori, preview: anteprima });
+    if (esito === null) return { anteprima: null, rifiuto: "closed" };
+    // OK manda il comando una volta sola: il suo esito entra nel disegno.
+    if (!anteprima && esito.refused === null) azioni.applica(esito);
+    return { anteprima: esito.preview, rifiuto: esito.refused };
+  };
   let chiuso = false;
   const completo: Completo = {
     indice,
@@ -164,6 +280,25 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
         );
       };
       apri();
+    },
+    async menu(selezione, azioni) {
+      const esegui = (voce: VoceIndice): void => avvia(voce, selezione(), azioni);
+      let pronto: Indice;
+      try {
+        pronto = await indice();
+      } catch {
+        return menuNonCaricato(azioni.riprova);
+      }
+      return menuComando(pronto, await statoComandi(ctx.motore, selezione()), esegui);
+    },
+    async ricerca(selezione, azioni) {
+      let pronto: Indice;
+      try {
+        pronto = await indice();
+      } catch {
+        return null;
+      }
+      return vociRicerca(pronto, await statoComandi(ctx.motore, selezione()), (voce) => avvia(voce, selezione(), azioni));
     },
   };
   ctx.life.add(() => completo.chiudi());

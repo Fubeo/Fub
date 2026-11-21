@@ -56,3 +56,56 @@ describe("apri", () => {
     expect(await completo.carica.famiglia(NUCLEO)).toEqual({ kind: "errore", perche: "motore" });
   });
 });
+
+/// Le azioni di un editor finto per le voci del menu e della ricerca.
+function azioniFinte(riprova = vi.fn()) {
+  return { strumento: vi.fn(), applica: vi.fn(), sulFoglio: vi.fn(), riprova };
+}
+
+describe("menu e ricerca del Completo (K6 T9a)", () => {
+  it("il menu dice che l'indice non si è caricato, e «Riprova» lo chiede di nuovo", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.reject(new Error("chunk")),
+      prepara: () => Promise.resolve("pronta"),
+    });
+    const riprova = vi.fn();
+    const menu = await completo.menu(() => [], azioniFinte(riprova));
+    expect(menu[0]).toMatchObject({ label: "Il catalogo dei comandi non si è caricato.", disabled: true });
+    menu[1]?.run?.();
+    expect(riprova).toHaveBeenCalledTimes(1);
+  });
+
+  it("la ricerca che non ha l'indice risponde null, perché chi la mostra dica «Riprova»", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.reject(new Error("chunk")),
+      prepara: () => Promise.resolve("pronta"),
+    });
+    expect(await completo.ricerca(() => [], azioniFinte())).toBeNull();
+  });
+
+  it("la prima ricerca carica l'indice, e nessuna famiglia", async () => {
+    const famiglia = vi.fn(() => Promise.resolve({ registra: () => undefined }));
+    const prepara = vi.fn((_f: string) => Promise.resolve<EsitoPrepara>("pronta"));
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [{ fonte: "motore", id: "a", chiamata: { comando: "disegno.a" }, etichetta: { it: "Voce a", en: "Item a" }, posto: "menu/oggetto", famiglia: "forme", tasto: null, effetto: "cambia", finestra: false }] })),
+      prepara,
+      moduli: { "./famiglie/forme/index.ts": famiglia },
+    });
+    const prima = prepara.mock.calls.length;
+    const righe = await completo.ricerca(() => [], azioniFinte());
+    expect(righe?.map((riga) => riga.label)).toEqual(["Voce a"]);
+    expect(prepara.mock.calls.length).toBe(prima);
+    expect(famiglia).not.toHaveBeenCalled();
+  });
+
+  it("col motore spento le voci del motore sono spente, e lo dicono", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [{ fonte: "motore", id: "a", chiamata: { comando: "disegno.a" }, etichetta: { it: "Voce a", en: "Item a" }, posto: "menu/oggetto", famiglia: "forme", tasto: "Ctrl+J", effetto: "cambia", finestra: false }] })),
+      prepara: () => Promise.resolve("pronta"),
+    });
+    const menu = await completo.menu(() => [], azioniFinte());
+    const oggetto = menu.find((item) => item.label === "Oggetto");
+    const voci = typeof oggetto?.items === "object" ? oggetto.items : [];
+    expect(voci[0]).toMatchObject({ label: "Voce a", hint: "Ctrl+J", disabled: true, description: "Motore del disegno spento." });
+  });
+});

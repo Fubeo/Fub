@@ -76,6 +76,7 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { rispostaDiFamiglia } from "./disegno-famiglie/risposte";
+import { comandiProva, INDICE_PROVA } from "./disegno-indice-prova";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
@@ -965,6 +966,10 @@ const DRAWING = CONNECTORS !== null
 // - `spento`: il motore spento nel vault, ogni porta del disegno `unserved`.
 // - `errore`: l'apertura fallisce con `internal`, il motore è fermo.
 const DRAWING_ENGINE_PARAM = params.get("drawing");
+// `?indice=prova` porta al Disegno completo l'indice di prova del menu ≡ e di
+// Ctrl+/ (K6 T9a, `disegno-indice-prova.ts`), al posto di quello generato, che
+// è vuoto finché nessuna riga è fatta.
+const INDICE_PARAM = params.get("indice");
 if (DRAWING_ENGINE_PARAM !== null && !["acceso", "spento", "errore"].includes(DRAWING_ENGINE_PARAM)) {
   throw new RangeError("drawing must be acceso, spento or errore");
 }
@@ -1042,6 +1047,8 @@ function benchDrawingEngine(): DrawingFake | undefined {
   ];
   let instances = 0;
   return {
+    // I comandi della prova: quali valgono per la selezione, e il perché (K6 T9a).
+    comandi: INDICE_PARAM === "prova" ? (selection) => comandiProva(selection) : undefined,
     open: () => {
       const instance = `banco-${++instances}`;
       benchLastInstance = instance;
@@ -1058,6 +1065,11 @@ function benchDrawingEngine(): DrawingFake | undefined {
 
 /// Il motore del disegno del banco: `undefined` senza `?drawing=`.
 const DRAWING_ENGINE = benchDrawingEngine();
+// L'indice di prova entra prima che il Completo chieda il suo: `indice()` lo
+// memorizza alla prima chiamata, e il banco apre il disegno dopo.
+if (INDICE_PARAM === "prova") {
+  void import("../src/editors/spatial/completo/indice").then((modulo) => modulo.usaIndiceDiProva(INDICE_PROVA));
+}
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
