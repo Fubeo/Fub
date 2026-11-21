@@ -1927,14 +1927,19 @@ Fatto quando:
   è verde;
 - `cargo test -p fub-features --test ts_mirror` passa.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial; npm run bench:a11y
-Stato: [ ] da fare · parziale sul ramo feat/k6-t8. Fatti: colonna a sei gruppi
-con le sue caselle (test contro i posti della mappa), cassetto con ricerca e
-errore «Riprova», colonna che mostra le caselle che stanno (le altre nel
-cassetto), colonna salvata con al più 15 caselle, icone, tema, dieci righe a
-`fub`, la regola della fila delle opzioni, lo strumento del motore e il suo
-cursore. Non fatti: la fila nella testata (nessun punto la monta ancora), lo
-stato «Completo spento» (c'è già la colonna di prima, non misurata), le scene
-del banco, le foto 1280/700 px, la misura della colonna, `bench:a11y`.
+Stato: [x] fatto (2026-11-21, ramo feat/k6-t8-fine). Fatti: la colonna a sei
+gruppi, con le caselle che stanno (conto sul contenitore, con fili e misure
+vere: test) e il cassetto con ricerca, frecce ed Esc; la colonna salta gli
+strumenti sconosciuti (`casellePresenti`); il triangolino ha il tasto della
+freccia di lato (`aria-keyshortcuts`); fila del 700 e dell'800 px con i gruppi
+in «…»; icone, tema, dieci righe a `fub`; lo strumento del motore nei gesti
+(`setEngineTool`, stato e opzioni, preparazione con «Riprova», Esc: test in
+`gesti.test.ts`); scene `disegno-completo`, `disegno-gruppo`,
+`disegno-cassetto`, `disegno-spento-colonna` a 1280 e 700 px; `bench:a11y` sulle
+scene del task senza fallimenti. Passa a T11 (decisione dell'orchestratore del
+2026-11-21, opzione a): la fila delle opzioni nella testata, e la prova della
+colonna a 44×550 con più di 6 caselle (oggi l'app ne mostra 6, perché nessuna
+riga del motore è «fatto»).
 `draw.toolbar` non va in `SETTINGS_WITH_THEIR_OWN_GESTURE`: le Impostazioni
 hanno la sua riga con un campo proprio (`OWN_LIST_FIELDS` in
 `panels/settings.ts`), e la lista la nasconderebbe.
@@ -2203,6 +2208,16 @@ Fatto quando:
   negli altri spazi uguale, gli appunti fra Completo e Semplice);
 - `tools/gesti-vettori.test.ts` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial src/panels
+Riceve da T8 (2026-11-21, decisione dell'orchestratore, opzione a): ci sono
+`completo/opzioni.ts` (la regola: casella, numero, scelta, colore), i comandi
+`setEngineTool`, `setEngineOption` e `statoStrumento` di `DrawEditor`, la
+preparazione `preparaMotore` (il gesto aspetta, «Riprova» e lo strumento di
+prima resta). Mancano: la casella «si prepara» in colonna; il collegamento con
+`completo/carica.ts`, che passa i testi della famiglia all'editor quando è
+pronta, e solo allora la fila si monta nella testata (`toolbar.ts`) con i
+controlli del kit al posto di quelli nativi di `costruisciFila`; l'ascolto di
+`StatiStrumenti` (oggi la fila non sa quando lo stato cambia). Con più di 6
+caselle in colonna si fa anche la prova dei 44×550 a 1280×800.
 Stato: [ ] da fare
 Aspetta: niente
 

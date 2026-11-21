@@ -48,7 +48,6 @@ describe("il cassetto Tutti gli strumenti", () => {
     const input = popover.element.querySelector<HTMLInputElement>("input")!;
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     expect(document.activeElement).toBe(popover.element.querySelector('[data-tool="select"]'));
-    const grid = popover.element.querySelector<HTMLElement>(".draw-drawer-groups")!;
     const sul = (key: string) => (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     sul("ArrowDown");
     expect(document.activeElement).toBe(popover.element.querySelector('[data-tool="pen"]'));

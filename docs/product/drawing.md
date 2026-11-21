@@ -60,7 +60,7 @@ freccia a destra. Nel Disegno completo la colonna ha sei gruppi (selezione,
 disegno, forme, modifica, colore, vista) e in fondo **Tutti gli strumenti**
 apre il cassetto: la ricerca, i gruppi con il tasto di ogni strumento, e
 «Modifica la colonna…». Il Completo mostra per ora solo gli strumenti di Fub: gli
-strumenti del motore entrano quando la loro riga della mappa è «fatto». Ogni strumento ha un tasto: selezione (`V`), penna (`P`),
+strumenti del motore entrano quando la loro riga della mappa è «fatto». Le caselle che non stanno nello spazio della colonna passano nel cassetto. Ogni strumento ha un tasto: selezione (`V`), penna (`P`),
 evidenziatore (`Maiusc+P`), gomma per oggetto (`E`), rettangolo (`R`),
 ellisse (`O`), linea (`L`) e freccia (`Maiusc+L`); la
 **Mano** (`H`) e lo **Zoom** (`Z`) muovono la vista in tutti e due gli spazi
@@ -360,7 +360,7 @@ cursore, 10 pixel per volta, 50 con `Maiusc` e 1 con `Ctrl` o `⌘`; `Spazio`
 preme e, di nuovo, rilascia, e `Invio` rilascia anche lui. In mezzo il cursore
 traccia: un rettangolo, un tratto a penna, la gomma su ciò che attraversa, un
 trascinamento con la selezione. `Esc` annulla il gesto. Il cursore dice dove
-si trova e che cosa c'è sotto, per esempio «x 120, y 80: Rettangolo, Blu».
+si trova e che cosa c'è sotto, per esempio «x 120, y 80: Rettangolo, Blu». La colonna è una barra con le frecce: il triangolino di una casella con più strumenti si apre con la freccia di lato, Esc riporta il fuoco alla casella, e nel cassetto le frecce passano fra gli strumenti.
 
 Con una selezione le frecce la spostano di 1, 10 con `Maiusc`, e con `Ctrl` o
 `⌘` la ridimensionano dall'angolo in alto a sinistra; con l'aggancio alla
