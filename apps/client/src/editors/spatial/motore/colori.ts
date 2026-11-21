@@ -80,10 +80,15 @@ export function motivoDelRifiuto(refused: DrawingRefusal): DrawKey | null {
     case "unsupported":
       return "draw.reason.foreign";
     case "too_large":
+    case "no_memory":
       return "draw.reason.limit";
     case "stale":
     case "closed":
     case "not_ready":
+    // I colori non chiedono anteprime né strumenti del motore: se arrivano,
+    // la richiesta non era valida.
+    case "no_preview":
+    case "unknown_tool":
       return "draw.reason.invalid";
   }
 }

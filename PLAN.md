@@ -1519,7 +1519,7 @@ Fatto quando:
 - `cargo test -p fub-abi --test wit_additivity` passa, senza toccare la
   WIT.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test gesti_motore; UPDATE_MIRROR=1 per i mirror e poi senza
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 ## T5 · L'indice dei comandi, il banco di prova delle righe e i pezzi pigri del client

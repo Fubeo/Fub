@@ -30,6 +30,7 @@ fn richiesta(id: &str, selezione: &[&str], valore: Value) -> DrawingCommandReque
         id: id.into(),
         selection: selezione.iter().map(|s| s.to_string()).collect(),
         value: valore,
+        preview: false,
     }
 }
 

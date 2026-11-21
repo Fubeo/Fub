@@ -51,9 +51,9 @@
 use std::collections::{HashMap, HashSet};
 
 use fub_abi::{
-    DrawingCommandInfo, DrawingCommandRequest, DrawingOutcome, DrawingRefusal, PluginError,
-    DRAWING_COMMANDS, DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR,
-    DRAWING_COMMAND_WIDTH,
+    DrawingCommandInfo, DrawingCommandRequest, DrawingDisabledReason, DrawingOutcome,
+    DrawingRefusal, PluginError, DRAWING_COMMANDS, DRAWING_COMMAND_FILL_COLOR,
+    DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH,
 };
 use fub_scene::Role;
 use serde_json::{json, Value};
@@ -331,12 +331,29 @@ pub(crate) fn elenco(copia: &Copia, selezione: &[String]) -> Vec<DrawingCommandI
                 DRAWING_COMMAND_WIDTH => Some(Specie::Spessore),
                 _ => None,
             };
+            let esito = match specie {
+                Some(s) => bersagli(copia, selezione, s).map(drop),
+                None => Err(DrawingRefusal::Unsupported),
+            };
             DrawingCommandInfo {
                 id: (*id).to_string(),
-                enabled: specie.is_some_and(|s| bersagli(copia, selezione, s).is_ok()),
+                enabled: esito.is_ok(),
+                disabled_reason: esito.err().map(|r| perche_spento(r, selezione)),
             }
         })
         .collect()
+}
+
+/// Il perché di un comando spento, dal rifiuto di [`bersagli`].
+fn perche_spento(r: DrawingRefusal, selezione: &[String]) -> DrawingDisabledReason {
+    match r {
+        _ if selezione.is_empty() => DrawingDisabledReason::NoSelection,
+        DrawingRefusal::Unsupported | DrawingRefusal::Locked => DrawingDisabledReason::ReadOnly,
+        DrawingRefusal::Unmapped => DrawingDisabledReason::Unmapped,
+        _ => DrawingDisabledReason::Other {
+            text: "Ciò che è scelto non ha niente da cambiare con questo comando.".into(),
+        },
+    }
 }
 
 /// I parametri di [`MOTORE_TRATTO`] e [`MOTORE_RIEMPIMENTO`]. `focus: false`

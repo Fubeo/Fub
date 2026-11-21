@@ -1053,6 +1053,26 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-disegno/src/gesti/strumento.rs::tasto",
+            (
+                Family::AsciiCase,
+                "traduce il tasto di un evento della tastiera nella lettera che gli strumenti del \
+                 motore di disegno aspettano (`ToolKey::Letter`, sempre minuscola): sono le \
+                 scorciatoie latine del motore, ASCII per contratto, e `A` con le maiuscole è lo \
+                 stesso tasto di `a`. Non è il nome di una nota, di un tag o di un path.",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/gesti/strumento.rs::cursore",
+            (
+                Family::AsciiCase,
+                "non confronta niente: scrive in `snake_case` il nome del cursore che il motore \
+                 di disegno chiede (`PenClose` → `pen_close`), un identificatore Rust \
+                 ASCII del vocabolario chiuso del motore. Non c'è un nome di nota, di tag o di \
+                 path da riconoscere.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/path_policy.rs::is_dos_device",
             (
                 Family::AsciiCase,

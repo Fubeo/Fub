@@ -288,7 +288,9 @@ export interface DrawingFake {
   /// Ciò che `openDrawing` risponde; senza, un'istanza nuova alla revisione
   /// 0 senza parti che restano come sono.
   open?: (doc: string, text: string) => DrawingOpen;
-  /// L'esito di un gesto. Senza, un gesto lancia: il finto non sa disegnare.
+  /// L'esito di un gesto. Senza, un gesto con uno strumento del motore
+  /// risponde con lo strumento finto (`strumentoFinto`) e uno con gli
+  /// strumenti di K5 lancia: il finto non sa disegnare.
   gesto?: (gesture: DrawingGesture, copia: DrawingFakeCopy) => DrawingOutcome;
   /// I comandi della selezione; senza, nessuno.
   comandi?: (selection: string[], copia: DrawingFakeCopy) => DrawingCommandInfo[];
@@ -2387,8 +2389,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       drawingGesture: (instance, gesture, vault) => gate("drawingGesture", named([instance, gesture], vault), Promise.resolve().then(() => {
         const copy = drawingCopyOf(instance);
-        if (!drawing?.gesto) throw new Error("host fake: il motore finto non ha risposte per i gesti");
-        return drawing.gesto(gesture, copy);
+        if (drawing?.gesto) return drawing.gesto(gesture, copy);
+        if (typeof gesture.tool === "object") return strumentoFinto(gesture, copy);
+        throw new Error("host fake: il motore finto non ha risposte per i gesti");
       })),
       drawingCommands: (instance, selection, vault) => gate("drawingCommands", named([instance, selection], vault), Promise.resolve().then(() => {
         const copy = drawingCopyOf(instance);
@@ -3031,6 +3034,51 @@ const DRAWING_TEMPLATES: Record<string, string> = Object.fromEntries(
     import.meta.glob<string>("../../../../crates/fub-features/templates/*.it.svg", { query: "?raw", import: "default", eager: true }),
   ).map(([path, text]) => [path.split("/").pop()!.replace(/\.it\.svg$/, ""), text]),
 );
+
+/// Lo strumento del motore finto: in anteprima rende un `marquee` dal primo
+/// all'ultimo puntatore della richiesta e un `anchor` sull'ultimo, con lo
+/// strumento occupato; alla fine non cambia niente (`empty`). Serve ai banchi
+/// che guardano i segni e lo stato senza il motore vero.
+export function strumentoFinto(gesture: DrawingGesture, copia: DrawingFakeCopy): DrawingOutcome {
+  const vuoto: DrawingOutcome = {
+    revision: copia.revision,
+    preview: null,
+    ops: null,
+    selection: gesture.selection,
+    losses: [],
+    refused: null,
+    frame: null,
+    state: null,
+    reading: null,
+  };
+  const state = (busy: boolean) => ({
+    busy,
+    transforming: false,
+    wants_text: false,
+    composing: false,
+    cursor: busy ? "crosshair" : "arrow",
+    options: null,
+  });
+  if (gesture.phase !== "preview") return { ...vuoto, refused: gesture.phase === "commit" ? "empty" : null, state: state(false) };
+  const primo = gesture.events[0];
+  const ultimo = gesture.events[gesture.events.length - 1];
+  if (primo === undefined || ultimo === undefined) return { ...vuoto, preview: { shape: null, matrix: null, marquee: null, overlays: [] }, state: state(true) };
+  const [x0, x1] = primo.x <= ultimo.x ? [primo.x, ultimo.x] : [ultimo.x, primo.x];
+  const [y0, y1] = primo.y <= ultimo.y ? [primo.y, ultimo.y] : [ultimo.y, primo.y];
+  return {
+    ...vuoto,
+    preview: {
+      shape: null,
+      matrix: null,
+      marquee: null,
+      overlays: [
+        { kind: "marquee", rect: [x0, y0, x1 - x0, y1 - y0] },
+        { kind: "anchor", at: [ultimo.x, ultimo.y], role: "selection", filled: true, size: 7 },
+      ],
+    },
+    state: state(true),
+  };
+}
 
 /// La spec di `drawing.create` come la dichiara la feature `draw`, in
 /// italiano: le prove della galleria e delle sue porte la danno all'host.

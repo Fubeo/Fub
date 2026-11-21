@@ -11,6 +11,12 @@ use fub_abi::{
     PluginError, DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH,
     MAX_DRAWING_LOSSES, MAX_DRAWING_OPS_BYTES, MAX_DRAWING_TEXT_BYTES, MAX_GESTURE_EVENTS,
 };
+use fub_abi::{
+    DrawingCommandInfo, DrawingDisabledReason, DrawingInput, DrawingKeyMods, DrawingOverlay,
+    DrawingOverlayRole, DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE,
+    DRAWING_COMMAND_TOOL_OPTION, DRAWING_FAMILIES, MAX_DRAWING_INPUTS,
+    MAX_DRAWING_OVERLAY_TEXT_BYTES, MAX_DRAWING_TOOL_ID_BYTES,
+};
 use serde_json::{json, Value};
 
 fn vectors() -> Vec<(String, Value)> {
@@ -66,6 +72,7 @@ fn gesture() -> DrawingGesture {
         }),
         text: None,
         frame: None,
+        inputs: Vec::new(),
         events: vec![
             pointer(DrawingPointerKind::Down, 10.0, 10.0),
             pointer(DrawingPointerKind::Drag, 40.0, 30.0),
@@ -80,12 +87,15 @@ fn outcome() -> DrawingOutcome {
             shape: Some(json!({"tag": "rect", "attrs": {"x": "0"}})),
             matrix: Some([1.0, 0.0, 0.0, 1.0, 7.0, 5.0]),
             marquee: Some([0.0, 0.0, 10.0, 10.0]),
+            overlays: Vec::new(),
         }),
         ops: None,
         selection: vec!["oa1a1a1a1".into()],
         losses: Vec::new(),
         refused: None,
         frame: None,
+        state: None,
+        reading: None,
     }
 }
 
@@ -239,6 +249,7 @@ fn good_requests_pass() {
             id: id.into(),
             selection: vec!["oa".into()],
             value,
+            preview: false,
         }
         .validate()
         .unwrap();
@@ -417,6 +428,7 @@ fn a_repeated_id_in_a_selection_is_refused() {
         id: DRAWING_COMMAND_WIDTH.into(),
         selection: twice,
         value: json!(1),
+        preview: false,
     };
     refused(request.validate(), "selection");
 
@@ -552,6 +564,7 @@ fn command_values_have_the_command_shape() {
             id: id.into(),
             selection: Vec::new(),
             value,
+            preview: false,
         };
         refused(request.validate(), "value");
     }
@@ -560,6 +573,253 @@ fn command_values_have_the_command_shape() {
         id: String::new(),
         selection: Vec::new(),
         value: Value::Null,
+        preview: false,
     };
     refused(request.validate(), "id");
+}
+
+#[test]
+fn an_engine_tool_is_an_object_and_its_id_is_checked() {
+    let tool: DrawingTool = serde_json::from_value(json!({"engine": {"id": "pen"}})).unwrap();
+    assert_eq!(tool, DrawingTool::Engine { id: "pen".into() });
+    assert_eq!(
+        serde_json::to_value(&tool).unwrap(),
+        json!({"engine": {"id": "pen"}})
+    );
+    assert_eq!(
+        serde_json::to_value(DrawingTool::Rect).unwrap(),
+        json!("rect")
+    );
+    let mut g = gesture();
+    g.tool = tool;
+    g.validate().unwrap();
+    let lungo = "a".repeat(MAX_DRAWING_TOOL_ID_BYTES + 1);
+    for id in ["", "pen tool", "pénna", lungo.as_str()] {
+        g.tool = DrawingTool::Engine { id: id.to_string() };
+        refused(g.validate(), "tool.engine.id");
+    }
+}
+
+#[test]
+fn inputs_default_to_none_and_belong_to_engine_tools() {
+    // Un gesto di K5 senza `inputs` si legge come prima.
+    let mut raw = serde_json::to_value(gesture()).unwrap();
+    raw.as_object_mut().unwrap().remove("inputs");
+    let g: DrawingGesture = serde_json::from_value(raw).unwrap();
+    assert!(g.inputs.is_empty());
+    let input: DrawingInput = serde_json::from_value(
+        json!({"kind": "key", "key": "Enter", "code": "Enter", "pressed": true}),
+    )
+    .unwrap();
+    assert_eq!(
+        input,
+        DrawingInput::Key {
+            key: "Enter".into(),
+            code: "Enter".into(),
+            mods: DrawingKeyMods::default(),
+            pressed: true
+        }
+    );
+    let mut g = gesture();
+    g.inputs = vec![input.clone()];
+    refused(g.validate(), "inputs");
+    g.tool = DrawingTool::Engine { id: "type".into() };
+    g.validate().unwrap();
+    for (bad, field) in [
+        (
+            json!({"kind": "key", "key": "", "code": "", "pressed": true}),
+            "inputs.key",
+        ),
+        (json!({"kind": "text", "text": ""}), "inputs.text"),
+        (
+            json!({"kind": "ime", "preedit": "かな", "active": [1, 3]}),
+            "inputs.active",
+        ),
+        (
+            json!({"kind": "ime", "preedit": "かな", "active": [2, 1]}),
+            "inputs.active",
+        ),
+    ] {
+        g.inputs = vec![serde_json::from_value(bad).unwrap()];
+        refused(g.validate(), field);
+    }
+    // L'IME conta i caratteri, non i byte: [0, 2] su due caratteri giapponesi.
+    g.inputs =
+        vec![
+            serde_json::from_value(json!({"kind": "ime", "preedit": "かな", "active": [0, 2]}))
+                .unwrap(),
+        ];
+    g.validate().unwrap();
+    g.inputs = vec![input; MAX_DRAWING_INPUTS + 1];
+    refused(g.validate(), "inputs");
+}
+
+#[test]
+fn overlays_have_a_role_and_are_checked() {
+    let raw = json!([
+        {"kind": "marquee", "rect": [0.0, 0.0, 10.0, 10.0]},
+        {"kind": "path", "d": "M0 0 L1 1", "role": "preview", "width": 1.0, "dashed": false},
+        {"kind": "line", "a": [0.0, 0.0], "b": [1.0, 1.0], "role": "guide", "dashed": true},
+        {"kind": "anchor", "at": [0.0, 0.0], "role": "selection", "filled": true, "size": 7.0},
+        {"kind": "curve_point", "at": [0.0, 0.0], "role": "selection", "filled": false, "size": 6.0},
+        {"kind": "handle", "at": [0.0, 0.0], "role": "selection"},
+        {"kind": "label", "at": [0.0, 0.0], "text": "anchor", "role": "guide"},
+        {"kind": "measure", "at": [0.0, 0.0], "text": "W: 10"},
+        {"kind": "distance", "a": [0.0, 0.0], "b": [0.0, 5.0], "text": "5", "role": "measure"},
+        {"kind": "highlight", "quad": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], "role": "selection"},
+        {"kind": "swatch", "at": [0.0, 0.0], "color": "#d55e00ff", "selected": true},
+        {"kind": "grid_line", "a": [0.0, 0.0], "b": [9.0, 9.0], "role": "perspective"},
+    ]);
+    let overlays: Vec<DrawingOverlay> = serde_json::from_value(raw.clone()).unwrap();
+    assert_eq!(overlays.len(), 12);
+    let mut o = outcome();
+    o.preview.as_mut().unwrap().overlays = overlays.clone();
+    o.validate().unwrap();
+    assert_eq!(serde_json::to_value(&overlays).unwrap(), raw);
+    // Un esito di K5 senza i campi nuovi si legge come prima.
+    let mut vecchio = serde_json::to_value(outcome()).unwrap();
+    for k in ["state", "reading"] {
+        vecchio.as_object_mut().unwrap().remove(k);
+    }
+    vecchio["preview"]
+        .as_object_mut()
+        .unwrap()
+        .remove("overlays");
+    let letto: DrawingOutcome = serde_json::from_value(vecchio).unwrap();
+    assert_eq!(letto, outcome());
+    let guida = DrawingOverlayRole::Guide;
+    for bad in [
+        DrawingOverlay::Marquee {
+            rect: [0.0, 0.0, -1.0, 1.0],
+        },
+        DrawingOverlay::Handle {
+            at: [f64::NAN, 0.0],
+            role: guida,
+        },
+        DrawingOverlay::Anchor {
+            at: [0.0, 0.0],
+            role: guida,
+            filled: true,
+            size: -1.0,
+        },
+        DrawingOverlay::Measure {
+            at: [0.0, 0.0],
+            text: "x".repeat(MAX_DRAWING_OVERLAY_TEXT_BYTES + 1),
+        },
+        DrawingOverlay::Swatch {
+            at: [0.0, 0.0],
+            color: String::new(),
+            selected: false,
+        },
+    ] {
+        let mut o = outcome();
+        o.preview.as_mut().unwrap().overlays = vec![bad.clone()];
+        assert!(o.validate().is_err(), "{bad:?}");
+    }
+}
+
+#[test]
+fn the_tool_state_and_the_disabled_reason_have_their_shape() {
+    let mut o = outcome();
+    o.state = Some(DrawingToolState {
+        busy: true,
+        transforming: false,
+        wants_text: true,
+        composing: false,
+        cursor: "pen_close".into(),
+        options: json!({"rubber_band": true}),
+    });
+    o.reading = Some(json!({"w": 1}));
+    o.validate().unwrap();
+    let v = serde_json::to_value(&o).unwrap();
+    assert_eq!(v["state"]["cursor"], "pen_close");
+    assert_eq!(v["reading"], json!({"w": 1}));
+    for (r, s) in [
+        (DrawingRefusal::NoMemory, "no_memory"),
+        (DrawingRefusal::NoPreview, "no_preview"),
+        (DrawingRefusal::UnknownTool, "unknown_tool"),
+    ] {
+        assert_eq!(serde_json::to_value(r).unwrap(), json!(s));
+    }
+    let info: DrawingCommandInfo =
+        serde_json::from_value(json!({"id": DRAWING_COMMAND_WIDTH, "enabled": true})).unwrap();
+    assert_eq!(info.disabled_reason, None);
+    let spento = DrawingCommandInfo {
+        id: DRAWING_COMMAND_WIDTH.into(),
+        enabled: false,
+        disabled_reason: Some(DrawingDisabledReason::Other {
+            text: "perché".into(),
+        }),
+    };
+    assert_eq!(
+        serde_json::to_value(&spento).unwrap()["disabled_reason"],
+        json!({"other": {"text": "perché"}})
+    );
+    assert_eq!(
+        serde_json::to_value(DrawingDisabledReason::NeedsPath).unwrap(),
+        json!("needs_path")
+    );
+}
+
+#[test]
+fn the_tool_option_and_the_family_requests_are_checked() {
+    let request = |id: &str, value: Value| DrawingCommandRequest {
+        revision: 1,
+        id: id.into(),
+        selection: Vec::new(),
+        value,
+        preview: false,
+    };
+    request(
+        DRAWING_COMMAND_TOOL_OPTION,
+        json!({"strumento": "pen", "chiave": "k", "valore": null}),
+    )
+    .validate()
+    .unwrap();
+    for (value, field) in [
+        (json!(1), "value"),
+        (json!({"strumento": "pen", "chiave": "k"}), "value.valore"),
+        (
+            json!({"strumento": "pen tool", "chiave": "k", "valore": 1}),
+            "value.strumento",
+        ),
+        (
+            json!({"strumento": "pen", "chiave": "", "valore": 1}),
+            "value.chiave",
+        ),
+        (
+            json!({"strumento": "pen", "chiave": "k", "valore": 1, "altro": 2}),
+            "value.altro",
+        ),
+    ] {
+        refused(
+            request(DRAWING_COMMAND_TOOL_OPTION, value).validate(),
+            field,
+        );
+    }
+    assert_eq!(DRAWING_FAMILIES.len(), 26);
+    for famiglia in DRAWING_FAMILIES {
+        request(
+            DRAWING_COMMAND_FAMILY_PREPARE,
+            json!({"famiglia": famiglia}),
+        )
+        .validate()
+        .unwrap();
+    }
+    for (value, field) in [
+        (json!({"famiglia": "magia"}), "value.famiglia"),
+        (json!({"famiglia": "testo", "x": 1}), "value.x"),
+        (json!("testo"), "value"),
+    ] {
+        refused(
+            request(DRAWING_COMMAND_FAMILY_PREPARE, value).validate(),
+            field,
+        );
+    }
+    // `preview` manca nelle richieste di prima: vale `false`.
+    let letta: DrawingCommandRequest = serde_json::from_value(json!({
+        "revision": "1", "id": DRAWING_COMMAND_WIDTH, "selection": [], "value": 2
+    }))
+    .unwrap();
+    assert!(!letta.preview);
 }

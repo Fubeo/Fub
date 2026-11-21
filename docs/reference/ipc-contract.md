@@ -70,8 +70,8 @@ con sei porte tipate (`open_drawing`, `drawing_sync`, `drawing_gesture`,
 del file. Forme, limiti e chi le usa: [le porte del disegno](drawing-ipc.md).
 `unserved` vuol dire che il motore è spento nel vault (la riga dei Componenti)
 o non c'è in questa build, all'apertura come a metà sessione; `internal` che
-il motore si è fermato o non si costruisce, e si può riprovare. I dettagli
-stanno [nella stessa pagina](drawing-ipc.md).
+il motore si è fermato o non si costruisce, e si può riprovare. Guidano anche
+[gli strumenti del motore](drawing-ipc.md#gli-strumenti-del-motore) per id.
 
 ## Sessione live
 

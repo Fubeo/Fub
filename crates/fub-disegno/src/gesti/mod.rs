@@ -24,6 +24,8 @@
 pub mod forme;
 /// Selezionare, spostare, ridimensionare e ruotare.
 pub mod selezione;
+/// Gli strumenti del motore come sono (`DrawingTool::Engine`).
+pub mod strumento;
 /// Scrivere e modificare il testo.
 pub mod testo;
 
@@ -66,6 +68,37 @@ pub(crate) struct Contesto<'a> {
     /// in ogni fase (la Selezione: il gesto che la pressione comincia, che
     /// dipende solo dal gesto, dalla copia e dalla vista).
     pub memo: OnceCell<Box<dyn Any>>,
+}
+
+impl<'a> Contesto<'a> {
+    /// Il contesto di un pezzo del gesto. Lo zoom della vista è quello del
+    /// client portato nel documento del motore (la radice lo scala).
+    pub(crate) fn nuovo(
+        gesto: &'a DrawingGesture,
+        copia: &'a Copia,
+        pressione: Option<DrawingPointer>,
+        trascinato: bool,
+    ) -> Contesto<'a> {
+        Contesto {
+            gesto,
+            copia,
+            pressione,
+            trascinato: Cell::new(trascinato),
+            cornice: gesto.frame,
+            memo: OnceCell::new(),
+            vista: ViewInfo {
+                zoom: gesto.zoom
+                    * copia
+                        .radice
+                        .determinant()
+                        .abs()
+                        .sqrt()
+                        .max(f64::MIN_POSITIVE)
+                        .recip(),
+                ..ViewInfo::default()
+            },
+        }
+    }
 }
 
 /// Uno strumento di Fub fatto con uno strumento del motore.
@@ -118,18 +151,20 @@ pub(crate) trait Strumento: Sync {
 /// Lo strumento che fa `tool`, se c'è già. I task che li fanno aggiungono
 /// qui il loro braccio: le forme in [`forme`], la selezione in
 /// [`selezione`], il testo in [`testo`].
-pub(crate) fn strumento(tool: DrawingTool) -> Option<&'static dyn Strumento> {
+pub(crate) fn strumento(tool: &DrawingTool) -> Option<&'static dyn Strumento> {
     match tool {
         DrawingTool::Rect | DrawingTool::Ellipse | DrawingTool::Line | DrawingTool::Arrow => {
-            Some(forme::strumento(tool))
+            Some(forme::strumento(tool.clone()))
         }
         DrawingTool::Select => Some(selezione::strumento()),
         DrawingTool::Text => Some(testo::strumento()),
+        // Il ponte di [`strumento`]: non è uno strumento di Fub.
+        DrawingTool::Engine { .. } => None,
     }
 }
 
 /// Il gesto che la sessione sta facendo, fra una richiesta e l'altra.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct InCorso {
     tool: DrawingTool,
     revisione: u64,
@@ -146,6 +181,11 @@ pub(crate) struct Banco {
     pub pressione: Option<DrawingPointer>,
     /// [`Contesto::trascinato`] del gesto in corso.
     pub trascinato: bool,
+    /// Le preferenze del motore all'apertura: un gesto con uno strumento
+    /// del motore riparte da loro (gli strumenti di K5 ne cambiano alcune).
+    pub prefs: vectorcraft_engine::Prefs,
+    /// Ciò che il ponte verso gli strumenti del motore ricorda del gesto.
+    pub(crate) ponte: strumento::Ponte,
 }
 
 impl Banco {
@@ -162,12 +202,15 @@ impl Banco {
         .and_then(|sessione| {
             let doc = sessione.doc().map_err(|e| e.to_string())?.doc.clone();
             copia.documento = doc;
+            let prefs = sessione.prefs.clone();
             Ok(Banco {
                 sessione,
                 in_corso: None,
                 inizio: None,
                 pressione: None,
                 trascinato: false,
+                prefs,
+                ponte: strumento::Ponte::default(),
             })
         })
     }
@@ -179,6 +222,7 @@ impl Banco {
         self.inizio = None;
         self.pressione = None;
         self.trascinato = false;
+        self.ponte = strumento::Ponte::default();
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc))?;
@@ -192,6 +236,7 @@ impl Banco {
         self.inizio = None;
         self.pressione = None;
         self.trascinato = false;
+        self.ponte = strumento::Ponte::default();
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         if vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc)).is_err() {
@@ -232,10 +277,19 @@ impl Banco {
     pub fn gesto(&mut self, copia: &Copia, gesto: &DrawingGesture) -> DrawingOutcome {
         let mut esito = esito_vuoto(gesto.revision);
         if gesto.phase == DrawingPhase::Cancel {
-            if self.in_corso.is_some() {
+            let del_motore = matches!(
+                self.in_corso.as_ref().map(|c| &c.tool),
+                Some(DrawingTool::Engine { .. })
+            );
+            if del_motore {
+                strumento::annulla(self, copia);
+            } else if self.in_corso.is_some() {
                 self.ripristina(copia);
             }
             return esito;
+        }
+        if let DrawingTool::Engine { id } = &gesto.tool {
+            return strumento::gesto(self, copia, gesto, id);
         }
         let rifiuta = |banco: &mut Banco, mut esito: DrawingOutcome, r: DrawingRefusal| {
             if banco.in_corso.is_some() {
@@ -247,14 +301,14 @@ impl Banco {
         if !copia.modificabile {
             return rifiuta(self, esito, DrawingRefusal::Unsupported);
         }
-        let Some(strumento) = strumento(gesto.tool) else {
+        let Some(strumento) = strumento(&gesto.tool) else {
             return rifiuta(self, esito, DrawingRefusal::Unsupported);
         };
         let qui = InCorso {
-            tool: gesto.tool,
+            tool: gesto.tool.clone(),
             revisione: gesto.revision,
         };
-        let ricomincia = self.in_corso != Some(qui)
+        let ricomincia = self.in_corso.as_ref() != Some(&qui)
             || gesto
                 .events
                 .first()
@@ -265,25 +319,7 @@ impl Banco {
             .find(|e| e.kind == DrawingPointerKind::Down)
             .copied()
             .or(if ricomincia { None } else { self.pressione });
-        let cx = Contesto {
-            gesto,
-            copia,
-            pressione,
-            trascinato: Cell::new(!ricomincia && self.trascinato),
-            cornice: gesto.frame,
-            memo: OnceCell::new(),
-            vista: ViewInfo {
-                zoom: gesto.zoom
-                    * copia
-                        .radice
-                        .determinant()
-                        .abs()
-                        .sqrt()
-                        .max(f64::MIN_POSITIVE)
-                        .recip(),
-                ..ViewInfo::default()
-            },
-        };
+        let cx = Contesto::nuovo(gesto, copia, pressione, !ricomincia && self.trascinato);
         let sessione_pronta = if ricomincia {
             if self.in_corso.is_some() {
                 self.ripristina(copia);
@@ -372,6 +408,8 @@ pub(crate) fn esito_vuoto(revisione: u64) -> DrawingOutcome {
         losses: Vec::new(),
         refused: None,
         frame: None,
+        state: None,
+        reading: None,
     }
 }
 

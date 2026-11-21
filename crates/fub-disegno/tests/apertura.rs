@@ -47,6 +47,7 @@ fn gesto(revision: u64, tool: DrawingTool) -> DrawingGesture {
         style: None,
         text: None,
         frame: None,
+        inputs: Vec::new(),
         events: vec![
             punto(DrawingPointerKind::Down, 150.0, 125.0),
             punto(DrawingPointerKind::Drag, 170.0, 135.0),
@@ -366,6 +367,7 @@ fn comandi_spenti_sulla_carta() {
             id: fub_abi::DRAWING_COMMAND_WIDTH.into(),
             selection: vec!["fub-paper".into()],
             value: serde_json::json!(2.0),
+            preview: false,
         })
         .expect("valido");
     assert_eq!(esito.refused, Some(DrawingRefusal::Empty));
