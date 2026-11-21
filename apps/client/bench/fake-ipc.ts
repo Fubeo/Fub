@@ -2400,12 +2400,13 @@ const RESPONSES: Partial<Record<IndexQuery["kind"], (q: IndexQuery) => IndexResu
   jobs: () => ({ kind: "jobs", value: JOBS }),
 };
 
-/// I titoli `#` di una nota del corpus, coi byte del sorgente: è l'indice dei
-/// titoli del finto (la domanda `outline`). Lo slug è quello semplice,
-/// minuscole e trattini; una nota fuori dal corpus, e ogni documento che non è
-/// una nota (un PDF, le sue annotazioni, una lavagna), non ha titoli.
+/// I titoli `#` di una nota del vault finto, coi byte del sorgente: è l'indice
+/// dei titoli del finto (la domanda `outline`), letto dai file del vault come
+/// l'indice vero. Lo slug è quello semplice, minuscole e trattini; ogni
+/// documento che non è una nota Markdown (un PDF, le sue annotazioni, una
+/// lavagna) non ha titoli.
 function headingsOf(doc: string): Heading[] {
-  const source = CORPUS[doc] ?? "";
+  const source = doc.endsWith(".md") ? (options.file?.[doc] ?? "") : "";
   const encoder = new TextEncoder();
   const value: Heading[] = [];
   let offset = 0;
