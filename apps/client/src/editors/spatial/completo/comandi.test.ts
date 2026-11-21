@@ -39,6 +39,12 @@ function trova(items: readonly MenuItem[], label: string): MenuItem {
   return hit;
 }
 
+/// Le voci di un sottomenu, che il menu dà come elenco (non come funzione).
+function sottovoci(item: MenuItem | undefined): readonly MenuItem[] {
+  if (item?.items === undefined || typeof item.items === "function") return [];
+  return item.items;
+}
+
 describe("menuComando", () => {
   it("raggruppa le voci per sottomenu, nell'ordine dell'indice, e lascia fuori i posti che non sono menu", () => {
     const indice = indiceDi({
@@ -51,20 +57,20 @@ describe("menuComando", () => {
     });
     const menu = menuComando(indice, valgono({ id: "disegno.a", enabled: true, disabled_reason: null }, { id: "disegno.b", enabled: true, disabled_reason: null }, { id: "disegno.c", enabled: true, disabled_reason: null }), NESSUNO);
     expect(menu.map((item) => item.label)).toEqual(["Oggetto", "File"]);
-    expect(trova(menu, "Oggetto").items?.map((item) => item.label)).toEqual(["Voce a", "Voce c"]);
+    expect(sottovoci(trova(menu, "Oggetto")).map((item) => item.label)).toEqual(["Voce a", "Voce c"]);
   });
 
   it("una voce spenta si vede col perché che il motore ha detto", () => {
     const indice = indiceDi({ voci: [voce("a", "menu/oggetto")] });
     const menu = menuComando(indice, valgono({ id: "disegno.a", enabled: false, disabled_reason: "needs_path" }), NESSUNO);
-    const oggetto = trova(menu, "Oggetto").items ?? [];
+    const oggetto = sottovoci(trova(menu, "Oggetto"));
     expect(oggetto[0]).toMatchObject({ label: "Voce a", disabled: true, description: "Scegli un tracciato." });
   });
 
   it("il tasto dell'indice è la scorciatoia della voce", () => {
     const indice = indiceDi({ voci: [voce("a", "menu/oggetto", { tasto: "Ctrl+J" })] });
     const menu = menuComando(indice, valgono({ id: "disegno.a", enabled: true, disabled_reason: null }), NESSUNO);
-    expect(trova(menu, "Oggetto").items?.[0]).toMatchObject({ hint: "Ctrl+J", disabled: false });
+    expect(sottovoci(trova(menu, "Oggetto"))[0]).toMatchObject({ hint: "Ctrl+J", disabled: false });
   });
 
   it("senza voci pronte il menu lo dice, come voce spenta", () => {
@@ -76,7 +82,7 @@ describe("menuComando", () => {
     const esegui = vi.fn();
     const v = voce("a", "menu/oggetto");
     const menu = menuComando(indiceDi({ voci: [v] }), valgono({ id: "disegno.a", enabled: true, disabled_reason: null }), esegui);
-    trova(trova(menu, "Oggetto").items ?? [], "Voce a").run?.();
+    trova(sottovoci(trova(menu, "Oggetto")), "Voce a").run?.();
     expect(esegui).toHaveBeenCalledWith(v);
   });
 });
