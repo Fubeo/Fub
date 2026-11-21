@@ -14,6 +14,9 @@ pub mod differenza;
 /// Il motore non tocca il disco: le radici del processo e la guardia prima
 /// del motore.
 pub mod disco;
+/// Le famiglie del Disegno completo, ognuna con il suo stato pigro.
+#[cfg(feature = "completo")]
+pub mod famiglie;
 /// I gesti delle forme, della selezione e del testo.
 pub mod gesti;
 /// Gli identificatori stabili degli elementi del disegno.

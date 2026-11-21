@@ -414,7 +414,11 @@ pub(crate) fn esito_vuoto(revisione: u64) -> DrawingOutcome {
 }
 
 /// Gli id di Fub della selezione del motore; un oggetto senza id resta fuori.
-fn selezione_di_fub(copia: &Copia, differenza: &Differenza, selezione: &[NodeId]) -> Vec<String> {
+pub(crate) fn selezione_di_fub(
+    copia: &Copia,
+    differenza: &Differenza,
+    selezione: &[NodeId],
+) -> Vec<String> {
     let mut fuori: Vec<String> = Vec::new();
     for n in selezione {
         let id = differenza.ids.get(n).cloned().or_else(|| {
