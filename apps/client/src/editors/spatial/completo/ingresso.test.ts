@@ -41,7 +41,12 @@ const apri = vi.hoisted(() => vi.fn());
 vi.mock("./index", () => ({ apri }));
 /// Il Completo che `apri` torna: basta il suo registro delle sezioni, vuoto
 /// (la scheda Risorse ne prende da lì).
-const completoFinto = () => ({ sezioni: { registra: () => false, di: () => [], ascolta: () => () => undefined, chiudi: () => undefined } });
+const completoFinto = () => ({
+  sezioni: { registra: () => false, di: () => [], ascolta: () => () => undefined, chiudi: () => undefined },
+  spazio: () => undefined,
+  colonna: () => [],
+  cassetto: () => undefined,
+});
 
 const SOURCE = doc(`<title>Prova</title>${LAYER}<rect id="o1a2b3c4d" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`);
 
