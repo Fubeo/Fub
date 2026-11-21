@@ -160,9 +160,8 @@ export function installCommandSearch(ctx: EditorContext): void {
       render: (one, row) => {
         row.classList.add("draw-commands-row");
         // Le voci spente restano raggiungibili con le frecce, perché Invio
-        // ripeta il perché (K6 T9a): per questo la lista non le salta, e il segno
-        // della voce spenta è un attributo suo (la lista toglie `aria-disabled`).
-        if (one.disabled) row.dataset.spento = "true";
+        // ripeta il perché (K6 T9a): la lista non le salta, e `segnaSpente` le
+        // dice spente a ogni aggiornamento.
         const label = document.createElement("span");
         label.className = "draw-commands-label";
         label.textContent = one.label;
@@ -194,10 +193,19 @@ export function installCommandSearch(ctx: EditorContext): void {
       },
       lifetime: own,
     });
+    /// Le voci spente hanno `aria-disabled`, come dice l'a11y. La lista del kit
+    /// lo toglie a ogni aggiornamento, perché non le salta: lo si rimette qui.
+    const segnaSpente = (shown: readonly FoundCommand[]): void => {
+      [...rows.querySelectorAll<HTMLElement>(".draw-commands-row")].forEach((row, at) => {
+        if (shown[at]?.disabled === true) row.setAttribute("aria-disabled", "true");
+        else row.removeAttribute("aria-disabled");
+      });
+    };
     const refresh = (): void => {
       if (caricando) return;
       const shown = rankCommands(tutte, input.value, recent);
       list.setItems(shown);
+      segnaSpente(shown);
       if (shown.length > 0) empty.textContent = "";
       else empty.textContent = completo !== null && tutte.length === 0 ? t("draw.completo.indice.empty") : t("draw.commands.none");
     };

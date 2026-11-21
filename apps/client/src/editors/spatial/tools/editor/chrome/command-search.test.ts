@@ -55,6 +55,8 @@ describe("la ricerca Ctrl+/ con il Completo (K6 T9a)", () => {
     ctx.searchCommands();
     await attesa();
     const input = document.querySelector<HTMLInputElement>(".draw-commands-field input");
+    // La voce spenta si dice tale anche a chi ascolta (aria-disabled), e resta raggiungibile.
+    expect(document.querySelectorAll(".draw-commands-row")[1]?.getAttribute("aria-disabled")).toBe("true");
     input?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await attesa();

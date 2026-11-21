@@ -28330,7 +28330,7 @@ h6.ui-heading {
   display: none;
 }
 /* Una voce che non vale adesso si vede attenuata, col suo perché (K6 T9a). */
-.draw-commands-row[data-spento="true"] .draw-commands-label {
+.draw-commands-row[aria-disabled="true"] .draw-commands-label {
   color: var(--muted);
 }
 /* «Personalizza la barra…»: una riga per strumento, con la casella, il
