@@ -548,14 +548,31 @@ describe("lo spazio di lavoro del disegno", () => {
   it("la chiave scelta vale; il livello di prima non si legge più", async () => {
     const { workspaceOf } = await boot(createFakeHost({ settings: [] }));
     // Niente scelto: Completo, colonna di serie.
-    expect(workspaceOf([])).toEqual({ workspace: "full", toolbar: [] });
+    expect(workspaceOf([])).toEqual({ space: "full", workspace: "full", saved: [], savedRaw: [], toolbar: [] });
     // `draw.level` e `draw.custom` restano nel file, ma non contano più.
-    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"])])).toEqual({ workspace: "full", toolbar: [] });
-    expect(workspaceOf([drawEntry("draw.workspace", "simple")])).toEqual({ workspace: "simple", toolbar: [] });
+    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"])])).toMatchObject({ space: "full", workspace: "full", toolbar: [] });
+    expect(workspaceOf([drawEntry("draw.workspace", "simple")])).toMatchObject({ space: "simple", workspace: "simple", toolbar: [] });
     // Uno strumento che non c'è non conta; il Testo c'è di nuovo (K5).
-    expect(workspaceOf([drawEntry("draw.workspace", "full"), drawEntry("draw.toolbar", ["select", "text", "domani"])])).toEqual({ workspace: "full", toolbar: ["select", "text"] });
+    expect(workspaceOf([drawEntry("draw.workspace", "full"), drawEntry("draw.toolbar", ["select", "text", "domani"])])).toMatchObject({ workspace: "full", toolbar: ["select", "text"] });
     // Uno spazio sconosciuto vale Completo.
-    expect(workspaceOf([drawEntry("draw.workspace", "tablet")]).workspace).toBe("full");
+    expect(workspaceOf([drawEntry("draw.workspace", "tablet")])).toMatchObject({ space: "full", workspace: "full" });
+  });
+
+  it("un preset del Completo resta lo spazio scelto, con la base Completo; uno salvato si cerca fra i salvati", () => {
+    return boot(createFakeHost({ settings: [] })).then(({ workspaceOf }) => {
+      const mio = '{"v":1,"id":"salvato-1","nome":"Mio","colonna":[],"scheda":"layers","sezione":null,"righelli":true}';
+      expect(workspaceOf([drawEntry("draw.workspace", "automazione")])).toMatchObject({ space: "automazione", workspace: "full" });
+      const salvato = workspaceOf([drawEntry("draw.workspace", "salvato-1"), drawEntry("draw.workspaces", [mio])]);
+      expect(salvato).toMatchObject({ space: "salvato-1", workspace: "full" });
+      expect(salvato.saved.map((each) => each.nome)).toEqual(["Mio"]);
+      // Lo stesso id senza l'elenco che lo contiene vale Completo: il valore
+      // resta nel file, com'è.
+      expect(workspaceOf([drawEntry("draw.workspace", "salvato-1")])).toMatchObject({ space: "full" });
+      // Una voce rotta si ignora, e resta nell'elenco com'è, per la prossima scrittura.
+      const rotta = workspaceOf([drawEntry("draw.workspaces", [mio, "{non è json"])]);
+      expect(rotta.saved).toHaveLength(1);
+      expect(rotta.savedRaw).toEqual([mio, "{non è json"]);
+    });
   });
 
   it("una lettura superata da una più recente non arriva, né all'editor né alla memoria", async () => {
@@ -604,7 +621,7 @@ describe("lo spazio di lavoro del disegno", () => {
     const applied: unknown[] = [];
     const stop = watchWorkspace((choice) => applied.push(choice));
     await settle();
-    expect(applied).toEqual([{ workspace: "simple", toolbar: [] }]);
+    expect(applied).toMatchObject([{ space: "simple", workspace: "simple", toolbar: [] }]);
 
     await host.module.api.setSetting("editor.line_numbers", false);
     await settle();
@@ -619,13 +636,13 @@ describe("lo spazio di lavoro del disegno", () => {
       ["draw.workspace", "full"],
       ["draw.toolbar", ["select", "pen"]],
     ]);
-    expect(applied[applied.length - 1]).toEqual({ workspace: "full", toolbar: ["select", "pen"] });
+    expect(applied[applied.length - 1]).toMatchObject({ space: "full", workspace: "full", toolbar: ["select", "pen"] });
     expect(host.atGate("resetSetting")).toEqual([]);
 
     stop();
     await host.module.api.setSetting("draw.workspace", "simple");
     await settle();
-    expect(applied[applied.length - 1], "dopo stop").toEqual({ workspace: "full", toolbar: ["select", "pen"] });
+    expect(applied[applied.length - 1], "dopo stop").toMatchObject({ space: "full", workspace: "full", toolbar: ["select", "pen"] });
   });
 
   it("una scrittura che non riesce lo dice", async () => {

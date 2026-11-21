@@ -21,8 +21,8 @@
 // confronta non deve restare verde.
 import { describe, expect, it } from "vitest";
 import DRAW_RS from "../../../../../crates/fub-features/src/draw.rs?raw";
-import { SUGGESTIONS_KEY, TOOLBAR_KEY, WORKSPACE_KEY, currentWorkspace } from "./preferences";
-import { WORKSPACES } from "./tools/registry";
+import { SAVED_WORKSPACES_KEY, SUGGESTIONS_KEY, TOOLBAR_KEY, WORKSPACE_KEY, currentWorkspace } from "./preferences";
+import { SPAZI_COMPLETO, WORKSPACES } from "./tools/registry";
 import { DRAW_BUNDLE, TEMPLATES_FOLDER, TEMPLATES_SETTING, templatesFolder } from "./templates/choices";
 
 /// Il valore, come testo, della costante pubblica `name` di `draw.rs`.
@@ -62,6 +62,7 @@ describe("le impostazioni dei disegni, Rust e client", () => {
 
   it("le chiavi sono quelle che il client legge e scrive", () => {
     expect(text("DRAW_WORKSPACE_KEY")).toBe(WORKSPACE_KEY);
+    expect(text("DRAW_WORKSPACES_KEY")).toBe(SAVED_WORKSPACES_KEY);
     expect(text("DRAW_TOOLBAR_KEY")).toBe(TOOLBAR_KEY);
     expect(text("DRAW_SUGGESTIONS_KEY")).toBe(SUGGESTIONS_KEY);
     expect(text("DRAW_TEMPLATES_KEY")).toBe(TEMPLATES_SETTING);
@@ -75,11 +76,13 @@ describe("le impostazioni dei disegni, Rust e client", () => {
     expect(templatesFolder(undefined)).toBe(text("DRAW_TEMPLATES_DEFAULT"));
   });
 
-  it("gli spazi di lavoro sono quelli del registro, e il primo è quello di serie", () => {
+  it("gli spazi di lavoro sono quelli del registro e i preset del Completo, e il primo è quello di serie", () => {
     const workspaces = strings("DRAW_WORKSPACES");
-    expect(workspaces).toEqual([...WORKSPACES]);
+    // I due dell'editor, poi gli otto preset del Disegno completo nell'ordine
+    // del menu: il Rust e il client li dicono allo stesso modo.
+    expect(workspaces).toEqual([...WORKSPACES, ...SPAZI_COMPLETO]);
     // Senza impostazioni l'editor parte dal primo, «Completo», con la colonna
     // di serie.
-    expect(currentWorkspace()).toEqual({ workspace: workspaces[0], toolbar: [] });
+    expect(currentWorkspace()).toMatchObject({ space: workspaces[0], workspace: workspaces[0], toolbar: [] });
   });
 });
