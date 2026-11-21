@@ -9,8 +9,8 @@ description = "Official features as native trait implementations: backlink, sear
 # Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
 # (`src/inventory.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
 # quindi non è mai il documento a dire cosa esiste. Il default è **tutto**, cioè
-# l'app che spediamo, con le eccezioni dichiarate (`draw` e `engine-drawing`,
-# che lo accende, più sotto):
+# l'app che spediamo, con le eccezioni dichiarate (`draw`, `engine-drawing`
+# e `drawing-complete`, che la accendono, più sotto):
 # spegnere è una scelta di chi compila, non un difetto da ricordarsi di
 # correggere.
 #
@@ -132,6 +132,10 @@ draw = [
 # disegna con gli strumenti semplici. Fuori dal default come `draw`, che
 # accende.
 engine-drawing = ["draw"]
+# Il Disegno completo: la riga della mappa dei componenti che richiede il
+# motore. Un marcatore, come `engine-drawing`, e fuori dal default per la
+# stessa ragione: lo porta `fub-host/drawing-complete`, nel default dell'host.
+drawing-complete = ["engine-drawing"]
 # La lavagna: il comando `canvas.apply`, che porta in un `.canvas` le
 # operazioni del suo nucleo. Il nucleo è puro (`serde`, `serde_json`,
 # `thiserror`) e nessun'altra feature lo tira dentro.

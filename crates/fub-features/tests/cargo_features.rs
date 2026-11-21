@@ -148,6 +148,13 @@ const OUT_OF_DEFAULT: &[(&str, bool, &str)] = &[
          ragione: il motore lo porta `fub-host/engine-drawing`, nel default \
          dell'host",
     ),
+    (
+        "drawing-complete",
+        cfg!(feature = "drawing-complete"),
+        "la riga del Disegno completo accende `engine-drawing`, e sta fuori per la \
+         stessa ragione: le famiglie le porta `fub-host/drawing-complete`, nel \
+         default dell'host",
+    ),
 ];
 
 /// Ogni cargo feature è accesa di default, tranne quelle dichiarate qui sopra.

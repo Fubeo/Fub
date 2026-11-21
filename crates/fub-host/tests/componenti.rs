@@ -511,6 +511,37 @@ fn a_remount_tells_the_shell_the_vault_is_open_again() {
 const MOTORE: &str = "fub.motore-vettoriale";
 /// I disegni, il bundle che il motore richiede.
 const DISEGNI: &str = "fub.draw";
+/// Il Disegno completo (K6), che richiede il motore.
+#[cfg(feature = "drawing-complete")]
+const COMPLETO: &str = "fub.disegno-completo";
+
+/// Spegne il motore a mano: con il Disegno completo nella build, il motore
+/// si spegne con lui («anche questi»), che lo richiede.
+#[cfg(feature = "engine-drawing")]
+fn spegni_il_motore(host: &fub_host::Host) {
+    apply(
+        host,
+        Azione::Spegni {
+            id: MOTORE.into(),
+            anche_questi: cfg!(feature = "drawing-complete"),
+            orfani: Orfani::Chiedi,
+        },
+    );
+}
+
+/// `components.off` dopo aver spento il motore: con il Disegno completo,
+/// anche lui.
+#[cfg(feature = "engine-drawing")]
+fn motore_spento() -> Value {
+    #[cfg(feature = "drawing-complete")]
+    {
+        serde_json::json!([COMPLETO, MOTORE])
+    }
+    #[cfg(not(feature = "drawing-complete"))]
+    {
+        serde_json::json!([MOTORE])
+    }
+}
 
 /// Il file delle impostazioni del vault con questi valori, scritto prima di
 /// aprirlo.
@@ -587,10 +618,10 @@ fn turning_the_engine_off_leaves_the_drawings_on() {
     let keys_before = keys(&root);
     let bundles_before = bundles(&host);
 
-    spegni(&host, MOTORE, Orfani::Chiedi);
+    spegni_il_motore(&host);
     assert_eq!(
         keys(&root),
-        vec![("components.off".to_string(), serde_json::json!([MOTORE]))]
+        vec![("components.off".to_string(), motore_spento())]
     );
     assert_eq!(perche(&host, MOTORE), Perche::Spento);
     assert_eq!(perche(&host, DISEGNI), Perche::Scelto);
@@ -603,6 +634,13 @@ fn turning_the_engine_off_leaves_the_drawings_on() {
     assert!(bundles(&host).contains(DISEGNI));
 
     accendi(&host, MOTORE);
+    // Il Completo resta com'è stato lasciato, spento: il risolutore non
+    // ricorda perché era acceso. Riacceso lui, il file torna com'era.
+    #[cfg(feature = "drawing-complete")]
+    {
+        assert_eq!(perche(&host, COMPLETO), Perche::Spento);
+        accendi(&host, COMPLETO);
+    }
     assert_eq!(keys(&root), keys_before);
     assert_eq!(perche(&host, MOTORE), Perche::Scelto);
 }
@@ -650,10 +688,15 @@ fn turning_the_drawings_off_follows_the_resolver() {
         rifiuto,
         componenti::Rifiuto::Richiesto {
             id: DISEGNI.into(),
+            // Anche il Completo, che richiede il motore.
+            #[cfg(feature = "drawing-complete")]
+            da: vec![COMPLETO.into(), MOTORE.into()],
+            #[cfg(not(feature = "drawing-complete"))]
             da: vec![MOTORE.into()],
         }
     );
     assert_eq!(keys(&root), keys_before, "a refusal writes nothing");
+    let off_after = motore_spento();
 
     apply(
         &host,
@@ -669,7 +712,7 @@ fn turning_the_drawings_off_follows_the_resolver() {
     assert_eq!(
         keys(&root),
         vec![
-            ("components.off".to_string(), serde_json::json!([MOTORE])),
+            ("components.off".to_string(), off_after),
             ("plugins.disabled".to_string(), serde_json::json!([DISEGNI])),
         ]
     );
@@ -685,9 +728,46 @@ fn turning_the_drawings_off_follows_the_resolver() {
     assert!(bundles(&host).contains(DISEGNI));
 
     accendi(&host, MOTORE);
+    #[cfg(feature = "drawing-complete")]
+    accendi(&host, COMPLETO);
     assert_eq!(keys_without_empty_disabled(&root), keys_before);
     assert_eq!(bundles(&host), bundles_before);
     assert_eq!(perche(&host, MOTORE), Perche::Scelto);
+}
+
+/// Il Disegno completo (K6 T3): acceso di serie in «Disegnare»; spento da
+/// solo va in `components.off` e il motore resta; un vault scritto prima di
+/// lui, con il solo motore spento, lo legge spento con il motore senza che il
+/// file cambi.
+#[test]
+#[cfg(feature = "drawing-complete")]
+fn the_complete_drawing_follows_its_engine() {
+    let (_dir, root) = vault();
+    let host = host(&root);
+    let completo = row(&host, COMPLETO).expect("the Complete row");
+    assert!(completo.acceso);
+    assert_eq!(perche(&host, COMPLETO), Perche::Scelto);
+
+    spegni(&host, COMPLETO, Orfani::Chiedi);
+    assert_eq!(
+        keys(&root),
+        vec![("components.off".to_string(), serde_json::json!([COMPLETO]))]
+    );
+    assert_eq!(perche(&host, COMPLETO), Perche::Spento);
+    assert_eq!(perche(&host, MOTORE), Perche::Scelto, "the engine stays on");
+    host.close();
+
+    let (_dir, root) = vault();
+    settings(&root, serde_json::json!({"components.off": [MOTORE]}));
+    let before = keys(&root);
+    let host = self::host(&root);
+    assert_eq!(perche(&host, MOTORE), Perche::Spento);
+    assert_eq!(
+        perche(&host, COMPLETO),
+        Perche::Spento,
+        "an old vault with the engine off has the Complete off too"
+    );
+    assert_eq!(keys(&root), before, "reading writes nothing");
 }
 
 /// Con il motore già spento a mano, spegnere e riaccendere i disegni non lo
@@ -697,7 +777,7 @@ fn turning_the_drawings_off_follows_the_resolver() {
 fn the_drawings_off_and_on_leave_an_engine_off_as_it_was() {
     let (_dir, root) = vault();
     let host = host(&root);
-    spegni(&host, MOTORE, Orfani::Chiedi);
+    spegni_il_motore(&host);
     let keys_before = keys(&root);
 
     spegni(&host, DISEGNI, Orfani::Chiedi);

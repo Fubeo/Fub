@@ -77,6 +77,14 @@ const FUORI_DAL_DEFAULT = new Map([
     "job test, passo «la riga del Motore del disegno, con la feature `engine-drawing` delle feature»; " +
       "job invariants, «ogni feature ufficiale compila da sola»",
   ],
+  // La riga del Disegno completo (K6 T3): accende `engine-drawing`, quindi
+  // sta fuori per la stessa ragione. Le famiglie le porta
+  // `fub-host/drawing-complete`, nel default dell'host.
+  [
+    "crates/fub-features/Cargo.toml#drawing-complete",
+    "job test, passo «la riga del Disegno completo, con la feature `drawing-complete` delle feature»; " +
+      "job invariants, «ogni feature ufficiale compila da sola»",
+  ],
   // L'oracolo a pixel dei disegni (il cancello di K5): porta un
   // rasterizzatore, e il banco del kernel lo prenderebbe in ogni crate che
   // ne fa un test senza usarlo.

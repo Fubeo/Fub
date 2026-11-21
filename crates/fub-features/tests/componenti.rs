@@ -366,3 +366,49 @@ fn il_motore_del_disegno_e_un_interruttore_in_disegnare() {
         "il motore acceso richiede i disegni"
     );
 }
+
+/// Il Disegno completo (piano K6 T3) sta in «Disegnare» accanto al motore,
+/// che richiede: non è un bundle, sta dietro la sua cargo feature ed è acceso
+/// di serie. Spegnere il motore lo spegne con lui («anche questi» di K2), e
+/// lui si spegne da solo lasciando il motore.
+#[test]
+#[cfg(feature = "drawing-complete")]
+fn il_disegno_completo_richiede_il_motore() {
+    let completo = componenti::riga("fub.disegno-completo").expect("la riga del Completo");
+    assert_eq!(completo.kind, fub_abi::ComponentKind::Engine);
+    assert_eq!(completo.gruppo, "disegnare");
+    assert!(!completo.bundle, "il Completo non è un bundle");
+    assert_eq!(completo.requires, &["fub.motore-vettoriale"]);
+    assert_eq!(completo.cargo_feature, Some("drawing-complete"));
+    assert_eq!(completo.nome, "component.disegno-completo.name");
+
+    let mappa = componenti::mappa();
+    let tutto = fub_componenti::Stato {
+        scelti: ["fub.draw", "fub.motore-vettoriale", "fub.disegno-completo"]
+            .map(String::from)
+            .into(),
+        in_attesa: Default::default(),
+    };
+    assert_eq!(
+        mappa.spegni(&tutto, "fub.motore-vettoriale"),
+        Err(fub_componenti::Errore::Richiesto {
+            da: vec!["fub.disegno-completo".into()],
+        }),
+        "il Completo acceso richiede il motore"
+    );
+    let (spento, effetto) = mappa
+        .spegni_con_dipendenti(&tutto, "fub.motore-vettoriale")
+        .expect("il motore si spegne con chi lo richiede");
+    assert_eq!(effetto.spenti_anche, ["fub.disegno-completo"]);
+    let attivi = mappa.attivi(&spento);
+    assert!(!attivi.contains("fub.disegno-completo"));
+    assert!(!attivi.contains("fub.motore-vettoriale"));
+    assert!(attivi.contains("fub.draw"));
+
+    let (spento, _) = mappa
+        .spegni(&tutto, "fub.disegno-completo")
+        .expect("il Completo si spegne da solo");
+    let attivi = mappa.attivi(&spento);
+    assert!(attivi.contains("fub.motore-vettoriale"), "il motore resta");
+    assert!(!attivi.contains("fub.disegno-completo"));
+}

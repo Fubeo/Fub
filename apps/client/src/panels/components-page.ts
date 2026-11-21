@@ -99,6 +99,7 @@ export const COMPONENT_ICONS: Readonly<Record<string, string>> = {
   "fub.motore-documenti": "format-odt",
   "fub.motore-fogli": "format-sheet",
   "fub.motore-vettoriale": "format-drawing",
+  "fub.disegno-completo": "format-drawing",
   "fub.importers": "folder",
   "fub.linkcard": "backlink",
   "fub.updates": "sync",
