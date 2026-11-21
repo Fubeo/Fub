@@ -192,6 +192,8 @@ export function installStage(ctx: EditorContext): void {
   ctx.collegaCompleto = (sezioni, motore) => {
     completoAperto = sezioni !== null;
     resources.collega(sezioni, motore);
+    // Il Design prende le sue sezioni dallo stesso registro.
+    panel.collegaSezioni(sezioni, motore, () => ctx.selectedUnits().length);
     if (!completoAperto && !resources.element.hidden) ctx.showResources(false, false);
     ctx.chrome.refresh?.();
   };

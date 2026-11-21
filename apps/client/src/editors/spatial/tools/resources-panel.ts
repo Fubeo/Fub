@@ -1,7 +1,9 @@
 // La scheda Risorse dell'ispettore (piano K6, T10; `docs/product/drawing-resources.md`).
-// Esiste solo col Disegno completo acceso e aperto: mostra le sezioni che le
-// famiglie registrano (`ispettore/risorse/<sezione>`, `completo/sezioni.ts`) e,
-// prima di loro, i campioni del documento, che K5 già sa leggere.
+// Esiste solo col Disegno completo acceso e aperto: mostra i campioni del
+// documento, che K5 già sa leggere, e le sezioni che le famiglie registrano
+// (`ispettore/risorse/<sezione>`, `completo/sezioni.ts`). Le stesse sezioni
+// del registro che stanno nella scheda Design le disegna la stessa lista
+// (`createSezioniList`), che sta qui perché è la sola che le sa montare.
 //
 // - **Una sezione si disegna da sé.** Ogni sezione ha il suo corpo; `disegna`
 //   lo riempie e torna il disposer. Ogni giro (la selezione cambia, il
@@ -44,12 +46,29 @@ export interface OpzioniPannelloRisorse {
   readonly selezione: () => Selezione;
 }
 
+/// Una lista di sezioni montata dentro un contenitore: le sezioni che si
+/// disegnano da sé, con il loro giro e il loro errore.
+export interface SezioniList {
+  /// Chiede un giro: al più uno per fotogramma.
+  aggiorna(): void;
+  /// Smonta tutte le sezioni e chiama i loro disposer.
+  dispose(): void;
+}
+
+export interface OpzioniSezioniList {
+  /// Le sezioni da mostrare, nell'ordine in cui stanno.
+  readonly elenco: () => readonly Sezione[];
+  /// La selezione di adesso: la sezione con `quando` la vede o no.
+  readonly selezione: () => Selezione;
+  /// Il motore del disegno, per i comandi delle sezioni.
+  readonly motore: () => MotoreDelDisegno | null;
+}
+
 /// Una sezione montata: il suo elemento, il giro che la disegna e ciò che
 /// serve a rifarla.
 interface Montata {
   readonly sezione: Sezione;
   readonly root: HTMLElement;
-  readonly toggle: HTMLButtonElement;
   readonly body: HTMLElement;
   readonly errore: HTMLElement;
   readonly riprova: HTMLButtonElement;
@@ -58,7 +77,6 @@ interface Montata {
   fine: Teardown | null;
   /// La vita del giro in corso; `null` se non ce n'è uno.
   giro: Lifetime | null;
-  aperta: boolean;
 }
 
 /// I campioni del documento, nell'ordine in cui stanno nel disegno: una
@@ -121,31 +139,14 @@ function sezioneCampioni(modello: () => DocumentModel | null): Sezione {
   };
 }
 
-/// Il pannello Risorse per un editor: la sezione dei campioni del documento,
-/// e sotto le sezioni del registro del Completo, nell'ordine della mappa.
-export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRisorse): PannelloRisorse {
-  const element = document.createElement("section");
-  element.className = "draw-properties draw-resources";
-  element.id = identifier("draw-resources");
-  element.tabIndex = -1;
-  element.setAttribute("aria-label", t("draw.resources.aria"));
-  const scroller = document.createElement("div");
-  scroller.className = "draw-properties-scroll";
-  element.append(scroller);
-
-  const campioni = sezioneCampioni(opzioni.modello);
+/// Monta una lista di sezioni dentro `host`, che la lista riempie da sola: le
+/// sezioni che la selezione vuole, nell'ordine di `elenco`.
+export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: OpzioniSezioniList): SezioniList {
   const montate = new Map<Sezione, Montata>();
-  let sezioni: Sezioni | null = null;
-  let motore: MotoreDelDisegno | null = null;
   /// Un giro è in attesa del suo fotogramma, e il suo numero per annullarlo.
   let pendente = false;
   let frame = 0;
-  let stopRegistro: Teardown | null = null;
   let closed = false;
-
-  /// Le sezioni da mostrare, nell'ordine: prima i campioni, poi quelle delle
-  /// famiglie (il registro le dà già in ordine di mappa).
-  const elenco = (): Sezione[] => [campioni, ...(sezioni?.di("risorse") ?? [])];
 
   function crea(sezione: Sezione): Montata {
     const root = document.createElement("div");
@@ -183,11 +184,11 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
     corpo.className = "draw-resources-corpo";
     body.append(errore, riprova, corpo);
     root.append(heading, body);
-    const m: Montata = { sezione, root, toggle, body, errore, riprova, corpo, fine: null, giro: null, aperta: true };
+    const m: Montata = { sezione, root, body, errore, riprova, corpo, fine: null, giro: null };
     toggle.addEventListener("click", () => {
-      m.aperta = !m.aperta;
-      toggle.setAttribute("aria-expanded", String(m.aperta));
-      body.hidden = !m.aperta;
+      const aperta = toggle.getAttribute("aria-expanded") !== "true";
+      toggle.setAttribute("aria-expanded", String(aperta));
+      body.hidden = !aperta;
     });
     riprova.addEventListener("click", () => disegna(m));
     return m;
@@ -214,7 +215,7 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
     const ctx: ContestoSezione = {
       corpo: m.corpo,
       sel: opzioni.selezione(),
-      motore,
+      motore: opzioni.motore(),
       aggiorna: () => pianifica(),
       vita: giro,
     };
@@ -234,7 +235,7 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
   function rifai(): void {
     if (closed) return;
     const sel = opzioni.selezione();
-    const visibili = elenco().filter((sezione) => sezione.quando?.(sel) ?? true);
+    const visibili = opzioni.elenco().filter((sezione) => sezione.quando?.(sel) ?? true);
     // Una sezione montata che non è più fra le visibili (la selezione non la
     // vuole più) si smonta; le altre si rifanno. Le sezioni si cercano per
     // oggetto, non per id: un id di famiglia può coincidere con quello di
@@ -253,8 +254,8 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
       }
       return m;
     });
-    // L'ordine nella scheda è quello di `visibili`.
-    scroller.replaceChildren(...nuove.map((m) => m.root));
+    // L'ordine nel contenitore è quello di `visibili`.
+    host.replaceChildren(...nuove.map((m) => m.root));
     for (const m of nuove) disegna(m);
   }
 
@@ -290,8 +291,45 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
   pianifica();
   life.add(() => {
     closed = true;
-    stopRegistro?.();
     smonta();
+  });
+
+  return {
+    aggiorna: pianifica,
+    dispose() {
+      closed = true;
+      smonta();
+    },
+  };
+}
+
+/// Il pannello Risorse per un editor: la sezione dei campioni del documento,
+/// e sotto le sezioni del registro del Completo, nell'ordine della mappa.
+export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRisorse): PannelloRisorse {
+  const element = document.createElement("section");
+  element.className = "draw-properties draw-resources";
+  element.id = identifier("draw-resources");
+  element.tabIndex = -1;
+  element.setAttribute("aria-label", t("draw.resources.aria"));
+  const scroller = document.createElement("div");
+  scroller.className = "draw-properties-scroll";
+  element.append(scroller);
+
+  const campioni = sezioneCampioni(opzioni.modello);
+  let sezioni: Sezioni | null = null;
+  let motore: MotoreDelDisegno | null = null;
+  let stopRegistro: Teardown | null = null;
+  let closed = false;
+  const lista = createSezioniList(scroller, life, {
+    elenco: () => [campioni, ...(sezioni?.di("risorse") ?? [])],
+    selezione: opzioni.selezione,
+    motore: () => motore,
+  });
+
+  life.add(() => {
+    closed = true;
+    stopRegistro?.();
+    stopRegistro = null;
   });
 
   return {
@@ -302,17 +340,17 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
       stopRegistro = null;
       sezioni = nuovi;
       motore = nuovo;
-      if (nuovi !== null) stopRegistro = nuovi.ascolta(() => pianifica());
-      pianifica();
+      if (nuovi !== null) stopRegistro = nuovi.ascolta(() => lista.aggiorna());
+      lista.aggiorna();
     },
     aggiorna() {
-      pianifica();
+      lista.aggiorna();
     },
     dispose() {
       closed = true;
       stopRegistro?.();
       stopRegistro = null;
-      smonta();
+      lista.dispose();
     },
   };
 }
