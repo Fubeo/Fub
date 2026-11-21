@@ -30,7 +30,9 @@ export interface VoceIndice {
   readonly posto: string;
   /// Una delle `DRAWING_FAMILIES`.
   readonly famiglia: string;
-  /// Il tasto del motore, come lo scrive il motore (`Ctrl+D`); `null`: nessuno.
+  /// Il tasto del motore, come lo scrive il motore: `Cmd+K`, `Cmd+Shift+]`,
+  /// `Ctrl+/` (`Cmd` è il tasto di Fub, `Mod`; `Ctrl` resta Control). `null`:
+  /// nessuno. Lo porta nella forma della shell (`Mod-k`) `tastoFub` in `tasti.ts`.
   readonly tasto: string | null;
   readonly effetto: EffettoVoce;
   /// Se la voce apre una finestra (lo schema è nella sua famiglia).
