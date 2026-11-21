@@ -447,18 +447,3 @@ contengono: le funzioni che lavorano sulla selezione ricevono il testo dei
 loro elementi. Un rimando a un punto del file, come quello di una ricerca,
 sceglie l'oggetto che lo contiene e lo porta in vista; un punto fuori dagli
 oggetti, come il titolo, lo dice con un avviso. In Lettura non c'è selezione.
-
-## Il menu ≡ e Ctrl+/ del Completo
-
-Con il Completo aperto, il menu ≡ «Disegno» e la ricerca **Ctrl+/** mostrano i
-comandi del motore del disegno, dal loro indice. Il menu ha i sottomenu del
-posto di ogni comando (Oggetto, Testo, Effetto e gli altri); la ricerca cerca
-in italiano e in inglese, e per ogni comando mostra il tasto e il suo posto.
-Un comando che adesso non vale resta visibile, spento, con il perché («Scegli
-prima un oggetto nel disegno.»): Invio su di lui non fa niente e ripete il
-perché. Un comando con parametri apre la sua finestra; gli altri girano subito.
-
-Finché nessuna funzione del Completo è pronta, l'indice è vuoto e il menu
-dice che nessun comando è ancora pronto. Se l'indice non arriva, il menu e la
-ricerca lo dicono, con «Riprova». Nello spazio Semplice, o con il componente
-«Disegno completo» spento, il menu ≡ e Ctrl+/ sono quelli di sempre.

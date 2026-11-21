@@ -81,6 +81,13 @@ cima. Con uno strumento che disegna c'è anche «Menu radiale», che apre il
 radiale in mezzo alla vista da tastiera. La palette dello Scrittoio resta
 `Ctrl+Maiusc+P`.
 
+Con il Disegno completo aperto, `Ctrl+/` e il menu ≡ «Disegno» cercano fra i
+comandi del motore, dal loro indice: ogni voce col suo posto e il suo tasto, in
+italiano e in inglese. Un comando che non vale per la selezione resta visibile,
+spento, col suo perché; Invio su di lui non fa niente e ripete il perché. Se
+l'indice non arriva, lo dicono, con «Riprova». Finché nessuna funzione del
+Completo è pronta, l'indice è vuoto e lo dicono anche loro.
+
 ## Girare il foglio
 
 La vista si gira:
