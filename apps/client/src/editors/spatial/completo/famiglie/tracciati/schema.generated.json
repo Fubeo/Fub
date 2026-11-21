@@ -1,0 +1,5 @@
+{
+  "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
+  "famiglia": "tracciati",
+  "finestre": []
+}

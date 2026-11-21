@@ -7,6 +7,9 @@
 
 /// Aprire un disegno nel motore a partire dai byte del file.
 pub mod apertura;
+/// L'indice dei comandi del Disegno completo, letto dalla mappa.
+#[cfg(feature = "completo")]
+pub mod catalogo;
 /// I comandi del motore tradotti in comandi di Fub.
 pub mod comandi;
 /// La differenza fra due stati della scena, scritta come operazioni.

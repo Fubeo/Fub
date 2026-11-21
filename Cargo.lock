@@ -2117,6 +2117,7 @@ dependencies = [
  "fub-motori",
  "fub-scene",
  "fub-testkit",
+ "regex",
  "serde_json",
  "uuid",
  "vectorcraft-doc",
