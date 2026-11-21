@@ -1,0 +1,33 @@
+// Le risposte del motore del banco ai comandi del Completo (`risposte.ts`).
+import { describe, expect, it } from "vitest";
+import { DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_FAMILIES, type DrawingCommandRequest } from "../../src/host/contract";
+import { RISPOSTE, rispostaDiFamiglia, type RispostaFamiglia } from "./risposte";
+
+const richiesta = (id: string, value: unknown = null): DrawingCommandRequest => ({ revision: "3", id, selection: ["oa1a1a1a1"], value });
+
+describe("le risposte delle famiglie del banco", () => {
+  it("c'è un file per famiglia, e oggi nessuna risposta", () => {
+    const file = Object.keys(import.meta.glob("./*.json")).map((nome) => nome.slice(2, -5)).sort();
+    expect(file).toEqual([...DRAWING_FAMILIES].sort());
+    expect(RISPOSTE).toEqual([]);
+  });
+
+  it("preparare una famiglia risponde pronta; una famiglia che non c'è è bad_args", () => {
+    const esito = rispostaDiFamiglia(richiesta(DRAWING_COMMAND_FAMILY_PREPARE, { famiglia: "nucleo" }));
+    expect(esito.reading).toEqual({ famiglia: "nucleo", stato: "pronta" });
+    expect(esito.revision).toBe("3");
+    expect(() => rispostaDiFamiglia(richiesta(DRAWING_COMMAND_FAMILY_PREPARE, { famiglia: "boh" }))).toThrow(expect.objectContaining({ kind: "bad_args" }));
+  });
+
+  it("un comando con la sua risposta la rende; senza, unserved come una riga da fare", () => {
+    const risposte: RispostaFamiglia[] = [
+      { comando: "disegno.edit.duplicate", esito: { ops: "[]", selection: ["oc3c3c3c3"] } },
+      { comando: "disegno.effect.apply", argomenti: { effect: "stylize.roundCorners", params: { radius: 15 } }, esito: { refused: "unsupported" } },
+    ];
+    expect(rispostaDiFamiglia(richiesta("disegno.edit.duplicate"), risposte)).toMatchObject({ ops: "[]", selection: ["oc3c3c3c3"], refused: null });
+    // Gli argomenti uguali come JSON, con le chiavi in un altro ordine.
+    expect(rispostaDiFamiglia(richiesta("disegno.effect.apply", { params: { radius: 15 }, effect: "stylize.roundCorners" }), risposte).refused).toBe("unsupported");
+    expect(() => rispostaDiFamiglia(richiesta("disegno.effect.apply", { effect: "stylize.roundCorners", params: { radius: 3 } }), risposte)).toThrow(expect.objectContaining({ kind: "unserved" }));
+    expect(() => rispostaDiFamiglia(richiesta("disegno.edit.clear"), risposte)).toThrow(expect.objectContaining({ kind: "unserved" }));
+  });
+});

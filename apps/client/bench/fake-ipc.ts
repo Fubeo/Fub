@@ -74,6 +74,7 @@ import { gridJournalText } from "../src/state/grid-journal";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
+import { rispostaDiFamiglia } from "./disegno-famiglie/risposte";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
@@ -941,6 +942,8 @@ const DRAWING = CONNECTORS !== null
 //   (`__fixtures__/disegno-gesti/`) quando il disegno e lo strumento sono
 //   quelli di un vettore; ogni altro gesto non scrive niente (`empty`): il
 //   motore del banco sa soltanto i vettori.
+//   I comandi rispondono con `disegno-famiglie/<famiglia>.json`
+//   (`disegno-famiglie/risposte.ts`).
 // - `spento`: il motore spento nel vault, ogni porta del disegno `unserved`.
 // - `errore`: l'apertura fallisce con `internal`, il motore è fermo.
 const DRAWING_ENGINE_PARAM = params.get("drawing");
@@ -1003,6 +1006,9 @@ function benchDrawingEngine(): DrawingFake | undefined {
   return {
     open: () => ({ instance: `banco-${++instances}`, revision: "0", mapped: 0, unmapped: losses.length, losses }),
     gesto: (gesture, copia) => benchDrawingOutcome(gesture, copia.text),
+    // I comandi del Disegno completo: le risposte di `disegno-famiglie/`, e
+    // `unserved` per un comando che non ne ha una.
+    comando: (request) => rispostaDiFamiglia(request),
   };
 }
 

@@ -1,10 +1,20 @@
 import { searchForWorkspaceRoot, type Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { readdirSync } from "node:fs";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
+import { completoBoundaries, completoChunk } from "./build/completo-chunks.mjs";
 import { SKIN_GROUP_TARGET, skinGroups } from "./build/skin-split.mjs";
 
 const CHUNK_BUDGET = 500_000;
+
+/// Le famiglie del Disegno completo, una cartella ciascuna
+/// (`src/editors/spatial/completo/famiglie/<id>/`): ognuna è il suo chunk
+/// `drawing-fam-<id>` (`build/completo-chunks.mjs`).
+const COMPLETO_FAMILIES = readdirSync(new URL("./src/editors/spatial/completo/famiglie/", import.meta.url), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
 const MERMAID_PARSER_BUDGET = 700_000;
 
@@ -183,7 +193,12 @@ export default defineConfig({
         map: null,
       };
     },
-  }, {
+  },
+  // I confini del Disegno completo: fuori da `completo/` solo un `import()`
+  // del suo ingresso, nessuna famiglia nei file di un'altra, e ogni modulo
+  // nel chunk della sua regola.
+  completoBoundaries(COMPLETO_FAMILIES),
+  {
     name: "bundle-size-budgets",
     apply: "build",
     generateBundle: {
@@ -315,6 +330,10 @@ export default defineConfig({
         // opzionali restano separati: non finiscono nel runtime iniziale.
         onlyExplicitManualChunks: true,
         manualChunks(id) {
+          // Il Disegno completo: l'ingresso, l'indice e una famiglia per
+          // chunk, che arrivano solo quando servono (`build/completo-chunks.mjs`).
+          const completo = completoChunk(id);
+          if (completo) return completo;
           if (/\/node_modules\/@codemirror\/(state|view|language|commands|autocomplete|search|lint)\//.test(id)) {
             return "editor-runtime";
           }

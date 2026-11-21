@@ -2,6 +2,7 @@
   <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
   <g id="l1a2b3c4d" fub:layer="Livello 1">
     <rect id="oa1a1a1a1" x="100" y="100" width="100" height="50" fill="#000000"/>
+    <path id="oc3c3c3c3" d="M100 100 L200 100 L200 150 L100 150 Z" fill="#000000"/>
     <rect id="ob2b2b2b2" x="220" y="100" width="60" height="50" fill="#ff0000"/>
   </g>
 </svg>

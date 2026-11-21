@@ -7,6 +7,7 @@
 // `onToolbar`); l'editor le applica subito.
 
 import { textButton } from "../../../../../kit";
+import { components, onComponents } from "../../../../../state/components";
 import type { MenuItem } from "../../../../../ui/menu";
 import { t } from "../../../strings";
 import type { ToolId, Workspace } from "../../registry";
@@ -20,6 +21,9 @@ import { railLayout } from "./rail";
 /// finestra di 1280 tiene la colonna a sinistra.
 const NARROW_WIDTH = 700;
 const NARROW_PANE = 480;
+
+/// Il componente del Disegno completo (`crates/fub-components`).
+export const DISEGNO_COMPLETO = "fub.disegno-completo";
 
 export interface WorkspaceContext {
   workspace: Workspace;
@@ -88,6 +92,29 @@ export function installWorkspace(ctx: EditorContext): void {
     full.title = t("draw.workspace.full.hint");
   });
 
+  // Il Disegno completo (K6): col componente acceso, entrare nel Completo
+  // porta il suo ingresso con un `import()`, una volta per disegno aperto. Il
+  // Semplice, una scheda e il componente spento non lo chiedono mai.
+  let completo: "no" | "in-arrivo" | "aperto" = "no";
+  const portaCompleto = (): void => {
+    if (completo !== "no" || compact || ctx.disposed || ctx.workspace !== "full") return;
+    if (components()?.on(DISEGNO_COMPLETO) !== true) return;
+    completo = "in-arrivo";
+    import("../../../completo").then(
+      ({ apri }) => {
+        if (ctx.disposed) return;
+        apri({ motore: options.motore ?? null, life: ctx.life });
+        completo = "aperto";
+      },
+      // Un chunk che non arriva: il Completo di K5 resta, e il prossimo
+      // ingresso ci riprova.
+      () => {
+        completo = "no";
+      },
+    );
+  };
+  ctx.life.add(onComponents(portaCompleto));
+
   ctx.setWorkspace = (next, toolbar) => {
     if (ctx.disposed) return;
     ctx.workspace = next;
@@ -98,7 +125,9 @@ export function installWorkspace(ctx: EditorContext): void {
     ctx.offer(ctx.featuresOf(next));
     ctx.syncRail(ctx.editable());
     ctx.syncPenOptions();
+    portaCompleto();
   };
+  portaCompleto();
 
   /// Lo spazio scelto da chi disegna: si applica, si dice e si ricorda.
   const choose = (next: Workspace): void => {
