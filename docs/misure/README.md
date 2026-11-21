@@ -171,4 +171,14 @@ pezzi copre la mappa, quante differenze restano e quanto si vedono.
 | Data | Prototipo | Commit | Pagina |
 |---|---|---|---|
 | 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | `25299965f` | [La conformità dell'editor al prototipo](2026-11-21-conformita-editor.md) |
-| 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | `c8b643653` | I gesti dell'editor, prototipo contro app: [blocchi](gesti-editor/blocchi.md), [formule, lanciatore e menu](gesti-editor/formule-lanciatore-menu-pagina.md) |
+
+## I gesti dell'editor
+
+Quali gesti del prototipo l'app fa uguali, e quali no: un inventario per
+area, con la prova di ogni gesto nell'app sul banco.
+
+| Data | Prototipo | Area | Pagina |
+|---|---|---|---|
+| 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | blocchi e trascinamento | [Blocchi e trascinamento](gesti-editor/blocchi.md) |
+| 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | formule, lanciatore e menu della pagina | [Formule, lanciatore e menu della pagina](gesti-editor/formule-lanciatore-menu-pagina.md) |
+| 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | scrittura, «/», «@», link e barra di formato | [Scrittura, «/», «@», link e barra di formato](gesti-editor/scrittura.md) |
