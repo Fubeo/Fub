@@ -13,7 +13,7 @@ import { liveReveal } from "../../../live-reveal";
 import { blockIdMarks } from "../block-id";
 import { blocksMode, plainMode, type BlocksOptions } from "./index";
 import { blockSelection, selectCursorBlock } from "./selection";
-import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
+import { addBelow, colorRanges, gripLabel, handleSpan, handlesView, visibleLeft } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
 import { dragPose, LIFT_SCALE } from "./motion";
@@ -167,6 +167,29 @@ describe("le maniglie", () => {
       setContentColor("fill", "yellow", range)({ state: view.state, dispatch: (tr) => view.dispatch(tr) });
     }
     expect(view.state.doc.toString()).toContain('<mark class="fub-bg-yellow">una\nriga</mark>');
+  });
+
+  it("stanno a sinistra del riquadro di una citazione, di un riquadro e del codice, non del loro testo rientrato", () => {
+    // La riga comincia a 412 px; il testo, rientrato dal filo o dal fondo, a 430.
+    const row = (className: string) => {
+      const el = document.createElement("div");
+      el.className = className;
+      vi.spyOn(el, "getBoundingClientRect").mockReturnValue({ left: 412, right: 900, top: 0, bottom: 30, width: 488, height: 30, x: 412, y: 0, toJSON: () => ({}) });
+      return el;
+    };
+    expect(visibleLeft(row("cm-line cm-fub-quote"), 430), "il filo della citazione").toBe(412);
+    expect(visibleLeft(row("cm-line cm-fub-codeblock"), 428), "il fondo del codice").toBe(412);
+    expect(visibleLeft(row("cm-line cm-fub-callout-line"), 428), "il fondo del riquadro").toBe(412);
+    expect(visibleLeft(row("cm-line"), 436), "una voce rientrata resta accanto al suo segno").toBe(436);
+    expect(visibleLeft(null, 412)).toBe(412);
+  });
+
+  it("su un blocco alto stanno in testa, non a metà altezza", () => {
+    expect(handleSpan(150, 150, true), "una tabella alta 150 px: conta la testa").toBe(36);
+    expect(handleSpan(0, 150, true), "un widget senza un carattere da misurare").toBe(36);
+    expect(handleSpan(24, 24, true), "un widget basso resta centrato").toBe(24);
+    expect(handleSpan(18, 30, false), "il testo: la prima riga").toBe(18);
+    expect(handleSpan(0, 30, false), "una riga senza carattere: il blocco di riga").toBe(30);
   });
 
   it("smontare l'editor toglie le maniglie", () => {
@@ -1725,6 +1748,46 @@ describe("i gesti ai bordi (E2): il posto interrotto a metà corsa", () => {
     hand.move(14);
     expect(slot.style.top, "il posto è cambiato").not.toBe(top);
     expect(Math.abs(seen() - before), "il posto prosegue da dov'era").toBeLessThan(0.5);
+    hand.handles.endDrag(false);
+  });
+
+  it("a posto fermo la corsa del posto non riparte, anche se il browser arrotonda la sua posizione", () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    // Righe di 20 px che partono da 1000,3125: posizioni con più di sei cifre,
+    // come quelle di una nota vera. Uno (1000–1020), Due (1040–1060), …
+    const view = mount("Uno\n\nDue\n\nTre\n\nQuattro", 0);
+    vi.spyOn(view, "lineBlockAt").mockImplementation((pos: number) => {
+      const top = 1000.3125 + (view.state.doc.lineAt(pos).number - 1) * 20;
+      return { from: 0, to: 0, top, bottom: top + 20, height: 20, type: 0, widget: null, widgetLineBreaks: 0 } as ReturnType<EditorView["lineBlockAt"]>;
+    });
+    const hand = grab(view, 0, 1010);
+    hand.move(1014);
+    const slot = hand.slot()!;
+    // Chromium scrive le lunghezze dello stile in linea con sei cifre
+    // significative (1080.3125 diventa «1080.31px»); happy-dom no.
+    const style = slot.style;
+    Object.defineProperty(slot, "style", {
+      configurable: true,
+      value: new Proxy(style, {
+        get: (target, key) => {
+          const value: unknown = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+        set: (target, key, value: string) => Reflect.set(target, key, key === "top" ? `${Number(parseFloat(value).toPrecision(6))}px` : value),
+      }),
+    });
+    // Oltre Due e Tre: il posto scivola giù, una volta.
+    hand.move(1095);
+    expect(parseFloat(slot.style.top), "la posizione riletta è arrotondata").toBe(1080.31);
+    driver.advance(150);
+    expect(liveState(slot), "a metà corsa").not.toBeNull();
+    // Il puntatore si muove ancora, il posto no: la corsa non deve ripartire.
+    hand.move(1096);
+    hand.move(1097);
+    hand.move(1098);
+    driver.advance(160);
+    expect(liveState(slot), "310 ms dopo il cambio di posto la corsa di 300 ms è finita").toBeNull();
     hand.handles.endDrag(false);
   });
 
