@@ -18,17 +18,59 @@ apre uguale nei due, e cambiare spazio non lo modifica.
 
 ## Sceglierlo
 
-Dal menu ≡ «Disegno», **Spazio di lavoro** ha Completo e Semplice. Si sceglie
-anche nelle Impostazioni, nel gruppo «Disegni», con «Spazio di lavoro». È
-un'impostazione del vault, `draw.workspace`, che vale per chiunque lo apra e
-che un plugin o una macro non cambiano. Cambia dal vivo, anche nei disegni
-aperti, senza riaprirli e senza perdere la selezione o la cronologia; chi
-monta l'editor lo sceglie con `workspace` e `setWorkspace`
+Nella banda, accanto alla modalità, c'è **Spazio di lavoro** con il nome dello
+spazio in uso: si apre col clic o con la freccia su, e il suo menu ha
+Semplice e Completo, poi gli otto spazi del Disegno completo (vedi [Gli spazi
+di lavoro](#gli-spazi-di-lavoro)), poi quelli che hai salvati. Dal menu ≡
+«Disegno», Spazio di lavoro ha ancora Completo e Semplice. Lo spazio è
+un'impostazione del vault, `draw.workspace`, un id di testo (`full`,
+`simple`, un preset o uno salvato), che vale per chiunque apra il vault e che
+un plugin o una macro non cambiano. Nelle Impostazioni, nel gruppo «Disegni»,
+«Spazio di lavoro» è ora un campo di testo con l'id, non più una scelta a
+elenco: si sceglie dalla banda. Cambia dal vivo, anche nei disegni aperti,
+senza riaprirli e senza perdere la selezione o la cronologia; chi monta
+l'editor lo sceglie con `space` e `setSpace`
 (`apps/client/src/editors/spatial/tools/editor.ts`).
+
+Con il componente «Disegno completo» spento la banda mostra lo stesso bottone:
+gli otto spazi del Completo sono grigi, con il perché, e «Apri Componenti…»
+porta alla riga per accenderlo. Il Completo è quello nativo, e il file si apre
+e si salva come prima. Uno spazio che nessuno conosce vale Completo.
 
 In una finestra larga al più 700 px, o in un riquadro largo al più 480, la
 colonna va sotto il foglio, in una riga che scorre di lato; col dito, a ogni
 larghezza, le caselle sono da 44 px.
+
+## Gli spazi di lavoro
+
+Gli otto spazi del Disegno completo vengono dai preset di Scrittoio (Automation,
+Layout, Painting, …), con i nomi di Fub: Completo classico, Automazione,
+Impaginazione, Pittura, Ricalco, Stampa e prova, Tipografia, Web. Ognuno è un
+dato (`apps/client/src/editors/spatial/completo/spazi.ts`): la scheda che apre
+(Design o Livelli), la sezione dell'ispettore, i righelli, la fila delle
+opzioni e le famiglie da preparare. Scegliere uno spazio prepara quelle
+famiglie in sottofondo, e non cambia il file né entra nella cronologia.
+
+Che cosa fa ora, e che cosa resta:
+
+- la scheda si apre; la sezione dell'ispettore si apre solo quando esiste, e
+  fino ad allora lo spazio la salta;
+- la colonna dei preset è quella di serie: le caselle di ogni spazio
+  aspettano gli strumenti del motore nell'indice;
+- i righelli e la fila delle opzioni sono dati dello spazio: non cambiano
+  ancora la finestra, che ha il suo righello e la sua fila di sempre.
+
+«Ripristina» riporta lo spazio in uso ai suoi dati. «Salva lo spazio di
+lavoro…» salva con un nome la colonna, la scheda, la sezione e i righelli
+dell'editor, e non si può usare il nome di uno spazio di serie né di un altro
+spazio salvato. «Gestisci gli spazi di lavoro…» sceglie uno spazio salvato, e
+lo rinomina o lo elimina; eliminare lo spazio in uso torna al Completo.
+
+Gli spazi salvati sono in `draw.workspaces`, un elenco di voci JSON, ognuna
+con la sua versione (`"v": 1`). Una voce rotta non si usa e si lascia com'è;
+una di una versione più nuova si mostra spenta, con il perché, e non si
+riscrive. Un salvataggio non cancella mai ciò che non legge
+(`apps/client/src/editors/spatial/tools/saved-workspaces.ts`).
 
 ## Personalizza la barra
 

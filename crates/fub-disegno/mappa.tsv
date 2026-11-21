@@ -1077,13 +1077,13 @@ interfaccia	window.panel.float	Float Panel		escluso	—	T2	escluso	escluso	—	p
 interfaccia	window.panel.dock	Dock Panel		escluso	—	T2	escluso	escluso	—	aggancio libero (D6)	Ancora pannello
 interfaccia	window.collapseDock	Collapse Panels to Icons		fub	—	T10	da fare	fub	—	l'ispettore di Fub	Comprimi pannelli in icone
 interfaccia	window.brightness	UI Brightness		fub	—	T2	fub	fub	—	la luce di Fub (giorno/notte)	Luminosità interfaccia
-interfaccia	window.workspace	Workspace		fub	—	T7	da fare	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub	Area di lavoro
-interfaccia	window.workspace.reset	Reset Essentials		fub	—	T7	da fare	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub	Reimposta Essentials
-interfaccia	window.workspace.new	New Workspace…		fub	—	T7	da fare	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub	Nuova area di lavoro…
-interfaccia	window.workspace.manage	Manage Workspaces…		fub	—	T7	da fare	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub	Gestisci aree di lavoro…
-interfaccia	window.workspace.delete	Delete Workspace		fub	—	T7	da fare	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub	Elimina area di lavoro
-interfaccia	window.workspace.rename	Rename Workspace		fub	—	T7	da fare	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub	Rinomina area di lavoro
-interfaccia	window.workspace.list	List Workspaces		fub	—	T7	da fare	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub	Elenca aree di lavoro
+interfaccia	window.workspace	Workspace		fub	—	T7	fub	fub	—	la banda del disegno: il bottone dello spazio di lavoro (`shells/scrittoio/frame/status-band.ts`) e il suo menu (`editors/spatial/workspace-band.ts`, Semplice, Completo, i preset e gli spazi salvati)	Area di lavoro
+interfaccia	window.workspace.reset	Reset Essentials		fub	—	T7	fub	fub	—	Ripristina dal menu dello spazio: riapplica i dati dello spazio in uso (`workspace-band.ts`, `completo/spazi.ts`)	Reimposta Essentials
+interfaccia	window.workspace.new	New Workspace…		fub	—	T7	fub	fub	—	Salva lo spazio di lavoro… dal menu della banda: colonna, scheda e sezione con un nome (`workspace-band.ts`, `tools/saved-workspaces.ts`)	Nuova area di lavoro…
+interfaccia	window.workspace.manage	Manage Workspaces…		fub	—	T7	fub	fub	—	Gestisci gli spazi di lavoro… dal menu della banda: scegli uno spazio salvato, poi rinomina o elimina (`workspace-band.ts`)	Gestisci aree di lavoro…
+interfaccia	window.workspace.delete	Delete Workspace		fub	—	T7	fub	fub	—	Elimina dalla finestra Gestisci gli spazi di lavoro: toglie lo spazio salvato, le altre voci restano (`workspace-band.ts`, `tools/saved-workspaces.ts`)	Elimina area di lavoro
+interfaccia	window.workspace.rename	Rename Workspace		fub	—	T7	fub	fub	—	Rinomina dalla finestra Gestisci gli spazi di lavoro, senza un nome già usato (`workspace-band.ts`, `tools/saved-workspaces.ts`)	Rinomina area di lavoro
+interfaccia	window.workspace.list	List Workspaces		fub	—	T7	fub	fub	—	L'elenco degli spazi nel menu della banda, con quelli salvati (`tools/workspace-choices.ts`)	Elenca aree di lavoro
 interfaccia	window.newWindow	New Window		fub	—	T2	fub	fub	—	Fub: nuova finestra della shell	Nuova finestra
 interfaccia	window.nextDocument	Next Document		fub	—	T2	fub	fub	—	Vai › Scheda successiva	Documento successivo
 interfaccia	window.previousDocument	Previous Document		fub	—	T2	fub	fub	—	Vai › Scheda precedente	Documento precedente
