@@ -86,6 +86,14 @@ sulla cornice di oggi (vedi «Aggiornamento del 2026-11-21», punto 14).
   `docs/architecture/disegno-completo.md`, e non dentro `disegno.md`, che è al
   tetto di righe: T3 e T5 scrivono le loro sezioni lì e tolgono le note
   «(arriva con T…)» dei loro pezzi · il tetto di `check-doc-size` · T1, T3, T5
+- 2026-11-21 · T2 ha fissato la forma che i task delle famiglie seguono: la
+  mappa è `crates/fub-disegno/mappa.tsv` (1551 righe, colonna `etichetta_it`
+  estratta da `i18n/it.tsv`, 26 righe ancora con l'etichetta inglese perché
+  upstream non la traduce), gli strumenti hanno l'`ID` vero di
+  `crates/tools/src/catalog.rs`, e una riga passa a `fatto` solo col suo caso
+  in `crates/fub-disegno/tests/famiglie/<famiglia>.json`
+  ([le regole](tools/disegno-mappa/README.md)) · la guardia
+  `check-disegno-mappa` · i task delle famiglie
 
 ## Aggiornamento del 2026-11-21
 
