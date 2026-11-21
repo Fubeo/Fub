@@ -179,6 +179,7 @@ area, con la prova di ogni gesto nell'app sul banco.
 
 | Data | Prototipo | Area | Pagina |
 |---|---|---|---|
+| 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | Base, tabelle, fogli e diagramma | [Base, tabelle, fogli e diagramma](gesti-editor/base-tabelle-diagramma.md) |
 | 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | blocchi e trascinamento | [Blocchi e trascinamento](gesti-editor/blocchi.md) |
 | 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | formule, lanciatore e menu della pagina | [Formule, lanciatore e menu della pagina](gesti-editor/formule-lanciatore-menu-pagina.md) |
 | 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | scrittura, «/», «@», link e barra di formato | [Scrittura, «/», «@», link e barra di formato](gesti-editor/scrittura.md) |
