@@ -11,6 +11,9 @@ pub mod apertura;
 pub mod comandi;
 /// La differenza fra due stati della scena, scritta come operazioni.
 pub mod differenza;
+/// Il motore non tocca il disco: le radici del processo e la guardia prima
+/// del motore.
+pub mod disco;
 /// I gesti delle forme, della selezione e del testo.
 pub mod gesti;
 /// Gli identificatori stabili degli elementi del disegno.

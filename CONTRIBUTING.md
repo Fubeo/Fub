@@ -112,6 +112,7 @@ node .github/scripts/check-prose.mjs
 node .github/scripts/check-tables.mjs
 node .github/scripts/check-locale-loop.mjs
 node .github/scripts/check-disegno-mappa.mjs
+node tools/disegno-disco/elenco.mjs --check
 node .github/scripts/baseline-dal-runner.mjs --self-test
 node .github/scripts/sbom.mjs --self-test
 ```
