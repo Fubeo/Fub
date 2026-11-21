@@ -59,8 +59,8 @@ tendine, che si aprono tenendo premuta la casella, col tasto destro o con la
 freccia a destra. Nel Disegno completo la colonna ha sei gruppi (selezione,
 disegno, forme, modifica, colore, vista) e in fondo **Tutti gli strumenti**
 apre il cassetto: la ricerca, i gruppi con il tasto di ogni strumento, e
-«Modifica la colonna…». Oggi il Completo mostra solo gli strumenti di Fub: gli
-strumenti del motore entrano con le loro righe «fatto» (piano K6, T11–T26). Ogni strumento ha un tasto: selezione (`V`), penna (`P`),
+«Modifica la colonna…». Il Completo mostra per ora solo gli strumenti di Fub: gli
+strumenti del motore entrano quando la loro riga della mappa è «fatto». Ogni strumento ha un tasto: selezione (`V`), penna (`P`),
 evidenziatore (`Maiusc+P`), gomma per oggetto (`E`), rettangolo (`R`),
 ellisse (`O`), linea (`L`) e freccia (`Maiusc+L`); la
 **Mano** (`H`) e lo **Zoom** (`Z`) muovono la vista in tutti e due gli spazi

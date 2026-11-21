@@ -217,9 +217,12 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
   };
 }
 
-/// Gli strumenti della colonna, coi primi delle tendine: il Completo e il
-/// Semplice hanno la stessa colonna, e cambiano i comandi.
+/// Gli strumenti della colonna del Semplice, coi primi delle tendine: la
+/// colonna di serie.
 const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
+/// La colonna del Completo (K6 T8): sei gruppi nell'ordine del prototipo, con
+/// la Mano in fondo al suo gruppo e «Tutti gli strumenti» dopo.
+const COLUMN_TOOLS_COMPLETO = ["select", "pen", "eraser", "rect", "text", "hand", "all"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;
@@ -530,7 +533,7 @@ describe("lo spazio e la griglia del disegno", () => {
     const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")] }));
     await open("casa.svg");
     const editor = focusedPane().querySelector(".draw-editor");
-    expect(tools()).toEqual(COLUMN_TOOLS);
+    expect(tools()).toEqual(COLUMN_TOOLS_COMPLETO);
 
     await host.module.api.setSetting("draw.workspace", "simple");
     await waitFor("il Semplice", () => workspace() === "simple");
