@@ -207,7 +207,8 @@ export function createToolRail(options: ToolRailOptions): ToolRail {
     flyout = openPopover({
       anchor: view.button,
       content: menu,
-      role: "menu",
+      // La superficie è un dialogo non modale che contiene il menu: il menu è `menu` dentro.
+      role: "dialog",
       label: name,
       placement: orientation === "vertical" ? "right" : "top",
       align: "start",
