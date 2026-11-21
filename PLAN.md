@@ -3307,6 +3307,7 @@ Fatto quando:
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test ricetta; node tools/disegno-cancello/cancello.mjs; node tools/vendor-craft/vendor.mjs vectorcraft check
 Stato: [x] fatto
 Aspetta: niente
+Correzione T27-bis (2026-11-21): il corpo di un oggetto con la ricetta non è più la geometria di partenza ma la grafica che il motore disegna (effetti dal vivo applicati, aspetto impilato in un `<g>`, forme dal vivo con la loro geometria), scritta dall'esportazione del motore (`src/espansa.rs`), e il banco delle righe disegna anche ciò che Fub scrive.
 
 ## T28 · Il motore non tocca il disco, e le sue tabelle si contano
 

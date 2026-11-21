@@ -1,13 +1,14 @@
 # Formato della scena, la ricetta di un oggetto
 
 > **Ambito:** la ricetta, la forma nativa del motore di un oggetto che la
-> scena non sa dire, tenuta nel file accanto alla grafica semplice che ogni
+> scena non sa dire, tenuta nel file accanto alla grafica espansa che ogni
 > programma mostra: l'elemento, l'impronta, le versioni, che cosa succede
 > quando l'elemento cambia, e la tabella dei costrutti. Versione 1.
 > **Fonti autorevoli:** `vendor/vectorcraft/crates/svg/src/recipe.rs`
 > (patch `0009-ricetta-per-elemento`) per l'elemento, l'impronta e i byte;
 > `crates/fub-disegno/src/ricetta.rs` per la tabella, la lettura e la
-> scrittura; le prove in `crates/fub-disegno/tests/ricetta.rs`.
+> scrittura; `crates/fub-disegno/src/espansa.rs` per il corpo espanso; le
+> prove in `crates/fub-disegno/tests/ricetta.rs`.
 
 Un oggetto del disegno con un effetto dal vivo, un aspetto con tre
 riempimenti o una forma dal vivo non si scrive in SVG semplice senza perdere
@@ -21,15 +22,18 @@ fra la copia e il motore ([il disegno sul motore](../architecture/disegno.md#la-
 ```xml
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300">
   <title>Ricette</title>
-  <metadata><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="oa1a1a1a1" hash="2a3bcb3147804bf0" v="1">eyJmb3JtYXQiOi…</vectorcraft:recipe></metadata>
+  <metadata><vectorcraft:recipe xmlns:vectorcraft="urn:vectorcraft:editing" for="oa1a1a1a1" hash="2e24b89e1d40e96f" v="1">eyJmb3JtYXQiOi…</vectorcraft:recipe></metadata>
   <g id="l1a2b3c4d" fub:layer="Livello 1">
-    <path id="oa1a1a1a1" d="M100 100 L200 100 L200 150 Z" fill="#000000"/>
+    <path id="oa1a1a1a1" d="M100 115 C100 106.716 106.716 100 115 100 L185 100 C193.284 100 200 106.716 200 115 L200 135 C200 143.284 193.284 150 185 150 L115 150 C106.716 150 100 143.284 100 135 Z" fill="#000000"/>
   </g>
 </svg>
 ```
 
-Un tracciato con un effetto dal vivo: il corpo ne porta la grafica
-semplice, la ricetta l'effetto.
+Un rettangolo con l'effetto dal vivo «angoli arrotondati» (raggio 15): il
+corpo ne porta la grafica espansa, con l'effetto già applicato (le curve
+degli angoli); la ricetta porta il rettangolo di partenza e l'effetto, che
+il motore riapplica alla riapertura. Il caso è
+`crates/fub-disegno/tests/casi-prova/prova.json` (`stylize.roundCorners`).
 
 ## 1. L'elemento
 
@@ -103,7 +107,9 @@ approssimato, il dettaglio comincia con «la ricetta »).
 Una ricetta non porta mai un percorso del disco al motore: i nodi immagine e
 documento collocato e ogni `link` non nullo la fanno rifiutare prima di
 leggerla. Gli elementi del corpo dentro un oggetto rifatto dalla ricetta
-sono la sua grafica semplice: non sono oggetti del motore e non sono parti.
+sono il suo corpo espanso: non sono oggetti del motore e non sono parti.
+L'oggetto riaperto è quello della ricetta, non il corpo: l'effetto non si
+applica due volte.
 
 ## 5. Alla scrittura
 
@@ -113,14 +119,35 @@ come operazioni sulla scena ([operazioni sulla scena](scene-operations.md)):
 - un oggetto con una ricetta che si sposta soltanto: un `set` della sua
   `transform`, la ricetta resta;
 - un oggetto che diventa ricco, o un oggetto con la ricetta che cambia
-  altrimenti: l'elemento si toglie e si riaggiunge con lo stesso id come
-  grafica semplice (`raw`), e la ricetta nuova nasce con l'impronta di quel
-  testo;
+  altrimenti: l'elemento si toglie e si riaggiunge con lo stesso id (se è
+  già della forma nuova, se no con uno nuovo) come corpo espanso (`raw`),
+  e la ricetta nuova nasce con l'impronta di quel testo;
 - quando le ricette cambiano, il loro `<metadata>` si toglie (`remove` col
   percorso) e se ne aggiunge uno nuovo (`add` `raw`, primo figlio di
   `<svg>`) con le ricette che restano, le nuove e il resto del blocco
   com'era; le ricette degli elementi tolti, riscritti, orfani o cambiati
   fuori da Fub non ci sono più.
+
+Il corpo espanso è la grafica che il motore disegna, scritta dalla sua
+esportazione SVG (`crates/fub-disegno/src/espansa.rs`): l'oggetto da solo,
+già nello spazio del genitore, su un documento con le risorse di quello
+vero. Gli effetti dal vivo sono applicati, l'aspetto impilato è un
+elemento per ogni riempimento e contorno, le forme dal vivo hanno la loro
+geometria, i testi sono contorni, le ombre e le sfocature sono filtri.
+Il corpo è un elemento solo con l'id dell'oggetto:
+
+- l'elemento che l'esportazione scrive, se è uno, senza risorse e senza
+  `transform`, e resta un elemento del formato della scena;
+- se no un `<g>` che lo avvolge, con le sue risorse in una `<defs>`. Gli
+  elementi dentro che il formato non sa dire (un attributo come
+  `stroke-miterlimit`, un filtro) restano estranei: si disegnano e si
+  conservano come sono.
+
+Gli id che l'esportazione scrive (le risorse a cui si rimanda) diventano
+id nuovi di Fub (`r…` le risorse, `o…` il resto), coi loro rimandi. Un
+corpo che non sarebbe un elemento del formato fa rifiutare il gesto
+(`unsupported`): la ricetta non lo troverebbe alla riapertura. Le
+coordinate hanno tre decimali, come l'esportazione del motore.
 
 Un gesto che non tocca ricette non tocca il `<metadata>`, e un file senza
 ricette torna byte per byte. Gli altri metadati (RDF, Inkscape, spazi dei
