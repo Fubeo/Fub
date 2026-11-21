@@ -170,6 +170,21 @@ export type Workspace = "full" | "simple";
 /// Gli spazi di lavoro, il primo è quello di serie.
 export const WORKSPACES: readonly Workspace[] = ["full", "simple"];
 
+/// Gli spazi del Disegno completo, i preset di `completo/spazi.ts`, nell'ordine
+/// del menu. Il loro id è quello che `draw.workspace` scrive. Stanno qui, nel
+/// pezzo che il chunk principale carica, perché la banda li elenca anche prima
+/// che il Completo arrivi. Il Rust li conta in `DRAW_WORKSPACES`, dopo i due.
+export const SPAZI_COMPLETO: readonly string[] = [
+  "completo-classico",
+  "automazione",
+  "impaginazione",
+  "pittura",
+  "ricalco",
+  "stampa-e-prova",
+  "tipografia",
+  "web",
+];
+
 /// Vero se `value` è il nome di uno spazio di lavoro.
 export function isWorkspace(value: unknown): value is Workspace {
   return typeof value === "string" && (WORKSPACES as readonly string[]).includes(value);

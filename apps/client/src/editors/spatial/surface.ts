@@ -82,19 +82,23 @@ import {
   saveSuggested,
   saveToolbar,
   saveWorkspace,
+  saveSavedWorkspaces,
   switchSuggestions,
   watchWorkspace,
   watchSuggested,
+  type WorkspaceChoice,
 } from "./preferences";
+import { createWorkspaceBand } from "./workspace-band";
 import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
-import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
+import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace, type SpazioSalvatoLayout } from "./tools/editor";
 import { cardChrome, inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
 import { exportDialog } from "./tools/export-dialog";
 import { asking } from "./tools/export-plan";
-import { featuresFor, type Workspace } from "./tools/registry";
+import { featuresFor, type ToolId, type Workspace } from "./tools/registry";
+import { DISEGNO_COMPLETO } from "./tools/editor/chrome/workspace";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
@@ -506,6 +510,44 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   });
   life.add(() => standing.dispose());
 
+  // --- Lo spazio di lavoro nella banda (T7) --------------------------------
+  // La banda legge lo spazio, gli spazi e le azioni di qui. Chi ascolta si
+  // rilegge quando lo spazio scritto cambia, o quando il Completo arriva o non
+  // arriva.
+  const workspaceListeners = new Set<() => void>();
+  function notifyWorkspace(): void {
+    for (const listener of [...workspaceListeners]) listener();
+  }
+  /// La colonna dello spazio in uso: quella del suo salvataggio, o quella
+  /// dell'utente.
+  function columnOf(choice: WorkspaceChoice): readonly ToolId[] {
+    const salvato = choice.saved.find((each) => each.id === choice.space);
+    return salvato !== undefined ? (salvato.colonna as ToolId[]) : choice.toolbar;
+  }
+  /// Il layout di uno spazio salvato, per l'editor: la colonna e la scheda.
+  function savedLayout(space: string): SpazioSalvatoLayout | null {
+    const salvato = workspace.saved.find((each) => each.id === space);
+    if (salvato === undefined) return null;
+    return { colonna: [...salvato.colonna], scheda: salvato.scheda, sezione: salvato.sezione, righelli: salvato.righelli };
+  }
+  const workspaceBand = createWorkspaceBand({
+    read: () => workspace,
+    componente: () => components()?.on(DISEGNO_COMPLETO) === true,
+    choose: (space) => saveWorkspace(space),
+    writeSaved: (raw) => saveSavedWorkspaces(raw),
+    snapshot: () => editor?.spaceSnapshot() ?? { colonna: [], scheda: "design", sezione: null, righelli: false },
+    reset: () => editor?.resetSpace(),
+    openComponents: () => showComponent(DISEGNO_COMPLETO),
+    failed: () => editor?.completoFailed() ?? false,
+    retry: () => editor?.retryCompleto(),
+    subscribe(listener) {
+      workspaceListeners.add(listener);
+      return () => {
+        workspaceListeners.delete(listener);
+      };
+    },
+  });
+
   const mountEditor = (engine: SceneEngine): DrawEditor => {
     const editorLifetime = openLifetime();
     const drawing = openMotore();
@@ -513,7 +555,16 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const mounted = createDrawEditor(drawHost, engine, editorLifetime, {
       ...(made === null
         ? { chrome: cardChrome(), compact: true, workspace: cardWorkspace }
-        : { chrome: made, workspace: workspace.workspace, toolbar: workspace.toolbar, onWorkspace: saveWorkspace, onToolbar: saveToolbar }),
+        : {
+          chrome: made,
+          workspace: workspace.workspace,
+          space: workspace.space,
+          toolbar: columnOf(workspace),
+          onWorkspace: saveWorkspace,
+          onWorkspaceChange: notifyWorkspace,
+          spazioSalvato: savedLayout,
+          onToolbar: saveToolbar,
+        }),
       grid,
       onGridChange: (next) => {
         grid = next;
@@ -875,7 +926,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   if (!compact) {
     life.add(watchWorkspace((next) => {
       workspace = next;
-      editor?.setWorkspace(next.workspace, next.toolbar);
+      editor?.setSpace(next.space, columnOf(next));
+      notifyWorkspace();
       paint();
     }));
   }
@@ -1058,6 +1110,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       },
     },
     standing,
+    // Lo spazio di lavoro, nella banda accanto alla modalità (T7).
+    workspace: workspaceBand,
     reveal: ({ span }) => !drawHost.hidden && editor !== null && editor.reveal(span.start),
     selections: (): EditorSelections | undefined => {
       const [first, ...rest] = selectedRanges();
@@ -1082,7 +1136,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
             const next: Workspace = full ? "full" : CARD_WORKSPACE;
             if (next === cardWorkspace) return;
             cardWorkspace = next;
-            editor?.setWorkspace(next);
+            editor?.setSpace(next);
           },
         }
       : {}),

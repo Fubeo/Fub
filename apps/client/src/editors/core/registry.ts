@@ -573,6 +573,49 @@ export interface SurfaceStanding {
   subscribe(listener: () => void): () => void;
 }
 
+/** Uno spazio di lavoro del disegno, come lo mostra il menu della banda. */
+export interface SurfaceWorkspaceChoice {
+  /** L'id che la scelta scrive nelle impostazioni (`draw.workspace`). */
+  readonly id: string;
+  /** Il nome, già tradotto. */
+  readonly name: string;
+  /** Una riga che dice che cos'è, a destra del nome, già tradotta. */
+  readonly description?: string;
+  /** Lo spazio base, i preset del Disegno completo o quelli salvati: il menu separa i gruppi. */
+  readonly group: "base" | "completo" | "salvato";
+  /** Vero se lo spazio si può scegliere adesso. */
+  readonly enabled: boolean;
+  /** Perché non si può scegliere, già tradotto: il menu lo dice. */
+  readonly reason?: string;
+}
+
+/** Una voce in fondo al menu dello spazio: ripristina, salva, gestisci. */
+export interface SurfaceWorkspaceAction {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly enabled: boolean;
+  run(): void;
+}
+
+/**
+ * Lo spazio di lavoro del disegno: la banda mostra quello in uso accanto alla
+ * modalità, e il menu offre gli spazi e le azioni. Scegliere uno spazio lo
+ * scrive nel vault, e chi lo mostra lo rilegge con `subscribe`.
+ */
+export interface SurfaceWorkspace {
+  /** Lo spazio in uso adesso, quello che la banda scrive. */
+  current(): SurfaceWorkspaceChoice;
+  /** Gli spazi del menu, nell'ordine in cui si mostrano. */
+  choices(): readonly SurfaceWorkspaceChoice[];
+  /** Le voci in fondo al menu, nell'ordine in cui si mostrano. */
+  actions(): readonly SurfaceWorkspaceAction[];
+  /** Sceglie lo spazio `id`; uno spento o sconosciuto non fa niente. */
+  choose(id: string): void;
+  /** Chiamata quando lo spazio, gli spazi o le azioni possono essere cambiati. */
+  subscribe(listener: () => void): () => void;
+}
+
 /** A tab the document brings to the side panel, next to the declared views. */
 export interface SurfacePanel {
   /** Stable within the surface: the panel keeps its tab across rebuilds. */
@@ -698,6 +741,8 @@ export interface EditorSurface {
   readonly cellSelection?: SurfaceCellSelectionSource;
   /** How far the document can be written, by its path. */
   readonly standing?: SurfaceStanding;
+  /** The drawing's workspace: the band shows it next to the mode (T7). */
+  readonly workspace?: SurfaceWorkspace;
   /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.

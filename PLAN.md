@@ -1835,7 +1835,7 @@ Fatto quando:
 - la guardia della mappa conta le 7 righe come `fub`;
 - con il componente spento, il file si apre e si salva come prima.
 Prova: scripts/check.sh --rapido; npx vitest run src/shells/scrittoio/frame src/editors/spatial; npm run bench:a11y
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 ## T8 · La colonna, il cassetto, la fila delle opzioni e le icone

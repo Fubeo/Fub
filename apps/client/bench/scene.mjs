@@ -1464,6 +1464,25 @@ export const SCENE = touchLast(onPage("shell", [
       prepare: (page) => openDrawingWindow(page, stato),
     },
   ]),
+  // **Lo spazio di lavoro nella banda** (K6 T7): il bottone accanto alla
+  // modalità, il suo menu aperto (Semplice, Completo, gli otto spazi del
+  // Completo, le azioni), il Completo spento, il Completo che non si carica, e
+  // il fuoco da tastiera. A 1280 e a 700 px, in giorno e in notte.
+  ...[
+    ["disegno-banda", 1280, "Lo spazio di lavoro nella banda, accanto alla modalità", null, openDrawing],
+    ["disegno-banda-800", 800, "Lo spazio di lavoro nella banda in un foglio stretto, 800 px, la finestra minima del desktop", null, openDrawing],
+    ["disegno-banda-aperta", 1280, "Lo spazio di lavoro aperto: Semplice, Completo, gli spazi del Completo, Ripristina, Salva e Gestisci", null, openWorkspaceMenu],
+    ["disegno-banda-aperta-800", 800, "Lo spazio di lavoro aperto in un foglio stretto, 800 px, la finestra minima del desktop", null, openWorkspaceMenu],
+    ["disegno-spento", 1280, "Il disegno completo spento: gli spazi del Completo grigi, con il perché, e «Apri Componenti…»", "componenti=motore-spento", openWorkspaceMenu],
+    ["disegno-banda-errore", 1280, "Il disegno completo non si carica: il menu lo dice, e «Riprova»", null, openWorkspaceErrorMenu],
+    ["disegno-banda-fuoco", 1280, "Il bottone dello spazio di lavoro col fuoco da tastiera", null, focusWorkspaceButton],
+  ].map(([id, width, title, extra, prepare]) => ({
+    id,
+    title,
+    query: extra === null ? "connectors=6" : `connectors=6&${extra}`,
+    viewport: { width, height: 800 },
+    prepare,
+  })),
   // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
   // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
   // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
@@ -5059,6 +5078,29 @@ async function openDrawing(page) {
 /// Apre il disegno dei connettori e preme il chip del disegno, che arriva
 /// quando il motore ha risposto; con `ask` apre anche «Che cosa manca?». Il
 /// fuoco resta nel riquadro, sull'ultimo pulsante premuto.
+/// Il bottone «Spazio di lavoro» della banda (K6 T7), col suo menu aperto.
+async function openWorkspaceMenu(page) {
+  await openDrawing(page);
+  await page.waitForSelector("#status-workspace:not([hidden])");
+  await page.click("#status-workspace");
+  await page.waitForSelector("#context-menu [role='menuitemradio']");
+}
+
+/// Il Completo che non si carica (K6 T7): il modulo del suo ingresso non
+/// arriva, e il menu dello spazio dice che non si è caricato, con «Riprova».
+async function openWorkspaceErrorMenu(page) {
+  await page.route("**/completo/index.ts*", (route) => route.abort());
+  await openWorkspaceMenu(page);
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Riprova')");
+}
+
+/// Il fuoco da tastiera sul bottone dello spazio (K6 T7): l'anello si vede.
+async function focusWorkspaceButton(page) {
+  await openDrawing(page);
+  await page.waitForSelector("#status-workspace:not([hidden])");
+  await page.evaluate(() => document.querySelector("#status-workspace")?.focus({ focusVisible: true }));
+}
+
 async function openDrawingStanding(page, ask) {
   await openDrawing(page);
   const chip = ".pane.focus .pane-toolbar .pane-standing:not([hidden]) .pane-standing-chip";

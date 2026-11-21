@@ -1,8 +1,13 @@
-// Le stringhe del disegno che le finestre dei comandi mostrano da sole: il
-// caricamento di una funzione, l'errore che lo dice, la riga dell'anteprima e
-// i pulsanti. Le finestre stanno in `motore/finestre.ts`; i nomi dei comandi e
-// dei campi arrivano da chi le apre, col suo catalogo.
-// La radice `../strings.ts` le ricompone nel catalogo del disegno.
+// Le stringhe del Disegno completo che il catalogo del disegno ricompone
+// (`../strings.ts`).
+// - Le finestre dei comandi (piano K6, T6; `motore/finestre.ts`): il
+//   caricamento di una funzione, l'errore che lo dice, la riga dell'anteprima e
+//   i pulsanti. I nomi dei comandi e dei campi arrivano da chi le apre, col suo
+//   catalogo.
+// - Gli spazi di lavoro (piano K6, T7): lo spazio nella banda, il menu, le
+//   azioni, i preset del Disegno completo e i messaggi di Gestisci e di Salva.
+//   La banda (nel chunk principale) non le importa: riceve il testo già
+//   tradotto dalla superficie (`SurfaceWorkspace`).
 
 /// L'italiano di quest'area, che è anche la forma dell'inglese.
 export const COMPLETO_IT = {
@@ -19,10 +24,54 @@ export const COMPLETO_IT = {
   "draw.window.range": "Scrivi un numero fra {min} e {max}.",
   "draw.window.range.min": "Scrivi un numero di almeno {min}.",
   "draw.window.range.max": "Scrivi un numero fino a {max}.",
+  "draw.workspace.base.full": "Completo",
+  "draw.workspace.base.full.description": "Tutti gli strumenti",
+  "draw.workspace.base.simple": "Semplice",
+  "draw.workspace.base.simple.description": "Per dita e penna",
+  "draw.workspace.preset.completo-classico": "Completo classico",
+  "draw.workspace.preset.automazione": "Automazione",
+  "draw.workspace.preset.impaginazione": "Impaginazione",
+  "draw.workspace.preset.pittura": "Pittura",
+  "draw.workspace.preset.ricalco": "Ricalco",
+  "draw.workspace.preset.stampa-e-prova": "Stampa e prova",
+  "draw.workspace.preset.tipografia": "Tipografia",
+  "draw.workspace.preset.web": "Web",
+  "draw.workspace.reset": "Ripristina «{name}»",
+  "draw.workspace.save": "Salva lo spazio di lavoro…",
+  "draw.workspace.manage": "Gestisci gli spazi di lavoro…",
+  "draw.workspace.off.others": "Gli altri spazi sono spenti",
+  "draw.workspace.off.others.hint": "Accendili in Componenti",
+  "draw.workspace.off.open": "Apri Componenti…",
+  "draw.workspace.off.reason": "Accendi in Componenti",
+  "draw.workspace.load.first": "Riprova prima",
+  "draw.workspace.load.failed": "Non si è caricato",
+  "draw.workspace.load.retry": "Riprova",
+  "draw.workspace.saved.newer": "Creato con una versione più nuova di Fub",
+  "draw.workspace.saved.broken": "Uno spazio salvato non si legge e resta com’è nel vault",
+  "draw.workspace.saved.unreadable": "Spazio non letto",
+  "draw.workspace.save.title": "Salva lo spazio di lavoro",
+  "draw.workspace.save.label": "Nome dello spazio",
+  "draw.workspace.save.ok": "Salva",
+  "draw.workspace.save.taken": "C’è già uno spazio con questo nome: scegline un altro",
+  "draw.workspace.save.preset": "«{name}» è uno spazio di serie: scegline un altro nome",
+  "draw.workspace.save.empty": "Il nome non può essere vuoto",
+  "draw.workspace.saved": "Spazio «{name}» salvato",
+  "draw.workspace.manage.title": "Gestisci gli spazi di lavoro",
+  "draw.workspace.manage.pick": "Scegli uno spazio salvato",
+  "draw.workspace.manage.none": "Non hai ancora salvato nessuno spazio di lavoro",
+  "draw.workspace.manage.rename": "Rinomina",
+  "draw.workspace.manage.delete": "Elimina",
+  "draw.workspace.manage.close": "Chiudi",
+  "draw.workspace.manage.rename.done": "Spazio rinominato",
+  "draw.workspace.manage.delete.done": "Spazio eliminato",
+  "draw.workspace.manage.failed": "Non si è potuto cambiare lo spazio: {reason}",
 } as const;
 
-/// L'inglese, completo come l'italiano.
-export const COMPLETO_EN: Record<keyof typeof COMPLETO_IT, string> = {
+/// Chiave del catalogo del disegno: la stessa forma di `COMPLETO_IT`.
+export type CompletoKey = keyof typeof COMPLETO_IT;
+
+/// L'inglese, completo per chiave come quello della shell.
+export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.window.loading": "Preparing this function: the first time takes a moment.",
   "draw.window.failed": "I can’t prepare this function. Try again.",
   "draw.window.nomemory": "I can’t prepare this function: the engine memory is full. Close a drawing or a sheet you don’t use and try again.",
@@ -36,4 +85,45 @@ export const COMPLETO_EN: Record<keyof typeof COMPLETO_IT, string> = {
   "draw.window.range": "Type a number between {min} and {max}.",
   "draw.window.range.min": "Type a number of at least {min}.",
   "draw.window.range.max": "Type a number up to {max}.",
+  "draw.workspace.base.full": "Full",
+  "draw.workspace.base.full.description": "All the tools",
+  "draw.workspace.base.simple": "Simple",
+  "draw.workspace.base.simple.description": "For fingers and pen",
+  "draw.workspace.preset.completo-classico": "Classic Full",
+  "draw.workspace.preset.automazione": "Automation",
+  "draw.workspace.preset.impaginazione": "Layout",
+  "draw.workspace.preset.pittura": "Painting",
+  "draw.workspace.preset.ricalco": "Tracing",
+  "draw.workspace.preset.stampa-e-prova": "Printing and Proofing",
+  "draw.workspace.preset.tipografia": "Typography",
+  "draw.workspace.preset.web": "Web",
+  "draw.workspace.reset": "Reset “{name}”",
+  "draw.workspace.save": "Save the workspace…",
+  "draw.workspace.manage": "Manage workspaces…",
+  "draw.workspace.off.others": "The other spaces are off",
+  "draw.workspace.off.others.hint": "Turn them on in Components",
+  "draw.workspace.off.open": "Open Components…",
+  "draw.workspace.off.reason": "Turn it on in Components",
+  "draw.workspace.load.first": "Try again first",
+  "draw.workspace.load.failed": "Did not load",
+  "draw.workspace.load.retry": "Try again",
+  "draw.workspace.saved.newer": "Made with a newer version of Fub",
+  "draw.workspace.saved.broken": "A saved workspace cannot be read and stays as it is in the vault",
+  "draw.workspace.saved.unreadable": "Unreadable workspace",
+  "draw.workspace.save.title": "Save the workspace",
+  "draw.workspace.save.label": "Workspace name",
+  "draw.workspace.save.ok": "Save",
+  "draw.workspace.save.taken": "A workspace with this name already exists: choose another",
+  "draw.workspace.save.preset": "“{name}” is a built-in workspace: choose another name",
+  "draw.workspace.save.empty": "The name cannot be empty",
+  "draw.workspace.saved": "Workspace “{name}” saved",
+  "draw.workspace.manage.title": "Manage workspaces",
+  "draw.workspace.manage.pick": "Choose a saved workspace",
+  "draw.workspace.manage.none": "You have not saved any workspace yet",
+  "draw.workspace.manage.rename": "Rename",
+  "draw.workspace.manage.delete": "Delete",
+  "draw.workspace.manage.close": "Close",
+  "draw.workspace.manage.rename.done": "Workspace renamed",
+  "draw.workspace.manage.delete.done": "Workspace deleted",
+  "draw.workspace.manage.failed": "The workspace could not be changed: {reason}",
 };

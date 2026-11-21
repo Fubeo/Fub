@@ -112,10 +112,10 @@ describe("la lettura degli oggetti scelti, nel pannello delle proprietà", () =>
   it("cambiando lo spazio si rilegge", () => {
     mount();
     editor.select([A]);
-    expect(rereads(() => editor.setWorkspace("simple"))).toEqual({ facts: 1 });
+    expect(rereads(() => editor.setSpace("simple"))).toEqual({ facts: 1 });
     // Lo stesso spazio non cambia niente.
-    expect(rereads(() => editor.setWorkspace("simple"))).toEqual({ facts: 0 });
-    expect(rereads(() => editor.setWorkspace("full"))).toEqual({ facts: 1 });
+    expect(rereads(() => editor.setSpace("simple"))).toEqual({ facts: 0 });
+    expect(rereads(() => editor.setSpace("full"))).toEqual({ facts: 1 });
   });
 
   it("cambiando la scena si rilegge, e il pannello mostra la scena nuova", () => {

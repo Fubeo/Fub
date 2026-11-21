@@ -637,7 +637,7 @@ describe("l'evidenziatore e il colore", () => {
     expect(editor.tool).toBe("highlighter");
 
     editor.select(["o1a2b3c4d"]);
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(editor.workspace).toBe("full");
     expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(free()).toBe(true);
@@ -773,7 +773,7 @@ describe("disporre, nel Completo", () => {
       closeContextMenu();
     }
     // Con meno azioni, niente «…».
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     editor.select([A]);
     expect(extra()).toEqual([]);
     expect(shown().length).toBeLessThanOrEqual(6);
@@ -801,7 +801,7 @@ describe("disporre, nel Completo", () => {
     expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(false);
     expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
 
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(bar().hidden).toBe(false);
     expect(bar().getAttribute("role")).toBe("toolbar");
     expect(bar().getAttribute("aria-label")).toBe("Disponi");
@@ -836,7 +836,7 @@ describe("disporre, nel Completo", () => {
     expect(bar().hidden).toBe(true);
     expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
     editor.select([A]);
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(bar().hidden).toBe(true);
     expect(hint?.textContent).not.toContain("Alt+F10");
     expect(changes).toEqual([]);
@@ -1062,7 +1062,7 @@ describe("disporre, nel Completo", () => {
     expect(key("g", { ctrlKey: true, shiftKey: true }, properties()).defaultPrevented).toBe(true);
     expect(spoken()).toBe("1 gruppo separato.");
     // Nel Semplice non si raggruppa: i tasti restano a chi li aveva.
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(key("g", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
   });
 
@@ -1362,7 +1362,7 @@ describe("i livelli, nel Completo", () => {
   it("il pulsante c'è nel Completo e dice dove si disegna; il menu sceglie il livello corrente", () => {
     mount(TWO, { workspace: "simple" });
     expect(layers().closest("[hidden]")).not.toBeNull();
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(layers().closest("[hidden]")).toBeNull();
     expect(layers().closest('[role="group"]')!.getAttribute("aria-label")).toBe("Livelli");
     expect(shownName()).toBe("Note");
@@ -1396,7 +1396,7 @@ describe("i livelli, nel Completo", () => {
     expect(editor.engine.text).toMatch(new RegExp(`<g id="l1" fub:layer="Sfondo">\\s*<rect id="${A}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>`));
     expect(editor.selection).toEqual([]);
     // Nel Semplice si disegna nel più alto, come sempre.
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     drag([[60, 60], [90, 80]]);
     expect(editor.engine.text).toMatch(new RegExp(`<rect id="${B}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>\\s*</svg>`));
   });
@@ -1415,7 +1415,7 @@ describe("i livelli, nel Completo", () => {
     expect(shownName()).toBe("Sfondo");
     editor.select([B]);
     expect(shownName()).toBe("Note");
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(labels()).toEqual(["Livello «Note»", "Rettangolo, Nero", "Livello «Sfondo»", "Rettangolo, Blu"]);
   });
 
@@ -1608,7 +1608,7 @@ describe("la griglia e la pagina, nel Completo", () => {
     size(200, 100);
     expect(pageButton().hidden).toBe(false);
     expect(lines().style.display).toBe("none");
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(pageButton().hidden).toBe(false);
     expect(pageButton().getAttribute("aria-haspopup")).toBe("menu");
     expect(lines().getAttribute("aria-hidden")).toBe("true");
@@ -1658,10 +1658,10 @@ describe("la griglia e la pagina, nel Completo", () => {
     ]);
 
     // Nel Semplice non si vede e non aggancia, ma resta com'era.
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(lines().style.display).toBe("none");
     expect(editor.grid.shown).toBe(true);
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(lines().style.display).toBe("");
     // La griglia non entra nel file.
     expect(changes).toEqual([]);
@@ -1698,11 +1698,11 @@ describe("la griglia e la pagina, nel Completo", () => {
     expect(spoken()).toBe("Griglia nascosta.");
     expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     expect(key("#", { ctrlKey: true }).defaultPrevented).toBe(false);
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(key("%", { shiftKey: true }).defaultPrevented).toBe(false);
     expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     // Nel titolo si scrivono.
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
     expect(key("#", { shiftKey: true }, title).defaultPrevented).toBe(false);
     expect(editor.grid.shown).toBe(false);
@@ -1716,7 +1716,7 @@ describe("la griglia e la pagina, nel Completo", () => {
     drag([[13, 17], [30, 40], [59, 61]], { ctrlKey: true });
     expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="13" y="17" width="46" height="44" fill="none"/);
     // Nel Semplice non si aggancia.
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     drag([[113, 117], [159, 161]]);
     expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="113" y="117" width="46" height="44" fill="none"/);
   });
@@ -2032,7 +2032,7 @@ describe("le forme dal tratto, nel Completo", () => {
     hold(600);
     lift(100, 100);
     expect(strokes()).toHaveLength(1);
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     editor.setTool("highlighter");
     press(RECT);
     hold(600);
@@ -2079,7 +2079,7 @@ describe("le forme dal tratto, nel Completo", () => {
     editor.undo();
     expect(editor.engine.text).toBe(before);
     expect(spoken()).toBe("Annullato: Forma dal tratto.");
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     editor.select([rect!]);
     expect(shapeButton().hidden).toBe(true);
   });
@@ -2130,7 +2130,7 @@ describe("il pannello delle proprietà, nel Completo", () => {
     expect(document.activeElement).toBe(surface());
     expect(panels).toEqual([true, false]);
     // Anche il Semplice ha il pannello: il pulsante non apre una finestra.
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(button().hasAttribute("aria-haspopup")).toBe(false);
     expect(button().getAttribute("aria-expanded")).toBe("false");
   });
@@ -3186,7 +3186,7 @@ describe("i nomi e il filtro dell'albero, nel Completo", () => {
     editor.setTool("rect");
     drag([[100, 100], [120, 120]]);
     expect(host.querySelector(".draw-objects-status")!.textContent).toBe("1 oggetto trovato.");
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(filter.hidden).toBe(true);
     expect(search.value).toBe("");
     expect(labels()).toHaveLength(4);
@@ -4226,7 +4226,7 @@ describe("le immagini del vault", () => {
     const images = vault(HREF);
     mount(SOURCE, { workspace: "simple", imageCodec: codec(20, 10), images });
     expect(insertShown()).toBe(true);
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(insertShown()).toBe(true);
     const control = imageButton();
     expect(control.closest('[role="group"]')!.getAttribute("aria-label")).toBe("Inserisci");
@@ -4394,7 +4394,7 @@ describe("la cronologia, nel Completo", () => {
   it("c'è nel Completo: il pulsante la apre a destra del foglio, e aperta prende il fuoco", () => {
     mount(SOURCE, { workspace: "simple" });
     expect(button().hidden).toBe(true);
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(button().hidden).toBe(false);
     expect(panel().hidden).toBe(true);
     expect(button().getAttribute("aria-expanded")).toBe("false");
@@ -4415,7 +4415,7 @@ describe("la cronologia, nel Completo", () => {
     expect(panel().closest(".draw-dock")!.hasAttribute("hidden")).toBe(true);
     // Nel Semplice si chiude.
     button().click();
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(button().hidden).toBe(true);
     expect(panel().hidden).toBe(true);
     expect(changes).toEqual([]);
@@ -4612,7 +4612,7 @@ describe("la verifica dell'accessibilità, nel Completo", () => {
   it("c'è nel Completo: il pulsante la apre a destra del foglio, e aperta legge il disegno e prende il fuoco", () => {
     mount(POOR, { workspace: "simple" });
     expect(button().hidden).toBe(true);
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(button().hidden).toBe(false);
     expect(panel().hidden).toBe(true);
     expect(button().getAttribute("aria-expanded")).toBe("false");
@@ -4634,7 +4634,7 @@ describe("la verifica dell'accessibilità, nel Completo", () => {
     expect(panel().closest(".draw-dock")!.hasAttribute("hidden")).toBe(true);
     // Nel Semplice si chiude.
     button().click();
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     expect(button().hidden).toBe(true);
     expect(panel().hidden).toBe(true);
     expect(changes).toEqual([]);
@@ -4815,7 +4815,7 @@ describe("un documento che non si modifica", () => {
     drag([[10, 10], [50, 40]]);
     expect(changes).toEqual([]);
     expect(spoken()).toBe("Ogni livello è bloccato o nascosto: non c’è dove disegnare.");
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     drag([[10, 10], [50, 40]]);
     expect(changes).toEqual([]);
     expect(spoken()).toBe("«Uno» è bloccato: sbloccalo, o scegli un altro livello, per disegnare.");
@@ -5830,7 +5830,7 @@ describe("la vista girata e i gesti", () => {
     size(200, 100);
     key("6");
     expect(turnButton().hidden).toBe(false);
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     expect(turnButton().hidden).toBe(false);
     expect(cameraOf()[0]).not.toBeCloseTo(1);
   });
@@ -6200,7 +6200,7 @@ describe("il menu radiale", () => {
     expect(document.querySelector(".context-menu")).not.toBeNull();
     // Senza il menu della selezione Maiusc+F10 apre il radiale.
     closeContextMenu();
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     surface().focus();
     expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(true);
     expect(radial()).not.toBeNull();
@@ -6430,7 +6430,7 @@ describe("la fusione e l'opacità", () => {
     expect(opacity().hasAttribute("aria-valuenow")).toBe(false);
     editor.select([]);
     expect(arrangeBar().hidden).toBe(true);
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     editor.select([A]);
     expect(opacityLabel().hidden).toBe(true);
     expect(changes).toEqual([]);
@@ -6829,7 +6829,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     // Dall'esterno (un'altra finestra ha cambiato l'impostazione): niente
     // richiamo, perché la scelta è già ricordata.
     onWorkspace.mockClear();
-    editor.setWorkspace("full", ["select", "rect", "pen"]);
+    editor.setSpace("full", ["select", "rect", "pen"]);
     expect(railNames()).toEqual(["Selezione", "Rettangolo", "Penna"]);
     expect(onWorkspace).not.toHaveBeenCalled();
   });
@@ -6850,7 +6850,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
     await settle();
 
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     key("?", { shiftKey: true });
     expect(dialog().querySelector<HTMLElement>(".keys-show-all")?.hidden ?? true, "in Completo non c'è altro").toBe(true);
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
@@ -6861,7 +6861,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     mount(SOURCE, { workspace: "full", toolbar: ["select", "ellipse", "pen", "domani" as never] });
     expect(railNames()).toEqual(["Selezione", "Ellisse", "Penna"]);
     // Senza la Selezione, la colonna la mette in cima.
-    editor.setWorkspace("full", ["rect", "pen"]);
+    editor.setSpace("full", ["rect", "pen"]);
     expect(railNames()).toEqual(["Selezione", "Rettangolo", "Penna"]);
     key("o");
     expect(editor.tool).toBe("ellipse");

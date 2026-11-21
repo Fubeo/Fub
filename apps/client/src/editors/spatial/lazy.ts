@@ -272,6 +272,11 @@ function lazily(
         return () => statusListeners.delete(listener);
       },
     },
+    // Lo spazio di lavoro nella banda (T7): quello della superficie vera, quando
+    // c'è; prima, niente, e il bottone non si vede.
+    get workspace() {
+      return surface?.workspace;
+    },
     // Il chip dello stato del documento, quando la superficie ne ha uno: prima,
     // niente da dire.
     standing: {

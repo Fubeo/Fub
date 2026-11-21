@@ -76,9 +76,9 @@ describe("l'ingresso del Completo", () => {
     mount({ workspace: "simple" });
     await arrivati();
     expect(apri).not.toHaveBeenCalled();
-    editor.setWorkspace("full");
-    editor.setWorkspace("simple");
-    editor.setWorkspace("full");
+    editor.setSpace("full");
+    editor.setSpace("simple");
+    editor.setSpace("full");
     await arrivati();
     expect(apri).toHaveBeenCalledTimes(1);
     const [ctx] = apri.mock.calls[0] as [{ motore: unknown; life: Lifetime }];
@@ -95,8 +95,8 @@ describe("l'ingresso del Completo", () => {
   it("col componente spento non si apre mai, nemmeno nel Completo", async () => {
     stato.acceso = false;
     mount({ workspace: "full" });
-    editor.setWorkspace("simple");
-    editor.setWorkspace("full");
+    editor.setSpace("simple");
+    editor.setSpace("full");
     await arrivati();
     expect(apri).not.toHaveBeenCalled();
   });
@@ -118,9 +118,9 @@ describe("l'ingresso del Completo", () => {
     await arrivati();
     expect(apri).not.toHaveBeenCalled();
     // La superficie ha letto lo spazio, e chi disegna sceglie il Completo.
-    editor.setWorkspace("simple");
+    editor.setSpace("simple");
     stato.vault = "full";
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     await arrivati();
     expect(apri).toHaveBeenCalledTimes(1);
   });

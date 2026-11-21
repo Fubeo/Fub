@@ -1758,6 +1758,42 @@ const DRAW_WORKSPACE: readonly SettingEntry[] = [
   },
 ];
 
+/// `?componenti=motore-spento` (K6 T7): la partenza in cui il Motore del disegno
+/// è spento, e con lui il Disegno completo che lo richiede. È costruita qui, come
+/// copia della partenza `studio`, così il fixture dei componenti (specchio del
+/// Rust) resta com'è.
+const COMPONENT_SCENARIO_MOTORE_SPENTO = (() => {
+  const base = COMPONENT_SCENARIO;
+  const mappa = structuredClone(base.mappe[base.partenze.studio!]!);
+  for (const riga of mappa.righe) {
+    if (riga.id === "fub.motore-vettoriale" || riga.id === "fub.disegno-completo") {
+      riga.acceso = false;
+      riga.perche = "Spento";
+    }
+  }
+  return { ...base, partenze: { ...base.partenze, "motore-spento": base.mappe.length }, mappe: [...base.mappe, mappa] };
+})();
+
+/// Gli spazi di lavoro salvati del disegno (K6 T7, `draw.workspaces`): un
+/// elenco di voci JSON con `"v": 1`, vuoto di serie come un vault che non ne ha
+/// salvati. Le scene del menu dello spazio lo lasciano così; il probe di «Salva»
+/// e «Gestisci» lo riempie scrivendo l'impostazione dalla banda.
+const DRAW_SAVED_WORKSPACES: readonly SettingEntry[] = [
+  {
+    spec: {
+      key: "draw.workspaces",
+      label: "Spazi di lavoro salvati",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value: [],
+    source: "default",
+  },
+];
+
 /// Il gruppo «App esterne» con le cinque impostazioni della feature `craft`,
 /// i testi del catalogo vero (`fub-host/src/settings.rs`). Solo con
 /// `?craft=1`, così le altre scene delle preferenze restano come sono.
@@ -2761,7 +2797,7 @@ const options: Options = {
     // Con `export.run` il riquadro di una nota ha «Esporta ▸»: HTML e PDF.
     ...(EXPORT_MENU ? [command("export.run", "Export documents", "Run a registered export target", null)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES, ...MAP_TILE_SETTING],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : [...DRAW_WORKSPACE, ...DRAW_SAVED_WORKSPACES]), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES, ...MAP_TILE_SETTING],
   // Le tessere della mappa (`?base=mappa`): il finto le chiede solo dopo il
   // controllo della riga `map.tile-hosts`, come l'host.
   ...(TILES_PARAM === null ? {} : { mapTile: benchTile }),
@@ -2807,7 +2843,7 @@ const options: Options = {
   // dall'host vero (vault di prova con «Studio»), le stesse dei test. Una
   // scelta che lo scenario non ha la porta la rifiuta, come nei test.
   // `?componenti=solo-note` parte da un altro stato registrato.
-  components: COMPONENT_SCENARIO,
+  components: COMPONENTS_START === "motore-spento" ? COMPONENT_SCENARIO_MOTORE_SPENTO : COMPONENT_SCENARIO,
   ...(COMPONENTS_START === null ? {} : { componentsStart: COMPONENTS_START }),
   ...(NEW_VAULT ? { initialVault: null, componentsStart: "nuovo" } : {}),
 };

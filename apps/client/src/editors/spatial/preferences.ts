@@ -39,15 +39,20 @@ import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
 import { isPenId, savedPensOf, type SavedPen } from "../../ink/pens";
 import { DEFAULT_GRID, isBarrelAction, isEraseMode, isFidelity, isPenOutput, validClosed, validStep, validSteady, validSteps, type Grid } from "./tools/grid";
 import { RECENT_COLORS } from "./tools/palette";
-import { isWorkspace, TOOLS, type ToolId, type Workspace } from "./tools/registry";
+import { SPAZI_COMPLETO, TOOLS, type ToolId, type Workspace } from "./tools/registry";
+import { leggiSpazi, spaziUsabili, type SpazioSalvato } from "./tools/saved-workspaces";
 import type { SettingEntry } from "../../host/contract";
 import type { Suggested } from "./tools/suggestions";
 
 /// Il bundle che dichiara lo spazio di lavoro.
 const DRAW_BUNDLE = "fub.draw";
 
-/// L'impostazione dello spazio di lavoro.
+/// L'impostazione dello spazio di lavoro: un id, di serie `full`.
 export const WORKSPACE_KEY = "draw.workspace";
+
+/// L'impostazione degli spazi di lavoro salvati: un elenco di voci JSON, ognuna
+/// con la sua versione (`"v": 1`).
+export const SAVED_WORKSPACES_KEY = "draw.workspaces";
 
 /// L'impostazione degli strumenti della colonna.
 export const TOOLBAR_KEY = "draw.toolbar";
@@ -97,12 +102,22 @@ const suggestedWatchers = new Set<(suggested: Suggested) => void>();
 /// Lo spazio di lavoro e gli strumenti della colonna, come li dicono le
 /// impostazioni.
 export interface WorkspaceChoice {
+  /// Lo spazio in uso: `full`, `simple`, un preset o uno salvato. Un id che
+  /// nessuno conosce vale `full`.
+  readonly space: string;
+  /// Lo spazio di base dell'editor: `simple` solo per il Semplice, altrimenti
+  /// `full`. Gli strumenti offerti si decidono da qui.
   readonly workspace: Workspace;
+  /// Gli spazi salvati che si usano, in ordine.
+  readonly saved: readonly SpazioSalvato[];
+  /// Le voci di `draw.workspaces` com'erano lette, per riscriverle senza
+  /// perdere quelle che non si capiscono.
+  readonly savedRaw: readonly string[];
   /// Vuoto: la colonna di serie.
   readonly toolbar: readonly ToolId[];
 }
 
-let lastWorkspace: WorkspaceChoice = { workspace: "full", toolbar: [] };
+let lastWorkspace: WorkspaceChoice = { space: "full", workspace: "full", saved: [], savedRaw: [], toolbar: [] };
 let workspaceReads = 0;
 let workspaceRead = 0;
 
@@ -122,9 +137,24 @@ export function workspaceOf(entries: readonly SettingEntry[]): WorkspaceChoice {
     const one = entry(key);
     return one === undefined || one.source === "default" ? undefined : one.value;
   };
-  const workspaceValue = chosen(WORKSPACE_KEY);
-  const workspace: Workspace = isWorkspace(workspaceValue) ? workspaceValue : "full";
-  return { workspace, toolbar: toolbarOf(chosen(TOOLBAR_KEY)) };
+  const savedRaw = savedRawOf(chosen(SAVED_WORKSPACES_KEY));
+  const saved = spaziUsabili(leggiSpazi(savedRaw));
+  // Uno spazio che nessuno conosce (scritto a mano, o salvato e poi tolto)
+  // vale Completo: il valore resta nel file, come l'ha scritto chi l'ha messo.
+  const stored = chosen(WORKSPACE_KEY);
+  const space = typeof stored === "string" && spaceKnown(stored, saved) ? stored : "full";
+  return { space, workspace: space === "simple" ? "simple" : "full", saved, savedRaw, toolbar: toolbarOf(chosen(TOOLBAR_KEY)) };
+}
+
+/// Le voci di `draw.workspaces` come stringhe: ciò che non è un elenco di
+/// stringhe non conta.
+function savedRawOf(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/// Vero se `id` è uno spazio che esiste: uno di serie, un preset o uno salvato.
+function spaceKnown(id: string, saved: readonly SpazioSalvato[]): boolean {
+  return id === "full" || id === "simple" || (SPAZI_COMPLETO as readonly string[]).includes(id) || saved.some((each) => each.id === id);
 }
 
 /// Lo spazio e la colonna dell'ultima lettura.
@@ -156,7 +186,7 @@ export function watchWorkspace(apply: (choice: WorkspaceChoice) => void): () => 
       });
   };
   const stop = onEvent("setting_changed", (event) => {
-    if (event.key === WORKSPACE_KEY || event.key === TOOLBAR_KEY) read();
+    if (event.key === WORKSPACE_KEY || event.key === TOOLBAR_KEY || event.key === SAVED_WORKSPACES_KEY) read();
   });
   read();
   return () => {
@@ -165,13 +195,26 @@ export function watchWorkspace(apply: (choice: WorkspaceChoice) => void): () => 
   };
 }
 
-/// Scrive la scelta dello spazio `workspace`, dal menu del disegno; le
-/// superfici aperte la rileggono col suo cambio. Una scrittura che non
-/// riesce lo dice.
-export function saveWorkspace(workspace: Workspace): void {
-  lastWorkspace = { ...lastWorkspace, workspace };
+/// Scrive lo spazio `space` (un id: `full`, `simple`, un preset o uno salvato),
+/// dalla banda del disegno; le superfici aperte la rileggono col suo cambio. Una
+/// scrittura che non riesce lo dice.
+export function saveWorkspace(space: string): void {
+  const workspace: Workspace = space === "simple" ? "simple" : "full";
+  lastWorkspace = { ...lastWorkspace, space, workspace };
   void Promise.resolve()
-    .then(() => api.setSetting(WORKSPACE_KEY, workspace))
+    .then(() => api.setSetting(WORKSPACE_KEY, space))
+    .catch((error: unknown) => notify(t("vector.workspace.save_failed", { reason: errorText(error) }), "guasto"));
+}
+
+/// Scrive l'elenco degli spazi salvati, come le sue voci vanno lette
+/// (`saved-workspaces.ts`). Una scrittura che non riesce lo dice, e l'elenco di
+/// prima resta.
+export function saveSavedWorkspaces(raw: readonly string[]): void {
+  void Promise.resolve()
+    .then(() => api.setSetting(SAVED_WORKSPACES_KEY, [...raw]))
+    .then(() => {
+      lastWorkspace = { ...lastWorkspace, saved: spaziUsabili(leggiSpazi(raw)), savedRaw: [...raw] };
+    })
     .catch((error: unknown) => notify(t("vector.workspace.save_failed", { reason: errorText(error) }), "guasto"));
 }
 

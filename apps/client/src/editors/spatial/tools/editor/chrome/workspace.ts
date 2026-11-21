@@ -15,6 +15,8 @@ import type { ToolId, Workspace } from "../../registry";
 import { openToolbarDialog } from "../../toolbar-dialog";
 import type { EditorContext } from "../context";
 import { railLayout } from "./rail";
+import type { Completo } from "../../../completo";
+import type { EffettiSpazio, SchedaSpazio } from "../../../completo/spazi";
 
 /// Fino a questa larghezza della finestra, in px, la colonna sta sotto il
 /// foglio; e così in un riquadro largo fino a `NARROW_PANE`, anche in una
@@ -32,24 +34,41 @@ export const DISEGNO_COMPLETO = "fub.disegno-completo";
 const DRAW_BUNDLE = "fub.draw";
 const WORKSPACE_KEY = "draw.workspace";
 
-/// Lo spazio che il vault ha scelto, letto adesso: `null` se è quello di
-/// serie, o se la lettura non riesce.
+/// Lo spazio di base che il vault ha scelto, letto adesso: `simple` per il
+/// Semplice, `full` per ogni altro id (un preset, uno salvato, o uno che nessuno
+/// conosce); `null` se è quello di serie, o se la lettura non riesce.
 async function spazioDelVault(): Promise<Workspace | null> {
   try {
     const entry = (await settings(DRAW_BUNDLE)).find((one) => one.spec.key === WORKSPACE_KEY);
     if (entry === undefined || entry.source === "default") return null;
-    return entry.value === "simple" || entry.value === "full" ? entry.value : null;
+    return entry.value === "simple" ? "simple" : "full";
   } catch {
     return null;
   }
 }
 
+/// La base di uno spazio: il Semplice per il suo id, il Completo per tutti gli
+/// altri (i preset e gli spazi salvati sono del Completo).
+export function baseOf(space: string): Workspace {
+  return space === "simple" ? "simple" : "full";
+}
+
 export interface WorkspaceContext {
+  /// La base dello spazio in uso: `simple` o `full`.
   workspace: Workspace;
+  /// Lo spazio in uso: `full`, `simple`, un preset o uno salvato.
+  space: string;
   /// Gli strumenti della colonna, in ordine; vuoto, quelli di serie.
   column: readonly ToolId[];
   /// Un altro spazio, dal vivo; con `toolbar`, anche la colonna.
-  setWorkspace: (next: Workspace, toolbar?: readonly ToolId[]) => void;
+  setSpace: (next: string, toolbar?: readonly ToolId[]) => void;
+  /// Riapplica i dati dello spazio in uso (Ripristina).
+  resetSpace: () => void;
+  /// Il Completo non si è caricato: si riprova (Riprova).
+  retryCompleto: () => void;
+  completoFailed: () => boolean;
+  /// La colonna, la scheda e la sezione adesso, per salvare lo spazio.
+  spaceSnapshot: () => { colonna: string[]; scheda: SchedaSpazio; sezione: string | null; righelli: boolean };
   /// Le voci «Spazio di lavoro» e «Personalizza la barra…» del menu ≡.
   workspaceItems: () => MenuItem[];
   /// Apre «Personalizza la barra…».
@@ -70,6 +89,7 @@ export function columnOf(ctx: EditorContext, toolbar: readonly ToolId[]): ToolId
 
 export function installWorkspace(ctx: EditorContext): void {
   const { options } = ctx;
+  ctx.space = options.space ?? ctx.workspace;
   ctx.root.dataset.workspace = ctx.workspace;
   // In una scheda (T46) gli strumenti sono sempre una fila sopra il foglio:
   // la scheda è larga quanto la colonna del testo, e una colonna di lato le
@@ -121,11 +141,30 @@ export function installWorkspace(ctx: EditorContext): void {
   // senza questa lettura un vault nel Semplice porterebbe il Completo a ogni
   // avvio. Una lettura che non riesce non ferma niente: decide lo spazio
   // dell'editor.
-  let completo: "no" | "verifica" | "in-arrivo" | "aperto" = "no";
+  // Lo stato del Completo: `fallito` quando il suo ingresso non arriva, e allora
+  // lo spazio di prima resta e il menu lo dice, con «Riprova».
+  let completo: "no" | "verifica" | "in-arrivo" | "aperto" | "fallito" = "no";
+  /// Il Completo aperto: vi si applica lo spazio in uso.
+  let aperto: Completo | null = null;
+  // La scheda che lo spazio apre passa dal pannello dell'ispettore; la sezione
+  // dell'ispettore arriva con T10, e finché non c'è lo spazio la salta.
+  const effetti: EffettiSpazio = {
+    scheda: (scheda) => options.chrome?.reveal?.(scheda),
+    sezione: () => false,
+  };
+  const applicaSpazio = (): void => {
+    // Uno spazio salvato porta la sua scheda; un preset chiede il Completo.
+    const salvato = options.spazioSalvato?.(ctx.space) ?? null;
+    if (salvato !== null) {
+      effetti.scheda(salvato.scheda);
+      return;
+    }
+    aperto?.spazio(ctx.space, effetti);
+  };
   const vuoleCompleto = (): boolean =>
     !compact && !ctx.disposed && ctx.workspace === "full" && components()?.on(DISEGNO_COMPLETO) === true;
   const portaCompleto = (): void => {
-    if (completo !== "no" || !vuoleCompleto()) return;
+    if ((completo !== "no" && completo !== "fallito") || !vuoleCompleto()) return;
     completo = "verifica";
     void spazioDelVault().then((scelto) => {
       if (ctx.disposed) return;
@@ -139,37 +178,54 @@ export function installWorkspace(ctx: EditorContext): void {
       import("../../../completo").then(
         ({ apri }) => {
           if (ctx.disposed) return;
-          apri({ motore: options.motore ?? null, life: ctx.life });
+          aperto = apri({ motore: options.motore ?? null, life: ctx.life });
           completo = "aperto";
+          applicaSpazio();
+          options.onWorkspaceChange?.();
         },
-        // Un chunk che non arriva: il Completo di K5 resta, e il prossimo
-        // ingresso ci riprova.
+        // Un chunk che non arriva: lo spazio di prima resta, e «Riprova» ci
+        // riprova.
         () => {
-          completo = "no";
+          completo = "fallito";
+          options.onWorkspaceChange?.();
         },
       );
     });
   };
   ctx.life.add(onComponents(portaCompleto));
 
-  ctx.setWorkspace = (next, toolbar) => {
+  ctx.setSpace = (next, toolbar) => {
     if (ctx.disposed) return;
-    ctx.workspace = next;
+    ctx.space = next;
+    ctx.workspace = baseOf(next);
     if (toolbar !== undefined) ctx.column = toolbar;
-    ctx.root.dataset.workspace = next;
-    ctx.rail.element.dataset.size = sizeOf(next);
-    full.hidden = fullHidden(next);
-    ctx.offer(ctx.featuresOf(next));
+    // Uno spazio salvato dà la sua colonna, sopra quella dell'utente.
+    const salvato = options.spazioSalvato?.(next) ?? null;
+    if (salvato !== null) ctx.column = [...salvato.colonna] as ToolId[];
+    ctx.root.dataset.workspace = ctx.workspace;
+    ctx.rail.element.dataset.size = sizeOf(ctx.workspace);
+    full.hidden = fullHidden(ctx.workspace);
+    ctx.offer(ctx.featuresOf(ctx.workspace));
     ctx.syncRail(ctx.editable());
     ctx.syncPenOptions();
     portaCompleto();
+    applicaSpazio();
   };
+  ctx.resetSpace = applicaSpazio;
+  ctx.retryCompleto = () => portaCompleto();
+  ctx.completoFailed = () => completo === "fallito";
+  ctx.spaceSnapshot = () => ({
+    colonna: [...ctx.column],
+    scheda: "design",
+    sezione: null,
+    righelli: ctx.ruler !== null,
+  });
   portaCompleto();
 
   /// Lo spazio scelto da chi disegna: si applica, si dice e si ricorda.
-  const choose = (next: Workspace): void => {
-    if (next === ctx.workspace) return;
-    ctx.setWorkspace(next);
+  const choose = (next: string): void => {
+    if (next === ctx.space) return;
+    ctx.setSpace(next);
     ctx.announce(t("draw.workspace.on", { name: t(next === "full" ? "draw.workspace.full" : "draw.workspace.simple") }));
     options.onWorkspace?.(next);
   };
