@@ -922,9 +922,26 @@ function trashWithThree(asking = false): UiNode {
 /// accende la feature `draw`, come l'host col componente dei disegni.
 const LIVE_DRAWS = Object.keys(LIVE?.files ?? {}).some((id) => /\.svg$/i.test(id));
 
+// `?campioni=N` (K6 T10, la scheda Risorse): il disegno dei connettori con N
+// campioni del documento in `<defs>`, gradienti lineari con un `fub:name` e
+// un solo stop, com'è scritto un campione che `scene/classify` legge. Senza,
+// il disegno è quello di sempre.
+const CAMPIONI_PARAM = params.get("campioni");
+
+/// Il testo del disegno con `count` campioni nel primo `<defs>` aperto.
+function conCampioni(text: string, count: number): string {
+  if (!/^(0|[1-9]\d{0,3})$/.test(String(count))) throw new RangeError("campioni must be a count from 0 to 9999");
+  const campioni = Array.from({ length: count }, (_, index) => {
+    const colore = (((index + 1) * 2654435761) >>> 0) & 0xffffff;
+    const hex = colore.toString(16).padStart(6, "0");
+    return `<linearGradient id="campione-${index + 1}" fub:role="swatch" fub:name="Campione ${index + 1}"><stop stop-color="#${hex}"/></linearGradient>`;
+  }).join("");
+  return text.replace(/<defs\b[^>]*[^/]>/, (open) => `${open}${campioni}`);
+}
+
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
-  ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
+  ? { doc: CONNECTORS_DOC, text: CAMPIONI_PARAM === null ? CONNECTORS.text : conCampioni(CONNECTORS.text, Number(CAMPIONI_PARAM)) }
   : LARGE !== null
     ? { doc: LARGE_DOC, text: LARGE.text }
     : null;

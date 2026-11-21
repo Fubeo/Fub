@@ -1439,6 +1439,41 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare: openDrawing,
   })),
+  // **La scheda Risorse** (K6 T10): il Disegno completo, con la scheda Risorse
+  // aperta. `campioni` dice quanti campioni del documento ha il disegno
+  // (`?campioni=N`, vedi `fake-ipc.ts`): 24 come il prototipo, 500 per lo stato
+  // con molte voci, 0 per il vuoto.
+  ...[
+    ["disegno-risorse", 24, "La scheda Risorse con 24 campioni del documento"],
+    ["disegno-risorse-molti", 500, "La scheda Risorse con 500 campioni: scorre dentro la scheda, senza spostare il resto"],
+    ["disegno-risorse-vuoto", 0, "La scheda Risorse senza campioni: lo stato vuoto"],
+  ].map(([id, campioni, title]) => ({
+    id,
+    title,
+    query: `connectors=6&drawing=acceso&campioni=${campioni}`,
+    prepare: openRisorse,
+  })),
+  // **Design** (K6 T10): con un punto scelto (Posizione e misure), a 1280 e a
+  // 700 px, e senza nulla scelto (il documento, con le sezioni del registro).
+  {
+    id: "disegno-design",
+    title: "Design con un punto scelto: Posizione e misure, a 1280 px",
+    query: "connectors=6&drawing=acceso",
+    prepare: openDesignoScelto,
+  },
+  {
+    id: "disegno-design-stretto",
+    title: "Design con un punto scelto, a 700 px",
+    query: "connectors=6&drawing=acceso",
+    viewport: { width: 700, height: 800 },
+    prepare: openDesignoScelto,
+  },
+  {
+    id: "disegno-design-vuoto",
+    title: "Design senza nulla scelto: il documento, a 1280 px",
+    query: "connectors=6&drawing=acceso",
+    prepare: openDesignoVuoto,
+  },
   // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
   // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
   // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
@@ -5034,6 +5069,31 @@ async function openDrawing(page) {
 /// Apre il disegno dei connettori e preme il chip del disegno, che arriva
 /// quando il motore ha risposto; con `ask` apre anche «Che cosa manca?». Il
 /// fuoco resta nel riquadro, sull'ultimo pulsante premuto.
+/// Apre il disegno e la scheda Risorse dell'ispettore (K6 T10): il pannello
+/// della scheda è quello che si vede, con i campioni del documento.
+async function openRisorse(page) {
+  await openDrawing(page);
+  await page.click('.inspector-tab[data-view-id="draw.resources"]');
+  await page.waitForSelector('#surface-panel-draw-resources:not([hidden]) .draw-resources');
+}
+
+/// Apre il disegno e sceglie la prima forma con la tastiera, come
+/// `draw-selection`: l'ispettore mostra il Design con la selezione (K6 T10).
+async function openDesignoScelto(page) {
+  await openDesignoVuoto(page);
+  await page.keyboard.press("v");
+  const shape = await page.locator(".draw-editor .draw-surface ellipse[data-scene-id]").first().boundingBox();
+  if (!shape) throw new Error("l'ellisse del disegno non c'è");
+  await page.mouse.click(shape.x + shape.width / 2, shape.y + shape.height / 2);
+}
+
+/// Apre il disegno e la scheda Design dell'ispettore, senza nulla scelto (K6 T10).
+async function openDesignoVuoto(page) {
+  await openDrawing(page);
+  await page.click('.inspector-tab[data-view-id="draw.design"]');
+  await page.waitForSelector('#surface-panel-draw-design:not([hidden]) section.draw-properties');
+}
+
 async function openDrawingStanding(page, ask) {
   await openDrawing(page);
   const chip = ".pane.focus .pane-toolbar .pane-standing:not([hidden]) .pane-standing-chip";
