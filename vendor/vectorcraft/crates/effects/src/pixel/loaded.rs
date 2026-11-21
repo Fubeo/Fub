@@ -133,6 +133,19 @@ impl LoadedTexture {
 /// The textures [`texture`] decoded last, with their PNG, the newest last.
 static DECODED: Mutex<Vec<(Vec<u8>, Arc<LoadedTexture>)>> = Mutex::new(Vec::new());
 
+/// Bytes the textures kept for the next call hold (their PNG and their gray levels).
+///
+/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_texture_cache`].
+pub fn texture_cache_bytes() -> usize {
+    let decoded = DECODED.lock().unwrap_or_else(PoisonError::into_inner);
+    decoded.iter().map(|(png, t)| png.capacity() + t.gray.capacity()).sum()
+}
+
+/// Forget the textures kept: each is decoded again from its value when next used.
+pub fn release_texture_cache() {
+    *DECODED.lock().unwrap_or_else(PoisonError::into_inner) = Vec::new();
+}
+
 /// The texture a [`TEXTURE_IMAGE`] value holds; `None` when it isn't base64 of a PNG. The last
 /// [`KEEP`] textures decoded are kept for the next call, found by their PNG: values that differ
 /// only in how the base64 is spaced share one.

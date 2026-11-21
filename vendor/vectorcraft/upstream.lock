@@ -35,6 +35,10 @@ sha256 = "sha256:a8718683083ffc26bd98ca8bad4cf357baf6199823d06c591f8560e6cc781f3
 path = "patches/0007-attesa-dei-bitmap.patch"
 sha256 = "sha256:9fc38eaa31880c1136d5d367b2fde88d434b5de312f1b0dde5a7acd1037f4636"
 
+[[patch]]
+path = "patches/0008-nessuna-radice-e-tabelle.patch"
+sha256 = "sha256:10ef670d3704263fa570669ec5b3829972f7ae2b9a2dd8382e4863ffc95ef94d"
+
 [[file]]
 path = "ASSETS.md"
 upstream = "sha256:2417b03b20596fb6d2b266c5acb2d31c1dd33a4922f1db49b4979f6d23975eaa"
@@ -326,6 +330,7 @@ upstream = "sha256:7eab90d111770c32ee5f9d7059bdcf70b0ddf62e2ddc31af2e7947b026bdf
 [[file]]
 path = "crates/color/src/cms.rs"
 upstream = "sha256:2710b332661e64face3a218d1e7c6b70f37b1b9d16333e0a05a2c6bccefbd1ac"
+result = "sha256:ecff8216d0b02968b6285ceb9547a5de08346b8f250d735c908e613e817ac3f1"
 
 [[file]]
 path = "crates/color/src/cms/generic.rs"
@@ -334,6 +339,7 @@ upstream = "sha256:1013380d8de44a43fc1f3938194126b250038110f99eaee2c6a882e5b15c1
 [[file]]
 path = "crates/color/src/cms/icc.rs"
 upstream = "sha256:51a48f9fc7d563a1798a129daaf4c41f7cb70401177bc9e924f3330c5e4d1c32"
+result = "sha256:4130af497af406fdd2ba94537c3fc19df84bd395de568622e6da9f27a09645a6"
 
 [[file]]
 path = "crates/color/src/cms/lab.rs"
@@ -550,6 +556,7 @@ upstream = "sha256:49d0335db65aabc3d790acaa33b7c53e4a96a9342ad8b12a55650cdfa08da
 [[file]]
 path = "crates/doc/src/mem.rs"
 upstream = "sha256:49e4715d3a2dd8dffffaf75078e2e3523043e946442c94bac530e198c6d81383"
+result = "sha256:0bad6d29797b7322ac7555e538b5aaf937955f7bb538bcbc08f9d9d715c747d1"
 
 [[file]]
 path = "crates/doc/src/metadata.rs"
@@ -626,6 +633,7 @@ upstream = "sha256:8e69bd50fbc8df2b7632018c1a43f6f8247643bd03239e1bfb38e217fc73f
 [[file]]
 path = "crates/doc/src/placed_document.rs"
 upstream = "sha256:5ebbf1ff2430ec0f38b053226fec06718c87e5e9c8a5fe4e1c15c8ce888e938a"
+result = "sha256:aa18b3c1bcf467994a4ea0f661b8b03a064c4ce45dc6a0cd2a781d9b4e78ea8a"
 
 [[file]]
 path = "crates/doc/src/plugin_data.rs"
@@ -882,6 +890,7 @@ result = "sha256:8d202912950bf0dbab2218e1682f15db0b101e3bf881479bc4768cfc9cdc487
 [[file]]
 path = "crates/effects/src/pixel.rs"
 upstream = "sha256:7418f87a9a562001c3df06e8769e0bd4a582352aa304696f050c4ae85470b457"
+result = "sha256:e0d7c876c4e7c53baddc02db455cdb517c1ec7bf2a905afdb1bdff871ae3a09c"
 
 [[file]]
 path = "crates/effects/src/pixel/artistic.rs"
@@ -906,6 +915,7 @@ upstream = "sha256:d080939363aa55af88ebc7de688f3765848a9f5c2978d3cb95526c74c95ed
 [[file]]
 path = "crates/effects/src/pixel/loaded.rs"
 upstream = "sha256:1d85c87da0ed64ce8a6c0bf082eaf0f4299bc922211feb1edf98cd787442847e"
+result = "sha256:947fa234a05e48ac506117c9a41ecfc0da5f1b8cd0ad5d7d4a715edf2f157ef4"
 
 [[file]]
 path = "crates/effects/src/pixel/paint.rs"
@@ -2152,6 +2162,7 @@ upstream = "sha256:166b665541bb74fa5d04fff28681ea30857251df6e10d19d0445bd4a22552
 [[file]]
 path = "crates/engine/src/file_access.rs"
 upstream = "sha256:c9acaeddf5defe7a44bb6f72c27aa03a7230afd798b5e2262fb3d2f5e21c9bcd"
+result = "sha256:d819dceed747594f0d933e63a4f38180ff32d328b7a4a7ae66dbdc956ddc1247"
 
 [[file]]
 path = "crates/engine/src/guard.rs"
@@ -2176,7 +2187,7 @@ upstream = "sha256:cce5e66bcda5d3981e9ca3683f1619d621ac71637faa119c80c7192eb886e
 [[file]]
 path = "crates/engine/src/lib.rs"
 upstream = "sha256:6c96dab78c5f15ebd48612aac72030ce6182d7c37801a48974acc7b38f3d2d8b"
-result = "sha256:9b25ceadb323b79a954cf0d60d866ddc64c52dc562389c3db5cc207e788e88f9"
+result = "sha256:4a93d299e54d43ee441fed20f578bc69dc8636cff7480c9992463b4f2f0b995d"
 
 [[file]]
 path = "crates/engine/src/link_watch.rs"
@@ -2220,6 +2231,11 @@ upstream = "sha256:0c3873fd1b40bef58573e45e3f07d94bb27a8fba8a3fd288d0fb9fae98f12
 path = "crates/engine/src/store.rs"
 upstream = "sha256:7bf0f4ebb98533160ed0d8e87e2ed0b9a6504dffca0100475027bb7ef26cb285"
 result = "sha256:673f4b10e6160018a605cb280e5f77f483e1afa6965537f1cbc6265cd73d851e"
+
+[[file]]
+path = "crates/engine/src/tables.rs"
+upstream = "none"
+result = "sha256:083ecefe5d52771b93aecaf3909615765fd5d9682288259270b2d1f8230a2bbb"
 
 [[file]]
 path = "crates/engine/src/tests.rs"
@@ -3536,6 +3552,7 @@ upstream = "sha256:802e0d7e015c6a3bd989102bbaa7750013d7e6da169cbc90d29476e56a4f1
 [[file]]
 path = "crates/render/src/addons/halftone.rs"
 upstream = "sha256:4f225ba75acf2aaf8c15305489fa98c6f181b4694f8597bc954e2fc71d11ad42"
+result = "sha256:f0e89e840901a313955d33c7c3e707a50e29184459291ba5cf0775e54faef95c"
 
 [[file]]
 path = "crates/render/src/addons/halftone/tests.rs"
@@ -3689,6 +3706,7 @@ upstream = "sha256:034664eb7ead6e6b0fd7e9b9359137bc69f1d6ac3cee445b595e6c37cd256
 [[file]]
 path = "crates/render/src/images.rs"
 upstream = "sha256:3c9ad97930ce3d6ff6579cdc883dce2bfb191521aa1b2b39fe75d31f056f1224"
+result = "sha256:4ec1ba4114e15ccf3e6aefafd5ea9bb325e39cec00c6bdb152b21dadfd98d59d"
 
 [[file]]
 path = "crates/render/src/ink.rs"
@@ -3697,6 +3715,7 @@ upstream = "sha256:7789e3ad56062df3429e4628e9e436e04dacc39f862e430b0903303ab2e15
 [[file]]
 path = "crates/render/src/lib.rs"
 upstream = "sha256:d54562944e804397417c171f3a74c71e3df5c2894c658df42988379657a68ff7"
+result = "sha256:5c4fcb0b71d9f501e062a1d3aeec94d7a71a0fc28128d8a1ac5192e59fa1ee8f"
 
 [[file]]
 path = "crates/render/src/live.rs"
@@ -3730,6 +3749,7 @@ result = "sha256:26e33bec42ee6c56e5cd4d67b1e53096d5091a3dc35d49a03d2ec2c1426cc6a
 [[file]]
 path = "crates/render/src/placed_document.rs"
 upstream = "sha256:042ac1e31d2ee99c94678d96b8fa5bf10c7438395d1d136687fc6204f4095354"
+result = "sha256:82ee485ca80cc0394ba43a01fe410afbbbc177dde49d34326c156cdd0a45a90a"
 
 [[file]]
 path = "crates/render/src/proof.rs"
@@ -4294,6 +4314,7 @@ upstream = "sha256:bce00c14f5a81b4ac9986f2b7ae5fe2385322a702e6522023dae09dc34fe1
 [[file]]
 path = "crates/text/src/fontdb.rs"
 upstream = "sha256:d19934ac29a3cc363e3f3ead4586d38d31e2b5cdb297f07057c6664d7b8892f7"
+result = "sha256:47187a06f4c1350b17ffefd4ff540b0a2e4aabd8a2daa25ac6a6285eb93540bc"
 
 [[file]]
 path = "crates/text/src/fontdb/build.rs"
@@ -4306,10 +4327,12 @@ upstream = "sha256:725c2f393c7164aa3bad2712c673259e6f5b76cd5dced7ffc3373492611f5
 [[file]]
 path = "crates/text/src/fontdb/db.rs"
 upstream = "sha256:bcbf52a922f7555ee18faf8f0f8aba1503fbad6104b18bbc244e1f2939ebef3c"
+result = "sha256:ebb2a3e961ed54a0a8d77cd46e0241f84e675dbf7431ffd41b084962f4b5f018"
 
 [[file]]
 path = "crates/text/src/fontdb/dirs.rs"
 upstream = "sha256:9de8114bb801612e992fff95202533574eb2503b2820b7e64c41fdf33dcc2be0"
+result = "sha256:c61ccce08c9979324dc0e983cce040c18712fa0990d93a7d9c1442ba1697f4fa"
 
 [[file]]
 path = "crates/text/src/fontdb/face.rs"
@@ -4394,6 +4417,7 @@ upstream = "sha256:df3f478a51bca4f4730889e16797ddd3d0874478a8796339c5bf932cb6d08
 [[file]]
 path = "crates/text/src/lib.rs"
 upstream = "sha256:6a97cd4fa6231b2776fd3cd397f34289606e0f9ed60707b8437aaedcf39e2e2c"
+result = "sha256:ec99f4042d9a9d4cc20e62fdfe00bb1486d1f800f206ae88760e4a4686290bdd"
 
 [[file]]
 path = "crates/text/src/shape.rs"

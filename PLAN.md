@@ -3449,7 +3449,7 @@ Fatto quando:
 - `node tools/vendor-craft/vendor.mjs vectorcraft check` esce con 0;
 - i test di `fub-disegno` di K5 passano ancora.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test disco; node tools/disegno-disco/elenco.mjs --check; node --test tools/disegno-disco/elenco.test.mjs; node tools/vendor-craft/vendor.mjs vectorcraft check
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 ## T29 · La chiusura: le misure, il cancello e la revisione

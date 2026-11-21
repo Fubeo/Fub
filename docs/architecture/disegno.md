@@ -283,6 +283,7 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 ## Il disegno completo
 
 Lo spazio Completo con tutte le funzioni del motore: [Il disegno completo](disegno-completo.md).
+Il motore non tocca il disco: [il disco](disegno-completo.md#il-disco).
 
 ## Dove sta il codice
 

@@ -236,6 +236,34 @@ impl Walk<'_> {
     }
 }
 
+impl Node {
+    /// Roughly how many bytes of heap this node and the art under it keep (children and mask art
+    /// included), in the estimate of [`Document::retained_bytes`]; art shared with something else
+    /// counts all the same.
+    ///
+    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`): what a cache of art weighs.
+    pub fn heap_bytes(&self) -> usize {
+        let mut b = node_bytes(self, None);
+        for c in self.children().into_iter().flatten() {
+            b += c.heap_bytes();
+        }
+        if let Some(m) = &self.extras().mask {
+            b += m.art.heap_bytes();
+        }
+        b
+    }
+}
+
+impl Document {
+    /// Roughly how many bytes of heap this document keeps, in the estimate of
+    /// [`Document::retained_bytes`] (what a new document shares with it left out).
+    ///
+    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`): what a cache of documents weighs.
+    pub fn heap_bytes(&self) -> usize {
+        self.retained_bytes(&Document::new(1.0, 1.0))
+    }
+}
+
 /// One node's own heap: the node, and what it owns besides its children and mask art (counted
 /// as nodes of their own). Its appearance counts unless `other`, its other version, shares it.
 fn node_bytes(n: &Node, other: Option<&Node>) -> usize {

@@ -46,10 +46,13 @@ pub struct MotoreDisegno {
 }
 
 impl MotoreDisegno {
-    /// Prende i caratteri del processo e prepara il catalogo dei comandi del
+    /// Confina il motore fuori dal disco ([`crate::disco::confina`]), prende
+    /// i caratteri del processo e prepara il catalogo dei comandi del
     /// motore. Senza caratteri il motore non si costruisce: l'host li dà
-    /// con `Servizi::fornisci_caratteri` prima della prima apertura.
+    /// con `Servizi::fornisci_caratteri` prima della prima apertura. Se il
+    /// processo ha già altre radici per i file, il motore non nasce.
     fn crea(servizi: &Arc<Servizi>) -> Result<MotoreDisegno, ErroreMotore> {
+        crate::disco::confina().map_err(|e| ErroreMotore::creazione(e.to_string()))?;
         let caratteri = servizi.caratteri().ok_or_else(|| {
             ErroreMotore::creazione("il motore del disegno non ha i caratteri: l'host li dà con Servizi::fornisci_caratteri")
         })?;
@@ -408,6 +411,9 @@ impl Disegno {
             }
             _ => {}
         }
+        // Un percorso, un comando escluso o uno che fa Fub (le righe `fub`
+        // di disco.tsv) si rifiutano prima del motore.
+        crate::disco::controlla(&richiesta.id, &richiesta.value)?;
         let azione = crate::comandi::Azione::di(&richiesta)?;
         if let Err(rifiuto) = self.pronta(richiesta.revision, ATTESA_MASSIMA) {
             return Ok(rifiutato(richiesta.revision, rifiuto));

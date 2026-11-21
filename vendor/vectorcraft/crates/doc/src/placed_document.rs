@@ -313,6 +313,19 @@ fn full() -> MutexGuard<'static, FullFiles> {
     FULL.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// Bytes of the files read again that are kept.
+///
+/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_placed_files`].
+pub fn placed_files_bytes() -> usize {
+    full().iter().map(|(k, path, b)| k.capacity() + path.capacity() + b.capacity()).sum()
+}
+
+/// Forget the files read again: a placed document shown from its preview reads its file again
+/// when it needs it whole.
+pub fn release_placed_files() {
+    *full() = Vec::new();
+}
+
 /// The file's bytes when they are at hand: stored (`blob` isn't just the preview) or read again
 /// already. Never reads it.
 pub fn full_bytes_cached(p: &PlacedDocument, blob: &ImageBlob) -> Option<Arc<Vec<u8>>> {
@@ -432,6 +445,20 @@ impl Cache {
             }
         }
     }
+}
+
+/// Roughly how many bytes of heap the placed documents read and kept hold (their art and setup;
+/// the file's bytes belong to the documents that place it).
+///
+/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_placed_reads`].
+pub fn placed_reads_bytes() -> usize {
+    let reads: Vec<Arc<ReadDocument>> = cache().entries.values().map(|x| x.e.clone()).collect();
+    reads.iter().map(|e| e.art.heap_bytes() + e.doc.heap_bytes()).sum()
+}
+
+/// Forget the placed documents read: each is read again from its bytes when next drawn.
+pub fn release_placed_reads() {
+    cache().entries = std::collections::HashMap::new();
 }
 
 /// `p`'s file (`bytes`) read, from the cache when it was read already: what the renderer draws a

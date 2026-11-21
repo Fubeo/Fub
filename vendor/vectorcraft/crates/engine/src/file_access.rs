@@ -85,6 +85,15 @@ impl AutomationRoots {
         Ok(Some(Arc::new(Self { read: open(read, Access::Read)?, write: open(write, Access::Write)? })))
     }
 
+    /// Roots in force that grant no access of either kind: every path is refused, read or written.
+    /// For a host that gives the engine its files as bytes and wants it never to reach the disk
+    /// on its own (`new` with no roots means nothing is confined).
+    ///
+    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
+    pub fn deny_all() -> Arc<Self> {
+        Arc::new(Self { read: Vec::new(), write: Vec::new() })
+    }
+
     /// May the file or folder at `path` be read (or written)? It must lie inside one of the roots
     /// of that kind. `Err` says why not.
     pub fn check(&self, path: &str, access: Access) -> Result<(), String> {
