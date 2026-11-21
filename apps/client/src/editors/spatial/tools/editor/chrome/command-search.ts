@@ -1,24 +1,56 @@
 // La ricerca dei comandi del disegno (E3): Ctrl+/ apre un campo e il catalogo
 // dei comandi (`commands.ts`), col tasto e il posto da cui vengono. Un comando spento si
 // vede col perché, e non si sceglie. I comandi usati da poco stanno in cima.
+// Con il Disegno completo aperto la ricerca cerca fra le voci del suo indice
+// (K6 T9a, `completo/comandi.ts`): ogni voce col suo posto, il suo tasto e il
+// suo perché. La prima apertura carica l'indice, e nessuna famiglia; se
+// l'indice non arriva, lo dice, con «Riprova».
 // La palette dello Scrittoio (Ctrl+Maiusc+P) resta sua.
 
+import type { DrawingOutcome, DrawingPreview } from "../../../../../host/contract";
 import { createList, openDialog } from "../../../../../kit";
 import { fuzzyScore } from "../../../../../ui/fuzzy";
 import { openLifetime } from "../../../../../ui/lifetime";
+import type { MenuItem } from "../../../../../ui/menu";
 import { t } from "../../../strings";
 import type { EditorContext } from "../context";
-import type { DrawCommand } from "./commands";
+import { azioniVoci, type DrawCommand } from "./commands";
 
 export interface CommandSearchContext {
   /// Apre la ricerca dei comandi.
   searchCommands: () => void;
+  /// Il Disegno completo aperto, con le sue voci (K6 T9a); `null` senza il
+  /// Completo, e allora menu e ricerca sono quelli di oggi.
+  completoVoci?: () => VociCompleto | null;
 }
 
-/// Un comando che si cerca: quelli del catalogo.
+/// Ciò che il Disegno completo dà al menu ≡ e alla ricerca (K6 T9a). Lo
+/// implementa `completo/index.ts`: qui se ne dice solo la forma.
+export interface VociCompleto {
+  /// Le voci dei sottomenu del menu ≡; se l'indice non arriva, lo dice.
+  menu(selezione: () => readonly string[], azioni: AzioniVociCompleto): Promise<readonly MenuItem[]>;
+  /// Le voci per la ricerca; `null` se l'indice non arriva.
+  ricerca(selezione: () => readonly string[], azioni: AzioniVociCompleto): Promise<readonly FoundCommand[] | null>;
+}
+
+/// Ciò che l'editor dà al Completo per una voce (K6 T9a).
+export interface AzioniVociCompleto {
+  /// Lo strumento del motore: l'editor lo sceglie.
+  readonly strumento: (id: string) => void;
+  /// L'esito di un comando, da applicare al disegno.
+  readonly applica: (esito: DrawingOutcome) => void;
+  /// L'anteprima di una finestra sul foglio, o la toglie con `null`.
+  readonly sulFoglio: (anteprima: DrawingPreview | null) => void;
+  /// Rifà la richiesta dell'indice, per chi lo mostra.
+  readonly riprova: () => void;
+}
+
+/// Un comando che si cerca: quelli del catalogo, o le voci del Completo.
 export type FoundCommand = Pick<DrawCommand, "label" | "path" | "hint" | "disabled" | "description" | "run"> & {
   /// L'id del catalogo: ciò che i recenti ricordano.
   readonly key: string;
+  /// Il nome nelle altre lingue: la ricerca lo trova lo stesso (K6 T9a).
+  readonly altreLingue?: readonly string[];
 };
 
 /// Quanti comandi recenti si ricordano.
@@ -37,8 +69,11 @@ export function rankCommands(all: readonly FoundCommand[], query: string, recent
   const scored: { one: FoundCommand; rank: number; score: number; at: number }[] = [];
   all.forEach((one, at) => {
     const label = one.label.toLowerCase();
-    if (label.startsWith(q)) scored.push({ one, rank: 0, score: 0, at });
-    else if (label.includes(q)) scored.push({ one, rank: 1, score: label.indexOf(q), at });
+    // Il nome nella lingua di adesso e quelli nelle altre: la ricerca li trova tutti.
+    const nomi = [label, ...(one.altreLingue ?? []).map((nome) => nome.toLowerCase())];
+    const posti = nomi.map((nome) => nome.indexOf(q)).filter((posto) => posto >= 0);
+    if (nomi.some((nome) => nome.startsWith(q))) scored.push({ one, rank: 0, score: 0, at });
+    else if (posti.length > 0) scored.push({ one, rank: 1, score: Math.min(...posti), at });
     else {
       const sparse = fuzzyScore(one.label, q);
       const placed = sparse === null ? fuzzyScore(`${one.path} ${one.label}`, q) : null;
@@ -56,7 +91,7 @@ export function installCommandSearch(ctx: EditorContext): void {
   let open: ReturnType<typeof openLifetime> | null = null;
   ctx.life.add(() => open?.close());
 
-  /// Il catalogo com'è adesso.
+  /// Il catalogo com'è adesso, senza il Completo.
   const commands = (): FoundCommand[] => ctx.commands().map((one) => ({ ...one, key: one.id }));
 
   ctx.searchCommands = () => {
@@ -65,7 +100,7 @@ export function installCommandSearch(ctx: EditorContext): void {
     ctx.cancelGesture();
     const own = openLifetime();
     open = own;
-    const all = commands();
+    const completo = ctx.completoVoci?.() ?? null;
     const body = document.createElement("div");
     body.className = "draw-commands";
     const field = document.createElement("label");
@@ -83,9 +118,20 @@ export function installCommandSearch(ctx: EditorContext): void {
     const empty = document.createElement("p");
     empty.className = "draw-commands-empty";
     empty.setAttribute("role", "status");
-    body.append(field, rows, empty);
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "kit-button draw-commands-retry";
+    retry.textContent = t("draw.window.retry");
+    retry.hidden = true;
+    body.append(field, rows, empty, retry);
 
     let chosen: FoundCommand | null = null;
+    let aperta = true;
+    /// Le voci mostrate: quelle del catalogo, o quelle del Completo quando
+    /// arrivano. `caricando` finché l'indice del Completo non risponde.
+    let tutte: readonly FoundCommand[] = completo === null ? commands() : [];
+    let caricando = completo !== null;
+    const azioni = azioniVoci(ctx, () => carica());
     const dialog = openDialog<null>({
       title: t("draw.commands"),
       body,
@@ -100,9 +146,11 @@ export function installCommandSearch(ctx: EditorContext): void {
       items: [],
       owner: input,
       key: (one) => one.key,
-      disabled: (one) => one.disabled,
       render: (one, row) => {
         row.classList.add("draw-commands-row");
+        // Le voci spente restano raggiungibili con le frecce, perché Invio
+        // ripeta il perché (K6 T9a): per questo la lista non le salta.
+        if (one.disabled) row.setAttribute("aria-disabled", "true");
         const label = document.createElement("span");
         label.className = "draw-commands-label";
         label.textContent = one.label;
@@ -124,21 +172,51 @@ export function installCommandSearch(ctx: EditorContext): void {
         }
       },
       onActivate: (one) => {
-        if (one.disabled) return;
+        // Una voce spenta non parte: dice di nuovo perché (K6 T9a).
+        if (one.disabled) {
+          if (one.description !== undefined) empty.textContent = one.description;
+          return;
+        }
         chosen = one;
         dialog.close(null);
       },
       lifetime: own,
     });
     const refresh = (): void => {
-      const shown = rankCommands(all, input.value, recent);
+      if (caricando) return;
+      const shown = rankCommands(tutte, input.value, recent);
       list.setItems(shown);
-      empty.textContent = shown.length === 0 ? t("draw.commands.none") : "";
+      if (shown.length > 0) empty.textContent = "";
+      else empty.textContent = completo !== null && tutte.length === 0 ? t("draw.completo.indice.empty") : t("draw.commands.none");
     };
+    /// Chiede le voci al Completo: il primo giro carica l'indice, e nessuna
+    /// famiglia. Se l'indice non arriva, lo dice, con «Riprova».
+    const carica = (): void => {
+      if (completo === null) return;
+      caricando = true;
+      retry.hidden = true;
+      list.setItems([]);
+      empty.textContent = t("draw.completo.indice.loading");
+      void completo.ricerca(() => [...ctx.selection], azioni).then((voci) => {
+        if (!aperta || ctx.disposed) return;
+        caricando = false;
+        if (voci === null) {
+          tutte = [];
+          empty.textContent = t("draw.completo.indice.failed");
+          retry.hidden = false;
+          return;
+        }
+        tutte = voci;
+        refresh();
+      });
+    };
+    retry.addEventListener("click", () => carica());
     own.listen(input, "input", refresh);
     refresh();
+    carica();
     input.focus();
     void dialog.result.then(() => {
+      aperta = false;
       ctx.asking = false;
       own.close();
       if (open === own) open = null;

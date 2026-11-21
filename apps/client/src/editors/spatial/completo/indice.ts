@@ -110,7 +110,21 @@ export function creaIndice(carica: CaricaIndice): () => Promise<Indice> {
   };
 }
 
+/// L'indice che porta il banco o un test al posto di quello generato (K6 T9a:
+/// le scene del menu e della tavolozza mostrano voci che il motore non ha
+/// ancora). Va messo prima che il Completo chieda l'indice: `indice()` lo
+/// memorizza alla prima chiamata.
+let indiceDiProva: FileIndice | null = null;
+
+/// Porta l'indice di prova (`null` toglie il suo). Solo il banco e i test lo
+/// chiamano; nell'app l'indice è quello generato.
+export function usaIndiceDiProva(file: FileIndice | null): void {
+  indiceDiProva = file;
+}
+
 /// L'indice dei comandi del Completo, memorizzato.
-export const indice: () => Promise<Indice> = creaIndice(
-  () => import("./indice.generated.json").then((m) => m.default as unknown as FileIndice),
+export const indice: () => Promise<Indice> = creaIndice(() =>
+  indiceDiProva !== null
+    ? Promise.resolve(indiceDiProva)
+    : import("./indice.generated.json").then((m) => m.default as unknown as FileIndice),
 );

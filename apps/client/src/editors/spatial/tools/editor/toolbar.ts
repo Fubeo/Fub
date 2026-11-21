@@ -25,6 +25,7 @@ import { drawPickerText } from "../color-text";
 import { customColor, DEFAULT_COLOR, PALETTE, swatchOf, WIDTHS } from "../palette";
 import type { Feature, ToolId } from "../registry";
 import { BAR_FEATURES, IMAGE_BINDING, ZOOM_STEP } from "./constants";
+import { azioniVoci } from "./chrome/commands";
 import { installPenOptions } from "./chrome/pen-options";
 import { installRail } from "./chrome/rail";
 import type { EditorContext } from "./context";
@@ -344,7 +345,22 @@ export function installToolbar(ctx: EditorContext): void {
   const topEnd = document.createElement("div");
   topEnd.className = "draw-group draw-top kit-bar-group";
   ctx.topEnd = topEnd;
-  const menuButton = button(topStart, "draw-button", () => t("draw.chrome.menu"), "draw-menu", () => ctx.openMenu(menuButton, ctx.drawMenuItems()));
+  // Il menu ≡: con il Disegno completo aperto, le sue voci vengono dall'indice
+  // (K6 T9a), e Visualizza e Selezione di Fub cedono ai sottomenu dell'indice.
+  // Senza il Completo, il menu di oggi.
+  const abriMenu = (): void => {
+    const completo = ctx.completoVoci?.() ?? null;
+    if (completo === null) {
+      ctx.openMenu(menuButton, ctx.drawMenuItems());
+      return;
+    }
+    const cedono = new Set([t("draw.view"), t("draw.selection.menu")]);
+    void completo.menu(() => [...ctx.selection], azioniVoci(ctx, abriMenu)).then((voci) => {
+      if (ctx.disposed) return;
+      ctx.openMenu(menuButton, [...voci, ...ctx.drawMenuItems().filter((voce) => !cedono.has(voce.label))]);
+    });
+  };
+  const menuButton = button(topStart, "draw-button", () => t("draw.chrome.menu"), "draw-menu", abriMenu);
   ctx.menuButton = menuButton;
   menuButton.setAttribute("aria-haspopup", "menu");
   menuButton.setAttribute("aria-expanded", "false");

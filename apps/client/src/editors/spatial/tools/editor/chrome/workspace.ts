@@ -185,6 +185,9 @@ export function installWorkspace(ctx: EditorContext): void {
       cassetto: (anchor, opzioni) => porta.cassetto(anchor, opzioni, ctx.life),
     };
   };
+  // Il Completo aperto e acceso, per il menu ≡ e la ricerca Ctrl+/ (K6 T9a):
+  // le sue voci vengono dall'indice. Senza, quelli di oggi.
+  ctx.completoVoci = () => (aperto === null || !vuoleCompleto() ? null : aperto);
   const portaCompleto = (): void => {
     if ((completo !== "no" && completo !== "fallito") || !vuoleCompleto()) return;
     completo = "verifica";
