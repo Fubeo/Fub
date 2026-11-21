@@ -142,6 +142,7 @@
 - Come si adatta lo spazio di lavoro e la barra al proprio modo di disegnare? → [product/drawing-custom.md](../product/drawing-custom.md)
 - Come si vedono e si modificano coi numeri le proprietà di un oggetto? → [product/drawing-properties.md](../product/drawing-properties.md)
 - Come si naviga il disegno (vista, gesti, menu radiale)? → [product/drawing-view.md](../product/drawing-view.md)
+- Quale tasto fa partire un comando del motore nel Completo, e quando non parte? → [product/drawing-keys.md](../product/drawing-keys.md)
 - Come si apre un disegno di decine di migliaia di elementi? → [product/drawing-large.md](../product/drawing-large.md)
 
 ## Riferimenti (`reference/`)

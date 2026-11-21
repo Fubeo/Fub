@@ -65,6 +65,13 @@ export const COMPLETO_IT = {
   "draw.workspace.manage.rename.done": "Spazio rinominato",
   "draw.workspace.manage.delete.done": "Spazio eliminato",
   "draw.workspace.manage.failed": "Non si è potuto cambiare lo spazio: {reason}",
+  // I tasti del motore (K6 T9b, `completo/esegui.ts`): il comando che aspetta, che
+  // non ha la sua finestra, che è fatto o non è andato, e il nome nella cronologia.
+  "draw.completo.key.waiting": "La parte del disegno per questo comando sta arrivando: il comando parte appena è pronta.",
+  "draw.completo.key.nowindow": "Questo comando non ha ancora la sua finestra.",
+  "draw.completo.key.done": "{command}: fatto.",
+  "draw.completo.key.failed": "Il comando non è andato a buon fine: il disegno è com'era.",
+  "draw.completo.key.history": "Comando del motore",
 } as const;
 
 /// Chiave del catalogo del disegno: la stessa forma di `COMPLETO_IT`.
@@ -126,6 +133,11 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.workspace.manage.rename.done": "Workspace renamed",
   "draw.workspace.manage.delete.done": "Workspace deleted",
   "draw.workspace.manage.failed": "The workspace could not be changed: {reason}",
+  "draw.completo.key.waiting": "The part of the drawing for this command is on its way: the command runs as soon as it is ready.",
+  "draw.completo.key.nowindow": "This command does not have its window yet.",
+  "draw.completo.key.done": "{command}: done.",
+  "draw.completo.key.failed": "The command did not finish: the drawing is as it was.",
+  "draw.completo.key.history": "Engine command",
 };
 
 /// La scheda Risorse dell'ispettore (K6 T10): il suo titolo, i campioni del

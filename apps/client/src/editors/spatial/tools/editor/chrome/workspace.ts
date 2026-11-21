@@ -14,6 +14,8 @@ import { t } from "../../../strings";
 import type { ToolId, Workspace } from "../../registry";
 import { openToolbarDialog } from "../../toolbar-dialog";
 import type { EditorContext } from "../context";
+import { gesture } from "../../edit";
+import { opsDellEsito } from "../../../motore/gesti";
 import type { Sezioni } from "../../../completo/sezioni";
 import { railLayout } from "./rail";
 import type { Completo } from "../../../completo";
@@ -200,7 +202,28 @@ export function installWorkspace(ctx: EditorContext): void {
       import("../../../completo").then(
         ({ apri }) => {
           if (ctx.disposed) return;
-          aperto = apri({ motore: options.motore ?? null, life: ctx.life });
+          aperto = apri({ motore: options.motore ?? null, life: ctx.life }, {
+            // I tasti del motore (K6 T9b): la radice dell'editor, la selezione, e la
+            // cronologia e l'annuncio di sempre. L'anteprima sul foglio arriva con
+            // la prima finestra del motore (T11): fino ad allora non ne mostra.
+            tasti: {
+              radice: ctx.root,
+              selezione: () => ctx.selection,
+              seleziona: (ids) => ctx.select(ids),
+              anteprima: () => undefined,
+              stato: () => {
+                const id = ctx.motoreTool;
+                const stato = id === null ? null : ctx.statoStrumento(id);
+                return { vuoleTesto: stato?.wants_text === true, componendo: stato?.composing === true };
+              },
+              leggi: (ops) => {
+                const letto = opsDellEsito(ops);
+                return "ops" in letto ? letto.ops : null;
+              },
+              commit: (ops) => ctx.commit("draw.completo.key.history", gesture(ops)) !== null,
+              annuncia: (testo) => ctx.announce(testo),
+            },
+          });
           sezioniAperte = aperto.sezioni;
           completo = "aperto";
           applicaSpazio();

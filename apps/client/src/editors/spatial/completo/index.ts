@@ -20,7 +20,15 @@ import type { ToolSpec } from "../tools/registry";
 import type { Lifetime } from "../../../ui/lifetime";
 import type { CassettoOptions } from "../tools/editor/chrome/drawer";
 import { openPopover } from "../../../kit/popover";
+import { keyboardPlatform } from "../../../ui/commands";
+import type { DrawingPreview } from "../../../host/contract";
 import { t } from "../strings";
+// I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
+// percorso di un comando che fanno partire.
+import { eseguiVoce, type AzioniEsito, type OpzioniFinestraComando } from "./esegui";
+import { montaTasti } from "./montaggio-tasti";
+import type { ModificheTasti, Piattaforma } from "./tasti";
+import type { VoceIndice } from "./indice";
 export type { GruppoLayout } from "./colonna";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
@@ -56,7 +64,29 @@ export interface OpzioniCompleto {
   readonly indice?: () => Promise<Indice>;
   readonly moduli?: OpzioniCaricatore["moduli"];
   readonly prepara?: OpzioniCaricatore["prepara"];
+  /// I tasti del motore nell'editor (K6 T9b). Senza, nessun tasto del motore
+  /// parte: il Semplice e i suoi tasti restano com'erano.
+  readonly tasti?: OpzioniTastiCompleto;
 }
+
+/// Ciò che l'editor dà al Completo per i tasti del motore: il suo root, la
+/// selezione e la cronologia (`AzioniEsito`), lo stato dello strumento, e le
+/// modifiche dell'utente quando ci sono.
+export interface OpzioniTastiCompleto extends AzioniEsito {
+  readonly radice: HTMLElement;
+  readonly selezione: () => readonly string[];
+  readonly anteprima: (anteprima: DrawingPreview | null) => void;
+  readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
+  readonly modifiche?: () => ModificheTasti;
+  readonly finestra?: (voce: VoceIndice) => Promise<OpzioniFinestraComando | null>;
+  readonly piattaforma?: Piattaforma;
+}
+
+/// Senza una finestra data, un comando con parametri dice che non ce l'ha.
+const nessunaFinestra = (): Promise<OpzioniFinestraComando | null> => Promise.resolve(null);
+
+/// La piattaforma per i tasti: Cmd su macOS, altrove Ctrl (come la shell).
+const piattaformaDi = (): Piattaforma => (keyboardPlatform(navigator.platform) === "mac" ? "mac" : "other");
 
 /// Dice che il cassetto non si è aperto (il suo pezzo non è arrivato), con
 /// «Riprova», che lo apre di nuovo. Sta qui, non nel pezzo del cassetto: il
@@ -139,5 +169,31 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
   ctx.life.add(() => completo.chiudi());
   void indice().catch(() => {});
   void carica.famiglia(NUCLEO);
+  const tasti = opzioni.tasti;
+  if (tasti !== undefined) {
+    montaTasti({
+      radice: tasti.radice,
+      vita: ctx.life,
+      indice: () => completo.indice(),
+      modifiche: tasti.modifiche ?? (() => ({})),
+      stato: tasti.stato,
+      piattaforma: tasti.piattaforma ?? piattaformaDi(),
+      esegui: (voce) => {
+        if (chiuso) return;
+        eseguiVoce(voce, {
+          motore: ctx.motore,
+          carica,
+          vita: ctx.life,
+          selezione: tasti.selezione,
+          anteprima: tasti.anteprima,
+          finestra: tasti.finestra ?? nessunaFinestra,
+          leggi: tasti.leggi,
+          commit: tasti.commit,
+          seleziona: tasti.seleziona,
+          annuncia: tasti.annuncia,
+        });
+      },
+    });
+  }
   return completo;
 }
