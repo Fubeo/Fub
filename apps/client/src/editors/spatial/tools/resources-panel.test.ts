@@ -78,7 +78,7 @@ describe("i campioni del documento", () => {
 
   it("li mostra in un gruppo, col conto", () => {
     const panel = pannello(modello(SWATCH, SWATCH_DUE));
-    expect(panel.element.textContent).toContain("Campioni del documento: 2");
+    expect(panel.element.textContent).toContain("2 campioni");
     expect(panel.element.querySelectorAll(".kit-color-swatch")).toHaveLength(2);
     expect(panel.element.querySelector('[aria-label="Blu"]')).not.toBeNull();
   });

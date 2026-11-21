@@ -127,12 +127,14 @@ export function installWorkspace(ctx: EditorContext): void {
   let sezioniAperte: Sezioni | null = null;
   const vuoleCompleto = (): boolean =>
     !compact && !ctx.disposed && ctx.workspace === "full" && components()?.on(DISEGNO_COMPLETO) === true;
-  // La scheda Risorse c'è solo col Completo aperto, col componente acceso e
-  // nello spazio «Completo»: spento o nel Semplice, il pannello si toglie.
+  // La scheda Risorse è quella del Completo del motore: c'è solo col Completo
+  // aperto, col componente acceso, col motore del disegno e nello spazio
+  // «Completo». Spento il componente, senza motore o nel Semplice, si toglie.
   const mostraRisorse = (): void => {
     if (completo !== "aperto" || sezioniAperte === null) return;
-    const attivo = !ctx.disposed && ctx.workspace === "full" && components()?.on(DISEGNO_COMPLETO) === true;
-    ctx.collegaCompleto(attivo ? sezioniAperte : null, attivo ? (options.motore ?? null) : null);
+    const motore = options.motore ?? null;
+    const attivo = !ctx.disposed && ctx.workspace === "full" && motore !== null && components()?.on(DISEGNO_COMPLETO) === true;
+    ctx.collegaCompleto(attivo ? sezioniAperte : null, attivo ? motore : null);
   };
   const portaCompleto = (): void => {
     if (completo !== "no" || !vuoleCompleto()) return;
