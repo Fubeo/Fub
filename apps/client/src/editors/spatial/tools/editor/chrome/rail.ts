@@ -12,6 +12,22 @@ import { toolKeyText, type ToolId, type ToolProfile, type ToolSpec } from "../..
 import type { EditorContext } from "../context";
 import type { StrumentoCassetto } from "./drawer";
 
+/// Quanto occupa una casella della colonna lungo il suo verso, in px: il
+/// bersaglio di 44 px del kit, senza i fili fra i gruppi.
+export const PASSO_CASELLA = 44;
+
+/// Quante caselle la colonna salvata può mostrare: il resto va nel cassetto.
+export const CASELLE_SALVATE_MAX = 15;
+
+/// Le caselle che stanno in `lunghezza` px, con «Tutti gli strumenti» in fondo
+/// che ne occupa una. Quelle che non stanno passano nel cassetto. Una misura
+/// che non c'è (0: il pannello non è ancora in pagina) non toglie niente.
+export function caselleCheStanno(lunghezza: number, quante: number): number {
+  if (lunghezza <= 0) return quante;
+  const posti = Math.floor(lunghezza / PASSO_CASELLA) - 1;
+  return Math.max(0, Math.min(quante, posti));
+}
+
 /// La casella «Tutti gli strumenti» della colonna del Completo: non è uno
 /// strumento, apre il cassetto.
 export const TUTTI_GLI_STRUMENTI = "all";
@@ -51,8 +67,13 @@ const GROUP_IDS = ["pick", "ink", "shape", "more"] as const;
 /// colonna scelta, e la Selezione in cima se non c'è: senza, non si sceglie
 /// più niente.
 export function railLayout(offered: readonly ToolSpec[], profile: ToolProfile, toolbar: readonly ToolId[] = []): ToolId[][][] {
+  // Uno strumento che la colonna salvata non conosce si salta; quelle oltre
+  // `CASELLE_SALVATE_MAX` stanno nel cassetto, con tutti gli altri.
   const chosen = [...new Set(toolbar)].filter((id) => offered.some((spec) => spec.id === id));
-  if (chosen.length > 0) return chosenLayout(offered, chosen.includes("select") ? chosen : ["select", ...chosen]);
+  if (chosen.length > 0) {
+    const scelti: ToolId[] = chosen.includes("select") ? chosen : ["select", ...chosen];
+    return chosenLayout(offered, scelti.slice(0, CASELLE_SALVATE_MAX));
+  }
   const layout = profile === "pdf" ? PDF : VECTOR;
   const ids = new Set(offered.map((spec) => spec.id));
   const placed = new Set(layout.flat(2));
@@ -109,6 +130,13 @@ export function installRail(ctx: EditorContext): void {
   const { life, profile, relabels, toolLabel, toolHint } = ctx;
   let shown = "";
 
+  // La colonna in pagina: la sua lunghezza dice quante caselle stanno. Prima
+  // che `createToolRail` la restituisca, non c'è (0).
+  let railEl: HTMLElement | null = null;
+  const misura = (): number => {
+    if (railEl === null) return 0;
+    return railEl.dataset.orientation === "horizontal" ? railEl.clientWidth : railEl.clientHeight;
+  };
   const railTool = (id: string): RailTool => {
     const spec = ctx.tools.find((each) => each.id === id)!;
     const { keys, aria } = keysOf(spec);
@@ -130,10 +158,16 @@ export function installRail(ctx: EditorContext): void {
     // La colonna del Completo, se la colonna è quella di serie; con una
     // colonna scelta da chi usa, quella vince.
     if (completo !== null && ctx.column.length === 0) {
-      const gruppi: RailGroup[] = completo.colonna(ctx.tools).map((gruppo) => ({
+      const tutte: RailGroup[] = completo.colonna(ctx.tools).map((gruppo) => ({
         id: gruppo.id,
         slots: gruppo.caselle.map((tools) => ({ id: tools[0]!, tools: tools.map(railTool) })),
       }));
+      // Le caselle che non stanno nella misura passano nel cassetto: lo
+      // mostra il cassetto, che elenca tutti gli strumenti.
+      let posti = caselleCheStanno(misura(), tutte.reduce((n, gruppo) => n + gruppo.slots.length, 0));
+      const gruppi: RailGroup[] = tutte
+        .map((gruppo) => ({ ...gruppo, slots: gruppo.slots.filter(() => posti-- > 0) }))
+        .filter((gruppo) => gruppo.slots.length > 0);
       const tutti: RailTool = { id: TUTTI_GLI_STRUMENTI, label: t("draw.chrome.column.all"), icon: "draw-all-tools", description: t("draw.chrome.column.all") };
       gruppi.push({ id: "all", slots: [{ id: TUTTI_GLI_STRUMENTI, tools: [tutti] }] });
       return gruppi;
@@ -170,6 +204,19 @@ export function installRail(ctx: EditorContext): void {
   });
   shown = signature();
   ctx.rail = rail;
+  railEl = rail.element;
+  // Quando la colonna cambia misura, si ricontano le caselle che stanno.
+  if (typeof ResizeObserver !== "undefined") {
+    let stanno = -1;
+    const osservatore = new ResizeObserver(() => {
+      const quante = groups().reduce((n, gruppo) => n + gruppo.slots.length, 0);
+      if (quante === stanno) return;
+      stanno = quante;
+      rebuild();
+    });
+    osservatore.observe(rail.element);
+    life.add(() => osservatore.disconnect());
+  }
   const column = document.createElement("div");
   column.className = "draw-rail";
   column.append(rail.element);
