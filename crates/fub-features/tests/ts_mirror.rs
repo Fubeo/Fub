@@ -73,6 +73,10 @@ use fub_abi::{
     DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH,
 };
 use fub_abi::{
+    DrawingDisabledReason, DrawingInput, DrawingKeyMods, DrawingOverlay, DrawingOverlayRole,
+    DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION,
+};
+use fub_abi::{
     GridBook, GridBytesCell, GridBytesSession, GridBytesWindow, GridCalculation, GridCommand,
     GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment, GridCommentReply,
     GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMedia, GridMerge, GridNotice,
@@ -1729,6 +1733,32 @@ fn drawing_samples() -> Value {
         DrawingTool::Line,
         DrawingTool::Arrow,
         DrawingTool::Text,
+        DrawingTool::Engine { id: "pen".into() },
+    ];
+    // Ogni specie di ingresso da tastiera, per lo strumento del motore.
+    let inputs = vec![
+        DrawingInput::Key {
+            key: "Enter".into(),
+            code: "Enter".into(),
+            mods: DrawingKeyMods {
+                shift: true,
+                alt: false,
+                cmd: false,
+                ctrl: true,
+            },
+            pressed: true,
+        },
+        DrawingInput::Ime {
+            preedit: "かな".into(),
+            active: Some([0, 2]),
+        },
+        DrawingInput::Ime {
+            preedit: String::new(),
+            active: None,
+        },
+        DrawingInput::Text {
+            text: "仮名".into(),
+        },
     ];
     let phases = [
         DrawingPhase::Preview,
@@ -1739,22 +1769,26 @@ fn drawing_samples() -> Value {
         .into_iter()
         .enumerate()
         .map(|(the, tool)| {
+            let select = tool == DrawingTool::Select;
+            let text = tool == DrawingTool::Text;
+            let engine = matches!(tool, DrawingTool::Engine { .. });
             to_value(DrawingGesture {
                 revision,
                 phase: phases[the % phases.len()],
                 tool,
                 layer: (the % 2 == 0).then(|| "l1a2b3c4d".into()),
-                selection: if tool == DrawingTool::Select {
+                selection: if select {
                     vec!["oa1a1a1a1".into()]
                 } else {
                     Vec::new()
                 },
                 zoom: 1.5,
                 snap,
-                style: (tool != DrawingTool::Select).then(|| style.clone()),
-                text: (tool == DrawingTool::Text).then(|| "Testo".into()),
-                frame: (tool == DrawingTool::Select).then_some(frame),
+                style: (!select).then(|| style.clone()),
+                text: text.then(|| "Testo".into()),
+                frame: select.then_some(frame),
                 events: pointers.clone(),
+                inputs: if engine { inputs.clone() } else { Vec::new() },
             })
         })
         .collect();
@@ -1768,7 +1802,105 @@ fn drawing_samples() -> Value {
         shape: Some(json!({"tag": "rect", "attrs": {"id": "@1", "x": "0"}})),
         matrix: Some([1.0, 0.0, 0.0, 1.0, 7.0, 5.0]),
         marquee: Some([0.0, 0.0, 10.0, 20.0]),
+        overlays: Vec::new(),
     };
+    // Ogni specie di segno di uno strumento del motore, con ogni ruolo.
+    let roles = [
+        DrawingOverlayRole::Selection,
+        DrawingOverlayRole::Guide,
+        DrawingOverlayRole::Preview,
+        DrawingOverlayRole::Measure,
+        DrawingOverlayRole::Perspective,
+    ];
+    let overlays = vec![
+        DrawingOverlay::Marquee {
+            rect: [1.0, 2.0, 30.0, 40.0],
+        },
+        DrawingOverlay::Path {
+            d: "M0 0 C10 0 20 10 20 20".into(),
+            role: roles[2],
+            width: 1.0,
+            dashed: false,
+        },
+        DrawingOverlay::Line {
+            a: [0.0, 0.0],
+            b: [10.0, 0.0],
+            role: roles[1],
+            dashed: true,
+        },
+        DrawingOverlay::Anchor {
+            at: [20.0, 20.0],
+            role: roles[0],
+            filled: true,
+            size: 7.0,
+        },
+        DrawingOverlay::CurvePoint {
+            at: [5.0, 5.0],
+            role: roles[0],
+            filled: false,
+            size: 6.0,
+        },
+        DrawingOverlay::Handle {
+            at: [10.0, 0.0],
+            role: roles[0],
+        },
+        DrawingOverlay::Label {
+            at: [3.0, 4.0],
+            text: "anchor".into(),
+            role: roles[1],
+        },
+        DrawingOverlay::Measure {
+            at: [3.0, 4.0],
+            text: "W: 20 px".into(),
+        },
+        DrawingOverlay::Distance {
+            a: [0.0, 0.0],
+            b: [0.0, 12.0],
+            text: "12 px".into(),
+            role: roles[3],
+        },
+        DrawingOverlay::Highlight {
+            quad: [[0.0, 0.0], [5.0, 0.0], [5.0, 5.0], [0.0, 5.0]],
+            role: roles[0],
+        },
+        DrawingOverlay::Swatch {
+            at: [8.0, 8.0],
+            color: "#d55e00ff".into(),
+            selected: true,
+        },
+        DrawingOverlay::GridLine {
+            a: [0.0, 0.0],
+            b: [100.0, 50.0],
+            role: roles[4],
+        },
+    ];
+    let engine_preview = DrawingPreview {
+        overlays: overlays.clone(),
+        ..DrawingPreview::default()
+    };
+    let state = DrawingToolState {
+        busy: true,
+        transforming: false,
+        wants_text: true,
+        composing: true,
+        cursor: "pen_close".into(),
+        options: json!({"rubber_band": true}),
+    };
+    let reasons: Vec<Value> = [
+        DrawingDisabledReason::NoSelection,
+        DrawingDisabledReason::NeedsPath,
+        DrawingDisabledReason::NeedsText,
+        DrawingDisabledReason::NeedsGroup,
+        DrawingDisabledReason::NeedsTwo,
+        DrawingDisabledReason::ReadOnly,
+        DrawingDisabledReason::Unmapped,
+        DrawingDisabledReason::Other {
+            text: "Niente da cambiare".into(),
+        },
+    ]
+    .into_iter()
+    .map(to_value)
+    .collect();
     let refusals = [
         DrawingRefusal::Stale,
         DrawingRefusal::Unmapped,
@@ -1779,6 +1911,9 @@ fn drawing_samples() -> Value {
         DrawingRefusal::NotReady,
         DrawingRefusal::Locked,
         DrawingRefusal::Hidden,
+        DrawingRefusal::NoMemory,
+        DrawingRefusal::NoPreview,
+        DrawingRefusal::UnknownTool,
     ];
     let mut outcomes = vec![
         to_value(DrawingOutcome {
@@ -1789,6 +1924,8 @@ fn drawing_samples() -> Value {
             losses: Vec::new(),
             refused: None,
             frame: None,
+            state: None,
+            reading: None,
         }),
         to_value(DrawingOutcome {
             revision,
@@ -1798,6 +1935,20 @@ fn drawing_samples() -> Value {
             losses: vec![loss(DrawingLossKind::Approximated)],
             refused: None,
             frame: Some(frame),
+            state: None,
+            reading: None,
+        }),
+        // L'anteprima di uno strumento del motore: solo segni, con lo stato.
+        to_value(DrawingOutcome {
+            revision,
+            preview: Some(engine_preview.clone()),
+            ops: None,
+            selection: Vec::new(),
+            losses: Vec::new(),
+            refused: None,
+            frame: None,
+            state: Some(state.clone()),
+            reading: Some(json!({"bounds": [0, 0, 20, 20]})),
         }),
     ];
     outcomes.extend(refusals.into_iter().map(|refused| {
@@ -1809,6 +1960,8 @@ fn drawing_samples() -> Value {
             losses: Vec::new(),
             refused: Some(refused),
             frame: None,
+            state: None,
+            reading: None,
         })
     }));
     json!({
@@ -1845,31 +1998,70 @@ fn drawing_samples() -> Value {
         "DrawingStyle": [to_value(style)],
         "DrawingFrame": [to_value(frame)],
         "DrawingGesture": gestures,
-        "DrawingPreview": [to_value(preview), to_value(DrawingPreview::default())],
+        "DrawingPreview": [
+            to_value(preview),
+            to_value(engine_preview),
+            to_value(DrawingPreview::default()),
+        ],
         "DrawingOutcome": outcomes,
         "DrawingCommandInfo": [
-            to_value(DrawingCommandInfo { id: DRAWING_COMMAND_STROKE_COLOR.into(), enabled: true }),
-            to_value(DrawingCommandInfo { id: DRAWING_COMMAND_FILL_COLOR.into(), enabled: false }),
-            to_value(DrawingCommandInfo { id: DRAWING_COMMAND_WIDTH.into(), enabled: true }),
+            to_value(DrawingCommandInfo {
+                id: DRAWING_COMMAND_STROKE_COLOR.into(),
+                enabled: true,
+                disabled_reason: None,
+            }),
+            to_value(DrawingCommandInfo {
+                id: DRAWING_COMMAND_FILL_COLOR.into(),
+                enabled: false,
+                disabled_reason: Some(DrawingDisabledReason::NoSelection),
+            }),
+            to_value(DrawingCommandInfo {
+                id: DRAWING_COMMAND_WIDTH.into(),
+                enabled: false,
+                disabled_reason: Some(DrawingDisabledReason::Other {
+                    text: "Niente da cambiare".into(),
+                }),
+            }),
         ],
+        "DrawingDisabledReason": reasons,
+        "DrawingInput": inputs.into_iter().map(to_value).collect::<Vec<_>>(),
+        "DrawingOverlay": overlays.into_iter().map(to_value).collect::<Vec<_>>(),
+        "DrawingToolState": [to_value(state)],
         "DrawingCommandRequest": [
             to_value(DrawingCommandRequest {
                 revision,
                 id: DRAWING_COMMAND_STROKE_COLOR.into(),
                 selection: vec!["oa1a1a1a1".into()],
                 value: json!("#d55e00"),
+                preview: false,
             }),
             to_value(DrawingCommandRequest {
                 revision,
                 id: DRAWING_COMMAND_FILL_COLOR.into(),
                 selection: vec!["oa1a1a1a1".into()],
                 value: Value::Null,
+                preview: false,
             }),
             to_value(DrawingCommandRequest {
                 revision,
                 id: DRAWING_COMMAND_WIDTH.into(),
                 selection: vec!["oa1a1a1a1".into()],
                 value: json!(2.5),
+                preview: true,
+            }),
+            to_value(DrawingCommandRequest {
+                revision,
+                id: DRAWING_COMMAND_TOOL_OPTION.into(),
+                selection: Vec::new(),
+                value: json!({"strumento": "pen", "chiave": "rubber_band", "valore": false}),
+                preview: false,
+            }),
+            to_value(DrawingCommandRequest {
+                revision,
+                id: DRAWING_COMMAND_FAMILY_PREPARE.into(),
+                selection: Vec::new(),
+                value: json!({"famiglia": "tracciati"}),
+                preview: false,
             }),
         ],
     })

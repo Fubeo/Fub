@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GRID_THEME_COLORS, MAIN_PANE } from "./contract";
+import { DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION, DRAWING_FAMILIES, GRID_THEME_COLORS, MAIN_PANE } from "./contract";
 import { themeIconsFileHolds } from "../rules/mirrored";
 import type {
   BacklinkRef,
@@ -41,13 +41,18 @@ import type {
   DrawingChange,
   DrawingCommandInfo,
   DrawingCommandRequest,
+  DrawingDisabledReason,
   DrawingEdit,
   DrawingFrame,
   DrawingGesture,
+  DrawingInput,
+  DrawingKeyMods,
   DrawingLoss,
   DrawingLossKind,
   DrawingOpen,
   DrawingOutcome,
+  DrawingOverlay,
+  DrawingOverlayRole,
   DrawingPhase,
   DrawingPointer,
   DrawingPointerKind,
@@ -58,6 +63,7 @@ import type {
   DrawingSync,
   DrawingSynced,
   DrawingTool,
+  DrawingToolState,
   EmbedContent,
   Failure,
   EventMask,
@@ -800,8 +806,9 @@ const RECORD_KEYS: Record<string, string[]> = {
     text: true,
     frame: true,
     events: true,
+    inputs: true,
   }),
-  DrawingPreview: keysOf<DrawingPreview>({ shape: true, matrix: true, marquee: true }),
+  DrawingPreview: keysOf<DrawingPreview>({ shape: true, matrix: true, marquee: true, overlays: true }),
   DrawingOutcome: keysOf<DrawingOutcome>({
     revision: true,
     preview: true,
@@ -810,9 +817,19 @@ const RECORD_KEYS: Record<string, string[]> = {
     losses: true,
     refused: true,
     frame: true,
+    state: true,
+    reading: true,
   }),
-  DrawingCommandInfo: keysOf<DrawingCommandInfo>({ id: true, enabled: true }),
-  DrawingCommandRequest: keysOf<DrawingCommandRequest>({ revision: true, id: true, selection: true, value: true }),
+  DrawingToolState: keysOf<DrawingToolState>({
+    busy: true,
+    transforming: true,
+    wants_text: true,
+    composing: true,
+    cursor: true,
+    options: true,
+  }),
+  DrawingCommandInfo: keysOf<DrawingCommandInfo>({ id: true, enabled: true, disabled_reason: true }),
+  DrawingCommandRequest: keysOf<DrawingCommandRequest>({ revision: true, id: true, selection: true, value: true, preview: true }),
   Span: keysOf<Span>({ start: true, end: true }),
   NeighborRef: keysOf<NeighborRef>({ doc: true, via: true, depth: true }),
   BacklinkRef: keysOf<BacklinkRef>({ source: true, context: true }),
@@ -1356,6 +1373,10 @@ describe("mirror TS↔Rust", () => {
       "DrawingOutcome",
       "DrawingCommandInfo",
       "DrawingCommandRequest",
+      "DrawingDisabledReason",
+      "DrawingInput",
+      "DrawingOverlay",
+      "DrawingToolState",
     ]) {
       expect(fixture[type], `manca il type ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
@@ -1587,6 +1608,11 @@ describe("mirror TS↔Rust", () => {
         case "text":
           return t;
         default:
+          if (typeof t === "object" && "engine" in t) {
+            expect(Object.keys(t)).toEqual(["engine"]);
+            expect(Object.keys(t.engine)).toEqual(["id"]);
+            return "engine";
+          }
           return assertNever(t);
       }
     };
@@ -1633,9 +1659,108 @@ describe("mirror TS↔Rust", () => {
         case "not_ready":
         case "locked":
         case "hidden":
+        case "no_memory":
+        case "no_preview":
+        case "unknown_tool":
           return r;
         default:
           return assertNever(r);
+      }
+    };
+    const role = (r: DrawingOverlayRole): string => {
+      switch (r) {
+        case "selection":
+        case "guide":
+        case "preview":
+        case "measure":
+        case "perspective":
+          return r;
+        default:
+          return assertNever(r);
+      }
+    };
+    // Le chiavi di ogni segno, per tipo: un campo nuovo in Rust resta rosso.
+    const overlay = (o: DrawingOverlay): string => {
+      const keys = (...k: string[]): void => expect(Object.keys(o).sort()).toEqual(["kind", ...k].sort());
+      switch (o.kind) {
+        case "marquee":
+          keys("rect");
+          return o.kind;
+        case "path":
+          keys("d", "role", "width", "dashed");
+          role(o.role);
+          return o.kind;
+        case "line":
+          keys("a", "b", "role", "dashed");
+          role(o.role);
+          return o.kind;
+        case "anchor":
+        case "curve_point":
+          keys("at", "role", "filled", "size");
+          role(o.role);
+          return o.kind;
+        case "handle":
+          keys("at", "role");
+          role(o.role);
+          return o.kind;
+        case "label":
+          keys("at", "text", "role");
+          role(o.role);
+          return o.kind;
+        case "measure":
+          keys("at", "text");
+          return o.kind;
+        case "distance":
+          keys("a", "b", "text", "role");
+          role(o.role);
+          return o.kind;
+        case "highlight":
+          keys("quad", "role");
+          role(o.role);
+          return o.kind;
+        case "swatch":
+          keys("at", "color", "selected");
+          return o.kind;
+        case "grid_line":
+          keys("a", "b", "role");
+          role(o.role);
+          return o.kind;
+        default:
+          return assertNever(o);
+      }
+    };
+    const input = (i: DrawingInput): string => {
+      switch (i.kind) {
+        case "key": {
+          expect(Object.keys(i).sort()).toEqual(["code", "key", "kind", "mods", "pressed"]);
+          const mods: DrawingKeyMods = i.mods ?? {};
+          expect(Object.keys(mods).sort()).toEqual(["alt", "cmd", "ctrl", "shift"]);
+          return i.kind;
+        }
+        case "text":
+          expect(Object.keys(i).sort()).toEqual(["kind", "text"]);
+          return i.kind;
+        case "ime":
+          expect(Object.keys(i).sort()).toEqual(["active", "kind", "preedit"]);
+          return i.kind;
+        default:
+          return assertNever(i);
+      }
+    };
+    const reason = (r: DrawingDisabledReason): string => {
+      switch (r) {
+        case "no_selection":
+        case "needs_path":
+        case "needs_text":
+        case "needs_group":
+        case "needs_two":
+        case "read_only":
+        case "unmapped":
+          return r;
+        default:
+          expect(Object.keys(r)).toEqual(["other"]);
+          expect(Object.keys(r.other)).toEqual(["text"]);
+          return "other";
       }
     };
     const change = (c: DrawingChange): string => {
@@ -1652,7 +1777,9 @@ describe("mirror TS↔Rust", () => {
       }
     };
     const gestures = fixture["DrawingGesture"] as DrawingGesture[];
-    expect(new Set(gestures.map((g) => tool(g.tool)))).toEqual(new Set(["select", "rect", "ellipse", "line", "arrow", "text"]));
+    expect(new Set(gestures.map((g) => tool(g.tool)))).toEqual(new Set(["select", "rect", "ellipse", "line", "arrow", "text", "engine"]));
+    expect(new Set(gestures.flatMap((g) => (g.inputs ?? []).map(input)))).toEqual(new Set(["key", "text", "ime"]));
+    expect(new Set((fixture["DrawingInput"] as DrawingInput[]).map(input))).toEqual(new Set(["key", "text", "ime"]));
     expect(new Set(gestures.map((g) => phase(g.phase)))).toEqual(new Set(["preview", "commit", "cancel"]));
     const kinds = gestures.flatMap((g) => g.events.map((e) => pointer(e.kind)));
     expect(new Set(kinds)).toEqual(new Set(["down", "drag", "up", "move", "double_click"]));
@@ -1669,14 +1796,45 @@ describe("mirror TS↔Rust", () => {
     );
     const outcomes = fixture["DrawingOutcome"] as DrawingOutcome[];
     expect(new Set(outcomes.flatMap((o) => (o.refused === null ? [] : [refusal(o.refused)])))).toEqual(
-      new Set(["stale", "unmapped", "empty", "unsupported", "too_large", "closed", "not_ready", "locked", "hidden"]),
+      new Set([
+        "stale", "unmapped", "empty", "unsupported", "too_large", "closed", "not_ready", "locked", "hidden",
+        "no_memory", "no_preview", "unknown_tool",
+      ]),
     );
     const previews = outcomes.flatMap((o) => (o.preview === null ? [] : [o.preview]));
     expect(previews.length).toBeGreaterThan(0);
     for (const p of previews) {
       expect(Object.keys(p).sort()).toEqual(RECORD_KEYS.DrawingPreview);
-      expect(p.matrix?.length).toBe(6);
-      expect(p.marquee?.length).toBe(4);
+      if (p.matrix !== null) expect(p.matrix.length).toBe(6);
+      if (p.marquee !== null) expect(p.marquee.length).toBe(4);
+    }
+    expect(previews.some((p) => p.matrix !== null && p.marquee !== null)).toBe(true);
+    const segni = [
+      ...(fixture["DrawingOverlay"] as DrawingOverlay[]),
+      ...previews.flatMap((p) => p.overlays ?? []),
+    ];
+    expect(new Set(segni.map(overlay))).toEqual(
+      new Set(["marquee", "path", "line", "anchor", "curve_point", "handle", "label", "measure", "distance", "highlight", "swatch", "grid_line"]),
+    );
+    expect(previews.some((p) => (p.overlays ?? []).length > 0)).toBe(true);
+    const roles = segni.flatMap((o) => ("role" in o ? [role(o.role)] : []));
+    expect(new Set(roles)).toEqual(new Set(["selection", "guide", "preview", "measure", "perspective"]));
+    expect(outcomes.some((o) => o.state != null && o.reading != null)).toBe(true);
+    const infos = fixture["DrawingCommandInfo"] as DrawingCommandInfo[];
+    const reasons = [
+      ...(fixture["DrawingDisabledReason"] as DrawingDisabledReason[]),
+      ...infos.flatMap((i) => (i.disabled_reason == null ? [] : [i.disabled_reason])),
+    ];
+    expect(new Set(reasons.map(reason))).toEqual(
+      new Set(["no_selection", "needs_path", "needs_text", "needs_group", "needs_two", "read_only", "unmapped", "other"]),
+    );
+    const requests = fixture["DrawingCommandRequest"] as DrawingCommandRequest[];
+    expect(requests.some((r) => r.preview === true)).toBe(true);
+    expect(new Set(requests.map((r) => r.id))).toContain(DRAWING_COMMAND_TOOL_OPTION);
+    expect(new Set(requests.map((r) => r.id))).toContain(DRAWING_COMMAND_FAMILY_PREPARE);
+    expect(DRAWING_FAMILIES).toHaveLength(26);
+    for (const r of requests.filter((each) => each.id === DRAWING_COMMAND_FAMILY_PREPARE)) {
+      expect(DRAWING_FAMILIES).toContain((r.value as { famiglia: string }).famiglia);
     }
     expect(outcomes.some((o) => typeof o.ops === "string")).toBe(true);
     const frames = outcomes.flatMap((o) => (o.frame === null ? [] : [o.frame]));

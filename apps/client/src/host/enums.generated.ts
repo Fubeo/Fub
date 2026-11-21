@@ -33,6 +33,8 @@ export type DocChange = "body" | "frontmatter" | "tags" | "links" | "outline" | 
 
 export type DrawingLossKind = "unmapped" | "approximated" | "unsupported";
 
+export type DrawingOverlayRole = "selection" | "guide" | "preview" | "measure" | "perspective";
+
 export type DrawingPhase = "preview" | "commit" | "cancel";
 
 export type DrawingPointerKind = "down" | "drag" | "up" | "move" | "double_click";
@@ -47,9 +49,10 @@ export type DrawingRefusal =
   | "not_ready"
   | "locked"
   | "hidden"
+  | "no_memory"
+  | "no_preview"
+  | "unknown_tool"
 ;
-
-export type DrawingTool = "select" | "rect" | "ellipse" | "line" | "arrow" | "text";
 
 export type EntryKind = "document" | "asset" | "unknown";
 

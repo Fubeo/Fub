@@ -3040,7 +3040,8 @@
           "alt": false,
           "cmd": false
         }
-      ]
+      ],
+      "inputs": []
     },
     {
       "revision": "18446744073709551614",
@@ -3106,7 +3107,8 @@
           "alt": false,
           "cmd": false
         }
-      ]
+      ],
+      "inputs": []
     },
     {
       "revision": "18446744073709551614",
@@ -3172,7 +3174,8 @@
           "alt": false,
           "cmd": false
         }
-      ]
+      ],
+      "inputs": []
     },
     {
       "revision": "18446744073709551614",
@@ -3238,7 +3241,8 @@
           "alt": false,
           "cmd": false
         }
-      ]
+      ],
+      "inputs": []
     },
     {
       "revision": "18446744073709551614",
@@ -3304,7 +3308,8 @@
           "alt": false,
           "cmd": false
         }
-      ]
+      ],
+      "inputs": []
     },
     {
       "revision": "18446744073709551614",
@@ -3370,6 +3375,108 @@
           "alt": false,
           "cmd": false
         }
+      ],
+      "inputs": []
+    },
+    {
+      "revision": "18446744073709551614",
+      "phase": "preview",
+      "tool": {
+        "engine": {
+          "id": "pen"
+        }
+      },
+      "layer": "l1a2b3c4d",
+      "selection": [],
+      "zoom": 1.5,
+      "snap": {
+        "grid": 10.0,
+        "free": true
+      },
+      "style": {
+        "stroke": "#000000",
+        "width": 4.0,
+        "fill": "#ffffff"
+      },
+      "text": null,
+      "frame": null,
+      "events": [
+        {
+          "kind": "down",
+          "x": 10.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "drag",
+          "x": 11.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": true,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "move",
+          "x": 12.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": true,
+          "cmd": false
+        },
+        {
+          "kind": "double_click",
+          "x": 13.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": true
+        },
+        {
+          "kind": "up",
+          "x": 14.0,
+          "y": 20.5,
+          "pressure": 0.0,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        }
+      ],
+      "inputs": [
+        {
+          "kind": "key",
+          "key": "Enter",
+          "code": "Enter",
+          "mods": {
+            "shift": true,
+            "alt": false,
+            "cmd": false,
+            "ctrl": true
+          },
+          "pressed": true
+        },
+        {
+          "kind": "ime",
+          "preedit": "かな",
+          "active": [
+            0,
+            2
+          ]
+        },
+        {
+          "kind": "ime",
+          "preedit": "",
+          "active": null
+        },
+        {
+          "kind": "text",
+          "text": "仮名"
+        }
       ]
     }
   ],
@@ -3395,12 +3502,151 @@
         0.0,
         10.0,
         20.0
+      ],
+      "overlays": []
+    },
+    {
+      "shape": null,
+      "matrix": null,
+      "marquee": null,
+      "overlays": [
+        {
+          "kind": "marquee",
+          "rect": [
+            1.0,
+            2.0,
+            30.0,
+            40.0
+          ]
+        },
+        {
+          "kind": "path",
+          "d": "M0 0 C10 0 20 10 20 20",
+          "role": "preview",
+          "width": 1.0,
+          "dashed": false
+        },
+        {
+          "kind": "line",
+          "a": [
+            0.0,
+            0.0
+          ],
+          "b": [
+            10.0,
+            0.0
+          ],
+          "role": "guide",
+          "dashed": true
+        },
+        {
+          "kind": "anchor",
+          "at": [
+            20.0,
+            20.0
+          ],
+          "role": "selection",
+          "filled": true,
+          "size": 7.0
+        },
+        {
+          "kind": "curve_point",
+          "at": [
+            5.0,
+            5.0
+          ],
+          "role": "selection",
+          "filled": false,
+          "size": 6.0
+        },
+        {
+          "kind": "handle",
+          "at": [
+            10.0,
+            0.0
+          ],
+          "role": "selection"
+        },
+        {
+          "kind": "label",
+          "at": [
+            3.0,
+            4.0
+          ],
+          "text": "anchor",
+          "role": "guide"
+        },
+        {
+          "kind": "measure",
+          "at": [
+            3.0,
+            4.0
+          ],
+          "text": "W: 20 px"
+        },
+        {
+          "kind": "distance",
+          "a": [
+            0.0,
+            0.0
+          ],
+          "b": [
+            0.0,
+            12.0
+          ],
+          "text": "12 px",
+          "role": "measure"
+        },
+        {
+          "kind": "highlight",
+          "quad": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              5.0,
+              0.0
+            ],
+            [
+              5.0,
+              5.0
+            ],
+            [
+              0.0,
+              5.0
+            ]
+          ],
+          "role": "selection"
+        },
+        {
+          "kind": "swatch",
+          "at": [
+            8.0,
+            8.0
+          ],
+          "color": "#d55e00ff",
+          "selected": true
+        },
+        {
+          "kind": "grid_line",
+          "a": [
+            0.0,
+            0.0
+          ],
+          "b": [
+            100.0,
+            50.0
+          ],
+          "role": "perspective"
+        }
       ]
     },
     {
       "shape": null,
       "matrix": null,
-      "marquee": null
+      "marquee": null,
+      "overlays": []
     }
   ],
   "DrawingOutcome": [
@@ -3427,7 +3673,8 @@
           0.0,
           10.0,
           20.0
-        ]
+        ],
+        "overlays": []
       },
       "ops": null,
       "selection": [
@@ -3435,7 +3682,9 @@
       ],
       "losses": [],
       "refused": null,
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3474,6 +3723,171 @@
           200.0,
           150.0
         ]
+      },
+      "state": null,
+      "reading": null
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": {
+        "shape": null,
+        "matrix": null,
+        "marquee": null,
+        "overlays": [
+          {
+            "kind": "marquee",
+            "rect": [
+              1.0,
+              2.0,
+              30.0,
+              40.0
+            ]
+          },
+          {
+            "kind": "path",
+            "d": "M0 0 C10 0 20 10 20 20",
+            "role": "preview",
+            "width": 1.0,
+            "dashed": false
+          },
+          {
+            "kind": "line",
+            "a": [
+              0.0,
+              0.0
+            ],
+            "b": [
+              10.0,
+              0.0
+            ],
+            "role": "guide",
+            "dashed": true
+          },
+          {
+            "kind": "anchor",
+            "at": [
+              20.0,
+              20.0
+            ],
+            "role": "selection",
+            "filled": true,
+            "size": 7.0
+          },
+          {
+            "kind": "curve_point",
+            "at": [
+              5.0,
+              5.0
+            ],
+            "role": "selection",
+            "filled": false,
+            "size": 6.0
+          },
+          {
+            "kind": "handle",
+            "at": [
+              10.0,
+              0.0
+            ],
+            "role": "selection"
+          },
+          {
+            "kind": "label",
+            "at": [
+              3.0,
+              4.0
+            ],
+            "text": "anchor",
+            "role": "guide"
+          },
+          {
+            "kind": "measure",
+            "at": [
+              3.0,
+              4.0
+            ],
+            "text": "W: 20 px"
+          },
+          {
+            "kind": "distance",
+            "a": [
+              0.0,
+              0.0
+            ],
+            "b": [
+              0.0,
+              12.0
+            ],
+            "text": "12 px",
+            "role": "measure"
+          },
+          {
+            "kind": "highlight",
+            "quad": [
+              [
+                0.0,
+                0.0
+              ],
+              [
+                5.0,
+                0.0
+              ],
+              [
+                5.0,
+                5.0
+              ],
+              [
+                0.0,
+                5.0
+              ]
+            ],
+            "role": "selection"
+          },
+          {
+            "kind": "swatch",
+            "at": [
+              8.0,
+              8.0
+            ],
+            "color": "#d55e00ff",
+            "selected": true
+          },
+          {
+            "kind": "grid_line",
+            "a": [
+              0.0,
+              0.0
+            ],
+            "b": [
+              100.0,
+              50.0
+            ],
+            "role": "perspective"
+          }
+        ]
+      },
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": null,
+      "frame": null,
+      "state": {
+        "busy": true,
+        "transforming": false,
+        "wants_text": true,
+        "composing": true,
+        "cursor": "pen_close",
+        "options": {
+          "rubber_band": true
+        }
+      },
+      "reading": {
+        "bounds": [
+          0,
+          0,
+          20,
+          20
+        ]
       }
     },
     {
@@ -3483,7 +3897,9 @@
       "selection": [],
       "losses": [],
       "refused": "stale",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3492,7 +3908,9 @@
       "selection": [],
       "losses": [],
       "refused": "unmapped",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3501,7 +3919,9 @@
       "selection": [],
       "losses": [],
       "refused": "empty",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3510,7 +3930,9 @@
       "selection": [],
       "losses": [],
       "refused": "unsupported",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3519,7 +3941,9 @@
       "selection": [],
       "losses": [],
       "refused": "too_large",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3528,7 +3952,9 @@
       "selection": [],
       "losses": [],
       "refused": "closed",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3537,7 +3963,9 @@
       "selection": [],
       "losses": [],
       "refused": "not_ready",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3546,7 +3974,9 @@
       "selection": [],
       "losses": [],
       "refused": "locked",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
     },
     {
       "revision": "18446744073709551614",
@@ -3555,21 +3985,252 @@
       "selection": [],
       "losses": [],
       "refused": "hidden",
-      "frame": null
+      "frame": null,
+      "state": null,
+      "reading": null
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "no_memory",
+      "frame": null,
+      "state": null,
+      "reading": null
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "no_preview",
+      "frame": null,
+      "state": null,
+      "reading": null
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "unknown_tool",
+      "frame": null,
+      "state": null,
+      "reading": null
     }
   ],
   "DrawingCommandInfo": [
     {
       "id": "disegno.colore-tratto",
-      "enabled": true
+      "enabled": true,
+      "disabled_reason": null
     },
     {
       "id": "disegno.colore-riempimento",
-      "enabled": false
+      "enabled": false,
+      "disabled_reason": "no_selection"
     },
     {
       "id": "disegno.spessore",
-      "enabled": true
+      "enabled": false,
+      "disabled_reason": {
+        "other": {
+          "text": "Niente da cambiare"
+        }
+      }
+    }
+  ],
+  "DrawingDisabledReason": [
+    "no_selection",
+    "needs_path",
+    "needs_text",
+    "needs_group",
+    "needs_two",
+    "read_only",
+    "unmapped",
+    {
+      "other": {
+        "text": "Niente da cambiare"
+      }
+    }
+  ],
+  "DrawingInput": [
+    {
+      "kind": "key",
+      "key": "Enter",
+      "code": "Enter",
+      "mods": {
+        "shift": true,
+        "alt": false,
+        "cmd": false,
+        "ctrl": true
+      },
+      "pressed": true
+    },
+    {
+      "kind": "ime",
+      "preedit": "かな",
+      "active": [
+        0,
+        2
+      ]
+    },
+    {
+      "kind": "ime",
+      "preedit": "",
+      "active": null
+    },
+    {
+      "kind": "text",
+      "text": "仮名"
+    }
+  ],
+  "DrawingOverlay": [
+    {
+      "kind": "marquee",
+      "rect": [
+        1.0,
+        2.0,
+        30.0,
+        40.0
+      ]
+    },
+    {
+      "kind": "path",
+      "d": "M0 0 C10 0 20 10 20 20",
+      "role": "preview",
+      "width": 1.0,
+      "dashed": false
+    },
+    {
+      "kind": "line",
+      "a": [
+        0.0,
+        0.0
+      ],
+      "b": [
+        10.0,
+        0.0
+      ],
+      "role": "guide",
+      "dashed": true
+    },
+    {
+      "kind": "anchor",
+      "at": [
+        20.0,
+        20.0
+      ],
+      "role": "selection",
+      "filled": true,
+      "size": 7.0
+    },
+    {
+      "kind": "curve_point",
+      "at": [
+        5.0,
+        5.0
+      ],
+      "role": "selection",
+      "filled": false,
+      "size": 6.0
+    },
+    {
+      "kind": "handle",
+      "at": [
+        10.0,
+        0.0
+      ],
+      "role": "selection"
+    },
+    {
+      "kind": "label",
+      "at": [
+        3.0,
+        4.0
+      ],
+      "text": "anchor",
+      "role": "guide"
+    },
+    {
+      "kind": "measure",
+      "at": [
+        3.0,
+        4.0
+      ],
+      "text": "W: 20 px"
+    },
+    {
+      "kind": "distance",
+      "a": [
+        0.0,
+        0.0
+      ],
+      "b": [
+        0.0,
+        12.0
+      ],
+      "text": "12 px",
+      "role": "measure"
+    },
+    {
+      "kind": "highlight",
+      "quad": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          5.0,
+          0.0
+        ],
+        [
+          5.0,
+          5.0
+        ],
+        [
+          0.0,
+          5.0
+        ]
+      ],
+      "role": "selection"
+    },
+    {
+      "kind": "swatch",
+      "at": [
+        8.0,
+        8.0
+      ],
+      "color": "#d55e00ff",
+      "selected": true
+    },
+    {
+      "kind": "grid_line",
+      "a": [
+        0.0,
+        0.0
+      ],
+      "b": [
+        100.0,
+        50.0
+      ],
+      "role": "perspective"
+    }
+  ],
+  "DrawingToolState": [
+    {
+      "busy": true,
+      "transforming": false,
+      "wants_text": true,
+      "composing": true,
+      "cursor": "pen_close",
+      "options": {
+        "rubber_band": true
+      }
     }
   ],
   "DrawingCommandRequest": [
@@ -3579,7 +4240,8 @@
       "selection": [
         "oa1a1a1a1"
       ],
-      "value": "#d55e00"
+      "value": "#d55e00",
+      "preview": false
     },
     {
       "revision": "18446744073709551614",
@@ -3587,7 +4249,8 @@
       "selection": [
         "oa1a1a1a1"
       ],
-      "value": null
+      "value": null,
+      "preview": false
     },
     {
       "revision": "18446744073709551614",
@@ -3595,7 +4258,28 @@
       "selection": [
         "oa1a1a1a1"
       ],
-      "value": 2.5
+      "value": 2.5,
+      "preview": true
+    },
+    {
+      "revision": "18446744073709551614",
+      "id": "disegno.strumento.opzione",
+      "selection": [],
+      "value": {
+        "strumento": "pen",
+        "chiave": "rubber_band",
+        "valore": false
+      },
+      "preview": false
+    },
+    {
+      "revision": "18446744073709551614",
+      "id": "disegno.famiglia.prepara",
+      "selection": [],
+      "value": {
+        "famiglia": "tracciati"
+      },
+      "preview": false
     }
   ]
 }

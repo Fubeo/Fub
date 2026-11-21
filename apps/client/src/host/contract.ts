@@ -26,10 +26,10 @@ import type {
   ContextKind,
   DocChange,
   DrawingLossKind,
+  DrawingOverlayRole,
   DrawingPhase,
   DrawingPointerKind,
   DrawingRefusal,
-  DrawingTool,
   EntryKind,
   Excerpts,
   Gate,
@@ -1878,17 +1878,113 @@ export const DRAWING_COMMAND_STROKE_COLOR = "disegno.colore-tratto";
 export const DRAWING_COMMAND_FILL_COLOR = "disegno.colore-riempimento";
 /** Spessore del tratto: `value` è un numero, zero o più. */
 export const DRAWING_COMMAND_WIDTH = "disegno.spessore";
+/** Un'opzione di uno strumento del motore: `value` è
+ *  `{ strumento: id, chiave: nome, valore: JSON }`. */
+export const DRAWING_COMMAND_TOOL_OPTION = "disegno.strumento.opzione";
+/** Prepara una famiglia di comandi del motore: `value` è `{ famiglia: id }`,
+ *  con l'id fra `DRAWING_FAMILIES`. */
+export const DRAWING_COMMAND_FAMILY_PREPARE = "disegno.famiglia.prepara";
+/** Le 26 famiglie della mappa del motore (`crates/fub-disegno/mappa.tsv`). */
+export const DRAWING_FAMILIES = [
+  "aspetto", "automazione", "colore", "dati", "dinamici", "effetti", "formati",
+  "forme", "grafici", "immagini", "livelli", "nucleo", "pennelli", "prospettiva",
+  "pulizia", "raster", "simboli", "stampa", "tavole", "testo", "tracciati",
+  "trame", "trasforma", "tre-d", "vista", "web",
+] as const;
+/** L'id di uno strumento del motore, al più (ASCII: lettere, cifre, `_`, `-`). */
+export const MAX_DRAWING_TOOL_ID_BYTES = 64;
+/** Gli ingressi da tastiera di una sola richiesta di gesto, al più. */
+export const MAX_DRAWING_INPUTS = 10_000;
 
-// Che specie di parte resta com'è; la fase, lo strumento e la specie di un
-// evento del gesto; perché un gesto non ha fatto niente (`locked` e `hidden`
-// sono il livello bloccato o nascosto, come negli strumenti di oggi).
+// Che specie di parte resta com'è; la fase e la specie di un evento del
+// gesto; perché un gesto non ha fatto niente (`locked` e `hidden` sono il
+// livello bloccato o nascosto, come negli strumenti di oggi; `no_memory`,
+// `no_preview` e `unknown_tool` vengono dagli strumenti e dai comandi del
+// motore); il ruolo di un segno, che il client colora con i suoi token.
 export type {
   DrawingLossKind,
+  DrawingOverlayRole,
   DrawingPhase,
   DrawingPointerKind,
   DrawingRefusal,
-  DrawingTool,
 } from "./enums.generated";
+
+/** Lo strumento di un gesto: uno dei sei di K5, o uno del motore per id
+ *  (`{ engine: { id: "pen" } }`, T4 di K6). */
+export type DrawingTool =
+  | "select"
+  | "rect"
+  | "ellipse"
+  | "line"
+  | "arrow"
+  | "text"
+  | { engine: { id: string } };
+
+/** I modificatori di un tasto; un campo che manca vale `false`. */
+export interface DrawingKeyMods {
+  shift?: boolean;
+  /** Option su macOS. */
+  alt?: boolean;
+  /** Ctrl su Windows e Linux, ⌘ su macOS. */
+  cmd?: boolean;
+  /** Ctrl su macOS (altrove è `cmd`). */
+  ctrl?: boolean;
+}
+
+/** Un ingresso da tastiera di un gesto con uno strumento del motore: lo
+ *  strumento lo vede dopo i puntatori della stessa richiesta. `active` è
+ *  `[da, a)` in caratteri Unicode di `preedit`, non in unità UTF-16. */
+export type DrawingInput =
+  | { kind: "key"; key: string; code: string; mods?: DrawingKeyMods; pressed: boolean }
+  | { kind: "text"; text: string }
+  | { kind: "ime"; preedit: string; active?: [number, number] | null };
+
+/** Un punto `[x, y]` in coordinate di scena. */
+export type DrawingPoint = [number, number];
+
+/** Un segno di uno strumento del motore, in coordinate di scena; `width` e
+ *  `size` sono pixel dello schermo. I testi di `label`, `measure` e
+ *  `distance` vengono dal motore. */
+export type DrawingOverlay =
+  | { kind: "marquee"; rect: [number, number, number, number] }
+  | { kind: "path"; d: string; role: DrawingOverlayRole; width: number; dashed: boolean }
+  | { kind: "line"; a: DrawingPoint; b: DrawingPoint; role: DrawingOverlayRole; dashed: boolean }
+  | { kind: "anchor"; at: DrawingPoint; role: DrawingOverlayRole; filled: boolean; size: number }
+  | { kind: "curve_point"; at: DrawingPoint; role: DrawingOverlayRole; filled: boolean; size: number }
+  | { kind: "handle"; at: DrawingPoint; role: DrawingOverlayRole }
+  | { kind: "label"; at: DrawingPoint; text: string; role: DrawingOverlayRole }
+  | { kind: "measure"; at: DrawingPoint; text: string }
+  | { kind: "distance"; a: DrawingPoint; b: DrawingPoint; text: string; role: DrawingOverlayRole }
+  | { kind: "highlight"; quad: [DrawingPoint, DrawingPoint, DrawingPoint, DrawingPoint]; role: DrawingOverlayRole }
+  | { kind: "swatch"; at: DrawingPoint; color: string; selected: boolean }
+  | { kind: "grid_line"; a: DrawingPoint; b: DrawingPoint; role: DrawingOverlayRole };
+
+/** Lo stato dello strumento del motore fra un gesto e l'altro. */
+export interface DrawingToolState {
+  /** Un'interazione è in corso (un trascinamento, un tracciato aperto). */
+  busy: boolean;
+  transforming: boolean;
+  /** Lo strumento vuole il testo: le scorciatoie a un tasto non partono. */
+  wants_text: boolean;
+  /** Un IME sta componendo: tasti, scorciatoie e annulla aspettano. */
+  composing: boolean;
+  /** Il puntatore in `snake_case` (`arrow`, `pen_close`); uno sconosciuto è la freccia. */
+  cursor: string;
+  /** Le opzioni dello strumento, `null` se non ne ha. */
+  options: unknown;
+}
+
+/** Perché un comando è spento: il client lo dice con i suoi testi; `other`
+ *  porta il testo del motore. */
+export type DrawingDisabledReason =
+  | "no_selection"
+  | "needs_path"
+  | "needs_text"
+  | "needs_group"
+  | "needs_two"
+  | "read_only"
+  | "unmapped"
+  | { other: { text: string } };
 
 /** Una parte del disegno che il motore non sa modificare. */
 export interface DrawingLoss {
@@ -1970,6 +2066,8 @@ export interface DrawingGesture {
    *  tiene una. Il Rust la legge anche assente (`#[serde(default)]`). */
   frame: DrawingFrame | null;
   events: DrawingPointer[];
+  /** Tasti, testo e IME, solo per uno strumento del motore; può mancare. */
+  inputs?: DrawingInput[];
 }
 
 /** La cornice di trasformazione che il client tiene (`Frame` di
@@ -1988,6 +2086,8 @@ export interface DrawingPreview {
   shape: unknown | null;
   matrix: [number, number, number, number, number, number] | null;
   marquee: [number, number, number, number] | null;
+  /** I segni di uno strumento del motore, nell'ordine in cui si disegnano. */
+  overlays?: DrawingOverlay[];
 }
 
 export interface DrawingOutcome {
@@ -2001,11 +2101,18 @@ export interface DrawingOutcome {
   /** La cornice che il client tiene per la selezione dopo, com'è diventata
    *  (la forma di `DrawingGesture.frame`); `null`: nessuna. */
   frame: DrawingFrame | null;
+  /** Lo strumento del motore dopo il gesto o dopo un'opzione; `null` per gli
+   *  strumenti di K5 e per i comandi. */
+  state?: DrawingToolState | null;
+  /** La lettura di un comando che legge e non cambia niente; `null` per gli altri. */
+  reading?: unknown;
 }
 
 export interface DrawingCommandInfo {
   id: string;
   enabled: boolean;
+  /** Perché è spento; `null` se è acceso. */
+  disabled_reason?: DrawingDisabledReason | null;
 }
 
 export interface DrawingCommandRequest {
@@ -2013,6 +2120,10 @@ export interface DrawingCommandRequest {
   id: string;
   selection: string[];
   value: unknown;
+  /** L'anteprima: il comando gira su una copia e le operazioni non entrano
+   *  nella cronologia; chi non ne sa dare risponde `no_preview`. Può mancare
+   *  (vale `false`). */
+  preview?: boolean;
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).
