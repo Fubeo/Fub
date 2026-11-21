@@ -1741,6 +1741,13 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: hidden;
   white-space: nowrap;
 }
+/* Un gruppo della fila non si stringe: il suo testo resta intero, e se non ci
+   sta il gruppo va in «…» (`kit/options-bar.ts`), non si tronca a «S…». La
+   misura del conto è la larghezza vera del gruppo. */
+.kit-options-row > *,
+.kit-options-row .kit-bar-button {
+  flex: none;
+}
 /* Col mouse i pulsanti della fila sono alti 28, come nella barra a schede; col
    dito sono bersagli da 44. */
 @media (pointer: fine) {
