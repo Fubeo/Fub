@@ -173,6 +173,7 @@ import { installClipboardCommands } from "./editor/clipboard-commands";
 import { installVaultImages } from "./editor/vault-images";
 import { installLife } from "./editor/life";
 import { installGestiMotore, type MotoreDelDisegno } from "../motore/gesti";
+import type { DrawingToolState } from "../../../host/contract";
 import type { SpazioSalvato } from "./saved-workspaces";
 
 /// Il layout di uno spazio salvato: quello che lo spazio porta all'editor.
@@ -349,6 +350,8 @@ export interface DrawEditorOptions {
   /// Senza, o finché non c'è, gli strumenti fanno da sé, come sempre. Il
   /// foglio delle annotazioni non lo usa.
   readonly motore?: MotoreDelDisegno;
+  /// La famiglia di uno strumento del motore (K6 T8) si prepara con questo: risolve `true` se è pronta. Di serie è pronta da sé.
+  readonly preparaMotore?: (id: string) => Promise<boolean>;
   /// Dove stanno barra, colonna, foglio e pannelli (default
   /// `inlineChrome()`: tutto dentro l'editor).
   readonly chrome?: DrawChrome;
@@ -422,6 +425,12 @@ export interface DrawEditor {
   /// La colonna, la scheda e la sezione adesso, per salvare lo spazio.
   spaceSnapshot(): { colonna: string[]; scheda: "design" | "layers"; sezione: string | null; righelli: boolean };
   setTool(id: ToolId): void;
+  /// Lo strumento del motore scelto (K6 T8), o `null` per tornare a quelli di oggi.
+  setEngineTool(id: string | null): void;
+  /// Manda l'opzione `chiave` dello strumento del motore `id` (K6 T8); il gesto dopo la vede.
+  setEngineOption(id: string, chiave: string, valore: unknown): void;
+  /// Lo stato dello strumento del motore `id` dall'ultimo esito che l'ha portato (K6 T8).
+  statoStrumento(id: string): DrawingToolState | null;
   /// Il colore dello strumento di adesso: uno della tavolozza o, dal livello
   /// Standard, uno a piacere, come lo legge `customColor`.
   setColor(color: string): void;
@@ -517,7 +526,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const {
     has, following, style, history, root, surface, labelSurface, suggestions, panel, cursorMark, boardsNow, editable, newIds, showGrid,
     fit, selectedUnits, showHandles, closeDescriptions, showPanel, syncProperties, refresh, commit, undo, redo, deleteSelection, select,
-    reveal, adopt, setReadOnly, setTool, setColor, setWidth, cancelGesture, undoable, redoable,
+    reveal, adopt, setReadOnly, setTool, sceltaMotore, setColor, setWidth, cancelGesture, undoable, redoable,
     visibleBoundsOf, dispose
   } = ctx;
   const stage: DrawStage = {
@@ -638,6 +647,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     completoFailed: () => ctx.completoFailed(),
     spaceSnapshot: () => ctx.spaceSnapshot(),
     setTool,
+    setEngineTool: (id) => sceltaMotore(id),
+    setEngineOption: (id, chiave, valore) => ctx.opzioneMotore(id, chiave, valore),
+    statoStrumento: (id) => ctx.statoStrumento(id),
     setColor: (color) => setColor(color),
     setWidth,
     replay: (speed) => ctx.replay(speed),

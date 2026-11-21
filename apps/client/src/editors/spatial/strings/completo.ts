@@ -158,6 +158,8 @@ export const RISORSE_EN: Record<keyof typeof RISORSE_IT, string> = {
 /// gli strumenti», il cassetto con la ricerca e i nomi dei suoi gruppi.
 export const COLONNA_IT = {
   "draw.chrome.column.all": "Tutti gli strumenti",
+  "draw.engine.tool": "Strumento del motore",
+  "draw.engine.prepare.failed": "Lo strumento non si è preparato: lo strumento di prima resta. Riprova.",
   "draw.chrome.drawer.title": "Tutti gli strumenti",
   "draw.chrome.drawer.note": "Scegline uno per usarlo adesso.",
   "draw.chrome.drawer.search": "Cerca uno strumento",
@@ -173,6 +175,8 @@ export const COLONNA_IT = {
 /// L'inglese della colonna e del cassetto.
 export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.chrome.column.all": "All tools",
+  "draw.engine.tool": "Engine tool",
+  "draw.engine.prepare.failed": "The tool did not get ready: the previous tool stays. Try again.",
   "draw.chrome.drawer.title": "All tools",
   "draw.chrome.drawer.note": "Choose one to use it now.",
   "draw.chrome.drawer.search": "Search for a tool",
