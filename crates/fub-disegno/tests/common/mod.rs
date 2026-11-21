@@ -9,6 +9,8 @@
 //! scritto sta in un `.tsv` di differenze ammesse (`vettore<TAB>perché`).
 #![allow(dead_code)]
 
+pub mod applica;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
