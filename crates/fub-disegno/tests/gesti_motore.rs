@@ -410,7 +410,7 @@ fn l_opzione_di_uno_strumento_resta_per_i_gesti_dopo() {
 }
 
 #[test]
-fn preparare_una_famiglia_si_controlla_ma_non_si_fa_ancora() {
+fn preparare_una_famiglia_si_controlla_e_la_avvia() {
     let (mut d, _) = apri(DISEGNO);
     let richiesta = DrawingCommandRequest {
         revision: d.revisione(),
@@ -420,6 +420,20 @@ fn preparare_una_famiglia_si_controlla_ma_non_si_fa_ancora() {
         preview: false,
     };
     let esito = d.comando(richiesta.clone()).expect("la risposta");
+    // Con il Completo la famiglia nasce in sottofondo e la risposta dice a
+    // che punto è; senza, non ci sono famiglie.
+    #[cfg(feature = "completo")]
+    {
+        assert_eq!(esito.refused, None, "{esito:?}");
+        assert!(esito.ops.is_none(), "{esito:?}");
+        let lettura = esito.reading.as_ref().expect("la lettura");
+        assert_eq!(lettura["famiglia"], "tracciati");
+        assert!(
+            ["pronta", "in-corso"].contains(&lettura["stato"].as_str().unwrap_or_default()),
+            "{lettura}"
+        );
+    }
+    #[cfg(not(feature = "completo"))]
     assert_eq!(esito.refused, Some(DrawingRefusal::Unsupported));
     let ignota = d.comando(DrawingCommandRequest {
         value: json!({ "famiglia": "magia" }),

@@ -62,8 +62,11 @@ questi pezzi:
    [le porte del disegno](../reference/drawing-ipc.md)). Con `preview` il
    comando gira su una copia e non entra nella cronologia (arriva con T4).
 4. **La famiglia.** In `fub-disegno` il comando trova la sua famiglia
-   (`crates/fub-disegno/src/famiglie/`, arriva con T3), che nasce al primo
-   uso, poi il motore lo esegue sulla copia.
+   (`crates/fub-disegno/src/famiglie/`, letta da `mappa.tsv`), che nasce
+   al primo uso, poi il motore lo esegue sulla copia nella sessione di K5.
+   Passa solo una riga «fatto» della mappa; una «da fare» è `Unserved`, e
+   una `fub`, esclusa o dietro una feature del motore spenta è
+   `unsupported`.
 5. **La differenza.** Il motore confronta la copia prima e dopo
    (`crates/fub-disegno/src/differenza.rs`) e rende le operazioni di scena.
    Ciò che l'SVG non sa dire va nella ricetta in `<metadata>` (arriva con
@@ -104,7 +107,7 @@ un ponte solo (arriva con T4):
 |---|---|---|
 | la mappa | `crates/fub-disegno/mappa.tsv` e la sua guardia (arriva con T2) | è il contratto della parità; una riga cambia stato solo con la sua prova |
 | l'indice | `fub-disegno`, che lo genera nel client come un mirror (arriva con T5) | il client non nomina il motore e non ha un elenco scritto a mano |
-| le famiglie | nel processo `fub-disegno` (arriva con T3), nel client i chunk `drawing-fam-<id>` (arriva con T5) | sono le unità pigre; una famiglia non importa un'altra |
+| le famiglie | nel processo `crates/fub-disegno/src/famiglie/` (feature `completo`), nel client i chunk `drawing-fam-<id>` (arriva con T5) | sono le unità pigre; una famiglia non importa un'altra |
 | il `Budget` | lo strato dei motori, `crates/fub-motori/src/memoria.rs` | libera le cache delle famiglie quando serve ([Lo strato dei motori](motori.md)) |
 | le librerie dell'utente | il kernel, in `.fub/plugins/fub.draw/librerie/` del vault (arriva con T30) | il motore non tocca il disco; le librerie viaggiano con il vault |
 | il disco | il kernel; il motore lo ha negato per tutto il processo ([il disco](#il-disco)) | ogni byte del motore passa da Fub |
@@ -137,7 +140,28 @@ Nel processo il codice del Completo è compilato, e pigro è lo stato: il
 motore nasce al primo disegno aperto (o con `warm_engine`), una famiglia al
 suo primo uso o quando uno spazio di lavoro la prepara, e mai con il suo
 componente spento. Lo stato di una famiglia sta in un `Pigro` dello strato
-dei motori, e le sue cache nel `Budget`, che le libera (arriva con T3).
+dei motori. Nata, si iscrive nel `Budget` come cache `disegno.<famiglia>`:
+i suoi byte sono quelli delle tabelle del motore che possiede (la patch
+0008, [Il disco](#il-disco)), e liberarla svuota quelle tabelle e la rimette
+da nascere, così il comando dopo la rifà. Un comando che la tiene tiene il
+suo stato fino alla fine, anche se il `Budget` la libera intanto. Le 26
+famiglie stanno in `famiglie/<id>.rs`, uno per famiglia, con lo stato vuoto
+finché il task della famiglia non lo riempie.
+
+`disegno.famiglia.prepara` avvia la nascita come lavoro dello strato dei
+motori (`Lavori::in_sottofondo`) e risponde subito con lo stato: `pronta`,
+`in-corso` o il rifiuto `no_memory` se il `Budget`, già liberato quanto
+poteva, resta sopra il tetto. Una seconda preparazione, o un comando della
+stessa famiglia, si unisce al lavoro in corso. Un lavoro finito dopo che il
+componente si è spento si butta: le famiglie contano i giri, come i motori.
+
+Il componente spento nel vault: ogni `disegno.*` tranne i tre di K5
+risponde `Unserved` (`host.drawing.complete_off`), `famiglia.prepara`
+compreso, e `drawing_commands` elenca solo i tre di K5; nessuna famiglia
+nasce. Spegnerlo libera le famiglie nate e le toglie dal `Budget`. In una
+build senza la feature `drawing-complete` di `fub-host` gli stessi comandi
+rispondono `Unserved` (`host.drawing.complete_missing`). «Chiudi tutto»
+rende il motore e, con lui, le famiglie.
 
 ## Il disco
 
@@ -189,8 +213,10 @@ rompere i documenti aperti, e il loro peso entra lo stesso nei conti.
 
 ## Le due strade
 
-Il componente «Disegno completo» (arriva con T3) richiede il «Motore del
-disegno» e si spegne con lui. Con il componente spento il Completo è quello
+Il componente «Disegno completo» (`fub.disegno-completo`, in «Disegnare»,
+acceso di serie) richiede il «Motore del disegno» e si spegne con lui: un
+vault che aveva spento soltanto il motore legge spento anche il Completo,
+senza che il file cambi. Con il componente spento il Completo è quello
 nativo, scritto in TypeScript, e il file si apre e si salva come prima. Con
 il motore spento valgono gli strumenti semplici, come dice
 [quando il motore manca](disegno.md#quando-il-motore-manca).

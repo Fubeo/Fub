@@ -52,6 +52,12 @@ pub const PDF: &str = "fub.pdf";
 /// chiude le sue istanze nel vault.
 pub const MOTORE_DISEGNO: &str = "fub.motore-vettoriale";
 
+/// Il Disegno completo (piano K6): una riga senza bundle che richiede il
+/// motore, spenta a mano in `components.off`. Spento, i comandi `disegno.*`
+/// oltre ai tre di K5 rispondono `Unserved` e nessuna famiglia nasce
+/// (`crate::drawing`).
+pub const DISEGNO_COMPLETO: &str = "fub.disegno-completo";
+
 /// Le chiavi dello stato, nell'ordine in cui [`Chiavi`] le legge.
 const CHIAVI: [&str; 5] = [
     PLUGINS_DISABLED,
@@ -262,13 +268,31 @@ impl Lettura {
         };
         let off = valide(COMPONENTS_OFF, &senza_bundle_spegnibile);
         let kept = valide(COMPONENTS_KEPT, &|r: &Riga| r.gruppo == SUPPORTO);
+        // Spenta a mano una riga senza bundle, è spento anche chi la richiede
+        // fra le righe senza bundle, a catena: un vault scritto prima che una
+        // riga ne richiedesse un'altra (`components.off` con il solo Motore
+        // del disegno, prima del Disegno completo) resta com'era, e non si
+        // riaccende il motore perché il Completo, scelto di serie, lo
+        // richiede.
+        let mut spenti: BTreeSet<&str> = off.iter().map(String::as_str).collect();
+        loop {
+            let prima = spenti.len();
+            for r in righe.iter().filter(|r| senza_bundle_spegnibile(r)) {
+                if r.requires.iter().any(|q| spenti.contains(q)) {
+                    spenti.insert(r.id);
+                }
+            }
+            if spenti.len() == prima {
+                break;
+            }
+        }
         let di_base = |r: &Riga| {
             r.gruppo != SUPPORTO
                 && !nucleo(r.id)
                 && if r.bundle {
                     !disabled.contains(r.id)
                 } else {
-                    !off.contains(r.id)
+                    !spenti.contains(r.id)
                 }
         };
         // In attesa sta solo ciò che senza la risposta sarebbe acceso: un
@@ -598,23 +622,53 @@ pub(crate) fn motore_disegno_spento(setting: impl Fn(&str) -> Option<SettingValu
     nomina(COMPONENTS_OFF, MOTORE_DISEGNO) || nomina(PLUGINS_DISABLED, fub_features::draw::DRAW_ID)
 }
 
+/// Se il Disegno completo è spento in un vault, dato come legge le sue chiavi
+/// (`setting`): spento a mano (`components.off`), o spento il motore che
+/// richiede ([`motore_disegno_spento`]), anche quando la riga del Completo si
+/// legge accesa.
+#[cfg(feature = "drawing-complete")]
+pub(crate) fn disegno_completo_spento(setting: impl Fn(&str) -> Option<SettingValue>) -> bool {
+    let spento_a_mano = setting(COMPONENTS_OFF)
+        .as_ref()
+        .and_then(SettingValue::as_list)
+        .is_some_and(|ids| ids.iter().any(|nome| nome == DISEGNO_COMPLETO));
+    spento_a_mano || motore_disegno_spento(setting)
+}
+
 impl Host {
     /// Se il Motore del disegno è spento nel vault nominato
     /// ([`motore_disegno_spento`]).
     #[cfg(feature = "engine-drawing")]
     pub(crate) fn drawing_engine_off(&self, vault: Option<&str>) -> Result<bool, PluginError> {
+        Ok(motore_disegno_spento(self.drawing_keys(vault)?))
+    }
+
+    /// Se il Disegno completo è spento nel vault nominato
+    /// ([`disegno_completo_spento`]).
+    #[cfg(feature = "drawing-complete")]
+    pub(crate) fn drawing_complete_off(&self, vault: Option<&str>) -> Result<bool, PluginError> {
+        Ok(disegno_completo_spento(self.drawing_keys(vault)?))
+    }
+
+    /// Le due chiavi che dicono se il motore o il Completo sono spenti, lette
+    /// una volta sola: la funzione che le rende per nome.
+    #[cfg(feature = "engine-drawing")]
+    fn drawing_keys(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<impl Fn(&str) -> Option<SettingValue>, PluginError> {
         const CHIAVI_DEL_MOTORE: [&str; 2] = [COMPONENTS_OFF, PLUGINS_DISABLED];
         let valori: Vec<(&str, SettingValue)> = CHIAVI_DEL_MOTORE
             .into_iter()
             .zip(self.settings_with_source(vault, &CHIAVI_DEL_MOTORE)?)
             .map(|(chiave, (value, _))| (chiave, value))
             .collect();
-        Ok(motore_disegno_spento(|chiave| {
+        Ok(move |chiave: &str| {
             valori
                 .iter()
                 .find(|(nota, _)| *nota == chiave)
                 .map(|(_, value)| value.clone())
-        }))
+        })
     }
 
     fn chiavi_dei_componenti(&self, vault: Option<&str>) -> Result<Chiavi, PluginError> {
@@ -694,11 +748,11 @@ impl Host {
         // istanze nel vault si chiudono. Riacceso, l'host non riapre niente:
         // riapre il client.
         #[cfg(feature = "engine-drawing")]
-        if esito
-            .scritture
-            .iter()
-            .any(|s| s.id == MOTORE_DISEGNO || s.id == fub_features::draw::DRAW_ID)
-        {
+        if esito.scritture.iter().any(|s| {
+            s.id == MOTORE_DISEGNO
+                || s.id == DISEGNO_COMPLETO
+                || s.id == fub_features::draw::DRAW_ID
+        }) {
             self.drawing_engine_switched(&root);
         }
         esito.applicato = true;

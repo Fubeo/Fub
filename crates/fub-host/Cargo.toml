@@ -35,7 +35,7 @@ fub-format-craft = { workspace = true, optional = true }
 # Il motore del disegno, dietro la feature `engine-drawing` qui sotto: è
 # l'adattatore, l'unico crate che nomina VectorCraft, e l'host lo prende solo
 # da lì. Per percorso e non dalla radice perché lo prende soltanto l'host.
-fub-disegno = { path = "../fub-disegno", version = "0.1.0", optional = true }
+fub-disegno = { path = "../fub-disegno", version = "0.1.0", optional = true, default-features = false }
 fub-importers = { workspace = true }
 fub-kernel = { workspace = true }
 serde = { workspace = true }
@@ -165,7 +165,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [features]
-default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw", "engine-drawing", "craft"]
+default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw", "engine-drawing", "drawing-complete", "craft"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 
 # I documenti di videoscrittura (`fub-format-rich`: Word, OpenDocument, RTF,
@@ -249,6 +249,13 @@ draw = ["dep:fub-format-svg", "fub-features/draw"]
 # che si spegne a mano in `components.off` come il PDF. Nel `default`; la CI
 # prova anche i disegni senza il motore, in un passo suo.
 engine-drawing = ["draw", "dep:fub-disegno", "fub-features/engine-drawing"]
+
+# Il Disegno completo (piano K6): le famiglie pigre del motore e i comandi
+# `disegno.<id>` oltre ai tre di K5 (`fub-disegno/completo`). Inoltra la riga
+# «Disegno completo» della mappa dei componenti, che si spegne in
+# `components.off` e si spegne con il motore. Nel `default`; senza, i comandi
+# del motore oltre ai tre di K5 rispondono `Unserved`.
+drawing-complete = ["engine-drawing", "fub-disegno/completo", "fub-features/drawing-complete"]
 
 # I file delle app Craft (`fub-format-craft`): i quattro formati a byte in sola
 # lettura (metadati, testo per la ricerca, file collegati) e il bundle

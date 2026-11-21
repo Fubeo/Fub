@@ -193,8 +193,18 @@ leggono come prima.
   e porta lo `state` con le opzioni nuove. Senza anteprima: con `preview` è
   `no_preview`.
 - **La famiglia**, `disegno.famiglia.prepara`, è `{"famiglia": "testo"}` con
-  una delle 26 famiglie della mappa del motore (`DRAWING_FAMILIES`); per ora
-  la richiesta si convalida soltanto, e il motore risponde `unsupported`.
+  una delle 26 famiglie della mappa del motore (`DRAWING_FAMILIES`). La
+  famiglia nasce in un lavoro in sottofondo e la risposta arriva subito:
+  una lettura `{"famiglia": "testo", "stato": "pronta" | "in-corso"}`, o il
+  rifiuto `no_memory`; una preparazione fallita lo dice una volta, come
+  `Internal`. Senza anteprima: con `preview` è `no_preview`.
+- **Gli altri comandi del motore**, `disegno.<id del motore>`: le righe
+  «fatto» della mappa, che `drawing_commands` elenca dopo i tre di K5. Rende
+  le operazioni se il documento cambia, la `reading` se il comando legge
+  soltanto; argomenti che il motore rifiuta sono `BadArgs`, una riga «da
+  fare» è `Unserved`, un id che il motore non serve qui `unsupported`. Con
+  il Disegno completo spento nel vault, o senza la feature
+  `drawing-complete`, ogni comando tranne i tre di K5 è `Unserved`.
 
 Dal lato del client gli strumenti del motore li usa per ora soltanto l'host
 finto (`host/fake.ts`): senza risposte del banco, uno strumento del motore

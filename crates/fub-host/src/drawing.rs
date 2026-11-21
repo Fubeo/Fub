@@ -181,6 +181,19 @@ mod engine {
             closed
         }
 
+        /// Il Disegno completo si è spento in un vault: le famiglie nate si
+        /// liberano e lasciano il `Budget`, e l'esito di una preparazione in
+        /// corso si butta. Solo un motore già nato: spegnere non lo
+        /// costruisce. Le famiglie sono del motore del processo, quindi un
+        /// altro vault con il Completo acceso le rifà al suo comando dopo.
+        #[cfg(feature = "drawing-complete")]
+        pub(crate) fn switch_complete_off(&self) {
+            if let Some(engine) = self.engine.get() {
+                engine.famiglie().spegni();
+                tracing::debug!("fub.disegno: il Completo si spegne, le famiglie si liberano");
+            }
+        }
+
         /// Ogni vault si chiude.
         pub(crate) fn forget_all(&self) {
             let gone = match self.open.lock() {
@@ -232,6 +245,19 @@ mod engine {
     /// semplici, come in una build senza il motore.
     pub(super) fn switched_off() -> PluginError {
         PluginError::Unserved(Text::key("host.drawing.engine_off"))
+    }
+
+    /// Il Disegno completo è spento nel vault: restano i tre comandi di K5.
+    #[cfg(feature = "drawing-complete")]
+    pub(super) fn complete_switched_off() -> PluginError {
+        PluginError::Unserved(Text::key("host.drawing.complete_off"))
+    }
+
+    /// Il Disegno completo non c'è in questa build (senza la feature
+    /// `drawing-complete`): restano i tre comandi di K5.
+    #[cfg(not(feature = "drawing-complete"))]
+    pub(super) fn complete_missing() -> PluginError {
+        PluginError::Unserved(Text::key("host.drawing.complete_missing"))
     }
 
     /// Un'istanza il cui lucchetto è avvelenato: una chiamata al motore si è
@@ -317,9 +343,19 @@ impl Host {
         }
     }
 
-    /// `apply_components` ha cambiato la riga del motore o dei disegni nel
-    /// vault `root`: spento, le istanze del vault si chiudono. Acceso, niente.
+    /// `apply_components` ha cambiato la riga del motore, del Completo o dei
+    /// disegni nel vault `root`: spento il motore, le istanze del vault si
+    /// chiudono; spento il Completo (anche con il motore), le sue famiglie si
+    /// liberano. Acceso, niente.
     pub(crate) fn drawing_engine_switched(&self, root: &camino::Utf8Path) {
+        #[cfg(feature = "drawing-complete")]
+        match self.drawing_complete_off(Some(root.as_str())) {
+            Ok(true) => self.drawings.switch_complete_off(),
+            Ok(false) => {}
+            Err(error) => {
+                tracing::debug!(vault = %root, %error, "fub.disegno: lo stato del Completo non si legge");
+            }
+        }
         match self.drawing_engine_off(Some(root.as_str())) {
             Ok(true) => {
                 self.drawings.switch_off(root);
@@ -328,6 +364,43 @@ impl Host {
             Err(error) => {
                 tracing::debug!(vault = %root, %error, "fub.disegno: lo stato del motore non si legge");
             }
+        }
+    }
+
+    /// Se il Completo serve il comando `id` nel vault nominato: i tre comandi
+    /// di K5 passano sempre; ogni altro `disegno.*` (gli strumenti del
+    /// motore e `famiglia.prepara` compresi) risponde `Unserved` con il
+    /// Completo spento nel vault, o senza la feature `drawing-complete`. Le
+    /// chiavi si leggono a ogni comando, che è un gesto della persona, non a
+    /// ogni evento del puntatore.
+    fn complete_serves(&self, vault: Option<&str>, id: &str) -> Result<(), PluginError> {
+        if fub_abi::DRAWING_COMMANDS.contains(&id) {
+            return Ok(());
+        }
+        #[cfg(feature = "drawing-complete")]
+        {
+            if self.drawing_complete_off(vault)? {
+                return Err(engine::complete_switched_off());
+            }
+            Ok(())
+        }
+        #[cfg(not(feature = "drawing-complete"))]
+        {
+            let _ = vault;
+            Err(engine::complete_missing())
+        }
+    }
+
+    /// Se il Completo è acceso nel vault nominato: senza la feature, mai.
+    fn complete_on(&self, vault: Option<&str>) -> Result<bool, PluginError> {
+        #[cfg(feature = "drawing-complete")]
+        {
+            Ok(!self.drawing_complete_off(vault)?)
+        }
+        #[cfg(not(feature = "drawing-complete"))]
+        {
+            let _ = vault;
+            Ok(false)
         }
     }
 }
@@ -434,7 +507,15 @@ impl Host {
         #[cfg(feature = "engine-drawing")]
         {
             engine::selection(selection)?;
-            self.with_drawing(vault, instance, |drawing| Ok(drawing.comandi(selection)))
+            let complete = self.complete_on(vault)?;
+            self.with_drawing(vault, instance, |drawing| {
+                let mut commands = drawing.comandi(selection);
+                // Il Completo spento: i tre di K5, e nient'altro.
+                if !complete {
+                    commands.retain(|c| fub_abi::DRAWING_COMMANDS.contains(&c.id.as_str()));
+                }
+                Ok(commands)
+            })
         }
         #[cfg(not(feature = "engine-drawing"))]
         {
@@ -453,6 +534,7 @@ impl Host {
         #[cfg(feature = "engine-drawing")]
         {
             request.validate()?;
+            self.complete_serves(vault, &request.id)?;
             self.with_drawing(vault, instance, |drawing| drawing.comando(request))
         }
         #[cfg(not(feature = "engine-drawing"))]

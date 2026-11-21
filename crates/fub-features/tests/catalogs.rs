@@ -455,6 +455,7 @@ fn the_component_names_are_those_of_the_plan() {
         ("component.motore-documenti.name", "Motore dei documenti"),
         ("component.motore-fogli.name", "Motore dei fogli"),
         ("component.motore-vettoriale.name", "Motore del disegno"),
+        ("component.disegno-completo.name", "Disegno completo"),
     ] {
         assert_eq!(
             it.entries.get(key).map(String::as_str),

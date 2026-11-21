@@ -16,7 +16,9 @@
 //!
 //! Il motore del disegno non ha oggi cache raggiungibili da fuori che valga
 //! contare: [`MotoreDisegno::byte`] è zero e svuotare rende la memoria al
-//! sistema.
+//! sistema. Con la feature `completo`, [`Disegni`] tiene anche le famiglie
+//! ([`crate::famiglie`]): nascono al loro primo comando, contano nei byte del
+//! motore e si liberano con lui.
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -100,6 +102,13 @@ pub struct Disegni {
     pigro: Arc<Pigro<MotoreDisegno>>,
     servizi: Arc<Servizi>,
     aperte: AtomicUsize,
+    /// Le famiglie del Completo, sugli stessi servizi.
+    #[cfg(feature = "completo")]
+    famiglie: Arc<crate::famiglie::Famiglie>,
+    /// Vero se si eseguono anche le righe da fare della mappa (solo le
+    /// prove: [`Disegni::filtra`]).
+    #[cfg(feature = "completo")]
+    tutte: std::sync::atomic::AtomicBool,
 }
 
 impl Disegni {
@@ -123,6 +132,10 @@ impl Disegni {
     pub fn nuovi(servizi: Arc<Servizi>) -> Arc<Disegni> {
         Arc::new(Disegni {
             pigro: Arc::new(Pigro::nuovo(MotoreDisegno::crea)),
+            #[cfg(feature = "completo")]
+            famiglie: crate::famiglie::Famiglie::nuove(Arc::clone(&servizi)),
+            #[cfg(feature = "completo")]
+            tutte: std::sync::atomic::AtomicBool::new(false),
             servizi,
             aperte: AtomicUsize::new(0),
         })
@@ -154,6 +167,42 @@ impl Disegni {
         self.aperte.load(Ordering::SeqCst)
     }
 
+    /// Le famiglie del Completo.
+    #[cfg(feature = "completo")]
+    pub fn famiglie(&self) -> &Arc<crate::famiglie::Famiglie> {
+        &self.famiglie
+    }
+
+    /// Quali righe della mappa si eseguono. [`crate::famiglie::Filtro::Tutte`]
+    /// è una configurazione delle prove: l'IPC non la accende.
+    #[cfg(feature = "completo")]
+    #[doc(hidden)]
+    pub fn filtra(&self, filtro: crate::famiglie::Filtro) {
+        let tutte = filtro == crate::famiglie::Filtro::Tutte;
+        self.tutte.store(tutte, Ordering::SeqCst);
+    }
+
+    #[cfg(feature = "completo")]
+    fn filtro(&self) -> crate::famiglie::Filtro {
+        if self.tutte.load(Ordering::SeqCst) {
+            crate::famiglie::Filtro::Tutte
+        } else {
+            crate::famiglie::Filtro::Fatte
+        }
+    }
+
+    /// Libera le famiglie nate; zero senza la feature `completo`.
+    fn libera_le_famiglie(&self) -> u64 {
+        #[cfg(feature = "completo")]
+        {
+            self.famiglie.libera_tutte()
+        }
+        #[cfg(not(feature = "completo"))]
+        {
+            0
+        }
+    }
+
     fn prendi(self: &Arc<Self>, motore: Arc<MotoreDisegno>) -> Presa {
         self.aperte.fetch_add(1, Ordering::SeqCst);
         Presa {
@@ -166,6 +215,7 @@ impl Disegni {
     /// al sistema. Il motore resta, finché il budget non lo libera.
     fn chiusa_l_ultima(&self, motore: &MotoreDisegno) {
         motore.svuota();
+        self.libera_le_famiglie();
         self.servizi.memoria().rispetta();
         rilascia_al_sistema();
     }
@@ -182,22 +232,33 @@ impl Voce for Disegni {
     }
 
     fn svuota(&self) -> u64 {
-        let reso = self.se_acceso().map_or(0, |motore| motore.svuota());
+        let reso = self.se_acceso().map_or(0, |motore| motore.svuota()) + self.libera_le_famiglie();
         rilascia_al_sistema();
         reso
     }
 
-    /// Spegne il motore. Le istanze aperte tengono il loro: se ne va con
-    /// l'ultima.
+    /// Spegne il motore, e con lui le famiglie. Le istanze aperte tengono il
+    /// loro: se ne va con l'ultima.
     fn libera(&self) -> bool {
         if let Some(motore) = self.se_acceso() {
             motore.svuota();
         }
+        self.libera_le_famiglie();
         self.pigro.libera()
     }
 
     fn byte(&self) -> u64 {
-        self.se_acceso().map_or(0, |motore| motore.byte())
+        let famiglie = {
+            #[cfg(feature = "completo")]
+            {
+                self.famiglie.byte()
+            }
+            #[cfg(not(feature = "completo"))]
+            {
+                0
+            }
+        };
+        self.se_acceso().map_or(0, |motore| motore.byte()) + famiglie
     }
 }
 
@@ -367,9 +428,14 @@ impl Disegno {
     }
 
     /// I comandi del disegno sulla selezione, accesi o spenti sulla copia di
-    /// adesso ([`crate::comandi`]).
+    /// adesso ([`crate::comandi`]): i tre di K5 e, con la feature
+    /// `completo`, le righe «fatto» della mappa ([`crate::famiglie`]).
     pub fn comandi(&self, selezione: &[String]) -> Vec<DrawingCommandInfo> {
-        crate::comandi::elenco(&self.copia, selezione)
+        #[allow(unused_mut)]
+        let mut comandi = crate::comandi::elenco(&self.copia, selezione);
+        #[cfg(feature = "completo")]
+        comandi.extend(crate::famiglie::elenco(&self.copia, selezione));
+        comandi
     }
 
     /// Un comando sulla selezione ([`crate::comandi`]): un valore che non
@@ -404,21 +470,47 @@ impl Disegno {
                 esito.validate()?;
                 return Ok(esito);
             }
-            // Preparare una famiglia non ha anteprima; la famiglia la
-            // prepara un task dopo: per ora è `unsupported`.
+            // Preparare una famiglia non ha anteprima.
             fub_abi::DRAWING_COMMAND_FAMILY_PREPARE if richiesta.preview => {
                 return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));
+            }
+            // Non tocca il documento: non aspetta la copia. Senza la feature
+            // `completo` non ci sono famiglie, ed è `unsupported` sotto.
+            #[cfg(feature = "completo")]
+            fub_abi::DRAWING_COMMAND_FAMILY_PREPARE => {
+                let esito = crate::famiglie::prepara(self._presa.disegni.famiglie(), &richiesta)?;
+                esito.validate()?;
+                return Ok(esito);
             }
             _ => {}
         }
         // Un percorso, un comando escluso o uno che fa Fub (le righe `fub`
-        // di disco.tsv) si rifiutano prima del motore.
-        crate::disco::controlla(&richiesta.id, &richiesta.value)?;
+        // di disco.tsv) si rifiutano prima del motore, sull'id del motore.
+        let id_del_motore = richiesta
+            .id
+            .strip_prefix("disegno.")
+            .unwrap_or(&richiesta.id);
+        crate::disco::controlla(id_del_motore, &richiesta.value)?;
         let azione = crate::comandi::Azione::di(&richiesta)?;
         if let Err(rifiuto) = self.pronta(richiesta.revision, ATTESA_MASSIMA) {
             return Ok(rifiutato(richiesta.revision, rifiuto));
         }
         let Some(azione) = azione else {
+            // Ogni altro `disegno.<id>`: la sua famiglia, nel motore.
+            #[cfg(feature = "completo")]
+            {
+                let disegni = &self._presa.disegni;
+                let esito = crate::famiglie::esegui(
+                    disegni.famiglie(),
+                    disegni.filtro(),
+                    &mut self.banco,
+                    &self.copia,
+                    &richiesta,
+                )?;
+                esito.validate()?;
+                return Ok(esito);
+            }
+            #[cfg(not(feature = "completo"))]
             return Ok(rifiutato(richiesta.revision, DrawingRefusal::Unsupported));
         };
         let esito = crate::comandi::esegui(

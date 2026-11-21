@@ -471,13 +471,15 @@ mod con_il_motore {
         assert!(esito.applicato, "{esito:?}");
     }
 
+    /// Spegne il motore, e con lui il Disegno completo che lo richiede
+    /// («anche questi»), quando la build lo ha.
     fn spegni(host: &Host, vault: Option<&str>) {
         applica(
             host,
             vault,
             Azione::Spegni {
                 id: MOTORE.into(),
-                anche_questi: false,
+                anche_questi: cfg!(feature = "drawing-complete"),
                 orfani: Orfani::Chiedi,
             },
         );

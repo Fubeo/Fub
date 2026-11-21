@@ -68,6 +68,12 @@ applica; la mappa la legge lo stato dei componenti di tutta l'app
 dalla CLI o da MCP. I permessi dei componenti inclusi restano sotto, in
 «Permessi dei componenti inclusi».
 
+Il gruppo «Disegnare» comincia con tre righe in fila: «Disegni» (i file SVG), «Motore
+del disegno», che richiede i disegni, e «Disegno completo», che richiede il
+motore. Spento il Completo, i disegni usano gli strumenti di Fub e il motore
+resta; spento il motore, si spegne anche il Completo. I profili non toccano
+questo gruppo.
+
 Accanto all'elenco (sopra, con la finestra stretta) il riquadro «Fub con questi
 componenti» dice che cosa cambia prima di uscire dalla pagina: le voci del menu
 «Nuovo» (le stesse dell'esploratore: «Nota», e «Disegno» se i disegni sono
