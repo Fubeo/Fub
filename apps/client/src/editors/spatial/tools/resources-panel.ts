@@ -191,9 +191,13 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
     const riprova = textButton({ label: t("draw.resources.retry"), onPress: () => disegna(m), lifetime: vita });
     riprova.classList.add("draw-resources-retry");
     riprova.hidden = true;
+    // Il corpo occupa tutte le colonne del corpo dell'ispettore (la griglia
+    // a tre colonne dei campi): dentro, l'errore, «Riprova» e il contenuto.
+    const avvolgi = document.createElement("div");
+    avvolgi.className = "draw-resources-corpo";
     const corpo = document.createElement("div");
-    corpo.className = "draw-resources-corpo";
-    body.append(errore, riprova, corpo);
+    avvolgi.append(errore, riprova, corpo);
+    body.append(avvolgi);
     root.append(heading, body);
     const m: Montata = { sezione, root, toggle, body, errore, riprova, corpo, vita, fine: null, giro: null };
     vita.listen(toggle, "click", () => {
