@@ -92,7 +92,7 @@ describe("createToolRail", () => {
     expect(buttons[0]!.getAttribute("aria-pressed")).toBe("true");
     expect(buttons[0]!.getAttribute("aria-haspopup")).toBe("menu");
     expect(buttons[1]!.hasAttribute("aria-haspopup")).toBe(false);
-    expect(buttons[2]!.getAttribute("aria-keyshortcuts")).toBe("Shift+P");
+    expect(buttons[2]!.getAttribute("aria-keyshortcuts")).toBe("Shift+P ArrowRight");
   });
 
   it("le frecce lungo il verso, Home e Fine muovono il fuoco; il clic sceglie", () => {
@@ -146,6 +146,16 @@ describe("createToolRail", () => {
     expect(buttons[2]!.getAttribute("aria-expanded")).toBe("false");
     expect(accessibleName(buttons[2]!)).toBe("Penna");
     expect(document.activeElement).toBe(buttons[2]);
+  });
+
+  it("il triangolino ha il suo tasto: una casella con tendina dice quale freccia la apre, e cambia con l'orientamento", () => {
+    const made = rail();
+    const buttons = slots(made.element);
+    expect(buttons[2]!.getAttribute("aria-keyshortcuts")).toBe("Shift+P ArrowRight");
+    const singola = buttons.find((button) => (button.dataset.tools ?? "").split(" ").length === 1)!;
+    expect(singola.getAttribute("aria-keyshortcuts") ?? "").not.toContain("Arrow");
+    made.setOrientation("horizontal");
+    expect(buttons[2]!.getAttribute("aria-keyshortcuts")).toBe("Shift+P ArrowUp");
   });
 
   it("la pressione lunga, il tasto destro e il triangolino aprono la tendina", () => {

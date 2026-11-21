@@ -54,6 +54,18 @@ export const DRAW: PartAnatomy = {
       ],
     },
     {
+      // Il cassetto «Tutti gli strumenti» (K6 T8): un popover del kit con la
+      // ricerca, i gruppi e le caselle degli strumenti.
+      name: "draw-drawer",
+      states: SELECTABLE,
+      hooks: [
+        "kit-popover", "draw-drawer-popover", "draw-drawer", "draw-drawer-head", "draw-drawer-title", "draw-drawer-note",
+        "draw-drawer-field", "draw-drawer-groups", "draw-drawer-group", "draw-drawer-heading", "draw-drawer-grid",
+        "draw-drawer-tool", "draw-drawer-icon", "draw-drawer-name", "draw-drawer-keys", "draw-drawer-empty",
+        "draw-drawer-edit",
+      ],
+    },
+    {
       name: "pdf-surface",
       states: [S("rest"), S("focused"), S("selected")],
       hooks: [

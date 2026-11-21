@@ -1513,6 +1513,25 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare,
   })),
+  // **La colonna del Completo** (K6 T8): la colonna a sei gruppi, la tendina di
+  // una casella, il cassetto «Tutti gli strumenti» (con la ricerca), e la colonna
+  // del Completo spento. A 1280 e a 700 px, in giorno e in notte.
+  ...[
+    ["disegno-completo", 1280, "La colonna del Completo: sei gruppi, le caselle che stanno, «Tutti gli strumenti» in fondo", null, openDrawing],
+    ["disegno-completo-800", 800, "La colonna del Completo nella finestra minima del desktop, 800 px", null, openDrawing],
+    ["disegno-gruppo", 1280, "La tendina della casella a più strumenti, aperta da tastiera con la freccia di lato", null, openColumnGroup],
+    ["disegno-gruppo-800", 800, "La tendina della casella nella finestra minima del desktop, 800 px", null, openColumnGroup],
+    ["disegno-cassetto", 1280, "Tutti gli strumenti: il cassetto con i gruppi per famiglia", null, openDrawerScene],
+    ["disegno-cassetto-800", 800, "Il cassetto nella finestra minima del desktop, 800 px", null, openDrawerScene],
+    ["disegno-cassetto-cerca", 1280, "Il cassetto con la ricerca scritta: restano i nomi che la contengono", null, (page) => openDrawerScene(page, "pe")],
+    ["disegno-spento-colonna", 1280, "La colonna del Completo spento: la colonna nativa, 44 px di larghezza", "componenti=motore-spento", openDrawing],
+  ].map(([id, width, title, extra, prepare]) => ({
+    id,
+    title,
+    query: extra === null ? "connectors=6" : `connectors=6&${extra}`,
+    viewport: { width, height: 800 },
+    prepare,
+  })),
   // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
   // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
   // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
@@ -5122,6 +5141,31 @@ async function openWorkspaceErrorMenu(page) {
   await page.route("**/completo/index.ts*", (route) => route.abort());
   await openWorkspaceMenu(page);
   await page.waitForSelector("#context-menu [role='menuitem']:has-text('Riprova')");
+}
+
+/// La tendina della casella a più strumenti (K6 T8): la matita, con la freccia
+/// di lato da tastiera, come la apre chi usa la tastiera.
+async function openColumnGroup(page) {
+  await openDrawing(page);
+  // La prima casella con il triangolino: quella che ha più strumenti.
+  await page.waitForSelector('.draw-rail .kit-rail-slot:has(.kit-rail-corner)');
+  await page.focus('.draw-rail .kit-rail-slot:has(.kit-rail-corner)');
+  await page.evaluate(() => {
+    const casella = document.querySelector('.draw-rail .kit-rail-slot:has(.kit-rail-corner)');
+    // La freccia di lato: destra in colonna, su in fila (il foglio stretto).
+    const lato = casella.closest(".kit-rail").dataset.orientation === "horizontal" ? "ArrowUp" : "ArrowRight";
+    casella.dispatchEvent(new KeyboardEvent("keydown", { key: lato, bubbles: true, cancelable: true }));
+  });
+  await page.waitForSelector(".kit-rail-flyout [role='menuitemradio']");
+}
+
+/// «Tutti gli strumenti» (K6 T8): il cassetto aperto dalla sua casella; con
+/// `cerca`, il campo della ricerca scritto.
+async function openDrawerScene(page, cerca = "") {
+  await openDrawing(page);
+  await page.click('.draw-rail .kit-rail-slot[data-slot="all"]');
+  await page.waitForSelector(".draw-drawer-popover .draw-drawer-tool");
+  if (cerca !== "") await page.fill(".draw-drawer-field input", cerca);
 }
 
 /// Il fuoco da tastiera sul bottone dello spazio (K6 T7): l'anello si vede.

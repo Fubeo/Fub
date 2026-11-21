@@ -175,6 +175,16 @@ export function installWorkspace(ctx: EditorContext): void {
     const attivo = !ctx.disposed && ctx.workspace === "full" && motore !== null && components()?.on(DISEGNO_COMPLETO) === true;
     ctx.collegaCompleto(attivo ? sezioniAperte : null, attivo ? motore : null);
   };
+  // La colonna del Completo (K6 T8) c'è quando il Completo è aperto e acceso
+  // nello spazio «Completo»: la colonna la chiede a ogni sincronia.
+  ctx.completo = () => {
+    const porta = aperto;
+    if (porta === null || !vuoleCompleto()) return null;
+    return {
+      colonna: (offerti) => porta.colonna(offerti),
+      cassetto: (anchor, opzioni) => porta.cassetto(anchor, opzioni, ctx.life),
+    };
+  };
   const portaCompleto = (): void => {
     if ((completo !== "no" && completo !== "fallito") || !vuoleCompleto()) return;
     completo = "verifica";
@@ -195,6 +205,7 @@ export function installWorkspace(ctx: EditorContext): void {
           completo = "aperto";
           applicaSpazio();
           mostraRisorse();
+          ctx.syncRail(ctx.editable());
           options.onWorkspaceChange?.();
         },
         // Un chunk che non arriva: lo spazio di prima resta, e «Riprova» ci
@@ -209,6 +220,7 @@ export function installWorkspace(ctx: EditorContext): void {
   ctx.life.add(onComponents(() => {
     portaCompleto();
     mostraRisorse();
+    ctx.syncRail(ctx.editable());
   }));
 
   ctx.setSpace = (next, toolbar) => {

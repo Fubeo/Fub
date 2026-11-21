@@ -14,6 +14,14 @@ import type { Indice } from "./indice";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
 export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
+// La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
+import { layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
+import type { ToolSpec } from "../tools/registry";
+import type { Lifetime } from "../../../ui/lifetime";
+import type { CassettoOptions } from "../tools/editor/chrome/drawer";
+import { openPopover } from "../../../kit/popover";
+import { t } from "../strings";
+export type { GruppoLayout } from "./colonna";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
 export type { Indice, VoceIndice } from "./indice";
@@ -35,6 +43,12 @@ export interface Completo {
   /// Applica lo spazio `space` del Completo (un preset, o `full` per i dati di
   /// serie): la scheda, la sezione, e le famiglie da preparare.
   spazio(space: string, effetti: EffettiSpazio): void;
+  /// La colonna del Completo per gli strumenti offerti (T8): sei gruppi, le
+  /// caselle che hanno strumenti pronti, nell'ordine del prototipo.
+  colonna(offerti: readonly ToolSpec[]): readonly GruppoLayout[];
+  /// Apre il cassetto «Tutti gli strumenti» dalla sua casella (T8). Il suo
+  /// pezzo arriva con un `import()`, la prima volta.
+  cassetto(anchor: HTMLElement, opzioni: Omit<CassettoOptions, "anchor" | "lifetime">, lifetime: Lifetime): void;
 }
 
 export interface OpzioniCompleto {
@@ -42,6 +56,36 @@ export interface OpzioniCompleto {
   readonly indice?: () => Promise<Indice>;
   readonly moduli?: OpzioniCaricatore["moduli"];
   readonly prepara?: OpzioniCaricatore["prepara"];
+}
+
+/// Dice che il cassetto non si è aperto (il suo pezzo non è arrivato), con
+/// «Riprova», che lo apre di nuovo. Sta qui, non nel pezzo del cassetto: il
+/// pezzo è quello che non è arrivato.
+export function apriErroreCassetto(anchor: HTMLElement, lifetime: Lifetime, riprova: () => void): void {
+  const testo = document.createElement("div");
+  testo.className = "draw-drawer-failed";
+  const messaggio = document.createElement("p");
+  messaggio.className = "draw-drawer-note";
+  messaggio.setAttribute("role", "alert");
+  messaggio.textContent = t("draw.chrome.drawer.failed");
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "draw-drawer-edit";
+  retry.textContent = t("draw.window.retry");
+  testo.append(messaggio, retry);
+  const popover = openPopover({
+    anchor,
+    content: testo,
+    placement: "right",
+    align: "start",
+    label: t("draw.chrome.drawer.failed"),
+    className: "kit-rail-popover draw-drawer-popover",
+    lifetime,
+  });
+  retry.addEventListener("click", () => {
+    popover.close("manual");
+    riprova();
+  });
 }
 
 /// L'indice vero, dal suo chunk (`drawing-indice`).
@@ -71,6 +115,25 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       const preset = presetDi(space);
       if (preset === null) return;
       applicaSpazio(preset, effetti, carica);
+    },
+    colonna: (offerti) => layoutCompleto(offerti, MOTORE_PRONTO),
+    cassetto(anchor, opzioni, lifetime) {
+      // Il cassetto è nel suo pezzo: si apre appena arriva, e non dopo la
+      // chiusura del disegno. Se il pezzo non arriva, lo dice e «Riprova» lo
+      // chiede di nuovo.
+      const apri = (): void => {
+        void import("../tools/editor/chrome/drawer").then(
+          ({ apriCassetto }) => {
+            if (chiuso) return;
+            apriCassetto({ ...opzioni, anchor, lifetime });
+          },
+          () => {
+            if (chiuso) return;
+            apriErroreCassetto(anchor, lifetime, apri);
+          },
+        );
+      };
+      apri();
     },
   };
   ctx.life.add(() => completo.chiudi());

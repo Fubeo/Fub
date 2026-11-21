@@ -47,8 +47,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   assert.equal(mappa.rev, revisione());
   assert.equal(mappa.righe.length, 1551);
   // Le sette righe `window.workspace*` sono di Fub (T7), e T10 chiude le sette
-  // righe `window.*` del menu Finestra: da «da fare» a «fub».
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1460, fub: 79, escluso: 12 });
+  // righe `window.*` del menu Finestra: da «da fare» a «fub». T8 chiude le dieci
+  // righe della colonna e del cassetto, e passano a «fub» allo stesso modo.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1450, fub: 89, escluso: 12 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

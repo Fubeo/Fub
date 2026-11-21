@@ -1741,6 +1741,13 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   overflow: hidden;
   white-space: nowrap;
 }
+/* Un gruppo della fila non si stringe: il suo testo resta intero, e se non ci
+   sta il gruppo va in «…» (`kit/options-bar.ts`), non si tronca a «S…». La
+   misura del conto è la larghezza vera del gruppo. */
+.kit-options-row > *,
+.kit-options-row .kit-bar-button {
+  flex: none;
+}
 /* Col mouse i pulsanti della fila sono alti 28, come nella barra a schede; col
    dito sono bersagli da 44. */
 @media (pointer: fine) {
@@ -5608,6 +5615,25 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 }
 .draw-toolbar {
   flex: 1 1 auto;
+}
+/* Il cassetto «Tutti gli strumenti» (K6 T8): una griglia di tre colonne uguali,
+   ogni voce una riga con icona, nome e tasto. Le colonne non dipendono dal numero
+   di voci: un gruppo con tre strumenti ha comunque tre colonne. */
+.draw-drawer-groups,
+.draw-drawer-group {
+  display: flex;
+  flex-direction: column;
+}
+.draw-drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.draw-drawer-tool {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 32px;
+  text-align: start;
 }
 .draw-top:last-child {
   margin-inline-start: auto;

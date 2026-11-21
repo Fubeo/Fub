@@ -83,6 +83,12 @@ export function installGestureBegin(ctx: EditorContext): void {
     // Il righello preso in mezzo si sposta, con ogni strumento (P13).
     const ruler = ctx.rulerStart(base);
     if (ruler !== null) return ruler;
+    // Uno strumento del motore (K6 T8) è scelto sopra a quelli di oggi: il
+    // motore fa il gesto, e se non c'è lo fanno gli strumenti di sempre.
+    if (ctx.motoreTool !== null) {
+      const motore = ctx.motoreBegin(base);
+      if (motore !== null) return motore;
+    }
     switch (ctx.tool) {
       // La Mano e la Lente muovono la vista prima della pipeline
       // (`hand-zoom.ts`): il cursore da tastiera non disegna niente.

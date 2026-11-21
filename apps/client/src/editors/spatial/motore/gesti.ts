@@ -39,7 +39,7 @@
 // La penna, l'evidenziatore, la gomma e la nota non passano mai di qua: sono
 // di Fub, e non chiamano il motore.
 
-import { MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingLoss, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool } from "../../../host/contract";
+import { DRAWING_COMMAND_TOOL_OPTION, MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingLoss, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool, type DrawingToolState } from "../../../host/contract";
 import type { InkSample } from "../../../ink/sample";
 import type { Teardown } from "../../../ui/lifetime";
 import type { PaintNode } from "../painter/paint";
@@ -55,6 +55,7 @@ import { layerRefusal, layerTitle } from "../tools/editor/helpers";
 import type { GestureBase, MotoreGesture } from "../tools/editor/types";
 import type { ToolId } from "../tools/registry";
 import type { GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
+import { cursoreCss, motoreDelloStrumento, StatiStrumenti } from "./strumento";
 
 /// Quanto un gesto aspetta il motore che si sta ancora aprendo.
 export const ATTESA_APERTURA_MS = 2_000;
@@ -434,6 +435,22 @@ export interface GestiMotoreContext {
   motoreSamples: (g: MotoreGesture, samples: readonly InkSample[]) => void;
   motoreEnd: (g: MotoreGesture) => void;
   motoreCancel: (g: MotoreGesture) => void;
+  /// Lo strumento del motore scelto (il suo id nel motore), o `null` se lo
+  /// strumento è uno di quelli di oggi (K6 T8). Con lui il gesto manda
+  /// `DrawingTool::Engine`, e lo strumento di prima non cambia finché questo
+  /// non è pronto.
+  motoreTool: string | null;
+  /// Sceglie lo strumento del motore `id` (o nessuno, con `null`). La sua
+  /// famiglia si prepara con `prepara`; se non arriva, lo strumento di prima
+  /// resta e lo si dice.
+  sceltaMotore: (id: string | null) => void;
+  /// Lo stato dello strumento del motore `id`, dall'ultimo esito che l'ha
+  /// portato; `null` se non ne ha ancora.
+  statoStrumento: (id: string) => DrawingToolState | null;
+  /// Manda l'opzione `chiave` (con il valore JSON `valore`) dello strumento
+  /// `id` (`disegno.strumento.opzione`). Il gesto dopo la vede; un gesto in
+  /// corso no.
+  opzioneMotore: (id: string, chiave: string, valore: unknown) => void;
 }
 
 /// Ciò che il gesto tiene e gli altri pezzi non leggono.
@@ -460,6 +477,57 @@ export function installGestiMotore(ctx: EditorContext): void {
   const interni = new WeakMap<MotoreGesture, Interno>();
   /// L'esito dell'ultimo gesto applicato: il gesto dopo parte da lì.
   let ultimo: Promise<unknown> = Promise.resolve();
+  /// Lo stato degli strumenti del motore fra un gesto e l'altro (K6 T8).
+  const stati = new StatiStrumenti();
+  /// La preparazione della famiglia di ogni strumento del motore scelto: il
+  /// gesto aspetta, e risolve `false` se non arriva.
+  const preparazioni = new Map<string, Promise<boolean>>();
+  ctx.motoreTool = null;
+
+  /// Sceglie lo strumento del motore `id`, o torna a quelli di oggi con
+  /// `null`. Il gesto in corso si annulla (come per ogni cambio di strumento).
+  /// Se la famiglia non arriva, lo strumento di prima torna e lo si dice.
+  const sceltaMotore = (id: string | null): void => {
+    if (id === ctx.motoreTool) return;
+    ctx.cancelGesture();
+    if (id === null) {
+      ctx.motoreTool = null;
+      ctx.surface.style.cursor = "";
+      return;
+    }
+    const precedente = ctx.motoreTool;
+    ctx.motoreTool = id;
+    // La famiglia dello strumento si prepara con `preparaMotore` (di serie è
+    // pronta da sé); se non arriva, risolve `false`.
+    const prepara = ctx.options.preparaMotore;
+    const pronta = prepara === undefined ? Promise.resolve(true) : prepara(id).catch(() => false);
+    preparazioni.set(id, pronta);
+    void pronta.then((ok) => {
+      if (ok || ctx.disposed || ctx.motoreTool !== id) return;
+      ctx.motoreTool = precedente;
+      ctx.announce(t("draw.engine.prepare.failed"));
+    });
+  };
+  ctx.sceltaMotore = sceltaMotore;
+  ctx.statoStrumento = (id) => stati.stato(id);
+
+  /// Manda l'opzione dello strumento `id` (`disegno.strumento.opzione`). Va in
+  /// fila con i gesti, così il gesto dopo la vede e quello in corso no. Un
+  /// esito con lo stato dello strumento lo registra; senza motore non fa niente.
+  ctx.opzioneMotore = (id, chiave, valore) => {
+    const sessione = porta?.adesso();
+    if (sessione === undefined || sessione === null || sessione === "apertura") return;
+    const done = ultimo
+      .then(() => sessione.comando({ id: DRAWING_COMMAND_TOOL_OPTION, selection: [], value: { strumento: id, chiave, valore } }))
+      .then((esito) => {
+        if (esito === null || "kind" in esito) return;
+        if (esito.state) stati.registra(id, esito.state);
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+      });
+    ultimo = done;
+  };
 
   const evento = (kind: DrawingPointer["kind"], sample: { readonly x: number; readonly y: number; readonly p?: number }): DrawingPointer => ({
     kind,
@@ -496,7 +564,10 @@ export function installGestiMotore(ctx: EditorContext): void {
 
   const motoreBegin = (base: GestureBase): MotoreGesture | null => {
     if (porta === undefined || ctx.folio !== undefined || ctx.isolatedNode() !== null) return null;
-    const tool = STRUMENTI_DEL_MOTORE.get(ctx.tool);
+    // Lo strumento del motore scelto (K6 T8) manda il suo id; gli altri sono
+    // quelli di K5.
+    const motore = ctx.motoreTool;
+    const tool = motore !== null ? motoreDelloStrumento(motore) : STRUMENTI_DEL_MOTORE.get(ctx.tool);
     if (tool === undefined || porta.adesso() === null) return null;
     const layer = ctx.has("layers") ? (ctx.currentLayer()?.id ?? null) : null;
     const g: MotoreGesture = {
@@ -510,7 +581,7 @@ export function installGestiMotore(ctx: EditorContext): void {
       frame: null,
       ended: false,
       intent: tool === "select" ? null : "shape",
-      label: tool === "select" ? "draw.action.move" : ctx.toolLabel(ctx.tool),
+      label: tool === "select" ? "draw.action.move" : motore !== null ? "draw.engine.tool" : ctx.toolLabel(ctx.tool),
       before: ctx.selection,
       layer,
       matrix: null,
@@ -522,26 +593,32 @@ export function installGestiMotore(ctx: EditorContext): void {
     const shape = tool !== "select";
     // La richiesta di base si prende quando parte: dopo l'esito del gesto
     // di prima, con la selezione che ha lasciato.
-    const avvio = precedente.then(() => porta.pronta(ATTESA_APERTURA_MS)).then((sessione) => {
-      if (sessione === null || ctx.disposed) return null;
-      g.before = ctx.selection;
-      const { color, width } = ctx.style();
-      return {
-        sessione,
-        base: {
-          tool,
-          layer,
-          selection: [...ctx.selection],
-          zoom: ctx.camera.scale,
-          snap: { grid: ctx.gridOn() ? ctx.stepNow() : null, free: ctx.free },
-          style: shape ? { stroke: color, width, fill: null } : null,
-          // Il Testo scrive la parola del testo nuovo, che poi si cambia
-          // nel campo «Testo» dell'ispettore.
-          text: tool === "text" ? t("draw.text.new") : null,
-          frame: shape ? null : cornicePerIlMotore(),
-        },
-      };
-    });
+    // La famiglia dello strumento del motore: il gesto aspetta che sia pronta,
+    // e se non arriva non parte (lo strumento di prima è già tornato).
+    const attesa = motore === null ? Promise.resolve(true) : (preparazioni.get(motore) ?? Promise.resolve(true));
+    const avvio = precedente
+      .then(() => attesa)
+      .then((pronta) => (pronta ? porta.pronta(ATTESA_APERTURA_MS) : null))
+      .then((sessione) => {
+        if (sessione === null || ctx.disposed) return null;
+        g.before = ctx.selection;
+        const { color, width } = ctx.style();
+        return {
+          sessione,
+          base: {
+            tool,
+            layer,
+            selection: [...ctx.selection],
+            zoom: ctx.camera.scale,
+            snap: { grid: ctx.gridOn() ? ctx.stepNow() : null, free: ctx.free },
+            style: shape ? { stroke: color, width, fill: null } : null,
+            // Il Testo scrive la parola del testo nuovo, che poi si cambia
+            // nel campo «Testo» dell'ispettore.
+            text: tool === "text" ? t("draw.text.new") : null,
+            frame: shape ? null : cornicePerIlMotore(),
+          },
+        };
+      });
     interni.set(g, { avvio, catena: avvio, from: null, hit: null, frame: null, perso: false, annullato: false });
     return g;
   };
@@ -560,6 +637,12 @@ export function installGestiMotore(ctx: EditorContext): void {
         // Le parti che il gesto ha trovato vanno nel chip «N parti restano
         // come sono» (`standing.ts`).
         if (outcome.losses.length > 0) porta!.trovate(outcome.losses);
+        // Lo stato dello strumento del motore che ha fatto il gesto: il gesto
+        // dopo lo legge, e il cursore del foglio segue lo strumento scelto.
+        if (typeof g.tool === "object" && outcome.state) {
+          stati.registra(g.tool.engine.id, outcome.state);
+          if (ctx.motoreTool === g.tool.engine.id) ctx.surface.style.cursor = cursoreCss(outcome.state.cursor);
+        }
         return outcome;
       }
       // Il motore è mancato a metà: fermo (`outcome` dice perché), o la
