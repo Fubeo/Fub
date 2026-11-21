@@ -2409,6 +2409,73 @@ kbd,
   }
 }
 
+/* ── K6 · Il modulo dei dialoghi (T6) ───────────────────────────────────── */
+.kit-form {
+  gap: var(--space-4);
+}
+.kit-form-row {
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+  column-gap: var(--space-3);
+}
+.kit-form-row > .kit-number {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+}
+.kit-form-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
+/* La scelta a segmenti è il pozzetto delle schede dell'ispettore: l'accesa è
+   un foglietto. */
+.kit-form-choice {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+}
+.kit-button.kit-form-option {
+  flex: 1 1 auto;
+  min-height: 26px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-sm);
+}
+.kit-button.kit-form-option[aria-checked="false"] {
+  background: transparent;
+  color: var(--muted);
+}
+.kit-button.kit-form-option[aria-checked="false"]:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-button.kit-form-option[aria-checked="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.kit-form-check {
+  grid-column: 2;
+  gap: var(--space-3);
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.kit-form-note,
+.kit-form-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.kit-form-note {
+  color: var(--muted);
+}
+.kit-form-error {
+  color: var(--danger);
+}
+.kit-dialog-scrim[data-preview] {
+  background: transparent;
+}
+
 /* ── skin/frame.css ─────────────────────────────────────────────────────── */
 
 /* La cornice: barra del titolo, binario, banda di stato. */

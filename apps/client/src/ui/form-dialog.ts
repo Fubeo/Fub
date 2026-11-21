@@ -4,6 +4,7 @@
 // disegno: il loro codice arriva con lui, e non pesa sulla shell.
 
 import { t } from "../i18n/strings";
+import { COLOR_PATTERN, explainBlank, explainColor, explainZero, sixDigits } from "../kit/form";
 import { identifier } from "./a11y";
 import { displayBinding, keyName, modifierName, parseChords } from "./commands";
 import { actions, openFrame } from "./dialogs";
@@ -84,7 +85,7 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
           input.required = true;
           if (field.min !== undefined) input.min = String(field.min);
           if (field.max !== undefined) input.max = String(field.max);
-          if (field.nonZero === true) input.addEventListener("input", () => explainZero(input));
+          if (field.nonZero === true) input.addEventListener("input", () => explainZero(input, t("form.nonzero")));
         } else if (field.kind === "color") {
           input.type = "text";
           input.required = true;
@@ -100,7 +101,7 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
       if (field.kind === "text" || field.kind === "multiline") {
         control.required = field.required === true;
         if (field.maxLength !== undefined) control.maxLength = field.maxLength;
-        if (field.required === true) control.addEventListener("input", () => explainBlank(control));
+        if (field.required === true) control.addEventListener("input", () => explainBlank(control, t("form.blank")));
       }
       control.name = field.id;
       control.value = field.value;
@@ -128,9 +129,9 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       for (const [field, control] of controls) {
-        if (field.kind === "color") explainColor(control);
-        else if (field.required === true) explainBlank(control);
-        else if (field.nonZero === true) explainZero(control);
+        if (field.kind === "color") explainColor(control, t("form.color.invalid"));
+        else if (field.required === true) explainBlank(control, t("form.blank"));
+        else if (field.nonZero === true) explainZero(control, t("form.nonzero"));
       }
       if (!form.checkValidity()) {
         form.reportValidity();
@@ -146,20 +147,6 @@ export function promptForm(options: FormOptions): Promise<Readonly<Record<string
   });
 }
 
-/// Un codice di colore come lo accetta un campo `color`: tre o sei cifre
-/// esadecimali, col `#` o senza.
-const COLOR_PATTERN = "#?(?:[0-9a-fA-F]{3}){1,2}";
-const COLOR_CODE = new RegExp(`^${COLOR_PATTERN}$`);
-
-/// Il codice `#rrggbb` minuscolo di `value`, se è un codice che il campo
-/// accetta.
-function sixDigits(value: string): string | null {
-  const text = value.trim();
-  if (!COLOR_CODE.test(text)) return null;
-  const hex = text.replace("#", "").toLowerCase();
-  return `#${hex.length === 3 ? [...hex].map((digit) => digit + digit).join("") : hex}`;
-}
-
 /// Il selettore del sistema accanto al campo `input`: l'uno scrive
 /// nell'altro. Il campo resta la via principale, perché il selettore si usa
 /// male da tastiera e con uno screen reader in più di un sistema.
@@ -171,34 +158,14 @@ function colorPicker(input: HTMLInputElement, value: string): HTMLInputElement {
   picker.setAttribute("aria-label", t("form.color.picker"));
   picker.addEventListener("input", () => {
     input.value = picker.value;
-    explainColor(input);
+    explainColor(input, t("form.color.invalid"));
   });
   input.addEventListener("input", () => {
-    explainColor(input);
+    explainColor(input, t("form.color.invalid"));
     const code = sixDigits(input.value);
     if (code !== null) picker.value = code;
   });
   return picker;
-}
-
-/// Un codice che non va si spiega con la frase del campo, non con quella
-/// generica del browser. Si rifà a ogni battuta e prima di confermare, così
-/// non resta indietro rispetto al valore.
-function explainColor(control: HTMLInputElement | HTMLTextAreaElement): void {
-  control.setCustomValidity(control.validity.patternMismatch ? t("form.color.invalid") : "");
-}
-
-/// Un testo che non si lascia vuoto non è nemmeno fatto di soli spazi, che
-/// il browser lascerebbe passare. Come per il colore, si rifà a ogni battuta:
-/// un errore rimasto fermerebbe l'invio prima di arrivare qui.
-function explainBlank(control: HTMLInputElement | HTMLTextAreaElement): void {
-  control.setCustomValidity(control.value !== "" && control.value.trim() === "" ? t("form.blank") : "");
-}
-
-/// Uno zero dove non va: il browser non ha un vincolo che lo dica. Come il
-/// testo vuoto, si rifà a ogni battuta e prima di confermare.
-function explainZero(control: HTMLInputElement | HTMLTextAreaElement): void {
-  control.setCustomValidity(control.value !== "" && Number(control.value) === 0 ? t("form.nonzero") : "");
 }
 
 /// Un gruppo dell'elenco dei tasti: il titolo, e per ogni riga i tasti, nella
