@@ -14,7 +14,7 @@ import type { StrumentoCassetto } from "./drawer";
 
 /// La casella «Tutti gli strumenti» della colonna del Completo: non è uno
 /// strumento, apre il cassetto.
-export const TUTTI_GLI_STRUMENTI = "fub:tutti";
+export const TUTTI_GLI_STRUMENTI = "all";
 
 /// La colonna del Disegno completo, come la porta `completo/` quando è aperto
 /// e acceso (K6 T8). Le sue caselle sono strumenti per id, nel loro gruppo; il

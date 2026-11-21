@@ -19431,6 +19431,131 @@ button.draw-isolation-crumb:hover {
   padding: 0;
 }
 
+
+
+/* ── K6 · Il cassetto «Tutti gli strumenti» (T8) ────────────────────────── */
+.kit-popover.draw-drawer-popover {
+  padding: 0;
+}
+.draw-drawer-head {
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-6) var(--space-3);
+}
+.draw-drawer-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.draw-drawer-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-drawer-field {
+  padding: 0 var(--space-6) var(--space-4);
+}
+.draw-drawer-groups {
+  gap: var(--space-5);
+  padding: 0 var(--space-4) var(--space-6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.draw-drawer-group {
+  gap: var(--space-2);
+}
+.draw-drawer-heading {
+  margin: 0;
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.draw-drawer-grid {
+  gap: var(--space-1);
+}
+.draw-drawer-tool {
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+.draw-drawer-tool:hover {
+  background: var(--overlay-hover);
+}
+.draw-drawer-tool[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.draw-drawer-tool:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.draw-drawer-icon {
+  color: var(--muted);
+}
+.draw-drawer-tool[aria-pressed="true"] .draw-drawer-icon {
+  color: inherit;
+}
+.draw-drawer-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.draw-drawer-keys {
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+.draw-drawer-empty {
+  margin: 0;
+  padding: var(--space-6);
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Il pulsante «Modifica la colonna…» in fondo al cassetto: un testo del
+   kit, col colore dell'accento e il fuoco del kit. */
+.draw-drawer-edit {
+  align-self: flex-start;
+  margin: 0 var(--space-6) var(--space-6);
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: var(--text-sm);
+}
+.draw-drawer-edit:hover {
+  background: var(--overlay-hover);
+}
+.draw-drawer-edit:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+/* La scatola del cassetto: una colonna che tiene ferma la testa e il campo
+   (scorrono solo i gruppi), e il nome dello strumento che va a capo. */
+.draw-drawer {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 32px));
+}
+.draw-drawer-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */
