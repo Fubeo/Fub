@@ -3305,7 +3305,7 @@ Fatto quando:
 - `node tools/vendor-craft/vendor.mjs vectorcraft check` esce con 0;
 - `node .github/scripts/check-doc-links.mjs` esce con 0.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test ricetta; node tools/disegno-cancello/cancello.mjs; node tools/vendor-craft/vendor.mjs vectorcraft check
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 ## T28 · Il motore non tocca il disco, e le sue tabelle si contano
