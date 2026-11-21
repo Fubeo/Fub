@@ -80,6 +80,14 @@ fn text(t: &Option<ProfileText>) -> Option<String> {
 }
 
 impl IccProfile {
+    /// Roughly how many bytes of heap the profile holds: itself and the file it came from (its
+    /// parsed tables and transforms left out).
+    ///
+    /// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
+    pub(crate) fn heap_bytes(&self) -> usize {
+        std::mem::size_of::<Self>() + self.name.capacity() + self.source.capacity()
+    }
+
     pub fn from_profile(name: Option<String>, profile: ColorProfile) -> Result<Self, CmsError> {
         let kind = match profile.color_space {
             DataColorSpace::Rgb => ProfileKind::Rgb,

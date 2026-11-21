@@ -81,7 +81,7 @@ static USER_FONT_DIRS_CONFINED: std::sync::atomic::AtomicBool = std::sync::atomi
 /// ([`set_user_font_dirs_confined`]).
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn confined_font_dirs() -> Vec<PathBuf> {
-    if !USER_FONT_DIRS_CONFINED.load(std::sync::atomic::Ordering::Relaxed) {
+    if !USER_FONT_DIRS_CONFINED.load(std::sync::atomic::Ordering::Relaxed) || !system_fonts() {
         return vec![];
     }
     user_font_dirs().iter().filter_map(|d| std::fs::canonicalize(d).ok()).collect()
@@ -119,13 +119,38 @@ pub fn app_font_dir() -> Option<&'static Path> {
     None
 }
 
+/// Whether font scans read the disk at all ([`set_system_fonts`]).
+#[cfg(not(target_arch = "wasm32"))]
+static SYSTEM_FONTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Let font scans read the disk (`true`, the default) or not: with `false`, [`system_font_dirs`]
+/// is empty whatever was set, so the scans and the fallback for missing characters only see the
+/// fonts added as bytes ([`FontDb::add_font`](super::FontDb::add_font)). For a host that gives the
+/// engine every font itself and keeps it off the disk. Ignored on wasm, which has no font folders.
+///
+/// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
+pub fn set_system_fonts(on: bool) {
+    #[cfg(not(target_arch = "wasm32"))]
+    SYSTEM_FONTS.store(on, std::sync::atomic::Ordering::Relaxed);
+    #[cfg(target_arch = "wasm32")]
+    let _ = on;
+}
+
+/// Whether font scans read the disk ([`set_system_fonts`]); `false` on wasm.
+pub fn system_fonts() -> bool {
+    #[cfg(not(target_arch = "wasm32"))]
+    return SYSTEM_FONTS.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(target_arch = "wasm32")]
+    false
+}
+
 /// The platform's font folders (the system's and the user's), VectorCraft's own Fonts folder
 /// ([`set_app_font_dir`]), the font files known to the platform outside them (on Windows those
 /// registered with it, and those [`set_platform_font_files`] lists) and the folders the user added
 /// ([`set_user_font_dirs`]), scanned by [`FontDb::global`].
 pub fn system_font_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
-    if cfg!(target_arch = "wasm32") {
+    if cfg!(target_arch = "wasm32") || !system_fonts() {
         return dirs;
     }
     let home = std::env::var_os("HOME").map(PathBuf::from);

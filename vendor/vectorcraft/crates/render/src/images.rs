@@ -258,6 +258,13 @@ impl ImageStore {
         self.bytes
     }
 
+    /// Drop every entry no one else holds (images being painted stay).
+    fn release(&mut self) {
+        self.entries.retain(|_, e| Arc::strong_count(&e.pm) > 1);
+        self.bytes = self.entries.values().map(|e| pixmap_bytes(&e.pm)).sum();
+        self.entries.shrink_to_fit();
+    }
+
     fn known_id(&self, bytes: &Arc<Vec<u8>>) -> Option<BlobId> {
         let (w, id) = self.ids.get(&(Arc::as_ptr(bytes) as usize))?;
         std::ptr::eq(w.as_ptr(), Arc::as_ptr(bytes)).then(|| id.clone())
@@ -296,6 +303,14 @@ pub fn set_image_cache_budget(bytes: usize) {
 /// Bytes of decoded images the renderers share now.
 pub fn image_cache_bytes() -> usize {
     store().bytes()
+}
+
+/// Drop the decoded images the renderers share, but those being painted: they are decoded again
+/// when drawn. Images known to be undecodable stay known.
+///
+/// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
+pub fn release_image_cache() {
+    store().release();
 }
 
 /// Keep `img`, the decoded pixels of `blob`, in the store as a renderer keeps the pixels it

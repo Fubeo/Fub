@@ -168,6 +168,14 @@ static USER: RwLock<Vec<Arc<IccProfile>>> = RwLock::new(Vec::new());
 /// Counts the profiles [`register_icc`] has registered ([`profiles_generation`]).
 static PROFILES_GENERATION: AtomicU64 = AtomicU64::new(0);
 
+/// Roughly how many bytes the profiles loaded by the user ([`register_icc`]) hold. They can't be
+/// released: documents and color settings name them.
+///
+/// Patch di Fub (`0008-nessuna-radice-e-tabelle`).
+pub fn user_profiles_bytes() -> usize {
+    USER.read().unwrap_or_else(|e| e.into_inner()).iter().map(|p| p.heap_bytes()).sum()
+}
+
 fn builtin_rgb_cache(name: &str) -> Option<Arc<IccProfile>> {
     static CACHE: Mutex<Vec<Arc<IccProfile>>> = Mutex::new(Vec::new());
     let mut c = CACHE.lock().unwrap_or_else(|e| e.into_inner());

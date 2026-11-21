@@ -38,7 +38,7 @@ pub use artistic::{PAINT_DAUB_BRUSH_TYPES, PaintDaubBrush};
 pub use blur::{SMART_BLUR_MODES, SmartBlurMode};
 pub use brushstrokes::{STROKE_DIRECTIONS, StrokeDirection};
 pub use distort::{GLASS_TEXTURES, GLASS_TEXTURES_LOADED, GlassTexture};
-pub use loaded::{LOADED, LoadedTexture, TEXTURE_IMAGE, texture};
+pub use loaded::{LOADED, LoadedTexture, TEXTURE_IMAGE, release_texture_cache, texture, texture_cache_bytes};
 pub use pixelate::{MEZZOTINT_TYPES, Mezzotint};
 pub use sketch::{HALFTONE_TYPES, HalftonePattern};
 pub use texture::{GRAIN_TYPES, Grain, LIGHT_DIRECTIONS, Light, TEXTURES, TEXTURES_LOADED, Texture};

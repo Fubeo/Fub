@@ -24,6 +24,20 @@ type Kept = (Node, Found, Option<Node>);
 
 static CACHE: Mutex<Vec<Kept>> = Mutex::new(Vec::new());
 
+/// Roughly how many bytes of heap the halftone arts kept hold (the objects and the arts; what
+/// they read from the document is left out).
+///
+/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_halftone_cache`].
+pub fn halftone_cache_bytes() -> usize {
+    let kept = CACHE.lock().unwrap_or_else(PoisonError::into_inner);
+    kept.iter().map(|(n, _, art)| n.heap_bytes() + art.as_ref().map_or(0, Node::heap_bytes)).sum()
+}
+
+/// Drop the halftone arts kept: each is made again the next time its object is drawn.
+pub fn release_halftone_cache() {
+    *CACHE.lock().unwrap_or_else(PoisonError::into_inner) = Vec::new();
+}
+
 #[cfg(test)]
 thread_local! {
     /// How many times this thread sampled art for the live effect.

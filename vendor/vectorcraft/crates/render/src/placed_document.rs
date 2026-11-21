@@ -83,6 +83,26 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// Bytes of pixels the bitmaps of placed documents keep (for a host's memory budget).
+///
+/// Patch di Fub (`0008-nessuna-radice-e-tabelle`), like [`release_placed_bitmaps`].
+pub fn placed_bitmaps_bytes() -> usize {
+    lock(&BITMAPS).bytes
+}
+
+/// Drop the bitmaps of placed documents kept, and forget those that could not be made or kept, so
+/// they are asked for again: the next frame that shows a placed document draws it exactly and
+/// schedules its bitmap anew. Bitmaps being made still arrive.
+pub fn release_placed_bitmaps() {
+    {
+        let mut b = lock(&BITMAPS);
+        b.map = HashMap::new();
+        b.bytes = 0;
+    }
+    *lock(&FAILED) = HashSet::new();
+    *lock(&UNKEPT) = HashSet::new();
+}
+
 /// Changes whenever a bitmap made in the background is ready: a screen showing placed documents
 /// draws again when it does, where [`made_between`] says.
 pub fn generation() -> u64 {
