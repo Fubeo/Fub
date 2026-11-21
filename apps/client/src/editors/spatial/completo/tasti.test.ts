@@ -1,8 +1,6 @@
 // Le regole dei tasti del Completo (K6 T9b): la forma dei tasti del motore, chi
 // vince su chi (D1 (a)), le modifiche dell'utente, il tasto che i menu mostrano,
 // e quando un tasto parte o no.
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { KeyChord } from "../../../ui/commands";
 import {
@@ -24,6 +22,9 @@ function tasto(key: string, mods: Partial<Pick<KeyChord, "ctrlKey" | "metaKey" |
 }
 
 const NESSUNO: StatoTastiera = { inCampo: false, vuoleTesto: false, componendo: false };
+
+/// Il sorgente di `keys.ts` come testo (Vite lo legge con `?raw`).
+const KEYS_TS = import.meta.glob("../tools/editor/keys.ts", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
 describe("tastoFub", () => {
   it("scrive Cmd del motore come Mod, e Ctrl come Ctrl", () => {
@@ -213,7 +214,7 @@ describe("TASTI_DI_FUB", () => {
   it("comprende ogni tasto con modificatore che keys.ts scrive nelle sue righe", () => {
     // Un tasto aggiunto a `keys.ts` senza entrare qui farebbe perdere a Fub il
     // suo tasto contro un comando del motore: il test lo vede prima.
-    const sorgente = readFileSync(fileURLToPath(new URL("../tools/editor/keys.ts", import.meta.url)), "utf8");
+    const sorgente = KEYS_TS["../tools/editor/keys.ts"]!;
     const scritti = new Set<string>();
     for (const [, letterale] of sorgente.matchAll(/"([^"\n]*)"/g)) {
       for (const parte of letterale!.split(/\s+/)) {
