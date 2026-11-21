@@ -20,7 +20,9 @@
 //!   `{"rifiuto": "unsupported"}` o `{"errore": "bad_args"}`;
 //! - `dopo`: il `.svg` del disegno dopo le operazioni, che il client
 //!   controlla byte per byte; per un effetto anche l'oracolo a pixel lo
-//!   confronta col disegno del motore stesso;
+//!   confronta col disegno del motore stesso, e con il disegno di partenza
+//!   a cui si applicano le operazioni che Fub ha dato (`common::applica`):
+//!   ciò che Fub scrive sul disco;
 //! - `prova`, per una voce dell'interfaccia o un pannello (che il motore non
 //!   esegue): il test del client che la prova, che deve esistere e nominare
 //!   l'id.
@@ -356,6 +358,8 @@ pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
     let (mut disegno, _) = Disegno::apri_con(disegni, &caso.disegno)
         .map_err(|e| format!("{nome}: il disegno non si apre: {e}"))?;
     let esito = esegui_sul_disegno(&mut disegno, caso)?;
+    // Le operazioni che Fub scrive, per l'oracolo dell'effetto.
+    let mut scritte: Option<Value> = None;
     match (&caso.atteso, esito) {
         (Atteso::Errore(kind), Err(e)) if tipo_dell_errore(&e) == *kind => {}
         (atteso, Err(e)) => return Err(format!("{nome}: atteso {atteso:?}, errore {e:?}")),
@@ -376,6 +380,7 @@ pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
             {
                 return Err(format!("{nome}: operazioni diverse: {dove}"));
             }
+            scritte = Some(ottenute);
         }
         (Atteso::Lettura(attesa), Ok(e)) => {
             let letta = e.reading.clone().unwrap_or(Value::Null);
@@ -417,7 +422,7 @@ pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
     }
     if caso.fonte == FonteMappa::Effetto {
         match (&caso.dopo, &caso.atteso) {
-            (Some(dopo), _) => oracolo_dell_effetto(caso, dopo)?,
+            (Some(dopo), _) => oracolo_dell_effetto(caso, dopo, scritte.as_ref())?,
             (None, Atteso::Ops(_)) => {
                 return Err(format!("{nome}: un effetto vuole il disegno `dopo`"))
             }
@@ -494,9 +499,33 @@ pub fn disegno_del_motore(caso: &Caso) -> Result<String, String> {
     .map_err(|e: String| format!("{nome}: {e}"))
 }
 
+/// Le operazioni che Fub scrive per il caso, come le dà il motore (senza
+/// il confronto con quelle attese): per le prove dell'oracolo.
+pub fn ops_scritte(disegni: &Arc<Disegni>, caso: &Caso) -> Result<Value, String> {
+    let nome = caso.nome();
+    let (mut disegno, _) = Disegno::apri_con(disegni, &caso.disegno)
+        .map_err(|e| format!("{nome}: il disegno non si apre: {e}"))?;
+    let esito =
+        esegui_sul_disegno(&mut disegno, caso)?.map_err(|e| format!("{nome}: errore {e:?}"))?;
+    if esito.ops.is_none() {
+        return Err(format!(
+            "{nome}: nessuna operazione, {}",
+            esito_in_breve(&esito)
+        ));
+    }
+    Ok(common::ops_di(&esito))
+}
+
 /// L'oracolo di K5: il disegno `dopo` e quello del motore, a pixel, con la
-/// tolleranza del cancello.
-pub fn oracolo_dell_effetto(caso: &Caso, dopo: &str) -> Result<(), String> {
+/// tolleranza del cancello. Con le operazioni `scritte` (quelle che Fub ha
+/// dato per il caso) anche il disegno di partenza con quelle applicate,
+/// cioè ciò che Fub scrive davvero sul disco, è uguale a `dopo` e al
+/// disegno del motore.
+pub fn oracolo_dell_effetto(
+    caso: &Caso,
+    dopo: &str,
+    scritte: Option<&Value>,
+) -> Result<(), String> {
     let nome = caso.nome();
     let facce = facce();
     let opzioni = Opzioni {
@@ -506,13 +535,25 @@ pub fn oracolo_dell_effetto(caso: &Caso, dopo: &str) -> Result<(), String> {
     let del_motore = disegno_del_motore(caso)?;
     let a = disegna(&senza_foglio(dopo), &opzioni).map_err(|e| format!("{nome}: dopo: {e}"))?;
     let b = disegna(&del_motore, &opzioni).map_err(|e| format!("{nome}: motore: {e}"))?;
-    let c = confronta(&a, &b, SOGLIA, None).map_err(|e| format!("{nome}: {e}"))?;
-    let parte = c.diversi as f64 / c.totali.max(1) as f64;
-    if parte > TETTO {
-        return Err(format!(
-            "{nome}: il disegno dopo e quello del motore differiscono in {} pixel su {} ({:?})",
-            c.diversi, c.totali, c.riquadro
-        ));
+    let uguali = |x, y, cosa: &str| -> Result<(), String> {
+        let c = confronta(x, y, SOGLIA, None).map_err(|e| format!("{nome}: {e}"))?;
+        let parte = c.diversi as f64 / c.totali.max(1) as f64;
+        if parte > TETTO {
+            return Err(format!(
+                "{nome}: {cosa} differiscono in {} pixel su {} ({:?})",
+                c.diversi, c.totali, c.riquadro
+            ));
+        }
+        Ok(())
+    };
+    uguali(&a, &b, "il disegno dopo e quello del motore")?;
+    if let Some(ops) = scritte {
+        let scritto = common::applica::applica(&caso.disegno, ops)
+            .map_err(|e| format!("{nome}: le operazioni di Fub non si applicano: {e}"))?;
+        let s = disegna(&senza_foglio(&scritto), &opzioni)
+            .map_err(|e| format!("{nome}: scritto: {e}"))?;
+        uguali(&s, &b, "il disegno che Fub scrive e quello del motore")?;
+        uguali(&s, &a, "il disegno che Fub scrive e il disegno dopo")?;
     }
     Ok(())
 }

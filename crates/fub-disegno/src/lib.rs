@@ -17,6 +17,8 @@ pub mod differenza;
 /// Il motore non tocca il disco: le radici del processo e la guardia prima
 /// del motore.
 pub mod disco;
+/// Il corpo espanso di un oggetto con la ricetta: la grafica del motore.
+mod espansa;
 /// Le famiglie del Disegno completo, ognuna con il suo stato pigro.
 #[cfg(feature = "completo")]
 pub mod famiglie;

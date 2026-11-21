@@ -1,5 +1,5 @@
 //! La ricetta di un elemento: la forma nativa del motore di un oggetto che la
-//! scena non sa dire, tenuta nel file accanto alla grafica semplice che ogni
+//! scena non sa dire, tenuta nel file accanto alla grafica espansa che ogni
 //! programma mostra (piano K6, T27; formato in
 //! `docs/reference/scene-format-recipe.md`).
 //!

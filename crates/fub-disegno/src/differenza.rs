@@ -210,7 +210,7 @@ struct Lavoro<'a> {
     /// Gli id dati in questo gesto.
     dati: HashSet<String>,
     /// Gli oggetti che si riscrivono interi: l'elemento di prima si toglie e
-    /// al suo posto va la grafica semplice con la ricetta nuova.
+    /// al suo posto va il corpo espanso con la ricetta nuova.
     riscritti: HashSet<NodeId>,
     /// Le ricette che il gesto scrive o fa cadere.
     ricette: ricetta::Scritte,
@@ -452,6 +452,8 @@ impl Lavoro<'_> {
             }
             cerca(l, prima, &self.riscritti, &mut nuovi);
         }
+        // Lo stampo del corpo espanso, fatto alla prima ricetta del gesto.
+        let mut stampo: Option<crate::espansa::Stampo> = None;
         for (genitore, fratelli, i) in nuovi {
             let nodo = fratelli[i];
             let parent = self.genitore(genitore)?;
@@ -475,14 +477,20 @@ impl Lavoro<'_> {
             } else {
                 self.scrittore.and_then(|s| s(nodo, locale))
             };
-            // Un oggetto ricco, o uno riscritto, va come grafica semplice
-            // con la sua ricetta, se nessuno dei suoi pezzi c'era già.
+            // Un oggetto ricco, o uno riscritto, va con il corpo espanso (la
+            // grafica che il motore disegna) e la sua ricetta, se nessuno dei
+            // suoi pezzi c'era già.
             let con_ricetta = scritto.is_none()
                 && (riscritto
                     || (ricetta::esito_albero(nodo) > Esito::Corpo
                         && !ha_pezzi_di_prima(nodo, prima)));
             let elem_o_raw = if con_ricetta {
-                let raw = self.grafica_semplice(nodo, locale, &id)?;
+                let stampo = stampo.get_or_insert_with(|| crate::espansa::Stampo::di(dopo));
+                let raw = stampo
+                    .corpo(nodo, locale, &id, &mut |specie| {
+                        self.id_nuovo(specie).map_err(|e| format!("{e:?}"))
+                    })
+                    .map_err(no)?;
                 let byte = ricetta::codifica(nodo, locale).map_err(no)?;
                 self.ricette.nuove.push(vectorcraft_svg::recipe_element(
                     &id,
@@ -514,89 +522,6 @@ impl Lavoro<'_> {
             self.add.push(op);
         }
         Ok(())
-    }
-
-    /// La grafica semplice di `n` nello spazio del genitore: un `<path>` per
-    /// un tracciato o un composto, un `<g>` per un oggetto con figli, con un
-    /// id nuovo per ogni figlio. Le sfumature diventano il colore della loro
-    /// prima tappa, i motivi niente: la forma vera è nella ricetta.
-    fn grafica_semplice(&mut self, n: &Node, locale: Affine, id: &str) -> Result<String, Rifiuto> {
-        let mut out = String::new();
-        let attr = |out: &mut String, k: &str, v: &str| {
-            out.push_str(&format!(" {k}=\"{}\"", vectorcraft_svg::xml_escape(v)));
-        };
-        let d = match &n.kind {
-            NodeKind::Path { path, .. } => Some(scrivi_d(&trasformato(path, locale))),
-            NodeKind::Compound { children, .. } => {
-                let mut d = String::new();
-                for c in children {
-                    if let NodeKind::Path { path, .. } = &c.kind {
-                        if !d.is_empty() {
-                            d.push(' ');
-                        }
-                        d.push_str(&scrivi_d(&trasformato(path, locale)));
-                    }
-                }
-                Some(d)
-            }
-            _ => None,
-        };
-        if let Some(d) = d {
-            out.push_str("<path");
-            attr(&mut out, "id", id);
-            attr(&mut out, "d", &d);
-            if let NodeKind::Compound {
-                rule: vectorcraft_geom::FillRule::EvenOdd,
-                ..
-            } = n.kind
-            {
-                attr(&mut out, "fill-rule", "evenodd");
-            }
-            attr(
-                &mut out,
-                "fill",
-                &colore_semplice(n.appearance.fill().map(|f| &f.paint)),
-            );
-            if let Some(s) = n
-                .appearance
-                .stroke()
-                .filter(|s| !matches!(s.paint, Paint::None))
-            {
-                attr(&mut out, "stroke", &colore_semplice(Some(&s.paint)));
-                let scala = locale.determinant().abs().sqrt();
-                attr(&mut out, "stroke-width", &g2(s.width * scala));
-            }
-            if n.opacity < 1.0 {
-                attr(
-                    &mut out,
-                    "opacity",
-                    &numero(f64::from(n.opacity), DECIMALI_MATRICE),
-                );
-            }
-            out.push_str("/>");
-            return Ok(out);
-        }
-        let Some(figli) = n.children() else {
-            return Err(no(
-                "un oggetto ricco che non ha una grafica semplice (testo, immagine, maglia, simbolo)",
-            ));
-        };
-        out.push_str("<g");
-        attr(&mut out, "id", id);
-        if n.opacity < 1.0 {
-            attr(
-                &mut out,
-                "opacity",
-                &numero(f64::from(n.opacity), DECIMALI_MATRICE),
-            );
-        }
-        out.push('>');
-        for c in figli {
-            let id_figlio = self.id_nuovo(Specie::Oggetto)?;
-            out.push_str(&self.grafica_semplice(c, locale, &id_figlio)?);
-        }
-        out.push_str("</g>");
-        Ok(out)
     }
 
     /// Gli oggetti che ci sono prima e dopo, dall'alto: i `set`.
@@ -1309,20 +1234,6 @@ fn trasformato(p: &vectorcraft_geom::PathData, m: Affine) -> vectorcraft_geom::P
 
 fn punti_uguali(a: Point, b: Point) -> bool {
     (a.x - b.x).abs() <= 1e-9 && (a.y - b.y).abs() <= 1e-9
-}
-
-/// Il colore della grafica semplice: una sfumatura vale la sua prima tappa,
-/// un motivo niente.
-fn colore_semplice(p: Option<&Paint>) -> String {
-    match p {
-        Some(Paint::Solid { color, .. }) => color.to_hex(),
-        Some(Paint::Gradient(g)) => g
-            .gradient
-            .stops
-            .first()
-            .map_or_else(|| "none".into(), |s| s.color.to_hex()),
-        None | Some(Paint::None) | Some(Paint::Pattern { .. }) => "none".into(),
-    }
 }
 
 /// Vero se un discendente di `n` c'era già prima del gesto: allora `n` non

@@ -3,9 +3,8 @@
 //! spostamento e cade a un cambio fatto fuori da Fub, la versione più nuova,
 //! i metadati sconosciuti e il base64 rotto.
 //!
-//! Le operazioni si applicano al testo con un applicatore piccolo, solo per
-//! le forme che la differenza scrive qui (`remove`, `add` di `raw` o `elem`,
-//! `set`, `ident`): il motore delle operazioni vero è quello del client.
+//! Le operazioni si applicano al testo con l'applicatore piccolo delle prove
+//! (`common::applica`): il motore delle operazioni vero è quello del client.
 
 mod common;
 
@@ -14,7 +13,6 @@ use std::sync::Arc;
 use common::ops_di;
 use fub_abi::{DrawingLoss, DrawingLossKind};
 use fub_disegno::ricetta::{self, Costrutto, Esito};
-use fub_scene::Item;
 use serde_json::Value;
 use vectorcraft_doc::color::{BlendMode, Paint};
 use vectorcraft_doc::{AppearanceItem, Document, LiveShape, Node, NodeId, NodeKind, Scaling};
@@ -30,153 +28,21 @@ const TRACCIATO: &[usize] = &[1, 0];
 // L'applicatore
 // ---------------------------------------------------------------------------
 
+// L'applicatore vive in `common::applica`; qui fallisce la prova.
+
 fn elementi(testo: &str) -> Vec<fub_scene::ElementItem> {
-    fub_scene::read(testo)
-        .expect("si legge")
-        .items
-        .into_iter()
-        .filter_map(|i| match i {
-            Item::Element(e) => Some(*e),
-            _ => None,
-        })
-        .collect()
+    common::applica::elementi(testo).unwrap_or_else(|e| panic!("{e}"))
 }
 
 fn span_dell_id(testo: &str, id: &str) -> [usize; 2] {
-    elementi(testo)
-        .into_iter()
-        .find(|e| e.id.as_deref() == Some(id))
-        .unwrap_or_else(|| panic!("l'id {id} c'è"))
-        .span
-        .bytes
-}
-
-fn fine_del_tag(testo: &str, da: usize) -> usize {
-    da + testo[da..].find('>').expect("un tag chiuso") + 1
-}
-
-/// Dove comincia e finisce il contenuto del genitore.
-fn dentro(testo: &str, genitore: &str) -> (usize, usize) {
-    let [da, a] = if genitore == "#root" {
-        let da = testo.find("<svg").expect("la radice");
-        [da, testo.rfind("</svg>").expect("chiusa") + "</svg>".len()]
-    } else {
-        span_dell_id(testo, genitore)
-    };
-    let chiude = testo[..a].rfind("</").expect("un tag di chiusura");
-    let mut inizio = fine_del_tag(testo, da);
-    if genitore == "#root" {
-        // Come il client: il primo posto della radice è dopo il titolo.
-        if let Some(t) = testo[inizio..].find("</title>") {
-            inizio += t + "</title>".len();
-        }
-    }
-    (inizio, chiude)
-}
-
-fn applica_op(testo: &mut String, op: &Value) {
-    match op["op"].as_str().expect("op") {
-        "batch" => {
-            for o in op["ops"].as_array().expect("ops") {
-                applica_op(testo, o);
-            }
-        }
-        "remove" => {
-            let t = &op["target"];
-            let [da, a] = match t.as_str() {
-                Some(id) => span_dell_id(testo, id),
-                None => {
-                    let percorso: Vec<usize> = t["path"]
-                        .as_array()
-                        .expect("path")
-                        .iter()
-                        .map(|v| v.as_u64().expect("indice") as usize)
-                        .collect();
-                    assert_eq!(t["tag"], "metadata", "{op}");
-                    let m = vectorcraft_svg::recipes(testo)
-                        .into_iter()
-                        .find(|r| r.metadata_path == percorso)
-                        .expect("il blocco delle ricette");
-                    [m.metadata.start, m.metadata.end]
-                }
-            };
-            testo.replace_range(da..a, "");
-        }
-        "add" => {
-            let corpo = match op.get("raw") {
-                Some(raw) => raw.as_str().expect("raw").to_string(),
-                None => {
-                    let e = &op["elem"];
-                    let mut s = format!("<{}", e["tag"].as_str().expect("tag"));
-                    for (k, v) in e["attrs"].as_object().expect("attrs") {
-                        s.push_str(&format!(" {k}=\"{}\"", v.as_str().expect("valore")));
-                    }
-                    s.push_str("/>");
-                    s
-                }
-            };
-            let genitore = op["parent"].as_str().expect("parent");
-            let (inizio, fine) = dentro(testo, genitore);
-            let pos = &op["pos"];
-            let dove = if pos.get("first").is_some() {
-                inizio
-            } else if pos.get("last").is_some() {
-                fine
-            } else {
-                span_dell_id(testo, pos["after"].as_str().expect("after"))[1]
-            };
-            testo.insert_str(dove, &corpo);
-        }
-        "set" => {
-            let id = op["id"].as_str().expect("id");
-            for (k, v) in op["attrs"].as_object().expect("attrs") {
-                imposta(testo, id, k, v.as_str().expect("valore"));
-            }
-        }
-        "ident" => {
-            let percorso: Vec<usize> = serde_json::from_value(op["path"].clone()).expect("path");
-            let e = elementi(testo)
-                .into_iter()
-                .find(|e| e.path == percorso)
-                .expect("l'elemento c'è");
-            let at = e.span.bytes[0] + 1 + e.tag.len();
-            testo.insert_str(at, &format!(" id=\"{}\"", op["id"].as_str().expect("id")));
-        }
-        altro => panic!("l'applicatore non sa {altro}"),
-    }
-}
-
-fn imposta(testo: &mut String, id: &str, k: &str, v: &str) {
-    let [da, _] = span_dell_id(testo, id);
-    let fine = fine_del_tag(testo, da);
-    let tag = &testo[da..fine];
-    let chiave = format!(" {k}=\"");
-    if let Some(i) = tag.find(&chiave) {
-        let inizio = da + i + chiave.len();
-        let fine_v = inizio + testo[inizio..].find('"').expect("chiuso");
-        testo.replace_range(inizio..fine_v, v);
-    } else {
-        let at = da + tag.find([' ', '/', '>']).expect("un tag");
-        testo.insert_str(at, &format!(" {k}=\"{v}\""));
-    }
+    common::applica::span_dell_id(testo, id).unwrap_or_else(|e| panic!("{e}"))
 }
 
 fn applica(testo: &str, ops: &Value) -> String {
-    let mut fuori = testo.to_string();
-    for op in ops.as_array().expect("una lista") {
-        applica_op(&mut fuori, op);
-    }
-    fuori
+    common::applica::applica(testo, ops).unwrap_or_else(|e| panic!("{e}: {ops}"))
 }
 
-/// Le operazioni piatte.
-fn piatte(ops: &Value) -> Vec<Value> {
-    let lista = ops.as_array().cloned().unwrap_or_default();
-    match lista.first() {
-        Some(b) if b["op"] == "batch" => b["ops"].as_array().expect("ops").clone(),
-        _ => lista,
-    }
-}
+use common::applica::piatte;
 
 // ---------------------------------------------------------------------------
 // Il disegno
@@ -429,6 +295,7 @@ fn ogni_riga_torna_dalla_ricetta() {
     let mut provate = Vec::new();
     for c in Costrutto::TUTTI {
         let mut esempio_messo = false;
+        let mut del_motore = String::new();
         let (ops, testo) = {
             let (mut d, _) = common::apri(BASE);
             let esito = d
@@ -438,6 +305,7 @@ fn ogni_riga_torna_dalla_ricetta() {
                     if esempio(c, &mut n).is_some() {
                         esempio_messo = true;
                         *doc.node_mut(id).expect("c'è") = n;
+                        del_motore = disegno_del_documento(doc);
                     }
                 })
                 .expect("valido");
@@ -467,6 +335,10 @@ fn ogni_riga_torna_dalla_ricetta() {
             "{c:?} non torna: {:?}",
             ricetta::costrutti(&n)
         );
+        // Il corpo scritto si disegna come il motore disegna l'oggetto.
+        if let Err(e) = stessi_pixel(&testo, &del_motore) {
+            panic!("{c:?}: il corpo scritto e il disegno del motore {e}\n{testo}");
+        }
         provate.push(c);
     }
     assert!(provate.len() >= 25, "{provate:?}");
@@ -498,6 +370,129 @@ fn con_ricetta() -> (String, String) {
         n.appearance.effects.push(effetto("distort.roughen"))
     });
     (id_aggiunto(&ops), testo)
+}
+
+/// Il disegno che il motore fa del documento: l'esportazione della prima
+/// tavola, come l'oracolo del banco delle righe.
+fn disegno_del_documento(doc: &Document) -> String {
+    vectorcraft_svg::export(
+        doc,
+        &vectorcraft_svg::ExportOptions {
+            artboard: Some(0),
+            ..Default::default()
+        },
+    )
+}
+
+/// `Ok` se i due SVG si disegnano uguali con la tolleranza del cancello
+/// (`casi/mod.rs`); se no quanti pixel differiscono.
+fn stessi_pixel(a: &str, b: &str) -> Result<(), String> {
+    use fub_testkit::pixel::{confronta, disegna, Opzioni};
+    let opzioni = Opzioni {
+        larghezza: 800,
+        facce: &[],
+    };
+    let x = disegna(a, &opzioni)?;
+    let y = disegna(b, &opzioni)?;
+    let c = confronta(&x, &y, 8, None)?;
+    if c.diversi as f64 / c.totali.max(1) as f64 > 0.002 {
+        return Err(format!(
+            "differiscono in {} pixel su {} ({:?})",
+            c.diversi, c.totali, c.riquadro
+        ));
+    }
+    Ok(())
+}
+
+/// L'andata e ritorno di un oggetto ricco, col corpo espanso: `f` lo fa
+/// ricco nel motore, Fub scrive. Il corpo scritto si disegna come il motore
+/// lo disegna; riaperto, l'oggetto ha di nuovo il costrutto `c` dalla
+/// ricetta e il motore lo disegna ancora uguale (il costrutto non si applica
+/// due volte, sul corpo già espanso); un secondo salvataggio senza modifiche
+/// non cambia niente.
+fn andata_e_ritorno(c: Costrutto, f: impl FnOnce(&mut Node)) -> String {
+    let mut del_motore = String::new();
+    let (mut d, _) = common::apri(BASE);
+    let esito = d
+        .a_mano(|doc, trova| {
+            let id = trova(TRACCIATO).expect("mappato");
+            let mut n = doc.node(id).expect("c'è").clone();
+            f(&mut n);
+            *doc.node_mut(id).expect("c'è") = n;
+            del_motore = disegno_del_documento(doc);
+        })
+        .expect("valido");
+    assert_eq!(esito.refused, None, "rifiutato: {esito:?}");
+    let ops = ops_di(&esito);
+    let testo = applica(BASE, &ops);
+    let id = id_aggiunto(&ops);
+    // 1. Ciò che Fub scrive è il disegno del motore.
+    if let Err(e) = stessi_pixel(&testo, &del_motore) {
+        panic!("{c:?}: il corpo scritto e il disegno del motore {e}\n{testo}");
+    }
+    // 2. Riaperto, l'oggetto ha di nuovo il costrutto, e il motore lo
+    // disegna come prima: non due volte.
+    let (n, perdite) = oggetto(&testo, &id);
+    assert!(avvisi(&perdite).is_empty(), "{c:?}: {perdite:?}");
+    assert!(
+        ricetta::costrutti(&n).contains(&c),
+        "{c:?} non torna: {:?}",
+        ricetta::costrutti(&n)
+    );
+    let (mut riaperto, _) = common::apri(&testo);
+    let mut di_nuovo = String::new();
+    let secondo = riaperto
+        .a_mano(|doc, _| di_nuovo = disegno_del_documento(doc))
+        .expect("valido");
+    if let Err(e) = stessi_pixel(&di_nuovo, &del_motore) {
+        panic!("{c:?}: riaperto, il motore lo disegna diverso: {e}\n{testo}");
+    }
+    // 3. Un secondo salvataggio senza modifiche non cambia niente.
+    assert_eq!(secondo.refused, None, "{secondo:?}");
+    assert!(secondo.ops.is_none(), "{c:?}: {:?}", secondo.ops);
+    testo
+}
+
+#[test]
+fn un_effetto_vivo_si_scrive_applicato_e_torna_vivo() {
+    let testo = andata_e_ritorno(Costrutto::EffettoVivo, |n| {
+        n.appearance.effects.push(
+            serde_json::from_value(serde_json::json!({
+                "id": "stylize.roundCorners", "params": { "radius": 40.0 }
+            }))
+            .expect("un effetto"),
+        )
+    });
+    // Gli angoli tondi sono nel corpo: curve, non la geometria di partenza.
+    let corpo = &testo[testo.find("<path id=").expect("il corpo")..];
+    assert!(
+        corpo[..corpo.find("/>").expect("chiuso")].contains(" C"),
+        "{testo}"
+    );
+}
+
+#[test]
+fn un_aspetto_impilato_si_scrive_espanso_e_torna_impilato() {
+    let testo = andata_e_ritorno(Costrutto::AspettoImpilato, |n| {
+        // Sotto, un contorno largo blu; sopra, il riempimento e un contorno
+        // stretto giallo.
+        let mut largo = contorno(n).clone();
+        largo.width = 12.0;
+        let mut stretto = largo.clone();
+        stretto.width = 3.0;
+        stretto.paint = da_json!(serde_json::json!({ "type": "solid",
+            "color": { "model": "rgb", "r": 1.0, "g": 0.8, "b": 0.0 } }));
+        n.appearance
+            .items
+            .retain(|i| !matches!(i, AppearanceItem::Stroke(_)));
+        n.appearance.items.insert(0, AppearanceItem::Stroke(largo));
+        n.appearance.items.push(AppearanceItem::Stroke(stretto));
+    });
+    // L'aspetto in pila è più elementi in un `<g>` con l'id dell'oggetto.
+    let da = testo.find("<g id=\"o").expect("il gruppo del corpo");
+    let gruppo = &testo[da..da + testo[da..].find("</g>").expect("chiuso")];
+    let pezzi = gruppo.matches("<path").count() + gruppo.matches("<polygon").count();
+    assert_eq!(pezzi, 3, "{testo}");
 }
 
 #[test]
