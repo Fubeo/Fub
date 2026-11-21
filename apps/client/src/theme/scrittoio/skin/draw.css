@@ -1043,3 +1043,12 @@ button.draw-isolation-crumb:hover {
   background: var(--bg-active);
   box-shadow: var(--shadow-sm);
 }
+
+/* ── K6 · I campioni nella scheda Risorse (T10) ─────────────────────────── */
+.draw-resources-swatches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: auto;
+  padding: 0;
+}

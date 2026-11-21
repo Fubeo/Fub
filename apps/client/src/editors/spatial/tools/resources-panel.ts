@@ -17,6 +17,7 @@
 //   `properties.ts` (`draw-properties-section`, `-toggle`, `-body`), così il
 //   tema e le foto le trattano allo stesso modo.
 
+import { textButton } from "../../../kit";
 import { iconEl } from "../../../ui/icons";
 import { identifier } from "../../../ui/a11y";
 import { openLifetime, type Lifetime, type Teardown } from "../../../ui/lifetime";
@@ -73,6 +74,8 @@ interface Montata {
   readonly errore: HTMLElement;
   readonly riprova: HTMLButtonElement;
   readonly corpo: HTMLElement;
+  /// La vita della sezione: si chiude quando la sezione si smonta.
+  readonly vita: Lifetime;
   /// Il disposer del giro in corso, se la sezione ne ha uno.
   fine: Teardown | null;
   /// La vita del giro in corso; `null` se non ce n'è uno.
@@ -175,22 +178,22 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
     const errore = document.createElement("p");
     errore.className = "draw-properties-error";
     errore.hidden = true;
-    const riprova = document.createElement("button");
-    riprova.type = "button";
-    riprova.className = "draw-button draw-resources-retry";
+    // La vita della sezione: finisce quando la sezione si smonta, e con lei
+    // i suoi ascolti (il pulsante «Riprova» e l'apertura).
+    const vita = openLifetime();
+    const riprova = textButton({ label: t("draw.resources.retry"), onPress: () => disegna(m), lifetime: vita });
+    riprova.classList.add("draw-resources-retry");
     riprova.hidden = true;
-    riprova.textContent = t("draw.resources.retry");
     const corpo = document.createElement("div");
     corpo.className = "draw-resources-corpo";
     body.append(errore, riprova, corpo);
     root.append(heading, body);
-    const m: Montata = { sezione, root, body, errore, riprova, corpo, fine: null, giro: null };
-    toggle.addEventListener("click", () => {
+    const m: Montata = { sezione, root, body, errore, riprova, corpo, vita, fine: null, giro: null };
+    vita.listen(toggle, "click", () => {
       const aperta = toggle.getAttribute("aria-expanded") !== "true";
       toggle.setAttribute("aria-expanded", String(aperta));
       body.hidden = !aperta;
     });
-    riprova.addEventListener("click", () => disegna(m));
     return m;
   }
 
@@ -202,6 +205,13 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
     m.giro = null;
     fine?.();
     giro?.close();
+  }
+
+  /// Smonta una sezione: il suo giro, i suoi ascolti, il suo elemento.
+  function butta(m: Montata): void {
+    chiudi(m);
+    m.vita.close();
+    m.root.remove();
   }
 
   /// Un giro nuovo di una sezione: il suo corpo, o l'errore con «Riprova».
@@ -242,8 +252,7 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
     // una sezione integrata, e restano due sezioni.
     for (const [sezione, m] of montate) {
       if (visibili.includes(sezione)) continue;
-      chiudi(m);
-      m.root.remove();
+      butta(m);
       montate.delete(sezione);
     }
     const nuove = visibili.map((sezione) => {
@@ -281,10 +290,7 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
     if (pendente && frame !== 0 && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
     pendente = false;
     frame = 0;
-    for (const m of montate.values()) {
-      chiudi(m);
-      m.root.remove();
-    }
+    for (const m of montate.values()) butta(m);
     montate.clear();
   }
 
