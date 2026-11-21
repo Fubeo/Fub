@@ -105,6 +105,25 @@ export function completoChunkProblems(chunks, families) {
 }
 
 /**
+ * Le dipendenze da precaricare per un `import()` (`build.modulePreload.
+ * resolveDependencies` di Vite). Vite non precarica un chunk che non importa
+ * niente, perché l'`import()` lo scarica comunque: per una famiglia del
+ * Completo rende il chunk stesso, così la pagina ne ha il `modulepreload`.
+ * La WebKitGTK dell'app non mette fra le risorse ciò che arriva dal
+ * protocollo dell'app: il `modulepreload` è l'unica traccia che lo scenario
+ * V1 del banco WebView vede di una famiglia arrivata. Gli altri `import()`
+ * restano come li fa Vite.
+ *
+ * @param {string} filename il chunk importato, `assets/<nome>-<impronta>.js`
+ * @param {string[]} deps ciò che Vite precaricherebbe
+ * @returns {string[]}
+ */
+export function completoPreload(filename, deps) {
+  const name = filename.split("/").pop() ?? "";
+  return deps.length === 0 && /^drawing-fam-[a-z0-9-]+-[A-Za-z0-9_-]{8}\.js$/.test(name) ? [filename] : deps;
+}
+
+/**
  * Il plugin di Vite che ferma la build quando un confine del Completo cade.
  *
  * @param {readonly string[]} families

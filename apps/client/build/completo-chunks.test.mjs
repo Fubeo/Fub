@@ -4,7 +4,7 @@
 // `completo-confini` di `vite.config.ts`); qui le regole su grafi finti.
 import { readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { completoChunk, completoChunkProblems, completoImportProblems, familyOf } from "./completo-chunks.mjs";
+import { completoChunk, completoChunkProblems, completoImportProblems, completoPreload, familyOf } from "./completo-chunks.mjs";
 
 const ROOT = "/repo/apps/client/src";
 const C = `${ROOT}/editors/spatial/completo`;
@@ -90,5 +90,16 @@ describe("i moduli nei loro chunk", () => {
     expect(completoChunkProblems(fuori, FAMILIES)).toEqual([`${C}/carica.ts è nel chunk index, non in drawing-completo`]);
     const senza = chunks().filter((chunk) => chunk.name !== "drawing-fam-nucleo");
     expect(completoChunkProblems(senza, FAMILIES)).toEqual(["manca il chunk drawing-fam-nucleo"]);
+  });
+});
+
+describe("il precaricamento delle famiglie", () => {
+  it("una famiglia senza dipendenze precarica sé stessa; il resto resta com'è", () => {
+    expect(completoPreload("assets/drawing-fam-nucleo-Ckrf_L1F.js", [])).toEqual(["assets/drawing-fam-nucleo-Ckrf_L1F.js"]);
+    expect(completoPreload("assets/drawing-fam-tre-d-Ckrf_L1F.js", [])).toEqual(["assets/drawing-fam-tre-d-Ckrf_L1F.js"]);
+    const deps = ["assets/drawing-fam-testo-AbCdEf12.js", "assets/kit-controls-ZyXwVu98.js"];
+    expect(completoPreload("assets/drawing-fam-testo-AbCdEf12.js", deps)).toBe(deps);
+    expect(completoPreload("assets/drawing-completo-WO3KQEvi.js", [])).toEqual([]);
+    expect(completoPreload("assets/editors-canvas-Bx3kQ9aZ.js", [])).toEqual([]);
   });
 });

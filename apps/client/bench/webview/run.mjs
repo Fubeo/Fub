@@ -1795,8 +1795,10 @@ const SCENARIOS = {
     const step = async (name, since) => {
       const ms = Math.round(performance.now() - since);
       await pause(MEMORY_QUIET_MS);
-      const chunks = await current.execute(CHUNKS_SCRIPT);
-      const added = chunks.filter((each) => !seen.includes(each));
+      const read = await current.execute(CHUNKS_SCRIPT);
+      const added = read.filter((each) => !seen.includes(each));
+      // L'unione dei passi: una voce che la pagina non elenca più resta vista.
+      const chunks = [...new Set([...seen, ...added])].sort();
       seen = chunks;
       const memory = await settled(driverPid, pause);
       const mib = (group) => memory?.groups?.[group]?.pss ?? null;

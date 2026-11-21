@@ -163,7 +163,11 @@ risponde o manca), `chunk` (il file non arriva); dall'errore si esce con
 con i test delle regole in `apps/client/build/completo-chunks.test.mjs`; ogni
 modulo sta nel suo chunk, e ogni chunk c'è. Lo scenario V1 del banco WebView
 (`bench/webview/run.mjs`) guarda la stessa cosa nella WebView vera: chunk,
-memoria e tempo all'avvio, nel Semplice, col Completo e con la penna.
+memoria e tempo all'avvio, nel Semplice, col Completo e con la penna. La
+WebKitGTK dell'app non elenca fra le risorse i file del protocollo dell'app,
+quindi lo scenario legge script e `modulepreload`: per questo ogni famiglia
+precarica il suo chunk (`completoPreload`, `build.modulePreload` di
+`vite.config.ts`), anche se non importa nient'altro.
 
 **Il banco di prova delle righe**: ogni riga fatta ha un caso in
 `crates/fub-disegno/tests/famiglie/<famiglia>.json`, con il disegno di

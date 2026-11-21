@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 import { readdirSync } from "node:fs";
 import { canvasWasm } from "./build/canvas-wasm.mjs";
-import { completoBoundaries, completoChunk } from "./build/completo-chunks.mjs";
+import { completoBoundaries, completoChunk, completoPreload } from "./build/completo-chunks.mjs";
 import { SKIN_GROUP_TARGET, skinGroups } from "./build/skin-split.mjs";
 
 const CHUNK_BUDGET = 500_000;
@@ -319,6 +319,9 @@ export default defineConfig({
     // L'avviso generico copre il tetto massimo; il plugin applica anche
     // il limite ordinario più stretto e vieta il parser nel percorso eager.
     chunkSizeWarningLimit: MERMAID_PARSER_BUDGET / 1000,
+    // Una famiglia del Disegno completo lascia il suo `modulepreload`, che il
+    // banco WebView legge (`completoPreload`).
+    modulePreload: { resolveDependencies: (filename, deps) => completoPreload(filename, deps) },
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL("./index.html", import.meta.url)),
