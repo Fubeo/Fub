@@ -1,0 +1,373 @@
+Fub patch 0009-ricetta-per-elemento (UPSTREAM-API, to be proposed upstream).
+
+An editing recipe per element: the native form of one rich object kept next
+to the plain graphics another app shows (Fub plan K6, T27;
+docs/reference/scene-format-recipe.md).
+
+- svg/src/recipe.rs (new): <vectorcraft:recipe for="<id>" hash="..." v="1">
+  inside a <metadata>, in the EDITING_NS namespace, with the object as base64
+  JSON ({"format":"vectorcraft-recipe","version":1,"node":...}).
+  element_hash hashes the element's markup without its own transform (a move
+  keeps the recipe); recipes() lists every recipe of a file with its byte
+  range, its <metadata> and that metadata's element path; recipe_of,
+  node_from_recipe, node_recipe and apply_recipe write and read the object;
+  recipe_element writes the element; base64_decode reads the payload.
+  RecipeError says whether a recipe is damaged, newer than RECIPE_VERSION or
+  names a missing node. node_from_recipe reads with the budgets of a native
+  document; what to do with a file the object links to is the reader's call.
+- svg/src/lib.rs: the module, its exports, and body_hash made public (the
+  recipe hash is body_hash of the element without its transform, the same
+  whitespace rule as the document-wide editing data).
+
+The document-wide <vectorcraft:document> block is untouched.
+
+diff --git a/crates/svg/src/lib.rs b/crates/svg/src/lib.rs
+--- a/crates/svg/src/lib.rs
++++ b/crates/svg/src/lib.rs
+@@ -99,6 +99,7 @@ mod entities;
+ mod export;
+ mod glyph;
+ mod import;
++mod recipe;
+ 
+ pub use css::{CssOptions, CssRule, CssSheet, CssUnits, css_rules};
+ 
+@@ -419,7 +420,7 @@ pub fn editing_data(svg: &str) -> Option<String> {
+ /// `<metadata>` (`parts`, in order): FNV-1a of the text with whitespace between tags dropped and
+ /// other whitespace runs read as one space, so re-indenting or other line endings don't count as
+ /// edits.
+-pub(crate) fn body_hash(parts: &[&str]) -> String {
++pub fn body_hash(parts: &[&str]) -> String {
+     let mut h = FNV_SEED;
+     // The last byte hashed and whether whitespace came after it.
+     let (mut last, mut gap) = (None, false);
+@@ -550,6 +551,10 @@ pub fn import_with_report(svg: &str) -> Result<(Document, Vec<String>), SvgError
+ 
+ pub use glyph::glyph_art;
+ pub use import::{MAX_ELEMENT_DEPTH, MAX_FOREIGN, MAX_FOREIGN_VALUE, MAX_NESTED_SVG_IMAGES, MAX_NODES};
++pub use recipe::{
++    RECIPE_VERSION, RecipeEntry, RecipeError, apply_recipe, base64_decode, element_hash, node_from_recipe, node_recipe, recipe_element, recipe_of,
++    recipes,
++};
+ 
+ /// Import an SVG document reading the files it links to as `opts` says, also returning warnings.
+ pub fn import_with(svg: &str, opts: &ImportOptions) -> Result<(Document, Vec<String>), SvgError> {
+diff --git a/crates/svg/src/recipe.rs b/crates/svg/src/recipe.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/svg/src/recipe.rs
+@@ -0,0 +1,314 @@
++//! Editing recipes kept per element: the native form of one object, carried by an SVG next to
++//! the plain graphics another app shows.
++//!
++//! A recipe is `<vectorcraft:recipe for="<id>" hash="…" v="1">base64</vectorcraft:recipe>`
++//! inside a `<metadata>`, in the [`EDITING_NS`] namespace. `for` names the element it belongs
++//! to; `hash` is [`element_hash`] of that element's markup when the recipe was written, so an
++//! app that reads it can tell whether the element was edited since (moving it, which only
++//! rewrites its own `transform`, doesn't count); `v` is [`RECIPE_VERSION`]. The bytes are the
++//! object as JSON (`{"format":"vectorcraft-recipe","version":1,"node":…}`), in whatever space
++//! the writer chose: the reader puts it back in the same one.
++//!
++//! The document-wide editing data ([`crate::editing`]) is a different element and is untouched
++//! here.
++
++use std::ops::Range;
++
++use vectorcraft_doc::{Document, Node, NodeId};
++
++use crate::{EDITING_NS, body_hash, entities, import};
++
++/// The version of the recipes this build writes; it reads this one and older.
++pub const RECIPE_VERSION: u32 = 1;
++
++/// The `format` field of a recipe's JSON.
++const RECIPE_FORMAT: &str = "vectorcraft-recipe";
++
++/// Why a recipe can't be applied.
++#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
++pub enum RecipeError {
++    /// The bytes are not a recipe this build can read (bad base64, JSON or object).
++    #[error("the recipe is damaged: {0}")]
++    Damaged(String),
++    /// Written by a newer version, with a format this build doesn't know.
++    #[error("the recipe was written by a newer version (format {0})")]
++    Newer(u32),
++    /// The object to apply it to isn't in the document.
++    #[error("no object {0} in the document")]
++    Missing(u64),
++}
++
++/// The hash of an element's markup (its whole text, start tag to end tag) without its own
++/// `transform` attribute, as [`body_hash`] counts it: whitespace between tags and line endings
++/// don't count, and neither does moving, rotating or scaling the element by its `transform`.
++pub fn element_hash(markup: &str) -> String {
++    match own_transform(markup) {
++        Some(r) => body_hash(&[&markup[..r.start], &markup[r.end..]]),
++        None => body_hash(&[markup]),
++    }
++}
++
++/// The byte range of the element's own `transform` attribute in `markup` (the whitespace before
++/// it included), if its start tag has one.
++fn own_transform(markup: &str) -> Option<Range<usize>> {
++    let b = markup.as_bytes();
++    let mut i = markup.find('<')? + 1;
++    // The tag name.
++    while i < b.len() && !b[i].is_ascii_whitespace() && b[i] != b'>' && b[i] != b'/' {
++        i += 1;
++    }
++    loop {
++        let gap = i;
++        while i < b.len() && b[i].is_ascii_whitespace() {
++            i += 1;
++        }
++        if i >= b.len() || b[i] == b'>' || b[i] == b'/' {
++            return None;
++        }
++        let name = i;
++        while i < b.len() && b[i] != b'=' && !b[i].is_ascii_whitespace() && b[i] != b'>' {
++            i += 1;
++        }
++        let name_end = i;
++        while i < b.len() && b[i].is_ascii_whitespace() {
++            i += 1;
++        }
++        if i >= b.len() || b[i] != b'=' {
++            return None;
++        }
++        i += 1;
++        while i < b.len() && b[i].is_ascii_whitespace() {
++            i += 1;
++        }
++        let quote = *b.get(i)?;
++        if quote != b'"' && quote != b'\'' {
++            return None;
++        }
++        let close = markup[i + 1..].find(quote as char)? + i + 1;
++        i = close + 1;
++        if &markup[name..name_end] == "transform" {
++            return Some(gap..i);
++        }
++    }
++}
++
++/// The recipe of `node`: its native form, version included.
++pub fn recipe_of(node: &Node) -> Vec<u8> {
++    let value = serde_json::json!({ "format": RECIPE_FORMAT, "version": RECIPE_VERSION, "node": node });
++    serde_json::to_vec(&value).unwrap_or_default()
++}
++
++/// The object a recipe holds, ids as written (see [`apply_recipe`] for fresh ones).
++pub fn node_from_recipe(bytes: &[u8]) -> Result<Node, RecipeError> {
++    #[derive(serde::Deserialize)]
++    struct Head {
++        format: String,
++        version: u32,
++    }
++    let head: Head = serde_json::from_slice(bytes).map_err(|e| RecipeError::Damaged(e.to_string()))?;
++    if head.format != RECIPE_FORMAT {
++        return Err(RecipeError::Damaged(format!("format {:?}", head.format)));
++    }
++    if head.version > RECIPE_VERSION {
++        return Err(RecipeError::Newer(head.version));
++    }
++    #[derive(serde::Deserialize)]
++    struct Body {
++        node: Node,
++    }
++    // The budgets of a native document: objects, anchors and values buffered before a type.
++    use vectorcraft_doc::{geom::path, node};
++    let read = || {
++        node::with_node_budget(node::MAX_READ_NODES, || {
++            node::with_buffered_value_budget(node::MAX_BUFFERED_VALUES, || serde_json::from_slice::<Body>(bytes))
++        })
++    };
++    let body = path::with_anchor_budget(path::MAX_READ_ANCHORS, read).map_err(|e| RecipeError::Damaged(e.to_string()))?;
++    Ok(body.node)
++}
++
++/// The recipe of object `node` of `doc`, if it is there.
++pub fn node_recipe(doc: &Document, node: NodeId) -> Option<Vec<u8>> {
++    doc.node(node).map(recipe_of)
++}
++
++/// Replace object `node` of `doc` with the one `bytes` holds: it keeps its id and name, and
++/// what it contains gets fresh ids. On error `doc` is unchanged.
++pub fn apply_recipe(doc: &mut Document, node: NodeId, bytes: &[u8]) -> Result<(), RecipeError> {
++    let read = node_from_recipe(bytes)?;
++    let Some(name) = doc.node(node).map(|n| n.name.clone()) else {
++        return Err(RecipeError::Missing(node.0));
++    };
++    let mut fresh = doc.reid(&read);
++    fresh.id = node;
++    fresh.name = name;
++    match doc.node_mut(node) {
++        Some(slot) => {
++            *slot = fresh;
++            Ok(())
++        }
++        None => Err(RecipeError::Missing(node.0)),
++    }
++}
++
++/// The `<vectorcraft:recipe>` element of a recipe for element `for_id` whose markup hashes to
++/// `hash` ([`element_hash`]). The prefix is bound on the element itself, so it can go in any
++/// `<metadata>`.
++pub fn recipe_element(for_id: &str, hash: &str, bytes: &[u8]) -> String {
++    format!(
++        "<vectorcraft:recipe xmlns:vectorcraft=\"{EDITING_NS}\" for=\"{}\" hash=\"{}\" v=\"{RECIPE_VERSION}\">{}</vectorcraft:recipe>",
++        crate::xml_escape(for_id),
++        crate::xml_escape(hash),
++        crate::base64_encode(bytes),
++    )
++}
++
++/// A recipe as an SVG carries it.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct RecipeEntry {
++    /// The `for` attribute: the id of the element it belongs to.
++    pub for_id: String,
++    /// The `hash` attribute, as written.
++    pub hash: Option<String>,
++    /// The `v` attribute, as written.
++    pub version: Option<String>,
++    /// The base64 text, whitespace removed.
++    pub data: String,
++    /// The bytes of the `<vectorcraft:recipe>` element in the SVG.
++    pub range: Range<usize>,
++    /// The bytes of the `<metadata>` holding it.
++    pub metadata: Range<usize>,
++    /// Where that `<metadata>` sits: the index among the element children of each ancestor,
++    /// from the root element down (`[0]`: the root's first element child).
++    pub metadata_path: Vec<usize>,
++}
++
++impl RecipeEntry {
++    /// The `v` attribute as a number (`None`: missing or not a number).
++    pub fn version_number(&self) -> Option<u32> {
++        self.version.as_deref().and_then(|v| v.trim().parse().ok())
++    }
++
++    /// The recipe's bytes, if the base64 reads.
++    pub fn bytes(&self) -> Option<Vec<u8>> {
++        base64_decode(&self.data)
++    }
++}
++
++/// Every recipe an SVG carries, in document order: `<vectorcraft:recipe>` elements of
++/// [`EDITING_NS`] directly inside a `<metadata>`. Empty for an SVG that doesn't parse.
++pub fn recipes(svg: &str) -> Vec<RecipeEntry> {
++    if !svg.contains(EDITING_NS) || import::xml_too_deep(svg) || entities::expansion_too_large(svg) {
++        return Vec::new();
++    }
++    let opts = usvg::roxmltree::ParsingOptions { allow_dtd: true, ..Default::default() };
++    let Ok(xml) = usvg::roxmltree::Document::parse_with_options(svg, opts) else {
++        return Vec::new();
++    };
++    xml.descendants()
++        .filter(|n| n.tag_name().namespace() == Some(EDITING_NS) && n.tag_name().name() == "recipe")
++        .filter_map(|el| {
++            let meta = el.parent_element().filter(|p| p.tag_name().name() == "metadata")?;
++            let data = el.children().filter_map(|c| c.text()).flat_map(|t| t.chars().filter(|c| !c.is_whitespace())).collect();
++            Some(RecipeEntry {
++                for_id: el.attribute("for")?.to_string(),
++                hash: el.attribute("hash").map(str::to_string),
++                version: el.attribute("v").map(str::to_string),
++                data,
++                range: el.range(),
++                metadata: meta.range(),
++                metadata_path: element_path(meta),
++            })
++        })
++        .collect()
++}
++
++/// The index path of `el` among element children, from the root element down.
++fn element_path(el: usvg::roxmltree::Node) -> Vec<usize> {
++    let mut path: Vec<usize> = el
++        .ancestors()
++        .filter(|a| a.is_element() && a.parent_element().is_some())
++        .map(|a| a.prev_siblings().filter(|s| s.is_element()).count() - 1)
++        .collect();
++    path.reverse();
++    path
++}
++
++/// Standard base64 (RFC 4648, padding optional); `None` for any other character.
++pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
++    fn value(c: u8) -> Option<u32> {
++        Some(match c {
++            b'A'..=b'Z' => c - b'A',
++            b'a'..=b'z' => c - b'a' + 26,
++            b'0'..=b'9' => c - b'0' + 52,
++            b'+' => 62,
++            b'/' => 63,
++            _ => return None,
++        } as u32)
++    }
++    let t = text.trim_end_matches('=').as_bytes();
++    if t.len() % 4 == 1 || text.len() - t.len() > 2 {
++        return None;
++    }
++    let mut out = Vec::with_capacity(t.len() * 3 / 4);
++    for chunk in t.chunks(4) {
++        let mut n = 0u32;
++        for (i, c) in chunk.iter().enumerate() {
++            n |= value(*c)? << (18 - 6 * i);
++        }
++        out.push((n >> 16) as u8);
++        if chunk.len() > 2 {
++            out.push((n >> 8) as u8);
++        }
++        if chunk.len() > 3 {
++            out.push(n as u8);
++        }
++    }
++    Some(out)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn hash_ignores_own_transform_only() {
++        let a = r#"<path id="a" d="M0 0L1 1" fill="red"/>"#;
++        let b = r#"<path id="a" transform="translate(4 5)" d="M0 0L1 1" fill="red"/>"#;
++        let c = r#"<path id="a" d="M0 0L1 2" fill="red"/>"#;
++        let d = r#"<g id="a"><path transform="scale(2)" d="M0 0"/></g>"#;
++        let e = r#"<g id="a"><path d="M0 0"/></g>"#;
++        assert_eq!(element_hash(a), element_hash(b));
++        assert_ne!(element_hash(a), element_hash(c));
++        assert_ne!(element_hash(d), element_hash(e), "a child's transform counts");
++    }
++
++    #[test]
++    fn base64_round_trip() {
++        for data in [&b""[..], b"f", b"fo", b"foo", b"foob", b"fooba", b"foobar"] {
++            assert_eq!(base64_decode(&crate::base64_encode(data)).as_deref(), Some(data));
++        }
++        assert_eq!(base64_decode("Zm9v!"), None);
++        assert_eq!(base64_decode("Z"), None);
++    }
++
++    #[test]
++    fn recipes_are_found_and_versions_checked() {
++        let node = Node::layer(NodeId(7), "x", vectorcraft_doc::LayerColor::Preset(0));
++        let bytes = recipe_of(&node);
++        let svg = format!(
++            "<svg xmlns=\"http://www.w3.org/2000/svg\"><title/><metadata>{}</metadata><path id=\"p\"/></svg>",
++            recipe_element("p", "00", &bytes)
++        );
++        let found = recipes(&svg);
++        assert_eq!(found.len(), 1);
++        assert_eq!(found[0].metadata_path, vec![1]);
++        assert_eq!(found[0].for_id, "p");
++        assert_eq!(found[0].version_number(), Some(RECIPE_VERSION));
++        assert_eq!(found[0].bytes().as_deref(), Some(&bytes[..]));
++        assert!(node_from_recipe(&bytes).is_ok());
++        let newer = br#"{"format":"vectorcraft-recipe","version":99,"node":{}}"#;
++        assert_eq!(node_from_recipe(newer), Err(RecipeError::Newer(99)));
++        assert!(matches!(node_from_recipe(b"{"), Err(RecipeError::Damaged(_))));
++    }
++}
