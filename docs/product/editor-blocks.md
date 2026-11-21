@@ -48,7 +48,11 @@ Al passaggio del puntatore a sinistra del blocco compaiono, in grigio, il
 voce), e la **maniglia**: i due occhi del marchio. A riposo non si vedono;
 sugli schermi senza passaggio restano sul blocco del cursore. Stanno sempre a
 sinistra di ciò che si vede: una scheda o una tabella più larga della colonna
-li sposta (figure da 16 px). La maniglia sotto il puntatore prende l'accento
+li sposta, e su una citazione, un riquadro o un blocco di codice stanno a
+sinistra del filo o del fondo, non del testo rientrato (figure da 16 px). In
+altezza stanno sulla prima riga di testo; su un blocco alto che non comincia
+con una riga (una tabella, una scheda, un'immagine) stanno in testa, non a
+metà altezza. La maniglia sotto il puntatore prende l'accento
 e gli occhi crescono appena; il suggerimento dice «Trascina per spostare,
 clic per il menu». La maniglia ha il nome del blocco («Blocco: Titolo 2») e
 apre col clic o col tasto destro un menu col campo «Cerca un'azione…», il
@@ -73,7 +77,9 @@ più alto di 104 px: uno più alto si accorcia davanti agli occhi mentre i
 vicini salgono, si taglia sfumando e porta il nome del suo tipo; più blocchi selezionati salgono insieme e dicono
 quanti sono. Fra i fratelli dello stesso livello si apre **il posto** dove
 cadrà, alto quanto il blocco in mano: grigio finché è quello d'origine,
-d'accento altrove; i vicini scivolano via per fargli spazio. Il posto cambia
+d'accento altrove; i vicini scivolano via per fargli spazio, e il posto
+scivola con loro, una volta per ogni cambio: a posto fermo non si muove,
+comunque si muova il puntatore. Il posto cambia
 soltanto quando il centro del blocco in mano passa oltre la metà di un vicino,
 e torna indietro solo ripassandola: niente tremolii. In un'altra sezione
 un'etichetta in basso a destra dice «in «Sezione»»; per chi non vede, a ogni
