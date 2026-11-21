@@ -5,7 +5,8 @@
 //! (la forma è in `casi/mod.rs`), e ogni caso ha la sua riga. Ogni caso gira
 //! con tutte le righe accese (`Filtro::Tutte`): un comando dà le operazioni,
 //! la lettura o l'errore attesi; uno strumento fa il suo gesto; un effetto
-//! si confronta a pixel col disegno del motore stesso. Dopo ogni caso il
+//! si confronta a pixel col disegno del motore stesso, sia il `dopo` sia il
+//! disegno con le operazioni di Fub applicate. Dopo ogni caso il
 //! motore è tornato al disegno di partenza; il client applica le operazioni
 //! in un passo, le annulla e controlla i testi byte per byte (`casi.test.ts`).
 //!
@@ -19,7 +20,7 @@ mod common;
 
 use casi::{
     cartella_famiglie, cartella_prova, controlla_righe, disegni_di_prova, esegui, leggi_cartella,
-    leggi_file, Atteso, Caso,
+    leggi_file, ops_scritte, oracolo_dell_effetto, Atteso, Caso,
 };
 use fub_disegno::catalogo::{mappa, FonteMappa, Stato};
 use serde_json::json;
@@ -123,11 +124,45 @@ fn un_effetto_diverso_dal_motore_fa_cadere_il_caso() {
         .map(|d| d.replace("fill=\"#000000\"", "fill=\"#00ff00\""));
     let errore = esegui(&disegni, &caso).expect_err("il disegno dopo è sbagliato");
     assert!(errore.contains("differiscono"), "{errore}");
-    // Gli angoli dritti: l'oracolo vede anche i soli angoli.
+    // Gli angoli dritti (il disegno di partenza come dopo): l'oracolo vede
+    // anche i soli angoli.
     let mut dritti = caso_di_prova("stylize.roundCorners");
-    dritti.dopo = dritti.dopo.map(|d| d.replace(" rx=\"15\"", ""));
+    dritti.dopo = Some(dritti.disegno.clone());
     let errore = esegui(&disegni, &dritti).expect_err("gli angoli non sono tondi");
     assert!(errore.contains("differiscono"), "{errore}");
+    // Ciò che Fub scrive conta, non solo `dopo`: con le operazioni della
+    // grafica semplice di prima (la geometria di partenza, senza l'effetto
+    // applicato) il caso cade anche con il `dopo` giusto.
+    let giusto = caso_di_prova("stylize.roundCorners");
+    let ops = ops_scritte(&disegni, &giusto).expect("le operazioni di Fub");
+    let mut testo = ops.to_string();
+    for (id, espanso, semplice) in [
+        (
+            "oa1a1a1a1",
+            "M100 115 C",
+            "M100 100 L200 100 L200 150 L100 150 Z",
+        ),
+        (
+            "ob2b2b2b2",
+            "M220 115 C",
+            "M220 100 L280 100 L280 150 L220 150 Z",
+        ),
+    ] {
+        let attacco = format!("<path id=\\\"{id}\\\" d=\\\"");
+        let da = testo
+            .find(&attacco)
+            .unwrap_or_else(|| panic!("il corpo di {id}: {testo}"))
+            + attacco.len();
+        let a = da + testo[da..].find("\\\"").expect("chiuso");
+        assert!(testo[da..a].starts_with(espanso), "{}", &testo[da..a]);
+        testo.replace_range(da..a, semplice);
+    }
+    let semplici: serde_json::Value = serde_json::from_str(&testo).expect("json");
+    let dopo = giusto.dopo.clone().expect("il dopo");
+    oracolo_dell_effetto(&giusto, &dopo, Some(&ops)).expect("le operazioni di Fub");
+    let errore = oracolo_dell_effetto(&giusto, &dopo, Some(&semplici))
+        .expect_err("la grafica semplice non è il disegno del motore");
+    assert!(errore.contains("il disegno che Fub scrive"), "{errore}");
     // Un effetto con le operazioni attese vuole il disegno dopo.
     let mut senza = caso_di_prova("stylize.roundCorners");
     senza.dopo = None;
