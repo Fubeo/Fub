@@ -2056,7 +2056,7 @@ Fatto quando:
 - le foto stanno accanto agli stati del prototipo, e `npm run bench:a11y`
   è verde.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial; npm run bench:a11y
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 
