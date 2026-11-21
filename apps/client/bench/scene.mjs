@@ -5143,14 +5143,22 @@ async function openDrawing(page) {
 /// quando il motore ha risposto; con `ask` apre anche «Che cosa manca?». Il
 /// fuoco resta nel riquadro, sull'ultimo pulsante premuto.
 /// Il bottone «Spazio di lavoro» della banda (K6 T7), col suo menu aperto.
+/// Il primo oggetto scelto da tastiera (`Home`), come lo sceglie chi usa la tastiera.
+async function scegliPrimo(page) {
+  await page.focus(".draw-editor .draw-surface");
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(300);
+}
+
 /// Il menu ≡ del Completo con Oggetto aperto (K6 T9a): le voci dell'indice di
 /// prova. Si apre col pulsante, poi si va su Oggetto col mouse, come chi usa il
 /// mouse: il sottomenu si apre di lato.
 async function openMenuOggetto(page) {
   await openDrawing(page);
-  // Un oggetto scelto, come nello stato del prototipo: `Home` sceglie il primo.
-  await page.keyboard.press("Home");
-  await page.waitForTimeout(300);
+  // Un oggetto scelto, come nello stato «un punto scelto» del prototipo. Con
+  // la tastiera: il menu che si apre dopo mostra l'anello del fuoco di chi usa
+  // la tastiera (WCAG 2.4.7). Col mouse, senza tastiera, non c'è (misurato).
+  await scegliPrimo(page);
   await page.click(".draw-header button[aria-label=\"Disegno\"]");
   await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
   await page.hover("#context-menu [role='menuitem']:has-text('Oggetto')");
@@ -5162,9 +5170,8 @@ async function openMenuOggetto(page) {
 /// cominciano così, col loro posto, il tasto e il perché di quella spenta.
 async function openTavolozza(page) {
   await openDrawing(page);
-  // Un oggetto scelto, come nello stato del prototipo: `Home` sceglie il primo.
-  await page.keyboard.press("Home");
-  await page.waitForTimeout(300);
+  // Un oggetto scelto, come nello stato «un punto scelto» del prototipo.
+  await scegliPrimo(page);
   await page.keyboard.press("Control+/");
   await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
   await page.fill(".draw-commands-dialog .draw-commands-field input", "sposta");
