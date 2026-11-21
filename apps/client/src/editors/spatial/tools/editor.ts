@@ -173,6 +173,10 @@ import { installClipboardCommands } from "./editor/clipboard-commands";
 import { installVaultImages } from "./editor/vault-images";
 import { installLife } from "./editor/life";
 import { installGestiMotore, type MotoreDelDisegno } from "../motore/gesti";
+import type { SpazioSalvato } from "./saved-workspaces";
+
+/// Il layout di uno spazio salvato: quello che lo spazio porta all'editor.
+export type SpazioSalvatoLayout = Omit<SpazioSalvato, "id" | "nome">;
 export { DRAW_SCALE_LIMITS } from "./editor/constants";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -275,12 +279,20 @@ export interface DrawSheet {
 
 export interface DrawEditorOptions {
   /// Lo spazio di lavoro, che sceglie le parti (default `full`); cambia con
-  /// `setWorkspace`.
+  /// `setSpace`.
   readonly workspace?: Workspace;
+  /// Lo spazio in uso (T7): `full`, `simple`, un preset o uno salvato. Di serie
+  /// è la base, `workspace`.
+  readonly space?: string;
   /// Gli strumenti della colonna, in ordine (default vuoto: quelli di serie).
   readonly toolbar?: readonly ToolId[];
-  /// Chi disegna ha scelto un altro spazio dal menu ≡.
-  readonly onWorkspace?: (workspace: Workspace) => void;
+  /// Chi disegna ha scelto un altro spazio dal menu ≡ o dalla banda.
+  readonly onWorkspace?: (space: string) => void;
+  /// Il Completo è arrivato o non è arrivato: la banda rilegge il menu.
+  readonly onWorkspaceChange?: () => void;
+  /// Il layout di uno spazio salvato (colonna, scheda), o `null` se lo spazio
+  /// non è salvato.
+  readonly spazioSalvato?: (space: string) => SpazioSalvatoLayout | null;
   /// Chi disegna ha salvato la colonna da «Personalizza la barra…»: vuota è
   /// quella di serie.
   readonly onToolbar?: (toolbar: readonly ToolId[]) => void;
@@ -399,7 +411,16 @@ export interface DrawEditor {
   /// la barra e i tasti cambiano, il documento e la cronologia restano. Uno
   /// strumento che lo spazio non ha più torna alla penna, o al primo che
   /// c'è, e un colore personalizzato al nero.
-  setWorkspace(workspace: Workspace, toolbar?: readonly ToolId[]): void;
+  /// Lo spazio in uso (T7): `full`, `simple`, un preset o uno salvato; con
+  /// `toolbar`, anche la colonna.
+  setSpace(space: string, toolbar?: readonly ToolId[]): void;
+  /// Ripristina i dati dello spazio in uso (scheda, sezione), senza cambiarlo.
+  resetSpace(): void;
+  /// Il Completo non si è caricato: riprova ad aprirlo.
+  retryCompleto(): void;
+  completoFailed(): boolean;
+  /// La colonna, la scheda e la sezione adesso, per salvare lo spazio.
+  spaceSnapshot(): { colonna: string[]; scheda: "design" | "layers"; sezione: string | null; righelli: boolean };
   setTool(id: ToolId): void;
   /// Il colore dello strumento di adesso: uno della tavolozza o, dal livello
   /// Standard, uno a piacere, come lo legge `customColor`.
@@ -611,7 +632,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setReadOnly,
     reveal,
     adopt,
-    setWorkspace: (workspace, toolbar) => ctx.setWorkspace(workspace, toolbar),
+    setSpace: (space, toolbar) => ctx.setSpace(space, toolbar),
+    resetSpace: () => ctx.resetSpace(),
+    retryCompleto: () => ctx.retryCompleto(),
+    completoFailed: () => ctx.completoFailed(),
+    spaceSnapshot: () => ctx.spaceSnapshot(),
     setTool,
     setColor: (color) => setColor(color),
     setWidth,

@@ -161,6 +161,12 @@ const CHROME: Readonly<Record<string, readonly string[]>> = {
 };
 
 /// Tutte le figure, per nome.
+/// Lo spazio di lavoro nella banda (T7): la figura del prototipo, come quella
+/// della modalità di Scrittoio 2.
+const WORKSPACE: Readonly<Record<string, readonly string[]>> = {
+  "draw-workspace": ["M4 5h16v14H4z", "M9 5v14", "M9 10h11"],
+};
+
 export const DRAW_ICONS: Readonly<Record<string, readonly string[]>> = {
   ...STATE,
   ...PROPERTIES,
@@ -169,6 +175,7 @@ export const DRAW_ICONS: Readonly<Record<string, readonly string[]>> = {
   ...ACCESSIBILITY_PANEL,
   ...SUGGESTIONS,
   ...CHROME,
+  ...WORKSPACE,
 };
 
 /// Registra le figure che mancano. Si chiama a ogni montaggio: costa un giro

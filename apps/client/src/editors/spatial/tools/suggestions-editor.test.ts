@@ -226,7 +226,7 @@ describe("i suggerimenti nell'editor", () => {
     // Nel Semplice le forme dal tratto non ci sono.
     stroke(RECT, MOUSE);
     expect(showing()).toBeNull();
-    editor.setWorkspace("full");
+    editor.setSpace("full");
     stroke(SCRIBBLE, MOUSE);
     expect(showing()).toBeNull();
     stroke(RECT, MOUSE);

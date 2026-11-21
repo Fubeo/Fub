@@ -10,6 +10,9 @@
 
 import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
 import type { Indice } from "./indice";
+// Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
+import { applicaSpazio, presetDi, SPAZIO_COMPLETO, type EffettiSpazio } from "./spazi";
+export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
 export type { Indice, VoceIndice } from "./indice";
@@ -24,6 +27,9 @@ export interface Completo {
   readonly carica: Caricatore;
   /// Il disegno si chiude: gli esiti in volo si buttano.
   chiudi(): void;
+  /// Applica lo spazio `space` del Completo (un preset, o `full` per i dati di
+  /// serie): la scheda, la sezione, e le famiglie da preparare.
+  spazio(space: string, effetti: EffettiSpazio): void;
 }
 
 export interface OpzioniCompleto {
@@ -50,6 +56,9 @@ export function apri(ctx: ContestoCompleto, opzioni: OpzioniCompleto = {}): Comp
       if (chiuso) return;
       chiuso = true;
       carica.chiudi();
+    },
+    spazio(space, effetti) {
+      applicaSpazio(presetDi(space) ?? SPAZIO_COMPLETO, effetti, carica);
     },
   };
   ctx.life.add(() => completo.chiudi());
