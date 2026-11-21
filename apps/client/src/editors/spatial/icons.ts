@@ -41,6 +41,8 @@ const STATE: Readonly<Record<string, readonly string[]>> = {
   "draw-order": ["M10 14H4V4h10v6", "M10 10h10v10H10z"],
   "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
+  // La scheda Risorse (K6 T10): la figura del prototipo, la stessa di T8.
+  "draw-resources": ["M4 4h7v7H4z", "M13 4h7v7h-7z", "M4 13h7v7H4z", "M13 16.5a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0"],
   "draw-into-layer": ["M12 11l9 5-9 5-9-5z", "M12 2v7", "M9 6l3 3 3-3"],
   "draw-page-grid": ["M3 3h18v18H3z", "M9 3v18", "M15 3v18", "M3 9h18", "M3 15h18"],
   "draw-image": ["M3 5h18v14H3z", "M3 17l5-5 5 5", "M11 15l4-4 6 6", "M14.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],

@@ -14,8 +14,10 @@
 
 import type { SurfacePanel, SurfacePanels } from "../../../../core/registry";
 
-/// Le schede dei pannelli, con gli id che l'ispettore ricorda.
-export type DrawPanelId = "design" | "layers" | "history" | "accessibility";
+/// Le schede dei pannelli, con gli id che l'ispettore ricorda. `resources` è
+/// la scheda Risorse del Disegno completo (T10), che c'è solo col Completo
+/// aperto.
+export type DrawPanelId = "design" | "layers" | "resources" | "history" | "accessibility";
 
 /// Un pannello dell'editor, come lo sposta una cromatura.
 export interface DrawPanelPiece {

@@ -14,6 +14,7 @@ import { t } from "../../../strings";
 import type { ToolId, Workspace } from "../../registry";
 import { openToolbarDialog } from "../../toolbar-dialog";
 import type { EditorContext } from "../context";
+import type { Sezioni } from "../../../completo/sezioni";
 import { railLayout } from "./rail";
 
 /// Fino a questa larghezza della finestra, in px, la colonna sta sotto il
@@ -122,8 +123,17 @@ export function installWorkspace(ctx: EditorContext): void {
   // avvio. Una lettura che non riesce non ferma niente: decide lo spazio
   // dell'editor.
   let completo: "no" | "verifica" | "in-arrivo" | "aperto" = "no";
+  // Le sezioni del Completo aperto (T10): la scheda Risorse le legge di qui.
+  let sezioniAperte: Sezioni | null = null;
   const vuoleCompleto = (): boolean =>
     !compact && !ctx.disposed && ctx.workspace === "full" && components()?.on(DISEGNO_COMPLETO) === true;
+  // La scheda Risorse c'è solo col Completo aperto, col componente acceso e
+  // nello spazio «Completo»: spento o nel Semplice, il pannello si toglie.
+  const mostraRisorse = (): void => {
+    if (completo !== "aperto" || sezioniAperte === null) return;
+    const attivo = !ctx.disposed && ctx.workspace === "full" && components()?.on(DISEGNO_COMPLETO) === true;
+    ctx.collegaCompleto(attivo ? sezioniAperte : null, attivo ? (options.motore ?? null) : null);
+  };
   const portaCompleto = (): void => {
     if (completo !== "no" || !vuoleCompleto()) return;
     completo = "verifica";
@@ -139,8 +149,10 @@ export function installWorkspace(ctx: EditorContext): void {
       import("../../../completo").then(
         ({ apri }) => {
           if (ctx.disposed) return;
-          apri({ motore: options.motore ?? null, life: ctx.life });
+          const aperto = apri({ motore: options.motore ?? null, life: ctx.life });
+          sezioniAperte = aperto.sezioni;
           completo = "aperto";
+          mostraRisorse();
         },
         // Un chunk che non arriva: il Completo di K5 resta, e il prossimo
         // ingresso ci riprova.
@@ -150,7 +162,10 @@ export function installWorkspace(ctx: EditorContext): void {
       );
     });
   };
-  ctx.life.add(onComponents(portaCompleto));
+  ctx.life.add(onComponents(() => {
+    portaCompleto();
+    mostraRisorse();
+  }));
 
   ctx.setWorkspace = (next, toolbar) => {
     if (ctx.disposed) return;
@@ -163,6 +178,7 @@ export function installWorkspace(ctx: EditorContext): void {
     ctx.syncRail(ctx.editable());
     ctx.syncPenOptions();
     portaCompleto();
+    mostraRisorse();
   };
   portaCompleto();
 
