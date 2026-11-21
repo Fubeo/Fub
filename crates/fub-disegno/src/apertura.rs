@@ -29,6 +29,7 @@ use vectorcraft_geom::Affine;
 
 use crate::mappa::{Elemento, Mappa};
 use crate::perdite::{self, Perdite};
+use crate::ricetta;
 
 /// Il prefisso degli id sintetici della copia per l'import.
 pub const PREFISSO_SINTETICO: &str = "fubtmp-";
@@ -92,7 +93,7 @@ impl std::fmt::Display for ErroreApertura {
 pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertura> {
     let scena = fub_scene::read(testo).map_err(|e| ErroreApertura::Scena(e.to_string()))?;
     let mut perdite = Perdite::nuove();
-    let modificabile = scena.editable();
+    let mut modificabile = scena.editable();
     if !scena.read_only.is_empty() {
         let motivi: Vec<&str> = scena
             .read_only
@@ -147,7 +148,27 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     let mut documento = documento;
     gruppi_di_fub(&elementi, &mut documento);
     livelli_vuoti(&elementi, &mut documento);
-    let mappa = Mappa::nuova(elementi, &mut documento);
+    // Le ricette dopo l'import, prima della mappa: gli elementi dentro un
+    // oggetto rifatto restano fuori dalla mappa.
+    let (ricette, sola_lettura) = ricetta::leggi(
+        testo,
+        &scena.items,
+        &mut elementi,
+        &mut documento,
+        &mut perdite,
+    );
+    if let Some(motivo) = sola_lettura {
+        if modificabile {
+            perdite.aggiungi(
+                "svg",
+                DrawingLossKind::Unsupported,
+                format!("sola lettura: {motivo}"),
+            );
+        }
+        modificabile = false;
+    }
+    let mut mappa = Mappa::nuova(elementi, &mut documento);
+    mappa.ricette = ricette;
     perdite::classifica(&mut perdite, testo, &scena.items, &mappa);
     Ok(Copia {
         revisione,

@@ -69,6 +69,8 @@ pub struct Mappa {
     /// Ogni id del file, anche di elementi fuori dalla mappa: gli id nuovi
     /// non devono esserne uguali.
     ids: HashSet<String>,
+    /// Le ricette del file ([`crate::ricetta`]).
+    pub(crate) ricette: crate::ricetta::Ricette,
 }
 
 impl Mappa {
@@ -129,6 +131,7 @@ impl Mappa {
             per_id,
             radici,
             ids,
+            ricette: Default::default(),
         }
     }
 
@@ -165,6 +168,11 @@ impl Mappa {
     /// Vero se `nodo` è un livello del motore che sta per la radice.
     pub fn e_radice(&self, nodo: NodeId) -> bool {
         self.radici.contains(&nodo)
+    }
+
+    /// Le ricette del file.
+    pub fn ricette(&self) -> &crate::ricetta::Ricette {
+        &self.ricette
     }
 
     /// Vero se `id` è già un id del file.
