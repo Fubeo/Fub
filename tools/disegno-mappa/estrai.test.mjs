@@ -46,7 +46,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   assert.deepEqual(mappa.errori, []);
   assert.equal(mappa.rev, revisione());
   assert.equal(mappa.righe.length, 1551);
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1474, fub: 65, escluso: 12 });
+  // T10 (K6) chiude le sette righe `window.*` del menu Finestra: da fare → fub.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1467, fub: 72, escluso: 12 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
