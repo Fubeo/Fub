@@ -43,6 +43,36 @@ describe("il cassetto Tutti gli strumenti", () => {
     life.close();
   });
 
+  it("da tastiera: la freccia giù dalla ricerca entra nella lista, le frecce passano fra gli strumenti visibili, Fine va all'ultimo", () => {
+    const { popover, life } = apri();
+    const input = popover.element.querySelector<HTMLInputElement>("input")!;
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(document.activeElement).toBe(popover.element.querySelector('[data-tool="select"]'));
+    const grid = popover.element.querySelector<HTMLElement>(".draw-drawer-groups")!;
+    const sul = (key: string) => (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    sul("ArrowDown");
+    expect(document.activeElement).toBe(popover.element.querySelector('[data-tool="pen"]'));
+    sul("End");
+    expect(document.activeElement).toBe(popover.element.querySelector('[data-tool="rect"]'));
+    sul("Home");
+    expect(document.activeElement).toBe(popover.element.querySelector('[data-tool="select"]'));
+    popover.close("manual");
+    life.close();
+  });
+
+  it("Esc chiude il cassetto e riporta il fuoco alla casella che lo ha aperto", () => {
+    const anchor = document.createElement("button");
+    document.body.append(anchor);
+    anchor.focus();
+    const life = openLifetime();
+    const popover = apriCassetto({ anchor, strumenti: STRUMENTI, corrente: "pen", scegli: vi.fn(), modifica: vi.fn(), lifetime: life });
+    popover.element.querySelector<HTMLButtonElement>('[data-tool="rect"]')!.focus();
+    (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(popover.closed).toBe(true);
+    expect(document.activeElement).toBe(anchor);
+    life.close();
+  });
+
   it("la ricerca trova il nome senza maiuscole e nasconde gli altri gruppi", () => {
     const { popover, life } = apri();
     const input = popover.element.querySelector<HTMLInputElement>("input")!;

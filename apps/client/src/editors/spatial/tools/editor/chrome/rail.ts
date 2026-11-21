@@ -75,6 +75,15 @@ export function caselleCheStanno(lunghezza: number, gruppi: readonly number[], m
   return stanno;
 }
 
+/// Le caselle del Completo con i soli strumenti che il disegno offre: uno
+/// strumento del motore (`motore:…`) o sconosciuto non ha un `ToolSpec` e si
+/// salta, e una casella senza strumenti non c'è. Così la colonna non cerca mai
+/// uno strumento che non esiste.
+export function casellePresenti(caselle: readonly (readonly string[])[], offerti: readonly ToolSpec[]): string[][] {
+  const ids = new Set(offerti.map((spec) => spec.id as string));
+  return caselle.map((casella) => casella.filter((id) => ids.has(id))).filter((casella) => casella.length > 0);
+}
+
 /// La casella «Tutti gli strumenti» della colonna del Completo: non è uno
 /// strumento, apre il cassetto.
 export const TUTTI_GLI_STRUMENTI = "all";
@@ -246,8 +255,10 @@ export function installRail(ctx: EditorContext): void {
     if (completo !== null && ctx.column.length === 0) {
       const tutte: RailGroup[] = completo.colonna(ctx.tools).map((gruppo) => ({
         id: gruppo.id,
-        slots: gruppo.caselle.map((tools) => ({ id: tools[0]!, tools: tools.map(railTool) })),
-      }));
+        slots: casellePresenti(gruppo.caselle, ctx.tools)
+          .filter((tools) => tools.length > 0)
+          .map((tools) => ({ id: tools[0]!, tools: tools.map(railTool) })),
+      })).filter((gruppo) => gruppo.slots.length > 0);
       // Le caselle che non stanno nello spazio passano nel cassetto: lo
       // mostra il cassetto, che elenca tutti gli strumenti.
       const { lunghezza, misure } = misura();

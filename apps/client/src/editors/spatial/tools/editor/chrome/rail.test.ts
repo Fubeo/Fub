@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { TOOLS, toolsFor } from "../../registry";
-import { CASELLE_SALVATE_MAX, caselleCheStanno, misureColonna, MISURE_DI_SERIE, PASSO_CASELLA, railLayout, spazioCaselle, type MisureColonna } from "./rail";
+import { CASELLE_SALVATE_MAX, casellePresenti, caselleCheStanno, misureColonna, MISURE_DI_SERIE, PASSO_CASELLA, railLayout, spazioCaselle, type MisureColonna } from "./rail";
 
 /// Misure senza fili né cornice: un bersaglio di 44 px per casella.
 const PIATTE: MisureColonna = { lato: 44, filoCasella: 0, filoGruppo: 0, respiroGruppo: 0, cornice: 0 };
@@ -85,6 +85,14 @@ describe("la colonna che non scorre", () => {
     const tools = toolsFor("full", "vector");
     const mostrate = railLayout(tools, "vector", ["select", "motore:inventato" as never, "pen"]).flat(2);
     expect(mostrate).toEqual(["select", "pen"]);
+  });
+});
+
+describe("le caselle del Completo contro gli strumenti che ci sono", () => {
+  it("uno strumento del motore o sconosciuto non è una casella: si salta, senza mandare in crash la colonna", () => {
+    const offerti = toolsFor("full", "vector");
+    const caselle = [["motore:pen", "motore:smartPen"], ["select", "motore:inventato"], ["motore:rect"]];
+    expect(casellePresenti(caselle, offerti)).toEqual([["select"]]);
   });
 });
 

@@ -140,6 +140,35 @@ export function apriCassetto(options: CassettoOptions): PopoverHandle {
     sections.push({ section, buttons: inGruppo });
   }
 
+  // Da tastiera: dalla ricerca la freccia giù entra nella lista, e le frecce
+  // passano fra gli strumenti che si vedono (Home e Fine ai capi). Invio
+  // sceglie quello col fuoco, come ogni pulsante; Esc chiude (il popover).
+  const visibili = (): HTMLButtonElement[] => buttons.map((each) => each.button).filter((button) => !button.hidden);
+  const muovi = (event: KeyboardEvent): void => {
+    const lista = visibili();
+    const at = lista.indexOf(event.target as HTMLButtonElement);
+    if (at < 0 || lista.length === 0) return;
+    const quale = {
+      ArrowDown: (at + 1) % lista.length,
+      ArrowRight: (at + 1) % lista.length,
+      ArrowUp: (at - 1 + lista.length) % lista.length,
+      ArrowLeft: (at - 1 + lista.length) % lista.length,
+      Home: 0,
+      End: lista.length - 1,
+    }[event.key];
+    if (quale === undefined) return;
+    event.preventDefault();
+    lista[quale]!.focus();
+  };
+  groups.addEventListener("keydown", muovi);
+  field.input.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown") return;
+    const primo = visibili()[0];
+    if (primo === undefined) return;
+    event.preventDefault();
+    primo.focus();
+  });
+
   // La ricerca nasconde i nomi che non contengono il testo, e i gruppi vuoti.
   field.input.addEventListener("input", () => {
     const query = cerca(field.value().trim());
