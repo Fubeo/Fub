@@ -1,5 +1,5 @@
 // L'ingresso del Disegno completo (piano K6, T5;
-// `docs/architecture/disegno.md`, «L'indice e i pezzi pigri»).
+// `docs/architecture/disegno-completo.md`, «L'indice e i pezzi pigri»).
 //
 // `chrome/workspace.ts` lo porta con un `import()` quando si entra nel
 // Completo col componente «Disegno completo» acceso; Vite lo mette nel chunk

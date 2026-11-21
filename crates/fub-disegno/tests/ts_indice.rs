@@ -1,5 +1,5 @@
 //! L'indice dei comandi del Disegno completo per il client (piano K6, T5;
-//! `docs/architecture/disegno.md`, «L'indice e i pezzi pigri»).
+//! `docs/architecture/disegno-completo.md`, «L'indice e i pezzi pigri»).
 //!
 //! `apps/client/src/editors/spatial/completo/indice.generated.json` porta
 //! una voce per ogni riga fatta della mappa e per ogni riga di Fub che ha un

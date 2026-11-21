@@ -1,5 +1,5 @@
 // L'indice dei comandi del Disegno completo (piano K6, T5;
-// `docs/architecture/disegno.md`, «L'indice e i pezzi pigri»).
+// `docs/architecture/disegno-completo.md`, «L'indice e i pezzi pigri»).
 //
 // Che cosa c'è e dove, senza un elenco scritto a mano: `indice.generated.json`
 // lo scrive `crates/fub-disegno/tests/ts_indice.rs` dalla mappa del motore,

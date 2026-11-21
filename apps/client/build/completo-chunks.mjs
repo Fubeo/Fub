@@ -1,5 +1,5 @@
 // I chunk del Disegno completo e i loro confini (piano K6, T5;
-// `docs/architecture/disegno.md`, «L'indice e i pezzi pigri»).
+// `docs/architecture/disegno-completo.md`, «L'indice e i pezzi pigri»).
 //
 // `src/editors/spatial/completo/` è fatto di pezzi che arrivano solo quando
 // servono: l'ingresso (`drawing-completo`), l'indice dei comandi

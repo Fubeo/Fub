@@ -1,5 +1,5 @@
 //! L'indice dei comandi del Disegno completo (piano K6, T5;
-//! `docs/architecture/disegno.md`, «L'indice e i pezzi pigri»).
+//! `docs/architecture/disegno-completo.md`, «L'indice e i pezzi pigri»).
 //!
 //! La mappa (`mappa.tsv`) dice per ogni funzione del motore la famiglia, il
 //! posto in Fub e a che punto è. Da lei, senza un elenco scritto a mano:

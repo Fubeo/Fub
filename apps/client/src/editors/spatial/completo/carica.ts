@@ -1,5 +1,5 @@
 // Le famiglie del Disegno completo, una alla volta e solo quando servono
-// (piano K6, T5; `docs/architecture/disegno.md`, «L'indice e i pezzi pigri»).
+// (piano K6, T5; `docs/architecture/disegno-completo.md`, «L'indice e i pezzi pigri»).
 //
 // `famiglia(id)` porta il chunk della famiglia (`famiglie/<id>/index.ts`, che
 // Vite mette in `drawing-fam-<id>`) e, insieme, chiede al motore di

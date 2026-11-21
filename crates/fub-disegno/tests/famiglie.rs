@@ -1,5 +1,5 @@
 //! Il banco di prova delle righe (piano K6, T5;
-//! `docs/architecture/disegno.md`, «L'indice e i pezzi pigri»).
+//! `docs/architecture/disegno-completo.md`, «L'indice e i pezzi pigri»).
 //!
 //! Ogni riga «fatto» della mappa ha un caso in `tests/famiglie/<famiglia>.json`
 //! (la forma è in `casi/mod.rs`), e ogni caso ha la sua riga. Ogni caso gira
