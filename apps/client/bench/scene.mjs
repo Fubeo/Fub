@@ -1439,6 +1439,31 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare: openDrawing,
   })),
+  // **La finestra del comando** (K6 T6, «Sposta tracciato» del prototipo
+  // `PLAN-ui/disegno-completo.html`): la famiglia pronta, con l'anteprima accesa
+  // a destra del foglio; la famiglia che si carica, e quella che non si carica
+  // (la memoria dei motori piena, con «Riprova»). Ognuna a 1280 e a 700 px, in
+  // giorno e notte. Le risposte sono quelle finte del motore del banco
+  // (`fake-ipc.ts`, `window.bench.finestra`).
+  ...[
+    ["disegno-finestra", "finestra", "La finestra «Sposta tracciato» sul disegno, con l'anteprima accesa: lascia vedere il foglio"],
+    ["disegno-finestra-caricamento", "caricamento", "La finestra mentre la famiglia si carica: il caricamento, e OK spento"],
+    ["disegno-finestra-errore", "errore", "La finestra quando la famiglia non si carica: la memoria dei motori è piena, e «Riprova»"],
+  ].flatMap(([id, stato, title]) => [
+    {
+      id,
+      title,
+      query: "connectors=6&drawing=acceso",
+      prepare: (page) => openDrawingWindow(page, stato),
+    },
+    {
+      id: `${id}-800`,
+      title: `${title}, nella finestra minima del desktop (800 px)`,
+      query: "connectors=6&drawing=acceso",
+      viewport: { width: 800, height: 800 },
+      prepare: (page) => openDrawingWindow(page, stato),
+    },
+  ]),
   // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
   // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
   // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
@@ -5044,6 +5069,24 @@ async function openDrawingStanding(page, ask) {
     await page.click(".pane-standing-panel .pane-standing-ask");
     await page.waitForSelector(".pane-standing-panel .pane-standing-places");
   }
+}
+
+/// Apre il disegno dei connettori e la finestra del comando nello stato `stato`
+/// (`finestra`, `caricamento` o `errore`), e aspetta che lo stato sia dipinto:
+/// col fuoco dove la finestra lo mette.
+async function openDrawingWindow(page, stato) {
+  await openDrawing(page);
+  await page.evaluate((each) => window.bench.finestra(each), stato);
+  const dialog = ".kit-dialog.draw-effect-dialog";
+  if (stato === "finestra") {
+    await page.waitForSelector(`${dialog} .kit-number-input`);
+    await page.waitForSelector(`${dialog} [data-action="ok"]:not([disabled])`);
+  } else if (stato === "caricamento") {
+    await page.waitForSelector(`${dialog} .kit-form-note[role="status"]`);
+  } else {
+    await page.waitForSelector(`${dialog} .kit-form-error`);
+  }
+  await page.evaluate(() => document.fonts.ready);
 }
 
 /// Apre la foto delle scene `photo-*` e aspetta che sia disegnata, e con

@@ -186,3 +186,27 @@
   top: 0;
   z-index: 2;
 }
+
+/* ── K6 · Il modulo dei dialoghi (`kit/form.ts`, T9) ────────────────────────
+   Righe di etichetta e campo, scelte a segmenti e caselle: la geometria. */
+.kit-form {
+  display: flex;
+  flex-direction: column;
+}
+.kit-form-row {
+  display: grid;
+  align-items: center;
+}
+.kit-form-choice {
+  display: flex;
+  flex-wrap: wrap;
+}
+.kit-form-check {
+  display: inline-flex;
+  align-items: center;
+}
+/* Un dialogo con l'anteprima lascia vedere il foglio: niente velo, e il
+   dialogo si sposta in alto a destra, lontano dalla selezione. */
+.kit-dialog-scrim[data-preview] {
+  place-items: start end;
+}

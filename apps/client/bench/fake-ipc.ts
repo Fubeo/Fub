@@ -47,6 +47,7 @@ import type {
   BundleInfo,
   CommandSpec,
   DocumentMatch,
+  DrawingCommandRequest,
   DrawingGesture,
   DrawingLoss,
   DrawingOutcome,
@@ -966,6 +967,26 @@ const GESTURE_VECTORS = Object.values(
 /// ogni rilascio.
 let benchDrawingIds = 0;
 
+/// L'istanza dell'ultimo disegno aperto dal motore del banco: la finestra del
+/// comando la usa (`window.bench.finestra`).
+let benchLastInstance: string | null = null;
+
+/// Il comando che la finestra «Sposta tracciato» del banco manda. Il banco non
+/// sposta niente: la finestra si guarda, e il suo esito è una riga tratteggiata
+/// sul foglio quando l'anteprima è accesa.
+const BENCH_WINDOW_COMMAND = "tracciato.sposta";
+
+/// L'esito del comando della finestra per il motore del banco: con `preview`
+/// un'anteprima vuota (la forma il motore vera la calcola), altrimenti un passo
+/// senza operazioni. Un comando di un altro id è una porta che il banco non
+/// conosce.
+function benchWindowOutcome(request: DrawingCommandRequest): DrawingOutcome {
+  const outcome: DrawingOutcome = { revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null };
+  if (request.id !== BENCH_WINDOW_COMMAND) return { ...outcome, refused: "unsupported" };
+  if (request.preview === true) return { ...outcome, preview: { shape: null, matrix: null, marquee: null, overlays: [] } };
+  return { ...outcome, ops: "[]" };
+}
+
 /// L'esito di un gesto del motore del banco sulla copia di testo `text`.
 function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutcome {
   const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
@@ -1004,7 +1025,12 @@ function benchDrawingEngine(): DrawingFake | undefined {
   ];
   let instances = 0;
   return {
-    open: () => ({ instance: `banco-${++instances}`, revision: "0", mapped: 0, unmapped: losses.length, losses }),
+    open: () => {
+      const instance = `banco-${++instances}`;
+      benchLastInstance = instance;
+      return { instance, revision: "0", mapped: 0, unmapped: losses.length, losses };
+    },
+    comando: (request) => benchWindowOutcome(request),
     gesto: (gesture, copia) => benchDrawingOutcome(gesture, copia.text),
     // I comandi del Disegno completo: le risposte di `disegno-famiglie/`, e
     // `unserved` per un comando che non ne ha una.
@@ -2829,6 +2855,9 @@ declare global {
       writeFromOutside: typeof host.writeFromOutside;
       calls: typeof host.calls;
       light: "dark" | "light";
+      /// La finestra del comando sul disegno aperto (K6 T6): la famiglia pronta,
+      /// che si carica, o che non si carica.
+      finestra: (stato: "finestra" | "caricamento" | "errore") => Promise<void>;
       /// Solo nello Scrittoio: dichiara le voci di un tema (vedi sotto).
       themeSettings?: () => Promise<void>;
     };
@@ -2865,7 +2894,54 @@ globalThis.window.bench = {
   writeFromOutside: host.writeFromOutside,
   calls: host.calls,
   light: LIGHT,
+  finestra: (stato: "finestra" | "caricamento" | "errore") => benchFinestra(stato),
 };
+
+/// La finestra «Sposta tracciato» del banco (K6 T6), aperta sul disegno
+/// dell'ultima apertura. `finestra`: la famiglia è pronta, col modulo del
+/// prototipo. `caricamento`: la famiglia non arriva. `errore`: la memoria dei
+/// motori è piena, e «Riprova» rifà la promessa. Le frasi del caricamento e
+/// del titolo di `caricamento` ed `errore` sono quelle del prototipo
+/// (`PLAN-ui/disegno-completo.html`, la finestra «Ombra esterna»).
+async function benchFinestra(stato: "finestra" | "caricamento" | "errore"): Promise<void> {
+  if (benchLastInstance === null) throw new Error("il banco: il disegno non è aperto");
+  const instance = benchLastInstance;
+  const { apriFinestra } = await import("../src/editors/spatial/motore/finestre");
+  const { openLifetime } = await import("../src/ui/lifetime");
+  const vita = openLifetime();
+  const modulo = {
+    campi: [
+      { nome: "distanza", tipo: "numero" as const },
+      { nome: "giunzioni", tipo: "scelta" as const, valori: ["vivo", "arrotondato", "smussato"] },
+      { nome: "limite", tipo: "numero" as const, min: 1 },
+    ],
+  };
+  const attesa = new Promise<void>(() => {});
+  const pronto = stato === "finestra" ? Promise.resolve() : stato === "errore" ? Promise.reject("no_memory") : attesa;
+  const aperta = stato === "finestra";
+  void apriFinestra(
+    modulo,
+    pronto,
+    (valori, anteprima) =>
+      host.module.api
+        .drawingCommand(instance, { revision: "0", id: BENCH_WINDOW_COMMAND, selection: [], value: valori, preview: anteprima })
+        .then((outcome) => ({ anteprima: outcome.preview, rifiuto: outcome.refused })),
+    {
+      id: "banco.tracciato.sposta",
+      titolo: aperta ? "Sposta tracciato" : "Ombra esterna",
+      descrizione: aperta ? "Un tracciato nuovo, parallelo a quello scelto, alla distanza che scrivi. Un numero negativo lo porta dentro." : undefined,
+      azione: aperta ? "Sposta" : undefined,
+      campi: { distanza: "Spostamento", giunzioni: "Giunzioni", limite: "Limite angolo vivo" },
+      scelte: { giunzioni: { vivo: "Angolo vivo", arrotondato: "Arrotondato", smussato: "Smussato" } },
+      unita: { distanza: "px", limite: "×" },
+      iniziali: { distanza: 6, giunzioni: "arrotondato", limite: 4 },
+      caricamento: aperta ? undefined : "Sto preparando gli effetti: la prima volta ci vuole un momento.",
+      vita,
+      sulFoglio: () => {},
+      riprova: stato === "errore" ? () => attesa : undefined,
+    },
+  );
+}
 
 /// Le voci di un tema, per la scena che fotografa la loro schermata. Il tema di
 /// serie non ne dichiara, e una schermata che non c'è non si fotografa: la

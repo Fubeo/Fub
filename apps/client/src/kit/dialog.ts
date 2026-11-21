@@ -47,6 +47,9 @@ export interface DialogOptions<T> {
   submit?: string;
   /// Una classe in più sulla superficie, per chi la veste.
   className?: string;
+  /// Un dialogo che lascia vedere il foglio dietro (un'anteprima): il velo
+  /// non copre niente, e la pelle lo mette di lato. Di serie, il velo copre.
+  preview?: boolean;
 }
 
 export interface DialogHandle<T> {
@@ -72,6 +75,7 @@ export function openDialog<T>(options: DialogOptions<T>): DialogHandle<T> {
 
   const scrim = doc.createElement("div");
   scrim.className = "kit-dialog-scrim";
+  if (options.preview) scrim.dataset.preview = "";
   const dialog = doc.createElement("div");
   dialog.className = options.className ? `kit-dialog ${options.className}` : "kit-dialog";
   dialog.setAttribute("role", "dialog");
