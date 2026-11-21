@@ -1445,9 +1445,9 @@ export const SCENE = touchLast(onPage("shell", [
   // il fuoco da tastiera. A 1280 e a 700 px, in giorno e in notte.
   ...[
     ["disegno-banda", 1280, "Lo spazio di lavoro nella banda, accanto alla modalità", null, openDrawing],
-    ["disegno-banda-700", 700, "Lo spazio di lavoro nella banda in un foglio stretto, 700 px", null, openDrawing],
+    ["disegno-banda-800", 800, "Lo spazio di lavoro nella banda in un foglio stretto, 800 px, la finestra minima del desktop", null, openDrawing],
     ["disegno-banda-aperta", 1280, "Lo spazio di lavoro aperto: Semplice, Completo, gli spazi del Completo, Ripristina, Salva e Gestisci", null, openWorkspaceMenu],
-    ["disegno-banda-aperta-700", 700, "Lo spazio di lavoro aperto in un foglio stretto, 700 px", null, openWorkspaceMenu],
+    ["disegno-banda-aperta-800", 800, "Lo spazio di lavoro aperto in un foglio stretto, 800 px, la finestra minima del desktop", null, openWorkspaceMenu],
     ["disegno-spento", 1280, "Il disegno completo spento: gli spazi del Completo grigi, con il perché, e «Apri Componenti…»", "componenti=motore-spento", openWorkspaceMenu],
     ["disegno-banda-errore", 1280, "Il disegno completo non si carica: il menu lo dice, e «Riprova»", null, openWorkspaceErrorMenu],
     ["disegno-banda-fuoco", 1280, "Il bottone dello spazio di lavoro col fuoco da tastiera", null, focusWorkspaceButton],
