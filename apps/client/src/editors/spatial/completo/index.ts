@@ -19,6 +19,8 @@ import { layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
 import type { ToolSpec } from "../tools/registry";
 import type { Lifetime } from "../../../ui/lifetime";
 import type { CassettoOptions } from "../tools/editor/chrome/drawer";
+import { openPopover } from "../../../kit/popover";
+import { t } from "../strings";
 export type { GruppoLayout } from "./colonna";
 
 export type { Caricatore, ContestoCompleto, StatoFamiglia, PercheErrore, ModuloFamiglia } from "./carica";
@@ -56,6 +58,36 @@ export interface OpzioniCompleto {
   readonly prepara?: OpzioniCaricatore["prepara"];
 }
 
+/// Dice che il cassetto non si è aperto (il suo pezzo non è arrivato), con
+/// «Riprova», che lo apre di nuovo. Sta qui, non nel pezzo del cassetto: il
+/// pezzo è quello che non è arrivato.
+export function apriErroreCassetto(anchor: HTMLElement, lifetime: Lifetime, riprova: () => void): void {
+  const testo = document.createElement("div");
+  testo.className = "draw-drawer-failed";
+  const messaggio = document.createElement("p");
+  messaggio.className = "draw-drawer-note";
+  messaggio.setAttribute("role", "alert");
+  messaggio.textContent = t("draw.chrome.drawer.failed");
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "draw-drawer-edit";
+  retry.textContent = t("draw.window.retry");
+  testo.append(messaggio, retry);
+  const popover = openPopover({
+    anchor,
+    content: testo,
+    placement: "right",
+    align: "start",
+    label: t("draw.chrome.drawer.failed"),
+    className: "kit-rail-popover draw-drawer-popover",
+    lifetime,
+  });
+  retry.addEventListener("click", () => {
+    popover.close("manual");
+    riprova();
+  });
+}
+
 /// L'indice vero, dal suo chunk (`drawing-indice`).
 const indiceVero = (): Promise<Indice> => import("./indice").then((m) => m.indice());
 
@@ -87,11 +119,21 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     colonna: (offerti) => layoutCompleto(offerti, MOTORE_PRONTO),
     cassetto(anchor, opzioni, lifetime) {
       // Il cassetto è nel suo pezzo: si apre appena arriva, e non dopo la
-      // chiusura del disegno.
-      void import("../tools/editor/chrome/drawer").then(({ apriCassetto }) => {
-        if (chiuso) return;
-        apriCassetto({ ...opzioni, anchor, lifetime });
-      });
+      // chiusura del disegno. Se il pezzo non arriva, lo dice e «Riprova» lo
+      // chiede di nuovo.
+      const apri = (): void => {
+        void import("../tools/editor/chrome/drawer").then(
+          ({ apriCassetto }) => {
+            if (chiuso) return;
+            apriCassetto({ ...opzioni, anchor, lifetime });
+          },
+          () => {
+            if (chiuso) return;
+            apriErroreCassetto(anchor, lifetime, apri);
+          },
+        );
+      };
+      apri();
     },
   };
   ctx.life.add(() => completo.chiudi());

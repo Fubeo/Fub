@@ -1,13 +1,13 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { TOOLS, type ToolSpec } from "../tools/registry";
 import { CASELLE, GRUPPI_COLONNA, layoutCompleto, type GruppoColonna } from "./colonna";
 
 // Ogni casella del prototipo ha gli strumenti del motore del loro posto
 // `colonna/<gruppo>` nella mappa: la tabella non si inventa.
-const MAPPA = readFileSync(new URL("../../../../../../crates/fub-disegno/mappa.tsv", import.meta.url), "utf8");
-const RIGHE = MAPPA.split("\n").filter((riga) => riga !== "" && !riga.startsWith("#")).slice(1).map((riga) => riga.split("\t"));
-const POSTO = new Map<string, string>(RIGHE.filter((colonne) => colonne[0] === "strumento").map((colonne) => [colonne[1]!, colonne[8]!]));
+// La mappa si legge col suo testo grezzo (il repo, non il client).
+const MAPPA = Object.values(import.meta.glob("../../../../../../crates/fub-disegno/mappa.tsv", { query: "?raw", import: "default", eager: true }) as Record<string, string>)[0]!;
+const RIGHE: string[][] = MAPPA.split("\n").filter((riga: string) => riga !== "" && !riga.startsWith("#")).slice(1).map((riga: string) => riga.split("\t"));
+const POSTO = new Map<string, string>(RIGHE.filter((colonne: string[]) => colonne[0] === "strumento").map((colonne: string[]) => [colonne[1]!, colonne[8]!]));
 const POSTI: Readonly<Record<GruppoColonna, readonly string[]>> = {
   pick: ["colonna/scegli"],
   draw: ["colonna/disegna"],
