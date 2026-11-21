@@ -1,7 +1,7 @@
 # Misure
 
 Questa cartella conserva le misure dei tempi di Fub nella WebView vera, una
-pagina per macchina e commit.
+pagina per macchina e commit, e i controlli della conformità al prototipo.
 
 > **Per chi:** chi confronta i tempi fra versioni, sistemi e WebView, e chi
 > tara le soglie della CI.
@@ -160,3 +160,14 @@ quanto costa caricare l'anagrafe (issue #523).
 |---|---|---|---|
 | 2026-11-20 | 5000 e 30000 note, generati | Intel Core i5-13600KF, build di rilascio | [La riapertura tiepida che non scatta](2026-11-20-riapertura-tiepida.md) |
 | 2026-11-20 | 30000 note, generate | Intel Core i5-13600KF, build di rilascio, carica | [L'anagrafe letta in un colpo](2026-11-20-anagrafe-lettura.md) |
+
+## La conformità al prototipo
+
+Gli stili calcolati dell'app confrontati con quelli di un prototipo
+approvato, col banco della conformità
+([Banco visivo e accessibilità](../development/visual-bench.md)): quanti
+pezzi copre la mappa, quante differenze restano e quanto si vedono.
+
+| Data | Prototipo | Commit | Pagina |
+|---|---|---|---|
+| 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | `25299965f` | [La conformità dell'editor al prototipo](2026-11-21-conformita-editor.md) |

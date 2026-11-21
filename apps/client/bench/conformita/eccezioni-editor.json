@@ -8,6 +8,7 @@
   {
     "pezzo": "schede.pdf.pagina",
     "proprieta": "filter",
+    "stati": ["scuro-1280", "scuro-700"],
     "motivo": "Di Notte il prototipo abbassa la pagina con filter: brightness(0.9); il vocabolario dei temi (THEME_2_VOCABULARY) non ammette brightness(), e la pelle stende sulla pagina un velo nero al 10% (.canvas-card-pdf::after), che dà lo stesso colore pixel per pixel (0,9 × il colore della pagina). Di Giorno i due valori coincidono (none).",
     "riferimento": "PLAN.md, T45 «Dal prototipo» (passo 17, .win[data-light=\"notte\"] .pdfp)"
   },
@@ -38,6 +39,7 @@
   {
     "pezzo": "esporta.dg-miniatura-scelta",
     "proprieta": "box-shadow",
+    "stati": ["scuro-1280", "scuro-700"],
     "motivo": "Lo stile scelto nel prototipo ha l'anello dell'accento della carta di stampa (--p-acc, #006e46) anche di notte, dove sul pannello scuro si distingue appena; Fub usa l'accento del tema (--acc → --accent), che di notte è il verde chiaro e dice quale stile è scelto con contrasto. Di giorno i due valori coincidono; lo spessore (2 px) è lo stesso.",
     "riferimento": "PLAN.md, «Dal prototipo» (--acc → --accent); T75"
   },
