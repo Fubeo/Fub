@@ -48,6 +48,7 @@ export const STATI = {
 
 const TUTTI = Object.keys(STATI);
 const DIMENSIONI = ["width", "height"];
+const ALLINEAMENTO = ["display", "align-items", "justify-content"];
 
 export const VISTE = {
   /// La scheda Risorse con i campioni del documento. Nel prototipo lo stato
@@ -61,7 +62,7 @@ export const VISTE = {
         await page.waitForSelector('#proto-box[data-pronto^="risorse-"]');
       },
     },
-    app: { scena: "disegno-risorse" },
+    app: { scena: "disegno-risorse-molti" },
   },
 };
 
@@ -111,7 +112,40 @@ export const PEZZI = [
     app: ".draw-resources-swatches .kit-color-chip",
     proprieta: [...DIMENSIONI, "border-radius"],
   },
+  // La fila dei campioni: la sua larghezza decide quante colonne ci stanno (la
+  // fila va a capi). Con 500 campioni il prototipo ne mette sette per riga; una
+  // fila più stretta ne mette meno, e la mappa lo deve vedere.
+  {
+    id: "risorse.campioni.corpo",
+    vista: "risorse",
+    prototipo: '[data-section="swatches"] .draw-properties-body',
+    app: '[data-section="documento"] .draw-properties-body',
+    proprieta: [...DIMENSIONI, "display"],
+  },
+  {
+    id: "risorse.campioni.contenitore",
+    vista: "risorse",
+    prototipo: ".draw-resources-swatches",
+    app: ".draw-resources-swatches",
+    proprieta: [...DIMENSIONI, ...ALLINEAMENTO],
+  },
+  {
+    id: "risorse.campioni.fila",
+    vista: "risorse",
+    prototipo: ".draw-resources-swatches .kit-color-swatches",
+    app: ".draw-resources-swatches .kit-color-swatches",
+    proprieta: [...DIMENSIONI, "display", "flex-wrap", "gap"],
+  },
 ];
 
-/// Ciò che ha ancora differenze e che correggono altri lavori: vuoto all'inizio.
-export const DA_COPRIRE = [];
+/// Ciò che ha ancora differenze e che correggono altri lavori. Le altezze dei
+/// tre contenitori dei campioni differiscono per i dati: il prototipo mostra
+/// cinque gruppi (500 campioni: Documento, Grigi, Brillanti, Web, Pastello) e il
+/// banco ne ha uno solo, quello del documento. I gruppi della tavolozza del
+/// motore arrivano con la famiglia del colore (T14). La larghezza della fila,
+/// che è il difetto delle due colonne, resta confrontata alla lettera.
+export const DA_COPRIRE = [
+  { id: "risorse.campioni.corpo", proprieta: ["height"], perche: "cinque gruppi nel prototipo, uno nel banco: i gruppi della tavolozza arrivano con la famiglia del colore (T14)" },
+  { id: "risorse.campioni.contenitore", proprieta: ["height"], perche: "stessa causa: i gruppi della tavolozza (T14)" },
+  { id: "risorse.campioni.fila", proprieta: ["height"], perche: "il primo gruppo del prototipo ha 24 campioni, quello del banco tutti i 500: i gruppi della tavolozza (T14)" },
+];

@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs disegno-completo` (dopo `git fetch`), che legge PLAN-ui/disegno-completo.html dal ramo piano/k6-disegno-completo al commit 74790a3748703d5a72f6816207aa25426455b3d2.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs disegno-completo` (dopo `git fetch`), che legge PLAN-ui/disegno-completo.html dal ramo piano/k6-disegno-completo al commit 997770f8eed496bac9ad16bdc96bb39cd5ae8c74.",
   "prototipo": "disegno-completo",
   "ramo": "piano/k6-disegno-completo",
-  "commit": "74790a3748703d5a72f6816207aa25426455b3d2",
+  "commit": "997770f8eed496bac9ad16bdc96bb39cd5ae8c74",
   "file": "PLAN-ui/disegno-completo.html",
   "sha256": "522f4dfe77b09611e0ff4feb204a0e34f5e0f9e96ca60cb911fb0bb8ab03abc4",
   "traduzioni": {
@@ -482,6 +482,82 @@
           "border-top-right-radius": "50%",
           "border-bottom-right-radius": "50%",
           "border-bottom-left-radius": "50%"
+        },
+        "fub": {}
+      }
+    },
+    "risorse.campioni.corpo": {
+      "chiaro-1280": {
+        "prototipo": "[data-section=\"swatches\"] .draw-properties-body",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "width": "224px",
+          "height": "2206.47px",
+          "display": "grid"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": "[data-section=\"swatches\"] .draw-properties-body",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "width": "224px",
+          "height": "2206.47px",
+          "display": "grid"
+        },
+        "fub": {}
+      }
+    },
+    "risorse.campioni.contenitore": {
+      "chiaro-1280": {
+        "prototipo": ".draw-resources-swatches",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "width": "208px",
+          "height": "2155.69px",
+          "display": "flex",
+          "align-items": "normal",
+          "justify-content": "normal"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".draw-resources-swatches",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "width": "208px",
+          "height": "2155.69px",
+          "display": "flex",
+          "align-items": "normal",
+          "justify-content": "normal"
+        },
+        "fub": {}
+      }
+    },
+    "risorse.campioni.fila": {
+      "chiaro-1280": {
+        "prototipo": ".draw-resources-swatches .kit-color-swatches",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "width": "208px",
+          "height": "108px",
+          "display": "flex",
+          "flex-wrap": "wrap",
+          "row-gap": "4px",
+          "column-gap": "4px"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".draw-resources-swatches .kit-color-swatches",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "width": "208px",
+          "height": "108px",
+          "display": "flex",
+          "flex-wrap": "wrap",
+          "row-gap": "4px",
+          "column-gap": "4px"
         },
         "fub": {}
       }
