@@ -111,7 +111,10 @@ fn draw_settings() -> Vec<fub_abi::settings::SettingSpec> {
 #[cfg(feature = "draw")]
 #[test]
 fn the_draw_workspace_keys_are_the_owners_constants() {
-    for key in [fub_features::DRAW_WORKSPACE_KEY, fub_features::DRAW_WORKSPACES_KEY] {
+    for key in [
+        fub_features::DRAW_WORKSPACE_KEY,
+        fub_features::DRAW_WORKSPACES_KEY,
+    ] {
         assert!(
             SETTINGS_WITH_THEIR_OWN_GESTURE.contains(&key),
             "`{key}` dello spazio di lavoro dovrebbe stare fuori dal form delle impostazioni"
