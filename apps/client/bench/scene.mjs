@@ -1518,11 +1518,11 @@ export const SCENE = touchLast(onPage("shell", [
   // del Completo spento. A 1280 e a 700 px, in giorno e in notte.
   ...[
     ["disegno-completo", 1280, "La colonna del Completo: sei gruppi, le caselle che stanno, «Tutti gli strumenti» in fondo", null, openDrawing],
-    ["disegno-completo-700", 700, "La colonna del Completo in un foglio stretto: la fila sotto il foglio", null, openDrawing],
+    ["disegno-completo-800", 800, "La colonna del Completo nella finestra minima del desktop, 800 px", null, openDrawing],
     ["disegno-gruppo", 1280, "La tendina della casella a più strumenti, aperta da tastiera con la freccia di lato", null, openColumnGroup],
-    ["disegno-gruppo-700", 700, "La tendina della casella in un foglio stretto", null, openColumnGroup],
+    ["disegno-gruppo-800", 800, "La tendina della casella nella finestra minima del desktop, 800 px", null, openColumnGroup],
     ["disegno-cassetto", 1280, "Tutti gli strumenti: il cassetto con i gruppi per famiglia", null, openDrawerScene],
-    ["disegno-cassetto-700", 700, "Il cassetto in un foglio stretto", null, openDrawerScene],
+    ["disegno-cassetto-800", 800, "Il cassetto nella finestra minima del desktop, 800 px", null, openDrawerScene],
     ["disegno-cassetto-cerca", 1280, "Il cassetto con la ricerca scritta: restano i nomi che la contengono", null, (page) => openDrawerScene(page, "pe")],
     ["disegno-spento-colonna", 1280, "La colonna del Completo spento: la colonna nativa, 44 px di larghezza", "componenti=motore-spento", openDrawing],
   ].map(([id, width, title, extra, prepare]) => ({

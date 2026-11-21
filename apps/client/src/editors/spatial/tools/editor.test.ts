@@ -269,7 +269,8 @@ describe("la barra e il foglio", () => {
     expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false", "false"]);
     expect(tools[5]!.getAttribute("aria-keyshortcuts")).toBe("T");
     expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
-    expect(tools[4]!.getAttribute("aria-keyshortcuts")).toBe("R");
+    // Una casella con tendina dice anche la freccia di lato, che la apre.
+    expect(tools[4]!.getAttribute("aria-keyshortcuts")).toBe("R ArrowRight");
     tools[4]!.focus();
     expect(document.getElementById(tools[4]!.getAttribute("aria-describedby")!)?.textContent).toMatch(/^Rettangolo \(R\) — .*Maiusc/);
     // Il colore è un pozzo col nome, niente formine: apre il selettore, con
