@@ -2054,11 +2054,13 @@ export const PEZZI = [
   },
   // ── la Base nella nota (T18) ────────────────────────────────────────────
   // Oltre la colonna fino al margine a tutta larghezza, nella colonna a 700.
+  // Il blocco del prototipo è il vassoio della trasclusione: si allarga lui,
+  // e la Base resta dentro il suo filo.
   {
     id: "base.incorporata",
     vista: "base-nota",
     prototipo: '.blk[data-t="base"]',
-    app: '.pane.focus .base-surface[data-embedded="true"]',
+    app: '.pane.focus .embed.transclusion:has(.base-surface[data-embedded="true"])',
     proprieta: ["margin-right"],
   },
   // Aggiunti dal controllo del 2026-11-21: la barra della Base nella nota
@@ -3397,11 +3399,6 @@ export const DA_COPRIRE = [
     id: "base.attrezzo",
     proprieta: ["padding", "line-height", "opacity"],
     perche: "controllo del 2026-11-21: attrezzi più stretti; il primo («Nuova vista») nell'app è spento dentro la nota, nel prototipo no",
-  },
-  {
-    id: "base.tabella",
-    proprieta: ["font-size", "border-collapse"],
-    perche: "controllo del 2026-11-21: la tabella della Base nella nota ha il testo a 9,75 px e i bordi separati",
   },
   {
     id: "base.nuova-riga",

@@ -568,6 +568,7 @@
     "cm-markdown-block",
     "cm-markdown-gap-lead",
     "markdown-table-scroll",
+    "base-surface",
     "cm-fub-heading-line",
     "cm-fub-h1",
     "cm-fub-h2",
@@ -1101,7 +1102,6 @@
     "grid-dialog-signature",
     "grid-dialog-swatch",
     "grid-dialog-toolbar",
-    "base-surface",
     "base-status",
     "base-body",
     "base-summaries",
@@ -3006,6 +3006,7 @@
     "cm-markdown-block": "contenuto",
     "cm-markdown-gap-lead": "contenuto",
     "markdown-table-scroll": "contenuto",
+    "base-surface": "cornice",
     "cm-fub-heading-line": "contenuto",
     "cm-fub-h1": "contenuto",
     "cm-fub-h2": "contenuto",
@@ -3539,7 +3540,6 @@
     "grid-dialog-signature": "cornice",
     "grid-dialog-swatch": "cornice",
     "grid-dialog-toolbar": "cornice",
-    "base-surface": "cornice",
     "base-status": "cornice",
     "base-body": "cornice",
     "base-summaries": "cornice",
@@ -6499,7 +6499,8 @@
         "cm-line",
         "cm-markdown-block",
         "cm-markdown-gap-lead",
-        "markdown-table-scroll"
+        "markdown-table-scroll",
+        "base-surface"
       ],
       "states": [
         "rest",
@@ -8633,7 +8634,8 @@
         "cm-focused",
         "cm-content",
         "pane-editor",
-        "markdown-rendered"
+        "markdown-rendered",
+        "base-surface"
       ],
       "states": [
         "rest",
