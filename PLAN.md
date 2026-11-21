@@ -1927,7 +1927,17 @@ Fatto quando:
   è verde;
 - `cargo test -p fub-features --test ts_mirror` passa.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial; npm run bench:a11y
-Stato: [ ] da fare
+Stato: [ ] da fare · parziale sul ramo feat/k6-t8. Fatti: colonna a sei gruppi
+con le sue caselle (test contro i posti della mappa), cassetto con ricerca e
+errore «Riprova», colonna che mostra le caselle che stanno (le altre nel
+cassetto), colonna salvata con al più 15 caselle, icone, tema, dieci righe a
+`fub`, la regola della fila delle opzioni, lo strumento del motore e il suo
+cursore. Non fatti: la fila nella testata (nessun punto la monta ancora), lo
+stato «Completo spento» (c'è già la colonna di prima, non misurata), le scene
+del banco, le foto 1280/700 px, la misura della colonna, `bench:a11y`.
+`draw.toolbar` non va in `SETTINGS_WITH_THEIR_OWN_GESTURE`: le Impostazioni
+hanno la sua riga con un campo proprio (`OWN_LIST_FIELDS` in
+`panels/settings.ts`), e la lista la nasconderebbe.
 Aspetta: niente
 
 ## T9 · Il menu ≡, Ctrl+/ e i tasti
