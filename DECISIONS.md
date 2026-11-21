@@ -58,8 +58,9 @@ Queste scelte l'orchestratore le prende da solo, ma con una soglia più alta,
 le scrive nel registro e le dice nel resoconto:
 
 - **il merge in `main`** di una consegna o di un ramo di piano: solo con la
-  PR pronta (non bozza), la CI completa verde sull'ultima testa (Linux,
-  Windows e macOS, banchi compresi quando tocca `apps/client/`), la
+  PR pronta (non bozza), la CI completa verde sull'ultima testa (Linux e
+  Windows, banchi compresi quando tocca `apps/client/`; macOS è in pausa,
+  ADR 0245), la
   revisione del diff fatta, le baseline prese dal runner e guardate, e
   nessun rosso tranne un instabile noto con la sua issue, rilanciato una
   volta e passato. Mai `--admin`, mai saltare un controllo richiesto, mai
