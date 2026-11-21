@@ -1052,16 +1052,16 @@ interfaccia	view.screenMode	Screen Mode		vista	F1	T11	da fare	menu/visualizza	fa
 interfaccia	view.rotate	Rotate View		vista	F1	T11	da fare	menu/visualizza	famiglia		Ruota vista
 interfaccia	view.rotateToSelection	Rotate View to Selection		vista	F1	T11	da fare	menu/visualizza	famiglia		Ruota vista in base alla selezione
 interfaccia	view.rotateReset	Reset Rotate View		vista	F1	T11	da fare	menu/visualizza	famiglia		Reimposta rotazione vista
-interfaccia	window.control	Control		fub	—	T8	da fare	fub	—	la testata del disegno	Controllo
-interfaccia	window.toolbar	Tools		fub	—	T8	da fare	fub	—	la colonna del disegno	Strumenti
-interfaccia	window.toolbarColumns	Toolbar: Single/Double Column		fub	—	T8	da fare	fub	—	la colonna di Fub è una sola: il resto nel cassetto «Tutti gli strumenti»	Barra degli strumenti: colonna singola/doppia
-interfaccia	window.toolbarAdvanced	Toolbar: Advanced / Basic		fub	—	T8	da fare	fub	—	lo spazio di lavoro Semplice/Completo	Barra degli strumenti: avanzata / di base
-interfaccia	window.floatTools	Float Tool Group		fub	—	T8	da fare	fub	—	niente gruppi fluttuanti: il cassetto «Tutti gli strumenti»	Rendi mobile gruppo strumenti
-interfaccia	toolbar.show	Toolbar: Show Controls		fub	—	T8	da fare	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: Mostra controlli
-interfaccia	window.editToolbar	Edit Toolbar		fub	—	T8	da fare	fub	—	«Modifica la colonna» nel cassetto degli strumenti	Modifica barra degli strumenti
-interfaccia	toolbar.addTool	Toolbar: Add Tool		fub	—	T8	da fare	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: aggiungi strumento
-interfaccia	toolbar.removeTool	Toolbar: Remove Tool		fub	—	T8	da fare	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: rimuovi strumento
-interfaccia	toolbar.reset	Toolbar: Reset		fub	—	T8	da fare	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: ripristina
+interfaccia	window.control	Control		fub	—	T8	fub	fub	—	la testata del disegno	Controllo
+interfaccia	window.toolbar	Tools		fub	—	T8	fub	fub	—	la colonna del disegno	Strumenti
+interfaccia	window.toolbarColumns	Toolbar: Single/Double Column		fub	—	T8	fub	fub	—	la colonna di Fub è una sola: il resto nel cassetto «Tutti gli strumenti»	Barra degli strumenti: colonna singola/doppia
+interfaccia	window.toolbarAdvanced	Toolbar: Advanced / Basic		fub	—	T8	fub	fub	—	lo spazio di lavoro Semplice/Completo	Barra degli strumenti: avanzata / di base
+interfaccia	window.floatTools	Float Tool Group		fub	—	T8	fub	fub	—	niente gruppi fluttuanti: il cassetto «Tutti gli strumenti»	Rendi mobile gruppo strumenti
+interfaccia	toolbar.show	Toolbar: Show Controls		fub	—	T8	fub	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: Mostra controlli
+interfaccia	window.editToolbar	Edit Toolbar		fub	—	T8	fub	fub	—	«Modifica la colonna» nel cassetto degli strumenti	Modifica barra degli strumenti
+interfaccia	toolbar.addTool	Toolbar: Add Tool		fub	—	T8	fub	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: aggiungi strumento
+interfaccia	toolbar.removeTool	Toolbar: Remove Tool		fub	—	T8	fub	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: rimuovi strumento
+interfaccia	toolbar.reset	Toolbar: Reset		fub	—	T8	fub	fub	—	la colonna del disegno, configurata dallo spazio di lavoro	Barra degli strumenti: ripristina
 interfaccia	window.taskBar	Contextual Task Bar		fub	—	T10	fub	fub	—	la barra contestuale diventa la fila delle opzioni della testata	Barra attività contestuale
 interfaccia	window.taskBar.pin	Pin Bar Position		escluso	—	T2	escluso	escluso	—	la barra contestuale non si sposta: è la fila delle opzioni (D6)	Fissa posizione barra
 interfaccia	window.taskBar.reset	Reset Bar Position		escluso	—	T2	escluso	escluso	—	come sopra (D6)	Ripristina posizione barra
