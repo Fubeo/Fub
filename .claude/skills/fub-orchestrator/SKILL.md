@@ -44,8 +44,9 @@ Files of this skill:
    - Run `.claude/skills/fub-orchestrator/sentinelle.sh`, and fix every
      `GIALLO` and `ROSSO` before launching anything.
    - Then keep it in a `Monitor` for the whole session: `--allarmi` every
-     600 s, printing only when the set of alarms changes. Re-arm it every time
-     it expires.
+     600 s, printing only when a new alarm appears or one gets worse (a
+     `GIALLO` that turns `ROSSO`); a return to normal stays silent, so a
+     quiet monitor wakes nobody. Re-arm it every time it expires.
    - What it checks and what each alarm means: "Sentinels" below.
 3. **Forgotten work.** After a long pause or a compaction, look at:
    - `git cherry origin/main <branch>` on the `piano/*` and coder branches;
