@@ -41,6 +41,7 @@ use vectorcraft_geom::{Affine, Point};
 use crate::apertura::Copia;
 use crate::id::{self, Specie};
 use crate::mappa::{Elemento, Posti};
+use crate::ricetta::{self, Esito};
 
 /// Tolleranza relativa con cui due documenti del motore sono uguali: le
 /// matrici composte dagli strumenti e quella ritrovata qui differiscono
@@ -142,25 +143,43 @@ pub(crate) fn differenza(
         set: Vec::new(),
         ids: HashMap::new(),
         dati: HashSet::new(),
+        riscritti: HashSet::new(),
+        ricette: ricetta::Scritte::default(),
     };
-    lavoro.tolti(&prima, &poi)?;
-    lavoro.ordine(&prima, dopo)?;
-    lavoro.nuovi(&prima, dopo)?;
+    // Il confronto per primo: dice quali oggetti si riscrivono interi
+    // (tolti e rimessi con la loro ricetta), che le altre fasi saltano.
     for l in &dopo.layers {
         let Some(p) = prima.nodi.get(&l.id) else {
             continue;
         };
         lavoro.confronta(p.nodo, l, &prima)?;
     }
+    let ident_del_confronto = std::mem::take(&mut lavoro.ident);
+    lavoro.tolti(&prima, &poi)?;
+    lavoro.ordine(&prima, dopo)?;
+    lavoro.nuovi(&prima, dopo)?;
+    lavoro.ident.extend(ident_del_confronto);
     let Lavoro {
         ident,
         mut remove,
         moves,
-        add,
+        mut add,
         set,
         ids,
+        ricette: scritte,
         ..
     } = lavoro;
+    // Il blocco delle ricette cambia solo con un gesto che scrive.
+    if !(ident.is_empty()
+        && remove.is_empty()
+        && moves.is_empty()
+        && add.is_empty()
+        && set.is_empty())
+    {
+        let (via, nuovo) = scritte.operazioni(copia.mappa.ricette());
+        remove.extend(via);
+        add.extend(nuovo);
+    }
     // I `remove` per percorso: dall'ultimo al primo, così ogni percorso vale
     // ancora quando tocca a lui.
     remove.sort_by(|a, b| b.0.cmp(&a.0));
@@ -190,6 +209,11 @@ struct Lavoro<'a> {
     ids: HashMap<NodeId, String>,
     /// Gli id dati in questo gesto.
     dati: HashSet<String>,
+    /// Gli oggetti che si riscrivono interi: l'elemento di prima si toglie e
+    /// al suo posto va la grafica semplice con la ricetta nuova.
+    riscritti: HashSet<NodeId>,
+    /// Le ricette che il gesto scrive o fa cadere.
+    ricette: ricetta::Scritte,
 }
 
 impl Lavoro<'_> {
@@ -270,6 +294,9 @@ impl Lavoro<'_> {
             if posto.genitore.is_some_and(|g| !poi.nodi.contains_key(&g)) {
                 continue;
             }
+            if self.dentro_un_riscritto(posto.genitore, prima) {
+                continue;
+            }
             if self.copia.mappa.e_radice(*id) {
                 return Err(no("il gesto toglie un livello del motore"));
             }
@@ -279,16 +306,50 @@ impl Lavoro<'_> {
                     id.0
                 )));
             };
-            let bersaglio = match e.id_del_file() {
-                Some(id) => json!(id),
-                None => json!({ "path": e.percorso, "tag": e.tag }),
+            let e = e.clone();
+            self.togli(&e);
+        }
+        for nodo in self.riscritti.clone() {
+            let Some(e) = self.elemento(nodo).cloned() else {
+                return Err(Rifiuto::NonMappato(format!(
+                    "il gesto riscrive l'oggetto {} che non viene da Fub",
+                    nodo.0
+                )));
             };
-            self.remove.push((
-                e.percorso.clone(),
-                json!({ "op": "remove", "target": bersaglio }),
-            ));
+            self.togli(&e);
         }
         Ok(())
+    }
+
+    /// Il `remove` dell'elemento `e`; le ricette sue e dei suoi discendenti
+    /// cadono.
+    fn togli(&mut self, e: &Elemento) {
+        let bersaglio = match e.id_del_file() {
+            Some(id) => json!(id),
+            None => json!({ "path": e.percorso, "tag": e.tag }),
+        };
+        self.remove.push((
+            e.percorso.clone(),
+            json!({ "op": "remove", "target": bersaglio }),
+        ));
+        for d in self.copia.mappa.elementi() {
+            if d.percorso.starts_with(&e.percorso) {
+                if let Some(id) = &d.id {
+                    self.ricette.via.insert(id.clone());
+                }
+            }
+        }
+    }
+
+    /// Vero se `nodo` o un suo antenato in `posti` si riscrive intero.
+    fn dentro_un_riscritto(&self, mut nodo: Option<NodeId>, posti: &Posti<'_>) -> bool {
+        while let Some(n) = nodo {
+            if self.riscritti.contains(&n) {
+                return true;
+            }
+            nodo = posti.nodi.get(&n).and_then(|p| p.genitore);
+        }
+        false
     }
 
     /// L'ordine e il genitore degli oggetti che ci sono prima e dopo: un
@@ -296,22 +357,30 @@ impl Lavoro<'_> {
     /// fratelli rimasti.
     fn ordine(&mut self, prima: &Posti<'_>, dopo: &Document) -> Result<(), Rifiuto> {
         let mut contenitori: Vec<(Option<NodeId>, &Vec<Arc<Node>>)> = Vec::new();
-        fn raccogli<'a>(n: &'a Arc<Node>, out: &mut Vec<(Option<NodeId>, &'a Vec<Arc<Node>>)>) {
+        fn raccogli<'a>(
+            n: &'a Arc<Node>,
+            riscritti: &HashSet<NodeId>,
+            out: &mut Vec<(Option<NodeId>, &'a Vec<Arc<Node>>)>,
+        ) {
+            if riscritti.contains(&n.id) {
+                return;
+            }
             if let Some(figli) = n.children() {
                 out.push((Some(n.id), figli));
                 for c in figli {
-                    raccogli(c, out);
+                    raccogli(c, riscritti, out);
                 }
             }
         }
         for l in &dopo.layers {
-            raccogli(l, &mut contenitori);
+            raccogli(l, &self.riscritti, &mut contenitori);
         }
         for (genitore, figli) in contenitori {
-            // Solo i figli che c'erano già; i nuovi li mette `add`.
+            // Solo i figli che c'erano già; i nuovi e i riscritti li mette
+            // `add`.
             let rimasti: Vec<&Arc<Node>> = figli
                 .iter()
-                .filter(|c| prima.nodi.contains_key(&c.id))
+                .filter(|c| prima.nodi.contains_key(&c.id) && !self.riscritti.contains(&c.id))
                 .collect();
             let chiavi: Vec<Option<usize>> = rimasti
                 .iter()
@@ -362,11 +431,16 @@ impl Lavoro<'_> {
         // Un oggetto nuovo: il genitore, i fratelli dopo il gesto, il posto.
         type Nuovo<'a> = (Option<NodeId>, Vec<&'a Arc<Node>>, usize);
         let mut nuovi: Vec<Nuovo<'_>> = Vec::new();
-        fn cerca<'a>(n: &'a Arc<Node>, prima: &Posti<'_>, out: &mut Vec<Nuovo<'a>>) {
+        fn cerca<'a>(
+            n: &'a Arc<Node>,
+            prima: &Posti<'_>,
+            riscritti: &HashSet<NodeId>,
+            out: &mut Vec<Nuovo<'a>>,
+        ) {
             let Some(figli) = n.children() else { return };
             for (i, c) in figli.iter().enumerate() {
-                if prima.nodi.contains_key(&c.id) {
-                    cerca(c, prima, out);
+                if prima.nodi.contains_key(&c.id) && !riscritti.contains(&c.id) {
+                    cerca(c, prima, riscritti, out);
                 } else {
                     out.push((Some(n.id), figli.iter().collect(), i));
                 }
@@ -376,7 +450,7 @@ impl Lavoro<'_> {
             if !prima.nodi.contains_key(&l.id) {
                 return Err(no("il gesto crea un livello del motore"));
             }
-            cerca(l, prima, &mut nuovi);
+            cerca(l, prima, &self.riscritti, &mut nuovi);
         }
         for (genitore, fratelli, i) in nuovi {
             let nodo = fratelli[i];
@@ -385,13 +459,45 @@ impl Lavoro<'_> {
             if !locale.is_finite() {
                 return Err(no("il genitore ha una transform che non si inverte"));
             }
-            let id = self.id_nuovo(Specie::Oggetto)?;
-            let scritto = self.scrittore.and_then(|s| s(nodo, locale));
-            let (tag, mut attrs) = match scritto {
-                Some(e) => e,
-                None => elem(nodo, locale)?,
+            let riscritto = self.riscritti.contains(&nodo.id);
+            // Un oggetto riscritto tiene il suo id se è già della forma nuova.
+            let vecchio = riscritto
+                .then(|| self.elemento(nodo.id).and_then(Elemento::id_del_file))
+                .flatten()
+                .filter(|id| id::e_nuovo(id, Specie::Oggetto))
+                .map(str::to_string);
+            let id = match vecchio {
+                Some(id) => id,
+                None => self.id_nuovo(Specie::Oggetto)?,
             };
-            attrs.insert("id".into(), json!(id));
+            let scritto = if riscritto {
+                None
+            } else {
+                self.scrittore.and_then(|s| s(nodo, locale))
+            };
+            // Un oggetto ricco, o uno riscritto, va come grafica semplice
+            // con la sua ricetta, se nessuno dei suoi pezzi c'era già.
+            let con_ricetta = scritto.is_none()
+                && (riscritto
+                    || (ricetta::esito_albero(nodo) > Esito::Corpo
+                        && !ha_pezzi_di_prima(nodo, prima)));
+            let elem_o_raw = if con_ricetta {
+                let raw = self.grafica_semplice(nodo, locale, &id)?;
+                let byte = ricetta::codifica(nodo, locale).map_err(no)?;
+                self.ricette.nuove.push(vectorcraft_svg::recipe_element(
+                    &id,
+                    &vectorcraft_svg::element_hash(&raw),
+                    &byte,
+                ));
+                json!({ "raw": raw })
+            } else {
+                let (tag, mut attrs) = match scritto {
+                    Some(e) => e,
+                    None => elem(nodo, locale)?,
+                };
+                attrs.insert("id".into(), json!(id));
+                json!({ "elem": { "tag": tag, "attrs": attrs } })
+            };
             self.ids.insert(nodo.id, id);
             let pos = if i + 1 == fratelli.len() {
                 json!({ "last": true })
@@ -401,9 +507,96 @@ impl Lavoro<'_> {
                     None => json!({ "first": true }),
                 }
             };
-            self.add.push(json!({ "op": "add", "parent": parent, "pos": pos, "elem": { "tag": tag, "attrs": attrs } }));
+            let mut op = json!({ "op": "add", "parent": parent, "pos": pos });
+            if let (Some(op), Value::Object(corpo)) = (op.as_object_mut(), elem_o_raw) {
+                op.extend(corpo);
+            }
+            self.add.push(op);
         }
         Ok(())
+    }
+
+    /// La grafica semplice di `n` nello spazio del genitore: un `<path>` per
+    /// un tracciato o un composto, un `<g>` per un oggetto con figli, con un
+    /// id nuovo per ogni figlio. Le sfumature diventano il colore della loro
+    /// prima tappa, i motivi niente: la forma vera è nella ricetta.
+    fn grafica_semplice(&mut self, n: &Node, locale: Affine, id: &str) -> Result<String, Rifiuto> {
+        let mut out = String::new();
+        let attr = |out: &mut String, k: &str, v: &str| {
+            out.push_str(&format!(" {k}=\"{}\"", vectorcraft_svg::xml_escape(v)));
+        };
+        let d = match &n.kind {
+            NodeKind::Path { path, .. } => Some(scrivi_d(&trasformato(path, locale))),
+            NodeKind::Compound { children, .. } => {
+                let mut d = String::new();
+                for c in children {
+                    if let NodeKind::Path { path, .. } = &c.kind {
+                        if !d.is_empty() {
+                            d.push(' ');
+                        }
+                        d.push_str(&scrivi_d(&trasformato(path, locale)));
+                    }
+                }
+                Some(d)
+            }
+            _ => None,
+        };
+        if let Some(d) = d {
+            out.push_str("<path");
+            attr(&mut out, "id", id);
+            attr(&mut out, "d", &d);
+            if let NodeKind::Compound {
+                rule: vectorcraft_geom::FillRule::EvenOdd,
+                ..
+            } = n.kind
+            {
+                attr(&mut out, "fill-rule", "evenodd");
+            }
+            attr(
+                &mut out,
+                "fill",
+                &colore_semplice(n.appearance.fill().map(|f| &f.paint)),
+            );
+            if let Some(s) = n
+                .appearance
+                .stroke()
+                .filter(|s| !matches!(s.paint, Paint::None))
+            {
+                attr(&mut out, "stroke", &colore_semplice(Some(&s.paint)));
+                let scala = locale.determinant().abs().sqrt();
+                attr(&mut out, "stroke-width", &g2(s.width * scala));
+            }
+            if n.opacity < 1.0 {
+                attr(
+                    &mut out,
+                    "opacity",
+                    &numero(f64::from(n.opacity), DECIMALI_MATRICE),
+                );
+            }
+            out.push_str("/>");
+            return Ok(out);
+        }
+        let Some(figli) = n.children() else {
+            return Err(no(
+                "un oggetto ricco che non ha una grafica semplice (testo, immagine, maglia, simbolo)",
+            ));
+        };
+        out.push_str("<g");
+        attr(&mut out, "id", id);
+        if n.opacity < 1.0 {
+            attr(
+                &mut out,
+                "opacity",
+                &numero(f64::from(n.opacity), DECIMALI_MATRICE),
+            );
+        }
+        out.push('>');
+        for c in figli {
+            let id_figlio = self.id_nuovo(Specie::Oggetto)?;
+            out.push_str(&self.grafica_semplice(c, locale, &id_figlio)?);
+        }
+        out.push_str("</g>");
+        Ok(out)
     }
 
     /// Gli oggetti che ci sono prima e dopo, dall'alto: i `set`.
@@ -421,6 +614,74 @@ impl Lavoro<'_> {
             || self
                 .elemento(a.id)
                 .is_some_and(|e| e.ruolo == fub_scene::Role::Layer);
+        let oggetto = if radice || livello {
+            None
+        } else {
+            self.elemento(a.id).cloned()
+        };
+        if let Some(e) = oggetto {
+            let con_ricetta =
+                e.id.as_deref()
+                    .is_some_and(|id| self.copia.mappa.ricette().applicata(id));
+            if con_ricetta {
+                // Spostato, ruotato o scalato: cambia solo la sua `transform`
+                // e la ricetta resta. Ogni altro cambio lo riscrive intero.
+                if let Some(m) = adatta(b, a) {
+                    if mosso_da(b, m, true).is_some_and(|c| nodi_vicini(&c, a)) {
+                        if !vicina_all_identita(m) {
+                            let t = nuova_trasformazione(&e, m)?;
+                            let id = self.bersaglio(a.id)?;
+                            self.set.push(json!({ "op": "set", "id": id, "attrs": { "transform": scrivi_matrice(t) } }));
+                        }
+                        return Ok(());
+                    }
+                }
+                self.riscritti.insert(a.id);
+                return Ok(());
+            }
+            if ricetta::esito_albero(a) > Esito::Corpo {
+                // Ricco. Se i suoi costrutti cambiano, gli attributi non li
+                // direbbero: si riscrive intero con la sua ricetta.
+                if ricetta::costrutti_albero(a) != ricetta::costrutti_albero(b) {
+                    self.riscritti.insert(a.id);
+                    return Ok(());
+                }
+                // Gli stessi di prima: se il cambio non si scrive come
+                // attributi, si riscrive intero.
+                let prima_del_tentativo = (
+                    self.ident.len(),
+                    self.set.len(),
+                    self.ids.clone(),
+                    self.dati.clone(),
+                    self.riscritti.clone(),
+                );
+                match self.confronta_comune(b, a, prima, radice, livello) {
+                    Ok(()) => return Ok(()),
+                    Err(_) => {
+                        let (ident, set, ids, dati, riscritti) = prima_del_tentativo;
+                        self.ident.truncate(ident);
+                        self.set.truncate(set);
+                        self.ids = ids;
+                        self.dati = dati;
+                        self.riscritti = riscritti;
+                        self.riscritti.insert(a.id);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        self.confronta_comune(b, a, prima, radice, livello)
+    }
+
+    /// Il confronto di un oggetto che non si riscrive intero.
+    fn confronta_comune(
+        &mut self,
+        b: &Arc<Node>,
+        a: &Arc<Node>,
+        prima: &Posti<'_>,
+        radice: bool,
+        livello: bool,
+    ) -> Result<(), Rifiuto> {
         // Un `<path>` con più sottotracciati (la freccia) è un tracciato
         // composto del motore, i cui figli non sono elementi di Fub: se i
         // figli restano gli stessi, il cambio è suo e si scrive come quello
@@ -1048,6 +1309,30 @@ fn trasformato(p: &vectorcraft_geom::PathData, m: Affine) -> vectorcraft_geom::P
 
 fn punti_uguali(a: Point, b: Point) -> bool {
     (a.x - b.x).abs() <= 1e-9 && (a.y - b.y).abs() <= 1e-9
+}
+
+/// Il colore della grafica semplice: una sfumatura vale la sua prima tappa,
+/// un motivo niente.
+fn colore_semplice(p: Option<&Paint>) -> String {
+    match p {
+        Some(Paint::Solid { color, .. }) => color.to_hex(),
+        Some(Paint::Gradient(g)) => g
+            .gradient
+            .stops
+            .first()
+            .map_or_else(|| "none".into(), |s| s.color.to_hex()),
+        None | Some(Paint::None) | Some(Paint::Pattern { .. }) => "none".into(),
+    }
+}
+
+/// Vero se un discendente di `n` c'era già prima del gesto: allora `n` non
+/// si scrive come grafica nuova, i suoi pezzi sono elementi del file.
+fn ha_pezzi_di_prima(n: &Node, prima: &Posti<'_>) -> bool {
+    n.children().is_some_and(|figli| {
+        figli
+            .iter()
+            .any(|c| prima.nodi.contains_key(&c.id) || ha_pezzi_di_prima(c, prima))
+    })
 }
 
 fn scrivi_colore(p: Option<&Paint>) -> Result<String, Rifiuto> {

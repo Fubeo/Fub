@@ -280,6 +280,10 @@ strumento li modifica, e un gesto sul loro oggetto del motore è rifiutato
 `cargo test -p fub-disegno --test corpus` lo confronta, e
 `UPDATE_PERDITE=1` lo riscrive.
 
+## La ricetta
+
+Ciò che la scena non sa dire (un effetto dal vivo, un aspetto impilato, una forma dal vivo) torna uguale dopo un salvataggio grazie alla ricetta, la forma nativa dell'oggetto in un `<vectorcraft:recipe>` dentro `<metadata>`, accanto alla grafica semplice del corpo. La possiede il ponte, `crates/fub-disegno/src/ricetta.rs`, con la tabella dei costrutti (`Corpo`, `Scena`, `Ricetta`) che le famiglie leggono: l'apertura la applica dopo l'import, la mappa la tiene accanto agli id, la differenza la scrive. È l'unico caso in cui il motore riscrive un elemento intero: un oggetto che diventa ricco, o che ha la ricetta e cambia altrimenti che con la `transform`, si toglie e torna con lo stesso id come grafica semplice. L'impronta è per elemento senza la sua `transform`: spostare tiene la ricetta, ogni altro cambio fuori dal motore la fa cadere con un avviso fra le parti. Il formato: [la ricetta di un oggetto](../reference/scene-format-recipe.md).
+
 ## Il disegno completo
 
 Lo spazio Completo con tutte le funzioni del motore: [Il disegno completo](disegno-completo.md).
@@ -442,7 +446,4 @@ flowchart LR
     vtrace --> vgeom
 ```
 
-Per l'inchiostro e gli strumenti della superficie vedi
-[Inchiostro e strumenti](ink-and-tools.md); per le superfici e le sessioni
-dei documenti [Superfici dell'editor](editor-surfaces.md); per le operazioni
-che il motore restituisce [le operazioni sulla scena](../reference/scene-operations.md).
+Per l'inchiostro e gli strumenti della superficie vedi [Inchiostro e strumenti](ink-and-tools.md); per le superfici e le sessioni dei documenti [Superfici dell'editor](editor-surfaces.md); per le operazioni che il motore restituisce [le operazioni sulla scena](../reference/scene-operations.md).

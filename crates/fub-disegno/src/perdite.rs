@@ -129,12 +129,23 @@ pub(crate) fn classifica(perdite: &mut Perdite, testo: &str, items: &[Item], map
         }
     }
     for e in mappa.elementi() {
+        if e.motivo == Some(crate::ricetta::COPERTO) {
+            continue;
+        }
         let nome = nome(e.id.as_deref(), e.tag, &e.percorso);
         if e.nodo.is_none() {
             perdite.non_mappato(
                 nome,
                 e.motivo.unwrap_or("il motore non ne fa un oggetto suo"),
             );
+            continue;
+        }
+        // Un oggetto rifatto dalla sua ricetta non perde niente: la grafica
+        // semplice si riscrive con la ricetta.
+        if e.id
+            .as_deref()
+            .is_some_and(|id| mappa.ricette().applicata(id))
+        {
             continue;
         }
         let Some(&[da, a]) = span.get(e.percorso.as_slice()) else {
@@ -219,6 +230,7 @@ pub(crate) fn controlla(perdite: &[DrawingLoss], ops: &[Value]) -> Result<(), St
                 p.kind,
                 DrawingLossKind::Unmapped | DrawingLossKind::Approximated
             ) && nominati.contains(p.element.as_str())
+                && !crate::ricetta::e_un_avviso(&p.detail)
         })
         .map(|p| (p.element.as_str(), p))
         .collect();

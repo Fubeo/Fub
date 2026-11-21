@@ -39,6 +39,10 @@ sha256 = "sha256:9fc38eaa31880c1136d5d367b2fde88d434b5de312f1b0dde5a7acd1037f463
 path = "patches/0008-nessuna-radice-e-tabelle.patch"
 sha256 = "sha256:10ef670d3704263fa570669ec5b3829972f7ae2b9a2dd8382e4863ffc95ef94d"
 
+[[patch]]
+path = "patches/0009-ricetta-per-elemento.patch"
+sha256 = "sha256:7e47e1b19b2234d998e9769dc4c67393032c1d15be596cbeeef09af174ee5300"
+
 [[file]]
 path = "ASSETS.md"
 upstream = "sha256:2417b03b20596fb6d2b266c5acb2d31c1dd33a4922f1db49b4979f6d23975eaa"
@@ -4073,6 +4077,12 @@ upstream = "sha256:cb8ccb2ae34ae60aab398fdc1d89daef3926fb7d2f031a1823667638988e5
 [[file]]
 path = "crates/svg/src/lib.rs"
 upstream = "sha256:495a17c86af62d299f891eaed398793248d06f4d26d5dbe779f1f0620eb118d8"
+result = "sha256:622699d09b59b62430ad93af4a610d9f14a8e8c1008b7487d950daa7ef9c8e3b"
+
+[[file]]
+path = "crates/svg/src/recipe.rs"
+upstream = "none"
+result = "sha256:bf2ca81308666f11bee2ab2254a9ecc16f01027f62a43b02eae4de7e3e7418ad"
 
 [[file]]
 path = "crates/svg/tests/convolve_overflow.rs"

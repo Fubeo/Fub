@@ -29,5 +29,7 @@ pub mod motore;
 pub mod perdite;
 /// Lo spessore delle linee a spessore variabile: il profilo e il contorno.
 mod profilo;
+/// La ricetta di un oggetto ricco accanto all'elemento.
+pub mod ricetta;
 /// La sincronia fra il documento del motore e il file sul disco.
 pub mod sincronia;
