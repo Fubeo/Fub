@@ -1404,7 +1404,7 @@ Fatto quando:
 - `cargo test -p fub-abi --test dependency_invariant` passa;
 - la riga si vede in Componenti, sotto «Disegnare».
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test famiglie_pigre; cargo test -p fub-disegno --lib famiglie
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 ## T4 · Il ponte degli strumenti e il contratto
