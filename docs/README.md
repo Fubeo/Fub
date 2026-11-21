@@ -100,7 +100,7 @@ dalla penna alle tavole, dall'import all'export, fino ai disegni grandi.
   [layout su disco](reference/on-disk-layout.md) e
   [permessi e sicurezza](reference/permissions-and-security.md) (con [gli stili e la CSP](reference/styles-and-csp.md))
 - [Il formato della scena](reference/scene-format.md) con le sue
-  pagine di dettaglio, e le
+  pagine di dettaglio, fra cui [la ricetta di un oggetto](reference/scene-format-recipe.md), e le
   [operazioni sulla scena](reference/scene-operations.md)
 - [Le annotazioni PDF](reference/annotation-format.md), [l'esportazione in PDF](reference/pdf-export-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
