@@ -153,3 +153,32 @@ export const RISORSE_EN: Record<keyof typeof RISORSE_IT, string> = {
   "draw.resources.failed": "This part did not open. Try again to load it.",
   "draw.resources.retry": "Try again",
 };
+
+/// La colonna e il cassetto del Disegno completo (K6 T8): la casella «Tutti
+/// gli strumenti», il cassetto con la ricerca e i nomi dei suoi gruppi.
+export const COLONNA_IT = {
+  "draw.chrome.column.all": "Tutti gli strumenti",
+  "draw.chrome.drawer.title": "Tutti gli strumenti",
+  "draw.chrome.drawer.note": "Scegline uno per usarlo adesso.",
+  "draw.chrome.drawer.search": "Cerca uno strumento",
+  "draw.chrome.drawer.empty": "Nessuno strumento ha quel nome.",
+  "draw.chrome.drawer.edit": "Modifica la colonna…",
+  "draw.chrome.drawer.group.pick": "Selezione",
+  "draw.chrome.drawer.group.ink": "Disegna",
+  "draw.chrome.drawer.group.shape": "Forme",
+  "draw.chrome.drawer.group.text": "Testo",
+} as const;
+
+/// L'inglese della colonna e del cassetto.
+export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
+  "draw.chrome.column.all": "All tools",
+  "draw.chrome.drawer.title": "All tools",
+  "draw.chrome.drawer.note": "Choose one to use it now.",
+  "draw.chrome.drawer.search": "Search for a tool",
+  "draw.chrome.drawer.empty": "No tool has that name.",
+  "draw.chrome.drawer.edit": "Edit the column…",
+  "draw.chrome.drawer.group.pick": "Selection",
+  "draw.chrome.drawer.group.ink": "Draw",
+  "draw.chrome.drawer.group.shape": "Shapes",
+  "draw.chrome.drawer.group.text": "Text",
+};
