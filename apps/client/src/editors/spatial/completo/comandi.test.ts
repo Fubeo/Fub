@@ -58,7 +58,7 @@ describe("menuComando", () => {
     const indice = indiceDi({ voci: [voce("a", "menu/oggetto")] });
     const menu = menuComando(indice, valgono({ id: "disegno.a", enabled: false, disabled_reason: "needs_path" }), NESSUNO);
     const oggetto = trova(menu, "Oggetto").items ?? [];
-    expect(oggetto[0]).toMatchObject({ label: "Voce a", disabled: true, description: "Scegli prima un tracciato." });
+    expect(oggetto[0]).toMatchObject({ label: "Voce a", disabled: true, description: "Scegli un tracciato." });
   });
 
   it("il tasto dell'indice è la scorciatoia della voce", () => {
@@ -94,19 +94,19 @@ describe("menuNonCaricato", () => {
 
 describe("statoVoce e testoPerche", () => {
   it("le ragioni tipate del motore hanno il loro testo, e quella libera passa com'è", () => {
-    expect(testoPerche("no_selection")).toBe("Scegli prima un oggetto nel disegno.");
-    expect(testoPerche("read_only")).toBe("Il disegno è in sola lettura.");
+    expect(testoPerche("no_selection")).toBe("Scegli un oggetto.");
+    expect(testoPerche("read_only")).toBe("Disegno di sola lettura.");
     expect(testoPerche({ other: { text: "il livello è bloccato" } })).toBe("il livello è bloccato");
-    expect(testoPerche(null)).toBe("Questo comando non vale adesso.");
+    expect(testoPerche(null)).toBe("Non vale adesso.");
   });
 
   it("un comando che il motore non elenca non è collegato, e lo dice", () => {
-    expect(statoVoce(voce("a", "menu/oggetto"), valgono())).toEqual({ disabled: true, perche: "Questo comando non è ancora collegato." });
+    expect(statoVoce(voce("a", "menu/oggetto"), valgono())).toEqual({ disabled: true, perche: "Non ancora collegato." });
   });
 
   it("col motore spento le voci del motore sono spente, col perché del motore", () => {
     const spento: StatoComandi = { per: null, assente: "spento" };
-    expect(statoVoce(voce("a", "menu/oggetto"), spento)).toEqual({ disabled: true, perche: "Il motore del disegno è spento." });
+    expect(statoVoce(voce("a", "menu/oggetto"), spento)).toEqual({ disabled: true, perche: "Motore del disegno spento." });
   });
 
   it("uno strumento lo sceglie l'editor, e vale sempre; una voce del client non è collegata", () => {

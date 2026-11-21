@@ -105,6 +105,6 @@ describe("menu e ricerca del Completo (K6 T9a)", () => {
     });
     const menu = await completo.menu(() => [], azioniFinte());
     const oggetto = menu.find((item) => item.label === "Oggetto");
-    expect(oggetto?.items?.[0]).toMatchObject({ label: "Voce a", hint: "Ctrl+J", disabled: true, description: "Il motore del disegno è spento." });
+    expect(oggetto?.items?.[0]).toMatchObject({ label: "Voce a", hint: "Ctrl+J", disabled: true, description: "Motore del disegno spento." });
   });
 });

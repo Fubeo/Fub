@@ -71,7 +71,7 @@ describe("la ricerca Ctrl+/ con il Completo (K6 T9a)", () => {
     await attesa();
     expect(document.querySelector(".draw-commands-empty")?.textContent).toBe("Il catalogo dei comandi non si è caricato.");
     const retry = document.querySelector<HTMLButtonElement>(".draw-commands-retry");
-    expect(retry?.hidden).toBe(false);
+    expect(retry?.textContent).toBe("Riprova");
     retry?.click();
     await attesa();
     expect(ricerca).toHaveBeenCalledTimes(2);

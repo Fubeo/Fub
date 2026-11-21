@@ -118,12 +118,23 @@ export function installCommandSearch(ctx: EditorContext): void {
     const empty = document.createElement("p");
     empty.className = "draw-commands-empty";
     empty.setAttribute("role", "status");
-    const retry = document.createElement("button");
-    retry.type = "button";
-    retry.className = "kit-button draw-commands-retry";
-    retry.textContent = t("draw.window.retry");
-    retry.hidden = true;
-    body.append(field, rows, empty, retry);
+    body.append(field, rows, empty);
+    // «Riprova» c'è solo quando l'indice non arriva: una riga nascosta pesa nel
+    // layout della finestra, e la tavolozza di oggi non deve cambiare altezza.
+    let riprova: HTMLButtonElement | null = null;
+    const mostraRiprova = (): void => {
+      if (riprova !== null) return;
+      riprova = document.createElement("button");
+      riprova.type = "button";
+      riprova.className = "kit-button draw-commands-retry";
+      riprova.textContent = t("draw.window.retry");
+      riprova.addEventListener("click", () => carica());
+      body.append(riprova);
+    };
+    const nascondiRiprova = (): void => {
+      riprova?.remove();
+      riprova = null;
+    };
 
     let chosen: FoundCommand | null = null;
     let aperta = true;
@@ -149,8 +160,9 @@ export function installCommandSearch(ctx: EditorContext): void {
       render: (one, row) => {
         row.classList.add("draw-commands-row");
         // Le voci spente restano raggiungibili con le frecce, perché Invio
-        // ripeta il perché (K6 T9a): per questo la lista non le salta.
-        if (one.disabled) row.setAttribute("aria-disabled", "true");
+        // ripeta il perché (K6 T9a): per questo la lista non le salta, e il segno
+        // della voce spenta è un attributo suo (la lista toglie `aria-disabled`).
+        if (one.disabled) row.dataset.spento = "true";
         const label = document.createElement("span");
         label.className = "draw-commands-label";
         label.textContent = one.label;
@@ -194,7 +206,7 @@ export function installCommandSearch(ctx: EditorContext): void {
     const carica = (): void => {
       if (completo === null) return;
       caricando = true;
-      retry.hidden = true;
+      nascondiRiprova();
       list.setItems([]);
       empty.textContent = t("draw.completo.indice.loading");
       void completo.ricerca(() => [...ctx.selection], azioni).then((voci) => {
@@ -203,14 +215,13 @@ export function installCommandSearch(ctx: EditorContext): void {
         if (voci === null) {
           tutte = [];
           empty.textContent = t("draw.completo.indice.failed");
-          retry.hidden = false;
+          mostraRiprova();
           return;
         }
         tutte = voci;
         refresh();
       });
     };
-    retry.addEventListener("click", () => carica());
     own.listen(input, "input", refresh);
     refresh();
     carica();
