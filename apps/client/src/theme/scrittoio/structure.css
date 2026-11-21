@@ -5616,6 +5616,25 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
 .draw-toolbar {
   flex: 1 1 auto;
 }
+/* Il cassetto «Tutti gli strumenti» (K6 T8): una griglia di tre colonne uguali,
+   ogni voce una riga con icona, nome e tasto. Le colonne non dipendono dal numero
+   di voci: un gruppo con tre strumenti ha comunque tre colonne. */
+.draw-drawer-groups,
+.draw-drawer-group {
+  display: flex;
+  flex-direction: column;
+}
+.draw-drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.draw-drawer-tool {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 32px;
+  text-align: start;
+}
 .draw-top:last-child {
   margin-inline-start: auto;
 }

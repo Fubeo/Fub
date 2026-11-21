@@ -794,7 +794,7 @@ K5 non si tocca: ciò che non torna sta qui, e lo fa un task di K6.
   e notte, a 1280 e a 700 px, con e senza fuoco. Lo script è
   `node k6-shot.mjs <prototipo> <cartella> tutti`, fuori dal repo.
   - La colonna misura 44×550 senza scorrere, e 550×44 a 700 px.
-  - Spenta misura 44×192.
+  - Spenta misura 44×226 (vassoio), 214 px dalla prima casella al basso di Testo (misurata 2026-11-21, prototipo e app uguali).
   - Le schede dell'ispettore stanno in 240 px su 240.
   - Nessun errore nella console, nessun menu o finestra fuori dallo schermo.
 - **Il sanificatore.** Il CSS del prototipo passa `sanitizeThemeCss`
@@ -1901,7 +1901,7 @@ Cosa fare:
   usano e basta.
 - Le 10 righe di T8 passano a `fub`.
 - Con il componente spento, la colonna del Completo nativo (lo stato
-  `spento`, 44×192).
+  `spento`). Misurata il 2026-11-21 nel prototipo e nell'app: colonna 44×226 (vassoio), dal bordo alto della prima casella al basso di Testo 214 px, caselle 32 px. Il 192 di prima non tornava: vale la misura.
 - Le scene `disegno-completo`, `disegno-gruppo`, `disegno-cassetto` e
   `disegno-opzioni`, in giorno e notte, a 1280 e a 700 px.
 Dal prototipo: `colonna`, `colonna-gruppo`, `colonna-penna`,

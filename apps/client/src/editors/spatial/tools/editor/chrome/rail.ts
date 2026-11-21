@@ -240,7 +240,9 @@ export function installRail(ctx: EditorContext): void {
   /// Il cassetto di «Tutti gli strumenti»: ogni strumento col suo gruppo e il
   /// suo tasto, e la modifica della colonna di chi lo apre.
   const openDrawer = (completo: CompletoColonna): void => {
-    const anchor = rail.element.querySelector<HTMLElement>(`[data-slot="${TUTTI_GLI_STRUMENTI}"]`) ?? rail.element;
+    // Il cassetto si apre a destra del vassoio della colonna, con il bordo alto
+    // allineato al suo (come nel prototipo), e non all'altezza della casella.
+    const anchor = rail.element.parentElement ?? rail.element;
     completo.cassetto(anchor, {
       strumenti: ctx.tools.map((spec) => ({ id: spec.id, label: toolLabel(spec.id) as DrawKey, icon: spec.icon, keys: keysOf(spec).keys, famiglia: spec.group })),
       corrente: ctx.tool,
