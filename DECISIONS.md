@@ -105,6 +105,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-21 · K6 · l'utente approva il prototipo rifatto sulla cornice di
+  oggi (`PLAN-ui/disegno-completo.html` a `6462d5b0e`) e sceglie D9 (a):
+  «Formati del disegno» acceso di serie, lo script del motore compilato
+  dentro, i plug-in WebAssembly del motore fuori finché un'ADR non li
+  ammette. Ogni dipendenza nuova chiede ancora il suo sì. Dal 2026-11-21
+  lavorano al più due agenti insieme, coder o pianificatori · sbloccati
+  T6–T26 per la parte del prototipo, T23 e T26 per D9.
 - 2026-11-21 · K6 · D9 (formati, script e plug-in del motore) resta aperta:
   è una scelta di dipendenze e di porte verso codice di terzi, che
   `CLAUDE.md` lascia al manutentore. Raccomandazione (a): «Formati del

@@ -70,10 +70,9 @@ Quando parte che cosa (aggiornato il 2026-11-21):
   sbloccano T24 e T25. T25 parte dopo T23. Non corrono mai insieme T12 e
   T15, T12 e T17, T22 e T23, T22 e T25, T23 e T26 (A13).
 
-Prototipo: `PLAN-ui/disegno-completo.html`; approvato: —. Lo mostra
-all'utente l'orchestratore, con D9, e scrive qui la data del sì. La sua
-cornice è quella di Scrittoio 2 del 2026-11-05: prima del sì va rifatta
-sulla cornice di oggi (vedi «Aggiornamento del 2026-11-21», punto 14).
+Prototipo: `PLAN-ui/disegno-completo.html`; approvato: 2026-11-21,
+sulla cornice di oggi (`25299965f`, vedi «Aggiornamento del 2026-11-21»,
+punto 14), insieme alla scelta (a) di D9.
 
 ## Modifiche
 
@@ -641,6 +640,7 @@ manutentore: T23 e T26 la aspettano. Il testo qui sotto è quello del
   con il suo host WebAssembly, e conviene deciderla a parte.
   Che cosa cambia: T23 e T26. Il cancello accetta le 11 righe escluse
   solo se l'utente sceglie (a); con (b) diventano lavoro di T26.
+  Scelta dell'utente il 2026-11-21: (a).
 - D10 · **Ciò che l'SVG non sa dire.** Effetti dal vivo, stili grafici,
   fusioni, pittura dinamica e simili, salvati in un `.svg`.
   (a) Ogni elemento ricco porta la sua ricetta come attributo.
@@ -1733,7 +1733,7 @@ Fatto quando:
 - `npm run theme:generate && npm run theme:verify` passano.
 Prova: scripts/check.sh --rapido; npx vitest run src/kit src/editors/spatial/motore; npm run bench:a11y
 Stato: [ ] da fare
-Aspetta: prototipo
+Aspetta: niente
 
 ## T7 · Lo spazio di lavoro nella banda
 
@@ -1836,7 +1836,7 @@ Fatto quando:
 - con il componente spento, il file si apre e si salva come prima.
 Prova: scripts/check.sh --rapido; npx vitest run src/shells/scrittoio/frame src/editors/spatial; npm run bench:a11y
 Stato: [ ] da fare
-Aspetta: prototipo
+Aspetta: niente
 
 ## T8 · La colonna, il cassetto, la fila delle opzioni e le icone
 
@@ -1928,7 +1928,7 @@ Fatto quando:
 - `cargo test -p fub-features --test ts_mirror` passa.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial; npm run bench:a11y
 Stato: [ ] da fare
-Aspetta: prototipo
+Aspetta: niente
 
 ## T9 · Il menu ≡, Ctrl+/ e i tasti
 
@@ -1995,7 +1995,7 @@ Fatto quando:
   è verde.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial src/panels; npm run bench:a11y
 Stato: [ ] da fare
-Aspetta: prototipo
+Aspetta: niente
 
 ## T10 · L'ispettore
 
@@ -2057,7 +2057,7 @@ Fatto quando:
   è verde.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial; npm run bench:a11y
 Stato: [ ] da fare
-Aspetta: prototipo
+Aspetta: niente
 
 
 ## T11 · Il nucleo, la vista e le preferenze del motore
@@ -2194,7 +2194,7 @@ Fatto quando:
 - `tools/gesti-vettori.test.ts` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial src/panels
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T6–T10)
+Aspetta: niente
 
 ## T12 · I tracciati e la penna di Bézier
 
@@ -2261,7 +2261,7 @@ Fatto quando: il modello, e `tools/gesti-vettori.test.ts` passa
 (l'Inchiostro fa ancora `fub:ink`).
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/tracciati src/editors/spatial/tools/gesti-vettori.test.ts
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
 
@@ -2327,7 +2327,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/forme src/editors/spatial/completo/famiglie/trasforma
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T14 · Il colore
 
@@ -2393,7 +2393,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/colore
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
 
@@ -2472,7 +2472,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/aspetto src/editors/spatial/completo/famiglie/livelli
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T16 · Il testo
 
@@ -2550,7 +2550,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/testo
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T17 · I pennelli, le deformazioni e la pulizia
 
@@ -2618,7 +2618,7 @@ Casi limite:
 Fatto quando: il modello, e `tools/gesti-vettori.test.ts` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/pennelli src/editors/spatial/completo/famiglie/pulizia
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T18 · Gli effetti
 
@@ -2668,7 +2668,7 @@ Fatto quando: il modello, e un caso con l'oracolo per ognuno dei 63
 effetti.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/effetti
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T19 · Le tavole, i righelli e le misure
 
@@ -2718,7 +2718,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/tavole
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T20 · Le immagini, il ricalco e i collegamenti
 
@@ -2774,7 +2774,7 @@ Fatto quando: il modello, e il caso di `../fuori/del/vault.png` in
 `crates/fub-disegno/tests/disco.rs` (T28) passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo test -p fub-disegno --test disco; npx vitest run src/editors/spatial/completo/famiglie/immagini
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T21 · Le trame e gli oggetti dinamici
 
@@ -2824,7 +2824,7 @@ costrutto della famiglia in `crates/fub-disegno/tests/ricetta.rs` (T27)
 passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo test -p fub-disegno --test ricetta; npx vitest run src/editors/spatial/completo/famiglie/trame src/editors/spatial/completo/famiglie/dinamici
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T22 · I simboli e il web
 
@@ -2889,7 +2889,7 @@ Casi limite:
 Fatto quando: il modello, e il test dell'`onclick` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/simboli src/editors/spatial/completo/famiglie/web
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11)
+Aspetta: niente
 
 ## T23 · I formati: aprire, posizionare, esportare, stampare
 
@@ -3005,7 +3005,7 @@ Fatto quando:
   accesi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo test -p fub-disegno --test disco; cargo deny check; npx vitest run src/editors/spatial/completo/famiglie/formati src/editors/spatial/templates
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11) e D9; le 16 righe di P1 le chiude T31
+Aspetta: niente; le 16 righe di P1 le chiude T31
 
 ## T24 · Gli effetti raster e il 3D
 
@@ -3055,7 +3055,7 @@ Fatto quando: il modello, con un caso con l'oracolo per ognuno dei 66
 effetti.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/raster src/editors/spatial/completo/famiglie/tre-d
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T18)
+Aspetta: niente
 
 ## T25 · La stampa, la prospettiva e i grafici
 
@@ -3122,7 +3122,7 @@ Casi limite:
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/stampa src/editors/spatial/completo/famiglie/prospettiva src/editors/spatial/completo/famiglie/grafici
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11); le 13 righe di P1 le chiude T31
+Aspetta: niente; le 13 righe di P1 le chiude T31
 
 ## T26 · I dati e l'automazione
 
@@ -3185,7 +3185,7 @@ Fatto quando: il modello, e il caso dello script che chiede un file in
 `crates/fub-disegno/tests/disco.rs` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; cargo test -p fub-disegno --test disco; npx vitest run src/editors/spatial/completo/famiglie/dati src/editors/spatial/completo/famiglie/automazione
 Stato: [ ] da fare
-Aspetta: prototipo (attraverso T11) e D9
+Aspetta: niente
 
 ## T27 · La ricetta e le forme della scena
 
@@ -3535,7 +3535,7 @@ Fatto quando:
 - `gh pr checks` è tutto verde con la CI completa, e la PR è unita.
 Prova: scripts/check.sh; node .github/scripts/check-disegno-mappa.mjs --finale; node tools/disegno-disco/elenco.mjs --check; cargo test -p fub-disegno; cargo test -p fub-host --test famiglie_pigre; npm run bench:a11y
 Stato: [ ] da fare
-Aspetta: D9 (e tutti gli altri task)
+Aspetta: tutti gli altri task
 
 ## T30 · Le librerie dell'utente
 
