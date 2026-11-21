@@ -96,8 +96,33 @@ nell'esportazione il file è quello che è.
   il resto: il foglio potrebbe sceglierle, e spostarle cambierebbe ciò che
   si vede.
 
+## La scheda Risorse
+
+Col Disegno completo acceso e il suo motore, l'ispettore ha la scheda
+**Risorse**, fra Livelli e Cronologia. Mostra le cose che il disegno e le sue
+famiglie portano:
+
+- **Campioni**: i colori con un nome che il documento ha. Il conto dice
+  quanti sono («24 campioni»); senza, la sezione dice che il disegno non ne
+  ha. Sono i campioni del documento: quelli delle librerie e della tavolozza
+  del motore arrivano con le loro famiglie.
+- **Le sezioni delle famiglie**, nell'ordine della mappa. Ognuna si apre e si
+  chiude dalla sua intestazione, e la sua lista è quella che la famiglia
+  porta. Quando ce ne sono molte, la scheda scorre dentro sé: il titolo
+  della scheda e le altre sezioni restano dove sono.
+
+Una sezione che non si apre dice che la parte non si è aperta, con
+«Riprova» per caricarla di nuovo; le altre restano com'erano.
+
+La scheda non c'è con il componente «Disegno completo» spento, senza il
+motore del disegno o nello spazio Semplice: le risorse restano nel disegno
+come sono, e l'ispettore mostra le sue schede di sempre.
+
 ## Chi monta l'editor
 
 Le risorse dell'editor stanno in
 `apps/client/src/editors/spatial/tools/resources.ts`, gli appunti in
-`clipboard.ts`, e la superficie le disegna con `painter/paint.ts`.
+`clipboard.ts`, e la superficie le disegna con `painter/paint.ts`. La scheda
+Risorse è `tools/resources-panel.ts`: le sue sezioni arrivano dal registro
+`completo/sezioni.ts`, che una famiglia riempie con `registraSezione` nel
+suo `registra(ctx)`.
