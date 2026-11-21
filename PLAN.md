@@ -1281,7 +1281,7 @@ Fatto quando:
 - `cargo metadata --manifest-path vendor/vectorcraft/Cargo.toml` non
   nomina `ui-egui`.
 Prova: scripts/check.sh --rapido; node .github/scripts/check-disegno-mappa.mjs; node --test tools/disegno-mappa/estrai.test.mjs
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 ## T3 · Il componente e le famiglie pigre

@@ -5184,6 +5184,382 @@ path = "crates/trace/tests/shared_boundaries.rs"
 upstream = "sha256:be4167bdafbb6c73bbd93c2432cfeac5c43ae8f91a4e80323a059255d4cd6991"
 
 [[file]]
+path = "crates/ui-egui/src/addons/arrange.rs"
+upstream = "sha256:c22fda7ef4dca1ef6d83b15254d70a37b7952d8ec1d9d3e9f0e079c6c3acbf57"
+
+[[file]]
+path = "crates/ui-egui/src/addons/pathtools/corner.rs"
+upstream = "sha256:6292f5687d1b2920d6736a37d454077c00dc7f7d8abf973d985dabc38111828d"
+
+[[file]]
+path = "crates/ui-egui/src/addons/pathtools/shared_edge.rs"
+upstream = "sha256:052bafca561eb878c4e9cd132b14ff702cb9cd6370132b253f39ca28dffced64"
+
+[[file]]
+path = "crates/ui-egui/src/i18n/it.tsv"
+upstream = "sha256:857317649c20baf56e249f0112607c1abbedbabfc06e2c04daf9d324dacd2a8b"
+
+[[file]]
+path = "crates/ui-egui/src/menus/ui_commands.rs"
+upstream = "sha256:fbdff41c2935c8f7da85b6914060a43b5e7eefd390ee647b7f9b92607d1e55eb"
+
+[[file]]
+path = "crates/ui-egui/src/panels.rs"
+upstream = "sha256:62addaba92973c4038cb73dbb9ba0a69e8e99eb1eb2bca3581a1f6158f0f4226"
+
+[[file]]
+path = "crates/ui-egui/src/panels/actions.rs"
+upstream = "sha256:3006ef1d7b3f65750fec5f1d493e46c81b589e14ed10056216a0f37796a7ba36"
+
+[[file]]
+path = "crates/ui-egui/src/panels/align.rs"
+upstream = "sha256:c069d1b44d84f8ff0adbe7da1177a115b3fd219d39e428058dcca0984e735fd3"
+
+[[file]]
+path = "crates/ui-egui/src/panels/align/tests.rs"
+upstream = "sha256:1c55fbf5549285b0af08575270659d37013581876e769f69f7d6a4c8f7d0c853"
+
+[[file]]
+path = "crates/ui-egui/src/panels/appearance.rs"
+upstream = "sha256:292f684a6be5d53bf8f957a3d2ecbe79318156e0dbc71047badc311eafd06233"
+
+[[file]]
+path = "crates/ui-egui/src/panels/appearance/tests.rs"
+upstream = "sha256:6879d97c5c45b8ccd6cceeee5a790392304132de2156f1ce15932bb777935e6c"
+
+[[file]]
+path = "crates/ui-egui/src/panels/artboards.rs"
+upstream = "sha256:7f1c7f15dae167bd8f50f199e56ec45196256bf0c9d5ae280361b445403ce0ee"
+
+[[file]]
+path = "crates/ui-egui/src/panels/artboards/tests.rs"
+upstream = "sha256:78fc8a006caa6a5bae598e5da2d471c26ace71e41c8091cd285115d34c4cc1ee"
+
+[[file]]
+path = "crates/ui-egui/src/panels/asset_export.rs"
+upstream = "sha256:bfb9479d927af109cb5d3f128addaa4192d48923486eb00f77b63f502d92b7e2"
+
+[[file]]
+path = "crates/ui-egui/src/panels/attributes.rs"
+upstream = "sha256:850a2d99276d5c03950c5da29c69847cefdad62c1b68afe2f3a84bbf5610527b"
+
+[[file]]
+path = "crates/ui-egui/src/panels/blend.rs"
+upstream = "sha256:860baf63588d41fbc578dc7b915a151ab8f4c0bac17cc2e8b4374509a9936398"
+
+[[file]]
+path = "crates/ui-egui/src/panels/brushes.rs"
+upstream = "sha256:2729a0bd5c6d6a0cc00f8cffad945b02fdff0b9090564d7b7c64b382b9c71cc4"
+
+[[file]]
+path = "crates/ui-egui/src/panels/brushes/tests.rs"
+upstream = "sha256:23b5ecad2240af5760b844bb78e9ae03076ac5b6d6fbd499c7c3fa006009efcf"
+
+[[file]]
+path = "crates/ui-egui/src/panels/character.rs"
+upstream = "sha256:3ffba62badcdf3cf469d75908b474b1c2223655709e3e2109c0773c7884f3700"
+
+[[file]]
+path = "crates/ui-egui/src/panels/character/tests.rs"
+upstream = "sha256:57c088f813ae32bc173119478c133da63957e13bbeb8a7f2d453a7b630046630"
+
+[[file]]
+path = "crates/ui-egui/src/panels/color.rs"
+upstream = "sha256:531cc750e7bf4bd6b70999d43080d809e594b0532d7539ca488dc716fa688edb"
+
+[[file]]
+path = "crates/ui-egui/src/panels/color/tests.rs"
+upstream = "sha256:2e4783abd965c6f7574a98fbec4673571c7317d993b754ccf12c87cedfeb9129"
+
+[[file]]
+path = "crates/ui-egui/src/panels/color_guide.rs"
+upstream = "sha256:ab31c6188eb0a0f3ce55571dda7f7e0f8077bc950da17231dc6e7821d742df80"
+
+[[file]]
+path = "crates/ui-egui/src/panels/color_themes.rs"
+upstream = "sha256:b1114c4fce908d404cd7131231b9d11985310912cacdf267887288cd8d8b315e"
+
+[[file]]
+path = "crates/ui-egui/src/panels/css_properties.rs"
+upstream = "sha256:4e5e327389be56e5d236fef4b35ccbe0967c74b7c35f6cccae3b20612e97d75b"
+
+[[file]]
+path = "crates/ui-egui/src/panels/doc_info.rs"
+upstream = "sha256:5c2f046c5b4875160f3bfad5e5c12b2f3003766ed62120b2f4a637849b632afd"
+
+[[file]]
+path = "crates/ui-egui/src/panels/flattener_preview.rs"
+upstream = "sha256:21c4813d59062fe6dff061c0727198042449712c37d1b3c62f6657b14c229814"
+
+[[file]]
+path = "crates/ui-egui/src/panels/glyphs.rs"
+upstream = "sha256:e1ffd31f7fb0c86831454ab84325f2728f98722117df048cc4c629746c62ac84"
+
+[[file]]
+path = "crates/ui-egui/src/panels/gradient.rs"
+upstream = "sha256:3c8fa73329e9a26ccdf155639b0a995d9f4caa8baae603edb7f0c4b5e6db7fb2"
+
+[[file]]
+path = "crates/ui-egui/src/panels/gradient/tests.rs"
+upstream = "sha256:04a02f0bea7a165d3bba37945b795fd9ef67195ec9717cb805fac1bae3f1de5c"
+
+[[file]]
+path = "crates/ui-egui/src/panels/graphic_styles.rs"
+upstream = "sha256:1e04b91258ff55992800cbbd10dbd333d7e8e654748e91c20e099f1bcbce5901"
+
+[[file]]
+path = "crates/ui-egui/src/panels/history.rs"
+upstream = "sha256:d9597c8d41088b62348ac0ae1cd7e7a2dc1037b3d5b731a74cfbbcf5b00663c0"
+
+[[file]]
+path = "crates/ui-egui/src/panels/image_trace.rs"
+upstream = "sha256:7093a43c40b276585df6943a475fee616a5de33d38d905a98a07579efd512df2"
+
+[[file]]
+path = "crates/ui-egui/src/panels/image_trace/tests.rs"
+upstream = "sha256:98e7116abb22f1557fb559057eab9ba39f33ecdd6d954ffaffe148ae2c3fe127"
+
+[[file]]
+path = "crates/ui-egui/src/panels/info.rs"
+upstream = "sha256:3d3747b8bd22303aca360e6491e9de5d8558724f000bf1fb9978c32006242c7d"
+
+[[file]]
+path = "crates/ui-egui/src/panels/layers.rs"
+upstream = "sha256:980d787623657a9fa1d4392c0ed714a3ed1ca44dd31fb49b96842b82bad73d97"
+
+[[file]]
+path = "crates/ui-egui/src/panels/layers/controls.rs"
+upstream = "sha256:fcf6bbaddf975c709fe897707cc87de635b5a2fd28cf810167dbd6e6ae0b0ec5"
+
+[[file]]
+path = "crates/ui-egui/src/panels/layers/model.rs"
+upstream = "sha256:54d2c90cb4c040a9ebf7632fe64203267eb6a144ac2f8c31df486326d1c7b280"
+
+[[file]]
+path = "crates/ui-egui/src/panels/layers/rows.rs"
+upstream = "sha256:7a21fba7fb999c5ca40272f16bfa0df994f605495aaa8da04310e4626f2fb5c6"
+
+[[file]]
+path = "crates/ui-egui/src/panels/layers/tests.rs"
+upstream = "sha256:5f93372f5bc034f6b2595f95d7f30d9f2e81a2a8301d148136e8b71b588addd7"
+
+[[file]]
+path = "crates/ui-egui/src/panels/layers/thumbs.rs"
+upstream = "sha256:efcc1200257314aead3c62c29bffe15cd9e00b02060b95ba651368390616f3f2"
+
+[[file]]
+path = "crates/ui-egui/src/panels/libraries.rs"
+upstream = "sha256:e176393c93e564b4c7eddbda65183470e6fed3c996ebf1613f27e49b26a31a7e"
+
+[[file]]
+path = "crates/ui-egui/src/panels/libraries/tests.rs"
+upstream = "sha256:3427fa68e2d381ffa6db3ae35751ea273e97462828472598573cdb0290da06d3"
+
+[[file]]
+path = "crates/ui-egui/src/panels/library_panel.rs"
+upstream = "sha256:c20716af93130f33a929a1c3688fb490a8671e0dd653d0c11e8e1f407ef4f16b"
+
+[[file]]
+path = "crates/ui-egui/src/panels/library_panel/tests.rs"
+upstream = "sha256:70b04edf7d56d5abd42dfff4fea5666596ff6a8e0d8f53743c1f958b0df4b2c4"
+
+[[file]]
+path = "crates/ui-egui/src/panels/links.rs"
+upstream = "sha256:9a14e25c67d923c999028bb9ae69d37e3be5359904ad7810822c6e4c720acf46"
+
+[[file]]
+path = "crates/ui-egui/src/panels/magic_wand.rs"
+upstream = "sha256:c202944996cbdf8aad814d8095a2270cbb040068bba6507596267c54ff86a842"
+
+[[file]]
+path = "crates/ui-egui/src/panels/memo.rs"
+upstream = "sha256:28848a366f38816dae8cf8f38164155894b162a2f2b4c41ddb2682d94e7bef86"
+
+[[file]]
+path = "crates/ui-egui/src/panels/navigator.rs"
+upstream = "sha256:048bc8baf4a1d64e6e39bf0ba40a8b9c98156b2b8ed84985cb6c9c3e4046c875"
+
+[[file]]
+path = "crates/ui-egui/src/panels/opentype.rs"
+upstream = "sha256:5ab57b25a0a608ba0acaef9283bc3c936b6df1868fbd38547b3f8f52c4fcafec"
+
+[[file]]
+path = "crates/ui-egui/src/panels/paragraph.rs"
+upstream = "sha256:7eba282d5549d9f2dc6a82a79cc51d36284c72e4acb7d469c78b4291c7330005"
+
+[[file]]
+path = "crates/ui-egui/src/panels/paragraph/tests.rs"
+upstream = "sha256:5e53b448544c58939c1e123b712647c17e2ffe8896cda9767b971903f93c7dfe"
+
+[[file]]
+path = "crates/ui-egui/src/panels/pathfinder.rs"
+upstream = "sha256:0510b93aff9028412c0be9baa905118c38acab5609df3927130d91d9a0549bce"
+
+[[file]]
+path = "crates/ui-egui/src/panels/pattern_options.rs"
+upstream = "sha256:a3c3c32e30caf56034a1c7942a175f4c3af29c30bff559345461c9def734e710"
+
+[[file]]
+path = "crates/ui-egui/src/panels/properties.rs"
+upstream = "sha256:e429bb32e6fe01bc79d89251fe388cd39dfdbaad13280555e6fb5f0e152ae940"
+
+[[file]]
+path = "crates/ui-egui/src/panels/properties/tests.rs"
+upstream = "sha256:1e7c6d12bcbdde303835d8e9829dc028afde0e487f6fcecbb03ceb1c00d450fd"
+
+[[file]]
+path = "crates/ui-egui/src/panels/separations.rs"
+upstream = "sha256:9dcd99e551b067067266917acd0214add5a54d4acf92b2450345f10b4572989f"
+
+[[file]]
+path = "crates/ui-egui/src/panels/stroke.rs"
+upstream = "sha256:f9b8fcfde0e84b853aa6acbf2930eac909108ec6eacf93e82ff41d0b1ecbeded"
+
+[[file]]
+path = "crates/ui-egui/src/panels/svg_interactivity.rs"
+upstream = "sha256:f49524caa2070e83e8539354de38d21ab785a43df0d20bb2c40875281bb24b1f"
+
+[[file]]
+path = "crates/ui-egui/src/panels/swatches.rs"
+upstream = "sha256:30ab5c3e07c2fc5855a41190a93db187f7f11a5791aeafadebc271d2b7f5f87a"
+
+[[file]]
+path = "crates/ui-egui/src/panels/swatches/actions.rs"
+upstream = "sha256:bf9e2a36634774fd01a459e19d921522d64e2233163616f9d390a8fe75824ea8"
+
+[[file]]
+path = "crates/ui-egui/src/panels/swatches/body.rs"
+upstream = "sha256:cf76b6f8d4c78eb7cd269b283b218e5c4d989ade3382af9c570798c51ecfe81e"
+
+[[file]]
+path = "crates/ui-egui/src/panels/swatches/dnd.rs"
+upstream = "sha256:6576450a92b5ec17ec32cdff5c82491953cf301aa9ef8d7d9f91e4cb153a0f2f"
+
+[[file]]
+path = "crates/ui-egui/src/panels/swatches/libraries.rs"
+upstream = "sha256:b9fc7c147c53a688afa482fb1441cbb2c1d51e896b5ecef2291168c11f3b1b7f"
+
+[[file]]
+path = "crates/ui-egui/src/panels/swatches/tests.rs"
+upstream = "sha256:d32c7e70e8f257b6bac649eb2133128e0f9db7951d2d9df0e7e3be22e3831e95"
+
+[[file]]
+path = "crates/ui-egui/src/panels/swatches/tiles.rs"
+upstream = "sha256:81ead3bf4d66b4711765d0169086654c9150b8997938f85aa8a9ad92b27133cf"
+
+[[file]]
+path = "crates/ui-egui/src/panels/symbols.rs"
+upstream = "sha256:f38fc352838bed60cb5b52981b78c38ab5ece63be0d3a318e4bfbe6ccc6a9c9f"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tabs.rs"
+upstream = "sha256:911deff06b0e33a121d7bd4ae3804605341c2c5c50f601a127052124828f1b9a"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tabs/tests.rs"
+upstream = "sha256:b69783c6a61f8b24f41a637dd4967c802a40a358d8f617bfb3e73887d95fb9e6"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_appearance.rs"
+upstream = "sha256:3301fee10cf6ceb39aabf2f07e50ac54daecdc1d96c44fb94d23fa5aced81c42"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_asset_export.rs"
+upstream = "sha256:dbeb8cc5bb77253ff28e7999ee7072eee712e0313a422d6ef9269506a69575af"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_blend.rs"
+upstream = "sha256:b82728c84f3924dfcb1eb33cb3b9ea22bd2a6cb3fbe4ec9212180b84e698235a"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_brush_libraries.rs"
+upstream = "sha256:4270872d222e01cbf093e29784f20aa8df985e6a84f10ede526a2ab2d14e2460"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_constrain.rs"
+upstream = "sha256:a687155a06635dfdc1dd848f58f5833a1d193d720c49c6f61737e7b987e628dd"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_css_properties.rs"
+upstream = "sha256:314c1787f888ee71a25589f6c9cff3067bf740250ff48c86d4a32f42419756eb"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_effectedit.rs"
+upstream = "sha256:03e77fed2057ee72ab14e631eb3dc2f782288a9d418e3cde049c7bb5ac875483"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_fontsize.rs"
+upstream = "sha256:e6c58c2844296e35e04040bf2a3c022b1b960a563d4c618d40861e3b926ca5a8"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_freeform.rs"
+upstream = "sha256:d4135544aa43f07a228c6996805a1d12d627a47b5e5183059add06dc694dcb44"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_links.rs"
+upstream = "sha256:18c096efbdb745f9b263d90a7fc17423bafa47f12bacd2d5b782ec8f3213de0f"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_maskview.rs"
+upstream = "sha256:e759095e3b8c6d22fe21eb72bda87bfb501bc23fb839f0836dc685c523b18660"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_stroke.rs"
+upstream = "sha256:e90692f86892527bcc4f2863da25bc0be7940401e09369bb0ac0c5982b3498cd"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_strokedepth.rs"
+upstream = "sha256:940b79e443a74ef76ab35c34e5648b00fb82f256e59cc358e68b92ce621cb790"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_strokeux.rs"
+upstream = "sha256:0d4f8543688848cddb9037a5028335f857fe2b6036d0db22d8b91118a8591f99"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_style_libraries.rs"
+upstream = "sha256:7cf7619b468766d2cb36b23952b8dcaab965e1f48e0486ff1c429d2eb7b1dd1d"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_symbol_libraries.rs"
+upstream = "sha256:4fadf21e6fc6e20e2d181b0f24a7f61f79b090be0b42ec24fd4277bb7033f1a5"
+
+[[file]]
+path = "crates/ui-egui/src/panels/tests_units.rs"
+upstream = "sha256:c16b2fac940649cd90199be9d13bc0c7348f33af6cd9fc39254952e90a080d79"
+
+[[file]]
+path = "crates/ui-egui/src/panels/text_styles.rs"
+upstream = "sha256:0d3aa775eb1d637aa11565a8ef0aaa8ac2075243f58f063b63ba24cfe04d909c"
+
+[[file]]
+path = "crates/ui-egui/src/panels/text_styles/tests.rs"
+upstream = "sha256:81cc21d40c8aaf693e44e14c70ee50ff01dfb45e6223135df84b5e2b82e4dd88"
+
+[[file]]
+path = "crates/ui-egui/src/panels/transform.rs"
+upstream = "sha256:fe07de3658d7287449c7b4209ab72ad9b0bc0f280c0adc058d391d9c19063b7d"
+
+[[file]]
+path = "crates/ui-egui/src/panels/transform/tests.rs"
+upstream = "sha256:24887109aecb94c1fb33fa88a74ac00db097bc14aa3da658e70f2d9ce17a9323"
+
+[[file]]
+path = "crates/ui-egui/src/panels/transparency.rs"
+upstream = "sha256:c092d179e7217af3ef91745270a94d538e40ab86ada1b0ea8d72ac57b8b8c917"
+
+[[file]]
+path = "crates/ui-egui/src/panels/variables.rs"
+upstream = "sha256:fae0d00ade0d1ddaf2633e8cde3d4a0a23513e30ba022c26302498593913be92"
+
+[[file]]
+path = "crates/ui-egui/src/shortcut_editor.rs"
+upstream = "sha256:ec9d63733c616d7dd82e9ac104fc5cb6cd2abf9a56821b2e5bfd257a4a4fbcb9"
+
+[[file]]
+path = "crates/ui-egui/src/workspaces.rs"
+upstream = "sha256:4b260f7d068854d0770caee65480a6b328ca59f13b9447d04a94e730c5a3f384"
+
+[[file]]
 path = "rustfmt.toml"
 upstream = "sha256:1b51e53edb3571229e84540b9b08514fb23d8c8d3225e8b984773f5c36eaa906"
 

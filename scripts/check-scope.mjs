@@ -58,7 +58,9 @@ for (const f of files) {
   if (/^crates\/fub-canvas-(core|wasm)\//.test(f)) flags.client = flags.canvaswasm = 1;
   if (f.startsWith("docs/") || /^[^/]+\.md$/.test(f)) flags.docs = 1;
   if (f.startsWith(".github/") || f.startsWith("scripts/")) flags.github = 1;
-  if (f.startsWith("vendor/") || f.startsWith("tools/vendor-craft/")) flags.vendor = 1;
+  // La mappa del disegno si confronta con la copia di VectorCraft: la sua
+  // guardia sta con quelle di vendor.
+  if (f.startsWith("vendor/") || f.startsWith("tools/vendor-craft/") || f.startsWith("tools/disegno-mappa/") || f === "crates/fub-disegno/mappa.tsv") flags.vendor = 1;
   const p = owner(f);
   if (p) touched.add(p.name);
 }

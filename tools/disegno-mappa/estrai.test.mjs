@@ -1,0 +1,244 @@
+// node --test tools/disegno-mappa/estrai.test.mjs
+//
+// L'estrazione della mappa del disegno: sulla copia di VectorCraft e su un
+// motore finto, scritto in una cartella temporanea, con i casi limite.
+
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { after, test } from "node:test";
+import {
+  COLONNE,
+  MAPPA,
+  estrai,
+  leggiMappa,
+  revisione,
+  rigenera,
+  scriviMappa,
+  senzaTest,
+  stringaRust,
+  traduzioni,
+} from "./estrai.mjs";
+
+const conta = (righe, colonna) => {
+  const out = {};
+  for (const r of righe) out[r[colonna]] = (out[r[colonna]] ?? 0) + 1;
+  return out;
+};
+
+test("sulla copia di cfb30d81 l'estrazione dà le 1551 righe, con i conti per fonte", () => {
+  assert.equal(revisione(), "cfb30d8139161cf1722dfabf3046741a0b21b3da");
+  const righe = estrai();
+  assert.equal(righe.length, 1551);
+  assert.deepEqual(conta(righe, "fonte"), { motore: 881, interfaccia: 397, strumento: 100, effetto: 130, pannello: 43 });
+  // Gli strumenti aggiunti hanno il loro ID, non il nome del modulo.
+  assert.ok(righe.some((r) => r.fonte === "strumento" && r.id === "cornerTool"));
+  assert.ok(!righe.some((r) => r.id === "corner_tool"));
+  // Le costanti di UI_COMMANDS si leggono dal loro modulo.
+  assert.ok(righe.some((r) => r.fonte === "interfaccia" && r.id === "addon.pathtools.cornerTool"));
+  // `file.place` è del motore e dell'interfaccia: due righe.
+  assert.deepEqual(righe.filter((r) => r.id === "file.place").map((r) => r.fonte).sort(), ["interfaccia", "motore"]);
+});
+
+test("la mappa del repository ha le righe dell'estrazione e la loro revisione", () => {
+  const mappa = leggiMappa(fs.readFileSync(MAPPA, "utf8"));
+  assert.deepEqual(mappa.errori, []);
+  assert.equal(mappa.rev, revisione());
+  assert.equal(mappa.righe.length, 1551);
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1474, fub: 65, escluso: 12 });
+});
+
+// --- un motore finto ---------------------------------------------------------------
+
+const cartelle = [];
+after(() => {
+  for (const d of cartelle) fs.rmSync(d, { recursive: true, force: true });
+});
+
+function motoreFinto(file) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fub-disegno-mappa-"));
+  cartelle.push(dir);
+  for (const [rel, testo] of Object.entries(file)) {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), testo);
+  }
+  return dir;
+}
+
+const BASE = {
+  "upstream.lock": `rev = "${"c".repeat(40)}"\n`,
+  "crates/engine/src/cmd.rs": [
+    "macro_rules! cmd {",
+    '    ($id:literal, $label:literal) => { "cmd!(\\"finto\\", \\"Finto\\", [], None, \\"{}\\"" };',
+    "}",
+    "pub(crate) use cmd;",
+    "pub fn specs() -> Vec<CommandSpec> {",
+    '    vec![cmd!("path.join", "Join", ["Object", "Path"], Some("Cmd+J"), "{}", has_doc, run),',
+    '         cmd!(query "doc.read", "Read\\tAll", [], None, "{}", has_doc, run),',
+    '         cmd!("file.place", "Place…", ["File"], None, "{}", has_doc, run)]',
+    "}",
+    "#[cfg(test)]",
+    "#[allow(dead_code)]",
+    "mod prove {",
+    "    // una graffa in un commento: }",
+    '    const S: &str = "}";',
+    '    const R: &str = r#"} "cmd!"#;',
+    "    fn f<'a>(c: char) -> bool { c == '}' }",
+    '    fn g() { let _ = cmd!("prova.inLinea", "Test", [], None, "{}", has_doc, run); }',
+    "}",
+    "#[cfg(test)]",
+    "mod tests;",
+    "#[cfg(all(test, feature = \"x\"))]",
+    'fn h() { cmd!("prova.funzione", "Test", [], None, "{}", has_doc, run); }',
+    'pub fn dopo() -> CommandSpec { cmd!("path.split", "Split", ["Object", "Path"], None, "{}", has_doc, run) }',
+    "",
+  ].join("\n"),
+  "crates/engine/src/cmd/tests.rs": 'fn t() { cmd!("prova.file", "Test", [], None, "{}", has_doc, run); }\n',
+  "crates/engine/src/cmd/tests/altro.rs": 'fn t() { cmd!("prova.sotto", "Test", [], None, "{}", has_doc, run); }\n',
+  "crates/ui-egui/src/menus/ui_commands.rs": [
+    "pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[",
+    "    // un commento con (parentesi",
+    '    (crate::addons::arrange::ZOOM, "Zoom to Selection", "", "{}"),',
+    '    ("file.place", "Place…", "", "{path?} (con una parentesi)"),',
+    '    ("help.discord", "Discord", "", "{}"),',
+    "];",
+    "",
+  ].join("\n"),
+  "crates/ui-egui/src/addons/arrange.rs": 'pub const ZOOM: &str = "addon.arrange.zoomSelection";\n',
+  "crates/ui-egui/src/i18n/it.tsv": [
+    "# commento",
+    "",
+    "\tJoin\tUnisci",
+    "\tZoom to Selection\t",
+    "@msg\tPlace…\tnon è un'etichetta",
+    "\tPlace…\tInserisci…",
+    "",
+  ].join("\r\n"),
+  "crates/tools/src/catalog.rs": [
+    "pub const TOOL_GROUPS: &[&[ToolInfo]] = &[",
+    '    &[t("selection", "Selection Tool", Some("V"), "tool-selection")],',
+    '    &[t("pen", "Pen Tool", Some("P"), "tool-pen"), t("addAnchor", "Add Anchor Point Tool", None, "x")],',
+    "];",
+    "",
+  ].join("\n"),
+  "crates/tools/src/addons.rs": 'pub const GROUPS: &[ToolInfo] = &[ToolInfo { id: corner_tool::ID, label: "Corner Tool", shortcut: None, icon: "x" }];\n',
+  "crates/tools/src/addons/corner_tool.rs": 'pub const ID: &str = "cornerTool";\n',
+  "crates/effects/src/catalog.rs": [
+    'const MENU_BLUR: &[&str] = &["Effect", "Blur"];',
+    'pub const GAUSS: &str = "blur.gaussian";',
+    "fn all() {",
+    "    let g = |id, label, menu, params, defaults| EffectInfo { id, label, menu };",
+    '    g(GAUSS, "Gaussian Blur…", MENU_BLUR, &[], &[]);',
+    '    r("raster.glow", "Glow…", &["Effect", "Stylize"], &[], &[]);',
+    "}",
+    'pub const WARP_STYLES: [(&str, &str); 1] = [("arc", "Arc…")];',
+    "",
+  ].join("\n"),
+  "crates/effects/src/group.rs": '    ("pathfinder.add", "Add", PathfinderOp::Unite),\n',
+  "crates/ui-egui/src/panels.rs": [
+    "pub mod layers;",
+    "pub(crate) mod memo;",
+    "mod aiuto;",
+    "#[cfg(test)]",
+    "mod tests_layers;",
+    "#[cfg(test)]",
+    "mod tests {",
+    "    pub mod finto;",
+    "}",
+    "",
+  ].join("\n"),
+  "crates/ui-egui/src/panels/layers/mod.rs": "",
+  "crates/ui-egui/src/panels/memo.rs": "",
+  "crates/ui-egui/src/panels/aiuto.rs": "",
+  "crates/ui-egui/src/panels/tests_layers.rs": "",
+  "crates/ui-egui/src/panels/finto.rs": "",
+};
+
+test("un cmd! nei test non conta: in linea, in un file di test e sotto di lui", () => {
+  const righe = estrai(motoreFinto(BASE)).filter((r) => r.fonte === "motore");
+  assert.deepEqual(
+    righe.map((r) => r.id),
+    ["path.join", "doc.read", "file.place", "path.split"],
+  );
+  assert.deepEqual(righe[0], { fonte: "motore", id: "path.join", etichetta: "Join", menu: "Object › Path", etichetta_it: "Unisci" });
+});
+
+test("senzaTest toglie l'elemento intero, anche con graffe in stringhe, caratteri e commenti", () => {
+  const { sorgente, moduli } = senzaTest(BASE["crates/engine/src/cmd.rs"]);
+  assert.ok(!sorgente.includes("prova."));
+  assert.ok(sorgente.includes('"path.split"'));
+  assert.deepEqual(moduli, [{ nome: "tests", percorso: undefined }]);
+});
+
+test("le altre fonti: interfaccia, strumenti, effetti e pannelli", () => {
+  const righe = estrai(motoreFinto(BASE));
+  const di = (fonte) => righe.filter((r) => r.fonte === fonte).map((r) => r.id);
+  assert.deepEqual(di("interfaccia"), ["addon.arrange.zoomSelection", "file.place", "help.discord"]);
+  assert.deepEqual(di("strumento"), ["selection", "pen", "addAnchor", "cornerTool"]);
+  assert.deepEqual(di("effetto"), ["blur.gaussian", "raster.glow", "warp.arc", "pathfinder.add"]);
+  // `aiuto` non è pub, `tests_layers` e `finto` sono dei test.
+  assert.deepEqual(di("pannello"), ["layers", "memo"]);
+  const effetto = righe.find((r) => r.id === "blur.gaussian");
+  assert.equal(effetto.menu, "Effect › Blur");
+});
+
+test("un id con la stessa scritta in due fonti fa due righe", () => {
+  const righe = estrai(motoreFinto(BASE)).filter((r) => r.id === "file.place");
+  assert.deepEqual(righe.map((r) => r.fonte), ["motore", "interfaccia"]);
+});
+
+test("it.tsv con righe vuote, CRLF e traduzioni che mancano: l'etichetta inglese", () => {
+  const it = traduzioni(BASE["crates/ui-egui/src/i18n/it.tsv"]);
+  assert.equal(it.get("Join"), "Unisci");
+  assert.equal(it.get("Place…"), "Inserisci…");
+  assert.equal(it.has("Zoom to Selection"), false);
+  const righe = estrai(motoreFinto(BASE));
+  assert.equal(righe.find((r) => r.id === "addon.arrange.zoomSelection").etichetta_it, "Zoom to Selection");
+  assert.equal(righe.find((r) => r.id === "help.discord").etichetta_it, "Discord");
+});
+
+test("un'etichetta con un tab si legge giusta e non sposta le colonne", () => {
+  assert.equal(stringaRust("Read\\tAll \\u{2026} \\\"x\\\""), 'Read\tAll … "x"');
+  const righe = estrai(motoreFinto(BASE));
+  const r = righe.find((x) => x.id === "doc.read");
+  assert.equal(r.etichetta, "Read\tAll");
+  const { righe: mappa } = rigenera([], righe);
+  const letta = leggiMappa(scriviMappa("c".repeat(40), mappa));
+  assert.deepEqual(letta.errori, []);
+  const riletta = letta.righe.find((x) => x.id === "doc.read");
+  assert.equal(riletta.etichetta, "Read All");
+  assert.equal(riletta.stato, "da fare");
+  assert.equal(Object.keys(riletta).length, COLONNE.length + 1);
+});
+
+test("rigenerando, le righe che c'erano tengono le colonne scritte a mano", () => {
+  const righe = estrai(motoreFinto(BASE));
+  const vecchie = [
+    { fonte: "motore", id: "path.join", etichetta: "Vecchia", menu: "", famiglia: "tracciati", fase: "F1", task: "T12", stato: "fatto", posto: "menu/oggetto", pigro: "famiglia", nota: "a mano", etichetta_it: "" },
+    { fonte: "motore", id: "path.rinominato", etichetta: "X", menu: "", famiglia: "tracciati", fase: "F1", task: "T12", stato: "da fare", posto: "menu/oggetto", pigro: "famiglia", nota: "", etichetta_it: "" },
+  ];
+  const { righe: nuove, nuove: aggiunte, sparite } = rigenera(vecchie, righe);
+  const join = nuove.find((r) => r.id === "path.join");
+  assert.equal(join.famiglia, "tracciati");
+  assert.equal(join.stato, "fatto");
+  assert.equal(join.nota, "a mano");
+  assert.equal(join.etichetta, "Join");
+  const split = nuove.find((r) => r.id === "path.split");
+  assert.equal(split.famiglia, "");
+  assert.equal(split.stato, "da fare");
+  assert.deepEqual(sparite, ["motore\tpath.rinominato"]);
+  assert.ok(aggiunte.includes("motore\tpath.split"));
+});
+
+test("una costante di UI_COMMANDS che non si trova ferma l'estrazione", () => {
+  const file = { ...BASE };
+  delete file["crates/ui-egui/src/addons/arrange.rs"];
+  assert.throws(() => estrai(motoreFinto(file)), /crate::addons::arrange::ZOOM/);
+});
+
+test("la mappa con una riga dal numero di campi sbagliato non si legge", () => {
+  const testo = scriviMappa("c".repeat(40), rigenera([], estrai(motoreFinto(BASE))).righe);
+  const rotta = testo.replace("path.join\t", "path.join\textra\t");
+  assert.match(leggiMappa(rotta).errori.join("\n"), /campi invece di 12/);
+});
