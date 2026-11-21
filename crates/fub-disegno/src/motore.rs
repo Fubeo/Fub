@@ -411,7 +411,8 @@ impl Disegno {
             }
             _ => {}
         }
-        // Un percorso o un comando escluso si rifiutano prima del motore.
+        // Un percorso, un comando escluso o uno che fa Fub (le righe `fub`
+        // di disco.tsv) si rifiutano prima del motore.
         crate::disco::controlla(&richiesta.id, &richiesta.value)?;
         let azione = crate::comandi::Azione::di(&richiesta)?;
         if let Err(rifiuto) = self.pronta(richiesta.revision, ATTESA_MASSIMA) {
