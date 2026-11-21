@@ -1532,6 +1532,21 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare,
   })),
+  // **Il menu ≡ e Ctrl+/ del Completo** (K6 T9a): le voci dell'indice di prova
+  // (`?indice=prova`, vedi `fake-ipc.ts`). Il menu ≡ con Oggetto aperto, e la
+  // tavolozza con la ricerca «sposta», a 1280 e a 800 px (la finestra minima).
+  ...[
+    ["disegno-menu", 1280, "Il menu ≡ del Completo con Oggetto aperto: le voci dell'indice, e quelle spente col perché", openMenuOggetto],
+    ["disegno-menu-800", 800, "Il menu ≡ del Completo nella finestra minima del desktop, 800 px", openMenuOggetto],
+    ["disegno-tavolozza", 1280, "Ctrl+/ con la ricerca «sposta»: le voci col posto e il tasto, e il perché di quella spenta", openTavolozza],
+    ["disegno-tavolozza-800", 800, "Ctrl+/ con la ricerca «sposta» nella finestra minima del desktop, 800 px", openTavolozza],
+  ].map(([id, width, title, prepare]) => ({
+    id,
+    title,
+    query: "connectors=6&drawing=acceso&indice=prova",
+    viewport: { width, height: 800 },
+    prepare,
+  })),
   // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
   // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
   // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
@@ -5128,6 +5143,35 @@ async function openDrawing(page) {
 /// quando il motore ha risposto; con `ask` apre anche «Che cosa manca?». Il
 /// fuoco resta nel riquadro, sull'ultimo pulsante premuto.
 /// Il bottone «Spazio di lavoro» della banda (K6 T7), col suo menu aperto.
+/// Il menu ≡ del Completo con Oggetto aperto (K6 T9a): le voci dell'indice di
+/// prova. Si apre col pulsante, poi si va su Oggetto col mouse, come chi usa il
+/// mouse: il sottomenu si apre di lato.
+async function openMenuOggetto(page) {
+  await openDrawing(page);
+  // Un oggetto scelto, come nello stato del prototipo: `Home` sceglie il primo.
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(300);
+  await page.click(".draw-header button[aria-label=\"Disegno\"]");
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
+  await page.hover("#context-menu [role='menuitem']:has-text('Oggetto')");
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Sposta tracciato')");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La tavolozza di Ctrl+/ con la ricerca «sposta» (K6 T9a): le voci che
+/// cominciano così, col loro posto, il tasto e il perché di quella spenta.
+async function openTavolozza(page) {
+  await openDrawing(page);
+  // Un oggetto scelto, come nello stato del prototipo: `Home` sceglie il primo.
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(300);
+  await page.keyboard.press("Control+/");
+  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
+  await page.fill(".draw-commands-dialog .draw-commands-field input", "sposta");
+  await page.waitForFunction(() => document.querySelectorAll(".draw-commands-dialog .draw-commands-row").length >= 5);
+  await page.evaluate(() => document.fonts.ready);
+}
+
 async function openWorkspaceMenu(page) {
   await openDrawing(page);
   await page.waitForSelector("#status-workspace:not([hidden])");

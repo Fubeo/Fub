@@ -64,6 +64,29 @@ export const VISTE = {
     },
     app: { scena: "disegno-risorse-molti" },
   },
+  /// Il menu ≡ con Oggetto aperto (K6 T9a). L'app lo mostra con l'indice di
+  /// prova (`?indice=prova`), che ha le stesse voci del prototipo.
+  menu: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.selectOption("#proto-stato", "menu");
+        await page.waitForSelector('#proto-box[data-pronto^="menu-"]');
+      },
+    },
+    app: { scena: "disegno-menu" },
+  },
+  /// La tavolozza di Ctrl+/ con la ricerca «sposta» (K6 T9a).
+  tavolozza: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.selectOption("#proto-stato", "tavolozza");
+        await page.waitForSelector('#proto-box[data-pronto^="tavolozza-"]');
+      },
+    },
+    app: { scena: "disegno-tavolozza" },
+  },
 };
 
 /// I pezzi. `prototipo` sta dentro lo schermo del prototipo, `app` nella pagina
@@ -135,6 +158,78 @@ export const PEZZI = [
     prototipo: ".draw-resources-swatches .kit-color-swatches",
     app: ".draw-resources-swatches .kit-color-swatches",
     proprieta: [...DIMENSIONI, "display", "flex-wrap", "gap"],
+  },
+  // ── il menu ≡ del Completo (K6 T9a) ───────────────────────────────────────
+  // Le misure del menu e dei sottomenu dipendono da quante voci e quanto lunghe
+  // sono: l'app ha le voci di prova, il prototipo tutte le sue. Qui si
+  // confrontano gli stili; la larghezza dei sottomenu è diversa di proposito
+  // (il perché delle voci spente sta a destra, in «menu.sottomenu»).
+  {
+    id: "menu.contenitore",
+    vista: "menu",
+    prototipo: "#context-menu",
+    app: ".context-menu",
+    proprieta: [...BASE],
+  },
+  {
+    id: "menu.voce.aperta",
+    vista: "menu",
+    prototipo: '.context-menu .kit-row[aria-expanded="true"]',
+    app: '.context-menu .kit-row[aria-expanded="true"]',
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "menu.sottomenu",
+    vista: "menu",
+    prototipo: ".context-submenu",
+    app: ".context-submenu",
+    proprieta: [...BASE],
+  },
+  // ── la tavolozza di Ctrl+/ (K6 T9a) ───────────────────────────────────────
+  // L'altezza non si confronta: la lista del kit tiene la riga accesa come
+  // figlia del flusso, e lo spazio fra le righe (8 px) in più; il prototipo la
+  // tiene nascosta (`hidden`). La larghezza sì.
+  {
+    id: "tavolozza.dialogo",
+    vista: "tavolozza",
+    prototipo: ".kit-dialog.draw-commands-dialog",
+    app: ".kit-dialog.draw-commands-dialog",
+    proprieta: [...BASE, "width"],
+  },
+  {
+    id: "tavolozza.campo",
+    vista: "tavolozza",
+    prototipo: ".draw-commands-field input",
+    app: ".draw-commands-field input",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "tavolozza.etichetta",
+    vista: "tavolozza",
+    prototipo: ".draw-commands-label",
+    app: ".draw-commands-label",
+    proprieta: [...BASE],
+  },
+  {
+    id: "tavolozza.percorso",
+    vista: "tavolozza",
+    prototipo: ".draw-commands-path",
+    app: ".draw-commands-path",
+    proprieta: [...BASE],
+  },
+  {
+    id: "tavolozza.tasto",
+    vista: "tavolozza",
+    prototipo: ".draw-commands-key",
+    app: ".draw-commands-key",
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "tavolozza.perche",
+    vista: "tavolozza",
+    prototipo: ".draw-commands-why",
+    app: ".draw-commands-why",
+    proprieta: [...BASE],
   },
 ];
 
