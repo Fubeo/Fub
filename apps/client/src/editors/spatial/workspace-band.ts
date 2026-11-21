@@ -49,7 +49,8 @@ function nomiPreset(): string[] {
 
 /// Lo spazio della banda: ciò che è in uso, l'elenco e le azioni.
 export function createWorkspaceBand(deps: WorkspaceBandDeps): SurfaceWorkspace {
-  const leggi = (): SpaziDisponibili => spaziDisponibili({ space: deps.read().space, componente: deps.componente(), savedRaw: deps.read().savedRaw });
+  const leggi = (): SpaziDisponibili =>
+    spaziDisponibili({ space: deps.read().space, componente: deps.componente(), fallito: deps.failed(), savedRaw: deps.read().savedRaw });
 
   const salva = async (): Promise<void> => {
     const nome = await promptText({
@@ -144,7 +145,6 @@ export function createWorkspaceBand(deps: WorkspaceBandDeps): SurfaceWorkspace {
         lista.push({
           id: "ripristina",
           label: t("draw.workspace.reset", { name: corrente.name }),
-          description: t("draw.workspace.reset.hint"),
           enabled: componente || corrente.id === "full",
           run: deps.reset,
         });
@@ -152,7 +152,6 @@ export function createWorkspaceBand(deps: WorkspaceBandDeps): SurfaceWorkspace {
       lista.push({
         id: "salva",
         label: t("draw.workspace.save"),
-        description: t("draw.workspace.save.hint"),
         enabled: componente || corrente.id === "full",
         run: () => void salva(),
       });

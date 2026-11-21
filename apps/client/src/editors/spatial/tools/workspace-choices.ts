@@ -31,6 +31,9 @@ export interface StatoSpazi {
   readonly space: string;
   /// Il componente «Disegno completo» è acceso.
   readonly componente: boolean;
+  /// Il Completo acceso non si è caricato: i suoi spazi non si scelgono, e
+  /// «Riprova» lo dice.
+  readonly fallito: boolean;
   /// Le voci di `draw.workspaces` come stanno nel vault.
   readonly savedRaw: readonly string[];
 }
@@ -66,19 +69,20 @@ export function spaziDisponibili(stato: StatoSpazi): SpaziDisponibili {
     group: "base",
     enabled: true,
   };
-  const reason = stato.componente ? undefined : t("draw.workspace.off.reason");
+  const attivo = stato.componente && !stato.fallito;
+  const reason = attivo ? undefined : t(stato.componente ? "draw.workspace.load.first" : "draw.workspace.off.reason");
   const preset: SurfaceWorkspaceChoice[] = SPAZI_COMPLETO.map((id) => ({
     id,
     name: t(NOME_PRESET[id]),
     group: "completo",
-    enabled: stato.componente,
+    enabled: attivo,
     ...(reason !== undefined ? { reason } : {}),
   }));
   const dalSalvato: SurfaceWorkspaceChoice[] = salvati.map((spazio) => ({
     id: spazio.id,
     name: spazio.nome,
     group: "salvato",
-    enabled: stato.componente,
+    enabled: attivo,
     ...(reason !== undefined ? { reason } : {}),
   }));
   const nonUsabiliVoci: SurfaceWorkspaceChoice[] = nonUsabili.map((voce, indice) => ({
@@ -89,16 +93,17 @@ export function spaziDisponibili(stato: StatoSpazi): SpaziDisponibili {
     reason: voce.kind === "piuNuova" ? t("draw.workspace.saved.newer") : t("draw.workspace.saved.broken"),
   }));
   const elenco = [semplice, completo, ...preset, ...dalSalvato, ...nonUsabiliVoci];
-  const corrente = trovaCorrente(stato.space, stato.componente, elenco, completo);
+  const corrente = trovaCorrente(stato.space, attivo, elenco, completo);
   return { corrente, elenco, salvati, nonUsabili };
 }
 
 /// Lo spazio in uso: quello scritto, se si può usare adesso; altrimenti
 /// Completo.
-function trovaCorrente(space: string, componente: boolean, elenco: readonly SurfaceWorkspaceChoice[], completo: SurfaceWorkspaceChoice): SurfaceWorkspaceChoice {
+function trovaCorrente(space: string, attivo: boolean, elenco: readonly SurfaceWorkspaceChoice[], completo: SurfaceWorkspaceChoice): SurfaceWorkspaceChoice {
   const scelto = elenco.find((voce) => voce.id === space);
   if (scelto === undefined) return completo;
   if (scelto.group === "base") return scelto;
-  if (!componente) return completo;
+  // Uno spazio del Completo che non si può usare: il Completo resta.
+  if (!attivo) return completo;
   return scelto;
 }
