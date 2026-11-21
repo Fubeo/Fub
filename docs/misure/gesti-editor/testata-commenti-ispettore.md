@@ -95,7 +95,7 @@ nell'app sul banco. È una misura: le differenze si correggono in task separati.
 | 63 | Etichette: clic sul valore | valore → valore | 2795 | Prototipo: nessun editor per le etichette. Banco: l'etichetta non si può creare, perché «Aggiungi una proprietà» non apre il menu (riga 27) | non provabile sul banco | Vedi riga 27 |
 | 64 | Selezione: clic sul valore | valore → valore | 2795 | Prototipo: nessun editor per la selezione, il clic non fa niente. Banco: elenco delle opzioni con il segno ✓ sulla scelta attuale | diverso | |
 | 65 | Selezione: scrivere un'opzione nuova | campo → campo | 2795 | Prototipo: non succede niente. Banco: «Crea «Media» con un colore libero» | diverso | |
-| 66 | «Modificata …» nella riga dei dati | dato → dato | 2792 | Prototipo: apre l'ispettore sulla scheda Cronologia. Banco: è solo testo, il clic non fa niente | manca nell'app | |
+| 66 | «Modificata …» nella riga dei dati | dato → dato | 2792 | Prototipo: apre l'ispettore sulla scheda Cronologia. Banco: è solo testo, non c'è un'azione da cliccare | manca nell'app | Nel banco il clic non è andato a segno |
 | 67 | «N collegamenti» o «in entrata» | dato → dato | 2792 | Apre l'ispettore sulla scheda Collegamenti, in entrambi (verificato) | uguale | |
 | 68 | «N commenti» nella riga dei dati | dato → dato | 2792 | Prototipo: apre la scheda Commenti. Banco: nella riga non c'è il conteggio dei commenti | manca nell'app | |
 | 69 | Clic su un'etichetta | etichetta → etichetta | 2792, 4359 | Prototipo: avviso «Cerca tag:… nel vault…». Banco: non succede niente | manca nell'app | |
@@ -144,7 +144,7 @@ nell'app sul banco. È una misura: le differenze si correggono in task separati.
 | 112 | Linguetta Cronologia | linguetta → linguetta | 4351, 1602, 3383–3386 | Prototipo: righe statiche, nessun confronto né ripristino. Banco: elenco delle versioni con «Ripristina» | diverso | |
 | 113 | Linguetta Proprietà | linguetta → nessuno | nessuna | Il prototipo non l'ha. Banco: scheda con parole, collegamenti, tag e data | diverso | Solo nel banco |
 | 114 | Frecce tra le linguette | tastiera → tastiera | nessuna | Prototipo: le frecce non spostano il fuoco. Banco: passano alla scheda successiva | diverso | |
-| 115 | Struttura: clic su un titolo | voce del contorno → voce | 3370, 4366 | Prototipo e banco portano il titolo in alto (verificato in entrambi) | uguale | |
+| 115 | Struttura: clic su un titolo | voce del contorno → voce | 3370, 4366 | Prototipo e banco portano alla sezione scelta (verificato in entrambi) | uguale | |
 | 116 | Struttura: «Inizio» in cima | voce → nessuno | 3370 | Prototipo: torna in cima (verificato). Banco: nel contorno non c'è la voce Inizio | manca nell'app | |
 | 117 | Scorrere la nota: voce corrente evidenziata | scorrimento → scorrimento | 3389–3393 | Prototipo: la voce corrente cambia quando un titolo passa in alto (verificato). Banco: la nota scorre, ma nella foto nessuna voce del contorno risulta evidenziata | diverso | |
 | 118 | Compiti: spunta di un compito della nota | spunta → nessuno | 3366–3387, 4361 | Prototipo: spunta il compito nella nota, con avviso. Banco: la scheda Compiti non c'è | manca nell'app | |
