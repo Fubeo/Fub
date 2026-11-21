@@ -4,7 +4,8 @@
 > motore vettoriale, che cosa vuol dire parità, che cosa arriva tardi e chi
 > possiede che cosa?
 > **Fonti autorevoli:** `crates/fub-disegno/`, `crates/fub-motori/`,
-> `crates/fub-host/src/drawing.rs`, `apps/client/vite.config.ts`.
+> `crates/fub-host/src/drawing.rs`, `apps/client/vite.config.ts`,
+> `crates/fub-disegno/disco.tsv`, `crates/fub-disegno/src/disco.rs`.
 > **Decisioni:** [ADR 0250](../decisions/0250-il-disegno-completo-sul-motore.md),
 > [ADR 0239](../decisions/0239-il-disegno-sul-motore-vettoriale.md),
 > [ADR 0248](../decisions/0248-il-disegno-nella-nota-si-modifica-sul-posto.md).
@@ -106,7 +107,7 @@ un ponte solo (arriva con T4):
 | le famiglie | nel processo `fub-disegno` (arriva con T3), nel client i chunk `drawing-fam-<id>` (arriva con T5) | sono le unità pigre; una famiglia non importa un'altra |
 | il `Budget` | lo strato dei motori, `crates/fub-motori/src/memoria.rs` | libera le cache delle famiglie quando serve ([Lo strato dei motori](motori.md)) |
 | le librerie dell'utente | il kernel, in `.fub/plugins/fub.draw/librerie/` del vault (arriva con T30) | il motore non tocca il disco; le librerie viaggiano con il vault |
-| il disco | il kernel; il motore lo ha negato per tutto il processo (arriva con T28) | ogni byte del motore passa da Fub |
+| il disco | il kernel; il motore lo ha negato per tutto il processo ([il disco](#il-disco)) | ogni byte del motore passa da Fub |
 | il file `.svg` e la cronologia | il client, come nella 0239 | il motore rende operazioni e non usa la sua cronologia |
 
 ## La mappa delle funzioni e la mappa degli id
@@ -137,6 +138,54 @@ motore nasce al primo disegno aperto (o con `warm_engine`), una famiglia al
 suo primo uso o quando uno spazio di lavoro la prepara, e mai con il suo
 componente spento. Lo stato di una famiglia sta in un `Pigro` dello strato
 dei motori, e le sue cache nel `Budget`, che le libera (arriva con T3).
+
+## Il disco
+
+Il motore non legge e non scrive file: ogni byte gli arriva da Fub e torna
+a Fub. Alla nascita del motore, `MotoreDisegno::crea` chiama
+`disco::confina()` (`crates/fub-disegno/src/disco.rs`), una volta per
+processo:
+
+- spegne i caratteri del sistema (`set_system_fonts(false)`): nessuna
+  scansione delle cartelle dei caratteri, nessun ripiego che legge il disco;
+  i caratteri vengono dal vault (D12) e Fub li dà come byte;
+- mette in vigore radici vuote (`AutomationRoots::deny_all()`, patch `0008`
+  di `vendor/vectorcraft`): `check_read` e `check_write` rifiutano ogni
+  percorso, in ogni thread del motore. Se nel processo erano già in vigore
+  radici diverse, il motore non nasce, con un errore tipato.
+
+Le radici non fermano `unconfined`, che il motore usa per le cartelle sue
+(preferenze, recupero, librerie, modelli). Per questo
+`crates/fub-disegno/disco.tsv` elenca ogni punto del motore che tocca il
+disco (file, funzione, primitiva), con i comandi della mappa che ci
+arrivano e come Fub ci arriva (`come`):
+
+| `come` | Vuol dire |
+|---|---|
+| `byte` | Fub passa i byte al posto del percorso (con il task) |
+| `kernel` | il kernel legge e scrive per il motore, nel vault (con il task) |
+| `fub` | lo fa Fub, non il motore: salvataggio, recupero, modelli |
+| `rifiutato` | le radici vuote lo fermano; mai dentro `unconfined` |
+| `escluso` | Fub non lo offre, con il perché (D6, D9 o D12) |
+| `spento` | sta dietro una feature che Fub non compila |
+| `ambiente` | legge l'ambiente (thread, memoria, data), non un file |
+| `nessuno` | nessun comando di Fub ci arriva, e la nota dice perché |
+
+`node tools/disegno-disco/elenco.mjs` riscrive le prime tre colonne dal
+codice; `--check` cade, nominandolo, per un sito senza riga, un id che non è
+nella mappa o un valore non ammesso. Prima di `Azione::di`,
+`Disegno::comando` rifiuta con un argomento non valido i comandi delle righe
+`escluso` e `fub` e ogni argomento che porta un percorso, letto dallo schema
+del comando. `cargo test -p fub-disegno --test disco` apre e cambia un
+disegno del corpus con `HOME`, le `XDG_*` e la cartella corrente vuote, e
+controlla che restino vuote.
+
+La patch `0008` elenca anche le tabelle globali del motore che crescono con
+l'uso (`vectorcraft_engine::tables`): per ognuna il peso e, quando si può,
+lo svuotamento. `user_profiles` e `font_faces` non si svuotano senza
+rompere i documenti aperti, e il loro peso entra lo stesso nei conti.
+`cargo test -p fub-disegno --release --test famiglie_memoria -- --ignored
+--nocapture` stampa una riga per tabella.
 
 ## Le due strade
 

@@ -105,6 +105,35 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-21 · K6 T28 · Il motore senza disco, scelte del coder.
+  - Le radici vuote si chiamano `AutomationRoots::deny_all()`, non
+    `nessuna()`: è un nome dell'API del motore, in inglese come il resto. La
+    patch 0008 aggiunge anche `set_system_fonts(false)` (D12: nessuna
+    scansione dei caratteri del sistema) e il registro
+    `vectorcraft_engine::tables` delle otto tabelle che crescono con l'uso.
+  - `user_profiles` (profili di colore caricati) e `font_faces` (caratteri)
+    non si svuotano: i documenti aperti li usano per nome, e svuotarli
+    cambierebbe i colori e il testo sotto i piedi della persona. Il loro
+    peso entra lo stesso nei conti.
+  - Restano fuori dal registro, perché non crescono con l'uso o hanno già un
+    tetto: le tabelle di grandezza fissa (cataloghi), le cache di glifi e
+    contorni, le impostazioni, le cache per thread, il MEMO dei documenti
+    collocati (spento quando ci sono radici), i nomi dei blob del recupero e
+    l'intern dei plug-in (feature spenta).
+  - `come` di `disco.tsv` ha due valori in più: `ambiente` (legge thread,
+    memoria o data dall'ambiente, non un file) e `nessuno` (nessun comando
+    di Fub ci arriva); entrambi vogliono «—» e una nota.
+  - La guardia rifiuta i comandi delle righe `fub` dell'elenco (salvataggio,
+    recupero, `file.saveAsTemplate`), non ogni comando di famiglia `fub`
+    della mappa: `prefs.*` serve a T11. `file.saveAsTemplate` è `fub`
+    perché senza percorso il motore creerebbe la cartella dei modelli sotto
+    `HOME`, e i modelli sono di Fub.
+  - `text.addFontFiles` e `text.findFontFiles` sono esclusi per D12: i
+    caratteri vengono dal vault, il motore non li cerca né li copia.
+  - Il test della memoria fa crescere soltanto le tabelle che Fub raggiunge
+    oggi (`image_cache`, `font_faces`); per le altre stampa il task che le
+    apre (T14, T20, T23).
+
 - 2026-11-21 · K6 · l'utente approva il prototipo rifatto sulla cornice di
   oggi (`PLAN-ui/disegno-completo.html` a `6462d5b0e`) e sceglie D9 (a):
   «Formati del disegno» acceso di serie, lo script del motore compilato
