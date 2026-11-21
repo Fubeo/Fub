@@ -92,13 +92,17 @@ pub use custom::{
     SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
 pub use drawing::{
-    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingFrame,
-    DrawingGesture, DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase,
+    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingDisabledReason, DrawingEdit,
+    DrawingFrame, DrawingGesture, DrawingInput, DrawingKeyMods, DrawingLoss, DrawingLossKind,
+    DrawingOpen, DrawingOutcome, DrawingOverlay, DrawingOverlayRole, DrawingPhase, DrawingPoint,
     DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle,
-    DrawingSync, DrawingSynced, DrawingTool, DRAWING_COMMANDS, DRAWING_COMMAND_FILL_COLOR,
-    DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH, MAX_DRAWING_COLOR_BYTES,
-    MAX_DRAWING_LOSSES, MAX_DRAWING_OPS, MAX_DRAWING_OPS_BYTES, MAX_DRAWING_TEXT_BYTES,
-    MAX_GESTURE_EVENTS,
+    DrawingSync, DrawingSynced, DrawingTool, DrawingToolState, DRAWING_COMMANDS,
+    DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR,
+    DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_WIDTH, DRAWING_FAMILIES, MAX_DRAWING_COLOR_BYTES,
+    MAX_DRAWING_INPUTS, MAX_DRAWING_KEY_BYTES, MAX_DRAWING_LOSSES, MAX_DRAWING_OPS,
+    MAX_DRAWING_OPS_BYTES, MAX_DRAWING_OPTION_KEY_BYTES, MAX_DRAWING_OVERLAYS,
+    MAX_DRAWING_OVERLAY_PATH_BYTES, MAX_DRAWING_OVERLAY_TEXT_BYTES, MAX_DRAWING_TEXT_BYTES,
+    MAX_DRAWING_TOOL_ID_BYTES, MAX_GESTURE_EVENTS,
 };
 pub use edit::{
     AppliedEdit, EditReport, EditRequest, Fnv1a, Revision, RevisionHasher, TextEdit, WriteBase,

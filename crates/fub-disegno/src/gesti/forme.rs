@@ -33,7 +33,8 @@
 //!   disegna con la matrice del livello).
 
 use fub_abi::{
-    DrawingOutcome, DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingTool,
+    DrawingOutcome, DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal,
+    DrawingStyle, DrawingTool,
 };
 use fub_scene::Role;
 use serde_json::{json, Map, Value};
@@ -91,24 +92,24 @@ pub(crate) fn strumento(tool: DrawingTool) -> &'static dyn Strumento {
 }
 
 /// Dove va la forma nuova.
-struct Destinazione {
+pub(crate) struct Destinazione {
     /// Il livello del motore che la riceve; `None`: quello che il motore
     /// sceglie da sé.
-    livello: Option<NodeId>,
+    pub(crate) livello: Option<NodeId>,
     /// Dallo spazio del livello al documento del motore.
-    al_motore: Affine,
+    pub(crate) al_motore: Affine,
     /// Dallo spazio del livello alle coordinate della scena.
     alla_scena: Affine,
 }
 
 /// La scala di una matrice (`scaleOf` del client).
-fn scala(m: Affine) -> f64 {
+pub(crate) fn scala(m: Affine) -> f64 {
     m.determinant().abs().sqrt()
 }
 
 /// Il livello del gesto, come `target` dell'editor: quello scelto, o il più
 /// alto né nascosto né bloccato; senza livelli, la radice.
-fn destinazione(cx: &Contesto<'_>) -> Result<Destinazione, DrawingRefusal> {
+pub(crate) fn destinazione(cx: &Contesto<'_>) -> Result<Destinazione, DrawingRefusal> {
     let copia = cx.copia;
     let mut livelli: Vec<_> = copia
         .mappa
@@ -173,6 +174,31 @@ fn destinazione(cx: &Contesto<'_>) -> Result<Destinazione, DrawingRefusal> {
     }
 }
 
+/// I colori e lo spessore che lo stile del gesto dà agli oggetti nuovi del
+/// motore. Lo spessore è nello spazio del livello, come lo scrive il client;
+/// `al_motore` porta da lì al documento del motore.
+pub(crate) fn pittura(
+    stile: &DrawingStyle,
+    al_motore: Affine,
+) -> Result<PaintDefaults, DrawingRefusal> {
+    let pieno = |c: &str| {
+        Color::from_hex(c)
+            .map(Paint::solid)
+            .ok_or(DrawingRefusal::Unsupported)
+    };
+    let stroke = pieno(&stile.stroke)?;
+    let fill = match &stile.fill {
+        Some(c) => pieno(c)?,
+        None => Paint::None,
+    };
+    Ok(PaintDefaults {
+        fill,
+        stroke,
+        stroke_width: stile.width * scala(al_motore),
+        ..PaintDefaults::default()
+    })
+}
+
 /// La misura minima nello spazio del livello (`minimumFor`).
 fn minimo(cx: &Contesto<'_>, dest: &Destinazione) -> f64 {
     let s = cx.gesto.zoom * scala(dest.alla_scena);
@@ -189,7 +215,7 @@ fn round_js(v: f64) -> f64 {
 }
 
 /// Un valore sulla griglia di passo `passo` (`snapValue`).
-fn sulla_griglia(v: f64, passo: f64) -> f64 {
+pub(crate) fn sulla_griglia(v: f64, passo: f64) -> f64 {
     let s = round_js(v / passo) * passo;
     let pulito = round_js(s * 100.0) / 100.0;
     if pulito == 0.0 {
@@ -333,7 +359,7 @@ impl Forma {
         let stroke = colore(&tratto.paint)?;
         let spessore = tratto.width * scala(locale);
         let mut attrs = Map::new();
-        let tag = match self.tool {
+        let tag = match &self.tool {
             DrawingTool::Rect | DrawingTool::Ellipse => {
                 if !sotto.closed || punti.len() != 4 {
                     return None;
@@ -403,7 +429,7 @@ impl Forma {
                     "path"
                 }
             }
-            DrawingTool::Select | DrawingTool::Text => return None,
+            DrawingTool::Select | DrawingTool::Text | DrawingTool::Engine { .. } => return None,
         };
         attrs.insert("stroke".into(), json!(stroke));
         attrs.insert("stroke-width".into(), json!(t2(spessore)));
@@ -423,23 +449,7 @@ impl Strumento for Forma {
     fn prepara(&self, sessione: &mut Session, cx: &Contesto<'_>) -> Result<(), DrawingRefusal> {
         let stile = cx.gesto.style.as_ref().ok_or(DrawingRefusal::Unsupported)?;
         let dest = destinazione(cx)?;
-        let pieno = |c: &str| {
-            Color::from_hex(c)
-                .map(Paint::solid)
-                .ok_or(DrawingRefusal::Unsupported)
-        };
-        let stroke = pieno(&stile.stroke)?;
-        let fill = match &stile.fill {
-            Some(c) => pieno(c)?,
-            None => Paint::None,
-        };
-        // Lo spessore è nello spazio del livello, come lo scrive il client.
-        sessione.paint = PaintDefaults {
-            fill,
-            stroke,
-            stroke_width: stile.width * scala(dest.al_motore),
-            ..PaintDefaults::default()
-        };
+        sessione.paint = pittura(stile, dest.al_motore)?;
         // Niente guide magnetiche del motore: le forme di Fub si agganciano
         // solo alla griglia, che applica [`Strumento::evento`].
         sessione.prefs.snapping_tolerance = 0.0;
@@ -468,7 +478,7 @@ impl Strumento for Forma {
             if let (Some(i), Ok(dest)) = (inizio, destinazione(cx)) {
                 let indietro = dest.alla_scena.inverse();
                 let da = indietro * Point::new(i.x, i.y);
-                p = dest.alla_scena * vincola(self.tool, da, indietro * p);
+                p = dest.alla_scena * vincola(self.tool.clone(), da, indietro * p);
             }
         }
         DrawingPointer {

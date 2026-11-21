@@ -99,7 +99,9 @@ impl Mappa {
                 Some([nodo]) => {
                     e.nodo = Some(*nodo);
                     per_nodo.insert(*nodo, i);
-                    if e.bloccato {
+                    // La carta non si sceglie né si sposta: per gli
+                    // strumenti del motore è bloccata come un `fub:locked`.
+                    if e.bloccato || e.ruolo == Role::Paper {
                         bloccati.push(*nodo);
                     }
                 }

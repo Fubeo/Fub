@@ -26,6 +26,7 @@ use fub_abi::{
     DrawingRefusal, DrawingSync, DrawingSynced, PluginError, MAX_DRAWING_TEXT_BYTES,
 };
 use fub_motori::{rilascia_al_sistema, Caratteri, ErroreMotore, Motori, Pigro, Servizi, Voce};
+use serde_json::Value;
 use vectorcraft_doc::{Document, NodeId};
 
 use crate::apertura::{importa, Copia, ErroreApertura};
@@ -375,6 +376,38 @@ impl Disegno {
         richiesta: DrawingCommandRequest,
     ) -> Result<DrawingOutcome, PluginError> {
         richiesta.validate()?;
+        match richiesta.id.as_str() {
+            // L'opzione di uno strumento non cambia il documento: non
+            // aspetta la copia e non ha anteprima.
+            fub_abi::DRAWING_COMMAND_TOOL_OPTION if richiesta.preview => {
+                return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));
+            }
+            fub_abi::DRAWING_COMMAND_TOOL_OPTION => {
+                // `validate()` ha già controllato la forma del valore.
+                let campo = |k: &str| richiesta.value.get(k);
+                let strumento = campo("strumento")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let chiave = campo("chiave").and_then(Value::as_str).unwrap_or_default();
+                let valore = campo("valore").cloned().unwrap_or(Value::Null);
+                let esito = crate::gesti::strumento::opzione(
+                    &mut self.banco,
+                    &self.copia,
+                    richiesta.revision,
+                    strumento,
+                    chiave,
+                    &valore,
+                );
+                esito.validate()?;
+                return Ok(esito);
+            }
+            // Preparare una famiglia non ha anteprima; la famiglia la
+            // prepara un task dopo: per ora è `unsupported`.
+            fub_abi::DRAWING_COMMAND_FAMILY_PREPARE if richiesta.preview => {
+                return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));
+            }
+            _ => {}
+        }
         let azione = crate::comandi::Azione::di(&richiesta)?;
         if let Err(rifiuto) = self.pronta(richiesta.revision, ATTESA_MASSIMA) {
             return Ok(rifiutato(richiesta.revision, rifiuto));

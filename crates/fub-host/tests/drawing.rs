@@ -222,6 +222,7 @@ mod con_il_motore {
                     id: DRAWING_COMMAND_WIDTH.into(),
                     selection: vec![nuovo],
                     value: serde_json::json!(2),
+                    preview: false,
                 },
             )
             .expect("il comando risponde");
@@ -268,6 +269,7 @@ mod con_il_motore {
                 id: DRAWING_COMMAND_WIDTH.into(),
                 selection: vec![],
                 value: serde_json::json!(-1),
+                preview: false,
             },
         );
         assert!(matches!(colore, Err(PluginError::BadArgs(_))), "{colore:?}");

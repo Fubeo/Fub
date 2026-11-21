@@ -53,6 +53,55 @@ pub const DRAWING_COMMANDS: [&str; 3] = [
     DRAWING_COMMAND_FILL_COLOR,
     DRAWING_COMMAND_WIDTH,
 ];
+/// Un'opzione di uno strumento del motore (`Tool::set_option`): `value` è
+/// `{ "strumento": id, "chiave": nome, "valore": JSON }`.
+pub const DRAWING_COMMAND_TOOL_OPTION: &str = "disegno.strumento.opzione";
+/// Prepara una famiglia di comandi del motore: `value` è
+/// `{ "famiglia": id }`, con l'id fra [`DRAWING_FAMILIES`].
+pub const DRAWING_COMMAND_FAMILY_PREPARE: &str = "disegno.famiglia.prepara";
+/// Le 26 famiglie della mappa del motore (`crates/fub-disegno/mappa.tsv`).
+pub const DRAWING_FAMILIES: [&str; 26] = [
+    "aspetto",
+    "automazione",
+    "colore",
+    "dati",
+    "dinamici",
+    "effetti",
+    "formati",
+    "forme",
+    "grafici",
+    "immagini",
+    "livelli",
+    "nucleo",
+    "pennelli",
+    "prospettiva",
+    "pulizia",
+    "raster",
+    "simboli",
+    "stampa",
+    "tavole",
+    "testo",
+    "tracciati",
+    "trame",
+    "trasforma",
+    "tre-d",
+    "vista",
+    "web",
+];
+/// L'id di uno strumento del motore, al più.
+pub const MAX_DRAWING_TOOL_ID_BYTES: usize = 64;
+/// Gli ingressi da tastiera di una sola richiesta di gesto, al più.
+pub const MAX_DRAWING_INPUTS: usize = 10_000;
+/// `key` e `code` di un tasto, al più.
+pub const MAX_DRAWING_KEY_BYTES: usize = 64;
+/// Le sovrapposizioni di un'anteprima, al più.
+pub const MAX_DRAWING_OVERLAYS: usize = 10_000;
+/// Il testo di un'etichetta o di una misura, al più.
+pub const MAX_DRAWING_OVERLAY_TEXT_BYTES: usize = 1024;
+/// I dati `d` di un tracciato sovrapposto, al più.
+pub const MAX_DRAWING_OVERLAY_PATH_BYTES: usize = 1024 * 1024;
+/// La chiave di un'opzione di uno strumento, al più.
+pub const MAX_DRAWING_OPTION_KEY_BYTES: usize = 64;
 
 fn bad(message: String) -> PluginError {
     PluginError::BadArgs(message.into())
@@ -360,7 +409,11 @@ pub enum DrawingPhase {
     Cancel,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Lo strumento del gesto. Le sei unità sono gli strumenti di K5, scritti
+/// come stringhe (`"select"`); `Engine` è uno strumento del motore preso dal
+/// suo catalogo (`TOOL_GROUPS`), scritto `{"engine": {"id": "pen"}}`. Un id
+/// che il motore non ha è il rifiuto [`DrawingRefusal::UnknownTool`].
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DrawingTool {
     Select,
@@ -369,6 +422,116 @@ pub enum DrawingTool {
     Line,
     Arrow,
     Text,
+    Engine { id: String },
+}
+
+impl DrawingTool {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        if let DrawingTool::Engine { id } = self {
+            if id.is_empty() || id.len() > MAX_DRAWING_TOOL_ID_BYTES {
+                return Err(bad(format!(
+                    "`tool.engine.id` must have 1 to {MAX_DRAWING_TOOL_ID_BYTES} bytes"
+                )));
+            }
+            if !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
+                return Err(bad(
+                    "`tool.engine.id` must be ASCII letters, digits, `_` or `-`".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// I modificatori di un tasto.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct DrawingKeyMods {
+    #[serde(default)]
+    pub shift: bool,
+    /// Option su macOS.
+    #[serde(default)]
+    pub alt: bool,
+    /// Ctrl su Windows e Linux, ⌘ su macOS.
+    #[serde(default)]
+    pub cmd: bool,
+    /// Ctrl su macOS (altrove è `cmd`).
+    #[serde(default)]
+    pub ctrl: bool,
+}
+
+/// Un ingresso da tastiera di un gesto con uno strumento del motore: lo
+/// strumento lo vede dopo i puntatori della stessa richiesta.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DrawingInput {
+    /// Un tasto premuto o lasciato: `key` e `code` come in `KeyboardEvent`
+    /// (`"Enter"`, `"ArrowUp"`, `"a"`; `"KeyA"`, `"Digit1"`). Un tasto che
+    /// lo strumento non conosce non fa niente.
+    Key {
+        key: String,
+        code: String,
+        #[serde(default)]
+        mods: DrawingKeyMods,
+        pressed: bool,
+    },
+    /// Il testo scritto, o ciò che l'IME conferma.
+    Text { text: String },
+    /// La composizione dell'IME: `preedit` sostituisce quella di prima (vuoto
+    /// la chiude); `active` è la parte che si sta convertendo, `[da, a)` in
+    /// caratteri Unicode di `preedit` (il client converte dagli indici
+    /// JavaScript), `None` se non c'è.
+    Ime {
+        preedit: String,
+        #[serde(default)]
+        active: Option<[u32; 2]>,
+    },
+}
+
+impl DrawingInput {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        match self {
+            DrawingInput::Key { key, code, .. } => {
+                if key.is_empty() || key.len() > MAX_DRAWING_KEY_BYTES {
+                    return Err(bad(format!(
+                        "`inputs.key` must have 1 to {MAX_DRAWING_KEY_BYTES} bytes"
+                    )));
+                }
+                if code.len() > MAX_DRAWING_KEY_BYTES {
+                    return Err(bad(format!(
+                        "`inputs.code` has more than {MAX_DRAWING_KEY_BYTES} bytes"
+                    )));
+                }
+                Ok(())
+            }
+            DrawingInput::Text { text } => {
+                if text.is_empty() || text.len() > MAX_DRAWING_TEXT_BYTES {
+                    return Err(bad(format!(
+                        "`inputs.text` must have 1 to {MAX_DRAWING_TEXT_BYTES} bytes"
+                    )));
+                }
+                Ok(())
+            }
+            DrawingInput::Ime { preedit, active } => {
+                if preedit.len() > MAX_DRAWING_TEXT_BYTES {
+                    return Err(bad(format!(
+                        "`inputs.preedit` has more than {MAX_DRAWING_TEXT_BYTES} bytes"
+                    )));
+                }
+                if let Some([da, a]) = active {
+                    let n = preedit.chars().count();
+                    if da > a || *a as usize > n {
+                        return Err(bad(format!(
+                            "`inputs.active` must be a range within the {n} characters of `preedit`"
+                        )));
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 /// La griglia magnetica del gesto.
@@ -476,10 +639,15 @@ pub struct DrawingGesture {
     #[serde(default)]
     pub frame: Option<DrawingFrame>,
     pub events: Vec<DrawingPointer>,
+    /// Tasti, testo e IME per uno strumento del motore, dopo `events`. Può
+    /// mancare (vale vuoto); solo per [`DrawingTool::Engine`].
+    #[serde(default)]
+    pub inputs: Vec<DrawingInput>,
 }
 
 impl DrawingGesture {
     pub fn validate(&self) -> Result<(), PluginError> {
+        self.tool.validate()?;
         if self.layer.as_deref() == Some("") {
             return Err(bad("`layer` is empty".into()));
         }
@@ -514,7 +682,17 @@ impl DrawingGesture {
                 self.events.len()
             )));
         }
-        self.events.iter().try_for_each(DrawingPointer::validate)
+        self.events.iter().try_for_each(DrawingPointer::validate)?;
+        if !self.inputs.is_empty() && !matches!(self.tool, DrawingTool::Engine { .. }) {
+            return Err(bad("`inputs` are only for an engine tool".into()));
+        }
+        if self.inputs.len() > MAX_DRAWING_INPUTS {
+            return Err(bad(format!(
+                "`inputs` has {} inputs, at most {MAX_DRAWING_INPUTS}",
+                self.inputs.len()
+            )));
+        }
+        self.inputs.iter().try_for_each(DrawingInput::validate)
     }
 }
 
@@ -534,10 +712,188 @@ pub struct DrawingPreview {
     /// Il riquadro di selezione: `[x, y, larghezza, altezza]` in coordinate
     /// di scena.
     pub marquee: Option<[f64; 4]>,
+    /// I segni di uno strumento del motore, in coordinate di scena, nell'ordine
+    /// in cui si disegnano. Può mancare (vale vuoto).
+    #[serde(default)]
+    pub overlays: Vec<DrawingOverlay>,
+}
+
+/// Il ruolo di un segno: il client lo colora con i suoi token. Viene dal
+/// colore che il motore gli dà; un colore che il ponte non conosce è
+/// `preview`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DrawingOverlayRole {
+    /// La selezione e i suoi punti (il colore del livello).
+    Selection,
+    /// Le guide magnetiche e le guide del righello.
+    Guide,
+    /// Ciò che il gesto sta disegnando.
+    Preview,
+    /// Le misure e le distanze.
+    Measure,
+    /// La griglia prospettica.
+    Perspective,
+}
+
+/// Un punto `[x, y]` in coordinate di scena.
+pub type DrawingPoint = [f64; 2];
+
+/// Un segno di uno strumento del motore: uno per ognuno dei dodici tipi di
+/// `Overlay` del motore. Le misure (`width`, `size`) sono pixel dello schermo.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DrawingOverlay {
+    /// Il riquadro di selezione `[x, y, larghezza, altezza]`.
+    Marquee { rect: [f64; 4] },
+    /// Un tracciato (l'elastico della penna): `d` come in SVG.
+    Path {
+        d: String,
+        role: DrawingOverlayRole,
+        width: f64,
+        dashed: bool,
+    },
+    /// Un segmento (una guida, la linea di una maniglia).
+    Line {
+        a: DrawingPoint,
+        b: DrawingPoint,
+        role: DrawingOverlayRole,
+        dashed: bool,
+    },
+    /// Un punto d'ancoraggio quadrato; pieno se è scelto.
+    Anchor {
+        at: DrawingPoint,
+        role: DrawingOverlayRole,
+        filled: bool,
+        size: f64,
+    },
+    /// Un punto dello strumento Curvatura, tondo; pieno se è l'ultimo toccato.
+    CurvePoint {
+        at: DrawingPoint,
+        role: DrawingOverlayRole,
+        filled: bool,
+        size: f64,
+    },
+    /// La punta di una maniglia.
+    Handle {
+        at: DrawingPoint,
+        role: DrawingOverlayRole,
+    },
+    /// Un'etichetta delle guide (il testo del motore, da passare per il
+    /// glossario).
+    Label {
+        at: DrawingPoint,
+        text: String,
+        role: DrawingOverlayRole,
+    },
+    /// La misura vicino al puntatore.
+    Measure { at: DrawingPoint, text: String },
+    /// Una distanza da `a` a `b`, con la sua misura in mezzo.
+    Distance {
+        a: DrawingPoint,
+        b: DrawingPoint,
+        text: String,
+        role: DrawingOverlayRole,
+    },
+    /// Un quadrilatero trasparente (il testo scelto).
+    Highlight {
+        quad: [DrawingPoint; 4],
+        role: DrawingOverlayRole,
+    },
+    /// Un campione di colore di misura fissa (una tappa di una sfumatura):
+    /// `color` è il colore vero, `#rrggbbaa`; cerchiato se è scelto.
+    Swatch {
+        at: DrawingPoint,
+        color: String,
+        selected: bool,
+    },
+    /// Una linea sottile della griglia prospettica.
+    GridLine {
+        a: DrawingPoint,
+        b: DrawingPoint,
+        role: DrawingOverlayRole,
+    },
+}
+
+impl DrawingOverlay {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        let punto = |p: &DrawingPoint| p.iter().try_for_each(|v| finite("preview.overlays", *v));
+        let testo = |t: &str| {
+            if t.len() > MAX_DRAWING_OVERLAY_TEXT_BYTES {
+                Err(bad(format!(
+                    "`preview.overlays.text` has {} bytes, at most {MAX_DRAWING_OVERLAY_TEXT_BYTES}",
+                    t.len()
+                )))
+            } else {
+                Ok(())
+            }
+        };
+        let misura = |v: f64| {
+            if v.is_finite() && v >= 0.0 {
+                Ok(())
+            } else {
+                Err(bad(
+                    "`preview.overlays` has a size that is not a finite number, 0 or more".into(),
+                ))
+            }
+        };
+        match self {
+            DrawingOverlay::Marquee { rect } => {
+                rect.iter()
+                    .try_for_each(|v| finite("preview.overlays.rect", *v))?;
+                if rect[2] < 0.0 || rect[3] < 0.0 {
+                    return Err(bad("`preview.overlays.rect` has a negative size".into()));
+                }
+                Ok(())
+            }
+            DrawingOverlay::Path { d, width, .. } => {
+                if d.len() > MAX_DRAWING_OVERLAY_PATH_BYTES {
+                    return Err(bad(format!(
+                        "`preview.overlays.d` has {} bytes, at most {MAX_DRAWING_OVERLAY_PATH_BYTES}",
+                        d.len()
+                    )));
+                }
+                misura(*width)
+            }
+            DrawingOverlay::Line { a, b, .. } | DrawingOverlay::GridLine { a, b, .. } => {
+                punto(a)?;
+                punto(b)
+            }
+            DrawingOverlay::Anchor { at, size, .. }
+            | DrawingOverlay::CurvePoint { at, size, .. } => {
+                punto(at)?;
+                misura(*size)
+            }
+            DrawingOverlay::Handle { at, .. } => punto(at),
+            DrawingOverlay::Label { at, text, .. } | DrawingOverlay::Measure { at, text } => {
+                punto(at)?;
+                testo(text)
+            }
+            DrawingOverlay::Distance { a, b, text, .. } => {
+                punto(a)?;
+                punto(b)?;
+                testo(text)
+            }
+            DrawingOverlay::Highlight { quad, .. } => quad.iter().try_for_each(punto),
+            DrawingOverlay::Swatch { at, color: c, .. } => {
+                punto(at)?;
+                color("preview.overlays.color", c)
+            }
+        }
+    }
 }
 
 impl DrawingPreview {
     pub fn validate(&self) -> Result<(), PluginError> {
+        if self.overlays.len() > MAX_DRAWING_OVERLAYS {
+            return Err(bad(format!(
+                "`preview.overlays` has {} overlays, at most {MAX_DRAWING_OVERLAYS}",
+                self.overlays.len()
+            )));
+        }
+        self.overlays
+            .iter()
+            .try_for_each(DrawingOverlay::validate)?;
         if self.shape.as_ref().is_some_and(|shape| !shape.is_object()) {
             return Err(bad("`preview.shape` must be an element object".into()));
         }
@@ -580,6 +936,35 @@ pub struct DrawingOutcome {
     /// cornice. `None`: il client non ne tiene nessuna.
     #[serde(default)]
     pub frame: Option<DrawingFrame>,
+    /// Com'è lo strumento del motore dopo il gesto (o dopo
+    /// `disegno.strumento.opzione`); `None` per gli strumenti di K5 e per i
+    /// comandi. Può mancare (vale `None`).
+    #[serde(default)]
+    pub state: Option<DrawingToolState>,
+    /// La lettura di un comando che legge e non cambia niente, per i
+    /// pannelli; `None` per gli altri. Può mancare (vale `None`).
+    #[serde(default)]
+    pub reading: Option<Value>,
+}
+
+/// Lo stato dello strumento del motore che il client guarda fra un gesto e
+/// l'altro.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DrawingToolState {
+    /// Un'interazione è in corso (un trascinamento, un tracciato aperto).
+    pub busy: bool,
+    /// Lo strumento sta trasformando la selezione.
+    pub transforming: bool,
+    /// Lo strumento vuole il testo: le scorciatoie a un tasto non partono.
+    pub wants_text: bool,
+    /// Un IME sta componendo: tasti, scorciatoie e annulla aspettano.
+    pub composing: bool,
+    /// Il puntatore, in `snake_case` (`arrow`, `pen_close`, `rotate_toward_3`):
+    /// il client lo traduce in un cursore CSS, e uno che non conosce è la
+    /// freccia.
+    pub cursor: String,
+    /// Le opzioni dello strumento (`Tool::options()`), `null` se non ne ha.
+    pub options: Value,
 }
 
 impl DrawingOutcome {
@@ -630,6 +1015,36 @@ pub enum DrawingRefusal {
     Locked,
     /// Il livello è nascosto.
     Hidden,
+    /// La memoria del motore non ha spazio per una famiglia o per il comando.
+    NoMemory,
+    /// Il comando non sa dare un'anteprima (`preview: true`).
+    NoPreview,
+    /// Lo strumento del motore non c'è nel suo catalogo.
+    UnknownTool,
+}
+
+/// Perché un comando è spento sulla selezione di adesso: il client lo dice
+/// con i suoi testi.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DrawingDisabledReason {
+    /// Non c'è niente di scelto.
+    NoSelection,
+    /// Serve un tracciato.
+    NeedsPath,
+    /// Serve un testo.
+    NeedsText,
+    /// Serve un gruppo.
+    NeedsGroup,
+    /// Servono almeno due oggetti.
+    NeedsTwo,
+    /// Il disegno, o ciò che è scelto, non si può modificare.
+    ReadOnly,
+    /// Ciò che è scelto è una parte che il motore non sa modificare.
+    Unmapped,
+    /// Un altro perché, con il testo del motore passato per il glossario:
+    /// `{"other": {"text": "…"}}`.
+    Other { text: String },
 }
 
 // ---------------------------------------------------------------------------
@@ -641,6 +1056,9 @@ pub enum DrawingRefusal {
 pub struct DrawingCommandInfo {
     pub id: String,
     pub enabled: bool,
+    /// Perché è spento; `None` se è acceso. Può mancare (vale `None`).
+    #[serde(default)]
+    pub disabled_reason: Option<DrawingDisabledReason>,
 }
 
 /// Un comando dato sulla selezione.
@@ -651,6 +1069,12 @@ pub struct DrawingCommandRequest {
     pub id: String,
     pub selection: Vec<String>,
     pub value: Value,
+    /// L'anteprima: il comando gira su una copia e rende le operazioni
+    /// senza che il client le applichi né le metta nella cronologia; un
+    /// comando che non ne sa dare risponde `no_preview`. Può mancare (vale
+    /// `false`).
+    #[serde(default)]
+    pub preview: bool,
 }
 
 impl DrawingCommandRequest {
@@ -676,6 +1100,60 @@ impl DrawingCommandRequest {
                 Some(width) if width.is_finite() && width >= 0.0 => Ok(()),
                 _ => Err(bad("`value` must be a finite number, 0 or more".into())),
             },
+            DRAWING_COMMAND_TOOL_OPTION => {
+                let campi = self.value.as_object().ok_or_else(|| {
+                    bad("`value` must be an object with `strumento`, `chiave` and `valore`".into())
+                })?;
+                if let Some(altro) = campi
+                    .keys()
+                    .find(|k| !matches!(k.as_str(), "strumento" | "chiave" | "valore"))
+                {
+                    return Err(bad(format!("`value.{altro}` is not a field of the option")));
+                }
+                let strumento = campi
+                    .get("strumento")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| bad("`value.strumento` must be a tool id".into()))?;
+                DrawingTool::Engine {
+                    id: strumento.to_string(),
+                }
+                .validate()
+                .map_err(|_| {
+                    bad(format!(
+                        "`value.strumento` must have 1 to {MAX_DRAWING_TOOL_ID_BYTES} bytes of ASCII letters, digits, `_` or `-`"
+                    ))
+                })?;
+                match campi.get("chiave").and_then(Value::as_str) {
+                    Some(k) if !k.is_empty() && k.len() <= MAX_DRAWING_OPTION_KEY_BYTES => {}
+                    _ => {
+                        return Err(bad(format!(
+                            "`value.chiave` must be a string of 1 to {MAX_DRAWING_OPTION_KEY_BYTES} bytes"
+                        )))
+                    }
+                }
+                if !campi.contains_key("valore") {
+                    return Err(bad("`value.valore` is missing".into()));
+                }
+                Ok(())
+            }
+            DRAWING_COMMAND_FAMILY_PREPARE => {
+                let campi = self
+                    .value
+                    .as_object()
+                    .ok_or_else(|| bad("`value` must be an object with `famiglia`".into()))?;
+                if let Some(altro) = campi.keys().find(|k| k.as_str() != "famiglia") {
+                    return Err(bad(format!(
+                        "`value.{altro}` is not a field of the request"
+                    )));
+                }
+                match campi.get("famiglia").and_then(Value::as_str) {
+                    Some(f) if DRAWING_FAMILIES.contains(&f) => Ok(()),
+                    _ => Err(bad(format!(
+                        "`value.famiglia` must be one of the {} families of the engine map",
+                        DRAWING_FAMILIES.len()
+                    ))),
+                }
+            }
             _ => Ok(()),
         }
     }
