@@ -4085,6 +4085,7 @@ input.canvas-toolbar-item {
 .base-table {
   min-width: 560px;
   font-size: var(--text-base);
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 .base-table th,
@@ -6103,6 +6104,31 @@ input.canvas-toolbar-item {
 /* Il vassoio finisce col suo padding, non col margine dell'ultimo blocco. */
 .transclusion-body > :last-child {
   margin-bottom: 0;
+}
+/* Una Base trasclusa si allarga oltre la colonna del testo come nel
+   prototipo (`.blk[data-t="base"]`, 64 dei 96 px di destra): si allarga il
+   vassoio intero, e la Base resta dentro il suo filo invece di uscirne.
+   Nella finestra stretta e nel foglio stretto il vassoio resta in colonna,
+   come la Base libera. */
+.cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+.markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+  margin-right: -64px;
+}
+.cm-content .transclusion-body .base-surface[data-embedded="true"],
+.markdown-rendered .transclusion-body .base-surface[data-embedded="true"] {
+  margin-right: 0;
+}
+@media (max-width: 940px) {
+  .cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+  .markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+    margin-right: 0;
+  }
+}
+@container sheet (max-width: 560px) {
+  .cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+  .markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+    margin-right: 0;
+  }
 }
 /* Mentre si scrive il vassoio diventa un foglio, col bordo d'accento. */
 .embed.transclusion-editing {

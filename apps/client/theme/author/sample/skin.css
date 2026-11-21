@@ -6593,7 +6593,7 @@ kbd,
 .markdown-rendered dl,
 .markdown-rendered blockquote,
 .markdown-rendered pre,
-.markdown-rendered table,
+.markdown-rendered table:not(:where(.base-surface *)),
 .markdown-rendered .markdown-table-scroll,
 .markdown-rendered hr,
 .markdown-rendered h1,
@@ -8968,8 +8968,14 @@ button.cm-fub-page-icon:focus-visible {
    scrive `border-spacing`): solo così gli angoli si arrotondano. Ogni
    cella ha il filo a destra e sotto; l'ultima colonna e l'ultima riga hanno
    al loro posto la cornice. La testata ha il suo fondo fino al bordo: la
-   cornice lì è trasparente, come nel prototipo dove il fondo la copre. */
-.markdown-rendered table {
+   cornice lì è trasparente, come nel prototipo dove il fondo la copre.
+   Queste regole sono delle tabelle Markdown, non delle tabelle che un
+   componente disegna dentro la pagina: la Base incorporata in una nota sta
+   dentro `.markdown-rendered`, e la sua tabella ha la sua pelle
+   (`skin/editors.css`, `.base-table`). Per questo ogni selettore lascia
+   fuori ciò che sta in una `.base-surface`, dentro un `:where()` che non
+   alza la specificità. */
+.markdown-rendered table:not(:where(.base-surface *)) {
   display: block;
   width: fit-content;
   max-width: 100%;
@@ -8989,8 +8995,8 @@ button.cm-fub-page-icon:focus-visible {
   margin: 0;
   overflow: visible;
 }
-.markdown-rendered th,
-.markdown-rendered td {
+.markdown-rendered th:not(:where(.base-surface *)),
+.markdown-rendered td:not(:where(.base-surface *)) {
   height: 34px;
   min-width: 4ch;
   padding: 0 var(--space-5);
@@ -9003,48 +9009,48 @@ button.cm-fub-page-icon:focus-visible {
   text-align: start;
   vertical-align: middle;
 }
-.markdown-rendered th {
+.markdown-rendered th:not(:where(.base-surface *)) {
   background: var(--doc-fill-soft);
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
 }
-.markdown-rendered tr > :first-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > :first-child {
   border-left: 1px solid var(--doc-rule);
 }
-.markdown-rendered tr > :last-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > :last-child {
   border-right: 1px solid var(--doc-rule);
 }
-.markdown-rendered table > :first-child > tr:first-child > * {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > * {
   border-top: 1px solid var(--doc-rule);
 }
-.markdown-rendered table > :last-child > tr:last-child > * {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > * {
   border-bottom: 1px solid var(--doc-rule);
 }
-.markdown-rendered tr > th:first-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > th:first-child {
   border-left-color: transparent;
 }
-.markdown-rendered tr > th:last-child {
+.markdown-rendered tr:not(:where(.base-surface *)) > th:last-child {
   border-right-color: transparent;
 }
-.markdown-rendered table > :first-child > tr:first-child > th {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > th {
   border-top-color: transparent;
 }
-.markdown-rendered table > :last-child > tr:last-child > th {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > th {
   border-bottom-color: transparent;
 }
-.markdown-rendered table > :first-child > tr:first-child > :first-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > :first-child {
   border-top-left-radius: var(--radius-md);
 }
-.markdown-rendered table > :first-child > tr:first-child > :last-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :first-child > tr:first-child > :last-child {
   border-top-right-radius: var(--radius-md);
 }
-.markdown-rendered table > :last-child > tr:last-child > :first-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > :first-child {
   border-bottom-left-radius: var(--radius-md);
 }
-.markdown-rendered table > :last-child > tr:last-child > :last-child {
+.markdown-rendered table:not(:where(.base-surface *)) > :last-child > tr:last-child > :last-child {
   border-bottom-right-radius: var(--radius-md);
 }
-.markdown-rendered table:focus-visible {
+.markdown-rendered table:not(:where(.base-surface *)):focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
@@ -15220,6 +15226,7 @@ input.canvas-toolbar-item {
 .base-table {
   min-width: 560px;
   font-size: var(--text-base);
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
 }
 .base-table th,
@@ -17238,6 +17245,31 @@ input.canvas-toolbar-item {
 /* Il vassoio finisce col suo padding, non col margine dell'ultimo blocco. */
 .transclusion-body > :last-child {
   margin-bottom: 0;
+}
+/* Una Base trasclusa si allarga oltre la colonna del testo come nel
+   prototipo (`.blk[data-t="base"]`, 64 dei 96 px di destra): si allarga il
+   vassoio intero, e la Base resta dentro il suo filo invece di uscirne.
+   Nella finestra stretta e nel foglio stretto il vassoio resta in colonna,
+   come la Base libera. */
+.cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+.markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+  margin-right: -64px;
+}
+.cm-content .transclusion-body .base-surface[data-embedded="true"],
+.markdown-rendered .transclusion-body .base-surface[data-embedded="true"] {
+  margin-right: 0;
+}
+@media (max-width: 940px) {
+  .cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+  .markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+    margin-right: 0;
+  }
+}
+@container sheet (max-width: 560px) {
+  .cm-content .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]),
+  .markdown-rendered .embed.transclusion:has(> .transclusion-body .base-surface[data-embedded="true"]) {
+    margin-right: 0;
+  }
 }
 /* Mentre si scrive il vassoio diventa un foglio, col bordo d'accento. */
 .embed.transclusion-editing {

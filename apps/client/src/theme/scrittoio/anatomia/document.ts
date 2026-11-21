@@ -7,7 +7,7 @@ export const DOCUMENT: PartAnatomy = {
   components: [
     // La colonna di lettura e le due facce dello stesso testo: l'albero di
     // CodeMirror in Live e Sorgente, l'HTML reso in Lettura.
-    { name: "document-column", layers: { "pane-editor": "cornice", "pane-preview": "cornice" }, states: [S("rest"), S("focused")], hooks: ["pane-editor", "pane-preview", "markdown-preview", "markdown-rendered", "cm-editor", "cm-fub-markdown", "cm-content", "cm-line", "cm-markdown-block", "cm-markdown-gap-lead", "markdown-table-scroll"] },
+    { name: "document-column", layers: { "pane-editor": "cornice", "pane-preview": "cornice", "base-surface": "cornice" }, states: [S("rest"), S("focused")], hooks: ["pane-editor", "pane-preview", "markdown-preview", "markdown-rendered", "cm-editor", "cm-fub-markdown", "cm-content", "cm-line", "cm-markdown-block", "cm-markdown-gap-lead", "markdown-table-scroll", "base-surface"] },
     { name: "document-heading", states: REST, hooks: ["cm-fub-heading-line", "cm-fub-h1", "cm-fub-h2", "cm-fub-h3", "cm-fub-h4", "cm-fub-h5", "cm-fub-h6", "cm-fub-h1-line", "cm-fub-h2-line", "cm-fub-h3-line", "cm-fub-h4-line", "cm-fub-h5-line", "cm-fub-h6-line"] },
     { name: "document-inline", states: REST, hooks: ["cm-fub-near", "cm-fub-pending-mark", "cm-fub-ghost", "cm-fub-wavy", "cm-fub-placeholder", "cm-fub-heading-pill-button", "cm-fub-strong", "cm-fub-em", "cm-fub-strike", "cm-fub-highlight", "inline-highlight", "cm-fub-comment", "cm-fub-code", "math-inline"] },
     { name: "document-details", states: [S("rest"), S("focused")], hooks: ["fub-details", "cm-fub-details-arrow", "cm-fub-details-empty"] },
