@@ -1453,19 +1453,14 @@ export const SCENE = touchLast(onPage("shell", [
     query: `connectors=6&drawing=acceso&campioni=${campioni}`,
     prepare: openRisorse,
   })),
-  // **Design** (K6 T10): con un punto scelto (Posizione e misure), a 1280 e a
-  // 700 px, e senza nulla scelto (il documento, con le sezioni del registro).
+  // **Design** (K6 T10): con un punto scelto (Posizione e misure), e senza
+  // nulla scelto (il documento, con le sezioni del registro), a 1280 px. Sotto
+  // gli 800 px del desktop la shell è quella del telefono, senza ispettore: il
+  // Design a 700 px non ha una scena desktop.
   {
     id: "disegno-design",
     title: "Design con un punto scelto: Posizione e misure, a 1280 px",
     query: "connectors=6&drawing=acceso",
-    prepare: openDesignoScelto,
-  },
-  {
-    id: "disegno-design-stretto",
-    title: "Design con un punto scelto, a 700 px",
-    query: "connectors=6&drawing=acceso",
-    viewport: { width: 700, height: 800 },
     prepare: openDesignoScelto,
   },
   {
