@@ -1073,6 +1073,18 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-disegno/src/catalogo.rs::sostituisci",
+            (
+                Family::PerCharacterCase,
+                "mette le parole di Fub al posto di quelle del motore di disegno nelle etichette \
+                 dell'indice dei comandi (`glossario.tsv`, «traccia» → «tratto»), a parola intera \
+                 e senza badare alle maiuscole. Il prodotto è un testo riscritto alle posizioni \
+                 del testo originale, carattere per carattere, quindi la piegatura senza \
+                 contesto; un testo che piegato cambia lunghezza resta com'è. Non è il nome di \
+                 una nota, di un tag o di un path.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/path_policy.rs::is_dos_device",
             (
                 Family::AsciiCase,
