@@ -160,8 +160,8 @@ export function apriFinestra(
       description: opzioni.descrizione,
       body: corpo,
       actions: [
-        { id: "riprova", label: t("draw.window.retry"), value: "riprova" },
-        { id: "annulla", label: t("draw.window.cancel"), value: "annulla" },
+        { id: "retry", label: t("draw.window.retry"), value: "riprova" },
+        { id: "cancel", label: t("draw.window.cancel"), value: "annulla" },
         { id: "ok", label: opzioni.azione ?? t("draw.window.ok"), kind: "primary", value: "ok" },
       ],
       dismissValue: "annulla",
@@ -173,8 +173,9 @@ export function apriFinestra(
     const dialog = handle.element;
     const descrizione = dialog.querySelector<HTMLElement>(".kit-dialog-description");
     const ok = dialog.querySelector<HTMLButtonElement>('[data-action="ok"]')!;
-    const riprova = dialog.querySelector<HTMLButtonElement>('[data-action="riprova"]')!;
-    const annulla = dialog.querySelector<HTMLButtonElement>('[data-action="annulla"]')!;
+    // I nomi dei pulsanti (`data-action`) sono quelli del prototipo.
+    const riprova = dialog.querySelector<HTMLButtonElement>('[data-action="retry"]')!;
+    const annulla = dialog.querySelector<HTMLButtonElement>('[data-action="cancel"]')!;
 
     // Un Invio in un campo di testo o di numeri conferma, come in un modulo. Il
     // campo di numeri già lo ha preso per sé (lo passa a chi lo ha scritto):

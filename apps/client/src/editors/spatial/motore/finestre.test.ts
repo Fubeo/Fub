@@ -122,7 +122,7 @@ describe("il caricamento e l'errore", () => {
     );
     expect(dialog()!.getAttribute("aria-busy")).toBe("true");
     expect(action("ok").disabled).toBe(true);
-    expect(action("riprova").hidden).toBe(true);
+    expect(action("retry").hidden).toBe(true);
     expect(chiamate).toHaveLength(0);
   });
 
@@ -131,8 +131,8 @@ describe("il caricamento e l'errore", () => {
     void apriFinestra(MODULO, Promise.reject("no_memory"), esegui, opzioni({ riprova }));
     await settle();
     expect(dialog()!.querySelector(".kit-form-error")?.textContent).toContain("la memoria dei motori è piena");
-    expect(action("riprova").hidden).toBe(false);
-    action("riprova").click();
+    expect(action("retry").hidden).toBe(false);
+    action("retry").click();
     await settle();
     expect(riprova).toHaveBeenCalledTimes(1);
     expect(numberInputs()).toHaveLength(2);
@@ -143,7 +143,7 @@ describe("il caricamento e l'errore", () => {
     void apriFinestra(MODULO, Promise.reject("altro"), esegui, opzioni());
     await settle();
     expect(dialog()!.querySelector(".kit-form-error")?.textContent).toBe("Non riesco a preparare questa funzione. Riprova.");
-    expect(action("riprova").hidden).toBe(true);
+    expect(action("retry").hidden).toBe(true);
   });
 });
 
@@ -188,7 +188,7 @@ describe("l'anteprima", () => {
 
   it("un'anteprima che arriva dopo Annulla si butta, e il foglio si pulisce", async () => {
     const { result } = await open();
-    action("annulla").click();
+    action("cancel").click();
     expect(await result).toBe(false);
     chiamate[0]!.risolvi({ anteprima: ANTEPRIMA, rifiuto: null });
     await settle();
@@ -239,7 +239,7 @@ describe("OK, Annulla, Esc e Invio", () => {
 
   it("Annulla chiude con false senza mandare il comando", async () => {
     const { result } = await open();
-    action("annulla").click();
+    action("cancel").click();
     expect(await result).toBe(false);
     expect(commits()).toHaveLength(0);
   });
@@ -264,7 +264,7 @@ describe("OK, Annulla, Esc e Invio", () => {
     opener.focus();
     const { result } = await open();
     expect(document.activeElement).not.toBe(opener);
-    action("annulla").click();
+    action("cancel").click();
     await result;
     expect(document.activeElement).toBe(opener);
   });
@@ -276,8 +276,8 @@ describe("OK, Annulla, Esc e Invio", () => {
     commits()[0]!.risolvi({ anteprima: null, rifiuto: "no_memory" });
     await settle();
     expect(dialog()!.querySelector(".kit-form-error")?.textContent).toContain("la memoria dei motori è piena");
-    expect(action("riprova").hidden).toBe(false);
-    action("riprova").click();
+    expect(action("retry").hidden).toBe(false);
+    action("retry").click();
     await settle();
     expect(commits()).toHaveLength(2);
     commits()[1]!.risolvi(VUOTO);
