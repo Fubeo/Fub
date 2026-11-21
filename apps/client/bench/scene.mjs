@@ -1457,10 +1457,10 @@ export const SCENE = touchLast(onPage("shell", [
       prepare: (page) => openDrawingWindow(page, stato),
     },
     {
-      id: `${id}-700`,
-      title: `${title}, a 700 px`,
+      id: `${id}-800`,
+      title: `${title}, nella finestra minima del desktop (800 px)`,
       query: "connectors=6&drawing=acceso",
-      viewport: { width: 700, height: 800 },
+      viewport: { width: 800, height: 800 },
       prepare: (page) => openDrawingWindow(page, stato),
     },
   ]),

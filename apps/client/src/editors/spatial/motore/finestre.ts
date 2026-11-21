@@ -135,6 +135,8 @@ export function apriFinestra(
 ): Promise<boolean> {
   return new Promise<boolean>((fine) => {
     const own = openLifetime();
+    // Il timer dell'anteprima è della finestra: chiusa, non scatta più.
+    own.add(() => fermaTimer());
     // Chiudendosi il disegno, la finestra si chiude: il suo `own` va con lei.
     const releaseFromDrawing = adopt(opzioni.vita, () => own.close());
 
@@ -278,7 +280,7 @@ export function apriFinestra(
         mandaAnteprima();
         return;
       }
-      timer ??= setTimeout(() => {
+      if (timer === null) timer = setTimeout(() => {
         timer = null;
         mandaAnteprima();
       }, attesa);
