@@ -2,7 +2,9 @@
 // Chi porta il Completo (piano K6, T5): `chrome/workspace.ts` chiama `apri`
 // con un `import()` quando si entra nel Completo col componente acceso, una
 // volta per disegno; col componente spento, nel Semplice o in una scheda,
-// `apri` (e quindi `indice()`) non si chiama mai.
+// `apri` (e quindi `indice()`) non si chiama mai. Prima dell'`import()` si
+// legge la scelta del vault: il primo disegno nasce nel Completo finché la
+// superficie non ha letto l'impostazione, e un vault nel Semplice non lo apre.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
@@ -13,6 +15,17 @@ import { LAYER } from "../tools/test-support";
 const stato = vi.hoisted(() => ({
   acceso: true as boolean | null,
   ascolti: new Set<() => void>(),
+  /// Lo spazio scelto nel vault; `null` quello di serie, `"guasto"` una lettura che non riesce.
+  vault: null as "simple" | "full" | "guasto" | null,
+}));
+
+vi.mock("../../../host/query", async (real) => ({
+  ...(await real<typeof import("../../../host/query")>()),
+  settings: (plugin?: string) => {
+    if (stato.vault === "guasto") return Promise.reject(new Error("ipc"));
+    if (plugin !== "fub.draw" || stato.vault === null) return Promise.resolve([]);
+    return Promise.resolve([{ spec: { key: "draw.workspace" }, value: stato.vault, source: "vault" }]);
+  },
 }));
 
 vi.mock("../../../state/components", async (real) => ({
@@ -48,6 +61,7 @@ beforeEach(() => {
   document.body.append(host);
   owner = openLifetime();
   stato.acceso = true;
+  stato.vault = null;
   stato.ascolti.clear();
   apri.mockReset();
 });
@@ -94,6 +108,26 @@ describe("l'ingresso del Completo", () => {
     expect(apri).not.toHaveBeenCalled();
     stato.acceso = true;
     for (const ascolto of stato.ascolti) ascolto();
+    await arrivati();
+    expect(apri).toHaveBeenCalledTimes(1);
+  });
+
+  it("un disegno nato nel Completo con il vault nel Semplice non lo apre; il Completo scelto dopo sì", async () => {
+    stato.vault = "simple";
+    mount({ workspace: "full" });
+    await arrivati();
+    expect(apri).not.toHaveBeenCalled();
+    // La superficie ha letto lo spazio, e chi disegna sceglie il Completo.
+    editor.setWorkspace("simple");
+    stato.vault = "full";
+    editor.setWorkspace("full");
+    await arrivati();
+    expect(apri).toHaveBeenCalledTimes(1);
+  });
+
+  it("una lettura dello spazio che non riesce non ferma il Completo", async () => {
+    stato.vault = "guasto";
+    mount({ workspace: "full" });
     await arrivati();
     expect(apri).toHaveBeenCalledTimes(1);
   });

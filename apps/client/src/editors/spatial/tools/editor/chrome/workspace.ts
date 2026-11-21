@@ -7,6 +7,7 @@
 // `onToolbar`); l'editor le applica subito.
 
 import { textButton } from "../../../../../kit";
+import { settings } from "../../../../../host/query";
 import { components, onComponents } from "../../../../../state/components";
 import type { MenuItem } from "../../../../../ui/menu";
 import { t } from "../../../strings";
@@ -24,6 +25,24 @@ const NARROW_PANE = 480;
 
 /// Il componente del Disegno completo (`crates/fub-components`).
 export const DISEGNO_COMPLETO = "fub.disegno-completo";
+
+/// L'impostazione dello spazio di lavoro nel bundle del disegno: le stesse di
+/// `preferences.ts` (`WORKSPACE_KEY`), che sta nel chunk della superficie e
+/// da qui non si importa.
+const DRAW_BUNDLE = "fub.draw";
+const WORKSPACE_KEY = "draw.workspace";
+
+/// Lo spazio che il vault ha scelto, letto adesso: `null` se è quello di
+/// serie, o se la lettura non riesce.
+async function spazioDelVault(): Promise<Workspace | null> {
+  try {
+    const entry = (await settings(DRAW_BUNDLE)).find((one) => one.spec.key === WORKSPACE_KEY);
+    if (entry === undefined || entry.source === "default") return null;
+    return entry.value === "simple" || entry.value === "full" ? entry.value : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface WorkspaceContext {
   workspace: Workspace;
@@ -95,23 +114,41 @@ export function installWorkspace(ctx: EditorContext): void {
   // Il Disegno completo (K6): col componente acceso, entrare nel Completo
   // porta il suo ingresso con un `import()`, una volta per disegno aperto. Il
   // Semplice, una scheda e il componente spento non lo chiedono mai.
-  let completo: "no" | "in-arrivo" | "aperto" = "no";
+  //
+  // Prima dell'`import()` si legge la scelta del vault: il primo disegno
+  // della sessione nasce nel Completo finché la superficie non ha letto
+  // l'impostazione (`preferences.ts`, il Completo è la scelta di serie), e
+  // senza questa lettura un vault nel Semplice porterebbe il Completo a ogni
+  // avvio. Una lettura che non riesce non ferma niente: decide lo spazio
+  // dell'editor.
+  let completo: "no" | "verifica" | "in-arrivo" | "aperto" = "no";
+  const vuoleCompleto = (): boolean =>
+    !compact && !ctx.disposed && ctx.workspace === "full" && components()?.on(DISEGNO_COMPLETO) === true;
   const portaCompleto = (): void => {
-    if (completo !== "no" || compact || ctx.disposed || ctx.workspace !== "full") return;
-    if (components()?.on(DISEGNO_COMPLETO) !== true) return;
-    completo = "in-arrivo";
-    import("../../../completo").then(
-      ({ apri }) => {
-        if (ctx.disposed) return;
-        apri({ motore: options.motore ?? null, life: ctx.life });
-        completo = "aperto";
-      },
-      // Un chunk che non arriva: il Completo di K5 resta, e il prossimo
-      // ingresso ci riprova.
-      () => {
+    if (completo !== "no" || !vuoleCompleto()) return;
+    completo = "verifica";
+    void spazioDelVault().then((scelto) => {
+      if (ctx.disposed) return;
+      if (scelto === "simple" || !vuoleCompleto()) {
+        // La superficie porterà l'editor nel Semplice; il prossimo ingresso
+        // nel Completo ci riprova.
         completo = "no";
-      },
-    );
+        return;
+      }
+      completo = "in-arrivo";
+      import("../../../completo").then(
+        ({ apri }) => {
+          if (ctx.disposed) return;
+          apri({ motore: options.motore ?? null, life: ctx.life });
+          completo = "aperto";
+        },
+        // Un chunk che non arriva: il Completo di K5 resta, e il prossimo
+        // ingresso ci riprova.
+        () => {
+          completo = "no";
+        },
+      );
+    });
   };
   ctx.life.add(onComponents(portaCompleto));
 
