@@ -196,6 +196,14 @@
     "kit-dialog-description",
     "kit-dialog-body",
     "kit-dialog-actions",
+    "kit-form",
+    "kit-form-row",
+    "kit-form-label",
+    "kit-form-choice",
+    "kit-form-option",
+    "kit-form-check",
+    "kit-form-note",
+    "kit-form-error",
     "kit-button",
     "kit-button--icon",
     "kit-field",
@@ -2630,6 +2638,14 @@
     "kit-dialog-description": "cornice",
     "kit-dialog-body": "cornice",
     "kit-dialog-actions": "cornice",
+    "kit-form": "cornice",
+    "kit-form-row": "cornice",
+    "kit-form-label": "cornice",
+    "kit-form-choice": "cornice",
+    "kit-form-option": "cornice",
+    "kit-form-check": "cornice",
+    "kit-form-note": "cornice",
+    "kit-form-error": "cornice",
     "kit-button": "cornice",
     "kit-button--icon": "cornice",
     "kit-field": "cornice",
@@ -5275,6 +5291,28 @@
       "states": [
         "rest",
         "focused"
+      ]
+    },
+    {
+      "name": "kit-form",
+      "part": "kit",
+      "hooks": [
+        "kit-form",
+        "kit-form-row",
+        "kit-form-label",
+        "kit-form-choice",
+        "kit-form-option",
+        "kit-form-check",
+        "kit-form-note",
+        "kit-form-error"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
       ]
     },
     {
@@ -12618,10 +12656,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2432,
+    "hooks": 2440,
     "state_names": 7,
-    "assigned_states": 1087,
-    "components": 322,
+    "assigned_states": 1093,
+    "components": 323,
     "preference_tokens": 196
   }
 }
