@@ -134,6 +134,27 @@ ancora gli oggetti a cui sono agganciati, [sfumature](drawing-gradients.md),
 oggetto che li porta si sceglie, si sposta, si trasforma e si elimina come
 gli altri.
 
+## Finestre dei comandi
+
+Un comando del Completo che chiede dei parametri, come «Sposta tracciato»,
+apre una finestra con i suoi campi: i numeri con la loro unità e i loro
+limiti, la scelta a segmenti, la casella e il testo. Con **«Anteprima»**
+accesa il foglio mostra l'esito prima di applicarlo, e la finestra sta di lato
+senza coprirlo; l'anteprima parte appena la finestra è pronta, e poi al più
+ogni 120 millisecondi, col valore dell'ultimo momento. **OK** applica il
+comando una volta sola, come un passo della cronologia; **Annulla** ed **Esc**
+chiudono senza fare niente, e **Invio** conferma come OK.
+
+Un numero fuori dai suoi limiti non si prende: il campo dice quali sono, e OK
+resta spento finché il valore non rientra. Se la funzione del comando non si
+carica, per esempio perché la memoria dei motori è piena, la finestra lo dice
+e offre «Riprova». Chiudere il disegno chiude la finestra senza eseguire
+niente. I valori dell'ultima volta restano per la sessione, non vanno sul
+disco.
+
+Nessun comando dell'editor apre ancora questa finestra: la usano le funzioni
+del motore che arrivano con le loro famiglie.
+
 ## Disporre
 
 Nello spazio Completo, finché c'è qualcosa di scelto, accanto alla selezione
