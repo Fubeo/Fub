@@ -17,7 +17,7 @@ import { identifier } from "../ui/a11y";
 import type { Lifetime } from "../ui/lifetime";
 import { textField } from "./field";
 import { numberField } from "./number-field";
-import { evaluate, type QuantityProblem } from "./quantity";
+import type { QuantityProblem } from "./quantity";
 import "./kit.css";
 
 /// Un codice di colore come lo accetta un campo `color`: tre o sei cifre
