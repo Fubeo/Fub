@@ -166,6 +166,10 @@ describe("il form generico", () => {
       entry("plugins.disabled", { kind: "list", default: [] }, []),
       entry("properties.types", { kind: "text", default: "{}" }, "{}"),
       entry("appearance.theme-id", { kind: "text", default: "fub.serie" }, "fub.serie"),
+      // Lo spazio di lavoro del disegno e gli spazi salvati si scelgono e si
+      // gestiscono dalla banda: nel form sarebbero un id da scrivere a mano.
+      entry("draw.workspace", { kind: "text", default: "full" }, "full"),
+      entry("draw.workspaces", { kind: "list", default: [] }, []),
     ]);
     const keys = [...document.querySelectorAll<HTMLElement>("[data-setting-key]")].map((el) => el.dataset.settingKey);
     expect(keys).toEqual(["editor.spellcheck"]);
