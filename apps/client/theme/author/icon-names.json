@@ -161,6 +161,7 @@
   "draw-ungroup",
   "draw-unlink",
   "draw-unmark",
+  "draw-workspace",
   "draw-zoom",
   "draw-zoom-in",
   "draw-zoom-out",
