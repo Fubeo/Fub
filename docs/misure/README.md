@@ -171,3 +171,4 @@ pezzi copre la mappa, quante differenze restano e quanto si vedono.
 | Data | Prototipo | Commit | Pagina |
 |---|---|---|---|
 | 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | `25299965f` | [La conformità dell'editor al prototipo](2026-11-21-conformita-editor.md) |
+| 2026-11-21 | `PLAN-ui/editor.html` (`piano/editor-completo`) | `80e7c92eb` | [I gesti dell'editor: testata, proprietà, commenti, sbirciata e ispettore](gesti-editor/testata-commenti-ispettore.md) |
