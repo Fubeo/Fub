@@ -8,8 +8,11 @@
 //! prova vale sia con `cargo test` sia con nextest. Poi un disegno del corpus
 //! si apre, cambia e torna indietro solo come byte; ogni comando del motore
 //! che prende un percorso si rifiuta prima del motore; e dopo ogni caso le
-//! cartelle sono ancora vuote.
+//! cartelle sono ancora vuote. Così anche dopo ogni caso del banco delle
+//! righe (`tests/famiglie/` e `tests/casi-prova/`, piano K6, T5).
 
+#[cfg(feature = "completo")]
+mod casi;
 mod common;
 
 use std::path::{Path, PathBuf};
@@ -254,5 +257,25 @@ fn i_comandi_esclusi_e_quelli_di_fub_non_arrivano_al_motore() {
         let messaggio = rifiutato(&mut d, id, json!({}));
         assert!(messaggio.contains(id.as_str()), "{id}: {messaggio}");
         ancora_vuote(id);
+    }
+}
+
+#[cfg(feature = "completo")]
+#[test]
+fn ogni_caso_del_banco_delle_righe_lascia_le_cartelle_vuote() {
+    let _fila = in_fila();
+    ambiente();
+    let mut tutti = casi::leggi_cartella(&casi::cartella_famiglie()).expect("i casi si leggono");
+    tutti.extend(
+        casi::leggi_file(&casi::cartella_prova().join("prova.json"))
+            .expect("i casi di prova si leggono"),
+    );
+    assert!(!tutti.is_empty(), "almeno i casi di prova");
+    let disegni = casi::disegni_di_prova();
+    for caso in &tutti {
+        if let Err(errore) = casi::esegui(&disegni, caso) {
+            panic!("{errore}");
+        }
+        ancora_vuote(&caso.nome());
     }
 }

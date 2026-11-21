@@ -53,7 +53,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "F1,F2,F3,F4,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11,R1,T1,I1,L1,C1").split(","));
+const only = new Set((args.only ?? "F1,F2,F3,F4,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11,R1,T1,I1,L1,C1,V1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 /// `--x11`: l'app va in X11 anche su una sessione Wayland (vedi `main`).
@@ -659,6 +659,14 @@ async function closeAll(session) {
 /// resta all'ultimo, «Tutto», come chi non ha scelto niente.
 const C1_PROFILES = [["solo-note", "Solo note"], ["tutto", "Tutto"]];
 
+/// I chunk del Disegno completo (V1): non arrivano prima del Completo, e col
+/// Completo arrivano l'ingresso, l'indice e il nucleo.
+const V1_LAZY = /^drawing-(completo|indice|fam-.+)$/;
+const V1_FULL = ["drawing-completo", "drawing-indice", "drawing-fam-nucleo"];
+
+/// Gli scenari che chiudono da sé le sessioni che aprono, anche la prima.
+const SELF_CLOSING = new Set(["C1", "V1"]);
+
 /// I file JavaScript che la pagina ha scaricato fin qui, con l'impronta
 /// (`editors-canvas-Bx3kQ9aZ.js`), in ordine.
 const CHUNKS_SCRIPT = `
@@ -716,6 +724,19 @@ async function applyProfile(session, nome) {
   const parsed = JSON.parse(answer);
   if (parsed.risposta !== "esito") throw new Error(`il profilo «${nome}» non si applica: ${answer.slice(0, 300)}`);
 }
+
+/// Scrive (o rimette di serie) un'impostazione del vault del banco, come il
+/// menu dell'app (V1: lo spazio di lavoro del disegno).
+async function invokeSetting(session, command, payload) {
+  const answer = await session.executeAsync(`
+    const done = arguments[arguments.length - 1];
+    window.__TAURI_INTERNALS__.invoke(arguments[0], arguments[1])
+      .then(() => done(null), (error) => done(JSON.stringify(error)));
+  `, [command, payload]);
+  if (answer !== null) throw new Error(`${command} ${JSON.stringify(payload)} non riesce: ${String(answer).slice(0, 300)}`);
+}
+const setSetting = (session, key, value) => invokeSetting(session, "set_setting", { key, value });
+const resetSetting = (session, key) => invokeSetting(session, "reset_setting", { key });
 
 /// S8: dove va il tempo dei fotogrammi lunghi. Fra due fotogrammi si guarda
 /// quale evento del puntatore è arrivato per ultimo (`pointermove` mentre il
@@ -1755,6 +1776,82 @@ const SCENARIOS = {
     }
     return { profiles, values, samples: C1_PROFILES.length };
   },
+  /// Il Disegno completo pigro (K6, T5): col profilo «Tutto» e lo spazio di
+  /// lavoro Semplice, l'app riparte da capo; poi apre un disegno nel
+  /// Semplice, passa al Completo, sceglie la penna. A ogni passo i chunk in
+  /// più (dalle richieste della WebView), la memoria dell'app e della WebView
+  /// e il tempo del passo. All'avvio e nel Semplice nessun `drawing-completo`,
+  /// `drawing-indice` né `drawing-fam-*`; col Completo i primi due e il
+  /// nucleo. Le soglie di memoria e tempo non sono qui: le scrive la misura
+  /// in `budgets.json`. Alla fine lo spazio di lavoro torna com'era.
+  async V1(session) {
+    const steps = [];
+    const values = {};
+    const notes = [];
+    const problems = [];
+    let current = session;
+    let seen = [];
+    const lazy = (names) => names.filter((name) => V1_LAZY.test(chunkName(name))).map(chunkName);
+    const step = async (name, since) => {
+      const ms = Math.round(performance.now() - since);
+      await pause(MEMORY_QUIET_MS);
+      const read = await current.execute(CHUNKS_SCRIPT);
+      const added = read.filter((each) => !seen.includes(each));
+      // L'unione dei passi: una voce che la pagina non elenca più resta vista.
+      const chunks = [...new Set([...seen, ...added])].sort();
+      seen = chunks;
+      const memory = await settled(driverPid, pause);
+      const mib = (group) => memory?.groups?.[group]?.pss ?? null;
+      steps.push({ name, ms, added: added.map(chunkName), lazy: lazy(chunks), memory });
+      values[`V1.${name}`] = ms;
+      values[`V1.${name}.chunks`] = added.length;
+      values[`V1.${name}.app.MiB`] = mib("app");
+      values[`V1.${name}.webview.MiB`] = mib("webview");
+      notes.push(`${name}: ${added.length ? added.map(chunkName).join(", ") : "nessun chunk in più"}`);
+      return lazy(chunks);
+    };
+    try {
+      await applyProfile(current, "tutto");
+      await setSetting(current, "draw.workspace", "simple");
+      await current.close();
+      current = null;
+      let since = performance.now();
+      current = await launch("V1");
+      await ready(current);
+      await indexed(current);
+      const atStart = await step("avvio", since);
+      if (atStart.length) problems.push(`all'avvio: ${atStart.join(", ")}`);
+      since = performance.now();
+      await openByName(current, "Foglio", "");
+      await current.waitFor("return !!document.querySelector('.pane.focus .draw-editor .draw-surface')", [], 60_000);
+      const simple = await step("semplice", since);
+      if (simple.length) problems.push(`nel Semplice: ${simple.join(", ")}`);
+      since = performance.now();
+      await setSetting(current, "draw.workspace", "full");
+      const nucleo = `return [...performance.getEntriesByType("resource")].some((entry) => /\\/drawing-fam-nucleo-[^/]*\\.js/.test(entry.name)) || !!document.querySelector('link[rel=modulepreload][href*="drawing-fam-nucleo-"]');`;
+      try {
+        await current.waitFor(nucleo, [], 30_000);
+      } catch {
+        // Il passo si scrive lo stesso: il referto dice che cosa manca.
+      }
+      const full = await step("completo", since);
+      for (const expected of V1_FULL) if (!full.includes(expected)) problems.push(`col Completo manca ${expected}`);
+      since = performance.now();
+      await current.keys("p");
+      await step("penna", since);
+      notes.push("apre un effetto: non c'è ancora un punto dell'interfaccia che apre un effetto del Completo (arriva con la cornice e i pannelli)");
+    } finally {
+      if (current) {
+        try {
+          await resetSetting(current, "draw.workspace");
+        } finally {
+          await current.close();
+        }
+      }
+    }
+    if (problems.length) throw new Error(`il Completo non è pigro come deve: ${problems.join("; ")} — passi: ${JSON.stringify(steps.map(({ name, added }) => ({ name, added })))}`);
+    return { report: { steps }, values, notes, samples: steps.length };
+  },
   /// Il nucleo della lavagna in WebAssembly (N3): il modulo che la build ha
   /// messo fra gli asset, compilato con la CSP dell'app, poi istanza, `open`
   /// e `commit` di uno spostamento su una lavagna di 50 e una di 2000 schede
@@ -1977,14 +2074,15 @@ async function main() {
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
     // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
-    // fondo: cambia il profilo del vault, e lo lascia a «Tutto». F1 prima di
+    // fondo: cambia il profilo del vault, e lo lascia a «Tutto»; V1 dopo C1,
+    // perché vuole «Tutto» e riparte da capo. F1 prima di
     // ogni scenario con una soglia in periodi, perché decide il tetto del
     // motore; R1 e I1 gli passano davanti perché in budgets.json hanno solo
     // soglie in ms, e una soglia in periodi data a uno dei due chiede di
     // spostare F1 davanti a lui. F2
     // subito dopo, con poche schede riaperte; F3 dopo S8, perché apre due
     // note che gli avvii dopo riaprono, e F4 dopo F3 per la stessa ragione.
-    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S10", "S11", "S4", "S5", "S7", "S8", "F3", "F4", "T1", "L1", "C1"].filter((id) => only.has(id));
+    const order = ["R1", "I1", "F1", "F2", "S1", "S6", "S2", "S3", "S9", "S10", "S11", "S4", "S5", "S7", "S8", "F3", "F4", "T1", "L1", "C1", "V1"].filter((id) => only.has(id));
     for (const id of order) {
       // R1 con la raccolta forzata ha un driver suo, con il gancio acceso
       // nell'ambiente; lo scenario dopo torna su un driver senza.
@@ -2070,9 +2168,9 @@ async function main() {
         results[id] = { error: String(error?.message ?? error) };
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
-        // C1 chiude da sé le sessioni che apre, anche la prima.
+        // C1 e V1 chiudono da sé le sessioni che aprono, anche la prima.
         // L'app dopo parte quando questa è uscita (`launch`).
-        if (id !== "C1") await session.close();
+        if (!SELF_CLOSING.has(id)) await session.close();
       }
     }
   } finally {

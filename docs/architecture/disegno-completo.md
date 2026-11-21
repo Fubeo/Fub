@@ -30,7 +30,7 @@ comando, voce dell'interfaccia, effetto e pannello del motore, con la sua
 
 | Stato | Vuol dire | Lo prova |
 |---|---|---|
-| fatto | si raggiunge dal suo posto (menu, colonna, ispettore, finestra, banda o tasto), fa sul disegno ciò che fa nel motore e si annulla con un passo | il suo caso in `crates/fub-disegno/tests/famiglie/` (arriva con T5) |
+| fatto | si raggiunge dal suo posto (menu, colonna, ispettore, finestra, banda o tasto), fa sul disegno ciò che fa nel motore e si annulla con un passo | il suo caso in `crates/fub-disegno/tests/famiglie/`, provato dal motore e dal client ([il banco delle righe](#lindice-e-i-pezzi-pigri)) |
 | fub | la serve una funzione di Fub (Salva, le schede, le Impostazioni, i recenti), scritta nella colonna `fub` | la funzione di Fub |
 | escluso | non entra, con il suo perché nella riga | la guardia della mappa |
 | da fare | non è ancora fatto | la guardia lo conta |
@@ -50,10 +50,10 @@ questi pezzi:
 
 1. **La voce.** Il menu ≡, Ctrl+/, la fila delle opzioni o una sezione
    dell'ispettore mostrano la voce dall'indice,
-   `apps/client/src/editors/spatial/completo/indice.generated.json`
-   (arriva con T5), generato dal Rust: etichetta, posto, tasto e famiglia.
+   `apps/client/src/editors/spatial/completo/indice.generated.json`,
+   generato dal Rust: etichetta, posto, tasto e famiglia.
    Nel client non c'è un elenco scritto a mano.
-2. **Il pezzo del client.** `completo/carica.ts` (arriva con T5) importa con
+2. **Il pezzo del client.** `completo/carica.ts` importa con
    `import()` il chunk `drawing-fam-<id>` della famiglia, se non c'è già. Un
    comando con parametri apre la sua finestra del kit, con l'anteprima
    (arriva con T6).
@@ -106,8 +106,8 @@ un ponte solo (arriva con T4):
 | Che cosa | Chi lo possiede | Perché |
 |---|---|---|
 | la mappa | `crates/fub-disegno/mappa.tsv` e la sua guardia (arriva con T2) | è il contratto della parità; una riga cambia stato solo con la sua prova |
-| l'indice | `fub-disegno`, che lo genera nel client come un mirror (arriva con T5) | il client non nomina il motore e non ha un elenco scritto a mano |
-| le famiglie | nel processo `crates/fub-disegno/src/famiglie/` (feature `completo`), nel client i chunk `drawing-fam-<id>` (arriva con T5) | sono le unità pigre; una famiglia non importa un'altra |
+| l'indice | `fub-disegno`, che lo genera nel client come un mirror | il client non nomina il motore e non ha un elenco scritto a mano |
+| le famiglie | nel processo `crates/fub-disegno/src/famiglie/` (feature `completo`), nel client i chunk `drawing-fam-<id>` | sono le unità pigre; una famiglia non importa un'altra |
 | il `Budget` | lo strato dei motori, `crates/fub-motori/src/memoria.rs` | libera le cache delle famiglie quando serve ([Lo strato dei motori](motori.md)) |
 | le librerie dell'utente | il kernel, in `.fub/plugins/fub.draw/librerie/` del vault (arriva con T30) | il motore non tocca il disco; le librerie viaggiano con il vault |
 | il disco | il kernel; il motore lo ha negato per tutto il processo ([il disco](#il-disco)) | ogni byte del motore passa da Fub |
@@ -124,12 +124,71 @@ In `fub-disegno` ci sono due mappe che non si toccano:
   del motore all'id del suo elemento nel file, per ogni disegno aperto (vedi
   [la copia e la differenza](disegno.md#la-copia-e-la-differenza)).
 
+## L'indice e i pezzi pigri
+
+**L'indice dei comandi** è
+`apps/client/src/editors/spatial/completo/indice.generated.json`: una voce
+per ogni riga fatta della mappa e per ogni riga `fub` con un posto vero.
+Lo scrive il Rust (`crates/fub-disegno/src/catalogo.rs`, attraverso
+`fub_motori::importa`), e `cargo test -p fub-disegno --test ts_indice` cade
+se è stantio; `UPDATE_MIRROR=1` lo rigenera, con gli schemi delle finestre
+in `completo/famiglie/<id>/schema.generated.json`. Una voce ha la fonte,
+l'id, la chiamata (un comando, un effetto con `disegno.effect.apply`, uno
+strumento o un'azione del client), le etichette italiana e inglese, il
+posto (`scheda/gruppo`), la famiglia, il tasto, l'effetto (`cambia`,
+`legge`, `mostra`) e se apre una finestra. Le etichette passano per
+`crates/fub-disegno/glossario.tsv`, le parole del motore tradotte in quelle
+del disegno di Fub; un'etichetta senza traduzione resta inglese e il test
+la elenca. Il client legge l'indice con `completo/indice.ts`: un solo
+`import()` per tutte le chiamate (ripetuto se non arriva), e le voci per
+posto, per famiglia e per testo cercato.
+
+**I pezzi pigri del client** stanno in `apps/client/src/editors/spatial/completo/`:
+
+| Pezzo | Chunk | Quando arriva |
+|---|---|---|
+| `index.ts`, `carica.ts` | `drawing-completo` | entrando nel Completo col componente `fub.disegno-completo` acceso (`chrome/workspace.ts`, un `import()` per disegno) |
+| `indice.ts` e il suo JSON | `drawing-indice` | quando il Completo si apre (`apri`) |
+| `famiglie/<id>/` | `drawing-fam-<id>` | il nucleo quando il Completo si apre, ogni altra famiglia al primo uso |
+
+`carica.ts` porta una famiglia così: importa il suo chunk, poi chiede al
+motore `disegno.famiglia.prepara`, che la fa nascere nel processo. Due
+richieste insieme fanno un giro solo; un giro vecchio (dopo «Riprova») non
+scrive sopra il nuovo; il disegno chiuso butta gli esiti in volo. Gli errori
+sono tre: `no-memory` (il `Budget` dice no), `motore` (il motore non
+risponde o manca), `chunk` (il file non arriva); dall'errore si esce con
+`riprova`. Una famiglia registra i suoi pezzi una volta sola.
+
+**I confini** li controlla la build ([che cosa arriva tardi](#che-cosa-arriva-tardi)),
+con i test delle regole in `apps/client/build/completo-chunks.test.mjs`; ogni
+modulo sta nel suo chunk, e ogni chunk c'è. Lo scenario V1 del banco WebView
+(`bench/webview/run.mjs`) guarda la stessa cosa nella WebView vera: chunk,
+memoria e tempo all'avvio, nel Semplice, col Completo e con la penna. La
+WebKitGTK dell'app non elenca fra le risorse i file del protocollo dell'app,
+quindi lo scenario legge script e `modulepreload`: per questo ogni famiglia
+precarica il suo chunk (`completoPreload`, `build.modulePreload` di
+`vite.config.ts`), anche se non importa nient'altro.
+
+**Il banco di prova delle righe**: ogni riga fatta ha un caso in
+`crates/fub-disegno/tests/famiglie/<famiglia>.json`, con il disegno di
+partenza e ciò che si aspetta (operazioni, lettura, errore o pixel).
+`cargo test -p fub-disegno --test famiglie` li fa girare nel motore e
+controlla che ogni riga fatta abbia il suo caso;
+`apps/client/src/editors/spatial/completo/casi.test.ts` applica le
+operazioni in un passo, confronta il testo con il `.svg` di `dopo` byte per
+byte e annulla (`FUB_CASI_SCRIVI=1` riscrive i `dopo`). I casi di
+`tests/casi-prova/` provano il banco stesso. Nel banco visivo il motore
+finto risponde ai comandi del Completo con
+`apps/client/bench/disegno-famiglie/<famiglia>.json`; un comando senza
+risposta è `Unserved`, come una riga da fare.
+
 ## Che cosa arriva tardi
 
 Nel client, la regola `NOT_AT_STARTUP` di `apps/client/vite.config.ts` fa
 cadere `npm run build` se un chunk `drawing-*` o un modulo di
 `editors/spatial/` entra nel grafo statico di una pagina. Le regole del
-Completo si aggiungono lì (arriva con T5): fuori da
+Completo stanno accanto, nel plugin `completo-confini`
+(`apps/client/build/completo-chunks.mjs`): fuori da
 `editors/spatial/completo/` si importa solo `completo/index.ts`, e solo con
 `import()`; l'indice e le famiglie arrivano da lì, e una famiglia non ne
 importa un'altra. All'avvio e nel Semplice non arriva niente del Completo;

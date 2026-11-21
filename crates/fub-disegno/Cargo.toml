@@ -42,3 +42,5 @@ completo = []
 [dev-dependencies]
 # L'oracolo a pixel, per confrontare ciò che disegna il motore con la scena.
 fub-testkit = { workspace = true, features = ["pixel"] }
+# Le parole del gergo di `apps/client/src/i18n/gergo.ts`, lette da `ts_indice`.
+regex = { workspace = true }

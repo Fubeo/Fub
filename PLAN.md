@@ -1658,7 +1658,7 @@ Fatto quando:
   `drawing-completo`, `drawing-indice` né `drawing-fam-*`; con il Completo
   `drawing-completo`, `drawing-indice` e `drawing-fam-nucleo`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npm run build; lo scenario V1 sul banco WebView (con C1 ancora verde)
-Stato: [ ] da fare
+Stato: [x] fatto
 Aspetta: niente
 
 ## T6 · Le finestre del kit con l'anteprima
