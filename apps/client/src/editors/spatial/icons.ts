@@ -169,6 +169,61 @@ const WORKSPACE: Readonly<Record<string, readonly string[]>> = {
   "draw-workspace": ["M4 5h16v14H4z", "M9 5v14", "M9 10h11"],
 };
 
+/// Le figure della colonna e del cassetto (T8) e delle famiglie che il
+/// prototipo disegna: `PLAN-ui/disegno-completo.html`, il suo script di
+/// `editors/spatial/icons.ts`. Ogni nome che il disegno chiama sta qui.
+const COLUMN: Readonly<Record<string, readonly string[]>> = {
+  "draw-add-fill": ["M4 4h10v10H4z", "M7 7h4v4H7z", "M18 15v6", "M15 18h6"],
+  "draw-add-stroke": ["M4 18L18 4", "M17 15v6", "M14 18h6"],
+  "draw-all-tools": ["M4 4h4v4H4z", "M10 4h4v4h-4z", "M16 4h4v4h-4z", "M4 10h4v4H4z", "M10 10h4v4h-4z", "M16 10h4v4h-4z", "M4 16h4v4H4z", "M10 16h4v4h-4z", "M16 16h4v4h-4z"],
+  "draw-arc": ["M5 19C5 11 11 5 19 5"],
+  "draw-artboard": ["M7 3v18", "M17 3v18", "M3 7h18", "M3 17h18"],
+  "draw-blend": ["M3 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M13 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M11 12h2"],
+  "draw-brush": ["M20 4c-4 1-8 5-9.5 8l1.5 1.5C15 12 19 8 20 4z", "M10.5 12C8.5 12 7 13.5 7 15.5 7 17 6 18.5 4 19c3 1.5 8 1 8-3.5"],
+  "draw-direct-select": ["M8 4v13l3.4-3.3 2.4 5.4 2.1-.9-2.4-5.4H18z", "M3.5 3.5h3v3h-3z"],
+  "draw-effects": ["M5 20l3-12h5", "M4.5 13h6", "M14 11l6 8", "M20 11l-6 8"],
+  "draw-eyedropper": ["M14 4.5a2.5 2.5 0 0 1 3.5 0l2 2a2.5 2.5 0 0 1 0 3.5L17 12.5 11.5 7z", "M12.5 8l-7 7V19h4l7-7"],
+  "draw-flare": ["M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0", "M12 3v4", "M12 17v4", "M3 12h4", "M17 12h4", "M5.6 5.6l2.8 2.8", "M15.6 15.6l2.8 2.8"],
+  "draw-free-transform": ["M5 5h14v14H5z", "M3.5 3.5h3v3h-3z", "M17.5 3.5h3v3h-3z", "M3.5 17.5h3v3h-3z", "M17.5 17.5h3v3h-3z"],
+  "draw-gradient": ["M4 5h16v14H4z", "M9 5v14", "M13 5v14", "M16 5v14", "M18.5 5v14"],
+  "draw-graph": ["M4 20h16", "M6 20v-6", "M10 20V8", "M14 20v-9", "M18 20V5"],
+  "draw-grid-polar": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0", "M12 3v18", "M3 12h18"],
+  "draw-grid-rect": ["M4 4h16v16H4z", "M4 9.3h16", "M4 14.7h16", "M9.3 4v16", "M14.7 4v16"],
+  "draw-live-paint": ["M6 10l6-6 7 7-6 6z", "M6 10l-1 1a2 2 0 0 0 0 2.8l.2.2", "M19 15s2 2.3 2 3.5a2 2 0 0 1-4 0c0-1.2 2-3.5 2-3.5z"],
+  "draw-measure": ["M3 17L17 3l4 4L7 21z", "M7 13l2 2", "M10 10l2 2", "M13 7l2 2"],
+  "draw-mesh": ["M4 4h16v16H4z", "M4 12c5-3 11 3 16 0", "M12 4c-3 5 3 11 0 16"],
+  "draw-parametric": ["M12 3l8 5v8l-8 5-8-5V8z", "M12 3v18"],
+  "draw-pen-nib": ["M12 3l5 8-2.5 5h-5L7 11z", "M12 3v7", "M9.5 20h5"],
+  "draw-pencil": ["M15 4l5 5L9 20H4v-5z", "M12.5 6.5l5 5"],
+  "draw-perspective": ["M3 20L12 4l9 16z", "M7.5 12h9", "M12 4v16"],
+  "draw-pf-crop": ["M10 10h4v4h-4z", "M4 4h10v6M4 4v10h6"],
+  "draw-pf-divide": ["M4 4h10v10H4z", "M10 10h10v10H10z"],
+  "draw-pf-exclude": ["M4 4h10v6h-4v4H4z", "M14 10h6v10H10v-6h4z"],
+  "draw-pf-intersect": ["M10 10h4v4h-4z", "M4 4h10v6", "M4 4v10h6", "M14 14v6h6V10h-6"],
+  "draw-pf-merge": ["M4 4h10v6h6v10H10v-6H4z", "M10 14v-4h4"],
+  "draw-pf-minus": ["M4 4h10v6h-4v4H4z"],
+  "draw-pf-minus-back": ["M10 10h10v10H10z", "M14 10V4H4v10h6"],
+  "draw-pf-outline": ["M4 4h10M4 4v10h6M10 10h10v10H10z"],
+  "draw-pf-trim": ["M4 4h10v6h-4v4H4z", "M10 10h10v10H10z"],
+  "draw-pf-unite": ["M4 4h10v6h6v10H10v-6H4z"],
+  "draw-point-corner": ["M4 18L12 7l8 11", "M10.5 5.5h3v3h-3z"],
+  "draw-point-cut": ["M4 18c1.5-5 3.5-8 6-8.6", "M14 9.4c2.5.6 4.5 3.6 6 8.6", "M10 4l4 4", "M14 4l-4 4"],
+  "draw-point-delete": ["M4 18c1.5-6 4.5-9 8-9s6.5 3 8 9", "M9 4.5h6"],
+  "draw-point-join": ["M4 18l6.5-9", "M20 18l-6.5-9", "M10.5 6h3v3h-3z"],
+  "draw-point-smooth": ["M4 18c1.5-6 4.5-9 8-9s6.5 3 8 9", "M10.5 7.5h3v3h-3z", "M6 9h12"],
+  "draw-polygon": ["M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"],
+  "draw-rounded-rect": ["M7 6h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3z"],
+  "draw-scale": ["M4 20V10h10v10z", "M10 7V4h10v10h-3", "M14 10l6-6", "M16 4h4v4"],
+  "draw-scissors": ["M3.5 6a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M8 7.5L20 18", "M8 16.5L20 6"],
+  "draw-shape-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 15a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M19 3v4", "M17 5h4"],
+  "draw-slice": ["M4 4h16v16H4z", "M4 12h16", "M12 4v16"],
+  "draw-spiral": ["M12 12a1.5 1.5 0 0 1 3 0 3 3 0 0 1-6 0 4.5 4.5 0 0 1 9 0 6 6 0 0 1-12 0 7.5 7.5 0 0 1 15 0"],
+  "draw-star": ["M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"],
+  "draw-symbol-spray": ["M6 10h6v10H6z", "M8 10V6h2v4", "M15 6h.01", "M18 4h.01", "M18 8h.01", "M21 6h.01"],
+  "draw-type": ["M5 6V4h14v2", "M12 4v16", "M9 20h6"],
+  "draw-width-tool": ["M3 12c4-6 14-6 18 0", "M3 12c4 6 14 6 18 0", "M12 7v10"],
+};
+
 export const DRAW_ICONS: Readonly<Record<string, readonly string[]>> = {
   ...STATE,
   ...PROPERTIES,
@@ -178,6 +233,7 @@ export const DRAW_ICONS: Readonly<Record<string, readonly string[]>> = {
   ...SUGGESTIONS,
   ...CHROME,
   ...WORKSPACE,
+  ...COLUMN,
 };
 
 /// Registra le figure che mancano. Si chiama a ogni montaggio: costa un giro
