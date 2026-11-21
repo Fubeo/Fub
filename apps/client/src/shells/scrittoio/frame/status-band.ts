@@ -313,6 +313,9 @@ export function mountStatusBand(lifetime: Lifetime): void {
   // registra quando si monta (il documento, `rc-mode-page`).
   function onStatus(): void {
     drawModeItem();
+    // Lo spazio di lavoro arriva con la superficie: se la superficie si monta
+    // dopo l'ultimo giro della banda, il bottone si accende qui.
+    drawWorkspaceItem();
     drawSurface();
   }
   function drawSurface(): void {
