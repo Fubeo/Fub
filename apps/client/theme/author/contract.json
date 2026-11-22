@@ -1775,6 +1775,12 @@
     "draw-drawer-keys",
     "draw-drawer-empty",
     "draw-drawer-edit",
+    "draw-zoom-popover",
+    "draw-zoom-body",
+    "draw-zoom-menu",
+    "draw-zoom-item",
+    "draw-zoom-separator",
+    "draw-zoom-field",
     "pdf-notice-messages",
     "pdf-pages",
     "pdf-page-input",
@@ -4237,6 +4243,12 @@
     "draw-drawer-keys": "cornice",
     "draw-drawer-empty": "cornice",
     "draw-drawer-edit": "cornice",
+    "draw-zoom-popover": "cornice",
+    "draw-zoom-body": "cornice",
+    "draw-zoom-menu": "cornice",
+    "draw-zoom-item": "cornice",
+    "draw-zoom-separator": "cornice",
+    "draw-zoom-field": "cornice",
     "pdf-notice-messages": "cornice",
     "pdf-pages": "cornice",
     "pdf-page-input": "cornice",
@@ -9132,6 +9144,26 @@
       ]
     },
     {
+      "name": "draw-zoom-menu",
+      "part": "draw",
+      "hooks": [
+        "draw-zoom-popover",
+        "draw-zoom-body",
+        "draw-zoom-menu",
+        "draw-zoom-item",
+        "draw-zoom-separator",
+        "draw-zoom-field"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
       "name": "pdf-surface",
       "part": "draw",
       "hooks": [
@@ -12732,10 +12764,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2460,
+    "hooks": 2466,
     "state_names": 7,
-    "assigned_states": 1099,
-    "components": 324,
+    "assigned_states": 1105,
+    "components": 325,
     "preference_tokens": 196
   }
 }

@@ -19556,6 +19556,52 @@ button.draw-isolation-crumb:hover {
   overflow-wrap: anywhere;
 }
 
+/* ── K6 · Il menu dello zoom della banda (T11) ───────────────────────────── */
+/* Un popover del kit con le voci del menu di contesto, e sotto il campo della
+   percentuale. Le voci hanno la faccia delle voci del menu: il fondo al passaggio
+   e l'anello del fuoco. */
+.kit-popover.draw-zoom-popover {
+  min-width: 220px;
+}
+.draw-zoom-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.draw-zoom-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.draw-zoom-item {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.draw-zoom-item:hover {
+  background: var(--bg-hover);
+}
+.draw-zoom-item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.draw-zoom-separator {
+  height: 1px;
+  margin: 0 var(--space-3);
+  background: var(--border);
+}
+.draw-zoom-field {
+  padding: 0 var(--space-3) var(--space-1);
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */
