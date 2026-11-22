@@ -412,6 +412,7 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                 nascosto: e.hidden,
                 nodo: None,
                 motivo,
+                testo: (e.tag == "text").then(|| info_testo(testo, e)),
             });
         }
         visti.insert(
@@ -424,6 +425,34 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
         );
     }
     fuori
+}
+
+/// Le righe di un `<text>` e gli attributi dei suoi `<tspan>`.
+fn info_testo(testo: &str, e: &fub_scene::ElementItem) -> crate::mappa::InfoTesto {
+    let righe = e.lines.clone().unwrap_or_default();
+    let corpo = testo.get(e.span.bytes[0]..e.span.bytes[1]).unwrap_or("");
+    let mut attributi_delle_righe = std::collections::BTreeSet::new();
+    let mut tspan = 0usize;
+    let mut da = 0;
+    while let Some(i) = corpo[da..].find("<tspan") {
+        let inizio = da + i;
+        da = inizio + "<tspan".len();
+        if !corpo[da..].starts_with(|c: char| c.is_ascii_whitespace() || c == '>' || c == '/') {
+            continue;
+        }
+        tspan += 1;
+        for a in attributi(corpo, inizio).map(|(_, a)| a).unwrap_or_default() {
+            if !matches!(a.nome.as_str(), "x" | "dy" | "fub:join") {
+                attributi_delle_righe.insert(a.nome);
+            }
+        }
+    }
+    crate::mappa::InfoTesto {
+        di_punto: e.wrap.is_none() && e.text_path.is_none() && e.along.is_none(),
+        pezzi: tspan > righe.len(),
+        righe,
+        attributi_delle_righe,
+    }
 }
 
 /// La copia per l'import: id sintetici, etichette tolte, livelli marcati.

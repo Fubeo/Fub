@@ -110,6 +110,18 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         None
     }
 
+    /// Gli oggetti scelti su cui il comando `id` gira uno alla volta, ognuno
+    /// da solo nella selezione del motore, quando il motore lo vuole su un
+    /// oggetto solo (`text.setRangeStyle` chiede un testo): `None` di serie,
+    /// e il comando gira una volta sola su tutta la selezione. Una lista vuota
+    /// è `empty`: niente di ciò che è scelto lo prende.
+    fn uno_alla_volta(_id: &str, _copia: &Copia, _selezione: &[String]) -> Option<Vec<NodeId>>
+    where
+        Self: Sized,
+    {
+        None
+    }
+
     /// Il livello dove il comando `id` mette ciò che crea, quando la richiesta
     /// non ne dà uno (un comando non porta il livello, lo strumento sì). Di
     /// serie `None`: il motore lascia lo stato del documento com'è.
@@ -194,6 +206,20 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto(id, copia, selezione)
+                    })*
+                }
+            }
+
+            /// Gli oggetti su cui il comando `id` gira uno alla volta, se la famiglia lo vuole.
+            fn uno_alla_volta(
+                self,
+                id: &str,
+                copia: &Copia,
+                selezione: &[String],
+            ) -> Option<Vec<NodeId>> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::uno_alla_volta(id, copia, selezione)
                     })*
                 }
             }
@@ -929,6 +955,13 @@ pub(crate) fn esegui(
     } else {
         Default::default()
     };
+    // Un comando che il motore vuole su un oggetto solo gira una volta per
+    // oggetto, nella stessa copia: la differenza li scrive in un passo.
+    let giri: Vec<Vec<NodeId>> = match famiglia.uno_alla_volta(&riga.id, copia, &richiesta.selection) {
+        Some(uno) if uno.is_empty() => return Ok(rifiuta(DrawingRefusal::Empty)),
+        Some(uno) => uno.into_iter().map(|n| vec![n]).collect(),
+        None => vec![scelti.clone()],
+    };
     let argomenti = nata.stato().adatta(&riga.id, valore)?;
     // Un gesto lasciato a metà non entra nel comando.
     if banco.in_corso.is_some() {
@@ -939,20 +972,35 @@ pub(crate) fn esegui(
         // Il comando cambia anche lo stile delle forme nuove: quello della
         // sessione resta com'era.
         let stile = sessione.paint.clone();
-        let fatto = sessione.doc_mut().map(|stato| {
-            stato.selection = Selection::default();
-            scelti.iter().for_each(|n| stato.selection.add(*n));
-            if let Some(livello) = livello {
-                stato.active_layer = Some(livello);
+        let mut fatto = Ok(Value::Null);
+        for giro in &giri {
+            fatto = sessione
+                .doc_mut()
+                .map(|stato| {
+                    stato.selection = Selection::default();
+                    giro.iter().for_each(|n| stato.selection.add(*n));
+                    if let Some(livello) = livello {
+                        stato.active_layer = Some(livello);
+                    }
+                    for (n, set) in &punti {
+                        if !stato.selection.objects.contains(n) {
+                            stato.selection.add(*n);
+                        }
+                        stato.selection.anchors.insert(*n, set.clone());
+                    }
+                })
+                .and_then(|()| sessione.execute(&riga.id, &argomenti));
+            if fatto.is_err() {
+                break;
             }
-            for (n, set) in &punti {
-                if !stato.selection.objects.contains(n) {
-                    stato.selection.add(*n);
-                }
-                stato.selection.anchors.insert(*n, set.clone());
+        }
+        // Dopo più giri il motore lascia scelti tutti gli oggetti del comando.
+        if giri.len() > 1 && fatto.is_ok() {
+            if let Ok(stato) = sessione.doc_mut() {
+                stato.selection = Selection::default();
+                giri.iter().flatten().for_each(|n| stato.selection.add(*n));
             }
-        });
-        let fatto = fatto.and_then(|()| sessione.execute(&riga.id, &argomenti));
+        }
         sessione.paint = stile;
         fatto
     });

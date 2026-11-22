@@ -45,6 +45,25 @@ pub struct Elemento {
     pub nodo: Option<NodeId>,
     /// Perché non è mappato, quando si sa prima dell'import.
     pub motivo: Option<&'static str>,
+    /// Le righe di un `<text>` e come sono scritte; `None` per gli altri.
+    pub testo: Option<InfoTesto>,
+}
+
+/// Ciò che la differenza sa di un `<text>` del file per scriverne le parole
+/// e il carattere (K6 T16): le righe come sono scritte e che cosa dicono i
+/// `<tspan>` dentro.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InfoTesto {
+    /// Una riga per `<tspan>`, come l'operazione `text` le sostituisce.
+    pub righe: Vec<String>,
+    /// Un testo di punto: niente `fub:wrap`, niente tracciato, niente
+    /// etichetta di un connettore.
+    pub di_punto: bool,
+    /// Più `<tspan>` che righe: una riga ha pezzi con un aspetto loro.
+    pub pezzi: bool,
+    /// I nomi degli attributi dei `<tspan>` oltre a `x`, `dy` e `fub:join`:
+    /// un attributo del `<text>` non arriva dove una riga ne scrive uno suo.
+    pub attributi_delle_righe: std::collections::BTreeSet<String>,
 }
 
 impl Elemento {

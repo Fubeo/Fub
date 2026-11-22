@@ -1,3 +1,339 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia testo (piano K6, T16, giro 1): il testo di punto. Carattere (`text.setRangeStyle`: famiglia, stile, dimensione e spaziatura) e Paragrafo (`text.setStyle`: allineamento a sinistra, al centro e a destra) sui testi scelti, e lo strumento Testo, che crea un testo nuovo o cambia le righe di uno che c'è. Interlinea, crenatura e giustificato il file di Fub non li scrive ancora: il motore li cambierebbe, ma Fub rifiuta (`unsupported`) invece di perderli; un comando di Carattere senza testi scelti non cambia niente (`empty`), e con altri oggetti scelti cambia solo i testi. Scrivere dentro un testo che c'è lo provano i gesti del motore (`gesti_motore.rs`), con i caratteri. Carattere e Paragrafo sono sezioni del client: la loro prova è il test che le apre.",
+  "casi": [
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "size": 40
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-size": "40"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-size.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "font": "Noto Serif"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-family": "Noto Serif"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-font.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "argomenti": {
+        "tracking": 100
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot2t2t2t2",
+            "attrs": {
+              "letter-spacing": "2"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-tracking.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "style": "Bold"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "font-weight": "bold"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-style.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1",
+        "oa1a1a1a1",
+        "ot2t2t2t2"
+      ],
+      "argomenti": {
+        "size": 24
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ot1t1t1t1",
+                "attrs": {
+                  "font-size": "24"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ot2t2t2t2",
+                "attrs": {
+                  "font-size": "24"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "text-setRangeStyle-due.svg"
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "leading": 50
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "size": 24
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "text.setRangeStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "kerning": "optical"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "text.setStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "justify": "center"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "text-anchor": "middle"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setStyle-center.svg"
+    },
+    {
+      "id": "text.setStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot2t2t2t2"
+      ],
+      "argomenti": {
+        "justify": "right"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot2t2t2t2",
+            "attrs": {
+              "text-anchor": "end"
+            }
+          }
+        ]
+      },
+      "dopo": "text-setStyle-right.svg"
+    },
+    {
+      "id": "text.setStyle",
+      "disegno": "base.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "justify": "justifyAll"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "type",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 40,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 40,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ],
+          "inputs": []
+        },
+        {
+          "phase": "preview",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "text",
+              "text": "Città"
+            },
+            {
+              "kind": "key",
+              "key": "Enter",
+              "code": "Enter",
+              "pressed": true
+            },
+            {
+              "kind": "text",
+              "text": "al mare 🌧"
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "text",
+              "attrs": {
+                "x": "40",
+                "y": "260",
+                "fill": "#000000",
+                "font-family": "Source Sans 3",
+                "font-size": "12",
+                "id": "o0rpq5ny2"
+              },
+              "children": [
+                {
+                  "tag": "tspan",
+                  "attrs": {
+                    "x": "40",
+                    "dy": "0"
+                  },
+                  "text": "Città"
+                },
+                {
+                  "tag": "tspan",
+                  "attrs": {
+                    "x": "40",
+                    "dy": "14.4"
+                  },
+                  "text": "al mare 🌧"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dopo": "type-nuovo.svg"
+    },
+    {
+      "id": "character",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/testo.test.ts"
+    },
+    {
+      "id": "paragraph",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/testo.test.ts"
+    }
+  ]
 }
