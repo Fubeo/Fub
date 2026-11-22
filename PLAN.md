@@ -1732,7 +1732,8 @@ Fatto quando:
   le 30 note di CLAUDE_DEVICE.md);
 - `npm run theme:generate && npm run theme:verify` passano.
 Prova: scripts/check.sh --rapido; npx vitest run src/kit src/editors/spatial/motore; npm run bench:a11y
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-21, unito in b327aacc7: le finestre del kit con
+l'anteprima)
 Aspetta: niente
 
 ## T7 · Lo spazio di lavoro nella banda
@@ -2009,7 +2010,12 @@ Fatto quando:
 - le foto stanno accanto agli stati del prototipo, e `npm run bench:a11y`
   è verde.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial src/panels; npm run bench:a11y
-Stato: [ ] da fare
+Stato: [~] in corso. Fatti T9a (≡ e Ctrl+/, unito in cb9cc2c99) e T9b (le
+regole dei tasti, unito in 79bd8959a); il giro che li unisce (un solo percorso,
+`eseguiVoce`, e il tasto che parte davvero nelle voci) è in 669863b5d. Manca
+T9c: `draw.keys`, Impostazioni › Scorciatoie, gli insiemi di tasti, il menu a
+tre livelli, l'etichetta della cronologia con gli argomenti, il motivo preciso
+del rifiuto
 Aspetta: niente
 
 ## T10 · L'ispettore
