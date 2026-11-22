@@ -150,6 +150,15 @@ fn canonicalizza(ops: &mut Value) {
                         nuovi.push(id.to_string());
                     }
                 }
+                // Un gruppo che il motore scrive come XML (`raw`) porta i suoi id
+                // nel testo: anche quelli sono id nuovi, e casuali a ogni prova.
+                if let Some(xml) = o.get("raw").and_then(Value::as_str) {
+                    for id in ids_xml(xml) {
+                        if !nuovi.iter().any(|n| *n == id) {
+                            nuovi.push(id);
+                        }
+                    }
+                }
                 o.values().for_each(|x| raccogli(x, nuovi));
             }
             _ => {}
@@ -166,6 +175,21 @@ fn canonicalizza(ops: &mut Value) {
             Value::String(s) => {
                 if let Some(n) = mappa.get(s.as_str()) {
                     *s = n.clone();
+                } else if s.contains('<') {
+                    // XML: l'attributo `id="…"`, il riferimento `url(#…)` o
+                    // `href="#…"`, e `for="…"` della ricetta (il metadato che dice
+                    // a quale elemento appartiene).
+                    *s = senza_sigillo(s);
+                    for (vecchio, nuovo) in mappa {
+                        *s = s
+                            .replace(&format!("id=\"{vecchio}\""), &format!("id=\"{nuovo}\""))
+                            .replace(&format!("for=\"{vecchio}\""), &format!("for=\"{nuovo}\""))
+                            .replace(&format!("url(#{vecchio})"), &format!("url(#{nuovo})"))
+                            .replace(
+                                &format!("href=\"#{vecchio}\""),
+                                &format!("href=\"#{nuovo}\""),
+                            );
+                    }
                 }
             }
             Value::Array(a) => a.iter_mut().for_each(|x| rinomina(x, mappa)),
@@ -174,6 +198,47 @@ fn canonicalizza(ops: &mut Value) {
         }
     }
     rinomina(ops, &mappa);
+}
+
+/// Il sigillo di una ricetta (`hash="…"`) cambia da una prova all'altra con
+/// l'id dell'elemento, che è casuale: il confronto lo tiene come `@hash`. Che il
+/// sigillo sia quello giusto lo prova `tests/ricetta.rs`, non questo confronto.
+fn senza_sigillo(xml: &str) -> String {
+    let mut out = String::new();
+    let mut resto = xml;
+    while let Some(i) = resto.find(" hash=\"") {
+        let (prima, dopo) = resto.split_at(i + " hash=\"".len());
+        out.push_str(prima);
+        match dopo.find('"') {
+            Some(j) => {
+                out.push_str("@hash");
+                resto = &dopo[j..];
+            }
+            None => {
+                out.push_str(dopo);
+                return out;
+            }
+        }
+    }
+    out.push_str(resto);
+    out
+}
+
+/// Gli id dell'XML di un gruppo `raw`: i valori di `id="…"`, nell'ordine in cui
+/// compaiono.
+fn ids_xml(xml: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut resto = xml;
+    while let Some(i) = resto.find("id=\"") {
+        resto = &resto[i + 4..];
+        if let Some(j) = resto.find('"') {
+            out.push(resto[..j].to_string());
+            resto = &resto[j + 1..];
+        } else {
+            break;
+        }
+    }
+    out
 }
 
 /// Il confronto di una lettura parziale (`lettura_parziale` di un caso): ogni
