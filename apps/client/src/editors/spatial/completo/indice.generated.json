@@ -587,7 +587,7 @@
         "it": "Sposta…",
         "en": "Move…"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/trasforma",
       "famiglia": "trasforma",
       "tasto": "Cmd+Shift+M",
       "effetto": "cambia",
@@ -603,7 +603,7 @@
         "it": "Rifletti…",
         "en": "Reflect…"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/trasforma",
       "famiglia": "trasforma",
       "tasto": null,
       "effetto": "cambia",
@@ -619,7 +619,7 @@
         "it": "Reimposta riquadro di delimitazione",
         "en": "Reset Bounding Box"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/trasforma",
       "famiglia": "trasforma",
       "tasto": null,
       "effetto": "cambia",
@@ -635,7 +635,7 @@
         "it": "Ruota…",
         "en": "Rotate…"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/trasforma",
       "famiglia": "trasforma",
       "tasto": null,
       "effetto": "cambia",
@@ -651,7 +651,7 @@
         "it": "Scala…",
         "en": "Scale…"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/trasforma",
       "famiglia": "trasforma",
       "tasto": null,
       "effetto": "cambia",
@@ -699,7 +699,7 @@
         "it": "Inclina…",
         "en": "Shear…"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/trasforma",
       "famiglia": "trasforma",
       "tasto": null,
       "effetto": "cambia",
@@ -747,7 +747,7 @@
         "it": "Ripeti trasformazione",
         "en": "Transform Again"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/trasforma",
       "famiglia": "trasforma",
       "tasto": "Cmd+D",
       "effetto": "cambia",
