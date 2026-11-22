@@ -190,9 +190,11 @@ fn esempio(c: Costrutto, n: &mut Node) -> Option<()> {
                 serde_json::json!({ "points": [[0.0, 1.0, 1.0], [1.0, 3.0, 3.0]] })
             ))
         }
+        // Una lineare o una radiale semplice è una sfumatura privata della scena (`crate::sfumature`, i
+        // casi `paint.editGradient` di `tests/famiglie/colore.json`); con la retinatura va con la ricetta.
         Sfumatura => {
             riempimento(n).paint = da_json!(serde_json::json!({ "type": "gradient",
-            "gradient": { "kind": "Linear", "stops": [
+            "gradient": { "kind": "Linear", "dither": true, "stops": [
                 { "offset": 0.0, "color": { "model": "rgb", "r": 1.0, "g": 0.0, "b": 0.0 } },
                 { "offset": 1.0, "color": { "model": "rgb", "r": 0.0, "g": 0.0, "b": 1.0 } }
             ] } }))

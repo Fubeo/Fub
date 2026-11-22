@@ -27,6 +27,9 @@ const TRASPARENZA: &str = "transparency.set";
 /// Il contorno: spessore, estremi, angoli, tratteggio.
 pub(crate) const CONTORNO: &str = "stroke.set";
 
+/// Il punto scelto della sfumatura del riempimento o del contorno davanti.
+const PUNTO_DELLA_SFUMATURA: &str = "gradient.selectStop";
+
 /// Il limite dell'angolo di SVG (4), quello che il motore legge da un file senza `stroke-miterlimit`:
 /// la scena non scrive l'attributo, quindi non se ne chiede un altro.
 const LIMITE_DELL_ANGOLO: f64 = 4.0;
@@ -45,6 +48,12 @@ impl StatoFamiglia for Stato {
 
     fn libera(&self) -> u64 {
         0
+    }
+
+    /// Scegliere un punto della sfumatura cambia solo la sessione del motore (il punto su cui agiscono
+    /// i tasti e il pannello): una lettura, `{index}`.
+    fn legge(&self, id: &str) -> bool {
+        id == PUNTO_DELLA_SFUMATURA
     }
 
     /// Lo spessore e le lunghezze del tratteggio sono numeri finiti non negativi; un tratteggio vuoto,
@@ -163,7 +172,7 @@ impl StatoFamiglia for Stato {
 }
 
 /// L'oggetto del motore `n` è un testo.
-fn testo(copia: &Copia, n: NodeId) -> bool {
+pub(super) fn testo(copia: &Copia, n: NodeId) -> bool {
     copia
         .documento
         .node(n)

@@ -64,6 +64,11 @@ use crate::campioni::{self, NonSiScrive, Riferimenti};
 use crate::id::{self, Specie};
 use crate::mappa::{Elemento, Posti};
 use crate::ricetta::{self, Esito};
+use crate::sfumature;
+
+/// Gli attributi di una foglia da scrivere, e le sfumature nuove che le servono, ognuna col canale
+/// (`fill` o `stroke`) che la usa.
+type AttributiDellaFoglia = (Map<String, Value>, Vec<(&'static str, sfumature::Scritta)>);
 
 #[path = "differenza_testo.rs"]
 mod testo;
@@ -183,6 +188,7 @@ pub(crate) fn differenza(
         liberati: HashSet::new(),
         assorbiti: HashSet::new(),
         riferimenti: Riferimenti::default(),
+        sfumature: Vec::new(),
     };
     // I campioni per primi: gli id dei campioni nuovi servono a chi li usa.
     let dei_campioni = {
@@ -228,6 +234,7 @@ pub(crate) fn differenza(
         set,
         ids,
         ricette: scritte,
+        sfumature,
         ..
     } = lavoro;
     // Il blocco delle ricette cambia solo con un gesto che scrive.
@@ -262,10 +269,15 @@ pub(crate) fn differenza(
     // I campioni nuovi o cambiati prima di chi li usa, quelli tolti per
     // ultimi, quando nessuno li usa più. Sono risorse, non oggetti del
     // disegno: il controllo delle parti non mappate non li guarda.
-    let mut ops = if dei_campioni.davanti.is_empty() {
+    // Le sfumature private nuove, dopo i campioni (che possono aver fatto la
+    // `fub-defs`) e prima di chi le usa; le vecchie le toglie la scena con
+    // il loro ultimo riferimento.
+    let sfumature = ops_delle_sfumature(copia, &dei_campioni.davanti, sfumature);
+    let mut ops = if dei_campioni.davanti.is_empty() && sfumature.is_empty() {
         ops
     } else {
         let mut tutte = dei_campioni.davanti;
+        tutte.extend(sfumature);
         tutte.extend(ops);
         tutte
     };
@@ -317,6 +329,33 @@ fn salvati_prima(
     Ok((salvati, altri))
 }
 
+/// Gli `add` delle sfumature private nuove `elems`: nella `fub-defs` del
+/// file o in quella che i campioni del gesto fanno (`campioni`), se no in
+/// una nuova in testa alla radice, come la fanno i campioni.
+fn ops_delle_sfumature(copia: &Copia, campioni: &[Value], elems: Vec<Value>) -> Vec<Value> {
+    if elems.is_empty() {
+        return Vec::new();
+    }
+    let fatta_dai_campioni = campioni.iter().any(|op| {
+        op["elem"]["tag"] == "defs" && op["elem"]["attrs"]["id"] == campioni::DEFS_DI_FUB
+    });
+    let defs = copia
+        .campioni
+        .defs
+        .clone()
+        .or_else(|| fatta_dai_campioni.then(|| campioni::DEFS_DI_FUB.to_string()));
+    match defs {
+        Some(defs) => elems
+            .into_iter()
+            .map(|elem| json!({ "op": "add", "parent": defs, "pos": { "last": true }, "elem": elem }))
+            .collect(),
+        None => vec![json!({
+            "op": "add", "parent": "#root", "pos": { "first": true },
+            "elem": { "tag": "defs", "attrs": { "id": campioni::DEFS_DI_FUB }, "children": elems },
+        })],
+    }
+}
+
 struct Lavoro<'a> {
     copia: &'a Copia,
     scrittore: Option<Scrittore<'a>>,
@@ -349,6 +388,9 @@ struct Lavoro<'a> {
     assorbiti: HashSet<NodeId>,
     /// Come si scrive un colore legato a un campione.
     riferimenti: Riferimenti,
+    /// Le sfumature private nuove del gesto, da aggiungere alla `fub-defs`
+    /// prima di chi le usa ([`crate::sfumature`]).
+    sfumature: Vec<Value>,
 }
 
 impl Lavoro<'_> {
@@ -966,13 +1008,15 @@ impl Lavoro<'_> {
                     self.ids.clone(),
                     self.dati.clone(),
                     self.riscritti.clone(),
+                    self.sfumature.len(),
                 );
                 match self.confronta_comune(b, a, prima, radice, livello) {
                     Ok(()) => return Ok(()),
                     Err(_) => {
-                        let (ident, set, ids, dati, riscritti) = prima_del_tentativo;
+                        let (ident, set, ids, dati, riscritti, sfumature) = prima_del_tentativo;
                         self.ident.truncate(ident);
                         self.set.truncate(set);
+                        self.sfumature.truncate(sfumature);
                         self.ids = ids;
                         self.dati = dati;
                         self.riscritti = riscritti;
@@ -1020,7 +1064,7 @@ impl Lavoro<'_> {
                 .filter(|e| e.tag == "path" && stessi)
                 .cloned()
             {
-                let attrs = self.foglia(&e, b, a)?;
+                let attrs = self.foglia_scritta(&e, b, a)?;
                 if !attrs.is_empty() {
                     let id = self.bersaglio(a.id)?;
                     self.set
@@ -1088,7 +1132,7 @@ impl Lavoro<'_> {
             Some(cambio) => (Arc::new(cambio.prima), cambio.attrs, cambio.righe),
             None => (b.clone(), Map::new(), None),
         };
-        attrs.extend(self.foglia(&e, &b, a)?);
+        attrs.extend(self.foglia_scritta(&e, &b, a)?);
         if !attrs.is_empty() || righe.is_some() {
             let id = self.bersaglio(a.id)?;
             if !attrs.is_empty() {
@@ -1184,9 +1228,30 @@ impl Lavoro<'_> {
                 .is_some_and(|c| c.iter().any(|c| self.ha_estranei(c)))
     }
 
-    /// Gli attributi cambiati di un oggetto senza figli.
-    fn foglia(&self, e: &Elemento, b: &Node, a: &Node) -> Result<Map<String, Value>, Rifiuto> {
+    /// [`Lavoro::foglia`], con le sfumature nuove scritte: ognuna ha il suo
+    /// id, va fra le [`Lavoro::sfumature`] e chi la usa scrive
+    /// `url(#id) ripiego`.
+    fn foglia_scritta(
+        &mut self,
+        e: &Elemento,
+        b: &Node,
+        a: &Node,
+    ) -> Result<Map<String, Value>, Rifiuto> {
+        let (mut attrs, nuove) = self.foglia(e, b, a)?;
+        for (canale, s) in nuove {
+            let id = self.id_nuovo(Specie::Risorsa)?;
+            attrs.insert(canale.into(), json!(format!("url(#{id}) {}", s.ripiego)));
+            self.sfumature.push(s.elem(&id));
+        }
+        Ok(attrs)
+    }
+
+    /// Gli attributi cambiati di un oggetto senza figli, e le sfumature
+    /// nuove del riempimento (`fill`) o del contorno (`stroke`), ancora
+    /// senza id ([`Lavoro::foglia_scritta`]).
+    fn foglia(&self, e: &Elemento, b: &Node, a: &Node) -> Result<AttributiDellaFoglia, Rifiuto> {
         let mut attrs = Map::new();
+        let mut nuove = Vec::new();
         let g = e
             .ctm_genitore
             .ok_or_else(|| no("una transform di un antenato non si legge"))?;
@@ -1260,7 +1325,7 @@ impl Lavoro<'_> {
             )));
         };
         if aspetti_vicini(&candidato.appearance, &a.appearance) {
-            return Ok(attrs);
+            return Ok((attrs, nuove));
         }
         // Lo spessore che non segue la scala, i colori pieni.
         let (prima, dopo) = senza_colori_nuovi(&candidato.appearance, &a.appearance);
@@ -1269,17 +1334,53 @@ impl Lavoro<'_> {
                 "cambia l'aspetto in un modo che fill, stroke e stroke-width non dicono",
             ));
         }
+        // Una sfumatura si scrive nelle coordinate dell'elemento dopo il
+        // gesto; quella di prima, portata dal gesto, si confronta scritta
+        // allo stesso modo, così uno spostamento non la riscrive.
+        let locale = (g * t_nuova).inverse();
+        let sfumatura = |p: Option<&Paint>,
+                         limiti: Option<vectorcraft_geom::Rect>|
+         -> Result<Option<sfumature::Scritta>, Rifiuto> {
+            let Some(Paint::Gradient(gp)) = p else {
+                return Ok(None);
+            };
+            let limiti = limiti.ok_or_else(|| no("una sfumatura su un oggetto senza misura"))?;
+            sfumature::scritta(gp, limiti, locale)
+                .map(Some)
+                .ok_or_else(|| no("una sfumatura che la scena non dice"))
+        };
+        let (gb, ga) = (candidato.geometric_bounds(), a.geometric_bounds());
         let (fb, fa) = (
             candidato.appearance.fill().map(|f| &f.paint),
             a.appearance.fill().map(|f| &f.paint),
         );
-        if da_scrivere(fb, fa) {
-            attrs.insert("fill".into(), json!(scrivi_colore(r, fa)?));
+        let (sfb, sfa) = (sfumatura(fb, gb)?, sfumatura(fa, ga)?);
+        match sfa {
+            Some(s) if sfb.as_ref() != Some(&s) => nuove.push(("fill", s)),
+            Some(_) => {}
+            None if da_scrivere(fb, fa) => {
+                attrs.insert("fill".into(), json!(scrivi_colore(r, fa)?));
+            }
+            None => {}
         }
         let (sb, sa) = (candidato.appearance.stroke(), a.appearance.stroke());
         let (pb, pa) = (sb.map(|s| &s.paint), sa.map(|s| &s.paint));
-        if da_scrivere(pb, pa) {
-            attrs.insert("stroke".into(), json!(scrivi_colore(r, pa)?));
+        if sa.is_some_and(|s| {
+            matches!(s.paint, Paint::Gradient(_)) && !sfumature::del_tratto_scrivibile(s)
+        }) {
+            return Err(no("una sfumatura che segue il tratto"));
+        }
+        let (stb, sta) = (
+            sfumatura(pb, gb.zip(sb).map(|(g, s)| s.paint_bounds(g)))?,
+            sfumatura(pa, ga.zip(sa).map(|(g, s)| s.paint_bounds(g)))?,
+        );
+        match sta {
+            Some(s) if stb.as_ref() != Some(&s) => nuove.push(("stroke", s)),
+            Some(_) => {}
+            None if da_scrivere(pb, pa) => {
+                attrs.insert("stroke".into(), json!(scrivi_colore(r, pa)?));
+            }
+            None => {}
         }
         let (wb, wa) = (sb.map_or(0.0, |s| s.width), sa.map_or(0.0, |s| s.width));
         let scala = (g * t_nuova).determinant().abs().sqrt();
@@ -1293,7 +1394,7 @@ impl Lavoro<'_> {
             );
         }
         scrivi_stile_del_tratto(sb, sa, scala, &mut attrs)?;
-        Ok(attrs)
+        Ok((attrs, nuove))
     }
 }
 
@@ -1679,8 +1780,10 @@ fn senza_colori(a: &Appearance) -> Appearance {
 }
 
 /// I costrutti di `n` e del suo albero che gli attributi di una foglia non
-/// dicono: tutti tranne il tratteggio semplice (`stroke-dasharray`). Un
-/// tratteggio spostato o adattato agli angoli resta un costrutto della
+/// dicono: tutti tranne il tratteggio semplice (`stroke-dasharray`) e la
+/// sfumatura lineare o radiale che la scena scrive come risorsa privata
+/// ([`crate::sfumature`]). Un tratteggio spostato o adattato agli angoli, e
+/// una sfumatura libera o che segue il tratto, restano costrutti della
 /// ricetta.
 fn costrutti_non_detti(n: &Node) -> Vec<ricetta::Costrutto> {
     fn tratteggio_ricco(n: &Node) -> bool {
@@ -1689,11 +1792,31 @@ fn costrutti_non_detti(n: &Node) -> Vec<ricetta::Costrutto> {
                 s.dash.as_ref().is_some_and(|d| !tratteggio_semplice(d))
             }
             _ => false,
-        }) || n.children().into_iter().flatten().any(tratteggio_ricco)
+        }) || n
+            .children()
+            .into_iter()
+            .flatten()
+            .any(|c| tratteggio_ricco(c))
+    }
+    fn sfumatura_ricca(n: &Node) -> bool {
+        let ricca = |p: &Paint| matches!(p, Paint::Gradient(g) if !sfumature::scrivibile(g));
+        n.appearance.items.iter().any(|item| match item {
+            vectorcraft_doc::AppearanceItem::Fill(f) => ricca(&f.paint),
+            vectorcraft_doc::AppearanceItem::Stroke(s) => {
+                ricca(&s.paint) || !sfumature::del_tratto_scrivibile(s)
+            }
+        }) || n
+            .children()
+            .into_iter()
+            .flatten()
+            .any(|c| sfumatura_ricca(c))
     }
     let mut c = ricetta::costrutti_albero(n);
     if !tratteggio_ricco(n) {
         c.retain(|c| *c != ricetta::Costrutto::Tratteggio);
+    }
+    if !sfumatura_ricca(n) {
+        c.retain(|c| *c != ricetta::Costrutto::Sfumatura);
     }
     c
 }

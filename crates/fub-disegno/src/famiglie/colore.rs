@@ -42,6 +42,7 @@ use vectorcraft_doc::color::Paint;
 use serde_json::Value;
 use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
 
+use super::aspetto::testo;
 use super::tracciati::{inchiostro_toccato, sceglie_inchiostro};
 use super::{byte_delle_tabelle, libera_le_tabelle, nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
@@ -60,6 +61,10 @@ pub(crate) const SUL_COLORE_ATTIVO: [&str; 8] = [
     "paint.complement",
     "paint.lastColor",
 ];
+
+/// Le sfumature del riempimento o del contorno degli oggetti scelti (K6 T15,
+/// giro 5): i punti, il tipo e l'angolo, la geometria, l'ultima usata.
+pub(crate) const SFUMATURE: [&str; 3] = ["paint.editGradient", "paint.setGradientGeom", "paint.lastGradient"];
 
 /// Il comando che porta davanti il riempimento o il tratto: una lettura.
 pub(crate) const ALTERNA: &str = "paint.toggleActive";
@@ -98,7 +103,44 @@ const RIEMPIMENTI_DELLE_FUSIONI: usize = 3;
 
 /// Il comando cambia i colori degli oggetti scelti.
 fn sugli_scelti(id: &str) -> bool {
-    SUL_COLORE_ATTIVO.contains(&id) || MODIFICA_COLORI.contains(&id)
+    SUL_COLORE_ATTIVO.contains(&id) || MODIFICA_COLORI.contains(&id) || SFUMATURE.contains(&id)
+}
+
+/// Gli argomenti di una sfumatura chiedono ciò che la scena non scrive: una
+/// sfumatura libera, un altro modo di mescolare i colori, la retinatura, un
+/// punto medio che non sta a metà o legato a un campione, una sfumatura che
+/// segue il tratto, un elemento dell'aspetto che non è quello in cima.
+fn sfumatura_fuori_dalla_scena(valore: &Value) -> bool {
+    let c = |chiave: &str| valore.get(chiave).filter(|v| !v.is_null());
+    let punto_ricco = |p: &Value| {
+        p.get("midpoint").filter(|v| !v.is_null()).is_some_and(|v| v.as_f64() != Some(0.5))
+            || p.get("swatch").filter(|v| !v.is_null()).is_some()
+    };
+    c("kind").is_some_and(|v| v.as_str() == Some("freeform"))
+        || c("mode").is_some()
+        || c("method").is_some_and(|v| v.as_str() != Some("classic"))
+        || c("dither").is_some_and(|v| v.as_bool() != Some(false))
+        || c("strokeMode").is_some_and(|v| v.as_str() != Some("within"))
+        || c("item").is_some()
+        || c("index").is_some()
+        || c("target").is_some_and(|v| v.as_str() != Some("object"))
+        || c("stops").and_then(Value::as_array).is_some_and(|p| p.iter().any(punto_ricco))
+}
+
+/// Vero se un oggetto scelto dopo il comando ha una sfumatura che la scena
+/// non scrive come risorsa privata ([`crate::sfumature`]): l'ultima
+/// sfumatura usata può essere libera.
+fn sfumatura_ricca(dopo: &Document, scelti: &[NodeId]) -> bool {
+    fn ricca(n: &Node) -> bool {
+        let pittura = |p: &Paint| matches!(p, Paint::Gradient(g) if !crate::sfumature::scrivibile(g));
+        n.appearance.items.iter().any(|i| match i {
+            vectorcraft_doc::AppearanceItem::Fill(f) => pittura(&f.paint),
+            vectorcraft_doc::AppearanceItem::Stroke(s) => {
+                pittura(&s.paint) || (matches!(s.paint, Paint::Gradient(_)) && !crate::sfumature::del_tratto_scrivibile(s))
+            }
+        }) || n.children().into_iter().flatten().any(|c| ricca(c))
+    }
+    scelti.iter().filter_map(|n| dopo.node(*n)).any(ricca)
 }
 
 /// Lo stato della famiglia: le sue tabelle nel motore.
@@ -159,12 +201,17 @@ impl StatoFamiglia for Stato {
         if !copia.modificabile {
             return Some(DrawingDisabledReason::ReadOnly);
         }
-        match nodi_scelti(copia, selezione) {
-            Ok(_) => {}
+        let scelti = match nodi_scelti(copia, selezione) {
+            Ok(scelti) => scelti,
             Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
             Err(_) => return Some(DrawingDisabledReason::Unmapped),
+        };
+        if sceglie_inchiostro(copia, selezione) {
+            return Some(DrawingDisabledReason::FubInk);
         }
-        sceglie_inchiostro(copia, selezione).then_some(DrawingDisabledReason::FubInk)
+        // La scena non scrive la sfumatura dei caratteri.
+        (SFUMATURE.contains(&id) && scelti.iter().all(|n| testo(copia, *n)))
+            .then_some(DrawingDisabledReason::NeedsPath)
     }
 
     /// Un tratto dell'Inchiostro scelto è `unmapped`; una fusione con meno di
@@ -179,7 +226,37 @@ impl StatoFamiglia for Stato {
                 return Some(DrawingRefusal::Empty);
             }
         }
+        if SFUMATURE.contains(&id) {
+            let scelti = nodi_scelti(copia, selezione).ok()?;
+            return (!scelti.is_empty() && scelti.iter().all(|n| testo(copia, *n)))
+                .then_some(DrawingRefusal::Unsupported);
+        }
         None
+    }
+
+    /// Ciò che una sfumatura del motore sa fare e la scena non dice:
+    /// `unsupported` prima del motore.
+    fn rifiuto_valore(
+        id: &str,
+        _copia: &Copia,
+        _selezione: &[String],
+        valore: &Value,
+    ) -> Option<DrawingRefusal> {
+        (SFUMATURE.contains(&id) && sfumatura_fuori_dalla_scena(valore))
+            .then_some(DrawingRefusal::Unsupported)
+    }
+
+    /// In una selezione con testi e forme la sfumatura va alle forme, una
+    /// alla volta nella stessa copia: un passo solo.
+    fn uno_alla_volta(id: &str, copia: &Copia, selezione: &[String]) -> Option<Vec<NodeId>> {
+        if !SFUMATURE.contains(&id) {
+            return None;
+        }
+        let scelti = nodi_scelti(copia, selezione).ok()?;
+        if !scelti.iter().any(|n| testo(copia, *n)) {
+            return None;
+        }
+        Some(scelti.into_iter().filter(|n| !testo(copia, *n)).collect())
     }
 
     /// Un tratto dell'Inchiostro cambiato, anche se non era scelto (dentro un
@@ -188,8 +265,11 @@ impl StatoFamiglia for Stato {
         id: &str,
         copia: &Copia,
         dopo: &Document,
-        _scelti_dopo: &[NodeId],
+        scelti_dopo: &[NodeId],
     ) -> Option<DrawingRefusal> {
+        if SFUMATURE.contains(&id) && sfumatura_ricca(dopo, scelti_dopo) {
+            return Some(DrawingRefusal::Unsupported);
+        }
         if CAMPIONI.contains(&id) {
             return crate::campioni::tolto_a_un_bloccato(copia, dopo)
                 .then_some(DrawingRefusal::Locked);
