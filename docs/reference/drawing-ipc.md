@@ -186,12 +186,19 @@ leggono come prima.
   clic), `wants_text` che le scorciatoie a un tasto non partono, `composing`
   che un IME compone e tasti, scorciatoie e annulla aspettano. `cursor` è il
   nome del cursore del motore in `snake_case`: uno che il client non conosce
-  è la freccia. `options` sono le opzioni dello strumento.
+  è la freccia. `options` sono le opzioni dello strumento. `anchors` (può
+  mancare: nessuno) sono i punti di ancoraggio che il gesto ha scelto, al più
+  1000: l'elemento, il sottotracciato e il punto (da 0), `at` in coordinate di
+  scena ed `end` per l'estremo di un sottotracciato aperto. I comandi sui
+  punti (`path.convertAnchors`, `path.cutAtAnchors`, `path.join`,
+  `path.removeAnchors`) li riprendono nel `value` (`anchors`): il motore li
+  prende solo se ogni punto sta ancora in `at`, e se no risponde `stale`.
 - **La lettura** (`DrawingOutcome.reading`) è il JSON di un comando che legge
   e non cambia niente, per i pannelli; `null` per gli altri.
 - **Perché un comando è spento** (`DrawingCommandInfo.disabled_reason`,
   `null` se è acceso): `no_selection`, `needs_path`, `needs_text`,
-  `needs_group`, `needs_two`, `read_only`, `unmapped`, oppure
+  `needs_group`, `needs_two`, `needs_anchors` (servono punti scelti con la
+  selezione diretta), `read_only`, `unmapped`, oppure
   `{"other": {"text": "…"}}` col testo del motore. Il client lo dice coi suoi
   testi.
 - **L'anteprima di un comando** (`DrawingCommandRequest.preview: true`): il
