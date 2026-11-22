@@ -673,6 +673,135 @@
       "atteso": {
         "rifiuto": "empty"
       }
+    },
+    {
+      "id": "select.same.fontFamily",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontFamily",
+      "disegno": "testi.svg",
+      "selezione": [
+        "oe7e7e7e7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "select.same.fontFamilyStyle",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontFamilyStyleSize",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontSize",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot5e5e5e5",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.textFillColor",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.textStrokeColor",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot5e5e5e5"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot3c3c3c3",
+          "ot5e5e5e5"
+        ]
+      }
+    },
+    {
+      "id": "select.object.strayPoints",
+      "disegno": "tracciati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ps3c3c3c3"
+        ]
+      }
+    },
+    {
+      "id": "select.object.openPaths",
+      "disegno": "tracciati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "op1a1a1a1"
+        ]
+      }
     }
   ]
 }

@@ -86,10 +86,16 @@ export function comandiTrasformazioni(selection: readonly string[]): DrawingComm
 /// del banco non ne ha. «Tutto nella tavola» e «Oggetti di testo» valgono anche senza scelta.
 const PERCHE_ISTANZA: DrawingDisabledReason = { other: { text: "Non è un'istanza." } };
 
-export function comandiSelezione(selection: readonly string[]): DrawingCommandInfo[] {
+/// Le voci del giro 6 (K6 T15): il testo uguale vuole un testo fra le scelte, e le etichette del banco (`etichette`,
+/// i loro id) sono testi; i connettori del disegno sono tracciati aperti, e non ci sono punti isolati.
+const PERCHE_PUNTI_ISOLATI: DrawingDisabledReason = { other: { text: "Nel disegno non ci sono punti isolati." } };
+const TESTO_UGUALE = ["fontFamily", "fontFamilyStyle", "fontFamilyStyleSize", "fontSize", "textFillColor", "textStrokeColor"];
+
+export function comandiSelezione(selection: readonly string[], etichette: readonly string[] = []): DrawingCommandInfo[] {
   const acceso = (id: string): DrawingCommandInfo => ({ id, enabled: true, disabled_reason: null });
   const spento = (id: string, perche: DrawingDisabledReason): DrawingCommandInfo => ({ id, enabled: false, disabled_reason: perche });
   const senzaScelta = selection.length === 0;
+  const conTesto = selection.some((id) => etichette.includes(id));
   const uguale = ["fillColor", "strokeColor", "strokeWeight", "fillAndStroke", "opacity", "blendingMode", "appearance", "shapeType"];
   return [
     ...uguale.map((nome) => (senzaScelta ? spento(`disegno.select.same.${nome}`, "no_selection") : acceso(`disegno.select.same.${nome}`))),
@@ -101,5 +107,18 @@ export function comandiSelezione(selection: readonly string[]): DrawingCommandIn
       : acceso("disegno.select.object.allOnSameLayers"),
     acceso("disegno.select.object.textObjects"),
     acceso("disegno.select.allOnArtboard"),
+    // Il nucleo di Selezione (K6 T11): Tutto e Inversa valgono sempre, gli altri vogliono una scelta.
+    acceso("disegno.select.all"),
+    acceso("disegno.select.inverse"),
+    senzaScelta ? spento("disegno.select.none", "no_selection") : acceso("disegno.select.none"),
+    senzaScelta ? spento("disegno.select.nextAbove", "no_selection") : acceso("disegno.select.nextAbove"),
+    senzaScelta ? spento("disegno.select.nextBelow", "no_selection") : acceso("disegno.select.nextBelow"),
+    ...TESTO_UGUALE.map((nome) => {
+      const id = `disegno.select.same.${nome}`;
+      if (senzaScelta) return spento(id, "no_selection");
+      return conTesto ? acceso(id) : spento(id, "needs_text");
+    }),
+    acceso("disegno.select.object.openPaths"),
+    spento("disegno.select.object.strayPoints", PERCHE_PUNTI_ISOLATI),
   ];
 }

@@ -1,7 +1,8 @@
-//! La famiglia `livelli` della mappa: le voci di ≡ › Selezione (K6 T15, giro 1) e i comandi di livello
-//! della scheda Livelli del Completo (giro 3): nuovo livello, elimina, rinomina e colore, occhio,
-//! lucchetto, livello corrente e spostamento. «Maschere di ritaglio» (K6 T12) sceglie le maschere, i
-//! `<g clip-path>` del file. Selezionare non cambia il documento: quelle voci non
+//! La famiglia `livelli` della mappa: le voci di ≡ › Selezione (K6 T15, giro 1; il testo uguale e i
+//! punti per specie, giro 6) e i comandi di livello della scheda Livelli del Completo (giro 3):
+//! nuovo livello, elimina, rinomina e colore, occhio, lucchetto, livello corrente e spostamento.
+//! «Maschere di ritaglio» (K6 T12) sceglie le maschere, i `<g clip-path>` del file.
+//! Selezionare non cambia il documento: quelle voci non
 //! scrivono niente, e il motore dice che cosa seleziona. Un livello si nomina nei suoi argomenti col suo
 //! numero del motore, come il motore vuole (`ids`, `id`, `parent`): la scheda lo legge da
 //! `document.inspect`. Un livello bloccato si sblocca e si nasconde, ma non si rinomina né si colora.
@@ -15,7 +16,7 @@ use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use serde_json::Value;
-use vectorcraft_doc::NodeId;
+use vectorcraft_doc::{Node, NodeId, NodeKind};
 
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
@@ -39,8 +40,9 @@ impl StatoFamiglia for Stato {
 
     /// Le voci spente col loro perché, prima di chiedere al motore. Il confronto con l'oggetto scelto
     /// (Uguale) e «Tutto sugli stessi livelli» vogliono qualcosa di scelto, e con un oggetto che la mappa
-    /// non ha non si usano, come nel nucleo; l'istanza di simbolo vuole un'istanza scelta; «Tutti gli
-    /// oggetti di testo» vuole un testo nel disegno. I comandi di livello cambiano il documento: sul
+    /// non ha non si usano, come nel nucleo; l'istanza di simbolo vuole un'istanza scelta; il confronto del
+    /// testo vuole un testo scelto (o dentro la scelta); «Tutti gli oggetti di testo», i punti isolati e i
+    /// tracciati aperti vogliono quella specie nel disegno. I comandi di livello cambiano il documento: sul
     /// disegno di sola lettura non si fanno. Il livello scelto sta negli argomenti (`rifiuto_valore`).
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
         if vuole_selezione(id) && selezione.is_empty() {
@@ -58,6 +60,9 @@ impl StatoFamiglia for Stato {
                 Err(DrawingRefusal::Locked) | Ok(_) => {}
                 Err(_) => return Some(DrawingDisabledReason::Unmapped),
             }
+        }
+        if vuole_testo(id) && !ha_testo(copia, selezione) {
+            return Some(DrawingDisabledReason::NeedsText);
         }
         match id {
             "select.same.symbolInstance" => {
@@ -83,8 +88,16 @@ impl StatoFamiglia for Stato {
                     text: "Nel disegno non ci sono oggetti di testo.".into(),
                 })
             }
+            "select.object.strayPoints" => senza_oggetti(copia, e_punto_isolato, "Nel disegno non ci sono punti isolati."),
+            "select.object.openPaths" => senza_oggetti(copia, e_tracciato_aperto, "Nel disegno non ci sono tracciati aperti."),
             _ => None,
         }
+    }
+
+    /// Il confronto del testo senza un testo fra gli oggetti scelti non parte: `empty`, come un comando
+    /// che non tocca niente. Il motore lo direbbe con un errore in inglese («select a text object»).
+    fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        (vuole_testo(id) && !ha_testo(copia, selezione)).then_some(DrawingRefusal::Empty)
     }
 
     /// Il nome di un livello, nuovo o rinominato, è quello che il formato tiene
@@ -179,6 +192,57 @@ fn cambia_il_livello(id: &str) -> bool {
 /// Il nuovo livello non vuole un livello scelto, ma cambia il documento.
 fn crea_livello(id: &str) -> bool {
     id == "layer.new"
+}
+
+/// Le voci di Uguale che confrontano il testo scelto: vogliono un testo fra gli oggetti scelti.
+fn vuole_testo(id: &str) -> bool {
+    matches!(
+        id,
+        "select.same.fontFamily"
+            | "select.same.fontFamilyStyle"
+            | "select.same.fontFamilyStyleSize"
+            | "select.same.fontSize"
+            | "select.same.textFillColor"
+            | "select.same.textStrokeColor"
+    )
+}
+
+/// C'è un testo fra gli oggetti scelti, o dentro uno di loro (un gruppo): il motore confronta con il primo
+/// testo che trova nella scelta. Un id che la mappa non ha non è un testo.
+fn ha_testo(copia: &Copia, selezione: &[String]) -> bool {
+    selezione.iter().any(|id| {
+        let nodo = copia
+            .mappa
+            .dell_id(id)
+            .and_then(|i| copia.mappa.elemento(i))
+            .and_then(|e| e.nodo)
+            .and_then(|n| copia.documento.node(n));
+        let mut testo = false;
+        if let Some(nodo) = nodo {
+            nodo.walk(&mut |c| testo |= matches!(c.kind, NodeKind::Text(_)));
+        }
+        testo
+    })
+}
+
+/// Il perché di una voce di ≡ › Selezione › Oggetto quando il disegno non ha la specie che cerca. Il motore
+/// sceglie per specie (`by_kind`) e la specie si legge dal suo documento, che la copia tiene. Il controllo
+/// guarda tutto il documento, anche gli oggetti nascosti o bloccati, come «Tutti gli oggetti di testo»: la
+/// voce resta accesa anche se il motore non ne sceglie nessuno.
+fn senza_oggetti(copia: &Copia, specie: fn(&Node) -> bool, perche: &str) -> Option<DrawingDisabledReason> {
+    let mut c_e = false;
+    copia.documento.walk(|n| c_e |= specie(n));
+    (!c_e).then(|| DrawingDisabledReason::Other { text: perche.into() })
+}
+
+/// Un punto isolato: un tracciato con un solo punto, come «Punti isolati».
+fn e_punto_isolato(n: &Node) -> bool {
+    n.path_data().is_some_and(|p| p.anchor_count() == 1)
+}
+
+/// Un tracciato aperto, come «Tracciati aperti»: un tracciato che non è chiuso (`!is_closed`).
+fn e_tracciato_aperto(n: &Node) -> bool {
+    n.path_data().is_some_and(|p| !p.is_closed())
 }
 
 /// Le chiavi di `layer.setProps` che un livello bloccato non prende.
