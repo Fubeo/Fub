@@ -194,6 +194,10 @@ describe("la sezione Disegno completo delle scorciatoie", () => {
     await importaFile(new Blob(["{rotto"]), { insieme: null, tasti: {} }, salva, new Set(["a", "b"]));
     expect(salva).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("Non è cambiato niente"), "guasto");
+    // E lo dice anche nella sezione, sotto l'insieme.
+    await vi.waitFor(() =>
+      expect(document.querySelector('.drawing-keys [role="alert"]')?.textContent).toContain("Non è cambiato niente"),
+    );
 
     const tastoSbagliato = JSON.stringify({ format: "vectorcraft-shortcuts", version: 1, overrides: { a: "Cmd+Shift+1" } });
     await importaFile(new Blob([tastoSbagliato]), { insieme: null, tasti: {} }, salva, new Set(["a"]));

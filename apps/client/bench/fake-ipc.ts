@@ -1823,6 +1823,33 @@ const DRAW_SAVED_WORKSPACES: readonly SettingEntry[] = [
   },
 ];
 
+/// I tasti del Disegno completo cambiati dall'utente (K6 T9c, `draw.keys`): solo
+/// con l'indice di prova (`?indice=prova`), che dà i comandi alla sezione
+/// «Disegno completo» di Impostazioni › Scorciatoie. Con `?tasti=conflitto`
+/// due tasti cambiati: «Inverti direzione tracciato» prende Ctrl+J di «Unisci»
+/// (vince l'ultimo assegnato) e «Separa» resta senza tasto.
+const DRAW_KEYS: readonly SettingEntry[] =
+  INDICE_PARAM !== "prova"
+    ? []
+    : [
+        {
+          spec: {
+            key: "draw.keys",
+            label: "Tasti del Disegno completo",
+            description: "",
+            group: "Disegni",
+            scope: "machine",
+            kind: { kind: "text", default: "" },
+            program_writable: false,
+          },
+          value:
+            params.get("tasti") === "conflitto"
+              ? JSON.stringify({ v: 1, insieme: null, tasti: { "draw.path.reverse": "Mod-j", "draw.ungroup": null } })
+              : "",
+          source: params.get("tasti") === "conflitto" ? "machine" : "default",
+        },
+      ];
+
 /// Il gruppo «App esterne» con le cinque impostazioni della feature `craft`,
 /// i testi del catalogo vero (`fub-host/src/settings.rs`). Solo con
 /// `?craft=1`, così le altre scene delle preferenze restano come sono.
@@ -2826,7 +2853,7 @@ const options: Options = {
     // Con `export.run` il riquadro di una nota ha «Esporta ▸»: HTML e PDF.
     ...(EXPORT_MENU ? [command("export.run", "Export documents", "Run a registered export target", null)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : [...DRAW_WORKSPACE, ...DRAW_SAVED_WORKSPACES]), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES, ...MAP_TILE_SETTING],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : [...DRAW_WORKSPACE, ...DRAW_SAVED_WORKSPACES]), ...DRAW_KEYS, ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES, ...MAP_TILE_SETTING],
   // Le tessere della mappa (`?base=mappa`): il finto le chiede solo dopo il
   // controllo della riga `map.tile-hosts`, come l'host.
   ...(TILES_PARAM === null ? {} : { mapTile: benchTile }),

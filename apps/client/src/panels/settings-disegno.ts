@@ -55,6 +55,16 @@ let modulo: Promise<ModuloCompleto> | null = null;
 let aperta = false;
 /// L'esito dell'ultimo import o export, finché non si fa altro.
 let esito: { readonly testo: string; readonly errore: boolean } | null = null;
+/// Chi ridisegna la scheda, per dire l'esito di un import o di un export che
+/// finisce dopo il clic (la finestra dei file, la lettura).
+let ridisegnaScheda: (() => void) | null = null;
+
+/// Dice l'esito sotto l'insieme e con una notifica, e ridisegna la scheda.
+function diciEsito(testo: string, errore: boolean): void {
+  esito = { testo, errore };
+  notify(testo, errore ? "guasto" : undefined);
+  ridisegnaScheda?.();
+}
 
 function caricaModulo(): Promise<ModuloCompleto> {
   if (modulo !== null) return modulo;
@@ -70,6 +80,7 @@ function caricaModulo(): Promise<ModuloCompleto> {
 export function dimenticaTastiDisegno(): void {
   aperta = false;
   esito = null;
+  ridisegnaScheda = null;
 }
 
 const testo = (className: string, contenuto: string): HTMLElement => {
@@ -109,6 +120,7 @@ export async function riempiTastiDisegno(corpo: HTMLElement, entry: SettingEntry
     dip.ridisegna();
   });
   if (!aperta) return 0;
+  ridisegnaScheda = dip.ridisegna;
 
   let completo: ModuloCompleto;
   let voci: readonly VoceIndice[];
@@ -309,10 +321,7 @@ export async function importaFile(
   } catch {
     // Senza i nomi, l'errore dice l'id del comando.
   }
-  const fallito = (reason: string) => {
-    esito = { testo: t("settings.drawing_keys.import_failed", { reason }), errore: true };
-    notify(esito.testo, "guasto");
-  };
+  const fallito = (reason: string) => diciEsito(t("settings.drawing_keys.import_failed", { reason }), true);
   let contenuto: string;
   try {
     if (file.size > tu.MISURA_MASSIMA_INSIEME) {
@@ -355,11 +364,9 @@ async function esportaFile(valore: TastiUtente): Promise<void> {
     const bytes = Array.from(new TextEncoder().encode(completo.tastiUtente.esportaInsieme(valore)));
     const fatto = await api.saveArtifact(t("settings.drawing_keys.file_name"), "application/json", bytes);
     if (fatto.status !== "saved") return;
-    esito = { testo: t("settings.drawing_keys.exported", { path: fatto.path }), errore: false };
-    notify(esito.testo);
+    diciEsito(t("settings.drawing_keys.exported", { path: fatto.path }), false);
   } catch (error) {
-    esito = { testo: t("settings.drawing_keys.export_failed", { reason: errorText(error) }), errore: true };
-    notify(esito.testo, "guasto");
+    diciEsito(t("settings.drawing_keys.export_failed", { reason: errorText(error) }), true);
   }
 }
 
