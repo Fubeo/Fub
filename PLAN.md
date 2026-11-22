@@ -2311,7 +2311,16 @@ Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx
 Stato: [~] in corso (2026-11-22). Giro 1 unito in 35f7352de: i ventuno
 strumenti di «disegnare» nella colonna, la Penna di Bézier dal motore e la
 fila dei punti (Converti, la posizione letta); `anchors` e `needs_anchors`
-aggiunti all'IPC. Mancano Oggetto › Tracciato e la sezione Tracciato.
+aggiunti all'IPC. Giro 2 unito in 4a3c71fff: quattordici voci di Oggetto ›
+Tracciato senza finestra (inverti, contorna, aggiungi punti, dividi sotto,
+composti, le `addon.pathtools.*` senza parametri) in quattro file; un
+composto si scrive come un solo `<path>` (regola `nonzero`; `evenodd`
+rifiutata: `fill-rule` non è della scena); il tracciato aperto della penna
+si chiude in un passo prima di un sync (`tieniAperto` della sessione). La
+ricetta di `corner_tool` resta (D10). Mancano: la sezione Tracciato in
+Design, le finestre (Semplifica, Leviga, Espandi, Sposta tracciato,
+`divideDashes`), un sottomenu «Tracciato composto», il perché vero delle
+voci spente con l'Inchiostro (oggi «Non ancora collegato»).
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
