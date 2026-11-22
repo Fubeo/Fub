@@ -38,7 +38,9 @@ import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 // Le sezioni del Design che il Completo registra (T10): in coda al pannello.
-import type { Sezioni } from "../completo/sezioni";
+import type { MisuraSelezione, MisureSelezione, Sezioni } from "../completo/sezioni";
+import { UNITS, type LengthUnit } from "../scene/rulers";
+import { fromUnit } from "./rulers";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import { createSezioniList, type SezioniList } from "./resources-panel";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
@@ -384,11 +386,33 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "view", label: "draw.properties.view_section" },
 ];
 
+/// Le sezioni che nel Completo non ci sono: la sezione Trasforma dà posizione e misure (K6 T13, giro 4).
+const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place"]);
+
+/// Le misure di «Posizione e misure» come le ha la vista del pannello (K6 T13, giro 4): il Trasforma del
+/// Completo le legge di qui, senza chiedere il motore. Il valore sta nell'unità del campo; `allaScena`
+/// lo riporta alle unità della scena, dove lavora il motore.
+function misureDellaVista(vista: PropertiesView): MisureSelezione {
+  const misura = (id: FieldId): MisuraSelezione | undefined => {
+    const campo = vista.fields[id];
+    if (campo?.kind !== "number") return undefined;
+    const unita = campo.unit;
+    const lunghezza = (UNITS as readonly string[]).includes(unita);
+    return {
+      valore: campo.value,
+      unita,
+      decimali: campo.places,
+      allaScena: (valore) => (lunghezza ? fromUnit(valore, unita as LengthUnit) : valore),
+    };
+  };
+  return { x: misura("x"), y: misura("y"), larghezza: misura("width"), altezza: misura("height"), rotazione: misura("rotation") };
+}
+
 /// I comandi di «Disponi», in tre barre: allineare, distribuire, ordinare.
 // Nel Completo il gruppo dei sei allineamenti non c'è: lo dà la sezione «Allinea», con «alla tavola» (K6 T13).
 const ACTION_ROWS: ReadonlyArray<{ readonly label: DrawKey; readonly actions: readonly ActionId[]; readonly nascostoNelCompleto?: true }> = [
   { label: "draw.properties.align", actions: ["align-left", "align-center", "align-right", "align-top", "align-middle", "align-bottom"], nascostoNelCompleto: true },
-  { label: "draw.properties.distribute", actions: ["distribute-x", "distribute-y"] },
+  { label: "draw.properties.distribute", actions: ["distribute-x", "distribute-y"], nascostoNelCompleto: true },
   { label: "draw.order", actions: ["order-front", "order-forward", "order-backward", "order-back"] },
 ];
 
@@ -1679,7 +1703,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       }
       for (const { bar, nascosto } of actionBars) bar.hidden = (nascosto && completoAperto) || [...bar.children].every((control) => (control as HTMLElement).hidden);
       if (next.exportSelection === true && options.onExportSelection !== undefined) shown.add("exportSelection");
-      for (const section of sections.values()) section.root.hidden = !shown.has(section.id);
+      for (const section of sections.values()) section.root.hidden = !shown.has(section.id) || (completoAperto && NASCOSTE_NEL_COMPLETO.has(section.id));
     } finally {
       rendering = false;
     }
@@ -1709,6 +1733,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     elenco: () => registro?.di("design") ?? [],
     selezione: () => ({ numero: scelti() }),
     motore: () => motoreCompleto,
+    misure: () => misureDellaVista(view),
   });
   life.add(() => {
     stopRegistro?.();

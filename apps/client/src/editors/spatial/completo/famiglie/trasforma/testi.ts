@@ -17,8 +17,8 @@ export const TESTI: Etichette = {
   "campo:axis": { it: "Asse", en: "Axis" },
   "scelta:axis:vertical": { it: "Verticale", en: "Vertical" },
   "scelta:axis:horizontal": { it: "Orizzontale", en: "Horizontal" },
-  "unita:dx": { it: "pt", en: "pt" },
-  "unita:dy": { it: "pt", en: "pt" },
+  "unita:dx": { it: "px", en: "px" },
+  "unita:dy": { it: "px", en: "px" },
   "unita:angle": { it: "°", en: "°" },
   "unita:sx": { it: "%", en: "%" },
 };

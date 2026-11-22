@@ -10,6 +10,7 @@ import type { MotoreDelDisegno } from "../motore/gesti";
 import type { SessioneMotore } from "../motore/sessione";
 import { t } from "../strings";
 import { apri } from "./index";
+import { sezioneTrasforma } from "./trasforma-sezione";
 import { indiceDi } from "./indice";
 import indiceGenerato from "./indice.generated.json";
 
@@ -104,5 +105,49 @@ describe("la sezione Trasforma del Design", () => {
     await vi.waitFor(() => expect(comando).toHaveBeenCalledTimes(1));
     expect(comando).toHaveBeenCalledWith(expect.objectContaining({ id: "disegno.object.resetBoundingBox", value: {} }));
     c.chiudi();
+  });
+});
+
+/// La sezione disegnata con le misure del pannello, e il comando spiato.
+function disegnaCon(misure: Record<string, unknown>, esegui = vi.fn()) {
+  const corpo = document.createElement("div");
+  sezioneTrasforma(esegui).disegna!({ corpo, sel: { numero: 1 }, motore: null, aggiorna: () => undefined, vita: openLifetime(), misure } as never);
+  return { corpo, esegui };
+}
+
+/// Il valore di un campo numerico, letto col separatore decimale di chi scrive.
+const numero = (input: HTMLInputElement): number => Number(input.value.replace(",", "."));
+
+/// Una misura del pannello nell'unità `unita`, con il passaggio alla scena dato.
+const misura = (valore: number | null, unita: string, allaScena = (v: number) => v) => ({ valore, unita, decimali: 2, allaScena });
+
+describe("la sezione Trasforma legge le misure del pannello (K6 T13, giro 4)", () => {
+  it("X, larghezza e rotazione mostrano il valore del pannello, nella sua unità; Y, senza misura, resta vuota", () => {
+    const { corpo } = disegnaCon({ x: misura(143.17, "px"), larghezza: misura(649.81, "px"), rotazione: misura(0, "°") });
+    expect(numero(campo(corpo, t("draw.trasforma.x")))).toBeCloseTo(143.17, 2);
+    expect(numero(campo(corpo, t("draw.trasforma.width")))).toBeCloseTo(649.81, 2);
+    expect(numero(campo(corpo, t("draw.trasforma.rotation")))).toBe(0);
+    expect(campo(corpo, t("draw.trasforma.y")).value).toBe("");
+    expect(campo(corpo, t("draw.trasforma.x")).closest(".kit-number")!.querySelector(".kit-number-unit")?.textContent).toBe("px");
+  });
+
+  it("una misura che la selezione non ha in un valore solo resta vuota", () => {
+    const { corpo } = disegnaCon({ x: misura(null, "px"), rotazione: misura(null, "°") });
+    expect(campo(corpo, t("draw.trasforma.x")).value).toBe("");
+    expect(campo(corpo, t("draw.trasforma.rotation")).value).toBe("");
+  });
+
+  it("un valore scritto nell'unità del pannello va alle unità della scena prima del comando", () => {
+    const { corpo, esegui } = disegnaCon({ x: misura(10, "mm", (v) => (v * 96) / 25.4) });
+    scrivi(campo(corpo, t("draw.trasforma.x")), "20");
+    expect(esegui).toHaveBeenCalledTimes(1);
+    const [id, valori] = esegui.mock.calls[0]!;
+    expect(id).toBe("object.setBounds");
+    expect((valori as { x: number }).x).toBeCloseTo((20 * 96) / 25.4, 6);
+  });
+
+  it("senza misure del pannello l'unità è il px, come nella scena", () => {
+    const { corpo } = disegnaCon({});
+    expect(campo(corpo, t("draw.trasforma.height")).closest(".kit-number")!.querySelector(".kit-number-unit")?.textContent).toBe("px");
   });
 });

@@ -744,23 +744,42 @@ describe("le scelte e i pulsanti", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
-  it("nel Completo il gruppo a icone dei sei allineamenti non c'è, e la distribuzione resta; il Semplice lo mostra", () => {
+  it("nel Completo non ci sono i gruppi a icone degli allineamenti e della distribuzione, né Posizione e misure; il Semplice li mostra", () => {
     state.actions = {
       "align-left": { label: "Allinea a sinistra" },
       "distribute-x": { label: "Distribuisci orizzontalmente" },
     };
     mount();
     const barraDi = (id: string): HTMLElement => action(id).closest<HTMLElement>(".draw-properties-bar")!;
-    // Il Semplice: il gruppo c'è.
+    // Il Semplice: il gruppo c'è, e anche Posizione e misure.
     expect(barraDi("align-left").hidden).toBe(false);
+    expect(panel.element.querySelector<HTMLElement>('[data-section="place"]')!.hidden).toBe(false);
     panel.collegaSezioni(creaSezioni(), null, () => 0);
     panel.update(view());
     expect(barraDi("align-left").hidden).toBe(true);
-    expect(barraDi("distribute-x").hidden).toBe(false);
+    expect(barraDi("distribute-x").hidden).toBe(true);
+    expect(panel.element.querySelector<HTMLElement>('[data-section="place"]')!.hidden).toBe(true);
     // Il Completo chiuso: il gruppo torna.
     panel.collegaSezioni(null, null, () => 0);
     panel.update(view());
     expect(barraDi("align-left").hidden).toBe(false);
+  });
+
+  it("una sezione del registro vede le misure della vista, e le rifà a ogni aggiornamento, senza il motore", async () => {
+    const sezioni = creaSezioni();
+    const visti: Array<number | null | undefined> = [];
+    sezioni.registra({ id: "misure", scheda: "design", titolo: "Misure", disegna: (contesto) => void visti.push(contesto.misure.x?.valore) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    state.x = 10;
+    mount();
+    panel.collegaSezioni(sezioni, null, () => 1);
+    panel.update(view());
+    await fotogramma();
+    expect(visti[visti.length - 1]).toBe(10);
+    state.x = 25;
+    panel.update(view());
+    await fotogramma();
+    expect(visti[visti.length - 1]).toBe(25);
   });
 
   it("i comandi partono; uno che adesso non si usa resta raggiungibile e dice perché", () => {

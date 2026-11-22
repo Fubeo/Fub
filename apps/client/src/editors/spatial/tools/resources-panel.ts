@@ -21,7 +21,7 @@ import { textButton } from "../../../kit";
 import { iconEl } from "../../../ui/icons";
 import { identifier } from "../../../ui/a11y";
 import { openLifetime, type Lifetime, type Teardown } from "../../../ui/lifetime";
-import type { ContestoSezione, Selezione, Sezione, Sezioni } from "../completo/sezioni";
+import type { ContestoSezione, MisureSelezione, Selezione, Sezione, Sezioni } from "../completo/sezioni";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { DocumentModel } from "../scene/model";
 import { t } from "../strings";
@@ -69,6 +69,8 @@ export interface OpzioniSezioniList {
   readonly selezione: () => Selezione;
   /// Il motore del disegno, per i comandi delle sezioni.
   readonly motore: () => MotoreDelDisegno | null;
+  /// Le misure della selezione per le sezioni (K6 T13, giro 4); senza, non ce ne sono.
+  readonly misure?: () => MisureSelezione;
 }
 
 /// Una sezione montata: il suo elemento, il giro che la disegna e ciò che
@@ -237,6 +239,7 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
       corpo: m.corpo,
       sel: opzioni.selezione(),
       motore: opzioni.motore(),
+      misure: opzioni.misure?.() ?? {},
       aggiorna: () => pianifica(),
       vita: giro,
     };
