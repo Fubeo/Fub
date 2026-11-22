@@ -475,7 +475,7 @@
         "it": "Selezione",
         "en": "Selection"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/nascondi",
       "famiglia": "nucleo",
       "tasto": "Cmd+3",
       "effetto": "cambia",
@@ -491,7 +491,7 @@
         "it": "Grafica non selezionata",
         "en": "Unselected Artwork"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/nascondi",
       "famiglia": "nucleo",
       "tasto": "Cmd+Alt+Shift+3",
       "effetto": "cambia",
@@ -507,7 +507,7 @@
         "it": "Selezione",
         "en": "Selection"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/blocca",
       "famiglia": "nucleo",
       "tasto": "Cmd+2",
       "effetto": "cambia",
@@ -523,7 +523,7 @@
         "it": "Grafica non selezionata",
         "en": "Unselected Artwork"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/blocca",
       "famiglia": "nucleo",
       "tasto": "Cmd+Alt+Shift+2",
       "effetto": "cambia",

@@ -100,6 +100,7 @@ function dipendenze(over: Partial<DipendenzeComando> & { risposta?: DrawingOutco
     ...(over.leggi === undefined ? {} : { leggi: over.leggi }),
     ...(over.commit === undefined ? {} : { commit: over.commit }),
     ...(over.appunti === undefined ? {} : { appunti: over.appunti }),
+    ...(over.diFub === undefined ? {} : { diFub: over.diFub }),
   };
   return { d, sessione, motore, azioni };
 }
@@ -344,6 +345,26 @@ describe("eseguiVoce, con gli appunti del Completo (K6 T11)", () => {
     const { d, sessione } = dipendenze();
     eseguiVoce(voce({ id: "edit.copy", chiamata: { comando: "disegno.edit.copy", valore: {} } }), d);
     await tick();
+    expect(sessione.comando).toHaveBeenCalledOnce();
+  });
+});
+
+describe("eseguiVoce, coi comandi che Fub fa da sé (K6 T11, oggetti)", () => {
+  it("un comando che Fub fa non va al motore", async () => {
+    const diFub = vi.fn((id: string) => id === "disegno.object.unlockAll");
+    const { d, sessione } = dipendenze({ diFub });
+    eseguiVoce(voce({ id: "object.unlockAll", chiamata: { comando: "disegno.object.unlockAll", valore: {} } }), d);
+    await tick();
+    expect(diFub).toHaveBeenCalledWith("disegno.object.unlockAll");
+    expect(sessione.comando).not.toHaveBeenCalled();
+  });
+
+  it("gli altri comandi vanno al motore come sempre", async () => {
+    const diFub = vi.fn(() => false);
+    const { d, sessione } = dipendenze({ diFub });
+    eseguiVoce(voce({ id: "object.lock", chiamata: { comando: "disegno.object.lock", valore: {} } }), d);
+    await tick();
+    expect(diFub).toHaveBeenCalledWith("disegno.object.lock");
     expect(sessione.comando).toHaveBeenCalledOnce();
   });
 });

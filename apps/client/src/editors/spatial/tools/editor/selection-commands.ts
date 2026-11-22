@@ -41,6 +41,10 @@ export interface SelectionCommandsContext {
   keyedMenu: number;
   menuPoint: () => MouseEvent;
   flagSelection: (flag: Flag) => void;
+  /// «Sblocca tutto» o «Mostra tutto»: gli oggetti che si vedono e si cambiano
+  /// (`flagged`), in un passo, poi la selezione. Il Disegno completo lo usa
+  /// per le sue voci di ≡ › Oggetto.
+  unflagAll: (flag: Flag) => void;
   toggleRow: (key: string, flag: Flag) => void;
   selectionItems: () => MenuItem[];
   pointMenu: () => PointMenu;
@@ -132,6 +136,7 @@ export function installSelectionCommands(ctx: EditorContext): void {
       announce(flag === "locked" ? plural(nodes.length, "draw.unlocked.one", "draw.unlocked.other") : plural(nodes.length, "draw.shown.one", "draw.shown.other"));
     }
   };
+  ctx.unflagAll = unflagAll;
 
   /// Un segno dell'albero, o Ctrl+Maiusc+L e H sulla sua riga attiva: blocca
   /// o sblocca, nasconde o mostra il livello o l'oggetto di chiave `key`. La
