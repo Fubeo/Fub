@@ -3578,6 +3578,23 @@ describe("la selezione avanzata, nel Completo", () => {
     expect(editor.engine.text).toBe(SET);
   });
 
+  it("l'isolamento non sopravvive alla chiusura: riaperto il disegno, si sceglie in tutto, e il file non lo ricorda", () => {
+    mount(SET);
+    editor.setTool("select");
+    doubleTap(20, 70);
+    expect(isolation().hidden).toBe(false);
+    editor.dispose();
+    host.replaceChildren();
+    mount(SET);
+    editor.setTool("select");
+    expect(isolation().hidden).toBe(true);
+    expect(crumbs()).not.toContain("Gruppo, 2 oggetti");
+    tap(20, 20);
+    expect(editor.selection).toEqual([A]);
+    expect(changes).toEqual([]);
+    expect(editor.engine.text).toBe(SET);
+  });
+
   it("Ctrl+Invio isola il gruppo scelto; dentro, un gruppo si isola ancora, e la barra riporta a ogni gruppo del percorso", () => {
     mount(SET);
     editor.setTool("select");

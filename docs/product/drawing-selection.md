@@ -11,9 +11,10 @@ isolati; e gli oggetti si bloccano e si nascondono uno per uno, non
 solo per livello. Scegliere e isolare non cambiano il file; bloccare e
 nascondere sì, e sono passi di annulla
 (`apps/client/src/editors/spatial/tools/selecting.ts`, l'indice in
-`apps/client/src/editors/spatial/tools/hit/`). Lo strumento Lazo se n'è
-andato col livello Standard (decisione 0231): il riquadro che la freccia tira
-sul vuoto sceglie ciò che racchiude per intero.
+`apps/client/src/editors/spatial/tools/hit/`). Lo strumento Lazo di Fub se
+n'è andato col livello Standard (decisione 0231): il riquadro che la freccia
+tira sul vuoto sceglie ciò che racchiude per intero. Nel Disegno completo il
+Lazo torna come strumento del motore (sotto).
 
 ## Dentro i gruppi
 
@@ -56,6 +57,38 @@ Isolare è una scelta della vista: non entra nel file, non è un passo di
 annulla e gli altri riquadri sullo stesso disegno non la vedono. Se il gruppo
 se ne va, per un annulla o per chi lavora insieme, o se lo si blocca, si esce
 da soli.
+
+## Gli strumenti del motore nel Disegno completo
+
+Nel Disegno completo la colonna ha anche gli strumenti del motore del disegno
+per scegliere e per la vista: **Selezione (Completo)**, **Selezione diretta** e
+**Selezione gruppo**, **Lazo** nel gruppo «Scegli»; **Mano (Completo)**, **Zoom (Completo)** e
+**Ruota vista** nel gruppo della vista. Ognuno ha il suo nome nella lingua
+dell'interfaccia e la sua icona, dopo gli strumenti di Fub della stessa
+casella. Il Semplice tiene solo gli strumenti di Fub.
+
+Scegliere uno di questi strumenti prepara la sua famiglia («nucleo»): finché
+si prepara la casella dice «Selezione diretta: si prepara…», e lo strumento di
+prima resta in mano. Se la famiglia non si prepara la casella lo dice
+(«non si è preparato. Sceglilo di nuovo per riprovare.»): sceglierlo di nuovo
+ci riprova, e intanto si disegna con lo strumento di prima. Appena la famiglia
+è pronta compare in testata la fila delle opzioni dello strumento, senza
+bisogno di un gesto sul foglio. Gli strumenti di scelta del nucleo non hanno
+opzioni da mostrare, e la fila resta vuota; le coordinate del punto scelto con
+la Selezione diretta non ci sono ancora, perché il motore non le dà.
+
+Mano, Zoom e Ruota vista del motore spostano, ingrandiscono e girano la vista
+di Fub, come la Mano e la Lente di Fub: la vista non cambia il file. Un tratto
+a mano libera (`fub:ink`) si sceglie e si sposta, ma gli strumenti del motore
+non ne cambiano i punti. Scegliere uno strumento di Fub toglie quello del
+motore. Il codice: `apps/client/src/editors/spatial/completo/colonna.ts`,
+`apps/client/src/editors/spatial/tools/editor/chrome/rail.ts`,
+`apps/client/src/editors/spatial/motore/gesti.ts`.
+
+L'isolamento di un gruppo è di Fub anche nel Disegno completo: «Isola il
+gruppo» ed «Esci dal gruppo» stanno nel menu del tasto destro, `Esc` esce
+dall'isolamento prima di svuotare la selezione, e riaprendo il disegno non si
+è più dentro il gruppo.
 
 ## Il menu della selezione
 

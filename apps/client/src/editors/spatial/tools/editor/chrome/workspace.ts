@@ -184,6 +184,7 @@ export function installWorkspace(ctx: EditorContext): void {
     if (porta === null || !vuoleCompleto()) return null;
     return {
       colonna: (offerti) => porta.colonna(offerti),
+      strumentoMotore: (id) => porta.strumentoMotore(id),
       cassetto: (anchor, opzioni) => porta.cassetto(anchor, opzioni, ctx.life),
     };
   };
@@ -234,6 +235,14 @@ export function installWorkspace(ctx: EditorContext): void {
           // Lo strumento del motore aspetta la sua famiglia dal Completo aperto
           // (`sceltaMotore`): una famiglia che non arriva non fa partire il gesto.
           ctx.preparaStrumento = (id) => aperto!.preparaStrumento(id);
+          // Le caselle degli strumenti del motore (K6 T11) cambiano col nome e
+          // con lo stato della loro famiglia, e la casella accesa con lo
+          // strumento scelto: la colonna si risincronizza.
+          const risincronizza = (): void => {
+            if (!ctx.disposed) ctx.syncRail(ctx.editable());
+          };
+          ctx.life.add(aperto.ascoltaColonna(risincronizza));
+          ctx.life.add(ctx.ascoltaStrumentoMotore(risincronizza));
           completo = "aperto";
           applicaSpazio();
           mostraRisorse();

@@ -39,7 +39,7 @@
 // La penna, l'evidenziatore, la gomma e la nota non passano mai di qua: sono
 // di Fub, e non chiamano il motore.
 
-import { DRAWING_COMMAND_TOOL_OPTION, MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingLoss, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool, type DrawingToolState } from "../../../host/contract";
+import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingLoss, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool, type DrawingToolState } from "../../../host/contract";
 import type { InkSample } from "../../../ink/sample";
 import type { Teardown } from "../../../ui/lifetime";
 import type { PaintNode } from "../painter/paint";
@@ -529,12 +529,33 @@ export function installGestiMotore(ctx: EditorContext): void {
         ctx.motoreTool = precedente;
         ctx.announce(t("draw.engine.prepare.failed"));
       }
+      // Pronta: lo stato dello strumento si legge subito, così la sua fila
+      // c'è prima del primo gesto.
+      if (ok && ctx.motoreTool === id && stati.stato(id) === null) leggiStato(id);
       // La fine della preparazione avvisa: la fila dello strumento si monta solo
       // ora che la sua famiglia è pronta (o si toglie, se non è arrivata).
       avvisa();
     });
   };
   ctx.sceltaMotore = sceltaMotore;
+
+  /// Legge lo stato dello strumento `id` (`disegno.strumento.stato`), in fila
+  /// con i gesti come un'opzione, e lo registra. Senza motore, o con un esito
+  /// senza stato, non fa niente: la fila arriva col primo gesto.
+  const leggiStato = (id: string): void => {
+    const sessione = porta?.adesso();
+    if (sessione === undefined || sessione === null || sessione === "apertura") return;
+    const done = ultimo
+      .then(() => sessione.comando({ id: DRAWING_COMMAND_TOOL_STATE, selection: [], value: { strumento: id } }))
+      .then((esito) => {
+        if (ctx.disposed || esito === null || "kind" in esito) return;
+        if (esito.state && stati.stato(id) === null) stati.registra(id, esito.state);
+      })
+      .catch((error: unknown) => {
+        console.error(error);
+      });
+    ultimo = done;
+  };
   ctx.statoStrumento = (id) => stati.stato(id);
   ctx.ascoltaStati = (ascolto) => stati.ascolta(ascolto);
   ctx.ascoltaStrumentoMotore = (ascolto) => {

@@ -16,6 +16,7 @@ import { touchDialog } from "../touch-dialog";
 import { HIT_PX, INK_KEY, inkCopyKey } from "./constants";
 import type { EditorContext } from "./context";
 import type { Gesture, GestureBase, InkGesture } from "./types";
+import { vistaDelMotore } from "./hand-zoom";
 
 /// Ciò che l'inizio del gesto dà agli altri pezzi dell'editor.
 export interface GestureBeginContext {
@@ -85,6 +86,9 @@ export function installGestureBegin(ctx: EditorContext): void {
     if (ruler !== null) return ruler;
     // Uno strumento del motore (K6 T8) è scelto sopra a quelli di oggi: il
     // motore fa il gesto, e se non c'è lo fanno gli strumenti di sempre.
+    // Uno strumento della vista del motore (Mano, Zoom, Ruota vista) muove la
+    // vista di Fub (`hand-zoom.ts`): come la Mano, non disegna niente.
+    if (vistaDelMotore(ctx.motoreTool) !== null) return { ...base, kind: "refused" };
     if (ctx.motoreTool !== null) {
       const motore = ctx.motoreBegin(base);
       if (motore !== null) return motore;

@@ -59,11 +59,32 @@ const GRUPPO_DI_FAMIGLIA: Readonly<Record<ToolSpec["group"], GruppoColonna>> = {
   text: "shape",
 };
 
-/// Gli strumenti del motore che hanno la riga «fatto». Oggi nessuna: fino ai
-/// task di famiglia (T11–T26) la colonna mostra solo gli strumenti di Fub. Un
-/// id qui sblocca `motore:<id>`, e il chrome lo deve sapere (uno strumento del
-/// motore non ha ancora un `ToolSpec`).
-export const MOTORE_PRONTO: ReadonlySet<string> = new Set();
+/// Gli strumenti del motore che hanno la riga «fatto» nella mappa (le voci
+/// `strumento` dell'indice generato; un test lo controlla). Un id qui sblocca
+/// `motore:<id>` nella colonna: il chrome lo mostra con il nome della sua
+/// famiglia e l'icona di `ICONE_MOTORE`. T11: gli strumenti del nucleo.
+export const MOTORE_PRONTO: ReadonlySet<string> = new Set(["selection", "directSelection", "groupSelection", "lasso", "hand", "zoom", "rotateView"]);
+
+/// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
+/// del prototipo (`PLAN-ui/disegno-completo.html`), dal catalogo
+/// `editors/spatial/icons.ts`.
+export const ICONE_MOTORE: Readonly<Record<string, string>> = {
+  selection: "draw-select",
+  directSelection: "draw-direct-select",
+  groupSelection: "draw-direct-select",
+  lasso: "draw-lasso",
+  hand: "draw-hand",
+  zoom: "draw-zoom",
+  rotateView: "draw-rotate",
+};
+
+/// L'icona di Fub per uno strumento del motore che il prototipo non disegna.
+export const ICONA_MOTORE_GENERICA = "draw-all-tools";
+
+/// L'icona dello strumento del motore `id`.
+export function iconaMotore(id: string): string {
+  return Object.prototype.hasOwnProperty.call(ICONE_MOTORE, id) ? ICONE_MOTORE[id]! : ICONA_MOTORE_GENERICA;
+}
 
 /// Un gruppo della colonna con le sue caselle; ogni casella è la lista dei
 /// suoi strumenti, già filtrati.

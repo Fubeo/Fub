@@ -93,8 +93,11 @@ function shown(ctx: EditorContext, control: HTMLElement): boolean {
 /// passano più di qui: partono da `eseguiVoce` (`completo/esegui.ts`).
 export function azioniVoci(ctx: EditorContext, riprova: () => void): AzioniVociCompleto {
   return {
+    // Uno strumento del motore: Mano e Zoom sono anche di Fub, e li fa Fub;
+    // gli altri li sceglie il motore, con la loro famiglia (K6 T11).
     strumento: (id) => {
-      if (toolsOf(ctx.features).some((spec) => spec.id === id)) ctx.setTool(id as ToolId);
+      if (toolsOf(ctx.features).some((spec) => spec.id === id)) ctx.pickTool(id as ToolId);
+      else ctx.sceltaMotore(id);
     },
     riprova,
   };
