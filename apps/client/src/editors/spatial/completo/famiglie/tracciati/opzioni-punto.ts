@@ -155,7 +155,7 @@ export function filaPunti(testi: Etichette, stato: DrawingToolState | null, azio
     const at: [number, number] = [scelto.at[0], scelto.at[1]];
     at[asse] = valore;
     azioni.esegui(
-      COMANDI_PUNTI.sposta,
+      comandoDelMotore(COMANDI_PUNTI.sposta),
       { element: scelto.element, subpath: scelto.subpath, anchor: scelto.anchor, x: at[0], y: at[1] },
       parola("punto.sposta"),
     );

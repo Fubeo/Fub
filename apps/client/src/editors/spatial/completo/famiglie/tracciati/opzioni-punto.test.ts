@@ -107,8 +107,8 @@ describe("la fila dei punti scelti", () => {
     cy!.value = "55";
     cy!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     expect(esegui.mock.calls.map(([id, valore, etichetta]) => [id, valore, etichetta])).toEqual([
-      [COMANDI_PUNTI.sposta, { element: "p1", subpath: 0, anchor: 2, x: 30, y: 40 }, TESTI["punto.sposta"]!.it],
-      [COMANDI_PUNTI.sposta, { element: "p1", subpath: 0, anchor: 2, x: 12.5, y: 55 }, TESTI["punto.sposta"]!.it],
+      ["disegno.path.moveAnchor", { element: "p1", subpath: 0, anchor: 2, x: 30, y: 40 }, TESTI["punto.sposta"]!.it],
+      ["disegno.path.moveAnchor", { element: "p1", subpath: 0, anchor: 2, x: 12.5, y: 55 }, TESTI["punto.sposta"]!.it],
     ]);
     // Un numero che non si legge non parte, e il campo lo dice.
     cx!.value = "trenta";
