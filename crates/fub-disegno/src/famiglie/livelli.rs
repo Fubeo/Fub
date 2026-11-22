@@ -1,6 +1,7 @@
 //! La famiglia `livelli` della mappa: le voci di ≡ › Selezione (K6 T15, giro 1) e i comandi di livello
 //! della scheda Livelli del Completo (giro 3): nuovo livello, elimina, rinomina e colore, occhio,
-//! lucchetto, livello corrente e spostamento. Selezionare non cambia il documento: quelle voci non
+//! lucchetto, livello corrente e spostamento. «Maschere di ritaglio» (K6 T12) sceglie le maschere, i
+//! `<g clip-path>` del file. Selezionare non cambia il documento: quelle voci non
 //! scrivono niente, e il motore dice che cosa seleziona. Un livello si nomina nei suoi argomenti col suo
 //! numero del motore, come il motore vuole (`ids`, `id`, `parent`): la scheda lo legge da
 //! `document.inspect`. Un livello bloccato si sblocca e si nasconde, ma non si rinomina né si colora.
@@ -71,6 +72,11 @@ impl StatoFamiglia for Stato {
                     text: "Non è un'istanza.".into(),
                 })
             }
+            "select.object.clippingMasks" => {
+                (!c_e_una_maschera(copia)).then(|| DrawingDisabledReason::Other {
+                    text: "Nel disegno non ci sono maschere di ritaglio.".into(),
+                })
+            }
             "select.object.textObjects" => {
                 let c_e_testo = copia.mappa.elementi().iter().any(|e| e.ruolo == Role::Text);
                 (!c_e_testo).then(|| DrawingDisabledReason::Other {
@@ -113,6 +119,9 @@ impl StatoFamiglia for Stato {
     /// e non si rinomina né si colora; un livello non va dentro se stesso.
     fn rifiuto_valore(id: &str, copia: &Copia, _selezione: &[String], valore: &Value) -> Option<DrawingRefusal> {
         match id {
+            // Senza maschere nel file il motore sceglierebbe solo ritagli suoi (un `clip-path` scritto
+            // su un tracciato), che la selezione di Fub non sa dire: niente da scegliere.
+            "select.object.clippingMasks" => (!c_e_una_maschera(copia)).then_some(DrawingRefusal::Empty),
             "layer.setCurrent" => livelli_del_valore(copia, valore).err(),
             "layer.delete" => match livelli_del_valore(copia, valore) {
                 Ok(livelli) => livelli.iter().any(|&i| bloccato_con_antenati(copia, i)).then_some(DrawingRefusal::Locked),
@@ -202,6 +211,16 @@ fn livelli_del_valore(copia: &Copia, valore: &Value) -> Result<Vec<usize>, Drawi
             copia.mappa.del_nodo(NodeId(n)).ok_or(DrawingRefusal::Unmapped)
         })
         .collect()
+}
+
+/// Vero se il file ha una maschera di ritaglio, un `<g clip-path>` della mappa. Il motore sceglie i
+/// tracciati che ritagliano, e nel file ciascuno vale per la sua maschera (`selezione_di_fub`).
+fn c_e_una_maschera(copia: &Copia) -> bool {
+    copia.mappa.elementi().iter().any(|e| {
+        e.nodo
+            .and_then(|n| copia.documento.node(n))
+            .is_some_and(|n| matches!(n.kind, vectorcraft_doc::NodeKind::Group { clip: true, .. }))
+    })
 }
 
 /// Il livello `i`, o un suo antenato, è bloccato nella mappa.

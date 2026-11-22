@@ -135,6 +135,41 @@
           "predefinito": 50.0
         }
       ]
+    },
+    {
+      "fonte": "motore",
+      "id": "path.average",
+      "campi": [
+        {
+          "nome": "axis",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "both",
+            "horizontal",
+            "vertical"
+          ],
+          "aperta": false,
+          "predefinito": "both"
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "path.averageJoin",
+      "campi": [
+        {
+          "nome": "to",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "corner",
+            "smooth"
+          ],
+          "aperta": false,
+          "predefinito": "corner"
+        }
+      ]
     }
   ]
 }

@@ -44,6 +44,11 @@
 //!   oggetto ricco: il `g` col disegno espanso e la ricetta. Un oggetto ricco
 //!   nuovo che non disegna niente (una composta in Intersezione di forme che
 //!   non si toccano) è `empty`: un `g` vuoto, riaperto, perderebbe la ricetta.
+//! - **Ritagli** (`differenza_ritagli.rs`): un gruppo di ritaglio nuovo del
+//!   motore si scrive come SVG semplice, un `<g clip-path="url(#…)">` coi suoi
+//!   contenuti e un `<clipPath>` privato in `fub-defs` col tracciato che
+//!   ritaglia; rilasciato, il tracciato torna primo figlio del gruppo, senza
+//!   colore, e il `clip-path` si toglie con un `set`.
 //! - **`remove`** per quelli tolti, **`move`** per l'ordine e il genitore.
 //! - **`ident`** prima di tutto, per gli elementi senza id che un'operazione
 //!   nomina: un id nuovo del formato di [`crate::id`].
@@ -75,6 +80,8 @@ use crate::sfumature;
 /// (`fill` o `stroke`) che la usa.
 type AttributiDellaFoglia = (Map<String, Value>, Vec<(&'static str, sfumature::Scritta)>);
 
+#[path = "differenza_ritagli.rs"]
+mod ritagli;
 #[path = "differenza_testo.rs"]
 mod testo;
 pub(crate) use testo::peso_e_corsivo;
@@ -219,6 +226,7 @@ pub(crate) fn differenza(
     };
     lavoro.riferimenti = dei_campioni.riferimenti;
     lavoro.composti(&prima, &poi);
+    lavoro.ritagli(&prima, &poi);
     // Il confronto per primo: dice quali oggetti si riscrivono interi
     // (tolti e rimessi con la loro ricetta), che le altre fasi saltano.
     for l in &dopo.layers {
@@ -624,6 +632,7 @@ impl Lavoro<'_> {
                     prima.nodi.contains_key(&c.id)
                         && !self.riscritti.contains(&c.id)
                         && !self.liberati.contains(&c.id)
+                        && !self.assorbiti.contains(&c.id)
                 })
                 .collect();
             let chiavi: Vec<Option<usize>> = rimasti
@@ -717,6 +726,12 @@ impl Lavoro<'_> {
                 return Err(no("il genitore ha una transform che non si inverte"));
             }
             let riscritto = self.riscritti.contains(&nodo.id);
+            if !riscritto && ritagli::ritaglio_nuovo(nodo, prima, &self.assorbiti, &self.riscritti)
+            {
+                let pos = self.posto(&fratelli, i)?;
+                self.scrivi_ritaglio(nodo, genitore, parent, pos, locale)?;
+                continue;
+            }
             if !riscritto && gruppo_di_prima(nodo, prima, &self.riscritti) {
                 let id = self.id_nuovo(Specie::Oggetto)?;
                 self.ids.insert(nodo.id, id.clone());
@@ -1145,6 +1160,14 @@ impl Lavoro<'_> {
                 }
                 None => b,
             };
+            let sciolto;
+            let b: &Node = match self.ritaglio_tolto(b, a)? {
+                Some(c) => {
+                    sciolto = c;
+                    &sciolto
+                }
+                None => b,
+            };
             if !proprieta_uguali(b, a) {
                 return Err(no(
                     "cambia un gruppo o un livello in un modo che non si scrive",
@@ -1315,7 +1338,11 @@ impl Lavoro<'_> {
             }
             None => b,
         };
-        let m = adatta(b, a).unwrap_or(Affine::IDENTITY);
+        // Una matrice che schiaccia (Media che allinea tutti i punti su una
+        // retta) non è uno spostamento: il tracciato si riscrive col suo `d`.
+        let m = adatta(b, a)
+            .filter(|m| m.determinant().abs() > 1e-9)
+            .unwrap_or(Affine::IDENTITY);
         let con_tratti =
             mosso_da(b, m, true).ok_or_else(|| no("l'oggetto non si muove con una matrice"))?;
         let geometria_ok = geometrie_vicine(&con_tratti, a);

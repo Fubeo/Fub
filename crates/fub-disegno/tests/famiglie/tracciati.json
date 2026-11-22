@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs).",
+  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg).",
   "casi": [
     {
       "id": "pen",
@@ -3717,6 +3717,318 @@
         ]
       },
       "dopo": "elabora-meno-davanti-2.svg"
+    },
+    {
+      "id": "object.clippingMask.make",
+      "disegno": "ritaglio.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oe5e5e5e5",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "defs",
+                  "attrs": {
+                    "id": "fub-defs"
+                  },
+                  "children": [
+                    {
+                      "tag": "clipPath",
+                      "attrs": {
+                        "id": "rkcu808lm",
+                        "fub:role": "private",
+                        "clipPathUnits": "userSpaceOnUse"
+                      },
+                      "children": [
+                        {
+                          "tag": "path",
+                          "attrs": {
+                            "d": "M220 110 C220 140.38 184.18 165 140 165 C95.82 165 60 140.38 60 110 C60 79.62 95.82 55 140 55 C184.18 55 220 79.62 220 110 Z",
+                            "fill": "#000000"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "o9xkn1dta",
+                    "clip-path": "url(#rkcu808lm)"
+                  }
+                }
+              },
+              {
+                "op": "move",
+                "target": "oa1a1a1a1",
+                "parent": "o9xkn1dta",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "move",
+                "target": "oe5e5e5e5",
+                "parent": "o9xkn1dta",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                }
+              }
+            ]
+          }
+        ],
+        "selezione": [
+          "o9xkn1dta"
+        ]
+      },
+      "dopo": "ritaglio-fatto.svg"
+    },
+    {
+      "id": "object.clippingMask.make",
+      "disegno": "ritaglio.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "od4d4d4d4"
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.clippingMask.make",
+      "disegno": "ritaglio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.clippingMask.release",
+      "disegno": "ritaglio-inkscape.svg",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "og1g1g1g1",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M160 100 C160 133.14 133.14 160 100 160 C66.86 160 40 133.14 40 100 C40 66.86 66.86 40 100 40 C133.14 40 160 66.86 160 100 Z",
+                    "fill": "none",
+                    "id": "oc02h41ec"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "og1g1g1g1",
+                "attrs": {
+                  "clip-path": null
+                }
+              }
+            ]
+          }
+        ],
+        "selezione": [
+          "og1g1g1g1"
+        ]
+      },
+      "dopo": "ritaglio-rilasciato.svg"
+    },
+    {
+      "id": "object.clippingMask.release",
+      "disegno": "ritaglio-sull-oggetto.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.clippingMask.release",
+      "disegno": "ritaglio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.clippingMask.editContents",
+      "disegno": "ritaglio-inkscape.svg",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "object.clippingMask.editContents",
+      "disegno": "ritaglio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.average",
+      "disegno": "media.svg",
+      "selezione": [
+        "od2d2d2d2",
+        "og6g6g6g6"
+      ],
+      "argomenti": {
+        "axis": "horizontal",
+        "anchors": [
+          {
+            "element": "od2d2d2d2",
+            "subpath": 0,
+            "anchor": 0,
+            "at": [
+              180,
+              120
+            ],
+            "end": true
+          },
+          {
+            "element": "og6g6g6g6",
+            "subpath": 0,
+            "anchor": 1,
+            "at": [
+              120,
+              200
+            ],
+            "end": true
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "od2d2d2d2",
+                "attrs": {
+                  "d": "M180 160 L240 140"
+                }
+              },
+              {
+                "op": "set",
+                "id": "og6g6g6g6",
+                "attrs": {
+                  "d": "M40 200 L120 160"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "media-dopo.svg"
+    },
+    {
+      "id": "path.average",
+      "disegno": "media.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "axis": "both"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.averageJoin",
+      "disegno": "media.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "argomenti": {
+        "to": "corner"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "od2d2d2d2"
+              },
+              {
+                "op": "set",
+                "id": "oc1c1c1c1",
+                "attrs": {
+                  "d": "M40 60 L100 60 L170 100 L240 140"
+                }
+              }
+            ]
+          }
+        ],
+        "selezione": [
+          "oc1c1c1c1"
+        ]
+      },
+      "dopo": "media-e-unisci.svg"
+    },
+    {
+      "id": "path.averageJoin",
+      "disegno": "media.svg",
+      "selezione": [
+        "oe3e3e3e3"
+      ],
+      "argomenti": {
+        "to": "corner"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
     }
   ]
 }

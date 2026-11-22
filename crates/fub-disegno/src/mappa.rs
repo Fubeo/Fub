@@ -81,6 +81,10 @@ pub struct Elemento {
     pub motivo: Option<&'static str>,
     /// Le righe di un `<text>` e come sono scritte; `None` per gli altri.
     pub testo: Option<InfoTesto>,
+    /// L'elemento ha l'attributo `clip-path`: Rilascia lo toglie con un
+    /// `set`. Un ritaglio scritto in `style` o dato da un foglio di stile
+    /// non si toglie così.
+    pub clip_path: bool,
 }
 
 /// Ciò che la differenza sa di un `<text>` del file per scriverne le parole

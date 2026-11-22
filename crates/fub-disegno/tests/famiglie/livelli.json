@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso).",
+  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso). Giro 6 (K6 T12): «Maschere di ritaglio» sceglie i <g clip-path> del file (livelli/ritaglio-inkscape.svg).",
   "casi": [
     {
       "id": "select.same.fillColor",
@@ -652,6 +652,26 @@
             }
           }
         ]
+      }
+    },
+    {
+      "id": "select.object.clippingMasks",
+      "disegno": "ritaglio-inkscape.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "og1g1g1g1"
+        ]
+      }
+    },
+    {
+      "id": "select.object.clippingMasks",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
       }
     }
   ]

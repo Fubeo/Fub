@@ -1,7 +1,7 @@
 //! Un applicatore piccolo delle operazioni della scena sul testo, solo per
 //! le forme che la differenza scrive nelle prove (`batch`, `remove` per id o
-//! del blocco delle ricette, `add` di `raw` o `elem`, `set`, `ident`): il
-//! motore delle operazioni vero è quello del client
+//! del blocco delle ricette, `add` di `raw` o `elem` coi figli, `move`, `set`,
+//! `ident`): il motore delle operazioni vero è quello del client
 //! (`apps/client/src/editors/spatial/completo/casi.test.ts` lo prova sugli
 //! stessi casi, byte per byte).
 //!
@@ -97,27 +97,17 @@ fn applica_op(testo: &mut String, op: &Value) -> Result<(), String> {
         "add" => {
             let corpo = match op.get("raw") {
                 Some(raw) => testo_di(raw, "raw")?.to_string(),
-                None => {
-                    let e = &op["elem"];
-                    let mut s = format!("<{}", testo_di(&e["tag"], "tag")?);
-                    for (k, v) in e["attrs"].as_object().ok_or("un elem senza attrs")? {
-                        s.push_str(&format!(" {k}=\"{}\"", testo_di(v, k)?));
-                    }
-                    s.push_str("/>");
-                    s
-                }
+                None => scrivi_elem(&op["elem"])?,
             };
-            let genitore = testo_di(&op["parent"], "parent")?;
-            let (inizio, fine) = dentro(testo, genitore)?;
-            let pos = &op["pos"];
-            let dove = if pos.get("first").is_some() {
-                inizio
-            } else if pos.get("last").is_some() {
-                fine
-            } else {
-                span_dell_id(testo, testo_di(&pos["after"], "after")?)?[1]
-            };
-            testo.insert_str(dove, &corpo);
+            inserisci(testo, op, &corpo)?;
+        }
+        "move" => {
+            // L'elemento con i suoi byte, tolto e rimesso dove dice `pos`.
+            let id = testo_di(&op["target"], "target")?;
+            let [da, a] = span_dell_id(testo, id)?;
+            let corpo = testo[da..a].to_string();
+            testo.replace_range(da..a, "");
+            inserisci(testo, op, &corpo)?;
         }
         "set" => {
             let id = testo_di(&op["id"], "id")?;
@@ -142,6 +132,54 @@ fn applica_op(testo: &mut String, op: &Value) -> Result<(), String> {
         }
         altro => return Err(format!("l'applicatore non sa {altro}")),
     }
+    Ok(())
+}
+
+/// Il testo di un `elem`, coi suoi figli.
+fn scrivi_elem(e: &Value) -> Result<String, String> {
+    let tag = testo_di(&e["tag"], "tag")?;
+    let mut s = format!("<{tag}");
+    for (k, v) in e["attrs"].as_object().ok_or("un elem senza attrs")? {
+        s.push_str(&format!(" {k}=\"{}\"", testo_di(v, k)?));
+    }
+    match e.get("children").and_then(Value::as_array) {
+        Some(figli) if !figli.is_empty() => {
+            s.push('>');
+            for f in figli {
+                s.push_str(&scrivi_elem(f)?);
+            }
+            s.push_str(&format!("</{tag}>"));
+        }
+        _ => s.push_str("/>"),
+    }
+    Ok(s)
+}
+
+/// Mette `corpo` sotto `parent`, al posto `pos` dell'operazione `op`. Un
+/// genitore vuoto (`<g …/>`) si apre.
+fn inserisci(testo: &mut String, op: &Value, corpo: &str) -> Result<(), String> {
+    let genitore = testo_di(&op["parent"], "parent")?;
+    if genitore != "#root" {
+        let [da, _] = span_dell_id(testo, genitore)?;
+        let fine = fine_del_tag(testo, da)?;
+        if testo[..fine].ends_with("/>") {
+            let tag: String = testo[da + 1..]
+                .chars()
+                .take_while(|c| !c.is_whitespace() && *c != '/' && *c != '>')
+                .collect();
+            testo.replace_range(fine - 2..fine, &format!("></{tag}>"));
+        }
+    }
+    let (inizio, fine) = dentro(testo, genitore)?;
+    let pos = &op["pos"];
+    let dove = if pos.get("first").is_some() {
+        inizio
+    } else if pos.get("last").is_some() {
+        fine
+    } else {
+        span_dell_id(testo, testo_di(&pos["after"], "after")?)?[1]
+    };
+    testo.insert_str(dove, corpo);
     Ok(())
 }
 

@@ -32,6 +32,8 @@
 //!   `unmapped` ([`elaborabile`]). Un risultato vuoto (due forme che non si
 //!   toccano, con Intersezione) è `empty`, e niente cambia
 //!   ([`StatoFamiglia::rifiuto_del_motore`]).
+//! - **Maschera di ritaglio** (`RITAGLI`, T12): Crea, Rilascia e Modifica
+//!   contenuto, spenti e rifiutati col perché in `tracciati_ritagli.rs`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -46,11 +48,17 @@ use vectorcraft_engine::EngineError;
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
 
+#[path = "tracciati_ritagli.rs"]
+mod ritagli;
+use ritagli::{ritaglio_rifiutato, ritaglio_spento, RITAGLI};
+
 /// I comandi che lavorano sui punti di ancoraggio scelti.
-pub(crate) const SUI_PUNTI: [&str; 5] = [
+pub(crate) const SUI_PUNTI: [&str; 7] = [
     "path.convertAnchors",
     "path.cutAtAnchors",
     "path.join",
+    "path.average",
+    "path.averageJoin",
     "path.removeAnchors",
     "addon.pathtools.removeKeepShape",
 ];
@@ -165,6 +173,75 @@ fn elaborazione_spenta(copia: &Copia, nodi: &[NodeId]) -> Option<DrawingDisabled
     (!tutti).then_some(DrawingDisabledReason::NeedsPath)
 }
 
+/// Media e unisci (T12): porta due estremi aperti nel loro punto di mezzo e
+/// li unisce lì.
+const MEDIA_E_UNISCI: &str = "path.averageJoin";
+
+/// Il perché di Media e unisci spento.
+const DUE_ESTREMI: &str = "Scegli due tracciati aperti, o un tracciato aperto da chiudere.";
+
+/// I due estremi che Media e unisci unirebbe, come li cerca il motore
+/// (`average_join_ends` in `engine/src/cmd/path.rs`), o `None`: i due punti
+/// scelti `scelti`, se sono estremi di sottotracciati aperti; senza punti,
+/// l'unico sottotracciato aperto dei tracciati scelti `nodi` (che si chiude, se
+/// ha un punto fra i due estremi) o i due. Restituisce i sottotracciati.
+fn estremi_da_unire(
+    copia: &Copia,
+    nodi: &[NodeId],
+    scelti: Option<&BTreeMap<NodeId, BTreeSet<(usize, usize)>>>,
+) -> Option<[(NodeId, usize); 2]> {
+    let doc = &copia.documento;
+    let aperto = |id: NodeId, si: usize| {
+        doc.node(id)?
+            .path_data()?
+            .subpaths
+            .get(si)
+            .filter(|sp| !sp.closed && !sp.anchors.is_empty())
+            .map(|sp| sp.anchors.len())
+    };
+    let [a, b] = match scelti {
+        Some(scelti) => {
+            let tutti: Vec<(NodeId, usize, usize)> = scelti
+                .iter()
+                .flat_map(|(id, punti)| punti.iter().map(move |&(si, ai)| (*id, si, ai)))
+                .collect();
+            let [x, y] = tutti.as_slice() else { return None };
+            for &(id, si, ai) in [x, y] {
+                let quanti = aperto(id, si)?;
+                if ai != 0 && ai + 1 != quanti {
+                    return None;
+                }
+            }
+            [(x.0, x.1), (y.0, y.1)]
+        }
+        None => {
+            let mut tracciati = Vec::new();
+            for n in nodi {
+                match doc.node(*n).map(|nodo| &nodo.kind) {
+                    Some(NodeKind::Path { .. }) => tracciati.push(*n),
+                    Some(NodeKind::Compound { children, .. }) => tracciati.extend(children.iter().map(|c| c.id)),
+                    _ => {}
+                }
+            }
+            let aperti: Vec<(NodeId, usize)> = tracciati
+                .iter()
+                .flat_map(|&id| {
+                    let quanti = doc.node(id).and_then(|n| n.path_data()).map_or(0, |pd| pd.subpaths.len());
+                    (0..quanti).filter(move |&si| aperto(id, si).is_some()).map(move |si| (id, si))
+                })
+                .collect();
+            match aperti.as_slice() {
+                [uno] => [*uno, *uno],
+                [x, y] => [*x, *y],
+                _ => return None,
+            }
+        }
+    };
+    // I due estremi di una linea: il punto di mezzo la schiaccerebbe.
+    let linea = a == b && aperto(a.0, a.1).is_none_or(|quanti| quanti <= 2);
+    (!linea).then_some([a, b])
+}
+
 /// Quanto un punto può essersi spostato (in coordinate di scena) ed essere
 /// ancora lui: sotto la precisione dei numeri che il file scrive.
 const TOLLERANZA: f64 = 1e-3;
@@ -192,7 +269,7 @@ impl StatoFamiglia for Stato {
     /// la selezione di oggetti non dice: da ≡ sono spenti, con
     /// `needs_anchors`; la fila dei punti li manda con i suoi punti.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
-        if !SUI_PUNTI.contains(&id) && !sugli_oggetti(id) {
+        if !SUI_PUNTI.contains(&id) && !sugli_oggetti(id) && !RITAGLI.contains(&id) {
             return None;
         }
         if selezione.is_empty() {
@@ -212,6 +289,9 @@ impl StatoFamiglia for Stato {
         if id == ESPANDI {
             return None;
         }
+        if RITAGLI.contains(&id) {
+            return ritaglio_spento(id, copia, &nodi);
+        }
         if ELABORAZIONE.contains(&id) {
             return elaborazione_spenta(copia, &nodi);
         }
@@ -230,7 +310,25 @@ impl StatoFamiglia for Stato {
         if SOLO_COI_PUNTI.contains(&id) {
             return Some(DrawingDisabledReason::NeedsAnchors);
         }
+        if id == MEDIA_E_UNISCI && estremi_da_unire(copia, &nodi, None).is_none() {
+            return Some(DrawingDisabledReason::Other {
+                text: DUE_ESTREMI.into(),
+            });
+        }
         None
+    }
+
+    /// Media e unisci sui punti scelti che non sono due estremi aperti da
+    /// unire (o sugli oggetti scelti, se la fila dei punti non ne manda):
+    /// `empty`, prima del motore, che non saprebbe quali unire.
+    fn rifiuto_valore(id: &str, copia: &Copia, selezione: &[String], valore: &Value) -> Option<DrawingRefusal> {
+        if id != MEDIA_E_UNISCI {
+            return None;
+        }
+        let nodi = nodi_scelti(copia, selezione).ok()?;
+        let scelti = punti(copia, &mut valore.clone()).ok()?;
+        let scelti = (!scelti.is_empty()).then_some(&scelti);
+        estremi_da_unire(copia, &nodi, scelti).is_none().then_some(DrawingRefusal::Empty)
     }
 
     /// Un comando di Oggetto › Tracciato su un tratto della penna di Fub:
@@ -239,8 +337,11 @@ impl StatoFamiglia for Stato {
     /// combinare: `empty`; con un oggetto che il motore toglierebbe senza
     /// usarlo, `unmapped`.
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
-        if sugli_oggetti(id) && sceglie_inchiostro(copia, selezione) {
+        if (sugli_oggetti(id) || RITAGLI.contains(&id)) && sceglie_inchiostro(copia, selezione) {
             return Some(DrawingRefusal::Unmapped);
+        }
+        if RITAGLI.contains(&id) {
+            return ritaglio_rifiutato(id, copia, &nodi_scelti(copia, selezione).ok()?);
         }
         if !ELABORAZIONE.contains(&id) {
             return None;
@@ -269,6 +370,9 @@ impl StatoFamiglia for Stato {
     ) -> Option<DrawingRefusal> {
         if inchiostro_toccato(copia, dopo) {
             return Some(DrawingRefusal::Unmapped);
+        }
+        if id == "path.average" && media_schiaccia(copia, dopo) {
+            return Some(DrawingRefusal::Empty);
         }
         (id == "object.path.divideObjectsBelow" && scelti_dopo.is_empty())
             .then_some(DrawingRefusal::Empty)
@@ -341,6 +445,27 @@ pub(crate) fn sceglie_inchiostro(copia: &Copia, selezione: &[String]) -> bool {
             .dell_id(id)
             .and_then(|i| copia.mappa.elemento(i))
             .is_some_and(|e| matches!(e.ruolo, Role::Stroke | Role::Width))
+    })
+}
+
+/// Vero se Media ha portato tutti i punti di un tracciato in un punto solo:
+/// succede scegliendo un tracciato intero, senza punti scelti, con l'asse
+/// «Tutti e due». Il tracciato non si vedrebbe più, e il file avrebbe una
+/// trasformazione che schiaccia tutto: niente da fare (`empty`).
+fn media_schiaccia(copia: &Copia, dopo: &Document) -> bool {
+    copia.mappa.elementi().iter().any(|e| {
+        let Some(n) = e.nodo else { return false };
+        let (Some(prima), Some(ora)) = (copia.documento.node(n), dopo.node(n)) else {
+            return false;
+        };
+        if std::ptr::eq(prima, ora) {
+            return false;
+        }
+        let Some(dati) = ora.path_data() else { return false };
+        let mut punti = dati.anchors().map(|(_, _, a)| a.p);
+        let Some(primo) = punti.next() else { return false };
+        let mut altri = punti.peekable();
+        altri.peek().is_some() && altri.all(|p| (p - primo).hypot() < 1e-6)
     })
 }
 
