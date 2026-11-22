@@ -1749,6 +1749,8 @@
     "draw-properties-contrast",
     "draw-resources-swatches",
     "draw-resources-corpo",
+    "draw-point-place",
+    "draw-point-coord",
     "vector-notice",
     "vector-about",
     "vector-about-desc",
@@ -4213,6 +4215,8 @@
     "draw-properties-contrast": "cornice",
     "draw-resources-swatches": "cornice",
     "draw-resources-corpo": "cornice",
+    "draw-point-place": "cornice",
+    "draw-point-coord": "cornice",
     "vector-notice": "cornice",
     "vector-about": "cornice",
     "vector-about-desc": "cornice",
@@ -9074,7 +9078,9 @@
         "draw-properties-menu",
         "draw-properties-contrast",
         "draw-resources-swatches",
-        "draw-resources-corpo"
+        "draw-resources-corpo",
+        "draw-point-place",
+        "draw-point-coord"
       ],
       "states": [
         "rest",
@@ -12738,7 +12744,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2462,
+    "hooks": 2464,
     "state_names": 7,
     "assigned_states": 1099,
     "components": 324,

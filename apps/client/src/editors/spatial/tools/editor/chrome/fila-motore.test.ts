@@ -102,7 +102,7 @@ describe("la fila dello strumento del motore nella testata", () => {
     registra("directSelection", stato({ attivo: false, spessore: 2 }));
     scegli("directSelection");
     registra("directSelection", stato({ attivo: true, spessore: 9 }));
-    expect(spia.aggiorna).toHaveBeenLastCalledWith({ attivo: true, spessore: 9 });
+    expect(spia.aggiorna).toHaveBeenLastCalledWith({ attivo: true, spessore: 9 }, expect.objectContaining({ options: { attivo: true, spessore: 9 } }));
     expect(fila.element.querySelector<HTMLInputElement>(".kit-form-checkbox")!.checked).toBe(true);
     expect(fila.element.querySelector<HTMLInputElement>(".kit-number-input")!.value).toBe("9");
   });

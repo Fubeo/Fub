@@ -75,7 +75,7 @@ describe("il cassetto Tutti gli strumenti", () => {
   it("la ricerca trova il nome senza maiuscole e nasconde gli altri gruppi", () => {
     const { popover, life } = apri();
     const input = popover.element.querySelector<HTMLInputElement>("input")!;
-    input.value = "PEN";
+    input.value = "INCHIOSTRO";
     input.dispatchEvent(new Event("input"));
     expect(popover.element.querySelector<HTMLElement>('[data-tool="pen"]')!.hidden).toBe(false);
     expect(popover.element.querySelector<HTMLElement>('[data-tool="select"]')!.hidden).toBe(true);

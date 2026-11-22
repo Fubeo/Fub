@@ -79,6 +79,7 @@ export const COMPLETO_IT = {
   "draw.disabled.needs_text": "Scegli un testo.",
   "draw.disabled.needs_group": "Scegli un gruppo.",
   "draw.disabled.needs_two": "Servono due oggetti.",
+  "draw.disabled.needs_anchors": "Scegli prima i punti con la Selezione diretta.",
   "draw.disabled.read_only": "Disegno di sola lettura.",
   "draw.disabled.unmapped": "Non ancora collegato.",
   "draw.disabled.other": "{text}",
@@ -202,6 +203,7 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.disabled.needs_text": "Choose a text.",
   "draw.disabled.needs_group": "Choose a group.",
   "draw.disabled.needs_two": "Needs two objects.",
+  "draw.disabled.needs_anchors": "Pick the points first with Direct Selection.",
   "draw.disabled.read_only": "The drawing is read-only.",
   "draw.disabled.unmapped": "Not connected yet.",
   "draw.disabled.other": "{text}",
@@ -284,6 +286,7 @@ export const RISORSE_EN: Record<keyof typeof RISORSE_IT, string> = {
 export const COLONNA_IT = {
   "draw.chrome.column.all": "Tutti gli strumenti",
   "draw.engine.tool": "Strumento del motore",
+  "draw.engine.done": "Disegno cambiato.",
   "draw.engine.prepare.failed": "Lo strumento non si è preparato: lo strumento di prima resta. Riprova.",
   "draw.engine.tool.preparing": "{tool}: si prepara…",
   "draw.engine.tool.failed": "{tool}: non si è preparato. Sceglilo di nuovo per riprovare.",
@@ -303,6 +306,7 @@ export const COLONNA_IT = {
 export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.chrome.column.all": "All tools",
   "draw.engine.tool": "Engine tool",
+  "draw.engine.done": "Drawing changed.",
   "draw.engine.prepare.failed": "The tool did not get ready: the previous tool stays. Try again.",
   "draw.engine.tool.preparing": "{tool}: getting ready…",
   "draw.engine.tool.failed": "{tool}: did not get ready. Choose it again to retry.",

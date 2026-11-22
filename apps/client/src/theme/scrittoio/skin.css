@@ -19556,6 +19556,18 @@ button.draw-isolation-crumb:hover {
   overflow-wrap: anywhere;
 }
 
+/* ── K6 · Il punto nella fila delle opzioni (T12) ───────────────────────── */
+.draw-point-place {
+  gap: var(--space-4);
+}
+.kit-number.draw-point-coord {
+  grid-template-columns: auto 5.5rem;
+  column-gap: var(--space-2);
+}
+.draw-point-coord .kit-number-box {
+  height: 28px;
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */

@@ -265,10 +265,10 @@ describe("la barra e il foglio", () => {
     expect(rail.getAttribute("aria-label")).toBe("Strumenti");
     expect(rail.getAttribute("aria-orientation")).toBe("vertical");
     const tools = railSlots();
-    expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Penna", "Gomma", "Rettangolo", "Testo"]);
+    expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Inchiostro", "Gomma", "Rettangolo", "Testo"]);
     expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false", "false"]);
     expect(tools[5]!.getAttribute("aria-keyshortcuts")).toBe("T");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Inchiostro", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     // Una casella con tendina dice anche la freccia di lato, che la apre.
     expect(tools[4]!.getAttribute("aria-keyshortcuts")).toBe("R ArrowRight");
     tools[4]!.focus();
@@ -640,7 +640,7 @@ describe("l'evidenziatore e il colore", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setSpace("full");
     expect(editor.workspace).toBe("full");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Inchiostro", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(free()).toBe(true);
     expect(railTool("Evidenziatore").title).toBe("Evidenziatore (Shift+P)");
     // Lo strumento, il documento, la selezione e la cronologia restano.
@@ -6082,7 +6082,7 @@ describe("il menu radiale", () => {
     expect(document.activeElement).toBe(surface());
 
     rightClick(100, 50);
-    expect(voices().slice(1, 4)).toEqual(["ne Selezione", "e Penna", "se Evidenziatore"]);
+    expect(voices().slice(1, 4)).toEqual(["ne Selezione", "e Inchiostro", "se Evidenziatore"]);
     voice("Colore: Blu").click();
     expect(spoken()).toBe("Colore: Blu.");
     editor.setTool("pen");
@@ -6820,7 +6820,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     mount(SOURCE, { workspace: "simple", onWorkspace });
     expect(host.querySelector<HTMLElement>(".draw-editor")!.dataset.workspace).toBe("simple");
     expect(rail().dataset.size).toBe("large");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Inchiostro", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
     expect(fullButton().hidden).toBe(false);
 
     fullButton().click();
@@ -6848,7 +6848,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     // richiamo, perché la scelta è già ricordata.
     onWorkspace.mockClear();
     editor.setSpace("full", ["select", "rect", "pen"]);
-    expect(railNames()).toEqual(["Selezione", "Rettangolo", "Penna"]);
+    expect(railNames()).toEqual(["Selezione", "Rettangolo", "Inchiostro"]);
     expect(onWorkspace).not.toHaveBeenCalled();
   });
 
@@ -6877,10 +6877,10 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
 
   it("una colonna personalizzata mette i suoi strumenti, nel suo ordine; gli altri restano nei tasti", () => {
     mount(SOURCE, { workspace: "full", toolbar: ["select", "ellipse", "pen", "domani" as never] });
-    expect(railNames()).toEqual(["Selezione", "Ellisse", "Penna"]);
+    expect(railNames()).toEqual(["Selezione", "Ellisse", "Inchiostro"]);
     // Senza la Selezione, la colonna la mette in cima.
     editor.setSpace("full", ["rect", "pen"]);
-    expect(railNames()).toEqual(["Selezione", "Rettangolo", "Penna"]);
+    expect(railNames()).toEqual(["Selezione", "Rettangolo", "Inchiostro"]);
     key("o");
     expect(editor.tool).toBe("ellipse");
   });
