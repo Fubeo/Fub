@@ -14,7 +14,7 @@
 //   aperto (`DrawingPreview.overlays`); `segniComeForma` li fa diventare una
 //   forma dello strato dell'anteprima, colorata coi token del tema.
 
-import type { DrawingOverlay, DrawingOverlayRole, DrawingPoint } from "../../../host/contract";
+import type { DrawingOverlay, DrawingPoint } from "../../../host/contract";
 import type { Elem } from "../scene/serialize";
 
 /// I ventuno strumenti di «disegnare» della famiglia `tracciati`, con l'id
@@ -47,18 +47,9 @@ export const STRUMENTI_DEI_TRACCIATI: ReadonlySet<string> = new Set([
 /// aperto fra un gesto e l'altro finché il motore dice `busy`.
 export const A_PIU_CLIC: ReadonlySet<string> = new Set(["pen", "smartPen", "curvature"]);
 
-/// Il colore di un ruolo, dai token del tema: i segni della selezione e
-/// dell'anteprima hanno l'accento, come le maniglie di Fub.
-function colore(role: DrawingOverlayRole): string {
-  switch (role) {
-    case "selection":
-    case "preview":
-    case "guide":
-    case "measure":
-    case "perspective":
-      return "var(--accent)";
-  }
-}
+// Il colore dei segni sta nella pelle (`skin/draw.css`), non sull'elemento:
+// ogni ruolo (selezione, anteprima, guida, misura, prospettiva) ha l'accento,
+// come le maniglie di Fub. Qui solo le classi.
 
 const punto = (p: DrawingPoint): string => `${p[0]} ${p[1]}`;
 
@@ -69,9 +60,8 @@ const punto = (p: DrawingPoint): string => `${p[0]} ${p[1]}`;
 /// non c'è niente da disegnare.
 export function segniComeForma(segni: readonly DrawingOverlay[], scala: number): Elem | null {
   const k = scala > 0 && Number.isFinite(scala) ? 1 / scala : 1;
-  const tratto = (role: DrawingOverlayRole, width: number, dashed: boolean): Record<string, string> => ({
-    fill: "none",
-    style: `stroke: ${colore(role)}`,
+  const tratto = (width: number, dashed: boolean): Record<string, string> => ({
+    class: "draw-engine-line",
     "stroke-width": String(width),
     "vector-effect": "non-scaling-stroke",
     ...(dashed ? { "stroke-dasharray": `${4 * k} ${3 * k}` } : {}),
@@ -81,10 +71,10 @@ export function segniComeForma(segni: readonly DrawingOverlay[], scala: number):
   for (const segno of segni) {
     switch (segno.kind) {
       case "path":
-        linee.push({ tag: "path", attrs: { d: segno.d, ...tratto(segno.role, segno.width, segno.dashed) } });
+        linee.push({ tag: "path", attrs: { d: segno.d, ...tratto(segno.width, segno.dashed) } });
         break;
       case "line":
-        linee.push({ tag: "path", attrs: { d: `M${punto(segno.a)} L${punto(segno.b)}`, ...tratto(segno.role, 1, segno.dashed) } });
+        linee.push({ tag: "path", attrs: { d: `M${punto(segno.a)} L${punto(segno.b)}`, ...tratto(1, segno.dashed) } });
         break;
       case "anchor": {
         const lato = segno.size * k;
@@ -95,7 +85,7 @@ export function segniComeForma(segni: readonly DrawingOverlay[], scala: number):
             y: String(segno.at[1] - lato / 2),
             width: String(lato),
             height: String(lato),
-            style: `stroke: ${colore(segno.role)}; fill: ${segno.filled ? colore(segno.role) : "var(--bg)"}`,
+            class: segno.filled ? "draw-engine-point draw-engine-point-pieno" : "draw-engine-point",
             "stroke-width": "1",
             "vector-effect": "non-scaling-stroke",
           },
@@ -109,7 +99,7 @@ export function segniComeForma(segni: readonly DrawingOverlay[], scala: number):
             cx: String(segno.at[0]),
             cy: String(segno.at[1]),
             r: String((segno.size * k) / 2),
-            style: `stroke: ${colore(segno.role)}; fill: ${segno.filled ? colore(segno.role) : "var(--bg)"}`,
+            class: segno.filled ? "draw-engine-point draw-engine-point-pieno" : "draw-engine-point",
             "stroke-width": "1",
             "vector-effect": "non-scaling-stroke",
           },
@@ -118,7 +108,7 @@ export function segniComeForma(segni: readonly DrawingOverlay[], scala: number):
       case "handle":
         punti.push({
           tag: "circle",
-          attrs: { cx: String(segno.at[0]), cy: String(segno.at[1]), r: String(3 * k), style: `fill: ${colore(segno.role)}` },
+          attrs: { cx: String(segno.at[0]), cy: String(segno.at[1]), r: String(3 * k), class: "draw-engine-handle" },
         });
         break;
       default:

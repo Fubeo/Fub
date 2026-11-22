@@ -26,7 +26,10 @@ describe("segniComeForma", () => {
     expect(forma.attrs.class).toBe("draw-engine-marks");
     const figli = forma.children as { tag: string; attrs: Record<string, string> }[];
     expect(figli.map((f) => f.tag)).toEqual(["path", "rect"]);
-    expect(figli[0]!.attrs.style).toBe("stroke: var(--accent)");
+    // Il colore sta nella pelle: sull'elemento solo le classi, nessuno stile.
+    expect(figli[0]!.attrs.class).toBe("draw-engine-line");
+    expect(figli[1]!.attrs.class).toBe("draw-engine-point draw-engine-point-pieno");
+    expect(JSON.stringify(forma)).not.toContain("style");
     // Un quadratino di 8 px sullo schermo, a zoom 2: 4 unità di scena, centrato.
     expect(figli[1]!.attrs).toEqual(expect.objectContaining({ x: "8", y: "18", width: "4", height: "4" }));
     expect(JSON.stringify(forma)).not.toMatch(/#[0-9a-f]{3,6}/i);

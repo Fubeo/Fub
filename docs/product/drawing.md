@@ -59,10 +59,7 @@ tendine, che si aprono tenendo premuta la casella, col tasto destro o con la
 freccia a destra. Nel Disegno completo la colonna ha sei gruppi (selezione,
 disegno, forme, modifica, colore, vista) e in fondo **Tutti gli strumenti**
 apre il cassetto: la ricerca, i gruppi con il tasto di ogni strumento, e
-«Modifica la colonna…». Accanto agli strumenti di Fub il Completo mostra
-quelli del motore la cui riga della mappa è «fatto»: le selezioni e la vista,
-e i ventuno strumenti dei tracciati, con la Penna di Bézier
-([penne](drawing-pen.md#la-penna-di-bézier-disegno-completo)). Le caselle che non stanno nello spazio della colonna passano nel cassetto. Ogni strumento ha un tasto: selezione (`V`), inchiostro (`P`),
+«Modifica la colonna…». Accanto agli strumenti di Fub il Completo mostra quelli del motore con la riga della mappa «fatto»: le selezioni, la vista e i ventuno dei tracciati ([penne](drawing-pen.md#la-penna-di-bézier-disegno-completo)). Le caselle che non stanno nello spazio della colonna passano nel cassetto. Ogni strumento ha un tasto: selezione (`V`), inchiostro (`P`),
 evidenziatore (`Maiusc+P`), gomma per oggetto (`E`), rettangolo (`R`),
 ellisse (`O`), linea (`L`) e freccia (`Maiusc+L`); la
 **Mano** (`H`) e lo **Zoom** (`Z`) muovono la vista in tutti e due gli spazi

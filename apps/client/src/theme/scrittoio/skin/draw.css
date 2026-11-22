@@ -208,6 +208,23 @@
   stroke: var(--accent);
   stroke-width: 1.5px;
 }
+/* I segni del motore del Completo (`motore/tracciati.ts`): il tracciato aperto
+   della Penna, i punti e le maniglie, nel colore d'accento. Un punto vuoto ha
+   il fondo del tema, uno pieno l'accento. */
+.draw-engine-line {
+  fill: none;
+  stroke: var(--accent);
+}
+.draw-engine-point {
+  fill: var(--bg);
+  stroke: var(--accent);
+}
+.draw-engine-point-pieno {
+  fill: var(--accent);
+}
+.draw-engine-handle {
+  fill: var(--accent);
+}
 .draw-zoom-box {
   border: 1px dashed var(--accent);
   background: color-mix(in oklch, var(--accent) 8%, transparent);
