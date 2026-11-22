@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 
-use fub_abi::DrawingDisabledReason;
+use fub_abi::{DrawingDisabledReason, DrawingRefusal};
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 
-use super::StatoFamiglia;
+use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
 
 /// Lo stato della famiglia: non tiene niente.
@@ -30,12 +30,19 @@ impl StatoFamiglia for Stato {
 
     /// Le voci di ≡ › Selezione spente col loro perché, prima di chiedere al motore.
     /// Il confronto con l'oggetto scelto (Uguale) e «Tutto sugli stessi livelli»
-    /// vogliono qualcosa di scelto; l'istanza di simbolo vuole un'istanza scelta;
+    /// vogliono qualcosa di scelto, e con un oggetto che la mappa non ha non si
+    /// usano, come nel nucleo; l'istanza di simbolo vuole un'istanza scelta;
     /// «Tutti gli oggetti di testo» vuole un testo nel disegno. Le altre valgono
-    /// sempre: il motore dice ciò che seleziona, anche niente.
+    /// sempre: non leggono ciò che è scelto, come «Tutto».
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
         if vuole_selezione(id) && selezione.is_empty() {
             return Some(DrawingDisabledReason::NoSelection);
+        }
+        if vuole_selezione(id) {
+            match nodi_scelti(copia, selezione) {
+                Err(DrawingRefusal::Locked) | Ok(_) => {}
+                Err(_) => return Some(DrawingDisabledReason::Unmapped),
+            }
         }
         match id {
             "select.same.symbolInstance" => {

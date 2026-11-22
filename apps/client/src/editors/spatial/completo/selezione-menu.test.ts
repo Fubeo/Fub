@@ -36,6 +36,11 @@ function trova(voci: readonly MenuItem[], etichetta: string): MenuItem | undefin
   return undefined;
 }
 
+/// I figli di una voce di menu, se è un sottomenu (il tipo di `items` è quello di un menu a funzione).
+function figli(voce: MenuItem | undefined): readonly MenuItem[] {
+  return voce !== undefined && Array.isArray(voce.items) ? (voce.items as readonly MenuItem[]) : [];
+}
+
 const AZIONI = { strumento: vi.fn(), client: vi.fn(), riprova: vi.fn() };
 
 describe("il menu ≡ › Selezione", () => {
@@ -46,7 +51,7 @@ describe("il menu ≡ › Selezione", () => {
     const selezione = voci.find((voce) => Array.isArray(voce.items) && voce.items.some((dentro) => dentro.label === "Uguale"));
     expect(selezione, "il menu Selezione").toBeDefined();
     const uguale = trova(selezione!.items as MenuItem[], "Uguale");
-    expect(uguale?.items?.map((voce) => voce.label)).toEqual(expect.arrayContaining(["Colore riempimento", "Opacità", "Istanza di simbolo"]));
+    expect(figli(uguale).map((voce) => voce.label)).toEqual(expect.arrayContaining(["Colore riempimento", "Opacità", "Istanza di simbolo"]));
     expect((selezione!.items as MenuItem[]).some((voce) => voce.label === "Oggetto" && Array.isArray(voce.items))).toBe(true);
     c.chiudi();
   });
