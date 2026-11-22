@@ -391,20 +391,20 @@ motore	artboard.copy	Copy Artboard		tavole	F2	T19	da fare	ispettore/design/docum
 motore	artboard.cut	Cut Artboard		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Taglia tavola da disegno
 motore	text.setFormat	Character / Paragraph		testo	F2	T16	da fare	ispettore/design	famiglia		Carattere / Paragrafo
 motore	text.convertListToText	Convert to Text		testo	F2	T16	da fare	ispettore/design	famiglia		Converti in testo
-motore	path.appendAnchor	Add Anchor (Pen)		tracciati	F1	T12	da fare	ispettore/design	famiglia		Aggiungi ancoraggio (Penna)
-motore	path.close	Close Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Chiudi tracciato
-motore	path.moveAnchors	Move Anchors		tracciati	F1	T12	da fare	ispettore/design	famiglia		Sposta ancoraggi
-motore	path.setHandle	Move Direction Handle		tracciati	F1	T12	da fare	ispettore/design	famiglia		Sposta maniglia di direzione
-motore	path.moveAnchor	Move Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Sposta punto di ancoraggio
+motore	path.appendAnchor	Add Anchor (Pen)		tracciati	F1	T12	fatto	ispettore/design	famiglia		Aggiungi ancoraggio (Penna)
+motore	path.close	Close Path		tracciati	F1	T12	fatto	ispettore/design	famiglia		Chiudi tracciato
+motore	path.moveAnchors	Move Anchors		tracciati	F1	T12	fatto	ispettore/design	famiglia		Sposta ancoraggi
+motore	path.setHandle	Move Direction Handle		tracciati	F1	T12	fatto	ispettore/design	famiglia		Sposta maniglia di direzione
+motore	path.moveAnchor	Move Anchor Point		tracciati	F1	T12	fatto	ispettore/design	famiglia		Sposta punto di ancoraggio
 motore	path.setAnchors	Set Anchors		tracciati	F1	T12	da fare	ispettore/design	famiglia		Imposta punti di ancoraggio
 motore	path.reverse	Reverse Path Direction	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Inverti direzione tracciato
 motore	path.join	Join	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Unisci
 motore	path.average	Average…	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Media…
 motore	path.averageJoin	Average & Join…	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Media e unisci…
 motore	path.convertAnchors	Convert Anchor Points		tracciati	F1	T12	fatto	ispettore/design	famiglia		Converti punti di ancoraggio
-motore	path.deleteAnchors	Delete Anchor Points		tracciati	F1	T12	da fare	ispettore/design	famiglia		Elimina punti di ancoraggio
+motore	path.deleteAnchors	Delete Anchor Points		tracciati	F1	T12	fatto	ispettore/design	famiglia		Elimina punti di ancoraggio
 motore	path.reshape	Reshape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella
-motore	path.insertAnchor	Add Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Aggiungi punto di ancoraggio
+motore	path.insertAnchor	Add Anchor Point		tracciati	F1	T12	fatto	ispettore/design	famiglia		Aggiungi punto di ancoraggio
 motore	path.cutAtAnchors	Cut Path at Selected Anchor Points		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglia tracciato nei punti di ancoraggio selezionati
 motore	object.pathfinder.unite	Unite	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Unione
 motore	object.pathfinder.minusFront	Minus Front	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Meno davanti
@@ -765,11 +765,11 @@ motore	clipboard.importEps	Load EPS into Clipboard		nucleo	F1	T11	da fare	intern
 motore	path.freehand	Pencil		tracciati	F1	T12	da fare	ispettore/design	famiglia		Matita
 motore	path.curvature	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
 motore	path.curvatureEdit	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
-motore	path.removeAnchor	Delete Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Elimina punto di ancoraggio
+motore	path.removeAnchor	Delete Anchor Point		tracciati	F1	T12	fatto	ispettore/design	famiglia		Elimina punto di ancoraggio
 motore	path.removeAnchors	Remove Anchor Points	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Rimuovi punti di ancoraggio
-motore	path.convertAnchor	Convert Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Converti punto di ancoraggio
+motore	path.convertAnchor	Convert Anchor Point		tracciati	F1	T12	fatto	ispettore/design	famiglia		Converti punto di ancoraggio
 motore	path.reshapeSegment	Reshape Segment		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella segmento
-motore	path.split	Split Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Dividi tracciato
+motore	path.split	Split Path		tracciati	F1	T12	fatto	ispettore/design	famiglia		Dividi tracciato
 motore	path.knife	Knife		tracciati	F1	T12	da fare	ispettore/design	famiglia		Coltello
 motore	path.eraseRegion	Eraser		tracciati	F1	T12	da fare	ispettore/design	famiglia		Gomma
 motore	path.eraseSegments	Path Eraser		tracciati	F1	T12	da fare	ispettore/design	famiglia		Gomma tracciato

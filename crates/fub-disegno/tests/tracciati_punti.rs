@@ -461,3 +461,148 @@ fn gli_strumenti_dei_tracciati_non_toccano_l_inchiostro() {
         assert_eq!(d.revisione(), prima, "{strumento}: niente cambia");
     }
 }
+
+/// Un quadrilatero con la radice scalata (`width` doppio del `viewBox`) e
+/// spostata (`viewBox` che non parte da zero): la scena e il documento del
+/// motore non coincidono. Quattro punti, perché il cambio di un triangolo è
+/// sempre una matrice e la differenza lo scriverebbe come `transform`.
+const SCALATO: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="100 50 400 300" width="800" height="600">
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <path id="op7a7a7a7" d="M300 200 L360 200 L360 260 L300 260 Z" fill="#cccccc"/>
+  </g>
+</svg>"##;
+
+/// Le operazioni di un esito riuscito, in un passo.
+fn riuscito(esito: &fub_abi::DrawingOutcome) -> Value {
+    assert!(esito.refused.is_none(), "rifiutato: {esito:?}");
+    let ops = common::ops_di(esito);
+    assert_eq!(ops.as_array().map(Vec::len), Some(1), "un passo: {ops}");
+    ops
+}
+
+/// Il `d` del tracciato `id` nel testo `svg`.
+fn d_di<'a>(svg: &'a str, id: &str) -> &'a str {
+    let inizio = svg.find(&format!("id=\"{id}\"")).expect("l'elemento c'è");
+    let resto = &svg[inizio..];
+    let d = resto.find(" d=\"").expect("il d c'è") + 4;
+    &resto[d..d + resto[d..].find('"').expect("il d finisce")]
+}
+
+#[test]
+fn un_punto_spostato_si_salva_e_torna_uguale() {
+    let (mut d, _) = apri(BASE);
+    let valore = json!({ "element": "op7a7a7a7", "anchor": 1, "x": 370, "y": 190 });
+    let esito = comando(&mut d, "path.moveAnchor", &["op7a7a7a7"], valore).expect("vale");
+    let salvato = common::applica::applica(BASE, &riuscito(&esito)).expect("si applica");
+    assert_eq!(d_di(&salvato, "op7a7a7a7"), "M300 200 L370 190 L330 260 Z");
+
+    // Riaperto, il punto sta dove lo si è lasciato: la Selezione diretta lo
+    // prende lì.
+    let (mut riaperto, _) = apri(&salvato);
+    let esito = riaperto
+        .gesto(gesto(
+            "directSelection",
+            "commit",
+            clic(370.0, 190.0),
+            vec![],
+            &[],
+        ))
+        .expect("il gesto vale");
+    let stato = esito.state.expect("lo stato dello strumento");
+    assert_eq!(
+        stato.anchors,
+        vec![DrawingAnchor {
+            element: "op7a7a7a7".into(),
+            subpath: 0,
+            anchor: 1,
+            at: [370.0, 190.0],
+            end: false
+        }]
+    );
+    // La maniglia e il punto aggiunto passano dal file allo stesso modo.
+    let valore = json!({ "element": "op7a7a7a7", "anchor": 0, "which": "out", "x": 320, "y": 180 });
+    let esito = comando(&mut riaperto, "path.setHandle", &["op7a7a7a7"], valore).expect("vale");
+    let curvo = common::applica::applica(&salvato, &riuscito(&esito)).expect("si applica");
+    let (mut terzo, _) = apri(&curvo);
+    let valore = json!({ "element": "op7a7a7a7", "segment": 1, "t": 0.5 });
+    let esito = comando(&mut terzo, "path.insertAnchor", &["op7a7a7a7"], valore).expect("vale");
+    let piu = common::applica::applica(&curvo, &riuscito(&esito)).expect("si applica");
+    assert_eq!(
+        d_di(&piu, "op7a7a7a7"),
+        "M300 200 C320 180 370 190 370 190 L350 225 L330 260 Z"
+    );
+    // Riaperto ancora, un comando che non cambia la forma (spostare il punto
+    // dov'è già) riscrive lo stesso `d`: niente si perde nell'andata e ritorno.
+    let (mut quarto, _) = apri(&piu);
+    let valore = json!({ "element": "op7a7a7a7", "anchor": 2, "x": 350, "y": 225 });
+    let esito = comando(&mut quarto, "path.moveAnchor", &["op7a7a7a7"], valore).expect("vale");
+    let ops = common::ops_di(&esito);
+    if let Some(elenco) = ops.as_array().filter(|e| !e.is_empty()) {
+        let rifatto =
+            common::applica::applica(&piu, &Value::Array(elenco.clone())).expect("si applica");
+        assert_eq!(d_di(&rifatto, "op7a7a7a7"), d_di(&piu, "op7a7a7a7"));
+    }
+}
+
+#[test]
+fn le_coordinate_della_scena_passano_nel_documento_del_motore() {
+    // Il punto va dove la scena dice, anche se la radice scala e sposta.
+    let (mut d, _) = apri(SCALATO);
+    let valore = json!({ "element": "op7a7a7a7", "anchor": 1, "x": 370, "y": 190 });
+    let esito = comando(&mut d, "path.moveAnchor", &["op7a7a7a7"], valore).expect("vale");
+    let salvato = common::applica::applica(SCALATO, &riuscito(&esito)).expect("si applica");
+    assert_eq!(
+        d_di(&salvato, "op7a7a7a7"),
+        "M300 200 L370 190 L360 260 L300 260 Z",
+        "{esito:?}"
+    );
+    // Lo spostamento dei punti scelti è della scena: 10 a destra, 10 in su.
+    let (mut d, _) = apri(SCALATO);
+    let valore = json!({
+        "dx": 10, "dy": -10,
+        "anchors": [punto("op7a7a7a7", 0, 2, [360.0, 260.0], false)]
+    });
+    let esito = comando(&mut d, "path.moveAnchors", &["op7a7a7a7"], valore).expect("vale");
+    let salvato = common::applica::applica(SCALATO, &riuscito(&esito)).expect("si applica");
+    assert_eq!(
+        d_di(&salvato, "op7a7a7a7"),
+        "M300 200 L360 200 L370 250 L300 260 Z",
+        "{esito:?}"
+    );
+}
+
+#[test]
+fn i_comandi_su_un_punto_dicono_perche_non_si_fanno() {
+    let (mut d, _) = apri(BASE);
+    let prima = d.revisione();
+    // Un elemento che il disegno non ha: `unmapped`, come la selezione.
+    let esito = comando(
+        &mut d,
+        "path.moveAnchor",
+        &[],
+        json!({ "element": "nessuno", "anchor": 0, "x": 1, "y": 1 }),
+    )
+    .expect("vale");
+    assert_eq!(esito.refused, Some(DrawingRefusal::Unmapped));
+    // Senza `element`, con un numero che non è un numero o senza il punto:
+    // argomenti sbagliati.
+    for valore in [
+        json!({ "anchor": 0, "x": 1, "y": 1 }),
+        json!({ "element": "op7a7a7a7", "anchor": "uno", "x": 1, "y": 1 }),
+        json!({ "element": "op7a7a7a7", "x": 1, "y": 1 }),
+    ] {
+        let r = comando(&mut d, "path.moveAnchor", &["op7a7a7a7"], valore.clone());
+        assert!(matches!(r, Err(PluginError::BadArgs(_))), "{valore}: {r:?}");
+    }
+    assert_eq!(d.revisione(), prima, "niente cambia");
+    // I comandi su un punto sono accesi in un disegno che si cambia: il
+    // tracciato lo nominano nel valore.
+    let accesi = d.comandi(&[]);
+    for id in ["path.moveAnchor", "path.close", "path.split"] {
+        let voce = accesi
+            .iter()
+            .find(|c| c.id == format!("disegno.{id}"))
+            .unwrap_or_else(|| panic!("{id} c'è"));
+        assert_eq!(voce.disabled_reason, None, "{id}");
+    }
+}

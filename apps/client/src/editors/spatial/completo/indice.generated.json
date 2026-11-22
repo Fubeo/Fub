@@ -1779,6 +1779,22 @@
     },
     {
       "fonte": "motore",
+      "id": "path.appendAnchor",
+      "chiamata": {
+        "comando": "disegno.path.appendAnchor"
+      },
+      "etichetta": {
+        "it": "Aggiungi ancoraggio (Penna)",
+        "en": "Add Anchor (Pen)"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.average",
       "chiamata": {
         "comando": "disegno.path.average"
@@ -1808,6 +1824,38 @@
       "tasto": "Cmd+Alt+Shift+J",
       "effetto": "cambia",
       "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "path.close",
+      "chiamata": {
+        "comando": "disegno.path.close"
+      },
+      "etichetta": {
+        "it": "Chiudi tracciato",
+        "en": "Close Path"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.convertAnchor",
+      "chiamata": {
+        "comando": "disegno.path.convertAnchor"
+      },
+      "etichetta": {
+        "it": "Converti punto di ancoraggio",
+        "en": "Convert Anchor Point"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
     },
     {
       "fonte": "motore",
@@ -1843,6 +1891,38 @@
     },
     {
       "fonte": "motore",
+      "id": "path.deleteAnchors",
+      "chiamata": {
+        "comando": "disegno.path.deleteAnchors"
+      },
+      "etichetta": {
+        "it": "Elimina punti di ancoraggio",
+        "en": "Delete Anchor Points"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.insertAnchor",
+      "chiamata": {
+        "comando": "disegno.path.insertAnchor"
+      },
+      "etichetta": {
+        "it": "Aggiungi punto di ancoraggio",
+        "en": "Add Anchor Point"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.join",
       "chiamata": {
         "comando": "disegno.path.join"
@@ -1854,6 +1934,54 @@
       "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": "Cmd+J",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.moveAnchor",
+      "chiamata": {
+        "comando": "disegno.path.moveAnchor"
+      },
+      "etichetta": {
+        "it": "Sposta punto di ancoraggio",
+        "en": "Move Anchor Point"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.moveAnchors",
+      "chiamata": {
+        "comando": "disegno.path.moveAnchors"
+      },
+      "etichetta": {
+        "it": "Sposta ancoraggi",
+        "en": "Move Anchors"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.removeAnchor",
+      "chiamata": {
+        "comando": "disegno.path.removeAnchor"
+      },
+      "etichetta": {
+        "it": "Elimina punto di ancoraggio",
+        "en": "Delete Anchor Point"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -1884,6 +2012,38 @@
         "en": "Reverse Path Direction"
       },
       "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.setHandle",
+      "chiamata": {
+        "comando": "disegno.path.setHandle"
+      },
+      "etichetta": {
+        "it": "Sposta maniglia di direzione",
+        "en": "Move Direction Handle"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.split",
+      "chiamata": {
+        "comando": "disegno.path.split"
+      },
+      "etichetta": {
+        "it": "Dividi tracciato",
+        "en": "Split Path"
+      },
+      "posto": "ispettore/design",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",

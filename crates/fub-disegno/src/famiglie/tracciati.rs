@@ -34,6 +34,12 @@
 //!   ([`StatoFamiglia::rifiuto_del_motore`]).
 //! - **Maschera di ritaglio** (`RITAGLI`, T12): Crea, Rilascia e Modifica
 //!   contenuto, spenti e rifiutati col perché in `tracciati_ritagli.rs`.
+//! - **I comandi su un punto** (`SU_UN_PUNTO`, T12 punti): spostare un punto o
+//!   una maniglia, aggiungere, eliminare o convertire un punto, chiudere,
+//!   continuare o dividere un tracciato. Nominano il tracciato con `element` e
+//!   il punto per numero; `tracciati_punti.rs` li traduce per il motore.
+//!   Sposta ancoraggi ed Elimina punti di ancoraggio (Canc) sono comandi sui
+//!   punti scelti.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -52,8 +58,14 @@ use crate::apertura::Copia;
 mod ritagli;
 use ritagli::{ritaglio_rifiutato, ritaglio_spento, RITAGLI};
 
+#[path = "tracciati_punti.rs"]
+mod su_un_punto;
+use su_un_punto::{argomenti_del_punto, punto_rifiutato, SU_UN_PUNTO};
+
 /// I comandi che lavorano sui punti di ancoraggio scelti.
-pub(crate) const SUI_PUNTI: [&str; 7] = [
+pub(crate) const SUI_PUNTI: [&str; 9] = [
+    "path.moveAnchors",
+    "path.deleteAnchors",
     "path.convertAnchors",
     "path.cutAtAnchors",
     "path.join",
@@ -65,7 +77,8 @@ pub(crate) const SUI_PUNTI: [&str; 7] = [
 
 /// I comandi sui punti che senza punti scelti non fanno niente: da ≡ sono
 /// spenti con `needs_anchors`.
-const SOLO_COI_PUNTI: [&str; 3] = [
+const SOLO_COI_PUNTI: [&str; 4] = [
+    "path.deleteAnchors",
     "path.cutAtAnchors",
     "path.removeAnchors",
     "addon.pathtools.removeKeepShape",
@@ -269,6 +282,11 @@ impl StatoFamiglia for Stato {
     /// la selezione di oggetti non dice: da ≡ sono spenti, con
     /// `needs_anchors`; la fila dei punti li manda con i suoi punti.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        // Un comando su un punto nomina il suo tracciato nel valore: senza il
+        // valore si sa solo se il disegno si cambia.
+        if SU_UN_PUNTO.contains(&id) {
+            return (!copia.modificabile).then_some(DrawingDisabledReason::ReadOnly);
+        }
         if !SUI_PUNTI.contains(&id) && !sugli_oggetti(id) && !RITAGLI.contains(&id) {
             return None;
         }
@@ -320,8 +338,13 @@ impl StatoFamiglia for Stato {
 
     /// Media e unisci sui punti scelti che non sono due estremi aperti da
     /// unire (o sugli oggetti scelti, se la fila dei punti non ne manda):
-    /// `empty`, prima del motore, che non saprebbe quali unire.
+    /// `empty`, prima del motore, che non saprebbe quali unire. Un comando su
+    /// un punto il cui tracciato non si cambia, o che chiude un tracciato già
+    /// chiuso: il suo rifiuto (`tracciati_punti.rs`).
     fn rifiuto_valore(id: &str, copia: &Copia, selezione: &[String], valore: &Value) -> Option<DrawingRefusal> {
+        if SU_UN_PUNTO.contains(&id) {
+            return punto_rifiutato(id, copia, valore);
+        }
         if id != MEDIA_E_UNISCI {
             return None;
         }
@@ -329,6 +352,13 @@ impl StatoFamiglia for Stato {
         let scelti = punti(copia, &mut valore.clone()).ok()?;
         let scelti = (!scelti.is_empty()).then_some(&scelti);
         estremi_da_unire(copia, &nodi, scelti).is_none().then_some(DrawingRefusal::Empty)
+    }
+
+    /// I comandi su un punto: `element` diventa l'oggetto del motore, le
+    /// coordinate della scena passano nel suo documento, gli indici si
+    /// controllano sulla copia (`tracciati_punti.rs`).
+    fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, fub_abi::PluginError> {
+        argomenti_del_punto(id, copia, valore)
     }
 
     /// Un comando di Oggetto › Tracciato su un tratto della penna di Fub:
