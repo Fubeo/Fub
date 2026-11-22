@@ -24,6 +24,7 @@ export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
 import { registraAllinea } from "./allinea";
 import { registraTrasforma } from "./trasforma-sezione";
+import { registraTrasparenza } from "./trasparenza-sezione";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
 import type { ToolSpec } from "../tools/registry";
@@ -331,6 +332,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   registraAllinea(sezioni, eseguiPerId);
   // La sezione «Trasforma» (K6 T13, giro 3): posizione, misura, rotazione e inclinazione.
   registraTrasforma(sezioni, eseguiPerId);
+  registraTrasparenza(sezioni, eseguiPerId);
   const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila, esegui: eseguiPerId }, moduli: opzioni.moduli, prepara: opzioni.prepara });
   // La finestra di un comando con parametri (T6): il modulo dello schema della sua
   // famiglia. `null` se la famiglia non ha la finestra di quel comando.
