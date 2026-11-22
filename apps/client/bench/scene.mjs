@@ -1581,8 +1581,6 @@ export const SCENE = touchLast(onPage("shell", [
   ...[
     ["disegno-fam-forme", 1280, "La tendina della casella delle forme: Rettangolo, Ellisse, Poligono, coi nomi del Completo", "", openFormeTendina],
     ["disegno-fam-forme-800", 800, "La tendina della casella delle forme nella finestra minima del desktop, 800 px", "", openFormeTendina],
-    ["disegno-fam-forme-finestra", 1280, "La finestra «Rettangolo» da Ctrl+/: Larghezza e Altezza, con l'anteprima sul foglio", "", openFormeFinestra],
-    ["disegno-fam-forme-finestra-800", 800, "La finestra «Rettangolo» nella finestra minima del desktop, 800 px", "", openFormeFinestra],
     ["disegno-fam-trasforma", 1280, "La sezione Allinea nel Design con il disegno scelto: i pulsanti e «Allinea a»", "", openAllinea],
     ["disegno-fam-trasforma-800", 800, "La sezione Allinea nella finestra minima del desktop, 800 px", "", openAllinea],
   ].map(([id, width, title, extra, prepare]) => ({
@@ -5389,22 +5387,6 @@ async function openFormeTendina(page) {
   await page.waitForSelector(selettore);
   const slot = await page.evaluate((sel) => document.querySelector(sel).dataset.slot, selettore);
   await openRailFlyout(page, slot);
-  await page.evaluate(() => document.fonts.ready);
-}
-
-/// La finestra «Rettangolo» (K6 T13, giro 2) aperta dalla tavolozza di Ctrl+/ con la
-/// ricerca «Rettangolo», come la apre chi cerca il comando: Larghezza e Altezza, e
-/// l'anteprima sul foglio (la risposta del banco a `shape.rectangle`).
-async function openFormeFinestra(page) {
-  await openDrawing(page);
-  await page.keyboard.press("Control+/");
-  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
-  await page.fill(".draw-commands-dialog .draw-commands-field input", "Rettangolo");
-  await page.waitForFunction(() =>
-    [...document.querySelectorAll(".draw-commands-dialog .draw-commands-row")].some((riga) => riga.textContent.includes("Rettangolo")),
-  );
-  await page.locator(".draw-commands-dialog .draw-commands-row", { hasText: "Rettangolo" }).first().click();
-  await page.waitForSelector(".draw-effect-dialog .kit-number-box");
   await page.evaluate(() => document.fonts.ready);
 }
 
