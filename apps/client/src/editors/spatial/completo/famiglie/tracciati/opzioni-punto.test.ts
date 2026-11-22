@@ -95,7 +95,7 @@ describe("la fila dei punti scelti", () => {
 
   it("la famiglia la registra per la Selezione diretta e il Punto di ancoraggio", () => {
     const registraFila = vi.fn();
-    famiglia.registra!({ registraFila } as never);
+    famiglia.registra!({ registraFila, sezioni: { registra: vi.fn() }, esegui: vi.fn() } as never);
     expect(registraFila.mock.calls.map(([strumento]) => strumento)).toEqual([...STRUMENTI_CON_I_PUNTI]);
     expect(STRUMENTI_CON_I_PUNTI).toEqual(["directSelection", "anchorPoint"]);
   });

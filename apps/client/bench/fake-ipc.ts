@@ -47,6 +47,7 @@ import type {
   BundleInfo,
   CommandSpec,
   DocumentMatch,
+  DrawingCommandInfo,
   DrawingCommandRequest,
   DrawingGesture,
   DrawingLoss,
@@ -75,7 +76,7 @@ import { gridJournalText } from "../src/state/grid-journal";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
-import { rispostaDiFamiglia } from "./disegno-famiglie/risposte";
+import { RISPOSTE, rispostaDiFamiglia } from "./disegno-famiglie/risposte";
 import { comandiProva, comandiTrasformazioni, INDICE_PROVA } from "./disegno-indice-prova";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
@@ -1106,7 +1107,16 @@ function benchDrawingEngine(): DrawingFake | undefined {
   let instances = 0;
   return {
     // I comandi della prova: quali valgono per la selezione, e il perché (K6 T9a).
-    comandi: INDICE_PARAM === "prova" ? (selection) => comandiProva(selection) : (selection) => comandiTrasformazioni(selection),
+    // Con `?comandi=risposti` valgono quelli a cui il banco sa rispondere
+    // (`disegno-famiglie/`, K6 T12 giro 4): la finestra di Sposta tracciato e
+    // Converti della sezione dei punti si aprono come col motore vero. Senza,
+    // quelli delle trasformazioni (K6 T13 giro 3).
+    comandi:
+      INDICE_PARAM === "prova"
+        ? (selection) => comandiProva(selection)
+        : params.get("comandi") === "risposti"
+          ? () => comandiRisposti()
+          : (selection) => comandiTrasformazioni(selection),
     open: () => {
       const instance = `banco-${++instances}`;
       benchLastInstance = instance;
@@ -1123,6 +1133,12 @@ function benchDrawingEngine(): DrawingFake | undefined {
           ? benchPrefsOutcome(request)
           : rispostaDiFamiglia(request)),
   };
+}
+
+/// I comandi che il banco sa fare con l'indice generato: uno per risposta di
+/// `disegno-famiglie/`, accesi.
+function comandiRisposti(): DrawingCommandInfo[] {
+  return [...new Set(RISPOSTE.map((r) => r.comando))].map((id) => ({ id, enabled: true, disabled_reason: null }));
 }
 
 /// Il motore del disegno del banco: `undefined` senza `?drawing=`.

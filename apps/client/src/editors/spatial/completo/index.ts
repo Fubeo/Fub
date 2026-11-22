@@ -23,7 +23,7 @@ export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 // La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
 import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
 import { registraAllinea } from "./allinea";
-import { registraTrasforma, type ValoreTrasforma } from "./trasforma-sezione";
+import { registraTrasforma } from "./trasforma-sezione";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
 import type { ToolSpec } from "../tools/registry";
@@ -306,9 +306,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // sezione «Allinea» lo usa per i suoi pulsanti. Il primo clic porta la famiglia della voce
   // (chunk e preparazione), come la finestra di un comando; dopo un errore il clic la riprova.
   // Il comando parte solo da una famiglia pronta. Chiuso il Completo, non parte.
-  const eseguiPerId = (id: string, valori: Readonly<Record<string, ValoreTrasforma>> = {}, opzioni: { readonly senzaFinestra?: boolean } = {}): void => {
-    if (chiuso) return;
-    void indice().then(async (pronto) => {
+  const eseguiPerId = (id: string, valori: Readonly<Record<string, unknown>> = {}, opzioni: { readonly senzaFinestra?: boolean } = {}): Promise<void> => {
+    if (chiuso) return Promise.resolve();
+    return indice().then(async (pronto) => {
       if (chiuso) return;
       const voce = pronto.voci.find((one) => one.id === id);
       if (voce === undefined || !("comando" in voce.chiamata)) return;
@@ -323,7 +323,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       const base = typeof fisso === "object" && fisso !== null ? fisso : {};
       // Una sezione che manda il comando lo manda senza la finestra della voce (la rotazione, K6 T13 giro 3).
       const senza = opzioni.senzaFinestra === true ? { ...voce, finestra: false } : voce;
-      eseguiVoce({ ...senza, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } }, dipendenze);
+      await eseguiVoce({ ...senza, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } }, dipendenze);
     });
   };
   // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,

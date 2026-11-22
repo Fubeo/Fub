@@ -32,8 +32,9 @@ export interface ContestoCompleto {
   /// registrata vale.
   readonly registraFila: (strumento: string, costruisci: CostruisciFila) => void;
   /// Manda la voce `id` dell'indice (un comando del motore) con altri valori fissi, dal
-  /// percorso unico di `esegui.ts` (T13, giro 2): la sezione «Allinea» lo usa per i pulsanti.
-  readonly esegui: (id: string, valori?: Readonly<Record<string, string>>) => void;
+  /// percorso unico di `esegui.ts` (T13, giro 2): la sezione «Allinea» lo usa per i pulsanti,
+  /// quella dei punti (T12, giro 4) coi punti scelti. Si risolve a giro finito.
+  readonly esegui: (id: string, valori?: Readonly<Record<string, unknown>>) => Promise<void>;
 }
 
 /// Ciò che il file `index.ts` di una famiglia esporta di serie.
