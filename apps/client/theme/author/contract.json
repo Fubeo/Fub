@@ -9080,7 +9080,9 @@
         "draw-resources-swatches",
         "draw-resources-corpo",
         "draw-point-place",
-        "draw-point-coord"
+        "draw-point-coord",
+        "kit-number",
+        "kit-number-box"
       ],
       "states": [
         "rest",
