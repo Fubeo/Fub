@@ -19560,8 +19560,13 @@ button.draw-isolation-crumb:hover {
 /* Un popover del kit con le voci del menu di contesto, e sotto il campo della
    percentuale. Le voci hanno la faccia delle voci del menu: il fondo al passaggio
    e l'anello del fuoco. */
+/* Il fondo, il raggio e l'ombra sono quelli del menu di contesto: il menu dello
+   zoom sta accanto alle altre scelte della banda. */
 .kit-popover.draw-zoom-popover {
   min-width: 220px;
+  border-radius: calc(var(--radius-menu) + var(--space-2));
+  background: var(--sheet);
+  box-shadow: var(--shadow-pop, 0 0 0 1px color-mix(in oklab, var(--text) 8%, transparent), var(--shadow-3));
 }
 .draw-zoom-body {
   display: flex;
