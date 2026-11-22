@@ -50,7 +50,7 @@
 // L'inchiostro, l'evidenziatore, la gomma e la nota non passano mai di qua:
 // sono di Fub, e non chiamano il motore.
 
-import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingInput, type DrawingLoss, type DrawingOutcome, type DrawingPointer, type DrawingRefusal, type DrawingTool, type DrawingToolState } from "../../../host/contract";
+import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, MAX_GESTURE_EVENTS, type DrawingFrame, type DrawingInput, type DrawingLoss, type DrawingOutcome, type DrawingOverlay, type DrawingPointer, type DrawingRefusal, type DrawingTool, type DrawingToolState } from "../../../host/contract";
 import type { InkSample } from "../../../ink/sample";
 import type { Teardown } from "../../../ui/lifetime";
 import type { PaintNode } from "../painter/paint";
@@ -62,12 +62,14 @@ import { plural, t, type DrawKey } from "../strings";
 import { gesture as asGesture, transformedMatrix, transformValue } from "../tools/edit";
 import { ADDED, DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX } from "../tools/editor/constants";
 import type { EditorContext } from "../tools/editor/context";
-import { layerRefusal, layerTitle } from "../tools/editor/helpers";
+import { layerRefusal, layerTitle, matrixText } from "../tools/editor/helpers";
 import type { GestureBase, MotoreGesture } from "../tools/editor/types";
 import type { ToolId } from "../tools/registry";
 import type { GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
 import { cursoreCss, motoreDelloStrumento, StatiStrumenti } from "./strumento";
+import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
 import { A_PIU_CLIC, segniComeForma, STRUMENTI_DEI_TRACCIATI } from "./tracciati";
+import { toScreen } from "../view";
 
 /// Quanto un gesto aspetta il motore che si sta ancora aprendo.
 export const ATTESA_APERTURA_MS = 2_000;
@@ -530,6 +532,43 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// Toglie il tracciato aperto dalla sessione (`tieniAperto`): ogni volta
   /// che `aperto` cambia.
   let lasciaAperto: Teardown = () => {};
+  /// La tastiera del testo che si scrive (K6 T16): la casella nascosta, gli
+  /// ingressi che aspettano il loro fotogramma e la richiesta in volo.
+  const scrittura = new Scrittura(ctx.surface, {
+    manda: (inputs) => {
+      ingressi.push(...inputs);
+      programmaScrittura();
+    },
+    esci: () => {
+      chiudiAperto([{ kind: "key", key: "Escape", code: "Escape", pressed: true }]);
+      ctx.pickTool("select");
+      ctx.surface.focus({ preventScroll: true });
+    },
+    chiudi: () => {
+      chiudiAperto([]);
+    },
+    annulla: () => {
+      if (!chiudiAperto([])) return;
+      ctx.surface.focus({ preventScroll: true });
+      // Il passo del testo è l'ultimo appena arriva: Ctrl+Z toglie lui.
+      void ultimo.then(() => {
+        if (!ctx.disposed) ctx.undo();
+      });
+    },
+  });
+  const ingressi: DrawingInput[] = [];
+  let fotogrammaScrittura: number | null = null;
+  let scritturaInVolo = false;
+  /// Il testo aperto non è più: via la casella e ciò che aspettava.
+  const lasciaScrittura = (): void => {
+    if (fotogrammaScrittura !== null) cancelAnimationFrame(fotogrammaScrittura);
+    fotogrammaScrittura = null;
+    scrittura.chiudi(ctx.surface);
+  };
+  ctx.life.add(() => {
+    ingressi.length = 0;
+    lasciaScrittura();
+  });
   // Di serie la famiglia è pronta da sé; il Completo la sostituisce con la sua
   // preparazione (`ctx.preparaStrumento`), che porta la famiglia dall'indice.
   // Di serie il clic non fa niente: il Completo lo sostituisce (`completo/index.ts`).
@@ -659,6 +698,9 @@ export function installGestiMotore(ctx: EditorContext): void {
     const motore = ctx.motoreTool;
     const tool = motore !== null ? motoreDelloStrumento(motore) : STRUMENTI_DEL_MOTORE.get(ctx.tool);
     if (tool === undefined || porta.adesso() === null) return null;
+    // Un clic mentre si scrive chiude il testo com'è, in un passo, prima del
+    // gesto nuovo: il clic dopo è un testo nuovo, o un altro strumento.
+    if (aperto !== null && scrive(aperto.ultimo)) chiudiAperto([]);
     const layer = ctx.has("layers") ? (ctx.currentLayer()?.id ?? null) : null;
     const g: MotoreGesture = {
       ...base,
@@ -841,6 +883,11 @@ export function installGestiMotore(ctx: EditorContext): void {
       // La forma nuova; senza, i segni del motore (il tracciato aperto della
       // penna), che stanno in coordinate di scena.
       const forma = elemDi(preview?.shape ?? null);
+      if (forma !== null && scrive(g)) {
+        anteprimaDelTesto(g, forma, preview?.overlays ?? []);
+        ctx.showHandles();
+        return;
+      }
       if (forma !== null) ctx.showShape(forma, layerMatrix(g.layer));
       else ctx.showShape(segniComeForma(preview?.overlays ?? [], ctx.camera.scale), IDENTITY);
       g.marquee = riquadroDi(preview?.marquee ?? null);
@@ -865,6 +912,56 @@ export function installGestiMotore(ctx: EditorContext): void {
     });
   };
 
+  /// Il gesto `g` è di uno strumento che scrive (K6 T16).
+  const scrive = (g: MotoreGesture): boolean => typeof g.tool === "object" && STRUMENTI_CHE_SCRIVONO.has(g.tool.engine.id);
+
+  /// Chiede il fotogramma che manderà gli ingressi del testo.
+  const programmaScrittura = (): void => {
+    if (fotogrammaScrittura !== null || ctx.disposed) return;
+    fotogrammaScrittura = requestAnimationFrame(() => {
+      fotogrammaScrittura = null;
+      mandaScrittura();
+    });
+  };
+
+  /// Gli ingressi scritti dall'ultimo fotogramma, in una richiesta d'anteprima
+  /// dopo le richieste del testo aperto; una alla volta, e quelli arrivati nel
+  /// frattempo partono al fotogramma dopo.
+  const mandaScrittura = (): void => {
+    const a = aperto;
+    if (a === null || scritturaInVolo || ingressi.length === 0 || ctx.disposed) return;
+    const g = a.ultimo;
+    const lotto = ingressi.splice(0);
+    scritturaInVolo = true;
+    void send(g, "preview", [], lotto).then((esito) => {
+      scritturaInVolo = false;
+      if (ctx.disposed || aperto !== a) return;
+      if (esito !== null && esito.refused === null) showPreview(g, esito);
+      if (ingressi.length > 0) programmaScrittura();
+    });
+  };
+
+  /// L'anteprima del testo che si scrive: il testo nelle coordinate del suo
+  /// livello, il cursore e la selezione del motore in quelle della scena, e il
+  /// testo del disegno che si sta cambiando nascosto sotto. La casella nascosta
+  /// va sul cursore, per la finestra dell'IME.
+  const anteprimaDelTesto = (g: MotoreGesture, forma: Elem, segni: readonly DrawingOverlay[]): void => {
+    const id = forma.attrs.id;
+    const { id: _tolto, ...attrs } = forma.attrs;
+    const testo: Elem = id === undefined ? forma : { ...forma, attrs };
+    const nelLivello: Elem = { tag: "g", attrs: { transform: matrixText(layerMatrix(g.layer)) }, children: [testo] };
+    const cursore = segniComeForma(segni, ctx.camera.scale);
+    ctx.showShape({ tag: "g", attrs: {}, children: cursore === null ? [nelLivello] : [nelLivello, cursore] }, IDENTITY);
+    const sotto = id === undefined ? null : ctx.currentIndex().get(id);
+    ctx.painter.setDraft(sotto === null ? null : { hidden: new Set(sotto.paints) });
+    const riga = segni.find((s): s is Extract<DrawingOverlay, { kind: "line" }> => s.kind === "line");
+    if (riga !== undefined) {
+      const [ax, ay] = toScreen(ctx.camera, riga.a);
+      const [bx, by] = toScreen(ctx.camera, riga.b);
+      scrittura.posa(Math.min(ax, bx), Math.min(ay, by), Math.hypot(bx - ax, by - ay));
+    }
+  };
+
   /// Via l'anteprima del gesto.
   const clearPreview = (g: MotoreGesture): void => {
     g.matrix = null;
@@ -883,7 +980,7 @@ export function installGestiMotore(ctx: EditorContext): void {
     // Gli eventi oltre il tetto di una richiesta partono prima, come
     // anteprime che non si disegnano.
     for (const pezzo of pezzi.slice(0, -1)) void send(g, "preview", pezzo);
-    if (typeof g.tool === "object" && A_PIU_CLIC.has(g.tool.engine.id)) {
+    if (typeof g.tool === "object" && (A_PIU_CLIC.has(g.tool.engine.id) || STRUMENTI_CHE_SCRIVONO.has(g.tool.engine.id))) {
       tieniAperto(g, pezzi[pezzi.length - 1] ?? []);
       return;
     }
@@ -917,11 +1014,15 @@ export function installGestiMotore(ctx: EditorContext): void {
       if (ctx.disposed || aperto?.ultimo !== g) return;
       if (esito === null) {
         aperto = null;
+        lasciaScrittura();
         clearPreview(g);
         ctx.showHandles();
         return;
       }
       if (esito.refused === null && esito.state?.busy === true) {
+        // Lo strumento che scrive vuole la tastiera: la casella prima
+        // dell'anteprima, che la posa sul cursore.
+        if (esito.state.wants_text && scrive(g)) scrittura.apri(t("draw.engine.type.box"));
         showPreview(g, esito);
         proteggiAperto(g);
         return;
@@ -943,7 +1044,10 @@ export function installGestiMotore(ctx: EditorContext): void {
         chiusura: () => {
           if (aperto === a) aperto = null;
           lasciaAperto = () => {};
-          return { ...started.base, phase: "commit", events: [] };
+          // Ciò che si è scritto e non è ancora partito va col commit.
+          const scritti = ingressi.splice(0);
+          lasciaScrittura();
+          return { ...started.base, phase: "commit", events: [], ...(scritti.length > 0 ? { inputs: scritti } : {}) };
         },
         chiuso: (esito) => {
           if (esito !== null && "kind" in esito) {
@@ -983,7 +1087,11 @@ export function installGestiMotore(ctx: EditorContext): void {
     aperto = null;
     lasciaAperto();
     lasciaAperto = () => {};
-    const done = send(a.ultimo, "commit", [], inputs).then((esito) => chiusoCon(a, esito));
+    // Ciò che si è scritto e aspetta il suo fotogramma parte col commit, prima
+    // del tasto che chiude.
+    const tutti = [...ingressi.splice(0), ...inputs];
+    lasciaScrittura();
+    const done = send(a.ultimo, "commit", [], tutti).then((esito) => chiusoCon(a, esito));
     ultimo = done;
     return true;
   };
@@ -1142,6 +1250,8 @@ export function installGestiMotore(ctx: EditorContext): void {
     if (g.sent > 0) {
       void send(g, "cancel", []);
       aperto = null;
+      ingressi.length = 0;
+      lasciaScrittura();
       lasciaAperto();
       lasciaAperto = () => {};
     }

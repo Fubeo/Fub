@@ -605,7 +605,7 @@ motore	text.tabs.get	Tab Stops		testo	F2	T16	da fare	interno	famiglia	lettura de
 motore	text.tabs.clear	Clear All Tabs	Window › Tabs	testo	F2	T16	da fare	ispettore/design	famiglia		Cancella tutte le tabulazioni
 motore	text.editRange	Edit Text		testo	F2	T16	da fare	ispettore/design	famiglia		Modifica testo
 motore	text.startList	Bullets and Numbering		testo	F2	T16	da fare	ispettore/design	famiglia		Punti elenco e numerazione
-motore	text.setRangeStyle	Character		testo	F2	T16	da fare	ispettore/design	famiglia		Carattere
+motore	text.setRangeStyle	Character		testo	F2	T16	fatto	ispettore/design	famiglia		Carattere
 motore	text.touchType	Touch Type		testo	F2	T16	da fare	ispettore/design	famiglia		Ritocco testo
 motore	text.getRange	Get Text Range		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Ottieni intervallo di testo
 motore	text.createInPath	Area / Path Type		testo	F2	T16	da fare	ispettore/design	famiglia		Testo in area / su tracciato
@@ -639,7 +639,7 @@ motore	text.areaOptions	Area Type Options…	Type	testo	F2	T16	da fare	menu/test
 motore	text.reshapeArea	Reshape Type Area		testo	F2	T16	da fare	ispettore/design	famiglia		Rimodella area di testo
 motore	text.reshapePath	Reshape Type Path		testo	F2	T16	da fare	ispettore/design	famiglia		Reshape Type Path
 motore	text.fitHeadline	Fit Headline	Type	testo	F2	T16	da fare	menu/testo	famiglia		Adatta titolo
-motore	text.setStyle	Character		testo	F2	T16	da fare	ispettore/design	famiglia		Carattere
+motore	text.setStyle	Character		testo	F2	T16	fatto	ispettore/design	famiglia		Carattere
 motore	type.ruby	Ruby…		testo	F2	T16	da fare	ispettore/design	famiglia	finestra	Ruby…
 motore	type.changeCase	Change Case	Type › Change Case	testo	F2	T16	da fare	menu/testo	famiglia		Maiuscole/minuscole
 motore	type.smartPunctuation	Smart Punctuation…	Type	testo	F2	T16	da fare	menu/testo	famiglia	finestra	Punteggiatura intelligente…
@@ -1288,7 +1288,7 @@ strumento	addAnchor	Add Anchor Point Tool		tracciati	F1	T12	fatto	colonna/disegn
 strumento	deleteAnchor	Delete Anchor Point Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Elimina punto di ancoraggio
 strumento	anchorPoint	Anchor Point Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Punto di ancoraggio
 strumento	curvature	Curvature Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «curvature»	Strumento Curvatura
-strumento	type	Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo
+strumento	type	Type Tool		testo	F2	T16	fatto	colonna/testo	famiglia	riquadro «type»	Strumento Testo
 strumento	areaType	Area Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo in area
 strumento	typeOnPath	Type on a Path Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo su tracciato
 strumento	verticalType	Vertical Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo verticale
@@ -1516,7 +1516,7 @@ pannello	asset_export	Asset Export	Window	web	F3	T22	da fare	ispettore/design/do
 pannello	attributes	Attributes	Window	dati	F4	T26	da fare	ispettore/design	famiglia		Attributi
 pannello	blend	Blend	Window	dinamici	F2	T21	da fare	finestra	famiglia		Fusione
 pannello	brushes	Brushes	Window	pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Pennelli
-pannello	character	Character	Window	testo	F2	T16	da fare	ispettore/design	famiglia		Carattere
+pannello	character	Character	Window	testo	F2	T16	fatto	ispettore/design	famiglia		Carattere
 pannello	color	Color	Window	colore	F1	T14	da fare	ispettore/design	famiglia		Colore
 pannello	color_guide	Color Guide	Window	colore	F1	T14	da fare	ispettore/design	famiglia		Guida colori
 pannello	color_themes	Color Themes	Window	colore	F1	T14	da fare	ispettore/risorse	famiglia		Temi colore
@@ -1537,7 +1537,7 @@ pannello	magic_wand	Magic Wand	Window	livelli	F1	T15	da fare	testata	famiglia		B
 pannello	memo	Memo	Window	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Memo
 pannello	navigator	Navigator	Window	vista	F1	T11	fatto	banda	famiglia		Navigatore
 pannello	opentype	Opentype	Window	testo	F2	T16	da fare	ispettore/design	famiglia		Opentype
-pannello	paragraph	Paragraph	Window	testo	F2	T16	da fare	ispettore/design	famiglia		Paragrafo
+pannello	paragraph	Paragraph	Window	testo	F2	T16	fatto	ispettore/design	famiglia		Paragrafo
 pannello	pathfinder	Pathfinder	Window	forme	F1	T13	da fare	ispettore/design	famiglia		Elaborazione tracciati
 pannello	pattern_options	Pattern Options	Window	trame	F2	T21	da fare	ispettore/design	famiglia		Opzioni motivo
 pannello	properties	Properties	Window	fub	—	T11	fub	fub	—	l'ispettore del disegno di Fub (scheda Design)	Proprietà

@@ -515,3 +515,127 @@ fn la_carta_non_si_sposta_con_uno_strumento_del_motore() {
         "{esito:?}"
     );
 }
+
+/// Un disegno con un testo di punto di due righe, come lo scrive Fub.
+const CON_IL_TESTO: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <text id=\"ot1t1t1t1\" x=\"40\" y=\"80\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"32\">\n      <tspan x=\"40\" dy=\"0\">Pioggia</tspan>\n      <tspan x=\"40\" dy=\"40\">sul mare</tspan>\n    </text>\n  </g>\n</svg>\n";
+
+fn scrivi(testo: &str) -> Value {
+    json!({ "kind": "text", "text": testo })
+}
+
+/// La forma dell'anteprima: il `<text>` che si sta scrivendo.
+fn forma(esito: &DrawingOutcome) -> Value {
+    esito
+        .preview
+        .as_ref()
+        .and_then(|p| p.shape.clone())
+        .unwrap_or_else(|| panic!("l'anteprima non ha la forma: {esito:?}"))
+}
+
+fn righe_della_forma(f: &Value) -> Vec<String> {
+    f["children"]
+        .as_array()
+        .map(|v| {
+            v.iter()
+                .map(|c| c["text"].as_str().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[test]
+fn il_testo_che_si_scrive_si_vede_nell_anteprima_con_emoji_e_accenti() {
+    let (mut d, _) = apri(DISEGNO);
+    gesto(&mut d, "type", "preview", clic(30.0, 250.0), vec![]);
+    // Un'emoji fuori dal piano di base, un accento composto (e + U+0301) e
+    // una famiglia di emoji con i congiuntori: le righe tornano come sono.
+    let parola = "Città 🌧 e\u{301} 👩\u{200d}👩\u{200d}👧";
+    let scritto = gesto(&mut d, "type", "preview", vec![], vec![scrivi(parola)]);
+    assert_eq!(scritto.refused, None, "{scritto:?}");
+    let f = forma(&scritto);
+    assert_eq!(f["tag"], "text", "{f}");
+    assert!(
+        f["attrs"].get("id").is_none(),
+        "un testo nuovo non ha id: {f}"
+    );
+    assert_eq!(righe_della_forma(&f), [parola]);
+    // Invio va a capo: due righe, la seconda giù di un'interlinea.
+    let a_capo = gesto(
+        &mut d,
+        "type",
+        "preview",
+        vec![],
+        vec![tasto("Enter"), scrivi("due")],
+    );
+    let f = forma(&a_capo);
+    assert_eq!(righe_della_forma(&f), [parola, "due"]);
+    assert_ne!(f["children"][1]["attrs"]["dy"], "0", "{f}");
+    // Esc chiude: il commit scrive le stesse righe.
+    let fine = gesto(&mut d, "type", "commit", vec![], vec![tasto("Escape")]);
+    assert_eq!(fine.refused, None, "{fine:?}");
+    let testo = ops_di(&fine).to_string();
+    assert!(testo.contains(&json!(parola).to_string()), "{testo}");
+    assert!(testo.contains("\"due\""), "{testo}");
+    // Il tratto dello stile di Fub (quello delle forme) non va sul testo: il
+    // testo nuovo è pieno, senza contorno.
+    let piatte = common::applica::piatte(&ops_di(&fine));
+    let nuovo = &piatte[0]["elem"]["attrs"];
+    assert_eq!(nuovo["fill"], "#000000", "{nuovo}");
+    assert!(nuovo.get("stroke").is_none(), "{nuovo}");
+}
+
+#[test]
+fn la_cancellazione_toglie_un_carattere_intero() {
+    let (mut d, _) = apri(DISEGNO);
+    gesto(&mut d, "type", "preview", clic(30.0, 250.0), vec![]);
+    let esito = gesto(
+        &mut d,
+        "type",
+        "preview",
+        vec![],
+        vec![scrivi("ab🌧"), tasto("Backspace"), scrivi("c")],
+    );
+    // Il Backspace toglie l'emoji intera, non metà della coppia surrogata
+    // che JavaScript vedrebbe.
+    assert_eq!(righe_della_forma(&forma(&esito)), ["abc"]);
+}
+
+#[test]
+fn scrivere_in_un_testo_che_c_e_cambia_le_sue_righe() {
+    let (mut d, _) =
+        Disegno::apri_con(&common::disegni_con_inter(), CON_IL_TESTO).expect("il disegno si apre");
+    // Un clic sulla seconda riga, Fine, e un punto esclamativo.
+    let dentro = gesto(&mut d, "type", "preview", clic(60.0, 115.0), vec![]);
+    assert_eq!(dentro.refused, None, "{dentro:?}");
+    let esito = gesto(
+        &mut d,
+        "type",
+        "preview",
+        vec![],
+        vec![tasto("End"), scrivi("!")],
+    );
+    let f = forma(&esito);
+    // L'anteprima porta l'id del testo del file: il client lo nasconde
+    // mentre si scrive.
+    assert_eq!(f["attrs"]["id"], "ot1t1t1t1", "{f}");
+    let fine = gesto(&mut d, "type", "commit", vec![], vec![tasto("Escape")]);
+    assert_eq!(fine.refused, None, "{fine:?}");
+    assert_eq!(
+        common::applica::piatte(&ops_di(&fine)),
+        [json!({ "op": "text", "id": "ot1t1t1t1", "lines": ["Pioggia", "sul mare!"] })],
+        "la prima riga resta com'è scritta nel file"
+    );
+}
+
+#[test]
+fn un_clic_e_esc_senza_scrivere_non_lascia_niente() {
+    let (mut d, _) = apri(DISEGNO);
+    let pronto = gesto(&mut d, "type", "preview", clic(30.0, 250.0), vec![]);
+    // Nessun testo segnaposto (in inglese): la casella è vuota.
+    if let Some(f) = pronto.preview.as_ref().and_then(|p| p.shape.as_ref()) {
+        assert_eq!(righe_della_forma(f).concat(), "", "{f}");
+    }
+    let fine = gesto(&mut d, "type", "commit", vec![], vec![tasto("Escape")]);
+    assert_eq!(fine.ops, None, "{fine:?}");
+    assert_eq!(fine.refused, Some(DrawingRefusal::Empty));
+}

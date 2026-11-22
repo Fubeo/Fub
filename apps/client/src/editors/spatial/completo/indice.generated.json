@@ -1891,6 +1891,38 @@
     },
     {
       "fonte": "motore",
+      "id": "text.setRangeStyle",
+      "chiamata": {
+        "comando": "disegno.text.setRangeStyle"
+      },
+      "etichetta": {
+        "it": "Carattere",
+        "en": "Character"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "text.setStyle",
+      "chiamata": {
+        "comando": "disegno.text.setStyle"
+      },
+      "etichetta": {
+        "it": "Carattere",
+        "en": "Character"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "transparency.set",
       "chiamata": {
         "comando": "disegno.transparency.set"
@@ -2993,6 +3025,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "type",
+      "chiamata": {
+        "strumento": "type"
+      },
+      "etichetta": {
+        "it": "Strumento Testo",
+        "en": "Type Tool"
+      },
+      "posto": "colonna/testo",
+      "famiglia": "testo",
+      "tasto": "T",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "zoom",
       "chiamata": {
         "strumento": "zoom"
@@ -3025,6 +3073,22 @@
     },
     {
       "fonte": "pannello",
+      "id": "character",
+      "chiamata": {
+        "client": "character"
+      },
+      "etichetta": {
+        "it": "Carattere",
+        "en": "Character"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
       "id": "info",
       "chiamata": {
         "client": "info"
@@ -3051,6 +3115,22 @@
       },
       "posto": "banda",
       "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "paragraph",
+      "chiamata": {
+        "client": "paragraph"
+      },
+      "etichetta": {
+        "it": "Paragrafo",
+        "en": "Paragraph"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false

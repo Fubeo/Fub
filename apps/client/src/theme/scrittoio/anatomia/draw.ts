@@ -104,5 +104,10 @@ export const DRAW: PartAnatomy = {
       states: [S("rest"), S("focused"), S("disabled")],
       hooks: ["draw-color", "draw-color-wells", "draw-color-label", "draw-color-active", "draw-color-actions", "kit-color-well", "kit-color-well-button", "kit-color-well-name", "kit-button"],
     },
+    {
+      name: "text-section",
+      states: [S("rest"), S("focused")],
+      hooks: ["draw-type", "draw-type-family", "draw-type-style", "draw-type-sizes", "draw-type-align", "kit-font-button"],
+    },
   ],
 };

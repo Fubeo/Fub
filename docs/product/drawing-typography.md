@@ -16,7 +16,10 @@ uguali, e il pannello delle proprietà ne cambia ancora l'aspetto. Un disegno
 può portare anche testi che vanno a capo da sé in un riquadro, [in
 area](#il-testo-in-area), o che scorrono lungo una linea, [su
 tracciato](#il-testo-su-tracciato). Come il file li scrive è in [formato
-della scena, testo](../reference/scene-format-text.md).
+della scena, testo](../reference/scene-format-text.md). Col Disegno completo
+acceso un testo nuovo si scrive col suo strumento Testo, e il carattere e il
+paragrafo si cambiano dalla scheda Design ([nel Disegno
+completo](#nel-disegno-completo)).
 
 ## Il pannello
 
@@ -54,6 +57,46 @@ righe e ai pezzi; ogni cambio è un passo di annulla col suo nome.
 Sottolineato e barrato scritti su tutto il testo hanno il colore del testo,
 anche sotto un pezzo di un altro colore: SVG dipinge la linea col
 riempimento di chi la scrive. Scritti su un pezzo hanno il colore del pezzo.
+
+## Nel Disegno completo
+
+Col Disegno completo acceso la casella del testo della colonna ha anche
+**Testo (Completo)**, il Testo di punto del motore.
+
+- **Un clic** sul foglio apre la casella dove si scrive, col cursore che
+  lampeggia: si scrive con la tastiera e con i metodi d'immissione (l'IME
+  delle lingue con la composizione, le lettere accentate composte, le emoji),
+  Invio va a capo, Backspace cancella. Le scorciatoie a un tasto, mentre si
+  scrive, sono lettere del testo.
+- **Esc** conferma il testo e torna alla Selezione, col testo nuovo scelto;
+  anche un clic altrove o un altro strumento lo confermano. Una casella vuota
+  non scrive niente.
+- **Annulla** dopo una parola chiude la casella e toglie il testo intero, un
+  passo solo.
+- Il testo nuovo ha il carattere e il corpo di serie del motore (Source Sans 3,
+  12): si cambiano dopo, da Carattere. Le righe vanno a capo con un a capo
+  semplice anche se si incolla un testo con gli a capo di Windows.
+
+Nella scheda Design, con un testo scelto, ci sono due sezioni:
+
+- **Carattere**: la **Famiglia**, col selettore dei caratteri (cerca, i
+  recenti, quelli del documento, quelli di Fub); lo **Stile**, cioè il peso
+  con o senza corsivo («Grassetto corsivo»), «Misto» se i testi scelti ne
+  hanno più d'uno; il **Corpo**, nell'unità del documento; la **Spaziatura**
+  delle lettere, in percentuale del corpo.
+- **Paragrafo**: l'**Allineamento**, a sinistra, al centro o a destra.
+
+Ogni cambio manda un comando solo e vale per tutti i testi scelti; i valori
+sono quelli che il pannello ha già. Le stesse righe escono dal pannello
+(Carattere, Dimensione, Peso, Spaziatura, Allineamento); l'Enfasi resta, per
+sottolineato e barrato, e restano lo Stile di Fub e l'Interlinea. Spento il
+Completo, il pannello è quello di sempre. L'interlinea, la crenatura, i
+rientri e il giustificato del motore non ci sono ancora: il motore non li sa
+scrivere in un SVG.
+
+Le sezioni sono in `apps/client/src/editors/spatial/completo/testo-sezioni.ts`,
+la casella in `apps/client/src/editors/spatial/motore/scrittura.ts`, i comandi
+nel motore (`crates/fub-disegno/src/famiglie/testo.rs`).
 
 ## Il testo in area
 

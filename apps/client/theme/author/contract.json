@@ -1807,6 +1807,11 @@
     "draw-color-active",
     "draw-color-actions",
     "kit-color-well-name",
+    "draw-type",
+    "draw-type-family",
+    "draw-type-style",
+    "draw-type-sizes",
+    "draw-type-align",
     "media-image",
     "zoom-view",
     "zoom-stage",
@@ -4296,6 +4301,11 @@
     "draw-color-active": "cornice",
     "draw-color-actions": "cornice",
     "kit-color-well-name": "cornice",
+    "draw-type": "cornice",
+    "draw-type-family": "cornice",
+    "draw-type-style": "cornice",
+    "draw-type-sizes": "cornice",
+    "draw-type-align": "cornice",
     "media-image": "contenuto",
     "zoom-view": "contenuto",
     "zoom-stage": "contenuto",
@@ -9294,6 +9304,22 @@
       ]
     },
     {
+      "name": "text-section",
+      "part": "draw",
+      "hooks": [
+        "draw-type",
+        "draw-type-family",
+        "draw-type-style",
+        "draw-type-sizes",
+        "draw-type-align",
+        "kit-font-button"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "markdown-preview",
       "part": "media",
       "hooks": [
@@ -12878,10 +12904,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2487,
+    "hooks": 2492,
     "state_names": 7,
-    "assigned_states": 1118,
-    "components": 329,
+    "assigned_states": 1120,
+    "components": 330,
     "preference_tokens": 196
   }
 }

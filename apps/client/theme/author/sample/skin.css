@@ -19757,6 +19757,35 @@ button.draw-isolation-crumb:hover {
   font-size: var(--text-xs);
 }
 
+/* ── K6 · Carattere e Paragrafo del Design (T16, giro 1) ─────────────────── */
+/* Carattere: la famiglia a riga piena, sotto lo stile, poi corpo e spaziatura
+   affiancati. Paragrafo: i tre allineamenti in una barra, come nel pannello. */
+.draw-type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+.draw-type-family > .kit-font-button {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.draw-type-family,
+.draw-type-style,
+.draw-type-align {
+  min-width: 0;
+}
+/* Corpo e spaziatura una riga piena per campo, come Trasforma. */
+.draw-type-sizes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+}
+.draw-type-align {
+  margin-block-end: var(--space-2);
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */

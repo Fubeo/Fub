@@ -32,17 +32,22 @@
 //   tracciato aperto lo dice con `tieniAperto`; il primo sync che arriva
 //   mette in fila, prima di sé, il `commit` che lo chiude alla revisione
 //   vecchia, e ne passa l'esito a chi l'ha aperto (un passo, come Invio).
+//   Lo stesso prima di un comando che cambia il disegno (T16): il motore
+//   scarterebbe il gesto a metà, e con lui il testo che si sta scrivendo.
 // - **Chiusa è chiusa.** Dopo `chiudi()` non parte più niente, e l'esito di
 //   una richiesta già in volo si scarta (`null`).
 
-import type {
-  DrawingChange,
-  DrawingCommandInfo,
-  DrawingCommandRequest,
-  DrawingGesture,
-  DrawingLoss,
-  DrawingOpen,
-  DrawingOutcome,
+import {
+  DRAWING_COMMAND_FAMILY_PREPARE,
+  DRAWING_COMMAND_TOOL_OPTION,
+  DRAWING_COMMAND_TOOL_STATE,
+  type DrawingChange,
+  type DrawingCommandInfo,
+  type DrawingCommandRequest,
+  type DrawingGesture,
+  type DrawingLoss,
+  type DrawingOpen,
+  type DrawingOutcome,
 } from "../../../host/contract";
 import { isErrorKind } from "../../../host/errors";
 import type { api } from "../../../host/ipc";
@@ -53,6 +58,11 @@ import { Queue } from "../../../ui/race";
 
 /// Quanto aspetta una richiesta al motore prima di darlo per perso.
 export const TEMPO_LIMITE_MS = 10_000;
+
+/// I comandi che non toccano il disegno: lo stato e le opzioni di uno
+/// strumento, la preparazione di una famiglia. Lasciano il tracciato aperto
+/// com'è; ogni altro comando lo chiude prima di partire (`comando`).
+const NON_TOCCANO: ReadonlySet<string> = new Set([DRAWING_COMMAND_TOOL_STATE, DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_FAMILY_PREPARE]);
 
 /// Il prefisso dell'identità con cui la sessione si registra come superficie.
 export const SUPERFICIE_MOTORE = "motore-disegno";
@@ -291,6 +301,10 @@ class Sessione implements SessioneMotore {
   }
 
   comando(request: ComandoMotore): Promise<DrawingOutcome | MotoreAssente | null> {
+    // Il motore scarta il gesto lasciato a metà quando un comando cambia il
+    // disegno: il tracciato aperto o il testo che si scrive si chiudono prima,
+    // in un passo, come prima di un sync (K6 T16).
+    if (!NON_TOCCANO.has(request.id)) this.#chiudiAperto();
     return this.#conRiprova((revision) =>
       this.#host.drawingCommand(this.instance, { ...request, revision }, this.#vault));
   }

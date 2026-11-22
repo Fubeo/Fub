@@ -148,6 +148,20 @@ export const VISTE = {
     },
     app: { scena: "disegno-fam-colore" },
   },
+  /// Carattere e Paragrafo del Design con un testo scelto (K6 T16, giro 1). Il prototipo non ha
+  /// sezioni del testo: come per Colore, si confrontano i pezzi comuni a ogni sezione del Design
+  /// (l'intestazione, il nome di riga, il pulsante di una barra) con quelli della sezione «Punto di
+  /// ancoraggio» del prototipo (stato `completo`).
+  sezioneTesto: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.selectOption("#proto-stato", "completo");
+        await page.waitForSelector('#proto-box[data-pronto^="completo-"]');
+      },
+    },
+    app: { scena: "disegno-fam-testo" },
+  },
 };
 
 /// I pezzi. `prototipo` sta dentro lo schermo del prototipo, `app` nella pagina
@@ -402,6 +416,29 @@ export const PEZZI = [
     prototipo: '[data-section="anchor"] .draw-properties-label',
     app: '[data-section="color"] .draw-color-label:not(.draw-color-active)',
     proprieta: [...BASE],
+  },
+  // ── Carattere e Paragrafo del Design (T16, giro 1) ───────────────────────
+  // Senza sezioni del testo nel prototipo, i pezzi comuni a ogni sezione.
+  {
+    id: "sezione-carattere.intestazione",
+    vista: "sezioneTesto",
+    prototipo: '[data-section="anchor"] .draw-properties-toggle',
+    app: '[data-section="character"] .draw-properties-toggle',
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "sezione-carattere.etichetta",
+    vista: "sezioneTesto",
+    prototipo: '[data-section="anchor"] .draw-properties-label',
+    app: '[data-section="character"] .draw-type-style .draw-properties-label',
+    proprieta: [...BASE],
+  },
+  {
+    id: "sezione-paragrafo.allinea",
+    vista: "sezioneTesto",
+    prototipo: '[data-section="anchor"] .draw-properties-segment[aria-label="Angolo"]',
+    app: '[data-section="paragraph"] .draw-properties-segment[aria-pressed="false"]',
+    proprieta: [...BASE, ...DIMENSIONI],
   },
 ];
 

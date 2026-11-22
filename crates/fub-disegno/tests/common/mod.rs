@@ -42,6 +42,29 @@ pub fn disegni() -> Arc<Disegni> {
     Disegni::nuovi(servizi)
 }
 
+/// Un motore del disegno con le facce di Inter che Fub porta: i colpi sui
+/// testi vogliono le lettere disposte.
+#[allow(dead_code)]
+pub fn disegni_con_inter() -> Arc<Disegni> {
+    let servizi = Servizi::nuovi(Config {
+        fili: Some(2),
+        tetto: Tetto::fisso(256 * 1024 * 1024),
+    });
+    let facce: [&'static [u8]; 2] = [
+        include_bytes!("../../../fub-features/fonts/inter-400.ttf"),
+        include_bytes!("../../../fub-features/fonts/inter-700.ttf"),
+    ];
+    let generiche = Generiche {
+        serif: "Inter".into(),
+        sans: "Inter".into(),
+        mono: "Inter".into(),
+    };
+    servizi
+        .fornisci_caratteri(Caratteri::nuovi(facce, generiche))
+        .unwrap_or_else(|_| panic!("i caratteri si danno una volta sola"));
+    Disegni::nuovi(servizi)
+}
+
 /// Apre `testo` su un motore nuovo.
 pub fn apri(testo: &str) -> (Disegno, fub_abi::DrawingOpen) {
     Disegno::apri_con(&disegni(), testo).unwrap_or_else(|e| panic!("il disegno non si apre: {e}"))

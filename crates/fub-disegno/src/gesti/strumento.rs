@@ -135,12 +135,19 @@ pub(crate) fn gesto(
                 }
                 overlays.extend(segno(o, copia.radice, sessione));
             }
-            (overlays, stato(sessione, ponte, copia, cx.vista))
+            // Il testo che si sta scrivendo, che il file non ha ancora.
+            let forma = if sessione.tool_wants_text() {
+                testo_in_scrittura(sessione, copia)
+            } else {
+                None
+            };
+            (overlays, forma, stato(sessione, ponte, copia, cx.vista))
         });
         return match fatto {
-            Ok((overlays, stato)) => {
+            Ok((overlays, shape, stato)) => {
                 esito.preview = Some(DrawingPreview {
                     overlays,
+                    shape,
                     ..DrawingPreview::default()
                 });
                 esito.state = Some(stato);
@@ -222,11 +229,99 @@ fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Valu
     attrs.insert("y".into(), json!(numero(ancora.y, 2)));
     attrs.insert("fill".into(), json!(fill));
     attrs.insert("font-family".into(), json!(primo.style.font_family));
-    attrs.insert(
-        "font-size".into(),
-        json!(numero(primo.style.size * forme::scala(m), 2)),
-    );
+    let corpo = primo.style.size * forme::scala(m);
+    attrs.insert("font-size".into(), json!(numero(corpo, 2)));
+    // Il peso, il corsivo, la spaziatura e l'allineamento, quando non sono
+    // quelli di serie (K6 T16), come li scrive il pannello.
+    let (peso, corsivo) = differenza::peso_e_corsivo(&primo.style.font_style);
+    match peso {
+        400 => {}
+        700 => {
+            attrs.insert("font-weight".into(), json!("bold"));
+        }
+        p => {
+            attrs.insert("font-weight".into(), json!(p.to_string()));
+        }
+    }
+    if corsivo {
+        attrs.insert("font-style".into(), json!("italic"));
+    }
+    let spaziatura = primo.style.tracking / 1000.0 * corpo;
+    if spaziatura.abs() >= 0.005 {
+        attrs.insert("letter-spacing".into(), json!(numero(spaziatura, 2)));
+    }
+    match t.para.justify {
+        vectorcraft_doc::text::Justify::Center => {
+            attrs.insert("text-anchor".into(), json!("middle"));
+        }
+        vectorcraft_doc::text::Justify::Right => {
+            attrs.insert("text-anchor".into(), json!("end"));
+        }
+        _ => {}
+    }
     Some(("text".into(), attrs))
+}
+
+/// Le righe di un testo del motore come `tspan`, dall'ascissa `x` del
+/// `<text>`, giù di un'interlinea del primo pezzo nello spazio di `m`.
+fn righe_del_testo(t: &vectorcraft_doc::text::TextObject, x: &str, m: Affine) -> Vec<Value> {
+    let interlinea = t
+        .runs
+        .first()
+        .map(|r| r.style.effective_leading())
+        .unwrap_or(0.0);
+    let dy = numero(interlinea * forme::scala(m), 2);
+    t.plain_text()
+        .replace("\r\n", "\n")
+        .split(['\n', '\r', '\u{2028}', '\u{2029}', '\u{3}'])
+        .enumerate()
+        .map(|(i, riga)| {
+            let dy = if i == 0 { "0" } else { dy.as_str() };
+            json!({ "tag": "tspan", "attrs": { "x": x, "dy": dy }, "text": riga })
+        })
+        .collect()
+}
+
+/// L'anteprima del testo che lo strumento sta scrivendo: il `<text>` nuovo
+/// o cambiato nella sessione, in coordinate di scena, con le sue righe; per
+/// un testo che c'era già, l'`id` di Fub, perché il client nasconda quello
+/// del file mentre si scrive. `None` se nessun testo è cambiato o se il
+/// testo non è di punto orizzontale.
+fn testo_in_scrittura(sessione: &Session, copia: &Copia) -> Option<Value> {
+    let stato = sessione.doc().ok()?;
+    let dopo = stato.doc.clone();
+    let prima = Posti::di(&copia.documento);
+    let ora = Posti::di(&dopo);
+    let mut cambiati: Vec<_> = ora
+        .nodi
+        .values()
+        .filter(|p| {
+            matches!(p.nodo.kind, NodeKind::Text(_))
+                && prima
+                    .nodi
+                    .get(&p.nodo.id)
+                    .is_none_or(|q| !Arc::ptr_eq(q.nodo, p.nodo) && q.nodo != p.nodo)
+        })
+        .collect();
+    cambiati.sort_by_key(|p| p.nodo.id);
+    let nodo = cambiati.first()?.nodo;
+    let NodeKind::Text(t) = &nodo.kind else {
+        return None;
+    };
+    let indietro = copia.radice.inverse();
+    let (tag, mut attrs) = scrivi_testo(nodo, indietro)?;
+    if let Some(id) = copia
+        .mappa
+        .del_nodo(nodo.id)
+        .and_then(|i| copia.mappa.elemento(i))
+        .and_then(|e| e.id_del_file().map(str::to_string))
+    {
+        attrs.insert("id".into(), json!(id));
+    }
+    let x = attrs["x"].as_str().unwrap_or("0").to_string();
+    let figli = righe_del_testo(t, &x, indietro * t.xf);
+    let forma = json!({ "tag": tag, "attrs": attrs, "children": figli });
+    (serde_json::to_string(&forma).ok()?.len() <= fub_abi::MAX_DRAWING_OPS_BYTES).then_some(forma)
 }
 
 /// Le righe dei `<text>` nuovi in `ops` (anche dentro un `batch`), come
@@ -259,22 +354,7 @@ fn con_le_righe(
             return;
         };
         let x = elem["attrs"]["x"].as_str().unwrap_or("0").to_string();
-        let interlinea = t
-            .runs
-            .first()
-            .map(|r| r.style.effective_leading())
-            .unwrap_or(0.0);
-        let dy = numero(interlinea * forme::scala(t.xf), 2);
-        let testo = t.plain_text();
-        let figli: Vec<Value> = testo
-            .split(['\n', '\r', '\u{2029}', '\u{3}'])
-            .enumerate()
-            .map(|(i, riga)| {
-                let dy = if i == 0 { "0" } else { dy.as_str() };
-                json!({ "tag": "tspan", "attrs": { "x": x, "dy": dy }, "text": riga })
-            })
-            .collect();
-        elem["children"] = Value::Array(figli);
+        elem["children"] = Value::Array(righe_del_testo(t, &x, t.xf));
         cambiato = true;
     };
     match &mut lista {
@@ -392,6 +472,10 @@ fn prepara(
     sessione.prefs = prefs.clone();
     sessione.prefs.tool_settings = tenute;
     sessione.prefs.corner_radius = raggio;
+    // Un testo nuovo nasce vuoto: il segnaposto del motore è in inglese, e
+    // un clic seguito da Esc lascerebbe nel disegno parole non scritte
+    // (K6 T16, come il Testo di K5).
+    sessione.prefs.placeholder_text = false;
     sessione
         .select_tool(id, cx.vista)
         .map_err(|_| DrawingRefusal::Unsupported)?;

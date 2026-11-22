@@ -1598,6 +1598,12 @@ export const SCENE = touchLast(onPage("shell", [
     // di Modifica › Modifica colori con l'anteprima che il banco risponde (`disegno-famiglie/colore.json`).
     ["disegno-fam-colore", 1280, "La sezione Colore del Design con un oggetto scelto: riempimento attivo, contorno, Scambia, Nessuno e Di serie", "", (page) => openSezioneConUno(page, ".draw-color")],
     ["disegno-fam-colore-800", 800, "La sezione Colore con un oggetto scelto, nel cassetto dell'ispettore, 800 px", "", (page) => openSezioneConUno(page, ".draw-color")],
+    // Il testo (K6 T16, giro 1): Carattere e Paragrafo del Design con un'etichetta scelta, e il Testo del
+    // motore che scrive nella casella aperta da un clic (il banco risponde l'anteprima, `fake-ipc.ts`).
+    ["disegno-fam-testo", 1280, "Carattere e Paragrafo del Design con un testo scelto: famiglia, stile, corpo, spaziatura e allineamento", "", openSezioniTesto],
+    ["disegno-fam-testo-800", 800, "Carattere e Paragrafo con un testo scelto, nel cassetto dell'ispettore, 800 px", "", openSezioniTesto],
+    ["disegno-fam-testo-scrive", 1280, "Il Testo del Completo: un clic apre la casella, e le parole scritte si vedono col cursore", "", scriviColTesto],
+    ["disegno-fam-testo-scrive-800", 800, "Il Testo del Completo che scrive nella finestra minima del desktop, 800 px", "", scriviColTesto],
     ["disegno-fam-colore-satura", 1280, "La finestra «Satura…» di Modifica colori, con l'intensità in % e l'anteprima sul foglio", "&comandi=risposti", openSaturaFinestra],
     ["disegno-fam-colore-satura-800", 800, "La finestra «Satura…» nella finestra minima del desktop, 800 px", "&comandi=risposti", openSaturaFinestra],
     ["disegno-scelte-pannello", 1280, "Il pannello Design del Completo con un oggetto scelto: senza Posizione e misure né Distribuisci", "", (page) => openSezioneConUno(page, ".draw-properties")],
@@ -5508,6 +5514,42 @@ async function openSezioneConUno(page, selettore, sceglie = scegliPrimo) {
       }
     }
   }, selettore);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Carattere e Paragrafo del Design (K6 T16, giro 1): un titolo scritto col Testo del Completo, che
+/// Esc conferma e lascia scelto, poi la scheda Design; sotto i 960 px l'ispettore è un cassetto.
+/// Carattere in vista.
+async function openSezioniTesto(page) {
+  await scriviColTesto(page);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => document.querySelector("textarea.draw-scrittura") === null);
+  if (await page.evaluate(() => window.innerWidth < 960)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+  }
+  await page.click('.inspector-tab[data-view-id="draw.design"]');
+  await page.waitForSelector("#surface-panel-draw-design:not([hidden]) .draw-type .kit-font-button");
+  await page.locator("#surface-panel-draw-design .draw-type").scrollIntoViewIfNeeded();
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il Testo del Completo (K6 T16, giro 1): la voce «Testo (Completo)» della casella del testo, un
+/// clic sul foglio vuoto e due righe scritte con la tastiera; la casella resta aperta.
+async function scriviColTesto(page) {
+  await openDrawing(page);
+  // La casella del testo ha la tendina solo quando le caselle del motore sono arrivate: prima è
+  // quella del Testo di Fub, da sola.
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await openRailFlyout(page, "text");
+  await page.click(".kit-rail-flyout [role='menuitemradio'][data-item='motore:type'], .kit-rail-flyout [role='menuitemradio']:has-text('Testo (Completo)')");
+  const foglio = await page.locator(".draw-editor .draw-surface").boundingBox();
+  await page.mouse.click(foglio.x + foglio.width * 0.3, foglio.y + foglio.height * 0.7);
+  await page.waitForSelector("textarea.draw-scrittura");
+  await page.keyboard.type("Città già scritta");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("seconda riga");
+  await page.waitForFunction(() => (document.querySelector(".draw-editor .draw-surface")?.textContent ?? "").includes("seconda riga"));
   await page.evaluate(() => document.fonts.ready);
 }
 

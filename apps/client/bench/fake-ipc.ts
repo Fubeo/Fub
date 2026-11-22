@@ -1069,9 +1069,58 @@ function benchWindowOutcome(request: DrawingCommandRequest): DrawingOutcome {
   return { ...outcome, ops: "[]" };
 }
 
+/// La casella del Testo del motore del banco (K6 T16): dove il clic l'ha aperta e le righe scritte.
+/// Il banco non sa misurare il carattere: il cursore sta dopo l'ultima lettera a mezzo corpo per
+/// lettera, abbastanza per guardare la casella che si scrive.
+let benchTypeBox: { x: number; y: number; righe: string[] } | null = null;
+const BENCH_TYPE_SIZE = 24;
+
+/// L'esito di un gesto del Testo del motore del banco: il clic apre la casella, i tasti e il testo
+/// la riempiono, e finché è aperta l'anteprima mostra le righe e il cursore. La conferma scrive il
+/// testo nel livello del gesto e lo lascia scelto, come il motore vero; una casella vuota non scrive
+/// niente.
+function benchTypeOutcome(gesture: DrawingGesture, outcome: DrawingOutcome): DrawingOutcome {
+  const stato = (busy: boolean) => ({ busy, transforming: false, wants_text: busy, composing: false, cursor: "text", options: null });
+  const primo = gesture.events[0];
+  if (benchTypeBox === null && primo !== undefined && primo.kind === "down") benchTypeBox = { x: primo.x, y: primo.y, righe: [""] };
+  const box = benchTypeBox;
+  if (box === null) return { ...outcome, state: stato(false) };
+  let preedit = "";
+  for (const ingresso of gesture.inputs ?? []) {
+    const ultima = box.righe.length - 1;
+    if (ingresso.kind === "text") box.righe[ultima] += ingresso.text;
+    else if (ingresso.kind === "ime") preedit = ingresso.preedit;
+    else if (ingresso.kind === "key" && ingresso.pressed && ingresso.key === "Enter") box.righe.push("");
+    else if (ingresso.kind === "key" && ingresso.pressed && ingresso.key === "Backspace") box.righe[ultima] = [...box.righe[ultima]!].slice(0, -1).join("");
+  }
+  const passo = BENCH_TYPE_SIZE * 1.2;
+  const shape = {
+    tag: "text",
+    attrs: { x: String(box.x), y: String(box.y), "font-family": "Source Sans 3, sans-serif", "font-size": String(BENCH_TYPE_SIZE), fill: "#1a1a1a" },
+    children: box.righe.map((riga, at) => ({
+      tag: "tspan",
+      attrs: { x: String(box.x), ...(at === 0 ? {} : { dy: String(passo) }) },
+      text: at === box.righe.length - 1 ? riga + preedit : riga,
+    })),
+  };
+  if (gesture.phase === "commit") {
+    benchTypeBox = null;
+    if (gesture.layer === null || box.righe.join("") === "") return { ...outcome, refused: "empty", state: stato(false) };
+    const id = `oz${String(++benchDrawingIds).padStart(7, "0")}`;
+    const elem = { ...shape, attrs: { id, ...shape.attrs } };
+    return { ...outcome, ops: JSON.stringify([{ op: "add", parent: gesture.layer, pos: { last: true }, elem }]), selection: [id], state: stato(false) };
+  }
+  const ultima = box.righe[box.righe.length - 1]! + preedit;
+  const cx = box.x + [...ultima].length * BENCH_TYPE_SIZE * 0.5;
+  const cy = box.y + (box.righe.length - 1) * passo;
+  const caret = { kind: "line" as const, a: [cx, cy - BENCH_TYPE_SIZE * 0.8] as [number, number], b: [cx, cy + BENCH_TYPE_SIZE * 0.2] as [number, number], role: "preview" as const, width: 1, dashed: false };
+  return { ...outcome, preview: { shape, matrix: null, marquee: null, overlays: [caret] }, state: stato(true) };
+}
+
 /// L'esito di un gesto del motore del banco sulla copia di testo `text`.
 function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutcome {
   const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
+  if (typeof gesture.tool === "object" && gesture.tool.engine.id === "type") return benchTypeOutcome(gesture, outcome);
   if (gesture.phase !== "commit") return outcome;
   const vector = GESTURE_VECTORS.find((each) => each.gesture.tool === gesture.tool && each.input === text);
   if (vector === undefined) {

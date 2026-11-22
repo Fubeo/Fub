@@ -6139,6 +6139,27 @@ body:has(#context-menu:not([hidden])) > .toast-stack {
   width: 6px;
   height: 6px;
 }
+/* La casella che prende la tastiera del Testo del motore (K6 T16): vuota e
+   invisibile, posata sul cursore del testo perché l'IME apra lì la sua
+   finestra. Il testo e il cursore li disegna l'anteprima. */
+.draw-scrittura {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  min-height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  resize: none;
+  opacity: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  outline: none;
+  pointer-events: none;
+}
 /* I segni dei collegamenti, in uno strato sopra il foglio che non scorre e
    taglia ai bordi. Un segno sta appena fuori dall'angolo in alto a destra del
    suo collegamento, così non copre il disegno, e si tocca solo quando lo

@@ -38,7 +38,7 @@ import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 // Le sezioni del Design che il Completo registra (T10): in coda al pannello.
-import type { ColoreSelezione, ColoriSelezione, MisuraSelezione, MisureSelezione, Selezione, Sezioni } from "../completo/sezioni";
+import type { ColoreSelezione, ColoriSelezione, MisuraSelezione, MisureSelezione, Selezione, Sezioni, TestoSelezione } from "../completo/sezioni";
 import { UNITS, type LengthUnit } from "../scene/rulers";
 import { fromUnit } from "./rulers";
 import type { MotoreDelDisegno } from "../motore/gesti";
@@ -405,25 +405,31 @@ const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place
 
 /// I campi che nel Completo non ci sono: i colori di riempimento e contorno li dà la sezione Colore
 /// (K6 T14, giro 1). Lo spessore, il tratteggio e le punte del contorno restano; la sezione
-/// Riempimento, che resta senza campi, si chiude da sé.
-const CAMPI_NASCOSTI_NEL_COMPLETO: ReadonlySet<FieldId> = new Set<FieldId>(["fill", "stroke"]);
+/// Riempimento, che resta senza campi, si chiude da sé. La famiglia, il corpo, il peso, la
+/// spaziatura e l'allineamento li danno Carattere e Paragrafo (K6 T16, giro 1); le parole, lo stile
+/// di Fub, l'enfasi (con sottolineato e barrato) e l'interlinea restano.
+const CAMPI_NASCOSTI_NEL_COMPLETO: ReadonlySet<FieldId> = new Set<FieldId>(["fill", "stroke", "family", "size", "weight", "spacing", "anchor"]);
+
+/// La misura del campo numerico `id` della vista, con il passaggio alle unità della scena; `undefined`
+/// se il campo non c'è.
+function misuraDelCampo(vista: PropertiesView, id: FieldId): MisuraSelezione | undefined {
+  const campo = vista.fields[id];
+  if (campo?.kind !== "number") return undefined;
+  const unita = campo.unit;
+  const lunghezza = (UNITS as readonly string[]).includes(unita);
+  return {
+    valore: campo.value,
+    unita,
+    decimali: campo.places,
+    allaScena: (valore) => (lunghezza ? fromUnit(valore, unita as LengthUnit) : valore),
+  };
+}
 
 /// Le misure di «Posizione e misure» come le ha la vista del pannello (K6 T13, giro 4): il Trasforma del
 /// Completo le legge di qui, senza chiedere il motore. Il valore sta nell'unità del campo; `allaScena`
 /// lo riporta alle unità della scena, dove lavora il motore.
 function misureDellaVista(vista: PropertiesView): MisureSelezione {
-  const misura = (id: FieldId): MisuraSelezione | undefined => {
-    const campo = vista.fields[id];
-    if (campo?.kind !== "number") return undefined;
-    const unita = campo.unit;
-    const lunghezza = (UNITS as readonly string[]).includes(unita);
-    return {
-      valore: campo.value,
-      unita,
-      decimali: campo.places,
-      allaScena: (valore) => (lunghezza ? fromUnit(valore, unita as LengthUnit) : valore),
-    };
-  };
+  const misura = (id: FieldId): MisuraSelezione | undefined => misuraDelCampo(vista, id);
   const fusione = vista.blend === undefined ? undefined : { valore: vista.blend.value, mista: vista.blend.value === null };
   return {
     x: misura("x"),
@@ -445,6 +451,26 @@ function coloriDellaVista(vista: PropertiesView): ColoriSelezione {
     return campo.sample === undefined ? { valore: campo.value } : { valore: campo.value, campione: campo.sample };
   };
   return { riempimento: colore("fill"), contorno: colore("stroke") };
+}
+
+/// Il carattere e il paragrafo dei testi scelti come li ha la vista del pannello (K6 T16, giro 1):
+/// Carattere e Paragrafo del Completo li leggono di qui, senza chiedere il motore. `undefined` se la
+/// selezione non ha testi.
+function testoDellaVista(vista: PropertiesView): TestoSelezione | undefined {
+  const { family, weight, emphasis, spacing, anchor } = vista.fields;
+  if (family?.kind !== "choice") return undefined;
+  const corpo = misuraDelCampo(vista, "size");
+  const corsivo = emphasis?.kind === "toggles" ? (emphasis.options.find((each) => each.value === "italic")?.on ?? false) : false;
+  const peso = weight?.kind === "choice" && weight.value !== null ? Number(weight.value) : null;
+  return {
+    famiglia: family.value,
+    famiglie: family.options.map((each) => ({ valore: each.value, nome: each.label })),
+    ...(corpo === undefined ? {} : { corpo }),
+    peso: peso !== null && Number.isFinite(peso) ? peso : null,
+    corsivo,
+    ...(spacing?.kind === "number" ? { spaziatura: spacing.value } : {}),
+    allineamento: anchor?.kind === "segment" ? anchor.value : null,
+  };
 }
 
 /// I comandi di «Disponi», in tre barre: allineare, distribuire, ordinare.
@@ -1771,7 +1797,11 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   let stopRegistro: Teardown | null = null;
   registrate = createSezioniList(sezioniDesign, life, {
     elenco: () => registro?.di("design") ?? [],
-    selezione: () => selezione(),
+    selezione: () => {
+      // Carattere e Paragrafo vedono il testo scelto dalla vista (K6 T16).
+      const testo = testoDellaVista(view);
+      return testo === undefined ? selezione() : { ...selezione(), testo };
+    },
     motore: () => motoreCompleto,
     rileggi: () => rileggiStato(),
     misure: () => misureDellaVista(view),

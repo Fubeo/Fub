@@ -57,6 +57,11 @@ use crate::id::{self, Specie};
 use crate::mappa::{Elemento, Posti};
 use crate::ricetta::{self, Esito};
 
+#[path = "differenza_testo.rs"]
+mod testo;
+pub(crate) use testo::peso_e_corsivo;
+use testo::testo_cambiato;
+
 /// `fill-rule` non è un attributo della scena (`docs/reference/scene-format.md`
 /// §4): un elemento che lo scrive diventerebbe estraneo, e i buchi si fanno
 /// col verso dei sottotracciati, con la regola `nonzero` di SVG.
@@ -892,11 +897,24 @@ impl Lavoro<'_> {
                 a.id.0
             )));
         };
-        let attrs = self.foglia(&e, b, a)?;
-        if !attrs.is_empty() {
+        // Un testo di punto con altre parole, un altro carattere o un altro
+        // allineamento (K6 T16): il resto del confronto va avanti sul testo
+        // di prima che li ha già.
+        let (b, mut attrs, righe) = match testo_cambiato(&e, b, a)? {
+            Some(cambio) => (Arc::new(cambio.prima), cambio.attrs, cambio.righe),
+            None => (b.clone(), Map::new(), None),
+        };
+        attrs.extend(self.foglia(&e, &b, a)?);
+        if !attrs.is_empty() || righe.is_some() {
             let id = self.bersaglio(a.id)?;
-            self.set
-                .push(json!({ "op": "set", "id": id, "attrs": attrs }));
+            if !attrs.is_empty() {
+                self.set
+                    .push(json!({ "op": "set", "id": id, "attrs": attrs }));
+            }
+            if let Some(righe) = righe {
+                self.set
+                    .push(json!({ "op": "text", "id": id, "lines": righe }));
+            }
         }
         Ok(())
     }

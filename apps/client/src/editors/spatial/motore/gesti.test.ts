@@ -1167,3 +1167,203 @@ describe("la penna del motore: il tracciato aperto (K6 T12)", () => {
     expect(opzioniInchiostro().hidden).toBe(false);
   });
 });
+
+// --- Il Testo del motore: si scrive con la tastiera (K6 T16) -----------------
+
+/// Il motore finto del Testo di punto: il clic apre la casella (`busy`,
+/// `wants_text`); ogni anteprima aggiunge ciò che arriva (il testo, l'IME, i
+/// tasti) alle righe, e rimanda il `<text>` col cursore; il commit scrive le
+/// ops del rettangolo (il loro contenuto qui non conta) in un passo.
+function testoFinto(): DrawingFake {
+  const rettangolo = VECTORS.find((vector) => vector.name === "rettangolo")!;
+  const stato = (busy: boolean) => ({ busy, transforming: false, wants_text: busy, composing: false, cursor: "text", options: null });
+  let righe = [""];
+  return {
+    comando: statoDiSerie,
+    gesto: (gesture) => {
+      const base: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null, reading: null };
+      for (const ingresso of gesture.inputs ?? []) {
+        if (ingresso.kind === "text") righe[righe.length - 1] += ingresso.text;
+        else if (ingresso.kind === "key" && ingresso.key === "Enter") righe.push("");
+        else if (ingresso.kind === "key" && ingresso.key === "Backspace") righe[righe.length - 1] = [...righe[righe.length - 1]!].slice(0, -1).join("");
+      }
+      if (gesture.phase === "preview") {
+        const shape = { tag: "text", attrs: { x: "40", y: "60" }, children: righe.map((riga) => ({ tag: "tspan", attrs: { x: "40" }, text: riga })) };
+        const caret = { kind: "line" as const, a: [80, 48] as [number, number], b: [80, 62] as [number, number], role: "preview" as const, dashed: false };
+        return { ...base, preview: { shape, matrix: null, marquee: null, overlays: [caret] }, state: stato(true) };
+      }
+      if (gesture.phase === "commit") {
+        righe = [""];
+        return { ...base, ops: JSON.stringify(rettangolo.expect.ops).replace(/@1/g, "oz0000001"), selection: [], state: stato(false) };
+      }
+      return { ...base, state: stato(false) };
+    },
+  } as DrawingFake;
+}
+
+const casella = (): HTMLTextAreaElement | null => host.querySelector<HTMLTextAreaElement>("textarea.draw-scrittura");
+
+/// Scrive `testo` nella casella, come la tastiera: il valore e l'`input`.
+async function scrivi(testo: string): Promise<void> {
+  const c = casella()!;
+  c.value = testo;
+  c.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: testo }));
+  await settle(16, 8);
+}
+
+/// Un tasto premuto nella casella.
+async function tastoNellaCasella(key: string, opzioni: KeyboardEventInit = {}): Promise<KeyboardEvent> {
+  const event = new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true, ...opzioni });
+  casella()!.dispatchEvent(event);
+  await settle(16, 8);
+  return event;
+}
+
+/// Un evento dell'IME con la sua parola (happy-dom non legge `data`).
+function composizione(tipo: string, data: string): CompositionEvent {
+  const event = new CompositionEvent(tipo, { data });
+  Object.defineProperty(event, "data", { value: data });
+  return event;
+}
+
+const ingressiDi = (fake: FakeHost) => gestures(fake).flatMap((each) => each.inputs ?? []);
+
+/// Il Testo del motore scelto e un clic sul foglio: la casella è aperta.
+async function apriIlTesto(fake: FakeHost): Promise<DrawEditor> {
+  const editor = await montaConPreparazione(EMPTY, fake);
+  editor.setEngineTool("type");
+  await clic(editor, 40, 60);
+  await settle(16, 8);
+  return editor;
+}
+
+describe("il Testo del motore: si scrive con la tastiera (K6 T16)", () => {
+  it("un clic apre la casella a fuoco; le parole e i tasti vanno al motore, il testo si vede, e Esc lo chiude in un passo e torna alla Selezione", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await apriIlTesto(fake);
+    expect(casella()).not.toBeNull();
+    expect(document.activeElement).toBe(casella());
+    expect(casella()!.getAttribute("aria-label")).toBe(t("draw.engine.type.box"));
+    await scrivi("Città 🌧");
+    await tastoNellaCasella("Backspace");
+    await tastoNellaCasella("Enter");
+    await scrivi("é");
+    // Niente è scritto nel disegno finché il testo è aperto.
+    expect(gestures(fake).map((each) => each.phase)).not.toContain("commit");
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(ingressiDi(fake)).toEqual([
+      { kind: "text", text: "Città 🌧" },
+      expect.objectContaining({ kind: "key", key: "Backspace", pressed: true }),
+      expect.objectContaining({ kind: "key", key: "Enter", pressed: true }),
+      { kind: "text", text: "é" },
+    ]);
+    // L'anteprima: il testo del motore, con le sue righe (l'emoji è tolta
+    // intera dal Backspace del motore finto), e il cursore.
+    const righe = [...host.querySelectorAll("text tspan")].map((each) => each.textContent);
+    expect(righe).toEqual(["Città ", "é"]);
+    expect(host.querySelector(".draw-engine-line")).not.toBeNull();
+    // La casella sta sul cursore del motore.
+    expect(casella()!.style.transform).toMatch(/^translate\(-?[\d.]+px, -?[\d.]+px\)$/u);
+    // Una lettera nella casella non è una scorciatoia del foglio.
+    const prima = editor.tool;
+    const lettera = await tastoNellaCasella("v");
+    expect(lettera.defaultPrevented).toBe(false);
+    expect(editor.tool).toBe(prima);
+    expect(casella()).not.toBeNull();
+    await tastoNellaCasella("Escape");
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    expect(commit[0]!.inputs).toEqual([expect.objectContaining({ kind: "key", key: "Escape" })]);
+    expect(casella()).toBeNull();
+    expect(host.querySelector("text tspan")).toBeNull();
+    expect(editor.tool).toBe("select");
+    expect(editor.engine.text).not.toBe(EMPTY);
+    editor.undo();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+  });
+
+  it("ciò che si scrive e non è ancora partito va col commit, prima di Esc", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    await apriIlTesto(fake);
+    const c = casella()!;
+    c.value = "ciao";
+    c.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "ciao" }));
+    c.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+    await settle(16, 8);
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    expect(commit[0]!.inputs).toEqual([{ kind: "text", text: "ciao" }, expect.objectContaining({ kind: "key", key: "Escape" })]);
+  });
+
+  it("l'IME manda la parola segnata e poi quella scelta; un incolla da Windows arriva con gli a capo di Fub", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    await apriIlTesto(fake);
+    const c = casella()!;
+    c.dispatchEvent(composizione("compositionstart", ""));
+    c.value = "か";
+    c.dispatchEvent(composizione("compositionupdate", "か"));
+    // Mentre l'IME compone i tasti sono suoi: il motore non li vede.
+    await tastoNellaCasella("Enter", { isComposing: true });
+    c.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "か", isComposing: true }));
+    c.dispatchEvent(composizione("compositionend", "書"));
+    c.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "書" }));
+    await settle(16, 8);
+    await scrivi("uno\r\ndue");
+    expect(ingressiDi(fake)).toEqual([
+      { kind: "ime", preedit: "", active: null },
+      { kind: "ime", preedit: "か", active: null },
+      { kind: "text", text: "書" },
+      { kind: "text", text: "uno\ndue" },
+    ]);
+  });
+
+  it("Ctrl+Z chiude il testo e lo annulla: il disegno torna com'era", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await apriIlTesto(fake);
+    await scrivi("parola");
+    const z = await tastoNellaCasella("z", { code: "KeyZ", ctrlKey: true });
+    expect(z.defaultPrevented).toBe(true);
+    await settle(16, 8);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    expect(casella()).toBeNull();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canRedo).toBe(true);
+  });
+
+  it("il fuoco altrove chiude il testo com'è, in un passo; un clic sul foglio ne apre uno nuovo", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await apriIlTesto(fake);
+    await scrivi("uno");
+    casella()!.blur();
+    await settle(16, 8);
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    expect(commit[0]!.inputs ?? []).toEqual([]);
+    expect(casella()).toBeNull();
+    expect(editor.engine.text).not.toBe(EMPTY);
+    // Lo strumento resta il Testo: un clic dopo apre un'altra casella.
+    await clic(editor, 200, 200);
+    await settle(16, 8);
+    expect(casella()).not.toBeNull();
+  });
+
+  it("un comando che cambia il disegno chiude prima il testo aperto, che il motore altrimenti scarterebbe", async () => {
+    const fake = createFakeHost({ drawing: testoFinto() });
+    const editor = await apriIlTesto(fake);
+    await scrivi("uno");
+    const prima = drawingCalls(fake).length;
+    const sessione = motore!.adesso() as SessioneMotore;
+    // Lo stato di uno strumento non tocca il disegno: il testo resta aperto.
+    await sessione.comando({ id: DRAWING_COMMAND_TOOL_STATE, selection: [], value: { strumento: "type" } });
+    await settle(16, 8);
+    expect(drawingCalls(fake).slice(prima)).toEqual(["drawingCommand"]);
+    expect(casella()).not.toBeNull();
+    void sessione.comando({ id: "disegno.text.setStyle", selection: [], value: { justify: "center" } }).catch(() => undefined);
+    await settle(16, 8);
+    expect(drawingCalls(fake).slice(prima + 1, prima + 3)).toEqual(["drawingGesture", "drawingCommand"]);
+    expect(gestures(fake).filter((each) => each.phase === "commit")).toHaveLength(1);
+    expect(casella()).toBeNull();
+    expect(editor.engine.text).not.toBe(EMPTY);
+  });
+});
