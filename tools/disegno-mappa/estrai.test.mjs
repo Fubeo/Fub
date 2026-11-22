@@ -98,7 +98,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (`object.transformEach`) restano «da fare».
   // T12 mano libera (giro 9) porta a «fatto» i cinque comandi a mano libera: `path.freehand`,
   // `.eraseRegion`, `.eraseSegments`, `.knife`, `.smoothRegion` (gli strumenti erano già fatti).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1142, fub: 114, escluso: 12, fatto: 283 });
+  // T12 curvatura porta a «fatto» undici righe: `path.curvature`, `.curvatureEdit`, `.reshape`,
+  // `.reshapeSegment`, `.setAnchors` e le sei `addon.pen.*` (append, close, segment, removePoint,
+  // togglePoint, reshape), come comandi su un punto con `element` (la Curvatura crea o sostituisce).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1131, fub: 114, escluso: 12, fatto: 294 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

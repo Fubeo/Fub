@@ -29,7 +29,7 @@ use crate::apertura::Copia;
 
 /// I comandi che nominano un tracciato con `element` e un suo punto (o
 /// segmento, o sottotracciato) per numero.
-pub(crate) const SU_UN_PUNTO: [&str; 8] = [
+pub(crate) const SU_UN_PUNTO: [&str; 17] = [
     "path.moveAnchor",
     "path.setHandle",
     "path.insertAnchor",
@@ -38,14 +38,31 @@ pub(crate) const SU_UN_PUNTO: [&str; 8] = [
     "path.close",
     "path.appendAnchor",
     "path.split",
+    // La Curvatura e la penna a passi (T12 curvatura): stesso `element`, stessi numeri.
+    "path.reshape",
+    "path.reshapeSegment",
+    "path.curvatureEdit",
+    "addon.pen.append",
+    "addon.pen.close",
+    "addon.pen.segment",
+    "addon.pen.removePoint",
+    "addon.pen.togglePoint",
+    "addon.pen.reshape",
 ];
+
+/// I comandi su un punto con `dx` e `dy`: lo spostamento è in scena e va al
+/// documento con la parte lineare della radice, come `path.moveAnchors`.
+const SPOSTAMENTO: [&str; 3] = ["path.reshape", "path.reshapeSegment", "addon.pen.reshape"];
+
+/// Il comando chiude un sottotracciato aperto: se il tracciato non ne ha, è `empty`.
+const CHIUDONO: [&str; 2] = ["path.close", "addon.pen.close"];
 
 /// Sposta i punti scelti (o gli oggetti scelti interi) di `dx`, `dy`: lo
 /// spostamento arriva nella scena e va al motore nel suo documento.
 pub(crate) const SPOSTA_I_PUNTI: &str = "path.moveAnchors";
 
 /// L'oggetto del motore del tracciato `element`, o perché non si cambia.
-fn tracciato(copia: &Copia, element: &str) -> Result<NodeId, DrawingRefusal> {
+pub(crate) fn tracciato(copia: &Copia, element: &str) -> Result<NodeId, DrawingRefusal> {
     let nodo = nodi_scelti(copia, &[element.to_owned()])?
         .into_iter()
         .next()
@@ -82,7 +99,7 @@ pub(crate) fn punto_rifiutato(id: &str, copia: &Copia, valore: &Value) -> Option
         Ok(nodo) => nodo,
         Err(r) => return Some(r),
     };
-    if id != "path.close" {
+    if !CHIUDONO.contains(&id) {
         return None;
     }
     let dati = copia.documento.node(nodo)?.path_data()?;
@@ -147,7 +164,20 @@ fn controlla_gli_indici(id: &str, o: &Map<String, Value>, dati: &PathData) -> Re
         "path.moveAnchor" | "path.setHandle" | "path.removeAnchor" | "path.convertAnchor" => {
             punto(intero_dovuto(id, o, "anchor")?)
         }
-        "path.insertAnchor" => segmento(intero_dovuto(id, o, "segment")?),
+        "path.insertAnchor" | "path.reshapeSegment" | "addon.pen.segment" | "addon.pen.reshape" => {
+            segmento(intero_dovuto(id, o, "segment")?)
+        }
+        "addon.pen.removePoint" | "addon.pen.togglePoint" => punto(intero_dovuto(id, o, "anchor")?),
+        // La curvatura muove un punto o inserisce su un segmento: il numero che c'è si controlla.
+        "path.curvatureEdit" => {
+            if intero(id, o, "anchor")?.is_some() {
+                punto(intero_dovuto(id, o, "anchor")?)?;
+            }
+            match intero(id, o, "segment")? {
+                Some(sg) => segmento(sg),
+                None => Ok(()),
+            }
+        }
         "path.split" => match (intero(id, o, "anchor")?, intero(id, o, "segment")?) {
             (Some(ai), _) => punto(ai),
             (None, Some(sg)) => segmento(sg),
@@ -195,6 +225,18 @@ fn nel_documento(o: &mut Map<String, Value>, radice: Affine) {
 /// `path.moveAnchors` porta lo spostamento nel documento. Gli altri comandi
 /// restano come sono.
 pub(crate) fn argomenti_del_punto(id: &str, copia: &Copia, mut valore: Value) -> Result<Value, PluginError> {
+    if SPOSTAMENTO.contains(&id) {
+        if let Some(o) = valore.as_object_mut() {
+            let dx = o.get("dx").and_then(Value::as_f64);
+            let dy = o.get("dy").and_then(Value::as_f64);
+            if dx.is_some() || dy.is_some() {
+                let [a, b, c, d, _, _] = copia.radice.as_coeffs();
+                let (x, y) = (dx.unwrap_or(0.0), dy.unwrap_or(0.0));
+                o.insert("dx".into(), numero(a * x + c * y));
+                o.insert("dy".into(), numero(b * x + d * y));
+            }
+        }
+    }
     if id == SPOSTA_I_PUNTI {
         if let Some(o) = valore.as_object_mut() {
             let dx = o.get("dx").and_then(Value::as_f64);

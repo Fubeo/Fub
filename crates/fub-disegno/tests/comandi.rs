@@ -246,6 +246,19 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.path.close",
         "disegno.path.appendAnchor",
         "disegno.path.split",
+        // La Curvatura e la penna a passi (T12 curvatura) nominano il tracciato con `element`
+        // nel valore, e la Curvatura crea un tracciato nuovo: nessuno guarda la scelta.
+        "disegno.path.reshape",
+        "disegno.path.reshapeSegment",
+        "disegno.path.curvatureEdit",
+        "disegno.path.curvature",
+        "disegno.path.setAnchors",
+        "disegno.addon.pen.append",
+        "disegno.addon.pen.close",
+        "disegno.addon.pen.segment",
+        "disegno.addon.pen.removePoint",
+        "disegno.addon.pen.togglePoint",
+        "disegno.addon.pen.reshape",
         // La Matita (K6 T12, giro 9) fa un tracciato nuovo: non guarda la scelta.
         "disegno.path.freehand",
         "disegno.swatch.new",
