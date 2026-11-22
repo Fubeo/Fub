@@ -6,12 +6,13 @@ import { RISPOSTE, rispostaDiFamiglia, type RispostaFamiglia } from "./risposte"
 const richiesta = (id: string, value: unknown = null): DrawingCommandRequest => ({ revision: "3", id, selection: ["oa1a1a1a1"], value });
 
 describe("le risposte delle famiglie del banco", () => {
-  it("c'è un file per famiglia, e oggi solo lo stato dello strumento del nucleo", () => {
+  it("c'è un file per famiglia, e oggi le risposte sono lo stato del nucleo e il Rettangolo del Completo", () => {
     const file = Object.keys(import.meta.glob("./*.json")).map((nome) => nome.slice(2, -5)).sort();
     expect(file).toEqual([...DRAWING_FAMILIES].sort());
     // Il Completo legge lo stato dello strumento del motore a famiglia pronta
     // (K6 T11): senza risposta la sessione del banco si darebbe per assente.
-    expect(RISPOSTE.map((r) => r.comando)).toEqual(["disegno.strumento.stato"]);
+    // Il Rettangolo del Completo risponde alla sua finestra (K6 T13, `forme.json`).
+    expect(RISPOSTE.map((r) => r.comando)).toEqual(["disegno.shape.rectangle", "disegno.strumento.stato"]);
     expect(rispostaDiFamiglia(richiesta("disegno.strumento.stato", { strumento: "lasso" })).state?.cursor).toBe("arrow");
   });
 

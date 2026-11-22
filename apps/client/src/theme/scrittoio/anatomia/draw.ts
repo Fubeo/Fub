@@ -92,7 +92,7 @@ export const DRAW: PartAnatomy = {
     {
       name: "align-section",
       states: [S("rest"), S("focused")],
-      hooks: ["draw-align-to", "draw-align-group"],
+      hooks: ["draw-align-to", "draw-align-group", "kit-button"],
     },
   ],
 };

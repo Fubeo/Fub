@@ -9240,7 +9240,8 @@
       "part": "draw",
       "hooks": [
         "draw-align-to",
-        "draw-align-group"
+        "draw-align-group",
+        "kit-button"
       ],
       "states": [
         "rest",
