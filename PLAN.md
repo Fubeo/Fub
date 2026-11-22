@@ -2610,7 +2610,10 @@ ed elimina passano dal motore con gli id di `document.inspect`
 stesse operazioni; il trascinamento resta nativo (`node.move` non è
 nell'indice del motore); 5000 livelli: 52 ms a costruire, 9 ms ad
 aggiornare. La prima scheda (lista piatta, ramo `feat/k6-t15-livelli`) non
-è entrata (DECISIONS 2026-11-22). Giro 5 (Contorno e Sfumatura) in corso.
+è entrata (DECISIONS 2026-11-22). Rifinitura dell'albero unita: la riga
+di un livello mostra solo il nome, il filtro è alto quanto i campi del kit,
+il livello corrente ha un puntino (a voce «corrente»). Giro 5 (Contorno e
+Sfumatura) in corso.
 Aspetta: niente
 
 ## T16 · Il testo
