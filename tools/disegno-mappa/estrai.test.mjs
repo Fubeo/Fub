@@ -75,7 +75,11 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T15 giro 5 `stroke.set` (la sezione Contorno) e le quattro della sfumatura
   // (`paint.editGradient`, `paint.setGradientGeom`, `gradient.selectStop`, `paint.lastGradient`).
   // T13 le quattro `object.compoundShape.*`, `object.expandShape` e `pathfinder.repeat`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1198, fub: 114, escluso: 12, fatto: 227 });
+  // T11 giro H (interruttori della vista) porta a «fatto» tre righe di ≡ › Visualizza:
+  // la griglia di trasparenza (fonte motore, ma la fa il client), i bordi e il riquadro
+  // di delimitazione. Guide intelligenti, aggancio ai punti e widget d'angolo restano
+  // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1195, fub: 114, escluso: 12, fatto: 230 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

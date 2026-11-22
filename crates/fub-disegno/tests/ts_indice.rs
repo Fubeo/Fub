@@ -42,11 +42,21 @@ fn generato() -> String {
     )
 }
 
+/// Le righe del motore che il client fa da sé (K6 T11, giro H): il motore le
+/// dichiara (`cmd!`), ma la griglia di trasparenza è uno stato della superficie
+/// di Fub, che il comando del motore porterebbe nel documento. Il client le
+/// chiama come le sue voci, e la sua prova è `visualizza.test.ts`. La stessa
+/// lista è `MOTORE_DEL_CLIENT` in `tests/casi/mod.rs`: cambiano insieme.
+const DEL_CLIENT: &[&str] = &["view.transparencyGrid"];
+
 /// Il comando che il client chiama per la voce: il comando del motore, un
 /// effetto con `disegno.effect.apply`, uno strumento del motore; una voce
-/// dell'interfaccia o un pannello è del client.
+/// dell'interfaccia, un pannello o una riga di `DEL_CLIENT` è del client.
 fn chiamata(voce: &Voce) -> Value {
     match voce.fonte {
+        FonteMappa::Motore if DEL_CLIENT.contains(&voce.id.as_str()) => {
+            json!({ "client": voce.id })
+        }
         FonteMappa::Motore => json!({ "comando": voce.comando.id }),
         FonteMappa::Effetto => json!({
             "comando": format!("{SPAZIO}.effect.apply"),

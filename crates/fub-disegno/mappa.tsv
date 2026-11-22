@@ -680,7 +680,7 @@ motore	view.capsLock	Caps Lock Cursor State		vista	F1	T11	da fare	interno	famigl
 motore	view.saved.new	New View…	View	vista	F1	T11	da fare	menu/visualizza	famiglia	finestra; aspetta T27 perché le viste salvate stanno nel documento, e la tabella di ricetta.rs non le ha ancora	Nuova vista…
 motore	view.saved.edit	Edit Views…	View	vista	F1	T11	da fare	menu/visualizza	famiglia	finestra; aspetta T27 perché le viste salvate stanno nel documento, e la tabella di ricetta.rs non le ha ancora	Modifica viste…
 motore	view.saved.list	Saved Views		vista	F1	T11	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Viste salvate
-motore	view.transparencyGrid	Show Transparency Grid	View	vista	F1	T11	da fare	menu/visualizza	famiglia	la griglia della trasparenza non la disegna ancora il client	Mostra griglia trasparenza
+motore	view.transparencyGrid	Show Transparency Grid	View	vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra griglia trasparenza
 motore	view.snapToGlyph.options	Snap to Glyph Options		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Opzioni di aggancio a glifo
 motore	select.magicWand	Magic Wand		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Bacchetta magica
 motore	magicWand.set	Magic Wand Options	Window › Magic Wand	livelli	F1	T15	da fare	ispettore/design	famiglia		Opzioni bacchetta magica
@@ -988,7 +988,7 @@ interfaccia	ui.shortcutImportDialog	Import Shortcut Set…		fub	—	T9	fub	fub	�
 interfaccia	view.outline	Outline		vista	F1	T11	fatto	menu/visualizza	famiglia		Contorno
 interfaccia	view.pixelPreview	Pixel Preview		vista	F1	T11	da fare	menu/visualizza	famiglia	l'anteprima dei pixel non la disegna ancora il client	Anteprima pixel
 interfaccia	view.trimView	Trim View		stampa	F4	T25	da fare	menu/visualizza	famiglia		Vista rifilata
-interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	da fare	menu/visualizza	famiglia	i widget d'angolo della selezione non ci sono ancora nel client	Nascondi widget angolo
+interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	da fare	menu/visualizza	famiglia	i widget d'angolo arrivano con i punti di T12 (le azioni sul punto): nel Completo non ce ne sono ancora	Nascondi widget angolo
 interfaccia	view.snapToPixel	Snap to Pixel		vista	F1	T11	da fare	menu/visualizza	famiglia	l'aggancio al pixel non c'è ancora: quello alla griglia è un passo diverso	Aggancia ai pixel
 interfaccia	view.snapToGlyph	Snap to Glyph		testo	F2	T16	da fare	menu/visualizza	famiglia		Aggancia a glifo
 interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	da fare	menu/visualizza	famiglia	il cursore a croce di precisione non c'è ancora nel client	Usa cursori di precisione
@@ -1036,17 +1036,17 @@ interfaccia	view.fitAll	Fit All in Window		vista	F1	T11	fatto	banda	famiglia		Ad
 interfaccia	view.actualSize	Actual Size		vista	F1	T11	fatto	banda	famiglia		Dimensioni effettive
 interfaccia	view.setZoom	Set Zoom		vista	F1	T11	fatto	banda	famiglia		Imposta zoom
 interfaccia	view.goToArtboard	Go to Artboard		tavole	F2	T19	da fare	menu/visualizza	famiglia		Vai alla tavola da disegno
-interfaccia	view.edges	Hide Edges		vista	F1	T11	da fare	menu/visualizza	famiglia	nascondere i bordi degli oggetti non c'è ancora nel client	Nascondi bordi
+interfaccia	view.edges	Hide Edges		vista	F1	T11	fatto	menu/visualizza	famiglia		Nascondi bordi
 interfaccia	view.artboards	Hide Artboards		tavole	F2	T19	da fare	menu/visualizza	famiglia		Nascondi tavole da disegno
 interfaccia	view.template	Hide Template		vista	F1	T11	da fare	menu/visualizza	famiglia	il modello della pagina non c'è ancora nel client	Nascondi modello
 interfaccia	view.rulers	Show Rulers		vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra righelli
 interfaccia	view.videoRulers	Show Video Rulers		stampa	F4	T25	da fare	menu/visualizza	famiglia		Mostra righelli video
-interfaccia	view.boundingBox	Hide Bounding Box		vista	F1	T11	da fare	menu/visualizza	famiglia	nascondere la cornice della selezione non c'è ancora nel client	Nascondi riquadro di delimitazione
+interfaccia	view.boundingBox	Hide Bounding Box		vista	F1	T11	fatto	menu/visualizza	famiglia		Nascondi riquadro di delimitazione
 interfaccia	view.guides	Hide Guides		tavole	F2	T19	da fare	menu/visualizza	famiglia		Nascondi guide
-interfaccia	view.smartGuides	Smart Guides		vista	F1	T11	da fare	menu/visualizza	famiglia	le guide intelligenti non ci sono ancora nel client	Guide sensibili
+interfaccia	view.smartGuides	Smart Guides		vista	F1	T11	da fare	menu/visualizza	famiglia	le guide magnetiche le disegna già il motore, ma il gesto non porta il flag di vista: serve un campo nuovo del contratto (fub-abi), decisione in attesa	Guide sensibili
 interfaccia	view.grid	Show Grid		vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra griglia
 interfaccia	view.snapToGrid	Snap to Grid		vista	F1	T11	fatto	menu/visualizza	famiglia		Aggancia alla griglia
-interfaccia	view.snapToPoint	Snap to Point		vista	F1	T11	da fare	menu/visualizza	famiglia	l'aggancio ai punti non c'è ancora nel client	Aggancia al punto
+interfaccia	view.snapToPoint	Snap to Point		vista	F1	T11	da fare	menu/visualizza	famiglia	l'aggancio ai punti lo fa già il motore, ma il gesto non porta il flag di vista: serve un campo nuovo del contratto (fub-abi), decisione in attesa	Aggancia al punto
 interfaccia	view.presentation	Presentation Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	la modalità presentazione non c'è ancora nel client	Modalità presentazione
 interfaccia	view.screenMode	Screen Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	la modalità schermo non c'è ancora nel client	Modalità schermo
 interfaccia	view.rotate	Rotate View		vista	F1	T11	da fare	menu/visualizza	famiglia	chiede un angolo: la finestra per l'angolo non c'è ancora nel client	Ruota vista

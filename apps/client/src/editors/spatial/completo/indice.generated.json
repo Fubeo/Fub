@@ -2402,6 +2402,22 @@
       "finestra": false
     },
     {
+      "fonte": "motore",
+      "id": "view.transparencyGrid",
+      "chiamata": {
+        "client": "view.transparencyGrid"
+      },
+      "etichetta": {
+        "it": "Mostra griglia trasparenza",
+        "en": "Show Transparency Grid"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": "Cmd+Shift+D",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
       "fonte": "interfaccia",
       "id": "align.distributeHorizontalCenter",
       "chiamata": {
@@ -2826,6 +2842,38 @@
         "en": "Actual Size"
       },
       "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.boundingBox",
+      "chiamata": {
+        "client": "view.boundingBox"
+      },
+      "etichetta": {
+        "it": "Nascondi riquadro di delimitazione",
+        "en": "Hide Bounding Box"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.edges",
+      "chiamata": {
+        "client": "view.edges"
+      },
+      "etichetta": {
+        "it": "Nascondi bordi",
+        "en": "Hide Edges"
+      },
+      "posto": "menu/visualizza",
       "famiglia": "vista",
       "tasto": null,
       "effetto": "mostra",

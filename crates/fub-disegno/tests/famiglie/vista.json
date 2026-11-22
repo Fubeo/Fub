@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia vista (piano K6, T11): il menu dello zoom e il pannello delle misure della banda (giro D), le righe di ≡ › Visualizza che il client fa e il navigatore della banda (giro E). Sono voci del client, della vista di Fub: la camera del foglio, non il file. Non passano dal motore; la loro prova è il test del client che le trova al loro posto e nomina il loro id.",
+  "$nota": "I casi della famiglia vista (piano K6, T11): il menu dello zoom e il pannello delle misure della banda (giro D), le righe di ≡ › Visualizza che il client fa e il navigatore della banda (giro E). Sono voci del client, della vista di Fub: la camera del foglio, non il file. Non passano dal motore; la loro prova è il test del client che le trova al loro posto e nomina il loro id. Il giro H (T11) aggiunge la griglia di trasparenza, che il motore dichiara ma il client fa da sé (`DEL_CLIENT` in `ts_indice.rs`), e i bordi e il riquadro di delimitazione, che si disegnano nel client.",
   "casi": [
     {
       "id": "view.zoomIn",
@@ -50,6 +50,21 @@
       "id": "view.rulers",
       "fonte": "interfaccia",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.transparencyGrid",
+      "fonte": "motore",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.edges",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/view-vista.test.ts"
+    },
+    {
+      "id": "view.boundingBox",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/view-vista.test.ts"
     },
     {
       "id": "view.rotateReset",
