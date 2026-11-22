@@ -377,6 +377,18 @@ motore passato per il glossario del disegno) in
 già aperto prende le preferenze cambiate da un altro disegno solo quando si
 riapre.
 
+Le sfumature preimpostate della sezione Sfumatura stanno qui: le 55 del motore
+sono sue, e quelle che l'utente salva sono la chiave `gradientPresets` delle
+preferenze, quindi `draw.motore`, per tutti i disegni e fuori dal file SVG.
+`gradient.presets.list`, `gradient.presets.save` e `gradient.presets.delete`
+(famiglia `aspetto`) le leggono e le cambiano senza toccare il disegno né la
+cronologia; `gradient.presets.apply` è un cambio del disegno come gli altri,
+con un passo di Annulla. Il client
+(`apps/client/src/editors/spatial/completo/sfumature-preimpostate.ts`)
+controlla il nome prima del motore, che rifiuta come `bad_args` un nome vuoto,
+già preso o di una preimpostata sua, e mostra i nomi del motore nella lingua
+dell'interfaccia (`sfumature-nomi.ts`).
+
 ## Le due strade
 
 Il componente «Disegno completo» (`fub.disegno-completo`, in «Disegnare»,
