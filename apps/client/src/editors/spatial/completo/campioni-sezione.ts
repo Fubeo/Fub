@@ -100,9 +100,10 @@ export function finestraCampione(opzioni: {
 
 /// Le parti della sezione che restano da un giro all'altro.
 interface Parti {
+  /// La griglia del kit (`kit-color`), come il prototipo: la nota le sta sopra, le azioni sotto.
   readonly radice: HTMLElement;
+  readonly azioni: HTMLElement;
   readonly nota: HTMLParagraphElement;
-  readonly griglia: HTMLElement;
   readonly fila: HTMLElement;
   readonly nuovo: HTMLButtonElement;
   readonly opzioni: HTMLButtonElement;
@@ -231,7 +232,7 @@ export function sezioneCampioni(
         return voce;
       }),
     );
-    p.griglia.hidden = elenco.length === 0;
+    p.radice.hidden = elenco.length === 0;
   };
 
   /// Le frecce muovono il fuoco fra i campioni: a destra e a sinistra di uno, su e giù di una riga.
@@ -282,8 +283,8 @@ export function sezioneCampioni(
     };
     const fatte: Parti = {
       radice,
+      azioni,
       nota,
-      griglia,
       fila,
       nuovo: bottone("draw.resources.swatches.nuovo", "draw.resources.swatches.nuovo.nota", () => void nuovo()),
       opzioni: bottone("draw.resources.swatches.opzioni", "draw.resources.swatches.opzioni.nota", () => void opzioni()),
@@ -301,7 +302,7 @@ export function sezioneCampioni(
       }),
     };
     azioni.append(fatte.nuovo, fatte.opzioni, fatte.elimina, fatte.usati, fatte.togli);
-    radice.append(nota, griglia, azioni);
+    radice.append(griglia);
     vita.listen(fila, "click", (evento) => {
       const voce = (evento.target as HTMLElement).closest<HTMLButtonElement>(".kit-color-swatch");
       if (voce?.dataset.swatch !== undefined) scegli(voce.dataset.swatch);
@@ -329,7 +330,7 @@ export function sezioneCampioni(
     p.togli.disabled = nonUsati === 0;
     p.togli.title = nonUsati === 0 && elenco.length > 0 ? t("draw.resources.swatches.togli.nessuno") : t("draw.resources.swatches.togli.nota");
     segna(p);
-    contesto.corpo.append(p.radice);
+    contesto.corpo.append(p.nota, p.radice, p.azioni);
     return () => {
       if (ultimo === contesto) ultimo = null;
       contesto.corpo.replaceChildren();

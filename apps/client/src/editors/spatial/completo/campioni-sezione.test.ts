@@ -87,7 +87,8 @@ describe("Risorse › Campioni (swatches)", () => {
   it("c'è nella scheda Risorse, prima delle altre, con la griglia del prototipo e il conto", () => {
     const { c, corpo } = completo(0);
     expect(c.sezioni.di("risorse")[0]?.id).toBe("swatches");
-    expect(corpo.querySelector(".kit-color.draw-resources-swatches")).not.toBeNull();
+    // Come il prototipo: la nota, poi la griglia del kit; le azioni sotto.
+    expect([...corpo.children].map((figlio) => figlio.className)).toEqual(["draw-properties-note", "kit-color draw-resources-swatches", "draw-resources-swatches-actions"]);
     expect(corpo.querySelector(".draw-properties-note")?.textContent).toBe(t("draw.resources.count", { count: 2 }));
     expect(corpo.querySelector(".kit-color-group-title")?.textContent).toBe(t("draw.resources.swatches.document"));
     const [blu, arancio] = voci(corpo);
@@ -103,7 +104,7 @@ describe("Risorse › Campioni (swatches)", () => {
   it("senza campioni dice che il disegno non ne ha; Opzioni ed Elimina aspettano un campione scelto", () => {
     const { c, corpo } = completo(0, [], []);
     expect(corpo.querySelector(".draw-properties-note")?.textContent).toBe(t("draw.resources.swatches.none"));
-    expect(corpo.querySelector<HTMLElement>(".kit-color-group")!.hidden).toBe(true);
+    expect(corpo.querySelector<HTMLElement>(".kit-color.draw-resources-swatches")!.hidden).toBe(true);
     expect(azione(corpo, "opzioni").disabled).toBe(true);
     expect(azione(corpo, "elimina").disabled).toBe(true);
     expect(azione(corpo, "opzioni").title).toBe(t("draw.resources.swatches.sceglino"));
