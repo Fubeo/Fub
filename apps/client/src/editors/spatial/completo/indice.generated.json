@@ -2531,6 +2531,22 @@
     },
     {
       "fonte": "motore",
+      "id": "select.reselect",
+      "chiamata": {
+        "comando": "disegno.select.reselect"
+      },
+      "etichetta": {
+        "it": "Riseleziona",
+        "en": "Reselect"
+      },
+      "posto": "menu/selezione",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+6",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.same.appearance",
       "chiamata": {
         "comando": "disegno.select.same.appearance"

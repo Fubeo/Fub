@@ -1048,6 +1048,9 @@ pub(crate) fn esegui(
     if banco.in_corso.is_some() {
         banco.ripristina(copia);
     }
+    // `select.reselect` ripete l'ultimo comando di selezione, che il motore non
+    // ricorda fra due richieste: il ricordo del banco va nello stato del documento.
+    let ultimo = banco.ultimo_di_selezione.clone();
     let sessione = &mut banco.sessione;
     let fatto = vectorcraft_engine::guard::catch_panic(|| {
         // Il comando cambia anche lo stile delle forme nuove: quello della
@@ -1060,6 +1063,9 @@ pub(crate) fn esegui(
                 .map(|stato| {
                     stato.selection = Selection::default();
                     giro.iter().for_each(|n| stato.selection.add(*n));
+                    if riga.id == "select.reselect" {
+                        stato.last_selection_cmd = ultimo.clone();
+                    }
                     if let Some(livello) = livello {
                         stato.active_layer = Some(livello);
                     }
@@ -1108,6 +1114,17 @@ pub(crate) fn esegui(
             return Ok(rifiuta(DrawingRefusal::Unsupported));
         }
     };
+    // Il comando di selezione che il motore ha appena dato ricorda sé e la sua
+    // selezione di prima, per `select.reselect`. Un comando che non ne dà uno non
+    // cancella il ricordo.
+    if let Some(nuovo) = banco
+        .sessione
+        .doc()
+        .ok()
+        .and_then(|d| d.last_selection_cmd.clone())
+    {
+        banco.ultimo_di_selezione = Some(nuovo);
+    }
     let Some(dopo) = banco.documento() else {
         banco.ripristina(copia);
         return Ok(rifiuta(DrawingRefusal::Unsupported));

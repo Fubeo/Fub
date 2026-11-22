@@ -98,7 +98,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (`object.transformEach`) restano «da fare».
   // T12 mano libera (giro 9) porta a «fatto» i cinque comandi a mano libera: `path.freehand`,
   // `.eraseRegion`, `.eraseSegments`, `.knife`, `.smoothRegion` (gli strumenti erano già fatti).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1142, fub: 114, escluso: 12, fatto: 283 });
+  // T15 Seleziona giro 2: Riseleziona (`select.reselect`) è «fatto», con il ricordo del banco.
+  // Le selezioni salvate, Oggetto › Testo di punto e in area, la bacchetta restano «da fare».
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1141, fub: 114, escluso: 12, fatto: 284 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

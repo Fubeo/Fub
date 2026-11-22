@@ -426,3 +426,15 @@ describe("eseguiVoce, coi comandi che Fub fa da sé (K6 T11, oggetti)", () => {
     expect(sessione.comando).toHaveBeenCalledOnce();
   });
 });
+
+describe("eseguiVoce, ≡ › Selezione › Riseleziona (K6 T15, giro 2)", () => {
+  it("manda al motore disegno.select.reselect con la selezione che c'è, senza cambiare il documento", async () => {
+    // Solo selezione: nessuna operazione, quindi niente cronologia.
+    const { d, sessione, azioni } = dipendenze({ risposta: esito({ ops: null, selection: ["n1", "n2"] }), leggi: () => [] });
+    eseguiVoce(voce({ id: "select.reselect", famiglia: "nucleo", chiamata: { comando: "disegno.select.reselect", valore: {} } }), d);
+    await tick();
+    expect(sessione.comando).toHaveBeenCalledWith({ id: "disegno.select.reselect", selection: ["n1", "n2"], value: {}, preview: false });
+    expect(azioni.commit).not.toHaveBeenCalled();
+    expect(azioni.seleziona).toHaveBeenCalledWith(["n1", "n2"]);
+  });
+});

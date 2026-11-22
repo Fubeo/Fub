@@ -95,6 +95,13 @@ dall'isolamento prima di svuotare la selezione, e riaprendo il disegno non si
 «Selezione avanzata», nella barra dopo «Elimina», apre il menu della
 selezione, con tutte le voci che seguono.
 
+**Riseleziona** ripete l'ultimo comando di selezione (per esempio Uguale ›
+Colore riempimento): dopo Deseleziona riparte dalla selezione di prima. Il
+ricordo sta nella sessione del disegno aperto: si perde chiudendo il disegno
+o cambiando il testo dall'esterno. Senza un comando di selezione prima, la
+voce è spenta e dice che cosa fare. Le selezioni salvate e la bacchetta magica
+non ci sono ancora: il formato del disegno non ha ancora un posto per loro.
+
 Il tasto destro del mouse sul foglio, con ogni strumento, il tocco lungo con
 la freccia in mano e, dalla tastiera, `Maiusc+F10` o il tasto del menu, sotto
 la selezione, aprono invece un menu più corto. Con la freccia il tasto

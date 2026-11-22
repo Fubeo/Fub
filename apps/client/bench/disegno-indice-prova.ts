@@ -89,6 +89,8 @@ const PERCHE_ISTANZA: DrawingDisabledReason = { other: { text: "Non è un'istanz
 /// Le voci del giro 6 (K6 T15): il testo uguale vuole un testo fra le scelte, e le etichette del banco (`etichette`,
 /// i loro id) sono testi; i connettori del disegno sono tracciati aperti, e non ci sono punti isolati.
 const PERCHE_PUNTI_ISOLATI: DrawingDisabledReason = { other: { text: "Nel disegno non ci sono punti isolati." } };
+// Riseleziona senza un comando di selezione prima nel banco (K6 T15 giro 2): la stessa frase del motore.
+const PERCHE_RISELEZIONE: DrawingDisabledReason = { other: { text: "Prima scegli un comando di selezione, per esempio Uguale o Oggetto." } };
 const TESTO_UGUALE = ["fontFamily", "fontFamilyStyle", "fontFamilyStyleSize", "fontSize", "textFillColor", "textStrokeColor"];
 
 export function comandiSelezione(selection: readonly string[], etichette: readonly string[] = []): DrawingCommandInfo[] {
@@ -113,6 +115,7 @@ export function comandiSelezione(selection: readonly string[], etichette: readon
     senzaScelta ? spento("disegno.select.none", "no_selection") : acceso("disegno.select.none"),
     senzaScelta ? spento("disegno.select.nextAbove", "no_selection") : acceso("disegno.select.nextAbove"),
     senzaScelta ? spento("disegno.select.nextBelow", "no_selection") : acceso("disegno.select.nextBelow"),
+    spento("disegno.select.reselect", PERCHE_RISELEZIONE),
     ...TESTO_UGUALE.map((nome) => {
       const id = `disegno.select.same.${nome}`;
       if (senzaScelta) return spento(id, "no_selection");
