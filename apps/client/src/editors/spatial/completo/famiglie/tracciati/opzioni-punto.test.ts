@@ -30,7 +30,8 @@ function monta(anchors: DrawingAnchor[]) {
   vita = openLifetime();
   const esegui = vi.fn();
   const annuncia = vi.fn();
-  const fila = filaPunti(TESTI, stato(anchors), { esegui, annuncia }, vita)!;
+  const leggi = vi.fn(() => Promise.resolve(null));
+  const fila = filaPunti(TESTI, stato(anchors), { esegui, leggi, annuncia }, vita)!;
   const host = document.createElement("div");
   for (const voce of fila.voci!) host.append(voce.element);
   const pulsante = (nome: string): HTMLButtonElement => [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === nome)!;
