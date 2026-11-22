@@ -173,3 +173,22 @@ describe("le voci nuove di ≡ › Selezione (K6 T15, giro 6)", () => {
     c.chiudi();
   });
 });
+
+describe("Riseleziona in ≡ › Selezione (K6 T15, giro 2)", () => {
+  it("sta nel menu Selezione, e dice perché è spenta quando il banco non ha un comando da ripetere", async () => {
+    const perche = "Prima scegli un comando di selezione, per esempio Uguale o Oggetto.";
+    const comandi = vi.fn(() =>
+      Promise.resolve([{ id: "disegno.select.reselect", enabled: false, disabled_reason: { other: { text: perche } } }]),
+    );
+    const sessione = { comandi, comando: vi.fn() } as unknown as SessioneMotore;
+    const motore = { adesso: () => sessione, pronta: () => Promise.resolve(sessione), assente: () => null } as unknown as MotoreDelDisegno;
+    const c = apri({ motore, life: openLifetime() } as never, { indice: () => Promise.resolve(indiceDi(indiceGenerato as never)) } as never);
+    const voci = await c.menu(() => ["oa1a1a1a1"], AZIONI);
+    const selezione = voci.find((voce) => Array.isArray(voce.items) && voce.items.some((dentro) => dentro.label === "Uguale"));
+    const riseleziona = (selezione!.items as MenuItem[]).find((voce) => voce.label === "Riseleziona");
+    expect(riseleziona, "Riseleziona nel menu Selezione").toBeDefined();
+    expect(riseleziona?.disabled).toBe(true);
+    expect(riseleziona?.description).toBe(perche);
+    c.chiudi();
+  });
+});
