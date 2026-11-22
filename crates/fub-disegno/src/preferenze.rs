@@ -71,6 +71,40 @@ pub fn lettura_senza_cartelle(mut lettura: Value) -> Value {
     lettura
 }
 
+/// Una preferenza dell'elenco del motore (`prefs.list`) con le parole del
+/// motore: categoria, sezione, etichetta e, per una scelta, le etichette di
+/// ogni valore. Impostazioni › Disegni le traduce una volta, in un file
+/// generato (`crates/fub-host/tests/ts_preferenze_motore.rs`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VoceElenco {
+    pub chiave: &'static str,
+    pub categoria: &'static str,
+    /// Il titoletto dentro la categoria; vuoto: nessuno.
+    pub sezione: &'static str,
+    pub etichetta: &'static str,
+    /// `(valore, etichetta)` di ogni scelta; vuoto per gli altri tipi.
+    pub scelte: Vec<(&'static str, &'static str)>,
+}
+
+/// Le preferenze dell'elenco del motore, nel suo ordine, senza le cartelle.
+pub fn elenco() -> Vec<VoceElenco> {
+    use vectorcraft_engine::cmd::prefscmds::{PrefKind, PREF_SPECS};
+    PREF_SPECS
+        .iter()
+        .filter(|voce| !e_cartella(voce.key))
+        .map(|voce| VoceElenco {
+            chiave: voce.key,
+            categoria: voce.category,
+            sezione: voce.section,
+            etichetta: voce.label,
+            scelte: match voce.kind {
+                PrefKind::Choice(scelte) => scelte.to_vec(),
+                _ => Vec::new(),
+            },
+        })
+        .collect()
+}
+
 /// Le preferenze di serie con sopra quelle salvate in `salvate`, una chiave
 /// alla volta: una chiave che il motore non conosce o un valore che non vale
 /// si salta, e lo dice un avviso. Le cartelle si saltano sempre, in silenzio
@@ -224,6 +258,18 @@ mod tests {
         assert_eq!(cambi, mappa(json!({"keyboardIncrement": 3.0})));
         let unite = con(&Prefs::default(), &cambi);
         assert_eq!(unite.keyboard_increment, 3.0);
+    }
+
+    #[test]
+    fn l_elenco_e_quello_del_motore_senza_le_cartelle() {
+        let elenco = elenco();
+        assert!(elenco.iter().all(|voce| !e_cartella(voce.chiave)));
+        assert_eq!(
+            elenco.len() + CARTELLE.len(),
+            vectorcraft_engine::cmd::prefscmds::PREF_SPECS.len()
+        );
+        let griglia = elenco.iter().find(|v| v.chiave == "gridStyle").unwrap();
+        assert!(griglia.scelte.contains(&("lines", "Lines")), "{griglia:?}");
     }
 
     #[test]
