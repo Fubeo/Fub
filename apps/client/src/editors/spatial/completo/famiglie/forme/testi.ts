@@ -31,6 +31,20 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:fill": { it: "Riempi", en: "Fill" },
   "campo:closed": { it: "Chiuso", en: "Closed" },
   "campo:clockwise": { it: "In senso orario", en: "Clockwise" },
+  // Le griglie (T13 giro 7): le righe e le colonne, o i cerchi e i raggi, con le loro
+  // inclinazioni (in %, da -500 a 500), la cornice e il riempimento.
+  "campo:rows": { it: "Divisori orizzontali", en: "Horizontal dividers" },
+  "campo:columns": { it: "Divisori verticali", en: "Vertical dividers" },
+  "campo:rowSkew": { it: "Inclinazione orizzontali", en: "Horizontal skew" },
+  "campo:columnSkew": { it: "Inclinazione verticali", en: "Vertical skew" },
+  "campo:frame": { it: "Cornice esterna", en: "Outside frame" },
+  "campo:concentric": { it: "Divisori circolari", en: "Concentric dividers" },
+  "campo:radial": { it: "Divisori radiali", en: "Radial dividers" },
+  "campo:concentricSkew": { it: "Inclinazione circolari", en: "Concentric skew" },
+  "campo:radialSkew": { it: "Inclinazione radiali", en: "Radial skew" },
+  "campo:compound": { it: "Anelli composti", en: "Compound rings" },
+  "campo:x": { it: "X", en: "X" },
+  "campo:y": { it: "Y", en: "Y" },
   // La finestra di Metodo forma (T13): i quattro metodi con i nomi dei pulsanti della
   // sezione «Elaborazione tracciati» (`draw.elaborazione.*`).
   "campo:mode": { it: "Metodo", en: "Mode" },

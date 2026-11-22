@@ -20,8 +20,8 @@ const STRUMENTI_FORME = VOCI.filter((voce) => voce.famiglia === "forme" && voce.
 const FORME_PRONTO: ReadonlySet<string> = new Set(STRUMENTI_FORME);
 
 describe("la famiglia forme nella colonna", () => {
-  it("ha otto strumenti fatti: senza le griglie e il riflesso (aspettano T27)", () => {
-    expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "lineSegment", "polygon", "rectangle", "roundedRectangle", "spiral", "star"]);
+  it("ha dieci strumenti fatti: le otto forme e le due griglie (T13 giro 7); senza il riflesso (aspetta T27)", () => {
+    expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "lineSegment", "polarGrid", "polygon", "rectangle", "rectangularGrid", "roundedRectangle", "spiral", "star"]);
   });
 
   it("ogni strumento fatto ha il nome corto nelle due lingue nel catalogo della colonna, l'icona e un posto nel motore", () => {
@@ -48,12 +48,25 @@ describe("la famiglia forme nella colonna", () => {
     const caselle = gruppoShape?.caselle ?? [];
     const strumentiDiRettangolo = caselle.find((casella) => casella.includes("motore:rectangle")) ?? [];
     expect(strumentiDiRettangolo).toEqual(expect.arrayContaining(["motore:rectangle", "motore:roundedRectangle", "motore:ellipse", "motore:polygon", "motore:star", "motore:lineSegment", "motore:arc", "motore:spiral"]));
-    expect(strumentiDiRettangolo).not.toContain("motore:rectangularGrid");
+    // Le due griglie stanno nella stessa casella, come nel prototipo (T13 giro 7).
+    expect(strumentiDiRettangolo).toEqual(expect.arrayContaining(["motore:rectangularGrid", "motore:polarGrid"]));
   });
 
-  it("le griglie, ancora da fare, non compaiono nella colonna", () => {
+  it("le due griglie hanno il nome corto nelle due lingue e un'icona del catalogo, e il loro id va al motore", () => {
+    for (const id of ["rectangularGrid", "polarGrid"]) {
+      expect(COLONNA_IT[`draw.engine.name.${id}` as keyof typeof COLONNA_IT].trim(), id).not.toBe("");
+      expect(COLONNA_EN[`draw.engine.name.${id}` as keyof typeof COLONNA_EN].trim(), id).not.toBe("");
+      expect(DRAW_ICONS[iconaMotore(id)], id).toBeDefined();
+      expect(ICONE_MOTORE[id], id).toBeDefined();
+      expect(MOTORE_PRONTO.has(id), id).toBe(true);
+    }
+    expect(COLONNA_IT["draw.engine.name.rectangularGrid"]).toBe("Griglia rettangolare");
+    expect(COLONNA_IT["draw.engine.name.polarGrid"]).toBe("Griglia polare");
+  });
+
+  it("le griglie compaiono nella colonna quando sono fatte", () => {
     const tutti = layoutCompleto([], MOTORE_PRONTO).flatMap((gruppo) => gruppo.caselle.flat());
-    expect(tutti).not.toContain("motore:rectangularGrid");
-    expect(tutti).not.toContain("motore:polarGrid");
+    expect(tutti).toContain("motore:rectangularGrid");
+    expect(tutti).toContain("motore:polarGrid");
   });
 });

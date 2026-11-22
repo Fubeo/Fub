@@ -2675,6 +2675,22 @@
     },
     {
       "fonte": "motore",
+      "id": "shape.polarGrid",
+      "chiamata": {
+        "comando": "disegno.shape.polarGrid"
+      },
+      "etichetta": {
+        "it": "Griglia polare",
+        "en": "Polar Grid"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "shape.polygon",
       "chiamata": {
         "comando": "disegno.shape.polygon"
@@ -2698,6 +2714,22 @@
       "etichetta": {
         "it": "Rettangolo",
         "en": "Rectangle"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.rectangularGrid",
+      "chiamata": {
+        "comando": "disegno.shape.rectangularGrid"
+      },
+      "etichetta": {
+        "it": "Griglia rettangolare",
+        "en": "Rectangular Grid"
       },
       "posto": "finestra",
       "famiglia": "forme",
@@ -3905,6 +3937,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "polarGrid",
+      "chiamata": {
+        "strumento": "polarGrid"
+      },
+      "etichetta": {
+        "it": "Strumento Griglia polare",
+        "en": "Polar Grid Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "polygon",
       "chiamata": {
         "strumento": "polygon"
@@ -3948,6 +3996,22 @@
       "posto": "colonna/forme",
       "famiglia": "forme",
       "tasto": "M",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "rectangularGrid",
+      "chiamata": {
+        "strumento": "rectangularGrid"
+      },
+      "etichetta": {
+        "it": "Strumento Griglia rettangolare",
+        "en": "Rectangular Grid Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },

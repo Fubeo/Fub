@@ -91,8 +91,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 punti le dieci sui punti di un tracciato: `path.moveAnchor`, `.moveAnchors`, `.setHandle`,
   // `.insertAnchor`, `.removeAnchor`, `.convertAnchor`, `.deleteAnchors`, `.close`, `.appendAnchor`, `.split`.
   // T13 generatore (giro 7): Oggetto › Trasforma › Trasforma singolarmente
-  // (`object.transformEach`) è «fatto», con la sua finestra con l'anteprima.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1157, fub: 114, escluso: 12, fatto: 268 });
+  // (`object.transformEach`) è «fatto», con la sua finestra con l'anteprima; le due
+  // griglie (`shape.rectangularGrid`, `shape.polarGrid`) e i loro strumenti (`rectangularGrid`,
+  // `polarGrid`) sono «fatto», senza più «aspetta T27»: quattro in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1153, fub: 114, escluso: 12, fatto: 272 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

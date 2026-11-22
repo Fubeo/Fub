@@ -816,6 +816,9 @@ pub const COMANDI_DI_FORMA: &[&str] = &[
     "shape.line",
     "shape.spiral",
     "shape.arc",
+    // Le griglie (T13, giro 7): un gruppo di tracciati, con la finestra delle misure.
+    "shape.rectangularGrid",
+    "shape.polarGrid",
 ];
 
 /// Le misure di una forma che partono da 100 quando lo schema non dà un predefinito (K6 T13,

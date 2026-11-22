@@ -115,6 +115,72 @@
     },
     {
       "fonte": "motore",
+      "id": "shape.polarGrid",
+      "campi": [
+        {
+          "nome": "x",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "concentric",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 5.0
+        },
+        {
+          "nome": "radial",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 5.0
+        },
+        {
+          "nome": "concentricSkew",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "radialSkew",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "compound",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "fill",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
       "id": "shape.polygon",
       "campi": [
         {
@@ -170,6 +236,72 @@
           "facoltativo": false,
           "minimo": 0.01,
           "predefinito": 100.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.rectangularGrid",
+      "campi": [
+        {
+          "nome": "x",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "rows",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 5.0
+        },
+        {
+          "nome": "columns",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 5.0
+        },
+        {
+          "nome": "rowSkew",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "columnSkew",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "frame",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "fill",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
         }
       ]
     },

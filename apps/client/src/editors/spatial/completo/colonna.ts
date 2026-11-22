@@ -99,6 +99,9 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "lineSegment",
   "arc",
   "spiral",
+  // T13 giro 7: le due griglie (la casella «forme»).
+  "rectangularGrid",
+  "polarGrid",
   "rectangle",
   "roundedRectangle",
   "ellipse",
@@ -140,6 +143,9 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   lineSegment: "draw-line",
   arc: "draw-arc",
   spiral: "draw-spiral",
+  // Le griglie (T13 giro 7): le icone del catalogo della griglia rettangolare e polare.
+  rectangularGrid: "draw-grid-rect",
+  polarGrid: "draw-grid-polar",
   rectangle: "draw-rect",
   roundedRectangle: "draw-rounded-rect",
   ellipse: "draw-ellipse",
@@ -196,6 +202,8 @@ export const COMANDO_DEL_CLIC: Readonly<Record<string, ComandoDelClic>> = {
   lineSegment: { comando: "shape.line", x: "x1", y: "y1" },
   arc: { comando: "shape.arc", x: "x1", y: "y1" },
   spiral: { comando: "shape.spiral", x: "cx", y: "cy" },
+  rectangularGrid: { comando: "shape.rectangularGrid", x: "x", y: "y" },
+  polarGrid: { comando: "shape.polarGrid", x: "x", y: "y" },
   rotate: { comando: "object.rotate", sullaSelezione: true },
   reflect: { comando: "object.reflect", sullaSelezione: true },
   scale: { comando: "object.scale", sullaSelezione: true },

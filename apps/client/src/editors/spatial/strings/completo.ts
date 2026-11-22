@@ -890,6 +890,8 @@ export const COLONNA_IT = {
   "draw.engine.name.lineSegment": "Segmento linea",
   "draw.engine.name.arc": "Arco",
   "draw.engine.name.spiral": "Spirale",
+  "draw.engine.name.rectangularGrid": "Griglia rettangolare",
+  "draw.engine.name.polarGrid": "Griglia polare",
   // Il Contagocce (T14 giro 6), nella casella «colore».
   "draw.engine.name.eyedropper": "Contagocce",
   // Gli strumenti di trasformazione (T13 giro 5): nella casella «modificare».
@@ -949,6 +951,8 @@ export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.engine.name.lineSegment": "Line Segment",
   "draw.engine.name.arc": "Arc",
   "draw.engine.name.spiral": "Spiral",
+  "draw.engine.name.rectangularGrid": "Rectangular Grid",
+  "draw.engine.name.polarGrid": "Polar Grid",
   "draw.engine.name.eyedropper": "Eyedropper",
   "draw.engine.name.rotate": "Rotate",
   "draw.engine.name.reflect": "Reflect",

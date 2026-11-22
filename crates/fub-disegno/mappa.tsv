@@ -120,8 +120,8 @@ motore	shape.flare	Flare		forme	F1	T13	da fare	finestra	famiglia	aspetta T27 (l'
 motore	shape.line	Line Segment		forme	F1	T13	fatto	finestra	famiglia		Segmento linea
 motore	shape.spiral	Spiral		forme	F1	T13	fatto	finestra	famiglia		Spirale
 motore	shape.arc	Arc		forme	F1	T13	fatto	finestra	famiglia		Arco
-motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	da fare	finestra	famiglia	aspetta T27	Griglia rettangolare
-motore	shape.polarGrid	Polar Grid		forme	F1	T13	da fare	finestra	famiglia	aspetta T27	Griglia polare
+motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	fatto	finestra	famiglia		Griglia rettangolare
+motore	shape.polarGrid	Polar Grid		forme	F1	T13	fatto	finestra	famiglia		Griglia polare
 motore	path.create	Create Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Crea tracciato
 motore	view.drawMode	Drawing Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	la modalità di disegno (dietro, dentro) non ce l'ha ancora il client	Modalità di disegno
 motore	text.create	Create Text		testo	F2	T16	da fare	ispettore/design	famiglia		Crea testo
@@ -1298,8 +1298,8 @@ strumento	touchType	Touch Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia
 strumento	lineSegment	Line Segment Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Segmento linea
 strumento	arc	Arc Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Arco
 strumento	spiral	Spiral Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Spirale
-strumento	rectangularGrid	Rectangular Grid Tool		forme	F1	T13	da fare	colonna/forme	famiglia	aspetta T27	Strumento Griglia rettangolare
-strumento	polarGrid	Polar Grid Tool		forme	F1	T13	da fare	colonna/forme	famiglia	aspetta T27	Strumento Griglia polare
+strumento	rectangularGrid	Rectangular Grid Tool		forme	F1	T13	fatto	colonna/forme	famiglia		Strumento Griglia rettangolare
+strumento	polarGrid	Polar Grid Tool		forme	F1	T13	fatto	colonna/forme	famiglia		Strumento Griglia polare
 strumento	rectangle	Rectangle Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Rettangolo
 strumento	roundedRectangle	Rounded Rectangle Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Rettangolo arrotondato
 strumento	ellipse	Ellipse Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Ellisse
