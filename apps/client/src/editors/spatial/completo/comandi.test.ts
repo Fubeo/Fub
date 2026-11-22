@@ -175,18 +175,31 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
     expect(righe[0]).toMatchObject({ choice: "checkbox", checked: true, disabled: false });
   });
 
-  it("≡ › Visualizza ha le sue file: griglia e aggancio, contorno e righelli, rotazione", () => {
+  it("≡ › Visualizza ha le sue file: griglia e aggancio, trasparenza, contorno e righelli, bordi e riquadro, rotazione", () => {
     const client = (id: string) => voce(id, "menu/visualizza", { fonte: "interfaccia", chiamata: { client: id } });
     // L'indice le dà in ordine di id, e una voce che nessuna fila nomina va in fondo.
-    const voci = ["view.altro", "view.grid", "view.outline", "view.rotateReset", "view.rulers", "view.snapToGrid"].map(client);
+    const voci = [
+      "view.altro",
+      "view.grid",
+      "view.outline",
+      "view.rotateReset",
+      "view.rulers",
+      "view.snapToGrid",
+      "view.transparencyGrid",
+      "view.edges",
+      "view.boundingBox",
+    ].map(client);
     const stato: StatoComandi = { per: null, assente: null, clientVoce: () => null, clientStato: () => undefined };
     const righe = menuComando(indiceDi({ voci }), stato, vi.fn())[0]!.items as readonly MenuItem[];
     const nome = (id: string) => nomeVoce(voci.find((v) => v.id === id)!);
     expect(righe.map((r) => [r.label, r.separator === true])).toEqual([
       [nome("view.grid"), false],
       [nome("view.snapToGrid"), false],
-      [nome("view.outline"), true],
+      [nome("view.transparencyGrid"), true],
+      [nome("view.outline"), false],
       [nome("view.rulers"), false],
+      [nome("view.edges"), true],
+      [nome("view.boundingBox"), false],
       [nome("view.rotateReset"), true],
       [nome("view.altro"), true],
     ]);

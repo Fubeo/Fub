@@ -375,10 +375,15 @@ export function installLayersGrid(ctx: EditorContext): void {
     else if (ctx.grid.shapes !== before.shapes) announce(t(ctx.grid.shapes ? "draw.recognize.on" : "draw.recognize.off"));
     else if (ctx.grid.bar !== before.bar) announce(t(ctx.grid.bar ? "draw.bar.beside.on" : "draw.bar.beside.off"));
     else if (ctx.grid.twist !== before.twist || ctx.grid.taps !== before.taps || !sameCurve(ctx.grid.pen, before.pen) || ctx.grid.steady?.amount !== before.steady?.amount || ctx.grid.steady?.string !== before.steady?.string) announce(t("draw.touch.changed"));
+    else if (ctx.grid.transparencyGrid !== before.transparencyGrid) announce(t(ctx.grid.transparencyGrid ? "draw.view.transparency.on" : "draw.view.transparency.off"));
+    else if (ctx.grid.hideEdges !== before.hideEdges) announce(t(ctx.grid.hideEdges ? "draw.view.edges.hidden" : "draw.view.edges.shown"));
+    else if (ctx.grid.hideBoundingBox !== before.hideBoundingBox) announce(t(ctx.grid.hideBoundingBox ? "draw.view.boundingBox.hidden" : "draw.view.boundingBox.shown"));
     // Il pannello aperto o chiuso, le sue sezioni, la gomma, la penna, il
     // tasto laterale e l'uscita si ricordano in silenzio: chi li cambia lo
     // dice da sé, o lo si vede.
     else if (ctx.grid.panel === before.panel && ctx.grid.closed.join("\n") === before.closed.join("\n") && !penChanged(ctx.grid, before)) return;
+    // Bordi e riquadro sono segni sul foglio, che si rifanno con la selezione.
+    if (ctx.grid.hideEdges !== before.hideEdges || ctx.grid.hideBoundingBox !== before.hideBoundingBox) ctx.showHandles();
     syncProperties();
     options.onGridChange?.(ctx.grid);
   };

@@ -124,6 +124,9 @@ export function installMarks(ctx: EditorContext): void {
   /// si ritaglia, che ha i suoi segni.
   const frameNow = (): FrameView | null => {
     if (ctx.tool !== "select" || !editable() || ctx.selection.length === 0) return null;
+    // Nascondi riquadro di delimitazione (K6 T11): senza cornice non ci sono
+    // maniglie da vedere, né da prendere col puntatore.
+    if (ctx.grid.hideBoundingBox === true) return null;
     const g = ctx.current?.kind === "select" ? ctx.current : null;
     if (g !== null && (g.mode === "move" || g.mode === "marquee")) return null;
     // Un gesto sul motore: la cornice come la sua anteprima la trasforma,
@@ -224,14 +227,18 @@ export function installMarks(ctx: EditorContext): void {
       const sy = Math.hypot(matrix[2], matrix[3]) * ctx.camera.scale;
       const padX = sx > 0 ? FRAME_PX / sx : 0;
       const padY = sy > 0 ? FRAME_PX / sy : 0;
-      handles.push({
-        kind: "box",
-        x: frame.min[0] - padX,
-        y: frame.min[1] - padY,
-        width: frame.max[0] - frame.min[0] + 2 * padX,
-        height: frame.max[1] - frame.min[1] + 2 * padY,
-        matrix,
-      });
+      // Il contorno di evidenziazione di ogni oggetto scelto: Nascondi bordi
+      // (K6 T11) lo toglie, e la cornice comune resta com'è.
+      if (ctx.grid.hideEdges !== true) {
+        handles.push({
+          kind: "box",
+          x: frame.min[0] - padX,
+          y: frame.min[1] - padY,
+          width: frame.max[0] - frame.min[0] + 2 * padX,
+          height: frame.max[1] - frame.min[1] + 2 * padY,
+          matrix,
+        });
+      }
     }
     handles.push(...frameHandles());
     handles.push(...ctx.nibHandles());
