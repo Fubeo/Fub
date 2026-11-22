@@ -219,10 +219,3 @@ export function creaMenuZoom(ctx: EditorContext, bottone: () => HTMLElement | nu
   return { apri, comando: esegui };
 }
 
-/// Installa il menu dello zoom nell'editor: `ctx.apriZoom` e `ctx.comandoVista`
-/// (`status.ts` li chiama dalla banda e dai comandi).
-export function installZoomMenu(ctx: EditorContext, bottone: () => HTMLElement | null): void {
-  const menu = creaMenuZoom(ctx, bottone);
-  ctx.apriZoom = () => menu.apri(false);
-  ctx.comandoVista = (id) => menu.comando(id);
-}

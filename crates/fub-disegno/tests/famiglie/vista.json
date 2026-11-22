@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia vista (piano K6, T11, giro D): il menu dello zoom della banda del Disegno completo e il pannello delle misure. Sono voci del client, della vista di Fub: la camera del foglio, non il file. Non passano dal motore; la loro prova è il test del client che le trova al loro posto e nomina il loro id.",
+  "$nota": "I casi della famiglia vista (piano K6, T11): il menu dello zoom e il pannello delle misure della banda (giro D), le righe di ≡ › Visualizza che il client fa e il navigatore della banda (giro E). Sono voci del client, della vista di Fub: la camera del foglio, non il file. Non passano dal motore; la loro prova è il test del client che le trova al loro posto e nomina il loro id.",
   "casi": [
     {
       "id": "view.zoomIn",
@@ -30,6 +30,36 @@
       "id": "info",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/tools/editor/chrome/status.test.ts"
+    },
+    {
+      "id": "view.grid",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.snapToGrid",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.outline",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.rulers",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "view.rotateReset",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
+      "id": "navigator",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/navigator.test.ts"
     }
   ]
 }

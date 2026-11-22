@@ -66,6 +66,13 @@ export const DRAW: PartAnatomy = {
       ],
     },
     {
+      // I righelli di bordo del foglio (K6 T11, giro E): due righe SVG dentro il foglio,
+      // con le tacche e i numeri. Stanno sopra il disegno, e il puntatore le attraversa.
+      name: "draw-rulers",
+      states: SELECTABLE,
+      hooks: ["draw-ruler-x", "draw-ruler-y", "draw-ruler-tick", "draw-ruler-label"],
+    },
+    {
       // Il menu dello zoom della banda (K6 T11): un popover del kit con le sue voci
       // e il campo della percentuale. Il popover è `kit-popover`, già nel cassetto.
       name: "draw-zoom-menu",

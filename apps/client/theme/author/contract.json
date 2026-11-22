@@ -1781,6 +1781,10 @@
     "draw-drawer-keys",
     "draw-drawer-empty",
     "draw-drawer-edit",
+    "draw-ruler-x",
+    "draw-ruler-y",
+    "draw-ruler-tick",
+    "draw-ruler-label",
     "draw-zoom-popover",
     "draw-zoom-body",
     "draw-zoom-menu",
@@ -4259,6 +4263,10 @@
     "draw-drawer-keys": "cornice",
     "draw-drawer-empty": "cornice",
     "draw-drawer-edit": "cornice",
+    "draw-ruler-x": "cornice",
+    "draw-ruler-y": "cornice",
+    "draw-ruler-tick": "cornice",
+    "draw-ruler-label": "cornice",
     "draw-zoom-popover": "cornice",
     "draw-zoom-body": "cornice",
     "draw-zoom-menu": "cornice",
@@ -9172,6 +9180,24 @@
       ]
     },
     {
+      "name": "draw-rulers",
+      "part": "draw",
+      "hooks": [
+        "draw-ruler-x",
+        "draw-ruler-y",
+        "draw-ruler-tick",
+        "draw-ruler-label"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
       "name": "draw-zoom-menu",
       "part": "draw",
       "hooks": [
@@ -12806,10 +12832,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2476,
+    "hooks": 2480,
     "state_names": 7,
-    "assigned_states": 1107,
-    "components": 326,
+    "assigned_states": 1113,
+    "components": 327,
     "preference_tokens": 196
   }
 }

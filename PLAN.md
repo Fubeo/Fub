@@ -2231,9 +2231,12 @@ dal motore, conflitti di campioni) e `edit.clearHistory` dalla tavolozza.
 Giro D unito in bc4ca64b9: il menu dello zoom e le misure nella banda.
 Giro F unito in 1ca956950: le altre voci di Modifica (le incolle, Pulisci,
 Duplica) e le letture interne, sedici righe «fatto».
-Mancano: la vista e il navigatore (giro E), gruppo, blocca, nascondi e `select.reselect`, che
-toccano la differenza (un giro Opus). I campi X/Y della selezione diretta non ci sono: il motore non dà le
-coordinate del punto. Selezione, Mano e Zoom del motore si chiamano
+Giro E unito in b14f18530: ≡ › Visualizza (griglia, aggancio, contorno,
+righelli di bordo, rotazione) e il navigatore nella banda; le altre voci di
+Visualizza restano «da fare» con la nota (aspettano T19, T27 o una finestra).
+Mancano: gruppo, blocca, nascondi e `select.reselect`, che toccano la
+differenza (un giro Opus, in corso). La posizione X/Y del punto si legge
+(T12) ma non si sposta ancora (`path.moveAnchor`). Selezione, Mano e Zoom del motore si chiamano
 «… (Completo)» per non avere due nomi uguali nella tendina.
 Aspetta: niente
 
@@ -2301,7 +2304,10 @@ Casi limite:
 Fatto quando: il modello, e `tools/gesti-vettori.test.ts` passa
 (l'Inchiostro fa ancora `fub:ink`).
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/tracciati src/editors/spatial/tools/gesti-vettori.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-22). Giro 1 unito in 35f7352de: i ventuno
+strumenti di «disegnare» nella colonna, la Penna di Bézier dal motore e la
+fila dei punti (Converti, la posizione letta); `anchors` e `needs_anchors`
+aggiunti all'IPC. Mancano Oggetto › Tracciato e la sezione Tracciato.
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni

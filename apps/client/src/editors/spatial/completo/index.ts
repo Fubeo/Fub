@@ -153,6 +153,8 @@ export interface OpzioniCompleto {
   /// Le voci del client che l'editor fa (`comandi.ts`, `statoVoce`): `null` se si
   /// fanno, il perché se sono spente, `undefined` se non le conosce.
   readonly clientVoce?: (id: string) => string | null | undefined;
+  /// La spunta delle voci del client (K6 T11, giro E), `undefined` se una voce non ne ha.
+  readonly clientStato?: (id: string) => boolean | undefined;
   /// I tasti del motore nell'editor (K6 T9b). Senza, nessun tasto del motore
   /// parte: il Semplice e i suoi tasti restano com'erano.
   readonly tasti?: OpzioniTastiCompleto;
@@ -386,7 +388,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   };
   /// Lo stato dei comandi con le voci del client dell'editor: la regola di
   /// `statoVoce` le legge da qui.
-  const conVociClient = (stato: StatoComandi): StatoComandi => ({ ...stato, clientVoce: opzioni.clientVoce });
+  const conVociClient = (stato: StatoComandi): StatoComandi => ({ ...stato, clientVoce: opzioni.clientVoce, clientStato: opzioni.clientStato });
   let chiuso = false;
   // I tasti dell'utente (`draw.keys`, T9c): con un editor e senza modifiche
   // date da chi apre, il Completo li segue, e rifà la regola a ogni cambio.

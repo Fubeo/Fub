@@ -11,7 +11,7 @@ import { t } from "../../../strings";
 import { toolsOf, toolSpec, type ToolId } from "../../registry";
 import type { EditorContext } from "../context";
 import type { AzioniVociCompleto } from "./command-search";
-import { isComandoVista } from "./zoom-menu";
+import { isComandoBanda } from "./status";
 
 /// Quando un comando vale: sempre, con uno strumento, con una selezione.
 export type CommandContext = "always" | "tool" | "selection";
@@ -100,10 +100,11 @@ export function azioniVoci(ctx: EditorContext, riprova: () => void): AzioniVociC
       if (toolsOf(ctx.features).some((spec) => spec.id === id)) ctx.pickTool(id as ToolId);
       else ctx.sceltaMotore(id);
     },
-    // Una voce del client: la vista della banda (`zoom-menu.ts`). Le altre non sono
-    // collegate, e lo stato le dice spente (`statoVoce`), quindi non arrivano qui.
+    // Una voce del client: la banda e ≡ › Visualizza del Completo (`status.ts`). Le
+    // altre non sono collegate, e lo stato le dice spente (`statoVoce`), quindi non
+    // arrivano qui.
     client: (id) => {
-      if (isComandoVista(id)) ctx.comandoVista(id);
+      if (isComandoBanda(id)) ctx.comandoVista(id);
     },
     riprova,
   };

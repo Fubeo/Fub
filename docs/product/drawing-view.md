@@ -62,6 +62,22 @@ chiude e riporta il fuoco alla voce dello zoom. Negli altri spazi di lavoro e ne
 Semplice, un clic sulla voce dello zoom torna al 100%, come prima. Gli stessi
 comandi stanno in Ctrl+/ e nella ricerca dei comandi.
 
+Nel Disegno completo, ≡ › Visualizza ha la griglia («Mostra griglia» e
+«Aggancia alla griglia», le stesse impostazioni del Semplice), il contorno, i
+righelli del bordo del foglio («Mostra righelli») e «Reimposta rotazione
+vista», che è spenta finché la vista non è girata. I righelli stanno sul bordo
+in alto e a sinistra del foglio, con le tacche e i numeri nell'unità del
+documento; non spostano il disegno, e con la vista girata non si leggono. Lo
+stato dei righelli non si salva nel file. Le altre voci di Visualizza (la
+rotazione con un angolo, l'anteprima dei pixel, la modalità presentazione e lo
+schermo intero, le guide intelligenti, l'aggancio ai punti e ai pixel, le
+viste salvate) non ci sono ancora: non compaiono nel menu.
+
+Il navigatore si accende e si spegne dalla banda, con la voce «Navigatore» nel
+Disegno completo, o da Vista nel Semplice. La panoramica mostra tutto il
+disegno e il riquadro di ciò che si vede; un clic porta la vista lì, e il
+riquadro si trascina. Si rilegge al più una volta per fotogramma.
+
 ## La testa
 
 In cima al foglio la testa del disegno è una barra in una fila, come la barra
