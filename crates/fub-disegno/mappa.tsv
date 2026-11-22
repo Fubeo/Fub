@@ -108,10 +108,10 @@ motore	colorTheme.list	Color Themes		colore	F1	T14	da fare	interno	famiglia	lett
 motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Salva tema
 motore	colorTheme.delete	Delete Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Elimina tema
 motore	colorTheme.addToSwatches	Add to Swatches	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Aggiungi ai campioni
-motore	object.compoundShape.make	Make Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Crea forma composta
-motore	object.compoundShape.setMode	Shape Mode	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Metodo forma
-motore	object.compoundShape.release	Release Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Rilascia forma composta
-motore	object.compoundShape.expand	Expand Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Espandi forma composta
+motore	object.compoundShape.make	Make Compound Shape	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Crea forma composta
+motore	object.compoundShape.setMode	Shape Mode	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia	finestra, il metodo (T13: il campo in catalogo::FINESTRE_SCRITTE)	Metodo forma
+motore	object.compoundShape.release	Release Compound Shape	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Rilascia forma composta
+motore	object.compoundShape.expand	Expand Compound Shape	Window › Pathfinder	forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Espandi forma composta
 motore	shape.rectangle	Rectangle		forme	F1	T13	fatto	finestra	famiglia		Rettangolo
 motore	shape.ellipse	Ellipse		forme	F1	T13	fatto	finestra	famiglia		Ellisse
 motore	shape.polygon	Polygon		forme	F1	T13	fatto	finestra	famiglia		Poligono
@@ -879,7 +879,7 @@ motore	object.align	Align	Window › Align	trasforma	F1	T13	fatto	ispettore/desi
 motore	object.distribute	Distribute	Window › Align	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci
 motore	object.distributeSpacing	Distribute Spacing	Window › Align	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci spaziatura
 motore	object.setBounds	Set Bounds		trasforma	F1	T13	fatto	ispettore/design	famiglia		Imposta limiti
-motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	da fare	menu/oggetto	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Espandi forma
+motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	fatto	menu/oggetto	famiglia		Espandi forma
 motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	da fare	ispettore/design	famiglia	aspetta T27	Proprietà forma dinamica
 interfaccia	addon.pathtools.cornerTool	Corner Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Angoli
 interfaccia	addon.pathtools.sharedEdgeTool	Shared Edge Merge Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Fondi bordo condiviso
@@ -1094,7 +1094,7 @@ interfaccia	ui.paramDialog	Command Dialog		fub	—	T11	fub	fub	—	le finestre d
 interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	da fare	finestra	famiglia		Ricolora grafica…
 interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	da fare	finestra	famiglia		Ritaglia immagine
 interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	da fare	menu/effetto	famiglia		Applica ultimo effetto
-interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	da fare	ispettore/design	famiglia	il ricordo dell’ultima operazione sta nell’interfaccia del motore, non nel motore: resta da fare nel Completo	Ripeti Elaborazione tracciati
+interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	fatto	menu/oggetto/elaborazione	famiglia		Ripeti Elaborazione tracciati
 interfaccia	file.export.pdf	Save as PDF…		formati	F3	T23	da fare	menu/file	sotto:disegno-formati		Salva come PDF…
 interfaccia	help.about	About VectorCraft		fub	—	T2	fub	fub	—	Informazioni su Fub e THIRD_PARTY_NOTICES	Informazioni su VectorCraft
 interfaccia	help.checkForUpdates	Check for Updates…		fub	—	T2	fub	fub	—	gli aggiornamenti di Fub: il motore viaggia dentro Fub	Check for Updates…

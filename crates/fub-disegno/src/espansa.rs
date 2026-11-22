@@ -60,14 +60,17 @@ impl Stampo {
     /// Il corpo espanso di `n` nello spazio del genitore (`locale` porta dal
     /// documento del motore lì), come un elemento solo con l'id `id`.
     /// `nuovo_id` dà gli id nuovi per le risorse e gli oggetti che il
-    /// frammento nomina.
+    /// frammento nomina. `None` se `n` non disegna niente (una forma
+    /// composta in Intersezione di due forme che non si toccano): un `g`
+    /// vuoto, riaperto, non diventerebbe un oggetto del motore e la ricetta
+    /// resterebbe senza il suo oggetto.
     pub(crate) fn corpo(
         &mut self,
         n: &Node,
         locale: Affine,
         id: &str,
         nuovo_id: &mut dyn FnMut(Specie) -> Result<String, String>,
-    ) -> Result<String, String> {
+    ) -> Result<Option<String>, String> {
         let mut copia = n.clone();
         copia.name = None;
         senza_nomi(&mut copia);
@@ -91,7 +94,10 @@ impl Stampo {
         let svg = vectorcraft_svg::export(&self.doc, &opzioni);
         self.doc.layers.clear();
         let pezzi = Pezzi::di(&svg)?;
-        pezzi.elemento(id, nuovo_id)
+        if !pezzi.elementi.iter().any(|e| disegna(e)) {
+            return Ok(None);
+        }
+        pezzi.elemento(id, nuovo_id).map(Some)
     }
 }
 
@@ -200,6 +206,7 @@ impl Pezzi {
                     .unwrap_or(tag.len());
                 let mut fuori = solo.clone();
                 fuori.insert_str(dopo_il_nome, &format!("{id_attr}{legami}"));
+                let fuori = con_gli_id(&fuori, nuovo_id)?;
                 if nel_formato(&fuori, id) {
                     return Ok(fuori);
                 }
@@ -216,6 +223,7 @@ impl Pezzi {
             fuori.push_str(&self.elementi.concat());
             fuori.push_str("</g>");
         }
+        let fuori = con_gli_id(&fuori, nuovo_id)?;
         if !nel_formato(&fuori, id) {
             return Err(format!(
                 "il corpo espanso non è un elemento del formato della scena: {}",
@@ -224,6 +232,98 @@ impl Pezzi {
         }
         Ok(fuori)
     }
+}
+
+/// Gli elementi che non hanno mai un id (formato della scena, §4).
+const SENZA_ID: [&str; 4] = ["title", "desc", "tspan", "textPath"];
+/// I tag delle risorse (formato della scena, risorse).
+const RISORSE: [&str; 7] = [
+    "linearGradient",
+    "radialGradient",
+    "pattern",
+    "marker",
+    "clipPath",
+    "mask",
+    "filter",
+];
+
+/// `elemento` con un id nuovo su ogni elemento del formato che non ne ha
+/// uno: la scena vuole l'id su ogni elemento che si aggiunge (formato della
+/// scena, §4), e l'esportazione del motore scrive i membri di un gruppo
+/// senza id. Restano senza id `title`, `desc`, `tspan` e `textPath`, ciò che
+/// sta dentro una risorsa, una `defs`, i metadati o un `foreignObject`, e
+/// gli elementi di un altro namespace; una risorsa fuori da una `defs`
+/// prende l'id di una risorsa.
+fn con_gli_id(
+    elemento: &str,
+    nuovo_id: &mut dyn FnMut(Specie) -> Result<String, String>,
+) -> Result<String, String> {
+    let rotto = || "il corpo espanso non si legge".to_string();
+    let mut fuori = String::with_capacity(elemento.len() + 32);
+    // I tag aperti, e se dentro ciascuno gli id restano come sono.
+    let mut aperti: Vec<bool> = Vec::new();
+    let mut i = 0;
+    while let Some(k) = elemento[i..].find('<') {
+        let da = i + k;
+        fuori.push_str(&elemento[i..da]);
+        let resto = &elemento[da..];
+        let a = if resto.starts_with("<!--") {
+            da + resto.find("-->").ok_or_else(rotto)? + 3
+        } else if resto.starts_with("<![CDATA[") {
+            da + resto.find("]]>").ok_or_else(rotto)? + 3
+        } else {
+            fine_del_tag(elemento, da).ok_or_else(rotto)?
+        };
+        let tag = &elemento[da..a];
+        i = a;
+        if tag.starts_with("</") {
+            aperti.pop().ok_or_else(rotto)?;
+            fuori.push_str(tag);
+            continue;
+        }
+        if tag.starts_with("<!") || tag.starts_with("<?") {
+            fuori.push_str(tag);
+            continue;
+        }
+        let fine_nome = tag[1..]
+            .find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')
+            .map_or(tag.len(), |f| f + 1);
+        let nome = &tag[1..fine_nome];
+        let fermo = aperti.last().copied().unwrap_or(false);
+        let risorsa = RISORSE.contains(&nome);
+        let ha_id = attributi(tag).iter().any(|(k, _)| k == "id");
+        let senza = !fermo
+            && !ha_id
+            && !nome.contains(':')
+            && !SENZA_ID.contains(&nome)
+            && !matches!(nome, "defs" | "metadata");
+        if senza {
+            let specie = if risorsa {
+                Specie::Risorsa
+            } else {
+                Specie::Oggetto
+            };
+            let nuovo = vectorcraft_svg::xml_escape(&nuovo_id(specie)?);
+            fuori.push_str(&tag[..fine_nome]);
+            fuori.push_str(&format!(" id=\"{nuovo}\""));
+            fuori.push_str(&tag[fine_nome..]);
+        } else {
+            fuori.push_str(tag);
+        }
+        if !tag.ends_with("/>") {
+            aperti.push(
+                fermo
+                    || risorsa
+                    || nome.contains(':')
+                    || matches!(nome, "defs" | "metadata" | "foreignObject"),
+            );
+        }
+    }
+    fuori.push_str(&elemento[i..]);
+    if !aperti.is_empty() {
+        return Err(rotto());
+    }
+    Ok(fuori)
 }
 
 /// Vero se `elemento`, messo in un livello di un disegno di Fub, è un
@@ -242,6 +342,20 @@ fn nel_formato(elemento: &str, id: &str) -> bool {
             fub_scene::Item::Element(e) => e.path == [0, 0] && e.id.as_deref() == Some(id),
             _ => false,
         })
+}
+
+/// Vero se `elemento` disegna qualcosa: dentro c'è un elemento che non è un
+/// `g` (un tracciato, un'immagine). Un `g` con dentro solo `g` vuoti non
+/// disegna niente.
+fn disegna(elemento: &str) -> bool {
+    elemento.match_indices('<').any(|(i, _)| {
+        let nome = &elemento[i + 1..];
+        let fine = nome
+            .find(|c: char| c.is_ascii_whitespace() || c == '/' || c == '>')
+            .unwrap_or(nome.len());
+        let nome = &nome[..fine];
+        !nome.is_empty() && nome != "g" && !nome.starts_with(['/', '!', '?'])
+    })
 }
 
 /// Il tag d'apertura di un elemento, fino al `>` compreso.
@@ -462,8 +576,23 @@ mod prove {
             .expect("un elemento");
         assert_eq!(
             e,
-            r##"<g id="oa1a1a1a1" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><filter id="r00000001"><feOffset dx="1"/></filter></defs><g filter="url(#r00000001)"><path d="M0 0" xlink:title="a"/></g></g>"##
+            r##"<g id="oa1a1a1a1" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><filter id="r00000001"><feOffset dx="1"/></filter></defs><g id="o00000002" filter="url(#r00000001)"><path id="o00000003" d="M0 0" xlink:title="a"/></g></g>"##
         );
+    }
+
+    #[test]
+    fn i_membri_prendono_un_id_tranne_quelli_che_non_l_hanno_mai() {
+        let mut n = 0;
+        let e = con_gli_id(
+            r##"<g id="oa1a1a1a1"><title>t</title><text x="1"><tspan>a</tspan></text><clipPath><rect/></clipPath><metadata><x:y xmlns:x="urn:x"/></metadata><x:z xmlns:x="urn:x"><path/></x:z><path id="o12345678"/></g>"##,
+            &mut |s| conta(s, &mut n),
+        )
+        .expect("si legge");
+        assert_eq!(
+            e,
+            r##"<g id="oa1a1a1a1"><title>t</title><text id="o00000001" x="1"><tspan>a</tspan></text><clipPath id="r00000002"><rect/></clipPath><metadata><x:y xmlns:x="urn:x"/></metadata><x:z xmlns:x="urn:x"><path/></x:z><path id="o12345678"/></g>"##
+        );
+        assert!(con_gli_id("<g><path/>", &mut |s| conta(s, &mut n)).is_err());
     }
 
     #[test]
@@ -476,7 +605,7 @@ mod prove {
             .expect("un elemento");
         assert_eq!(
             e,
-            r##"<g id="oa1a1a1a1"><path d="M0 0"/><path d="M1 1"/></g>"##
+            r##"<g id="oa1a1a1a1"><path id="o00000001" d="M0 0"/><path id="o00000002" d="M1 1"/></g>"##
         );
         let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><g><path transform="matrix(1 0 0 1 2 0)" d="M0 0"/></g></svg>"##;
         let e = Pezzi::di(svg)
@@ -485,7 +614,7 @@ mod prove {
             .expect("un elemento");
         assert_eq!(
             e,
-            r##"<g id="oa1a1a1a1"><path transform="matrix(1 0 0 1 2 0)" d="M0 0"/></g>"##
+            r##"<g id="oa1a1a1a1"><path id="o00000003" transform="matrix(1 0 0 1 2 0)" d="M0 0"/></g>"##
         );
         let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><g/></svg>"##;
         let e = Pezzi::di(svg)

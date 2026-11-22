@@ -39,6 +39,11 @@
 //!   composto e aggiunge i suoi tracciati liberati; Inverti o punti aggiunti
 //!   su un composto sono un `set` del `d`. Cambiare la regola di riempimento
 //!   è `unsupported`: `fill-rule` non è un attributo della scena.
+//! - **Forme composte**: una forma composta del motore (un gruppo segnato)
+//!   assorbe e libera i suoi membri come un composto, ma si scrive come un
+//!   oggetto ricco: il `g` col disegno espanso e la ricetta. Un oggetto ricco
+//!   nuovo che non disegna niente (una composta in Intersezione di forme che
+//!   non si toccano) è `empty`: un `g` vuoto, riaperto, perderebbe la ricetta.
 //! - **`remove`** per quelli tolti, **`move`** per l'ordine e il genitore.
 //! - **`ident`** prima di tutto, per gli elementi senza id che un'operazione
 //!   nomina: un id nuovo del formato di [`crate::id`].
@@ -94,6 +99,9 @@ pub enum Rifiuto {
     NonMappato(String),
     /// Le operazioni supererebbero i limiti del contratto.
     TroppoGrande,
+    /// Un oggetto ricco nuovo o riscritto non disegna niente: il suo corpo
+    /// sarebbe un `g` vuoto, che riaperto perderebbe la ricetta.
+    Vuoto,
 }
 
 impl Rifiuto {
@@ -103,6 +111,7 @@ impl Rifiuto {
             Rifiuto::NonSupportato(_) => DrawingRefusal::Unsupported,
             Rifiuto::NonMappato(_) => DrawingRefusal::Unmapped,
             Rifiuto::TroppoGrande => DrawingRefusal::TooLarge,
+            Rifiuto::Vuoto => DrawingRefusal::Empty,
         }
     }
 }
@@ -355,8 +364,12 @@ impl Lavoro<'_> {
     /// I tracciati composti fatti o sciolti dal gesto ([`Lavoro::liberati`],
     /// [`Lavoro::assorbiti`]).
     fn composti(&mut self, prima: &Posti<'_>, poi: &Posti<'_>) {
+        // Un tracciato composto o una forma composta (un gruppo segnato, che il
+        // file tiene come un solo elemento con la ricetta).
         let composto = |n: Option<&crate::mappa::Posto<'_>>| {
-            n.is_some_and(|p| matches!(p.nodo.kind, NodeKind::Compound { .. }))
+            n.is_some_and(|p| {
+                matches!(p.nodo.kind, NodeKind::Compound { .. }) || p.nodo.is_compound_shape()
+            })
         };
         for (id, dopo) in &poi.nodi {
             let Some(p) = prima.nodi.get(id) else {
@@ -544,9 +557,10 @@ impl Lavoro<'_> {
             if riscritti.contains(&n.id) {
                 return;
             }
-            // Un tracciato composto nuovo si scrive intero: i suoi tracciati
-            // non si spostano dentro di lui.
-            if matches!(n.kind, NodeKind::Compound { .. }) && !prima.nodi.contains_key(&n.id) {
+            // Un tracciato composto o una forma composta nuovi si scrivono
+            // interi: i loro pezzi non si spostano dentro di loro.
+            let composto = matches!(n.kind, NodeKind::Compound { .. }) || n.is_compound_shape();
+            if composto && !prima.nodi.contains_key(&n.id) {
                 return;
             }
             if let Some(figli) = n.children() {
@@ -712,14 +726,15 @@ impl Lavoro<'_> {
             let con_ricetta = scritto.is_none()
                 && (riscritto
                     || (ricetta::esito_albero(nodo) > Esito::Corpo
-                        && !ha_pezzi_di_prima(nodo, prima)));
+                        && !ha_pezzi_rimasti(nodo, prima, &self.assorbiti)));
             let elem_o_raw = if con_ricetta {
                 let stampo = stampo.get_or_insert_with(|| crate::espansa::Stampo::di(dopo));
                 let raw = stampo
                     .corpo(nodo, locale, &id, &mut |specie| {
                         self.id_nuovo(specie).map_err(|e| format!("{e:?}"))
                     })
-                    .map_err(no)?;
+                    .map_err(no)?
+                    .ok_or(Rifiuto::Vuoto)?;
                 let byte = ricetta::codifica(nodo, locale).map_err(no)?;
                 self.ricette.nuove.push(vectorcraft_svg::recipe_element(
                     &id,
@@ -1820,6 +1835,18 @@ fn ha_pezzi_di_prima(n: &Node, prima: &Posti<'_>) -> bool {
         figli
             .iter()
             .any(|c| prima.nodi.contains_key(&c.id) || ha_pezzi_di_prima(c, prima))
+    })
+}
+
+/// Come [`ha_pezzi_di_prima`], senza i pezzi assorbiti in un composto nuovo
+/// (e ciò che hanno dentro): quelli si tolgono dal file, e il composto li
+/// porta nella sua ricetta.
+fn ha_pezzi_rimasti(n: &Node, prima: &Posti<'_>, assorbiti: &HashSet<NodeId>) -> bool {
+    n.children().is_some_and(|figli| {
+        figli
+            .iter()
+            .filter(|c| !assorbiti.contains(&c.id))
+            .any(|c| prima.nodi.contains_key(&c.id) || ha_pezzi_rimasti(c, prima, assorbiti))
     })
 }
 

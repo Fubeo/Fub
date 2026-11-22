@@ -851,6 +851,70 @@
     },
     {
       "fonte": "motore",
+      "id": "object.compoundShape.expand",
+      "chiamata": {
+        "comando": "disegno.object.compoundShape.expand"
+      },
+      "etichetta": {
+        "it": "Espandi forma composta",
+        "en": "Expand Compound Shape"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.compoundShape.make",
+      "chiamata": {
+        "comando": "disegno.object.compoundShape.make"
+      },
+      "etichetta": {
+        "it": "Crea forma composta",
+        "en": "Make Compound Shape"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.compoundShape.release",
+      "chiamata": {
+        "comando": "disegno.object.compoundShape.release"
+      },
+      "etichetta": {
+        "it": "Rilascia forma composta",
+        "en": "Release Compound Shape"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.compoundShape.setMode",
+      "chiamata": {
+        "comando": "disegno.object.compoundShape.setMode"
+      },
+      "etichetta": {
+        "it": "Metodo forma",
+        "en": "Shape Mode"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.distribute",
       "chiamata": {
         "comando": "disegno.object.distribute"
@@ -896,6 +960,22 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.expandShape",
+      "chiamata": {
+        "comando": "disegno.object.expandShape"
+      },
+      "etichetta": {
+        "it": "Espandi forma",
+        "en": "Expand Shape"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
     },
     {
       "fonte": "motore",
@@ -2523,6 +2603,22 @@
       },
       "posto": "ispettore/design/allinea",
       "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "pathfinder.repeat",
+      "chiamata": {
+        "client": "pathfinder.repeat"
+      },
+      "etichetta": {
+        "it": "Ripeti Elaborazione tracciati",
+        "en": "Repeat Pathfinder"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "forme",
       "tasto": null,
       "effetto": "cambia",
       "finestra": false
