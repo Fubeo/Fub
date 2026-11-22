@@ -2435,8 +2435,14 @@ Oggetto, Ripeti elaborazione (ricordata finché il Completo resta aperto);
 rifiutava la composta). Rischi: il metodo attivo non si accende nella
 sezione; il rifiuto «Scegli una forma composta.» del motore resta in
 italiano; il banco non riconosce la composta, va guardata nell'app vera.
-Giro 5 (gli strumenti Ruota, Rifletti, Scala e Inclina nella colonna) in
-corso.
+Giro 5 unito in b05e948eb: gli strumenti Ruota, Rifletti, Scala e Inclina
+nella colonna (gruppo «modificare», Inclina con l'icona `draw-shear`); il
+clic apre la finestra del comando sulla selezione (centro della selezione,
+non il punto del clic: il comando non lo prende), il trascinamento passa
+dal motore con un passo di Annulla; un oggetto bloccato o non mappato
+rifiuta il gesto come la finestra (`rifiuto_dello_strumento`). Rischio: il
+banco non dà anteprima ai gesti del motore, il trascinamento va guardato
+nell'app vera.
 Aspetta: niente
 
 ## T14 · Il colore
