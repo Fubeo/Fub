@@ -130,6 +130,21 @@ punti con `anchors` nel `value` e dopo l'esito rilegge lo stato. Gli
 strumenti e i comandi dei tracciati rifiutano l'inchiostro di Fub
 (`unmapped`) e la carta. Il prodotto: [penne](../product/drawing-pen.md#la-penna-di-bézier-disegno-completo).
 
+## Il Contagocce (T14, giro 6)
+
+Lo strumento `eyedropper` (famiglia `colore`) copia sulla selezione riempimento,
+contorno e spessore dell'oggetto sotto il primo clic: il motore fa il suo
+`appearance.copyFrom` con la sorgente che sceglie lui. Il rifiuto sta prima del
+motore, in `crates/fub-disegno/src/famiglie/colore.rs`
+(`rifiuto_del_contagocce`): un bersaglio bloccato o non mappato, un tratto
+dell'Inchiostro di Fub come bersaglio, e un'immagine come sorgente si rifiutano
+(`locked`, `unmapped`, `unsupported`); una sorgente bloccata o un tratto
+dell'Inchiostro si leggono senza cambiarli. Senza selezione il clic cambia i
+valori predefiniti del motore (riempimento e contorno), non gli oggetti. Le sue
+opzioni sono `eyedropper.setOptions`, una preferenza del motore che sta in
+`draw.motore`. Il comando `appearance.copyFrom` con `source` resta «da fare»
+(T15, famiglia `aspetto`): la sorgente è un id del motore, che Fub non traduce.
+
 ## I livelli
 
 Nel motore un livello di Fub si chiama col suo id, perché la mappa lega per
