@@ -744,6 +744,25 @@ describe("le scelte e i pulsanti", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
+  it("nel Completo il gruppo a icone dei sei allineamenti non c'è, e la distribuzione resta; il Semplice lo mostra", () => {
+    state.actions = {
+      "align-left": { label: "Allinea a sinistra" },
+      "distribute-x": { label: "Distribuisci orizzontalmente" },
+    };
+    mount();
+    const barraDi = (id: string): HTMLElement => action(id).closest<HTMLElement>(".draw-properties-bar")!;
+    // Il Semplice: il gruppo c'è.
+    expect(barraDi("align-left").hidden).toBe(false);
+    panel.collegaSezioni(creaSezioni(), null, () => 0);
+    panel.update(view());
+    expect(barraDi("align-left").hidden).toBe(true);
+    expect(barraDi("distribute-x").hidden).toBe(false);
+    // Il Completo chiuso: il gruppo torna.
+    panel.collegaSezioni(null, null, () => 0);
+    panel.update(view());
+    expect(barraDi("align-left").hidden).toBe(false);
+  });
+
   it("i comandi partono; uno che adesso non si usa resta raggiungibile e dice perché", () => {
     state.actions = {
       "align-left": { label: "Allinea a sinistra" },
