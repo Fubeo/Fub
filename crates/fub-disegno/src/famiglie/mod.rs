@@ -32,8 +32,8 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
 use fub_abi::{
-    DrawingCommandRequest, DrawingDisabledReason, DrawingOutcome, DrawingRefusal, PluginError,
-    Text, MAX_DRAWING_OPS_BYTES,
+    DrawingCommandRequest, DrawingDisabledReason, DrawingOutcome, DrawingPreview, DrawingRefusal,
+    PluginError, Text, MAX_DRAWING_OPS_BYTES,
 };
 use fub_motori::{Cache, ErroreMotore, Pigro, Servizi};
 use serde_json::Value;
@@ -863,7 +863,9 @@ fn si_legge_in_sola_lettura(id: &str) -> bool {
 /// famiglia, lo fa girare nella sessione del motore sulla selezione e passa
 /// per la differenza. Le operazioni, se il documento cambia; la lettura, se
 /// il comando non va nella cronologia del motore e rende un valore; se no
-/// `empty`. Un id che il motore non serve qui è `unsupported`, uno che il
+/// `empty`. Con `preview` il documento che cambierebbe dà i contorni dei
+/// tracciati nuovi o cambiati (`DrawingPreview::overlays`), senza operazioni:
+/// niente arriva al file finché il client non manda il comando senza. Un id che il motore non serve qui è `unsupported`, uno che il
 /// filtro non lascia passare `Unserved`, argomenti che il motore rifiuta
 /// `BadArgs`.
 pub(crate) fn esegui(
@@ -989,6 +991,15 @@ pub(crate) fn esegui(
     };
     let mut esito = esito_vuoto(richiesta.revision);
     match differenza.testo() {
+        // L'anteprima di un comando con finestra: i contorni di ciò che
+        // cambierebbe, senza operazioni, e la copia resta com'è.
+        Ok(Some(_)) if richiesta.preview => {
+            esito.selection = richiesta.selection.clone();
+            esito.preview = Some(DrawingPreview {
+                overlays: crate::gesti::strumento::contorni_cambiati(copia, &dopo),
+                ..DrawingPreview::default()
+            });
+        }
         Ok(Some(ops)) => {
             esito.selection = selezione_di_fub(copia, &differenza, &selezione);
             esito.ops = Some(ops);

@@ -77,6 +77,7 @@ const CHIAVI_PERCHE: Readonly<Record<Exclude<DrawingDisabledReason, { readonly o
   needs_group: "draw.disabled.needs_group",
   needs_two: "draw.disabled.needs_two",
   needs_anchors: "draw.disabled.needs_anchors",
+  fub_ink: "draw.disabled.fub_ink",
   read_only: "draw.disabled.read_only",
   unmapped: "draw.disabled.unmapped",
 };
@@ -198,7 +199,7 @@ export function tastoMostrato(regola: RegolaTasti | null, id: string): string | 
 }
 
 /// Le file di Oggetto › Tracciato (K6 T12): i comandi sul tracciato intero,
-/// il tracciato composto, gli strumenti di precisione, la penna intelligente.
+/// il tracciato composto (un sottomenu, `RACCOLTE_DEI_MENU`), gli strumenti di precisione, la penna intelligente.
 /// Gli id sono quelli della mappa del motore (`crates/fub-disegno/mappa.tsv`).
 const FILE_TRACCIATO: readonly (readonly string[])[] = [
   ["path.join", "path.reverse", "object.path.outlineStroke", "object.path.addAnchorPoints", "path.removeAnchors", "object.path.divideObjectsBelow"],
@@ -223,6 +224,30 @@ const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = 
   visualizza: FILE_VISUALIZZA,
   "oggetto/tracciato": FILE_TRACCIATO,
 };
+
+/// I sottomenu che il client fa dentro un sottomenu del terzo livello: il loro
+/// nome e le voci che raccolgono, per id. L'indice non ha un quarto livello
+/// (`SOTTOMENU` di `crates/fub-disegno/src/catalogo.rs`): è solo come il menu
+/// le mostra, e Ctrl+/ le trova col posto della mappa.
+const RACCOLTE_DEI_MENU: Readonly<Record<string, readonly { readonly nome: DrawKey; readonly ids: readonly string[] }[]>> = {
+  "oggetto/tracciato": [{ nome: "draw.completo.sotto.composto", ids: ["object.compoundPath.make", "object.compoundPath.release"] }],
+};
+
+/// Le voci di `chiave` che una raccolta (`RACCOLTE_DEI_MENU`) prende diventano
+/// un sottomenu solo, al posto della prima, con le voci nell'ordine della
+/// raccolta. Una raccolta senza voci pronte non c'è.
+function raccogli(chiave: string, righe: Array<{ id: string; riga: MenuItem }>): Array<{ id: string; riga: MenuItem }> {
+  let fuori = righe;
+  for (const raccolta of RACCOLTE_DEI_MENU[chiave] ?? []) {
+    const dentro = raccolta.ids.flatMap((id) => fuori.filter((r) => r.id === id));
+    if (dentro.length === 0) continue;
+    const primo = fuori.findIndex((r) => raccolta.ids.includes(r.id));
+    const sotto: MenuItem = { label: t(raccolta.nome), submenu: true, items: dentro.map((r) => r.riga) };
+    const voce = { id: fuori[primo]!.id, riga: sotto };
+    fuori = fuori.flatMap((r, i) => (i === primo ? [voce] : raccolta.ids.includes(r.id) ? [] : [r]));
+  }
+  return fuori;
+}
 
 /// Le righe di un sottomenu nelle sue file (`FILE_DEI_MENU`): l'ordine delle
 /// file e, dentro una fila, il suo; una riga che nessuna fila nomina va in
@@ -291,7 +316,7 @@ export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiV
       righe.map(({ id, riga }) => {
         if (typeof riga !== "string") return { id, riga };
         const sotto = riga.slice(gruppo.length + 1);
-        const items = inFile(riga, sotti.get(riga)!, (dentro) => ({ ...dentro, separator: true }));
+        const items = inFile(riga, raccogli(riga, sotti.get(riga)!), (dentro) => ({ ...dentro, separator: true }));
         const voce: MenuItem = { label: t(NOMI_PEZZO[sotto]), submenu: true, items };
         return { id, riga: voce };
       }),

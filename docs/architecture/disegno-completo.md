@@ -161,7 +161,14 @@ per ogni riga fatta della mappa e per ogni riga `fub` con un posto vero.
 Lo scrive il Rust (`crates/fub-disegno/src/catalogo.rs`, attraverso
 `fub_motori::importa`), e `cargo test -p fub-disegno --test ts_indice` cade
 se è stantio; `UPDATE_MIRROR=1` lo rigenera, con gli schemi delle finestre
-in `completo/famiglie/<id>/schema.generated.json`. Una voce ha la fonte,
+in `completo/famiglie/<id>/schema.generated.json` (campi, `predefinito`,
+`minimo`, `massimo`). Quando lo schema del motore descrive i parametri a
+parole, i campi li scrive Fub dal codice del comando (`FINESTRE_SCRITTE`
+in `catalogo.rs`: Sposta tracciato, Semplifica, Smussa, Espandi, Dividi in
+trattini); la frase, il verbo di OK, le parole delle scelte e le unità sono
+nei testi della famiglia (`descrizione:<id>`, `azione:<id>`,
+`campo:<id>:<nome>` o `campo:<nome>`, `scelta:<campo>:<valore>`,
+`unita:<campo>`). Una voce ha la fonte,
 l'id, la chiamata (un comando, un effetto con `disegno.effect.apply`, uno
 strumento o un'azione del client), le etichette italiana e inglese, il
 posto (`scheda/gruppo`), la famiglia, il tasto, l'effetto (`cambia`,

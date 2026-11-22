@@ -1901,6 +1901,7 @@ fn drawing_samples() -> Value {
         DrawingDisabledReason::NeedsGroup,
         DrawingDisabledReason::NeedsTwo,
         DrawingDisabledReason::NeedsAnchors,
+        DrawingDisabledReason::FubInk,
         DrawingDisabledReason::ReadOnly,
         DrawingDisabledReason::Unmapped,
         DrawingDisabledReason::Other {

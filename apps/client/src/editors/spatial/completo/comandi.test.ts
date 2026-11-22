@@ -11,6 +11,7 @@ import type { SessioneMotore } from "../motore/sessione";
 import { menuComando, menuNonCaricato, nomeVoce, percorsoPosto, statoComandi, statoVoce, testoPerche, vociRicerca, type StatoComandi } from "./comandi";
 import { indiceDi, type VoceIndice } from "./indice";
 import { risolviTasti } from "./tasti";
+import { t } from "../strings";
 
 /// Una voce dell'indice, con i campi che le voci hanno sempre.
 function voce(id: string, posto: string, over: Partial<VoceIndice> = {}): VoceIndice {
@@ -193,18 +194,30 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
 
   it("≡ › Oggetto › Tracciato ha le sue file: il tracciato intero, il composto, la precisione, la penna intelligente", () => {
     // L'indice le dà in ordine di id.
-    const ids = ["addon.pathtools.close", "addon.pathtools.smooth", "addon.pen.closeJoin", "object.compoundPath.make", "path.join", "path.reverse"];
+    const ids = [
+      "addon.pathtools.close",
+      "addon.pathtools.smooth",
+      "addon.pen.closeJoin",
+      "object.compoundPath.make",
+      "object.compoundPath.release",
+      "path.join",
+      "path.reverse",
+    ];
     const voci = ids.map((id) => voce(id, "menu/oggetto/tracciato"));
     const righe = sottovoci(sottovoci(menuComando(indiceDi({ voci }), { per: null, assente: null }, vi.fn())[0])[0]);
     const nome = (id: string) => nomeVoce(voci.find((v) => v.id === id)!);
     expect(righe.map((r) => [r.label, r.separator === true])).toEqual([
       [nome("path.join"), false],
       [nome("path.reverse"), false],
-      [nome("object.compoundPath.make"), true],
+      [t("draw.completo.sotto.composto"), true],
       [nome("addon.pathtools.smooth"), true],
       [nome("addon.pathtools.close"), false],
       [nome("addon.pen.closeJoin"), true],
     ]);
+    // Crea e Rilascia stanno nel sottomenu «Tracciato composto», col loro stato.
+    const composto = sottovoci(righe[2]);
+    expect(composto.map((r) => r.label)).toEqual([nome("object.compoundPath.make"), nome("object.compoundPath.release")]);
+    expect(composto.every((r) => r.disabled === true)).toBe(true);
   });
 
   it("un sottomenu senza file tiene l'ordine dell'indice, senza separazioni", () => {

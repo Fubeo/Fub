@@ -15,7 +15,9 @@ import type { ToolId, Workspace } from "../../registry";
 import { openToolbarDialog } from "../../toolbar-dialog";
 import type { EditorContext } from "../context";
 import { gesture } from "../../edit";
-import { opsDellEsito } from "../../../motore/gesti";
+import { elemDi, opsDellEsito } from "../../../motore/gesti";
+import { segniComeForma } from "../../../motore/tracciati";
+import { IDENTITY } from "../../../scene/matrix";
 import type { Sezioni } from "../../../completo/sezioni";
 import { railLayout } from "./rail";
 import { comandoDiFub, statoClienteCompleto, voceClienteCompleto } from "./status";
@@ -212,13 +214,18 @@ export function installWorkspace(ctx: EditorContext): void {
           if (ctx.disposed) return;
           aperto = apri({ motore: options.motore ?? null, life: ctx.life }, {
             // I tasti del motore (K6 T9b): la radice dell'editor, la selezione, e la
-            // cronologia e l'annuncio di sempre. L'anteprima sul foglio arriva con
-            // la prima finestra del motore (T11): fino ad allora non ne mostra.
+            // cronologia e l'annuncio di sempre. L'anteprima di una finestra (T12,
+            // giro 3) va sullo strato dell'anteprima come quella dei gesti: la forma,
+            // o i contorni nuovi in coordinate di scena; `null` la toglie.
             tasti: {
               radice: ctx.root,
               selezione: () => ctx.selection,
               seleziona: (ids) => ctx.select(ids),
-              anteprima: () => undefined,
+              anteprima: (anteprima) =>
+                ctx.showShape(
+                  anteprima === null ? null : (elemDi(anteprima.shape) ?? segniComeForma(anteprima.overlays ?? [], ctx.camera.scale)),
+                  IDENTITY,
+                ),
               stato: () => {
                 const id = ctx.motoreTool;
                 const stato = id === null ? null : ctx.statoStrumento(id);

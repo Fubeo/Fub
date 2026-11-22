@@ -228,8 +228,9 @@ stanno in quattro file, separate da una riga:
   di ancoraggio**, uno a metà di ogni segmento, **Dividi oggetti
   sottostanti**, che taglia ciò che sta sotto col tracciato scelto, che se
   ne va;
-- il tracciato composto, **Crea** e **Rilascia**: due tracciati diventano
-  uno solo, col buco dove si sovrappongono, e tornano separati;
+- il sottomenu **Tracciato composto**, con **Crea** e **Rilascia**: due
+  tracciati diventano uno solo, col buco dove si sovrappongono, e tornano
+  separati;
 - gli strumenti di precisione: **Rendi arrotondato**, **Rendi angolo**,
   **Uguaglia maniglie**, **Rimuovi punti, mantieni forma** (sui punti
   scelti), **Chiudi tracciato**, **Aggiungi punti agli incroci** (dove due
@@ -237,7 +238,8 @@ stanno in quattro file, separate da una riga:
   per trattino);
 - **Chiudi o unisci** della Penna intelligente.
 
-Le file sono del client (`FILE_TRACCIATO` in
+Le file e il sottomenu sono del client (`FILE_TRACCIATO` e
+`RACCOLTE_DEI_MENU` in
 `apps/client/src/editors/spatial/completo/comandi.ts`); il posto
 `menu/oggetto/tracciato` è nella mappa del motore.
 
@@ -247,8 +249,30 @@ uguale dopo due Inverti. Un tracciato di un altro programma con la regola
 `evenodd` resta com'è: questi comandi non lo cambiano e lo dicono. Un
 comando che non trova niente da fare (Dividi gli oggetti sotto senza niente
 sotto, Angolo su punti già angoli) non cambia il file e lo dice. Come gli
-strumenti, i comandi non toccano i tratti dell'Inchiostro.
+strumenti, i comandi non toccano i tratti dell'Inchiostro: con un tratto a
+mano scelto sono spenti e dicono «L'Inchiostro di Fub non è un tracciato.».
 
-Le voci con una finestra (Media, Sposta tracciato, Semplifica, Pulisci,
-Dividi in griglia, Dividi in trattini…) e le maschere di ritaglio non ci
-sono ancora: sono spente e dicono perché.
+Cinque voci aprono una finestra, con l'anteprima sul foglio:
+
+- **Sposta tracciato…**: un tracciato nuovo, parallelo, alla distanza
+  scritta (un numero negativo lo porta dentro), con le giunzioni ad angolo
+  vivo, arrotondate o smussate e il limite dell'angolo vivo;
+- **Semplifica…**: meno punti di ancoraggio, con la soglia degli angoli e
+  la scelta dei soli segmenti dritti;
+- **Smussa…**: curve morbide al posto delle linee spezzate;
+- **Dividi in trattini**: trattini della lunghezza scritta, con lo spazio
+  fra l'uno e l'altro;
+- **≡ › Oggetto › Espandi…**: il riempimento e il tratto diventano forme
+  piene, su ogni oggetto scelto e non solo sui tracciati.
+
+L'anteprima mostra i contorni nuovi mentre si cambiano i valori: parte
+quando un campo prende il valore (Invio, Tab o un clic fuori), non a ogni
+tasto, e non cambia il file. OK fa il comando in un passo di Annulla;
+Annulla ed Esc chiudono la finestra e lasciano il file com'era. Anche qui un
+tratto dell'Inchiostro scelto spegne le voci. I campi, i valori di partenza
+e i limiti vengono dal motore (`FINESTRE_SCRITTE` in
+`crates/fub-disegno/src/catalogo.rs`); le parole della finestra sono della
+famiglia (`completo/famiglie/tracciati/testi.ts`).
+
+Le altre voci con una finestra (Media, Pulisci, Dividi in griglia…) e le
+maschere di ritaglio non ci sono ancora: sono spente e dicono perché.

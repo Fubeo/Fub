@@ -10,11 +10,13 @@
 //!   `unmapped`, e niente cambia ([`inchiostro_toccato`]): i tratti si fanno
 //!   dai campioni, e un taglio li perderebbe in tracciati qualsiasi. Lo
 //!   stesso per i comandi sui punti ([`sceglie_inchiostro`]).
-//! - **Oggetto › Tracciato** (`SUGLI_OGGETTI`): i comandi senza finestra sui
-//!   tracciati scelti. Spenti col perché come quelli sui punti; un tratto
-//!   della penna di Fub, scelto o toccato dal risultato (Dividi gli oggetti
-//!   sotto taglia anche quelli sotto), è `unmapped`; un risultato che non
-//!   divide niente è `empty`, e niente cambia ([`StatoFamiglia::rifiuto_dopo`]).
+//! - **Oggetto › Tracciato** (`SUGLI_OGGETTI`, e con la finestra
+//!   `CON_FINESTRA` ed Espandi): i comandi sui tracciati scelti. Spenti col
+//!   perché come quelli sui punti (un tratto della penna di Fub scelto è
+//!   `fub_ink`); un tratto della penna di Fub, scelto o toccato dal risultato
+//!   (Dividi gli oggetti sotto taglia anche quelli sotto), è rifiutato con
+//!   `unmapped`; un risultato che non divide niente è `empty`, e niente cambia
+//!   ([`StatoFamiglia::rifiuto_dopo`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -62,6 +64,24 @@ const SUGLI_OGGETTI: [&str; 13] = [
     "addon.pen.closeJoin",
 ];
 
+/// I comandi di Oggetto › Tracciato con una finestra (T12, giro 3), sui
+/// tracciati scelti: i campi sono in `catalogo::FINESTRE_SCRITTE`.
+const CON_FINESTRA: [&str; 4] = [
+    "object.path.simplify",
+    "object.path.smooth",
+    "object.path.offsetPath",
+    "addon.pathtools.divideDashes",
+];
+
+/// Espandi, con la sua finestra: vale su ogni oggetto scelto (un testo, una
+/// forma, un tratto), non solo sui tracciati.
+const ESPANDI: &str = "object.expand";
+
+/// Il comando è uno di Oggetto › Tracciato (o Espandi) sugli oggetti scelti.
+fn sugli_oggetti(id: &str) -> bool {
+    SUGLI_OGGETTI.contains(&id) || CON_FINESTRA.contains(&id) || id == ESPANDI
+}
+
 /// Quanto un punto può essersi spostato (in coordinate di scena) ed essere
 /// ancora lui: sotto la precisione dei numeri che il file scrive.
 const TOLLERANZA: f64 = 1e-3;
@@ -89,7 +109,7 @@ impl StatoFamiglia for Stato {
     /// la selezione di oggetti non dice: da ≡ sono spenti, con
     /// `needs_anchors`; la fila dei punti li manda con i suoi punti.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
-        if !SUI_PUNTI.contains(&id) && !SUGLI_OGGETTI.contains(&id) {
+        if !SUI_PUNTI.contains(&id) && !sugli_oggetti(id) {
             return None;
         }
         if selezione.is_empty() {
@@ -104,7 +124,10 @@ impl StatoFamiglia for Stato {
             Err(_) => return Some(DrawingDisabledReason::Unmapped),
         };
         if sceglie_inchiostro(copia, selezione) {
-            return Some(DrawingDisabledReason::Unmapped);
+            return Some(DrawingDisabledReason::FubInk);
+        }
+        if id == ESPANDI {
+            return None;
         }
         // La carta è bloccata per il motore: non è un tracciato da cambiare.
         // Un tracciato composto (un `<path>` coi buchi) vale come tracciato.
@@ -127,7 +150,7 @@ impl StatoFamiglia for Stato {
     /// Un comando di Oggetto › Tracciato su un tratto della penna di Fub:
     /// `unmapped`, prima di farlo girare.
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
-        (SUGLI_OGGETTI.contains(&id) && sceglie_inchiostro(copia, selezione))
+        (sugli_oggetti(id) && sceglie_inchiostro(copia, selezione))
             .then_some(DrawingRefusal::Unmapped)
     }
 

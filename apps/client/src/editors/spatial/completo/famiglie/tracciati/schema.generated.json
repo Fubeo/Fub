@@ -1,5 +1,140 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "tracciati",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.divideDashes",
+      "campi": [
+        {
+          "nome": "dash",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "massimo": 1000000.0,
+          "predefinito": 10.0
+        },
+        {
+          "nome": "gap",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 1000000.0,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "fit",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "removeGaps",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.expand",
+      "campi": [
+        {
+          "nome": "object",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "fill",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "stroke",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.path.offsetPath",
+      "campi": [
+        {
+          "nome": "offset",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": -100000.0,
+          "massimo": 100000.0,
+          "predefinito": 10.0
+        },
+        {
+          "nome": "joins",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "miter",
+            "round",
+            "bevel"
+          ],
+          "aperta": false,
+          "predefinito": "miter"
+        },
+        {
+          "nome": "miterLimit",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "massimo": 500.0,
+          "predefinito": 4.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.path.simplify",
+      "campi": [
+        {
+          "nome": "level",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 50.0
+        },
+        {
+          "nome": "cornerAngle",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 180.0,
+          "predefinito": 30.0
+        },
+        {
+          "nome": "straightLines",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.path.smooth",
+      "campi": [
+        {
+          "nome": "level",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 50.0
+        }
+      ]
+    }
+  ]
 }

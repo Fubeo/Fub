@@ -17,6 +17,7 @@ use fub_disegno::motore::Disegno;
 use serde_json::{json, Value};
 
 const BASE: &str = include_str!("famiglie/tracciati/base.svg");
+const SEGHETTATO: &str = include_str!("famiglie/tracciati/seghettato.svg");
 
 fn ev(kind: &str, x: f64, y: f64) -> Value {
     json!({ "kind": kind, "x": x, "y": y, "pressure": 0.5, "shift": false, "alt": false, "cmd": false })
@@ -151,7 +152,7 @@ fn i_comandi_sui_punti_sono_spenti_col_perche() {
     // L'inchiostro di Fub non si cambia dai punti, nemmeno insieme a un tracciato.
     let inchiostro = perche(&["oc1c1c1c1", "oi8b8b8b8"]);
     assert!(
-        inchiostro.iter().all(|(_, r)| *r == Some(Unmapped)),
+        inchiostro.iter().all(|(_, r)| *r == Some(FubInk)),
         "{inchiostro:?}"
     );
 }
@@ -170,6 +171,120 @@ fn i_comandi_sui_punti_non_toccano_l_inchiostro() {
         );
     }
     assert_eq!(d.revisione(), prima);
+}
+
+#[test]
+fn oggetto_tracciato_sull_inchiostro_dice_perche_e_non_cambia_niente() {
+    let (mut d, _) = apri(BASE);
+    let prima = d.revisione();
+    let scelti = vec!["oi8b8b8b8".to_string()];
+    let ids = [
+        "path.reverse",
+        "object.path.outlineStroke",
+        "object.compoundPath.make",
+        "addon.pathtools.smooth",
+    ];
+    // Spenti col perché vero: l'Inchiostro è di Fub, non un tracciato.
+    let stato = d.comandi(&scelti);
+    for id in ids {
+        let info = stato
+            .iter()
+            .find(|c| c.id == format!("disegno.{id}"))
+            .unwrap_or_else(|| panic!("{id} elencato"));
+        assert_eq!(
+            info.disabled_reason,
+            Some(DrawingDisabledReason::FubInk),
+            "{id}"
+        );
+    }
+    // E se il comando arriva lo stesso, il motore lo rifiuta e niente cambia.
+    for id in ids {
+        let esito = comando(&mut d, id, &["oi8b8b8b8"], json!({})).expect("la richiesta vale");
+        assert_eq!(
+            (esito.refused, esito.ops),
+            (Some(DrawingRefusal::Unmapped), None),
+            "{id}"
+        );
+    }
+    assert_eq!(d.revisione(), prima);
+}
+
+/// Le finestre dei tracciati (T12, giro 3) e i loro argomenti di prova.
+const FINESTRE: [(&str, &str, &str, &str); 5] = [
+    (
+        "object.path.simplify",
+        BASE,
+        "oc1c1c1c1",
+        r#"{"level": 100, "cornerAngle": 30, "straightLines": true}"#,
+    ),
+    (
+        "object.path.smooth",
+        SEGHETTATO,
+        "os9c9c9c9",
+        r#"{"level": 50}"#,
+    ),
+    (
+        "object.path.offsetPath",
+        BASE,
+        "of4f4f4f4",
+        r#"{"offset": 10, "joins": "round", "miterLimit": 4}"#,
+    ),
+    (
+        "object.expand",
+        BASE,
+        "oc1c1c1c1",
+        r#"{"object": true, "fill": true, "stroke": true}"#,
+    ),
+    (
+        "addon.pathtools.divideDashes",
+        BASE,
+        "oc1c1c1c1",
+        r#"{"dash": 20, "gap": 10, "fit": false, "removeGaps": true}"#,
+    ),
+];
+
+/// L'anteprima di una finestra dei tracciati: i contorni nuovi sul foglio,
+/// nessuna operazione, la revisione ferma e il disegno uguale; OK, con gli
+/// stessi argomenti, scrive.
+#[test]
+fn l_anteprima_delle_finestre_non_scrive_e_ok_si() {
+    for (id, disegno, scelto, argomenti) in FINESTRE {
+        let (mut d, _) = apri(disegno);
+        let prima = d.revisione();
+        let valore: Value = serde_json::from_str(argomenti).expect("json");
+        let richiesta = |d: &Disegno, preview| DrawingCommandRequest {
+            revision: d.revisione(),
+            id: format!("disegno.{id}"),
+            selection: vec![scelto.to_string()],
+            value: valore.clone(),
+            preview,
+        };
+        // Due anteprime di fila: nessuna scrive, la seconda vede la copia
+        // di partenza, non la prima anteprima.
+        for _ in 0..2 {
+            let esito = d.comando(richiesta(&d, true)).expect("l'anteprima vale");
+            assert_eq!((esito.refused, &esito.ops), (None, &None), "{id}");
+            let segni = esito.preview.map(|p| p.overlays).unwrap_or_default();
+            assert!(
+                !segni.is_empty(),
+                "{id}: l'anteprima mostra i contorni nuovi"
+            );
+            assert_eq!(esito.selection, vec![scelto.to_string()], "{id}");
+            assert_eq!(
+                d.revisione(),
+                prima,
+                "{id}: l'anteprima non cambia la revisione"
+            );
+        }
+        let fermo = d.a_mano(|_, _| {}).expect("il motore si rilegge");
+        assert!(fermo.ops.is_none(), "{id}: il motore è tornato alla copia");
+        let esito = d.comando(richiesta(&d, false)).expect("OK vale");
+        assert!(
+            esito.refused.is_none() && esito.ops.is_some(),
+            "{id}: OK scrive"
+        );
+        assert!(esito.preview.is_none(), "{id}");
+    }
 }
 
 #[test]
