@@ -2532,8 +2532,14 @@ finestre Nuovo campione e Opzioni del campione, «Aggiungi i colori usati»,
 «Togli i non usati» (contato nel client), 2000 campioni che scorrono; con
 un testo scelto il Contorno è «Nessuno» spento col perché (Fub non dà un
 contorno ai testi). Mancano: gruppi, tinte piatte, Temi, Guida dei
-colori, Ricolora, contagocce e sfumatura, sfumature libere, profili e
-librerie.
+colori, Ricolora, sfumature libere, profili e librerie. Contagocce unito
+in 10747473a: lo strumento nella casella «colore» della colonna,
+`paint.sampleColor` e `eyedropper.setOptions` (preferenza del motore);
+sopra un oggetto bloccato, di Inchiostro o lasciato com'è il rifiuto ha il
+perché. Restano: `appearance.copyFrom` (la sorgente è un id del motore),
+il messaggio del rifiuto su un'immagine (oggi generico) e la fila delle
+opzioni (giro in corso). Gestione dei campioni (duplica, sposta, ordina,
+gruppi, unisci, di serie) in corso.
 Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
@@ -2647,8 +2653,19 @@ aggiungi, togli, sposta, colore, opacità, inverti) passano dal motore, un
 passo di Annulla per cambio; le sfumature sono risorse private
 (`src/sfumature.rs`); limite dell'angolo e allineamento del contorno
 spenti col perché (l'SVG non li scrive); il profilo dello spessore resta
-da fare. Giro 6 (preimpostate, strumento Sfumatura sulla tela, «Punte» nel
-Completo) in corso.
+da fare. Giro 6 unito in 2c7ceaf95: preimpostate in `gradientPresets`
+dentro `draw.motore` (Applica; Salva ed Elimina solo sulle salvate; con un
+`draw.motore` più nuovo o rotto Salva ed Elimina sono rifiutati col perché
+e la sessione resta viva), strumento Sfumatura sulla tela con
+l'annotatore, «Punte» tenuta. Restano: l'etichetta inglese dei comandi
+preimpostati nell'indice; Salva ed Elimina non si spengono prima del clic
+(il perché arriva dopo); le preimpostate salvate in un altro disegno si
+vedono solo dopo la riapertura. ≡ › Selezione unito in 307012ac7: «Uguale»
+per il testo (sei voci) e Oggetto › Punti isolati e Tracciati aperti. Restano
+da fare il testo di punto e quello in area (il motore legge il testo con
+`fub:wrap` come testo di punto) e le maniglie (la risposta porta solo gli
+oggetti, non i punti: nessun campo nuovo nel contratto); a 800 px la
+motivazione nei sottomenu si tronca.
 Aspetta: niente
 
 ## T16 · Il testo
