@@ -81,4 +81,23 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "unita:gap": { it: "px", en: "px" },
   "campo:fit": { it: "Adatta alla lunghezza del tracciato", en: "Fit to the path length" },
   "campo:removeGaps": { it: "Togli i pezzi fra i trattini", en: "Remove the pieces between dashes" },
+
+  // Media e Media e unisci (giro 6): l'asse e il punto che l'unione lascia.
+  "descrizione:path.average": {
+    it: "Porta i punti scelti nel loro punto medio, su un asse o su tutti e due. Senza punti scelti vale per tutti i punti dei tracciati scelti.",
+    en: "Moves the chosen points to their average position, along one axis or both. With no points chosen it uses every point of the chosen paths.",
+  },
+  "azione:path.average": { it: "Media", en: "Average" },
+  "campo:axis": { it: "Asse", en: "Axis" },
+  "scelta:axis:both": { it: "Entrambi", en: "Both" },
+  "scelta:axis:horizontal": { it: "Orizzontale", en: "Horizontal" },
+  "scelta:axis:vertical": { it: "Verticale", en: "Vertical" },
+  "descrizione:path.averageJoin": {
+    it: "Porta i due punti finali nel loro punto medio e li unisce lì. Con un tracciato aperto solo, lo chiude.",
+    en: "Moves the two end points to their midpoint and joins them there. With a single open path, it closes it.",
+  },
+  "azione:path.averageJoin": { it: "Media e unisci", en: "Average & Join" },
+  "campo:to": { it: "Punto unito", en: "Joined point" },
+  "scelta:to:corner": { it: "Angolo", en: "Corner" },
+  "scelta:to:smooth": { it: "Morbido", en: "Smooth" },
 };

@@ -200,6 +200,8 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
       "addon.pen.closeJoin",
       "object.compoundPath.make",
       "object.compoundPath.release",
+      "path.average",
+      "path.averageJoin",
       "path.join",
       "path.reverse",
     ];
@@ -208,6 +210,8 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
     const nome = (id: string) => nomeVoce(voci.find((v) => v.id === id)!);
     expect(righe.map((r) => [r.label, r.separator === true])).toEqual([
       [nome("path.join"), false],
+      [nome("path.average"), false],
+      [nome("path.averageJoin"), false],
       [nome("path.reverse"), false],
       [t("draw.completo.sotto.composto"), true],
       [nome("addon.pathtools.smooth"), true],
@@ -215,9 +219,24 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
       [nome("addon.pen.closeJoin"), true],
     ]);
     // Crea e Rilascia stanno nel sottomenu «Tracciato composto», col loro stato.
-    const composto = sottovoci(righe[2]);
+    const composto = sottovoci(righe[4]);
     expect(composto.map((r) => r.label)).toEqual([nome("object.compoundPath.make"), nome("object.compoundPath.release")]);
     expect(composto.every((r) => r.disabled === true)).toBe(true);
+  });
+
+  it("≡ › Oggetto › Maschera di ritaglio ha il suo nome, e le voci nell'ordine di Illustrator: Crea, Rilascia, Modifica contenuto", () => {
+    const ids = ["object.clippingMask.editContents", "object.clippingMask.make", "object.clippingMask.release"];
+    const voci = ids.map((id) => voce(id, "menu/oggetto/ritaglio"));
+    const oggetto = menuComando(indiceDi({ voci }), { per: null, assente: null }, vi.fn())[0]!;
+    const ritaglio = sottovoci(oggetto)[0]!;
+    expect(ritaglio.label).toBe(t("draw.completo.sotto.ritaglio"));
+    expect(t("draw.completo.sotto.ritaglio")).not.toBe("draw.completo.sotto.ritaglio");
+    const nome = (id: string) => nomeVoce(voci.find((v) => v.id === id)!);
+    expect(sottovoci(ritaglio).map((r) => r.label)).toEqual([
+      nome("object.clippingMask.make"),
+      nome("object.clippingMask.release"),
+      nome("object.clippingMask.editContents"),
+    ]);
   });
 
   it("≡ › Modifica › Modifica colori ha le sue file: le regolazioni, le fusioni, le conversioni, Inverti e Sovrastampa", () => {

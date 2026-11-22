@@ -8,7 +8,7 @@
 // chunk del Completo (come in `carica.ts`). La lettura delle operazioni e la
 // cronologia le porta chi ha l'editor, con `AzioniEsito`.
 
-import type { DrawingOutcome, DrawingPreview } from "../../../host/contract";
+import type { DrawingAnchor, DrawingOutcome, DrawingPreview } from "../../../host/contract";
 import { languageCurrent } from "../../../i18n/strings";
 import type { Lifetime } from "../../../ui/lifetime";
 import { apriFinestra, type Esegui, type EsitoComando, type FinestraOpzioni, type ModuloFinestra } from "../motore/finestre";
@@ -52,6 +52,10 @@ export interface DipendenzeComando extends AzioniEsito {
   readonly vita: Lifetime;
   /// La selezione adesso, come id del motore.
   readonly selezione: () => readonly string[];
+  /// I punti scelti adesso con lo strumento del motore (la Selezione diretta):
+  /// Media e Media e unisci li mandano nel `value` (`anchors`). Senza, o vuoti,
+  /// quei comandi valgono sui tracciati scelti interi.
+  readonly punti?: () => readonly DrawingAnchor[];
   /// Mette l'anteprima sul foglio, o la toglie con `null`.
   readonly anteprima: (anteprima: DrawingPreview | null) => void;
   /// La finestra del comando, se la voce ne ha una.
@@ -94,6 +98,19 @@ function comandoDi(voce: VoceIndice): { readonly id: string; readonly valore: un
 /// Il valore fisso di una voce (un effetto con il suo valore), come oggetto.
 function comeOggetto(valore: unknown): Readonly<Record<string, unknown>> {
   return typeof valore === "object" && valore !== null && !Array.isArray(valore) ? (valore as Readonly<Record<string, unknown>>) : {};
+}
+
+/// I comandi del menu che valgono sui punti scelti, se ce ne sono (K6 T12):
+/// il menu ≡, Ctrl+/ e il tasto li mandano coi punti dello strumento.
+const SUI_PUNTI_SCELTI: ReadonlySet<string> = new Set(["disegno.path.average", "disegno.path.averageJoin"]);
+
+/// Il valore di partenza del comando `id`: quello fisso della voce, più i punti
+/// scelti adesso per un comando che li usa e non li ha già.
+function valoreDi(id: string, valore: unknown, dipendenze: DipendenzeComando): Readonly<Record<string, unknown>> {
+  const base = comeOggetto(valore);
+  if (!SUI_PUNTI_SCELTI.has(id) || "anchors" in base) return base;
+  const punti = dipendenze.punti?.() ?? [];
+  return punti.length === 0 ? base : { ...base, anchors: [...punti] };
 }
 
 /// Il chiamante di `apriFinestra`: una promessa che si risolve quando la
@@ -178,8 +195,10 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
         return false;
       }
       if (dipendenze.vita.closed) return false;
+      // I punti scelti quando la finestra si apre: valgono fino a OK.
+      const partenza = valoreDi(comando.id, comando.valore, dipendenze);
       const esegui: Esegui = async (valori, anteprima): Promise<EsitoComando> => {
-        const esito = await chiama(dipendenze, comando.id, { ...comeOggetto(comando.valore), ...valori }, anteprima);
+        const esito = await chiama(dipendenze, comando.id, { ...partenza, ...valori }, anteprima);
         if (esito === null) return { anteprima: null, rifiuto: "not_ready" };
         // OK manda il comando una volta sola: un passo della cronologia.
         if (!anteprima) applicaEsito(esito, etichetta, dipendenze);
@@ -209,7 +228,7 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
       dipendenze.annuncia(t("draw.window.failed"));
       return false;
     }
-    const esito = await chiama(dipendenze, comando.id, comeOggetto(comando.valore), false);
+    const esito = await chiama(dipendenze, comando.id, valoreDi(comando.id, comando.valore, dipendenze), false);
     if (dipendenze.vita.closed) return false;
     if (esito === null) {
       dipendenze.annuncia(t("draw.window.unanswered"));

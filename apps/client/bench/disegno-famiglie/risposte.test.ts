@@ -27,6 +27,8 @@ describe("le risposte delle famiglie del banco", () => {
     // con le operazioni del motore vero (il gruppo, i suoi membri con l'id e la ricetta).
     // L'elaborazione dei tracciati (K6 T12, giro 5): Unione e Meno davanti sulle due forme di
     // `?elabora=1`, coi tracciati scritti a mano (archi al posto delle curve del motore).
+    // La maschera di ritaglio (K6 T12, giro 6): Crea sulle stesse due forme, il cerchio davanti ritaglia
+    // il rettangolo, com'è il motore vero (il clipPath in `fub-defs`, il `<g clip-path>`).
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
       "disegno.transparency.set",
       "disegno.stroke.set",
@@ -54,6 +56,7 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.object.path.offsetPath",
       "disegno.object.pathfinder.unite",
       "disegno.object.pathfinder.minusFront",
+      "disegno.object.clippingMask.make",
     ]);
     // Unione e Meno davanti (K6 T12, giro 5): le due forme sovrapposte di `?elabora=1` tolte, e il
     // tracciato al posto di quella davanti, in un passo solo.
@@ -63,6 +66,8 @@ describe("le risposte delle famiglie del banco", () => {
     expect(unione[0].ops.map((op: { op: string }) => op.op)).toEqual(["remove", "remove", "add"]);
     const composta = JSON.parse(rispostaDiFamiglia(richiesta("disegno.object.compoundShape.make", { mode: "subtract" })).ops ?? "[]");
     expect(composta[0].ops.map((op: { op: string }) => op.op)).toEqual(["remove", "remove", "add", "add"]);
+    const maschera = JSON.parse(rispostaDiFamiglia(richiesta("disegno.object.clippingMask.make")).ops ?? "[]");
+    expect(maschera[0].ops.map((op: { op: string }) => op.op)).toEqual(["add", "remove", "add", "move"]);
     expect(rispostaDiFamiglia(richiesta("disegno.text.setRangeStyle", { size: 40 })).ops).toBe("[]");
     expect(rispostaDiFamiglia(richiesta("disegno.swatch.new", { name: "Verde", color: "#009e73" })).refused).toBeNull();
     expect(rispostaDiFamiglia(richiesta("disegno.object.path.offsetPath", { offset: 10 })).preview?.overlays).toHaveLength(1);
