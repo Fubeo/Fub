@@ -81,6 +81,9 @@ i suoi campioni e i suoi stili, resta tale fra due disegni del Completo.
   nome nuovo.
 - **Un formato che Fub non legge** (PDF, EPS, metafile) si dice, e il disegno
   resta com'è. PDF ed EPS arrivano con i formati del disegno.
+- **Sola lettura.** Il motore non modifica un disegno che non si può scrivere
+  (una versione più nuova, un DOCTYPE, un file troppo grande): copiare e
+  leggere gli appunti restano possibili, tagliare e incollare no.
 - **Dove va l'incolla.** Nel Completo gli oggetti vanno nella posizione che dà
   il motore (scostati dalla copia, o nel primo tavolo per un'immagine o un
   testo), non al cursore. «Incolla nello stesso punto» (`Ctrl+Maiusc+V`) non c'è
