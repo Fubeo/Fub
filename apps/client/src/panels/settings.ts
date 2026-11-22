@@ -1379,7 +1379,15 @@ async function renderForm(): Promise<HTMLElement[]> {
     if (conMotore !== null && group.title === conMotore.spec.group) await appendMotore(parts.body, conMotore);
     nodes.push(parts.section);
   }
-  nodes.push(await renderProfiles(groups.length));
+  // Il gruppo dei disegni senza altre righe da mostrare: il riquadro ha la
+  // sezione sua, con lo stesso titolo.
+  let sections = groups.length;
+  if (conMotore !== null && !groups.some((group) => group.title === conMotore.spec.group)) {
+    const parts = sectionBlock(conMotore.spec.group || t("settings.group.other"), sections++);
+    await appendMotore(parts.body, conMotore);
+    nodes.push(parts.section);
+  }
+  nodes.push(await renderProfiles(sections));
   formSnapshots.set(nodes, snapshot);
   return nodes;
 }

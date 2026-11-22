@@ -175,6 +175,24 @@ describe("la sezione Motore del disegno", () => {
     );
   });
 
+  it("ha la sezione sua quando il gruppo dei disegni non ha altre righe", async () => {
+    fake.entries = [motore("")];
+    document.body.innerHTML = `
+      <button id="open-settings"></button>
+      <section id="settings-panel" hidden>
+        <div id="settings-tabs"><button data-tab="settings"></button></div>
+        <button id="settings-close"></button>
+        <div id="settings-body"></div>
+      </section>`;
+    mountSettings({ openVault: async () => {}, reloadProvider: async () => {} });
+    document.querySelector<HTMLButtonElement>("#open-settings")!.click();
+    await vi.waitFor(() =>
+      expect(document.querySelector('details[data-details-key="drawing-engine"]')).not.toBeNull(),
+    );
+    const sezione = document.querySelector('details[data-details-key="drawing-engine"]')!.closest(".settings-section")!;
+    expect(sezione.querySelector(".settings-section-title")!.textContent).toBe("Disegni");
+  });
+
   it("non c'è con il Disegno completo spento né senza un vault", async () => {
     fake.acceso = false;
     expect(await openForm()).toBeNull();
@@ -219,7 +237,14 @@ describe("la sezione Motore del disegno", () => {
     const details = await openSection();
     const stato = details.querySelector('[role="status"]')!;
     expect(stato.textContent).toContain("99");
-    for (const fieldset of details.querySelectorAll("fieldset")) expect(fieldset.disabled).toBe(true);
+    const campi = details.querySelectorAll<HTMLInputElement>(".kit-form input, .kit-form select");
+    expect(campi.length).toBeGreaterThan(0);
+    for (const campo of campi) expect(campo.disabled || campo.readOnly).toBe(true);
+    // Il numero resta leggibile e raggiungibile: sola lettura, non spento.
+    const numero = details.querySelector<HTMLInputElement>(".kit-number-input")!;
+    expect(numero.readOnly).toBe(true);
+    expect(numero.disabled).toBe(false);
+    expect(details.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
     const azzera = details.querySelector<HTMLButtonElement>(".settings-actions button")!;
     azzera.click();
     await vi.waitFor(() => expect(api.resetSetting).toHaveBeenCalledWith("draw.motore"));
@@ -235,7 +260,9 @@ describe("la sezione Motore del disegno", () => {
     fake.entries = [entry("draw.snap", true, { kind: "toggle", default: true }), motore("{non json")];
     const details = await openSection();
     expect(details.querySelector('[role="status"]')).not.toBeNull();
-    for (const fieldset of details.querySelectorAll("fieldset")) expect(fieldset.disabled).toBe(true);
+    const campi = details.querySelectorAll<HTMLInputElement>(".kit-form input, .kit-form select");
+    expect(campi.length).toBeGreaterThan(0);
+    for (const campo of campi) expect(campo.disabled || campo.readOnly).toBe(true);
   });
 
   it("chiude il disegno vuoto quando le Impostazioni si chiudono", async () => {

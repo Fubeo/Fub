@@ -246,14 +246,23 @@ function corpo(righe: readonly RigaPreferenza[], lettura: LetturaMotore, dip: Di
       }
       campi.push(campo(r, scrivibile, dip, (value) => void scrivi("disegno.prefs.set", { key: r.key, value })));
     }
-    const fieldset = document.createElement("fieldset");
-    fieldset.disabled = !scrivibile;
-    fieldset.append(formBody(campi));
-    fieldset.style.border = "0";
-    fieldset.style.margin = "0";
-    fieldset.style.padding = "0";
-    fieldset.style.minWidth = "0";
-    dentro.append(fieldset);
+    const modulo = formBody(campi);
+    // In sola lettura nessun campo cambia: quelli di testo e di numero sono
+    // `readOnly` (il valore resta leggibile a pieno contrasto, e chi usa la
+    // tastiera o un lettore di schermo ci arriva e sente «sola lettura»);
+    // caselle, scelte e pulsanti, che `readOnly` non ferma, sono spenti.
+    if (!scrivibile) {
+      for (const controllo of modulo.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
+        "input, select, button",
+      )) {
+        if (controllo instanceof HTMLInputElement && ["text", "number", "search", ""].includes(controllo.type)) {
+          controllo.readOnly = true;
+        } else {
+          controllo.disabled = true;
+        }
+      }
+    }
+    dentro.append(modulo);
     if (scrivibile) {
       const azioni = document.createElement("div");
       azioni.className = "settings-actions";
