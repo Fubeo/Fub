@@ -691,6 +691,70 @@
     },
     {
       "fonte": "motore",
+      "id": "gradient.presets.apply",
+      "chiamata": {
+        "comando": "disegno.gradient.presets.apply"
+      },
+      "etichetta": {
+        "it": "Apply Gradient Preset",
+        "en": "Apply Gradient Preset"
+      },
+      "posto": "ispettore/design/sfumatura",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "gradient.presets.delete",
+      "chiamata": {
+        "comando": "disegno.gradient.presets.delete"
+      },
+      "etichetta": {
+        "it": "Delete Gradient Preset",
+        "en": "Delete Gradient Preset"
+      },
+      "posto": "interno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "gradient.presets.list",
+      "chiamata": {
+        "comando": "disegno.gradient.presets.list"
+      },
+      "etichetta": {
+        "it": "Gradient Presets",
+        "en": "Gradient Presets"
+      },
+      "posto": "interno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "gradient.presets.save",
+      "chiamata": {
+        "comando": "disegno.gradient.presets.save"
+      },
+      "etichetta": {
+        "it": "Save Gradient Preset",
+        "en": "Save Gradient Preset"
+      },
+      "posto": "interno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "gradient.selectStop",
       "chiamata": {
         "comando": "disegno.gradient.selectStop"
@@ -3249,6 +3313,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "gradient",
+      "chiamata": {
+        "strumento": "gradient"
+      },
+      "etichetta": {
+        "it": "Strumento Sfumatura",
+        "en": "Gradient Tool"
+      },
+      "posto": "colonna/colore",
+      "famiglia": "colore",
+      "tasto": "G",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "groupSelection",
       "chiamata": {
         "strumento": "groupSelection"
@@ -3755,6 +3835,22 @@
       },
       "posto": "ispettore/design",
       "famiglia": "testo",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "gradient",
+      "chiamata": {
+        "client": "gradient"
+      },
+      "etichetta": {
+        "it": "Sfumatura",
+        "en": "Gradient"
+      },
+      "posto": "ispettore/design/sfumatura",
+      "famiglia": "aspetto",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false

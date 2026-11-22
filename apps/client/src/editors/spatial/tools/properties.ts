@@ -437,7 +437,9 @@ const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place
 const CAMPI_NASCOSTI_NEL_COMPLETO: ReadonlySet<FieldId> = new Set<FieldId>(["fill", "stroke", "strokeWidth", "dash", "family", "size", "weight", "spacing", "anchor"]);
 
 /// Le sezioni che nel Completo hanno un altro titolo: del Contorno restano solo le punte, perché il
-/// resto lo dà la sezione Contorno del Completo, e due sezioni «Contorno» confonderebbero.
+/// resto lo dà la sezione Contorno del Completo, e due sezioni «Contorno» confonderebbero. Le punte
+/// restano visibili (K6 T15, giro 6): il motore non ha un comando né una sezione per le punte di Fub
+/// (`marker-start`/`marker-end` sulle linee), e toglierle le farebbe sparire dal Completo.
 const TITOLI_NEL_COMPLETO: Readonly<Partial<Record<SectionId, DrawKey>>> = { stroke: "draw.properties.tips" };
 
 /// La misura del campo numerico `id` della vista, con il passaggio alle unità della scena; `undefined`

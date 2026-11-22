@@ -1754,6 +1754,108 @@
         ]
       },
       "dopo": "paint-lastGradient.svg"
+    },
+    {
+      "id": "gradient",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 110,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 190,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 190,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "defs",
+                  "attrs": {
+                    "id": "fub-defs"
+                  },
+                  "children": [
+                    {
+                      "tag": "linearGradient",
+                      "attrs": {
+                        "id": "r8iplzdp6",
+                        "fub:role": "private",
+                        "gradientUnits": "userSpaceOnUse",
+                        "x1": "110",
+                        "y1": "125",
+                        "x2": "190",
+                        "y2": "125"
+                      },
+                      "children": [
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "0",
+                            "stop-color": "#ffffff"
+                          }
+                        },
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "1",
+                            "stop-color": "#000000"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "url(#r8iplzdp6) #808080"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "gradient-dopo.svg"
     }
   ]
 }

@@ -361,6 +361,10 @@ nell'impostazione di macchina `draw.motore` (`crates/fub-features/src/draw.rs`,
   sovrascrive. In tutti e due i casi `prefs.set` e `prefs.reset` si rifiutano
   con `conflict` (`host.drawing.prefs_newer`, `host.drawing.prefs_broken`)
   prima del motore, finché l'utente non azzera `draw.motore`;
+  `gradient.presets.save` e `gradient.presets.delete` invece tornano con un
+  rifiuto nell'esito (`unsupported`, il perché in `reading`), perché vengono
+  dalla sessione del disegno aperto, che un errore fermerebbe; la sezione
+  Sfumatura lo dice con la frase del caso;
 - **le quattro cartelle** (`fontsFolder`, `pluginsFolder`, `recoveryFolder`,
   `templatesFolder`: `preferenze::CARTELLE`) non si leggono, non si scrivono e
   non si mostrano: `prefs.get` e `prefs.list` le tolgono, e un `prefs.set` che
@@ -376,6 +380,18 @@ motore passato per il glossario del disegno) in
 `settings-motore.generated.json`, con la versione di `draw.motore`. Un disegno
 già aperto prende le preferenze cambiate da un altro disegno solo quando si
 riapre.
+
+Le sfumature preimpostate della sezione Sfumatura stanno qui: le 55 del motore
+sono sue, e quelle che l'utente salva sono la chiave `gradientPresets` delle
+preferenze, quindi `draw.motore`, per tutti i disegni e fuori dal file SVG.
+`gradient.presets.list`, `gradient.presets.save` e `gradient.presets.delete`
+(famiglia `aspetto`) le leggono e le cambiano senza toccare il disegno né la
+cronologia; `gradient.presets.apply` è un cambio del disegno come gli altri,
+con un passo di Annulla. Il client
+(`apps/client/src/editors/spatial/completo/sfumature-preimpostate.ts`)
+controlla il nome prima del motore, che rifiuta come `bad_args` un nome vuoto,
+già preso o di una preimpostata sua, e mostra i nomi del motore nella lingua
+dell'interfaccia (`sfumature-nomi.ts`).
 
 ## Le due strade
 

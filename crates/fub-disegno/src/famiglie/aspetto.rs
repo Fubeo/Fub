@@ -3,6 +3,12 @@
 //! pila, le maschere di opacità, il gruppo a foratura) aspetta il suo giro
 //! (`docs/architecture/disegno-completo.md`).
 //!
+//! **Le sfumature preimpostate** (giro 6): `gradient.presets.list`, `.save` e `.delete` sono letture
+//! del motore (non cambiano il documento); le preimpostate salvate stanno nelle preferenze del motore,
+//! che l'host tiene in `draw.motore` (`crate::preferenze`). `gradient.presets.apply` cambia la
+//! sfumatura degli oggetti scelti come `paint.editGradient`, in un passo: ne prende le regole dalla
+//! famiglia `colore`, che le ha (spento, rifiuto, i testi saltati, ciò che la scena non scrive).
+//!
 //! **Il contorno.** Del pannello Contorno del motore il file dice lo spessore, gli estremi, gli angoli e
 //! il tratteggio semplice (`stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`). Il
 //! limite dell'angolo, l'allineamento dentro o fuori, lo spostamento del tratteggio e il tratteggio
@@ -17,6 +23,7 @@ use fub_motori::{ErroreMotore, Servizi};
 use serde_json::Value;
 use vectorcraft_doc::{Document, NodeId, NodeKind};
 
+use super::colore::SFUMATURE;
 use super::tracciati::{inchiostro_toccato, sceglie_inchiostro};
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
@@ -29,6 +36,18 @@ pub(crate) const CONTORNO: &str = "stroke.set";
 
 /// Il punto scelto della sfumatura del riempimento o del contorno davanti.
 const PUNTO_DELLA_SFUMATURA: &str = "gradient.selectStop";
+
+/// Applicare una sfumatura preimpostata: cambia la sfumatura degli oggetti scelti come la cambia
+/// `paint.editGradient`, il comando che il motore usa per farlo.
+const APPLICA_PRESET: &str = "gradient.presets.apply";
+
+/// Le regole di `paint.editGradient`, nella famiglia `colore`.
+type Colore = super::colore::Stato;
+
+/// L'id di cui `gradient.presets.apply` usa le regole: `paint.editGradient`.
+fn come_sfumatura(id: &str) -> Option<&'static str> {
+    (id == APPLICA_PRESET).then_some(SFUMATURE[0])
+}
 
 /// Il limite dell'angolo di SVG (4), quello che il motore legge da un file senza `stroke-miterlimit`:
 /// la scena non scrive l'attributo, quindi non se ne chiede un altro.
@@ -98,6 +117,9 @@ impl StatoFamiglia for Stato {
     /// bloccato (che non si scrive). Il contorno è spento anche su un tratto dell'Inchiostro di Fub, che
     /// è un riempimento, e su soli testi, che non hanno contorno.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        if let Some(sfumatura) = come_sfumatura(id) {
+            return Colore::spento(sfumatura, copia, selezione);
+        }
         if id != TRASPARENZA && id != CONTORNO {
             return None;
         }
@@ -126,6 +148,9 @@ impl StatoFamiglia for Stato {
     /// Il contorno su un tratto dell'Inchiostro è `unmapped` (è un riempimento); su soli testi è
     /// `unsupported`: la scena non scrive il contorno dei caratteri.
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if let Some(sfumatura) = come_sfumatura(id) {
+            return Colore::rifiuto(sfumatura, copia, selezione);
+        }
         if id != CONTORNO {
             return None;
         }
@@ -140,10 +165,13 @@ impl StatoFamiglia for Stato {
     /// Ciò che il contorno del motore sa fare e la scena non dice: `unsupported` prima del motore.
     fn rifiuto_valore(
         id: &str,
-        _copia: &Copia,
-        _selezione: &[String],
+        copia: &Copia,
+        selezione: &[String],
         valore: &Value,
     ) -> Option<DrawingRefusal> {
+        if let Some(sfumatura) = come_sfumatura(id) {
+            return Colore::rifiuto_valore(sfumatura, copia, selezione, valore);
+        }
         (id == CONTORNO && fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported)
     }
 
@@ -152,14 +180,20 @@ impl StatoFamiglia for Stato {
         id: &str,
         copia: &Copia,
         dopo: &Document,
-        _scelti_dopo: &[NodeId],
+        scelti_dopo: &[NodeId],
     ) -> Option<DrawingRefusal> {
+        if let Some(sfumatura) = come_sfumatura(id) {
+            return Colore::rifiuto_dopo(sfumatura, copia, dopo, scelti_dopo);
+        }
         (id == CONTORNO && inchiostro_toccato(copia, dopo)).then_some(DrawingRefusal::Unmapped)
     }
 
     /// In una selezione con testi e forme il contorno va alle forme, una alla volta nella stessa
     /// copia: un passo solo. Senza testi il comando gira una volta su tutti.
     fn uno_alla_volta(id: &str, copia: &Copia, selezione: &[String]) -> Option<Vec<NodeId>> {
+        if let Some(sfumatura) = come_sfumatura(id) {
+            return Colore::uno_alla_volta(sfumatura, copia, selezione);
+        }
         if id != CONTORNO {
             return None;
         }

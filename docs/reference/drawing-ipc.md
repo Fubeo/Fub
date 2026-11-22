@@ -105,6 +105,11 @@ I loro rifiuti:
 - `conflict` con `host.drawing.prefs_newer` o `host.drawing.prefs_broken`:
   `draw.motore` è di un Fub più nuovo o non si legge, e `prefs.set` o
   `prefs.reset` (non in anteprima) non lo riscrivono; prima va azzerato;
+- per `gradient.presets.save` e `gradient.presets.delete`, che la sezione
+  Sfumatura manda dalla sessione del disegno aperto, lo stesso caso non è un
+  errore (fermerebbe la sessione) ma un esito con `refused: "unsupported"`,
+  nessuna operazione e il perché in `reading` (`{"prefs": "newer"}` o
+  `{"prefs": "broken"}`); motore e `draw.motore` non si toccano;
 - `bad_args`: un `prefs.set` che nomina una cartella del motore
   (`fontsFolder`, `pluginsFolder`, `recoveryFolder`, `templatesFolder`), o un
   valore che il motore non accetta;

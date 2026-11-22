@@ -100,8 +100,16 @@ quello di sempre.
   nessuno la usa più, se ne va. Il testo non prende una sfumatura, che il file
   SVG non scrive sui caratteri; un oggetto bloccato spegne la sezione e dice
   perché; con oggetti di punti diversi i punti non si cambiano, il tipo e
-  l’angolo sì, per tutti. Ogni cambio è un passo di Annulla. I modelli di
-  sfumatura e lo strumento Sfumatura sulla tela non ci sono ancora.
+  l’angolo sì, per tutti. Ogni cambio è un passo di Annulla.
+  In fondo, «Preimpostate» (chiuse finché non si aprono): una scelta per temi
+  (Spettro, Cielo, Neutri, Due toni, Bagliori radiali, Metalli, poi le
+  Salvate) con la sua striscia, e «Applica», che la dà al colore mostrato con
+  un passo di Annulla, anche a un colore pieno. Con una sfumatura sola mostrata,
+  un nome e «Salva» (o Invio) la tengono fra le Salvate, per tutti i disegni e
+  fuori dal file; un nome vuoto o già preso lo dice senza salvare. Una salvata
+  ha «Elimina». Lo strumento Sfumatura della colonna (G) disegna la sfumatura
+  sulla tela: si trascina dall’inizio alla fine, sull’oggetto scelto, con la
+  guida del motore mentre si trascina; un trascinamento è un passo di Annulla.
 - **Riempimento**, con la parte «Colori personalizzati»: il colore che
   riempie gli oggetti, con sotto il contrasto con la carta.
 - **Contorno.** Il colore, con la parte «Colori personalizzati», lo

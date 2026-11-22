@@ -78,7 +78,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T13 le quattro `object.compoundShape.*`, `object.expandShape` e `pathfinder.repeat`.
   // T12 giro 6 le tre maschere di ritaglio (`object.clippingMask.make`, `.release`, `.editContents`),
   // `select.object.clippingMasks`, e le due finestre di Media (`path.average`, `path.averageJoin`).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1188, fub: 114, escluso: 12, fatto: 237 });
+  // T15 giro 6 le quattro `gradient.presets.*`, il pannello `gradient` e lo strumento Sfumatura.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1182, fub: 114, escluso: 12, fatto: 243 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

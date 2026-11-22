@@ -1,5 +1,5 @@
 {
-  "$nota": "Le risposte della famiglia colore del banco (K6 T14 e T15): l'anteprima di Satura, i campioni e i colori dati alla selezione, e la sfumatura (giro 5). Il banco non riscrive il disegno: un passo senza operazioni, la scena si guarda.",
+  "$nota": "Le risposte della famiglia colore del banco (K6 T14 e T15): l'anteprima di Satura, i campioni e i colori dati alla selezione, e la sfumatura (giro 5). Il banco non riscrive il disegno: un passo senza operazioni, la scena si guarda. `paint.toggleActive` (giro 6, prima di salvare una preimpostata) non cambia niente.",
   "risposte": [
     {
       "comando": "disegno.edit.colors.saturate",
@@ -70,6 +70,12 @@
     },
     {
       "comando": "disegno.paint.lastGradient",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.toggleActive",
       "esito": {
         "ops": "[]"
       }

@@ -224,15 +224,15 @@ Sei comandi tipati, nella forma di quelli dei fogli, con le forme in
 | `drawing_sync` | porta all'istanza le modifiche del testo, o il testo intero |
 | `drawing_gesture` | manda gli eventi nuovi di un gesto e riceve anteprima o operazioni |
 | `drawing_commands` | dice quali comandi sono attivi per una selezione |
-| `drawing_command` | esegue colore del tratto, colore del riempimento o spessore |
+| `drawing_command` | esegue un comando del disegno sulla selezione |
 | `close_drawing` | chiude l'istanza |
 
-I tre comandi (`crates/fub-disegno/src/comandi.rs`) sono `paint.setStroke`,
-`paint.setFill` e `stroke.set` del motore, sugli oggetti che colora il
-pannello del client; l'esito è la differenza scritta come la scrive il client,
-punta delle frecce e `stroke-dasharray` dei tratteggi compresi. Su una linea a
-spessore variabile lo spessore riscala il profilo e ricalcola il contorno pieno
-(`src/profilo/`, come `widthTo` del client).
+`drawing_command` serve due insiemi. I tre di base (`fub_abi::DRAWING_COMMANDS`,
+`src/comandi.rs`), anche col Completo spento, sono `paint.setStroke`,
+`paint.setFill` e `stroke.set`: l'esito è la differenza scritta come il client,
+punte e tratteggi compresi, e su una linea a spessore variabile riscala il
+profilo (`src/profilo/`). Gli altri, delle famiglie, solo col Completo acceso
+(`complete_serves`): [il percorso](disegno-completo.md#il-percorso-di-un-comando).
 
 Ogni richiesta passa da `validate()` prima del motore. Le istanze stanno
 nell'host per vault, sotto un lucchetto preso per trovare l'istanza e lasciato

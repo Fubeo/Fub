@@ -224,9 +224,10 @@ const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 /// la Mano in fondo al suo gruppo e «Tutti gli strumenti» dopo; con il motore
 /// acceso, le caselle della Selezione diretta e del Lazo del nucleo (K6 T11),
 /// e il gruppo «disegnare» con tre caselle: la Penna di Bézier, la Matita (che
-/// tiene l'Inchiostro di Fub) e la Gomma del Completo (K6 T12), e il gruppo
-/// «modificare» con la Ruota (K6 T13 giro 5: le sue altre tre voci stanno nella stessa casella).
-const COLUMN_TOOLS_COMPLETO = ["select", "motore:directSelection", "motore:lasso", "motore:pen", "pen", "motore:eraser", "rect", "text", "motore:rotate", "hand", "all"];
+/// tiene l'Inchiostro di Fub) e la Gomma del Completo (K6 T12), il gruppo
+/// «modificare» con la Ruota (K6 T13 giro 5: le sue altre tre voci stanno nella stessa casella)
+/// e la casella del colore con lo strumento Sfumatura (K6 T15 giro 6).
+const COLUMN_TOOLS_COMPLETO = ["select", "motore:directSelection", "motore:lasso", "motore:pen", "pen", "motore:eraser", "rect", "text", "motore:rotate", "motore:gradient", "hand", "all"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;

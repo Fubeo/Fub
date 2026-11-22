@@ -112,6 +112,9 @@ export const DRAW: PartAnatomy = {
       hooks: [
         "draw-gradient", "draw-gradient-field", "draw-gradient-row", "draw-gradient-bar", "draw-gradient-stops",
         "draw-gradient-stop", "draw-gradient-stop-chosen", "draw-gradient-actions", "draw-gradient-create",
+        // Le preimpostate (giro 6).
+        "draw-gradient-presets", "draw-gradient-presets-title", "draw-gradient-save", "draw-gradient-save-name",
+        "draw-gradient-presets-retry", "draw-gradient-presets-error",
         "kit-color-well", "kit-color-well-button", "kit-color-well-name", "kit-number", "kit-button",
       ],
     },

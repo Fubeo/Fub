@@ -49,6 +49,16 @@ pub fn di_serie() -> Map<String, Value> {
     json_di(&Prefs::default())
 }
 
+/// Se `valore` è quello di serie per `chiave`, in `serie` ([`di_serie`]): uguale, o vuoto per una
+/// chiave che le preferenze di serie non scrivono (una lista di preset senza preset). L'host non
+/// tiene in `draw.motore` ciò che è di serie.
+pub fn e_di_serie(serie: &Map<String, Value>, chiave: &str, valore: &Value) -> bool {
+    match serie.get(chiave) {
+        Some(di_serie) => di_serie == valore,
+        None => *valore == assente_come(valore),
+    }
+}
+
 /// La lettura di `prefs.get` o `prefs.list` senza le cartelle: l'oggetto
 /// `{prefs}` senza le loro chiavi, l'elenco senza le loro righe.
 pub fn lettura_senza_cartelle(mut lettura: Value) -> Value {
@@ -143,20 +153,42 @@ fn una(prefs: &Prefs, chiave: &str, valore: &Value) -> Result<Prefs, String> {
     let Value::Object(mut tutte) = prefs.to_json() else {
         return Err("le preferenze non si leggono".into());
     };
-    if !tutte.contains_key(chiave) {
+    tutte.insert(chiave.to_string(), valore.clone());
+    let nuove: Prefs = serde_json::from_value(Value::Object(tutte)).map_err(|e| e.to_string())?;
+    // Il motore ignora una chiave che non ha: la conosce se la riscrive, o se il valore è uno di
+    // quelli che non scrive (una lista di preset vuota, che le preferenze di serie non hanno).
+    let riscritta = matches!(nuove.to_json(), Value::Object(o) if o.contains_key(chiave));
+    if !riscritta && *valore != assente_come(valore) {
         return Err("il motore non la conosce".into());
     }
-    tutte.insert(chiave.to_string(), valore.clone());
-    serde_json::from_value(Value::Object(tutte)).map_err(|e| e.to_string())
+    Ok(nuove)
+}
+
+/// Il valore che il motore non scrive al posto di `valore`: le liste di preset, le mappe e i
+/// facoltativi che non scrive vuoti (`skip_serializing_if`) mancano dal suo JSON, e una chiave che
+/// manca vale la lista vuota, la mappa vuota o niente.
+fn assente_come(valore: &Value) -> Value {
+    match valore {
+        Value::Array(_) => Value::Array(Vec::new()),
+        Value::Object(_) => Value::Object(Map::new()),
+        _ => Value::Null,
+    }
 }
 
 /// Le preferenze che cambiano da `prima` a `dopo`, con il valore di `dopo`;
-/// le cartelle mai. Vuota se nessuna cambia.
+/// le cartelle mai. Vuota se nessuna cambia. Una chiave che c'era e il motore
+/// non scrive più (l'ultimo preset tolto) cambia nel suo valore vuoto
+/// ([`assente_come`]), così l'host la toglie da `draw.motore`.
 pub fn differenza(prima: &Map<String, Value>, dopo: &Map<String, Value>) -> Map<String, Value> {
-    dopo.iter()
+    let cambiate = dopo
+        .iter()
         .filter(|(chiave, valore)| !e_cartella(chiave) && prima.get(*chiave) != Some(*valore))
-        .map(|(chiave, valore)| (chiave.clone(), valore.clone()))
-        .collect()
+        .map(|(chiave, valore)| (chiave.clone(), valore.clone()));
+    let sparite = prima
+        .iter()
+        .filter(|(chiave, _)| !e_cartella(chiave) && !dopo.contains_key(*chiave))
+        .map(|(chiave, valore)| (chiave.clone(), assente_come(valore)));
+    cambiate.chain(sparite).collect()
 }
 
 /// Le preferenze che i comandi di un'istanza hanno cambiato e che l'host non
@@ -176,11 +208,12 @@ impl CambioPreferenze {
     /// aggiorna.
     pub fn aggiungi(&mut self, prima: &Map<String, Value>, dopo: &Map<String, Value>) {
         for (chiave, valore) in differenza(prima, dopo) {
-            if let Some(vecchio) = prima.get(&chiave) {
-                self.prima
-                    .entry(chiave.clone())
-                    .or_insert_with(|| vecchio.clone());
-            }
+            // Una chiave che prima mancava (il primo preset salvato) torna al suo valore vuoto.
+            let vecchio = prima
+                .get(&chiave)
+                .cloned()
+                .unwrap_or_else(|| assente_come(&valore));
+            self.prima.entry(chiave.clone()).or_insert(vecchio);
             self.dopo.insert(chiave, valore);
         }
     }
@@ -248,6 +281,59 @@ mod tests {
         let (rilette, avvisi) = componi(&salvate);
         assert!(avvisi.is_empty(), "{avvisi:?}");
         assert_eq!(json_di(&rilette), salvate);
+    }
+
+    /// Le preferenze con una sfumatura salvata fra le preimpostate.
+    fn con_una_sfumatura() -> Prefs {
+        Prefs {
+            gradient_presets: vec![vectorcraft_engine::cmd::GradientPreset {
+                name: "Mare".into(),
+                gradient: Default::default(),
+            }],
+            ..Prefs::default()
+        }
+    }
+
+    #[test]
+    fn una_lista_che_il_motore_non_scrive_vuota_si_rilegge() {
+        // Il motore non scrive una lista di preset vuota: le preferenze di serie non hanno la
+        // chiave, e la preimpostata salvata deve tornare lo stesso all'apertura (K6 T15, giro 6).
+        assert!(!json_di(&Prefs::default()).contains_key("gradientPresets"));
+        let salvate = json_di(&con_una_sfumatura());
+        let (rilette, avvisi) = componi(&salvate);
+        assert!(avvisi.is_empty(), "{avvisi:?}");
+        assert_eq!(
+            rilette.gradient_presets,
+            con_una_sfumatura().gradient_presets
+        );
+        // Una chiave sconosciuta resta un avviso.
+        let (_, avvisi) = componi(&mappa(json!({"presetCheNonCi": [1]})));
+        assert_eq!(avvisi.len(), 1, "{avvisi:?}");
+    }
+
+    #[test]
+    fn togliere_l_ultima_preimpostata_e_un_cambio() {
+        let prima = json_di(&con_una_sfumatura());
+        let dopo = json_di(&Prefs::default());
+        let cambi = differenza(&prima, &dopo);
+        assert_eq!(cambi, mappa(json!({"gradientPresets": []})));
+        // Per l'host la lista vuota è di serie: `draw.motore` non la tiene.
+        assert!(e_di_serie(&di_serie(), "gradientPresets", &json!([])));
+        assert!(!e_di_serie(
+            &di_serie(),
+            "gradientPresets",
+            &prima["gradientPresets"]
+        ));
+        assert!(con(&con_una_sfumatura(), &cambi)
+            .gradient_presets
+            .is_empty());
+        // La prima salvata ha un «prima» da rimettere se l'host non la salva: la lista vuota.
+        let mut cambio = CambioPreferenze::default();
+        cambio.aggiungi(&dopo, &prima);
+        assert_eq!(cambio.prima, mappa(json!({"gradientPresets": []})));
+        assert!(con(&con_una_sfumatura(), &cambio.prima)
+            .gradient_presets
+            .is_empty());
     }
 
     #[test]
