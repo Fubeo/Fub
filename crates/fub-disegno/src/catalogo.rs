@@ -509,7 +509,176 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("width", Tipo::Numero),
     ("x", Tipo::Numero),
     ("y", Tipo::Numero),
+    // Le forme (T13, giro 1): i punti e le misure degli strumenti di forma.
+    ("cx", Tipo::Numero),
+    ("cy", Tipo::Numero),
+    ("x1", Tipo::Numero),
+    ("y1", Tipo::Numero),
+    ("x2", Tipo::Numero),
+    ("y2", Tipo::Numero),
+    ("radius", Tipo::Numero),
+    ("radius1", Tipo::Numero),
+    ("radius2", Tipo::Numero),
+    ("sides", Tipo::Numero),
+    ("points", Tipo::Numero),
+    ("diameter", Tipo::Numero),
+    ("decay", Tipo::Numero),
+    ("segments", Tipo::Numero),
+    ("opacity", Tipo::Numero),
+    ("brightness", Tipo::Numero),
+    ("growth", Tipo::Numero),
+    ("fuzziness", Tipo::Numero),
+    ("rays", Tipo::Numero),
+    ("longest", Tipo::Numero),
+    ("rayFuzziness", Tipo::Numero),
+    ("rotation", Tipo::Numero),
+    ("pathLength", Tipo::Numero),
+    ("rings", Tipo::Numero),
+    ("largest", Tipo::Numero),
+    ("direction", Tipo::Numero),
+    ("seed", Tipo::Numero),
+    ("slope", Tipo::Numero),
+    ("fill", Tipo::SiNo),
+    ("closed", Tipo::SiNo),
+    ("clockwise", Tipo::SiNo),
 ];
+
+/// I comandi di forma che hanno una finestra delle misure (T13, giro 1): per
+/// loro lo schema va ripulito come dice [`schema_pulito`].
+pub const COMANDI_DI_FORMA: &[&str] = &[
+    "shape.rectangle",
+    "shape.ellipse",
+    "shape.polygon",
+    "shape.star",
+    "shape.flare",
+    "shape.line",
+    "shape.spiral",
+    "shape.arc",
+];
+
+/// Lo schema di una finestra di forma, dal primo modulo dello schema del
+/// motore: senza le note fra parentesi e senza i predefiniti (`sides=6`), che
+/// il lettore dello schema non legge e che [`predefiniti`] dà a parte. Un
+/// optional numerico senza predefinito non ha un valore che la finestra possa
+/// mandare (un `x2` vuoto è un anello sbagliato), e non si chiede: se ne va.
+/// L'alternativa dopo il primo modulo (`… or {…}` dell'arco) non si chiede.
+pub fn schema_pulito(schema: &str) -> String {
+    let (campi, _) = analizza(schema);
+    format!("{{{}}}", campi.join(", "))
+}
+
+/// I predefiniti che lo schema di una finestra di forma scrive dopo `=`, per
+/// nome del campo: `sides=6` dà `("sides", "6")`.
+pub fn predefiniti(schema: &str) -> Vec<(String, String)> {
+    analizza(schema).1
+}
+
+/// I predefiniti del comando di forma `id`, dallo schema del motore (vuoti per
+/// un comando che non è di forma).
+pub fn predefiniti_del_comando(id: &str) -> Vec<(String, String)> {
+    if !COMANDI_DI_FORMA.contains(&id) {
+        return Vec::new();
+    }
+    vectorcraft_engine::find_command(id)
+        .map(|c| predefiniti(c.params))
+        .unwrap_or_default()
+}
+
+/// Analizza il primo modulo di `schema`: i campi che restano (`nome` o
+/// `nome?`) e i predefiniti. Un campo che non comincia con un nome passa com'è.
+fn analizza(schema: &str) -> (Vec<String>, Vec<(String, String)>) {
+    let (Some(inizio), Some(fine)) = (schema.find('{'), schema.find('}')) else {
+        return (Vec::new(), Vec::new());
+    };
+    if fine < inizio {
+        return (Vec::new(), Vec::new());
+    }
+    let mut campi = Vec::new();
+    let mut predefiniti = Vec::new();
+    for pezzo in dividi_fuori_dalle_parentesi(&schema[inizio + 1..fine]) {
+        let pezzo = senza_note(pezzo.trim());
+        let nome: String = pezzo
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if nome.is_empty() {
+            continue;
+        }
+        let mut resto = &pezzo[nome.len()..];
+        let facoltativo = resto.starts_with('?');
+        if facoltativo {
+            resto = &resto[1..];
+        }
+        let mut predefinito = None;
+        if let Some(dopo_uguale) = resto.strip_prefix('=') {
+            let valore: String = dopo_uguale
+                .chars()
+                .take_while(|c| !c.is_whitespace() && *c != ':')
+                .collect();
+            predefinito = Some(valore.clone());
+            predefiniti.push((nome.clone(), valore));
+        }
+        let numerico = NOMI.iter().any(|(n, t)| *n == nome && *t == Tipo::Numero);
+        if facoltativo && numerico && predefinito.is_none() {
+            continue;
+        }
+        campi.push(if facoltativo {
+            format!("{nome}?")
+        } else {
+            nome
+        });
+    }
+    (campi, predefiniti)
+}
+
+/// I pezzi di `testo` separati dalle virgole che non stanno fra parentesi.
+fn dividi_fuori_dalle_parentesi(testo: &str) -> Vec<&str> {
+    let (mut pezzi, mut profondita, mut da) = (Vec::new(), 0usize, 0usize);
+    for (i, c) in testo.char_indices() {
+        match c {
+            '(' => profondita += 1,
+            ')' => profondita = profondita.saturating_sub(1),
+            ',' if profondita == 0 => {
+                pezzi.push(&testo[da..i]);
+                da = i + 1;
+            }
+            _ => {}
+        }
+    }
+    pezzi.push(&testo[da..]);
+    pezzi
+}
+
+/// Il pezzo senza le note fra parentesi (`decay=80 (%)` diventa `decay=80`).
+fn senza_note(pezzo: &str) -> String {
+    let mut out = String::new();
+    let mut profondita = 0usize;
+    for c in pezzo.chars() {
+        match c {
+            '(' => profondita += 1,
+            ')' => profondita = profondita.saturating_sub(1),
+            _ if profondita == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    out.trim().to_string()
+}
+
+/// Il limite minimo di un campo di una finestra di forma: le misure sono
+/// positive (il campo mostra due decimali, e lo zero è una forma che non c'è),
+/// e i conteggi hanno il loro minimo (un poligono ha almeno tre lati). Nessun
+/// massimo: il motore non ne dà uno.
+pub fn minimo_del_campo(comando: &str, campo: &str) -> Option<f64> {
+    if !COMANDI_DI_FORMA.contains(&comando) {
+        return None;
+    }
+    match campo {
+        "width" | "height" | "radius" | "radius1" | "radius2" | "diameter" => Some(0.01),
+        "sides" | "points" => Some(3.0),
+        "segments" | "rays" | "rings" => Some(1.0),
+        _ => None,
+    }
+}
 
 /// La riga ha una finestra: la nota lo dice, il posto è `finestra`, o
 /// l'etichetta del motore finisce coi puntini.
@@ -579,6 +748,11 @@ pub fn effetti_del_motore() -> &'static BTreeMap<String, String> {
 /// Lo schema del motore per i parametri della riga, vuoto se non ne ha.
 pub fn schema_di(riga: &RigaMappa) -> String {
     match riga.fonte {
+        FonteMappa::Motore if COMANDI_DI_FORMA.contains(&riga.id.as_str()) => {
+            vectorcraft_engine::find_command(&riga.id)
+                .map(|c| schema_pulito(c.params))
+                .unwrap_or_default()
+        }
         FonteMappa::Motore => vectorcraft_engine::find_command(&riga.id)
             .map(|c| c.params.to_string())
             .unwrap_or_default(),

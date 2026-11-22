@@ -59,7 +59,11 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 giro 1 porta a «fatto» i ventuno strumenti di «disegnare» e i quattro
   // comandi sui punti che la fila dei punti chiama. Il giro «oggetti» di T11
   // le sette di Raggruppa, Blocca e Nascondi (la selezione, il resto, tutto).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1333, fub: 114, escluso: 12, fatto: 92 });
+  // T13 giro 1 porta a «fatto» le otto forme del Completo, le otto finestre
+  // delle misure dei comandi `shape.*` (senza le griglie), le tre voci di
+  // Allinea del motore, le quindici `align.*` e il pannello `align`:
+  // trentaquattro righe. Le griglie e il riflesso aspettano T27.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1299, fub: 114, escluso: 12, fatto: 126 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -39,6 +39,9 @@ interface VoceGenerata {
 
 const VOCI = (indiceGenerato as { readonly voci: readonly VoceGenerata[] }).voci;
 const STRUMENTI_NUCLEO = VOCI.filter((voce) => voce.famiglia === "nucleo" && voce.chiamata.strumento !== undefined).map((voce) => voce.chiamata.strumento!);
+// Gli strumenti del nucleo pronti: le prove della colonna qui guardano solo loro
+// (le forme, T13, hanno le loro prove in `famiglie/forme`).
+const NUCLEO_PRONTO: ReadonlySet<string> = new Set(STRUMENTI_NUCLEO);
 
 describe("gli strumenti del nucleo nella colonna", () => {
   it("MOTORE_PRONTO è l'elenco degli strumenti «fatto» dell'indice generato", () => {
@@ -48,7 +51,7 @@ describe("gli strumenti del nucleo nella colonna", () => {
   });
 
   it("ogni strumento pronto ha il nome corto nelle due lingue e un'icona del catalogo", () => {
-    for (const id of MOTORE_PRONTO) {
+    for (const id of STRUMENTI_NUCLEO) {
       const nome = TESTI[`strumento:${id}`];
       expect(nome, id).toBeDefined();
       expect(nome!.it.trim()).not.toBe("");
@@ -65,7 +68,7 @@ describe("gli strumenti del nucleo nella colonna", () => {
 
   it("nella stessa casella uno strumento del motore non si chiama come quello di Fub", () => {
     const nomiFub = new Map(toolsFor("full", "vector").map((spec) => [spec.id as string, [t(`draw.tool.${spec.id}` as never), spec.id] as const]));
-    for (const gruppo of layoutCompleto(toolsFor("full", "vector"), MOTORE_PRONTO)) {
+    for (const gruppo of layoutCompleto(toolsFor("full", "vector"), NUCLEO_PRONTO)) {
       for (const casella of gruppo.caselle) {
         const diFub = casella.filter((id) => !id.startsWith(PREFISSO_MOTORE)).map((id) => nomiFub.get(id)?.[0]);
         for (const id of casella.filter((one) => one.startsWith(PREFISSO_MOTORE))) {
@@ -77,7 +80,7 @@ describe("gli strumenti del nucleo nella colonna", () => {
   });
 
   it("i sette strumenti stanno nelle caselle del prototipo, dopo quelli di Fub della stessa casella", () => {
-    const layout = layoutCompleto(toolsFor("full", "vector"), MOTORE_PRONTO);
+    const layout = layoutCompleto(toolsFor("full", "vector"), NUCLEO_PRONTO);
     const pick = layout.find((gruppo) => gruppo.id === "pick")!;
     expect(pick.caselle).toEqual([["select", "motore:selection"], ["motore:directSelection", "motore:groupSelection"], ["motore:lasso"]]);
     const view = layout.find((gruppo) => gruppo.id === "view")!;
@@ -142,7 +145,7 @@ describe("tool.select: la casella di uno strumento del motore", () => {
 
   it("più di sei caselle a 1280×800: la colonna da 44 px ne tiene otto in 550 px, il resto va nel cassetto", () => {
     const offerti = toolsFor("full", "vector");
-    const gruppi = layoutCompleto(offerti, MOTORE_PRONTO).map((gruppo) => casellePresenti(gruppo.caselle, offerti, (id) => MOTORE_PRONTO.has(id)).length);
+    const gruppi = layoutCompleto(offerti, NUCLEO_PRONTO).map((gruppo) => casellePresenti(gruppo.caselle, offerti, (id) => NUCLEO_PRONTO.has(id)).length);
     const quante = gruppi.reduce((somma, n) => somma + n, 0);
     expect(quante).toBeGreaterThan(6);
     // Le misure della colonna grande del kit: 44 px a casella, 2 fra due

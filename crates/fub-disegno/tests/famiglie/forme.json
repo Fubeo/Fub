@@ -1,3 +1,819 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia forme (piano K6, T13, giro 1): le forme del motore, con il gesto dello strumento (lineSegment, arc, spiral, rectangle, roundedRectangle, ellipse, polygon, star, flare) e il comando della sua finestra delle misure (shape.*). Il disegno è forme/base.svg, lo stesso di nucleo: un livello l1a2b3c4d con due rettangoli, un gruppo di due quadrati, un triangolo e un tratto della penna. Le griglie (rectangularGrid, polarGrid) aspettano T27: il loro gruppo di percorsi composti è un costrutto ricco.",
+  "casi": [
+    {
+      "id": "lineSegment",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 70,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 120,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 120,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "line",
+              "attrs": {
+                "x1": "20",
+                "y1": "280",
+                "x2": "120",
+                "y2": "280",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "omesoqbwf"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "linesegment-0.svg"
+    },
+    {
+      "id": "arc",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 280,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 190,
+              "y": 265,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 230,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 230,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M150 250 C172.09 250 230 271.72 230 280",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "ofedgggp5"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "arc-1.svg"
+    },
+    {
+      "id": "spiral",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 300,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 320,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 340,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 340,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M295.71 260 C295.35 262.51 297.19 264.97 300 265.37 C303.14 265.81 306.21 263.51 306.71 260 C307.27 256.08 304.38 252.23 300 251.61 C295.1 250.92 290.29 254.52 289.51 260 C288.64 266.13 293.15 272.13 300 273.11 C307.66 274.2 315.17 268.56 316.38 260 C317.74 250.43 310.7 241.04 300 239.52 C288.03 237.82 276.3 246.62 274.4 260 C272.28 274.96 283.28 289.62 300 292 C318.7 294.66 337.03 280.9 340 260",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "od5wyget3"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "spiral-2.svg"
+    },
+    {
+      "id": "rectangle",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 260,
+              "y": 20,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 300,
+              "y": 40,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 340,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 340,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "rect",
+              "attrs": {
+                "x": "260",
+                "y": "20",
+                "width": "80",
+                "height": "40",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "of8jg6tot"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "rectangle-3.svg"
+    },
+    {
+      "id": "roundedRectangle",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 260,
+              "y": 70,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 300,
+              "y": 90,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 340,
+              "y": 110,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 340,
+              "y": 110,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"oeopq71hl\"><path d=\"M272 70 L328 70 C334.627 70 340 75.373 340 82 L340 98 C340 104.627 334.627 110 328 110 L272 110 C265.373 110 260 104.627 260 98 L260 82 C260 75.373 265.373 70 272 70 Z\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oeopq71hl\" hash=\"bd54610ed9e4fb2b\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyNzIuMCw3MC4wXSwiaW4iOlsyNjUuMzcyNTgzMDAyMDMwNDcsNzAuMF19LHsicCI6WzMyOC4wLDcwLjBdLCJvdXQiOlszMzQuNjI3NDE2OTk3OTY5NTMsNzAuMF19LHsicCI6WzM0MC4wLDgyLjBdLCJpbiI6WzM0MC4wLDc1LjM3MjU4MzAwMjAzMDQ4XX0seyJwIjpbMzQwLjAsOTguMF0sIm91dCI6WzM0MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzMyOC4wLDExMC4wXSwiaW4iOlszMzQuNjI3NDE2OTk3OTY5NTMsMTEwLjBdfSx7InAiOlsyNzIuMCwxMTAuMF0sIm91dCI6WzI2NS4zNzI1ODMwMDIwMzA0NywxMTAuMF19LHsicCI6WzI2MC4wLDk4LjBdLCJpbiI6WzI2MC4wLDEwNC42Mjc0MTY5OTc5Njk1Ml19LHsicCI6WzI2MC4wLDgyLjBdLCJvdXQiOlsyNjAuMCw3NS4zNzI1ODMwMDIwMzA0OF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicmVjdGFuZ2xlIiwidyI6ODAuMCwiaCI6NDAuMCwicmFkaWkiOlsxMi4wLDEyLjAsMTIuMCwxMi4wXSwieGYiOlsxLjAsMC4wLDAuMCwxLjAsMjYwLjAsNzAuMF19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "roundedrectangle-4.svg"
+    },
+    {
+      "id": "ellipse",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 160,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 50,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 80,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "ellipse",
+              "attrs": {
+                "cx": "50",
+                "cy": "180",
+                "rx": "30",
+                "ry": "20",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "ow2f8mmj9"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "ellipse-5.svg"
+    },
+    {
+      "id": "polygon",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 240,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 215,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 230,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 230,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"onkkz57hn\"><polygon points=\"230,200 249.641,245.981 219.641,285.981 170,280 150.359,234.019 180.359,194.019\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-miterlimit=\"10\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"onkkz57hn\" hash=\"bff9f64b7a7340ff\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoibm9uZSJ9fSx7ImtpbmQiOiJzdHJva2UiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC4wLCJiIjowLjB9fSwid2lkdGgiOjIuMH1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsyMzAuMCwyMDAuMF19LHsicCI6WzI0OS42NDEwMTYxNTEzNzc1NiwyNDUuOTgwNzYyMTEzNTMzMTZdfSx7InAiOlsyMTkuNjQxMDE2MTUxMzc3NTYsMjg1Ljk4MDc2MjExMzUzMzE2XX0seyJwIjpbMTcwLjAsMjgwLjBdfSx7InAiOlsxNTAuMzU4OTgzODQ4NjIyNDQsMjM0LjAxOTIzNzg4NjQ2Njg3XX0seyJwIjpbMTgwLjM1ODk4Mzg0ODYyMjQ0LDE5NC4wMTkyMzc4ODY0NjY4NF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6NTAuMCwic2lkZXMiOjYsInhmIjpbMC44LDAuNiwtMC42LDAuOCwyMDAuMCwyNDAuMF19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "polygon-6.svg"
+    },
+    {
+      "id": "star",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 190,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 160,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 170,
+              "y": 160,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 170,
+              "y": 160,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M170 160 L166.91 183.74 L184.71 199.75 L161.18 204.15 L151.45 226.03 L140 205 L116.19 202.51 L132.64 185.12 L127.65 161.71 L149.27 171.99 Z",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "ovw7otbbb"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "star-7.svg"
+    },
+    {
+      "id": "shape.rectangle",
+      "disegno": "base.svg",
+      "argomenti": {
+        "x": 260,
+        "y": 20,
+        "width": 80,
+        "height": 40
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "rect",
+              "attrs": {
+                "x": "260",
+                "y": "20",
+                "width": "80",
+                "height": "40",
+                "fill": "#ffffff",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "o2l4xmo90"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "shape-rectangle-9.svg"
+    },
+    {
+      "id": "shape.ellipse",
+      "disegno": "base.svg",
+      "argomenti": {
+        "x": 20,
+        "y": 160,
+        "width": 60,
+        "height": 40
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "ellipse",
+              "attrs": {
+                "cx": "50",
+                "cy": "180",
+                "rx": "30",
+                "ry": "20",
+                "fill": "#ffffff",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "o8iwbbhue"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "shape-ellipse-10.svg"
+    },
+    {
+      "id": "shape.polygon",
+      "disegno": "base.svg",
+      "argomenti": {
+        "cx": 200,
+        "cy": 240,
+        "radius": 30,
+        "sides": 6
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "raw": "<g id=\"o7efmct8i\"><polygon points=\"200,210 225.981,225 225.981,255 200,270 174.019,255 174.019,225\" fill=\"#ffffff\" stroke=\"#000000\" stroke-miterlimit=\"10\"/></g>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"o7efmct8i\" hash=\"5b68b682941412f9\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjoxMSwiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjEuMCwiZyI6MS4wLCJiIjoxLjB9fX0seyJraW5kIjoic3Ryb2tlIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX0sIndpZHRoIjoxLjB9XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAwLjAsMjEwLjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjI1LjBdfSx7InAiOlsyMjUuOTgwNzYyMTEzNTMzMTYsMjU1LjBdfSx7InAiOlsyMDAuMCwyNzAuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyNTUuMF19LHsicCI6WzE3NC4wMTkyMzc4ODY0NjY4NCwyMjUuMF19XSwiY2xvc2VkIjp0cnVlfV19LCJsaXZlIjp7InNoYXBlIjoicG9seWdvbiIsInJhZGl1cyI6MzAuMCwic2lkZXMiOjYsInhmIjpbMS4wLDAuMCwwLjAsMS4wLDIwMC4wLDI0MC4wXX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "shape-polygon-11.svg"
+    },
+    {
+      "id": "shape.star",
+      "disegno": "base.svg",
+      "argomenti": {
+        "cx": 150,
+        "cy": 190,
+        "radius1": 20,
+        "radius2": 10,
+        "points": 5
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M150 170 L155.88 181.91 L169.02 183.82 L159.51 193.09 L161.76 206.18 L150 200 L138.24 206.18 L140.49 193.09 L130.98 183.82 L144.12 181.91 Z",
+                "fill": "#ffffff",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "o9wzy75ts"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "shape-star-12.svg"
+    },
+    {
+      "id": "shape.line",
+      "disegno": "base.svg",
+      "argomenti": {
+        "x1": 20,
+        "y1": 280,
+        "x2": 120,
+        "y2": 280
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "line",
+              "attrs": {
+                "x1": "20",
+                "y1": "280",
+                "x2": "120",
+                "y2": "280",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "ou16h387c"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "shape-line-14.svg"
+    },
+    {
+      "id": "shape.spiral",
+      "disegno": "base.svg",
+      "argomenti": {
+        "cx": 300,
+        "cy": 260,
+        "radius": 40,
+        "decay": 80,
+        "segments": 10
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M295.71 260 C295.35 262.51 297.19 264.97 300 265.37 C303.14 265.81 306.21 263.51 306.71 260 C307.27 256.08 304.38 252.23 300 251.61 C295.1 250.92 290.29 254.52 289.51 260 C288.64 266.13 293.15 272.13 300 273.11 C307.66 274.2 315.17 268.56 316.38 260 C317.74 250.43 310.7 241.04 300 239.52 C288.03 237.82 276.3 246.62 274.4 260 C272.28 274.96 283.28 289.62 300 292 C318.7 294.66 337.03 280.9 340 260",
+                "fill": "#ffffff",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "ohcouhuod"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "shape-spiral-15.svg"
+    },
+    {
+      "id": "shape.arc",
+      "disegno": "base.svg",
+      "argomenti": {
+        "x1": 150,
+        "y1": 280,
+        "x2": 230,
+        "y2": 250
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M150 280 C194.18 280 230 266.57 230 250",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "o2nfrq3qu"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "shape-arc-16.svg"
+    }
+  ]
 }

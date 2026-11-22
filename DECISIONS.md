@@ -105,6 +105,27 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-22 · K6 T13 · La sezione «Allinea» sta nel Completo, costruita dall'indice; la famiglia `trasforma` si porta al primo clic, decisa dal coordinatore.
+  - Perché: la sezione deve esserci in una sessione nuova senza caricare la
+    famiglia per mostrarla. Le voci `align.*` dell'indice hanno già comando e
+    valore; acceso o spento lo dice il client dal numero di oggetti scelti (due,
+    alla tavola uno). Il comando passa dal percorso unico, e un errore di
+    preparazione si dice e si riprova al clic successivo. Il prototipo non mostra
+    la barra Allinea (sta in un modello nascosto): la mappa della conformità non
+    la confronta, e la scelta «selezione o tavola» non è nel prototipo.
+- 2026-11-22 · K6 T13 · Oggetto bloccato nella selezione dell'allineamento: opzione (b), decisa dal coordinatore.
+  - Niente cambio a fub-abi: il comando resta rifiutato con il messaggio
+    «sblocca o togli dalla selezione». Il piano voleva che il motore saltasse
+    l'elemento bloccato e lo dicesse: quel salto con la perdita resta un lavoro
+    dichiarato, da riprendere solo con un cambio ABI approvato.
+- 2026-11-22 · K6 T13 · Oggetto chiave di «allinea a»: opzione (a), decisa dal coordinatore.
+  - La riga select.key (T15, «livelli») resta «da fare» con la nota «aspetta
+    T15»: l'oggetto chiave non c'è nel Completo finché T15 non la porta.
+- 2026-11-22 · K6 T13 · Il Riflesso (flare) torna «da fare», strumento e comando.
+  - Il suo alone è un g senza id: la scena del client non lo applica, e la
+    prova dei casi del client (casi.test.ts) lo ha trovato, non il banco Rust.
+    Aspetta T27, come le griglie: il gruppo con sfumature è un costrutto ricco.
+
 - 2026-11-21 · K6 T28 · Il motore senza disco, scelte del coder.
   - Le radici vuote si chiamano `AutomationRoots::deny_all()`, non
     `nessuna()`: è un nome dell'API del motore, in inglese come il resto. La

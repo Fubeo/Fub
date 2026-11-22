@@ -1,3 +1,18 @@
 {
-  "risposte": []
+  "risposte": [
+    {
+      "comando": "disegno.shape.rectangle",
+      "esito": {
+        "preview": {
+          "shape": {
+            "tag": "rect",
+            "attrs": { "x": "60", "y": "60", "width": "80", "height": "40", "fill": "none", "stroke": "#000000", "stroke-width": "1" }
+          },
+          "matrix": null,
+          "marquee": null,
+          "overlays": []
+        }
+      }
+    }
+  ]
 }

@@ -1,14 +1,11 @@
-// La famiglia «trasforma» del Disegno completo (piano K6, T5): il chunk
-// `drawing-fam-trasforma`, che `../../carica.ts` porta quando la famiglia serve.
-// Importa solo i suoi file e, per i tipi, il Completo: mai un'altra famiglia
-// (la build lo vieta, `build/completo-chunks.mjs`). Nessuna riga fatta, per
-// ora: `registra` non monta niente.
+// La famiglia «trasforma» del Disegno completo (piano K6, T13). La sezione «Allinea»
+// non ne ha bisogno per esserci: la mette il Completo (`completo/allinea.ts`), dalle
+// voci `align.*` dell'indice, e le sue parole stanno nel catalogo del Completo. La
+// famiglia si carica al primo clic di un suo comando, come gli altri comandi pigri.
 
 import type { ModuloFamiglia } from "../../carica";
-import { TESTI } from "./testi";
 
-const famiglia: ModuloFamiglia & { readonly testi: typeof TESTI } = {
-  testi: TESTI,
+const famiglia: ModuloFamiglia = {
   registra() {},
 };
 

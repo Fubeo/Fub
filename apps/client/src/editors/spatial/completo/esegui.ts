@@ -119,12 +119,22 @@ async function chiama(
   return esito;
 }
 
+/// I comandi di allineamento della sezione «Allinea» (T13, giro 2): con un oggetto
+/// bloccato nella selezione il motore non fa niente, e la frase dice di sbloccarlo o
+/// toglierlo.
+const ALLINEAMENTI: ReadonlySet<string> = new Set(["disegno.object.align", "disegno.object.distribute", "disegno.object.distributeSpacing"]);
+
 /// Un esito che non è un'anteprima: la selezione, le operazioni in un passo, e
 /// lo si dice. Un rifiuto del motore si dice col suo motivo (`motivoDelRifiuto`,
 /// come per i colori) e non cambia niente.
-export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: AzioniEsito): void {
+export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: AzioniEsito, comando?: string): void {
   if (esito.refused !== null) {
     azioni.seleziona(esito.selection);
+    // Un allineamento con un oggetto bloccato nella selezione dice che cosa fare (T13).
+    if (esito.refused === "locked" && comando !== undefined && ALLINEAMENTI.has(comando)) {
+      azioni.annuncia(t("draw.align.locked"));
+      return;
+    }
     const motivo = motivoDelRifiuto(esito.refused);
     azioni.annuncia(motivo === null ? t("draw.completo.key.unchanged", { command: etichetta }) : t("draw.rejected", { reason: t(motivo) }));
     return;
@@ -171,7 +181,7 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): voi
         const esito = await chiama(dipendenze, comando.id, { ...comeOggetto(comando.valore), ...valori }, anteprima);
         if (esito === null) return { anteprima: null, rifiuto: "not_ready" };
         // OK manda il comando una volta sola: un passo della cronologia.
-        if (!anteprima) applicaEsito(esito, etichetta, dipendenze);
+        if (!anteprima) applicaEsito(esito, etichetta, dipendenze, comando.id);
         return { anteprima: esito.preview, rifiuto: esito.refused };
       };
       void apriFinestra(opzioni.modulo, dipendenze.carica.famiglia(voce.famiglia).then(attesaFamiglia), esegui, {
@@ -204,6 +214,6 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): voi
       dipendenze.annuncia(t("draw.window.unanswered"));
       return;
     }
-    applicaEsito(esito, etichetta, dipendenze);
+    applicaEsito(esito, etichetta, dipendenze, comando.id);
   });
 }

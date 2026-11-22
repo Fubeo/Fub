@@ -101,6 +101,16 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
     {
         None
     }
+
+    /// Il livello dove il comando `id` mette ciò che crea, quando la richiesta
+    /// non ne dà uno (un comando non porta il livello, lo strumento sì). Di
+    /// serie `None`: il motore lascia lo stato del documento com'è.
+    fn livello(_id: &str, _copia: &Copia) -> Result<Option<NodeId>, DrawingRefusal>
+    where
+        Self: Sized,
+    {
+        Ok(None)
+    }
 }
 
 /// Le 26 famiglie, nell'ordine di `fub_abi::DRAWING_FAMILIES`: per ognuna la
@@ -159,6 +169,19 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto(id, copia, selezione)
+                    })*
+                }
+            }
+
+            /// Il livello dove il comando `id` mette ciò che crea, se la famiglia lo sceglie.
+            fn livello(
+                self,
+                id: &str,
+                copia: &Copia,
+            ) -> Result<Option<NodeId>, DrawingRefusal> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::livello(id, copia)
                     })*
                 }
             }
@@ -842,6 +865,10 @@ pub(crate) fn esegui(
     if let Some(motivo) = famiglia.rifiuto(&riga.id, copia, &richiesta.selection) {
         return Ok(rifiuta(motivo));
     }
+    let livello = match famiglia.livello(&riga.id, copia) {
+        Ok(livello) => livello,
+        Err(motivo) => return Ok(rifiuta(motivo)),
+    };
     // I punti scelti di un comando sui punti (T12): tolti dal valore, vanno
     // nella selezione del motore.
     let mut valore = richiesta.value.clone();
@@ -872,6 +899,9 @@ pub(crate) fn esegui(
         let fatto = sessione.doc_mut().map(|stato| {
             stato.selection = Selection::default();
             scelti.iter().for_each(|n| stato.selection.add(*n));
+            if let Some(livello) = livello {
+                stato.active_layer = Some(livello);
+            }
             for (n, set) in &punti {
                 if !stato.selection.objects.contains(n) {
                     stato.selection.add(*n);
@@ -954,10 +984,28 @@ pub(crate) fn esegui(
     Ok(esito)
 }
 
+/// Perché la selezione spegne un comando che la usa, o `None` se va bene: un
+/// pezzo che il motore non ha è `unmapped`, uno bloccato è di sola lettura. È
+/// la stessa regola che `esegui` applica a ogni comando (le famiglie che
+/// chiedono la selezione la riusano, senza ripeterla).
+pub(crate) fn selezione_spenta(
+    copia: &Copia,
+    selezione: &[String],
+) -> Option<fub_abi::DrawingDisabledReason> {
+    match nodi_scelti(copia, selezione) {
+        Ok(_) => None,
+        Err(DrawingRefusal::Locked) => Some(fub_abi::DrawingDisabledReason::ReadOnly),
+        Err(_) => Some(fub_abi::DrawingDisabledReason::Unmapped),
+    }
+}
+
 /// Gli oggetti del motore della selezione di Fub: un id che la mappa non ha,
 /// o che il motore non sa modificare, è `unmapped`; uno bloccato (lui o un
 /// antenato) `locked`.
-fn nodi_scelti(copia: &Copia, selezione: &[String]) -> Result<Vec<NodeId>, DrawingRefusal> {
+pub(crate) fn nodi_scelti(
+    copia: &Copia,
+    selezione: &[String],
+) -> Result<Vec<NodeId>, DrawingRefusal> {
     let mappa = &copia.mappa;
     selezione
         .iter()

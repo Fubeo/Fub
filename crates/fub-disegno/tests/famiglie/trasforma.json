@@ -1,3 +1,264 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia trasforma (piano K6, T13, giro 1): la sezione «Allinea» dell'ispettore. Il disegno è trasforma/base.svg: due rettangoli a y 100 (oa1a1a1a1 e ob2b2b2b2), un gruppo di due quadrati, un tracciato op7a7a7a7 a destra e un tratto della penna. Le voci «interfaccia» e il pannello «align» hanno la loro prova nel client (apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts), che nomina ciascuna.",
+  "casi": [
+    {
+      "id": "object.align",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "horizontal": "left",
+        "to": "selection"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 -120 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-align-0.svg"
+    },
+    {
+      "id": "object.align",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "horizontal": "center",
+        "vertical": "center",
+        "to": "selection"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 40 0)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 -60 0)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "object-align-1.svg"
+    },
+    {
+      "id": "object.align",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "vertical": "top",
+        "to": "artboard"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 0 -100)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 0 -100)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "object-align-2.svg"
+    },
+    {
+      "id": "object.align",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "horizontal": "left",
+        "to": "selection"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.align",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "horizontal": "left",
+        "to": "selection"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.align",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "horizontal": "left",
+        "to": "selection"
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "object.distribute",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "horizontal": "left",
+        "to": "selection"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 -20 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-distribute-6.svg"
+    },
+    {
+      "id": "object.distributeSpacing",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "axis": "horizontal",
+        "to": "selection"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "align.horizontalLeft",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.horizontalCenter",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.horizontalRight",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.horizontalVerticalCenter",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.verticalTop",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.verticalCenter",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.verticalBottom",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.distributeVerticalTop",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.distributeVerticalCenter",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.distributeVerticalBottom",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.distributeHorizontalLeft",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.distributeHorizontalCenter",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.distributeHorizontalRight",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.distributeVerticalSpace",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align.distributeHorizontalSpace",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "align",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    }
+  ]
 }

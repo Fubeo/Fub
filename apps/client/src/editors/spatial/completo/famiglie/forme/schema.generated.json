@@ -1,5 +1,228 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "forme",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "shape.arc",
+      "campi": [
+        {
+          "nome": "x1",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y1",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "x2",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y2",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "closed",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.ellipse",
+      "campi": [
+        {
+          "nome": "x",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.line",
+      "campi": [
+        {
+          "nome": "x1",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y1",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "x2",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y2",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "fill",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.polygon",
+      "campi": [
+        {
+          "nome": "cx",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "cy",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01
+        },
+        {
+          "nome": "sides",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 3.0,
+          "predefinito": 6.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.rectangle",
+      "campi": [
+        {
+          "nome": "x",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "y",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.spiral",
+      "campi": [
+        {
+          "nome": "cx",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "cy",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "radius",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01
+        },
+        {
+          "nome": "decay",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 80.0
+        },
+        {
+          "nome": "segments",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 1.0,
+          "predefinito": 10.0
+        },
+        {
+          "nome": "clockwise",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.star",
+      "campi": [
+        {
+          "nome": "cx",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "cy",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "radius1",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01
+        },
+        {
+          "nome": "radius2",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01
+        },
+        {
+          "nome": "points",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 3.0,
+          "predefinito": 5.0
+        }
+      ]
+    }
+  ]
 }

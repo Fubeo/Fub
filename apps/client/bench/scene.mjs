@@ -1575,6 +1575,23 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare,
   })),
+  // **La famiglia «forme»** (K6 T13, giro 2): la tendina della casella delle forme,
+  // la finestra «Rettangolo» da Ctrl+/ con l'anteprima sul foglio, e la sezione
+  // Allinea nel Design con il disegno scelto. A 1280 e a 800 px.
+  ...[
+    ["disegno-fam-forme", 1280, "La tendina della casella delle forme: Rettangolo, Ellisse, Poligono, coi nomi del Completo", "", openFormeTendina],
+    ["disegno-fam-forme-800", 800, "La tendina della casella delle forme nella finestra minima del desktop, 800 px", "", openFormeTendina],
+    ["disegno-fam-trasforma", 1280, "La sezione Allinea nel Design con il disegno scelto: i pulsanti e «Allinea a»", "", openAllinea],
+    ["disegno-fam-trasforma-800", 800, "La sezione Allinea nella finestra minima del desktop, 800 px", "", openAllinea],
+    ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
+    ["disegno-fam-forme-finestra-800", 800, "La finestra delle misure del Rettangolo nella finestra minima del desktop, 800 px", "", openFormeFinestra],
+  ].map(([id, width, title, extra, prepare]) => ({
+    id,
+    title,
+    query: `connectors=6&drawing=acceso${extra}`,
+    viewport: { width, height: 800 },
+    prepare,
+  })),
   // **Il menu ≡ e Ctrl+/ del Completo** (K6 T9a): le voci dell'indice di prova
   // (`?indice=prova`, vedi `fake-ipc.ts`). Il menu ≡ con Oggetto aperto, e la
   // tavolozza con la ricerca «sposta», a 1280 e a 800 px (la finestra minima).
@@ -5362,6 +5379,69 @@ async function openRailFlyout(page, slot) {
     el.dispatchEvent(new KeyboardEvent("keydown", { key: lato, bubbles: true, cancelable: true }));
   }, casella);
   await page.waitForSelector(".kit-rail-flyout [role='menuitemradio']");
+}
+
+/// La casella delle forme della colonna (K6 T13): quella di Rettangolo. La sua
+/// prima voce è di Fub (`rect`) o del motore (`motore:rectangle`): si legge dal DOM.
+async function openFormeTendina(page) {
+  await openDrawing(page);
+  const selettore = '.draw-rail .kit-rail-slot[data-slot="motore:rectangle"], .draw-rail .kit-rail-slot[data-slot="rect"]';
+  await page.waitForSelector(selettore);
+  const slot = await page.evaluate((sel) => document.querySelector(sel).dataset.slot, selettore);
+  await openRailFlyout(page, slot);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La finestra delle misure del Rettangolo (K6 T13, giro 2): la voce «Rettangolo (Completo)»
+/// della tendina della casella `rect`, poi un clic sul foglio. È il clic sul foglio ad
+/// aprirla, come nel Completo: la sola scelta dalla tendina non apre niente.
+async function openFormeFinestra(page) {
+  await openFormeTendina(page);
+  await page.locator(".kit-rail-flyout [role='menuitemradio']", { hasText: "Rettangolo (Completo)" }).first().click();
+  const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+  if (!foglio) throw new Error("il foglio del disegno non c'è");
+  await page.mouse.click(foglio.x + foglio.width / 2, foglio.y + foglio.height / 2);
+  await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La sezione Allinea nel Design (K6 T13, giro 2) con il disegno scelto per intero:
+/// la scheda Design, poi Ctrl+A, come chi allinea una selezione. Sotto i 960 px
+/// l'ispettore è un cassetto che si apre dal suo pulsante: lì il disegno si sceglie
+/// a cassetto chiuso, poi si apre il cassetto e la scheda Design.
+async function openAllinea(page) {
+  if (await page.evaluate(() => window.innerWidth >= 960)) {
+    await openDesignoScelto(page);
+  } else {
+    await openDrawing(page);
+    await page.click('.draw-rail [aria-label="Selezione"]');
+    const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+    if (!foglio) throw new Error("il foglio del disegno non c'è");
+    await page.mouse.click(foglio.x + 30, foglio.y + 30);
+    await page.keyboard.press("Control+a");
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+    await page.click('.inspector-tab[data-view-id="draw.design"]');
+    await page.waitForSelector('#surface-panel-draw-design:not([hidden]) section.draw-properties');
+    await page.waitForFunction(() => {
+      const soggetto = document.querySelector("#surface-panel-draw-design .draw-properties-subject");
+      return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
+    });
+  }
+  await page.waitForSelector(".draw-align-to");
+  // Sotto le sezioni Posizione e Disponi: la foto la porta in vista.
+  // Scorre solo il primo contenitore scrollabile sopra la sezione (il pannello), non la pagina.
+  await page.evaluate(() => {
+    const el = document.querySelector(".draw-align-to");
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) {
+        p.scrollTop += el.getBoundingClientRect().top - p.getBoundingClientRect().top - 8;
+        break;
+      }
+    }
+  });
+  await page.evaluate(() => document.fonts.ready);
 }
 
 /// La Selezione diretta del motore con un punto scelto (K6 T12, `?punti=1`):

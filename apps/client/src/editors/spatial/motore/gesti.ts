@@ -474,6 +474,10 @@ export interface GestiMotoreContext {
   /// `id` (`disegno.strumento.opzione`). Il gesto dopo la vede; un gesto in
   /// corso no.
   opzioneMotore: (id: string, chiave: string, valore: unknown) => void;
+  /// Un clic senza trascinare con uno strumento del motore (il suo id e il punto
+  /// del clic nel disegno): il Completo apre la finestra della forma, se la
+  /// forma ne ha una. Di serie non fa niente.
+  clicStrumento: (strumento: string, punto: { readonly x: number; readonly y: number }) => void;
   /// Invio o Esc, quando nessun gesto è in corso: chiude il tracciato aperto
   /// della penna (il tasto va al motore, che lo chiude a modo suo); senza
   /// tracciato aperto, Esc con uno strumento dei tracciati torna alla
@@ -522,6 +526,8 @@ export function installGestiMotore(ctx: EditorContext): void {
   let aperto: { readonly primo: MotoreGesture; ultimo: MotoreGesture } | null = null;
   // Di serie la famiglia è pronta da sé; il Completo la sostituisce con la sua
   // preparazione (`ctx.preparaStrumento`), che porta la famiglia dall'indice.
+  // Di serie il clic non fa niente: il Completo lo sostituisce (`completo/index.ts`).
+  ctx.clicStrumento = () => undefined;
   ctx.preparaStrumento = (id) => {
     const porta = ctx.options.preparaMotore;
     return porta === undefined ? Promise.resolve(true) : porta(id).catch(() => false);
@@ -877,6 +883,7 @@ export function installGestiMotore(ctx: EditorContext): void {
     }
     const outcome = send(g, "commit", pezzi[pezzi.length - 1] ?? []);
     const tap = tapOf(g);
+    const clic = clicDi(g);
     const done = outcome.then((esito) => {
       if (ctx.disposed) return;
       if (esito === null) {
@@ -885,6 +892,7 @@ export function installGestiMotore(ctx: EditorContext): void {
         return;
       }
       applyOutcome(g, esito, tap);
+      if (clic !== null) ctx.clicStrumento(clic.strumento, clic.punto);
     });
     ultimo = done;
   };
@@ -954,6 +962,18 @@ export function installGestiMotore(ctx: EditorContext): void {
     if (g.tool !== "select" || g.intent !== "move" || inner.hit === null || inner.from === null || g.last === null || ctx.shift) return null;
     const moved = Math.hypot(g.last.x - inner.from[0], g.last.y - inner.from[1]) * ctx.camera.scale;
     return moved <= DRAG_PX[g.pointer] ? { key: inner.hit, at: inner.from, time: performance.now() } : null;
+  };
+
+  /// Un clic senza trascinare con uno strumento del motore: il suo id e il punto
+  /// del clic, con lo stesso criterio del tocco (`DRAG_PX`, in pixel dello
+  /// schermo). `null` se il gesto ha trascinato o non c'è uno strumento del motore.
+  const clicDi = (g: MotoreGesture): { readonly strumento: string; readonly punto: { readonly x: number; readonly y: number } } | null => {
+    const strumento = ctx.motoreTool;
+    const inner = interni.get(g)!;
+    if (strumento === null || inner.from === null || g.last === null) return null;
+    const moved = Math.hypot(g.last.x - inner.from[0], g.last.y - inner.from[1]) * ctx.camera.scale;
+    if (moved > DRAG_PX[g.pointer]) return null;
+    return { strumento, punto: { x: inner.from[0], y: inner.from[1] } };
   };
 
   /// L'esito del rilascio: le operazioni in un passo, la selezione, e lo si

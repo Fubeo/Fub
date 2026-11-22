@@ -63,7 +63,8 @@ const GRUPPO_DI_FAMIGLIA: Readonly<Record<ToolSpec["group"], GruppoColonna>> = {
 /// `strumento` dell'indice generato; un test lo controlla). Un id qui sblocca
 /// `motore:<id>` nella colonna: il chrome lo mostra con il nome della sua
 /// famiglia e l'icona di `ICONE_MOTORE`. T11: gli strumenti del nucleo; T12:
-/// i ventuno di «disegnare» dei tracciati.
+/// i ventuno di «disegnare» dei tracciati; T13 giro 1: gli strumenti di forma
+/// (la famiglia `forme`).
 export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "selection",
   "directSelection",
@@ -93,12 +94,22 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "mirrorCut",
   "lineCut",
   "rectCut",
+  "lineSegment",
+  "arc",
+  "spiral",
+  "rectangle",
+  "roundedRectangle",
+  "ellipse",
+  "polygon",
+  "star",
 ]);
 
 /// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
 /// del prototipo (`PLAN-ui/disegno-completo.html`), dal catalogo
-/// `editors/spatial/icons.ts`. Le icone della matita e della gomma che il
-/// prototipo non disegna nella tendina sono scelte fra quelle del catalogo.
+/// `editors/spatial/icons.ts`. Le forme usano la serie che c'è (`draw-rect`,
+/// `draw-ellipse`…): il prototipo non le disegna tutte. Le icone della matita e
+/// della gomma che il prototipo non disegna nella tendina sono scelte fra quelle
+/// del catalogo.
 export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   selection: "draw-select",
   directSelection: "draw-direct-select",
@@ -107,6 +118,14 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   hand: "draw-hand",
   zoom: "draw-zoom",
   rotateView: "draw-rotate",
+  lineSegment: "draw-line",
+  arc: "draw-arc",
+  spiral: "draw-spiral",
+  rectangle: "draw-rect",
+  roundedRectangle: "draw-rounded-rect",
+  ellipse: "draw-ellipse",
+  polygon: "draw-polygon",
+  star: "draw-star",
   // La tendina della Penna, dal prototipo (`tendina-penna`).
   pen: "draw-pen-nib",
   smartPen: "draw-pen-nib",
@@ -130,6 +149,21 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   mirrorCut: "draw-scissors",
   lineCut: "draw-scissors",
   rectCut: "draw-scissors",
+};
+
+/// La finestra che un clic senza trascinare apre per uno strumento di forma (T13,
+/// giro 2): il comando `shape.*` delle sue misure, e i due campi del punto del clic
+/// (`x`, `y` o `cx`, `cy`…), che il comando prende dal disegno e la finestra non
+/// chiede. Il Rettangolo arrotondato non ce l'ha: `shape.rectangle` non porta il
+/// raggio d'angolo, che il motore prende dalle sue preferenze.
+export const COMANDO_DEL_CLIC: Readonly<Record<string, { readonly forma: string; readonly x: string; readonly y: string }>> = {
+  rectangle: { forma: "shape.rectangle", x: "x", y: "y" },
+  ellipse: { forma: "shape.ellipse", x: "x", y: "y" },
+  polygon: { forma: "shape.polygon", x: "cx", y: "cy" },
+  star: { forma: "shape.star", x: "cx", y: "cy" },
+  lineSegment: { forma: "shape.line", x: "x1", y: "y1" },
+  arc: { forma: "shape.arc", x: "x1", y: "y1" },
+  spiral: { forma: "shape.spiral", x: "cx", y: "cy" },
 };
 
 /// L'icona di Fub per uno strumento del motore che il prototipo non disegna.

@@ -240,6 +240,8 @@ export function installWorkspace(ctx: EditorContext): void {
           // Lo strumento del motore aspetta la sua famiglia dal Completo aperto
           // (`sceltaMotore`): una famiglia che non arriva non fa partire il gesto.
           ctx.preparaStrumento = (id) => aperto!.preparaStrumento(id);
+          // Il clic senza trascinare di uno strumento di forma apre la sua finestra (T13).
+          ctx.clicStrumento = (strumento, punto) => aperto?.clicStrumento(strumento, punto);
           // Le caselle degli strumenti del motore (K6 T11) cambiano col nome e
           // con lo stato della loro famiglia, e la casella accesa con lo
           // strumento scelto: la colonna si risincronizza.
