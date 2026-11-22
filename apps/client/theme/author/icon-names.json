@@ -175,6 +175,7 @@
   "draw-select",
   "draw-selection",
   "draw-shape-builder",
+  "draw-shear",
   "draw-simple",
   "draw-slice",
   "draw-snap",
