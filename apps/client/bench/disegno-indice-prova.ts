@@ -79,3 +79,27 @@ export function comandiTrasformazioni(selection: readonly string[]): DrawingComm
   const ids = ["disegno.object.move", "disegno.object.rotate", "disegno.object.scale", "disegno.object.reflect", "disegno.object.shear", "disegno.object.transformAgain", "disegno.object.setBounds", "disegno.object.transform", "disegno.object.resetBoundingBox"];
   return ids.map((id) => (selection.length >= 1 ? acceso(id) : spento(id, "no_selection")));
 }
+
+/// I comandi di Selezione del Disegno completo (K6 T15, giro 1), quelli che l'indice reale porta
+/// (`famiglie/livelli.rs`), col perché delle voci spente come lo dà il motore. «Uguale» e «Oggetti
+/// sugli stessi livelli» vogliono una scelta; «Istanza di simbolo» vuole un'istanza, e il disegno
+/// del banco non ne ha. «Tutto nella tavola» e «Oggetti di testo» valgono anche senza scelta.
+const PERCHE_ISTANZA: DrawingDisabledReason = { other: { text: "Non è un'istanza." } };
+
+export function comandiSelezione(selection: readonly string[]): DrawingCommandInfo[] {
+  const acceso = (id: string): DrawingCommandInfo => ({ id, enabled: true, disabled_reason: null });
+  const spento = (id: string, perche: DrawingDisabledReason): DrawingCommandInfo => ({ id, enabled: false, disabled_reason: perche });
+  const senzaScelta = selection.length === 0;
+  const uguale = ["fillColor", "strokeColor", "strokeWeight", "fillAndStroke", "opacity", "blendingMode", "appearance", "shapeType"];
+  return [
+    ...uguale.map((nome) => (senzaScelta ? spento(`disegno.select.same.${nome}`, "no_selection") : acceso(`disegno.select.same.${nome}`))),
+    senzaScelta
+      ? spento("disegno.select.same.symbolInstance", "no_selection")
+      : spento("disegno.select.same.symbolInstance", PERCHE_ISTANZA),
+    senzaScelta
+      ? spento("disegno.select.object.allOnSameLayers", "no_selection")
+      : acceso("disegno.select.object.allOnSameLayers"),
+    acceso("disegno.select.object.textObjects"),
+    acceso("disegno.select.allOnArtboard"),
+  ];
+}

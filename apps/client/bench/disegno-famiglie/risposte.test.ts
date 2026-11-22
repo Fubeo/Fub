@@ -6,16 +6,21 @@ import { RISPOSTE, rispostaDiFamiglia, type RispostaFamiglia } from "./risposte"
 const richiesta = (id: string, value: unknown = null): DrawingCommandRequest => ({ revision: "3", id, selection: ["oa1a1a1a1"], value });
 
 describe("le risposte delle famiglie del banco", () => {
-  it("c'è un file per famiglia, e oggi le risposte sono lo stato del nucleo, il Rettangolo e i tracciati del Completo", () => {
+  it("c'è un file per famiglia, e oggi le risposte sono lo stato del nucleo, il Rettangolo, la Selezione e i tracciati del Completo", () => {
     const file = Object.keys(import.meta.glob("./*.json")).map((nome) => nome.slice(2, -5)).sort();
     expect(file).toEqual([...DRAWING_FAMILIES].sort());
     // Il Completo legge lo stato dello strumento del motore a famiglia pronta
     // (K6 T11): senza risposta la sessione del banco si darebbe per assente.
     // Il Rettangolo del Completo risponde alla sua finestra (K6 T13, `forme.json`).
     // I tracciati (K6 T12, giro 4): Converti della sezione dei punti, e l'anteprima di
-    // Sposta tracciato, coi contorni nuovi dell'ellisse della prima forma.
+    // Sposta tracciato, coi contorni nuovi dell'ellisse della prima forma. La Selezione (K6 T15,
+    // `livelli.json`): «Uguale › Colore riempimento», «Tutto nella tavola» e «Oggetti di testo».
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
       "disegno.shape.rectangle",
+      "disegno.select.same.fillColor",
+      "disegno.select.same.strokeColor",
+      "disegno.select.allOnArtboard",
+      "disegno.select.object.textObjects",
       "disegno.strumento.stato",
       "disegno.path.convertAnchors",
       "disegno.object.path.offsetPath",
