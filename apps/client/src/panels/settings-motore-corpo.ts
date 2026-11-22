@@ -19,7 +19,10 @@ import type { SettingEntry } from "../host/contract";
 import { api } from "../host/ipc";
 import { errorText, isErrorKind } from "../host/errors";
 import { resolvedLanguage, t } from "../i18n/strings";
-import { formBody, formCheck, formChoice, formNumber, formRow, formText, sixDigits } from "../kit/form";
+import type { ColorPickerText } from "../kit/color/picker";
+import { colorWell } from "../kit/color/well";
+import { textField } from "../kit/field";
+import { formBody, formCheck, formChoice, formNumber, formRow, sixDigits } from "../kit/form";
 import type { QuantityProblem } from "../kit/quantity";
 import { confirm } from "../platform/confirm";
 import { identifier } from "../ui/a11y";
@@ -244,7 +247,7 @@ function corpo(righe: readonly RigaPreferenza[], lettura: LetturaMotore, dip: Di
           campi.push(titolo);
         }
       }
-      campi.push(campo(r, scrivibile, dip, (value) => void scrivi("disegno.prefs.set", { key: r.key, value })));
+      campi.push(rigaLarga(r, campo(r, dip, (value) => void scrivi("disegno.prefs.set", { key: r.key, value }))));
     }
     const modulo = formBody(campi);
     // In sola lettura nessun campo cambia: quelli di testo e di numero sono
@@ -259,6 +262,9 @@ function corpo(righe: readonly RigaPreferenza[], lettura: LetturaMotore, dip: Di
           controllo.readOnly = true;
         } else {
           controllo.disabled = true;
+          // I segmenti del kit tengono il loro `tabindex` (roving): spenti,
+          // escono dall'ordine del Tab.
+          controllo.removeAttribute("tabindex");
         }
       }
     }
@@ -282,7 +288,7 @@ function corpo(righe: readonly RigaPreferenza[], lettura: LetturaMotore, dip: Di
 }
 
 /// Il campo di una preferenza; `prendi` riceve il valore preso.
-function campo(r: RigaPreferenza, scrivibile: boolean, dip: DipendenzeMotore, prendi: (value: unknown) => void): HTMLElement {
+function campo(r: RigaPreferenza, dip: DipendenzeMotore, prendi: (value: unknown) => void): HTMLElement {
   const nome = parola(r.label);
   const vita = dip.vita;
   switch (r.kind) {
@@ -303,44 +309,99 @@ function campo(r: RigaPreferenza, scrivibile: boolean, dip: DipendenzeMotore, pr
         onChange: (valore) => prendi(r.kind === "integer" ? Math.round(valore) : valore),
         lifetime: vita,
       });
+      // Anche il campo, che è una griglia sua dentro la riga, prende le
+      // colonne delle righe del motore.
+      numero.element.classList.add("drawing-engine-row");
       return formRow(numero.element);
     }
     case "choice": {
       const opzioni = (r.options ?? []).map((valore) => ({ value: valore, label: etichettaScelta(r.key, valore) }));
       const valore = typeof r.value === "string" ? r.value : "";
       const corte = opzioni.length <= 3 && opzioni.every((o) => o.label.length <= 14);
-      if (corte && scrivibile) {
+      // Corte, a segmenti anche in sola lettura (spenti, più sotto), perché la
+      // riga non cambi forma fra le due.
+      if (corte) {
         return formChoice({ label: nome, choices: opzioni, value: valore, onChange: prendi, lifetime: vita }).element;
       }
       return sceltaLunga(nome, opzioni, valore, prendi, dip);
     }
-    case "color":
+    case "color": {
+      // Il pozzo del colore del kit, col codice accanto: si apre il selettore,
+      // e il colore scelto è un `prefs.set` col codice a sei cifre.
+      const etichetta = etichettaRiga(nome);
+      const pozzo = colorWell({
+        label: nome,
+        mixedText: "",
+        text: testiSelettore(),
+        value: typeof r.value === "string" ? (sixDigits(r.value) ?? r.value) : null,
+        now: () => ({ free: true }),
+        onChange: (colore) => {
+          const codice = sixDigits(colore);
+          if (codice !== null) prendi(codice);
+        },
+        lifetime: vita,
+      });
+      etichetta.htmlFor = pozzo.button.id;
+      pozzo.element.classList.add("drawing-engine-well");
+      return formRow(etichetta, pozzo.element);
+    }
     case "text": {
-      const iniziale = typeof r.value === "string" ? r.value : "";
-      const testo = formText({ label: nome, value: iniziale, blank: "", onChange: () => undefined, lifetime: vita });
-      let preso = iniziale;
+      // Un testo su una riga, col nome a sinistra come le altre righe; si
+      // prende quando si lascia il campo.
+      const etichetta = etichettaRiga(nome);
+      const campoTesto = textField({ label: nome, labelHidden: true, value: typeof r.value === "string" ? r.value : "", lifetime: vita });
+      etichetta.htmlFor = campoTesto.input.id;
+      // Il nome si vede già a sinistra: quello nascosto del campo non si ripete.
+      campoTesto.element.querySelector(".kit-field-label")?.remove();
+      let preso = campoTesto.value();
       const lascia = (): void => {
-        const scritto = testo.value();
+        const scritto = campoTesto.value();
         if (scritto === preso) return;
-        if (r.kind === "color") {
-          const codice = sixDigits(scritto);
-          if (codice === null) {
-            testo.setError(t("settings.drawing_engine.color"));
-            return;
-          }
-          testo.setError(null);
-          preso = codice;
-          prendi(codice);
-          return;
-        }
         preso = scritto;
         prendi(scritto);
       };
-      testo.input.addEventListener("change", lascia);
-      vita.add(() => testo.input.removeEventListener("change", lascia));
-      return testo.element;
+      vita.listen(campoTesto.input, "change", lascia);
+      return formRow(etichetta, campoTesto.element);
     }
   }
+}
+
+/// Una riga col nome a sinistra e il controllo largo quanto i campi delle
+/// altre righe delle Impostazioni (`.drawing-engine-row` nella pelle); la
+/// casella resta com'è nel kit.
+function rigaLarga(r: RigaPreferenza, riga: HTMLElement): HTMLElement {
+  if (r.kind !== "bool") riga.classList.add("drawing-engine-row");
+  return riga;
+}
+
+/// Il nome a sinistra di una riga del modulo, legato al suo controllo.
+function etichettaRiga(nome: string): HTMLLabelElement {
+  const label = document.createElement("label");
+  label.className = "kit-form-label";
+  label.textContent = nome;
+  return label;
+}
+
+/// I testi del selettore del colore, nella lingua di adesso: le parole del
+/// selettore della shell (quello dell'inchiostro), non il catalogo del disegno,
+/// che le Impostazioni non caricano.
+function testiSelettore(): ColorPickerText {
+  return {
+    area: t("rich.ink.picker.area"),
+    areaValue: (saturation, value) => t("rich.ink.picker.area.value", { s: String(saturation), v: String(value) }),
+    hue: t("rich.ink.picker.hue"),
+    alpha: t("rich.ink.picker.alpha"),
+    format: t("rich.ink.picker.format"),
+    formats: { hex: "HEX", rgb: "RGB", hsl: "HSL", oklch: "OKLCH" },
+    code: t("rich.ink.picker.code"),
+    invalid: t("rich.ink.picker.invalid"),
+    eyedropper: t("rich.ink.picker.eyedropper"),
+    recommended: t("rich.ink.picker.recommended"),
+    documentColors: t("rich.ink.picker.document"),
+    recent: t("rich.ink.picker.recent"),
+    theme: t("rich.ink.picker.theme"),
+    none: t("rich.ink.picker.none"),
+  };
 }
 
 /// Una scelta con molte voci o voci lunghe: un menu a tendina, nella riga del

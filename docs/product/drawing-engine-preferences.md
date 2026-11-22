@@ -18,10 +18,11 @@ preferenze, e un'Impostazioni aperta senza aprirlo non la carica.
   «Prestazioni»…), ognuna in un riquadro suo, con i titoletti dentro. Le
   parole sono quelle del disegno, in italiano e in inglese.
 - **Ogni preferenza** ha il suo campo: una casella, un numero con la sua unità
-  e i suoi limiti (le lunghezze in punti, `pt`), una scelta o un testo. Un
-  campo si salva quando lo si cambia; un testo e un colore quando si esce dal
-  campo. Un colore si scrive `#rrggbb`. Un valore che il motore non accetta lo
-  dice e il campo torna al valore che vale.
+  e i suoi limiti (le lunghezze in punti, `pt`), una scelta, un colore (il
+  pozzo del colore, col codice `#rrggbb` accanto, che apre il selettore) o un
+  testo; il nome sta a sinistra, il controllo a destra. Un campo si salva
+  quando lo si cambia, un testo quando si esce dal campo. Un valore che il
+  motore non accetta lo dice e il campo torna al valore che vale.
 - **«Ripristina»**, in fondo a ogni categoria, rimette le preferenze di quella
   categoria come di serie.
 - **Le cartelle** del motore (caratteri, plug-in, recupero, modelli) non ci

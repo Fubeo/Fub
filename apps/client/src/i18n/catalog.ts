@@ -2492,7 +2492,6 @@ export const IT = { // --- la scocca -------------------------------------------
 "settings.drawing_engine.reset_all": "Azzera le preferenze del motore",
 "settings.drawing_engine.reset": "Ripristina",
 "settings.drawing_engine.reset_aria": "Ripristina le preferenze di {category}",
-"settings.drawing_engine.color": "Un colore si scrive con sei cifre esadecimali, per esempio #3366cc.",
 "settings.drawing_engine.write_failed": "La preferenza non è cambiata: {reason}",
 "settings.drawing_engine.reset_confirm": "Le preferenze del motore scritte dal Fub più nuovo si perdono, e tornano quelle di serie.",
 "settings.drawing_engine.reset_confirm_title": "Azzerare le preferenze del motore?",

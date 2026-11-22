@@ -105,6 +105,7 @@ const RIGHE = [
     kind: "choice",
     options: ["lines", "dots"],
   },
+  { key: "gridColor", category: "Guides & Grid", section: "Grid", label: "Color", value: "#D0D0D0", kind: "color" },
   {
     key: "keyboardIncrement",
     category: "General",
@@ -218,6 +219,16 @@ describe("la sezione Motore del disegno", () => {
     );
   });
 
+  it("il colore è il pozzo del kit col codice accanto, nella riga col nome a sinistra", async () => {
+    await openSection();
+    const griglia = document.querySelector<HTMLElement>('details[data-details-key="drawing-engine:Guides & Grid"]')!;
+    const pozzo = griglia.querySelector<HTMLButtonElement>(".kit-form-row > .kit-color-well .kit-color-well-button")!;
+    expect(pozzo.textContent).toBe("#d0d0d0");
+    const etichetta = pozzo.closest(".kit-form-row")!.querySelector<HTMLLabelElement>("label.kit-form-label")!;
+    expect(etichetta.htmlFor).toBe(pozzo.id);
+    expect(griglia.querySelector('input[type="text"]')).toBeNull();
+  });
+
   it("Ripristina chiama prefs.reset della sua categoria", async () => {
     await openSection();
     const generale = document.querySelector<HTMLElement>('details[data-details-key="drawing-engine:General"]')!;
@@ -245,6 +256,15 @@ describe("la sezione Motore del disegno", () => {
     expect(numero.readOnly).toBe(true);
     expect(numero.disabled).toBe(false);
     expect(details.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+    // La scelta corta resta a segmenti, spenta; il pozzo del colore è spento.
+    const segmenti = details.querySelectorAll<HTMLButtonElement>('[role="radiogroup"] [role="radio"]');
+    expect(segmenti.length).toBe(2);
+    for (const segmento of segmenti) {
+      expect(segmento.disabled).toBe(true);
+      expect(segmento.hasAttribute("tabindex")).toBe(false);
+    }
+    expect(details.querySelector("select")).toBeNull();
+    expect(details.querySelector<HTMLButtonElement>(".kit-color-well-button")!.disabled).toBe(true);
     const azzera = details.querySelector<HTMLButtonElement>(".settings-actions button")!;
     azzera.click();
     await vi.waitFor(() => expect(api.resetSetting).toHaveBeenCalledWith("draw.motore"));

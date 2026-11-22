@@ -1338,6 +1338,19 @@
   border-top: 1px solid var(--border);
 }
 
+/* Le preferenze del motore del disegno (`settings-motore-corpo.ts`): righe del
+ * modulo del kit col nome a sinistra e il controllo a destra, largo quanto i
+ * campi delle altre righe (`.setting-input`, 280px). */
+.drawing-engine-row,
+.drawing-engine-row > .drawing-engine-row {
+  /* La seconda è il campo numerico dentro la sua riga: una griglia sua. */
+  grid-template-columns: minmax(0, 1fr) min(280px, 60%);
+}
+.drawing-engine-well {
+  justify-self: start;
+  min-width: 0;
+}
+
 /* Un permesso è una frase, non un nome: peso normale. */
 .setting-permission > .setting-text > :first-child {
   color: var(--text);

@@ -2406,7 +2406,6 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "settings.drawing_engine.reset_all": "Reset the engine preferences",
 "settings.drawing_engine.reset": "Restore",
 "settings.drawing_engine.reset_aria": "Restore the {category} preferences",
-"settings.drawing_engine.color": "A color is written with six hexadecimal digits, for example #3366cc.",
 "settings.drawing_engine.write_failed": "The preference did not change: {reason}",
 "settings.drawing_engine.reset_confirm": "The engine preferences written by the newer Fub are lost, and the defaults come back.",
 "settings.drawing_engine.reset_confirm_title": "Reset the engine preferences?",
