@@ -29,7 +29,8 @@ import type { Lifetime } from "../../../ui/lifetime";
 import type { CassettoOptions } from "../tools/editor/chrome/drawer";
 import { openPopover } from "../../../kit/popover";
 import { keyboardPlatform } from "../../../ui/commands";
-import { t } from "../strings";
+import { t, type DrawKey } from "../strings";
+import { COLONNA_IT } from "../strings/completo";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
 import { applicaEsito, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
@@ -243,6 +244,15 @@ async function moduloDi(famiglia: string, id: string): Promise<ModuloFinestra | 
   }
 }
 
+/// Il nome corto dello strumento del motore `strumento` dalle parole della
+/// colonna (`draw.engine.name.<id>`, K6 T12): c'è per gli strumenti che la
+/// colonna mostra prima che la loro famiglia arrivi. `null` per gli altri, che
+/// lo prendono dai testi della famiglia pronta o dall'indice.
+export function nomeCortoColonna(strumento: string): string | null {
+  const chiave = `draw.engine.name.${strumento}`;
+  return Object.prototype.hasOwnProperty.call(COLONNA_IT, chiave) ? t(chiave as DrawKey) : null;
+}
+
 /// Apre il Completo di un disegno: chiede l'indice e prepara il nucleo. Un
 /// indice che non arriva non ferma niente: chi lo mostra (≡, Ctrl+/) lo
 /// richiede e dice che non si è caricato, con «Riprova».
@@ -409,7 +419,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila">, op
       if (voce === undefined) return null;
       const inglese = languageCurrent().startsWith("en");
       const corto = carica.testi(voce.famiglia)?.[`strumento:${strumento}`];
-      const nome = corto !== undefined ? (inglese ? corto.en : corto.it) : inglese ? voce.etichetta.en : voce.etichetta.it;
+      const nome = corto !== undefined ? (inglese ? corto.en : corto.it) : (nomeCortoColonna(strumento) ?? (inglese ? voce.etichetta.en : voce.etichetta.it));
       const stato = carica.stato(voce.famiglia).kind;
       return { nome, icona: iconaMotore(strumento), famiglia: stato };
     },

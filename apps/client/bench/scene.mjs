@@ -1549,6 +1549,21 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare,
   })),
+  // **La famiglia «tracciati»** (K6 T12): la tendina della casella «Penna»
+  // aperta, coi nove strumenti del motore; la Selezione diretta con un punto
+  // scelto (`?punti=1`), con la fila dei punti in testata. A 1280 e a 800 px.
+  ...[
+    ["disegno-fam-tracciati-penna", 1280, "La tendina della casella «Penna»: la Penna di Bézier e gli strumenti dei punti", "", (page) => openRailFlyout(page, "motore:pen")],
+    ["disegno-fam-tracciati-penna-800", 800, "La tendina della casella «Penna» nella finestra minima del desktop, 800 px", "", (page) => openRailFlyout(page, "motore:pen")],
+    ["disegno-fam-tracciati-punto", 1280, "La Selezione diretta con un punto scelto: Converti, Punto e la posizione del punto", "&punti=1", scegliSelezioneDirettaCoiPunti],
+    ["disegno-fam-tracciati-punto-800", 800, "La Selezione diretta con un punto scelto nella finestra minima del desktop, 800 px", "&punti=1", scegliSelezioneDirettaCoiPunti],
+  ].map(([id, width, title, extra, prepare]) => ({
+    id,
+    title,
+    query: `connectors=6&drawing=acceso${extra}`,
+    viewport: { width, height: 800 },
+    prepare,
+  })),
   // **Il menu ≡ e Ctrl+/ del Completo** (K6 T9a): le voci dell'indice di prova
   // (`?indice=prova`, vedi `fake-ipc.ts`). Il menu ≡ con Oggetto aperto, e la
   // tavolozza con la ricerca «sposta», a 1280 e a 800 px (la finestra minima).
@@ -5309,6 +5324,30 @@ async function scegliSelezioneDiretta(page) {
   await page.click(casella);
   await page.waitForSelector(`${casella}[aria-pressed="true"], ${casella} [aria-pressed="true"], ${casella}.is-active, ${casella}[data-active]`, { timeout: 5000 }).catch(() => {});
   await page.evaluate(() => document.fonts.ready);
+}
+
+/// La tendina della casella `slot` della colonna (K6 T12), aperta con la
+/// freccia di lato come fa chi usa la tastiera.
+async function openRailFlyout(page, slot) {
+  await openDrawing(page);
+  const casella = `.draw-rail .kit-rail-slot[data-slot="${slot}"]`;
+  await page.waitForSelector(casella);
+  await page.focus(casella);
+  await page.evaluate((selettore) => {
+    const el = document.querySelector(selettore);
+    const lato = el.closest(".kit-rail").dataset.orientation === "horizontal" ? "ArrowUp" : "ArrowRight";
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: lato, bubbles: true, cancelable: true }));
+  }, casella);
+  await page.waitForSelector(".kit-rail-flyout [role='menuitemradio']");
+}
+
+/// La Selezione diretta del motore con un punto scelto (K6 T12, `?punti=1`):
+/// la fila dei punti in testata, coi pulsanti accesi e la posizione.
+async function scegliSelezioneDirettaCoiPunti(page) {
+  await scegliSelezioneDiretta(page);
+  // La posizione può stare nel «…» della riga: basta che ci sia.
+  await page.waitForSelector(".draw-point-place .draw-point-coord input", { state: "attached" });
+  await page.waitForFunction(() => document.querySelector(".draw-point-coord input")?.value !== "");
 }
 
 /// «Tutti gli strumenti» (K6 T8): il cassetto aperto dalla sua casella; con

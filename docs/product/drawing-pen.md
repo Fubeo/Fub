@@ -163,6 +163,12 @@ scrivono tracciati veri, `<path>`, non tratti a mano:
 | **Matita** | Matita, poi l'Inchiostro e l'Evidenziatore di Fub, Smussa, Unisci, Fondi bordo condiviso |
 | **Gomma** | Gomma (Completo), poi la gomma di Fub, Gomma tracciato, Pennello gomma punti, Forbici, Coltello, Specchia e taglia, Taglio linea, Taglio rettangolare |
 
+La tendina di una casella dà i nomi corti degli strumenti anche prima che la
+famiglia sia caricata. Gli strumenti del motore non hanno un tasto: la tendina
+non ne mostra. Con uno strumento del motore scelto, le opzioni dell'Inchiostro
+e della gomma di Fub lasciano la riga: restano il colore, lo spessore e le
+opzioni dello strumento, prima di Modifica.
+
 **La Penna** fa un tracciato clic dopo clic: ogni clic mette un punto,
 trascinare tira le maniglie. Fra un clic e l'altro il tracciato è aperto e si
 vedono i suoi punti, nel colore d'accento del tema; il file non cambia ancora.

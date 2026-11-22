@@ -13,14 +13,22 @@ import { casellaMotore, casellePresenti, caselleCheStanno, PREFISSO_MOTORE, spaz
 import { descrivi } from "./opzioni";
 import { ICONE_MOTORE, iconaMotore, ICONA_MOTORE_GENERICA, layoutCompleto, MOTORE_PRONTO } from "./colonna";
 import { TESTI as TESTI_NUCLEO } from "./famiglie/nucleo/testi";
-import { TESTI as TESTI_TRACCIATI } from "./famiglie/tracciati/testi";
+import { COLONNA_EN, COLONNA_IT } from "../strings/completo";
+
+/// I nomi corti dei tracciati (T12): nelle parole della colonna, perché la
+/// colonna li mostra prima che la famiglia arrivi.
+const TESTI_TRACCIATI: Record<string, { it: string; en: string }> = Object.fromEntries(
+  Object.entries(COLONNA_IT)
+    .filter(([chiave]) => chiave.startsWith("draw.engine.name."))
+    .map(([chiave, it]) => [`strumento:${chiave.slice("draw.engine.name.".length)}`, { it, en: COLONNA_EN[chiave as keyof typeof COLONNA_EN] }]),
+);
 
 /// I nomi corti degli strumenti pronti: del nucleo (T11) e dei tracciati (T12).
 const TESTI = { ...TESTI_NUCLEO, ...TESTI_TRACCIATI };
 import indiceGenerato from "./indice.generated.json";
 import { DRAW_ICONS } from "../icons";
 import { t } from "../strings";
-import type { StrumentoMotoreColonna } from "./index";
+import { nomeCortoColonna, type StrumentoMotoreColonna } from "./index";
 
 interface VoceGenerata {
   readonly fonte: string;
@@ -100,6 +108,13 @@ describe("gli strumenti dei tracciati nella colonna (T12)", () => {
     expect(t("draw.tool.pen")).toBe("Inchiostro");
     expect(TESTI["strumento:pen"]).toEqual({ it: "Penna", en: "Pen" });
     expect(TESTI["strumento:pencil"]).toEqual({ it: "Matita", en: "Pencil" });
+  });
+
+  it("la colonna ha i nomi corti dei tracciati prima che la famiglia arrivi; gli altri no", () => {
+    expect(nomeCortoColonna("pen")).toBe("Penna");
+    expect(nomeCortoColonna("slideAnchor")).toBe("Fai scorrere il punto di ancoraggio lungo il tracciato");
+    expect(nomeCortoColonna("selection")).toBeNull();
+    expect(nomeCortoColonna("inventato")).toBeNull();
   });
 });
 

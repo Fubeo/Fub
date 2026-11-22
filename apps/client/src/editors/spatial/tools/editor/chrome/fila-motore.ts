@@ -37,6 +37,16 @@ export interface FilaMotoreContext {
   completoMotore?: () => CompletoMotore | null;
 }
 
+/// La riga con la fila del motore: dopo il colore e gli spessori (e le
+/// opzioni dell'Inchiostro, nascoste), prima della modifica, come la fila dei
+/// punti nel prototipo (`opzioni-punto`, «dopo Spessore»). Senza la modifica
+/// nella riga, la fila va in fondo.
+export function conLaFila(gruppi: readonly OptionItem[], voci: readonly OptionItem[]): OptionItem[] {
+  const modifica = gruppi.findIndex((gruppo) => gruppo.id === "draw.edit");
+  if (modifica < 0) return [...gruppi, ...voci];
+  return [...gruppi.slice(0, modifica), ...voci, ...gruppi.slice(modifica)];
+}
+
 /// La priorità della fila nella riga delle opzioni: va in «…» dopo il colore e
 /// gli spessori (priorità 3), e alla pari con la modifica (2), prima dei livelli (1).
 const PRIORITA_FILA = 2;
@@ -74,6 +84,9 @@ export function installFilaMotore(ctx: EditorContext): void {
       smonta();
       return;
     }
+    // Le opzioni dell'Inchiostro e della gomma di Fub seguono lo strumento del
+    // motore: con uno scelto si nascondono.
+    ctx.syncPenOptions();
     const id = ctx.motoreTool;
     const completo = ctx.completoMotore?.() ?? null;
     if (id === null || completo === null) {
@@ -110,7 +123,7 @@ export function installFilaMotore(ctx: EditorContext): void {
       if (montata !== null && montata.id === altro) sincronizza();
     });
     montata = { id, fila, voci, vita, spegniStati };
-    ctx.optionsBar.setItems([...ctx.toolbarGroups, ...voci]);
+    ctx.optionsBar.setItems(conLaFila(ctx.toolbarGroups, voci));
   };
 
   // Lo strumento scelto e la sua preparazione: a ogni avviso si sincronizza.

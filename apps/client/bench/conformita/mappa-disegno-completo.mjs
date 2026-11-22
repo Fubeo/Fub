@@ -87,6 +87,29 @@ export const VISTE = {
     },
     app: { scena: "disegno-tavolozza" },
   },
+  /// La tendina della casella «Penna» aperta (K6 T12, stato `gruppo`).
+  penna: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.selectOption("#proto-stato", "gruppo");
+        await page.waitForSelector('#proto-box[data-pronto^="gruppo-"]');
+      },
+    },
+    app: { scena: "disegno-fam-tracciati-penna" },
+  },
+  /// La Selezione diretta con un punto scelto (K6 T12, stato `completo`): la
+  /// fila dei punti nella riga delle opzioni.
+  punto: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.selectOption("#proto-stato", "completo");
+        await page.waitForSelector('#proto-box[data-pronto^="completo-"]');
+      },
+    },
+    app: { scena: "disegno-fam-tracciati-punto" },
+  },
 };
 
 /// I pezzi. `prototipo` sta dentro lo schermo del prototipo, `app` nella pagina
@@ -239,6 +262,41 @@ export const PEZZI = [
     prototipo: ".draw-commands-why",
     app: ".draw-commands-why",
     proprieta: [...BASE],
+  },
+  // ── la tendina della Penna (K6 T12) ───────────────────────────────────────
+  {
+    id: "penna.tendina",
+    vista: "penna",
+    prototipo: ".kit-rail-flyout",
+    app: ".kit-rail-flyout",
+    proprieta: [...BASE],
+  },
+  {
+    id: "penna.voce",
+    vista: "penna",
+    prototipo: '.kit-rail-flyout-item[aria-checked="true"]',
+    app: '.kit-rail-flyout-item[aria-checked="true"]',
+    proprieta: [...BASE, "height"],
+  },
+  {
+    id: "penna.etichetta",
+    vista: "penna",
+    prototipo: '.kit-rail-flyout-item[aria-checked="true"] .kit-rail-flyout-label',
+    app: '.kit-rail-flyout-item[aria-checked="true"] .kit-rail-flyout-label',
+    proprieta: [...BASE],
+  },
+  // Il tasto a destra della voce (P, Shift+C nel prototipo) nell'app non c'è:
+  // gli strumenti del motore non partono da un tasto (T9b, la regola dei tasti
+  // tiene solo i comandi), e la tendina non promette un tasto che non va.
+  // ── la fila dei punti scelti (K6 T12) ─────────────────────────────────────
+  // La posizione del punto (priorità 1) a 1280 px sta nel «…» della riga, nel
+  // prototipo come nell'app: si confrontano i pulsanti che si vedono.
+  {
+    id: "punto.pulsante",
+    vista: "punto",
+    prototipo: '.draw-button[aria-label="Taglia il tracciato nel punto"]',
+    app: '.draw-button[aria-label="Taglia il tracciato nel punto"]',
+    proprieta: [...BASE, ...DIMENSIONI],
   },
 ];
 

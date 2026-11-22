@@ -982,6 +982,28 @@ if (MOTORE_PARAM !== null && !["prova", "nuovo", "rotto"].includes(MOTORE_PARAM)
   throw new RangeError("motore must be prova, nuovo or rotto");
 }
 
+/// `?punti=1` (K6 T12): con la Selezione diretta o il Punto di ancoraggio
+/// del motore, lo stato dello strumento dice un punto scelto sulla prima
+/// forma del disegno, per la fila dei punti; senza, nessun punto.
+const PUNTI_PARAM = params.get("punti");
+if (PUNTI_PARAM !== null && PUNTI_PARAM !== "1") throw new RangeError("punti must be 1");
+
+/// Lo stato dello strumento del banco con un punto scelto (`?punti=1`), o
+/// `null` per una richiesta che non lo chiede.
+function benchStatoCoiPunti(request: DrawingCommandRequest): DrawingOutcome | null {
+  if (PUNTI_PARAM !== "1" || request.id !== "disegno.strumento.stato") return null;
+  const strumento = (request.value as { strumento?: unknown } | null)?.strumento;
+  if (strumento !== "directSelection" && strumento !== "anchorPoint") return null;
+  const element = CONNECTORS?.shapes[0]?.id ?? "banco";
+  return {
+    revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null,
+    state: {
+      busy: false, transforming: false, wants_text: false, composing: false, cursor: "arrow", options: null,
+      anchors: [{ element, subpath: 0, anchor: 0, at: [292.99, 170.14], end: false }],
+    },
+  };
+}
+
 /// Le righe di `prefs.list` del banco: un pezzo dell'elenco vero del motore
 /// (`vendor/vectorcraft/crates/engine/src/cmd/prefscmds.rs`), con ogni tipo di
 /// campo, nelle parole del motore che la sezione traduce.
@@ -1095,11 +1117,11 @@ function benchDrawingEngine(): DrawingFake | undefined {
     // comandi del Disegno completo hanno quelle di `disegno-famiglie/`, e
     // `unserved` un comando che non ne ha una.
     comando: (request) =>
-      request.id === BENCH_WINDOW_COMMAND
+      benchStatoCoiPunti(request) ?? (request.id === BENCH_WINDOW_COMMAND
         ? benchWindowOutcome(request)
         : MOTORE_PARAM !== null && request.id.startsWith("disegno.prefs.")
           ? benchPrefsOutcome(request)
-          : rispostaDiFamiglia(request),
+          : rispostaDiFamiglia(request)),
   };
 }
 

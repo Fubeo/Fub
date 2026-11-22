@@ -1102,4 +1102,18 @@ describe("la penna del motore: il tracciato aperto (K6 T12)", () => {
     // Il secondo Esc non manda niente al motore.
     expect(gestures(fake)).toHaveLength(prima);
   });
+
+  it("con uno strumento del motore le opzioni dell'Inchiostro lasciano la riga; tornano con l'Inchiostro", async () => {
+    const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setTool("pen");
+    const opzioniInchiostro = (): HTMLElement => host.querySelector<HTMLElement>('.kit-options-row [role="group"][aria-label="Penna"]')!;
+    expect(opzioniInchiostro().hidden).toBe(false);
+    editor.setEngineTool("directSelection");
+    await settle(16, 8);
+    expect(opzioniInchiostro().hidden).toBe(true);
+    editor.setEngineTool(null);
+    await settle(16, 8);
+    expect(opzioniInchiostro().hidden).toBe(false);
+  });
 });
