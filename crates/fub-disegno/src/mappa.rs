@@ -18,6 +18,37 @@ use fub_scene::Role;
 use vectorcraft_doc::{Document, Node, NodeId};
 use vectorcraft_geom::Affine;
 
+/// La lunghezza massima del nome di un livello di Fub, in caratteri
+/// (`fub:layer`, `docs/reference/scene-format.md` §3).
+pub const MAX_NOME_LIVELLO: usize = 80;
+
+/// Il nome di serie di un livello nuovo, seguito dal suo numero: un documento
+/// nuovo ha «Livello 1» (formato della scena, §3).
+pub const NOME_DI_SERIE: &str = "Livello";
+
+/// Perché `nome` non può essere il nome di un livello di Fub, o `None` se
+/// può: vuoto (o di soli spazi), più lungo di [`MAX_NOME_LIVELLO`] caratteri,
+/// o con un carattere che l'attributo non tiene com'è (un carattere di
+/// controllo, che XML rifiuta o che la lettura di un attributo cambia in uno
+/// spazio, e i non caratteri U+FFFE e U+FFFF).
+pub fn nome_di_livello_sbagliato(nome: &str) -> Option<&'static str> {
+    if nome.trim().is_empty() {
+        return Some("Il nome del livello è vuoto: scrivi almeno un carattere.");
+    }
+    if nome.chars().count() > MAX_NOME_LIVELLO {
+        return Some("Il nome del livello è troppo lungo: al massimo 80 caratteri.");
+    }
+    if nome
+        .chars()
+        .any(|c| c.is_control() || matches!(c, '\u{FFFE}' | '\u{FFFF}'))
+    {
+        return Some(
+            "Il nome del livello ha un carattere che il file non tiene: togli a capo, tabulazioni e caratteri di controllo.",
+        );
+    }
+    None
+}
+
 /// Un elemento di Fub che il motore potrebbe modificare.
 #[derive(Clone, Debug)]
 pub struct Elemento {
@@ -29,6 +60,9 @@ pub struct Elemento {
     pub id: Option<String>,
     /// Il nome nel motore: l'id del file o quello sintetico.
     pub nome: String,
+    /// Il nome di un livello di Fub (`fub:layer`, formato della scena §3);
+    /// `None` per ogni altro elemento.
+    pub livello: Option<String>,
     /// L'elemento che lo contiene, fra quelli della mappa; `None` sotto la
     /// radice.
     pub genitore: Option<usize>,
@@ -192,6 +226,26 @@ impl Mappa {
     /// Le ricette del file.
     pub fn ricette(&self) -> &crate::ricetta::Ricette {
         &self.ricette
+    }
+
+    /// Il nome di un livello nuovo: «Livello N» col primo N, dal numero dei
+    /// livelli di Fub più uno, che nessun livello porta già (come
+    /// `freshLayerName` del client).
+    pub fn nome_libero(&self) -> String {
+        let livelli: Vec<&str> = self
+            .elementi
+            .iter()
+            .filter_map(|e| e.livello.as_deref())
+            .collect();
+        let mut n = livelli.len() + 1;
+        let presi: HashSet<&str> = livelli.into_iter().collect();
+        loop {
+            let nome = format!("{NOME_DI_SERIE} {n}");
+            if !presi.contains(nome.as_str()) {
+                return nome;
+            }
+            n += 1;
+        }
     }
 
     /// Vero se `id` è già un id del file.

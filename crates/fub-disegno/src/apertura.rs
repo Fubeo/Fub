@@ -405,6 +405,7 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                 ruolo: e.role,
                 id: e.id.clone(),
                 nome: e.id.clone().unwrap_or_default(),
+                livello: e.layer.as_ref().map(|l| l.name.clone()),
                 genitore: indice_genitore,
                 propria,
                 ctm_genitore,

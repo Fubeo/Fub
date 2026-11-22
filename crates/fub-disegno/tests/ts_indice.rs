@@ -558,3 +558,33 @@ fn le_finestre_dei_colori_hanno_i_loro_campi_e_i_loro_limiti() {
     assert_eq!(sovrastampa["campi"][1]["predefinito"], json!(100.0));
     assert_eq!(sovrastampa["campi"][1]["massimo"], json!(100.0));
 }
+
+/// Nuovo livello… e Opzioni livello… (K6 T15, giro 3) chiedono solo il nome, l'occhio e il
+/// lucchetto, che il formato della scena scrive: niente colore, modello, stampa o anteprima.
+#[test]
+fn le_finestre_dei_livelli_chiedono_solo_cio_che_il_file_scrive() {
+    let voci = voci();
+    let livelli = schema_json("livelli", &voci);
+    for id in ["layer.new", "layer.setProps"] {
+        let finestra = livelli["finestre"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["id"] == id)
+            .cloned()
+            .unwrap_or_else(|| panic!("nessuna finestra per {id}: {livelli}"));
+        let nomi: Vec<&str> = finestra["campi"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["nome"].as_str().unwrap())
+            .collect();
+        assert_eq!(nomi, vec!["name", "visible", "locked"], "{finestra}");
+        // Il nome di serie lo dà Fub: il campo si può lasciare vuoto.
+        assert_eq!(
+            finestra["campi"][0]["facoltativo"],
+            json!(true),
+            "{finestra}"
+        );
+    }
+}

@@ -269,17 +269,17 @@ motore	object.intertwine.make	Make	Object › Intertwine	dinamici	F2	T21	da fare
 motore	object.intertwine.edit	Edit	Object › Intertwine	dinamici	F2	T21	da fare	menu/oggetto	famiglia		Modifica
 motore	object.intertwine.release	Release	Object › Intertwine	dinamici	F2	T21	da fare	menu/oggetto	famiglia		Rilascia
 motore	object.intertwine.arrange	Arrange Intertwine Area		dinamici	F2	T21	da fare	menu/oggetto	famiglia		Disponi area intrecciata
-motore	layer.new	New Layer…	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	finestra	Nuovo livello…
+motore	layer.new	New Layer…	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	finestra	Nuovo livello…
 motore	layer.newSublayer	New Sublayer…	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	finestra	Nuovo sottolivello…
-motore	layer.delete	Delete Selection	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Elimina selezione
+motore	layer.delete	Delete Selection	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Elimina selezione
 motore	layer.duplicate	Duplicate Selection	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Duplica selezione
-motore	layer.setCurrent	Set Current Layer		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Imposta livello corrente
+motore	layer.setCurrent	Set Current Layer		livelli	F1	T15	da fare	ispettore/livelli	famiglia	aspetta T15, decisione: il motore lo dà disabilitato come id	Imposta livello corrente
 motore	layer.highlight	Highlight Rows		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Evidenzia righe
-motore	layer.setProps	Layer Options…	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	finestra	Opzioni livello…
+motore	layer.setProps	Layer Options…	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	finestra	Opzioni livello…
 motore	layer.collectInNew	Collect in New Layer	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Raccogli in un nuovo livello
 motore	layer.selectAll	Select Art		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Seleziona grafica
 motore	layer.move	Move Rows		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Sposta righe
-motore	node.move	Reorder		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Riordina
+motore	node.move	Reorder		livelli	F1	T15	da fare	ispettore/livelli	famiglia	aspetta T15, decisione: il motore lo dà disabilitato come id	Riordina
 motore	artboard.new	New Artboard	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Nuova tavola da disegno
 motore	artboard.delete	Delete Artboard	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Elimina tavola da disegno
 motore	artboard.deleteEmpty	Delete Empty Artboards	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Elimina tavole da disegno vuote

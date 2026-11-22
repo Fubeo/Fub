@@ -691,6 +691,54 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.delete",
+      "chiamata": {
+        "comando": "disegno.layer.delete"
+      },
+      "etichetta": {
+        "it": "Elimina selezione",
+        "en": "Delete Selection"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.new",
+      "chiamata": {
+        "comando": "disegno.layer.new"
+      },
+      "etichetta": {
+        "it": "Nuovo livello…",
+        "en": "New Layer…"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": "Cmd+L",
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.setProps",
+      "chiamata": {
+        "comando": "disegno.layer.setProps"
+      },
+      "etichetta": {
+        "it": "Opzioni livello…",
+        "en": "Layer Options…"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.align",
       "chiamata": {
         "comando": "disegno.object.align"
