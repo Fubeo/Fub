@@ -115,6 +115,21 @@ spegne. Lo stato arriva con un esito: un gesto, `disegno.strumento.opzione`, o
 (`preparaStrumento`) manda appena la famiglia è pronta, così la fila c'è prima
 del primo gesto.
 
+**I tracciati e i punti (T12).** La penna, la penna intelligente e la
+curvatura fanno un tracciato a più clic (`motore/tracciati.ts`,
+`A_PIU_CLIC`): al rilascio `gesti.ts` manda un'anteprima e, finché lo stato
+dice `busy`, tiene il tracciato aperto e disegna i segni del motore
+(`segniComeForma`, nello strato dell'anteprima, coi token del tema). Il
+ponte tiene il tracciato nella sua copia finché il gesto continua (stesso
+strumento, stessa revisione); Invio, Esc o lo strumento cambiato mandano il
+`commit` con il tasto (o senza) e l'esito è un passo solo. Con la
+Selezione diretta lo stato porta i punti scelti (`DrawingToolState.anchors`);
+la famiglia `tracciati` registra la sua fila (`ContestoCompleto.registraFila`,
+`completo/famiglie/tracciati/opzioni-punto.ts`), che manda i comandi sui
+punti con `anchors` nel `value` e dopo l'esito rilegge lo stato. Gli
+strumenti e i comandi dei tracciati rifiutano l'inchiostro di Fub
+(`unmapped`) e la carta. Il prodotto: [penne](../product/drawing-pen.md#la-penna-di-bézier-disegno-completo).
+
 ## Chi possiede che cosa
 
 | Che cosa | Chi lo possiede | Perché |

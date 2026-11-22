@@ -12,11 +12,23 @@ import { gradiAttorno, VISTA_DEL_MOTORE, vistaDelMotore } from "../tools/editor/
 import { casellaMotore, casellePresenti, caselleCheStanno, PREFISSO_MOTORE, spazioCaselle, type MisureColonna } from "../tools/editor/chrome/rail";
 import { descrivi } from "./opzioni";
 import { ICONE_MOTORE, iconaMotore, ICONA_MOTORE_GENERICA, layoutCompleto, MOTORE_PRONTO } from "./colonna";
-import { TESTI } from "./famiglie/nucleo/testi";
+import { TESTI as TESTI_NUCLEO } from "./famiglie/nucleo/testi";
+import { COLONNA_EN, COLONNA_IT } from "../strings/completo";
+
+/// I nomi corti dei tracciati (T12): nelle parole della colonna, perché la
+/// colonna li mostra prima che la famiglia arrivi.
+const TESTI_TRACCIATI: Record<string, { it: string; en: string }> = Object.fromEntries(
+  Object.entries(COLONNA_IT)
+    .filter(([chiave]) => chiave.startsWith("draw.engine.name."))
+    .map(([chiave, it]) => [`strumento:${chiave.slice("draw.engine.name.".length)}`, { it, en: COLONNA_EN[chiave as keyof typeof COLONNA_EN] }]),
+);
+
+/// I nomi corti degli strumenti pronti: del nucleo (T11) e dei tracciati (T12).
+const TESTI = { ...TESTI_NUCLEO, ...TESTI_TRACCIATI };
 import indiceGenerato from "./indice.generated.json";
 import { DRAW_ICONS } from "../icons";
 import { t } from "../strings";
-import type { StrumentoMotoreColonna } from "./index";
+import { nomeCortoColonna, type StrumentoMotoreColonna } from "./index";
 
 interface VoceGenerata {
   readonly fonte: string;
@@ -70,8 +82,39 @@ describe("gli strumenti del nucleo nella colonna", () => {
     expect(pick.caselle).toEqual([["select", "motore:selection"], ["motore:directSelection", "motore:groupSelection"], ["motore:lasso"]]);
     const view = layout.find((gruppo) => gruppo.id === "view")!;
     expect(view.caselle).toEqual([["hand", "zoom", "motore:hand", "motore:zoom", "motore:rotateView"]]);
-    const delMotore = layout.flatMap((gruppo) => gruppo.caselle.flat()).filter((id) => id.startsWith(PREFISSO_MOTORE));
+    const delMotore = layout.flatMap((gruppo) => gruppo.caselle.flat()).filter((id) => id.startsWith(PREFISSO_MOTORE) && STRUMENTI_NUCLEO.includes(id.slice(PREFISSO_MOTORE.length)));
     expect(delMotore).toHaveLength(7);
+  });
+});
+
+describe("gli strumenti dei tracciati nella colonna (T12)", () => {
+  it("i ventuno stanno nelle tre caselle di «disegnare», nell'ordine del prototipo", () => {
+    const layout = layoutCompleto(toolsFor("full", "vector"), MOTORE_PRONTO);
+    const draw = layout.find((gruppo) => gruppo.id === "draw")!;
+    // La Penna è quella del motore; la Matita del motore apre la sua casella,
+    // con l'Inchiostro e l'Evidenziatore di Fub dopo; la Gomma del motore apre
+    // la sua, con la gomma di Fub dopo (`colonna-penna` del prototipo).
+    expect(draw.caselle).toEqual([
+      ["motore:pen", "motore:smartPen", "motore:curvature", "motore:addAnchor", "motore:deleteAnchor", "motore:anchorPoint", "motore:cornerTool", "motore:slideAnchor", "motore:extendPath"],
+      ["motore:pencil", "pen", "highlighter", "motore:smooth", "motore:join", "motore:sharedEdge"],
+      ["motore:eraser", "eraser", "motore:pathEraser", "motore:anchorEraserBrush", "motore:scissors", "motore:knife", "motore:mirrorCut", "motore:lineCut", "motore:rectCut"],
+    ]);
+    const tracciati = VOCI.filter((voce) => voce.famiglia === "tracciati" && voce.chiamata.strumento !== undefined).map((voce) => voce.chiamata.strumento!);
+    expect(tracciati).toHaveLength(21);
+    expect(draw.caselle.flat().filter((id) => id.startsWith(PREFISSO_MOTORE)).map((id) => id.slice(PREFISSO_MOTORE.length)).sort()).toEqual([...tracciati].sort());
+  });
+
+  it("la Penna di Fub si chiama «Inchiostro», e la Penna è quella del motore", () => {
+    expect(t("draw.tool.pen")).toBe("Inchiostro");
+    expect(TESTI["strumento:pen"]).toEqual({ it: "Penna", en: "Pen" });
+    expect(TESTI["strumento:pencil"]).toEqual({ it: "Matita", en: "Pencil" });
+  });
+
+  it("la colonna ha i nomi corti dei tracciati prima che la famiglia arrivi; gli altri no", () => {
+    expect(nomeCortoColonna("pen")).toBe("Penna");
+    expect(nomeCortoColonna("slideAnchor")).toBe("Fai scorrere il punto di ancoraggio lungo il tracciato");
+    expect(nomeCortoColonna("selection")).toBeNull();
+    expect(nomeCortoColonna("inventato")).toBeNull();
   });
 });
 

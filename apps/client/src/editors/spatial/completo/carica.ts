@@ -16,7 +16,7 @@
 import { DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_FAMILIES } from "../../../host/contract";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 import type { MotoreDelDisegno } from "../motore/gesti";
-import type { Etichette } from "./opzioni";
+import type { CostruisciFila, Etichette } from "./opzioni";
 import type { Sezioni } from "./sezioni";
 
 /// Ciò che il Completo aperto dà alle sue famiglie.
@@ -27,6 +27,10 @@ export interface ContestoCompleto {
   readonly life: Lifetime;
   /// Il registro delle sezioni dell'ispettore (`registraSezione`).
   readonly sezioni: Sezioni;
+  /// Una fila propria per lo strumento `strumento`, al posto di quella
+  /// generica delle opzioni (T12: i punti della Selezione diretta). L'ultima
+  /// registrata vale.
+  readonly registraFila: (strumento: string, costruisci: CostruisciFila) => void;
 }
 
 /// Ciò che il file `index.ts` di una famiglia esporta di serie.

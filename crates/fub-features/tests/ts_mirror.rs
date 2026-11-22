@@ -66,16 +66,16 @@ use fub_abi::ui::{
     UiNode, UiOption, UiValue, ViewUpdate,
 };
 use fub_abi::{
+    DrawingAnchor, DrawingDisabledReason, DrawingInput, DrawingKeyMods, DrawingOverlay,
+    DrawingOverlayRole, DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE,
+    DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE,
+};
+use fub_abi::{
     DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingFrame,
     DrawingGesture, DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase,
     DrawingPointer, DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle,
     DrawingSync, DrawingSynced, DrawingTool, DRAWING_COMMAND_FILL_COLOR,
     DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH,
-};
-use fub_abi::{
-    DrawingDisabledReason, DrawingInput, DrawingKeyMods, DrawingOverlay, DrawingOverlayRole,
-    DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION,
-    DRAWING_COMMAND_TOOL_STATE,
 };
 use fub_abi::{
     GridBook, GridBytesCell, GridBytesSession, GridBytesWindow, GridCalculation, GridCommand,
@@ -1886,6 +1886,13 @@ fn drawing_samples() -> Value {
         composing: true,
         cursor: "pen_close".into(),
         options: json!({"rubber_band": true}),
+        anchors: vec![DrawingAnchor {
+            element: "p1".into(),
+            subpath: 0,
+            anchor: 2,
+            at: [12.5, -3.0],
+            end: true,
+        }],
     };
     let reasons: Vec<Value> = [
         DrawingDisabledReason::NoSelection,
@@ -1893,6 +1900,7 @@ fn drawing_samples() -> Value {
         DrawingDisabledReason::NeedsText,
         DrawingDisabledReason::NeedsGroup,
         DrawingDisabledReason::NeedsTwo,
+        DrawingDisabledReason::NeedsAnchors,
         DrawingDisabledReason::ReadOnly,
         DrawingDisabledReason::Unmapped,
         DrawingDisabledReason::Other {

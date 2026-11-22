@@ -3879,7 +3879,19 @@
         "cursor": "pen_close",
         "options": {
           "rubber_band": true
-        }
+        },
+        "anchors": [
+          {
+            "element": "p1",
+            "subpath": 0,
+            "anchor": 2,
+            "at": [
+              12.5,
+              -3.0
+            ],
+            "end": true
+          }
+        ]
       },
       "reading": {
         "bounds": [
@@ -4050,6 +4062,7 @@
     "needs_text",
     "needs_group",
     "needs_two",
+    "needs_anchors",
     "read_only",
     "unmapped",
     {
@@ -4230,7 +4243,19 @@
       "cursor": "pen_close",
       "options": {
         "rubber_band": true
-      }
+      },
+      "anchors": [
+        {
+          "element": "p1",
+          "subpath": 0,
+          "anchor": 2,
+          "at": [
+            12.5,
+            -3.0
+          ],
+          "end": true
+        }
+      ]
     }
   ],
   "DrawingCommandRequest": [

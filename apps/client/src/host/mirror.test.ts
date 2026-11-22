@@ -827,6 +827,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     composing: true,
     cursor: true,
     options: true,
+    anchors: true,
   }),
   DrawingCommandInfo: keysOf<DrawingCommandInfo>({ id: true, enabled: true, disabled_reason: true }),
   DrawingCommandRequest: keysOf<DrawingCommandRequest>({ revision: true, id: true, selection: true, value: true, preview: true }),
@@ -1754,6 +1755,7 @@ describe("mirror TS↔Rust", () => {
         case "needs_text":
         case "needs_group":
         case "needs_two":
+        case "needs_anchors":
         case "read_only":
         case "unmapped":
           return r;
@@ -1826,7 +1828,7 @@ describe("mirror TS↔Rust", () => {
       ...infos.flatMap((i) => (i.disabled_reason == null ? [] : [i.disabled_reason])),
     ];
     expect(new Set(reasons.map(reason))).toEqual(
-      new Set(["no_selection", "needs_path", "needs_text", "needs_group", "needs_two", "read_only", "unmapped", "other"]),
+      new Set(["no_selection", "needs_path", "needs_text", "needs_group", "needs_two", "needs_anchors", "read_only", "unmapped", "other"]),
     );
     const requests = fixture["DrawingCommandRequest"] as DrawingCommandRequest[];
     expect(requests.some((r) => r.preview === true)).toBe(true);

@@ -15,6 +15,7 @@
 
 import type { OptionItem } from "../../../../../kit/options-bar";
 import { openLifetime, type Lifetime, type Teardown } from "../../../../../ui/lifetime";
+import type { DrawingToolState } from "../../../../../host/contract";
 import type { FilaOpzioni } from "../../../completo/opzioni";
 import type { EditorContext } from "../context";
 
@@ -26,6 +27,7 @@ export interface CompletoMotore {
     opzioni: unknown,
     cambia: (chiave: string, valore: boolean | number | string) => void,
     vita: Lifetime,
+    ambiente?: { readonly stato: DrawingToolState | null; readonly rileggi: () => void },
   ): FilaOpzioni | null;
 }
 
@@ -35,6 +37,16 @@ export interface FilaMotoreContext {
   completoMotore?: () => CompletoMotore | null;
 }
 
+/// La riga con la fila del motore: dopo il colore e gli spessori (e le
+/// opzioni dell'Inchiostro, nascoste), prima della modifica, come la fila dei
+/// punti nel prototipo (`opzioni-punto`, «dopo Spessore»). Senza la modifica
+/// nella riga, la fila va in fondo.
+export function conLaFila(gruppi: readonly OptionItem[], voci: readonly OptionItem[]): OptionItem[] {
+  const modifica = gruppi.findIndex((gruppo) => gruppo.id === "draw.edit");
+  if (modifica < 0) return [...gruppi, ...voci];
+  return [...gruppi.slice(0, modifica), ...voci, ...gruppi.slice(modifica)];
+}
+
 /// La priorità della fila nella riga delle opzioni: va in «…» dopo il colore e
 /// gli spessori (priorità 3), e alla pari con la modifica (2), prima dei livelli (1).
 const PRIORITA_FILA = 2;
@@ -42,7 +54,7 @@ const PRIORITA_FILA = 2;
 interface Montata {
   readonly id: string;
   readonly fila: FilaOpzioni;
-  readonly voce: OptionItem;
+  readonly voci: readonly OptionItem[];
   readonly vita: Lifetime;
   /// Lo smontaggio dell'ascolto degli stati di questa fila.
   readonly spegniStati: Teardown;
@@ -72,36 +84,46 @@ export function installFilaMotore(ctx: EditorContext): void {
       smonta();
       return;
     }
+    // Le opzioni dell'Inchiostro e della gomma di Fub seguono lo strumento del
+    // motore: con uno scelto si nascondono.
+    ctx.syncPenOptions();
     const id = ctx.motoreTool;
     const completo = ctx.completoMotore?.() ?? null;
     if (id === null || completo === null) {
       smonta();
       return;
     }
-    const opzioni = ctx.statoStrumento(id)?.options ?? null;
+    const stato = ctx.statoStrumento(id);
+    const opzioni = stato?.options ?? null;
     // La stessa fila per lo stesso strumento: si aggiorna, e se non ha più
     // controlli si toglie.
     if (montata !== null && montata.id === id) {
-      if (!montata.fila.aggiorna(opzioni)) smonta();
+      if (!montata.fila.aggiorna(opzioni, stato)) smonta();
       return;
     }
     smonta();
     const vita = openLifetime();
-    const fila = completo.fila(id, opzioni, (chiave, valore) => ctx.opzioneMotore(id, chiave, valore), vita);
+    const ambiente = { stato, rileggi: () => ctx.rileggiStato(id) };
+    const fila = completo.fila(id, opzioni, (chiave, valore) => ctx.opzioneMotore(id, chiave, valore), vita, ambiente);
     if (fila === null) {
       vita.close();
       return;
     }
-    const holder = document.createElement("div");
-    holder.className = "draw-options-item";
-    holder.append(fila.element);
-    const voce: OptionItem = { id: `motore-${id}`, element: holder, priority: PRIORITA_FILA };
+    // Una voce per pezzo, ognuna con la sua priorità; senza pezzi, la fila
+    // intera in una voce.
+    const pezzi = fila.voci ?? [{ element: fila.element, priorita: PRIORITA_FILA }];
+    const voci: OptionItem[] = pezzi.map((pezzo, i) => {
+      const holder = document.createElement("div");
+      holder.className = "draw-options-item";
+      holder.append(pezzo.element);
+      return { id: i === 0 ? `motore-${id}` : `motore-${id}-${i}`, element: holder, priority: pezzo.priorita };
+    });
     // Lo stato dello strumento: la fila montata lo segue, e nessun altro.
     const spegniStati = ctx.ascoltaStati((altro) => {
       if (montata !== null && montata.id === altro) sincronizza();
     });
-    montata = { id, fila, voce, vita, spegniStati };
-    ctx.optionsBar.setItems([...ctx.toolbarGroups, voce]);
+    montata = { id, fila, voci, vita, spegniStati };
+    ctx.optionsBar.setItems(conLaFila(ctx.toolbarGroups, voci));
   };
 
   // Lo strumento scelto e la sua preparazione: a ogni avviso si sincronizza.

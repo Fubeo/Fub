@@ -38,8 +38,8 @@ export const CASELLE: readonly Casella[] = [
   { id: "directSelection", gruppo: "pick", strumenti: ["motore:directSelection", "motore:groupSelection"] },
   { id: "lasso", gruppo: "pick", strumenti: ["motore:lasso", "motore:magicWand"] },
   { id: "pen", gruppo: "draw", strumenti: ["motore:pen", "motore:smartPen", "motore:curvature", "motore:addAnchor", "motore:deleteAnchor", "motore:anchorPoint", "motore:cornerTool", "motore:slideAnchor", "motore:extendPath"] },
-  { id: "pencil", gruppo: "draw", strumenti: ["pen", "highlighter", "motore:pencil", "motore:paintbrush", "motore:blobBrush", "motore:smooth", "motore:join", "motore:sharedEdge"] },
-  { id: "eraser", gruppo: "draw", strumenti: ["eraser", "motore:eraser", "motore:pathEraser", "motore:anchorEraserBrush", "motore:scissors", "motore:knife", "motore:mirrorCut", "motore:lineCut", "motore:rectCut"] },
+  { id: "pencil", gruppo: "draw", strumenti: ["motore:pencil", "pen", "highlighter", "motore:paintbrush", "motore:blobBrush", "motore:smooth", "motore:join", "motore:sharedEdge"] },
+  { id: "eraser", gruppo: "draw", strumenti: ["motore:eraser", "eraser", "motore:pathEraser", "motore:anchorEraserBrush", "motore:scissors", "motore:knife", "motore:mirrorCut", "motore:lineCut", "motore:rectCut"] },
   { id: "rectangle", gruppo: "shape", strumenti: ["rect", "ellipse", "line", "arrow", "motore:rectangle", "motore:roundedRectangle", "motore:ellipse", "motore:polygon", "motore:star", "motore:flare", "motore:lineSegment", "motore:arc", "motore:spiral", "motore:rectangularGrid", "motore:polarGrid", "motore:parametricShape", "motore:shaper"] },
   { id: "type", gruppo: "shape", strumenti: ["text", "motore:type", "motore:areaType", "motore:typeOnPath", "motore:verticalType", "motore:verticalAreaType", "motore:verticalTypeOnPath", "motore:touchType"] },
   { id: "rotate", gruppo: "modify", strumenti: ["motore:rotate", "motore:reflect", "motore:scale", "motore:shear", "motore:reshape", "motore:freeTransform", "motore:puppetWarp"] },
@@ -62,12 +62,43 @@ const GRUPPO_DI_FAMIGLIA: Readonly<Record<ToolSpec["group"], GruppoColonna>> = {
 /// Gli strumenti del motore che hanno la riga «fatto» nella mappa (le voci
 /// `strumento` dell'indice generato; un test lo controlla). Un id qui sblocca
 /// `motore:<id>` nella colonna: il chrome lo mostra con il nome della sua
-/// famiglia e l'icona di `ICONE_MOTORE`. T11: gli strumenti del nucleo.
-export const MOTORE_PRONTO: ReadonlySet<string> = new Set(["selection", "directSelection", "groupSelection", "lasso", "hand", "zoom", "rotateView"]);
+/// famiglia e l'icona di `ICONE_MOTORE`. T11: gli strumenti del nucleo; T12:
+/// i ventuno di «disegnare» dei tracciati.
+export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
+  "selection",
+  "directSelection",
+  "groupSelection",
+  "lasso",
+  "hand",
+  "zoom",
+  "rotateView",
+  "pen",
+  "smartPen",
+  "curvature",
+  "addAnchor",
+  "deleteAnchor",
+  "anchorPoint",
+  "cornerTool",
+  "slideAnchor",
+  "extendPath",
+  "pencil",
+  "smooth",
+  "join",
+  "sharedEdge",
+  "eraser",
+  "pathEraser",
+  "anchorEraserBrush",
+  "scissors",
+  "knife",
+  "mirrorCut",
+  "lineCut",
+  "rectCut",
+]);
 
 /// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
 /// del prototipo (`PLAN-ui/disegno-completo.html`), dal catalogo
-/// `editors/spatial/icons.ts`.
+/// `editors/spatial/icons.ts`. Le icone della matita e della gomma che il
+/// prototipo non disegna nella tendina sono scelte fra quelle del catalogo.
 export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   selection: "draw-select",
   directSelection: "draw-direct-select",
@@ -76,6 +107,29 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   hand: "draw-hand",
   zoom: "draw-zoom",
   rotateView: "draw-rotate",
+  // La tendina della Penna, dal prototipo (`tendina-penna`).
+  pen: "draw-pen-nib",
+  smartPen: "draw-pen-nib",
+  curvature: "draw-point-smooth",
+  addAnchor: "draw-pen-nib",
+  deleteAnchor: "draw-point-delete",
+  anchorPoint: "draw-point-corner",
+  cornerTool: "draw-point-corner",
+  slideAnchor: "draw-point-smooth",
+  extendPath: "draw-point-join",
+  // La Matita e la Gomma: la prima dal prototipo, le altre dal catalogo.
+  pencil: "draw-pencil",
+  smooth: "draw-pencil",
+  join: "draw-point-join",
+  sharedEdge: "draw-point-join",
+  eraser: "draw-eraser",
+  pathEraser: "draw-eraser",
+  anchorEraserBrush: "draw-point-delete",
+  scissors: "draw-scissors",
+  knife: "draw-scissors",
+  mirrorCut: "draw-scissors",
+  lineCut: "draw-scissors",
+  rectCut: "draw-scissors",
 };
 
 /// L'icona di Fub per uno strumento del motore che il prototipo non disegna.

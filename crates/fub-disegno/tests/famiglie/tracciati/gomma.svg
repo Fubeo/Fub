@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <path id="oc1c1c1c1" d="M40 60 L100 60 L160 60 L160 120" fill="none" stroke="#000000" stroke-width="2"/>
+    <path id="od2d2d2d2" d="M166 124 L230 124" fill="none" stroke="#000000" stroke-width="2"/>
+    <path id="oe3e3e3e3" d="M220 20 L280 20 L284 50 L280 80 L220 80 Z" fill="#88aaff"/>
+    <path id="of4f4f4f4" d="M280 20 L340 20 L340 80 L280 80 Z" fill="#ffaa88"/>
+    <path id="op7a7a7a7" d="M330 260 L300 200 L325 200 C325 202.76 327.24 205 330 205 L330.01 205 C332.77 205 335.01 202.76 335.01 200 L360 200 Z" fill="#cccccc"/>
+    <path id="oi8b8b8b8" fub:tool="pen" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120 220 L160 220 L160 240 L120 240 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,23020,128,0 25,-3,2,8 31,-5,0,8"/>
+  </g>
+</svg>

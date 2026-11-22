@@ -18579,6 +18579,23 @@ input.canvas-toolbar-item {
   stroke: var(--accent);
   stroke-width: 1.5px;
 }
+/* I segni del motore del Completo (`motore/tracciati.ts`): il tracciato aperto
+   della Penna, i punti e le maniglie, nel colore d'accento. Un punto vuoto ha
+   il fondo del tema, uno pieno l'accento. */
+.draw-engine-line {
+  fill: none;
+  stroke: var(--accent);
+}
+.draw-engine-point {
+  fill: var(--bg);
+  stroke: var(--accent);
+}
+.draw-engine-point-pieno {
+  fill: var(--accent);
+}
+.draw-engine-handle {
+  fill: var(--accent);
+}
 .draw-zoom-box {
   border: 1px dashed var(--accent);
   background: color-mix(in oklch, var(--accent) 8%, transparent);
@@ -19605,6 +19622,17 @@ button.draw-isolation-crumb:hover {
 }
 .draw-zoom-field {
   padding: 0 var(--space-3) var(--space-1);
+}
+/* ── K6 · Il punto nella fila delle opzioni (T12) ───────────────────────── */
+.draw-point-place {
+  gap: var(--space-4);
+}
+.kit-number.draw-point-coord {
+  grid-template-columns: auto 5.5rem;
+  column-gap: var(--space-2);
+}
+.draw-point-coord .kit-number-box {
+  height: 28px;
 }
 
 /* ── skin/media.css ─────────────────────────────────────────────────────── */

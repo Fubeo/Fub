@@ -1975,6 +1975,19 @@ export interface DrawingToolState {
   cursor: string;
   /** Le opzioni dello strumento, `null` se non ne ha. */
   options: unknown;
+  /** I punti di ancoraggio scelti dal gesto; manca se nessuno. */
+  anchors?: DrawingAnchor[];
+}
+
+/** Un punto di ancoraggio scelto, in coordinate di scena: torna nel `value`
+ *  dei comandi sui punti (`anchors`), e vale solo se sta ancora lì. */
+export interface DrawingAnchor {
+  element: string;
+  subpath: number;
+  anchor: number;
+  at: DrawingPoint;
+  /** Il primo o l'ultimo punto di un sottotracciato aperto. */
+  end: boolean;
 }
 
 /** Perché un comando è spento: il client lo dice con i suoi testi; `other`
@@ -1985,6 +1998,7 @@ export type DrawingDisabledReason =
   | "needs_text"
   | "needs_group"
   | "needs_two"
+  | "needs_anchors"
   | "read_only"
   | "unmapped"
   | { other: { text: string } };

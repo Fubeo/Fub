@@ -19,7 +19,7 @@ export const DRAW: PartAnatomy = {
         "draw-export", "draw-export-text", "draw-rail", "draw-group", "draw-button", "kit-bar-button", "draw-zoom-level", "draw-layer-button",
         "draw-layer-state", "draw-swatch-frame", "draw-swatch", "draw-width-bar", "draw-size-glyph", "draw-pen-choice", "draw-pen-name", "draw-pen-gallery", "draw-pen-gallery-heading", "draw-pen-gallery-list", "draw-pen-gallery-item", "draw-pen-gallery-empty", "draw-pen-gallery-save", "draw-pen-preview", "draw-pen-saved-remove", "draw-pen-size", "draw-eraser-mode", "draw-eraser-mode-name", "draw-title",
         "draw-title-input", "draw-surface", "draw-zoom-box", "draw-navigator", "draw-navigator-sheets",
-        "draw-navigator-shapes", "draw-navigator-view", "draw-arrange", "draw-arrange-input", "draw-arrange-suffix", "draw-page",
+        "draw-navigator-shapes", "draw-navigator-view", "draw-engine-line", "draw-engine-point", "draw-engine-point-pieno", "draw-engine-handle", "draw-arrange", "draw-arrange-input", "draw-arrange-suffix", "draw-page",
         "draw-sheet-name", "draw-grid", "draw-cursor", "draw-objects",
         "draw-objects-header", "draw-objects-title", "draw-objects-count", "draw-objects-empty",
         "draw-objects-filter", "draw-objects-search", "draw-objects-kind", "draw-objects-status", "draw-objects-tree",
@@ -42,7 +42,7 @@ export const DRAW: PartAnatomy = {
         "draw-properties-unit", "draw-properties-switch", "draw-properties-note",
         "draw-properties-error", "draw-properties-actions", "draw-properties-bar", "draw-properties-export",
         "draw-properties-menu", "draw-properties-contrast",
-        "draw-resources-swatches", "draw-resources-corpo",
+        "draw-resources-swatches", "draw-resources-corpo", "draw-point-place", "draw-point-coord", "kit-number", "kit-number-box",
       ],
     },
     {

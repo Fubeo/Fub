@@ -100,6 +100,10 @@ pub const MAX_DRAWING_INPUTS: usize = 10_000;
 pub const MAX_DRAWING_KEY_BYTES: usize = 64;
 /// Le sovrapposizioni di un'anteprima, al più.
 pub const MAX_DRAWING_OVERLAYS: usize = 10_000;
+
+/// I punti scelti in `DrawingToolState.anchors`, al più: chi scrive lo stato
+/// porta i primi.
+pub const MAX_DRAWING_ANCHORS: usize = 1_000;
 /// Il testo di un'etichetta o di una misura, al più.
 pub const MAX_DRAWING_OVERLAY_TEXT_BYTES: usize = 1024;
 /// I dati `d` di un tracciato sovrapposto, al più.
@@ -970,6 +974,45 @@ pub struct DrawingToolState {
     pub cursor: String,
     /// Le opzioni dello strumento (`Tool::options()`), `null` se non ne ha.
     pub options: Value,
+    /// I punti di ancoraggio scelti dal gesto (la selezione diretta, il punto
+    /// di ancoraggio), su elementi che il disegno ha già; vuoto se nessuno.
+    /// Al più [`MAX_DRAWING_ANCHORS`]. Può mancare (vale vuoto).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<DrawingAnchor>,
+}
+
+/// Un punto di ancoraggio scelto: l'elemento del disegno, il suo sottotracciato
+/// e il punto (da 0), dove sta in coordinate di scena, e se è l'estremo di un
+/// sottotracciato aperto. Torna nel `value` dei comandi sui punti scelti
+/// (`anchors`): il motore lo prende solo se il punto sta ancora lì.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DrawingAnchor {
+    pub element: String,
+    pub subpath: u32,
+    pub anchor: u32,
+    pub at: DrawingPoint,
+    /// Il primo o l'ultimo punto di un sottotracciato aperto.
+    pub end: bool,
+}
+
+impl DrawingToolState {
+    /// Il controllo di chi scrive lo stato, prima di mandarlo.
+    pub fn validate(&self) -> Result<(), PluginError> {
+        if self.anchors.len() > MAX_DRAWING_ANCHORS {
+            return Err(bad(format!(
+                "`state.anchors` has {} anchors, at most {MAX_DRAWING_ANCHORS}",
+                self.anchors.len()
+            )));
+        }
+        for a in &self.anchors {
+            if a.element.is_empty() || !a.at.iter().all(|v| v.is_finite()) {
+                return Err(bad(
+                    "`state.anchors` has an empty element or a point that is not finite".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl DrawingOutcome {
@@ -991,6 +1034,9 @@ impl DrawingOutcome {
         }
         if let Some(frame) = &self.frame {
             frame.validate("frame")?;
+        }
+        if let Some(state) = &self.state {
+            state.validate()?;
         }
         ids("selection", &self.selection)?;
         losses("losses", &self.losses)
@@ -1043,6 +1089,9 @@ pub enum DrawingDisabledReason {
     NeedsGroup,
     /// Servono almeno due oggetti.
     NeedsTwo,
+    /// Servono punti di ancoraggio scelti (con la selezione diretta): un
+    /// comando sui punti che la selezione di oggetti non dice.
+    NeedsAnchors,
     /// Il disegno, o ciò che è scelto, non si può modificare.
     ReadOnly,
     /// Ciò che è scelto è una parte che il motore non sa modificare.
