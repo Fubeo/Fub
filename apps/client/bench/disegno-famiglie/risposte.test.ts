@@ -21,6 +21,8 @@ describe("le risposte delle famiglie del banco", () => {
     // L'aspetto (K6 T15, giro 2): la trasparenza, che il banco non scrive (`aspetto.json`).
     // Il testo (K6 T16, giro 1): Carattere e Paragrafo, un passo senza operazioni (il banco non
     // riscrive il testo, la scena si guarda).
+    // La forma composta (K6 T13, `forme.json`): Alt e Meno davanti sulle due forme di `?elabora=1`,
+    // con le operazioni del motore vero (il gruppo, i suoi membri con l'id e la ricetta).
     // L'elaborazione dei tracciati (K6 T12, giro 5): Unione e Meno davanti sulle due forme di
     // `?elabora=1`, coi tracciati scritti a mano (archi al posto delle curve del motore).
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
@@ -33,6 +35,7 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.paint.setFill",
       "disegno.paint.setStroke",
       "disegno.shape.rectangle",
+      "disegno.object.compoundShape.make",
       "disegno.select.same.fillColor",
       "disegno.select.same.strokeColor",
       "disegno.select.allOnArtboard",
@@ -51,6 +54,8 @@ describe("le risposte delle famiglie del banco", () => {
     expect(unione).toHaveLength(1);
     expect(unione[0].op).toBe("batch");
     expect(unione[0].ops.map((op: { op: string }) => op.op)).toEqual(["remove", "remove", "add"]);
+    const composta = JSON.parse(rispostaDiFamiglia(richiesta("disegno.object.compoundShape.make", { mode: "subtract" })).ops ?? "[]");
+    expect(composta[0].ops.map((op: { op: string }) => op.op)).toEqual(["remove", "remove", "add", "add"]);
     expect(rispostaDiFamiglia(richiesta("disegno.text.setRangeStyle", { size: 40 })).ops).toBe("[]");
     expect(rispostaDiFamiglia(richiesta("disegno.swatch.new", { name: "Verde", color: "#009e73" })).refused).toBeNull();
     expect(rispostaDiFamiglia(richiesta("disegno.object.path.offsetPath", { offset: 10 })).preview?.overlays).toHaveLength(1);

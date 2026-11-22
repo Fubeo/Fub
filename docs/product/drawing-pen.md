@@ -326,6 +326,40 @@ avrebbe niente di sicuro da fare:
 Le voci e il pannello `pathfinder` sono nella mappa del motore
 (`crates/fub-disegno/mappa.tsv`); le file del menu sono del client
 (`FILE_ELABORAZIONE` in `apps/client/src/editors/spatial/completo/comandi.ts`),
-la sezione è `completo/elaborazione.ts`. Trapping, Opzioni di elaborazione,
-Ripeti, le forme composte (`object.compoundShape.*`) ed Espandi forma non ci
-sono ancora: sono spente e dicono perché.
+la sezione è `completo/elaborazione.ts`. Trapping e Opzioni di elaborazione
+non ci sono ancora: sono spente e dicono perché.
+
+**Ripeti Elaborazione tracciati** rifà sugli oggetti scelti adesso l'ultima
+voce delle due file andata a buon fine (dal menu, dalla sezione o dai
+tasti), finché il disegno resta aperto nel Completo. Prima della prima è
+spenta e dice «Nessuna elaborazione da ripetere: fanne prima una.». Le forme
+composte non contano.
+
+#### Forme composte
+
+Una **forma composta** tiene i suoi oggetti e li mostra combinati: si può
+cambiare il metodo o rimetterli com'erano. Si fa in due modi:
+
+- un metodo forma con **Alt** nella sezione Elaborazione tracciati: gli
+  oggetti scelti diventano una forma composta in quel metodo (il titolo del
+  pulsante lo dice);
+- **≡ › Oggetto › Elaborazione tracciati › Forma composta › Crea forma
+  composta**, che la fa in Unione.
+
+Con una forma composta fra gli oggetti scelti, anche sola, i metodi forma
+della sezione cambiano il suo metodo invece di toglierne gli oggetti. Nel
+sottomenu **Forma composta** ci sono anche **Metodo forma…** (una finestra
+con il metodo: Unione, Meno davanti, Intersezione, Escludi), **Rilascia
+forma composta** (rimette gli oggetti, ognuno con un id nuovo) ed **Espandi
+forma composta** (lascia il tracciato che si vede). **≡ › Oggetto › Espandi
+forma** fa lo stesso con una forma viva (un rettangolo arrotondato, un
+poligono): diventa un tracciato semplice.
+
+Ogni comando è un passo di Annulla. La forma composta si salva come un
+gruppo col disegno già combinato e la sua ricetta (`scene-format-recipe.md`):
+riaperta nel Completo resta composta, coi metodi dei suoi oggetti; il
+Semplice e gli altri programmi vedono il gruppo. Un comando che non ha
+niente da fare (Crea con un oggetto solo, lo stesso metodo che ha già, un
+risultato vuoto) non parte e dice perché. Il motore è
+`crates/fub-disegno/src/famiglie/forme.rs`; ogni elemento del gruppo salvato
+ha il suo id, come vuole il formato della scena.

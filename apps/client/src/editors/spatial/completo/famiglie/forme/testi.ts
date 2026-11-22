@@ -1,5 +1,5 @@
 // I testi della famiglia «forme» del Disegno completo (piano K6, T13): solo le parole
-// dei campi delle finestre delle misure (`campo:<nome>`, giro 2). I nomi corti degli
+// dei campi delle finestre delle misure (`campo:<nome>`, giro 2) e di Metodo forma. I nomi corti degli
 // strumenti di forma nella colonna stanno nel catalogo del Completo (`draw.engine.name.*`
 // in `strings/completo.ts`), perché la colonna li mostra prima che la famiglia arrivi.
 
@@ -31,4 +31,11 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "campo:fill": { it: "Riempi", en: "Fill" },
   "campo:closed": { it: "Chiuso", en: "Closed" },
   "campo:clockwise": { it: "In senso orario", en: "Clockwise" },
+  // La finestra di Metodo forma (T13): i quattro metodi con i nomi dei pulsanti della
+  // sezione «Elaborazione tracciati» (`draw.elaborazione.*`).
+  "campo:mode": { it: "Metodo", en: "Mode" },
+  "scelta:mode:add": { it: "Unione", en: "Unite" },
+  "scelta:mode:subtract": { it: "Meno davanti", en: "Minus Front" },
+  "scelta:mode:intersect": { it: "Intersezione", en: "Intersect" },
+  "scelta:mode:exclude": { it: "Escludi", en: "Exclude" },
 };
