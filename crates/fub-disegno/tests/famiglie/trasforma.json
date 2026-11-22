@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia trasforma (piano K6, T13, giro 1): la sezione «Allinea» dell'ispettore. Il disegno è trasforma/base.svg: due rettangoli a y 100 (oa1a1a1a1 e ob2b2b2b2), un gruppo di due quadrati, un tracciato op7a7a7a7 a destra e un tratto della penna. Le voci «interfaccia» e il pannello «align» hanno la loro prova nel client (apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts), che nomina ciascuna.",
+  "$nota": "I casi della famiglia trasforma (piano K6, T13, giro 1 e 3): la sezione «Allinea» dell'ispettore, e le finestre con anteprima di Sposta, Ruota, Scala, Rifletti e Inclina (giro 3). Il disegno è trasforma/base.svg: due rettangoli a y 100 (oa1a1a1a1 e ob2b2b2b2), un gruppo di due quadrati, un tracciato op7a7a7a7 a destra e un tratto della penna. Le voci «interfaccia» e il pannello «align» hanno la loro prova nel client (apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts), che nomina ciascuna.",
   "casi": [
     {
       "id": "object.align",
@@ -259,6 +259,220 @@
       "id": "align",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts"
+    },
+    {
+      "id": "object.move",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 20,
+        "dy": 10
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 20 10)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-move-20-10.svg"
+    },
+    {
+      "id": "object.rotate",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "angle": 90
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(0 -1 1 0 25 275)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-rotate-90.svg"
+    },
+    {
+      "id": "object.scale",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "sx": 50
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(0.5 0 0 0.5 75 62.5)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-scale-50.svg"
+    },
+    {
+      "id": "object.scale",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "sx": 0
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.reflect",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "axis": "vertical"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(-1 0 0 1 300 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-reflect-vertical.svg"
+    },
+    {
+      "id": "object.shear",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "angle": 15,
+        "axis": "horizontal"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 -0.2679 1 33.4936 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-shear-15.svg"
+    },
+    {
+      "id": "object.setBounds",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "x": 0,
+        "width": 300
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(3 0 0 1 -450 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-setbounds.svg"
+    },
+    {
+      "id": "object.transform",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "matrix": [
+          1,
+          0,
+          0,
+          1,
+          30,
+          0
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 30 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "object-transform-30.svg"
+    },
+    {
+      "id": "object.resetBoundingBox",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.transformAgain",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.move",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "dx": 20,
+        "dy": 0
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
     }
   ]
 }

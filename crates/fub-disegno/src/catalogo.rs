@@ -499,6 +499,9 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("count", Tipo::Numero),
     ("dx", Tipo::Numero),
     ("dy", Tipo::Numero),
+    ("sx", Tipo::Numero),
+    ("sy", Tipo::Numero),
+    ("dy", Tipo::Numero),
     ("height", Tipo::Numero),
     ("id", Tipo::Testo),
     ("ids", Tipo::Json),
@@ -556,6 +559,40 @@ pub const COMANDI_DI_FORMA: &[&str] = &[
     "shape.arc",
 ];
 
+/// Le finestre con anteprima delle trasformazioni (K6 T13, giro 3): per ciascuna il comando, i
+/// campi che la finestra chiede e il predefinito di partenza di ciascuno. Lo schema grezzo del
+/// motore porta anche `ids`, `objects`, `patterns`…: la finestra non li chiede, e li lascia al
+/// comando (la selezione, le impostazioni). Sposta è il modello, come dice il piano.
+pub const FINESTRE_DI_TRASFORMA: &[(&str, &str, &[(&str, &str)])] = &[
+    ("object.move", "{dx, dy}", &[("dx", "0"), ("dy", "0")]),
+    ("object.rotate", "{angle}", &[("angle", "0")]),
+    ("object.scale", "{sx}", &[("sx", "100")]),
+    (
+        "object.reflect",
+        "{axis: \"vertical\"|\"horizontal\"}",
+        &[("axis", "vertical")],
+    ),
+    (
+        "object.shear",
+        "{angle, axis?: \"horizontal\"|\"vertical\"}",
+        &[("angle", "0"), ("axis", "horizontal")],
+    ),
+];
+
+/// Le misure di una forma che partono da 100 quando lo schema non dà un predefinito (K6 T13,
+/// giro 3): una larghezza, un'altezza o un raggio a 0 non è una forma, e OK non deve partire.
+pub const MISURE_DI_PARTENZA: &[&str] = &[
+    "width", "height", "radius", "radius1", "radius2", "diameter",
+];
+
+/// Lo schema di una finestra di trasformazione, se il comando ne ha una.
+fn schema_di_trasformazione(id: &str) -> Option<&'static str> {
+    FINESTRE_DI_TRASFORMA
+        .iter()
+        .find(|(comando, _, _)| *comando == id)
+        .map(|(_, schema, _)| *schema)
+}
+
 /// Lo schema di una finestra di forma, dal primo modulo dello schema del
 /// motore: senza le note fra parentesi e senza i predefiniti (`sides=6`), che
 /// il lettore dello schema non legge e che [`predefiniti`] dà a parte. Un
@@ -576,12 +613,27 @@ pub fn predefiniti(schema: &str) -> Vec<(String, String)> {
 /// I predefiniti del comando di forma `id`, dallo schema del motore (vuoti per
 /// un comando che non è di forma).
 pub fn predefiniti_del_comando(id: &str) -> Vec<(String, String)> {
+    if let Some((_, _, predefiniti)) = FINESTRE_DI_TRASFORMA
+        .iter()
+        .find(|(comando, _, _)| *comando == id)
+    {
+        return predefiniti
+            .iter()
+            .map(|(nome, valore)| ((*nome).to_string(), (*valore).to_string()))
+            .collect();
+    }
     if !COMANDI_DI_FORMA.contains(&id) {
         return Vec::new();
     }
-    vectorcraft_engine::find_command(id)
+    let mut out = vectorcraft_engine::find_command(id)
         .map(|c| predefiniti(c.params))
-        .unwrap_or_default()
+        .unwrap_or_default();
+    for misura in MISURE_DI_PARTENZA {
+        if !out.iter().any(|(nome, _)| nome == misura) {
+            out.push(((*misura).to_string(), "100".to_string()));
+        }
+    }
+    out
 }
 
 /// Analizza il primo modulo di `schema`: i campi che restano (`nome` o
@@ -668,7 +720,19 @@ fn senza_note(pezzo: &str) -> String {
 /// positive (il campo mostra due decimali, e lo zero è una forma che non c'è),
 /// e i conteggi hanno il loro minimo (un poligono ha almeno tre lati). Nessun
 /// massimo: il motore non ne dà uno.
+/// Il massimo di un campo di una finestra di trasformazione (K6 T13, giro 3): la scala sta fra
+/// 0,01 % e 10000 %; le altre misure non ne hanno.
+pub fn massimo_del_campo(comando: &str, campo: &str) -> Option<f64> {
+    if schema_di_trasformazione(comando).is_some() && (campo == "sx" || campo == "sy") {
+        return Some(10000.0);
+    }
+    None
+}
+
 pub fn minimo_del_campo(comando: &str, campo: &str) -> Option<f64> {
+    if schema_di_trasformazione(comando).is_some() && (campo == "sx" || campo == "sy") {
+        return Some(0.01);
+    }
     if !COMANDI_DI_FORMA.contains(&comando) {
         return None;
     }
@@ -747,6 +811,9 @@ pub fn effetti_del_motore() -> &'static BTreeMap<String, String> {
 
 /// Lo schema del motore per i parametri della riga, vuoto se non ne ha.
 pub fn schema_di(riga: &RigaMappa) -> String {
+    if let (FonteMappa::Motore, Some(schema)) = (riga.fonte, schema_di_trasformazione(&riga.id)) {
+        return schema.to_string();
+    }
     match riga.fonte {
         FonteMappa::Motore if COMANDI_DI_FORMA.contains(&riga.id.as_str()) => {
             vectorcraft_engine::find_command(&riga.id)
