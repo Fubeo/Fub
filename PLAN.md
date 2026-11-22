@@ -2320,7 +2320,11 @@ si chiude in un passo prima di un sync (`tieniAperto` della sessione). La
 ricetta di `corner_tool` resta (D10). Mancano: la sezione Tracciato in
 Design, le finestre (Semplifica, Leviga, Espandi, Sposta tracciato,
 `divideDashes`), un sottomenu «Tracciato composto», il perché vero delle
-voci spente con l'Inchiostro (oggi «Non ancora collegato»).
+voci spente con l'Inchiostro (oggi «Non ancora collegato»). Giro 3 unito
+in 3b51c0e28: sottomenu «Tracciato composto», il perché `fub_ink` (variante
+nuova di `DrawingDisabledReason`), finestre con anteprima di Semplifica,
+Smussa, Sposta tracciato, Espandi e Dividi in trattini (i contorni senza
+operazioni; OK scrive). Manca la sezione Tracciato in Design (giro 4).
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
@@ -2393,12 +2397,18 @@ non porta il raggio), la sezione «Allinea» in Design costruita dall'indice
 (selezione o tavola; la famiglia si carica al primo clic), i nomi corti.
 Il riflesso (`flare`) e le griglie aspettano T27; `select.key` aspetta T15.
 La sezione Allinea non è nel prototipo: da disegnare in PLAN-ui (resta
-solo nell'app finché il pianificatore non la disegna). Mancano: i valori
-di partenza delle finestre delle forme (oggi 0, OK acceso), il messaggio
-dell'oggetto bloccato, il gruppo a icone di allineamento doppio nel
-Completo, la sezione «Trasforma», le finestre Sposta/Ruota/Rifletti/
-Scala/Inclina, «Elaborazione tracciati», costruttore di forme, perni e
-strumento forma.
+solo nell'app finché il pianificatore non la disegna). Giro 3 unito in
+11d976ca0: misure di partenza 100 e OK spento sotto il minimo, oggetto
+bloccato rifiutato col perché (decisione b estesa: rifiuto, non salto),
+gruppo `align` nascosto nel Completo, sezione «Trasforma» in Design,
+finestre Sposta/Ruota/Rifletti/Scala/Inclina con anteprima (rotazione con
+`object.rotate`, inclinazione con `object.shear`); le finestre stanno in
+`catalogo::FINESTRE_SCRITTE` con quelle dei tracciati. Mancano: i campi di
+Trasforma che leggono il valore della selezione (oggi vuoti), «Posizione
+e misure» e «Distribuisci» doppi nel Completo (da nascondere), Ripeti
+trasformazione senza una precedente (oggi `unsupported`), Trasforma
+ciascuno, Distorci, «Elaborazione tracciati», costruttore di forme, perni
+e strumento forma.
 Aspetta: niente
 
 ## T14 · Il colore
