@@ -1856,6 +1856,481 @@
         ]
       },
       "dopo": "gradient-dopo.svg"
+    },
+    {
+      "id": "paint.sampleColor",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#00ff00"
+      },
+      "atteso": {
+        "selezione": []
+      }
+    },
+    {
+      "id": "paint.sampleColor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#00aa00"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-setFill.svg"
+    },
+    {
+      "id": "paint.sampleColor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "paint.sampleColor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "eyedropper.setOptions",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "sampleSize": 3,
+        "apply": {
+          "paragraph": false
+        }
+      },
+      "atteso": {
+        "selezione": []
+      }
+    },
+    {
+      "id": "eyedropper.setOptions",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "sampleSize": 4
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "#ff0000",
+              "stroke": "#0000ff",
+              "stroke-width": "2"
+            }
+          }
+        ]
+      },
+      "dopo": "eyedropper-riempimento.svg"
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "selezione": []
+      }
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 40,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 40,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#336699",
+              "stroke": "none",
+              "stroke-width": "0"
+            }
+          }
+        ]
+      },
+      "dopo": "eyedropper-da-bloccato.svg"
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 140,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 140,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#d55e00",
+              "stroke": "none",
+              "stroke-width": "0"
+            }
+          }
+        ]
+      },
+      "dopo": "eyedropper-da-inchiostro.svg"
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 40,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": true,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 40,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": true,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 140,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": true,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 140,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": true,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "immagine.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "eyedropper",
+      "fonte": "strumento",
+      "disegno": "immagine.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": true,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": true,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
     }
   ]
 }

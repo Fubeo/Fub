@@ -229,8 +229,11 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // Il punto scelto della sfumatura (K6 T15, giro 5) è della sessione, come
     // il lato attivo: una lettura che non cambia il file. Le sfumature
     // preimpostate (K6 T15, giro 6) si elencano, si salvano e si tolgono
-    // nelle preferenze del motore: il file non cambia.
+    // nelle preferenze del motore: il file non cambia. Le opzioni del
+    // Contagocce (K6 T14, giro 6) sono una preferenza del motore: non leggono
+    // né cambiano ciò che è scelto.
     let sempre = [
+        "disegno.eyedropper.setOptions",
         "disegno.swatch.new",
         "disegno.swatch.edit",
         "disegno.swatch.delete",

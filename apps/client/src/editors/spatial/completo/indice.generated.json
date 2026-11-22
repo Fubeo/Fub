@@ -691,6 +691,22 @@
     },
     {
       "fonte": "motore",
+      "id": "eyedropper.setOptions",
+      "chiamata": {
+        "comando": "disegno.eyedropper.setOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni contagocce",
+        "en": "Eyedropper Options"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "gradient.presets.apply",
       "chiamata": {
         "comando": "disegno.gradient.presets.apply"
@@ -1758,6 +1774,22 @@
       "posto": "ispettore/design",
       "famiglia": "colore",
       "tasto": "/",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.sampleColor",
+      "chiamata": {
+        "comando": "disegno.paint.sampleColor"
+      },
+      "etichetta": {
+        "it": "Campiona colore",
+        "en": "Sample Color"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -3308,6 +3340,22 @@
       "posto": "colonna/disegna",
       "famiglia": "tracciati",
       "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "eyedropper",
+      "chiamata": {
+        "strumento": "eyedropper"
+      },
+      "etichetta": {
+        "it": "Strumento Contagocce",
+        "en": "Eyedropper Tool"
+      },
+      "posto": "colonna/colore",
+      "famiglia": "colore",
+      "tasto": "I",
       "effetto": "cambia",
       "finestra": false
     },
