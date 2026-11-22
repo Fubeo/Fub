@@ -1755,6 +1755,7 @@
     "draw-resources-corpo",
     "draw-point-place",
     "draw-point-coord",
+    "draw-contagocce-copia",
     "vector-notice",
     "vector-about",
     "vector-about-desc",
@@ -4267,6 +4268,7 @@
     "draw-resources-corpo": "cornice",
     "draw-point-place": "cornice",
     "draw-point-coord": "cornice",
+    "draw-contagocce-copia": "cornice",
     "vector-notice": "cornice",
     "vector-about": "cornice",
     "vector-about-desc": "cornice",
@@ -9177,6 +9179,7 @@
         "draw-resources-corpo",
         "draw-point-place",
         "draw-point-coord",
+        "draw-contagocce-copia",
         "kit-number",
         "kit-number-box"
       ],
@@ -12990,7 +12993,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2510,
+    "hooks": 2511,
     "state_names": 7,
     "assigned_states": 1128,
     "components": 332,

@@ -19967,6 +19967,15 @@ button.draw-isolation-crumb:hover {
   padding: 0;
 }
 
+/* Le caselle della copia del Contagocce (K6 T14, giro 8): una fila con lo spazio del kit fra
+   una casella e la parola dopo, nel menu «…» come in linea nella testata. */
+.draw-contagocce-copia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
 /* Immagini, zoom, lightbox, SVG. */
