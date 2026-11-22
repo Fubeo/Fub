@@ -98,7 +98,7 @@ pub(crate) fn rifiuto_del_generatore(
     }
     let tutti = nodi
         .iter()
-        .all(|n| copia.documento.node(*n).is_some_and(|nodo| unibile(nodo)));
+        .all(|n| copia.documento.node(*n).is_some_and(unibile));
     (!tutti).then_some(DrawingRefusal::Unmapped)
 }
 
@@ -122,7 +122,7 @@ fn generatore_spento(copia: &Copia, selezione: &[String]) -> Option<DrawingDisab
     }
     let tutti = nodi
         .iter()
-        .all(|n| copia.documento.node(*n).is_some_and(|nodo| unibile(nodo)));
+        .all(|n| copia.documento.node(*n).is_some_and(unibile));
     (!tutti).then_some(DrawingDisabledReason::NeedsPath)
 }
 
