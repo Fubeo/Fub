@@ -147,22 +147,32 @@ gli oggetti. Scegliere non cambia il file e non passa da Annulla.
   **Colore tratto**, **Spessore tratto** e **Istanza di simbolo**, che sceglie
   le istanze dello stesso simbolo. Gli oggetti senza tratto sono uguali fra
   loro: con un oggetto senza tratto, **Colore tratto** sceglie tutti quelli
-  senza tratto.
+  senza tratto. **Famiglia di font**, **Famiglia e stile font**, **Famiglia,
+  stile e dimensione font**, **Dimensione font**, **Colore riempimento testo** e
+  **Colore tratto testo** confrontano il testo scelto: sceglie gli oggetti che
+  hanno un testo con lo stesso valore, anche dentro i gruppi.
 - **Oggetto** ha **Tutto sugli stessi livelli**, che sceglie gli oggetti dei
   livelli dell'oggetto scelto, e **Tutti gli oggetti di testo**, che sceglie
-  tutti gli oggetti di testo del disegno.
+  tutti gli oggetti di testo del disegno. **Punti isolati** sceglie i tracciati
+  di un solo punto, e **Tracciati aperti** quelli che non sono chiusi.
+- **Tutto**, **Inversa**, **Oggetto successivo sopra** e **sotto**, e
+  **Deseleziona** scelgono o tolgono la selezione, senza cambiare il file.
 
 Una voce che non vale per ciò che è scelto resta nel menu, sbiadita, con il
-perché del motore: «Scegli un oggetto.» senza scelta, e, sulla voce Istanza di
-simbolo, «Non è un'istanza.» quando la scelta non è un'istanza.
+perché del motore: «Scegli un oggetto.» senza scelta, «Scegli un testo.» sulle
+voci del testo quando la scelta non ha testo, sulla voce Istanza di simbolo
+«Non è un'istanza.» quando la scelta non è un'istanza, e «Nel disegno non ci
+sono punti isolati.» (o tracciati aperti) quando il disegno non ne ha.
 
-Restano «Non ancora collegato»: **Tutto**, **Inversa**, **Oggetto successivo
-sopra** e **sotto**, e **Deseleziona**. Dentro **Oggetto** mancano le voci che
-dipendono dalla specie dell'oggetto (maschere di ritaglio, punti isolati,
-tracciati aperti, testo di punto e d'area, maniglie, pennellate): il modello
-del Completo non dice ancora di che specie è un oggetto. **Punti**, **segmenti**
-e **colore** non sono voci del menu: il motore le vuole con un punto o un colore
-già scelti, e restano nell'ispettore.
+Non sono ancora nel menu: **Riseleziona**, le selezioni salvate (**Salva
+selezione…**, **Aggiorna selezione**, **Richiama** e **Modifica selezione…**),
+**Seleziona testo per font**, **Avvia modifica globale** e la bacchetta
+magica. Dentro **Oggetto** mancano **Maschere di ritaglio**, **Maniglie di
+direzione**, **Pennellate**, **Sezioni**, **Oggetti testo per punti** e
+**Oggetti testo in area**: il motore non distingue il testo con la larghezza di
+Fub da quello di punto, perché il suo importatore legge il testo in area solo
+dai `flowRoot`. **Punti**, **segmenti** e **colore** non sono voci del menu: il
+motore le vuole con un punto o un colore già scelti, e restano nell'ispettore.
 
 ## Bloccare e nascondere
 

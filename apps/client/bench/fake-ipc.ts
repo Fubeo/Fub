@@ -1276,7 +1276,7 @@ function benchDrawingEngine(): DrawingFake | undefined {
         ? (selection) => comandiProva(selection)
         : params.get("comandi") === "risposti"
           ? () => comandiRisposti()
-          : (selection) => [...comandiTrasformazioni(selection), ...comandiSelezione(selection)],
+          : (selection) => [...comandiTrasformazioni(selection), ...comandiSelezione(selection, CONNECTORS?.labels ?? [])],
     open: () => {
       const instance = `banco-${++instances}`;
       benchLastInstance = instance;
