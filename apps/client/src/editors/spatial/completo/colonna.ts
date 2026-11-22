@@ -64,7 +64,8 @@ const GRUPPO_DI_FAMIGLIA: Readonly<Record<ToolSpec["group"], GruppoColonna>> = {
 /// `motore:<id>` nella colonna: il chrome lo mostra con il nome della sua
 /// famiglia e l'icona di `ICONE_MOTORE`. T11: gli strumenti del nucleo; T12:
 /// i ventuno di «disegnare» dei tracciati; T13 giro 1: gli strumenti di forma
-/// (la famiglia `forme`); T16 giro 1: il Testo di punto (`type`).
+/// (la famiglia `forme`); T16 giro 1: il Testo di punto (`type`); T15 giro 6:
+/// lo strumento Sfumatura (`gradient`).
 export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "selection",
   "directSelection",
@@ -104,6 +105,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "star",
   // T16 giro 1: il Testo di punto.
   "type",
+  // T15 giro 6: lo strumento Sfumatura, con il suo annotatore.
+  "gradient",
 ]);
 
 /// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
@@ -153,6 +156,8 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   rectCut: "draw-scissors",
   // Il Testo del motore: l'icona del Testo di Fub, con cui sta nella casella.
   type: "draw-text",
+  // Lo strumento Sfumatura: l'icona del prototipo (`data-slot="gradient"`).
+  gradient: "draw-gradient",
 };
 
 /// La finestra che un clic senza trascinare apre per uno strumento di forma (T13,

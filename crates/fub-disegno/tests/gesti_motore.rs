@@ -710,3 +710,65 @@ fn un_clic_e_esc_senza_scrivere_non_lascia_niente() {
     assert_eq!(fine.ops, None, "{fine:?}");
     assert_eq!(fine.refused, Some(DrawingRefusal::Empty));
 }
+
+/// Un gesto dello strumento Sfumatura sul rettangolo scelto.
+fn sfumatura(phase: &str, eventi: Vec<Value>) -> DrawingGesture {
+    let mut r = richiesta("gradient", phase, eventi, vec![]);
+    r.selection = vec!["oa1a1a1a1".into()];
+    r
+}
+
+#[test]
+fn lo_strumento_sfumatura_trascina_gli_estremi_con_l_annotatore_in_un_passo() {
+    let (mut d, _) = apri(DISEGNO);
+    // Il trascinamento sul rettangolo scelto mostra l'annotatore: la barra, la maniglia
+    // d'inizio e un campione per punto, in coordinate di scena.
+    let anteprima = d
+        .gesto(sfumatura(
+            "preview",
+            vec![evento("down", 110.0, 125.0), evento("drag", 190.0, 125.0)],
+        ))
+        .expect("l'anteprima");
+    assert_eq!(anteprima.refused, None, "{anteprima:?}");
+    assert_eq!(anteprima.ops, None, "l'anteprima non scrive niente");
+    let s = segni(&anteprima);
+    assert!(
+        s.iter()
+            .any(|o| matches!(o, DrawingOverlay::Line { a, b, .. }
+            if *a == [110.0, 125.0] && *b == [190.0, 125.0])),
+        "la barra dell'annotatore: {s:?}"
+    );
+    assert!(
+        s.iter()
+            .any(|o| matches!(o, DrawingOverlay::Handle { at, .. } if *at == [110.0, 125.0])),
+        "la maniglia d'inizio: {s:?}"
+    );
+    let campioni = s
+        .iter()
+        .filter(|o| matches!(o, DrawingOverlay::Swatch { .. }))
+        .count();
+    assert_eq!(campioni, 2, "un campione per punto: {s:?}");
+    for o in s {
+        o.validate().expect("ogni segno è valido");
+    }
+    // Il rilascio scrive la sfumatura privata con gli estremi del trascinamento e la dà al
+    // riempimento: un'operazione sola, cioè un passo di Annulla.
+    let fine = d
+        .gesto(sfumatura("commit", vec![evento("up", 190.0, 125.0)]))
+        .expect("il commit");
+    assert_eq!(fine.refused, None, "{fine:?}");
+    let ops = ops_di(&fine);
+    assert_eq!(
+        ops.as_array().map(Vec::len),
+        Some(1),
+        "un passo solo: {ops}"
+    );
+    let testo = ops.to_string();
+    assert!(
+        testo.contains(r#""x1":"110","y1":"125","x2":"190","y2":"125""#),
+        "gli estremi del trascinamento: {testo}"
+    );
+    assert!(testo.contains(r#""fub:role":"private""#), "{testo}");
+    assert!(testo.contains(r#""fill":"url(#"#), "{testo}");
+    assert_eq!(fine.selection, vec!["oa1a1a1a1".to_string()], "{fine:?}");
+}

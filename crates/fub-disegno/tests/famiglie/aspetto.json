@@ -356,6 +356,462 @@
       "atteso": {
         "errore": "bad_args"
       }
+    },
+    {
+      "id": "gradient.presets.list",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "presets": [
+            {
+              "name": "Spectrum",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Soft Spectrum",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Red to Amber",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Orange to Yellow",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Amber to Lime",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Yellow to Green",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Lime to Teal",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Green to Cyan",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Teal to Azure",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Cyan to Blue",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Azure to Violet",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Blue to Magenta",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Violet to Red",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Magenta to Orange",
+              "library": "Spectrum Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Dawn",
+              "library": "Sky Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Noon",
+              "library": "Sky Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Sunset",
+              "library": "Sky Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Dusk",
+              "library": "Sky Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Night",
+              "library": "Sky Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Overcast",
+              "library": "Sky Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "White to Black",
+              "library": "Neutral Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Light Grays",
+              "library": "Neutral Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Dark Grays",
+              "library": "Neutral Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Warm Grays",
+              "library": "Neutral Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Cool Grays",
+              "library": "Neutral Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Fade to Transparent",
+              "library": "Neutral Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "White Fade",
+              "library": "Neutral Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Vignette",
+              "library": "Neutral Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Coral and Navy",
+              "library": "Duotone Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Plum and Lime",
+              "library": "Duotone Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Teal and Gold",
+              "library": "Duotone Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Indigo and Peach",
+              "library": "Duotone Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Forest and Rose",
+              "library": "Duotone Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Red Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Orange Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Amber Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Yellow Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Lime Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Green Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Teal Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Cyan Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Azure Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Blue Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Violet Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Magenta Glow",
+              "library": "Radial Glows",
+              "builtIn": true
+            },
+            {
+              "name": "Gold",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Silver",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Bronze",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Copper",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Brass",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Chrome",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Rose Gold",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Gunmetal",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Platinum",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            },
+            {
+              "name": "Pewter",
+              "library": "Metallic Gradients",
+              "builtIn": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "gradient.presets.apply",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "name": "Dawn",
+        "stroke": false
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "defs",
+                  "attrs": {
+                    "id": "fub-defs"
+                  },
+                  "children": [
+                    {
+                      "tag": "linearGradient",
+                      "attrs": {
+                        "id": "r9mhdvzjt",
+                        "fub:role": "private",
+                        "gradientUnits": "userSpaceOnUse",
+                        "x1": "100",
+                        "y1": "125",
+                        "x2": "200",
+                        "y2": "125"
+                      },
+                      "children": [
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "0",
+                            "stop-color": "#4d5081"
+                          }
+                        },
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "0.5",
+                            "stop-color": "#dd84af"
+                          }
+                        },
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "1",
+                            "stop-color": "#ffd7a0"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "url(#r9mhdvzjt) #c28ca0"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "gradient.presets.apply",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "name": "Nessuna"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "gradient.presets.save",
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"rg1g1g1g1\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"100\" y1=\"125\" x2=\"200\" y2=\"125\">\n      <stop offset=\"0\" stop-color=\"#ff0000\"/>\n      <stop offset=\"1\" stop-color=\"#0000ff\"/>\n    </linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"og1g1g1g1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"url(#rg1g1g1g1) #800080\"/>\n  </g>\n</svg>\n",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "argomenti": {
+        "name": "Mare"
+      },
+      "atteso": {
+        "lettura": {
+          "name": "Mare"
+        }
+      }
+    },
+    {
+      "id": "gradient.presets.save",
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"rg1g1g1g1\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"100\" y1=\"125\" x2=\"200\" y2=\"125\">\n      <stop offset=\"0\" stop-color=\"#ff0000\"/>\n      <stop offset=\"1\" stop-color=\"#0000ff\"/>\n    </linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"og1g1g1g1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"url(#rg1g1g1g1) #800080\"/>\n  </g>\n</svg>\n",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "argomenti": {
+        "name": "Dawn"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "gradient.presets.delete",
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"rg1g1g1g1\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"100\" y1=\"125\" x2=\"200\" y2=\"125\">\n      <stop offset=\"0\" stop-color=\"#ff0000\"/>\n      <stop offset=\"1\" stop-color=\"#0000ff\"/>\n    </linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"og1g1g1g1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"url(#rg1g1g1g1) #800080\"/>\n  </g>\n</svg>\n",
+      "selezione": [],
+      "prima": [
+        {
+          "id": "gradient.presets.save",
+          "selezione": [
+            "og1g1g1g1"
+          ],
+          "argomenti": {
+            "name": "Mare"
+          }
+        }
+      ],
+      "argomenti": {
+        "name": "Mare"
+      },
+      "atteso": {
+        "lettura": {
+          "deleted": "Mare"
+        }
+      }
+    },
+    {
+      "id": "gradient.presets.delete",
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"rg1g1g1g1\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"100\" y1=\"125\" x2=\"200\" y2=\"125\">\n      <stop offset=\"0\" stop-color=\"#ff0000\"/>\n      <stop offset=\"1\" stop-color=\"#0000ff\"/>\n    </linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"og1g1g1g1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"url(#rg1g1g1g1) #800080\"/>\n  </g>\n</svg>\n",
+      "selezione": [],
+      "prima": [
+        {
+          "id": "gradient.presets.save",
+          "selezione": [
+            "og1g1g1g1"
+          ],
+          "argomenti": {
+            "name": "Mare"
+          }
+        }
+      ],
+      "argomenti": {
+        "name": "Dawn"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "gradient",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/sfumatura-sezione.test.ts"
     }
   ]
 }

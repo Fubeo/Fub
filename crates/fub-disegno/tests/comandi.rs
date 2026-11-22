@@ -227,7 +227,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // tavola e gli oggetti di testo non leggono ciò che è scelto, come Tutto
     // (K6 T15). I campioni del documento (K6 T14) non sono gli oggetti scelti.
     // Il punto scelto della sfumatura (K6 T15, giro 5) è della sessione, come
-    // il lato attivo: una lettura che non cambia il file.
+    // il lato attivo: una lettura che non cambia il file. Le sfumature
+    // preimpostate (K6 T15, giro 6) si elencano, si salvano e si tolgono
+    // nelle preferenze del motore: il file non cambia.
     let sempre = [
         "disegno.swatch.new",
         "disegno.swatch.edit",
@@ -242,6 +244,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.select.object.textObjects",
         "disegno.paint.toggleActive",
         "disegno.gradient.selectStop",
+        "disegno.gradient.presets.list",
+        "disegno.gradient.presets.save",
+        "disegno.gradient.presets.delete",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

@@ -243,12 +243,12 @@ motore	paint.freeform.get	Freeform Gradient		colore	F1	T14	da fare	interno	famig
 motore	select.globalEdit	Start Global Edit	Select	livelli	F1	T15	da fare	menu/selezione	famiglia		Avvia modifica globale
 motore	select.globalEditOptions	Global Edit Options		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Opzioni modifica globale
 motore	paint.editGradient	Gradient	Window › Gradient	colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	lineare e radiale, nella sezione Sfumatura: tipo, angolo, punti (aggiungi, togli, sposta, colore, opacità) e inverti; la scena la scrive come sfumatura privata. La sfumatura libera, il metodo percettivo, la retinatura, la sfumatura lungo il contorno e il punto di metà spostato la scena non li scrive: tornano non supportati	Sfumatura
-motore	paint.setGradientGeom	Gradient Vector		colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	gli estremi della sfumatura, dalla tavolozza dei comandi; lo strumento Sfumatura sulla tela è del giro dopo	Vettore sfumatura
+motore	paint.setGradientGeom	Gradient Vector		colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	gli estremi della sfumatura, dalla tavolozza dei comandi; sulla tela li mette lo strumento Sfumatura	Vettore sfumatura
 motore	gradient.selectStop	Select Gradient Stop		aspetto	F1	T15	fatto	ispettore/design/sfumatura	famiglia	scegliere un punto nella sezione Sfumatura lo dice al motore	Seleziona cursore colore
-motore	gradient.presets.list	Gradient Presets		aspetto	F1	T15	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Gradient Presets
-motore	gradient.presets.apply	Apply Gradient Preset		aspetto	F1	T15	da fare	ispettore/design	famiglia		Apply Gradient Preset
-motore	gradient.presets.save	Save Gradient Preset		aspetto	F1	T15	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Save Gradient Preset
-motore	gradient.presets.delete	Delete Gradient Preset		aspetto	F1	T15	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Delete Gradient Preset
+motore	gradient.presets.list	Gradient Presets		aspetto	F1	T15	fatto	interno	famiglia	lettura del motore: l'elenco della scelta nella sezione Sfumatura (le preimpostate del motore per tema, poi le salvate)	Gradient Presets
+motore	gradient.presets.apply	Apply Gradient Preset		aspetto	F1	T15	fatto	interno	famiglia	la scelta nella sezione Sfumatura: dà la preimpostata al colore mostrato (riempimento o contorno) degli oggetti scelti, in un passo di Annulla, con le regole di paint.editGradient	Apply Gradient Preset
+motore	gradient.presets.save	Save Gradient Preset		aspetto	F1	T15	fatto	interno	famiglia	lettura del motore: «Salva» nella sezione Sfumatura; la preimpostata va nelle preferenze del motore (`draw.motore`), non nel file	Save Gradient Preset
+motore	gradient.presets.delete	Delete Gradient Preset		aspetto	F1	T15	fatto	interno	famiglia	lettura del motore: «Elimina» nella sezione Sfumatura, solo per una salvata	Delete Gradient Preset
 motore	object.vectorHalftone	Vector Halftone…	Object	immagini	F3	T20	da fare	menu/oggetto	famiglia	finestra	Retino vettoriale…
 motore	help.discord	Join Our Discord	Help	escluso	—	T2	escluso	escluso	—	link della comunità ArtCraft: Fub ha il suo Aiuto (D6)	Unisciti al nostro Discord
 motore	help.website	ArtCraft Website	Help	escluso	—	T2	escluso	escluso	—	link ad ArtCraft (D6)	Sito web di ArtCraft
@@ -994,7 +994,7 @@ interfaccia	view.snapToGlyph	Snap to Glyph		testo	F2	T16	da fare	menu/visualizza
 interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	da fare	menu/visualizza	famiglia	il cursore a croce di precisione non c'è ancora nel client	Usa cursori di precisione
 interfaccia	imageTrace.preview	Image Trace Preview		immagini	F3	T20	da fare	ispettore/design	famiglia		Anteprima di Ricalco immagine
 interfaccia	view.textThreads	Hide Text Threads		testo	F2	T16	da fare	menu/visualizza	famiglia		Nascondi concatenamenti testo
-interfaccia	view.gradientAnnotator	Hide Gradient Annotator		aspetto	F1	T15	da fare	menu/visualizza	famiglia		Nascondi annotatore sfumatura
+interfaccia	view.gradientAnnotator	Hide Gradient Annotator		aspetto	F1	T15	da fare	menu/visualizza	famiglia	l'annotatore si vede con lo strumento Sfumatura (T15 giro 6); nasconderlo vuole una scelta che il gesto porti al ponte degli strumenti, che non c'è ancora	Nascondi annotatore sfumatura
 interfaccia	view.livePaintGaps	Show Live Paint Gaps		trame	F2	T21	da fare	menu/visualizza	famiglia		Mostra spazi vuoti pittura dinamica
 interfaccia	type.hiddenCharacters	Show Hidden Characters		testo	F2	T16	da fare	menu/testo	famiglia		Mostra caratteri nascosti
 interfaccia	type.alignLeft	Align left		testo	F2	T16	da fare	menu/testo	famiglia		Allinea a sinistra
@@ -1340,7 +1340,7 @@ strumento	livePaintSelection	Live Paint Selection Tool		trame	F2	T21	da fare	col
 strumento	perspectiveGrid	Perspective Grid Tool		prospettiva	F4	T25	da fare	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»	Strumento Griglia prospettica
 strumento	perspectiveSelection	Perspective Selection Tool		prospettiva	F4	T25	da fare	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»	Strumento Selezione prospettica
 strumento	mesh	Mesh Tool		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «mesh»	Strumento Trama
-strumento	gradient	Gradient Tool		colore	F1	T14	da fare	colonna/colore	famiglia	riquadro «gradient»	Strumento Sfumatura
+strumento	gradient	Gradient Tool		colore	F1	T14	fatto	colonna/colore	famiglia	riquadro «gradient»; trascinare sull'oggetto scelto ne mette l'inizio e la fine della sfumatura, con l'annotatore del motore (barra, maniglie, un campione per punto) mentre si trascina; il rilascio è un passo di Annulla	Strumento Sfumatura
 strumento	eyedropper	Eyedropper Tool		colore	F1	T14	da fare	colonna/colore	famiglia	riquadro «eyedropper»	Strumento Contagocce
 strumento	measure	Measure Tool		tavole	F2	T19	da fare	colonna/misura	famiglia	riquadro «eyedropper»	Strumento Misura
 strumento	blend	Blend Tool		dinamici	F2	T21	da fare	colonna/oggetti	famiglia	riquadro «blend»	Strumento Fusione
@@ -1524,7 +1524,7 @@ pannello	css_properties	Css Properties	Window	web	F3	T22	da fare	ispettore/desig
 pannello	doc_info	Doc Info	Window	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Doc Info
 pannello	flattener_preview	Flattener Preview	Window	stampa	F4	T25	da fare	ispettore/design/documento	famiglia		Anteprima appiattimento
 pannello	glyphs	Glyphs	Window	testo	F2	T16	da fare	ispettore/risorse	famiglia		Glifi
-pannello	gradient	Gradient	Window	aspetto	F1	T15	da fare	ispettore/design	famiglia		Sfumatura
+pannello	gradient	Gradient	Window	aspetto	F1	T15	fatto	ispettore/design/sfumatura	famiglia	la sezione Sfumatura del Design: tipo, angolo, punti, inverti e le preimpostate	Sfumatura
 pannello	graphic_styles	Graphic Styles	Window	aspetto	F1	T15	da fare	ispettore/risorse	famiglia		Stili grafici
 pannello	history	History	Window	fub	—	T11	fub	fub	—	la cronologia della superficie e le versioni del file di Fub	Cronologia
 pannello	image_trace	Image Trace	Window	immagini	F3	T20	da fare	ispettore/design	famiglia		Ricalco immagine
