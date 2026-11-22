@@ -51,13 +51,15 @@
           "nome": "width",
           "tipo": "numero",
           "facoltativo": false,
-          "minimo": 0.01
+          "minimo": 0.01,
+          "predefinito": 100.0
         },
         {
           "nome": "height",
           "tipo": "numero",
           "facoltativo": false,
-          "minimo": 0.01
+          "minimo": 0.01,
+          "predefinito": 100.0
         }
       ]
     },
@@ -110,7 +112,8 @@
           "nome": "radius",
           "tipo": "numero",
           "facoltativo": false,
-          "minimo": 0.01
+          "minimo": 0.01,
+          "predefinito": 100.0
         },
         {
           "nome": "sides",
@@ -139,13 +142,15 @@
           "nome": "width",
           "tipo": "numero",
           "facoltativo": false,
-          "minimo": 0.01
+          "minimo": 0.01,
+          "predefinito": 100.0
         },
         {
           "nome": "height",
           "tipo": "numero",
           "facoltativo": false,
-          "minimo": 0.01
+          "minimo": 0.01,
+          "predefinito": 100.0
         }
       ]
     },
@@ -167,7 +172,8 @@
           "nome": "radius",
           "tipo": "numero",
           "facoltativo": false,
-          "minimo": 0.01
+          "minimo": 0.01,
+          "predefinito": 100.0
         },
         {
           "nome": "decay",
@@ -207,13 +213,15 @@
           "nome": "radius1",
           "tipo": "numero",
           "facoltativo": false,
-          "minimo": 0.01
+          "minimo": 0.01,
+          "predefinito": 100.0
         },
         {
           "nome": "radius2",
           "tipo": "numero",
           "facoltativo": false,
-          "minimo": 0.01
+          "minimo": 0.01,
+          "predefinito": 100.0
         },
         {
           "nome": "points",

@@ -76,7 +76,7 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { rispostaDiFamiglia } from "./disegno-famiglie/risposte";
-import { comandiProva, INDICE_PROVA } from "./disegno-indice-prova";
+import { comandiProva, comandiTrasformazioni, INDICE_PROVA } from "./disegno-indice-prova";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
@@ -1106,7 +1106,7 @@ function benchDrawingEngine(): DrawingFake | undefined {
   let instances = 0;
   return {
     // I comandi della prova: quali valgono per la selezione, e il perché (K6 T9a).
-    comandi: INDICE_PARAM === "prova" ? (selection) => comandiProva(selection) : undefined,
+    comandi: INDICE_PARAM === "prova" ? (selection) => comandiProva(selection) : (selection) => comandiTrasformazioni(selection),
     open: () => {
       const instance = `banco-${++instances}`;
       benchLastInstance = instance;

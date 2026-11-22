@@ -771,6 +771,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.move",
+      "chiamata": {
+        "comando": "disegno.object.move"
+      },
+      "etichetta": {
+        "it": "Sposta…",
+        "en": "Move…"
+      },
+      "posto": "menu/oggetto/trasforma",
+      "famiglia": "trasforma",
+      "tasto": "Cmd+Shift+M",
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.path.addAnchorPoints",
       "chiamata": {
         "comando": "disegno.object.path.addAnchorPoints"
@@ -867,6 +883,86 @@
     },
     {
       "fonte": "motore",
+      "id": "object.reflect",
+      "chiamata": {
+        "comando": "disegno.object.reflect"
+      },
+      "etichetta": {
+        "it": "Rifletti…",
+        "en": "Reflect…"
+      },
+      "posto": "menu/oggetto/trasforma",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.resetBoundingBox",
+      "chiamata": {
+        "comando": "disegno.object.resetBoundingBox"
+      },
+      "etichetta": {
+        "it": "Reimposta riquadro di delimitazione",
+        "en": "Reset Bounding Box"
+      },
+      "posto": "menu/oggetto/trasforma",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.rotate",
+      "chiamata": {
+        "comando": "disegno.object.rotate"
+      },
+      "etichetta": {
+        "it": "Ruota…",
+        "en": "Rotate…"
+      },
+      "posto": "menu/oggetto/trasforma",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.scale",
+      "chiamata": {
+        "comando": "disegno.object.scale"
+      },
+      "etichetta": {
+        "it": "Scala…",
+        "en": "Scale…"
+      },
+      "posto": "menu/oggetto/trasforma",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.setBounds",
+      "chiamata": {
+        "comando": "disegno.object.setBounds"
+      },
+      "etichetta": {
+        "it": "Imposta limiti",
+        "en": "Set Bounds"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.setProps",
       "chiamata": {
         "comando": "disegno.object.setProps"
@@ -883,6 +979,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.shear",
+      "chiamata": {
+        "comando": "disegno.object.shear"
+      },
+      "etichetta": {
+        "it": "Inclina…",
+        "en": "Shear…"
+      },
+      "posto": "menu/oggetto/trasforma",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.showAll",
       "chiamata": {
         "comando": "disegno.object.showAll"
@@ -894,6 +1006,38 @@
       "posto": "menu/oggetto",
       "famiglia": "nucleo",
       "tasto": "Cmd+Alt+3",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.transform",
+      "chiamata": {
+        "comando": "disegno.object.transform"
+      },
+      "etichetta": {
+        "it": "Trasforma",
+        "en": "Transform"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.transformAgain",
+      "chiamata": {
+        "comando": "disegno.object.transformAgain"
+      },
+      "etichetta": {
+        "it": "Ripeti trasformazione",
+        "en": "Transform Again"
+      },
+      "posto": "menu/oggetto/trasforma",
+      "famiglia": "trasforma",
+      "tasto": "Cmd+D",
       "effetto": "cambia",
       "finestra": false
     },

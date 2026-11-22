@@ -441,3 +441,62 @@ fn le_etichette_senza_traduzione_restano_inglesi_e_si_elencano() {
         "Aggiungi nuovo tratto"
     );
 }
+
+/// Le finestre delle trasformazioni e le misure di partenza (K6 T13, giro 3): Sposta chiede dx e
+/// dy da 0, Scala ha il suo minimo e il suo massimo, Rifletti sceglie un asse, e un rettangolo
+/// parte da 100 × 100, non da 0.
+#[test]
+fn le_finestre_delle_trasformazioni_hanno_i_loro_campi_e_le_misure_di_partenza() {
+    let voci = voci();
+    let trasforma = schema_json("trasforma", &voci);
+    let finestra = |id: &str| -> Value {
+        trasforma["finestre"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["id"] == id)
+            .cloned()
+            .unwrap_or_else(|| panic!("nessuna finestra per {id}: {trasforma}"))
+    };
+    let nomi = |f: &Value| -> Vec<String> {
+        f["campi"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["nome"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(nomi(&finestra("object.move")), vec!["dx", "dy"]);
+    assert_eq!(
+        finestra("object.move")["campi"][0]["predefinito"],
+        json!(0.0)
+    );
+    let scala = finestra("object.scale");
+    assert_eq!(nomi(&scala), vec!["sx"]);
+    assert_eq!(scala["campi"][0]["minimo"], json!(0.01));
+    assert_eq!(scala["campi"][0]["massimo"], json!(10000.0));
+    let rifletti = finestra("object.reflect");
+    assert_eq!(rifletti["campi"][0]["tipo"], "scelta");
+    assert_eq!(
+        rifletti["campi"][0]["valori"],
+        json!(["vertical", "horizontal"])
+    );
+    // Le misure di partenza delle forme: 100, mai 0 (una forma a 0 non è una forma).
+    let forme = schema_json("forme", &voci);
+    let rettangolo = forme["finestre"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["id"] == "shape.rectangle")
+        .unwrap();
+    let misure: Vec<&Value> = rettangolo["campi"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| matches!(c["nome"].as_str(), Some("width" | "height")))
+        .collect();
+    assert_eq!(misure.len(), 2, "{rettangolo}");
+    for misura in misure {
+        assert_eq!(misura["predefinito"], json!(100.0), "{misura}");
+    }
+}

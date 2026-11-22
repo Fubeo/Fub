@@ -12,7 +12,10 @@ export function motivoDelRifiuto(refused: DrawingRefusal): DrawKey | null {
   switch (refused) {
     case "empty":
       return null;
+    // Un oggetto bloccato nella selezione: il motore non fa niente, e la frase dice di
+    // sbloccarlo o toglierlo dalla selezione (K6 T13, decisione b).
     case "locked":
+      return "draw.reason.lockedSelection";
     case "hidden":
       return "draw.reason.locked";
     case "unmapped":

@@ -241,7 +241,7 @@ export function apriFinestra(
     };
 
     const mandaAnteprima = (): void => {
-      if (chiusa || !formaPronta || !anteprimaAccesa || !anteprimaPossibile) return;
+      if (chiusa || !formaPronta || !anteprimaAccesa || !anteprimaPossibile || campi.some((campo) => !campo.valido())) return;
       ultimoInvio = Date.now();
       const mio = ++numero;
       const valori = leggi();
@@ -273,7 +273,7 @@ export function apriFinestra(
     };
 
     const pianificaAnteprima = (): void => {
-      if (chiusa || !formaPronta || !anteprimaAccesa || !anteprimaPossibile) return;
+      if (chiusa || !formaPronta || !anteprimaAccesa || !anteprimaPossibile || campi.some((campo) => !campo.valido())) return;
       const attesa = INTERVALLO_ANTEPRIMA_MS - (Date.now() - ultimoInvio);
       if (attesa <= 0) {
         fermaTimer();

@@ -385,8 +385,9 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
 ];
 
 /// I comandi di «Disponi», in tre barre: allineare, distribuire, ordinare.
-const ACTION_ROWS: ReadonlyArray<{ readonly label: DrawKey; readonly actions: readonly ActionId[] }> = [
-  { label: "draw.properties.align", actions: ["align-left", "align-center", "align-right", "align-top", "align-middle", "align-bottom"] },
+// Nel Completo il gruppo dei sei allineamenti non c'è: lo dà la sezione «Allinea», con «alla tavola» (K6 T13).
+const ACTION_ROWS: ReadonlyArray<{ readonly label: DrawKey; readonly actions: readonly ActionId[]; readonly nascostoNelCompleto?: true }> = [
+  { label: "draw.properties.align", actions: ["align-left", "align-center", "align-right", "align-top", "align-middle", "align-bottom"], nascostoNelCompleto: true },
   { label: "draw.properties.distribute", actions: ["distribute-x", "distribute-y"] },
   { label: "draw.order", actions: ["order-front", "order-forward", "order-backward", "order-back"] },
 ];
@@ -698,7 +699,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   // --- I comandi di «Disponi» ---------------------------------------------------
 
   const actionButtons = new Map<ActionId, HTMLButtonElement>();
-  const actionBars: Array<{ readonly bar: HTMLElement; readonly label: DrawKey }> = [];
+  /// Vero con il Completo aperto: il gruppo che nel Completo non c'è si toglie.
+  let completoAperto = false;
+  const actionBars: Array<{ readonly bar: HTMLElement; readonly label: DrawKey; readonly nascosto: boolean }> = [];
   const arrangeBody = sections.get("arrange")!.body;
   const arrangeRows = document.createElement("div");
   arrangeRows.className = "draw-properties-actions";
@@ -736,7 +739,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       });
     }
     arrangeRows.append(bar);
-    actionBars.push({ bar, label: row.label });
+    actionBars.push({ bar, label: row.label, nascosto: row.nascostoNelCompleto === true });
     roves.push(rove(bar));
   }
 
@@ -1674,7 +1677,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         if (off) control.setAttribute("aria-disabled", "true");
         else control.removeAttribute("aria-disabled");
       }
-      for (const { bar } of actionBars) bar.hidden = [...bar.children].every((control) => (control as HTMLElement).hidden);
+      for (const { bar, nascosto } of actionBars) bar.hidden = (nascosto && completoAperto) || [...bar.children].every((control) => (control as HTMLElement).hidden);
       if (next.exportSelection === true && options.onExportSelection !== undefined) shown.add("exportSelection");
       for (const section of sections.values()) section.root.hidden = !shown.has(section.id);
     } finally {
@@ -1720,6 +1723,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       stopRegistro?.();
       stopRegistro = null;
       registro = nuovo;
+      completoAperto = nuovo !== null;
       motoreCompleto = motore;
       scelti = numero;
       if (nuovo !== null) stopRegistro = nuovo.ascolta(() => registrate?.aggiorna());

@@ -499,6 +499,9 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("count", Tipo::Numero),
     ("dx", Tipo::Numero),
     ("dy", Tipo::Numero),
+    ("sx", Tipo::Numero),
+    ("sy", Tipo::Numero),
+    ("dy", Tipo::Numero),
     ("height", Tipo::Numero),
     ("id", Tipo::Testo),
     ("ids", Tipo::Json),
@@ -570,7 +573,8 @@ pub struct FinestraScritta {
     pub limiti: &'static [(&'static str, Option<f64>, Option<f64>)],
 }
 
-/// Le finestre dei tracciati (T12, giro 3): Semplifica, Leviga, Sposta
+/// Le finestre dei tracciati (T12, giro 3) e delle trasformazioni (T13,
+/// giro 3). Tracciati: Semplifica, Leviga, Sposta
 /// tracciato, Espandi e Dividi in trattini. Semplifica chiede il cursore
 /// (`level`), non la tolleranza in punti: 50 è la tolleranza di serie, 1 pt.
 /// Espandi non chiede come espandere le sfumature (`gradient`, `steps`): vale
@@ -624,6 +628,40 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
             ("gap", Some(0.0), Some(1_000_000.0)),
         ],
     },
+    // Le trasformazioni (T13, giro 3): lo schema del motore porta anche
+    // `ids`, `objects`, `patterns`…, che la finestra non chiede e lascia al
+    // comando (la selezione, le impostazioni). La scala sta fra 0,01 % e
+    // 10000 %.
+    FinestraScritta {
+        id: "object.move",
+        schema: "{dx, dy}",
+        predefiniti: &[("dx", "0"), ("dy", "0")],
+        limiti: &[],
+    },
+    FinestraScritta {
+        id: "object.rotate",
+        schema: "{angle}",
+        predefiniti: &[("angle", "0")],
+        limiti: &[],
+    },
+    FinestraScritta {
+        id: "object.scale",
+        schema: "{sx}",
+        predefiniti: &[("sx", "100")],
+        limiti: &[("sx", Some(0.01), Some(10_000.0))],
+    },
+    FinestraScritta {
+        id: "object.reflect",
+        schema: "{axis: \"vertical\"|\"horizontal\"}",
+        predefiniti: &[("axis", "vertical")],
+        limiti: &[],
+    },
+    FinestraScritta {
+        id: "object.shear",
+        schema: "{angle, axis?: \"horizontal\"|\"vertical\"}",
+        predefiniti: &[("angle", "0"), ("axis", "horizontal")],
+        limiti: &[],
+    },
 ];
 
 /// La finestra scritta da Fub per il comando `id`, se ne ha una.
@@ -642,6 +680,12 @@ pub const COMANDI_DI_FORMA: &[&str] = &[
     "shape.line",
     "shape.spiral",
     "shape.arc",
+];
+
+/// Le misure di una forma che partono da 100 quando lo schema non dà un predefinito (K6 T13,
+/// giro 3): una larghezza, un'altezza o un raggio a 0 non è una forma, e OK non deve partire.
+pub const MISURE_DI_PARTENZA: &[&str] = &[
+    "width", "height", "radius", "radius1", "radius2", "diameter",
 ];
 
 /// Lo schema di una finestra di forma, dal primo modulo dello schema del
@@ -674,9 +718,15 @@ pub fn predefiniti_del_comando(id: &str) -> Vec<(String, String)> {
     if !COMANDI_DI_FORMA.contains(&id) {
         return Vec::new();
     }
-    vectorcraft_engine::find_command(id)
+    let mut out = vectorcraft_engine::find_command(id)
         .map(|c| predefiniti(c.params))
-        .unwrap_or_default()
+        .unwrap_or_default();
+    for misura in MISURE_DI_PARTENZA {
+        if !out.iter().any(|(nome, _)| nome == misura) {
+            out.push(((*misura).to_string(), "100".to_string()));
+        }
+    }
+    out
 }
 
 /// Analizza il primo modulo di `schema`: i campi che restano (`nome` o

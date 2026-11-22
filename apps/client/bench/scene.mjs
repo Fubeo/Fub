@@ -1581,8 +1581,12 @@ export const SCENE = touchLast(onPage("shell", [
   ...[
     ["disegno-fam-forme", 1280, "La tendina della casella delle forme: Rettangolo, Ellisse, Poligono, coi nomi del Completo", "", openFormeTendina],
     ["disegno-fam-forme-800", 800, "La tendina della casella delle forme nella finestra minima del desktop, 800 px", "", openFormeTendina],
-    ["disegno-fam-trasforma", 1280, "La sezione Allinea nel Design con il disegno scelto: i pulsanti e «Allinea a»", "", openAllinea],
-    ["disegno-fam-trasforma-800", 800, "La sezione Allinea nella finestra minima del desktop, 800 px", "", openAllinea],
+    ["disegno-fam-allinea", 1280, "La sezione Allinea nel Design con il disegno scelto: i pulsanti e «Allinea a»", "", openAllinea],
+    ["disegno-fam-allinea-800", 800, "La sezione Allinea nella finestra minima del desktop, 800 px", "", openAllinea],
+    ["disegno-fam-trasforma", 1280, "La finestra «Ruota…» di Oggetto › Trasforma, con l'anteprima sul foglio", "", openRuotaFinestra],
+    ["disegno-fam-trasforma-800", 800, "La finestra «Ruota…» nella finestra minima del desktop, 800 px", "", openRuotaFinestra],
+    ["disegno-fam-trasforma-sezione", 1280, "La sezione Trasforma nel Design: posizione, misura, rotazione, inclinazione e il riquadro", "", openTrasformaSezione],
+    ["disegno-fam-trasforma-sezione-800", 800, "La sezione Trasforma nel cassetto dell'ispettore, 800 px", "", openTrasformaSezione],
     ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
     ["disegno-fam-forme-finestra-800", 800, "La finestra delle misure del Rettangolo nella finestra minima del desktop, 800 px", "", openFormeFinestra],
   ].map(([id, width, title, extra, prepare]) => ({
@@ -5410,7 +5414,7 @@ async function openFormeFinestra(page) {
 /// la scheda Design, poi Ctrl+A, come chi allinea una selezione. Sotto i 960 px
 /// l'ispettore è un cassetto che si apre dal suo pulsante: lì il disegno si sceglie
 /// a cassetto chiuso, poi si apre il cassetto e la scheda Design.
-async function openAllinea(page) {
+async function openSezioneDesign(page, selettore) {
   if (await page.evaluate(() => window.innerWidth >= 960)) {
     await openDesignoScelto(page);
   } else {
@@ -5429,18 +5433,46 @@ async function openAllinea(page) {
       return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
     });
   }
-  await page.waitForSelector(".draw-align-to");
-  // Sotto le sezioni Posizione e Disponi: la foto la porta in vista.
+  await page.waitForSelector(selettore);
   // Scorre solo il primo contenitore scrollabile sopra la sezione (il pannello), non la pagina.
-  await page.evaluate(() => {
-    const el = document.querySelector(".draw-align-to");
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
     for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
       if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) {
         p.scrollTop += el.getBoundingClientRect().top - p.getBoundingClientRect().top - 8;
         break;
       }
     }
-  });
+  }, selettore);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La sezione Allinea nel Design (K6 T13, giro 2) con il disegno scelto per intero.
+async function openAllinea(page) {
+  await openSezioneDesign(page, ".draw-align-to");
+}
+
+/// La sezione Trasforma nel Design (K6 T13, giro 3) con il disegno scelto per intero.
+async function openTrasformaSezione(page) {
+  await openSezioneDesign(page, ".draw-transform-grid");
+}
+
+/// La finestra «Ruota…» di Oggetto › Trasforma (K6 T13, giro 3): il disegno scelto per intero, poi
+/// il comando dal menu ≡, come chi lo usa col mouse. La finestra ha l'angolo, l'anteprima e OK.
+async function openRuotaFinestra(page) {
+  // Il disegno aperto e un oggetto scelto, come il menu ≡ di Oggetto (openMenuOggetto).
+  await openDrawing(page);
+  await scegliPrimo(page);
+  await page.click('.draw-header button[aria-label="Disegno"]');
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
+  await page.hover("#context-menu [role='menuitem']:has-text('Oggetto')");
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Trasforma')");
+  await page.hover(".context-submenu [role='menuitem']:has-text('Trasforma')");
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Ruota')");
+  // Il clic sulla voce del sottomenu è quello dell'elemento: il menu si chiude a ogni movimento del puntatore.
+  await page.evaluate(() => [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Ruota")).click());
+  await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
   await page.evaluate(() => document.fonts.ready);
 }
 

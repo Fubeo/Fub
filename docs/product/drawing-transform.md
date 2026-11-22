@@ -68,6 +68,24 @@ italiana sono `AltGr++` e `AltGr+è`, con `Maiusc` per le graffe. Con `Ctrl` le
 parentesi restano all'ordine, come dice «Disporre» in [Disegni](drawing.md).
 Come per le frecce, i colpi di fila si annullano insieme.
 
+## Nel disegno completo
+
+Nel menu ≡ › Oggetto › Trasforma del Disegno completo ci sono Sposta, Ruota,
+Rifletti, Scala e Inclina. Ciascuna apre una finestra con l'anteprima sul
+foglio. Scala accetta da 0,01 % a 10000 %: un numero fuori dai limiti è in
+errore accanto al campo, e OK resta spento. Ripeti trasformazione applica di
+nuovo l'ultima. Con un oggetto bloccato nella selezione il comando non parte,
+e la frase dice di sbloccarlo o toglierlo dalla selezione.
+
+La sezione Trasforma, nella scheda Design, dà posizione, misura, rotazione e
+inclinazione, e Reimposta riquadro. Ogni campo manda il suo comando quando si
+conferma; rotazione e inclinazione vanno senza finestra. I suoi campi partono
+vuoti: il valore attuale della selezione lo mostra la sezione «Posizione e
+misure».
+
+Trasforma ciascuno, Distorci e le forme dal vivo non ci sono ancora: le forme
+dal vivo aspettano T27.
+
 ## Che cosa si scrive
 
 Ogni gesto è un passo di annulla, «Ridimensionamento» o «Rotazione», e scrive

@@ -1800,6 +1800,7 @@
     "pdf-list-marks",
     "draw-align-to",
     "draw-align-group",
+    "draw-transform-grid",
     "media-image",
     "zoom-view",
     "zoom-stage",
@@ -4282,6 +4283,7 @@
     "pdf-list-marks": "cornice",
     "draw-align-to": "cornice",
     "draw-align-group": "cornice",
+    "draw-transform-grid": "cornice",
     "media-image": "contenuto",
     "zoom-view": "contenuto",
     "zoom-stage": "contenuto",
@@ -9249,6 +9251,17 @@
       ]
     },
     {
+      "name": "transform-section",
+      "part": "draw",
+      "hooks": [
+        "draw-transform-grid"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "markdown-preview",
       "part": "media",
       "hooks": [
@@ -12833,10 +12846,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2480,
+    "hooks": 2481,
     "state_names": 7,
-    "assigned_states": 1113,
-    "components": 327,
+    "assigned_states": 1115,
+    "components": 328,
     "preference_tokens": 196
   }
 }

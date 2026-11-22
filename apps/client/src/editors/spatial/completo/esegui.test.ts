@@ -174,7 +174,7 @@ describe("eseguiVoce, senza finestra", () => {
     await tick();
     expect(azioni.commit).not.toHaveBeenCalled();
     expect(azioni.seleziona).toHaveBeenCalledWith(["n9"]);
-    expect(azioni.annuncia).toHaveBeenLastCalledWith(t("draw.rejected", { reason: t("draw.reason.locked") }));
+    expect(azioni.annuncia).toHaveBeenLastCalledWith(t("draw.reason.lockedSelection"));
     expect(azioni.annuncia).not.toHaveBeenCalledWith(t("draw.window.refused"));
   });
 
@@ -243,11 +243,11 @@ describe("eseguiVoce, con finestra", () => {
     expect(risposta).toEqual({ anteprima: null, rifiuto: null });
   });
 
-  it("un allineamento con un oggetto bloccato nella selezione dice di sbloccarlo o toglierlo, e non il generico", async () => {
+  it("un oggetto bloccato nella selezione dice di sbloccarlo o toglierlo, anche per un allineamento", async () => {
     const { d, azioni } = dipendenze({ risposta: { ...esito(), refused: "locked", ops: null } });
     eseguiVoce(voce({ id: "object.align", famiglia: "trasforma", chiamata: { comando: "disegno.object.align", valore: { horizontal: "left" } } }), d);
     await tick();
-    expect(azioni.annuncia).toHaveBeenCalledWith(t("draw.align.locked"));
+    expect(azioni.annuncia).toHaveBeenCalledWith(t("draw.reason.lockedSelection"));
     expect(azioni.annuncia).not.toHaveBeenCalledWith(expect.stringContaining(t("draw.reason.locked")));
   });
 
