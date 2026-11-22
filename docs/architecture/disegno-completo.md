@@ -130,7 +130,7 @@ punti con `anchors` nel `value` e dopo l'esito rilegge lo stato. Gli
 strumenti e i comandi dei tracciati rifiutano l'inchiostro di Fub
 (`unmapped`) e la carta. Il prodotto: [penne](../product/drawing-pen.md#la-penna-di-bézier-disegno-completo).
 
-## Il Contagocce (T14, giro 6)
+## Il Contagocce (T14, giri 6 e 7)
 
 Lo strumento `eyedropper` (famiglia `colore`) copia sulla selezione riempimento,
 contorno e spessore dell'oggetto sotto il primo clic: il motore fa il suo
@@ -142,7 +142,12 @@ dell'Inchiostro di Fub come bersaglio, e un'immagine come sorgente si rifiutano
 dell'Inchiostro si leggono senza cambiarli. Senza selezione il clic cambia i
 valori predefiniti del motore (riempimento e contorno), non gli oggetti. Le sue
 opzioni sono `eyedropper.setOptions`, una preferenza del motore che sta in
-`draw.motore`. Il comando `appearance.copyFrom` con `source` resta «da fare»
+`draw.motore`. Quando lo strumento è attivo, la fila delle opzioni (giro 7,
+`completo/famiglie/colore/opzioni-contagocce.ts`) legge le preferenze con
+`disegno.prefs.get` e le cambia con `disegno.eyedropper.setOptions`: il campione
+(1, 3 o 5 punti) e che cosa copia (riempimento, contorno, opacità, testo). Un
+rifiuto su un'immagine dice «Il Contagocce non legge i colori di un'immagine.».
+Il comando `appearance.copyFrom` con `source` resta «da fare»
 (T15, famiglia `aspetto`): la sorgente è un id del motore, che Fub non traduce.
 
 ## I livelli
