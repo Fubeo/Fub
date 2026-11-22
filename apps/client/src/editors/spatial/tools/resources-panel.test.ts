@@ -47,7 +47,7 @@ function modello(...campioni: string[]) {
 
 /// Un pannello montato con `modello`, e la sua selezione vuota.
 function pannello(documento = modello()) {
-  const panel = createResourcesPanel(vita, { modello: () => documento, selezione: () => ({ numero: 0 }) });
+  const panel = createResourcesPanel(vita, { modello: () => documento, selezione: () => ({ numero: 0, punti: [] }) });
   document.body.append(panel.element);
   fotogramma();
   return panel;

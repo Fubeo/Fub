@@ -9,6 +9,7 @@
 // prima che la famiglia arrivi.
 
 export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: string }>> = {
+  "sezione.punto": { it: "Punto di ancoraggio", en: "Anchor point" },
   "punto.converti": { it: "Converti", en: "Convert" },
   "punto.angolo": { it: "Angolo", en: "Corner" },
   "punto.angolo.titolo": { it: "Converti il punto: angolo", en: "Convert the point: corner" },

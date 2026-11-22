@@ -2,7 +2,7 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import type { Lifetime } from "../../../../ui/lifetime";
+import type { Lifetime, Teardown } from "../../../../ui/lifetime";
 import type { Bounds } from "../../scene/geometry";
 import type { Point } from "../../scene/matrix";
 import { pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../../scene/model";
@@ -21,7 +21,7 @@ import { INK_KEY, inkCopyKey, PAGE_SHEET } from "./constants";
 import { inlineChrome, type DrawChrome, type DrawPanelId, type DrawPanelPiece } from "./chrome/hosts";
 // La scheda Risorse (T10): il pannello, e i tipi del registro del Completo.
 import { createResourcesPanel, type PannelloRisorse } from "../resources-panel";
-import type { Sezioni } from "../../completo/sezioni";
+import type { Selezione, Sezioni } from "../../completo/sezioni";
 import type { MotoreDelDisegno } from "../../motore/gesti";
 import type { EditorContext } from "./context";
 import { nodeAtPath } from "./helpers";
@@ -129,9 +129,20 @@ export function installStage(ctx: EditorContext): void {
   dock.hidden = true;
   // La scheda Risorse (T10): i campioni del documento e le sezioni del
   // registro, solo col Completo aperto (`collegaCompleto`).
+  // La selezione che le sezioni del registro vedono: gli oggetti scelti, e i punti
+  // scelti con lo strumento del motore di adesso, dal suo stato (T12, giro 4).
+  const selezioneSezioni = (): Selezione => {
+    const id = ctx.motoreTool;
+    const punti = id === null ? undefined : ctx.statoStrumento(id)?.anchors;
+    return { numero: ctx.selectedUnits().length, punti: Array.isArray(punti) ? punti : [] };
+  };
+  const rileggiStrumento = (): void => {
+    const id = ctx.motoreTool;
+    if (id !== null && !ctx.disposed) ctx.rileggiStato(id);
+  };
   const resources: PannelloRisorse = createResourcesPanel(life, {
     modello: () => ctx.engine.model,
-    selezione: () => ({ numero: ctx.selectedUnits().length }),
+    selezione: selezioneSezioni,
   });
   resources.element.hidden = true;
   let completoAperto = false;
@@ -189,11 +200,30 @@ export function installStage(ctx: EditorContext): void {
 
   // Risorse (T10): si apre solo col Completo. Senza, la sua scheda non c'è,
   // e il pannello, se era aperto nel dock, si chiude.
+  // Lo strumento del motore scelto o il suo stato cambiano (i punti scelti): le sezioni
+  // del Design si rifanno. Si ascolta solo col Completo aperto.
+  let stopStati: Teardown | null = null;
+  life.add(() => {
+    stopStati?.();
+    stopStati = null;
+  });
   ctx.collegaCompleto = (sezioni, motore) => {
     completoAperto = sezioni !== null;
     resources.collega(sezioni, motore);
     // Il Design prende le sue sezioni dallo stesso registro.
-    panel.collegaSezioni(sezioni, motore, () => ctx.selectedUnits().length);
+    panel.collegaSezioni(sezioni, motore, selezioneSezioni, rileggiStrumento);
+    stopStati?.();
+    stopStati = null;
+    if (sezioni !== null) {
+      const spegniStati = ctx.ascoltaStati((id) => {
+        if (id === ctx.motoreTool) panel.aggiornaSezioni();
+      });
+      const spegniStrumento = ctx.ascoltaStrumentoMotore(() => panel.aggiornaSezioni());
+      stopStati = () => {
+        spegniStati();
+        spegniStrumento();
+      };
+    }
     if (!completoAperto && !resources.element.hidden) ctx.showResources(false, false);
     ctx.chrome.refresh?.();
   };

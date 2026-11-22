@@ -1097,13 +1097,13 @@ describe("le sezioni del Design dal registro del Completo (T10)", () => {
     sezioni.registra({ id: "griglia", scheda: "design", titolo: "Griglia", ordine: 1, disegna: ({ corpo }) => { corpo.textContent = "griglia"; } });
     sezioni.registra({ id: "solo-risorse", scheda: "risorse", titolo: "Risorse", disegna: () => undefined });
     mount();
-    panel.collegaSezioni(sezioni, null, () => 0);
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 0, punti: [] }));
     await frame();
     const ours = idDesign().filter((id) => id === "griglia" || id === "tavole");
     expect(ours).toEqual(["griglia", "tavole"]);
     expect(idDesign()).not.toContain("solo-risorse");
     expect(panel.element.querySelector('[data-section="tavole"]')?.textContent).toContain("tavole");
-    panel.collegaSezioni(null, null, () => 0);
+    panel.collegaSezioni(null, null, () => ({ numero: 0, punti: [] }));
     await frame();
     expect(idDesign().filter((id) => id === "griglia" || id === "tavole")).toEqual([]);
   });

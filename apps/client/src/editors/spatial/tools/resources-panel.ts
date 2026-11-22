@@ -69,6 +69,9 @@ export interface OpzioniSezioniList {
   readonly selezione: () => Selezione;
   /// Il motore del disegno, per i comandi delle sezioni.
   readonly motore: () => MotoreDelDisegno | null;
+  /// Rilegge lo stato dello strumento del motore (`ContestoSezione.rileggi`);
+  /// di serie non fa niente.
+  readonly rileggi?: () => void;
 }
 
 /// Una sezione montata: il suo elemento, il giro che la disegna e ciò che
@@ -238,6 +241,7 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
       sel: opzioni.selezione(),
       motore: opzioni.motore(),
       aggiorna: () => pianifica(),
+      rileggi: () => opzioni.rileggi?.(),
       vita: giro,
     };
     try {

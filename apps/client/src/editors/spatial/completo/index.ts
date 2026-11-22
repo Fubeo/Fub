@@ -305,9 +305,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // sezione «Allinea» lo usa per i suoi pulsanti. Il primo clic porta la famiglia della voce
   // (chunk e preparazione), come la finestra di un comando; dopo un errore il clic la riprova.
   // Il comando parte solo da una famiglia pronta. Chiuso il Completo, non parte.
-  const eseguiPerId = (id: string, valori: Readonly<Record<string, string>> = {}): void => {
-    if (chiuso) return;
-    void indice().then(async (pronto) => {
+  const eseguiPerId = (id: string, valori: Readonly<Record<string, unknown>> = {}): Promise<void> => {
+    if (chiuso) return Promise.resolve();
+    return indice().then(async (pronto) => {
       if (chiuso) return;
       const voce = pronto.voci.find((one) => one.id === id);
       if (voce === undefined || !("comando" in voce.chiamata)) return;
@@ -320,7 +320,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       }
       const fisso = (voce.chiamata as { readonly valore?: unknown }).valore;
       const base = typeof fisso === "object" && fisso !== null ? fisso : {};
-      eseguiVoce({ ...voce, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } }, dipendenze);
+      await eseguiVoce({ ...voce, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } }, dipendenze);
     });
   };
   // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,

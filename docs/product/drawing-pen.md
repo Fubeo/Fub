@@ -207,6 +207,13 @@ sono anche nella palette (`Ctrl+/`) e nel menu ≡: con un tracciato scelto e
 nessun punto, Converti e Unisci valgono sul tracciato intero, Taglia ed
 Elimina chiedono i punti. Non toccano i tratti dell'Inchiostro né la carta.
 
+Col Disegno completo acceso, la scheda **Design** dell'ispettore ha anche la
+sezione **Punto di ancoraggio**, con un oggetto o dei punti scelti: lì
+**Converti** in **Angolo** o **Morbido** manda lo stesso comando della riga
+delle opzioni sui punti scelti, e senza punti resta spento col perché. Il
+raggio dell'angolo e l'Elaborazione tracciati del prototipo non ci sono
+ancora: non hanno un comando del motore.
+
 Come ci arrivano i punti, nel contratto: `DrawingToolState.anchors` e il
 `value` dei comandi ([IPC del disegno](../reference/drawing-ipc.md)).
 

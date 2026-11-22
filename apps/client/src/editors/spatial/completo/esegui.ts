@@ -154,24 +154,26 @@ export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: A
 
 /// Fa partire il comando della voce `voce`: subito se non ha parametri (dopo
 /// l'arrivo della sua famiglia, se serve), con la finestra di T6 se ne ha una.
-/// Una voce che non è un comando del motore non fa niente.
-export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): void {
+/// Una voce che non è un comando del motore non fa niente. La promessa si
+/// risolve quando il giro è finito: l'esito applicato (o detto), o la finestra
+/// aperta. La sezione dei punti (T12, giro 4) la aspetta per rileggere lo stato
+/// dello strumento.
+export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Promise<void> {
   const comando = comandoDi(voce);
-  if (comando === null) return;
+  if (comando === null) return Promise.resolve();
   const etichetta = etichettaDi(voce);
   // Gli appunti e la cronologia del Completo (K6 T11): non passano dal motore come un comando qualsiasi.
   const appunti = dipendenze.appunti;
   const azioneAppunti = AZIONI_APPUNTI[comando.id];
   if (appunti !== undefined && azioneAppunti !== undefined) {
-    void azioneAppunti(appunti, etichetta);
-    return;
+    return azioneAppunti(appunti, etichetta);
   }
   // «Sblocca tutto» e «Mostra tutto» sono quelli di Fub: il motore non sa che
   // un livello bloccato o nascosto di Fub resta com'è, con ciò che contiene.
-  if (dipendenze.diFub?.(comando.id) === true) return;
+  if (dipendenze.diFub?.(comando.id) === true) return Promise.resolve();
 
   if (voce.finestra) {
-    void dipendenze.finestra(voce).then((opzioni) => {
+    return dipendenze.finestra(voce).then((opzioni) => {
       if (opzioni === null) {
         dipendenze.annuncia(t("draw.completo.key.nowindow"));
         return;
@@ -195,14 +197,13 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): voi
         riprova: () => dipendenze.carica.riprova(voce.famiglia).then(attesaFamiglia),
       });
     });
-    return;
   }
 
   // Senza finestra il comando aspetta la famiglia, e lo si vede.
   if (dipendenze.carica.stato(voce.famiglia).kind !== "pronta") {
     dipendenze.annuncia(t("draw.completo.key.waiting"));
   }
-  void dipendenze.carica.famiglia(voce.famiglia).then(async (stato) => {
+  return dipendenze.carica.famiglia(voce.famiglia).then(async (stato) => {
     if (dipendenze.vita.closed) return;
     if (stato.kind !== "pronta") {
       dipendenze.annuncia(t("draw.window.failed"));

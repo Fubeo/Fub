@@ -3,11 +3,13 @@
 // Importa solo i suoi file e, per i tipi, il Completo: mai un'altra famiglia
 // (la build lo vieta, `build/completo-chunks.mjs`). Pronta, registra la fila
 // dei punti scelti per la Selezione diretta e il Punto di ancoraggio
-// (`opzioni-punto.ts`); i ventuno strumenti di «disegnare» li sblocca la
+// (`opzioni-punto.ts`) e la sezione «Punto di ancoraggio» del Design
+// (`sezione-punto.ts`, T12 giro 4); i ventuno strumenti di «disegnare» li sblocca la
 // colonna (`../../colonna.ts`), coi nomi corti di `testi.ts`.
 
 import type { ModuloFamiglia } from "../../carica";
 import { filaPunti } from "./opzioni-punto";
+import { sezionePunto } from "./sezione-punto";
 import { TESTI } from "./testi";
 
 /// Gli strumenti che hanno la fila dei punti scelti.
@@ -17,6 +19,7 @@ const famiglia: ModuloFamiglia & { readonly testi: typeof TESTI } = {
   testi: TESTI,
   registra(ctx) {
     for (const strumento of STRUMENTI_CON_I_PUNTI) ctx.registraFila(strumento, (stato, azioni, vita) => filaPunti(TESTI, stato, azioni, vita));
+    ctx.sezioni.registra(sezionePunto(TESTI, ctx.esegui));
   },
 };
 

@@ -16,6 +16,7 @@
 // - **Il Completo si chiude e il registro si svuota.** Dopo `chiudi` nessuna
 //   sezione si registra più, e nessuna resta da disegnare.
 
+import type { DrawingAnchor } from "../../../host/contract";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 import type { MotoreDelDisegno } from "../motore/gesti";
 
@@ -23,9 +24,15 @@ import type { MotoreDelDisegno } from "../motore/gesti";
 /// `ispettore/<scheda>` della mappa (`scripts/check-disegno-mappa.mjs`).
 export type Scheda = "design" | "livelli" | "risorse" | "cronologia";
 
-/// Ciò che una sezione sa della selezione di adesso: quanti oggetti ci sono.
+/// Ciò che una sezione sa della selezione di adesso: quanti oggetti ci sono, e
+/// i punti di ancoraggio scelti dentro (T12, giro 4).
 export interface Selezione {
   readonly numero: number;
+  /// I punti scelti con lo strumento del motore di adesso (la Selezione diretta,
+  /// il Punto di ancoraggio), dal suo stato (`DrawingToolState.anchors`, la porta
+  /// dello stato dello strumento che c'è già). Vuoto senza uno strumento del
+  /// motore, o se il suo stato non ne porta.
+  readonly punti: readonly DrawingAnchor[];
 }
 
 /// Ciò che una sezione riceve per disegnarsi.
@@ -41,6 +48,10 @@ export interface ContestoSezione {
   /// Il disegno che la sezione mostra cambia: `aggiorna` la chiede di nuovo,
   /// al più una volta per fotogramma.
   readonly aggiorna: () => void;
+  /// Rilegge dal motore lo stato dello strumento di adesso, dopo un comando che
+  /// lo cambia (i punti scelti): la sezione si rifà quando arriva. Senza uno
+  /// strumento del motore non fa niente.
+  readonly rileggi: () => void;
   /// La vita di questo disegno: si chiude quando la sezione si rifà o si
   /// smonta. Una risposta che arriva dopo (un comando del motore) si scarta
   /// se la vita è chiusa.

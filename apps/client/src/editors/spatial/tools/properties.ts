@@ -38,7 +38,7 @@ import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 // Le sezioni del Design che il Completo registra (T10): in coda al pannello.
-import type { Sezioni } from "../completo/sezioni";
+import type { Selezione, Sezioni } from "../completo/sezioni";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import { createSezioniList, type SezioniList } from "./resources-panel";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
@@ -303,8 +303,17 @@ export interface Properties {
   /// Il pannello: titolo, oggetto, sezioni.
   readonly element: HTMLElement;
   /// Il Completo aperto dà le sezioni del Design (`ispettore/design/…`) dal
-  /// suo registro, con la selezione che `scelti` conta; `null` le toglie.
-  collegaSezioni(registro: Sezioni | null, motore: MotoreDelDisegno | null, scelti: () => number): void;
+  /// suo registro, con la selezione di `selezione` (gli oggetti e i punti
+  /// scelti) e `rileggi` per lo stato dello strumento; `null` le toglie.
+  collegaSezioni(
+    registro: Sezioni | null,
+    motore: MotoreDelDisegno | null,
+    selezione: () => Selezione,
+    rileggi?: () => void,
+  ): void;
+  /// Lo stato dello strumento del motore è cambiato (i punti scelti): le
+  /// sezioni del registro si rifanno, al più una volta per fotogramma.
+  aggiornaSezioni(): void;
   /// Fra il titolo e le sezioni: ciò che l'editor ci mette (il titolo del
   /// disegno).
   readonly lead: HTMLElement;
@@ -1700,12 +1709,14 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   scroller.append(sezioniDesign);
   let registro: Sezioni | null = null;
   let motoreCompleto: MotoreDelDisegno | null = null;
-  let scelti: () => number = () => 0;
+  let selezione: () => Selezione = () => ({ numero: 0, punti: [] });
+  let rileggiStato: () => void = () => undefined;
   let stopRegistro: Teardown | null = null;
   registrate = createSezioniList(sezioniDesign, life, {
     elenco: () => registro?.di("design") ?? [],
-    selezione: () => ({ numero: scelti() }),
+    selezione: () => selezione(),
     motore: () => motoreCompleto,
+    rileggi: () => rileggiStato(),
   });
   life.add(() => {
     stopRegistro?.();
@@ -1716,13 +1727,17 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     element,
     lead,
     update,
-    collegaSezioni(nuovo, motore, numero) {
+    collegaSezioni(nuovo, motore, sceltaDiAdesso, rileggi) {
       stopRegistro?.();
       stopRegistro = null;
       registro = nuovo;
       motoreCompleto = motore;
-      scelti = numero;
+      selezione = sceltaDiAdesso;
+      rileggiStato = rileggi ?? (() => undefined);
       if (nuovo !== null) stopRegistro = nuovo.ascolta(() => registrate?.aggiorna());
+      registrate?.aggiorna();
+    },
+    aggiornaSezioni() {
       registrate?.aggiorna();
     },
     focus() {

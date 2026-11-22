@@ -28,7 +28,7 @@ afterEach(() => {
 function contesto(motore: MotoreDelDisegno | null = null): ContestoCompleto {
   const life = openLifetime();
   lifetimes.push(life);
-  return { motore, life, sezioni: creaSezioni(), registraFila: () => undefined, esegui: () => undefined };
+  return { motore, life, sezioni: creaSezioni(), registraFila: () => undefined, esegui: () => Promise.resolve() };
 }
 
 /// I chunk finti: un modulo per famiglia, con `registra` spiato.
