@@ -84,7 +84,8 @@ già preso, o che si legge come un colore, prende il primo libero, «Vermiglio
 
 Col Disegno completo acceso il colore degli oggetti scelti si cambia dalla
 sezione **Colore** della scheda Design, e i campi del colore di Riempimento e
-Contorno escono dal pannello: Spessore, Tratteggio e punte restano dove sono
+Contorno escono dal pannello; Spessore e Tratteggio vanno nella sezione
+Contorno del Design e le punte restano nel pannello
 ([Disegni, pannello delle proprietà](drawing-properties.md)). Spento il
 Completo, i campi tornano.
 
@@ -94,7 +95,12 @@ Completo, i campi tornano.
   colore dell'altro lo fa attivo, anche per i tasti del motore. Un colore
   scelto va sul suo lato con un comando solo.
 - **Scambia** scambia riempimento e contorno; **Nessuno** toglie il colore del
-  lato attivo; **Di serie** rimette il riempimento bianco e il contorno nero.
+  lato attivo; **Di serie** rimette il riempimento bianco e il contorno nero;
+  **Sfumatura** dà al lato attivo l’ultima sfumatura usata (la prima volta, dal
+  bianco al nero), che poi si cambia dalla sezione Sfumatura
+  ([Disegni, pannello delle proprietà](drawing-properties.md#le-sezioni)). È
+  spento, col perché, senza niente di scelto, con soli testi, con un oggetto
+  bloccato o su un lato che la selezione non ha.
 - Senza niente di scelto la sezione è spenta; un lato che gli oggetti scelti
   non hanno si spegne da solo e dice «Nessuno», col perché nel suggerimento
   («Contorno: la selezione non ne ha»): un'immagine non ha contorno, e
