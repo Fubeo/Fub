@@ -101,7 +101,7 @@ Completo, i campi tornano.
   nemmeno un testo, perché Fub non ne dà ai testi. «Misto» vuol dire solo
   oggetti scelti con colori diversi.
 
-### Risorse › Campioni
+### I campioni nella scheda Risorse
 
 Nella scheda **Risorse** la sezione **Campioni** mostra i campioni del
 documento in una griglia, col conto («24 campioni»); con molti campioni la

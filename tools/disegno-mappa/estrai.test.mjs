@@ -70,7 +70,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // colori e le due finestre `ui.*` del client. T15 giro 2 `transparency.set`.
   // T16 giro 1 le cinque del testo di punto: lo strumento Testo, i pannelli
   // Carattere e Paragrafo e i loro due comandi (`text.setRangeStyle`, `text.setStyle`).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1232, fub: 114, escluso: 12, fatto: 193 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1223, fub: 114, escluso: 12, fatto: 202 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

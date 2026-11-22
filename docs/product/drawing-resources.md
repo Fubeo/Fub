@@ -105,7 +105,7 @@ famiglie portano:
 - **Campioni**: i colori con un nome che il documento ha. Il conto dice
   quanti sono («24 campioni»); senza, la sezione dice che il disegno non ne
   ha. Si scelgono, si danno agli oggetti scelti, si fanno e si cambiano
-  ([Disegni, colori](drawing-colors.md#risorse--campioni)). Sono i campioni
+  ([Disegni, colori](drawing-colors.md#i-campioni-nella-scheda-risorse)). Sono i campioni
   del documento: quelli delle librerie e della tavolozza del motore arrivano
   con le loro famiglie.
 - **Le sezioni delle famiglie**, nell'ordine della mappa. Ognuna si apre e si
