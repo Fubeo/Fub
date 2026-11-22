@@ -170,6 +170,18 @@ elementi fuori da ogni livello stanno in un livello del motore senza elemento
 nel file, che non si rinomina, non si nasconde e non si elimina (`Unmapped`);
 un livello nuovo sotto di lui non ha un posto da scrivere (`Unsupported`).
 
+Unire (`layer.merge`) e invertire (`layer.reverse`) vogliono almeno due righe,
+e unire vuole livelli, non oggetti; invertire vuole righe dello stesso livello
+o gruppo. Un argomento così è `BadArgs` col perché in italiano, prima del motore;
+un livello bloccato si rifiuta (`Locked`). Il livello nel cui nome cade l'unione
+è l'ultimo elencato in `ids`. Seleziona grafica (`layer.selectAll`) sceglie
+l'arte visibile e sbloccata del livello, e con un livello bloccato non sceglie
+niente (`Empty`). Duplica, raccogli in un livello nuovo, il livello corrente e le
+righe di Oggetto che guardano il livello (sopra, altri livelli) restano «da fare»:
+il motore vede i livelli di Fub come figli di un livello radice, e il file non
+scrive un livello dentro un livello, né dice quale livello è corrente fra un
+comando e il successivo.
+
 Nel client la scheda Livelli del Completo è l'albero nativo
 (`apps/client/src/editors/spatial/tools/objects.ts`): l'occhio, il lucchetto,
 il nome, Nuovo livello ed Elimina livello chiedono a

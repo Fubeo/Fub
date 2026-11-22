@@ -803,6 +803,22 @@
     },
     {
       "fonte": "motore",
+      "id": "layer.merge",
+      "chiamata": {
+        "comando": "disegno.layer.merge"
+      },
+      "etichetta": {
+        "it": "Unisci selezionati",
+        "en": "Merge Selected"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "layer.new",
       "chiamata": {
         "comando": "disegno.layer.new"
@@ -816,6 +832,38 @@
       "tasto": "Cmd+L",
       "effetto": "cambia",
       "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.reverse",
+      "chiamata": {
+        "comando": "disegno.layer.reverse"
+      },
+      "etichetta": {
+        "it": "Inverti ordine",
+        "en": "Reverse Order"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "layer.selectAll",
+      "chiamata": {
+        "comando": "disegno.layer.selectAll"
+      },
+      "etichetta": {
+        "it": "Seleziona grafica",
+        "en": "Select Art"
+      },
+      "posto": "ispettore/livelli",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
     },
     {
       "fonte": "motore",

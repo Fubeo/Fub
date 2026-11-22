@@ -90,7 +90,11 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
   // T12 punti le dieci sui punti di un tracciato: `path.moveAnchor`, `.moveAnchors`, `.setHandle`,
   // `.insertAnchor`, `.removeAnchor`, `.convertAnchor`, `.deleteAnchors`, `.close`, `.appendAnchor`, `.split`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1158, fub: 114, escluso: 12, fatto: 267 });
+  // T15 livelli giro 2 porta a «fatto» tre righe di livelli: `layer.selectAll`, `layer.merge` e
+  // `layer.reverse`. Duplica, raccogli in un livello nuovo, il livello corrente e le righe di
+  // Oggetto che lavorano sul livello (sopra e altri livelli, il livello corrente) restano «da fare»,
+  // con la causa nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1155, fub: 114, escluso: 12, fatto: 270 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
