@@ -48,10 +48,19 @@ Sotto la selezione ferma ci sono le sue misure, larghezza per altezza, e la
 barra della selezione si mette sotto di loro; mentre si ridimensiona le
 misure seguono, e mentre si gira l'angolo.
 
-Nella banda di stato dello Scrittoio il disegno dice lo zoom (un clic torna al
-100%), l'angolo della vista girata (un clic la raddrizza), la vista dei
-contorni (un clic torna al disegno pieno), dove sta il puntatore, la misura
-della selezione e quanti oggetti ci sono o sono scelti.
+Nella banda di stato dello Scrittoio il disegno dice lo zoom, l'angolo della
+vista girata (un clic la raddrizza), la vista dei contorni (un clic torna al
+disegno pieno), le misure (dove sta il puntatore, accanto alla misura della
+selezione: un'unica voce, aggiornata al più una volta per fotogramma) e quanti
+oggetti ci sono o sono scelti.
+
+Nel Disegno completo lo zoom apre un menu: ingrandisci, riduci, zoom al 100%,
+adatta tutto alla finestra, e sotto un campo dove si scrive la percentuale. Un
+valore fuori dai limiti della vista (dal 10% al 3200%) lo dice e lo zoom non
+cambia. Il menu si apre con Invio o Spazio, le frecce vanno fra le voci, Esc lo
+chiude e riporta il fuoco alla voce dello zoom. Negli altri spazi di lavoro e nel
+Semplice, un clic sulla voce dello zoom torna al 100%, come prima. Gli stessi
+comandi stanno in Ctrl+/ e nella ricerca dei comandi.
 
 ## La testa
 
