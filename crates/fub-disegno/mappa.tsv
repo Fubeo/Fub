@@ -1319,10 +1319,10 @@ strumento	knife	Knife		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro 
 strumento	mirrorCut	Mirror & Cut Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Strumento Specchia e taglia
 strumento	lineCut	Line Cut Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Strumento Taglio linea
 strumento	rectCut	Rectangle Cut Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Strumento Taglio rettangolare
-strumento	rotate	Rotate Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «rotate»	Strumento Ruota
-strumento	reflect	Reflect Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «rotate»	Strumento Rifletti
-strumento	scale	Scale Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «scale»	Strumento Scala
-strumento	shear	Shear Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «scale»	Strumento Inclina
+strumento	rotate	Rotate Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «rotate»	Strumento Ruota
+strumento	reflect	Reflect Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «rotate»	Strumento Rifletti
+strumento	scale	Scale Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «scale»	Strumento Scala
+strumento	shear	Shear Tool		trasforma	F1	T13	fatto	colonna/trasforma	famiglia	riquadro «scale»	Strumento Inclina
 strumento	reshape	Reshape Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «scale»	Strumento Rimodella
 strumento	width	Width Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Larghezza
 strumento	warp	Warp Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Altera
