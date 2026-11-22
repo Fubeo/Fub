@@ -2410,12 +2410,15 @@ bloccato rifiutato col perché (decisione b estesa: rifiuto, non salto),
 gruppo `align` nascosto nel Completo, sezione «Trasforma» in Design,
 finestre Sposta/Ruota/Rifletti/Scala/Inclina con anteprima (rotazione con
 `object.rotate`, inclinazione con `object.shear`); le finestre stanno in
-`catalogo::FINESTRE_SCRITTE` con quelle dei tracciati. Mancano: i campi di
-Trasforma che leggono il valore della selezione (oggi vuoti), «Posizione
-e misure» e «Distribuisci» doppi nel Completo (da nascondere), Ripeti
-trasformazione senza una precedente (oggi `unsupported`), Trasforma
-ciascuno, Distorci, «Elaborazione tracciati», costruttore di forme, perni
-e strumento forma.
+`catalogo::FINESTRE_SCRITTE` con quelle dei tracciati. Giro 4 unito in
+9f4cea005: i campi di Trasforma leggono la vista del pannello (vuoti se la
+selezione non ha un valore solo; l'inclinazione resta vuota), «Posizione e
+misure» e i gruppi Distribuisci nascosti nel Completo, le finestre misurano
+in px (unità della scena). Rimandati a dopo la base: Ripeti trasformazione
+senza una precedente (oggi `unsupported`; spegnerla chiede un motivo nuovo
+in `DrawingDisabledReason` e il ricordo dell'ultima trasformazione lato
+Fub, gesti compresi), Trasforma ciascuno, Distorci, «Elaborazione
+tracciati», costruttore di forme, perni e strumento forma.
 Aspetta: niente
 
 ## T14 · Il colore
