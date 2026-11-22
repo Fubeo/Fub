@@ -28,7 +28,7 @@
       "dopo": "duplicato.svg"
     },
     {
-      "id": "select.all",
+      "id": "select.reselect",
       "disegno": "base.svg",
       "atteso": { "rifiuto": "empty" }
     },

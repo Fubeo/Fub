@@ -107,11 +107,15 @@ fn operazioni_diverse_fanno_cadere_il_caso() {
     // Un rifiuto al posto delle operazioni, o un altro rifiuto.
     caso.atteso = Atteso::Rifiuto("unsupported".into());
     assert!(esegui(&disegni, &caso).is_err());
-    let mut vuoto = caso_di_prova("select.all");
+    let mut vuoto = caso_di_prova("select.reselect");
     vuoto.atteso = Atteso::Rifiuto("unmapped".into());
     assert!(esegui(&disegni, &vuoto).is_err());
     vuoto.atteso = Atteso::Errore("bad_args".into());
     assert!(esegui(&disegni, &vuoto).is_err());
+    // Una selezione diversa da quella attesa.
+    vuoto.atteso = Atteso::Selezione(vec!["oa1a1a1a1".into()]);
+    let errore = esegui(&disegni, &vuoto).expect_err("la selezione è diversa");
+    assert!(errore.contains("selezione"), "{errore}");
 }
 
 #[test]
@@ -173,7 +177,7 @@ fn un_effetto_diverso_dal_motore_fa_cadere_il_caso() {
 #[test]
 fn una_voce_dell_interfaccia_vuole_la_sua_prova() {
     let disegni = disegni_di_prova();
-    let mut caso = caso_di_prova("select.all");
+    let mut caso = caso_di_prova("select.reselect");
     caso.fonte = FonteMappa::Interfaccia;
     caso.id = "view.zoomIn".into();
     caso.prova = None;
@@ -197,16 +201,23 @@ fn una_riga_fatta_senza_caso_e_un_caso_senza_riga_cadono() {
         .position(|r| r.fonte == FonteMappa::Motore && r.id == "edit.colors.invert")
         .expect("la riga c'è");
     righe[quale].stato = Stato::Fatto;
-    let errori = controlla_righe(&righe, &[], &file);
+    // I casi veri delle famiglie: le altre righe fatte li hanno.
+    let veri = leggi_cartella(&cartella_famiglie()).expect("i casi si leggono");
+    let con = |caso: &Caso| {
+        let mut tutti = veri.clone();
+        tutti.push(caso.clone());
+        tutti
+    };
+    let errori = controlla_righe(&righe, &veri, &file);
     assert_eq!(errori.len(), 1, "{errori:?}");
     assert!(errori[0].contains("edit.colors.invert"), "{errori:?}");
     // Col suo caso nel file della sua famiglia, non cade più.
     let mut caso = caso_di_prova("edit.colors.invert");
     caso.gruppo = righe[quale].famiglia.clone();
-    assert!(controlla_righe(&righe, std::slice::from_ref(&caso), &file).is_empty());
+    assert!(controlla_righe(&righe, &con(&caso), &file).is_empty());
     // Nel file di un'altra famiglia, sì.
     caso.gruppo = "nucleo".into();
-    assert_eq!(controlla_righe(&righe, &[caso.clone()], &file).len(), 1);
+    assert_eq!(controlla_righe(&righe, &con(&caso), &file).len(), 1);
     // Un caso senza riga.
     caso.id = "edit.nonEsiste".into();
     let errori = controlla_righe(mappa(), &[caso], &file);

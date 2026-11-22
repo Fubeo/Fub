@@ -17,6 +17,9 @@
 //!   `{"phase", "events", "inputs"}`; l'esito è quello dell'ultimo;
 //! - `atteso`: `{"ops": […]}` (gli id nuovi sono id validi qualunque: il
 //!   confronto li rinomina nell'ordine), `{"lettura": …}`,
+//!   `{"selezione": […]}` (niente operazioni, niente lettura, e la selezione
+//!   dopo, gli id di Fub nell'ordine; un gesto che sceglie e basta può
+//!   rispondere `empty`, come in K5),
 //!   `{"rifiuto": "unsupported"}` o `{"errore": "bad_args"}`;
 //! - `dopo`: il `.svg` del disegno dopo le operazioni, che il client
 //!   controlla byte per byte; per un effetto anche l'oracolo a pixel lo
@@ -25,7 +28,9 @@
 //!   ciò che Fub scrive sul disco;
 //! - `prova`, per una voce dell'interfaccia o un pannello (che il motore non
 //!   esegue): il test del client che la prova, che deve esistere e nominare
-//!   l'id.
+//!   l'id. Anche uno strumento della vista (`hand`, `zoom`, `rotateView`)
+//!   ha solo la `prova`, senza gesto: il motore non lo fa (è un suo
+//!   strumento vuoto), la vista è di Fub.
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
@@ -62,6 +67,8 @@ pub fn cartella_prova() -> PathBuf {
 pub enum Atteso {
     Ops(Value),
     Lettura(Value),
+    /// Nessuna operazione e nessuna lettura: la selezione dopo, gli id di Fub.
+    Selezione(Vec<String>),
     /// Un rifiuto del motore, come lo scrive il contratto (`unsupported`).
     Rifiuto(String),
     /// Un errore tipato, col suo `kind` (`bad_args`).
@@ -145,22 +152,26 @@ pub fn leggi_file(file: &Path) -> Result<Vec<Caso>, String> {
             Atteso::Ops(ops.clone())
         } else if let Some(l) = atteso.get("lettura") {
             Atteso::Lettura(l.clone())
+        } else if let Some(s) = atteso.get("selezione").and_then(Value::as_array) {
+            Atteso::Selezione(
+                s.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect(),
+            )
         } else if let Some(r) = atteso.get("rifiuto").and_then(Value::as_str) {
             Atteso::Rifiuto(r.to_string())
         } else if let Some(e) = atteso.get("errore").and_then(Value::as_str) {
             Atteso::Errore(e.to_string())
-        } else if matches!(fonte, FonteMappa::Interfaccia | FonteMappa::Pannello) {
+        } else if solo_prova(fonte, &id) {
             Atteso::Lettura(Value::Null)
         } else {
             return Err(format!(
-                "{dove}: `atteso` vuole ops, lettura, rifiuto o errore"
+                "{dove}: `atteso` vuole ops, lettura, selezione, rifiuto o errore"
             ));
         };
         let disegno = match v.get("disegno").and_then(Value::as_str) {
             Some(d) => leggi_svg(&accanto, d).map_err(|e| format!("{dove}: {e}"))?,
-            None if matches!(fonte, FonteMappa::Interfaccia | FonteMappa::Pannello) => {
-                String::new()
-            }
+            None if solo_prova(fonte, &id) => String::new(),
             None => return Err(format!("{dove}: manca il disegno")),
         };
         let dopo = match v.get("dopo").and_then(Value::as_str) {
@@ -188,6 +199,16 @@ pub fn leggi_file(file: &Path) -> Result<Vec<Caso>, String> {
         });
     }
     Ok(casi)
+}
+
+/// Gli strumenti della vista: il motore non li fa (sono suoi strumenti
+/// vuoti, `NoopTool`), la vista di Fub sì. Il loro caso è la prova del client.
+pub const STRUMENTI_DELLA_VISTA: [&str; 3] = ["hand", "zoom", "rotateView"];
+
+/// Una riga che il motore non esegue: il suo caso è solo la prova del client.
+pub fn solo_prova(fonte: FonteMappa, id: &str) -> bool {
+    matches!(fonte, FonteMappa::Interfaccia | FonteMappa::Pannello)
+        || (fonte == FonteMappa::Strumento && STRUMENTI_DELLA_VISTA.contains(&id))
 }
 
 /// I casi di tutti i `.json` di una cartella, in ordine di nome.
@@ -352,7 +373,7 @@ fn esegui_sul_disegno(
 /// effetto, l'oracolo a pixel.
 pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
     let nome = caso.nome();
-    if matches!(caso.fonte, FonteMappa::Interfaccia | FonteMappa::Pannello) {
+    if solo_prova(caso.fonte, &caso.id) {
         return controlla_la_prova(caso);
     }
     let (mut disegno, _) = Disegno::apri_con(disegni, &caso.disegno)
@@ -392,6 +413,23 @@ pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
             }
             if let common::Confronto::Diverse(dove) = common::confronta_ops(attesa, &letta, None) {
                 return Err(format!("{nome}: lettura diversa: {dove}"));
+            }
+        }
+        (Atteso::Selezione(attesa), Ok(e)) => {
+            // Un gesto che sceglie e basta risponde `empty` con la selezione
+            // nuova (la convenzione di K5); un comando, senza rifiuto.
+            let scelta = matches!(e.refused, None | Some(fub_abi::DrawingRefusal::Empty));
+            if !scelta || e.ops.is_some() || e.reading.is_some() {
+                return Err(format!(
+                    "{nome}: attesa la sola selezione, {}",
+                    esito_in_breve(&e)
+                ));
+            }
+            if e.selection != *attesa {
+                return Err(format!(
+                    "{nome}: selezione {:?}, attesa {attesa:?}",
+                    e.selection
+                ));
             }
         }
         (Atteso::Rifiuto(atteso), Ok(e)) => match e.refused {

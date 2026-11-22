@@ -224,7 +224,8 @@ fn una_riga_fatta_entra_nell_indice_con_posto_effetto_e_tasto() {
     ]);
     let fatte: Vec<&RigaMappa> = righe.iter().filter(|r| r.stato == Stato::Fatto).collect();
     let voci = voci_di(&fatte).expect("le righe fatte si importano");
-    assert_eq!(voci.len(), 4);
+    let gia_fatte = mappa().iter().filter(|r| r.stato == Stato::Fatto).count();
+    assert_eq!(voci.len(), 4 + gia_fatte);
     let duplica = voci.iter().find(|v| v.id == "edit.duplicate").unwrap();
     assert_eq!(duplica.comando.id, "disegno.edit.duplicate");
     assert_eq!(duplica.comando.effetto, fub_motori::Effetto::Cambia);

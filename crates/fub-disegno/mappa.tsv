@@ -201,11 +201,11 @@ motore	document.setRulerOrigin	Ruler Origin		tavole	F2	T19	da fare	ispettore/des
 motore	document.resetRulerOrigin	Reset Ruler Origin		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Ripristina origine dei righelli
 motore	view.globalRulers	Change to Global Rulers	View › Rulers	vista	F1	T11	da fare	menu/visualizza	famiglia		Passa a righelli globali
 motore	edit.dropSelection	Drop Artwork		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Rilascia illustrazione
-motore	edit.undo	Undo	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Annulla
-motore	edit.redo	Redo	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Ripeti
+motore	edit.undo	Undo	Edit	fub	—	T11	fub	fub	—	«Annulla» di Fub: la cronologia della superficie	Annulla
+motore	edit.redo	Redo	Edit	fub	—	T11	fub	fub	—	«Ripeti» di Fub: la cronologia della superficie	Ripeti
 motore	edit.clearHistory	Clear History		nucleo	F1	T11	da fare	tavolozza	nucleo		Cancella cronologia
-motore	edit.undoGroup.begin	Begin Undo Group		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Inizia gruppo di annullamento
-motore	edit.undoGroup.end	End Undo Group		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Termina gruppo di annullamento
+motore	edit.undoGroup.begin	Begin Undo Group		fub	—	T11	fub	fub	—	un gesto o un comando di Fub è un passo solo della cronologia	Inizia gruppo di annullamento
+motore	edit.undoGroup.end	End Undo Group		fub	—	T11	fub	fub	—	un gesto o un comando di Fub è un passo solo della cronologia	Termina gruppo di annullamento
 motore	edit.cut	Cut	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Taglia
 motore	edit.copy	Copy	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Copia
 motore	edit.paste	Paste	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla
@@ -494,13 +494,13 @@ motore	file.recovery.list	Recovery Data		fub	—	T2	fub	fub	—	bozze e versioni
 motore	file.recovery.restore	Restore Recovered Documents		fub	—	T2	fub	fub	—	bozze e versioni del kernel	Ripristina documenti recuperati
 motore	file.recovery.discard	Discard Recovered Documents		fub	—	T2	fub	fub	—	bozze e versioni del kernel	Scarta documenti recuperati
 motore	script.check	Check Script		automazione	F4	T26	da fare	interno	sotto:disegno-script	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Controlla script
-motore	select.all	All	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo		Tutto
+motore	select.all	All	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Tutto
 motore	select.allOnArtboard	All on Active Artboard	Select	livelli	F1	T15	da fare	menu/selezione	famiglia		Tutto nella tavola da disegno attiva
-motore	select.none	Deselect	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo		Deseleziona
-motore	select.reselect	Reselect	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo		Riseleziona
-motore	select.inverse	Inverse	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo		Inversa
-motore	select.nextAbove	Next Object Above	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo		Oggetto successivo sopra
-motore	select.nextBelow	Next Object Below	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo		Oggetto successivo sotto
+motore	select.none	Deselect	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Deseleziona
+motore	select.reselect	Reselect	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo	manca ancora: il motore non ricorda la selezione di prima fra le richieste	Riseleziona
+motore	select.inverse	Inverse	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Inversa
+motore	select.nextAbove	Next Object Above	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Oggetto successivo sopra
+motore	select.nextBelow	Next Object Below	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Oggetto successivo sotto
 motore	select.set	Select Objects		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Seleziona oggetti
 motore	select.add	Add to Selection		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aggiungi alla selezione
 motore	select.toggle	Toggle Selection		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Alterna selezione
@@ -855,25 +855,25 @@ motore	object.reflect	Reflect…	Object › Transform	trasforma	F1	T13	da fare	m
 motore	object.shear	Shear…	Object › Transform	trasforma	F1	T13	da fare	menu/oggetto	famiglia	finestra	Inclina…
 motore	object.transformAgain	Transform Again	Object › Transform	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Ripeti trasformazione
 motore	object.nudge	Nudge		trasforma	F1	T13	da fare	ispettore/design	famiglia		Sposta leggermente
-motore	object.arrange.bringToFront	Bring to Front	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Porta in primo piano
-motore	object.arrange.bringForward	Bring Forward	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Porta avanti
-motore	object.arrange.sendBackward	Send Backward	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Porta indietro
-motore	object.arrange.sendToBack	Send to Back	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Porta in fondo
-motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Sposta sul livello corrente
-motore	object.group	Group	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Raggruppa
-motore	object.ungroup	Ungroup	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Separa
-motore	object.lock	Selection	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Selezione
-motore	object.unlockAll	Unlock All	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Sblocca tutto
-motore	object.hide	Selection	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Selezione
-motore	object.showAll	Show All	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Mostra tutto
+motore	object.arrange.bringToFront	Bring to Front	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta in primo piano
+motore	object.arrange.bringForward	Bring Forward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta avanti
+motore	object.arrange.sendBackward	Send Backward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta indietro
+motore	object.arrange.sendToBack	Send to Back	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta in fondo
+motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: il livello attivo di Fub non arriva al motore	Sposta sul livello corrente
+motore	object.group	Group	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non sa ancora scrivere un gruppo nuovo	Raggruppa
+motore	object.ungroup	Ungroup	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Separa
+motore	object.lock	Selection	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non scrive ancora fub:locked; oggi «Blocca» di Fub nel tasto destro	Selezione
+motore	object.unlockAll	Unlock All	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non scrive ancora fub:locked; oggi «Sblocca» di Fub nel tasto destro	Sblocca tutto
+motore	object.hide	Selection	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non scrive ancora display; oggi «Nascondi» di Fub nel tasto destro	Selezione
+motore	object.showAll	Show All	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non scrive ancora display; oggi «Mostra» di Fub nel tasto destro	Mostra tutto
 motore	object.compoundPath.make	Make	Object › Compound Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Crea
 motore	object.compoundPath.release	Release	Object › Compound Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Rilascia
 motore	object.clippingMask.make	Make	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Crea
 motore	object.clippingMask.release	Release	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Rilascia
 motore	object.clippingMask.editContents	Edit Contents	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Modifica contenuto
 motore	object.clippingMask.editMask	Edit Clipping Path	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Modifica tracciato di ritaglio
-motore	object.isolate	Enter Isolation Mode		nucleo	F1	T11	da fare	tasto-destro	nucleo		Entra in modalità isolamento
-motore	object.exitIsolation	Exit Isolation Mode		nucleo	F1	T11	da fare	tasto-destro	nucleo		Esci dalla modalità isolamento
+motore	object.isolate	Enter Isolation Mode		fub	—	T11	fub	fub	—	«Isola» di Fub nel tasto destro del disegno (il motore non tiene lo stato fra le richieste)	Entra in modalità isolamento
+motore	object.exitIsolation	Exit Isolation Mode		fub	—	T11	fub	fub	—	«Esci dall'isolamento» di Fub nel tasto destro, o Esc	Esci dalla modalità isolamento
 motore	object.setProps	Object Properties		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Proprietà oggetto
 motore	object.align	Align	Window › Align	trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea
 motore	object.distribute	Distribute	Window › Align	trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci
@@ -1087,10 +1087,10 @@ interfaccia	window.workspace.list	List Workspaces		fub	—	T7	fub	fub	—	L'elen
 interfaccia	window.newWindow	New Window		fub	—	T2	fub	fub	—	Fub: nuova finestra della shell	Nuova finestra
 interfaccia	window.nextDocument	Next Document		fub	—	T2	fub	fub	—	Vai › Scheda successiva	Documento successivo
 interfaccia	window.previousDocument	Previous Document		fub	—	T2	fub	fub	—	Vai › Scheda precedente	Documento precedente
-interfaccia	tool.select	Select Tool		nucleo	F1	T11	da fare	colonna	nucleo		Seleziona strumento
-interfaccia	tool.setOption	Tool Option		nucleo	F1	T11	da fare	colonna	nucleo		Opzione strumento
+interfaccia	tool.select	Select Tool		nucleo	F1	T11	fatto	colonna	nucleo		Seleziona strumento
+interfaccia	tool.setOption	Tool Option		nucleo	F1	T11	fatto	colonna	nucleo		Opzione strumento
 interfaccia	effect.dialog	Effect…		effetti	F2	T18	da fare	menu/effetto	famiglia		Effetto…
-interfaccia	ui.paramDialog	Command Dialog		nucleo	F1	T11	da fare	finestra	nucleo		Finestra dei comandi
+interfaccia	ui.paramDialog	Command Dialog		fub	—	T11	fub	fub	—	le finestre dei comandi di Fub (completo/finestre)	Finestra dei comandi
 interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	da fare	finestra	famiglia		Ricolora grafica…
 interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	da fare	finestra	famiglia		Ritaglia immagine
 interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	da fare	menu/effetto	famiglia		Applica ultimo effetto
@@ -1113,7 +1113,7 @@ interfaccia	ui.charStyleOptions.resetPanel	Reset Panel		testo	F2	T16	da fare	fin
 interfaccia	ui.newCharStyle	New Character Style…		testo	F2	T16	da fare	finestra	famiglia		Nuovo stile carattere…
 interfaccia	ui.newParaStyle	New Paragraph Style…		testo	F2	T16	da fare	finestra	famiglia		Nuovo stile paragrafo…
 interfaccia	ui.symbolOptions	Symbol Options…		simboli	F3	T22	da fare	finestra	famiglia		Opzioni simbolo…
-interfaccia	tool.options	Tool Options…		nucleo	F1	T11	da fare	colonna	nucleo		Opzioni strumento…
+interfaccia	tool.options	Tool Options…		nucleo	F1	T11	fatto	colonna	nucleo	la fila delle opzioni in testata	Opzioni strumento…
 interfaccia	ui.colorGuideOptions	Color Guide Options…		colore	F1	T14	da fare	finestra	famiglia		Opzioni guida colori…
 interfaccia	ui.colorBalanceDialog	Adjust Color Balance…		colore	F1	T14	da fare	finestra	famiglia		Regola bilanciamento colore…
 interfaccia	ui.saturateDialog	Saturate…		colore	F1	T14	da fare	finestra	famiglia		Satura…
@@ -1278,11 +1278,11 @@ interfaccia	ui.perspectiveUserPreset3.5	Three Point Perspective Preset 5		prospe
 interfaccia	ui.blendOptions	Blend Options…		dinamici	F2	T21	da fare	finestra	famiglia		Opzioni fusione…
 interfaccia	ui.livePaintGapOptions	Gap Options…		trame	F2	T21	da fare	finestra	famiglia		Opzioni spazi vuoti…
 interfaccia	ui.perspectivePlane	Perspective Plane Options…		prospettiva	F4	T25	da fare	finestra	famiglia		Opzioni piano prospettico…
-strumento	selection	Selection Tool		nucleo	F1	T11	da fare	colonna/scegli	nucleo	riquadro «selection»	Strumento Selezione
-strumento	directSelection	Direct Selection Tool		nucleo	F1	T11	da fare	colonna/scegli	nucleo	riquadro «directSelection»	Strumento Selezione diretta
-strumento	groupSelection	Group Selection Tool		nucleo	F1	T11	da fare	colonna/scegli	nucleo	riquadro «directSelection»	Strumento Selezione gruppo
+strumento	selection	Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «selection»	Strumento Selezione
+strumento	directSelection	Direct Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «directSelection»	Strumento Selezione diretta
+strumento	groupSelection	Group Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «directSelection»	Strumento Selezione gruppo
 strumento	magicWand	Magic Wand Tool		livelli	F1	T15	da fare	colonna/scegli	famiglia	riquadro «magicWand»	Strumento Bacchetta magica
-strumento	lasso	Lasso Tool		nucleo	F1	T11	da fare	colonna/scegli	nucleo	riquadro «lasso»	Strumento Lazo
+strumento	lasso	Lasso Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «lasso»	Strumento Lazo
 strumento	pen	Pen Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «pen»	Strumento Penna
 strumento	addAnchor	Add Anchor Point Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «pen»	Strumento Aggiungi punto di ancoraggio
 strumento	deleteAnchor	Delete Anchor Point Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «pen»	Strumento Elimina punto di ancoraggio
@@ -1366,10 +1366,10 @@ strumento	radarGraph	Radar Graph Tool		grafici	F4	T25	da fare	colonna/oggetti	fa
 strumento	artboard	Artboard Tool		tavole	F2	T19	da fare	colonna/misura	famiglia	riquadro «artboard»	Strumento Tavola da disegno
 strumento	slice	Slice Tool		web	F3	T22	da fare	colonna/misura	famiglia	riquadro «artboard»	Strumento Sezione
 strumento	sliceSelection	Slice Selection Tool		web	F3	T22	da fare	colonna/misura	famiglia	riquadro «artboard»	Strumento Selezione sezione
-strumento	hand	Hand Tool		nucleo	F1	T11	da fare	colonna/vista	nucleo	riquadro «hand»	Strumento Mano
-strumento	rotateView	Rotate View Tool		nucleo	F1	T11	da fare	colonna/vista	nucleo	riquadro «hand»	Strumento Ruota vista
+strumento	hand	Hand Tool		nucleo	F1	T11	fatto	colonna/vista	nucleo	la vista di Fub sposta il foglio (lo strumento del motore è vuoto)	Strumento Mano
+strumento	rotateView	Rotate View Tool		nucleo	F1	T11	fatto	colonna/vista	nucleo	la vista di Fub gira il foglio (lo strumento del motore è vuoto)	Strumento Ruota vista
 strumento	printTiling	Print Tiling Tool		stampa	F4	T25	da fare	colonna/misura	sotto:disegno-formati	riquadro «hand»	Strumento Affiancamento di stampa
-strumento	zoom	Zoom Tool		nucleo	F1	T11	da fare	colonna/vista	nucleo	riquadro «zoom»	Strumento Zoom
+strumento	zoom	Zoom Tool		nucleo	F1	T11	fatto	colonna/vista	nucleo	la vista di Fub ingrandisce (lo strumento del motore è vuoto)	Strumento Zoom
 strumento	anchorEraserBrush	Anchor Eraser Brush		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «anchorEraserBrush» (aggiunta di VectorCraft)	Pennello gomma punti di ancoraggio
 strumento	extendPath	Extend Path Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «extendPath» (aggiunta di VectorCraft)	Strumento Estendi tracciato
 strumento	measureInspect	Measure & Inspect Tool		tavole	F2	T19	da fare	colonna/misura	famiglia	riquadro «measureInspect» (aggiunta di VectorCraft)	Strumento Misura e ispeziona
@@ -1526,7 +1526,7 @@ pannello	flattener_preview	Flattener Preview	Window	stampa	F4	T25	da fare	ispett
 pannello	glyphs	Glyphs	Window	testo	F2	T16	da fare	ispettore/risorse	famiglia		Glifi
 pannello	gradient	Gradient	Window	aspetto	F1	T15	da fare	ispettore/design	famiglia		Sfumatura
 pannello	graphic_styles	Graphic Styles	Window	aspetto	F1	T15	da fare	ispettore/risorse	famiglia		Stili grafici
-pannello	history	History	Window	nucleo	F1	T11	da fare	ispettore/cronologia	nucleo		Cronologia
+pannello	history	History	Window	fub	—	T11	fub	fub	—	la cronologia della superficie e le versioni del file di Fub	Cronologia
 pannello	image_trace	Image Trace	Window	immagini	F3	T20	da fare	ispettore/design	famiglia		Ricalco immagine
 pannello	info	Info	Window	vista	F1	T11	da fare	banda	famiglia		Info
 pannello	layers	Layers	Window	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Livelli
@@ -1540,7 +1540,7 @@ pannello	opentype	Opentype	Window	testo	F2	T16	da fare	ispettore/design	famiglia
 pannello	paragraph	Paragraph	Window	testo	F2	T16	da fare	ispettore/design	famiglia		Paragrafo
 pannello	pathfinder	Pathfinder	Window	forme	F1	T13	da fare	ispettore/design	famiglia		Elaborazione tracciati
 pannello	pattern_options	Pattern Options	Window	trame	F2	T21	da fare	ispettore/design	famiglia		Opzioni motivo
-pannello	properties	Properties	Window	nucleo	F1	T11	da fare	ispettore/design	nucleo		Proprietà
+pannello	properties	Properties	Window	fub	—	T11	fub	fub	—	l'ispettore del disegno di Fub (scheda Design)	Proprietà
 pannello	separations	Separations	Window	stampa	F4	T25	da fare	ispettore/design/documento	famiglia		Separations
 pannello	stroke	Stroke	Window	aspetto	F1	T15	da fare	ispettore/design	famiglia		Traccia
 pannello	svg_interactivity	Svg Interactivity	Window	web	F3	T22	da fare	ispettore/design/documento	famiglia		Svg Interactivity

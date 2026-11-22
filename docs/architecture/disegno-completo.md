@@ -110,8 +110,10 @@ allora `completo/index.ts` (`fila`) costruisce la fila con i controlli del kit
 (`completo/opzioni.ts`). La testata (`tools/editor/chrome/fila-motore.ts`) la
 monta nella riga delle opzioni; ogni stato registrato dello strumento la
 aggiorna (`StatiStrumenti.ascolta`), e smontata la fila il suo ascolto si
-spegne. Il motore non ha ancora un comando di sola lettura per lo stato di uno
-strumento: lo stato arriva con un esito (un gesto, o `disegno.strumento.opzione`).
+spegne. Lo stato arriva con un esito: un gesto, `disegno.strumento.opzione`, o
+`disegno.strumento.stato`, il comando di sola lettura che `gesti.ts`
+(`preparaStrumento`) manda appena la famiglia è pronta, così la fila c'è prima
+del primo gesto.
 
 ## Chi possiede che cosa
 

@@ -1,3 +1,220 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia nucleo (piano K6, T11): gli strumenti per scegliere e i comandi della selezione e dell'ordine. Il disegno è nucleo/base.svg: due rettangoli, un gruppo di due quadrati, un triangolo e un tratto della penna (fub:ink), nel livello l1a2b3c4d.",
+  "casi": [
+    {
+      "id": "selection",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            { "kind": "down", "x": 150, "y": 125, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 160, "y": 135, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 170, "y": 145, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "up", "x": 170, "y": 145, "pressure": 0.5, "shift": false, "alt": false, "cmd": false }
+          ]
+        }
+      ],
+      "atteso": { "ops": [{ "op": "set", "id": "oa1a1a1a1", "attrs": { "transform": "matrix(1 0 0 1 20 20)" } }] },
+      "dopo": "selezione-sposta.svg"
+    },
+    {
+      "id": "directSelection",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            { "kind": "down", "x": 300, "y": 200, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 290, "y": 190, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 280, "y": 180, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "up", "x": 280, "y": 180, "pressure": 0.5, "shift": false, "alt": false, "cmd": false }
+          ]
+        }
+      ],
+      "atteso": { "ops": [{ "op": "set", "id": "op7a7a7a7", "attrs": { "d": "M280 180 L360 200 L330 260 Z" } }] },
+      "dopo": "punto-sposta.svg"
+    },
+    {
+      "id": "groupSelection",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            { "kind": "down", "x": 35, "y": 35, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 40, "y": 40, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 45, "y": 45, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "up", "x": 45, "y": 45, "pressure": 0.5, "shift": false, "alt": false, "cmd": false }
+          ]
+        }
+      ],
+      "atteso": { "ops": [{ "op": "set", "id": "oe5e5e5e5", "attrs": { "transform": "matrix(1 0 0 1 10 10)" } }] },
+      "dopo": "nel-gruppo-sposta.svg"
+    },
+    {
+      "id": "lasso",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            { "kind": "down", "x": 90, "y": 90, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 290, "y": 90, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 290, "y": 160, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 90, "y": 160, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 90, "y": 95, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "up", "x": 90, "y": 95, "pressure": 0.5, "shift": false, "alt": false, "cmd": false }
+          ]
+        }
+      ],
+      "atteso": { "selezione": ["oa1a1a1a1", "ob2b2b2b2"] }
+    },
+    {
+      "$nota": "Un tratto della penna (fub:ink) si sceglie e si sposta, come in K5.",
+      "id": "selection",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            { "kind": "down", "x": 140, "y": 230, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 150, "y": 240, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 160, "y": 250, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "up", "x": 160, "y": 250, "pressure": 0.5, "shift": false, "alt": false, "cmd": false }
+          ]
+        }
+      ],
+      "atteso": { "ops": [{ "op": "set", "id": "oi8b8b8b8", "attrs": { "transform": "matrix(1 0 0 1 20 20)" } }] },
+      "dopo": "tratto-sposta.svg"
+    },
+    {
+      "$nota": "I punti di un tratto della penna (fub:ink) non si cambiano: la sua forma viene dai campioni.",
+      "id": "directSelection",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            { "kind": "down", "x": 120, "y": 220, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 110, "y": 210, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "drag", "x": 100, "y": 200, "pressure": 0.5, "shift": false, "alt": false, "cmd": false },
+            { "kind": "up", "x": 100, "y": 200, "pressure": 0.5, "shift": false, "alt": false, "cmd": false }
+          ]
+        }
+      ],
+      "atteso": { "rifiuto": "unsupported" }
+    },
+    {
+      "id": "hand",
+      "fonte": "strumento",
+      "prova": "apps/client/src/editors/spatial/completo/nucleo.test.ts"
+    },
+    {
+      "id": "zoom",
+      "fonte": "strumento",
+      "prova": "apps/client/src/editors/spatial/completo/nucleo.test.ts"
+    },
+    {
+      "id": "rotateView",
+      "fonte": "strumento",
+      "prova": "apps/client/src/editors/spatial/completo/nucleo.test.ts"
+    },
+    {
+      "id": "tool.select",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/nucleo.test.ts"
+    },
+    {
+      "id": "tool.setOption",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/nucleo.test.ts"
+    },
+    {
+      "id": "tool.options",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/nucleo.test.ts"
+    },
+    {
+      "id": "select.all",
+      "disegno": "base.svg",
+      "atteso": { "selezione": ["oa1a1a1a1", "ob2b2b2b2", "gd4d4d4d4", "op7a7a7a7", "oi8b8b8b8"] }
+    },
+    {
+      "id": "select.none",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "selezione": [] }
+    },
+    {
+      "id": "select.inverse",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "selezione": ["ob2b2b2b2", "gd4d4d4d4", "op7a7a7a7", "oi8b8b8b8"] }
+    },
+    {
+      "id": "select.nextAbove",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "selezione": ["ob2b2b2b2"] }
+    },
+    {
+      "id": "select.nextBelow",
+      "disegno": "base.svg",
+      "selezione": ["ob2b2b2b2"],
+      "atteso": { "selezione": ["oa1a1a1a1"] }
+    },
+    {
+      "id": "object.ungroup",
+      "disegno": "base.svg",
+      "selezione": ["gd4d4d4d4"],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              { "op": "move", "target": "oe5e5e5e5", "parent": "l1a2b3c4d", "pos": { "after": "ob2b2b2b2" } },
+              { "op": "move", "target": "of6f6f6f6", "parent": "l1a2b3c4d", "pos": { "after": "oe5e5e5e5" } },
+              { "op": "remove", "target": "gd4d4d4d4" }
+            ]
+          }
+        ]
+      },
+      "dopo": "separato.svg"
+    },
+    {
+      "id": "object.arrange.bringToFront",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "ops": [{ "op": "move", "target": "oa1a1a1a1", "parent": "l1a2b3c4d", "pos": { "after": "oi8b8b8b8" } }] },
+      "dopo": "in-cima.svg"
+    },
+    {
+      "id": "object.arrange.bringForward",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "ops": [{ "op": "move", "target": "ob2b2b2b2", "parent": "l1a2b3c4d", "pos": { "first": true } }] },
+      "dopo": "su-di-uno.svg"
+    },
+    {
+      "id": "object.arrange.sendBackward",
+      "disegno": "base.svg",
+      "selezione": ["ob2b2b2b2"],
+      "atteso": { "ops": [{ "op": "move", "target": "ob2b2b2b2", "parent": "l1a2b3c4d", "pos": { "first": true } }] },
+      "dopo": "su-di-uno.svg"
+    },
+    {
+      "id": "object.arrange.sendToBack",
+      "disegno": "base.svg",
+      "selezione": ["op7a7a7a7"],
+      "atteso": { "ops": [{ "op": "move", "target": "op7a7a7a7", "parent": "l1a2b3c4d", "pos": { "first": true } }] },
+      "dopo": "in-fondo.svg"
+    }
+  ]
 }

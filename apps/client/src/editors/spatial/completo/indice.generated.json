@@ -1,4 +1,325 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
-  "voci": []
+  "voci": [
+    {
+      "fonte": "motore",
+      "id": "object.arrange.bringForward",
+      "chiamata": {
+        "comando": "disegno.object.arrange.bringForward"
+      },
+      "etichetta": {
+        "it": "Porta avanti",
+        "en": "Bring Forward"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+]",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.arrange.bringToFront",
+      "chiamata": {
+        "comando": "disegno.object.arrange.bringToFront"
+      },
+      "etichetta": {
+        "it": "Porta in primo piano",
+        "en": "Bring to Front"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Shift+]",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.arrange.sendBackward",
+      "chiamata": {
+        "comando": "disegno.object.arrange.sendBackward"
+      },
+      "etichetta": {
+        "it": "Porta indietro",
+        "en": "Send Backward"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+[",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.arrange.sendToBack",
+      "chiamata": {
+        "comando": "disegno.object.arrange.sendToBack"
+      },
+      "etichetta": {
+        "it": "Porta in fondo",
+        "en": "Send to Back"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Shift+[",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.ungroup",
+      "chiamata": {
+        "comando": "disegno.object.ungroup"
+      },
+      "etichetta": {
+        "it": "Separa",
+        "en": "Ungroup"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Shift+G",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.all",
+      "chiamata": {
+        "comando": "disegno.select.all"
+      },
+      "etichetta": {
+        "it": "Tutto",
+        "en": "All"
+      },
+      "posto": "menu/selezione",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+A",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.inverse",
+      "chiamata": {
+        "comando": "disegno.select.inverse"
+      },
+      "etichetta": {
+        "it": "Inversa",
+        "en": "Inverse"
+      },
+      "posto": "menu/selezione",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.nextAbove",
+      "chiamata": {
+        "comando": "disegno.select.nextAbove"
+      },
+      "etichetta": {
+        "it": "Oggetto successivo sopra",
+        "en": "Next Object Above"
+      },
+      "posto": "menu/selezione",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Alt+]",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.nextBelow",
+      "chiamata": {
+        "comando": "disegno.select.nextBelow"
+      },
+      "etichetta": {
+        "it": "Oggetto successivo sotto",
+        "en": "Next Object Below"
+      },
+      "posto": "menu/selezione",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Alt+[",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.none",
+      "chiamata": {
+        "comando": "disegno.select.none"
+      },
+      "etichetta": {
+        "it": "Deseleziona",
+        "en": "Deselect"
+      },
+      "posto": "menu/selezione",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Shift+A",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "tool.options",
+      "chiamata": {
+        "client": "tool.options"
+      },
+      "etichetta": {
+        "it": "Opzioni strumento…",
+        "en": "Tool Options…"
+      },
+      "posto": "colonna",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "tool.select",
+      "chiamata": {
+        "client": "tool.select"
+      },
+      "etichetta": {
+        "it": "Seleziona strumento",
+        "en": "Select Tool"
+      },
+      "posto": "colonna",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "tool.setOption",
+      "chiamata": {
+        "client": "tool.setOption"
+      },
+      "etichetta": {
+        "it": "Opzione strumento",
+        "en": "Tool Option"
+      },
+      "posto": "colonna",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "directSelection",
+      "chiamata": {
+        "strumento": "directSelection"
+      },
+      "etichetta": {
+        "it": "Strumento Selezione diretta",
+        "en": "Direct Selection Tool"
+      },
+      "posto": "colonna/scegli",
+      "famiglia": "nucleo",
+      "tasto": "A",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "groupSelection",
+      "chiamata": {
+        "strumento": "groupSelection"
+      },
+      "etichetta": {
+        "it": "Strumento Selezione gruppo",
+        "en": "Group Selection Tool"
+      },
+      "posto": "colonna/scegli",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "hand",
+      "chiamata": {
+        "strumento": "hand"
+      },
+      "etichetta": {
+        "it": "Strumento Mano",
+        "en": "Hand Tool"
+      },
+      "posto": "colonna/vista",
+      "famiglia": "nucleo",
+      "tasto": "H",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "lasso",
+      "chiamata": {
+        "strumento": "lasso"
+      },
+      "etichetta": {
+        "it": "Strumento Lazo",
+        "en": "Lasso Tool"
+      },
+      "posto": "colonna/scegli",
+      "famiglia": "nucleo",
+      "tasto": "Q",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "rotateView",
+      "chiamata": {
+        "strumento": "rotateView"
+      },
+      "etichetta": {
+        "it": "Strumento Ruota vista",
+        "en": "Rotate View Tool"
+      },
+      "posto": "colonna/vista",
+      "famiglia": "nucleo",
+      "tasto": "Shift+H",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "selection",
+      "chiamata": {
+        "strumento": "selection"
+      },
+      "etichetta": {
+        "it": "Strumento Selezione",
+        "en": "Selection Tool"
+      },
+      "posto": "colonna/scegli",
+      "famiglia": "nucleo",
+      "tasto": "V",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "zoom",
+      "chiamata": {
+        "strumento": "zoom"
+      },
+      "etichetta": {
+        "it": "Strumento Zoom",
+        "en": "Zoom Tool"
+      },
+      "posto": "colonna/vista",
+      "famiglia": "nucleo",
+      "tasto": "Z",
+      "effetto": "cambia",
+      "finestra": false
+    }
+  ]
 }

@@ -856,6 +856,12 @@ pub(crate) fn esegui(
             esito.selection = selezione_di_fub(copia, &differenza, &selezione);
             esito.ops = Some(ops);
         }
+        // Il documento non cambia ma la selezione sì (`select.all`,
+        // `select.inverse`…): l'esito porta la selezione nuova, senza
+        // operazioni e senza un passo della cronologia.
+        Ok(None) if selezione != scelti => {
+            esito.selection = selezione_di_fub(copia, &differenza, &selezione);
+        }
         Ok(None) => {
             let legge = vectorcraft_engine::find_command(&riga.id).is_some_and(|c| !c.journal);
             if !legge || risultato.is_null() {

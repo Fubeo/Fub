@@ -221,10 +221,26 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         ),
         DrawingRefusal::Unmapped
     );
-    assert!(d
-        .comandi(&["oa1a1a1a1".into(), "onessuno1".into()])
+    // Scegliere tutto, l'inversa e nessuno non toccano ciò che è scelto: il
+    // resto (anche l'ordine del nucleo, K6 T11) è spento.
+    let sempre = [
+        "disegno.select.all",
+        "disegno.select.inverse",
+        "disegno.select.none",
+    ];
+    let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
+    assert!(comandi
         .iter()
+        .filter(|c| !sempre.contains(&c.id.as_str()))
         .all(|c| !c.enabled));
+    let ordine = comandi
+        .iter()
+        .find(|c| c.id == "disegno.object.arrange.bringToFront")
+        .expect("l'ordine è una riga fatta");
+    assert_eq!(
+        ordine.disabled_reason,
+        Some(fub_abi::DrawingDisabledReason::Unmapped)
+    );
     if aperto.unmapped > 0 {
         // L'immagine, se il motore non la sa modificare.
         assert_eq!(
@@ -343,13 +359,61 @@ fn il_tratto_di_una_penna_e_il_suo_riempimento() {
 #[test]
 fn i_comandi_sono_accesi_su_una_selezione_mappata() {
     let (d, _) = apri(&disegno(RETTANGOLO));
+    // Prima i comandi del nucleo di Fub, poi le righe «fatto» del Completo.
     let accesi = d.comandi(&["oa1a1a1a1".into()]);
     assert_eq!(
-        accesi.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+        accesi
+            .iter()
+            .take(DRAWING_COMMANDS.len())
+            .map(|c| c.id.as_str())
+            .collect::<Vec<_>>(),
         DRAWING_COMMANDS.to_vec()
     );
-    assert!(accesi.iter().all(|c| c.enabled), "{accesi:?}");
-    assert!(d.comandi(&[]).iter().all(|c| !c.enabled));
+    let stato = |comandi: &[fub_abi::DrawingCommandInfo], id: &str| {
+        let c = comandi
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap_or_else(|| panic!("manca {id}"));
+        (c.enabled, c.disabled_reason.clone())
+    };
+    assert!(
+        accesi
+            .iter()
+            .take(DRAWING_COMMANDS.len())
+            .all(|c| c.enabled),
+        "{accesi:?}"
+    );
+    // Il nucleo del Completo (K6 T11): un rettangolo si ordina e si sceglie
+    // sopra o sotto, ma non si separa.
+    assert_eq!(
+        stato(&accesi, "disegno.object.arrange.bringToFront"),
+        (true, None)
+    );
+    assert_eq!(stato(&accesi, "disegno.select.nextAbove"), (true, None));
+    assert_eq!(
+        stato(&accesi, "disegno.object.ungroup"),
+        (false, Some(fub_abi::DrawingDisabledReason::NeedsGroup))
+    );
+    // Senza selezione: spenti, tranne Seleziona tutto e l'Inversa.
+    let vuota = d.comandi(&[]);
+    assert!(vuota
+        .iter()
+        .take(DRAWING_COMMANDS.len())
+        .all(|c| !c.enabled));
+    assert_eq!(stato(&vuota, "disegno.select.all"), (true, None));
+    assert_eq!(stato(&vuota, "disegno.select.inverse"), (true, None));
+    for id in [
+        "disegno.select.none",
+        "disegno.select.nextBelow",
+        "disegno.object.arrange.sendToBack",
+        "disegno.object.ungroup",
+    ] {
+        assert_eq!(
+            stato(&vuota, id),
+            (false, Some(fub_abi::DrawingDisabledReason::NoSelection)),
+            "{id}"
+        );
+    }
 }
 
 #[test]
