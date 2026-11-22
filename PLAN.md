@@ -2426,9 +2426,17 @@ in px (unità della scena). Rimandati a dopo la base: Ripeti trasformazione
 senza una precedente (oggi `unsupported`; spegnerla chiede un motivo nuovo
 in `DrawingDisabledReason` e il ricordo dell'ultima trasformazione lato
 Fub, gesti compresi), Trasforma ciascuno, Distorci, «Elaborazione
-tracciati», costruttore di forme, perni e strumento forma. Giro 5 (gli
-strumenti Ruota, Rifletti, Scala e Inclina nella colonna) e giro 6 (forme
-composte, Espandi forma, Ripeti Elaborazione tracciati) in corso.
+tracciati», costruttore di forme, perni e strumento forma. Giro 6 unito
+in 8a11d0a95: forme composte (crea con Alt + metodo nella sezione o da ≡ ›
+Oggetto › Elaborazione tracciati › Forma composta, cambia metodo, rilascia,
+espandi; salvata con la ricetta e riaperta uguale), Espandi forma in
+Oggetto, Ripeti elaborazione (ricordata finché il Completo resta aperto);
+`con_gli_id` dà un id a ogni membro di un gruppo espanso (prima il client
+rifiutava la composta). Rischi: il metodo attivo non si accende nella
+sezione; il rifiuto «Scegli una forma composta.» del motore resta in
+italiano; il banco non riconosce la composta, va guardata nell'app vera.
+Giro 5 (gli strumenti Ruota, Rifletti, Scala e Inclina nella colonna) in
+corso.
 Aspetta: niente
 
 ## T14 · Il colore
