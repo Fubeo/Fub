@@ -282,8 +282,23 @@ e i limiti vengono dal motore (`FINESTRE_SCRITTE` in
 `crates/fub-disegno/src/catalogo.rs`); le parole della finestra sono della
 famiglia (`completo/famiglie/tracciati/testi.ts`).
 
-Le altre voci con una finestra (Media, Pulisci, Dividi in griglia…) e le
-maschere di ritaglio non ci sono ancora: sono spente e dicono perché.
+**Media…** e **Media e unisci…** stanno nella prima fila di ≡ › Oggetto ›
+Tracciato, dopo Unisci, e aprono anche loro una finestra:
+
+- **Media…** porta i punti nel loro punto medio, sull'asse scelto
+  (orizzontale, verticale o tutti e due). Con i punti scelti con la
+  Selezione diretta muove solo quelli; senza, tutti i punti dei tracciati
+  scelti. Se tutti i punti di un tracciato finirebbero in uno solo, il file
+  non cambia e lo dice;
+- **Media e unisci…** porta due estremi aperti nel loro punto medio e li
+  unisce lì, con un angolo o un punto morbido: i due estremi scelti, o i due
+  tracciati aperti scelti, o un tracciato aperto che si chiude. Altrimenti è
+  spenta e dice «Scegli due tracciati aperti, o un tracciato aperto da
+  chiudere.».
+
+Le altre voci con una finestra (Pulisci, Dividi in griglia…) non ci sono
+ancora: sono spente e dicono perché. Le maschere di ritaglio sono in
+[Ritagli e maschere](drawing-masks.md#maschere-di-ritaglio-nel-completo).
 
 ### Elaborazione tracciati
 
