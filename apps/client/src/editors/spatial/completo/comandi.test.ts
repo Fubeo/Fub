@@ -252,6 +252,28 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
     ]);
   });
 
+  it("≡ › Oggetto › Disponi raccoglie le sette voci di Disponi nell'ordine di VectorCraft, e il resto di Oggetto resta fuori", () => {
+    const disponi = [
+      "addon.arrange.grid",
+      "addon.arrange.swap",
+      "addon.arrange.replace",
+      "addon.arrange.size",
+      "addon.arrange.groupOverlapping",
+      "addon.arrange.randomizeOpacity",
+      "addon.arrange.sort",
+    ];
+    // L'indice le dà in ordine di id; una voce di Oggetto che non è di Disponi resta al suo posto.
+    const voci = [...disponi].reverse().map((id) => voce(id, "menu/oggetto")).concat(voce("object.group", "menu/oggetto"));
+    const oggetto = menuComando(indiceDi({ voci }), { per: null, assente: null }, vi.fn())[0]!;
+    const righe = sottovoci(oggetto);
+    const sottomenu = righe.find((r) => r.submenu === true)!;
+    expect(sottomenu.label).toBe(t("draw.completo.sotto.disponi"));
+    expect(t("draw.completo.sotto.disponi")).not.toBe("draw.completo.sotto.disponi");
+    const nome = (id: string) => nomeVoce(voci.find((v) => v.id === id)!);
+    expect(sottovoci(sottomenu).map((r) => r.label)).toEqual(disponi.map(nome));
+    expect(righe.filter((r) => r.submenu !== true).map((r) => r.label)).toEqual([nome("object.group")]);
+  });
+
   it("≡ › Modifica › Modifica colori ha le sue file: le regolazioni, le fusioni, le conversioni, Inverti e Sovrastampa", () => {
     // L'indice le dà in ordine di id.
     const ids = [

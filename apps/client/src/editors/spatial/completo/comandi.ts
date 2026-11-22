@@ -298,6 +298,18 @@ const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = 
   "selezione/oggetto": FILE_OGGETTO,
 };
 
+/// Le voci di ≡ › Oggetto › Disponi (K6 T13), nell'ordine del menu di VectorCraft
+/// (Plug-ins › Arrange Tools): il motore le fa sulla selezione (`addon.arrange.*`).
+const DISPONI: readonly string[] = [
+  "addon.arrange.grid",
+  "addon.arrange.swap",
+  "addon.arrange.replace",
+  "addon.arrange.size",
+  "addon.arrange.groupOverlapping",
+  "addon.arrange.randomizeOpacity",
+  "addon.arrange.sort",
+];
+
 /// I sottomenu che il client fa dentro un sottomenu del terzo livello: il loro
 /// nome e le voci che raccolgono, per id. L'indice non ha un quarto livello
 /// (`SOTTOMENU` di `crates/fub-disegno/src/catalogo.rs`): è solo come il menu
@@ -305,6 +317,7 @@ const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = 
 const RACCOLTE_DEI_MENU: Readonly<Record<string, readonly { readonly nome: DrawKey; readonly ids: readonly string[] }[]>> = {
   "oggetto/tracciato": [{ nome: "draw.completo.sotto.composto", ids: ["object.compoundPath.make", "object.compoundPath.release"] }],
   "oggetto/elaborazione": [{ nome: "draw.completo.sotto.formaComposta", ids: FORME_COMPOSTE }],
+  oggetto: [{ nome: "draw.completo.sotto.disponi", ids: DISPONI }],
 };
 
 /// Le voci di `chiave` che una raccolta (`RACCOLTE_DEI_MENU`) prende diventano
@@ -387,13 +400,18 @@ export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiV
     submenu: true,
     items: inFile(
       gruppo,
-      righe.map(({ id, riga }) => {
-        if (typeof riga !== "string") return { id, riga };
-        const sotto = riga.slice(gruppo.length + 1);
-        const items = inFile(riga, raccogli(riga, sotti.get(riga)!), (dentro) => ({ ...dentro, separator: true }));
-        const voce: MenuItem = { label: t(NOMI_PEZZO[sotto]), submenu: true, items };
-        return { id, riga: voce };
-      }),
+      // Le voci del livello di gruppo che una raccolta prende (Disponi, in Oggetto)
+      // diventano un sottomenu solo, come quelle dei sottomenu.
+      raccogli(
+        gruppo,
+        righe.map(({ id, riga }) => {
+          if (typeof riga !== "string") return { id, riga };
+          const sotto = riga.slice(gruppo.length + 1);
+          const items = inFile(riga, raccogli(riga, sotti.get(riga)!), (dentro) => ({ ...dentro, separator: true }));
+          const voce: MenuItem = { label: t(NOMI_PEZZO[sotto]), submenu: true, items };
+          return { id, riga: voce };
+        }),
+      ),
       (riga) => ({ ...riga, separator: true }),
     ),
   }));
