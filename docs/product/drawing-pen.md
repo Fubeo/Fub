@@ -284,3 +284,48 @@ famiglia (`completo/famiglie/tracciati/testi.ts`).
 
 Le altre voci con una finestra (Media, Pulisci, Dividi in griglia…) e le
 maschere di ritaglio non ci sono ancora: sono spente e dicono perché.
+
+### Elaborazione tracciati
+
+Con due oggetti scelti o più, **≡ › Oggetto › Elaborazione tracciati** (e
+la palette, `Ctrl+/`) combina le loro forme in un passo di Annulla, senza
+finestre. Le voci stanno in due file:
+
+- i **metodi forma**: **Unione**, **Meno davanti** (toglie dalla forma
+  dietro quelle davanti), **Intersezione** (resta solo la parte comune),
+  **Escludi** (resta tutto tranne la parte comune);
+- le **operazioni**: **Dividi** (un pezzo per ogni zona), **Rifila** (toglie
+  le parti coperte), **Fondi** (come Rifila, e unisce i pezzi dello stesso
+  colore), **Ritaglia** (tiene ciò che sta dentro la forma davanti),
+  **Contorno** (le linee dei pezzi), **Meno dietro** (toglie dalla forma
+  davanti quelle dietro).
+
+Le stesse dieci voci sono nella sezione **Elaborazione tracciati** della
+scheda Design, con un oggetto scelto o più: due barre di pulsanti con le
+figure, nello stesso ordine. Con un oggetto solo i pulsanti restano
+raggiungibili col Tab ma sono spenti, e la nota sotto dice «Servono due
+oggetti.»; le frecce si muovono fra i pulsanti di una barra.
+
+Gli oggetti scelti se ne vanno e il risultato prende il posto del più alto,
+con un id nuovo. Un metodo forma dà un tracciato solo (composto, con
+la regola `nonzero`, se ha più pezzi), con lo stile della forma davanti
+(della forma dietro per Meno davanti); un'operazione dà un gruppo di
+tracciati. Un testo entra col contorno delle sue lettere, un gruppo con le
+forme che ha. Il comando non parte, e il file non cambia, quando non
+avrebbe niente di sicuro da fare:
+
+- un oggetto bloccato nella selezione: lo dice, e chiede di sbloccarlo o di
+  toglierlo;
+- un'immagine, una guida, una maschera di ritaglio, un gruppo vuoto o un
+  testo senza i suoi caratteri: se ne andrebbero senza entrare nel
+  risultato;
+- un tratto dell'Inchiostro di Fub;
+- un risultato vuoto (Intersezione di due forme che non si toccano): niente
+  sparisce, e lo dice.
+
+Le voci e il pannello `pathfinder` sono nella mappa del motore
+(`crates/fub-disegno/mappa.tsv`); le file del menu sono del client
+(`FILE_ELABORAZIONE` in `apps/client/src/editors/spatial/completo/comandi.ts`),
+la sezione è `completo/elaborazione.ts`. Trapping, Opzioni di elaborazione,
+Ripeti, le forme composte (`object.compoundShape.*`) ed Espandi forma non ci
+sono ancora: sono spente e dicono perché.

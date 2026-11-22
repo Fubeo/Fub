@@ -943,9 +943,31 @@ function conCampioni(text: string, count: number): string {
   return text.replace(/<defs\b[^>]*[^/]>/, (open) => `${open}${campioni}`);
 }
 
+// `?elabora=1` (K6 T12, giro 5, Elaborazione tracciati): il disegno dei connettori con
+// due forme sovrapposte in fondo al primo livello, un rettangolo dietro e un cerchio
+// davanti, nel vuoto in basso a destra. Le risposte di Unione e Meno davanti
+// (`disegno-famiglie/tracciati.json`) le tolgono e mettono il tracciato al posto del
+// cerchio, com'è il motore vero (`crates/fub-disegno/tests/famiglie/tracciati.json`).
+const ELABORA_PARAM = params.get("elabora");
+if (ELABORA_PARAM !== null && ELABORA_PARAM !== "1") throw new RangeError("elabora must be 1");
+
+/// Il testo del disegno con le due forme sovrapposte alla fine del primo livello.
+function conSovrapposte(text: string): string {
+  const forme =
+    `    <rect id="o0000001a" fub:name="Dietro" x="620" y="320" width="160" height="100" fill="#e9d8fd"/>\n` +
+    `    <ellipse id="o0000001b" fub:name="Davanti" cx="780" cy="420" rx="60" ry="60" fill="#fce7f3" stroke="#1a202c" stroke-width="2"/>\n`;
+  return text.replace(/\n  <\/g>\n<\/svg>/, (fine) => `\n${forme.trimEnd()}${fine}`);
+}
+
+/// Il testo del disegno dei connettori con le aggiunte delle query.
+function testoDeiConnettori(text: string): string {
+  const coi = CAMPIONI_PARAM === null ? text : conCampioni(text, Number(CAMPIONI_PARAM));
+  return ELABORA_PARAM === "1" ? conSovrapposte(coi) : coi;
+}
+
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
-  ? { doc: CONNECTORS_DOC, text: CAMPIONI_PARAM === null ? CONNECTORS.text : conCampioni(CONNECTORS.text, Number(CAMPIONI_PARAM)) }
+  ? { doc: CONNECTORS_DOC, text: testoDeiConnettori(CONNECTORS.text) }
   : LARGE !== null
     ? { doc: LARGE_DOC, text: LARGE.text }
     : null;
