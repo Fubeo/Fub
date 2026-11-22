@@ -13,6 +13,10 @@
 //! - `selezione` e `argomenti` (il `value` del comando; per un effetto i
 //!   suoi valori, `{"effect": id, "params": argomenti}`, e senza quelli di
 //!   serie);
+//! - `prima`, facoltativo: i comandi che preparano il motore prima del caso,
+//!   ognuno `{"id", "selezione"?, "argomenti"?}`, in ordine sullo stesso
+//!   disegno (copiare o importare negli appunti; ogni caso parte da un motore
+//!   nuovo). Un passo che cambia il disegno o rifiuta fa cadere il caso;
 //! - `gesto`, per uno strumento: i passi del gesto, ognuno
 //!   `{"phase", "events", "inputs"}`; l'esito è quello dell'ultimo;
 //! - `atteso`: `{"ops": […]}` (gli id nuovi sono id validi qualunque: il
@@ -91,6 +95,20 @@ pub struct Caso {
     pub dopo: Option<String>,
     /// Il test del client che prova una voce dell'interfaccia.
     pub prova: Option<String>,
+    /// I passi che preparano il motore prima del comando del caso (`prima`):
+    /// copiare o importare negli appunti, senza operazioni. Girano in ordine
+    /// sullo stesso disegno, perché ogni caso parte da un motore nuovo.
+    pub prima: Vec<Passo>,
+}
+
+/// Un passo di `prima`: un comando del motore, con la sua selezione e i suoi
+/// argomenti, che non cambia il disegno.
+#[derive(Clone, Debug)]
+pub struct Passo {
+    /// L'id del comando del motore, senza il prefisso `disegno.`.
+    pub id: String,
+    pub selezione: Vec<String>,
+    pub argomenti: Value,
 }
 
 impl Caso {
@@ -196,9 +214,42 @@ pub fn leggi_file(file: &Path) -> Result<Vec<Caso>, String> {
             atteso,
             dopo,
             prova: v.get("prova").and_then(Value::as_str).map(str::to_string),
+            prima: leggi_prima(v, &dove)?,
         });
     }
     Ok(casi)
+}
+
+/// I passi di `prima` di un caso: un elenco di `{"id", "selezione"?,
+/// "argomenti"?}`, senza `prima` un elenco vuoto.
+fn leggi_prima(v: &Value, dove: &str) -> Result<Vec<Passo>, String> {
+    let Some(passi) = v.get("prima") else {
+        return Ok(Vec::new());
+    };
+    let passi = passi
+        .as_array()
+        .ok_or_else(|| format!("{dove}: `prima` vuole un elenco"))?;
+    passi
+        .iter()
+        .map(|p| {
+            let id = p["id"]
+                .as_str()
+                .ok_or_else(|| format!("{dove}: un passo di `prima` vuole l'id"))?
+                .to_string();
+            Ok(Passo {
+                id,
+                selezione: p["selezione"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|s| s.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                argomenti: p.get("argomenti").cloned().unwrap_or_else(|| json!({})),
+            })
+        })
+        .collect()
 }
 
 /// Gli strumenti della vista: il motore non li fa (sono suoi strumenti
@@ -378,6 +429,35 @@ pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
     }
     let (mut disegno, _) = Disegno::apri_con(disegni, &caso.disegno)
         .map_err(|e| format!("{nome}: il disegno non si apre: {e}"))?;
+    // I passi di `prima` preparano il motore (gli appunti): non cambiano il
+    // disegno, e uno che rifiuta fa cadere il caso.
+    for passo in &caso.prima {
+        let richiesta = DrawingCommandRequest {
+            revision: disegno.revisione(),
+            id: format!("{PREFISSO}{}", passo.id),
+            selection: passo.selezione.clone(),
+            value: passo.argomenti.clone(),
+            preview: false,
+        };
+        match disegno.comando(richiesta) {
+            Ok(e)
+                if e.ops.is_none()
+                    && matches!(e.refused, None | Some(fub_abi::DrawingRefusal::Empty)) => {}
+            Ok(e) => {
+                return Err(format!(
+                    "{nome}: il passo «{}» di `prima` non prepara il motore: {}",
+                    passo.id,
+                    esito_in_breve(&e)
+                ))
+            }
+            Err(e) => {
+                return Err(format!(
+                    "{nome}: il passo «{}» di `prima` è un errore: {e:?}",
+                    passo.id
+                ))
+            }
+        }
+    }
     let esito = esegui_sul_disegno(&mut disegno, caso)?;
     // Le operazioni che Fub scrive, per l'oracolo dell'effetto.
     let mut scritte: Option<Value> = None;

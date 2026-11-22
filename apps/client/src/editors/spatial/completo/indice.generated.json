@@ -3,6 +3,198 @@
   "voci": [
     {
       "fonte": "motore",
+      "id": "clipboard.conflicts",
+      "chiamata": {
+        "comando": "disegno.clipboard.conflicts"
+      },
+      "etichetta": {
+        "it": "Conflitti campioni",
+        "en": "Swatch Conflicts"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "clipboard.exportPng",
+      "chiamata": {
+        "comando": "disegno.clipboard.exportPng"
+      },
+      "etichetta": {
+        "it": "Appunti come PNG",
+        "en": "Clipboard as PNG"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "clipboard.exportSvg",
+      "chiamata": {
+        "comando": "disegno.clipboard.exportSvg"
+      },
+      "etichetta": {
+        "it": "Appunti come SVG",
+        "en": "Clipboard as SVG"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "clipboard.exportText",
+      "chiamata": {
+        "comando": "disegno.clipboard.exportText"
+      },
+      "etichetta": {
+        "it": "Appunti come testo",
+        "en": "Clipboard as Text"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "clipboard.flavours",
+      "chiamata": {
+        "comando": "disegno.clipboard.flavours"
+      },
+      "etichetta": {
+        "it": "Formati degli appunti",
+        "en": "Clipboard Formats"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "clipboard.importImage",
+      "chiamata": {
+        "comando": "disegno.clipboard.importImage"
+      },
+      "etichetta": {
+        "it": "Carica immagine negli appunti",
+        "en": "Load Image into Clipboard"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "clipboard.importSvg",
+      "chiamata": {
+        "comando": "disegno.clipboard.importSvg"
+      },
+      "etichetta": {
+        "it": "Carica SVG negli appunti",
+        "en": "Load SVG into Clipboard"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "clipboard.importText",
+      "chiamata": {
+        "comando": "disegno.clipboard.importText"
+      },
+      "etichetta": {
+        "it": "Carica testo negli appunti",
+        "en": "Load Text into Clipboard"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.clearHistory",
+      "chiamata": {
+        "comando": "disegno.edit.clearHistory"
+      },
+      "etichetta": {
+        "it": "Cancella cronologia",
+        "en": "Clear History"
+      },
+      "posto": "tavolozza",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.copy",
+      "chiamata": {
+        "comando": "disegno.edit.copy"
+      },
+      "etichetta": {
+        "it": "Copia",
+        "en": "Copy"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+C",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.cut",
+      "chiamata": {
+        "comando": "disegno.edit.cut"
+      },
+      "etichetta": {
+        "it": "Taglia",
+        "en": "Cut"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+X",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.paste",
+      "chiamata": {
+        "comando": "disegno.edit.paste"
+      },
+      "etichetta": {
+        "it": "Incolla",
+        "en": "Paste"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+V",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.arrange.bringForward",
       "chiamata": {
         "comando": "disegno.object.arrange.bringForward"
