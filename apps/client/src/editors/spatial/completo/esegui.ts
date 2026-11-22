@@ -16,6 +16,7 @@ import type { MotoreDelDisegno } from "../motore/gesti";
 import { motivoDelRifiuto } from "../motore/rifiuto";
 import type { Op } from "../scene/ops";
 import { t } from "../strings";
+import type { AppuntiCompleto } from "../tools/clipboard";
 import type { Caricatore, StatoFamiglia } from "./carica";
 import type { VoceIndice } from "./indice";
 
@@ -55,7 +56,18 @@ export interface DipendenzeComando extends AzioniEsito {
   readonly anteprima: (anteprima: DrawingPreview | null) => void;
   /// La finestra del comando, se la voce ne ha una.
   readonly finestra: (voce: VoceIndice) => Promise<OpzioniFinestraComando | null>;
+  /// Gli appunti del Completo per questo motore (K6 T11): copia, taglia,
+  /// incolla e cancella cronologia passano di qui, non dal motore. `null` senza motore.
+  appunti?: AppuntiCompleto;
 }
+
+/// I comandi del motore che passano dagli appunti del Completo (`appunti.ts`).
+const AZIONI_APPUNTI: Readonly<Record<string, (appunti: AppuntiCompleto) => Promise<void>>> = {
+  "disegno.edit.copy": (appunti) => appunti.copia("copy"),
+  "disegno.edit.cut": (appunti) => appunti.copia("cut"),
+  "disegno.edit.paste": (appunti) => appunti.incollaDaMenu(),
+  "disegno.edit.clearHistory": (appunti) => appunti.cancellaCronologia(),
+};
 
 /// L'etichetta della voce nella lingua che l'app usa adesso: l'indice porta
 /// l'italiana e l'inglese.
@@ -128,6 +140,13 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): voi
   const comando = comandoDi(voce);
   if (comando === null) return;
   const etichetta = etichettaDi(voce);
+  // Gli appunti e la cronologia del Completo (K6 T11): non passano dal motore come un comando qualsiasi.
+  const appunti = dipendenze.appunti;
+  const azioneAppunti = AZIONI_APPUNTI[comando.id];
+  if (appunti !== undefined && azioneAppunti !== undefined) {
+    void azioneAppunti(appunti);
+    return;
+  }
 
   if (voce.finestra) {
     void dipendenze.finestra(voce).then((opzioni) => {
