@@ -24,7 +24,8 @@ fn comando(d: &mut Disegno, id: &str, valore: Value) -> Result<DrawingOutcome, P
 
 /// La lettura delle preferenze del Contagocce (`disegno.prefs.get`).
 fn letto(d: &mut Disegno) -> Value {
-    let esito = comando(d, "disegno.prefs.get", json!({"key": "eyedropper"})).expect("la lettura vale");
+    let esito =
+        comando(d, "disegno.prefs.get", json!({"key": "eyedropper"})).expect("la lettura vale");
     assert_eq!(esito.refused, None, "{esito:?}");
     esito.reading.expect("una lettura delle preferenze")
 }
@@ -68,7 +69,9 @@ fn valori_della_fila() -> Vec<Value> {
 /// vale per tutte le sue foglie, come dice il motore (`merge_flags`).
 fn contiene(prefs: &Value, atteso: &Value, dove: &str) {
     match (atteso, prefs) {
-        (Value::Object(o), _) => o.iter().for_each(|(k, v)| contiene(&prefs[k], v, &format!("{dove}.{k}"))),
+        (Value::Object(o), _) => o
+            .iter()
+            .for_each(|(k, v)| contiene(&prefs[k], v, &format!("{dove}.{k}"))),
         (Value::Bool(b), Value::Object(_)) => foglie(prefs, *b, dove),
         _ => assert_eq!(prefs, atteso, "{dove}"),
     }
@@ -76,7 +79,9 @@ fn contiene(prefs: &Value, atteso: &Value, dove: &str) {
 
 fn foglie(prefs: &Value, b: bool, dove: &str) {
     match prefs {
-        Value::Object(o) => o.iter().for_each(|(k, v)| foglie(v, b, &format!("{dove}.{k}"))),
+        Value::Object(o) => o
+            .iter()
+            .for_each(|(k, v)| foglie(v, b, &format!("{dove}.{k}"))),
         _ => assert_eq!(prefs, &Value::Bool(b), "{dove}"),
     }
 }
@@ -88,7 +93,10 @@ fn ogni_scelta_della_fila_e_accettata_dal_motore_e_torna_con_prefs_get() {
         let esito = comando(&mut d, "disegno.eyedropper.setOptions", valore.clone())
             .unwrap_or_else(|e| panic!("il motore rifiuta {valore}: {e:?}"));
         // `empty` vuol dire: il valore era già quello (il campione di serie), niente cambia.
-        assert!(matches!(esito.refused, None | Some(DrawingRefusal::Empty)), "{valore}: {esito:?}");
+        assert!(
+            matches!(esito.refused, None | Some(DrawingRefusal::Empty)),
+            "{valore}: {esito:?}"
+        );
         contiene(&letto(&mut d), &valore, &valore.to_string());
     }
 }
@@ -96,9 +104,19 @@ fn ogni_scelta_della_fila_e_accettata_dal_motore_e_torna_con_prefs_get() {
 #[test]
 fn il_campione_di_tre_punti_si_legge_come_scelto_e_un_numero_fuori_no() {
     let (mut d, _) = apri(DISEGNO);
-    comando(&mut d, "disegno.eyedropper.setOptions", json!({"sampleSize": 3})).expect("3 punti");
+    comando(
+        &mut d,
+        "disegno.eyedropper.setOptions",
+        json!({"sampleSize": 3}),
+    )
+    .expect("3 punti");
     assert_eq!(letto(&mut d)["sampleSize"], json!(3));
-    assert!(comando(&mut d, "disegno.eyedropper.setOptions", json!({"sampleSize": 4})).is_err());
+    assert!(comando(
+        &mut d,
+        "disegno.eyedropper.setOptions",
+        json!({"sampleSize": 4})
+    )
+    .is_err());
 }
 
 #[test]
@@ -107,7 +125,10 @@ fn con_il_riempimento_spento_il_clic_non_copia_il_riempimento_ma_il_contorno_si(
     let (mut d, _) = apri(DISEGNO);
     let acceso = clic_contagocce(&mut d, &["ob2b2b2b2"], 150.0, 125.0);
     let fill_acceso = ops_di(&acceso).to_string();
-    assert!(fill_acceso.contains("#ff0000"), "il riempimento di serie: {fill_acceso}");
+    assert!(
+        fill_acceso.contains("#ff0000"),
+        "il riempimento di serie: {fill_acceso}"
+    );
 
     // Dopo: la casella del riempimento spenta (la fila manda questo ramo).
     let (mut d, _) = apri(DISEGNO);
@@ -119,7 +140,10 @@ fn con_il_riempimento_spento_il_clic_non_copia_il_riempimento_ma_il_contorno_si(
     .expect("riempimento spento");
     let spento = clic_contagocce(&mut d, &["ob2b2b2b2"], 150.0, 125.0);
     let ops = ops_di(&spento).to_string();
-    assert!(!ops.contains("#ff0000"), "con il riempimento spento il rosso non arriva: {ops}");
+    assert!(
+        !ops.contains("#ff0000"),
+        "con il riempimento spento il rosso non arriva: {ops}"
+    );
     assert!(ops.contains("#0000ff"), "il contorno resta copiato: {ops}");
 }
 
@@ -145,8 +169,22 @@ fn un_comando_del_punto_senza_il_prefisso_disegno_non_arriva_al_motore() {
     // La fila dei punti (opzioni-punto.ts) manda `path.convertAnchors`. Fub risponde solo agli id
     // con il prefisso `disegno.`: l'id nudo è `unsupported`, quello prefissato no.
     let (mut d, _) = apri(DISEGNO);
-    let nudo = comando(&mut d, "path.convertAnchors", json!({"to": "corner", "anchors": []}));
-    let con_prefisso = comando(&mut d, "disegno.path.convertAnchors", json!({"to": "corner", "anchors": []}));
-    assert_eq!(nudo.map(|e| e.refused), Ok(Some(DrawingRefusal::Unsupported)));
-    assert_ne!(con_prefisso.map(|e| e.refused), Ok(Some(DrawingRefusal::Unsupported)));
+    let nudo = comando(
+        &mut d,
+        "path.convertAnchors",
+        json!({"to": "corner", "anchors": []}),
+    );
+    let con_prefisso = comando(
+        &mut d,
+        "disegno.path.convertAnchors",
+        json!({"to": "corner", "anchors": []}),
+    );
+    assert_eq!(
+        nudo.map(|e| e.refused),
+        Ok(Some(DrawingRefusal::Unsupported))
+    );
+    assert_ne!(
+        con_prefisso.map(|e| e.refused),
+        Ok(Some(DrawingRefusal::Unsupported))
+    );
 }
