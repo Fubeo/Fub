@@ -731,7 +731,8 @@ impl Host {
             // controllo, ma un rifiuto nell'esito e non un errore, perché la sessione del
             // disegno che le chiede dalla sezione Sfumatura resti viva. Il motore e
             // `draw.motore` non si toccano; `reading` dice perché.
-            if matches!(id, "gradient.presets.save" | "gradient.presets.delete") && !request.preview {
+            if matches!(id, "gradient.presets.save" | "gradient.presets.delete") && !request.preview
+            {
                 let perche = match self.engine_prefs(vault) {
                     engine::EnginePrefs::Newer(_) => Some("newer"),
                     engine::EnginePrefs::Broken(_) => Some("broken"),
