@@ -65,6 +65,9 @@ use su_un_punto::{argomenti_del_punto, punto_rifiutato, SU_UN_PUNTO};
 #[path = "tracciati_mano.rs"]
 mod mano;
 
+#[path = "tracciati_curva.rs"]
+mod curva;
+
 /// I comandi che lavorano sui punti di ancoraggio scelti.
 pub(crate) const SUI_PUNTI: [&str; 9] = [
     "path.moveAnchors",
@@ -289,6 +292,9 @@ impl StatoFamiglia for Stato {
         if mano::MANO.contains(&id) {
             return mano::spento(id, copia, selezione);
         }
+        if curva::CURVA.contains(&id) {
+            return curva::spento(copia);
+        }
         // Un comando su un punto nomina il suo tracciato nel valore: senza il
         // valore si sa solo se il disegno si cambia.
         if SU_UN_PUNTO.contains(&id) {
@@ -349,6 +355,9 @@ impl StatoFamiglia for Stato {
     /// un punto il cui tracciato non si cambia, o che chiude un tracciato già
     /// chiuso: il suo rifiuto (`tracciati_punti.rs`).
     fn rifiuto_valore(id: &str, copia: &Copia, selezione: &[String], valore: &Value) -> Option<DrawingRefusal> {
+        if curva::CURVA.contains(&id) {
+            return curva::rifiuto_valore(copia, valore);
+        }
         if SU_UN_PUNTO.contains(&id) {
             return punto_rifiutato(id, copia, valore);
         }
@@ -367,6 +376,9 @@ impl StatoFamiglia for Stato {
     fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, fub_abi::PluginError> {
         if mano::MANO.contains(&id) {
             return mano::argomenti(id, copia, valore);
+        }
+        if curva::CURVA.contains(&id) {
+            return curva::argomenti(id, copia, valore);
         }
         argomenti_del_punto(id, copia, valore)
     }

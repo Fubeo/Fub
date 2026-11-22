@@ -243,6 +243,38 @@
     },
     {
       "fonte": "motore",
+      "id": "addon.pen.append",
+      "chiamata": {
+        "comando": "disegno.addon.pen.append"
+      },
+      "etichetta": {
+        "it": "Penna intelligente",
+        "en": "Smart Pen"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pen.close",
+      "chiamata": {
+        "comando": "disegno.addon.pen.close"
+      },
+      "etichetta": {
+        "it": "Chiudi tracciato",
+        "en": "Close Path"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pen.closeJoin",
       "chiamata": {
         "comando": "disegno.addon.pen.closeJoin"
@@ -252,6 +284,70 @@
         "en": "Close or Join"
       },
       "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pen.removePoint",
+      "chiamata": {
+        "comando": "disegno.addon.pen.removePoint"
+      },
+      "etichetta": {
+        "it": "Rimuovi punti, mantieni forma",
+        "en": "Remove Points, Keep Shape"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pen.reshape",
+      "chiamata": {
+        "comando": "disegno.addon.pen.reshape"
+      },
+      "etichetta": {
+        "it": "Rimodella segmento",
+        "en": "Reshape Segment"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pen.segment",
+      "chiamata": {
+        "comando": "disegno.addon.pen.segment"
+      },
+      "etichetta": {
+        "it": "Segmento diritto o curvo",
+        "en": "Straight or Curved Segment"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pen.togglePoint",
+      "chiamata": {
+        "comando": "disegno.addon.pen.togglePoint"
+      },
+      "etichetta": {
+        "it": "Converti punto di ancoraggio",
+        "en": "Convert Anchor Point"
+      },
+      "posto": "ispettore/design",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -2147,6 +2243,38 @@
     },
     {
       "fonte": "motore",
+      "id": "path.curvature",
+      "chiamata": {
+        "comando": "disegno.path.curvature"
+      },
+      "etichetta": {
+        "it": "Curvatura",
+        "en": "Curvature"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.curvatureEdit",
+      "chiamata": {
+        "comando": "disegno.path.curvatureEdit"
+      },
+      "etichetta": {
+        "it": "Curvatura",
+        "en": "Curvature"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.cutAtAnchors",
       "chiamata": {
         "comando": "disegno.path.cutAtAnchors"
@@ -2339,6 +2467,38 @@
     },
     {
       "fonte": "motore",
+      "id": "path.reshape",
+      "chiamata": {
+        "comando": "disegno.path.reshape"
+      },
+      "etichetta": {
+        "it": "Rimodella",
+        "en": "Reshape"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.reshapeSegment",
+      "chiamata": {
+        "comando": "disegno.path.reshapeSegment"
+      },
+      "etichetta": {
+        "it": "Rimodella segmento",
+        "en": "Reshape Segment"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.reverse",
       "chiamata": {
         "comando": "disegno.path.reverse"
@@ -2348,6 +2508,22 @@
         "en": "Reverse Path Direction"
       },
       "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.setAnchors",
+      "chiamata": {
+        "comando": "disegno.path.setAnchors"
+      },
+      "etichetta": {
+        "it": "Imposta punti di ancoraggio",
+        "en": "Set Anchors"
+      },
+      "posto": "ispettore/design",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",

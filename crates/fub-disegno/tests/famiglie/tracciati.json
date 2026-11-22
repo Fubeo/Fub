@@ -5184,6 +5184,448 @@
       "atteso": {
         "rifiuto": "unmapped"
       }
+    },
+    {
+      "id": "path.curvature",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          {
+            "x": 20,
+            "y": 200
+          },
+          {
+            "x": 120,
+            "y": 250
+          },
+          {
+            "x": 220,
+            "y": 200
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M20 200 C43.61 231.48 80.66 250 120 250 C159.34 250 196.39 231.48 220 200",
+                "fill": "#ffffff",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "osj8p4ks2"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "curvatura-nuova.svg"
+    },
+    {
+      "id": "path.setAnchors",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "element": "op7a7a7a7",
+        "subpaths": [
+          {
+            "anchors": [
+              {
+                "x": 300,
+                "y": 200
+              },
+              {
+                "x": 360,
+                "y": 200
+              },
+              {
+                "x": 330,
+                "y": 240
+              }
+            ],
+            "closed": true
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "transform": "matrix(1 0 0 0.6667 0 66.6667)"
+            }
+          }
+        ]
+      },
+      "dopo": "imposta-punti.svg"
+    },
+    {
+      "id": "path.curvatureEdit",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "op": "move",
+        "anchor": 1,
+        "x": 100,
+        "y": 80
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L100 80 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "curvatura-sposta.svg"
+    },
+    {
+      "id": "path.reshape",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "x": 100,
+        "y": 60,
+        "dx": 0,
+        "dy": 20
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60.8 L100 80 L160 60.8 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "rimodella.svg"
+    },
+    {
+      "id": "path.reshapeSegment",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "segment": 1,
+        "t": 0.5,
+        "dx": 0,
+        "dy": 20
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L100 60 C100 86.67 160 86.67 160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "rimodella-segmento.svg"
+    },
+    {
+      "id": "addon.pen.append",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "x": 200,
+        "y": 100
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L100 60 L160 60 L160 120 L200 100"
+            }
+          }
+        ]
+      },
+      "dopo": "penna-aggiungi.svg"
+    },
+    {
+      "id": "addon.pen.close",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L100 60 L160 60 L160 120 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "penna-chiudi.svg"
+    },
+    {
+      "id": "addon.pen.segment",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "segment": 1,
+        "curved": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L100 60 C123.43 60 160 36.57 160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "penna-segmento.svg"
+    },
+    {
+      "id": "addon.pen.removePoint",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "anchor": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "penna-togli.svg"
+    },
+    {
+      "id": "addon.pen.togglePoint",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "anchor": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 C40 60 76.57 60 100 60 C123.43 60 160 60 160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "penna-angolo.svg"
+    },
+    {
+      "id": "addon.pen.reshape",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "segment": 0,
+        "t": 0.5,
+        "dx": 0,
+        "dy": 20
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 C40 86.67 100 86.67 100 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "penna-rimodella.svg"
+    },
+    {
+      "id": "path.setAnchors",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oi8b8b8b8",
+        "subpaths": [
+          {
+            "anchors": [
+              {
+                "x": 1,
+                "y": 1
+              }
+            ],
+            "closed": false
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.reshape",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oi8b8b8b8",
+        "x": 130,
+        "y": 230,
+        "dx": 0,
+        "dy": 5
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.pen.close",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "op7a7a7a7"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pen.append",
+      "disegno": "elabora.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oe5e5e5e5",
+        "x": 10,
+        "y": 10
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.pen.togglePoint",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oi8b8b8b8",
+        "anchor": 0
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.curvature",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oi8b8b8b8",
+        "points": [
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 9,
+            "y": 9
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.setAnchors",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "subpaths": [
+          {
+            "anchors": [
+              {
+                "x": 1,
+                "y": 1
+              }
+            ],
+            "closed": false
+          }
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pen.segment",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 1,
+        "element": "oc1c1c1c1",
+        "segment": 1,
+        "curved": true
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pen.removePoint",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "anchor": 9
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.reshapeSegment",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "segment": 7,
+        "t": 0.5,
+        "dx": 0,
+        "dy": 2
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
     }
   ]
 }

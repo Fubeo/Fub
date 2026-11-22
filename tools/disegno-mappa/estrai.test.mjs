@@ -110,7 +110,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // `polarGrid`) sono «fatto», senza più «aspetta T27»: quattro in più.
   // T13 generatore (giro 7): il Generatore forme (`shapeBuilder.merge`, la lettura
   // `shapeBuilder.regions` e lo strumento `shapeBuilder`) è «fatto»: tre in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1130, fub: 114, escluso: 12, fatto: 295 });
+  // T12 curvatura porta a «fatto» undici righe: `path.curvature`, `.curvatureEdit`, `.reshape`,
+  // `.reshapeSegment`, `.setAnchors` e le sei `addon.pen.*` (append, close, segment, removePoint,
+  // togglePoint, reshape), come comandi su un punto con `element` (la Curvatura crea o sostituisce).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1119, fub: 114, escluso: 12, fatto: 306 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
