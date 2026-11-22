@@ -5531,8 +5531,9 @@ async function schedaLivelli(page) {
   await page.waitForSelector('.draw-objects-tree .draw-object[aria-level="1"]');
 }
 
-/// La riga del livello che si chiama `nome` nella scheda Livelli: l'etichetta dice «Livello «nome»».
-const rigaDelLivello = (nome) => `.draw-objects-tree .draw-object[aria-level="1"]:has(.draw-object-label:has-text("«${nome}»"))`;
+/// La riga del livello che si chiama `nome` nella scheda Livelli: la riga mostra il solo nome, e il nome
+/// accessibile dice «Livello «nome»» (`aria-label`, da `tree.ts`).
+const rigaDelLivello = (nome) => `.draw-objects-tree .draw-object[aria-level="1"][aria-label^="Livello «${nome}»"]`;
 
 /// La scheda Livelli del Completo (K6 T15, giro 4): il disegno aperto, la scheda Livelli in vista, e un livello
 /// nuovo dal menu dei livelli, che passa dal motore del banco e va in cima. Livello 1 resta aperto coi suoi oggetti.

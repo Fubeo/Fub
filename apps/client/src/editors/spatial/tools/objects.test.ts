@@ -41,7 +41,9 @@ function layer(key: string, children: readonly TreeEntry[], state = ""): TreeEnt
     moves: true,
     kind: "layer",
     children,
-    label: () => `Livello ${key}${state}`,
+    label: () => `Livello «${key}»${state}`,
+    shown: () => key,
+    current: key === "l2",
   };
 }
 
@@ -115,11 +117,11 @@ describe("le righe", () => {
     // Dal davanti: in cima ciò che il documento ha per ultimo.
     expect(rows().map((row) => [row.textContent, row.getAttribute("aria-level"), row.getAttribute("aria-posinset"), row.getAttribute("aria-setsize")])).toEqual([
       ["✓Oggetto e", "1", "1", "3"],
-      ["▾Livello l2", "1", "2", "3"],
+      ["▾l2", "1", "2", "3"],
       ["✓Oggetto d", "2", "1", "3"],
       ["✓Oggetto c", "2", "2", "3"],
       ["✓Oggetto b", "2", "3", "3"],
-      ["▾Livello l1, bloccato", "1", "3", "3"],
+      ["▾l1", "1", "3", "3"],
       ["✓Oggetto a", "2", "1", "1"],
     ]);
     // I segni sono nascosti agli screen reader: per loro c'è `aria-selected`,
@@ -131,6 +133,13 @@ describe("le righe", () => {
     expect(locked.getAttribute("aria-expanded")).toBe("true");
     expect(locked.hasAttribute("aria-selected")).toBe(false);
     expect(rows()[6]!.getAttribute("aria-disabled")).toBe("true");
+    // Un livello mostra il solo nome; il nome accessibile dice che è un livello,
+    // e che è bloccato, mentre un oggetto non ha un nome diverso da quello che mostra.
+    expect(locked.getAttribute("aria-label")).toBe("Livello «l1», bloccato");
+    expect(rows()[1]!.getAttribute("aria-label")).toBe("Livello «l2»");
+    expect(rows()[2]!.hasAttribute("aria-label")).toBe(false);
+    // Il livello corrente ha il puntino; gli altri no, e l'oggetto no.
+    expect(rows().map((row) => row.hasAttribute("data-current"))).toEqual([false, true, false, false, false, false, false]);
     expect(rows().map((row) => row.getAttribute("aria-selected"))).toEqual(["false", null, "false", "true", "false", null, "false"]);
     // Il fuoco non è nell'albero: la riga attiva va al primo oggetto scelto.
     expect(active()?.dataset.key).toBe("c");
@@ -851,7 +860,7 @@ describe("spostare", () => {
     pointer("pointermove", treeEl(), 3 * ROW_PX + 30);
     expect(rowEl("b").dataset.drop).toBe("after");
     expect(depthOf("b")).toBe("0");
-    expect(host.querySelector<HTMLElement>(".draw-objects-ghost")!.textContent).toBe("Livello l1");
+    expect(host.querySelector<HTMLElement>(".draw-objects-ghost")!.textContent).toBe("l1");
     pointer("pointermove", treeEl(), 30);
     expect(rowEl("l2").dataset.drop).toBe("before");
     pointer("pointerup", treeEl(), 30, { buttons: 0 });

@@ -527,6 +527,22 @@ button.draw-isolation-crumb:hover {
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
 }
+/* Alti quanto i campi del kit, nella stessa riga; col dito 44 px. Il
+   selettore è doppio perché la struttura della shell fissa `min-height: 44px`
+   a questi due, da sola. */
+.draw-objects-filter .draw-objects-search,
+.draw-objects-filter .draw-objects-kind {
+  box-sizing: border-box;
+  height: var(--control-h);
+  min-height: 0;
+  padding: 0 var(--space-3);
+}
+@media (pointer: coarse) {
+  .draw-objects-filter .draw-objects-search,
+  .draw-objects-filter .draw-objects-kind {
+    min-height: 44px;
+  }
+}
 .draw-object-rename {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
@@ -552,6 +568,17 @@ button.draw-isolation-crumb:hover {
 .draw-object[aria-disabled="true"] {
   color: var(--muted);
   font-style: italic;
+}
+/* Il livello corrente: un puntino nel segno, nel colore del tema. Non ha
+   parole: a voce il nome dice che è quello corrente. */
+.draw-object[data-current] > .draw-object-mark::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
 }
 /* Col filtro, una riga che c'è per ciò che contiene è in grigio: la sua
    freccia aperta dice che i trovati sono sotto. */
