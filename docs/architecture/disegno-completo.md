@@ -136,6 +136,16 @@ numeri (`bad_args`), rifiuta un `id` del motore nel valore, e passa l'id e le
 coordinate nel documento del motore; Canc coi punti scelti è
 `path.deleteAnchors` (`Completo.cancellaPunti`). Il prodotto: [penne](../product/drawing-pen.md#la-penna-di-bézier-disegno-completo).
 
+**I gesti a mano libera (T12, giro 9).** Matita (`path.freehand`), Gomma
+(`path.eraseRegion`), Cancella tracciato (`path.eraseSegments`), Coltello
+(`path.knife`) e Smussa (`path.smoothRegion`) sono anche comandi del disegno,
+oltre agli strumenti. `famiglie/tracciati_mano.rs` ne decide il perché: senza
+selezione, Cancella tracciato e Smussa sono `empty`; un'immagine o un testo
+scelto è `unmapped`; un tratto della penna di Fub è `fub_ink`; un oggetto
+bloccato è `locked`. I punti del valore passano da coordinate di scena a quelle
+del documento, e `extend`, `connect`, `redraw` (id del motore) sono `bad_args`.
+La Matita va nel livello più alto visibile, come le forme.
+
 ## Il Contagocce (T14, giro 6)
 
 Lo strumento `eyedropper` (famiglia `colore`) copia sulla selezione riempimento,
