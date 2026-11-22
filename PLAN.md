@@ -2226,9 +2226,12 @@ Stato: [~] in corso (2026-11-22). Giro A unito in b9ceb4cd2: i sette strumenti
 del nucleo passano dal motore, venti righe select.* e object.* «fatto»,
 `disegno.strumento.stato`. Giro B unito in 0967c1140: `draw.motore` e la
 sezione «Motore del disegno» in Impostazioni › Configurazione › Disegni.
-Mancano: `edit.clearHistory` e gli appunti (giro C), la banda (giro D), la
-vista. I
-campi X/Y della selezione diretta non ci sono: il motore non dà le
+Giro C unito in d36be532f: gli appunti del Completo (copia, taglia, incolla
+dal motore, conflitti di campioni) e `edit.clearHistory` dalla tavolozza.
+Giro D unito in bc4ca64b9: il menu dello zoom e le misure nella banda.
+Mancano: la vista e il navigatore (giro E), le altre voci di Modifica e le
+letture interne (giro F), gruppo, blocca, nascondi e `select.reselect`, che
+toccano la differenza (un giro Opus). I campi X/Y della selezione diretta non ci sono: il motore non dà le
 coordinate del punto. Selezione, Mano e Zoom del motore si chiamano
 «… (Completo)» per non avere due nomi uguali nella tendina.
 Aspetta: niente
