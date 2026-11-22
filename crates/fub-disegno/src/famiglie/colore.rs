@@ -16,8 +16,10 @@
 //!   niente, e il comando è `empty`.
 //!
 //! - **I campioni del documento** (`swatch.*`, Risorse › Campioni): nuovo,
-//!   opzioni (nome e colore), elimina, «Aggiungi i colori usati» e l'elenco
-//!   di quelli che nessuno usa. Nel file un campione si usa sempre per
+//!   opzioni (nome e colore), elimina, duplica, unisci, ordina per nome,
+//!   sposta, «Aggiungi i colori usati» e l'elenco di quelli che nessuno usa.
+//!   I gruppi di colori e i campioni predefiniti non ci sono nel formato, e
+//!   restano da fare. Nel file un campione si usa sempre per
 //!   riferimento, quindi è sempre **globale**: la famiglia lo chiede al motore
 //!   anche se gli argomenti dicono altro, così cambiarlo cambia in un passo chi
 //!   lo usa ([`crate::campioni`]). Eliminare lascia a chi lo usava il suo
@@ -99,13 +101,40 @@ pub(crate) const MODIFICA_COLORI: [&str; 10] = [
     "edit.colors.overprintBlack",
 ];
 
-/// I comandi dei campioni del documento che cambiano il file.
-pub(crate) const CAMPIONI: [&str; 4] = [
+/// I comandi dei campioni del documento che cambiano il file: i campioni nuovi, cambiati o tolti, e
+/// l'ordine (`swatch.duplicate` mette la copia dopo l'originale, `swatch.merge` toglie gli uniti,
+/// `swatch.sortByName` e `swatch.move` riordinano: [`crate::campioni`]).
+pub(crate) const CAMPIONI: [&str; 8] = [
     "swatch.new",
     "swatch.edit",
     "swatch.delete",
     "swatch.addUsedColors",
+    "swatch.duplicate",
+    "swatch.merge",
+    "swatch.sortByName",
+    "swatch.move",
 ];
+
+/// Un campione che il comando nomina nei suoi argomenti deve essere un campione del file: i colori
+/// dei gruppi e i Nessuno non ci sono.
+fn campione_del_file(copia: &Copia, nome: &str) -> Result<(), PluginError> {
+    if nome.starts_with('[') || !copia.campioni.elenco.iter().any(|c| c.nome == nome) {
+        return Err(PluginError::BadArgs(
+            format!("«{nome}» non è un campione del disegno.").into(),
+        ));
+    }
+    Ok(())
+}
+
+/// I nomi dei campioni in `names`, se sono tutti testi.
+fn nomi_di_campioni(valore: &Value) -> Option<Vec<&str>> {
+    valore
+        .get("names")?
+        .as_array()?
+        .iter()
+        .map(Value::as_str)
+        .collect()
+}
 
 /// Le fusioni: almeno tre oggetti con un riempimento pieno.
 const FUSIONI: [&str; 3] = [
@@ -193,11 +222,43 @@ impl StatoFamiglia for Stato {
         if let Some(o) = argomenti.as_object_mut() {
             if id == "swatch.delete" {
                 o.insert("unlink".into(), Value::Bool(true));
-            } else {
+            } else if matches!(id, "swatch.new" | "swatch.edit" | "swatch.addUsedColors") {
                 o.insert("global".into(), Value::Bool(true));
             }
         }
         Ok(argomenti)
+    }
+
+    /// Gli argomenti dei comandi di campioni che il file non può prendere, prima del motore e col
+    /// perché in italiano: il campione nominato deve esserci, e la posizione essere un intero.
+    fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, PluginError> {
+        let senza_nome = || PluginError::BadArgs("Scegli il campione.".into());
+        match id {
+            "swatch.duplicate" => {
+                let nome = valore.get("name").and_then(Value::as_str).ok_or_else(senza_nome)?;
+                campione_del_file(copia, nome)?;
+            }
+            "swatch.merge" => {
+                let nomi = nomi_di_campioni(&valore).unwrap_or_default();
+                if nomi.len() < 2 {
+                    return Err(PluginError::BadArgs("Scegli due o più campioni da unire.".into()));
+                }
+                for nome in nomi {
+                    campione_del_file(copia, nome)?;
+                }
+            }
+            "swatch.move" => {
+                let nomi = nomi_di_campioni(&valore).filter(|nomi| !nomi.is_empty()).ok_or_else(senza_nome)?;
+                for nome in nomi {
+                    campione_del_file(copia, nome)?;
+                }
+                if valore.get("to").is_some_and(|to| !to.is_null() && to.as_u64().is_none()) {
+                    return Err(PluginError::BadArgs("La posizione è un numero intero, dal primo campione: 0.".into()));
+                }
+            }
+            _ => {}
+        }
+        Ok(valore)
     }
 
     /// Senza selezione, su un disegno in sola lettura, su un oggetto bloccato
@@ -258,8 +319,10 @@ impl StatoFamiglia for Stato {
         _selezione: &[String],
         valore: &Value,
     ) -> Option<DrawingRefusal> {
-        (SFUMATURE.contains(&id) && sfumatura_fuori_dalla_scena(valore))
-            .then_some(DrawingRefusal::Unsupported)
+        // Un gruppo di colori non c'è nel formato: lo spostamento dentro un gruppo non si fa.
+        let sfumatura = SFUMATURE.contains(&id) && sfumatura_fuori_dalla_scena(valore);
+        let gruppo = id == "swatch.move" && valore.get("group").is_some_and(|g| !g.is_null());
+        (sfumatura || gruppo).then_some(DrawingRefusal::Unsupported)
     }
 
     /// In una selezione con testi e forme la sfumatura va alle forme, una

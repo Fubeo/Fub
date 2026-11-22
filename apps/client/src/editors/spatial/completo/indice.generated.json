@@ -2611,6 +2611,22 @@
     },
     {
       "fonte": "motore",
+      "id": "swatch.duplicate",
+      "chiamata": {
+        "comando": "disegno.swatch.duplicate"
+      },
+      "etichetta": {
+        "it": "Duplica campione",
+        "en": "Duplicate Swatch"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.edit",
       "chiamata": {
         "comando": "disegno.swatch.edit"
@@ -2643,6 +2659,38 @@
     },
     {
       "fonte": "motore",
+      "id": "swatch.merge",
+      "chiamata": {
+        "comando": "disegno.swatch.merge"
+      },
+      "etichetta": {
+        "it": "Unisci campioni",
+        "en": "Merge Swatches"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "swatch.move",
+      "chiamata": {
+        "comando": "disegno.swatch.move"
+      },
+      "etichetta": {
+        "it": "Sposta campione",
+        "en": "Move Swatch"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.new",
       "chiamata": {
         "comando": "disegno.swatch.new"
@@ -2650,6 +2698,22 @@
       "etichetta": {
         "it": "Nuovo campione",
         "en": "New Swatch"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "swatch.sortByName",
+      "chiamata": {
+        "comando": "disegno.swatch.sortByName"
+      },
+      "etichetta": {
+        "it": "Ordina per nome",
+        "en": "Sort by Name"
       },
       "posto": "ispettore/risorse",
       "famiglia": "colore",

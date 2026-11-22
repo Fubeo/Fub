@@ -2331,6 +2331,265 @@
       "atteso": {
         "rifiuto": "unsupported"
       }
+    },
+    {
+      "id": "swatch.duplicate",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Blu"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "fub-defs",
+            "pos": {
+              "after": "r1a1a1a1a"
+            },
+            "elem": {
+              "tag": "linearGradient",
+              "attrs": {
+                "id": "r9z9z9z9z",
+                "fub:role": "swatch",
+                "fub:name": "Blu copy",
+                "gradientUnits": "userSpaceOnUse"
+              },
+              "children": [
+                {
+                  "tag": "stop",
+                  "attrs": {
+                    "stop-color": "#0072b2"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dopo": "swatch-duplicate.svg"
+    },
+    {
+      "id": "swatch.duplicate",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.duplicate",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Verde"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.merge",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Blu",
+          "Arancio"
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "remove",
+            "target": "r2b2b2b2b"
+          }
+        ]
+      },
+      "dopo": "swatch-merge.svg"
+    },
+    {
+      "id": "swatch.merge",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Blu",
+          "Viola"
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "swatch.merge",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Blu"
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.sortByName",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "move",
+            "target": "r2b2b2b2b",
+            "parent": "fub-defs",
+            "pos": {
+              "first": true
+            }
+          }
+        ]
+      },
+      "dopo": "swatch-sort.svg"
+    },
+    {
+      "id": "swatch.sortByName",
+      "disegno": "campioni-ordinati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "swatch.move",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Viola"
+        ],
+        "to": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "move",
+            "target": "r3c3c3c3c",
+            "parent": "fub-defs",
+            "pos": {
+              "first": true
+            }
+          }
+        ]
+      },
+      "dopo": "swatch-move.svg"
+    },
+    {
+      "id": "swatch.move",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": []
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.move",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Blu"
+        ],
+        "to": "primo"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.move",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Blu"
+        ],
+        "group": "Grigi"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "swatch.merge",
+      "disegno": "campioni-fusione.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Blu",
+          "Arancio"
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "fill": "url(#r1a1a1a1a) #0072b2"
+                }
+              },
+              {
+                "op": "remove",
+                "target": "r2b2b2b2b"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "swatch-merge-collega.svg"
+    },
+    {
+      "id": "swatch.sortByName",
+      "disegno": "campioni-inversi.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "move",
+                "target": "r2b2b2b2b",
+                "parent": "fub-defs",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "move",
+                "target": "r1a1a1a1a",
+                "parent": "fub-defs",
+                "pos": {
+                  "after": "r2b2b2b2b"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "swatch-sort-inversi.svg"
     }
   ]
 }
