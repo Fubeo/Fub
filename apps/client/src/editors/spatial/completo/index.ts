@@ -22,6 +22,7 @@ import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
 export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 // La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
 import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
+import { registraAllinea } from "./allinea";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
 import type { ToolSpec } from "../tools/registry";
@@ -301,6 +302,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       eseguiVoce({ ...voce, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } }, dipendenze);
     });
   };
+  // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,
+  // che parte solo al clic di un suo comando.
+  registraAllinea(sezioni, eseguiPerId);
   const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila, esegui: eseguiPerId }, moduli: opzioni.moduli, prepara: opzioni.prepara });
   // La finestra di un comando con parametri (T6): il modulo dello schema della sua
   // famiglia. `null` se la famiglia non ha la finestra di quel comando.

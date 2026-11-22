@@ -1,14 +1,14 @@
-// La famiglia «forme» lato client (piano K6, T13, giro 1): gli strumenti di forma
-// nella colonna del Completo. Ogni strumento «fatto» dell'indice generato ha il
-// suo nome corto nelle due lingue, la sua icona del catalogo e la sua casella nel
-// gruppo «forme» (la casella di Rettangolo). Rettangolo ed Ellisse esistono anche
-// nel Semplice: nella tendina portano «(Completo)».
+// La famiglia «forme» lato client (piano K6, T13): gli strumenti di forma nella colonna
+// del Completo. Ogni strumento «fatto» dell'indice generato ha il suo nome corto nelle due
+// lingue, nel catalogo della colonna (così c'è prima che la famiglia arrivi), la sua icona
+// del catalogo e la sua casella nel gruppo «forme» (la casella di Rettangolo). Rettangolo
+// ed Ellisse esistono anche nel Semplice: nella tendina portano «(Completo)».
 
 import { describe, expect, it } from "vitest";
 import { DRAW_ICONS } from "../../../icons";
 import { ICONE_MOTORE, iconaMotore, layoutCompleto, MOTORE_PRONTO } from "../../colonna";
 import indiceGenerato from "../../indice.generated.json";
-import { TESTI } from "./testi";
+import { COLONNA_EN, COLONNA_IT } from "../../../strings/completo";
 
 interface VoceGenerata {
   readonly famiglia: string;
@@ -24,12 +24,13 @@ describe("la famiglia forme nella colonna", () => {
     expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "lineSegment", "polygon", "rectangle", "roundedRectangle", "spiral", "star"]);
   });
 
-  it("ogni strumento fatto ha il nome corto nelle due lingue, l'icona del catalogo e un posto nel motore", () => {
+  it("ogni strumento fatto ha il nome corto nelle due lingue nel catalogo della colonna, l'icona e un posto nel motore", () => {
     for (const id of STRUMENTI_FORME) {
-      const nome = TESTI[`strumento:${id}`];
-      expect(nome, id).toBeDefined();
-      expect(nome!.it.trim(), id).not.toBe("");
-      expect(nome!.en.trim(), id).not.toBe("");
+      const chiave = `draw.engine.name.${id}`;
+      expect(COLONNA_IT, id).toHaveProperty([chiave]);
+      expect(COLONNA_EN, id).toHaveProperty([chiave]);
+      expect(COLONNA_IT[chiave as keyof typeof COLONNA_IT].trim(), id).not.toBe("");
+      expect(COLONNA_EN[chiave as keyof typeof COLONNA_EN].trim(), id).not.toBe("");
       expect(MOTORE_PRONTO.has(id), id).toBe(true);
       expect(DRAW_ICONS[iconaMotore(id)], id).toBeDefined();
       expect(Object.prototype.hasOwnProperty.call(ICONE_MOTORE, id), id).toBe(true);
@@ -37,9 +38,9 @@ describe("la famiglia forme nella colonna", () => {
   });
 
   it("Rettangolo ed Ellisse portano «(Completo)», come Selezione, Mano e Zoom", () => {
-    expect(TESTI["strumento:rectangle"]!.it).toBe("Rettangolo (Completo)");
-    expect(TESTI["strumento:ellipse"]!.it).toBe("Ellisse (Completo)");
-    expect(TESTI["strumento:rectangle"]!.en).toBe("Rectangle (Full)");
+    expect(COLONNA_IT["draw.engine.name.rectangle"]).toBe("Rettangolo (Completo)");
+    expect(COLONNA_IT["draw.engine.name.ellipse"]).toBe("Ellisse (Completo)");
+    expect(COLONNA_EN["draw.engine.name.rectangle"]).toBe("Rectangle (Full)");
   });
 
   it("nella colonna le forme stanno nella casella di Rettangolo, nel gruppo «forme»", () => {

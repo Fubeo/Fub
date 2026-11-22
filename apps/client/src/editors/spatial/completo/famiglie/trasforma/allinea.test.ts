@@ -1,15 +1,17 @@
 // @vitest-environment happy-dom
-// La sezione «Allinea» (T13, giro 2): i quindici pulsanti delle voci `align.*`, la
-// regola dei due oggetti (`needs_two`, e «alla tavola» che ne basta uno), il clic che
-// manda il comando con il suo `to`, e la corrispondenza con l'indice generato.
+// La sezione «Allinea» (T13, giro 2): la prova delle voci `align.*` di
+// `crates/fub-disegno/tests/famiglie/trasforma.json`. La sezione la mette il Completo
+// (`completo/allinea.ts`), dall'indice, senza la famiglia: nella sessione nuova c'è, e
+// nessun comando parte prima del clic. Poi i quindici pulsanti, la regola dei due
+// oggetti (`needs_two`, e «alla tavola» che ne basta uno), il clic che manda il comando
+// col suo `to`, e la corrispondenza con l'indice generato.
 
 import { describe, expect, it, vi } from "vitest";
-import type { ContestoCompleto } from "../../carica";
-import { creaSezioni } from "../../sezioni";
 import { t } from "../../../strings";
 import { openLifetime } from "../../../../../ui/lifetime";
+import { creaSezioni } from "../../sezioni";
+import { oggettiMinimi, registraAllinea, sezioneAllinea, spento } from "../../allinea";
 import indiceGenerato from "../../indice.generated.json";
-import famiglia, { oggettiMinimi, spento } from "./index";
 
 const ALLINEA = [
   "align.horizontalLeft",
@@ -35,25 +37,24 @@ interface VoceGenerata {
 }
 const VOCI = (indiceGenerato as { readonly voci: readonly VoceGenerata[] }).voci;
 
-/// La sezione registrata dalla famiglia, disegnata in un contenitore con `numero` oggetti scelti.
+/// La sezione disegnata in un contenitore, con `numero` oggetti scelti.
 function disegna(numero: number) {
-  const sezioni = creaSezioni();
   const esegui = vi.fn();
-  famiglia.registra({ motore: null, life: openLifetime(), sezioni, esegui, registraFila: vi.fn() } as unknown as ContestoCompleto);
-  const [sezione] = sezioni.di("design");
   const corpo = document.createElement("div");
   document.body.append(corpo);
-  sezione!.disegna({ corpo, sel: { numero }, motore: null, aggiorna: vi.fn(), vita: openLifetime() });
+  sezioneAllinea(esegui).disegna!({ corpo, sel: { numero }, motore: null, aggiorna: vi.fn(), vita: openLifetime() } as never);
   const pulsante = (id: string): HTMLButtonElement => corpo.querySelector<HTMLButtonElement>(`button[data-id="${id}"]`)!;
   const modo = (indice: number): HTMLButtonElement => corpo.querySelectorAll<HTMLButtonElement>(".draw-align-to button")[indice]!;
-  return { sezioni, corpo, esegui, pulsante, modo };
+  return { corpo, esegui, pulsante, modo };
 }
 
-describe("la sezione Allinea", () => {
-  it("sta nella scheda Design, con l'id allinea", () => {
+describe("la sezione Allinea nella sessione nuova", () => {
+  it("c'è nella scheda Design, con l'id allinea, e nessun comando parte prima del clic", () => {
     const sezioni = creaSezioni();
-    famiglia.registra({ motore: null, life: openLifetime(), sezioni, esegui: vi.fn(), registraFila: vi.fn() } as unknown as ContestoCompleto);
+    const esegui = vi.fn();
+    expect(registraAllinea(sezioni, esegui)).toBe(true);
     expect(sezioni.di("design").map((sezione) => sezione.id)).toEqual(["allinea"]);
+    expect(esegui).not.toHaveBeenCalled();
   });
 
   it("ha un pulsante per ciascuna delle quindici voci align.*, con il suo id", () => {
@@ -64,7 +65,15 @@ describe("la sezione Allinea", () => {
     expect([...ids].sort()).toEqual([...ALLINEA].sort());
   });
 
-  it("ogni pulsante corrisponde a una voce dell'indice che manda il comando del motore con il suo valore", () => {
+  it("le parole dei pulsanti vengono dal catalogo del Completo, non dalla famiglia", () => {
+    const { pulsante } = disegna(2);
+    expect(pulsante("align.horizontalLeft").textContent).toBe(t("draw.allinea.horizontalLeft"));
+    expect(pulsante("align.distributeHorizontalSpace").textContent).toBe(t("draw.allinea.distributeHorizontalSpace"));
+  });
+});
+
+describe("le voci dell'indice", () => {
+  it("ogni pulsante corrisponde a una voce che manda il comando del motore con il suo valore", () => {
     for (const id of ALLINEA) {
       const voce = VOCI.find((one) => one.id === id);
       expect(voce, id).toBeDefined();
@@ -72,8 +81,10 @@ describe("la sezione Allinea", () => {
       expect(voce!.chiamata.valore, id).toBeTypeOf("object");
     }
   });
+});
 
-  it("la regola dei due oggetti: alla selezione servono due; alla tavola ne basta uno per allineare, mai per distribuire", () => {
+describe("la regola dei due oggetti", () => {
+  it("alla selezione servono due; alla tavola ne basta uno per allineare, mai per distribuire", () => {
     expect(oggettiMinimi("align.horizontalLeft", "selection")).toBe(2);
     expect(oggettiMinimi("align.horizontalLeft", "artboard")).toBe(1);
     expect(oggettiMinimi("align.distributeHorizontalLeft", "artboard")).toBe(2);
@@ -100,8 +111,10 @@ describe("la sezione Allinea", () => {
     const spenti = [...corpo.querySelectorAll<HTMLButtonElement>("button[data-id]")].filter((el) => el.disabled);
     expect(spenti).toHaveLength(0);
   });
+});
 
-  it("un clic manda il comando col modo scelto, e «alla tavola» cambia il valore di to", () => {
+describe("il clic", () => {
+  it("manda il comando col modo scelto, e «alla tavola» cambia il valore di to", () => {
     const { pulsante, esegui, modo } = disegna(2);
     pulsante("align.horizontalLeft").click();
     expect(esegui).toHaveBeenLastCalledWith("align.horizontalLeft", { to: "selection" });
