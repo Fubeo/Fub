@@ -66,6 +66,15 @@ export const DRAW: PartAnatomy = {
       ],
     },
     {
+      // Il menu dello zoom della banda (K6 T11): un popover del kit con le sue voci
+      // e il campo della percentuale. Il popover è `kit-popover`, già nel cassetto.
+      name: "draw-zoom-menu",
+      states: SELECTABLE,
+      hooks: [
+        "draw-zoom-popover", "draw-zoom-body", "draw-zoom-menu", "draw-zoom-item", "draw-zoom-separator", "draw-zoom-field",
+      ],
+    },
+    {
       name: "pdf-surface",
       states: [S("rest"), S("focused"), S("selected")],
       hooks: [

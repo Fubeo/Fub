@@ -1,11 +1,17 @@
-// La banda di stato del disegno (E1): lo zoom, dove sta il puntatore, le
-// misure della selezione, quanti oggetti, la vista girata. Chi ospita
-// l'editor la legge con `items()` e la ridisegna a ogni `subscribe`: nello
-// Scrittoio è lo `status` della superficie, al posto delle parole.
+// La banda di stato del disegno (E1): lo zoom, le misure (dove sta il puntatore
+// e la selezione), quanti oggetti, la vista girata. Chi ospita l'editor la legge
+// con `items()` e la ridisegna a ogni `subscribe`: nello Scrittoio è lo `status`
+// della superficie, al posto delle parole.
+//
+// Nel Disegno completo la voce dello zoom apre il suo menu (`zoom-menu.ts`); le
+// misure stanno in una voce sola, `info`, che si ricalcola al più una volta per
+// fotogramma: il puntatore si muove a ogni tocco, la selezione può avere 50 000
+// elementi, e una lettura vecchia non si mostra.
 
 import { plural, t } from "../../../strings";
 import type { Point } from "../../../scene/matrix";
 import type { EditorContext } from "../context";
+import { installZoomMenu, isComandoVista, type ComandoVista } from "./zoom-menu";
 
 /// Una voce della banda: un fatto, e se c'è che cosa fa un clic.
 export interface DrawStatusItem {
@@ -28,44 +34,118 @@ export interface StatusContext {
   status: DrawStatus;
   /// Dove sta il puntatore sul foglio, nella scena; `null` fuori.
   statusPointer: Point | null;
-  /// Una voce può essere cambiata: la vista, la selezione, il puntatore.
+  /// Una voce può essere cambiata: la vista, la selezione, il puntatore. La banda
+  /// si ridisegna al fotogramma successivo.
   statusChanged: () => void;
+  /// Apre il menu dello zoom dalla sua voce della banda (il Disegno completo).
+  apriZoom: () => void;
+  /// Fa un comando `view.*` (la banda, Ctrl+/, la ricerca).
+  comandoVista: (id: ComandoVista) => void;
+}
+
+/// Il fotogramma che porta le misure: `requestAnimationFrame` nel browser, un suo
+/// doppio nei test.
+export interface StatusFrame {
+  request(richiesta: () => void): number;
+  cancel(handle: number): void;
+}
+
+const FOTOGRAMMA: StatusFrame = {
+  request(richiesta) {
+    const id = requestAnimationFrame(richiesta);
+    return id;
+  },
+  cancel(id) {
+    cancelAnimationFrame(id);
+  },
+};
+
+/// La misura della selezione letta a un fotogramma, e la versione del disegno che
+/// l'ha letta. Una lettura di un'altra versione è vecchia: non si mostra.
+interface Misura {
+  readonly versione: number;
+  readonly selezione: { readonly larghezza: number; readonly altezza: number } | null;
 }
 
 /// La misura lungo un lato di una cornice con la matrice `[a, b, c, d]`.
 const along = (length: number, x: number, y: number): number => length * Math.hypot(x, y);
 
-export function installStatus(ctx: EditorContext): void {
+/// Le voci del client che la banda porta nel Disegno completo (Ctrl+/ e la ricerca,
+/// `completo/comandi.ts`): `null` se la voce si fa, il perché se è spenta, `undefined`
+/// se non è di questa parte.
+export function voceClienteBanda(id: string): string | null | undefined {
+  if (isComandoVista(id)) return null;
+  if (id === "info") return t("draw.status.info.shown");
+  return undefined;
+}
+
+export function installStatus(ctx: EditorContext, frame: StatusFrame = FOTOGRAMMA): void {
   const listeners = new Set<() => void>();
   ctx.statusPointer = null;
-  ctx.statusChanged = () => {
+
+  // Le voci cambiano al più una volta per fotogramma: `statusChanged` chiede il
+  // fotogramma, e lì si legge la selezione e si avvisa la banda. Una richiesta
+  // sola per fotogramma, anche con cento movimenti del puntatore.
+  let versione = 0;
+  let misura: Misura | null = null;
+  let fotogramma: number | null = null;
+  const leggi = (): void => {
+    fotogramma = null;
+    if (ctx.disposed) return;
+    const scelti = ctx.selectedUnits();
+    const trovata = scelti.length > 0 ? ctx.frameOf(scelti) : null;
+    misura = {
+      versione,
+      selezione: trovata === null ? null : {
+        larghezza: along(trovata.box.max[0] - trovata.box.min[0], trovata.matrix[0], trovata.matrix[1]),
+        altezza: along(trovata.box.max[1] - trovata.box.min[1], trovata.matrix[2], trovata.matrix[3]),
+      },
+    };
     for (const listener of [...listeners]) listener();
   };
-  ctx.life.add(() => listeners.clear());
+  ctx.statusChanged = () => {
+    versione += 1;
+    fotogramma ??= frame.request(leggi);
+  };
+  ctx.life.add(() => {
+    if (fotogramma !== null) frame.cancel(fotogramma);
+    fotogramma = null;
+    listeners.clear();
+  });
+
+  /// Le misure: dove sta il puntatore, e la selezione accanto. Un'unica voce.
+  const infoDi = (puntatore: Point | null, selezione: Misura["selezione"]): string | null => {
+    const punto = puntatore === null ? null : t("draw.status.pointer", { x: ctx.coordText(puntatore[0]), y: ctx.coordText(puntatore[1]) });
+    const dimensioni = selezione === null
+      ? null
+      : t("draw.status.size", { width: ctx.lengthText(selezione.larghezza), height: ctx.lengthText(selezione.altezza) });
+    if (punto !== null && dimensioni !== null) return t("draw.status.info", { pointer: punto, size: dimensioni });
+    return punto ?? dimensioni;
+  };
 
   const items = (): DrawStatusItem[] => {
     if (ctx.disposed) return [];
     const list: DrawStatusItem[] = [];
     const zoom = ctx.zoomText();
-    list.push({ id: "zoom", text: zoom, hint: t("draw.zoom_reset", { zoom }), open: () => ctx.zoomBy(1 / ctx.camera.scale), inPlace: true });
+    // Nel Disegno completo la voce apre il menu dello zoom; negli altri spazi resta
+    // com'è: un clic torna al 100 %, sul posto.
+    if (ctx.space === "full" && ctx.completoVoci?.() != null) {
+      list.push({ id: "zoom", text: zoom, hint: t("draw.status.zoom.menu", { zoom }), open: () => ctx.apriZoom() });
+    } else {
+      list.push({ id: "zoom", text: zoom, hint: t("draw.zoom_reset", { zoom }), open: () => ctx.zoomBy(1 / ctx.camera.scale), inPlace: true });
+    }
     if (ctx.camera.angle !== 0) {
       const angle = ctx.turnText(ctx.camera.angle);
       list.push({ id: "turn", text: t("draw.status.turn", { angle }), hint: t("draw.turn.button", { angle }), open: () => ctx.turnView(0), inPlace: true });
     }
     if (ctx.outline) list.push({ id: "outline", text: t("draw.outlines"), hint: t("draw.status.outline.hint"), open: () => ctx.setOutline(false), inPlace: true });
-    if (ctx.statusPointer !== null) {
-      list.push({ id: "pointer", text: t("draw.status.pointer", { x: ctx.coordText(ctx.statusPointer[0]), y: ctx.coordText(ctx.statusPointer[1]) }), hint: t("draw.status.pointer.hint") });
-    }
+    // Una lettura che non è di questa versione del disegno è vecchia: non si mostra.
+    const selezione = misura !== null && misura.versione === versione ? misura.selezione : null;
+    const info = infoDi(ctx.statusPointer, selezione);
+    if (info !== null) list.push({ id: "info", text: info, hint: t("draw.status.info.hint") });
     const count = ctx.currentIndex().units.length;
     const chosen = ctx.selectedUnits();
     if (chosen.length > 0) {
-      const frame = ctx.frameOf(chosen);
-      if (frame !== null) {
-        const [a, b, c, d] = frame.matrix;
-        const width = ctx.lengthText(along(frame.box.max[0] - frame.box.min[0], a, b));
-        const height = ctx.lengthText(along(frame.box.max[1] - frame.box.min[1], c, d));
-        list.push({ id: "size", text: t("draw.status.size", { width, height }), hint: t("draw.status.size.hint") });
-      }
       list.push({ id: "objects", text: t("draw.status.chosen", { chosen: chosen.length, count }), hint: t("draw.status.objects.hint") });
     } else {
       list.push({ id: "objects", text: plural(count, "draw.status.objects.one", "draw.status.objects.other"), hint: t("draw.status.objects.hint") });
@@ -80,4 +160,5 @@ export function installStatus(ctx: EditorContext): void {
       return () => listeners.delete(listener);
     },
   };
+  installZoomMenu(ctx, () => ctx.root.ownerDocument.querySelector<HTMLElement>('[data-surface-item="zoom"]'));
 }

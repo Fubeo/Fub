@@ -18,6 +18,7 @@ import { gesture } from "../../edit";
 import { opsDellEsito } from "../../../motore/gesti";
 import type { Sezioni } from "../../../completo/sezioni";
 import { railLayout } from "./rail";
+import { voceClienteBanda } from "./status";
 import type { Completo } from "../../../completo";
 import type { EffettiSpazio, SchedaSpazio } from "../../../completo/spazi";
 
@@ -230,6 +231,8 @@ export function installWorkspace(ctx: EditorContext): void {
               commit: (ops, nome) => ctx.commit({ name: nome }, gesture(ops)) !== null,
               annuncia: (testo) => ctx.announce(testo),
             },
+            // Le voci del client che la banda fa (il menu dello zoom, le misure).
+            clientVoce: voceClienteBanda,
           });
           sezioniAperte = aperto.sezioni;
           // Lo strumento del motore aspetta la sua famiglia dal Completo aperto
@@ -247,6 +250,9 @@ export function installWorkspace(ctx: EditorContext): void {
           applicaSpazio();
           mostraRisorse();
           ctx.syncRail(ctx.editable());
+          // La voce dello zoom della banda sceglie il suo menu solo col Completo
+          // presente (`status.ts`): la banda si rilegge adesso.
+          ctx.statusChanged();
           options.onWorkspaceChange?.();
         },
         // Un chunk che non arriva: lo spazio di prima resta, e «Riprova» ci
@@ -262,6 +268,7 @@ export function installWorkspace(ctx: EditorContext): void {
     portaCompleto();
     mostraRisorse();
     ctx.syncRail(ctx.editable());
+    ctx.statusChanged();
   }));
 
   ctx.setSpace = (next, toolbar) => {
@@ -281,6 +288,7 @@ export function installWorkspace(ctx: EditorContext): void {
     portaCompleto();
     applicaSpazio();
     mostraRisorse();
+    ctx.statusChanged();
   };
   ctx.resetSpace = applicaSpazio;
   ctx.retryCompleto = () => portaCompleto();

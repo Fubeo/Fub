@@ -115,7 +115,7 @@ describe("apri", () => {
 
 /// Le azioni di un editor finto per le voci del menu e della ricerca.
 function azioniFinte(riprova = vi.fn()) {
-  return { strumento: vi.fn(), riprova };
+  return { strumento: vi.fn(), client: vi.fn(), riprova };
 }
 
 describe("menu e ricerca del Completo (K6 T9a)", () => {

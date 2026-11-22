@@ -1542,6 +1542,10 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-fam-nucleo-tendina", 1280, "La tendina della casella «Scegli»: Selezione di Fub e Selezione del motore", openColumnGroup],
     ["disegno-fam-nucleo-diretta", 1280, "La Selezione diretta del motore scelta: la casella accesa, e la famiglia pronta senza un gesto", scegliSelezioneDiretta],
     ["disegno-fam-nucleo-diretta-800", 800, "La Selezione diretta del motore scelta nella finestra minima del desktop, 800 px", scegliSelezioneDiretta],
+    // La famiglia «vista» (K6 T11): il menu dello zoom della banda, aperto dalla
+    // sua voce come lo apre chi preme.
+    ["disegno-fam-vista", 1280, "Il menu dello zoom della banda: ingrandisci, riduci, 100 %, adatta tutto e il campo della percentuale", openZoomMenu],
+    ["disegno-fam-vista-800", 800, "Il menu dello zoom della banda nella finestra minima del desktop, 800 px", openZoomMenu],
   ].map(([id, width, title, prepare]) => ({
     id,
     title,
@@ -5308,6 +5312,18 @@ async function scegliSelezioneDiretta(page) {
   await page.waitForSelector(casella);
   await page.click(casella);
   await page.waitForSelector(`${casella}[aria-pressed="true"], ${casella} [aria-pressed="true"], ${casella}.is-active, ${casella}[data-active]`, { timeout: 5000 }).catch(() => {});
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il menu dello zoom della banda (K6 T11): la sua voce, aperta come la apre chi
+/// preme; il fuoco va alla prima voce.
+async function openZoomMenu(page) {
+  await openDrawing(page);
+  // Il menu c'è solo col Completo presente: si aspettano le sue caselle del motore.
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await page.waitForSelector('[data-surface-item="zoom"]');
+  await page.click('[data-surface-item="zoom"]');
+  await page.waitForSelector(".draw-zoom-popover .draw-zoom-item");
   await page.evaluate(() => document.fonts.ready);
 }
 

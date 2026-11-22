@@ -13,7 +13,7 @@ import { costruisciFila, type FilaOpzioni } from "./opzioni";
 import { creaSezioni, type Sezioni } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
-import { menuComando, menuNonCaricato, statoComandi, vociRicerca, type VoceRicerca } from "./comandi";
+import { menuComando, menuNonCaricato, statoComandi, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
 import type { CampoFinestra, ModuloFinestra } from "../motore/finestre";
 import type { DrawingPreview } from "../../../host/contract";
 import type { MenuItem } from "../../../ui/menu";
@@ -105,6 +105,8 @@ export interface StrumentoMotoreColonna {
 export interface AzioniVoci {
   /// Lo strumento del motore: lo sceglie l'editor.
   readonly strumento: (id: string) => void;
+  /// Una voce del client (K6 T11, la vista della banda): la fa l'editor, con il suo id.
+  readonly client: (id: string) => void;
   /// Rifà l'indice, per chi lo mostra («Riprova»).
   readonly riprova: () => void;
 }
@@ -114,6 +116,9 @@ export interface OpzioniCompleto {
   readonly indice?: () => Promise<Indice>;
   readonly moduli?: OpzioniCaricatore["moduli"];
   readonly prepara?: OpzioniCaricatore["prepara"];
+  /// Le voci del client che l'editor fa (`comandi.ts`, `statoVoce`): `null` se si
+  /// fanno, il perché se sono spente, `undefined` se non le conosce.
+  readonly clientVoce?: (id: string) => string | null | undefined;
   /// I tasti del motore nell'editor (K6 T9b). Senza, nessun tasto del motore
   /// parte: il Semplice e i suoi tasti restano com'erano.
   readonly tasti?: OpzioniTastiCompleto;
@@ -252,8 +257,15 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       azioni.strumento(chiamata.strumento);
       return;
     }
+    if ("client" in chiamata) {
+      azioni.client(chiamata.client);
+      return;
+    }
     eseguiVoce(voce, dipendenze);
   };
+  /// Lo stato dei comandi con le voci del client dell'editor: la regola di
+  /// `statoVoce` le legge da qui.
+  const conVociClient = (stato: StatoComandi): StatoComandi => ({ ...stato, clientVoce: opzioni.clientVoce });
   let chiuso = false;
   // I tasti dell'utente (`draw.keys`, T9c): con un editor e senza modifiche
   // date da chi apre, il Completo li segue, e rifà la regola a ogni cambio.
@@ -383,7 +395,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       } catch {
         return menuNonCaricato(azioni.riprova);
       }
-      return menuComando(pronto, await statoComandi(ctx.motore, selezione()), esegui, montaggio.regola());
+      return menuComando(pronto, conVociClient(await statoComandi(ctx.motore, selezione())), esegui, montaggio.regola());
     },
     async ricerca(selezione, azioni) {
       let pronto: Indice;
@@ -392,7 +404,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       } catch {
         return null;
       }
-      return vociRicerca(pronto, await statoComandi(ctx.motore, selezione()), (voce) => avvia(voce, azioni), montaggio.regola());
+      return vociRicerca(pronto, conVociClient(await statoComandi(ctx.motore, selezione())), (voce) => avvia(voce, azioni), montaggio.regola());
     },
   };
   ctx.life.add(() => completo.chiudi());

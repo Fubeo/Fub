@@ -51,8 +51,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // righe della colonna e del cassetto, e passano a «fub» allo stesso modo; T9c
   // le dieci di Impostazioni › Scorciatoie (i tasti, i conflitti, gli insiemi).
   // T11 giro A porta a «fatto» le venti del nucleo (select, object), il giro B
-  // a «fub» le cinque delle preferenze del motore (Impostazioni › Disegni).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1405, fub: 114, escluso: 12, fatto: 20 });
+  // a «fub» le cinque delle preferenze del motore (Impostazioni › Disegni), il
+  // giro D a «fatto» le sei della banda (il menu dello zoom e le misure).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1399, fub: 114, escluso: 12, fatto: 26 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

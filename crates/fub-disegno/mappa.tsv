@@ -1029,12 +1029,12 @@ interfaccia	type.underline	Underline		testo	F2	T16	da fare	menu/testo	famiglia		
 interfaccia	type.lineComposer	Toggle Line Composer		testo	F2	T16	da fare	menu/testo	famiglia		Alterna composizione delle righe
 interfaccia	type.hyphenate	Hyphenate		testo	F2	T16	da fare	menu/testo	famiglia		Sillaba
 interfaccia	effect.last	Last Effect…		effetti	F2	T18	da fare	menu/effetto	famiglia		Ultimo effetto…
-interfaccia	view.zoomIn	Zoom In		vista	F1	T11	da fare	banda	famiglia		Ingrandisci
-interfaccia	view.zoomOut	Zoom Out		vista	F1	T11	da fare	banda	famiglia		Riduci
+interfaccia	view.zoomIn	Zoom In		vista	F1	T11	fatto	banda	famiglia		Ingrandisci
+interfaccia	view.zoomOut	Zoom Out		vista	F1	T11	fatto	banda	famiglia		Riduci
 interfaccia	view.fitArtboard	Fit Artboard in Window		tavole	F2	T19	da fare	banda	famiglia		Adatta tavola da disegno alla finestra
-interfaccia	view.fitAll	Fit All in Window		vista	F1	T11	da fare	banda	famiglia		Adatta tutto alla finestra
-interfaccia	view.actualSize	Actual Size		vista	F1	T11	da fare	banda	famiglia		Dimensioni effettive
-interfaccia	view.setZoom	Set Zoom		vista	F1	T11	da fare	banda	famiglia		Imposta zoom
+interfaccia	view.fitAll	Fit All in Window		vista	F1	T11	fatto	banda	famiglia		Adatta tutto alla finestra
+interfaccia	view.actualSize	Actual Size		vista	F1	T11	fatto	banda	famiglia		Dimensioni effettive
+interfaccia	view.setZoom	Set Zoom		vista	F1	T11	fatto	banda	famiglia		Imposta zoom
 interfaccia	view.goToArtboard	Go to Artboard		tavole	F2	T19	da fare	menu/visualizza	famiglia		Vai alla tavola da disegno
 interfaccia	view.edges	Hide Edges		vista	F1	T11	da fare	menu/visualizza	famiglia		Nascondi bordi
 interfaccia	view.artboards	Hide Artboards		tavole	F2	T19	da fare	menu/visualizza	famiglia		Nascondi tavole da disegno
@@ -1528,7 +1528,7 @@ pannello	gradient	Gradient	Window	aspetto	F1	T15	da fare	ispettore/design	famigl
 pannello	graphic_styles	Graphic Styles	Window	aspetto	F1	T15	da fare	ispettore/risorse	famiglia		Stili grafici
 pannello	history	History	Window	fub	—	T11	fub	fub	—	la cronologia della superficie e le versioni del file di Fub	Cronologia
 pannello	image_trace	Image Trace	Window	immagini	F3	T20	da fare	ispettore/design	famiglia		Ricalco immagine
-pannello	info	Info	Window	vista	F1	T11	da fare	banda	famiglia		Info
+pannello	info	Info	Window	vista	F1	T11	fatto	banda	famiglia		Info
 pannello	layers	Layers	Window	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Livelli
 pannello	libraries	Libraries	Window	simboli	F3	T22	da fare	ispettore/risorse	famiglia		Librerie
 pannello	library_panel	Library Panel	Window	simboli	F3	T22	da fare	ispettore/risorse	famiglia		Library Panel
