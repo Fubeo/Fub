@@ -59,7 +59,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12 giro 1 porta a «fatto» i ventuno strumenti di «disegnare» e i quattro
   // comandi sui punti che la fila dei punti chiama. Il giro «oggetti» di T11
   // le sette di Raggruppa, Blocca e Nascondi (la selezione, il resto, tutto).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1333, fub: 114, escluso: 12, fatto: 92 });
+  // T12 giro 2 le quattordici di Oggetto › Tracciato senza finestra.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1319, fub: 114, escluso: 12, fatto: 106 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

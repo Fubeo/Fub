@@ -175,9 +175,12 @@ vedono i suoi punti, nel colore d'accento del tema; il file non cambia ancora.
 Lo chiudono:
 
 - **Invio** o **Esc**: il tracciato finisce come lo finisce il motore;
-- **un altro strumento**: il tracciato resta com'è, aperto.
+- **un altro strumento**: il tracciato resta com'è, aperto;
+- **il disegno che cambia sotto**, da un altro riquadro o dal file riletto:
+  il tracciato si chiude com'è, aperto, prima che il cambio arrivi al
+  motore, e i punti messi restano.
 
-In tutti e tre i casi il tracciato è **un passo** di Annulla. Un secondo Esc,
+In tutti i casi il tracciato è **un passo** di Annulla. Un secondo Esc,
 senza niente di aperto, torna alla Selezione. Lo stesso vale per la Penna
 intelligente e la Curvatura.
 
@@ -206,3 +209,38 @@ Elimina chiedono i punti. Non toccano i tratti dell'Inchiostro né la carta.
 
 Come ci arrivano i punti, nel contratto: `DrawingToolState.anchors` e il
 `value` dei comandi ([IPC del disegno](../reference/drawing-ipc.md)).
+
+**Angoli** arrotonda un angolo e lo tiene vivo: il raggio si cambia dopo.
+Nel file il tracciato è quello arrotondato, che ogni programma vede, e il
+raggio sta nella ricetta del motore in `<metadata>`
+([ADR del Disegno completo](../architecture/disegno-completo.md)); un
+programma che cambia il tracciato perde solo la ricetta.
+
+### Oggetto › Tracciato
+
+Con dei tracciati scelti, il menu **Oggetto › Tracciato** (e la palette,
+`Ctrl+/`) fa, in un passo di Annulla e senza finestre:
+
+- **Inverti direzione tracciato**; **Contorna traccia**, che fa del tratto
+  una forma piena; **Aggiungi punti di ancoraggio**, uno a metà di ogni
+  segmento; **Dividi gli oggetti sotto**, che taglia ciò che sta sotto col
+  tracciato scelto, che se ne va;
+- **Tracciato composto › Crea** e **Rilascia**: due tracciati diventano uno
+  solo, col buco dove si sovrappongono, e tornano separati;
+- dagli strumenti di precisione: **Morbido**, **Angolo**, **Pareggia le
+  maniglie**, **Rimuovi mantenendo la forma** (sui punti scelti),
+  **Chiudi**, **Incroci** (un punto dove due tracciati si incrociano),
+  **Espandi i trattini** (un tracciato per trattino), e **Chiudi o unisci**
+  della Penna intelligente.
+
+Il buco di un tracciato composto viene dal verso dei suoi pezzi, come vuole
+la regola `nonzero` di SVG: Inverti e Rilascia lo rispettano, e il file torna
+uguale dopo due Inverti. Un tracciato di un altro programma con la regola
+`evenodd` resta com'è: questi comandi non lo cambiano e lo dicono. Un
+comando che non trova niente da fare (Dividi gli oggetti sotto senza niente
+sotto, Angolo su punti già angoli) non cambia il file e lo dice. Come gli
+strumenti, i comandi non toccano i tratti dell'Inchiostro.
+
+Le voci con una finestra (Media, Sposta tracciato, Semplifica, Pulisci,
+Dividi in griglia, Dividi in trattini…) e le maschere di ritaglio non ci
+sono ancora: sono spente e dicono perché.

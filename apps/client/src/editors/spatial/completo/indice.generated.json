@@ -3,6 +3,134 @@
   "voci": [
     {
       "fonte": "motore",
+      "id": "addon.pathtools.close",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.close"
+      },
+      "etichetta": {
+        "it": "Chiudi tracciato",
+        "en": "Close Path"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.corner",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.corner"
+      },
+      "etichetta": {
+        "it": "Rendi angolo",
+        "en": "Make Corner"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.crossings",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.crossings"
+      },
+      "etichetta": {
+        "it": "Aggiungi punti agli incroci",
+        "en": "Add Points at Crossings"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.equalize",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.equalize"
+      },
+      "etichetta": {
+        "it": "Uguaglia maniglie",
+        "en": "Equalize Handles"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.expandDashes",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.expandDashes"
+      },
+      "etichetta": {
+        "it": "Espandi trattini in tracciati",
+        "en": "Expand Dashes into Paths"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.removeKeepShape",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.removeKeepShape"
+      },
+      "etichetta": {
+        "it": "Rimuovi punti, mantieni forma",
+        "en": "Remove Points, Keep Shape"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.smooth",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.smooth"
+      },
+      "etichetta": {
+        "it": "Rendi arrotondato",
+        "en": "Make Smooth"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pen.closeJoin",
+      "chiamata": {
+        "comando": "disegno.addon.pen.closeJoin"
+      },
+      "etichetta": {
+        "it": "Chiudi o unisci",
+        "en": "Close or Join"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "clipboard.conflicts",
       "chiamata": {
         "comando": "disegno.clipboard.conflicts"
@@ -451,6 +579,38 @@
     },
     {
       "fonte": "motore",
+      "id": "object.compoundPath.make",
+      "chiamata": {
+        "comando": "disegno.object.compoundPath.make"
+      },
+      "etichetta": {
+        "it": "Crea",
+        "en": "Make"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": "Cmd+8",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.compoundPath.release",
+      "chiamata": {
+        "comando": "disegno.object.compoundPath.release"
+      },
+      "etichetta": {
+        "it": "Rilascia",
+        "en": "Release"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": "Cmd+Alt+Shift+8",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.group",
       "chiamata": {
         "comando": "disegno.object.group"
@@ -526,6 +686,54 @@
       "posto": "menu/oggetto/blocca",
       "famiglia": "nucleo",
       "tasto": "Cmd+Alt+Shift+2",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.path.addAnchorPoints",
+      "chiamata": {
+        "comando": "disegno.object.path.addAnchorPoints"
+      },
+      "etichetta": {
+        "it": "Aggiungi punti di ancoraggio",
+        "en": "Add Anchor Points"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.path.divideObjectsBelow",
+      "chiamata": {
+        "comando": "disegno.object.path.divideObjectsBelow"
+      },
+      "etichetta": {
+        "it": "Dividi oggetti sottostanti",
+        "en": "Divide Objects Below"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.path.outlineStroke",
+      "chiamata": {
+        "comando": "disegno.object.path.outlineStroke"
+      },
+      "etichetta": {
+        "it": "Contorna tratto",
+        "en": "Outline Stroke"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -650,6 +858,22 @@
       "etichetta": {
         "it": "Rimuovi punti di ancoraggio",
         "en": "Remove Anchor Points"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.reverse",
+      "chiamata": {
+        "comando": "disegno.path.reverse"
+      },
+      "etichetta": {
+        "it": "Inverti direzione tracciato",
+        "en": "Reverse Path Direction"
       },
       "posto": "menu/oggetto",
       "famiglia": "tracciati",

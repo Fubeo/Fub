@@ -37,7 +37,7 @@ use fub_abi::{
 };
 use fub_motori::{Cache, ErroreMotore, Pigro, Servizi};
 use serde_json::Value;
-use vectorcraft_doc::{NodeId, Selection};
+use vectorcraft_doc::{Document, NodeId, Selection};
 use vectorcraft_engine::EngineError;
 
 use crate::apertura::Copia;
@@ -101,6 +101,23 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
     {
         None
     }
+
+    /// Perché il risultato del comando `id` non si scrive, visto il documento
+    /// del motore `dopo` e gli oggetti che il motore ha lasciato scelti: un
+    /// oggetto toccato che la famiglia non lascia cambiare, un risultato che
+    /// non fa ciò che il comando dice. Di serie nessuno; `esegui` lo rende come
+    /// rifiuto, e niente cambia.
+    fn rifiuto_dopo(
+        _id: &str,
+        _copia: &Copia,
+        _dopo: &Document,
+        _scelti_dopo: &[NodeId],
+    ) -> Option<DrawingRefusal>
+    where
+        Self: Sized,
+    {
+        None
+    }
 }
 
 /// Le 26 famiglie, nell'ordine di `fub_abi::DRAWING_FAMILIES`: per ognuna la
@@ -159,6 +176,21 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto(id, copia, selezione)
+                    })*
+                }
+            }
+
+            /// Perché il risultato del comando `id` non si scrive.
+            fn rifiuto_dopo(
+                self,
+                id: &str,
+                copia: &Copia,
+                dopo: &Document,
+                scelti_dopo: &[NodeId],
+            ) -> Option<DrawingRefusal> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::rifiuto_dopo(id, copia, dopo, scelti_dopo)
                     })*
                 }
             }
@@ -913,6 +945,10 @@ pub(crate) fn esegui(
         .doc()
         .map(|d| d.selection.objects.clone())
         .unwrap_or_default();
+    if let Some(motivo) = famiglia.rifiuto_dopo(&riga.id, copia, &dopo, &selezione) {
+        banco.ripristina(copia);
+        return Ok(rifiuta(motivo));
+    }
     let differenza =
         vectorcraft_engine::guard::catch_panic(|| differenza::differenza(copia, &dopo, None, None));
     banco.ripristina(copia);
