@@ -2377,7 +2377,19 @@ Casi limite:
 - la deformazione con i perni annullata a metà: niente resta.
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/forme src/editors/spatial/completo/famiglie/trasforma
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-22). Giri 1 e 2 uniti in c5a06fc9d: le
+quattordici forme nella colonna, il clic senza trascinare apre la finestra
+delle misure (otto forme; il Rettangolo arrotondato no, `shape.rectangle`
+non porta il raggio), la sezione «Allinea» in Design costruita dall'indice
+(selezione o tavola; la famiglia si carica al primo clic), i nomi corti.
+Il riflesso (`flare`) e le griglie aspettano T27; `select.key` aspetta T15.
+La sezione Allinea non è nel prototipo: da disegnare in PLAN-ui (resta
+solo nell'app finché il pianificatore non la disegna). Mancano: i valori
+di partenza delle finestre delle forme (oggi 0, OK acceso), il messaggio
+dell'oggetto bloccato, il gruppo a icone di allineamento doppio nel
+Completo, la sezione «Trasforma», le finestre Sposta/Ruota/Rifletti/
+Scala/Inclina, «Elaborazione tracciati», costruttore di forme, perni e
+strumento forma.
 Aspetta: niente
 
 ## T14 · Il colore
