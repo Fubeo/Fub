@@ -7,8 +7,11 @@
 > di un tratto, come si riscrive un tratto con un'altra penna, come si
 > riproduce un disegno e come si scrive lungo il righello.
 
-La **Penna** (`P`) e l'**Evidenziatore** (`Maiusc+P`) del
-[disegno](drawing.md) scrivono tratti a mano libera. Ogni tratto tiene i suoi
+L'**Inchiostro** (`P`) e l'**Evidenziatore** (`Maiusc+P`) del
+[disegno](drawing.md) scrivono tratti a mano libera. Nel Disegno completo
+c'è anche la **Penna** di Bézier del motore, che fa tracciati punto per punto
+([più sotto](#la-penna-di-bézier-disegno-completo)); qui «la penna» senza
+altro è sempre l'Inchiostro. Ogni tratto tiene i suoi
 campioni grezzi, posizione, pressione, inclinazione e tempo, in `fub:ink`, e
 il pennello con cui è nato in `fub:brush` (il formato è in
 [`scene-format-pens.md`](../reference/scene-format-pens.md)): per questo un tratto si
@@ -16,7 +19,7 @@ può ridisegnare dopo, con un'altra penna, senza perdere niente.
 
 ## Le penne
 
-La Penna ha sei penne, l'Evidenziatore una:
+L'Inchiostro ha sei penne, l'Evidenziatore una:
 
 | Penna | Com'è | Misura di serie |
 |---|---|---|
@@ -146,3 +149,54 @@ punta rettangolare, il Pennarello la pressione ignorata, l'evidenziatore una
 punta rettangolare trasparente; la penna stessa resta in `fubPen`, che Word
 ignora ([`rich-projection.md`](../reference/rich-projection.md)). Le penne
 salvate non ci sono.
+
+## La Penna di Bézier (Disegno completo)
+
+Nel Disegno completo il gruppo «disegnare» della colonna ha tre caselle, come
+gli altri programmi di disegno vettoriale. Gli strumenti vengono dal motore
+(la famiglia `tracciati`, `crates/fub-disegno/src/famiglie/tracciati.rs`) e
+scrivono tracciati veri, `<path>`, non tratti a mano:
+
+| Casella | Strumenti |
+|---|---|
+| **Penna** | Penna, Penna intelligente, Curvatura, Aggiungi e Elimina punto di ancoraggio, Punto di ancoraggio, Angoli, Fai scorrere il punto di ancoraggio, Estendi tracciato |
+| **Matita** | Matita, poi l'Inchiostro e l'Evidenziatore di Fub, Smussa, Unisci, Fondi bordo condiviso |
+| **Gomma** | Gomma (Completo), poi la gomma di Fub, Gomma tracciato, Pennello gomma punti, Forbici, Coltello, Specchia e taglia, Taglio linea, Taglio rettangolare |
+
+**La Penna** fa un tracciato clic dopo clic: ogni clic mette un punto,
+trascinare tira le maniglie. Fra un clic e l'altro il tracciato è aperto e si
+vedono i suoi punti, nel colore d'accento del tema; il file non cambia ancora.
+Lo chiudono:
+
+- **Invio** o **Esc**: il tracciato finisce come lo finisce il motore;
+- **un altro strumento**: il tracciato resta com'è, aperto.
+
+In tutti e tre i casi il tracciato è **un passo** di Annulla. Un secondo Esc,
+senza niente di aperto, torna alla Selezione. Lo stesso vale per la Penna
+intelligente e la Curvatura.
+
+Gli strumenti dei tracciati non toccano i tratti dell'**Inchiostro**
+(`fub:ink`): Forbici, Coltello o Gomma su un tratto a mano sono spenti, e il
+disegno resta com'è. Per tagliare un tratto a mano c'è la gomma di Fub,
+**Precisa**.
+
+### I punti scelti
+
+Con la **Selezione diretta** o il **Punto di ancoraggio**, i punti scelti
+sul foglio danno la riga delle opzioni:
+
+- **Converti**: **Angolo** o **Morbido**;
+- **Punto**: **Taglia il tracciato nel punto**, **Unisci i due punti** (due
+  punti finali, di uno o due tracciati aperti), **Elimina il punto**;
+- **Posizione del punto**: X e Y del punto, quando ne è scelto uno solo.
+
+Un pulsante che adesso non vale resta raggiungibile e dice perché: «Scegli
+prima i punti con la Selezione diretta.», o per unire «Scegli i due punti
+finali da unire.». La posizione per ora si legge e basta: il punto si sposta
+trascinandolo sul foglio. Ogni comando è un passo di Annulla. I comandi ci
+sono anche nella palette (`Ctrl+/`) e nel menu ≡: con un tracciato scelto e
+nessun punto, Converti e Unisci valgono sul tracciato intero, Taglia ed
+Elimina chiedono i punti. Non toccano i tratti dell'Inchiostro né la carta.
+
+Come ci arrivano i punti, nel contratto: `DrawingToolState.anchors` e il
+`value` dei comandi ([IPC del disegno](../reference/drawing-ipc.md)).
