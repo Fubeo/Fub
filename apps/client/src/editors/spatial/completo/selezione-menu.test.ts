@@ -158,4 +158,18 @@ describe("le voci nuove di ≡ › Selezione (K6 T15, giro 6)", () => {
     expect(voci[primo - 1]?.label, "prima del testo ci sono gli oggetti").toBe("Istanza di simbolo");
     c.chiudi();
   });
+
+  it("Oggetto mette punti isolati e tracciati aperti in una fila sua, con una riga di separazione", async () => {
+    const comandi = vi.fn((selezione: readonly string[]) => Promise.resolve(comandiDelDisegnoDiProva(selezione)));
+    const sessione = { comandi, comando: vi.fn() } as unknown as SessioneMotore;
+    const motore = { adesso: () => sessione, pronta: () => Promise.resolve(sessione), assente: () => null } as unknown as MotoreDelDisegno;
+    const c = apri({ motore, life: openLifetime() } as never, { indice: () => Promise.resolve(indiceDi(indiceGenerato as never)) } as never);
+    const voci = sottomenuDiSelezione(await c.menu(() => ["ot1a1a1a1"], AZIONI), "Oggetto");
+    const posto = (etichetta: string) => voci.findIndex((dentro) => dentro.label === etichetta);
+    expect(posto("Punti isolati"), "Punti isolati nel sottomenu").toBeGreaterThanOrEqual(0);
+    expect(posto("Tracciati aperti"), "Tracciati aperti subito dopo").toBe(posto("Punti isolati") + 1);
+    expect(voci[posto("Punti isolati")]?.separator, "riga di separazione prima dei punti isolati").toBe(true);
+    expect(posto("Tutti gli oggetti di testo"), "il testo resta nella sua fila prima").toBeLessThan(posto("Punti isolati"));
+    c.chiudi();
+  });
 });

@@ -206,6 +206,13 @@ const FILE_UGUALE: readonly (readonly string[])[] = [
   ["select.same.fontFamily", "select.same.fontFamilyStyle", "select.same.fontFamilyStyleSize", "select.same.fontSize", "select.same.textFillColor", "select.same.textStrokeColor"],
 ];
 
+/// Le file di ≡ › Selezione › Oggetto (K6 T15, giro 6): prima i criteri sul livello e sul testo, poi le specie di
+/// tracciato (punti isolati e tracciati aperti), ognuna nella sua fila.
+const FILE_OGGETTO: readonly (readonly string[])[] = [
+  ["select.object.allOnSameLayers", "select.object.textObjects"],
+  ["select.object.strayPoints", "select.object.openPaths"],
+];
+
 /// Le file di Oggetto › Tracciato (K6 T12): i comandi sul tracciato intero,
 /// il tracciato composto (un sottomenu, `RACCOLTE_DEI_MENU`), gli strumenti di precisione, la penna intelligente.
 /// Gli id sono quelli della mappa del motore (`crates/fub-disegno/mappa.tsv`).
@@ -280,6 +287,7 @@ const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = 
   "oggetto/elaborazione": FILE_ELABORAZIONE,
   "modifica/colori": FILE_COLORI,
   "selezione/uguale": FILE_UGUALE,
+  "selezione/oggetto": FILE_OGGETTO,
 };
 
 /// I sottomenu che il client fa dentro un sottomenu del terzo livello: il loro
