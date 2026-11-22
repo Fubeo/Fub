@@ -1,8 +1,8 @@
 {
-  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs disegno-completo` (dopo `git fetch`), che legge PLAN-ui/disegno-completo.html dal ramo piano/k6-disegno-completo al commit cd5396976081fdc8ff573c5a1cf138c2d326e384.",
+  "_intestazione": "File generato: non modificarlo a mano. Lo rigenera, da apps/client, `node bench/conformita/estrai.mjs disegno-completo` (dopo `git fetch`), che legge PLAN-ui/disegno-completo.html dal ramo piano/k6-disegno-completo al commit cb9cc2c99b0e62f74a2bb23a4e89282e0145d393.",
   "prototipo": "disegno-completo",
   "ramo": "piano/k6-disegno-completo",
-  "commit": "cd5396976081fdc8ff573c5a1cf138c2d326e384",
+  "commit": "cb9cc2c99b0e62f74a2bb23a4e89282e0145d393",
   "file": "PLAN-ui/disegno-completo.html",
   "sha256": "522f4dfe77b09611e0ff4feb204a0e34f5e0f9e96ca60cb911fb0bb8ab03abc4",
   "traduzioni": {
@@ -916,6 +916,24 @@
           "background-image": "none",
           "opacity": "1",
           "width": "560px"
+        },
+        "fub": {}
+      }
+    },
+    "tavolozza.riga": {
+      "chiaro-1280": {
+        "prototipo": ".draw-commands-row",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "height": "28px"
+        },
+        "fub": {}
+      },
+      "scuro-1280": {
+        "prototipo": ".draw-commands-row",
+        "contesto": "interfaccia",
+        "proprieta": {
+          "height": "28px"
         },
         "fub": {}
       }

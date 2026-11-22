@@ -26,5 +26,8 @@ Un tasto con `Maiusc` su un segno o una cifra non si assegna, perché su
 un'altra tastiera è un altro tasto. Su macOS `Ctrl` e `⌘` restano quelli di
 sempre: `⌘` è il tasto di Fub, `Ctrl` è Control.
 
-Il menu ≡ e «Ctrl+/» non mostrano ancora questi tasti, e «Impostazioni ›
-Scorciatoie» non li cambia.
+Il menu ≡ e «Ctrl+/» mostrano il tasto che fa partire il comando, cioè lo
+stesso di questa regola: un comando il cui tasto è di Fub, o che ha perso un
+conflitto, non ne mostra nessuno. Finché l'indice dei comandi non è arrivato,
+nessun tasto è mostrato. «Impostazioni › Scorciatoie» non cambia ancora questi
+tasti.

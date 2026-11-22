@@ -196,6 +196,15 @@ export const PEZZI = [
     app: ".kit-dialog.draw-commands-dialog",
     proprieta: [...BASE, "width"],
   },
+  // L'altezza della riga: con il gap del kit in mezzo, il passo fra le righe
+  // sarebbe questa più 2 px; la tavolozza lo toglie, come il prototipo (28 px).
+  {
+    id: "tavolozza.riga",
+    vista: "tavolozza",
+    prototipo: ".draw-commands-row",
+    app: ".draw-commands-row",
+    proprieta: ["height"],
+  },
   {
     id: "tavolozza.campo",
     vista: "tavolozza",

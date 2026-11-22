@@ -11,13 +11,15 @@
 // di `crates/fub-disegno/src/catalogo.rs`): un sottomenu più in basso aspetta
 // che il catalogo lo accetti.
 
-import type { DrawingCommandInfo, DrawingDisabledReason, DrawingOutcome } from "../../../host/contract";
+import type { DrawingCommandInfo, DrawingDisabledReason } from "../../../host/contract";
 import { resolvedLanguage } from "../../../i18n/strings";
+import { displayBinding } from "../../../ui/commands";
 import type { MenuItem } from "../../../ui/menu";
 import { t, type DrawKey } from "../strings";
 import type { MotoreDelDisegno } from "../motore/gesti";
-import type { ComandoMotore, MotoreAssente, SessioneMotore } from "../motore/sessione";
+import type { MotoreAssente, SessioneMotore } from "../motore/sessione";
 import type { Indice, VoceIndice } from "./indice";
+import { tastoDelComando, type RegolaTasti } from "./tasti";
 
 /// Quanto si aspetta che la sessione del motore si apra (come `carica.ts`: un
 /// numero suo, perché un import di valore da `motore/gesti` porterebbe la
@@ -158,18 +160,28 @@ export function percorsoPosto(posto: string): string {
     .join(" › ");
 }
 
+/// Il tasto che una riga mostra: quello che fa partire il comando, come lo dà la
+/// regola dei tasti (`tasti.ts`), scritto come gli altri tasti di Fub. Nessuno
+/// finché la regola non c'è (l'indice non è arrivato), o se il tasto dell'indice
+/// è coperto da un tasto di Fub o perso in un conflitto: la riga non lo promette.
+export function tastoMostrato(regola: RegolaTasti | null, id: string): string | undefined {
+  const tasto = regola === null ? null : tastoDelComando(regola, id);
+  return tasto === null ? undefined : displayBinding(tasto);
+}
+
 /// Il menu ≡ con i sottomenu dell'indice (`menu/<sottomenu>`), nell'ordine in
 /// cui l'indice li dà. Una voce spenta si vede, col suo perché.
-export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiVoce): MenuItem[] {
+export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiVoce, regola: RegolaTasti | null = null): MenuItem[] {
   const gruppi = new Map<string, MenuItem[]>();
   for (const voce of indice.voci) {
     const [scheda, gruppo] = voce.posto.split("/");
     if (scheda !== "menu" || gruppo === undefined || !(gruppo in NOMI_PEZZO)) continue;
     const { disabled, perche } = statoVoce(voce, stato);
     const elenco = gruppi.get(gruppo) ?? [];
+    const hint = tastoMostrato(regola, voce.id);
     elenco.push({
       label: nomeVoce(voce),
-      ...(voce.tasto === null ? {} : { hint: voce.tasto }),
+      ...(hint === undefined ? {} : { hint }),
       disabled,
       ...(perche === undefined ? {} : { description: perche }),
       run: () => esegui(voce),
@@ -190,15 +202,16 @@ export function menuNonCaricato(riprova: () => void): MenuItem[] {
 
 /// Tutte le voci dell'indice per la ricerca Ctrl+/, col posto, il tasto e il
 /// perché di quelle spente. Chi le filtra sceglie con `rankCommands`.
-export function vociRicerca(indice: Indice, stato: StatoComandi, esegui: EseguiVoce): VoceRicerca[] {
+export function vociRicerca(indice: Indice, stato: StatoComandi, esegui: EseguiVoce, regola: RegolaTasti | null = null): VoceRicerca[] {
   return indice.voci.map((voce) => {
     const { disabled, perche } = statoVoce(voce, stato);
+    const hint = tastoMostrato(regola, voce.id);
     return {
       key: voce.id,
       label: nomeVoce(voce),
       altreLingue: [voce.etichetta.it, voce.etichetta.en],
       path: percorsoPosto(voce.posto),
-      ...(voce.tasto === null ? {} : { hint: voce.tasto }),
+      ...(hint === undefined ? {} : { hint }),
       disabled,
       ...(perche === undefined ? {} : { description: perche }),
       run: () => esegui(voce),
@@ -206,12 +219,3 @@ export function vociRicerca(indice: Indice, stato: StatoComandi, esegui: EseguiV
   });
 }
 
-/// Manda un comando al motore. `null` se il motore non c'è, o non risponde
-/// (il disegno si è chiuso, o il motore è assente).
-export async function inviaComando(motore: MotoreDelDisegno | null, richiesta: ComandoMotore): Promise<DrawingOutcome | null> {
-  if (motore === null) return null;
-  const sessione = await sessioneDi(motore);
-  if (sessione === null) return null;
-  const esito = await sessione.comando(richiesta);
-  return esito === null || "kind" in esito ? null : esito;
-}

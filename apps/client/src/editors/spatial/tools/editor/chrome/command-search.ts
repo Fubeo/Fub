@@ -7,7 +7,6 @@
 // l'indice non arriva, lo dice, con «Riprova».
 // La palette dello Scrittoio (Ctrl+Maiusc+P) resta sua.
 
-import type { DrawingOutcome, DrawingPreview } from "../../../../../host/contract";
 import { createList, openDialog } from "../../../../../kit";
 import { fuzzyScore } from "../../../../../ui/fuzzy";
 import { openLifetime } from "../../../../../ui/lifetime";
@@ -35,12 +34,9 @@ export interface VociCompleto {
 
 /// Ciò che l'editor dà al Completo per una voce (K6 T9a).
 export interface AzioniVociCompleto {
-  /// Lo strumento del motore: l'editor lo sceglie.
+  /// Lo strumento del motore: l'editor lo sceglie. I comandi del motore non
+  /// passano di qui: partono da `eseguiVoce`.
   readonly strumento: (id: string) => void;
-  /// L'esito di un comando, da applicare al disegno.
-  readonly applica: (esito: DrawingOutcome) => void;
-  /// L'anteprima di una finestra sul foglio, o la toglie con `null`.
-  readonly sulFoglio: (anteprima: DrawingPreview | null) => void;
   /// Rifà la richiesta dell'indice, per chi lo mostra.
   readonly riprova: () => void;
 }

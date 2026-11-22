@@ -5,11 +5,8 @@
 // ricerca dei comandi (Ctrl+/) e il menu radiale. Un comando nuovo entra da
 // uno di quei posti, e la ricerca lo trova senza altro lavoro.
 
-import type { DrawingOutcome } from "../../../../../host/contract";
 import { displayBinding } from "../../../../../ui/commands";
 import type { MenuItem } from "../../../../../ui/menu";
-import { motivoDelRifiuto } from "../../../motore/colori";
-import { opsDellEsito } from "../../../motore/gesti";
 import { t } from "../../../strings";
 import { toolsOf, toolSpec, type ToolId } from "../../registry";
 import type { EditorContext } from "../context";
@@ -91,36 +88,16 @@ function shown(ctx: EditorContext, control: HTMLElement): boolean {
   return true;
 }
 
-/// Ciò che il Disegno completo chiede all'editor per le sue voci (K6 T9a): lo
-/// strumento del motore, l'esito di un comando nel disegno, e «Riprova».
+/// Ciò che il Disegno completo chiede all'editor per le sue voci: lo strumento
+/// del motore (che l'editor sceglie) e «Riprova». I comandi del motore non
+/// passano più di qui: partono da `eseguiVoce` (`completo/esegui.ts`).
 export function azioniVoci(ctx: EditorContext, riprova: () => void): AzioniVociCompleto {
   return {
     strumento: (id) => {
       if (toolsOf(ctx.features).some((spec) => spec.id === id)) ctx.setTool(id as ToolId);
     },
-    applica: (esito) => applicaEsito(ctx, esito),
-    // L'anteprima di una finestra sul foglio la porta T6 con la famiglia: qui
-    // non c'è ancora il pezzo del foglio.
-    sulFoglio: () => undefined,
     riprova,
   };
-}
-
-/// L'esito di un comando del motore nel disegno: le operazioni in un passo, o
-/// perché no (il rifiuto, o operazioni che non valgono).
-function applicaEsito(ctx: EditorContext, esito: DrawingOutcome): void {
-  if (esito.refused !== null) {
-    const motivo = motivoDelRifiuto(esito.refused);
-    if (motivo !== null) ctx.announce(t("draw.rejected", { reason: t(motivo) }));
-    return;
-  }
-  const read = opsDellEsito(esito.ops);
-  if ("reason" in read) {
-    ctx.announce(t("draw.rejected", { reason: t(read.reason === "limit" ? "draw.reason.limit" : "draw.reason.invalid") }));
-    return;
-  }
-  const outcome = ctx.changeFromPanel("draw.completo.azione", read.ops, esito.selection);
-  if (outcome !== null) ctx.announce(outcome);
 }
 
 export function installCommands(ctx: EditorContext): void {

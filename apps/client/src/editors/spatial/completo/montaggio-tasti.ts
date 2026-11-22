@@ -14,8 +14,10 @@ import type { Indice, VoceIndice } from "./indice";
 import { decidiTasto, risolviTasti, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
 
 export interface OpzioniMontaggioTasti {
-  /// La radice dell'editor: i tasti si ascoltano lì.
-  readonly radice: HTMLElement;
+  /// La radice dell'editor: i tasti si ascoltano lì. `null` senza editor: la
+  /// regola c'è lo stesso (il menu e la tavolozza la leggono da qui), e nessun
+  /// tasto parte.
+  readonly radice: HTMLElement | null;
   /// La vita del Completo: chiusa, l'ascoltatore si toglie.
   readonly vita: Lifetime;
   /// L'indice dei comandi del Completo (`completo.indice()`): chiesto al
@@ -100,7 +102,7 @@ export function montaTasti(opzioni: OpzioniMontaggioTasti): MontaggioTasti {
     opzioni.esegui(voce);
   };
 
-  opzioni.vita.listen(opzioni.radice, "keydown", alTasto);
+  if (opzioni.radice !== null) opzioni.vita.listen(opzioni.radice, "keydown", alTasto);
   opzioni.vita.add(() => {
     chiuso = true;
   });
