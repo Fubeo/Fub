@@ -25,6 +25,7 @@ import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type Grup
 import { registraAllinea } from "./allinea";
 import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore } from "./colore-sezione";
+import { registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
 import type { ToolSpec } from "../tools/registry";
@@ -334,6 +335,8 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   registraTrasforma(sezioni, eseguiPerId);
   // La sezione «Colore» (K6 T14, giro 1): riempimento e contorno, scambia, nessuno e di serie.
   registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);
+  // Le sezioni «Carattere» e «Paragrafo» (K6 T16, giro 1): il testo scelto, un comando per cambio.
+  registraTesto(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);
   const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila, esegui: eseguiPerId }, moduli: opzioni.moduli, prepara: opzioni.prepara });
   // La finestra di un comando con parametri (T6): il modulo dello schema della sua
   // famiglia. `null` se la famiglia non ha la finestra di quel comando.

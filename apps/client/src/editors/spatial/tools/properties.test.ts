@@ -807,6 +807,46 @@ describe("le scelte e i pulsanti", () => {
     expect(section("fill").hidden).toBe(false);
   });
 
+  it("nel Completo famiglia, corpo, peso, spaziatura e allineamento li danno Carattere e Paragrafo; l'enfasi resta; la sezione vede il testo della vista", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "carattere", scheda: "design", titolo: "Carattere", disegna: (contesto) => void visti.push(contesto.sel.testo) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    mount();
+    expect(field("anchor").hidden).toBe(false);
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    expect(field("anchor").hidden).toBe(true);
+    expect(field("emphasis").hidden).toBe(false);
+    // Senza il campo della famiglia la selezione non ha testi: la sezione non ne vede.
+    panel.update(view());
+    await fotogramma();
+    expect(visti[visti.length - 1]).toBeUndefined();
+    // Un testo: la famiglia, il corpo, il peso, il corsivo, la spaziatura e l'allineamento dalla vista.
+    const conTesto = view();
+    panel.update({
+      ...conTesto,
+      fields: {
+        ...conTesto.fields,
+        family: { kind: "choice", label: "Carattere", value: "Inter, sans-serif", options: [{ value: "Inter, sans-serif", label: "Inter" }] },
+        size: { kind: "number", label: "Corpo", value: 12, unit: "pt", units: PERCENT_UNITS, relative: false, places: 1 },
+        weight: { kind: "choice", label: "Peso", value: "700", options: [{ value: "700", label: "Grassetto" }] },
+        spacing: { kind: "number", label: "Spaziatura", value: 5, unit: "%", units: PERCENT_UNITS, relative: false, places: 0 },
+      },
+    });
+    await fotogramma();
+    expect(visti[visti.length - 1]).toMatchObject({
+      famiglia: "Inter, sans-serif",
+      famiglie: [{ valore: "Inter, sans-serif", nome: "Inter" }],
+      corpo: { valore: 12, unita: "pt", decimali: 1 },
+      peso: 700,
+      corsivo: false,
+      spaziatura: 5,
+      allineamento: "start",
+    });
+    panel.collegaSezioni(null, null, () => ({ numero: 0, punti: [] }));
+    expect(field("anchor").hidden).toBe(false);
+  });
+
   it("i comandi partono; uno che adesso non si usa resta raggiungibile e dice perché", () => {
     state.actions = {
       "align-left": { label: "Allinea a sinistra" },

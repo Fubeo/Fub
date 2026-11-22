@@ -34,6 +34,35 @@ export interface Selezione {
   /// dello stato dello strumento che c'è già). Vuoto senza uno strumento del
   /// motore, o se il suo stato non ne porta.
   readonly punti: readonly DrawingAnchor[];
+  /// Il carattere e il paragrafo dei testi scelti, dalla vista del pannello (K6 T16); manca se la
+  /// selezione non ha testi. Carattere e Paragrafo ci sono solo con lui.
+  readonly testo?: TestoSelezione;
+}
+
+/// Una famiglia che il menu del carattere offre: il valore com'è nel disegno (`Inter, sans-serif`,
+/// vuoto per quella di serie) e il nome da mostrare.
+export interface FamigliaSelezione {
+  readonly valore: string;
+  readonly nome: string;
+}
+
+/// Il carattere e il paragrafo dei testi scelti come li mostra il pannello (K6 T16): ogni valore è
+/// `null` se i testi ne hanno più d'uno.
+export interface TestoSelezione {
+  /// La famiglia com'è nel disegno; vuota per quella di serie.
+  readonly famiglia: string | null;
+  /// Le famiglie del menu: quelle di Fub e quelle che il disegno usa.
+  readonly famiglie: readonly FamigliaSelezione[];
+  /// Il corpo, nell'unità del pannello.
+  readonly corpo?: MisuraSelezione;
+  /// Il peso, da 100 a 900.
+  readonly peso: number | null;
+  readonly corsivo: boolean | null;
+  /// La spaziatura fra le lettere in percento del corpo, come la mostra il pannello; manca se il
+  /// pannello non la mostra.
+  readonly spaziatura?: number | null;
+  /// L'allineamento del testo all'àncora: `start`, `middle`, `end`.
+  readonly allineamento: string | null;
 }
 
 /// Una misura di «Posizione e misure» come la mostra il pannello (K6 T13, giro 4): il valore nell'unità
