@@ -107,12 +107,13 @@ fn una_fusione_con_meno_di_tre_riempimenti_non_fa_niente() {
     )
     .is_ok());
     let (mut d, _) = apri(BASE);
-    match comando(&mut d, "edit.colors.blendVertically", &["oa1a1a1a1", "ob2b2b2b2"], json!({})) {
-        Ok(esito) => assert_eq!(
-            esito.refused,
-            Some(DrawingRefusal::Empty),
-            "{esito:?}"
-        ),
+    match comando(
+        &mut d,
+        "edit.colors.blendVertically",
+        &["oa1a1a1a1", "ob2b2b2b2"],
+        json!({}),
+    ) {
+        Ok(esito) => assert_eq!(esito.refused, Some(DrawingRefusal::Empty), "{esito:?}"),
         Err(e) => panic!("{e:?}"),
     }
     assert_eq!(d.revisione(), prima);
