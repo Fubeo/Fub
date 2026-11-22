@@ -123,6 +123,13 @@ griglia scorre dentro la scheda.
 - **Opzioni…** apre «Opzioni del campione» per quello scelto: rinominarlo o
   cambiarne il colore cambia tutti gli oggetti che lo usano, in un passo.
 - **Elimina** toglie il campione scelto: chi lo usava tiene il suo colore.
+- **Duplica** fa una copia del campione scelto, subito dopo di lui; il motore
+  la chiama «… copy», e si rinomina con Opzioni. **Ordina per nome** mette i
+  campioni in ordine di nome, e il file salva quell'ordine. **Unisci campioni**
+  e **Sposta campione** sono nell'indice dei comandi (Ctrl+/), senza un'interfaccia
+  nella sezione: chiedono i campioni da unire o da spostare, e dicono che cosa manca.
+  I gruppi di colori non ci sono, perché il formato del disegno non ne ha, e
+  «Ordina per specie» non cambia niente, perché ogni campione è un colore.
 - **Aggiungi i colori usati** fa un campione per ogni colore degli oggetti
   scelti, o di tutto il disegno senza niente di scelto.
 - **Togli i non usati** elimina in un passo i campioni che nessun oggetto,

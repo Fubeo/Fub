@@ -231,6 +231,18 @@ describe("Risorse › Campioni (swatches)", () => {
     c.chiudi();
   });
 
+  it("Duplica manda swatch.duplicate col nome del campione scelto; Ordina per nome manda swatch.sortByName", async () => {
+    const { c, corpo, comando } = completo(1);
+    voci(corpo)[1]!.click();
+    azione(corpo, "duplica").click();
+    azione(corpo, "ordina").click();
+    expect((await arrivati(comando, 3)).slice(1)).toEqual([
+      ["disegno.swatch.duplicate", { name: "Arancio" }],
+      ["disegno.swatch.sortByName", {}],
+    ]);
+    c.chiudi();
+  });
+
   it("senza selezione «Aggiungi i colori usati» prende tutto il disegno; ogni campione usato spegne «Togli i non usati»", async () => {
     const { c, corpo, comando, disegna } = completo(0);
     azione(corpo, "usati").click();
