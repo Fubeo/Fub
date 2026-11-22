@@ -4,10 +4,13 @@
 //! scrivono niente, e il motore dice che cosa seleziona. Un livello si nomina nei suoi argomenti col suo
 //! numero del motore, come il motore vuole (`ids`, `id`, `parent`): la scheda lo legge da
 //! `document.inspect`. Un livello bloccato si sblocca e si nasconde, ma non si rinomina né si colora.
+//! Il formato della scena scrive di un livello il nome, l'occhio e il lucchetto: un nome che non vale
+//! è un errore degli argomenti prima del motore, un livello nuovo senza nome prende il primo
+//! «Livello N» libero, e le altre opzioni (il colore, il modello, la stampa) sono `Unsupported`.
 
 use std::sync::Arc;
 
-use fub_abi::{DrawingDisabledReason, DrawingRefusal};
+use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use serde_json::Value;
@@ -15,6 +18,7 @@ use vectorcraft_doc::NodeId;
 
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
+use crate::mappa::nome_di_livello_sbagliato;
 
 /// Lo stato della famiglia: non tiene niente.
 pub(crate) struct Stato;
@@ -77,6 +81,33 @@ impl StatoFamiglia for Stato {
         }
     }
 
+    /// Il nome di un livello, nuovo o rinominato, è quello che il formato tiene
+    /// (`nome_di_livello_sbagliato`): se no `BadArgs` col perché, prima del motore. Un livello nuovo
+    /// senza nome prende il primo «Livello N» libero, come la scheda nativa.
+    fn argomenti_della_copia(id: &str, copia: &Copia, mut valore: Value) -> Result<Value, PluginError> {
+        if !matches!(id, "layer.new" | "layer.setProps") {
+            return Ok(valore);
+        }
+        match valore.get("name") {
+            Some(Value::String(nome)) => {
+                if let Some(perche) = nome_di_livello_sbagliato(nome) {
+                    return Err(PluginError::BadArgs(perche.into()));
+                }
+            }
+            Some(Value::Null) | None if id == "layer.new" => {
+                if !valore.is_object() {
+                    valore = Value::Object(serde_json::Map::new());
+                }
+                if let Some(o) = valore.as_object_mut() {
+                    o.insert("name".into(), Value::String(copia.mappa.nome_libero()));
+                }
+            }
+            None => {}
+            Some(_) => return Err(PluginError::BadArgs("Il nome del livello dev'essere un testo.".into())),
+        }
+        Ok(valore)
+    }
+
     /// I livelli negli argomenti: senza nessuno il comando non parte (il motore prenderebbe il livello
     /// corrente, quello da cancellare o da spostare). Un livello bloccato non si cancella, non si sposta
     /// e non si rinomina né si colora; un livello non va dentro se stesso.
@@ -93,8 +124,12 @@ impl StatoFamiglia for Stato {
                     Err(motivo) => return Some(motivo),
                 };
                 let cambia_nome_o_colore = CHIAVI_DI_UN_LIVELLO_BLOCCATO.iter().any(|chiave| valore.get(*chiave).is_some());
-                (cambia_nome_o_colore && livelli.iter().any(|&i| bloccato_con_antenati(copia, i))).then_some(DrawingRefusal::Locked)
+                if cambia_nome_o_colore && livelli.iter().any(|&i| bloccato_con_antenati(copia, i)) {
+                    return Some(DrawingRefusal::Locked);
+                }
+                fuori_dal_formato(valore)
             }
+            "layer.new" => fuori_dal_formato(valore),
             "node.move" => {
                 let Some(chi) = valore.get("id").and_then(Value::as_u64) else {
                     return Some(DrawingRefusal::Empty);
@@ -139,6 +174,19 @@ fn crea_livello(id: &str) -> bool {
 
 /// Le chiavi di `layer.setProps` che un livello bloccato non prende.
 const CHIAVI_DI_UN_LIVELLO_BLOCCATO: [&str; 6] = ["name", "color", "template", "printable", "preview", "dimImages"];
+
+/// Le opzioni di un livello che il formato della scena non ha (§3: un livello ha nome, blocco e
+/// visibilità): il colore, il modello, la stampa, l'anteprima e le immagini sbiadite. Chiederle è
+/// `unsupported`, prima del motore, e niente cambia.
+const OPZIONI_FUORI_DAL_FORMATO: [&str; 5] = ["color", "template", "printable", "preview", "dimImages"];
+
+/// `unsupported` se gli argomenti chiedono un'opzione di [`OPZIONI_FUORI_DAL_FORMATO`].
+fn fuori_dal_formato(valore: &Value) -> Option<DrawingRefusal> {
+    OPZIONI_FUORI_DAL_FORMATO
+        .iter()
+        .any(|chiave| valore.get(*chiave).is_some())
+        .then_some(DrawingRefusal::Unsupported)
+}
 
 /// I livelli che il comando nomina nei suoi argomenti, con `ids` o con `id`, come elementi della mappa.
 /// Nessuno è `empty`; un numero che la mappa non ha, o che non è un numero, è `unmapped`.

@@ -25,6 +25,13 @@
 //!   `display="none"`, `docs/reference/scene-format.md` §3), come li scrivono
 //!   «Blocca» e «Nascondi» del client: un `set` che li mette o li toglie.
 //!   Il foglio di Fub resta bloccato com'è.
+//! - **Livelli**: un livello di Fub è un livello del motore che si chiama
+//!   col suo id; un nome diverso è un livello rinominato, e diventa il `set`
+//!   di `fub:layer`. Un livello nuovo in cima al documento del motore è un
+//!   `add` di `<g id="l…" fub:layer="Nome">` vuoto nella radice, al suo posto
+//!   fra i livelli, con `fub:locked` e `display` se nasce bloccato o
+//!   nascosto. Un nome vuoto o oltre 80 caratteri, e le opzioni che il
+//!   formato non ha (colore a parte, che non si scrive), si rifiutano.
 //! - **Tracciati composti**: un composto del motore si scrive come un solo
 //!   `<path>` col `d` unito dei suoi sottotracciati (il buco viene dal verso,
 //!   regola `nonzero`). Crea composto toglie i tracciati assorbiti e
@@ -580,9 +587,10 @@ impl Lavoro<'_> {
                 }
             }
         }
-        for l in &dopo.layers {
+        for (i, l) in dopo.layers.iter().enumerate() {
             if !prima.nodi.contains_key(&l.id) {
-                return Err(no("il gesto crea un livello del motore"));
+                self.livello_nuovo(dopo, i)?;
+                continue;
             }
             cerca(l, prima, &self.riscritti, &self.liberati, &mut nuovi);
         }
@@ -724,6 +732,123 @@ impl Lavoro<'_> {
         c.visible = a.visible;
         c.locked = a.locked;
         Ok(Arc::new(c))
+    }
+
+    /// Un livello di Fub rinominato dal motore: il `set` di `fub:layer` col
+    /// nome nuovo, e il livello di prima con quel nome, per il resto del
+    /// confronto. `None` se il nome non cambia o se `a` non è un livello di
+    /// Fub (il livello che sta per la radice non ha un nome da scrivere, e il
+    /// confronto lo rifiuta). Nel motore il livello si chiama col suo id
+    /// (la mappa lega per nome): rinominarlo è dargli un nome diverso da quello.
+    /// Un nome che il formato non tiene si rifiuta.
+    fn nome_del_livello(&mut self, b: &Node, a: &Node) -> Result<Option<Node>, Rifiuto> {
+        if b.name == a.name {
+            return Ok(None);
+        }
+        let Some(e) = self
+            .elemento(a.id)
+            .filter(|e| e.ruolo == fub_scene::Role::Layer)
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        let nome = a.name.clone().unwrap_or_default();
+        if let Some(perche) = crate::mappa::nome_di_livello_sbagliato(&nome) {
+            return Err(no(perche));
+        }
+        if e.livello.as_deref() != Some(nome.as_str()) {
+            let id = self.bersaglio(a.id)?;
+            self.set
+                .push(json!({ "op": "set", "id": id, "attrs": { "fub:layer": nome } }));
+        }
+        let mut c = b.clone();
+        c.name = a.name.clone();
+        Ok(Some(c))
+    }
+
+    /// Un livello nuovo del motore in cima al documento: un `<g>` figlio della
+    /// radice con un id di livello nuovo e `fub:layer` col nome del motore
+    /// (formato della scena §3), al suo posto fra i livelli. Si scrive solo un
+    /// livello vuoto, nascosto o bloccato al più: ciò che il formato non dice
+    /// (il modello, la stampa, l'anteprima, le immagini sbiadite, una
+    /// maschera) si rifiuta. Il colore del motore non si scrive: il formato
+    /// non lo ha, e il motore ne dà uno a ogni livello nuovo.
+    fn livello_nuovo(&mut self, dopo: &Document, i: usize) -> Result<(), Rifiuto> {
+        let l = &dopo.layers[i];
+        let NodeKind::Layer {
+            children,
+            clip,
+            template,
+            printable,
+            preview,
+            dim_images,
+            ..
+        } = &l.kind
+        else {
+            return Err(no("il gesto crea in cima un oggetto che non è un livello"));
+        };
+        if !children.is_empty() {
+            return Err(no("il gesto crea un livello con qualcosa dentro"));
+        }
+        if *clip || *template || !*printable || !*preview || dim_images.is_some() {
+            return Err(no(
+                "il livello nuovo ha opzioni che il formato della scena non ha",
+            ));
+        }
+        let nome = l.name.clone().unwrap_or_default();
+        if let Some(perche) = crate::mappa::nome_di_livello_sbagliato(&nome) {
+            return Err(no(perche));
+        }
+        // Il posto: dopo il livello che gli sta sotto; il primo dei livelli va
+        // dopo l'elemento che precede il primo livello del file.
+        let pos = if i + 1 == dopo.layers.len() {
+            json!({ "last": true })
+        } else if let Some(sotto) = i.checked_sub(1).map(|j| dopo.layers[j].id) {
+            if self.copia.mappa.e_radice(sotto) {
+                return Err(no(
+                    "un livello nuovo fra gli elementi fuori da ogni livello non ha un posto nel file",
+                ));
+            }
+            json!({ "after": self.bersaglio(sotto)? })
+        } else {
+            let primo = dopo.layers[i + 1].id;
+            let e = self.elemento(primo).cloned().ok_or_else(|| {
+                no("un livello nuovo sotto gli elementi fuori da ogni livello non ha un posto nel file")
+            })?;
+            let indice = e.percorso.first().copied().unwrap_or(0);
+            let prima_di_lui = indice.checked_sub(1).and_then(|k| {
+                self.copia
+                    .mappa
+                    .elementi()
+                    .iter()
+                    .find(|x| x.percorso == [k])
+            });
+            match prima_di_lui.and_then(Elemento::id_del_file) {
+                Some(id) => json!({ "after": id }),
+                None if indice == 0 => json!({ "first": true }),
+                None => {
+                    return Err(no(
+                        "un livello nuovo sotto tutti gli altri non ha un posto da scrivere",
+                    ))
+                }
+            }
+        };
+        let id = self.id_nuovo(Specie::Livello)?;
+        self.ids.insert(l.id, id.clone());
+        let mut attrs = Map::new();
+        attrs.insert("id".into(), json!(id));
+        attrs.insert("fub:layer".into(), json!(nome));
+        if l.locked {
+            attrs.insert("fub:locked".into(), json!("true"));
+        }
+        if !l.visible {
+            attrs.insert("display".into(), json!("none"));
+        }
+        self.add.push(json!({
+            "op": "add", "parent": "#root", "pos": pos,
+            "elem": { "tag": "g", "attrs": attrs, "children": [] },
+        }));
+        Ok(())
     }
 
     /// Gli oggetti che ci sono prima e dopo, dall'alto: i `set`.
@@ -875,6 +1000,14 @@ impl Lavoro<'_> {
                     }
                 }
             }
+            let rinominato;
+            let b: &Node = match self.nome_del_livello(b, a)? {
+                Some(c) => {
+                    rinominato = c;
+                    &rinominato
+                }
+                None => b,
+            };
             if !proprieta_uguali(b, a) {
                 return Err(no(
                     "cambia un gruppo o un livello in un modo che non si scrive",

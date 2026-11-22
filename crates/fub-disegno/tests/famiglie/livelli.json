@@ -310,6 +310,349 @@
       "atteso": {
         "rifiuto": "unsupported"
       }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          7
+        ],
+        "name": "Sfondo"
+      },
+      "dopo": "layer-rename-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l1a2b3c4d",
+            "attrs": {
+              "fub:layer": "Sfondo"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          7
+        ],
+        "name": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          7
+        ],
+        "name": "   "
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          7
+        ],
+        "name": "a\nb"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          7
+        ],
+        "color": 3
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4
+        ],
+        "visible": false
+      },
+      "dopo": "layer-hide-bloccato-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l1a2b3c4d",
+            "attrs": {
+              "display": "none"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "top": true
+      },
+      "dopo": "layer-new-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 3"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "top": true,
+        "name": "Note",
+        "visible": false,
+        "locked": true
+      },
+      "dopo": "layer-new-nascosto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Note",
+                "fub:locked": "true",
+                "display": "none"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "below": true
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "senza-carta.svg",
+      "selezione": [],
+      "argomenti": {
+        "below": true
+      },
+      "dopo": "layer-new-sotto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "after": "l1a2b3c4d"
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 3"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4
+        ],
+        "name": "X"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4
+        ],
+        "visible": false
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.delete",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "estraneo.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          1
+        ],
+        "name": "Altro"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.setProps",
+      "disegno": "estraneo.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          1
+        ],
+        "visible": false
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.delete",
+      "disegno": "estraneo.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          1
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.new",
+      "disegno": "estraneo.svg",
+      "selezione": [],
+      "argomenti": {
+        "top": true
+      },
+      "dopo": "layer-new-estraneo-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "g",
+              "attrs": {
+                "id": "l00000000",
+                "fub:layer": "Livello 2"
+              },
+              "children": []
+            }
+          }
+        ]
+      }
     }
   ]
 }

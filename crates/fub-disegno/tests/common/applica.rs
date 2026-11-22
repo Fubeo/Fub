@@ -122,7 +122,12 @@ fn applica_op(testo: &mut String, op: &Value) -> Result<(), String> {
         "set" => {
             let id = testo_di(&op["id"], "id")?;
             for (k, v) in op["attrs"].as_object().ok_or("un set senza attrs")? {
-                imposta(testo, id, k, testo_di(v, k)?)?;
+                if v.is_null() {
+                    // Come il client: `null` toglie l'attributo.
+                    togli(testo, id, k)?;
+                } else {
+                    imposta(testo, id, k, testo_di(v, k)?)?;
+                }
             }
         }
         "ident" => {
@@ -152,6 +157,19 @@ fn imposta(testo: &mut String, id: &str, k: &str, v: &str) -> Result<(), String>
     } else {
         let at = da + tag.find([' ', '/', '>']).ok_or("un tag senza nome")?;
         testo.insert_str(at, &format!(" {k}=\"{v}\""));
+    }
+    Ok(())
+}
+
+fn togli(testo: &mut String, id: &str, k: &str) -> Result<(), String> {
+    let [da, _] = span_dell_id(testo, id)?;
+    let fine = fine_del_tag(testo, da)?;
+    let chiave = format!(" {k}=\"");
+    if let Some(i) = testo[da..fine].find(&chiave) {
+        let inizio = da + i;
+        let valore = inizio + chiave.len();
+        let chiude = valore + testo[valore..].find('"').ok_or("un valore non chiuso")?;
+        testo.replace_range(inizio..=chiude, "");
     }
     Ok(())
 }

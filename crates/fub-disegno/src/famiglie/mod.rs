@@ -135,6 +135,17 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         None
     }
 
+    /// Gli argomenti del comando `id` completati con ciò che solo la copia sa, prima che il motore li
+    /// veda: il nome di serie di un livello nuovo, che dipende dai livelli del file. Un argomento che
+    /// il formato non tiene (il nome di un livello troppo lungo) è `BadArgs`, col perché, e niente
+    /// cambia. Di serie restano come sono.
+    fn argomenti_della_copia(_id: &str, _copia: &Copia, valore: Value) -> Result<Value, PluginError>
+    where
+        Self: Sized,
+    {
+        Ok(valore)
+    }
+
     /// Perché il risultato del comando `id` non si scrive, visto il documento
     /// del motore `dopo` e gli oggetti che il motore ha lasciato scelti: un
     /// oggetto toccato che la famiglia non lascia cambiare, un risultato che
@@ -210,6 +221,20 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto_valore(id, copia, selezione, valore)
+                    })*
+                }
+            }
+
+            /// Gli argomenti del comando `id` con ciò che solo la copia sa.
+            fn argomenti_della_copia(
+                self,
+                id: &str,
+                copia: &Copia,
+                valore: Value,
+            ) -> Result<Value, PluginError> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::argomenti_della_copia(id, copia, valore)
                     })*
                 }
             }
@@ -949,7 +974,7 @@ pub(crate) fn esegui(
     };
     // I punti scelti di un comando sui punti (T12): tolti dal valore, vanno
     // nella selezione del motore.
-    let mut valore = richiesta.value.clone();
+    let mut valore = famiglia.argomenti_della_copia(&riga.id, copia, richiesta.value.clone())?;
     let punti = if famiglia == Famiglia::Tracciati
         && tracciati::SUI_PUNTI.contains(&riga.id.as_str())
     {
