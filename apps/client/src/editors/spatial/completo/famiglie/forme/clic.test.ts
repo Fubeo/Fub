@@ -26,7 +26,7 @@ function finestra(id: string): { readonly id: string; readonly campi: readonly C
 
 // Gli strumenti di forma (giro 2): hanno il punto del clic. Le trasformazioni (giro 5)
 // stanno in `famiglie/trasforma/clic.test.ts`.
-const FORME: ReadonlySet<string> = new Set(["rectangle", "ellipse", "polygon", "star", "lineSegment", "arc", "spiral"]);
+const FORME: ReadonlySet<string> = new Set(["rectangle", "ellipse", "polygon", "star", "lineSegment", "arc", "spiral", "rectangularGrid", "polarGrid"]);
 
 describe("il clic di una forma apre la finestra del suo comando", () => {
   it("ogni forma del clic ha un comando con finestra, della famiglia forme", () => {
@@ -65,5 +65,18 @@ describe("il clic di una forma apre la finestra del suo comando", () => {
 
   it("il Rettangolo arrotondato non ha un clic: la sua finestra non porta il raggio d'angolo", () => {
     expect(COMANDO_DEL_CLIC.roundedRectangle).toBeUndefined();
+  });
+
+  // Le griglie (T13 giro 7): il clic manda il punto come `x`, `y` e apre la finestra della griglia.
+  it("il clic di Griglia rettangolare e Griglia polare apre `shape.rectangularGrid` e `shape.polarGrid` col punto", () => {
+    expect(COMANDO_DEL_CLIC.rectangularGrid).toEqual({ comando: "shape.rectangularGrid", x: "x", y: "y" });
+    expect(COMANDO_DEL_CLIC.polarGrid).toEqual({ comando: "shape.polarGrid", x: "x", y: "y" });
+    for (const id of ["shape.rectangularGrid", "shape.polarGrid"]) {
+      const voce = VOCI.find((one) => one.id === id);
+      expect(voce?.finestra, id).toBe(true);
+      expect(voce?.famiglia, id).toBe("forme");
+    }
+    expect(finestra("shape.rectangularGrid").campi.map((campo) => campo.nome)).toEqual(expect.arrayContaining(["x", "y", "width", "height", "rows", "columns"]));
+    expect(finestra("shape.polarGrid").campi.map((campo) => campo.nome)).toEqual(expect.arrayContaining(["x", "y", "concentric", "radial"]));
   });
 });

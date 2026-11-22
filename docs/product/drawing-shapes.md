@@ -40,10 +40,19 @@ arrotondato, Poligono, Stella, Segmento linea, Arco e Spirale. Rettangolo
 ed Ellisse esistono anche nel Semplice, e nella stessa tendina portano
 «(Completo)», come Selezione, Mano e Zoom.
 
-Le griglie rettangolare e polare non ci sono ancora: il loro gruppo di percorsi
-composti aspetta la ricetta del disegno (T27). Lo stesso vale per le forme dal
-vivo, cioè con angoli e lati che si cambiano dopo: quelle che il motore scrive
-come corpo espanso con la sua ricetta si salvano così.
+Le griglie rettangolare e polare (T13 giro 7) stanno nello stesso gruppo: un
+trascinamento crea un gruppo di tracciati e di linee, con i divisori come linee
+normali; la finestra chiede i divisori orizzontali e verticali (o circolari e
+radiali), le inclinazioni in per cento e la cornice esterna. Le forme dal vivo,
+cioè con angoli e lati che si cambiano dopo, aspettano ancora la ricetta del
+disegno (T27).
+
+Il Generatore forme (`shapeBuilder`, T13 giro 7) unisce le forme scelte: il
+trascinamento sulle regioni che toccano le unisce in un solo tracciato, e con
+Alt toglie le regioni toccate. Servono due o più oggetti, tracciati, forme
+composte o gruppi di tracciati: un'immagine o un testo non entrano, e un oggetto
+bloccato spegne il gesto. Le regioni che il motore calcola si mostrano come aree
+evidenziate mentre si trascina.
 
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla

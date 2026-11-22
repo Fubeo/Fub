@@ -109,8 +109,14 @@ seme, sugli stessi oggetti nello stesso ordine, dà la stessa scelta. Con un
 oggetto bloccato o con un inchiostro di Fub il comando non parte, e la voce dice
 perché; se non cambia niente, non parte.
 
-Sposta leggermente e Trasforma ciascuno non ci sono ancora nel menu, e Distorci
-e le forme dal vivo nemmeno: le forme dal vivo aspettano T27.
+Trasforma singolarmente (Oggetto › Trasforma, T13 giro 7) sposta, scala e ruota
+ogni oggetto della selezione attorno al proprio centro, con la sua finestra e
+l'anteprima: la scala orizzontale e verticale da 0,01 % a 10000 %, lo spostamento
+in pt e l'angolo in gradi. Un valore fuori dai limiti è in errore accanto al
+campo, e la scala a zero è rifiutata.
+
+Sposta leggermente, Distorci e le forme dal vivo non ci sono ancora: le forme
+dal vivo aspettano T27.
 
 ## Che cosa si scrive
 

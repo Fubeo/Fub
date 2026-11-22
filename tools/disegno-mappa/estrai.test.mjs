@@ -104,7 +104,13 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // `layer.reverse`. Duplica, raccogli in un livello nuovo, il livello corrente e le righe di
   // Oggetto che lavorano sul livello (sopra e altri livelli, il livello corrente) restano «da fare»,
   // con la causa nella nota.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1138, fub: 114, escluso: 12, fatto: 287 });
+  // T13 generatore (giro 7): Oggetto › Trasforma › Trasforma singolarmente
+  // (`object.transformEach`) è «fatto», con la sua finestra con l'anteprima; le due
+  // griglie (`shape.rectangularGrid`, `shape.polarGrid`) e i loro strumenti (`rectangularGrid`,
+  // `polarGrid`) sono «fatto», senza più «aspetta T27»: quattro in più.
+  // T13 generatore (giro 7): il Generatore forme (`shapeBuilder.merge`, la lettura
+  // `shapeBuilder.regions` e lo strumento `shapeBuilder`) è «fatto»: tre in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1130, fub: 114, escluso: 12, fatto: 295 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

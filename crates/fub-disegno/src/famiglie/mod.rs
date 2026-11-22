@@ -1205,6 +1205,11 @@ pub(crate) fn rifiuto_dello_strumento(
     match riga.famiglia {
         Some(Famiglia::Trasforma) => nodi_scelti(copia, selezione).err(),
         Some(Famiglia::Colore) => colore::rifiuto_del_contagocce(copia, selezione, clic),
+        // Il Generatore forme (T13 giro 7) unisce o toglie le forme scelte: meno di
+        // due, o una che non è una forma, si rifiuta come il comando.
+        Some(Famiglia::Forme) if id == forme::STRUMENTO_GENERATORE => {
+            forme::rifiuto_del_generatore(copia, selezione)
+        }
         _ => None,
     }
 }
