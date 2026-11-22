@@ -252,6 +252,11 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.swatch.list",
         "disegno.swatch.unused",
         "disegno.swatch.addUsedColors",
+        // I campioni del documento (K6 T14) non guardano ciò che è scelto: duplica, unisci e riordina.
+        "disegno.swatch.duplicate",
+        "disegno.swatch.merge",
+        "disegno.swatch.sortByName",
+        "disegno.swatch.move",
         "disegno.select.all",
         "disegno.select.inverse",
         "disegno.select.none",

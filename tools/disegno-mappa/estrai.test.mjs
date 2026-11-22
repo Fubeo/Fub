@@ -90,7 +90,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
   // T12 punti le dieci sui punti di un tracciato: `path.moveAnchor`, `.moveAnchors`, `.setHandle`,
   // `.insertAnchor`, `.removeAnchor`, `.convertAnchor`, `.deleteAnchors`, `.close`, `.appendAnchor`, `.split`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1158, fub: 114, escluso: 12, fatto: 267 });
+  // T14 campioni porta a «fatto» quattro righe dei campioni (duplica, unisci, ordina per nome, sposta).
+  // Restano «da fare», con il perché: i tre comandi dei gruppi e i predefiniti non ci sono nel formato,
+  // e ordina per specie non cambia niente su campioni che sono tutti colori.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1154, fub: 114, escluso: 12, fatto: 271 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

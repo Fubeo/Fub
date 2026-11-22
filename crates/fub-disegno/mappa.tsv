@@ -575,23 +575,23 @@ motore	graphicStyle.saveLibrary	Save Graphic Style Library…	Window › Graphic
 motore	graphicStyle.loadLibrary	Other Library…	Window › Graphic Style Libraries	aspetto	F1	T15	da fare	ispettore/risorse	famiglia	finestra	Altra libreria…
 motore	swatch.new	New Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Nuovo campione
 motore	swatch.delete	Delete Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Elimina campione
-motore	swatch.newGroup	New Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Nuovo gruppo colori
-motore	swatch.duplicate	Duplicate Swatch	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Duplica campione
-motore	swatch.sortByName	Sort by Name	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Ordina per nome
+motore	swatch.newGroup	New Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il formato della scena non ha gruppi di colori (campioni.rs): un gruppo non si scrive	Nuovo gruppo colori
+motore	swatch.duplicate	Duplicate Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Duplica campione
+motore	swatch.sortByName	Sort by Name	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Ordina per nome
 motore	swatch.edit	Swatch Options	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Opzioni campione
 motore	swatch.list	Swatches		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Campioni
-motore	swatch.move	Move Swatch	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Sposta campione
+motore	swatch.move	Move Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Sposta campione
 motore	swatch.addUsedColors	Add Used Colors	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Aggiungi colori usati
 motore	swatch.unused	Select All Unused	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Seleziona tutti gli elementi non usati
-motore	swatch.merge	Merge Swatches	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Unisci campioni
-motore	swatch.ungroup	Ungroup Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Separa gruppo colori
-motore	swatch.sortByKind	Sort by Kind	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Ordina per tipo
+motore	swatch.merge	Merge Swatches	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Unisci campioni
+motore	swatch.ungroup	Ungroup Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il formato della scena non ha gruppi di colori (campioni.rs): un gruppo non si scrive	Separa gruppo colori
+motore	swatch.sortByKind	Sort by Kind	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	tutti i campioni del formato sono colori globali: l'ordine per specie non cambia niente	Ordina per tipo
 motore	swatch.spotOptions	Spot Colors	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Colori spot
-motore	swatch.editGroup	Edit Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Modifica gruppo colori
+motore	swatch.editGroup	Edit Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	il formato della scena non ha gruppi di colori (campioni.rs): un gruppo non si scrive	Modifica gruppo colori
 motore	swatch.library.list	Swatch Libraries		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie campioni
 motore	swatch.library.get	Swatch Library		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Libreria campioni
 motore	swatch.library.add	Add to Swatches	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia		Aggiungi ai campioni
-motore	swatch.resetDefaults	Default Swatches	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia		Campioni predefiniti
+motore	swatch.resetDefaults	Default Swatches	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	i campioni predefiniti portano gruppi di colori, che il formato non ha (campioni.rs)	Campioni predefiniti
 motore	swatch.library.save	Save Swatch Library…	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia	finestra	Salva libreria campioni…
 motore	swatch.library.load	Other Library…	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia	finestra	Altra libreria…
 motore	swatch.library.copyToUser	Copy to User Defined	Window › Swatch Libraries	colore	F1	T14	da fare	ispettore/risorse	famiglia		Copia in Definito dall'utente

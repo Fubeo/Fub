@@ -1533,7 +1533,7 @@ fn nuova_trasformazione(e: &Elemento, m: Affine) -> Result<Affine, Rifiuto> {
 }
 
 /// Gli indici di una sottosequenza crescente più lunga fra le chiavi presenti.
-fn sottosequenza_crescente(chiavi: &[Option<usize>]) -> HashSet<usize> {
+pub(crate) fn sottosequenza_crescente(chiavi: &[Option<usize>]) -> HashSet<usize> {
     let presenti: Vec<(usize, usize)> = chiavi
         .iter()
         .enumerate()

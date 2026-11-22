@@ -50,6 +50,9 @@ pub struct Campione {
     pub nome: String,
     /// Il colore del suo `stop`, `#rrggbb` minuscolo.
     pub colore: String,
+    /// L'id della `defs` che lo contiene, se ne ha una: l'ordine si scrive
+    /// solo dentro la `defs` dove nascono i campioni nuovi.
+    pub genitore: Option<String>,
 }
 
 /// I campioni del file e dove ne nascono di nuovi.
@@ -76,8 +79,15 @@ pub(crate) struct Usi {
 pub(crate) fn leggi(testo: &str, items: &[Item]) -> (CampioniDelFile, HashMap<Vec<usize>, Usi>) {
     let mut campioni = CampioniDelFile::default();
     let mut prima_defs: Option<String> = None;
+    // Le `defs` con un id, per percorso: il genitore di un campione è quello del suo percorso.
+    let mut defs_per_percorso: HashMap<Vec<usize>, String> = HashMap::new();
     for item in items {
         let Item::Element(e) = item else { continue };
+        if e.role == Role::Defs {
+            if let Some(id) = &e.id {
+                defs_per_percorso.insert(e.path.clone(), id.clone());
+            }
+        }
         if e.role == Role::Defs && e.path.len() == 1 {
             if let Some(id) = &e.id {
                 if id == DEFS_DI_FUB {
@@ -89,10 +99,16 @@ pub(crate) fn leggi(testo: &str, items: &[Item]) -> (CampioniDelFile, HashMap<Ve
         }
         if e.role == Role::Resource {
             if let (Some(id), Some(s)) = (&e.id, &e.swatch) {
+                let genitore = e
+                    .path
+                    .split_last()
+                    .and_then(|(_, padre)| defs_per_percorso.get(padre))
+                    .cloned();
                 campioni.elenco.push(Campione {
                     id: id.clone(),
                     nome: s.name.clone(),
                     colore: s.color.clone(),
+                    genitore,
                 });
             }
             if let Some(m) = &e.motif {
@@ -389,7 +405,9 @@ pub(crate) fn operazioni(
             preso[*i] = true;
         }
     }
-    let mut nuovi = Vec::new();
+    // Gli id di dopo, in ordine di documento: quello del file, o uno nuovo.
+    let mut ids: Vec<String> = Vec::with_capacity(poi.len());
+    let mut elementi: Vec<Value> = Vec::with_capacity(poi.len());
     for (j, (nome, colore)) in poi.iter().enumerate() {
         match compagno[j] {
             Some(i) => {
@@ -413,6 +431,8 @@ pub(crate) fn operazioni(
                     .riferimenti
                     .dopo
                     .insert((*nome).to_string(), c.id.clone());
+                ids.push(c.id.clone());
+                elementi.push(Value::Null);
             }
             None => {
                 if campioni.motivi.iter().any(|m| m == nome) {
@@ -425,7 +445,7 @@ pub(crate) fn operazioni(
                     .riferimenti
                     .dopo
                     .insert((*nome).to_string(), id.clone());
-                nuovi.push(json!({
+                elementi.push(json!({
                     "tag": "linearGradient",
                     "attrs": {
                         "id": id, "fub:role": "swatch", "fub:name": nome,
@@ -433,6 +453,7 @@ pub(crate) fn operazioni(
                     },
                     "children": [ { "tag": "stop", "attrs": { "stop-color": colore } } ],
                 }));
+                ids.push(id);
             }
         }
     }
@@ -446,61 +467,133 @@ pub(crate) fn operazioni(
                 .push(json!({ "op": "remove", "target": c.id }));
         }
     }
-    if !nuovi.is_empty() {
-        match &campioni.defs {
-            Some(defs) => {
-                for elem in nuovi {
-                    fuori.davanti.push(json!({
-                        "op": "add", "parent": defs, "pos": { "last": true }, "elem": elem,
+    // L'ordine. Si scrive solo dove i campioni del file stanno tutti nella defs dove
+    // nascono i nuovi. Si va nell'ordine di dopo: un campione nuovo o spostato va subito
+    // dopo il suo predecessore, e quelli nella sequenza crescente restano fermi, come
+    // fanno gli spostamenti dei nodi.
+    let defs = campioni.defs.clone();
+    let scrivibile = prima
+        .iter()
+        .all(|c| c.genitore.is_some() && c.genitore == defs);
+    let fermi = crate::differenza::sottosequenza_crescente(&compagno);
+    let mut in_ordine: Vec<Value> = Vec::new();
+    let mut in_defs_nuova: Vec<Value> = Vec::new();
+    for j in 0..poi.len() {
+        // In coda, da qui in poi tutti i campioni sono nuovi: si aggiungono in fondo, nell'ordine.
+        let in_coda = compagno[j..].iter().all(|c| c.is_none());
+        let pos = if in_coda {
+            json!({ "last": true })
+        } else if j == 0 {
+            json!({ "first": true })
+        } else {
+            json!({ "after": ids[j - 1] })
+        };
+        let dopo_un_predecessore = !in_coda && j > 0;
+        match compagno[j] {
+            Some(_) if fermi.contains(&j) => {}
+            Some(i) => {
+                let Some(defs) = defs.as_ref().filter(|_| scrivibile) else {
+                    return Err(ordine_non_scrivibile());
+                };
+                in_ordine.push(json!({
+                    "op": "move", "target": prima[i].id.clone(), "parent": defs, "pos": pos,
+                }));
+            }
+            None => match &defs {
+                Some(defs) => {
+                    if dopo_un_predecessore && !scrivibile {
+                        return Err(ordine_non_scrivibile());
+                    }
+                    in_ordine.push(json!({
+                        "op": "add", "parent": defs, "pos": pos, "elem": elementi[j].clone(),
                     }));
                 }
-            }
-            None => fuori.davanti.push(json!({
-                "op": "add", "parent": "#root", "pos": { "first": true },
-                "elem": { "tag": "defs", "attrs": { "id": DEFS_DI_FUB }, "children": nuovi },
-            })),
+                None => in_defs_nuova.push(elementi[j].clone()),
+            },
         }
+    }
+    fuori.davanti.extend(in_ordine);
+    if !in_defs_nuova.is_empty() {
+        fuori.davanti.push(json!({
+            "op": "add", "parent": "#root", "pos": { "first": true },
+            "elem": { "tag": "defs", "attrs": { "id": DEFS_DI_FUB }, "children": in_defs_nuova },
+        }));
     }
     Ok(fuori)
 }
 
-/// Vero se il comando ha sciolto da un campione un colore di un oggetto
-/// bloccato (lui o un antenato): eliminare un campione che un oggetto
-/// bloccato usa riscriverebbe l'oggetto.
+/// Il riordino dei campioni che il file non può scrivere: non stanno tutti nella defs dove nascono i nuovi.
+fn ordine_non_scrivibile() -> NonSiScrive {
+    NonSiScrive::Forma(
+        "i campioni non stanno tutti nella stessa defs: il loro ordine non si scrive".into(),
+    )
+}
+
+/// L'elemento `i` della mappa, o un suo antenato, è bloccato.
+fn bloccato_con_antenati(mappa: &crate::mappa::Mappa, mut i: usize) -> bool {
+    while let Some(e) = mappa.elemento(i) {
+        if e.bloccato {
+            return true;
+        }
+        match e.genitore {
+            Some(g) => i = g,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// Il primo dei campioni `nomi` che un oggetto bloccato (lui o un antenato) usa come riempimento o
+/// contorno, se c'è: unirlo riscriverebbe l'oggetto, e la fusione non si fa.
+pub(crate) fn usato_da_un_bloccato(
+    copia: &crate::apertura::Copia,
+    nomi: &[&str],
+) -> Option<String> {
+    use vectorcraft_doc::swatches::node_paints;
+    copia
+        .mappa
+        .elementi()
+        .iter()
+        .enumerate()
+        .find_map(|(i, e)| {
+            let nodo = e.nodo?;
+            if !bloccato_con_antenati(&copia.mappa, i) {
+                return None;
+            }
+            let b = copia.documento.node(nodo)?;
+            node_paints(b).find_map(|p| match p {
+                Paint::Solid {
+                    swatch: Some(nome), ..
+                } if nomi.contains(&nome.as_str()) => Some(nome.clone()),
+                _ => None,
+            })
+        })
+}
+
+/// Vero se il comando ha sciolto da un campione, o ha legato a un altro, un
+/// colore di un oggetto bloccato (lui o un antenato): eliminare o unire un
+/// campione che un oggetto bloccato usa riscriverebbe l'oggetto.
 pub(crate) fn tolto_a_un_bloccato(copia: &crate::apertura::Copia, dopo: &Document) -> bool {
     use vectorcraft_doc::swatches::node_paints;
     let mappa = &copia.mappa;
-    let bloccato = |mut i: usize| {
-        while let Some(e) = mappa.elemento(i) {
-            if e.bloccato {
-                return true;
-            }
-            match e.genitore {
-                Some(g) => i = g,
-                None => return false,
-            }
-        }
-        false
-    };
-    let legato = |p: &Paint| {
-        matches!(
-            p,
-            Paint::Solid {
-                swatch: Some(_),
-                ..
-            }
-        )
+    let bloccato = |i: usize| bloccato_con_antenati(mappa, i);
+    // Il campione a cui un colore è legato: se il comando lo toglie o lo cambia con un altro (la
+    // fusione), l'oggetto bloccato cambia.
+    let campione = |p: &Paint| match p {
+        Paint::Solid {
+            swatch: Some(nome), ..
+        } => Some(nome.clone()),
+        _ => None,
     };
     mappa.elementi().iter().enumerate().any(|(i, e)| {
         let Some(nodo) = e.nodo else { return false };
         let (Some(b), Some(a)) = (copia.documento.node(nodo), dopo.node(nodo)) else {
             return false;
         };
-        node_paints(b).any(legato)
-            && bloccato(i)
+        bloccato(i)
             && node_paints(b)
                 .zip(node_paints(a))
-                .any(|(x, y)| legato(x) && !legato(y))
+                .any(|(x, y)| campione(x).is_some() && campione(x) != campione(y))
     })
 }
 
@@ -523,6 +616,7 @@ mod tests {
                 id: "r1a2b3c4d".into(),
                 nome: "Blu".into(),
                 colore: "#0072b2".into(),
+                genitore: Some("fub-defs".into()),
             }],
             ..CampioniDelFile::default()
         };

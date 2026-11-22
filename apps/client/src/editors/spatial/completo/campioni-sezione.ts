@@ -1,7 +1,8 @@
 // La sezione «Campioni» della scheda Risorse del Completo (K6 T14, giro 2; prototipo
 // `pezzo-pannello-risorse`, `draw-resources-swatches`): i campioni del documento, la scelta di uno,
-// il campione dato alla selezione, e le azioni Nuovo, Opzioni, Elimina, Aggiungi i colori usati e
-// Togli i non usati, con le finestre del kit «Nuovo campione» e «Opzioni del campione».
+// il campione dato alla selezione, e le azioni Nuovo, Opzioni, Duplica, Elimina, Ordina per nome,
+// Aggiungi i colori usati e Togli i non usati, con le finestre del kit «Nuovo campione» e «Opzioni del
+// campione». Unisci e Sposta non stanno qui: scelgono più campioni o un posto, e sono nell'indice dei comandi.
 //
 // - **I campioni dal modello.** La griglia mostra i campioni che il pannello legge dal disegno
 //   (`ContestoSezione.campioni`): nessuna richiesta al motore per mostrarli. Ogni campione del file è
@@ -108,6 +109,8 @@ interface Parti {
   readonly nuovo: HTMLButtonElement;
   readonly opzioni: HTMLButtonElement;
   readonly elimina: HTMLButtonElement;
+  readonly duplica: HTMLButtonElement;
+  readonly ordina: HTMLButtonElement;
   readonly usati: HTMLButtonElement;
   readonly togli: HTMLButtonElement;
 }
@@ -152,6 +155,10 @@ export function sezioneCampioni(
     const manca = campioneScelto() === undefined;
     p.opzioni.disabled = manca;
     p.elimina.disabled = manca;
+    p.duplica.disabled = manca;
+    // Ordinare vuole almeno due campioni.
+    p.ordina.disabled = elenco.length < 2;
+    p.duplica.title = manca ? t("draw.resources.swatches.sceglino") : t("draw.resources.swatches.duplica.nota");
     for (const bottone of [p.opzioni, p.elimina]) {
       const nota = manca ? t("draw.resources.swatches.sceglino") : t(bottone === p.opzioni ? "draw.resources.swatches.opzioni.nota" : "draw.resources.swatches.elimina.nota");
       bottone.title = nota;
@@ -292,6 +299,11 @@ export function sezioneCampioni(
         const campione = campioneScelto();
         if (campione !== undefined) esegui("swatch.delete", { name: campione.name });
       }),
+      duplica: bottone("draw.resources.swatches.duplica", "draw.resources.swatches.duplica.nota", () => {
+        const campione = campioneScelto();
+        if (campione !== undefined) esegui("swatch.duplicate", { name: campione.name });
+      }),
+      ordina: bottone("draw.resources.swatches.ordina", "draw.resources.swatches.ordina.nota", () => esegui("swatch.sortByName", {})),
       usati: bottone("draw.resources.swatches.usati", "draw.resources.swatches.usati.nota", () => {
         esegui("swatch.addUsedColors", ultimo !== null && ultimo.sel.numero > 0 ? { selection: true } : {});
       }),
@@ -301,7 +313,7 @@ export function sezioneCampioni(
         if (nomi.length > 0) esegui("swatch.delete", { names: nomi });
       }),
     };
-    azioni.append(fatte.nuovo, fatte.opzioni, fatte.elimina, fatte.usati, fatte.togli);
+    azioni.append(fatte.nuovo, fatte.opzioni, fatte.duplica, fatte.elimina, fatte.ordina, fatte.usati, fatte.togli);
     radice.append(griglia);
     vita.listen(fila, "click", (evento) => {
       const voce = (evento.target as HTMLElement).closest<HTMLButtonElement>(".kit-color-swatch");
