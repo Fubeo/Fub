@@ -25,6 +25,7 @@ export const SETTINGS_WITH_THEIR_OWN_GESTURE: readonly string[] = [
   "draw.workspace",
   "draw.workspaces",
   "draw.keys",
+  "draw.motore",
 ];
 
 /// Il job il cui esito, quando riesce, può portare gli artefatti di un export.

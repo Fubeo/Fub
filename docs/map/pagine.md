@@ -143,6 +143,7 @@
 - Come si vedono e si modificano coi numeri le proprietà di un oggetto? → [product/drawing-properties.md](../product/drawing-properties.md)
 - Come si naviga il disegno (vista, gesti, menu radiale)? → [product/drawing-view.md](../product/drawing-view.md)
 - Quale tasto fa partire un comando del motore nel Completo, e quando non parte? → [product/drawing-keys.md](../product/drawing-keys.md)
+- Dove si cambiano le preferenze del motore del disegno, e quando valgono? → [product/drawing-engine-preferences.md](../product/drawing-engine-preferences.md)
 - Come si apre un disegno di decine di migliaia di elementi? → [product/drawing-large.md](../product/drawing-large.md)
 
 ## Riferimenti (`reference/`)

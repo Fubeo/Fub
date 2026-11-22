@@ -284,6 +284,44 @@ rompere i documenti aperti, e il loro peso entra lo stesso nei conti.
 `cargo test -p fub-disegno --release --test famiglie_memoria -- --ignored
 --nocapture` stampa una riga per tabella.
 
+## Le preferenze del motore
+
+Le preferenze del motore (`vectorcraft_engine::Prefs`: griglia, guide, passi,
+preset delle famiglie) stanno nella sessione di ogni istanza. Fub le tiene
+nell'impostazione di macchina `draw.motore` (`crates/fub-features/src/draw.rs`,
+`{"v":1,"prefs":{…}}` con le sole chiavi cambiate), e l'host ne è il padrone
+(`crates/fub-host/src/drawing.rs`):
+
+- **alla nascita** di un'istanza, l'host legge `draw.motore` e la dà al motore
+  (`preferenze::componi`, chiave per chiave: una chiave che non vale si salta
+  con un avviso nel log);
+- **dopo ogni comando**, fuori dal lucchetto dell'istanza, l'istanza dice quali
+  preferenze il comando ha cambiato (`prefs.set`, `prefs.reset`, le opzioni di
+  uno strumento, i preset di una famiglia: `Disegno::prendi_le_preferenze_cambiate`)
+  e l'host le scrive sopra le chiavi che tiene. Una scrittura che non riesce
+  rimette nell'istanza i valori di prima e torna con l'errore: il valore
+  salvato resta quello di prima;
+- **un valore più nuovo** (`v` più alta) vale per le chiavi che si capiscono
+  ma non si riscrive; **uno rotto** vale come le preferenze di serie e non si
+  sovrascrive. In tutti e due i casi `prefs.set` e `prefs.reset` si rifiutano
+  con `conflict` (`host.drawing.prefs_newer`, `host.drawing.prefs_broken`)
+  prima del motore, finché l'utente non azzera `draw.motore`;
+- **le quattro cartelle** (`fontsFolder`, `pluginsFolder`, `recoveryFolder`,
+  `templatesFolder`: `preferenze::CARTELLE`) non si leggono, non si scrivono e
+  non si mostrano: `prefs.get` e `prefs.list` le tolgono, e un `prefs.set` che
+  ne nomina una è `bad_args` da `disco::controlla`.
+
+Impostazioni › Disegni le mostra nel riquadro «Motore del disegno»
+(`apps/client/src/panels/settings-motore.ts`, il corpo pigro in
+`settings-motore-corpo.ts`): apre nel motore un disegno vuoto suo, chiede
+`prefs.list`, e ogni campo è un `prefs.set` su quel disegno; nessuna IPC nuova.
+Le parole delle categorie, dei titoletti e delle etichette sono generate da
+`crates/fub-host/tests/ts_preferenze_motore.rs` (il catalogo italiano del
+motore passato per il glossario del disegno) in
+`settings-motore.generated.json`, con la versione di `draw.motore`. Un disegno
+già aperto prende le preferenze cambiate da un altro disegno solo quando si
+riapre.
+
 ## Le due strade
 
 Il componente «Disegno completo» (`fub.disegno-completo`, in «Disegnare»,

@@ -385,7 +385,7 @@ nascosto. Oltre 500 righe l'albero disegna soltanto quelle che si vedono.
 
 La scelta non si legge mai dal solo colore: lo strumento, il colore e lo
 spessore scelti hanno un filo sotto, le righe scelte la spunta. La vista non
-si anima: ogni inquadratura è subito quella nuova, e non c'è moto da ridurre. Per i tasti dei comandi del motore nel Completo: [Disegni, tasti del motore](drawing-keys.md).
+si anima: ogni inquadratura è subito quella nuova, e non c'è moto da ridurre. Per i tasti dei comandi del motore nel Completo: [Disegni, tasti del motore](drawing-keys.md); per le sue preferenze: [Disegni, preferenze del motore](drawing-engine-preferences.md).
 
 ## Documenti che non si modificano subito
 

@@ -203,6 +203,16 @@ pub const DRAW_SUGGESTIONS_KEY: &str = "draw.suggestions";
 /// versione più nuova non si sovrascrive, e una scrittura che non riesce
 /// lascia il valore di prima.
 pub const DRAW_KEYS_KEY: &str = "draw.keys";
+/// Le preferenze del motore del disegno cambiate dall'utente (Impostazioni ›
+/// Disegni › «Motore del disegno», `prefs.set` e i preset delle famiglie): un
+/// testo JSON con la sua versione, `{"v":1,"prefs":{"<chiave>":<valore>}}`, con
+/// le sole chiavi cambiate; vuoto, quelle di serie. Lo legge e lo scrive
+/// l'host (`crates/fub-host/src/drawing.rs`): le cartelle del motore non ci
+/// sono mai, un valore rotto o di una versione più nuova si legge come può e
+/// non si sovrascrive, una scrittura che non riesce lascia il valore di prima.
+pub const DRAW_ENGINE_PREFS_KEY: &str = "draw.motore";
+/// La versione di [`DRAW_ENGINE_PREFS_KEY`] che questo Fub scrive.
+pub const DRAW_ENGINE_PREFS_VERSION: u64 = 1;
 
 /// La densità di riferimento dei pixel CSS: 96 per pollice.
 const CSS_DPI: f32 = 96.0;
@@ -233,6 +243,8 @@ const S_SUGGESTIONS: &str = "s_suggestions";
 const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
 const S_KEYS: &str = "s_keys";
 const S_KEYS_DESC: &str = "s_keys_desc";
+const S_ENGINE_PREFS: &str = "s_engine_prefs";
+const S_ENGINE_PREFS_DESC: &str = "s_engine_prefs_desc";
 
 /// Lo schema delle impostazioni dei disegni.
 ///
@@ -257,6 +269,10 @@ const S_KEYS_DESC: &str = "s_keys_desc";
 /// - **I tasti del Disegno completo** sono della **macchina**, come le altre
 ///   scorciatoie: sono le mani di chi usa l'editor. Li scrive la sezione
 ///   «Disegno completo» di Impostazioni › Scorciatoie; non `program_writable`.
+/// - **Le preferenze del motore** sono della **macchina**, come i tasti: sono
+///   le abitudini di chi disegna (incrementi, guide, unità). Le scrive l'host
+///   dopo un comando che le cambia, dalla sezione «Motore del disegno» o
+///   dall'editor; non `program_writable`.
 pub fn settings() -> Vec<SettingSpec> {
     let [full, ..] = DRAW_WORKSPACES;
     vec![
@@ -309,6 +325,16 @@ pub fn settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(S_KEYS_DESC))
+        .grouped(Text::key(S_GROUP))
+        .for_machine(),
+        SettingSpec::new(
+            DRAW_ENGINE_PREFS_KEY,
+            Text::key(S_ENGINE_PREFS),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(S_ENGINE_PREFS_DESC))
         .grouped(Text::key(S_GROUP))
         .for_machine(),
     ]
@@ -376,6 +402,14 @@ pub fn catalog() -> Vec<StringCatalog> {
              l'insieme di tasti scelto. Si cambiano in Impostazioni › \
              Scorciatoie, nella sezione «Disegno completo», e valgono per \
              questa macchina.",
+        )
+        .with(S_ENGINE_PREFS, "Preferenze del motore del disegno")
+        .with(
+            S_ENGINE_PREFS_DESC,
+            "Le preferenze del motore del Disegno completo cambiate da te: \
+             incrementi, guide, griglia, unità e i preset salvati. Si cambiano \
+             nella sezione «Motore del disegno» qui sotto o dall'editor, e \
+             valgono per questa macchina.",
         ),
         choice::in_english(annotated::in_english(annotate::in_english(
             create::in_english(StringCatalog::new("en")),
@@ -431,6 +465,14 @@ pub fn catalog() -> Vec<StringCatalog> {
             "The keys of the Complete drawing commands you changed, and the \
              chosen key set. They are changed in Settings › Shortcuts, in the \
              «Complete drawing» section, and apply to this machine.",
+        )
+        .with(S_ENGINE_PREFS, "Drawing engine preferences")
+        .with(
+            S_ENGINE_PREFS_DESC,
+            "The preferences of the Complete drawing engine you changed: \
+             increments, guides, grid, units and the saved presets. They are \
+             changed in the «Drawing engine» section below or from the \
+             editor, and apply to this machine.",
         ),
     ])
 }
@@ -546,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn the_settings_are_six_in_one_group_with_their_defaults() {
+    fn the_settings_are_seven_in_one_group_with_their_defaults() {
         use fub_abi::settings::{SettingScope, SettingValue};
         let specs = settings();
         let keys: Vec<_> = specs.iter().map(|spec| spec.key.as_str()).collect();
@@ -558,7 +600,8 @@ mod tests {
                 "draw.toolbar",
                 "draw.templates",
                 "draw.suggestions",
-                "draw.keys"
+                "draw.keys",
+                "draw.motore"
             ]
         );
         assert_eq!(
@@ -569,11 +612,12 @@ mod tests {
                 DRAW_TOOLBAR_KEY,
                 DRAW_TEMPLATES_KEY,
                 DRAW_SUGGESTIONS_KEY,
-                DRAW_KEYS_KEY
+                DRAW_KEYS_KEY,
+                DRAW_ENGINE_PREFS_KEY
             ]
         );
-        // Il vault, tranne i suggerimenti e i tasti, che sono di chi usa la
-        // macchina.
+        // Il vault, tranne i suggerimenti, i tasti e le preferenze del
+        // motore, che sono di chi usa la macchina.
         let scopes: Vec<_> = specs.iter().map(|spec| spec.scope).collect();
         assert_eq!(
             scopes,
@@ -583,13 +627,14 @@ mod tests {
                 SettingScope::Vault,
                 SettingScope::Vault,
                 SettingScope::Machine,
+                SettingScope::Machine,
                 SettingScope::Machine
             ]
         );
         // Un componente non cambia lo spazio di lavoro o la colonna e non
         // spegne i suggerimenti da sé: soltanto la cartella è di tutti.
         let writable: Vec<_> = specs.iter().map(|spec| spec.program_writable).collect();
-        assert_eq!(writable, [false, false, false, true, false, false]);
+        assert_eq!(writable, [false, false, false, true, false, false, false]);
 
         let defaults: Vec<_> = specs.iter().map(|spec| spec.kind.default_value()).collect();
         assert_eq!(
@@ -600,6 +645,7 @@ mod tests {
                 SettingValue::List(vec![]),
                 SettingValue::Text("Templates".into()),
                 SettingValue::Toggle(true),
+                SettingValue::Text(String::new()),
                 SettingValue::Text(String::new()),
             ]
         );

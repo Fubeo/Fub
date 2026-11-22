@@ -32,6 +32,8 @@ pub mod mappa;
 pub mod motore;
 /// Ciò che il motore non sa modificare e che resta com'è nel file.
 pub mod perdite;
+/// Le preferenze del motore come impostazione di Fub (`draw.motore`).
+pub mod preferenze;
 /// Lo spessore delle linee a spessore variabile: il profilo e il contorno.
 mod profilo;
 /// La ricetta di un oggetto ricco accanto all'elemento.

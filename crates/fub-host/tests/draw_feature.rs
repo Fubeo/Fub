@@ -254,7 +254,8 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
                 "draw.toolbar",
                 "draw.templates",
                 "draw.suggestions",
-                "draw.keys"
+                "draw.keys",
+                "draw.motore"
             ]
         );
         let entry = |key: &str| entries.iter().find(|entry| entry.spec.key == key).unwrap();

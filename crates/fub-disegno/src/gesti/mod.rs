@@ -193,9 +193,14 @@ impl Banco {
     /// la sessione lo tiene (con i limiti e i riquadri del testo già
     /// calcolati), perché la differenza confronti documenti dello stesso
     /// passo.
-    pub fn nuovo(copia: &mut Copia) -> Result<Banco, String> {
+    ///
+    /// La sessione prende le preferenze `prefs` (quelle di `draw.motore`)
+    /// prima del documento, così il documento nasce con la loro griglia e
+    /// la loro cronologia.
+    pub fn nuovo(copia: &mut Copia, prefs: vectorcraft_engine::Prefs) -> Result<Banco, String> {
         vectorcraft_engine::guard::catch_panic(|| {
             let mut sessione = Session::new();
+            sessione.apply_prefs(prefs);
             sessione.add_document((*copia.documento).clone(), None);
             sessione
         })
@@ -240,8 +245,11 @@ impl Banco {
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         if vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc)).is_err() {
-            // Anche la sostituzione è andata in panico: una sessione nuova.
+            // Anche la sostituzione è andata in panico: una sessione nuova,
+            // con le preferenze del disegno e non quelle di serie (che
+            // altrimenti si salverebbero in `draw.motore` come un cambio).
             if let Ok(mut s) = vectorcraft_engine::guard::catch_panic(Session::new) {
+                s.prefs = self.prefs.clone();
                 s.add_document((*copia.documento).clone(), None);
                 self.sessione = s;
             }

@@ -1,0 +1,1386 @@
+{
+  "_": "File generato da crates/fub-host/tests/ts_preferenze_motore.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-host --test ts_preferenze_motore",
+  "versione": 1,
+  "testi": {
+    "30° Angles": {
+      "it": "Angoli di 30°",
+      "en": "30° Angles"
+    },
+    "45° Angles": {
+      "it": "Angoli di 45°",
+      "en": "45° Angles"
+    },
+    "60° Angles": {
+      "it": "Angoli di 60°",
+      "en": "60° Angles"
+    },
+    "90° & 45° & 30° Angles": {
+      "it": "Angoli di 90°, 45° e 30°",
+      "en": "90° & 45° & 30° Angles"
+    },
+    "90° & 45° Angles": {
+      "it": "Angoli di 90° e 45°",
+      "en": "90° & 45° Angles"
+    },
+    "90° Angles": {
+      "it": "Angoli di 90°",
+      "en": "90° Angles"
+    },
+    "Accent Color": {
+      "it": "Colore di risalto",
+      "en": "Accent Color"
+    },
+    "Align to Glyph Bounds": {
+      "it": "Allinea ai limiti del glifo",
+      "en": "Align to Glyph Bounds"
+    },
+    "Alignment Guides": {
+      "it": "Guide di allineamento",
+      "en": "Alignment Guides"
+    },
+    "Amber": {
+      "it": "Ambra",
+      "en": "Amber"
+    },
+    "Anchor Points, Handle, and Bounding Box Display": {
+      "it": "Visualizzazione di punti di ancoraggio, maniglie e riquadro di delimitazione",
+      "en": "Anchor Points, Handle, and Bounding Box Display"
+    },
+    "Anchor/Path Labels": {
+      "it": "Etichette ancoraggio/tracciato",
+      "en": "Anchor/Path Labels"
+    },
+    "Angles": {
+      "it": "Angoli",
+      "en": "Angles"
+    },
+    "Animated Zoom": {
+      "it": "Zoom animato",
+      "en": "Animated Zoom"
+    },
+    "Anti-aliased Artwork": {
+      "it": "Grafica con anti-aliasing",
+      "en": "Anti-aliased Artwork"
+    },
+    "Appearance Panel": {
+      "it": "Pannello Aspetto",
+      "en": "Appearance Panel"
+    },
+    "Appearance of Black": {
+      "it": "Aspetto del nero",
+      "en": "Appearance of Black"
+    },
+    "Area Text": {
+      "it": "Testo in area",
+      "en": "Area Text"
+    },
+    "Ask When Modified": {
+      "it": "Chiedi se modificato",
+      "en": "Ask When Modified"
+    },
+    "Auto Size New Area Type": {
+      "it": "Dimensionamento automatico del nuovo testo in area",
+      "en": "Auto Size New Area Type"
+    },
+    "Auto-Collapse Iconic Panels": {
+      "it": "Comprimi automaticamente i pannelli a icona",
+      "en": "Auto-Collapse Iconic Panels"
+    },
+    "Automatic": {
+      "it": "Automatico",
+      "en": "Automatic"
+    },
+    "Automatically": {
+      "it": "Automaticamente",
+      "en": "Automatically"
+    },
+    "Automatically Save Recovery Data": {
+      "it": "Salva automaticamente i dati di recupero",
+      "en": "Automatically Save Recovery Data"
+    },
+    "Baseline Shift": {
+      "it": "Spostamento linea di base",
+      "en": "Baseline Shift"
+    },
+    "Blue": {
+      "it": "Blu",
+      "en": "Blue"
+    },
+    "Brightness": {
+      "it": "Luminosità",
+      "en": "Brightness"
+    },
+    "Canvas Color": {
+      "it": "Colore area di disegno",
+      "en": "Canvas Color"
+    },
+    "Centimeters": {
+      "it": "Centimetri",
+      "en": "Centimeters"
+    },
+    "Classic": {
+      "it": "Classico",
+      "en": "Classic"
+    },
+    "Clipboard Handling": {
+      "it": "Gestione degli appunti",
+      "en": "Clipboard Handling"
+    },
+    "Color": {
+      "it": "Colore",
+      "en": "Color"
+    },
+    "Color Scheme": {
+      "it": "Combinazione colori",
+      "en": "Color Scheme"
+    },
+    "Command Click to Select Objects Behind": {
+      "it": "Cmd+clic per selezionare gli oggetti retrostanti",
+      "en": "Command Click to Select Objects Behind"
+    },
+    "Constrain Angle": {
+      "it": "Vincola angolo",
+      "en": "Constrain Angle"
+    },
+    "Constrain Width and Height Proportions": {
+      "it": "Vincola proporzioni di larghezza e altezza",
+      "en": "Constrain Width and Height Proportions"
+    },
+    "Construction Guides": {
+      "it": "Guide di costruzione",
+      "en": "Construction Guides"
+    },
+    "Coral": {
+      "it": "Corallo",
+      "en": "Coral"
+    },
+    "Corner Radius": {
+      "it": "Raggio angolo",
+      "en": "Corner Radius"
+    },
+    "Curvature Tool": {
+      "it": "Strumento Curvatura",
+      "en": "Curvature Tool"
+    },
+    "Dark": {
+      "it": "Scuro",
+      "en": "Dark"
+    },
+    "Dark Gray": {
+      "it": "Grigio scuro",
+      "en": "Dark Gray"
+    },
+    "Data Recovery": {
+      "it": "Recupero dati",
+      "en": "Data Recovery"
+    },
+    "Default": {
+      "it": "Predefinito",
+      "en": "Default"
+    },
+    "Default Language": {
+      "it": "Lingua predefinita",
+      "en": "Default Language"
+    },
+    "Devices": {
+      "it": "Dispositivi",
+      "en": "Devices"
+    },
+    "Disable Auto Add/Delete": {
+      "it": "Disattiva aggiunta/eliminazione automatica",
+      "en": "Disable Auto Add/Delete"
+    },
+    "Display All Blacks Accurately": {
+      "it": "Visualizza tutti i neri con precisione",
+      "en": "Display All Blacks Accurately"
+    },
+    "Display All Blacks as Rich Black": {
+      "it": "Visualizza tutti i neri come nero ricco",
+      "en": "Display All Blacks as Rich Black"
+    },
+    "Display Bitmaps as Anti-aliased Images in Pixel Preview": {
+      "it": "Visualizza bitmap come immagini con antialiasing nell'anteprima pixel",
+      "en": "Display Bitmaps as Anti-aliased Images in Pixel Preview"
+    },
+    "Display Options": {
+      "it": "Opzioni di visualizzazione",
+      "en": "Display Options"
+    },
+    "Display Print Size at 100% Zoom": {
+      "it": "Visualizza dimensioni di stampa con zoom al 100%",
+      "en": "Display Print Size at 100% Zoom"
+    },
+    "Dots": {
+      "it": "Punti",
+      "en": "Dots"
+    },
+    "Double Click To Isolate": {
+      "it": "Fai doppio clic per isolare",
+      "en": "Double Click To Isolate"
+    },
+    "Dutch": {
+      "it": "Olandese",
+      "en": "Dutch"
+    },
+    "East Asian Type": {
+      "it": "Testo dell'Asia orientale",
+      "en": "East Asian Type"
+    },
+    "Enable Background Export": {
+      "it": "Attiva esportazione in background",
+      "en": "Enable Background Export"
+    },
+    "Enable Background Save": {
+      "it": "Attiva salvataggio in background",
+      "en": "Enable Background Save"
+    },
+    "Enable Missing Glyph Protection": {
+      "it": "Attiva protezione glifi mancanti",
+      "en": "Enable Missing Glyph Protection"
+    },
+    "Enable Rubber Band for": {
+      "it": "Attiva elastico per",
+      "en": "Enable Rubber Band for"
+    },
+    "Enable Touch Gestures": {
+      "it": "Attiva gesti touch",
+      "en": "Enable Touch Gestures"
+    },
+    "Enable Touch Workspace": {
+      "it": "Attiva area di lavoro touch",
+      "en": "Enable Touch Workspace"
+    },
+    "Enable in-menu font previews": {
+      "it": "Attiva anteprima dei font nei menu",
+      "en": "Enable in-menu font previews"
+    },
+    "English: UK": {
+      "it": "Inglese: Regno Unito",
+      "en": "English: UK"
+    },
+    "English: USA": {
+      "it": "Inglese: Stati Uniti",
+      "en": "English: USA"
+    },
+    "Every (minutes)": {
+      "it": "Ogni (minuti)",
+      "en": "Every (minutes)"
+    },
+    "Exceptions (comma separated)": {
+      "it": "Eccezioni (separate da virgole)",
+      "en": "Exceptions (comma separated)"
+    },
+    "Feet": {
+      "it": "Piedi",
+      "en": "Feet"
+    },
+    "Feet & Inches": {
+      "it": "Piedi e pollici",
+      "en": "Feet & Inches"
+    },
+    "File Handling": {
+      "it": "Gestione file",
+      "en": "File Handling"
+    },
+    "Files": {
+      "it": "File",
+      "en": "Files"
+    },
+    "Fill New Type Objects With Placeholder Text": {
+      "it": "Riempi i nuovi oggetti di testo con testo segnaposto",
+      "en": "Fill New Type Objects With Placeholder Text"
+    },
+    "Font Preview Size": {
+      "it": "Dimensione anteprima font",
+      "en": "Font Preview Size"
+    },
+    "French": {
+      "it": "Francese",
+      "en": "French"
+    },
+    "GPU Performance": {
+      "it": "Prestazioni GPU",
+      "en": "GPU Performance"
+    },
+    "General": {
+      "it": "Generale",
+      "en": "General"
+    },
+    "Geometric Guides": {
+      "it": "Guide geometriche",
+      "en": "Geometric Guides"
+    },
+    "German": {
+      "it": "Tedesco",
+      "en": "German"
+    },
+    "Graphic Styles": {
+      "it": "Stili grafici",
+      "en": "Graphic Styles"
+    },
+    "Graphics Processor": {
+      "it": "Processore grafico",
+      "en": "Graphics Processor"
+    },
+    "Green": {
+      "it": "Verde",
+      "en": "Green"
+    },
+    "Grid": {
+      "it": "Griglia",
+      "en": "Grid"
+    },
+    "Gridline every": {
+      "it": "Linea griglia ogni",
+      "en": "Gridline every"
+    },
+    "Grids In Back": {
+      "it": "Griglie dietro",
+      "en": "Grids In Back"
+    },
+    "Guides": {
+      "it": "Guide",
+      "en": "Guides"
+    },
+    "Guides & Grid": {
+      "it": "Guide e griglia",
+      "en": "Guides & Grid"
+    },
+    "Handles": {
+      "it": "Maniglie",
+      "en": "Handles"
+    },
+    "Hide Corner Widget for angles greater than": {
+      "it": "Nascondi widget angolo per angoli maggiori di",
+      "en": "Hide Corner Widget for angles greater than"
+    },
+    "High Performance (discrete)": {
+      "it": "Prestazioni elevate (dedicata)",
+      "en": "High Performance (discrete)"
+    },
+    "Highlight Alternate Glyphs": {
+      "it": "Evidenzia glifi alternativi",
+      "en": "Highlight Alternate Glyphs"
+    },
+    "Highlight Substituted Fonts": {
+      "it": "Evidenzia font sostituiti",
+      "en": "Highlight Substituted Fonts"
+    },
+    "Highlight anchors on mouse over": {
+      "it": "Evidenzia ancoraggi al passaggio del mouse",
+      "en": "Highlight anchors on mouse over"
+    },
+    "History States": {
+      "it": "Stati cronologia",
+      "en": "History States"
+    },
+    "Hollow": {
+      "it": "Vuoto",
+      "en": "Hollow"
+    },
+    "Hyphenation": {
+      "it": "Sillabazione",
+      "en": "Hyphenation"
+    },
+    "Identify Objects By": {
+      "it": "Identifica oggetti per",
+      "en": "Identify Objects By"
+    },
+    "Inches": {
+      "it": "Pollici",
+      "en": "Inches"
+    },
+    "Include SVG Code": {
+      "it": "Includi codice SVG",
+      "en": "Include SVG Code"
+    },
+    "Invoke Distance Guides": {
+      "it": "Richiama guide di distanza",
+      "en": "Invoke Distance Guides"
+    },
+    "Italian": {
+      "it": "Italiano",
+      "en": "Italian"
+    },
+    "Keep Formatting": {
+      "it": "Mantieni formattazione",
+      "en": "Keep Formatting"
+    },
+    "Keep Plain Text": {
+      "it": "Mantieni solo testo",
+      "en": "Keep Plain Text"
+    },
+    "Keyboard Increment": {
+      "it": "Incremento da tastiera",
+      "en": "Keyboard Increment"
+    },
+    "Language": {
+      "it": "Lingua",
+      "en": "Language"
+    },
+    "Language Options": {
+      "it": "Opzioni lingua",
+      "en": "Language Options"
+    },
+    "Large": {
+      "it": "Grande",
+      "en": "Large"
+    },
+    "Large Tabs": {
+      "it": "Schede grandi",
+      "en": "Large Tabs"
+    },
+    "Legacy vector clipboard": {
+      "it": "Appunti vettoriali tradizionali",
+      "en": "Legacy vector clipboard"
+    },
+    "Legacy vector clipboard (no transparency)": {
+      "it": "Appunti vettoriali tradizionali (senza trasparenza)",
+      "en": "Legacy vector clipboard (no transparency)"
+    },
+    "Light": {
+      "it": "Chiaro",
+      "en": "Light"
+    },
+    "Light Gray": {
+      "it": "Grigio chiaro",
+      "en": "Light Gray"
+    },
+    "Line Color": {
+      "it": "Colore linea",
+      "en": "Line Color"
+    },
+    "Lines": {
+      "it": "Linee",
+      "en": "Lines"
+    },
+    "Linux Display Server": {
+      "it": "Server di visualizzazione Linux",
+      "en": "Linux Display Server"
+    },
+    "Manually": {
+      "it": "Manualmente",
+      "en": "Manually"
+    },
+    "Mark Older Files as [Converted] When Opened": {
+      "it": "Contrassegna i file meno recenti come [Convertito] all'apertura",
+      "en": "Mark Older Files as [Converted] When Opened"
+    },
+    "Match User Interface Brightness": {
+      "it": "Adatta alla luminosità dell'interfaccia utente",
+      "en": "Match User Interface Brightness"
+    },
+    "Measurement Labels": {
+      "it": "Etichette di misura",
+      "en": "Measurement Labels"
+    },
+    "Medium": {
+      "it": "Media",
+      "en": "Medium"
+    },
+    "Medium Dark": {
+      "it": "Scuro medio",
+      "en": "Medium Dark"
+    },
+    "Medium Gray": {
+      "it": "Grigio medio",
+      "en": "Medium Gray"
+    },
+    "Medium Light": {
+      "it": "Chiaro medio",
+      "en": "Medium Light"
+    },
+    "Meters": {
+      "it": "Metri",
+      "en": "Meters"
+    },
+    "Millimeters": {
+      "it": "Millimetri",
+      "en": "Millimeters"
+    },
+    "Modern": {
+      "it": "Moderno",
+      "en": "Modern"
+    },
+    "Move Locked and Hidden Artwork with Artboard": {
+      "it": "Sposta grafica bloccata e nascosta con la tavola",
+      "en": "Move Locked and Hidden Artwork with Artboard"
+    },
+    "New Art Has Basic Appearance": {
+      "it": "La nuova grafica ha aspetto di base",
+      "en": "New Art Has Basic Appearance"
+    },
+    "Number of Recent Files to Display": {
+      "it": "Numero di file recenti da visualizzare",
+      "en": "Number of Recent Files to Display"
+    },
+    "Number of Recent Fonts": {
+      "it": "Numero di font recenti",
+      "en": "Number of Recent Fonts"
+    },
+    "Numbers Without Units Are Points": {
+      "it": "I numeri senza unità sono punti",
+      "en": "Numbers Without Units Are Points"
+    },
+    "Object Highlighting": {
+      "it": "Evidenziazione oggetti",
+      "en": "Object Highlighting"
+    },
+    "Object Name": {
+      "it": "Nome oggetto",
+      "en": "Object Name"
+    },
+    "Object Selection by Path Only": {
+      "it": "Selezione oggetti solo tramite tracciato",
+      "en": "Object Selection by Path Only"
+    },
+    "On Copy": {
+      "it": "Durante la copia",
+      "en": "On Copy"
+    },
+    "On Paste": {
+      "it": "Durante l'incollamento",
+      "en": "On Paste"
+    },
+    "On Screen": {
+      "it": "Su schermo",
+      "en": "On Screen"
+    },
+    "Open Documents As Tabs": {
+      "it": "Apri documenti come schede",
+      "en": "Open Documents As Tabs"
+    },
+    "Options": {
+      "it": "Opzioni",
+      "en": "Options"
+    },
+    "Output All Blacks Accurately": {
+      "it": "Riproduci tutti i neri con precisione",
+      "en": "Output All Blacks Accurately"
+    },
+    "Output All Blacks as Rich Black": {
+      "it": "Riproduci tutti i neri come nero ricco",
+      "en": "Output All Blacks as Rich Black"
+    },
+    "Override Character Color": {
+      "it": "Sostituisci colore carattere",
+      "en": "Override Character Color"
+    },
+    "PDF": {
+      "it": "PDF",
+      "en": "PDF"
+    },
+    "Paste Offset": {
+      "it": "Spostamento all'incollamento",
+      "en": "Paste Offset"
+    },
+    "Pattern Editing": {
+      "it": "Modifica motivo",
+      "en": "Pattern Editing"
+    },
+    "Pen Tool": {
+      "it": "Strumento Penna",
+      "en": "Pen Tool"
+    },
+    "Performance": {
+      "it": "Prestazioni",
+      "en": "Performance"
+    },
+    "Picas": {
+      "it": "Pica",
+      "en": "Picas"
+    },
+    "Pink": {
+      "it": "Rosa",
+      "en": "Pink"
+    },
+    "Pixels": {
+      "it": "Pixel",
+      "en": "Pixels"
+    },
+    "Plug-ins & Scratch Disks": {
+      "it": "Plug-in & Dischi di memoria virtuale",
+      "en": "Plug-ins & Scratch Disks"
+    },
+    "Point Text": {
+      "it": "Testo per punti",
+      "en": "Point Text"
+    },
+    "Points": {
+      "it": "Punti",
+      "en": "Points"
+    },
+    "Portuguese": {
+      "it": "Portoghese",
+      "en": "Portuguese"
+    },
+    "Power Saving (integrated)": {
+      "it": "Risparmio energetico (integrata)",
+      "en": "Power Saving (integrated)"
+    },
+    "Preserve Appearance and Overprints": {
+      "it": "Mantieni aspetto e sovrastampe",
+      "en": "Preserve Appearance and Overprints"
+    },
+    "Preserve Paths": {
+      "it": "Mantieni tracciati",
+      "en": "Preserve Paths"
+    },
+    "Primary": {
+      "it": "Principale",
+      "en": "Primary"
+    },
+    "Printing / Exporting": {
+      "it": "Stampa / Esportazione",
+      "en": "Printing / Exporting"
+    },
+    "Real-time Drawing and Editing": {
+      "it": "Disegno e modifica in tempo reale",
+      "en": "Real-time Drawing and Editing"
+    },
+    "Render Threads (-1 = Automatic)": {
+      "it": "Thread di rendering (-1 = automatico)",
+      "en": "Render Threads (-1 = Automatic)"
+    },
+    "Scale": {
+      "it": "Scala",
+      "en": "Scale"
+    },
+    "Scale Corners": {
+      "it": "Scala angoli",
+      "en": "Scale Corners"
+    },
+    "Scale Cursor Proportional to UI": {
+      "it": "Scala il cursore in proporzione all'interfaccia",
+      "en": "Scale Cursor Proportional to UI"
+    },
+    "Scale Strokes & Effects": {
+      "it": "Scala tratti ed effetti",
+      "en": "Scale Strokes & Effects"
+    },
+    "Scratch Disks": {
+      "it": "Dischi di memoria virtuale",
+      "en": "Scratch Disks"
+    },
+    "Scrub Numeric Fields by Dragging": {
+      "it": "Regola i campi numerici trascinando",
+      "en": "Scrub Numeric Fields by Dragging"
+    },
+    "Secondary": {
+      "it": "Secondario",
+      "en": "Secondary"
+    },
+    "Select Same Tint %": {
+      "it": "Seleziona stessa % tinta",
+      "en": "Select Same Tint %"
+    },
+    "Selection": {
+      "it": "Selezione",
+      "en": "Selection"
+    },
+    "Selection & Anchor Display": {
+      "it": "Visualizzazione selezione e punti di ancoraggio",
+      "en": "Selection & Anchor Display"
+    },
+    "Show East Asian Options": {
+      "it": "Mostra opzioni Asia orientale",
+      "en": "Show East Asian Options"
+    },
+    "Show Font Names in English": {
+      "it": "Mostra nomi dei font in inglese",
+      "en": "Show Font Names in English"
+    },
+    "Show Indic Options": {
+      "it": "Mostra opzioni per lingue indiane",
+      "en": "Show Indic Options"
+    },
+    "Show Pixel Grid (Above 600% Zoom)": {
+      "it": "Mostra griglia pixel (zoom oltre il 600%)",
+      "en": "Show Pixel Grid (Above 600% Zoom)"
+    },
+    "Show Slice Numbers": {
+      "it": "Mostra numeri sezioni",
+      "en": "Show Slice Numbers"
+    },
+    "Show The Home Screen When No Documents Are Open": {
+      "it": "Mostra la schermata iniziale quando non ci sono documenti aperti",
+      "en": "Show The Home Screen When No Documents Are Open"
+    },
+    "Show Tool Group Labels": {
+      "it": "Mostra etichette dei gruppi di strumenti",
+      "en": "Show Tool Group Labels"
+    },
+    "Show Tool Tips": {
+      "it": "Mostra descrizioni comandi",
+      "en": "Show Tool Tips"
+    },
+    "Show handles when multiple anchors are selected": {
+      "it": "Mostra le maniglie quando sono selezionati più punti di ancoraggio",
+      "en": "Show handles when multiple anchors are selected"
+    },
+    "Single Corner Radius": {
+      "it": "Raggio angolo unico",
+      "en": "Single Corner Radius"
+    },
+    "Size": {
+      "it": "Dimensione",
+      "en": "Size"
+    },
+    "Size/Leading": {
+      "it": "Dimensione/interlinea",
+      "en": "Size/Leading"
+    },
+    "Slices": {
+      "it": "Sezioni",
+      "en": "Slices"
+    },
+    "Small": {
+      "it": "Piccola",
+      "en": "Small"
+    },
+    "Smart Guides": {
+      "it": "Guide sensibili",
+      "en": "Smart Guides"
+    },
+    "Snap to Perpendicular": {
+      "it": "Aggancia alla perpendicolare",
+      "en": "Snap to Perpendicular"
+    },
+    "Snap to Point": {
+      "it": "Aggancia al punto",
+      "en": "Snap to Point"
+    },
+    "Snap to Tangent": {
+      "it": "Aggancia alla tangente",
+      "en": "Snap to Tangent"
+    },
+    "Snapping Tolerance": {
+      "it": "Tolleranza di aggancio",
+      "en": "Snapping Tolerance"
+    },
+    "Solid": {
+      "it": "Pieno",
+      "en": "Solid"
+    },
+    "Spacing Guides": {
+      "it": "Guide di spaziatura",
+      "en": "Spacing Guides"
+    },
+    "Spanish": {
+      "it": "Spagnolo",
+      "en": "Spanish"
+    },
+    "Stroke": {
+      "it": "Tratto",
+      "en": "Stroke"
+    },
+    "Style": {
+      "it": "Stile",
+      "en": "Style"
+    },
+    "Subdivisions": {
+      "it": "Suddivisioni",
+      "en": "Subdivisions"
+    },
+    "System Title Bar": {
+      "it": "Barra del titolo di sistema",
+      "en": "System Title Bar"
+    },
+    "Tile Edge Color": {
+      "it": "Colore bordo tassello",
+      "en": "Tile Edge Color"
+    },
+    "Tolerance": {
+      "it": "Tolleranza",
+      "en": "Tolerance"
+    },
+    "Tracking": {
+      "it": "Spaziatura caratteri",
+      "en": "Tracking"
+    },
+    "Trackpad Gesture to Rotate View": {
+      "it": "Ruota vista con un gesto sul trackpad",
+      "en": "Trackpad Gesture to Rotate View"
+    },
+    "Transform": {
+      "it": "Trasforma",
+      "en": "Transform"
+    },
+    "Transform Both": {
+      "it": "Trasforma entrambi",
+      "en": "Transform Both"
+    },
+    "Transform Object Only": {
+      "it": "Trasforma solo oggetto",
+      "en": "Transform Object Only"
+    },
+    "Transform Panel": {
+      "it": "Pannello Trasforma",
+      "en": "Transform Panel"
+    },
+    "Transform Pattern Only": {
+      "it": "Trasforma solo motivo",
+      "en": "Transform Pattern Only"
+    },
+    "Transform Pattern Tiles": {
+      "it": "Trasforma tasselli motivo",
+      "en": "Transform Pattern Tiles"
+    },
+    "Transform Tools": {
+      "it": "Strumenti di trasformazione",
+      "en": "Transform Tools"
+    },
+    "Turn off Data Recovery for complex documents": {
+      "it": "Disattiva il recupero dati per i documenti complessi",
+      "en": "Turn off Data Recovery for complex documents"
+    },
+    "Type": {
+      "it": "Testo",
+      "en": "Type"
+    },
+    "Type Object Selection by Path Only": {
+      "it": "Selezione oggetti testo solo tramite tracciato",
+      "en": "Type Object Selection by Path Only"
+    },
+    "UI Scaling": {
+      "it": "Scala interfaccia",
+      "en": "UI Scaling"
+    },
+    "Units": {
+      "it": "Unità",
+      "en": "Units"
+    },
+    "Update Links": {
+      "it": "Aggiorna collegamenti",
+      "en": "Update Links"
+    },
+    "Use Compression": {
+      "it": "Usa compressione",
+      "en": "Use Compression"
+    },
+    "Use Japanese Crop Marks": {
+      "it": "Usa segni di ritaglio giapponesi",
+      "en": "Use Japanese Crop Marks"
+    },
+    "Use Low Resolution Proxy for Linked EPS": {
+      "it": "Usa proxy a bassa risoluzione per EPS collegati",
+      "en": "Use Low Resolution Proxy for Linked EPS"
+    },
+    "Use Precise Cursors": {
+      "it": "Usa cursori di precisione",
+      "en": "Use Precise Cursors"
+    },
+    "Use Preview Bounds": {
+      "it": "Usa limiti anteprima",
+      "en": "Use Preview Bounds"
+    },
+    "Use Registration Point for Symbol": {
+      "it": "Usa punto di registrazione per il simbolo",
+      "en": "Use Registration Point for Symbol"
+    },
+    "User Interface": {
+      "it": "Interfaccia utente",
+      "en": "User Interface"
+    },
+    "Violet": {
+      "it": "Viola",
+      "en": "Violet"
+    },
+    "When pasting text": {
+      "it": "Quando incolli testo",
+      "en": "When pasting text"
+    },
+    "White": {
+      "it": "Bianco",
+      "en": "White"
+    },
+    "X11 (XWayland)": {
+      "it": "X11 (XWayland)",
+      "en": "X11 (XWayland)"
+    },
+    "X11 (XWayland) When a Pen Is Attached": {
+      "it": "X11 (XWayland) quando è collegata una penna",
+      "en": "X11 (XWayland) When a Pen Is Attached"
+    },
+    "XML ID": {
+      "it": "ID XML",
+      "en": "XML ID"
+    },
+    "Yards": {
+      "it": "Iarde",
+      "en": "Yards"
+    },
+    "Zoom to Selection": {
+      "it": "Zoom sulla selezione",
+      "en": "Zoom to Selection"
+    },
+    "Zoom with Mouse Wheel": {
+      "it": "Zoom con la rotellina del mouse",
+      "en": "Zoom with Mouse Wheel"
+    }
+  },
+  "scelte": {
+    "handleStyle": [
+      [
+        "solid",
+        "Solid"
+      ],
+      [
+        "hollow",
+        "Hollow"
+      ],
+      [
+        "large",
+        "Large"
+      ]
+    ],
+    "fontPreviewSize": [
+      [
+        "small",
+        "Small"
+      ],
+      [
+        "medium",
+        "Medium"
+      ],
+      [
+        "large",
+        "Large"
+      ]
+    ],
+    "unitsGeneral": [
+      [
+        "points",
+        "Points"
+      ],
+      [
+        "picas",
+        "Picas"
+      ],
+      [
+        "inches",
+        "Inches"
+      ],
+      [
+        "millimeters",
+        "Millimeters"
+      ],
+      [
+        "centimeters",
+        "Centimeters"
+      ],
+      [
+        "pixels",
+        "Pixels"
+      ],
+      [
+        "feetInches",
+        "Feet & Inches"
+      ],
+      [
+        "meters",
+        "Meters"
+      ],
+      [
+        "yards",
+        "Yards"
+      ],
+      [
+        "feet",
+        "Feet"
+      ]
+    ],
+    "unitsStroke": [
+      [
+        "points",
+        "Points"
+      ],
+      [
+        "picas",
+        "Picas"
+      ],
+      [
+        "inches",
+        "Inches"
+      ],
+      [
+        "millimeters",
+        "Millimeters"
+      ],
+      [
+        "centimeters",
+        "Centimeters"
+      ],
+      [
+        "pixels",
+        "Pixels"
+      ],
+      [
+        "feetInches",
+        "Feet & Inches"
+      ],
+      [
+        "meters",
+        "Meters"
+      ],
+      [
+        "yards",
+        "Yards"
+      ],
+      [
+        "feet",
+        "Feet"
+      ]
+    ],
+    "unitsType": [
+      [
+        "points",
+        "Points"
+      ],
+      [
+        "picas",
+        "Picas"
+      ],
+      [
+        "inches",
+        "Inches"
+      ],
+      [
+        "millimeters",
+        "Millimeters"
+      ],
+      [
+        "centimeters",
+        "Centimeters"
+      ],
+      [
+        "pixels",
+        "Pixels"
+      ],
+      [
+        "feetInches",
+        "Feet & Inches"
+      ],
+      [
+        "meters",
+        "Meters"
+      ],
+      [
+        "yards",
+        "Yards"
+      ],
+      [
+        "feet",
+        "Feet"
+      ]
+    ],
+    "unitsAsianType": [
+      [
+        "points",
+        "Points"
+      ],
+      [
+        "picas",
+        "Picas"
+      ],
+      [
+        "inches",
+        "Inches"
+      ],
+      [
+        "millimeters",
+        "Millimeters"
+      ],
+      [
+        "centimeters",
+        "Centimeters"
+      ],
+      [
+        "pixels",
+        "Pixels"
+      ],
+      [
+        "feetInches",
+        "Feet & Inches"
+      ],
+      [
+        "meters",
+        "Meters"
+      ],
+      [
+        "yards",
+        "Yards"
+      ],
+      [
+        "feet",
+        "Feet"
+      ]
+    ],
+    "identifyObjectsBy": [
+      [
+        "objectName",
+        "Object Name"
+      ],
+      [
+        "xmlId",
+        "XML ID"
+      ]
+    ],
+    "guideStyle": [
+      [
+        "lines",
+        "Lines"
+      ],
+      [
+        "dots",
+        "Dots"
+      ]
+    ],
+    "gridStyle": [
+      [
+        "lines",
+        "Lines"
+      ],
+      [
+        "dots",
+        "Dots"
+      ]
+    ],
+    "constructionAngles": [
+      [
+        "90° & 45° Angles",
+        "90° & 45° Angles"
+      ],
+      [
+        "30° Angles",
+        "30° Angles"
+      ],
+      [
+        "45° Angles",
+        "45° Angles"
+      ],
+      [
+        "60° Angles",
+        "60° Angles"
+      ],
+      [
+        "90° Angles",
+        "90° Angles"
+      ],
+      [
+        "90° & 45° & 30° Angles",
+        "90° & 45° & 30° Angles"
+      ]
+    ],
+    "hyphenationLanguage": [
+      [
+        "English: USA",
+        "English: USA"
+      ],
+      [
+        "English: UK",
+        "English: UK"
+      ],
+      [
+        "French",
+        "French"
+      ],
+      [
+        "German",
+        "German"
+      ],
+      [
+        "Spanish",
+        "Spanish"
+      ],
+      [
+        "Italian",
+        "Italian"
+      ],
+      [
+        "Dutch",
+        "Dutch"
+      ],
+      [
+        "Portuguese",
+        "Portuguese"
+      ]
+    ],
+    "uiBrightness": [
+      [
+        "dark",
+        "Dark"
+      ],
+      [
+        "mediumDark",
+        "Medium Dark"
+      ],
+      [
+        "mediumLight",
+        "Medium Light"
+      ],
+      [
+        "light",
+        "Light"
+      ]
+    ],
+    "uiColorScheme": [
+      [
+        "modern",
+        "Modern"
+      ],
+      [
+        "classic",
+        "Classic"
+      ]
+    ],
+    "uiAccent": [
+      [
+        "coral",
+        "Coral"
+      ],
+      [
+        "blue",
+        "Blue"
+      ],
+      [
+        "violet",
+        "Violet"
+      ],
+      [
+        "green",
+        "Green"
+      ],
+      [
+        "amber",
+        "Amber"
+      ],
+      [
+        "pink",
+        "Pink"
+      ]
+    ],
+    "canvasColor": [
+      [
+        "matchUi",
+        "Match User Interface Brightness"
+      ],
+      [
+        "white",
+        "White"
+      ],
+      [
+        "lightGray",
+        "Light Gray"
+      ],
+      [
+        "mediumGray",
+        "Medium Gray"
+      ],
+      [
+        "darkGray",
+        "Dark Gray"
+      ]
+    ],
+    "gpuPreference": [
+      [
+        "automatic",
+        "Automatic"
+      ],
+      [
+        "lowPower",
+        "Power Saving (integrated)"
+      ],
+      [
+        "highPerformance",
+        "High Performance (discrete)"
+      ]
+    ],
+    "linuxDisplayServer": [
+      [
+        "automatic",
+        "Automatic"
+      ],
+      [
+        "x11",
+        "X11 (XWayland)"
+      ],
+      [
+        "x11WithPen",
+        "X11 (XWayland) When a Pen Is Attached"
+      ]
+    ],
+    "updateLinks": [
+      [
+        "automatically",
+        "Automatically"
+      ],
+      [
+        "manually",
+        "Manually"
+      ],
+      [
+        "askWhenModified",
+        "Ask When Modified"
+      ]
+    ],
+    "aicbMode": [
+      [
+        "preservePaths",
+        "Preserve Paths"
+      ],
+      [
+        "preserveAppearance",
+        "Preserve Appearance and Overprints"
+      ]
+    ],
+    "pasteTextFormatting": [
+      [
+        "keep",
+        "Keep Formatting"
+      ],
+      [
+        "plain",
+        "Keep Plain Text"
+      ]
+    ],
+    "blackOnScreen": [
+      [
+        "accurate",
+        "Display All Blacks Accurately"
+      ],
+      [
+        "rich",
+        "Display All Blacks as Rich Black"
+      ]
+    ],
+    "blackOutput": [
+      [
+        "accurate",
+        "Output All Blacks Accurately"
+      ],
+      [
+        "rich",
+        "Output All Blacks as Rich Black"
+      ]
+    ],
+    "transformPanelPatterns": [
+      [
+        "default",
+        "Default"
+      ],
+      [
+        "object",
+        "Transform Object Only"
+      ],
+      [
+        "pattern",
+        "Transform Pattern Only"
+      ],
+      [
+        "both",
+        "Transform Both"
+      ]
+    ]
+  }
+}

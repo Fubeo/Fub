@@ -68,6 +68,10 @@ mod engine {
         engine: OnceLock<Arc<Disegni>>,
         /// Le istanze aperte, per vault.
         open: Mutex<Open>,
+        /// Chi legge, unisce e scrive `draw.motore` dopo un comando: due
+        /// istanze che salvano insieme non si perdono le chiavi a vicenda.
+        /// Non si tiene mai attraverso una chiamata al motore.
+        pub(super) prefs: Mutex<()>,
     }
 
     impl Drawings {
@@ -76,6 +80,7 @@ mod engine {
             Self {
                 engine: OnceLock::from(engine),
                 open: Mutex::default(),
+                prefs: Mutex::default(),
             }
         }
 
@@ -269,6 +274,90 @@ mod engine {
         ))
     }
 
+    /// Il valore dell'impostazione `draw.motore` come l'host lo legge.
+    #[derive(Debug, PartialEq)]
+    pub(super) enum EnginePrefs {
+        /// Vuota: le preferenze di serie.
+        Empty,
+        /// Della versione che questo Fub scrive: le chiavi cambiate.
+        Current(serde_json::Map<String, serde_json::Value>),
+        /// Di una versione più nuova: si legge come si può (le chiavi che
+        /// questo motore conosce), e non si sovrascrive.
+        Newer(serde_json::Map<String, serde_json::Value>),
+        /// Non si legge: vale come vuota, e non si sovrascrive finché la
+        /// persona non la azzera.
+        Broken(String),
+    }
+
+    impl EnginePrefs {
+        /// Legge il testo dell'impostazione.
+        pub(super) fn parse(text: &str) -> EnginePrefs {
+            use fub_features::DRAW_ENGINE_PREFS_VERSION as VERSION;
+            use serde_json::Value;
+            if text.trim().is_empty() {
+                return EnginePrefs::Empty;
+            }
+            let value: Value = match serde_json::from_str(text) {
+                Ok(value) => value,
+                Err(error) => return EnginePrefs::Broken(error.to_string()),
+            };
+            let Some(version) = value.get("v").and_then(Value::as_u64) else {
+                return EnginePrefs::Broken("`v` is not a version number".into());
+            };
+            let prefs = value.get("prefs").and_then(Value::as_object).cloned();
+            match (version, prefs) {
+                (v, prefs) if v > VERSION => EnginePrefs::Newer(prefs.unwrap_or_default()),
+                (VERSION, Some(prefs)) => EnginePrefs::Current(prefs),
+                (VERSION, None) => EnginePrefs::Broken("`prefs` is not an object".into()),
+                (v, _) => EnginePrefs::Broken(format!("version {v} is not known")),
+            }
+        }
+
+        /// Le preferenze da dare a un'istanza che nasce.
+        pub(super) fn for_engine(&self) -> serde_json::Map<String, serde_json::Value> {
+            match self {
+                EnginePrefs::Current(prefs) | EnginePrefs::Newer(prefs) => prefs.clone(),
+                EnginePrefs::Empty | EnginePrefs::Broken(_) => serde_json::Map::new(),
+            }
+        }
+
+        /// Il testo da scrivere con i cambi `changed` sopra le chiavi tenute;
+        /// `None` se, tolte quelle uguali al valore di serie, non resta
+        /// niente (l'impostazione si azzera). Solo per `Empty` e `Current`.
+        pub(super) fn merged(
+            &self,
+            changed: &serde_json::Map<String, serde_json::Value>,
+        ) -> Option<String> {
+            let mut prefs = self.for_engine();
+            prefs.extend(changed.clone());
+            let defaults = fub_disegno::preferenze::di_serie();
+            prefs.retain(|key, value| {
+                !fub_disegno::preferenze::e_cartella(key) && defaults.get(key) != Some(value)
+            });
+            if prefs.is_empty() {
+                return None;
+            }
+            Some(
+                serde_json::json!({
+                    "v": fub_features::DRAW_ENGINE_PREFS_VERSION,
+                    "prefs": prefs,
+                })
+                .to_string(),
+            )
+        }
+    }
+
+    /// `draw.motore` è di una versione più nuova: questo Fub non la scrive.
+    pub(super) fn prefs_newer() -> PluginError {
+        PluginError::Conflict(Text::key("host.drawing.prefs_newer"))
+    }
+
+    /// `draw.motore` non si legge: questo Fub non la sovrascrive finché non
+    /// la si azzera.
+    pub(super) fn prefs_broken() -> PluginError {
+        PluginError::Conflict(Text::key("host.drawing.prefs_broken"))
+    }
+
     /// La selezione di `drawing_commands`, con le regole delle selezioni di
     /// `fub_abi::drawing`: nessun id vuoto o ripetuto, al più
     /// [`MAX_DRAWING_OPS`].
@@ -391,6 +480,63 @@ impl Host {
         }
     }
 
+    /// Il valore di `draw.motore` nel vault nominato. Una chiave che non si
+    /// legge (il disegno spento nel vault, un vault che si chiude) vale
+    /// vuota: il disegno nasce con le preferenze di serie.
+    fn engine_prefs(&self, vault: Option<&str>) -> engine::EnginePrefs {
+        match self.settings_with_source(vault, &[fub_features::DRAW_ENGINE_PREFS_KEY]) {
+            Ok(values) => match values.first().map(|(value, _)| value) {
+                Some(fub_abi::settings::SettingValue::Text(text)) => {
+                    engine::EnginePrefs::parse(text)
+                }
+                Some(other) => engine::EnginePrefs::Broken(format!("not a text: {other:?}")),
+                None => engine::EnginePrefs::Empty,
+            },
+            Err(error) => {
+                tracing::debug!(%error, "fub.disegno: draw.motore non si legge");
+                engine::EnginePrefs::Empty
+            }
+        }
+    }
+
+    /// Salva in `draw.motore` le preferenze che un comando ha cambiato, sopra
+    /// quelle già salvate. Un valore più nuovo o rotto non si sovrascrive
+    /// (`Ok`, e lo dice il log); una scrittura che non riesce lascia il
+    /// valore di prima ed è l'errore.
+    fn save_engine_prefs(
+        &self,
+        vault: Option<&str>,
+        changed: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), PluginError> {
+        let _one = self
+            .drawings
+            .prefs
+            .lock()
+            .map_err(|_| PluginError::Internal(fub_abi::Text::key("host.drawing.poisoned")))?;
+        let stored = self.engine_prefs(vault);
+        let key = fub_features::DRAW_ENGINE_PREFS_KEY;
+        match &stored {
+            engine::EnginePrefs::Newer(_) | engine::EnginePrefs::Broken(_) => {
+                tracing::warn!(
+                    keys = changed.len(),
+                    "fub.disegno: draw.motore non si sovrascrive (più nuovo o rotto): le preferenze cambiate valgono finché il disegno è aperto"
+                );
+                Ok(())
+            }
+            engine::EnginePrefs::Empty | engine::EnginePrefs::Current(_) => {
+                match stored.merged(changed) {
+                    Some(text) => self.set_setting_for_user(
+                        vault,
+                        key,
+                        fub_abi::settings::SettingValue::Text(text),
+                    ),
+                    None if stored == engine::EnginePrefs::Empty => Ok(()),
+                    None => self.reset_setting_for_user(vault, key),
+                }
+            }
+        }
+    }
+
     /// Se il Completo è acceso nel vault nominato: senza la feature, mai.
     fn complete_on(&self, vault: Option<&str>) -> Result<bool, PluginError> {
         #[cfg(feature = "drawing-complete")]
@@ -423,12 +569,26 @@ impl Host {
                 return Err(engine::switched_off());
             }
             let engine = self.drawings.engine();
-            let (drawing, opened) = fub_disegno::motore::Disegno::apri_con(&engine, text)
-                .inspect_err(|error| {
-                    if matches!(error, PluginError::Internal(_)) {
-                        tracing::warn!(doc = %doc.as_str(), %error, "fub.disegno: il motore non apre il disegno");
-                    }
-                })?;
+            let prefs = self.engine_prefs(Some(root.as_str()));
+            match &prefs {
+                engine::EnginePrefs::Newer(_) => {
+                    tracing::warn!("fub.disegno: draw.motore è di una versione più nuova: si legge ciò che si conosce, e non si scrive");
+                }
+                engine::EnginePrefs::Broken(why) => {
+                    tracing::warn!(%why, "fub.disegno: draw.motore non si legge: il disegno nasce con le preferenze di serie");
+                }
+                engine::EnginePrefs::Empty | engine::EnginePrefs::Current(_) => {}
+            }
+            let (drawing, opened, warnings) =
+                fub_disegno::motore::Disegno::apri_con_preferenze(&engine, text, &prefs.for_engine())
+                    .inspect_err(|error| {
+                        if matches!(error, PluginError::Internal(_)) {
+                            tracing::warn!(doc = %doc.as_str(), %error, "fub.disegno: il motore non apre il disegno");
+                        }
+                    })?;
+            for warning in warnings {
+                tracing::warn!(%warning, "fub.disegno: una preferenza di draw.motore si salta");
+            }
             self.drawings
                 .insert(&root, opened.instance.clone(), drawing)?;
             // La chiusura del vault toglie le istanze dopo aver segnato la
@@ -535,7 +695,33 @@ impl Host {
         {
             request.validate()?;
             self.complete_serves(vault, &request.id)?;
-            self.with_drawing(vault, instance, |drawing| drawing.comando(request))
+            // Cambiare le preferenze quando `draw.motore` non si può scrivere
+            // si rifiuta prima del motore: cambierebbero solo in questa
+            // istanza, e sparirebbero alla chiusura.
+            let id = request.id.strip_prefix("disegno.").unwrap_or(&request.id);
+            if matches!(id, "prefs.set" | "prefs.reset") && !request.preview {
+                match self.engine_prefs(vault) {
+                    engine::EnginePrefs::Newer(_) => return Err(engine::prefs_newer()),
+                    engine::EnginePrefs::Broken(_) => return Err(engine::prefs_broken()),
+                    engine::EnginePrefs::Empty | engine::EnginePrefs::Current(_) => {}
+                }
+            }
+            let (outcome, changed) = self.with_drawing(vault, instance, |drawing| {
+                let outcome = drawing.comando(request);
+                Ok((outcome, drawing.prendi_le_preferenze_cambiate()))
+            })?;
+            // Il lucchetto dell'istanza è già lasciato: salvare non lo tiene.
+            if !changed.vuoto() {
+                if let Err(error) = self.save_engine_prefs(vault, &changed.dopo) {
+                    tracing::warn!(%error, "fub.disegno: draw.motore non si scrive: le preferenze tornano com'erano");
+                    self.with_drawing(vault, instance, |drawing| {
+                        drawing.rimetti_le_preferenze(&changed.prima);
+                        Ok(())
+                    })?;
+                    return Err(error);
+                }
+            }
+            outcome
         }
         #[cfg(not(feature = "engine-drawing"))]
         {

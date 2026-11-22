@@ -2541,6 +2541,8 @@
     "settings-catalog-results",
     "settings-details",
     "settings-details-body",
+    "drawing-engine-row",
+    "drawing-engine-well",
     "components-page",
     "components-head",
     "components-head-text",
@@ -5003,6 +5005,8 @@
     "settings-catalog-results": "cornice",
     "settings-details": "cornice",
     "settings-details-body": "cornice",
+    "drawing-engine-row": "cornice",
+    "drawing-engine-well": "cornice",
     "components-page": "cornice",
     "components-head": "cornice",
     "components-head-text": "cornice",
@@ -11297,7 +11301,9 @@
         "settings-catalog",
         "settings-catalog-results",
         "settings-details",
-        "settings-details-body"
+        "settings-details-body",
+        "drawing-engine-row",
+        "drawing-engine-well"
       ],
       "states": [
         "rest",
@@ -12732,7 +12738,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2460,
+    "hooks": 2462,
     "state_names": 7,
     "assigned_states": 1099,
     "components": 324,

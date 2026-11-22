@@ -469,10 +469,10 @@ motore	plugin.install	Install Plug-in		automazione	F4	T26	da fare	interno	sotto:
 motore	plugin.inspect	Inspect Plug-in		automazione	F4	T26	da fare	interno	sotto:disegno-plugin	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Esamina plug-in
 motore	plugin.remove	Remove Plug-in		automazione	F4	T26	da fare	interno	sotto:disegno-plugin	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Rimuovi plug-in
 motore	plugin.reload	Reload Plug-ins	Object › Plug-ins	automazione	F4	T26	da fare	menu/oggetto	sotto:disegno-plugin		Ricarica plug-in
-motore	prefs.get	Get Preferences		fub	—	T11	da fare	fub	—	Impostazioni › Disegno (le preferenze del motore come impostazioni di Fub)	Ottieni preferenze
-motore	prefs.set	Set Preference		fub	—	T11	da fare	fub	—	Impostazioni › Disegno (le preferenze del motore come impostazioni di Fub)	Imposta preferenza
-motore	prefs.reset	Reset Preferences		fub	—	T11	da fare	fub	—	Impostazioni › Disegno (le preferenze del motore come impostazioni di Fub)	Reimposta preferenze
-motore	prefs.list	List Preferences		fub	—	T11	da fare	fub	—	Impostazioni › Disegno (le preferenze del motore come impostazioni di Fub)	Elenca preferenze
+motore	prefs.get	Get Preferences		fub	—	T11	fub	fub	—	Impostazioni › Disegni › Motore del disegno (le preferenze del motore come impostazione draw.motore)	Ottieni preferenze
+motore	prefs.set	Set Preference		fub	—	T11	fub	fub	—	Impostazioni › Disegni › Motore del disegno (le preferenze del motore come impostazione draw.motore)	Imposta preferenza
+motore	prefs.reset	Reset Preferences		fub	—	T11	fub	fub	—	Impostazioni › Disegni › Motore del disegno (le preferenze del motore come impostazione draw.motore)	Reimposta preferenze
+motore	prefs.list	List Preferences		fub	—	T11	fub	fub	—	Impostazioni › Disegni › Motore del disegno (le preferenze del motore come impostazione draw.motore)	Elenca preferenze
 motore	print.setup	Print Setup		stampa	F4	T25	da fare	menu/file	sotto:disegno-formati		Impostazione di stampa
 motore	print.preview	Print Preview		stampa	F4	T25	da fare	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Anteprima di stampa
 motore	file.print	Print		formati	F3	T23	da fare	menu/file	sotto:disegno-formati		Stampa
@@ -975,7 +975,7 @@ interfaccia	file.documentSetup	Document Setup…		formati	F3	T23	da fare	menu/fi
 interfaccia	file.newDialog	New…		fub	—	T2	fub	fub	—	nuovo disegno di Fub	Nuovo…
 interfaccia	file.newWithoutDialog	New Without Dialog		fub	—	T2	fub	fub	—	nuovo disegno di Fub	Nuovo senza finestra di dialogo
 interfaccia	app.home	Home		fub	—	T2	fub	fub	—	il Benvenuto di Fub	Home
-interfaccia	edit.preferences	Preferences…		fub	—	T11	da fare	fub	—	Impostazioni › Disegno	Preferenze…
+interfaccia	edit.preferences	Preferences…		fub	—	T11	fub	fub	—	Impostazioni › Disegni › Motore del disegno	Preferenze…
 interfaccia	edit.keyboardShortcuts	Keyboard Shortcuts…		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie	Scelte rapide da tastiera…
 interfaccia	shortcuts.set	Set Keyboard Shortcut		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Imposta scelta rapida da tastiera
 interfaccia	shortcuts.list	List Keyboard Shortcuts		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Elenca scelte rapide da tastiera
