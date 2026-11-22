@@ -93,7 +93,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 campioni porta a «fatto» quattro righe dei campioni (duplica, unisci, ordina per nome, sposta).
   // Restano «da fare», con il perché: i tre comandi dei gruppi e i predefiniti non ci sono nel formato,
   // e ordina per specie non cambia niente su campioni che sono tutti colori.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1154, fub: 114, escluso: 12, fatto: 271 });
+  // T13 disponi porta a «fatto» le sette voci di ≡ › Oggetto › Disponi (`addon.arrange.*`), con i
+  // loro casi in trasforma.json; Sposta leggermente (`object.nudge`) e Trasforma singolarmente
+  // (`object.transformEach`) restano «da fare».
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1147, fub: 114, escluso: 12, fatto: 278 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

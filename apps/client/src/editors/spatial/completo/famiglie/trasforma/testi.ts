@@ -21,4 +21,17 @@ export const TESTI: Etichette = {
   "unita:dy": { it: "px", en: "px" },
   "unita:angle": { it: "°", en: "°" },
   "unita:sx": { it: "%", en: "%" },
+  // Disponi (K6 T13): la misura di ciascuno e l'opacità casuale, con le loro finestre.
+  "azione:addon.arrange.size": { it: "Imposta", en: "Set" },
+  "azione:addon.arrange.randomizeOpacity": { it: "Applica", en: "Apply" },
+  "campo:width": { it: "Larghezza", en: "Width" },
+  "campo:height": { it: "Altezza", en: "Height" },
+  "campo:proportional": { it: "Proporzionale", en: "Proportional" },
+  "campo:min": { it: "Minimo", en: "Minimum" },
+  "campo:max": { it: "Massimo", en: "Maximum" },
+  "campo:seed": { it: "Seme", en: "Seed" },
+  "unita:width": { it: "px", en: "px" },
+  "unita:height": { it: "px", en: "px" },
+  "unita:min": { it: "%", en: "%" },
+  "unita:max": { it: "%", en: "%" },
 };
