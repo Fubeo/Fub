@@ -71,7 +71,10 @@ fn alias_allinea(id: &str) -> Option<(&'static str, Value)> {
         "align.horizontalLeft" => ("object.align", json!({ "horizontal": "left" })),
         "align.horizontalCenter" => ("object.align", json!({ "horizontal": "center" })),
         "align.horizontalRight" => ("object.align", json!({ "horizontal": "right" })),
-        "align.horizontalVerticalCenter" => ("object.align", json!({ "horizontal": "center", "vertical": "center" })),
+        "align.horizontalVerticalCenter" => (
+            "object.align",
+            json!({ "horizontal": "center", "vertical": "center" }),
+        ),
         "align.verticalTop" => ("object.align", json!({ "vertical": "top" })),
         "align.verticalCenter" => ("object.align", json!({ "vertical": "center" })),
         "align.verticalBottom" => ("object.align", json!({ "vertical": "bottom" })),
@@ -79,10 +82,18 @@ fn alias_allinea(id: &str) -> Option<(&'static str, Value)> {
         "align.distributeVerticalCenter" => ("object.distribute", json!({ "vertical": "center" })),
         "align.distributeVerticalBottom" => ("object.distribute", json!({ "vertical": "bottom" })),
         "align.distributeHorizontalLeft" => ("object.distribute", json!({ "horizontal": "left" })),
-        "align.distributeHorizontalCenter" => ("object.distribute", json!({ "horizontal": "center" })),
-        "align.distributeHorizontalRight" => ("object.distribute", json!({ "horizontal": "right" })),
-        "align.distributeVerticalSpace" => ("object.distributeSpacing", json!({ "axis": "vertical" })),
-        "align.distributeHorizontalSpace" => ("object.distributeSpacing", json!({ "axis": "horizontal" })),
+        "align.distributeHorizontalCenter" => {
+            ("object.distribute", json!({ "horizontal": "center" }))
+        }
+        "align.distributeHorizontalRight" => {
+            ("object.distribute", json!({ "horizontal": "right" }))
+        }
+        "align.distributeVerticalSpace" => {
+            ("object.distributeSpacing", json!({ "axis": "vertical" }))
+        }
+        "align.distributeHorizontalSpace" => {
+            ("object.distributeSpacing", json!({ "axis": "horizontal" }))
+        }
         _ => return None,
     })
 }
