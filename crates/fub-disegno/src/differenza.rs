@@ -183,7 +183,11 @@ pub(crate) fn differenza(
     // I `remove` per percorso: dall'ultimo al primo, così ogni percorso vale
     // ancora quando tocca a lui.
     remove.sort_by(|a, b| b.0.cmp(&a.0));
+    // Un oggetto che esce da un elemento tolto (separare un gruppo) si sposta
+    // prima che il suo genitore se ne vada: dopo, la scena non lo troverebbe.
+    let (salvati, moves) = salvati_prima(copia, &remove, moves)?;
     let mut ops = ident;
+    ops.extend(salvati);
     ops.extend(remove.into_iter().map(|(_, op)| op));
     ops.extend(moves);
     ops.extend(add);
@@ -193,6 +197,47 @@ pub(crate) fn differenza(
     }
     crate::perdite::controlla(&copia.perdite, &ops).map_err(Rifiuto::NonMappato)?;
     Ok(Differenza { ops, ids })
+}
+
+/// Divide i `move` in quelli che portano fuori un oggetto da un elemento tolto,
+/// che vanno prima dei `remove`, e gli altri. Un `remove` per percorso (un
+/// elemento senza id) con un oggetto da portare fuori si rifiuta: lo
+/// spostamento di prima cambierebbe il percorso.
+fn salvati_prima(
+    copia: &Copia,
+    remove: &[(Vec<usize>, Value)],
+    moves: Vec<Value>,
+) -> Result<(Vec<Value>, Vec<Value>), Rifiuto> {
+    if remove.is_empty() || moves.is_empty() {
+        return Ok((Vec::new(), moves));
+    }
+    let percorso_di = |id: &str| {
+        copia
+            .mappa
+            .elementi()
+            .iter()
+            .find(|e| e.id.as_deref() == Some(id))
+            .map(|e| e.percorso.clone())
+    };
+    let (mut salvati, mut altri) = (Vec::new(), Vec::new());
+    for m in moves {
+        let dentro = m["target"].as_str().and_then(percorso_di).is_some_and(|p| {
+            remove
+                .iter()
+                .any(|(r, _)| p.len() > r.len() && p.starts_with(r))
+        });
+        if dentro {
+            salvati.push(m);
+        } else {
+            altri.push(m);
+        }
+    }
+    if !salvati.is_empty() && remove.iter().any(|(_, op)| !op["target"].is_string()) {
+        return Err(no(
+            "un oggetto esce da un elemento tolto che non ha id: non si fa in un passo",
+        ));
+    }
+    Ok((salvati, altri))
 }
 
 struct Lavoro<'a> {
@@ -740,6 +785,14 @@ impl Lavoro<'_> {
             "path",
         ) = (&b.kind, &a.kind, e.tag)
         {
+            // Un tratto della penna di Fub (`fub:ink`): la sua forma viene dai
+            // campioni, e un `d` nuovo li smentirebbe. Lo si sposta, gira o
+            // ridimensiona (la `transform` qui sopra), e niente altro (K5).
+            if matches!(e.ruolo, fub_scene::Role::Stroke | fub_scene::Role::Width) {
+                return Err(no(
+                    "un tratto della penna si sposta, gira o ridimensiona, ma i suoi punti non si cambiano",
+                ));
+            }
             // Un tracciato cambiato punto per punto: il `d` nuovo, nello
             // spazio dell'elemento.
             let locale = (g * t).inverse();

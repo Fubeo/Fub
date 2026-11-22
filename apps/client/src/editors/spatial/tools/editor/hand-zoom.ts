@@ -5,10 +5,14 @@
 //
 // I gesti si prendono in cattura sulla radice, prima della pipeline della
 // penna: un trascinamento della vista non comincia un tratto.
+//
+// Gli strumenti della vista del motore (Mano, Zoom, Ruota vista: K6 T11) nel
+// motore sono vuoti: la vista è di Fub. Scelti nella colonna del Completo,
+// fanno la Mano, la Lente e il giro della vista di qui (`VISTA_DEL_MOTORE`).
 
 import type { Bounds } from "../../scene/geometry";
 import type { Point } from "../../scene/matrix";
-import { panned, zoomAt } from "../../view";
+import { panned, turnBy, zoomAt } from "../../view";
 import { DRAW_SCALE_LIMITS } from "./constants";
 import type { EditorContext } from "./context";
 
@@ -22,10 +26,37 @@ export interface HandZoomContext {
   spaceHeld: boolean;
 }
 
+/// Che cosa fa un trascinamento della vista: sposta, ingrandisce, gira.
+type ModoVista = "pan" | "zoom" | "turn";
+
+/// Gli strumenti della vista del motore, per id: il motore non li fa (sono
+/// vuoti), li fa la vista di Fub.
+export const VISTA_DEL_MOTORE: Readonly<Record<string, ModoVista>> = {
+  hand: "pan",
+  zoom: "zoom",
+  rotateView: "turn",
+};
+
+/// Lo strumento della vista del motore `id`, o `null` se `id` non lo è.
+export function vistaDelMotore(id: string | null): ModoVista | null {
+  return id !== null && Object.prototype.hasOwnProperty.call(VISTA_DEL_MOTORE, id) ? VISTA_DEL_MOTORE[id]! : null;
+}
+
+/// I gradi fra `from` e `at` attorno a `centro`, nel verso dell'orologio
+/// sullo schermo (le y vanno in giù), fra −180 e 180.
+export function gradiAttorno(centro: Point, from: Point, at: Point): number {
+  const prima = Math.atan2(from[1] - centro[1], from[0] - centro[0]);
+  const dopo = Math.atan2(at[1] - centro[1], at[0] - centro[0]);
+  let gradi = ((dopo - prima) * 180) / Math.PI;
+  if (gradi > 180) gradi -= 360;
+  if (gradi < -180) gradi += 360;
+  return gradi;
+}
+
 /// Il gesto della vista in corso.
 interface ViewDrag {
   readonly id: number;
-  readonly mode: "pan" | "zoom";
+  readonly mode: ModoVista;
   /// Dove è cominciato e dov'è adesso, nelle coordinate del foglio.
   readonly from: Point;
   at: Point;
@@ -56,7 +87,12 @@ export function installHandZoom(ctx: EditorContext): void {
 
   const modeFor = (event: PointerEvent): ViewDrag["mode"] | null => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return null;
-    if (ctx.spaceHeld || ctx.tool === "hand") return "pan";
+    if (ctx.spaceHeld) return "pan";
+    // Uno strumento della vista del motore, scelto sopra a quelli di Fub.
+    const delMotore = vistaDelMotore(ctx.motoreTool);
+    if (delMotore !== null) return delMotore === "turn" && !ctx.has("gestures") ? null : delMotore;
+    if (ctx.motoreTool !== null) return null;
+    if (ctx.tool === "hand") return "pan";
     if (ctx.tool === "zoom") return "zoom";
     return null;
   };
@@ -91,6 +127,11 @@ export function installHandZoom(ctx: EditorContext): void {
     const at = local(event);
     if (drag.mode === "pan") {
       ctx.setCamera(panned(ctx.camera, at[0] - drag.at[0], at[1] - drag.at[1]));
+    } else if (drag.mode === "turn") {
+      // Si gira attorno al centro di ciò che si vede, quanto il puntatore gira
+      // attorno a lui.
+      const centro = ctx.viewCenter();
+      ctx.setCamera(turnBy(ctx.camera, gradiAttorno(centro, drag.at, at), centro));
     } else {
       const shown = screenBox(drag.from, at);
       box.hidden = shown.w < CLICK_SLOP_PX && shown.h < CLICK_SLOP_PX;
@@ -108,6 +149,10 @@ export function installHandZoom(ctx: EditorContext): void {
     drag = null;
     box.hidden = true;
     showMode();
+    if (ended.mode === "turn") {
+      ctx.announceTurn();
+      return;
+    }
     if (event.type !== "pointerup" || ended.mode !== "zoom") return;
     const shown = screenBox(ended.from, local(event));
     if (shown.w < CLICK_SLOP_PX && shown.h < CLICK_SLOP_PX) {

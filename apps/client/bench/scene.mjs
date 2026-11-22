@@ -1532,6 +1532,23 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare,
   })),
+  // **La famiglia «nucleo»** (K6 T11): gli strumenti del motore per scegliere
+  // e per la vista nella colonna del Completo, col motore del banco acceso; la
+  // tendina della casella «Scegli» aperta, e la Selezione diretta scelta (la
+  // sua famiglia pronta, la fila delle opzioni in testata senza un gesto).
+  ...[
+    ["disegno-fam-nucleo", 1280, "Il nucleo nella colonna: Selezione, Selezione diretta, Lazo e la vista del motore, coi nomi e le icone", openDrawing],
+    ["disegno-fam-nucleo-800", 800, "Il nucleo nella colonna nella finestra minima del desktop, 800 px", openDrawing],
+    ["disegno-fam-nucleo-tendina", 1280, "La tendina della casella «Scegli»: Selezione di Fub e Selezione del motore", openColumnGroup],
+    ["disegno-fam-nucleo-diretta", 1280, "La Selezione diretta del motore scelta: la casella accesa, e la famiglia pronta senza un gesto", scegliSelezioneDiretta],
+    ["disegno-fam-nucleo-diretta-800", 800, "La Selezione diretta del motore scelta nella finestra minima del desktop, 800 px", scegliSelezioneDiretta],
+  ].map(([id, width, title, prepare]) => ({
+    id,
+    title,
+    query: "connectors=6&drawing=acceso",
+    viewport: { width, height: 800 },
+    prepare,
+  })),
   // **Il menu ≡ e Ctrl+/ del Completo** (K6 T9a): le voci dell'indice di prova
   // (`?indice=prova`, vedi `fake-ipc.ts`). Il menu ≡ con Oggetto aperto, e la
   // tavolozza con la ricerca «sposta», a 1280 e a 800 px (la finestra minima).
@@ -5249,6 +5266,17 @@ async function openColumnGroup(page) {
     casella.dispatchEvent(new KeyboardEvent("keydown", { key: lato, bubbles: true, cancelable: true }));
   });
   await page.waitForSelector(".kit-rail-flyout [role='menuitemradio']");
+}
+
+/// La Selezione diretta del motore (K6 T11) scelta dalla sua casella: la
+/// casella si accende quando la famiglia è pronta.
+async function scegliSelezioneDiretta(page) {
+  await openDrawing(page);
+  const casella = '.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]';
+  await page.waitForSelector(casella);
+  await page.click(casella);
+  await page.waitForSelector(`${casella}[aria-pressed="true"], ${casella} [aria-pressed="true"], ${casella}.is-active, ${casella}[data-active]`, { timeout: 5000 }).catch(() => {});
+  await page.evaluate(() => document.fonts.ready);
 }
 
 /// «Tutti gli strumenti» (K6 T8): il cassetto aperto dalla sua casella; con

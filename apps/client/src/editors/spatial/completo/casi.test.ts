@@ -37,7 +37,9 @@ const TESTS = decodeURIComponent(new URL("../../../../../../crates/fub-disegno/t
 interface CasoSuDisco {
   readonly id: string;
   readonly disegno: string;
-  readonly atteso: { readonly ops?: unknown };
+  /// Manca per una riga che ha solo la prova del client (una voce
+  /// dell'interfaccia, un pannello, uno strumento della vista).
+  readonly atteso?: { readonly ops?: unknown };
   readonly dopo?: string;
 }
 
@@ -69,7 +71,7 @@ async function tuttiICasi(): Promise<{ fs: NodeFs; casi: CasoDaApplicare[] }> {
 describe("il banco delle righe, lato client", () => {
   it("applica le operazioni di ogni caso in un passo, e le annulla", async () => {
     const { fs, casi } = await tuttiICasi();
-    const conOps = casi.filter(({ caso }) => Array.isArray(caso.atteso.ops));
+    const conOps = casi.filter(({ caso }) => Array.isArray(caso.atteso?.ops));
     // I casi di prova hanno almeno un comando e uno strumento con operazioni.
     expect(conOps.filter(({ nome }) => nome.startsWith("prova:")).length).toBeGreaterThanOrEqual(3);
     const errori: string[] = [];
@@ -79,7 +81,7 @@ describe("il banco delle righe, lato client", () => {
         errori.push(`${nome}: le operazioni senza il disegno dopo`);
         continue;
       }
-      const letto = opsDellEsito(JSON.stringify(caso.atteso.ops));
+      const letto = opsDellEsito(JSON.stringify(caso.atteso!.ops));
       if ("reason" in letto) {
         errori.push(`${nome}: le operazioni non si leggono (${letto.reason}: ${letto.detail})`);
         continue;

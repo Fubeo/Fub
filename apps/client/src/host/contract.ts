@@ -1881,6 +1881,9 @@ export const DRAWING_COMMAND_WIDTH = "disegno.spessore";
 /** Un'opzione di uno strumento del motore: `value` è
  *  `{ strumento: id, chiave: nome, valore: JSON }`. */
 export const DRAWING_COMMAND_TOOL_OPTION = "disegno.strumento.opzione";
+/** Lo stato di uno strumento del motore, senza cambiare niente: `value` è
+ *  `{ strumento: id }`; l'esito porta lo `state`, senza operazioni. */
+export const DRAWING_COMMAND_TOOL_STATE = "disegno.strumento.stato";
 /** Prepara una famiglia di comandi del motore: `value` è `{ famiglia: id }`,
  *  con l'id fra `DRAWING_FAMILIES`. */
 export const DRAWING_COMMAND_FAMILY_PREPARE = "disegno.famiglia.prepara";

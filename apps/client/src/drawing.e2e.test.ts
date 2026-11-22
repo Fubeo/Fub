@@ -221,8 +221,9 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 /// colonna di serie.
 const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 /// La colonna del Completo (K6 T8): sei gruppi nell'ordine del prototipo, con
-/// la Mano in fondo al suo gruppo e «Tutti gli strumenti» dopo.
-const COLUMN_TOOLS_COMPLETO = ["select", "pen", "eraser", "rect", "text", "hand", "all"];
+/// la Mano in fondo al suo gruppo e «Tutti gli strumenti» dopo; con il motore
+/// acceso, le caselle della Selezione diretta e del Lazo del nucleo (K6 T11).
+const COLUMN_TOOLS_COMPLETO = ["select", "motore:directSelection", "motore:lasso", "pen", "eraser", "rect", "text", "hand", "all"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;

@@ -11,6 +11,7 @@ import { t, type DrawKey } from "../../../strings";
 import { toolKeyText, type ToolId, type ToolProfile, type ToolSpec } from "../../registry";
 import type { EditorContext } from "../context";
 import type { StrumentoCassetto } from "./drawer";
+import type { StrumentoMotoreColonna } from "../../../completo";
 
 /// Il bersaglio di una casella della colonna, in px: il lato di 44 px del kit
 /// (`kit-rail[data-size="large"]`). È la misura di serie; quella vera si legge
@@ -75,13 +76,28 @@ export function caselleCheStanno(lunghezza: number, gruppi: readonly number[], m
   return stanno;
 }
 
-/// Le caselle del Completo con i soli strumenti che il disegno offre: uno
-/// strumento del motore (`motore:…`) o sconosciuto non ha un `ToolSpec` e si
-/// salta, e una casella senza strumenti non c'è. Così la colonna non cerca mai
-/// uno strumento che non esiste.
-export function casellePresenti(caselle: readonly (readonly string[])[], offerti: readonly ToolSpec[]): string[][] {
+/// Il prefisso di uno strumento del motore nella colonna: `motore:<id>`.
+export const PREFISSO_MOTORE = "motore:";
+
+/// Le caselle del Completo con i soli strumenti che il disegno offre: uno di
+/// Fub se ha un `ToolSpec`, uno del motore (`motore:<id>`) se `motore` lo sa
+/// descrivere (il suo nome e la sua icona: K6 T11). Gli altri si saltano, e una
+/// casella senza strumenti non c'è. Così la colonna non cerca mai uno
+/// strumento che non esiste, e non mostra mai un id al posto di un nome.
+export function casellePresenti(caselle: readonly (readonly string[])[], offerti: readonly ToolSpec[], motore: (id: string) => boolean = () => false): string[][] {
   const ids = new Set(offerti.map((spec) => spec.id as string));
-  return caselle.map((casella) => casella.filter((id) => ids.has(id))).filter((casella) => casella.length > 0);
+  const presente = (id: string): boolean => (id.startsWith(PREFISSO_MOTORE) ? motore(id.slice(PREFISSO_MOTORE.length)) : ids.has(id));
+  return caselle.map((casella) => casella.filter(presente)).filter((casella) => casella.length > 0);
+}
+
+/// La casella di uno strumento del motore: il nome, l'icona, e lo stato della
+/// sua famiglia nel nome e nella descrizione (si prepara; non si è preparata,
+/// e sceglierlo di nuovo ci riprova). Il tasto è quello dell'indice, che la
+/// colonna non mostra (i tasti del motore sono una regola del Completo).
+export function casellaMotore(id: string, strumento: StrumentoMotoreColonna): RailTool {
+  const nome = strumento.nome;
+  const stato = strumento.famiglia === "in-arrivo" ? t("draw.engine.tool.preparing", { tool: nome }) : strumento.famiglia === "errore" ? t("draw.engine.tool.failed", { tool: nome }) : null;
+  return { id: `${PREFISSO_MOTORE}${id}`, label: stato ?? nome, icon: strumento.icona, description: stato ?? nome };
 }
 
 /// La casella «Tutti gli strumenti» della colonna del Completo: non è uno
@@ -93,6 +109,9 @@ export const TUTTI_GLI_STRUMENTI = "all";
 /// cassetto riceve gli strumenti da mostrare e chi li sceglie.
 export interface CompletoColonna {
   colonna(offerti: readonly ToolSpec[]): readonly { readonly id: string; readonly caselle: readonly (readonly string[])[] }[];
+  /// Lo strumento del motore `id` come lo mostra la casella; `null` se non si
+  /// sa ancora descrivere (la casella non lo mostra).
+  strumentoMotore(id: string): StrumentoMotoreColonna | null;
   cassetto(
     anchor: HTMLElement,
     opzioni: { readonly strumenti: readonly StrumentoCassetto[]; readonly corrente: string | null; readonly scegli: (id: string) => void; readonly modifica: () => void },
@@ -232,7 +251,11 @@ export function installRail(ctx: EditorContext): void {
   // che `createToolRail` la restituisca, non c'è (0).
   let railEl: HTMLElement | null = null;
   const misura = (): { lunghezza: number; misure: MisureColonna } => (railEl === null ? { lunghezza: 0, misure: MISURE_DI_SERIE } : misureColonna(railEl));
-  const railTool = (id: string): RailTool => {
+  const railTool = (id: string, completo: CompletoColonna): RailTool => {
+    if (id.startsWith(PREFISSO_MOTORE)) {
+      const motore = id.slice(PREFISSO_MOTORE.length);
+      return casellaMotore(motore, completo.strumentoMotore(motore)!);
+    }
     const spec = ctx.tools.find((each) => each.id === id)!;
     const { keys, aria } = keysOf(spec);
     return { id, label: t(toolLabel(id as ToolId)), icon: ctx.toolIcon(id as ToolId), keys, ariaKeys: aria, description: t(toolHint(id as ToolId)) };
@@ -257,9 +280,9 @@ export function installRail(ctx: EditorContext): void {
     if (completo !== null && ctx.column.length === 0) {
       const tutte: RailGroup[] = completo.colonna(ctx.tools).map((gruppo) => ({
         id: gruppo.id,
-        slots: casellePresenti(gruppo.caselle, ctx.tools)
+        slots: casellePresenti(gruppo.caselle, ctx.tools, (id) => completo.strumentoMotore(id) !== null)
           .filter((tools) => tools.length > 0)
-          .map((tools) => ({ id: tools[0]!, tools: tools.map(railTool) })),
+          .map((tools) => ({ id: tools[0]!, tools: tools.map((id) => railTool(id, completo)) })),
       })).filter((gruppo) => gruppo.slots.length > 0);
       // Le caselle che non stanno nello spazio passano nel cassetto: lo
       // mostra il cassetto, che elenca tutti gli strumenti.
@@ -284,18 +307,44 @@ export function installRail(ctx: EditorContext): void {
       })),
     }));
   };
-  const signature = (): string => `${ctx.column.join("+")}|${ctx.completo?.() ? "completo" : "base"}|${ctx.tools.map((spec) => `${spec.id}:${ctx.toolIcon(spec.id)}:${toolLabel(spec.id)}`).join(",")}`;
+  /// Gli strumenti del motore della colonna, col loro nome e lo stato della
+  /// famiglia: un cambio rifà le caselle.
+  const firmaMotore = (completo: CompletoColonna | null): string => {
+    if (completo === null || ctx.column.length > 0) return "";
+    const ids = completo.colonna(ctx.tools).flatMap((gruppo) => gruppo.caselle.flat()).filter((id) => id.startsWith(PREFISSO_MOTORE));
+    return ids
+      .map((id) => {
+        const motore = completo.strumentoMotore(id.slice(PREFISSO_MOTORE.length));
+        return motore === null ? `${id}:-` : `${id}:${motore.nome}:${motore.icona}:${motore.famiglia}`;
+      })
+      .join(",");
+  };
+  const signature = (): string => {
+    const completo = ctx.completo?.() ?? null;
+    return `${ctx.column.join("+")}|${completo ? "completo" : "base"}|${ctx.tools.map((spec) => `${spec.id}:${ctx.toolIcon(spec.id)}:${toolLabel(spec.id)}`).join(",")}|${firmaMotore(completo)}`;
+  };
+  /// Lo strumento acceso nella colonna: quello del motore, se ce n'è uno
+  /// scelto, sopra a quello di Fub.
+  const attivo = (): string => (ctx.motoreTool !== null && ctx.motoreTool !== undefined ? `${PREFISSO_MOTORE}${ctx.motoreTool}` : ctx.tool);
 
   const rail = createToolRail({
     label: t("draw.chrome.rail"),
     groups: groups(),
-    active: ctx.tool,
+    active: attivo(),
     slotClass: "draw-tool",
     text: { more: (tool) => t("draw.chrome.rail.more", { tool }) },
     onSelect: (tool) => {
       if (tool === TUTTI_GLI_STRUMENTI) {
         const completo = ctx.completo?.() ?? null;
         if (completo !== null) openDrawer(completo);
+        return;
+      }
+      // Uno strumento del motore lo sceglie il motore, e la sua famiglia si
+      // prepara (una famiglia in errore ci riprova); uno di Fub toglie quello
+      // del motore.
+      if (tool.startsWith(PREFISSO_MOTORE)) {
+        ctx.sceltaMotore(tool.slice(PREFISSO_MOTORE.length));
+        rail.setActive(attivo());
         return;
       }
       ctx.pickTool(tool as ToolId);
@@ -313,7 +362,7 @@ export function installRail(ctx: EditorContext): void {
   const rebuild = (): void => {
     shown = signature();
     rail.setGroups(groups());
-    rail.setActive(ctx.tool);
+    rail.setActive(attivo());
   };
   relabels.push(() => {
     rail.element.setAttribute("aria-label", t("draw.chrome.rail"));
@@ -336,7 +385,7 @@ export function installRail(ctx: EditorContext): void {
 
   ctx.syncRail = (editable) => {
     if (signature() !== shown) rebuild();
-    else rail.setActive(ctx.tool);
+    else rail.setActive(attivo());
     rail.setDisabled(!editable);
   };
 }

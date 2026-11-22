@@ -56,6 +56,10 @@ pub const DRAWING_COMMANDS: [&str; 3] = [
 /// Un'opzione di uno strumento del motore (`Tool::set_option`): `value` è
 /// `{ "strumento": id, "chiave": nome, "valore": JSON }`.
 pub const DRAWING_COMMAND_TOOL_OPTION: &str = "disegno.strumento.opzione";
+/// Lo stato di uno strumento del motore, senza cambiare niente: `value` è
+/// `{ "strumento": id }`. Lo strumento diventa quello attivo e l'esito porta
+/// il suo `state`, senza operazioni e senza un passo della cronologia.
+pub const DRAWING_COMMAND_TOOL_STATE: &str = "disegno.strumento.stato";
 /// Prepara una famiglia di comandi del motore: `value` è
 /// `{ "famiglia": id }`, con l'id fra [`DRAWING_FAMILIES`].
 pub const DRAWING_COMMAND_FAMILY_PREPARE: &str = "disegno.famiglia.prepara";
@@ -937,7 +941,8 @@ pub struct DrawingOutcome {
     #[serde(default)]
     pub frame: Option<DrawingFrame>,
     /// Com'è lo strumento del motore dopo il gesto (o dopo
-    /// `disegno.strumento.opzione`); `None` per gli strumenti di K5 e per i
+    /// `disegno.strumento.opzione` o `disegno.strumento.stato`); `None` per
+    /// gli strumenti di K5 e per i
     /// comandi. Può mancare (vale `None`).
     #[serde(default)]
     pub state: Option<DrawingToolState>,
@@ -1135,6 +1140,30 @@ impl DrawingCommandRequest {
                     return Err(bad("`value.valore` is missing".into()));
                 }
                 Ok(())
+            }
+            DRAWING_COMMAND_TOOL_STATE => {
+                let campi = self
+                    .value
+                    .as_object()
+                    .ok_or_else(|| bad("`value` must be an object with `strumento`".into()))?;
+                if let Some(altro) = campi.keys().find(|k| k.as_str() != "strumento") {
+                    return Err(bad(format!(
+                        "`value.{altro}` is not a field of the request"
+                    )));
+                }
+                let strumento = campi
+                    .get("strumento")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| bad("`value.strumento` must be a tool id".into()))?;
+                DrawingTool::Engine {
+                    id: strumento.to_string(),
+                }
+                .validate()
+                .map_err(|_| {
+                    bad(format!(
+                        "`value.strumento` must have 1 to {MAX_DRAWING_TOOL_ID_BYTES} bytes of ASCII letters, digits, `_` or `-`"
+                    ))
+                })
             }
             DRAWING_COMMAND_FAMILY_PREPARE => {
                 let campi = self

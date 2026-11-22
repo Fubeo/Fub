@@ -14,7 +14,7 @@ use fub_abi::{
 use fub_abi::{
     DrawingCommandInfo, DrawingDisabledReason, DrawingInput, DrawingKeyMods, DrawingOverlay,
     DrawingOverlayRole, DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE,
-    DRAWING_COMMAND_TOOL_OPTION, DRAWING_FAMILIES, MAX_DRAWING_INPUTS,
+    DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, DRAWING_FAMILIES, MAX_DRAWING_INPUTS,
     MAX_DRAWING_OVERLAY_TEXT_BYTES, MAX_DRAWING_TOOL_ID_BYTES,
 };
 use serde_json::{json, Value};
@@ -796,6 +796,20 @@ fn the_tool_option_and_the_family_requests_are_checked() {
             request(DRAWING_COMMAND_TOOL_OPTION, value).validate(),
             field,
         );
+    }
+    request(
+        DRAWING_COMMAND_TOOL_STATE,
+        json!({"strumento": "directSelection"}),
+    )
+    .validate()
+    .unwrap();
+    for (value, field) in [
+        (json!("pen"), "value"),
+        (json!({}), "value.strumento"),
+        (json!({"strumento": "pen tool"}), "value.strumento"),
+        (json!({"strumento": "pen", "chiave": "k"}), "value.chiave"),
+    ] {
+        refused(request(DRAWING_COMMAND_TOOL_STATE, value).validate(), field);
     }
     assert_eq!(DRAWING_FAMILIES.len(), 26);
     for famiglia in DRAWING_FAMILIES {

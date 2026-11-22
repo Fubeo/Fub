@@ -45,6 +45,8 @@ const completoFinto = () => ({
   sezioni: { registra: () => false, di: () => [], ascolta: () => () => undefined, chiudi: () => undefined },
   spazio: () => undefined,
   colonna: () => [],
+  strumentoMotore: () => null,
+  ascoltaColonna: () => () => undefined,
   cassetto: () => undefined,
 });
 

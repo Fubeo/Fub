@@ -64,7 +64,8 @@ Sei porte tipate, come quelle della griglia, registrate dall'app
   selezione, valore, anteprima) e risponde un `DrawingOutcome`. I comandi sono
   `disegno.colore-tratto` (un colore), `disegno.colore-riempimento` (un colore
   o `null`), `disegno.spessore` (un numero, zero o più),
-  `disegno.strumento.opzione` e `disegno.famiglia.prepara`;
+  `disegno.strumento.opzione`, `disegno.strumento.stato` e
+  `disegno.famiglia.prepara`;
 - `close_drawing` chiude l'istanza.
 
 Dal lato del client le sei porte sono `openDrawing`, `drawingSync`,
@@ -192,6 +193,13 @@ leggono come prima.
   gesto di un altro strumento in corso si annulla); l'esito non ha operazioni
   e porta lo `state` con le opzioni nuove. Senza anteprima: con `preview` è
   `no_preview`.
+- **Lo stato di uno strumento**, `disegno.strumento.stato`, è
+  `{"strumento": "directSelection"}` e nessun altro campo. Si legge soltanto:
+  lo strumento diventa quello attivo (come per l'opzione) e l'esito porta il
+  suo `state`, senza operazioni, senza cambiare la selezione e senza un passo
+  della cronologia. Il client lo chiede quando la famiglia dello strumento è
+  pronta, così la fila delle opzioni c'è prima del primo gesto. Uno strumento
+  che il motore non conosce è `unknown_tool`; con `preview` è `no_preview`.
 - **La famiglia**, `disegno.famiglia.prepara`, è `{"famiglia": "testo"}` con
   una delle 26 famiglie della mappa del motore (`DRAWING_FAMILIES`). La
   famiglia nasce in un lavoro in sottofondo e la risposta arriva subito:

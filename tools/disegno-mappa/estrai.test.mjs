@@ -50,7 +50,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // righe `window.*` del menu Finestra: da «da fare» a «fub». T8 chiude le dieci
   // righe della colonna e del cassetto, e passano a «fub» allo stesso modo; T9c
   // le dieci di Impostazioni › Scorciatoie (i tasti, i conflitti, gli insiemi).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1439, fub: 100, escluso: 12 });
+  // T11 giro A porta a «fatto» le venti del nucleo (select, object).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1410, fub: 109, escluso: 12, fatto: 20 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

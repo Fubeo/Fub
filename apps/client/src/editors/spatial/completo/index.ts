@@ -21,7 +21,9 @@ import type { MenuItem } from "../../../ui/menu";
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
 export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 // La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
-import { layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
+import { iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
+import type { Teardown } from "../../../ui/lifetime";
+import { languageCurrent } from "../../../i18n/strings";
 import type { ToolSpec } from "../tools/registry";
 import type { Lifetime } from "../../../ui/lifetime";
 import type { CassettoOptions } from "../tools/editor/chrome/drawer";
@@ -59,6 +61,14 @@ export interface Completo {
   /// La colonna del Completo per gli strumenti offerti (T8): sei gruppi, le
   /// caselle che hanno strumenti pronti, nell'ordine del prototipo.
   colonna(offerti: readonly ToolSpec[]): readonly GruppoLayout[];
+  /// Lo strumento del motore `strumento` come lo mostra la colonna (T11): il
+  /// nome nella lingua di adesso, l'icona e lo stato della sua famiglia.
+  /// `null` finché l'indice non dice la sua famiglia, o se non ce l'ha: la
+  /// casella non lo mostra (mai un id al posto del nome).
+  strumentoMotore(strumento: string): StrumentoMotoreColonna | null;
+  /// Avvisa quando ciò che `strumentoMotore` dice può essere cambiato: l'indice
+  /// è arrivato, o una famiglia ha cambiato stato. Il ritorno smette.
+  ascoltaColonna(ascolto: () => void): Teardown;
   /// Apre il cassetto «Tutti gli strumenti» dalla sua casella (T8). Il suo
   /// pezzo arriva con un `import()`, la prima volta.
   cassetto(anchor: HTMLElement, opzioni: Omit<CassettoOptions, "anchor" | "lifetime">, lifetime: Lifetime): void;
@@ -78,6 +88,15 @@ export interface Completo {
   /// controlli da mostrare. Le etichette non si inventano: senza famiglia pronta non
   /// c'è fila.
   fila(strumento: string, opzioni: unknown, cambia: (chiave: string, valore: boolean | number | string) => void, vita: Lifetime): FilaOpzioni | null;
+}
+
+/// Uno strumento del motore nella colonna (T11): il nome (dai testi della sua
+/// famiglia, o dall'indice finché la famiglia non è pronta), l'icona del
+/// prototipo, e la sua famiglia: pronta, in arrivo, in errore o non chiesta.
+export interface StrumentoMotoreColonna {
+  readonly nome: string;
+  readonly icona: string;
+  readonly famiglia: "pronta" | "in-arrivo" | "errore" | "assente";
 }
 
 /// Ciò che l'editor dà a una voce del menu o della ricerca: lo strumento del
@@ -262,6 +281,10 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
   // sola per strumento (la voce dell'indice non cambia). Uno strumento senza
   // voce, o un indice che non arriva, non ha famiglia.
   const famiglie = new Map<string, string>();
+  /// L'indice, quando è arrivato: la colonna ne legge i nomi senza aspettare.
+  let indiceArrivato: Indice | null = null;
+  const voceStrumento = (pronto: Indice, strumento: string): VoceIndice | undefined =>
+    pronto.voci.find((one) => "strumento" in one.chiamata && one.chiamata.strumento === strumento);
   const famigliaDi = async (strumento: string): Promise<string | null> => {
     const nota = famiglie.get(strumento);
     if (nota !== undefined) return nota;
@@ -271,11 +294,18 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     } catch {
       return null;
     }
-    const voce = pronto.voci.find((one) => "strumento" in one.chiamata && one.chiamata.strumento === strumento);
+    const voce = voceStrumento(pronto, strumento);
     if (voce === undefined) return null;
     famiglie.set(strumento, voce.famiglia);
     return voce.famiglia;
   };
+  /// Chi ascolta i cambi della colonna (`ascoltaColonna`).
+  const ascoltiColonna = new Set<() => void>();
+  const avvisaColonna = (): void => {
+    if (chiuso) return;
+    for (const ascolto of [...ascoltiColonna]) if (ascoltiColonna.has(ascolto)) ascolto();
+  };
+  ctx.life.add(carica.quandoCambia(() => avvisaColonna()));
   const completo: Completo = {
     indice,
     carica,
@@ -310,6 +340,23 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       applicaSpazio(preset, effetti, carica);
     },
     colonna: (offerti) => layoutCompleto(offerti, MOTORE_PRONTO),
+    strumentoMotore(strumento) {
+      // Senza motore uno strumento del motore non fa niente: non si mostra.
+      if (ctx.motore === null || indiceArrivato === null) return null;
+      const voce = voceStrumento(indiceArrivato, strumento);
+      if (voce === undefined) return null;
+      const inglese = languageCurrent().startsWith("en");
+      const corto = carica.testi(voce.famiglia)?.[`strumento:${strumento}`];
+      const nome = corto !== undefined ? (inglese ? corto.en : corto.it) : inglese ? voce.etichetta.en : voce.etichetta.it;
+      const stato = carica.stato(voce.famiglia).kind;
+      return { nome, icona: iconaMotore(strumento), famiglia: stato };
+    },
+    ascoltaColonna(ascolto) {
+      ascoltiColonna.add(ascolto);
+      return () => {
+        ascoltiColonna.delete(ascolto);
+      };
+    },
     cassetto(anchor, opzioni, lifetime) {
       // Il cassetto è nel suo pezzo: si apre appena arriva, e non dopo la
       // chiusura del disegno. Se il pezzo non arriva, lo dice e «Riprova» lo
@@ -349,7 +396,14 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     },
   };
   ctx.life.add(() => completo.chiudi());
-  void indice().catch(() => {});
+  ctx.life.add(() => ascoltiColonna.clear());
+  void indice().then(
+    (pronto) => {
+      indiceArrivato = pronto;
+      avvisaColonna();
+    },
+    () => {},
+  );
   void carica.famiglia(NUCLEO);
   return completo;
 }

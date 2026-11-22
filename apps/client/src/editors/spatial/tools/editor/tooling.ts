@@ -138,8 +138,10 @@ export function installTooling(ctx: EditorContext): void {
   }
   ctx.setWidth = setWidth;
 
-  /// Lo strumento `id` scelto dalla barra o dal suo tasto.
+  /// Lo strumento `id` scelto dalla barra o dal suo tasto. Uno strumento del
+  /// motore scelto (K6 T11) si toglie: chi sceglie uno di Fub vuole quello.
   function pickTool(id: ToolId): void {
+    if (ctx.motoreTool !== null && ctx.motoreTool !== undefined && ctx.tools.some((spec) => spec.id === id)) ctx.sceltaMotore(null);
     setTool(id);
   }
   ctx.pickTool = pickTool;

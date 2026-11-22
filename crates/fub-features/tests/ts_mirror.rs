@@ -75,6 +75,7 @@ use fub_abi::{
 use fub_abi::{
     DrawingDisabledReason, DrawingInput, DrawingKeyMods, DrawingOverlay, DrawingOverlayRole,
     DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION,
+    DRAWING_COMMAND_TOOL_STATE,
 };
 use fub_abi::{
     GridBook, GridBytesCell, GridBytesSession, GridBytesWindow, GridCalculation, GridCommand,
@@ -2054,6 +2055,13 @@ fn drawing_samples() -> Value {
                 id: DRAWING_COMMAND_TOOL_OPTION.into(),
                 selection: Vec::new(),
                 value: json!({"strumento": "pen", "chiave": "rubber_band", "valore": false}),
+                preview: false,
+            }),
+            to_value(DrawingCommandRequest {
+                revision,
+                id: DRAWING_COMMAND_TOOL_STATE.into(),
+                selection: Vec::new(),
+                value: json!({"strumento": "directSelection"}),
                 preview: false,
             }),
             to_value(DrawingCommandRequest {

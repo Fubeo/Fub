@@ -4274,6 +4274,15 @@
     },
     {
       "revision": "18446744073709551614",
+      "id": "disegno.strumento.stato",
+      "selection": [],
+      "value": {
+        "strumento": "directSelection"
+      },
+      "preview": false
+    },
+    {
+      "revision": "18446744073709551614",
       "id": "disegno.famiglia.prepara",
       "selection": [],
       "value": {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION, DRAWING_FAMILIES, GRID_THEME_COLORS, MAIN_PANE } from "./contract";
+import { DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, DRAWING_FAMILIES, GRID_THEME_COLORS, MAIN_PANE } from "./contract";
 import { themeIconsFileHolds } from "../rules/mirrored";
 import type {
   BacklinkRef,
@@ -1831,6 +1831,7 @@ describe("mirror TS↔Rust", () => {
     const requests = fixture["DrawingCommandRequest"] as DrawingCommandRequest[];
     expect(requests.some((r) => r.preview === true)).toBe(true);
     expect(new Set(requests.map((r) => r.id))).toContain(DRAWING_COMMAND_TOOL_OPTION);
+    expect(new Set(requests.map((r) => r.id))).toContain(DRAWING_COMMAND_TOOL_STATE);
     expect(new Set(requests.map((r) => r.id))).toContain(DRAWING_COMMAND_FAMILY_PREPARE);
     expect(DRAWING_FAMILIES).toHaveLength(26);
     for (const r of requests.filter((each) => each.id === DRAWING_COMMAND_FAMILY_PREPARE)) {

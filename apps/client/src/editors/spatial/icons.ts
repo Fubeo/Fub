@@ -189,6 +189,8 @@ const COLUMN: Readonly<Record<string, readonly string[]>> = {
   "draw-graph": ["M4 20h16", "M6 20v-6", "M10 20V8", "M14 20v-9", "M18 20V5"],
   "draw-grid-polar": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M7 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0", "M12 3v18", "M3 12h18"],
   "draw-grid-rect": ["M4 4h16v16H4z", "M4 9.3h16", "M4 14.7h16", "M9.3 4v16", "M14.7 4v16"],
+  // Il Lazo: un riquadro a tratti.
+  "draw-lasso": ["M4 7V4h3", "M10 4h4", "M17 4h3v3", "M20 10v4", "M20 17v3h-3", "M14 20h-4", "M7 20H4v-3", "M4 14v-4"],
   "draw-live-paint": ["M6 10l6-6 7 7-6 6z", "M6 10l-1 1a2 2 0 0 0 0 2.8l.2.2", "M19 15s2 2.3 2 3.5a2 2 0 0 1-4 0c0-1.2 2-3.5 2-3.5z"],
   "draw-measure": ["M3 17L17 3l4 4L7 21z", "M7 13l2 2", "M10 10l2 2", "M13 7l2 2"],
   "draw-mesh": ["M4 4h16v16H4z", "M4 12c5-3 11 3 16 0", "M12 4c-3 5 3 11 0 16"],

@@ -9,7 +9,7 @@
 // gesto annullato non scrivono niente.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DRAWING_COMMAND_TOOL_OPTION, type DrawingFrame, type DrawingGesture, type DrawingOutcome, type DrawingPointer } from "../../../host/contract";
+import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, type DrawingFrame, type DrawingGesture, type DrawingOutcome, type DrawingPointer } from "../../../host/contract";
 import { createFakeHost, type DrawingFake, type FakeHost } from "../../../host/fake";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../../state/document-session";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -892,9 +892,13 @@ const esitoConStato = (cursor: string, options: unknown): DrawingOutcome => ({
   reading: null,
 });
 
+/// Il motore finto che, a famiglia pronta, dice lo stato di serie di uno
+/// strumento (`disegno.strumento.stato`), come quello vero.
+const statoDiSerie = (): DrawingOutcome => esitoConStato("arrow", null);
+
 describe("lo strumento del motore nei gesti (K6 T8)", () => {
   it("uno strumento del motore manda `DrawingTool::Engine` col suo id, e il cursore del foglio segue il suo stato", async () => {
-    const fake = createFakeHost({ drawing: {} });
+    const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
     const editor = await montaConPreparazione(EMPTY, fake);
     editor.setEngineTool("pen");
     await drag(editor, [[220, 40], [260, 70], [300, 90]]);
@@ -917,8 +921,44 @@ describe("lo strumento del motore nei gesti (K6 T8)", () => {
     editor.setEngineOption("pen", "spessore", 3);
     await settle();
     const comandi = fake.atGate("drawingCommand").map((call) => call.args[1] as { id: string; selection: string[]; value: unknown });
-    expect(comandi).toEqual([expect.objectContaining({ id: DRAWING_COMMAND_TOOL_OPTION, selection: [], value: { strumento: "pen", chiave: "spessore", valore: 3 } })]);
+    expect(comandi.filter((c) => c.id === DRAWING_COMMAND_TOOL_OPTION)).toEqual([expect.objectContaining({ selection: [], value: { strumento: "pen", chiave: "spessore", valore: 3 } })]);
     expect(editor.statoStrumento("pen")).toEqual(expect.objectContaining({ cursor: "arrow" }));
+  });
+
+  it("a famiglia pronta lo stato dello strumento si legge senza un gesto, e una volta sola", async () => {
+    let pronta!: (ok: boolean) => void;
+    const fake = createFakeHost({
+      drawing: {
+        comando: (request) => (request.id === DRAWING_COMMAND_TOOL_STATE ? esitoConStato("crosshair", { meshPoints: [] }) : esitoConStato("arrow", null)),
+      } as DrawingFake,
+    });
+    const editor = await montaConPreparazione(EMPTY, fake, () => new Promise<boolean>((resolve) => (pronta = resolve)));
+    editor.setEngineTool("directSelection");
+    await settle();
+    // Mentre si prepara, niente: la famiglia non c'è ancora.
+    expect(fake.atGate("drawingCommand")).toHaveLength(0);
+    expect(editor.statoStrumento("directSelection")).toBeNull();
+    pronta(true);
+    await settle(0, 4);
+    const comandi = fake.atGate("drawingCommand").map((call) => call.args[1] as { id: string; selection: string[]; value: unknown });
+    expect(comandi).toEqual([expect.objectContaining({ id: DRAWING_COMMAND_TOOL_STATE, selection: [], value: { strumento: "directSelection" } })]);
+    expect(editor.statoStrumento("directSelection")).toEqual(expect.objectContaining({ cursor: "crosshair", options: { meshPoints: [] } }));
+    // Nessun gesto è partito, e il documento non è cambiato.
+    expect(gestures(fake)).toHaveLength(0);
+    // Tornare allo strumento, con lo stato già noto, non lo rilegge.
+    editor.setEngineTool(null);
+    editor.setEngineTool("directSelection");
+    await settle(0, 4);
+    expect(fake.atGate("drawingCommand")).toHaveLength(1);
+  });
+
+  it("la famiglia che non arriva non legge lo stato", async () => {
+    const fake = createFakeHost({ drawing: { comando: () => esitoConStato("arrow", null) } as DrawingFake });
+    const editor = await montaConPreparazione(EMPTY, fake, async () => false);
+    editor.setEngineTool("selection");
+    await settle(0, 4);
+    expect(fake.atGate("drawingCommand")).toHaveLength(0);
+    expect(editor.statoStrumento("selection")).toBeNull();
   });
 
   it("la famiglia che non arriva: lo strumento di prima resta, e lo si dice con «Riprova»", async () => {
@@ -948,7 +988,7 @@ describe("lo strumento del motore nei gesti (K6 T8)", () => {
   });
 
   it("Esc annulla il gesto e lo strumento del motore resta", async () => {
-    const fake = createFakeHost({ drawing: {} });
+    const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
     const editor = await montaConPreparazione(EMPTY, fake);
     editor.setEngineTool("pen");
     dispatch(editor, point("down", 220, 40));
