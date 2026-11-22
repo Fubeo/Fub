@@ -16,7 +16,7 @@ import { labelsOf } from "../connectors";
 import { movedFrame } from "../frame";
 import { placedAt, screenBox } from "../../view";
 import type { Unit } from "../hit";
-import type { Mark, Replay } from "../history";
+import { stepName, type Mark, type Replay, type StepLabel } from "../history";
 import type { DrawChange } from "../editor";
 import { FIT_PAD, HIT_PX } from "./constants";
 import type { EditorContext } from "./context";
@@ -39,8 +39,8 @@ const REASONS: Readonly<Record<Reason, DrawKey>> = {
 
 /// Ciò che le operazioni e il gruppo isolato dà agli altri pezzi dell'editor.
 export interface OperationsContext {
-  attempt: (label: DrawKey, op: Op | null) => Applied | string | null;
-  commit: (label: DrawKey, op: Op | null) => Applied | null;
+  attempt: (label: StepLabel, op: Op | null) => Applied | string | null;
+  commit: (label: StepLabel, op: Op | null) => Applied | null;
   goToPoint: (at: number, mark: Mark | null) => void;
   markHere: () => void;
   renameMark: (id: number, name: string) => void;
@@ -94,7 +94,7 @@ export function installOperations(ctx: EditorContext): void {
 
   /// Applica il gesto `op` come `commit`, in silenzio: un rifiuto rende la
   /// sua ragione, a parole.
-  const attempt = (label: DrawKey, op: Op | null): Applied | string | null => {
+  const attempt = (label: StepLabel, op: Op | null): Applied | string | null => {
     if (op === null || !editable()) return null;
     // La misura del foglio si legge prima che il passo tocchi il disegno: dopo
     // le scritture costerebbe una rimisura ogni volta.
@@ -115,7 +115,7 @@ export function installOperations(ctx: EditorContext): void {
   ctx.attempt = attempt;
 
   /// Applica il gesto `op` e lo mette nella cronologia col nome `label`.
-  const commit = (label: DrawKey, op: Op | null): Applied | null => {
+  const commit = (label: StepLabel, op: Op | null): Applied | null => {
     const outcome = attempt(label, op);
     if (typeof outcome !== "string") return outcome;
     announce(t("draw.rejected", { reason: outcome }));
@@ -141,7 +141,7 @@ export function installOperations(ctx: EditorContext): void {
 
   const replay = (step: Replay | null, origin: "undo" | "redo"): void => {
     if (step === null) return;
-    const action = t(step.step.label);
+    const action = stepName(step.step.label);
     if (step.outcome.outcome === "rejected") {
       syncControls();
       announce(t(origin === "undo" ? "draw.undo.failed" : "draw.redo.failed", { action }));
@@ -159,7 +159,7 @@ export function installOperations(ctx: EditorContext): void {
     if (mark !== null && mark.at === at) return t("draw.history.where.mark", { name: mark.name });
     if (at === history.start) return t(history.trimmed ? "draw.history.where.start" : "draw.history.where.opened");
     const step = history.steps()[history.done - 1]!;
-    return t("draw.history.where.step", { action: t(step.label) });
+    return t("draw.history.where.step", { action: stepName(step.label) });
   };
 
   /// Va al punto `at` della cronologia in un colpo, dal suo pannello: i
@@ -186,7 +186,7 @@ export function installOperations(ctx: EditorContext): void {
     } else {
       syncControls();
     }
-    if (jump.failed !== null) said.push(t(jump.direction === "undo" ? "draw.undo.failed" : "draw.redo.failed", { action: t(jump.failed.label) }));
+    if (jump.failed !== null) said.push(t(jump.direction === "undo" ? "draw.undo.failed" : "draw.redo.failed", { action: stepName(jump.failed.label) }));
     announce(said.join(" "));
   }
   ctx.goToPoint = goToPoint;

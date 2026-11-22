@@ -32,7 +32,7 @@ import { identifier } from "../../../ui/a11y";
 import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
-import type { Mark, Step } from "./history";
+import { stepName, type Mark, type Step } from "./history";
 import { cleanName, NAME_MAX } from "./naming";
 import { ROW_PX } from "./objects";
 import { composingKey } from "../../../kit/ime";
@@ -171,7 +171,7 @@ export function createHistoryPanel(life: Lifetime, options: HistoryPanelOptions)
   const editable = (): boolean => view?.editable ?? false;
 
   const startLabel = (): string => t(view?.trimmed ? "draw.history.start" : "draw.history.opened");
-  const labelOf = (row: Row): string => (row.kind === "start" ? startLabel() : row.kind === "step" ? t(row.step.label) : row.mark.name);
+  const labelOf = (row: Row): string => (row.kind === "start" ? startLabel() : row.kind === "step" ? stepName(row.step.label) : row.mark.name);
 
   /// Le righe della cronologia `next`: la partenza, poi ogni passo coi segni
   /// che stanno dopo di lui.
