@@ -636,18 +636,25 @@ impl Lavoro<'_> {
                 return Err(no("il foglio di Fub non si nasconde"));
             }
             if a.visible && !e.nascosto {
-                return Err(no("l'oggetto è nascosto da uno stile, che display non toglie"));
+                return Err(no(
+                    "l'oggetto è nascosto da uno stile, che display non toglie",
+                ));
             }
             if a.visible == e.nascosto {
                 attrs.insert(
                     "display".into(),
-                    if a.visible { Value::Null } else { json!("none") },
+                    if a.visible {
+                        Value::Null
+                    } else {
+                        json!("none")
+                    },
                 );
             }
         }
         if !attrs.is_empty() {
             let id = self.bersaglio(a.id)?;
-            self.set.push(json!({ "op": "set", "id": id, "attrs": attrs }));
+            self.set
+                .push(json!({ "op": "set", "id": id, "attrs": attrs }));
         }
         let mut c = (**b).clone();
         c.visible = a.visible;
