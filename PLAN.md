@@ -2598,7 +2598,15 @@ bloccato) e `layer.setProps` (nome fino a 80 caratteri, occhio, lucchetto)
 nella famiglia `livelli`, finestre scritte a mano, colore `unsupported`; il
 nome si legge da `fub:layer` (il motore usa l'id); il livello implicito non
 si rinomina né si elimina (`unmapped`); sezione «I livelli» in
-`docs/architecture/disegno-completo.md`.
+`docs/architecture/disegno-completo.md`. Giro 4 unito in e33ee766c: la
+scheda Livelli del Completo è l'albero nativo (filtro, miniature,
+trascinamento, tastiera restano), e occhio, lucchetto, nome, livello nuovo
+ed elimina passano dal motore con gli id di `document.inspect`
+(`completo/livelli-porta.ts`); senza motore l'editor scrive da sé le
+stesse operazioni; il trascinamento resta nativo (`node.move` non è
+nell'indice del motore); 5000 livelli: 52 ms a costruire, 9 ms ad
+aggiornare. La prima scheda (lista piatta, ramo `feat/k6-t15-livelli`) non
+è entrata (DECISIONS 2026-11-22). Giro 5 (Contorno e Sfumatura) in corso.
 Aspetta: niente
 
 ## T16 · Il testo
