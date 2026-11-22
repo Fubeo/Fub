@@ -7,11 +7,17 @@
 // (`testi`).
 
 import type { ModuloFamiglia } from "../../carica";
+import { filaContagocce } from "./opzioni-contagocce";
 import { TESTI } from "./testi";
+
+/// Il Contagocce (K6 T14, giro 7): la sua fila delle opzioni, dalle preferenze del motore.
+export const STRUMENTO_CONTAGOCCE = "eyedropper";
 
 const famiglia: ModuloFamiglia & { readonly testi: typeof TESTI } = {
   testi: TESTI,
-  registra() {},
+  registra(ctx) {
+    ctx.registraFila(STRUMENTO_CONTAGOCCE, (_stato, azioni, vita) => filaContagocce(azioni, vita));
+  },
 };
 
 export default famiglia;

@@ -506,6 +506,15 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   /// Un comando di una fila propria (T12: i comandi sui punti), col suo valore:
   /// l'esito passa da `applicaEsito` come i comandi del menu, in un passo, e
   /// lo stato dello strumento si rilegge, perché i punti scelti cambiano.
+  /// La lettura di un comando per la fila (K6 T14, giro 7): come `comandoDellaFila`, ma
+  /// senza cambiare niente e col valore che il motore legge; `null` se non risponde.
+  const leggiPerLaFila = async (id: string, valore: unknown): Promise<unknown> => {
+    const sessione = ctx.motore === null ? null : await ctx.motore.pronta(ATTESA_MOTORE_FILA_MS);
+    if (ctx.life.closed || sessione === null) return null;
+    const esito = await sessione.comando({ id, selection: [], value: valore });
+    if (esito === null || "kind" in esito) return null;
+    return esito.reading ?? null;
+  };
   const comandoDellaFila = async (id: string, valore: unknown, etichetta: string, rileggi: (() => void) | undefined): Promise<void> => {
     const sessione = ctx.motore === null ? null : await ctx.motore.pronta(ATTESA_MOTORE_FILA_MS);
     if (ctx.life.closed) return;
@@ -648,6 +657,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       if (propria !== undefined && ctx.motore !== null) {
         const azioni = {
           esegui: (id: string, valore: unknown, etichetta: string) => void comandoDellaFila(id, valore, etichetta, ambiente?.rileggi),
+          leggi: (id: string, valore: unknown) => leggiPerLaFila(id, valore),
           annuncia: dipendenze.annuncia,
         };
         return propria(ambiente?.stato ?? null, azioni, vita);

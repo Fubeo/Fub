@@ -106,6 +106,9 @@ export interface FilaOpzioni {
 /// frase per chi ascolta.
 export interface AzioniFila {
   esegui(id: string, valore: unknown, etichetta: string): void;
+  /// Un comando che legge e non cambia niente (K6 T14, giro 7: le preferenze del Contagocce):
+  /// la sua lettura, o `null` se il motore non risponde.
+  leggi(id: string, valore: unknown): Promise<unknown>;
   annuncia(testo: string): void;
 }
 

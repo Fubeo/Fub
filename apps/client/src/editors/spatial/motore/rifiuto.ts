@@ -34,3 +34,11 @@ export function motivoDelRifiuto(refused: DrawingRefusal): DrawKey | null {
       return "draw.reason.invalid";
   }
 }
+
+/// Il motivo di un rifiuto di un gesto con lo strumento `strumento` (K6 T14, giro 7). Il
+/// Contagocce dice che non legge un'immagine, invece del «fuori» generico: il motore dà
+/// `unsupported` solo per quella sorgente. Gli altri casi sono `motivoDelRifiuto`.
+export function motivoDelRifiutoDelloStrumento(refused: DrawingRefusal, strumento: string | null): DrawKey | null {
+  if (refused === "unsupported" && strumento === "eyedropper") return "draw.contagocce.immagine";
+  return motivoDelRifiuto(refused);
+}
