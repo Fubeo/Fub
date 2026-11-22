@@ -42,7 +42,10 @@
 //   e il clic dopo lo continua (stesso strumento e stessa revisione: il ponte
 //   tiene il gesto). Lo chiudono Invio o Esc (il tasto va al motore), o lo
 //   strumento cambiato (un `commit` senza tasti): un passo solo, col nome e la
-//   selezione di partenza del primo clic.
+//   selezione di partenza del primo clic. Un testo che cambia sotto (un'altra
+//   superficie, il file riletto) lo chiude allo stesso modo, prima che la
+//   copia del motore vada avanti (`tieniAperto` della sessione): i punti
+//   messi restano nel file.
 //
 // L'inchiostro, l'evidenziatore, la gomma e la nota non passano mai di qua:
 // sono di Fub, e non chiamano il motore.
@@ -524,6 +527,9 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// clic (il nome del passo e la selezione di partenza) e quello dell'ultimo
   /// (la sua catena porta il `commit` che lo chiude).
   let aperto: { readonly primo: MotoreGesture; ultimo: MotoreGesture } | null = null;
+  /// Toglie il tracciato aperto dalla sessione (`tieniAperto`): ogni volta
+  /// che `aperto` cambia.
+  let lasciaAperto: Teardown = () => {};
   // Di serie la famiglia è pronta da sé; il Completo la sostituisce con la sua
   // preparazione (`ctx.preparaStrumento`), che porta la famiglia dall'indice.
   // Di serie il clic non fa niente: il Completo lo sostituisce (`completo/index.ts`).
@@ -903,6 +909,8 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// aperto coi suoi segni; se ha finito da sé, si chiude subito.
   const tieniAperto = (g: MotoreGesture, eventi: DrawingPointer[]): void => {
     aperto = { primo: aperto?.primo ?? g, ultimo: g };
+    lasciaAperto();
+    lasciaAperto = () => {};
     const done = send(g, "preview", eventi).then((esito) => {
       // Chiuso nel frattempo (Invio, Esc, lo strumento cambiato), o un
       // clic dopo che lo continua: niente da fare qui.
@@ -915,11 +923,54 @@ export function installGestiMotore(ctx: EditorContext): void {
       }
       if (esito.refused === null && esito.state?.busy === true) {
         showPreview(g, esito);
+        proteggiAperto(g);
         return;
       }
       chiudiAperto([]);
     });
     ultimo = done;
+  };
+
+  /// Il tracciato aperto all'ultimo clic `g` non si perde se il testo cambia
+  /// sotto: il primo sync della sessione lo chiude prima di partire, in un
+  /// passo come Invio (il `commit` senza tasti, come lo strumento cambiato).
+  const proteggiAperto = (g: MotoreGesture): void => {
+    void interni.get(g)!.avvio.then((started) => {
+      const a = aperto;
+      if (started === null || ctx.disposed || a === null || a.ultimo !== g) return;
+      lasciaAperto();
+      lasciaAperto = started.sessione.tieniAperto({
+        chiusura: () => {
+          if (aperto === a) aperto = null;
+          lasciaAperto = () => {};
+          return { ...started.base, phase: "commit", events: [] };
+        },
+        chiuso: (esito) => {
+          if (esito !== null && "kind" in esito) {
+            perso(g, esito);
+            chiusoCon(a, null);
+            return;
+          }
+          if (esito !== null && esito.losses.length > 0) porta!.trovate(esito.losses);
+          chiusoCon(a, esito);
+        },
+      });
+    });
+  };
+
+  /// L'esito del `commit` che ha chiuso il tracciato aperto `a`: un passo col
+  /// nome e la selezione di partenza del primo clic.
+  const chiusoCon = (a: { readonly primo: MotoreGesture; ultimo: MotoreGesture }, esito: DrawingOutcome | null): void => {
+    if (ctx.disposed) return;
+    const g = a.ultimo;
+    g.before = a.primo.before;
+    g.label = a.primo.label;
+    if (esito === null) {
+      clearPreview(g);
+      ctx.showHandles();
+      return;
+    }
+    applyOutcome(g, esito, null);
   };
 
   /// Chiude il tracciato aperto con i tasti `inputs` (nessuno: lo strumento
@@ -930,18 +981,9 @@ export function installGestiMotore(ctx: EditorContext): void {
     const a = aperto;
     if (a === null) return false;
     aperto = null;
-    const g = a.ultimo;
-    const done = send(g, "commit", [], inputs).then((esito) => {
-      if (ctx.disposed) return;
-      g.before = a.primo.before;
-      g.label = a.primo.label;
-      if (esito === null) {
-        clearPreview(g);
-        ctx.showHandles();
-        return;
-      }
-      applyOutcome(g, esito, null);
-    });
+    lasciaAperto();
+    lasciaAperto = () => {};
+    const done = send(a.ultimo, "commit", [], inputs).then((esito) => chiusoCon(a, esito));
     ultimo = done;
     return true;
   };
@@ -1100,6 +1142,8 @@ export function installGestiMotore(ctx: EditorContext): void {
     if (g.sent > 0) {
       void send(g, "cancel", []);
       aperto = null;
+      lasciaAperto();
+      lasciaAperto = () => {};
     }
     clearPreview(g);
     if (g.before.join("\n") !== ctx.selection.join("\n")) ctx.select(g.before);

@@ -26,6 +26,12 @@
 //   istanze (T29): la sessione si ferma come `MotoreAssente { perche:
 //   "spento" }`. Una sessione ferma non riparte: chi la vuole di nuovo ne apre
 //   un'altra (`motoreDa` di `gesti.ts`).
+// - **Il tracciato aperto non si perde (T12).** Il motore tiene il gesto di
+//   uno strumento a più clic (la penna) solo alla sua revisione: un sync lo
+//   ricomincerebbe, e i punti già messi andrebbero persi. Chi tiene un
+//   tracciato aperto lo dice con `tieniAperto`; il primo sync che arriva
+//   mette in fila, prima di sé, il `commit` che lo chiude alla revisione
+//   vecchia, e ne passa l'esito a chi l'ha aperto (un passo, come Invio).
 // - **Chiusa è chiusa.** Dopo `chiudi()` non parte più niente, e l'esito di
 //   una richiesta già in volo si scarta (`null`).
 
@@ -63,6 +69,15 @@ export type DocumentoDisegno = Pick<DocumentSession, "attachSurface" | "text" | 
 /// Il motore non c'è: spento (l'host non ha il componente, o lo ha spento a
 /// metà sessione) o in errore (all'apertura, a una richiesta, o perché non
 /// risponde).
+/// Un tracciato aperto che un sync non deve perdere (`tieniAperto`).
+export interface TracciatoAperto {
+  /// Il `commit` che lo chiude: la sessione ci mette la revisione.
+  chiusura(): GestoMotore;
+  /// L'esito del `commit` partito prima del sync; `null` o il motore assente
+  /// come per `gesto`.
+  chiuso(esito: DrawingOutcome | MotoreAssente | null): void;
+}
+
 export interface MotoreAssente {
   readonly kind: "assente";
   readonly perche: "spento" | "errore";
@@ -99,6 +114,10 @@ export interface SessioneMotore {
   gesto(gesture: GestoMotore): Promise<DrawingOutcome | MotoreAssente | null>;
   comandi(selection: string[]): Promise<DrawingCommandInfo[] | MotoreAssente | null>;
   comando(request: ComandoMotore): Promise<DrawingOutcome | MotoreAssente | null>;
+  /// Un tracciato aperto: il primo sync che arriva lo chiude prima di
+  /// partire (il `commit` alla revisione del gesto), una volta sola. Uno
+  /// nuovo prende il posto di quello di prima; il ritorno lo toglie.
+  tieniAperto(aperto: TracciatoAperto): Teardown;
   /// Chiude l'istanza nel motore e si toglie dalla `DocumentSession`. Torna
   /// quando la chiusura è partita e ha risposto (o il suo tempo è scaduto).
   chiudi(): Promise<void>;
@@ -201,6 +220,8 @@ class Sessione implements SessioneMotore {
   /// ha, o avrà appena il motore lo legge.
   #revisione: bigint;
   #testo: string;
+  /// Il tracciato aperto da chiudere prima del prossimo sync.
+  #aperto: TracciatoAperto | null = null;
 
   constructor(
     host: HostDisegno,
@@ -274,9 +295,18 @@ class Sessione implements SessioneMotore {
       this.#host.drawingCommand(this.instance, { ...request, revision }, this.#vault));
   }
 
+  tieniAperto(aperto: TracciatoAperto): Teardown {
+    if (this.#stato !== "aperta") return () => {};
+    this.#aperto = aperto;
+    return () => {
+      if (this.#aperto === aperto) this.#aperto = null;
+    };
+  }
+
   async chiudi(): Promise<void> {
     if (this.#stato !== "aperta") return;
     this.#stato = "chiusa";
+    this.#aperto = null;
     this.#assenti.clear();
     this.#life.close();
     const chiusura = this.#chiudiNelMotore();
@@ -293,12 +323,26 @@ class Sessione implements SessioneMotore {
     // Il testo dopo il cambio, preso adesso: è quello che la copia avrà
     // quando questo sync sarà partito, anche se il documento intanto va oltre.
     const dopo = lineFeeds(update.text);
+    this.#chiudiAperto();
     void this.#inFila(async () => {
       const revision = (this.#revisione + 1n).toString();
       await entro(this.#host.drawingSync(this.instance, { revision, change }, this.#vault));
       this.#revisione += 1n;
       this.#testo = dopo;
     });
+  }
+
+  /// Il tracciato aperto, se c'è, si chiude in fila prima del sync che
+  /// arriva: alla revisione del gesto, senza riprova (`stale` vorrebbe dire
+  /// che è già perso, e la riprova lo ricomincerebbe vuoto).
+  #chiudiAperto(): void {
+    const aperto = this.#aperto;
+    if (aperto === null) return;
+    this.#aperto = null;
+    const gesture = aperto.chiusura();
+    void this.#inFila(() =>
+      entro(this.#host.drawingGesture(this.instance, { ...gesture, revision: this.revision() }, this.#vault)),
+    ).then((esito) => aperto.chiuso(esito));
   }
 
   /// Il testo intero alla revisione dopo: da dentro un lavoro della fila.
@@ -350,6 +394,7 @@ class Sessione implements SessioneMotore {
   #guasto(perche: MotoreAssente["perche"]): MotoreAssente {
     const assente: MotoreAssente = { kind: "assente", perche };
     this.#stato = assente;
+    this.#aperto = null;
     this.#life.close();
     this.#chiuse.clear();
     avvisa(this.#assenti, assente);

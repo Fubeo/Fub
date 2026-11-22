@@ -25,6 +25,13 @@
 //!   `display="none"`, `docs/reference/scene-format.md` §3), come li scrivono
 //!   «Blocca» e «Nascondi» del client: un `set` che li mette o li toglie.
 //!   Il foglio di Fub resta bloccato com'è.
+//! - **Tracciati composti**: un composto del motore si scrive come un solo
+//!   `<path>` col `d` unito dei suoi sottotracciati (il buco viene dal verso,
+//!   regola `nonzero`). Crea composto toglie i tracciati assorbiti e
+//!   aggiunge il composto come un `<path>` nuovo; Rilascia toglie il
+//!   composto e aggiunge i suoi tracciati liberati; Inverti o punti aggiunti
+//!   su un composto sono un `set` del `d`. Cambiare la regola di riempimento
+//!   è `unsupported`: `fill-rule` non è un attributo della scena.
 //! - **`remove`** per quelli tolti, **`move`** per l'ordine e il genitore.
 //! - **`ident`** prima di tutto, per gli elementi senza id che un'operazione
 //!   nomina: un id nuovo del formato di [`crate::id`].
@@ -43,12 +50,18 @@ use vectorcraft_doc::color::Paint;
 use vectorcraft_doc::{
     Appearance, Document, LineCap, LineJoin, LiveShape, Node, NodeId, NodeKind, Scaling,
 };
-use vectorcraft_geom::{Affine, Point};
+use vectorcraft_geom::{Affine, FillRule, PathData, Point};
 
 use crate::apertura::Copia;
 use crate::id::{self, Specie};
 use crate::mappa::{Elemento, Posti};
 use crate::ricetta::{self, Esito};
+
+/// `fill-rule` non è un attributo della scena (`docs/reference/scene-format.md`
+/// §4): un elemento che lo scrive diventerebbe estraneo, e i buchi si fanno
+/// col verso dei sottotracciati, con la regola `nonzero` di SVG.
+const REGOLA_FUORI: &str =
+    "la regola di riempimento evenodd non è un attributo della scena: i buchi vanno col verso";
 
 /// Tolleranza relativa con cui due documenti del motore sono uguali: le
 /// matrici composte dagli strumenti e quella ritrovata qui differiscono
@@ -154,7 +167,10 @@ pub(crate) fn differenza(
         dati: HashSet::new(),
         riscritti: HashSet::new(),
         ricette: ricetta::Scritte::default(),
+        liberati: HashSet::new(),
+        assorbiti: HashSet::new(),
     };
+    lavoro.composti(&prima, &poi);
     // Il confronto per primo: dice quali oggetti si riscrivono interi
     // (tolti e rimessi con la loro ricetta), che le altre fasi saltano.
     for l in &dopo.layers {
@@ -278,9 +294,38 @@ struct Lavoro<'a> {
     riscritti: HashSet<NodeId>,
     /// Le ricette che il gesto scrive o fa cadere.
     ricette: ricetta::Scritte,
+    /// I tracciati di un tracciato composto sciolto: c'erano, ma non erano
+    /// elementi di Fub (il `<path>` era il composto); si scrivono come nuovi.
+    liberati: HashSet<NodeId>,
+    /// Gli elementi di Fub finiti dentro un tracciato composto nuovo: si
+    /// tolgono, e il composto si scrive come un solo `<path>`.
+    assorbiti: HashSet<NodeId>,
 }
 
 impl Lavoro<'_> {
+    /// I tracciati composti fatti o sciolti dal gesto ([`Lavoro::liberati`],
+    /// [`Lavoro::assorbiti`]).
+    fn composti(&mut self, prima: &Posti<'_>, poi: &Posti<'_>) {
+        let composto = |n: Option<&crate::mappa::Posto<'_>>| {
+            n.is_some_and(|p| matches!(p.nodo.kind, NodeKind::Compound { .. }))
+        };
+        for (id, dopo) in &poi.nodi {
+            let Some(p) = prima.nodi.get(id) else {
+                continue;
+            };
+            if p.genitore == dopo.genitore {
+                continue;
+            }
+            let di_fub = self.copia.mappa.del_nodo(*id).is_some();
+            let nuovo_genitore = dopo.genitore.filter(|g| !prima.nodi.contains_key(g));
+            if !di_fub && composto(p.genitore.and_then(|g| prima.nodi.get(&g))) {
+                self.liberati.insert(*id);
+            } else if di_fub && composto(nuovo_genitore.and_then(|g| poi.nodi.get(&g))) {
+                self.assorbiti.insert(*id);
+            }
+        }
+    }
+
     fn elemento(&self, nodo: NodeId) -> Option<&Elemento> {
         self.copia
             .mappa
@@ -376,6 +421,11 @@ impl Lavoro<'_> {
             let e = e.clone();
             self.togli(&e);
         }
+        for nodo in self.assorbiti.clone() {
+            if let Some(e) = self.elemento(nodo).cloned() {
+                self.togli(&e);
+            }
+        }
         for nodo in self.riscritti.clone() {
             let Some(e) = self.elemento(nodo).cloned() else {
                 return Err(Rifiuto::NonMappato(format!(
@@ -427,27 +477,37 @@ impl Lavoro<'_> {
         fn raccogli<'a>(
             n: &'a Arc<Node>,
             riscritti: &HashSet<NodeId>,
+            prima: &Posti<'_>,
             out: &mut Vec<(Option<NodeId>, &'a Vec<Arc<Node>>)>,
         ) {
             if riscritti.contains(&n.id) {
                 return;
             }
+            // Un tracciato composto nuovo si scrive intero: i suoi tracciati
+            // non si spostano dentro di lui.
+            if matches!(n.kind, NodeKind::Compound { .. }) && !prima.nodi.contains_key(&n.id) {
+                return;
+            }
             if let Some(figli) = n.children() {
                 out.push((Some(n.id), figli));
                 for c in figli {
-                    raccogli(c, riscritti, out);
+                    raccogli(c, riscritti, prima, out);
                 }
             }
         }
         for l in &dopo.layers {
-            raccogli(l, &self.riscritti, &mut contenitori);
+            raccogli(l, &self.riscritti, prima, &mut contenitori);
         }
         for (genitore, figli) in contenitori {
             // Solo i figli che c'erano già; i nuovi e i riscritti li mette
             // `add`.
             let rimasti: Vec<&Arc<Node>> = figli
                 .iter()
-                .filter(|c| prima.nodi.contains_key(&c.id) && !self.riscritti.contains(&c.id))
+                .filter(|c| {
+                    prima.nodi.contains_key(&c.id)
+                        && !self.riscritti.contains(&c.id)
+                        && !self.liberati.contains(&c.id)
+                })
                 .collect();
             let chiavi: Vec<Option<usize>> = rimasti
                 .iter()
@@ -505,12 +565,16 @@ impl Lavoro<'_> {
             n: &'a Arc<Node>,
             prima: &Posti<'_>,
             riscritti: &HashSet<NodeId>,
+            liberati: &HashSet<NodeId>,
             out: &mut Vec<Nuovo<'a>>,
         ) {
             let Some(figli) = n.children() else { return };
             for (i, c) in figli.iter().enumerate() {
-                if prima.nodi.contains_key(&c.id) && !riscritti.contains(&c.id) {
-                    cerca(c, prima, riscritti, out);
+                if prima.nodi.contains_key(&c.id)
+                    && !riscritti.contains(&c.id)
+                    && !liberati.contains(&c.id)
+                {
+                    cerca(c, prima, riscritti, liberati, out);
                 } else {
                     out.push((Some(n.id), figli.iter().collect(), i));
                 }
@@ -520,7 +584,7 @@ impl Lavoro<'_> {
             if !prima.nodi.contains_key(&l.id) {
                 return Err(no("il gesto crea un livello del motore"));
             }
-            cerca(l, prima, &self.riscritti, &mut nuovi);
+            cerca(l, prima, &self.riscritti, &self.liberati, &mut nuovi);
         }
         // Lo stampo del corpo espanso, fatto alla prima ricetta del gesto.
         let mut stampo: Option<crate::espansa::Stampo> = None;
@@ -749,6 +813,14 @@ impl Lavoro<'_> {
         radice: bool,
         livello: bool,
     ) -> Result<(), Rifiuto> {
+        if let Some(attrs) = self.composto_cambiato(b, a)? {
+            if !attrs.is_empty() {
+                let id = self.bersaglio(a.id)?;
+                self.set
+                    .push(json!({ "op": "set", "id": id, "attrs": attrs }));
+            }
+            return Ok(());
+        }
         // Un `<path>` con più sottotracciati (la freccia) è un tracciato
         // composto del motore, i cui figli non sono elementi di Fub: se i
         // figli restano gli stessi, il cambio è suo e si scrive come quello
@@ -829,9 +901,68 @@ impl Lavoro<'_> {
         Ok(())
     }
 
+    /// Un `<path>` composto di prima (i suoi tracciati non sono elementi di
+    /// Fub) di cui cambiano solo i sottotracciati (il verso, punti aggiunti):
+    /// il `d` nuovo. Una regola di riempimento cambiata si rifiuta
+    /// ([`REGOLA_FUORI`]). `None` se il cambio è un altro, che il resto del
+    /// confronto scrive o rifiuta.
+    fn composto_cambiato(&self, b: &Node, a: &Node) -> Result<Option<Map<String, Value>>, Rifiuto> {
+        let (Some((pb, rb)), Some((pa, ra))) = (tracciato_composto(b), tracciato_composto(a))
+        else {
+            return Ok(None);
+        };
+        let estranei = |n: &Node| {
+            n.children().is_some_and(|figli| {
+                figli
+                    .iter()
+                    .all(|c| self.copia.mappa.del_nodo(c.id).is_none())
+            })
+        };
+        let Some(e) = self
+            .elemento(a.id)
+            .filter(|e| e.tag == "path" && estranei(b) && estranei(a))
+        else {
+            return Ok(None);
+        };
+        let con_la_stessa_regola = |n: &Node| {
+            let mut c = senza_figli(n);
+            if let NodeKind::Compound { rule, .. } = &mut c.kind {
+                *rule = FillRule::NonZero;
+            }
+            c
+        };
+        if !nodi_vicini(&con_la_stessa_regola(b), &con_la_stessa_regola(a)) {
+            return Ok(None);
+        }
+        let mut attrs = Map::new();
+        if !json_vicini(
+            &serde_json::to_value(&pb).unwrap_or(Value::Null),
+            &serde_json::to_value(&pa).unwrap_or(Value::Null),
+        ) {
+            let g = e
+                .ctm_genitore
+                .ok_or_else(|| no("una transform di un antenato non si legge"))?;
+            let t = e
+                .propria
+                .ok_or_else(|| no("la transform dell'elemento non si legge"))?;
+            let locale = (g * t).inverse();
+            if !locale.is_finite() {
+                return Err(no("l'elemento ha una transform che non si inverte"));
+            }
+            attrs.insert("d".into(), json!(scrivi_d(&trasformato(&pa, locale))));
+        }
+        if rb != ra {
+            return Err(no(REGOLA_FUORI));
+        }
+        Ok(Some(attrs))
+    }
+
     /// I figli che c'erano già, e quelli di un gruppo nuovo che li raccoglie.
     fn confronta_figli(&mut self, figli: &[Arc<Node>], prima: &Posti<'_>) -> Result<(), Rifiuto> {
         for c in figli {
+            if self.liberati.contains(&c.id) || self.assorbiti.contains(&c.id) {
+                continue;
+            }
             match prima.nodi.get(&c.id) {
                 Some(p) => self.confronta(p.nodo, c, prima)?,
                 None => {
@@ -1445,6 +1576,17 @@ fn scrivi_colore(p: Option<&Paint>) -> Result<String, Rifiuto> {
 /// porta dal documento del motore lì): `rect`, `ellipse` e `line` quando la
 /// forma lo è ancora dopo il passaggio, altrimenti `path`.
 fn elem(n: &Node, locale: Affine) -> Result<(String, Map<String, Value>), Rifiuto> {
+    // Un tracciato composto fatto di tracciati: un solo `<path>` con tutti i
+    // sottotracciati, come lo legge la scena.
+    if let Some((path, regola)) = tracciato_composto(n) {
+        let mut attrs = Map::new();
+        attrs.insert("d".into(), json!(scrivi_d(&trasformato(&path, locale))));
+        if regola != FillRule::NonZero {
+            return Err(no(REGOLA_FUORI));
+        }
+        scrivi_aspetto(n, locale, "path", &mut attrs)?;
+        return Ok(("path".to_string(), attrs));
+    }
     let NodeKind::Path { path, live, .. } = &n.kind else {
         return Err(no("un oggetto nuovo che non è un tracciato"));
     };
@@ -1498,6 +1640,17 @@ fn elem(n: &Node, locale: Affine) -> Result<(String, Map<String, Value>), Rifiut
     if tag == "path" {
         attrs.insert("d".into(), json!(scrivi_d(&p)));
     }
+    scrivi_aspetto(n, locale, tag, &mut attrs)?;
+    Ok((tag.to_string(), attrs))
+}
+
+/// Il riempimento e il tratto di un oggetto nuovo, come li scrive il client.
+fn scrivi_aspetto(
+    n: &Node,
+    locale: Affine,
+    tag: &str,
+    attrs: &mut Map<String, Value>,
+) -> Result<(), Rifiuto> {
     let fill = n.appearance.fill().map(|f| &f.paint);
     if tag != "line" || !matches!(fill, None | Some(Paint::None)) {
         attrs.insert("fill".into(), json!(scrivi_colore(fill)?));
@@ -1529,7 +1682,32 @@ fn elem(n: &Node, locale: Affine) -> Result<(String, Map<String, Value>), Rifiut
             }
         }
     }
-    Ok((tag.to_string(), attrs))
+    Ok(())
+}
+
+/// I sottotracciati di un tracciato composto fatto solo di tracciati semplici
+/// (non forme vive, non tracciati di ritaglio o guide), nell'ordine dei
+/// figli, e la sua regola di riempimento: ciò che un `<path>` dice con `d` e
+/// `fill-rule`. `None` per ogni altro oggetto.
+fn tracciato_composto(n: &Node) -> Option<(PathData, FillRule)> {
+    let NodeKind::Compound { children, rule } = &n.kind else {
+        return None;
+    };
+    let mut tutto = PathData::default();
+    for c in children {
+        let NodeKind::Path {
+            path,
+            live: None,
+            clipping: false,
+            guide: false,
+            ..
+        } = &c.kind
+        else {
+            return None;
+        };
+        tutto.subpaths.extend(path.subpaths.iter().cloned());
+    }
+    Some((tutto, *rule))
 }
 
 /// `[x, y, larghezza, altezza]` di un tracciato che è un rettangolo dritto.

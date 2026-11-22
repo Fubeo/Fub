@@ -10,6 +10,11 @@
 //!   `unmapped`, e niente cambia ([`inchiostro_toccato`]): i tratti si fanno
 //!   dai campioni, e un taglio li perderebbe in tracciati qualsiasi. Lo
 //!   stesso per i comandi sui punti ([`sceglie_inchiostro`]).
+//! - **Oggetto › Tracciato** (`SUGLI_OGGETTI`): i comandi senza finestra sui
+//!   tracciati scelti. Spenti col perché come quelli sui punti; un tratto
+//!   della penna di Fub, scelto o toccato dal risultato (Dividi gli oggetti
+//!   sotto taglia anche quelli sotto), è `unmapped`; un risultato che non
+//!   divide niente è `empty`, e niente cambia ([`StatoFamiglia::rifiuto_dopo`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -18,17 +23,43 @@ use fub_abi::{DrawingAnchor, DrawingDisabledReason, DrawingRefusal, MAX_DRAWING_
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use serde_json::Value;
-use vectorcraft_doc::{Document, NodeId};
+use vectorcraft_doc::{Document, NodeId, NodeKind};
 
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
 
 /// I comandi che lavorano sui punti di ancoraggio scelti.
-pub(crate) const SUI_PUNTI: [&str; 4] = [
+pub(crate) const SUI_PUNTI: [&str; 5] = [
     "path.convertAnchors",
     "path.cutAtAnchors",
     "path.join",
     "path.removeAnchors",
+    "addon.pathtools.removeKeepShape",
+];
+
+/// I comandi sui punti che senza punti scelti non fanno niente: da ≡ sono
+/// spenti con `needs_anchors`.
+const SOLO_COI_PUNTI: [&str; 3] = [
+    "path.cutAtAnchors",
+    "path.removeAnchors",
+    "addon.pathtools.removeKeepShape",
+];
+
+/// I comandi di Oggetto › Tracciato senza finestra, sui tracciati scelti.
+const SUGLI_OGGETTI: [&str; 13] = [
+    "path.reverse",
+    "object.path.outlineStroke",
+    "object.path.addAnchorPoints",
+    "object.path.divideObjectsBelow",
+    "object.compoundPath.make",
+    "object.compoundPath.release",
+    "addon.pathtools.smooth",
+    "addon.pathtools.corner",
+    "addon.pathtools.equalize",
+    "addon.pathtools.close",
+    "addon.pathtools.crossings",
+    "addon.pathtools.expandDashes",
+    "addon.pen.closeJoin",
 ];
 
 /// Quanto un punto può essersi spostato (in coordinate di scena) ed essere
@@ -51,13 +82,14 @@ impl StatoFamiglia for Stato {
         0
     }
 
-    /// I comandi sui punti spenti, col perché: vogliono un tracciato scelto,
-    /// che il motore conosce, non bloccato e in un disegno modificabile.
-    /// Tagliare ed eliminare i punti vogliono anche i punti scelti, che la
-    /// selezione di oggetti non dice: da ≡ sono spenti, con `needs_anchors`;
-    /// la fila dei punti li manda con i suoi punti.
+    /// I comandi sui punti e quelli di Oggetto › Tracciato spenti, col
+    /// perché: vogliono un tracciato scelto, che il motore conosce, non
+    /// bloccato e in un disegno modificabile, e non un tratto della penna di
+    /// Fub. Tagliare ed eliminare i punti vogliono anche i punti scelti, che
+    /// la selezione di oggetti non dice: da ≡ sono spenti, con
+    /// `needs_anchors`; la fila dei punti li manda con i suoi punti.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
-        if !SUI_PUNTI.contains(&id) {
+        if !SUI_PUNTI.contains(&id) && !SUGLI_OGGETTI.contains(&id) {
             return None;
         }
         if selezione.is_empty() {
@@ -75,19 +107,44 @@ impl StatoFamiglia for Stato {
             return Some(DrawingDisabledReason::Unmapped);
         }
         // La carta è bloccata per il motore: non è un tracciato da cambiare.
+        // Un tracciato composto (un `<path>` coi buchi) vale come tracciato.
         let tracciato = |n: &NodeId| {
-            copia
-                .documento
-                .node(*n)
-                .is_some_and(|nodo| !nodo.locked && nodo.path_data().is_some())
+            copia.documento.node(*n).is_some_and(|nodo| {
+                !nodo.locked
+                    && (nodo.path_data().is_some()
+                        || matches!(nodo.kind, NodeKind::Compound { .. }))
+            })
         };
         if !nodi.iter().any(tracciato) {
             return Some(DrawingDisabledReason::NeedsPath);
         }
-        if matches!(id, "path.cutAtAnchors" | "path.removeAnchors") {
+        if SOLO_COI_PUNTI.contains(&id) {
             return Some(DrawingDisabledReason::NeedsAnchors);
         }
         None
+    }
+
+    /// Un comando di Oggetto › Tracciato su un tratto della penna di Fub:
+    /// `unmapped`, prima di farlo girare.
+    fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        (SUGLI_OGGETTI.contains(&id) && sceglie_inchiostro(copia, selezione))
+            .then_some(DrawingRefusal::Unmapped)
+    }
+
+    /// Dopo il comando: un tratto della penna di Fub cambiato o tolto, anche
+    /// se non era scelto, è `unmapped`; Dividi gli oggetti sotto che non
+    /// divide niente toglierebbe soltanto il tracciato che taglia: `empty`.
+    fn rifiuto_dopo(
+        id: &str,
+        copia: &Copia,
+        dopo: &Document,
+        scelti_dopo: &[NodeId],
+    ) -> Option<DrawingRefusal> {
+        if inchiostro_toccato(copia, dopo) {
+            return Some(DrawingRefusal::Unmapped);
+        }
+        (id == "object.path.divideObjectsBelow" && scelti_dopo.is_empty())
+            .then_some(DrawingRefusal::Empty)
     }
 }
 

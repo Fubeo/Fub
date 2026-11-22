@@ -424,6 +424,7 @@ function fakeSession(instance: string, losses: readonly DrawingLoss[]): Sessione
     gesto: async () => null,
     comandi: async () => null,
     comando: async () => null,
+    tieniAperto: () => () => {},
     chiudi: async () => {
       stato = "chiusa";
     },

@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti dei tracciati non toccano (`unmapped`), e i comandi sui punti scelti con i loro `anchors`. Il disegno è `tracciati/base.svg`.",
+  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Il disegno di partenza è di solito `tracciati/base.svg`.",
   "casi": [
     {
       "id": "pen",
@@ -2022,6 +2022,746 @@
         ]
       },
       "dopo": "elimina-il-punto.svg"
+    },
+    {
+      "id": "path.reverse",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M160 120 L160 60 L100 60 L40 60"
+            }
+          }
+        ]
+      },
+      "dopo": "rovescia.svg"
+    },
+    {
+      "id": "path.reverse",
+      "disegno": "composto.svg",
+      "selezione": [
+        "oh9c9c9c9"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oh9c9c9c9",
+            "attrs": {
+              "d": "M40 200 L200 200 L200 40 L40 40 Z M80 80 L160 80 L160 160 L80 160 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "composto-rovescio.svg"
+    },
+    {
+      "id": "path.reverse",
+      "disegno": "composto-rovescio.svg",
+      "selezione": [
+        "oh9c9c9c9"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oh9c9c9c9",
+            "attrs": {
+              "d": "M40 40 L200 40 L200 200 L40 200 Z M80 160 L160 160 L160 80 L80 80 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "composto.svg"
+    },
+    {
+      "id": "path.reverse",
+      "disegno": "composto-pari.svg",
+      "selezione": [
+        "oh9c9c9c9"
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.reverse",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.setFillRule",
+      "disegno": "composto.svg",
+      "selezione": [
+        "oh9c9c9c9"
+      ],
+      "argomenti": {
+        "rule": "evenOdd"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "object.path.outlineStroke",
+      "disegno": "base.svg",
+      "selezione": [
+        "od2d2d2d2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "od2d2d2d2"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oc1c1c1c1"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M166 125 L166 123 L230 123 L230 125 Z",
+                    "fill": "#000000",
+                    "id": "o74aw1gmi"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "contorno-tratto.svg"
+    },
+    {
+      "id": "object.path.outlineStroke",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.path.addAnchorPoints",
+      "disegno": "base.svg",
+      "selezione": [
+        "of4f4f4f4"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "of4f4f4f4",
+            "attrs": {
+              "d": "M280 20 L310 20 L340 20 L340 50 L340 80 L310 80 L280 80 L280 50 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "aggiungi-punti.svg"
+    },
+    {
+      "id": "object.path.addAnchorPoints",
+      "disegno": "composto.svg",
+      "selezione": [
+        "oh9c9c9c9"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oh9c9c9c9",
+            "attrs": {
+              "d": "M40 40 L120 40 L200 40 L200 120 L200 200 L120 200 L40 200 L40 120 Z M80 160 L120 160 L160 160 L160 120 L160 80 L120 80 L80 80 L80 120 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "composto-punti.svg"
+    },
+    {
+      "id": "object.path.divideObjectsBelow",
+      "disegno": "base.svg",
+      "selezione": [
+        "of4f4f4f4"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "of4f4f4f4"
+              },
+              {
+                "op": "remove",
+                "target": "oe3e3e3e3"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "od2d2d2d2"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M220 80 L220 20 L280 20 L280 80 Z",
+                    "fill": "#88aaff",
+                    "id": "orx6nnst6"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "orx6nnst6"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M280 80 L280 20 L284 50 Z",
+                    "fill": "#88aaff",
+                    "id": "oe0ibzryj"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "dividi-sotto.svg"
+    },
+    {
+      "id": "object.path.divideObjectsBelow",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.path.divideObjectsBelow",
+      "disegno": "sopra-inchiostro.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.compoundPath.make",
+      "disegno": "due-quadrati.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M40 40 L200 40 L200 200 L40 200 Z M80 160 L160 160 L160 80 L80 80 Z",
+                    "fill": "#3366aa",
+                    "id": "oijoz26br"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "crea-composto.svg"
+    },
+    {
+      "id": "object.compoundPath.release",
+      "disegno": "composto.svg",
+      "selezione": [
+        "oh9c9c9c9"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oh9c9c9c9"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M40 40 L200 40 L200 200 L40 200 Z",
+                    "fill": "#3366aa",
+                    "id": "orygafhd8"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M80 160 L160 160 L160 80 L80 80 Z",
+                    "fill": "#3366aa",
+                    "id": "oastg4z0k"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "sciogli-composto.svg"
+    },
+    {
+      "id": "object.compoundPath.release",
+      "disegno": "composto-pari.svg",
+      "selezione": [
+        "oh9c9c9c9"
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.pathtools.smooth",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 200 C312.32 180.07 347.68 180.07 360 200 C372.32 219.93 356.2 260 330 260 C303.8 260 287.68 219.93 300 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "ammorbidisci.svg"
+    },
+    {
+      "id": "addon.pathtools.corner",
+      "disegno": "curvo.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "d": "M300 200 L360 200 L330 260 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "raddrizza.svg"
+    },
+    {
+      "id": "addon.pathtools.corner",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.equalize",
+      "disegno": "curvo.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "d": "M300 200 C316.5 175.25 347.68 180.07 360 200 C372.32 219.93 356.2 260 330 260 C303.8 260 284.36 225.3 300 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "pareggia.svg"
+    },
+    {
+      "id": "addon.pathtools.removeKeepShape",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "anchors": [
+          {
+            "element": "oc1c1c1c1",
+            "subpath": 0,
+            "anchor": 1,
+            "at": [
+              100,
+              60
+            ],
+            "end": false
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "togli-tieni-forma.svg"
+    },
+    {
+      "id": "addon.pathtools.close",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L100 60 L160 60 L160 120 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "chiudi.svg"
+    },
+    {
+      "id": "addon.pathtools.crossings",
+      "disegno": "incrocio.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "d": "M40 100 L120 100 L200 100"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "d": "M120 40 L120 100 L120 160"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "incroci.svg"
+    },
+    {
+      "id": "addon.pathtools.expandDashes",
+      "disegno": "tratteggio.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "40",
+                    "y1": "100",
+                    "x2": "50",
+                    "y2": "100",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "owdi79lis"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "owdi79lis"
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "60",
+                    "y1": "100",
+                    "x2": "70",
+                    "y2": "100",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "ox9n9q5ul"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "ox9n9q5ul"
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "80",
+                    "y1": "100",
+                    "x2": "90",
+                    "y2": "100",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "o273trn3n"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "o273trn3n"
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "100",
+                    "y1": "100",
+                    "x2": "110",
+                    "y2": "100",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "o5yzehfda"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "o5yzehfda"
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "120",
+                    "y1": "100",
+                    "x2": "130",
+                    "y2": "100",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "ogbjj90qw"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "ogbjj90qw"
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "140",
+                    "y1": "100",
+                    "x2": "150",
+                    "y2": "100",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "o6e51knqc"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "o6e51knqc"
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "160",
+                    "y1": "100",
+                    "x2": "170",
+                    "y2": "100",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "oq6fqrw2e"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "line",
+                  "attrs": {
+                    "x1": "180",
+                    "y1": "100",
+                    "x2": "190",
+                    "y2": "100",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "o0fgmr2aj"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "espandi-trattini.svg"
+    },
+    {
+      "id": "addon.pen.closeJoin",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L100 60 L160 60 L160 120 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "chiudi-unisci.svg"
+    },
+    {
+      "id": "path.reverse",
+      "disegno": "angolo.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "remove",
+                "target": {
+                  "path": [
+                    1
+                  ],
+                  "tag": "metadata"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<path id=\"op7a7a7a7\" d=\"M321.056 242.111 C324.741 249.482 335.259 249.482 338.944 242.111 L360 200 L300 200 Z\" fill=\"#cccccc\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"op7a7a7a7\" hash=\"f4910cc982eee0f7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuODAwMDAwMDExOTIwOTI5LCJiIjowLjgwMDAwMDAxMTkyMDkyOX19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMyMS4wNTU3MjgwOTAwMDA4NSwyNDIuMTExNDU2MTgwMDAxNjhdLCJvdXQiOlszMjQuNzQwOTcwNzg2NjY3OCwyNDkuNDgxOTQxNTczMzM1NThdfSx7InAiOlszMzguOTQ0MjcxOTA5OTk5MTUsMjQyLjExMTQ1NjE4MDAwMTY4XSwiaW4iOlszMzUuMjU5MDI5MjEzMzMyMiwyNDkuNDgxOTQxNTczMzM1NThdfSx7InAiOlszNjAuMCwyMDAuMF19LHsicCI6WzMwMC4wLDIwMC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "angolo-rovescio.svg"
     }
   ]
 }
