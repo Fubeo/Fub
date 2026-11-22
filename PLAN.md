@@ -2010,13 +2010,11 @@ Fatto quando:
 - le foto stanno accanto agli stati del prototipo, e `npm run bench:a11y`
   è verde.
 Prova: scripts/check.sh --rapido; npx vitest run src/editors/spatial src/panels; npm run bench:a11y
-Stato: [~] in corso. Fatti T9a (≡ e Ctrl+/, unito in cb9cc2c99) e T9b (le
-regole dei tasti, unito in 79bd8959a); il giro che li unisce (un solo percorso,
-`eseguiVoce`, e il tasto che parte davvero nelle voci) è in 669863b5d. Manca
-T9c: `draw.keys`, Impostazioni › Scorciatoie, gli insiemi di tasti, il menu a
-tre livelli, l'etichetta della cronologia con gli argomenti, il motivo preciso
-del rifiuto
-Aspetta: niente
+Stato: [x] fatto (2026-11-22). T9a e T9b uniti, poi il giro che li unisce
+(669863b5d), poi T9c in 80b328c43: `draw.keys`, Impostazioni › Scorciatoie ›
+Disegno completo (insiemi, import ed export, conflitti), menu a tre livelli,
+motivo del rifiuto e nome nella cronologia. Le scene strette sono a 800 px,
+non 700: la finestra minima del desktop è 800
 
 ## T10 · L'ispettore
 
