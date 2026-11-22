@@ -1,3 +1,35 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia vista (piano K6, T11, giro D): il menu dello zoom della banda del Disegno completo e il pannello delle misure. Sono voci del client, della vista di Fub: la camera del foglio, non il file. Non passano dal motore; la loro prova è il test del client che le trova al loro posto e nomina il loro id.",
+  "casi": [
+    {
+      "id": "view.zoomIn",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/zoom-menu.test.ts"
+    },
+    {
+      "id": "view.zoomOut",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/zoom-menu.test.ts"
+    },
+    {
+      "id": "view.actualSize",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/zoom-menu.test.ts"
+    },
+    {
+      "id": "view.fitAll",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/zoom-menu.test.ts"
+    },
+    {
+      "id": "view.setZoom",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/zoom-menu.test.ts"
+    },
+    {
+      "id": "info",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/status.test.ts"
+    }
+  ]
 }

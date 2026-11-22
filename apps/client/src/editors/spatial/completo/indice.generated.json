@@ -210,6 +210,86 @@
       "finestra": false
     },
     {
+      "fonte": "interfaccia",
+      "id": "view.actualSize",
+      "chiamata": {
+        "client": "view.actualSize"
+      },
+      "etichetta": {
+        "it": "Dimensioni effettive",
+        "en": "Actual Size"
+      },
+      "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.fitAll",
+      "chiamata": {
+        "client": "view.fitAll"
+      },
+      "etichetta": {
+        "it": "Adatta tutto alla finestra",
+        "en": "Fit All in Window"
+      },
+      "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.setZoom",
+      "chiamata": {
+        "client": "view.setZoom"
+      },
+      "etichetta": {
+        "it": "Imposta zoom",
+        "en": "Set Zoom"
+      },
+      "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.zoomIn",
+      "chiamata": {
+        "client": "view.zoomIn"
+      },
+      "etichetta": {
+        "it": "Ingrandisci",
+        "en": "Zoom In"
+      },
+      "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.zoomOut",
+      "chiamata": {
+        "client": "view.zoomOut"
+      },
+      "etichetta": {
+        "it": "Riduci",
+        "en": "Zoom Out"
+      },
+      "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
       "fonte": "strumento",
       "id": "directSelection",
       "chiamata": {
@@ -319,6 +399,22 @@
       "famiglia": "nucleo",
       "tasto": "Z",
       "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "info",
+      "chiamata": {
+        "client": "info"
+      },
+      "etichetta": {
+        "it": "Info",
+        "en": "Info"
+      },
+      "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
       "finestra": false
     }
   ]
