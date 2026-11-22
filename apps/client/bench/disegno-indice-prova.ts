@@ -69,3 +69,13 @@ export function comandiProva(selection: readonly string[]): DrawingCommandInfo[]
     spento("disegno.sposta-campione", PERCHE_CAMPIONE),
   ];
 }
+
+/// I comandi di trasformazione dell'indice reale (K6 T13, giro 3): accesi con una selezione. Il
+/// banco li dà al Completo quando non c'è `?indice=prova`, perché senza una lista le voci dicono
+/// «Non ancora collegato».
+export function comandiTrasformazioni(selection: readonly string[]): DrawingCommandInfo[] {
+  const acceso = (id: string): DrawingCommandInfo => ({ id, enabled: true, disabled_reason: null });
+  const spento = (id: string, perche: DrawingDisabledReason): DrawingCommandInfo => ({ id, enabled: false, disabled_reason: perche });
+  const ids = ["disegno.object.move", "disegno.object.rotate", "disegno.object.scale", "disegno.object.reflect", "disegno.object.shear", "disegno.object.transformAgain", "disegno.object.setBounds", "disegno.object.transform", "disegno.object.resetBoundingBox"];
+  return ids.map((id) => (selection.length >= 1 ? acceso(id) : spento(id, "no_selection")));
+}
