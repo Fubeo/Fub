@@ -951,8 +951,10 @@ impl Lavoro<'_> {
             }
             if ricetta::esito_albero(a) > Esito::Corpo {
                 // Ricco. Se i suoi costrutti cambiano, gli attributi non li
-                // direbbero: si riscrive intero con la sua ricetta.
-                if ricetta::costrutti_albero(a) != ricetta::costrutti_albero(b) {
+                // direbbero: si riscrive intero con la sua ricetta. Il
+                // tratteggio semplice fa eccezione: `stroke-dasharray` lo
+                // dice, e `foglia` lo scrive (o rifiuta, e si riscrive).
+                if costrutti_non_detti(a) != costrutti_non_detti(b) {
                     self.riscritti.insert(a.id);
                     return Ok(());
                 }
@@ -1280,8 +1282,8 @@ impl Lavoro<'_> {
             attrs.insert("stroke".into(), json!(scrivi_colore(r, pa)?));
         }
         let (wb, wa) = (sb.map_or(0.0, |s| s.width), sa.map_or(0.0, |s| s.width));
+        let scala = (g * t_nuova).determinant().abs().sqrt();
         if !vicini(wb, wa) {
-            let scala = (g * t_nuova).determinant().abs().sqrt();
             if scala <= 0.0 || !scala.is_finite() {
                 return Err(no("lo spessore non si scrive in uno spazio schiacciato"));
             }
@@ -1290,6 +1292,7 @@ impl Lavoro<'_> {
                 json!(numero(wa / scala, DECIMALI_GEOMETRIA)),
             );
         }
+        scrivi_stile_del_tratto(sb, sa, scala, &mut attrs)?;
         Ok(attrs)
     }
 }
@@ -1653,8 +1656,11 @@ fn riempimento_dei_pezzi(b: &Node, a: &Node) -> Result<Option<(Node, Paint, Pain
     Ok(Some((ricolorato, prima, colore)))
 }
 
-/// L'aspetto senza il colore del riempimento, quello del tratto e lo
-/// spessore: ciò che i tre attributi non dicono.
+/// L'aspetto senza il colore del riempimento, quello del tratto, lo
+/// spessore, gli estremi, gli angoli e il tratteggio semplice: ciò che
+/// `fill`, `stroke`, `stroke-width`, `stroke-linecap`, `stroke-linejoin` e
+/// `stroke-dasharray` dicono. Un tratteggio spostato o allineato agli angoli
+/// resta: la scena non ha un attributo per dirlo.
 fn senza_colori(a: &Appearance) -> Appearance {
     let mut a = a.clone();
     if let Some(f) = a.fill_mut() {
@@ -1663,8 +1669,100 @@ fn senza_colori(a: &Appearance) -> Appearance {
     if let Some(s) = a.stroke_mut() {
         s.paint = Paint::None;
         s.width = 0.0;
+        s.cap = LineCap::default();
+        s.join = LineJoin::default();
+        if s.dash.as_ref().is_none_or(tratteggio_semplice) {
+            s.dash = None;
+        }
     }
     a
+}
+
+/// I costrutti di `n` e del suo albero che gli attributi di una foglia non
+/// dicono: tutti tranne il tratteggio semplice (`stroke-dasharray`). Un
+/// tratteggio spostato o adattato agli angoli resta un costrutto della
+/// ricetta.
+fn costrutti_non_detti(n: &Node) -> Vec<ricetta::Costrutto> {
+    fn tratteggio_ricco(n: &Node) -> bool {
+        n.appearance.items.iter().any(|item| match item {
+            vectorcraft_doc::AppearanceItem::Stroke(s) => {
+                s.dash.as_ref().is_some_and(|d| !tratteggio_semplice(d))
+            }
+            _ => false,
+        }) || n.children().into_iter().flatten().any(tratteggio_ricco)
+    }
+    let mut c = ricetta::costrutti_albero(n);
+    if !tratteggio_ricco(n) {
+        c.retain(|c| *c != ricetta::Costrutto::Tratteggio);
+    }
+    c
+}
+
+/// Un tratteggio che `stroke-dasharray` dice: senza spostamento e con le
+/// lunghezze esatte, non adattate agli angoli.
+fn tratteggio_semplice(d: &vectorcraft_doc::Dash) -> bool {
+    d.offset == 0.0 && !d.align_corners
+}
+
+/// Gli estremi, gli angoli e il tratteggio del tratto in cima, prima e dopo,
+/// come attributi della scena: solo quelli cambiati, e `null` per tornare al
+/// valore di SVG (`butt`, `miter`, nessun tratteggio). Le lunghezze del
+/// tratteggio stanno nel documento del motore e tornano nello spazio
+/// dell'elemento con la sua `scala`, come lo spessore.
+fn scrivi_stile_del_tratto(
+    prima: Option<&vectorcraft_doc::StrokeLayer>,
+    dopo: Option<&vectorcraft_doc::StrokeLayer>,
+    scala: f64,
+    attrs: &mut Map<String, Value>,
+) -> Result<(), Rifiuto> {
+    let cap = |s: Option<&vectorcraft_doc::StrokeLayer>| s.map_or(LineCap::default(), |s| s.cap);
+    let join = |s: Option<&vectorcraft_doc::StrokeLayer>| s.map_or(LineJoin::default(), |s| s.join);
+    if cap(prima) != cap(dopo) {
+        let valore = match cap(dopo) {
+            LineCap::Butt => Value::Null,
+            LineCap::Round => json!("round"),
+            LineCap::Square => json!("square"),
+        };
+        attrs.insert("stroke-linecap".into(), valore);
+    }
+    if join(prima) != join(dopo) {
+        let valore = match join(dopo) {
+            LineJoin::Miter => Value::Null,
+            LineJoin::Round => json!("round"),
+            LineJoin::Bevel => json!("bevel"),
+        };
+        attrs.insert("stroke-linejoin".into(), valore);
+    }
+    // Un tratteggio che non disegna trattini (vuoto, tutto a zero) è un
+    // tratto pieno, come per SVG.
+    let trattini = |s: Option<&vectorcraft_doc::StrokeLayer>| -> Option<Vec<f64>> {
+        s.and_then(|s| s.dash.as_ref())
+            .filter(|d| d.is_dashed())
+            .map(|d| d.pattern.clone())
+    };
+    let (tb, ta) = (trattini(prima), trattini(dopo));
+    let uguali = match (&tb, &ta) {
+        (None, None) => true,
+        (Some(b), Some(a)) => b.len() == a.len() && b.iter().zip(a).all(|(x, y)| vicini(*x, *y)),
+        _ => false,
+    };
+    if !uguali {
+        let valore = match ta {
+            None => Value::Null,
+            Some(lunghezze) => {
+                if scala <= 0.0 || !scala.is_finite() {
+                    return Err(no("il tratteggio non si scrive in uno spazio schiacciato"));
+                }
+                let parole: Vec<String> = lunghezze
+                    .iter()
+                    .map(|l| numero(l / scala, DECIMALI_GEOMETRIA))
+                    .collect();
+                json!(parole.join(" "))
+            }
+        };
+        attrs.insert("stroke-dasharray".into(), valore);
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

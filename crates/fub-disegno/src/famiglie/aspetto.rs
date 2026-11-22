@@ -1,14 +1,35 @@
-//! La famiglia `aspetto` della mappa (K6 T15, giro 2): l'opacità e il metodo di fusione dell'oggetto
-//! scelto, `transparency.set`. Il resto dell'aspetto (la pila, il contorno, le maschere di opacità, il
-//! gruppo a foratura) aspetta il suo giro (`docs/architecture/disegno-completo.md`).
+//! La famiglia `aspetto` della mappa (K6 T15): l'opacità e il metodo di fusione dell'oggetto scelto
+//! (`transparency.set`, giro 2) e il suo contorno (`stroke.set`, giro 5). Il resto dell'aspetto (la
+//! pila, le maschere di opacità, il gruppo a foratura) aspetta il suo giro
+//! (`docs/architecture/disegno-completo.md`).
+//!
+//! **Il contorno.** Del pannello Contorno del motore il file dice lo spessore, gli estremi, gli angoli e
+//! il tratteggio semplice (`stroke-width`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`). Il
+//! limite dell'angolo, l'allineamento dentro o fuori, lo spostamento del tratteggio e il tratteggio
+//! adattato agli angoli, le frecce del motore e i profili di spessore non hanno un attributo nella
+//! scena: chiederli è `unsupported`, e niente cambia. Un testo non ha contorno (come per il Colore): con
+//! soli testi scelti il comando è spento, e in una selezione mista il contorno va alle altre forme.
 
 use std::sync::Arc;
 
-use fub_abi::{DrawingDisabledReason, DrawingRefusal};
+use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
+use serde_json::Value;
+use vectorcraft_doc::{Document, NodeId, NodeKind};
 
+use super::tracciati::{inchiostro_toccato, sceglie_inchiostro};
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
+
+/// L'opacità e la fusione.
+const TRASPARENZA: &str = "transparency.set";
+
+/// Il contorno: spessore, estremi, angoli, tratteggio.
+pub(crate) const CONTORNO: &str = "stroke.set";
+
+/// Il limite dell'angolo di SVG (4), quello che il motore legge da un file senza `stroke-miterlimit`:
+/// la scena non scrive l'attributo, quindi non se ne chiede un altro.
+const LIMITE_DELL_ANGOLO: f64 = 4.0;
 
 /// Lo stato della famiglia: non tiene niente.
 pub(crate) struct Stato;
@@ -26,11 +47,49 @@ impl StatoFamiglia for Stato {
         0
     }
 
-    /// `transparency.set` spento col suo perché, prima di chiedere al motore: senza una scelta; sul
-    /// disegno di sola lettura; con una scelta che la mappa non ha, o con un oggetto bloccato (che non
-    /// si scrive). Gli altri comandi della famiglia non sono ancora nella mappa.
+    /// Lo spessore e le lunghezze del tratteggio sono numeri finiti non negativi; un tratteggio vuoto,
+    /// o che non disegna trattini (tutto a zero), è un contorno pieno: `dash: null` per il motore.
+    fn adatta(&self, id: &str, argomenti: Value) -> Result<Value, PluginError> {
+        if id != CONTORNO {
+            return Ok(argomenti);
+        }
+        let Value::Object(mut o) = argomenti else {
+            return Err(PluginError::BadArgs("gli argomenti sono un oggetto".into()));
+        };
+        if let Some(spessore) = o.get("weight") {
+            match spessore.as_f64() {
+                Some(v) if v.is_finite() && v >= 0.0 => {}
+                _ => {
+                    return Err(PluginError::BadArgs(
+                        "lo spessore è un numero non negativo".into(),
+                    ))
+                }
+            }
+        }
+        if let Some(trattini) = o.get("dash").filter(|v| !v.is_null()) {
+            let lunghezze: Option<Vec<f64>> = trattini
+                .as_array()
+                .map(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<f64>>>())
+                .unwrap_or(None);
+            let Some(lunghezze) = lunghezze.filter(|l| l.iter().all(|v| v.is_finite() && *v >= 0.0))
+            else {
+                return Err(PluginError::BadArgs(
+                    "il tratteggio è una lista di lunghezze non negative".into(),
+                ));
+            };
+            if lunghezze.iter().all(|v| *v == 0.0) {
+                o.insert("dash".into(), Value::Null);
+            }
+        }
+        Ok(Value::Object(o))
+    }
+
+    /// `transparency.set` e `stroke.set` spenti col loro perché, prima di chiedere al motore: senza una
+    /// scelta; sul disegno di sola lettura; con una scelta che la mappa non ha, o con un oggetto
+    /// bloccato (che non si scrive). Il contorno è spento anche su un tratto dell'Inchiostro di Fub, che
+    /// è un riempimento, e su soli testi, che non hanno contorno.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
-        if id != "transparency.set" {
+        if id != TRASPARENZA && id != CONTORNO {
             return None;
         }
         if selezione.is_empty() {
@@ -39,10 +98,92 @@ impl StatoFamiglia for Stato {
         if !copia.modificabile {
             return Some(DrawingDisabledReason::ReadOnly);
         }
-        match nodi_scelti(copia, selezione) {
-            Ok(_) => None,
-            Err(DrawingRefusal::Locked) => Some(DrawingDisabledReason::ReadOnly),
-            Err(_) => Some(DrawingDisabledReason::Unmapped),
+        let scelti = match nodi_scelti(copia, selezione) {
+            Ok(scelti) => scelti,
+            Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
+            Err(_) => return Some(DrawingDisabledReason::Unmapped),
+        };
+        if id == CONTORNO {
+            if sceglie_inchiostro(copia, selezione) {
+                return Some(DrawingDisabledReason::FubInk);
+            }
+            if scelti.iter().all(|n| testo(copia, *n)) {
+                return Some(DrawingDisabledReason::NeedsPath);
+            }
         }
+        None
     }
+
+    /// Il contorno su un tratto dell'Inchiostro è `unmapped` (è un riempimento); su soli testi è
+    /// `unsupported`: la scena non scrive il contorno dei caratteri.
+    fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if id != CONTORNO {
+            return None;
+        }
+        if sceglie_inchiostro(copia, selezione) {
+            return Some(DrawingRefusal::Unmapped);
+        }
+        let scelti = nodi_scelti(copia, selezione).ok()?;
+        (!scelti.is_empty() && scelti.iter().all(|n| testo(copia, *n)))
+            .then_some(DrawingRefusal::Unsupported)
+    }
+
+    /// Ciò che il contorno del motore sa fare e la scena non dice: `unsupported` prima del motore.
+    fn rifiuto_valore(
+        id: &str,
+        _copia: &Copia,
+        _selezione: &[String],
+        valore: &Value,
+    ) -> Option<DrawingRefusal> {
+        (id == CONTORNO && fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported)
+    }
+
+    /// Un tratto dell'Inchiostro cambiato dentro un gruppo scelto: `unmapped`, e niente si scrive.
+    fn rifiuto_dopo(
+        id: &str,
+        copia: &Copia,
+        dopo: &Document,
+        _scelti_dopo: &[NodeId],
+    ) -> Option<DrawingRefusal> {
+        (id == CONTORNO && inchiostro_toccato(copia, dopo)).then_some(DrawingRefusal::Unmapped)
+    }
+
+    /// In una selezione con testi e forme il contorno va alle forme, una alla volta nella stessa
+    /// copia: un passo solo. Senza testi il comando gira una volta su tutti.
+    fn uno_alla_volta(id: &str, copia: &Copia, selezione: &[String]) -> Option<Vec<NodeId>> {
+        if id != CONTORNO {
+            return None;
+        }
+        let scelti = nodi_scelti(copia, selezione).ok()?;
+        if !scelti.iter().any(|n| testo(copia, *n)) {
+            return None;
+        }
+        Some(scelti.into_iter().filter(|n| !testo(copia, *n)).collect())
+    }
+}
+
+/// L'oggetto del motore `n` è un testo.
+fn testo(copia: &Copia, n: NodeId) -> bool {
+    copia
+        .documento
+        .node(n)
+        .is_some_and(|nodo| matches!(nodo.kind, NodeKind::Text(_)))
+}
+
+/// Gli argomenti di `stroke.set` chiedono qualcosa che la scena non scrive: un limite dell'angolo
+/// diverso da quello di SVG, un allineamento dentro o fuori, un tratteggio spostato o adattato agli
+/// angoli, una freccia del motore (le punte di Fub sono un'altra cosa, `docs/product/drawing-tips.md`),
+/// un profilo di spessore, un tratto dell'aspetto che non è quello in cima.
+fn fuori_dalla_scena(valore: &Value) -> bool {
+    let c = |chiave: &str| valore.get(chiave).filter(|v| !v.is_null());
+    c("miterLimit").is_some_and(|v| v.as_f64() != Some(LIMITE_DELL_ANGOLO))
+        || c("align").is_some_and(|v| v.as_str() != Some("center"))
+        || c("dashOffset").is_some_and(|v| v.as_f64() != Some(0.0))
+        || c("alignDashes").is_some_and(|v| v.as_bool() != Some(false))
+        || c("startArrow").is_some()
+        || c("endArrow").is_some()
+        || c("arrowAlign").is_some()
+        || c("profile").is_some_and(|v| v.as_str() != Some("uniform"))
+        || c("item").is_some()
+        || c("target").is_some_and(|v| v.as_str() != Some("object"))
 }

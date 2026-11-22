@@ -134,10 +134,10 @@ motore	path.rectCut	Rectangle Cut		tracciati	F1	T12	da fare	ispettore/design	fam
 motore	dimension.create	Create Dimension		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Crea quota
 motore	dimension.update	Update Dimensions		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Aggiorna quote
 motore	dimension.applyToAll	Apply to All		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Applica a tutti
-motore	stroke.widthPoint.set	Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia		Punto di larghezza
-motore	stroke.widthPoint.remove	Delete Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia		Elimina punto di larghezza
-motore	stroke.widthPoint.copy	Copy Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia		Copia punto di larghezza
-motore	stroke.widthProfile.set	Width Profile		aspetto	F1	T15	da fare	ispettore/design	famiglia		Profilo larghezza
+motore	stroke.widthPoint.set	Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Punto di larghezza
+motore	stroke.widthPoint.remove	Delete Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Elimina punto di larghezza
+motore	stroke.widthPoint.copy	Copy Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Copia punto di larghezza
+motore	stroke.widthProfile.set	Width Profile		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Profilo larghezza
 motore	object.liquify	Liquify		pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Fluidifica
 motore	object.puppetWarp	Puppet Warp		trasforma	F1	T13	da fare	ispettore/design	famiglia		Alterazione marionetta
 motore	object.puppetWarp.pins	Puppet Warp Pins		trasforma	F1	T13	da fare	ispettore/design	famiglia		Perni alterazione marionetta
@@ -549,11 +549,11 @@ motore	object.slice.setRect	Set Slice Rectangle		web	F3	T22	da fare	ispettore/de
 motore	object.slice.move	Move Slices		web	F3	T22	da fare	ispettore/design/documento	famiglia		Sposta sezioni
 motore	object.slice.delete	Delete Slices		web	F3	T22	da fare	ispettore/design/documento	famiglia		Elimina sezioni
 motore	object.slice.select	Select Slices		web	F3	T22	da fare	ispettore/design/documento	famiglia		Seleziona sezioni
-motore	stroke.set	Stroke Options	Window › Stroke	aspetto	F1	T15	da fare	ispettore/design	famiglia		Opzioni traccia
-motore	stroke.setAdvanced	Stroke Options		aspetto	F1	T15	da fare	ispettore/design	famiglia		Opzioni traccia
-motore	stroke.widthProfile.add	Add to Profiles		aspetto	F1	T15	da fare	ispettore/design	famiglia		Aggiungi ai profili
-motore	stroke.widthProfile.delete	Delete Profile		aspetto	F1	T15	da fare	ispettore/design	famiglia		Elimina profilo
-motore	stroke.widthProfile.reset	Reset Profiles		aspetto	F1	T15	da fare	ispettore/design	famiglia		Reimposta profili
+motore	stroke.set	Stroke Options	Window › Stroke	aspetto	F1	T15	fatto	ispettore/design/contorno	famiglia	spessore, estremi, angoli e tratteggio; il limite dell'angolo, l'allineamento dentro o fuori, lo spostamento del tratteggio e le frecce del motore la scena non li scrive: spenti col perché, unsupported	Opzioni traccia
+motore	stroke.setAdvanced	Stroke Options		aspetto	F1	T15	da fare	ispettore/design	famiglia	le dimensioni e lo scambio delle frecce, il profilo rovesciato e il pennello: la scena non li scrive (le punte di Fub sono drawing-tips.md)	Opzioni traccia
+motore	stroke.widthProfile.add	Add to Profiles		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Aggiungi ai profili
+motore	stroke.widthProfile.delete	Delete Profile		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Elimina profilo
+motore	stroke.widthProfile.reset	Reset Profiles		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Reimposta profili
 motore	stroke.widthProfile.list	Width Profiles		aspetto	F1	T15	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Profili larghezza
 motore	graphicStyle.apply	Apply Graphic Style	Window › Graphic Styles	aspetto	F1	T15	da fare	ispettore/risorse	famiglia		Applica stile grafico
 motore	graphicStyle.new	New Graphic Style	Window › Graphic Styles	aspetto	F1	T15	da fare	ispettore/risorse	famiglia		Nuovo stile grafico
