@@ -62,6 +62,13 @@ restano. Senza il Completo acceso il pannello è quello di sempre.
 - **Aspetto.** L'Opacità. Gli effetti e la fusione che un disegno porta si vedono sul
   foglio e non stanno nel pannello ([Disegni, effetti e
   fusione](drawing-effects.md)).
+- **Trasparenza**, solo col Disegno completo, e al posto della sezione Aspetto,
+  che lì non c'è: l'Opacità in percento e il Metodo di fusione dell'oggetto
+  scelto, come la sezione Trasforma. I valori sono quelli del pannello; scrivere
+  un valore cambia il file di un passo di Annulla. Con niente di scelto i campi
+  sono spenti; con più oggetti di metodi diversi il metodo dice «Più valori», e
+  non si sceglie. Le maschere d'opacità, il gruppo a foratura e la fusione
+  isolata non ci sono ancora.
 - **Riempimento**, con la parte «Colori personalizzati»: il colore che
   riempie gli oggetti, con sotto il contrasto con la carta.
 - **Contorno.** Il colore, con la parte «Colori personalizzati», lo

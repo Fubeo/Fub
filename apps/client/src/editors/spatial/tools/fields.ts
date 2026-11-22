@@ -447,6 +447,9 @@ export function propertiesView(input: FieldsInput): PropertiesView {
   const { selection, unit } = input;
   const has = (feature: Feature): boolean => input.features.has(feature);
   const fields: Partial<Record<FieldId, FieldState>> = {};
+  // Il metodo di fusione dell'oggetto scelto: non è un campo del pannello del Semplice; lo legge la
+  // sezione Trasparenza del Completo, dalla vista (K6 T15, giro 2).
+  let blend: PropertiesView["blend"];
   const actions: Partial<Record<ActionId, ActionState>> = {};
 
   if (selection !== null) {
@@ -528,6 +531,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     // Le parole, per un testo libero solo che le riscrive senza perdere
     // niente.
     if (selection.words != null) fields.content = { kind: "text", label: t("draw.properties.content"), value: selection.words };
+    if (look.blend.count > 0) blend = { value: look.blend.value, count: look.blend.count };
     if (look.size.count > 0) {
       const { size, weight } = look;
       const preset = size.value === null || weight.value === null ? undefined : TEXT_PRESETS.find((each) => Math.abs(each.size - size.value!) < 1e-6 && each.weight === weight.value);
@@ -656,6 +660,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     editable: input.editable,
     fields,
     actions,
+    blend,
     exportSelection: selection !== null && input.exportSelection === true,
     swatches: input.swatches,
     recent: input.recent,

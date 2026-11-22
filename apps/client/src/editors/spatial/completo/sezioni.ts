@@ -53,6 +53,10 @@ export interface MisureSelezione {
   readonly larghezza?: MisuraSelezione;
   readonly altezza?: MisuraSelezione;
   readonly rotazione?: MisuraSelezione;
+  /// L'opacità in percento, come la vista del pannello la mostra (K6 T15, giro 2).
+  readonly opacita?: MisuraSelezione;
+  /// Il metodo di fusione della selezione: `valore` è `null` e `mista` vero se ne ha più d'uno.
+  readonly fusione?: { readonly valore: string | null; readonly mista: boolean };
 }
 
 /// Un colore della selezione come lo mostra il pannello (K6 T14, giro 1): `#rrggbb`, `none`, `url(#id)`

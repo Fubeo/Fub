@@ -27,7 +27,7 @@ interface CampoTrasforma {
   readonly valori: (valore: number) => Readonly<Record<string, ValoreTrasforma>>;
   readonly senzaFinestra: boolean;
   /// La misura del pannello che il campo mostra, se ce n'è una.
-  readonly misura?: keyof MisureSelezione;
+  readonly misura?: "x" | "y" | "larghezza" | "altezza" | "rotazione";
 }
 
 /// I campi della sezione, nell'ordine in cui si vedono.

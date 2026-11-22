@@ -277,6 +277,10 @@ export interface PropertiesView {
   readonly actions: Readonly<Partial<Record<ActionId, ActionState>>>;
   /// Vero se c'è «Esporta la selezione».
   readonly exportSelection?: boolean;
+  /// Il modo di fusione degli oggetti scelti, come lo scrive il file (`normal` dove nessuno lo dice):
+  /// `value` è `null` se la selezione ne ha più d'uno. Non è un campo: lo legge la sezione Trasparenza
+  /// del Completo (K6 T15, giro 2).
+  readonly blend?: { readonly value: string | null; readonly count: number };
   /// I campioni del documento, che i campi dei colori scrivono per nome e
   /// offrono nel menu del loro campione.
   readonly swatches?: readonly FieldSwatch[];
@@ -395,8 +399,9 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "view", label: "draw.properties.view_section" },
 ];
 
-/// Le sezioni che nel Completo non ci sono: la sezione Trasforma dà posizione e misure (K6 T13, giro 4).
-const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place"]);
+/// Le sezioni che nel Completo non ci sono: la sezione Trasforma dà posizione e misure (K6 T13, giro 4),
+/// e la sezione Trasparenza dà l'opacità (K6 T15, giro 2).
+const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place", "look"]);
 
 /// I campi che nel Completo non ci sono: i colori di riempimento e contorno li dà la sezione Colore
 /// (K6 T14, giro 1). Lo spessore, il tratteggio e le punte del contorno restano; la sezione
@@ -419,7 +424,16 @@ function misureDellaVista(vista: PropertiesView): MisureSelezione {
       allaScena: (valore) => (lunghezza ? fromUnit(valore, unita as LengthUnit) : valore),
     };
   };
-  return { x: misura("x"), y: misura("y"), larghezza: misura("width"), altezza: misura("height"), rotazione: misura("rotation") };
+  const fusione = vista.blend === undefined ? undefined : { valore: vista.blend.value, mista: vista.blend.value === null };
+  return {
+    x: misura("x"),
+    y: misura("y"),
+    larghezza: misura("width"),
+    altezza: misura("height"),
+    rotazione: misura("rotation"),
+    opacita: misura("opacity"),
+    fusione,
+  };
 }
 
 /// Il riempimento e il contorno come li ha la vista del pannello (K6 T14, giro 1): la sezione Colore

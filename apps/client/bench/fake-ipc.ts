@@ -78,6 +78,7 @@ import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./con
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { RISPOSTE, rispostaDiFamiglia } from "./disegno-famiglie/risposte";
 import { comandiProva, comandiSelezione, comandiTrasformazioni, INDICE_PROVA } from "./disegno-indice-prova";
+import { selezioneDelClic } from "./disegno-clic";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
@@ -1073,7 +1074,12 @@ function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutc
   const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
   if (gesture.phase !== "commit") return outcome;
   const vector = GESTURE_VECTORS.find((each) => each.gesture.tool === gesture.tool && each.input === text);
-  if (vector === undefined) return { ...outcome, refused: "empty" };
+  if (vector === undefined) {
+    // Il clic di Selezione sceglie ciò che sta sotto il punto, come il motore (K6 T15, giro 2); gli altri
+    // gesti senza vettore non cambiano niente.
+    const scelta = gesture.tool === "select" ? selezioneDelClic(gesture) : null;
+    return scelta === null ? { ...outcome, refused: "empty" } : { ...outcome, selection: scelta };
+  }
   const names = new Map<string, string>();
   const real = (value: string): string =>
     value.replace(/@(\d+)/g, (found) => {
