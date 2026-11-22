@@ -667,6 +667,29 @@
       "atteso": { "selezione": [] }
     },
     {
+      "id": "select.reselect",
+      "disegno": "base.svg",
+      "prima": [{ "id": "select.same.fillColor", "selezione": ["oa1a1a1a1"] }],
+      "selezione": [],
+      "atteso": { "selezione": ["oa1a1a1a1"] }
+    },
+    {
+      "id": "select.reselect",
+      "disegno": "base.svg",
+      "prima": [
+        { "id": "select.same.fillColor", "selezione": ["oa1a1a1a1"] },
+        { "id": "select.none", "selezione": ["oa1a1a1a1"] }
+      ],
+      "selezione": [],
+      "atteso": { "selezione": ["oa1a1a1a1"] }
+    },
+    {
+      "id": "select.reselect",
+      "disegno": "base.svg",
+      "selezione": [],
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
       "id": "edit.dropSelection",
       "disegno": "base.svg",
       "argomenti": { "sourceDocument": 999, "ids": [3], "grab": [0, 0], "at": [0, 0] },

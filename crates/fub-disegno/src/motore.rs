@@ -453,6 +453,20 @@ impl Disegno {
         let mut comandi = crate::comandi::elenco(&self.copia, selezione);
         #[cfg(feature = "completo")]
         comandi.extend(crate::famiglie::elenco(&self.copia, selezione));
+        // Riseleziona ripete l'ultimo comando di selezione del banco: senza, è spento col
+        // suo perché (il rifiuto `empty` non dice niente).
+        if self.banco.ultimo_di_selezione.is_none() {
+            for info in comandi
+                .iter_mut()
+                .filter(|i| i.id == "disegno.select.reselect")
+            {
+                info.enabled = false;
+                info.disabled_reason = Some(fub_abi::DrawingDisabledReason::Other {
+                    text: "Prima scegli un comando di selezione, per esempio Uguale o Oggetto."
+                        .into(),
+                });
+            }
+        }
         comandi
     }
 

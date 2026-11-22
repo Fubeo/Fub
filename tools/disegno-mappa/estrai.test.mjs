@@ -90,7 +90,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
   // T12 punti le dieci sui punti di un tracciato: `path.moveAnchor`, `.moveAnchors`, `.setHandle`,
   // `.insertAnchor`, `.removeAnchor`, `.convertAnchor`, `.deleteAnchors`, `.close`, `.appendAnchor`, `.split`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1158, fub: 114, escluso: 12, fatto: 267 });
+  // T15 Seleziona giro 2: Riseleziona (`select.reselect`) è «fatto», con il ricordo del banco.
+  // Le selezioni salvate, Oggetto › Testo di punto e in area, la bacchetta restano «da fare».
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1157, fub: 114, escluso: 12, fatto: 268 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -186,6 +186,12 @@ pub(crate) struct Banco {
     pub prefs: vectorcraft_engine::Prefs,
     /// Ciò che il ponte verso gli strumenti del motore ricorda del gesto.
     pub(crate) ponte: strumento::Ponte,
+    /// L'ultimo comando di selezione del motore con la selezione di prima
+    /// (`last_selection_cmd`, K6 T15 giro 2): `select.reselect` lo ripete. Il
+    /// motore lo tiene nel suo stato di documento, che ogni comando ricrea
+    /// (`ripristina`), quindi il ricordo sta qui fra un comando e l'altro.
+    /// [`Banco::installa`] lo toglie, perché il documento è un altro.
+    pub(crate) ultimo_di_selezione: Option<(String, serde_json::Value, Vec<NodeId>)>,
 }
 
 impl Banco {
@@ -216,6 +222,7 @@ impl Banco {
                 trascinato: false,
                 prefs,
                 ponte: strumento::Ponte::default(),
+                ultimo_di_selezione: None,
             })
         })
     }
@@ -228,6 +235,7 @@ impl Banco {
         self.pressione = None;
         self.trascinato = false;
         self.ponte = strumento::Ponte::default();
+        self.ultimo_di_selezione = None;
         let doc = (*copia.documento).clone();
         let sessione = &mut self.sessione;
         vectorcraft_engine::guard::catch_panic(|| sessione.replace_document(0, doc))?;

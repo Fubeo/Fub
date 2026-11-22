@@ -256,14 +256,14 @@ fn una_riga_fatta_entra_nell_indice_con_posto_effetto_e_tasto() {
     };
     let non_servito = |id: &str| non_servito(id).or_else(|| senza_riga_perche(id));
     copertura(&voci, &non_servito).expect("coperte");
-    // Senza il perché, un comando fuori dall'indice cade. (`select.reselect` è ancora
-    // da fare: il suo esempio resta fuori dall'indice.)
-    let errore = copertura(&voci, &|id| (id != "select.reselect").then_some("da fare"))
-        .expect_err("select.reselect è fuori senza perché");
+    // Senza il perché, un comando fuori dall'indice cade. (`select.save` è ancora
+    // da fare, senza un posto nel formato della scena: il suo esempio resta fuori.)
+    let errore = copertura(&voci, &|id| (id != "select.save").then_some("da fare"))
+        .expect_err("select.save è fuori senza perché");
     assert!(
         errore
             .iter()
-            .any(|m| matches!(m, Mancanza::Irraggiungibile(id) if id == "select.reselect")),
+            .any(|m| matches!(m, Mancanza::Irraggiungibile(id) if id == "select.save")),
         "{errore:?}"
     );
 }

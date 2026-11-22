@@ -77,9 +77,19 @@ fn cambia_il_file(id: &str) -> bool {
 /// I comandi che lavorano sulla selezione. Le incolle vanno dove sta il punto
 /// del disegno, le letture del documento leggono tutto, e la selezione per id
 /// prende i suoi id: nessuno di loro vuole una selezione. Nemmeno Sblocca
-/// tutto e Mostra tutto, che lavorano su tutto il disegno.
+/// tutto e Mostra tutto, che lavorano su tutto il disegno. Riseleziona, invece,
+/// vuole la selezione vuota: dopo Deseleziona riparte da quella di prima.
 fn vuole_selezione(id: &str) -> bool {
     !(id.starts_with("edit.paste")
         || id.starts_with("document.")
-        || matches!(id, "select.set" | "select.add" | "select.toggle" | "edit.dropSelection" | "object.unlockAll" | "object.showAll"))
+        || matches!(
+            id,
+            "select.set"
+                | "select.add"
+                | "select.toggle"
+                | "select.reselect"
+                | "edit.dropSelection"
+                | "object.unlockAll"
+                | "object.showAll"
+        ))
 }
