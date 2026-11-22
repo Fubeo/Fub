@@ -190,17 +190,23 @@ fn esempio(c: Costrutto, n: &mut Node) -> Option<()> {
                 serde_json::json!({ "points": [[0.0, 1.0, 1.0], [1.0, 3.0, 3.0]] })
             ))
         }
+        // Una lineare o una radiale semplice è una sfumatura privata della scena (`crate::sfumature`, i
+        // casi `paint.editGradient` di `tests/famiglie/colore.json`); con la retinatura va con la ricetta.
         Sfumatura => {
             riempimento(n).paint = da_json!(serde_json::json!({ "type": "gradient",
-            "gradient": { "kind": "Linear", "stops": [
+            "gradient": { "kind": "Linear", "dither": true, "stops": [
                 { "offset": 0.0, "color": { "model": "rgb", "r": 1.0, "g": 0.0, "b": 0.0 } },
                 { "offset": 1.0, "color": { "model": "rgb", "r": 0.0, "g": 0.0, "b": 1.0 } }
             ] } }))
         }
         Motivo => return None,
         Penna => contorno(n).end_arrow = Some(da_json!(serde_json::json!("Triangle"))),
+        // Un tratteggio semplice è `stroke-dasharray` sull'elemento (`differenza::scrivi_stile_del_tratto`,
+        // i casi `stroke.set` di `tests/famiglie/aspetto.json`); spostato, va con la ricetta.
         Tratteggio => {
-            contorno(n).dash = Some(da_json!(serde_json::json!({ "pattern": [4.0, 2.0] })))
+            contorno(n).dash = Some(da_json!(
+                serde_json::json!({ "pattern": [4.0, 2.0], "offset": 1.0 })
+            ))
         }
         Maschera => n.extras_mut().mask = Some(da_json!(serde_json::json!({ "art": quadrato() }))),
         Ritaglio => {

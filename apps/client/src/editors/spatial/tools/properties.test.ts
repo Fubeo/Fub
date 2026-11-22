@@ -9,6 +9,7 @@ import { iconEl, iconNames } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
 import { creaSezioni } from "../completo/sezioni";
+import { t } from "../strings";
 import {
   createProperties,
   type ActionState,
@@ -782,29 +783,85 @@ describe("le scelte e i pulsanti", () => {
     expect(visti[visti.length - 1]).toBe(25);
   });
 
-  it("nel Completo i colori di riempimento e contorno non ci sono (li dà la sezione Colore), il tratteggio resta; il Semplice non cambia", async () => {
+  it("nel Completo i colori, lo spessore e il tratteggio non ci sono (li danno Colore e Contorno), le punte restano in «Punte»; il Semplice non cambia", async () => {
     const sezioni = creaSezioni();
     const visti: unknown[] = [];
     sezioni.registra({ id: "colori", scheda: "design", titolo: "Colori", disegna: (contesto) => void visti.push(contesto.colori) });
     const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    const titolo = (id: SectionId): string => section(id).querySelector(".draw-properties-toggle-text")!.textContent!;
+    state.tips = { start: { shape: "none", size: "medium" }, end: { shape: "triangle", size: "medium" } };
     mount();
-    // Il Semplice: il campo del riempimento c'è, con la sua sezione.
+    // Il Semplice: il campo del riempimento c'è, con la sua sezione; il tratteggio è nel Contorno.
     expect(field("fill").hidden).toBe(false);
     expect(section("fill").hidden).toBe(false);
-    // Il Completo aperto: il campo si toglie subito, e la sezione Riempimento, rimasta vuota, con lui.
+    expect(field("dash").hidden).toBe(false);
+    expect(titolo("stroke")).toBe(t("draw.properties.stroke"));
+    // Il Completo aperto: i campi si tolgono subito, e la sezione Riempimento, rimasta vuota, con loro.
     panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
     expect(field("fill").hidden).toBe(true);
     expect(section("fill").hidden).toBe(true);
-    expect(field("dash").hidden).toBe(false);
+    expect(field("dash").hidden).toBe(true);
+    expect(field("tipEnd").hidden).toBe(false);
     expect(section("stroke").hidden).toBe(false);
+    expect(titolo("stroke")).toBe(t("draw.properties.tips"));
     // La sezione del registro vede il colore della vista, senza il motore.
     panel.update(view());
     await fotogramma();
     expect(visti[visti.length - 1]).toEqual({ riempimento: { valore: "#0072b2" } });
-    // Il Completo chiuso: il campo torna.
+    // Il Completo chiuso: i campi tornano, e la sezione si chiama di nuovo Contorno.
     panel.collegaSezioni(null, null, () => ({ numero: 0, punti: [] }));
     expect(field("fill").hidden).toBe(false);
     expect(section("fill").hidden).toBe(false);
+    expect(field("dash").hidden).toBe(false);
+    expect(titolo("stroke")).toBe(t("draw.properties.stroke"));
+  });
+
+  it("la sezione del registro vede il contorno della vista: lo spessore nella sua unità, estremi, angoli, trattini, blocco", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "contorno", scheda: "design", titolo: "Contorno", disegna: (contesto) => void visti.push(contesto.misure.contorno) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    mount();
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    const base = view();
+    panel.update({
+      ...base,
+      fields: { ...base.fields, strokeWidth: { kind: "number", label: "Spessore", value: 1.5, unit: "pt", units: {}, relative: false, places: 2, min: 0, max: 1000 } },
+      outline: { cap: "round", join: null, dashes: [3, 1.5], locked: false },
+    });
+    await fotogramma();
+    const contorno = visti[visti.length - 1] as { spessore: { valore: number; unita: string; allaScena: (v: number) => number } } & Record<string, unknown>;
+    expect(contorno).toMatchObject({ spessore: { valore: 1.5, unita: "pt", decimali: 2 }, estremi: "round", angoli: null, trattini: [3, 1.5], bloccato: false });
+    expect(contorno.spessore.allaScena(3)).toBeCloseTo(4);
+  });
+
+  it("la sezione del registro vede le sfumature della vista: riempimento, contorno, blocco e soli testi", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "sfumatura", scheda: "design", titolo: "Sfumatura", disegna: (contesto) => void visti.push(contesto.misure.sfumature) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    mount();
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    const stops = [
+      { offset: 0, color: "#ffffff", opacity: 1 },
+      { offset: 1, color: "#000000", opacity: 0.5 },
+    ];
+    panel.update({
+      ...view(),
+      gradients: {
+        fill: { count: 2, gradients: 1, kind: "radial", stops, angle: -45 },
+        stroke: { count: 2, gradients: 0, kind: null, stops: null, angle: null },
+        locked: true,
+        onlyText: false,
+      },
+    });
+    await fotogramma();
+    expect(visti[visti.length - 1]).toEqual({
+      riempimento: { parti: 2, conSfumatura: 1, tipo: "radial", punti: stops, angolo: -45 },
+      contorno: { parti: 2, conSfumatura: 0, tipo: null, punti: null, angolo: null },
+      bloccato: true,
+      soloTesto: false,
+    });
   });
 
   it("nel Completo famiglia, corpo, peso, spaziatura e allineamento li danno Carattere e Paragrafo; l'enfasi resta; la sezione vede il testo della vista", async () => {

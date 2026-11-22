@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia aspetto (piano K6, T15, giro 2): l'opacità e il metodo di fusione dell'oggetto scelto, transparency.set. Il disegno è aspetto/base.svg: un rettangolo rosso e un'ellisse blu, nel livello l1a2b3c4d. Scrivere l'aspetto cambia il file di un passo di Annulla; con niente di scelto il comando è spento.",
+  "$nota": "I casi della famiglia aspetto (piano K6, T15): l'opacità e il metodo di fusione dell'oggetto scelto (transparency.set, giro 2, disegno aspetto/base.svg) e il contorno (stroke.set, giro 5, disegno aspetto/contorno.svg: un rettangolo, un'ellisse tratteggiata, un testo e un rettangolo bloccato). Il contorno scrive stroke-width, stroke-linecap, stroke-linejoin e stroke-dasharray sull'elemento, in un passo di Annulla; ciò che la scena non dice (limite dell'angolo, allineamento, frecce del motore) è unsupported, il testo non ha contorno, l'oggetto bloccato è locked.",
   "casi": [
     {
       "id": "transparency.set",
@@ -48,6 +48,310 @@
       "selezione": [],
       "argomenti": {
         "opacity": 50
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "weight": 6,
+        "cap": "round",
+        "join": "bevel",
+        "dash": [
+          10,
+          5
+        ]
+      },
+      "dopo": "contorno-spesso-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke-width": "6",
+              "stroke-linecap": "round",
+              "stroke-linejoin": "bevel",
+              "stroke-dasharray": "10 5"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oe1e1e1e1"
+      ],
+      "argomenti": {
+        "dash": null
+      },
+      "dopo": "contorno-pieno-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oe1e1e1e1",
+            "attrs": {
+              "stroke-dasharray": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oe1e1e1e1"
+      ],
+      "argomenti": {
+        "dash": []
+      },
+      "dopo": "contorno-pieno-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oe1e1e1e1",
+            "attrs": {
+              "stroke-dasharray": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oe1e1e1e1"
+      ],
+      "argomenti": {
+        "dash": [
+          0,
+          0
+        ]
+      },
+      "dopo": "contorno-pieno-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oe1e1e1e1",
+            "attrs": {
+              "stroke-dasharray": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "weight": 5
+      },
+      "dopo": "contorno-misto-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke-width": "5"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "weight": 0
+      },
+      "dopo": "contorno-zero-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke-width": "0"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "weight": 3
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "ob1b1b1b1"
+      ],
+      "argomenti": {
+        "weight": 3
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "weight": -1
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dash": [
+          4,
+          -2
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "miterLimit": 8
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "align": "inside"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "endArrow": "Triangle"
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oe1e1e1e1"
+      ],
+      "argomenti": {
+        "dashOffset": 3
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "stroke.set",
+      "disegno": "contorno.svg",
+      "selezione": [],
+      "argomenti": {
+        "weight": 3
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "gradient.selectStop",
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"rg1g1g1g1\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"100\" y1=\"125\" x2=\"200\" y2=\"125\">\n      <stop offset=\"0\" stop-color=\"#ff0000\"/>\n      <stop offset=\"1\" stop-color=\"#0000ff\"/>\n    </linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"og1g1g1g1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"url(#rg1g1g1g1) #800080\" stroke=\"#000000\" stroke-width=\"2\"/>\n    <rect id=\"oa1a1a1a1\" x=\"250\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/>\n    <text id=\"ot1t1t1t1\" x=\"100\" y=\"250\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"24\"><tspan x=\"100\" dy=\"0\">Ciao</tspan></text>\n  </g>\n</svg>\n",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "argomenti": {
+        "index": 1
+      },
+      "atteso": {
+        "lettura": {
+          "index": 1
+        }
+      }
+    },
+    {
+      "id": "gradient.selectStop",
+      "disegno": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"rg1g1g1g1\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"100\" y1=\"125\" x2=\"200\" y2=\"125\">\n      <stop offset=\"0\" stop-color=\"#ff0000\"/>\n      <stop offset=\"1\" stop-color=\"#0000ff\"/>\n    </linearGradient>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"og1g1g1g1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"url(#rg1g1g1g1) #800080\" stroke=\"#000000\" stroke-width=\"2\"/>\n    <rect id=\"oa1a1a1a1\" x=\"250\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\"/>\n    <text id=\"ot1t1t1t1\" x=\"100\" y=\"250\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"24\"><tspan x=\"100\" dy=\"0\">Ciao</tspan></text>\n  </g>\n</svg>\n",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "argomenti": {
+        "index": 5
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "gradient.selectStop",
+      "disegno": "contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "index": 0
       },
       "atteso": {
         "errore": "bad_args"

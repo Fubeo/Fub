@@ -957,6 +957,803 @@
       "id": "swatches",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/campioni-sezione.test.ts"
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "sfumatura.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ff0000",
+            "opacity": 1
+          },
+          {
+            "offset": 0.5,
+            "color": "#00ff00",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#0000ff",
+            "opacity": 0.5
+          }
+        ],
+        "angle": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9y9y9y9y",
+                    "fub:role": "private",
+                    "gradientUnits": "userSpaceOnUse",
+                    "x1": "250",
+                    "y1": "125",
+                    "x2": "350",
+                    "y2": "125"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0",
+                        "stop-color": "#ff0000"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0.5",
+                        "stop-color": "#00ff00"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "1",
+                        "stop-color": "#0000ff",
+                        "stop-opacity": "0.5"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "url(#r9y9y9y9y) #498631"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "paint-editGradient.svg"
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "sfumatura.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "kind": "radial",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ff0000",
+            "opacity": 1
+          },
+          {
+            "offset": 0.5,
+            "color": "#00ff00",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#0000ff",
+            "opacity": 0.5
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "radialGradient",
+                  "attrs": {
+                    "id": "r9y9y9y9y",
+                    "fub:role": "private",
+                    "gradientUnits": "userSpaceOnUse",
+                    "cx": "300",
+                    "cy": "125",
+                    "r": "50"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0",
+                        "stop-color": "#ff0000"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0.5",
+                        "stop-color": "#00ff00"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "1",
+                        "stop-color": "#0000ff",
+                        "stop-opacity": "0.5"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "url(#r9y9y9y9y) #498631"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "paint-editGradient-radiale.svg"
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "stroke": true,
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ],
+        "angle": 45
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "defs",
+                  "attrs": {
+                    "id": "fub-defs"
+                  },
+                  "children": [
+                    {
+                      "tag": "linearGradient",
+                      "attrs": {
+                        "id": "r9y9y9y9y",
+                        "fub:role": "private",
+                        "gradientUnits": "userSpaceOnUse",
+                        "x1": "111.5",
+                        "y1": "163.5",
+                        "x2": "188.5",
+                        "y2": "86.5"
+                      },
+                      "children": [
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "0",
+                            "stop-color": "#ffffff"
+                          }
+                        },
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "1",
+                            "stop-color": "#000000"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "stroke": "url(#r9y9y9y9y) #808080"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "paint-editGradient-contorno.svg"
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "sfumatura.svg",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ff0000",
+            "opacity": 1
+          },
+          {
+            "offset": 0.5,
+            "color": "#00ff00",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#0000ff",
+            "opacity": 0.5
+          }
+        ],
+        "angle": 90
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9y9y9y9y",
+                    "fub:role": "private",
+                    "gradientUnits": "userSpaceOnUse",
+                    "x1": "150",
+                    "y1": "175",
+                    "x2": "150",
+                    "y2": "75"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0",
+                        "stop-color": "#ff0000"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0.5",
+                        "stop-color": "#00ff00"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "1",
+                        "stop-color": "#0000ff",
+                        "stop-opacity": "0.5"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "og1g1g1g1",
+                "attrs": {
+                  "fill": "url(#r9y9y9y9y) #498631"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "paint-editGradient-cambia.svg"
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "sfumatura.svg",
+      "selezione": [
+        "og1g1g1g1",
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ],
+        "angle": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9y9y9y9y",
+                    "fub:role": "private",
+                    "gradientUnits": "userSpaceOnUse",
+                    "x1": "100",
+                    "y1": "125",
+                    "x2": "200",
+                    "y2": "125"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0",
+                        "stop-color": "#ffffff"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "1",
+                        "stop-color": "#000000"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "og1g1g1g1",
+                "attrs": {
+                  "fill": "url(#r9y9y9y9y) #808080"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "paint-editGradient-misto.svg"
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "sfumatura.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "kind": "freeform",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "method": "perceptual",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "midpoint": 0.3
+          },
+          {
+            "offset": 1,
+            "color": "#000000"
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "stroke": true,
+        "strokeMode": "along",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff",
+            "opacity": 1
+          },
+          {
+            "offset": 1,
+            "color": "#000000",
+            "opacity": 1
+          }
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "paint.editGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "kind": "linear",
+        "stops": [
+          {
+            "offset": 0,
+            "color": "#ffffff"
+          }
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "paint.setGradientGeom",
+      "disegno": "sfumatura.svg",
+      "selezione": [
+        "og1g1g1g1"
+      ],
+      "argomenti": {
+        "start": [
+          100,
+          100
+        ],
+        "end": [
+          200,
+          150
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9y9y9y9y",
+                    "fub:role": "private",
+                    "gradientUnits": "userSpaceOnUse",
+                    "x1": "100",
+                    "y1": "100",
+                    "x2": "200",
+                    "y2": "150"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "0",
+                        "stop-color": "#ff0000"
+                      }
+                    },
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "offset": "1",
+                        "stop-color": "#0000ff"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "og1g1g1g1",
+                "attrs": {
+                  "fill": "url(#r9y9y9y9y) #800080"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "paint-setGradientGeom.svg"
+    },
+    {
+      "id": "paint.setGradientGeom",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "start": [
+          0,
+          0
+        ],
+        "end": [
+          10,
+          10
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "paint.lastGradient",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "defs",
+                  "attrs": {
+                    "id": "fub-defs"
+                  },
+                  "children": [
+                    {
+                      "tag": "linearGradient",
+                      "attrs": {
+                        "id": "r9y9y9y9y",
+                        "fub:role": "private",
+                        "gradientUnits": "userSpaceOnUse",
+                        "x1": "100",
+                        "y1": "125",
+                        "x2": "200",
+                        "y2": "125"
+                      },
+                      "children": [
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "0",
+                            "stop-color": "#ffffff"
+                          }
+                        },
+                        {
+                          "tag": "stop",
+                          "attrs": {
+                            "offset": "1",
+                            "stop-color": "#000000"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "url(#r9y9y9y9y) #808080"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "paint-lastGradient.svg"
     }
   ]
 }

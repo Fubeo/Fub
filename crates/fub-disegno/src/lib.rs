@@ -40,5 +40,7 @@ pub mod preferenze;
 mod profilo;
 /// La ricetta di un oggetto ricco accanto all'elemento.
 pub mod ricetta;
+/// Le sfumature del motore scritte come risorse private della scena.
+mod sfumature;
 /// La sincronia fra il documento del motore e il file sul disco.
 pub mod sincronia;

@@ -40,6 +40,8 @@ interface Parti {
   readonly scambia: HTMLButtonElement;
   readonly nessuno: HTMLButtonElement;
   readonly diSerie: HTMLButtonElement;
+  /// Fa sfumatura il lato attivo (K6 T15, giro 5): l'ultima usata, o quella di serie del motore.
+  readonly sfumatura: HTMLButtonElement;
 }
 
 /// Il nome di un lato nella lingua di adesso.
@@ -90,6 +92,10 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoA
     }
     p.nessuno.title = t("draw.colore.nessuno.nota", { lato: nomeDi(stato.lato) });
     p.nessuno.setAttribute("aria-label", p.nessuno.title);
+    if (!p.sfumatura.disabled) {
+      p.sfumatura.title = t("draw.colore.sfumatura.nota", { lato: nomeDi(stato.lato) });
+      p.sfumatura.setAttribute("aria-label", p.sfumatura.title);
+    }
   };
 
   const crea = (): Parti => {
@@ -137,6 +143,7 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoA
     const scambia = pulsante(t("draw.colore.scambia"), t("draw.colore.scambia.nota"));
     const nessuno = pulsante(t("draw.colore.nessuno"), t("draw.colore.nessuno.nota", { lato: nomeDi(stato.lato) }));
     const diSerie = pulsante(t("draw.colore.diSerie"), t("draw.colore.diSerie.nota"));
+    const sfumatura = pulsante(t("draw.colore.sfumatura.applica"), t("draw.colore.sfumatura.nota", { lato: nomeDi(stato.lato) }));
     vita.listen(scambia, "click", () => {
       if (!scambia.disabled) esegui("paint.swap", {});
     });
@@ -146,9 +153,12 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoA
     vita.listen(diSerie, "click", () => {
       if (!diSerie.disabled) esegui("paint.default", {});
     });
-    azioni.append(scambia, nessuno, diSerie);
+    vita.listen(sfumatura, "click", () => {
+      if (!sfumatura.disabled) esegui("paint.lastGradient", { stroke: stato.lato === "stroke" });
+    });
+    azioni.append(scambia, nessuno, diSerie, sfumatura);
     radice.append(coppia, azioni);
-    const fatte: Parti = { radice, pozzi, nomi, scambia, nessuno, diSerie };
+    const fatte: Parti = { radice, pozzi, nomi, scambia, nessuno, diSerie, sfumatura };
     segna(fatte);
     return fatte;
   };
@@ -174,7 +184,24 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoA
     p.scambia.disabled = spenta;
     p.nessuno.disabled = spenta;
     p.diSerie.disabled = spenta;
+    // La sfumatura non va sui testi (la scena non la scrive sui caratteri) né sugli oggetti bloccati,
+    // né su un lato che la selezione non ha.
+    const sfumature = contesto.misure?.sfumature;
+    const perche = spenta
+      ? t("draw.sfumatura.vuota")
+      : sfumature?.soloTesto === true
+        ? t("draw.sfumatura.testo")
+        : sfumature?.bloccato === true
+          ? t("draw.sfumatura.bloccato")
+          : colori[stato.lato] === undefined
+            ? t("draw.colore.manca", { lato: nomeDi(stato.lato) })
+            : null;
+    p.sfumatura.disabled = perche !== null;
     segna(p);
+    if (perche !== null) {
+      p.sfumatura.title = perche;
+      p.sfumatura.setAttribute("aria-label", perche);
+    }
     for (const lato of mancanti) {
       const perche = t(spenta ? "draw.colore.vuota" : "draw.colore.manca", { lato: nomeDi(lato) });
       p.pozzi[lato].button.title = perche;

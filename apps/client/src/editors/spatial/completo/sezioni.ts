@@ -86,6 +86,51 @@ export interface MisureSelezione {
   readonly opacita?: MisuraSelezione;
   /// Il metodo di fusione della selezione: `valore` è `null` e `mista` vero se ne ha più d'uno.
   readonly fusione?: { readonly valore: string | null; readonly mista: boolean };
+  /// Il contorno della selezione (K6 T15, giro 5); manca se non ne ha uno da cambiare.
+  readonly contorno?: ContornoSelezione;
+  /// Le sfumature del riempimento e del contorno (K6 T15, giro 5).
+  readonly sfumature?: SfumatureSelezione;
+}
+
+/// Un punto di una sfumatura: dove sta da 0 a 1, il colore `#rrggbb` minuscolo, l'opacità da 0 a 1.
+export interface PuntoSfumatura {
+  readonly offset: number;
+  readonly color: string;
+  readonly opacity: number;
+}
+
+/// La sfumatura di un colore della selezione, come la legge la vista del pannello: `null` dove gli
+/// oggetti scelti non sono d'accordo, o non ne hanno una.
+export interface SfumaturaSelezione {
+  /// Quante parti mostrano il colore, e quante una sfumatura che si legge.
+  readonly parti: number;
+  readonly conSfumatura: number;
+  readonly tipo: "linear" | "radial" | null;
+  readonly punti: readonly PuntoSfumatura[] | null;
+  /// L'angolo della linea, o del primo raggio, in gradi in senso orario come lo scrive la scena.
+  readonly angolo: number | null;
+}
+
+/// Le sfumature della selezione: quella del riempimento e quella del contorno (manca il colore che
+/// nessun oggetto scelto mostra), e perché non si cambiano.
+export interface SfumatureSelezione {
+  readonly riempimento?: SfumaturaSelezione;
+  readonly contorno?: SfumaturaSelezione;
+  readonly bloccato: boolean;
+  readonly soloTesto: boolean;
+}
+
+/// Il contorno della selezione come lo mostra la vista del pannello (K6 T15, giro 5): `null` dove gli
+/// oggetti scelti non sono d'accordo, che la sezione mostra «Misto».
+export interface ContornoSelezione {
+  /// Lo spessore, nella sua unità (pt o px); manca se la vista non lo ha.
+  readonly spessore?: MisuraSelezione;
+  readonly estremi: "butt" | "round" | "square" | null;
+  readonly angoli: "miter" | "round" | "bevel" | null;
+  /// Trattini e spazi alternati, nell'unità dello spessore; vuoti per un contorno pieno.
+  readonly trattini: readonly number[] | null;
+  /// Un oggetto scelto è bloccato: il contorno non si cambia.
+  readonly bloccato: boolean;
 }
 
 /// Un colore della selezione come lo mostra il pannello (K6 T14, giro 1): `#rrggbb`, `none`, `url(#id)`

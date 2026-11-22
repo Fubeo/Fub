@@ -1807,6 +1807,15 @@
     "draw-color-active",
     "draw-color-actions",
     "kit-color-well-name",
+    "draw-gradient",
+    "draw-gradient-field",
+    "draw-gradient-row",
+    "draw-gradient-bar",
+    "draw-gradient-stops",
+    "draw-gradient-stop",
+    "draw-gradient-stop-chosen",
+    "draw-gradient-actions",
+    "draw-gradient-create",
     "draw-type",
     "draw-type-family",
     "draw-type-style",
@@ -4304,6 +4313,15 @@
     "draw-color-active": "cornice",
     "draw-color-actions": "cornice",
     "kit-color-well-name": "cornice",
+    "draw-gradient": "cornice",
+    "draw-gradient-field": "cornice",
+    "draw-gradient-row": "cornice",
+    "draw-gradient-bar": "cornice",
+    "draw-gradient-stops": "cornice",
+    "draw-gradient-stop": "cornice",
+    "draw-gradient-stop-chosen": "cornice",
+    "draw-gradient-actions": "cornice",
+    "draw-gradient-create": "cornice",
     "draw-type": "cornice",
     "draw-type-family": "cornice",
     "draw-type-style": "cornice",
@@ -9310,6 +9328,32 @@
       ]
     },
     {
+      "name": "gradient-section",
+      "part": "draw",
+      "hooks": [
+        "draw-gradient",
+        "draw-gradient-field",
+        "draw-gradient-row",
+        "draw-gradient-bar",
+        "draw-gradient-stops",
+        "draw-gradient-stop",
+        "draw-gradient-stop-chosen",
+        "draw-gradient-actions",
+        "draw-gradient-create",
+        "kit-color-well",
+        "kit-color-well-button",
+        "kit-color-well-name",
+        "kit-number",
+        "kit-button"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected",
+        "disabled"
+      ]
+    },
+    {
       "name": "text-section",
       "part": "draw",
       "hooks": [
@@ -12928,10 +12972,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2495,
+    "hooks": 2504,
     "state_names": 7,
-    "assigned_states": 1124,
-    "components": 331,
+    "assigned_states": 1128,
+    "components": 332,
     "preference_tokens": 196
   }
 }

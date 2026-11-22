@@ -226,6 +226,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // il resto (anche l'ordine del nucleo, K6 T11) è spento. Tutto nella
     // tavola e gli oggetti di testo non leggono ciò che è scelto, come Tutto
     // (K6 T15). I campioni del documento (K6 T14) non sono gli oggetti scelti.
+    // Il punto scelto della sfumatura (K6 T15, giro 5) è della sessione, come
+    // il lato attivo: una lettura che non cambia il file.
     let sempre = [
         "disegno.swatch.new",
         "disegno.swatch.edit",
@@ -239,12 +241,18 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.select.allOnArtboard",
         "disegno.select.object.textObjects",
         "disegno.paint.toggleActive",
+        "disegno.gradient.selectStop",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
-    assert!(comandi
+    let accesi: Vec<&str> = comandi
         .iter()
-        .filter(|c| !sempre.contains(&c.id.as_str()))
-        .all(|c| !c.enabled));
+        .filter(|c| !sempre.contains(&c.id.as_str()) && c.enabled)
+        .map(|c| c.id.as_str())
+        .collect();
+    assert!(
+        accesi.is_empty(),
+        "accesi con un elemento non mappato: {accesi:?}"
+    );
     let ordine = comandi
         .iter()
         .find(|c| c.id == "disegno.object.arrange.bringToFront")

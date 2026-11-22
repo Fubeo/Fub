@@ -691,6 +691,22 @@
     },
     {
       "fonte": "motore",
+      "id": "gradient.selectStop",
+      "chiamata": {
+        "comando": "disegno.gradient.selectStop"
+      },
+      "etichetta": {
+        "it": "Seleziona cursore colore",
+        "en": "Select Gradient Stop"
+      },
+      "posto": "ispettore/design/sfumatura",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "layer.delete",
       "chiamata": {
         "comando": "disegno.layer.delete"
@@ -1475,6 +1491,22 @@
     },
     {
       "fonte": "motore",
+      "id": "paint.editGradient",
+      "chiamata": {
+        "comando": "disegno.paint.editGradient"
+      },
+      "etichetta": {
+        "it": "Sfumatura",
+        "en": "Gradient"
+      },
+      "posto": "ispettore/design/sfumatura",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "paint.invert",
       "chiamata": {
         "comando": "disegno.paint.invert"
@@ -1507,6 +1539,22 @@
     },
     {
       "fonte": "motore",
+      "id": "paint.lastGradient",
+      "chiamata": {
+        "comando": "disegno.paint.lastGradient"
+      },
+      "etichetta": {
+        "it": "Applica ultima sfumatura",
+        "en": "Apply Last Gradient"
+      },
+      "posto": "ispettore/design/sfumatura",
+      "famiglia": "colore",
+      "tasto": ".",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "paint.none",
       "chiamata": {
         "comando": "disegno.paint.none"
@@ -1532,6 +1580,22 @@
         "en": "Fill"
       },
       "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.setGradientGeom",
+      "chiamata": {
+        "comando": "disegno.paint.setGradientGeom"
+      },
+      "etichetta": {
+        "it": "Vettore sfumatura",
+        "en": "Gradient Vector"
+      },
+      "posto": "ispettore/design/sfumatura",
       "famiglia": "colore",
       "tasto": null,
       "effetto": "cambia",
@@ -2096,6 +2160,22 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "stroke.set",
+      "chiamata": {
+        "comando": "disegno.stroke.set"
+      },
+      "etichetta": {
+        "it": "Opzioni tratto",
+        "en": "Stroke Options"
+      },
+      "posto": "ispettore/design/contorno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
     },
     {
       "fonte": "motore",

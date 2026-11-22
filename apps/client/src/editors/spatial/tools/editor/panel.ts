@@ -10,7 +10,7 @@ import { gesture as asGesture, moveOps, roundDelta } from "../edit";
 import { elemOf, orderOps, type Order } from "../arrange";
 import { textLines, wordsOf } from "../text";
 import { orderChanges } from "../order-changes";
-import { lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf } from "../outline";
+import { detailsOf as outlineDetails, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf } from "../outline";
 import { boundsAfter, numericOps } from "../transform";
 import {
   lookAction,
@@ -27,6 +27,10 @@ import { tipOps, tipsLookOf, type TipChange } from "../tips";
 import { angleOf, frameCenter, frameSize, movedFrame, normalized, resizeMatrix, rotationMatrix, scales, type Axis as FrameAxis, type Frame } from "../frame";
 import { fromUnit } from "../rulers";
 import type { Unit } from "../hit";
+import { gradientSummary, paintedParts, type GradientSummary, type PaintChannel } from "../gradients";
+import { lockedAbove } from "../follow";
+import type { DocumentModel } from "../../scene/model";
+import type { SelectionGradients } from "../fields";
 import { overlaps } from "../audit";
 import { cleanName, decorative } from "../naming";
 import type { Font } from "../measure";
@@ -46,6 +50,23 @@ function tipAction(change: TipChange): DrawKey {
   if ("swap" in change) return "draw.action.tips_swap";
   if ("size" in change) return "draw.action.tip_size";
   return change.end === "start" ? "draw.action.tip_start" : "draw.action.tip_end";
+}
+
+/// Le sfumature del riempimento e del contorno di `units`, per la sezione Sfumatura del Completo
+/// (K6 T15, giro 5): un colore che nessuna parte mostra manca.
+export function selectionGradients(model: DocumentModel, units: readonly Unit[]): SelectionGradients {
+  const of = (channel: PaintChannel): GradientSummary | undefined => {
+    const parts = paintedParts(model, units, channel);
+    return parts.length === 0 ? undefined : gradientSummary(parts);
+  };
+  const fill = of("fill");
+  const stroke = of("stroke");
+  return {
+    ...(fill === undefined ? {} : { fill }),
+    ...(stroke === undefined ? {} : { stroke }),
+    locked: units.some((unit) => unit.node.details?.locked === true || lockedAbove(unit.node)),
+    onlyText: units.length > 0 && units.every((unit) => unit.role === "text"),
+  };
 }
 
 /// Ciò che il pannello delle proprietà, gli attributi e la descrizione delle immagini dà agli altri pezzi dell'editor.
@@ -355,6 +376,8 @@ export function installPanel(ctx: EditorContext): void {
       ratio: ratioOn(units),
       look: selectionLook(model, units),
       outline: outlines.length === 0 && widths.length === 0 ? null : outlineLook(outlines, widths),
+      outlineDetails: outlines.length === 0 ? null : outlineDetails(outlines),
+      gradients: selectionGradients(model, units),
       alignable: ctx.alignReference(units) !== null,
       drawn: ctx.drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => changes.has(order)) : []),

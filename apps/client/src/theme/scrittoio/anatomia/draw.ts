@@ -105,6 +105,17 @@ export const DRAW: PartAnatomy = {
       hooks: ["draw-color", "draw-color-wells", "draw-color-label", "draw-color-active", "draw-color-actions", "kit-color-well", "kit-color-well-button", "kit-color-well-name", "kit-button"],
     },
     {
+      // Design › Sfumatura (K6 T15, giro 5): il lato e il tipo, l'angolo, la striscia dei colori, i punti
+      // (il punto scelto) con il pozzo del kit, e le azioni.
+      name: "gradient-section",
+      states: [S("rest"), S("focused"), S("selected"), S("disabled")],
+      hooks: [
+        "draw-gradient", "draw-gradient-field", "draw-gradient-row", "draw-gradient-bar", "draw-gradient-stops",
+        "draw-gradient-stop", "draw-gradient-stop-chosen", "draw-gradient-actions", "draw-gradient-create",
+        "kit-color-well", "kit-color-well-button", "kit-color-well-name", "kit-number", "kit-button",
+      ],
+    },
+    {
       name: "text-section",
       states: [S("rest"), S("focused")],
       hooks: ["draw-type", "draw-type-family", "draw-type-style", "draw-type-sizes", "draw-type-align", "kit-font-button"],

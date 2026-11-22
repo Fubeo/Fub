@@ -18,13 +18,17 @@ describe("le risposte delle famiglie del banco", () => {
     // Il colore (K6 T14, giro 1): l'anteprima di Satura, coi contorni della prima forma.
     // I campioni (K6 T14, giro 2): Risorse › Campioni e il campione dato alla selezione, un passo
     // senza operazioni (il banco non riscrive i campioni, la scena si guarda).
-    // L'aspetto (K6 T15, giro 2): la trasparenza, che il banco non scrive (`aspetto.json`).
+    // L'aspetto (K6 T15): la trasparenza (giro 2), il contorno e il punto scelto della sfumatura
+    // (giro 5), che il banco non scrive (`aspetto.json`). La sfumatura (K6 T15, giro 5): un passo
+    // senza operazioni in `colore.json`.
     // Il testo (K6 T16, giro 1): Carattere e Paragrafo, un passo senza operazioni (il banco non
     // riscrive il testo, la scena si guarda).
     // L'elaborazione dei tracciati (K6 T12, giro 5): Unione e Meno davanti sulle due forme di
     // `?elabora=1`, coi tracciati scritti a mano (archi al posto delle curve del motore).
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
       "disegno.transparency.set",
+      "disegno.stroke.set",
+      "disegno.gradient.selectStop",
       "disegno.edit.colors.saturate",
       "disegno.swatch.new",
       "disegno.swatch.edit",
@@ -32,6 +36,9 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.swatch.addUsedColors",
       "disegno.paint.setFill",
       "disegno.paint.setStroke",
+      "disegno.paint.editGradient",
+      "disegno.paint.setGradientGeom",
+      "disegno.paint.lastGradient",
       "disegno.shape.rectangle",
       "disegno.select.same.fillColor",
       "disegno.select.same.strokeColor",
@@ -54,6 +61,7 @@ describe("le risposte delle famiglie del banco", () => {
     expect(rispostaDiFamiglia(richiesta("disegno.text.setRangeStyle", { size: 40 })).ops).toBe("[]");
     expect(rispostaDiFamiglia(richiesta("disegno.swatch.new", { name: "Verde", color: "#009e73" })).refused).toBeNull();
     expect(rispostaDiFamiglia(richiesta("disegno.object.path.offsetPath", { offset: 10 })).preview?.overlays).toHaveLength(1);
+    expect(rispostaDiFamiglia(richiesta("disegno.gradient.selectStop", { index: 2 })).reading).toEqual({ index: 0 });
     expect(rispostaDiFamiglia(richiesta("disegno.strumento.stato", { strumento: "lasso" })).state?.cursor).toBe("arrow");
   });
 
