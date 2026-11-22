@@ -199,6 +199,13 @@ export function tastoMostrato(regola: RegolaTasti | null, id: string): string | 
   return tasto === null ? undefined : displayBinding(tasto);
 }
 
+/// Le file di ≡ › Selezione › Uguale (K6 T15, giro 6): prima gli oggetti, nell'ordine dell'indice, poi il testo
+/// (famiglia, dimensione e colori del testo) in una fila sua, come il motore lo raggruppa.
+const FILE_UGUALE: readonly (readonly string[])[] = [
+  ["select.same.appearance", "select.same.blendingMode", "select.same.fillAndStroke", "select.same.fillColor", "select.same.opacity", "select.same.shapeType", "select.same.strokeColor", "select.same.strokeWeight", "select.same.symbolInstance"],
+  ["select.same.fontFamily", "select.same.fontFamilyStyle", "select.same.fontFamilyStyleSize", "select.same.fontSize", "select.same.textFillColor", "select.same.textStrokeColor"],
+];
+
 /// Le file di Oggetto › Tracciato (K6 T12): i comandi sul tracciato intero,
 /// il tracciato composto (un sottomenu, `RACCOLTE_DEI_MENU`), gli strumenti di precisione, la penna intelligente.
 /// Gli id sono quelli della mappa del motore (`crates/fub-disegno/mappa.tsv`).
@@ -272,6 +279,7 @@ const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = 
   "oggetto/tracciato": FILE_TRACCIATO,
   "oggetto/elaborazione": FILE_ELABORAZIONE,
   "modifica/colori": FILE_COLORI,
+  "selezione/uguale": FILE_UGUALE,
 };
 
 /// I sottomenu che il client fa dentro un sottomenu del terzo livello: il loro

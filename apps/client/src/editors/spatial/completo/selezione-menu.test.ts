@@ -142,4 +142,20 @@ describe("le voci nuove di ≡ › Selezione (K6 T15, giro 6)", () => {
     }
     c.chiudi();
   });
+
+  it("Uguale mette il testo in una fila sua, dopo gli oggetti, con una riga di separazione", async () => {
+    const comandi = vi.fn((selezione: readonly string[]) => Promise.resolve(comandiDelDisegnoDiProva(selezione)));
+    const sessione = { comandi, comando: vi.fn() } as unknown as SessioneMotore;
+    const motore = { adesso: () => sessione, pronta: () => Promise.resolve(sessione), assente: () => null } as unknown as MotoreDelDisegno;
+    const c = apri({ motore, life: openLifetime() } as never, { indice: () => Promise.resolve(indiceDi(indiceGenerato as never)) } as never);
+    const voci = sottomenuDiSelezione(await c.menu(() => ["ot1a1a1a1"], AZIONI), "Uguale");
+    const testo = NUOVE.filter((voce) => voce.id.startsWith("select.same.font") || voce.id.startsWith("select.same.text"));
+    const posti = testo.map((voce) => voci.findIndex((dentro) => dentro.label === voce.label));
+    expect(posti.every((posto) => posto >= 0), "tutte le voci del testo nel sottomenu").toBe(true);
+    expect(Math.max(...posti) - Math.min(...posti), "una dopo l'altra").toBe(testo.length - 1);
+    const primo = Math.min(...posti);
+    expect(voci[primo]?.separator, "riga di separazione prima del testo").toBe(true);
+    expect(voci[primo - 1]?.label, "prima del testo ci sono gli oggetti").toBe("Istanza di simbolo");
+    c.chiudi();
+  });
 });

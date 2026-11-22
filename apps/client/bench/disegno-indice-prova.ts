@@ -107,6 +107,12 @@ export function comandiSelezione(selection: readonly string[], etichette: readon
       : acceso("disegno.select.object.allOnSameLayers"),
     acceso("disegno.select.object.textObjects"),
     acceso("disegno.select.allOnArtboard"),
+    // Il nucleo di Selezione (K6 T11): Tutto e Inversa valgono sempre, gli altri vogliono una scelta.
+    acceso("disegno.select.all"),
+    acceso("disegno.select.inverse"),
+    senzaScelta ? spento("disegno.select.none", "no_selection") : acceso("disegno.select.none"),
+    senzaScelta ? spento("disegno.select.nextAbove", "no_selection") : acceso("disegno.select.nextAbove"),
+    senzaScelta ? spento("disegno.select.nextBelow", "no_selection") : acceso("disegno.select.nextBelow"),
     ...TESTO_UGUALE.map((nome) => {
       const id = `disegno.select.same.${nome}`;
       if (senzaScelta) return spento(id, "no_selection");
