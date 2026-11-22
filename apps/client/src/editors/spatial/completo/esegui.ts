@@ -15,7 +15,7 @@ import { apriFinestra, type Esegui, type EsitoComando, type FinestraOpzioni, typ
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { Op } from "../scene/ops";
 import { t } from "../strings";
-import type { Caricatore } from "./carica";
+import type { Caricatore, StatoFamiglia } from "./carica";
 import type { VoceIndice } from "./indice";
 
 /// Quanto il comando aspetta la sessione del motore: come `ATTESA_APERTURA_MS`
@@ -73,12 +73,11 @@ function comeOggetto(valore: unknown): Readonly<Record<string, unknown>> {
 }
 
 /// Il chiamante di `apriFinestra`: una promessa che si risolve quando la
-/// famiglia è pronta, e si rifiuta con `no_memory` o con altro.
-function famigliaPronta(carica: Caricatore, famiglia: string): Promise<void> {
-  return carica.famiglia(famiglia).then((stato) => {
-    if (stato.kind === "pronta") return;
-    return Promise.reject(stato.kind === "errore" && stato.perche === "no-memory" ? "no_memory" : "motore");
-  });
+/// famiglia è pronta, e si rifiuta con `no_memory` o con altro. Vale sia per
+/// l'attesa sia per «Riprova» (`carica.riprova`).
+function attesaFamiglia(stato: StatoFamiglia): Promise<void> {
+  if (stato.kind === "pronta") return Promise.resolve();
+  return Promise.reject(stato.kind === "errore" && stato.perche === "no-memory" ? "no_memory" : "motore");
 }
 
 /// Manda il comando al motore. `null` se il motore non c'è o non risponde.
@@ -139,13 +138,15 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): voi
         if (!anteprima) applicaEsito(esito, etichetta, dipendenze);
         return { anteprima: esito.preview, rifiuto: esito.refused };
       };
-      void apriFinestra(opzioni.modulo, famigliaPronta(dipendenze.carica, voce.famiglia), esegui, {
+      void apriFinestra(opzioni.modulo, dipendenze.carica.famiglia(voce.famiglia).then(attesaFamiglia), esegui, {
         ...opzioni,
         id: voce.id,
         titolo: etichetta,
         iniziali: opzioni.iniziali ?? {},
         vita: dipendenze.vita,
         sulFoglio: dipendenze.anteprima,
+        // «Riprova» dell'errore della famiglia: rifà la sua attesa.
+        riprova: () => dipendenze.carica.riprova(voce.famiglia).then(attesaFamiglia),
       });
     });
     return;

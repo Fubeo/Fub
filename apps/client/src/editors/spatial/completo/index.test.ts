@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { EsitoPrepara } from "./carica";
 import { apri, NUCLEO } from "./index";
-import { indiceDi } from "./indice";
+import { creaIndice, indiceDi } from "./indice";
 
 const lifetimes: Lifetime[] = [];
 afterEach(() => {
@@ -20,10 +20,13 @@ function vita(): Lifetime {
 
 describe("apri", () => {
   it("chiede l'indice e prepara il nucleo, nient'altro", async () => {
-    const indice = vi.fn(() => Promise.resolve(indiceDi({ voci: [] })));
+    // L'indice si carica una volta sola (memorizzato): il montaggio dei tasti e il
+    // Completo lo chiedono entrambi, e il caricatore lo porta una volta.
+    const caricaIndice = vi.fn(() => Promise.resolve({ voci: [] }));
+    const indice = creaIndice(caricaIndice);
     const prepara = vi.fn((_f: string) => Promise.resolve<EsitoPrepara>("pronta"));
     const completo = apri({ motore: null, life: vita() }, { indice, prepara });
-    expect(indice).toHaveBeenCalledTimes(1);
+    expect(caricaIndice).toHaveBeenCalledTimes(1);
     expect(await completo.carica.famiglia(NUCLEO)).toEqual({ kind: "pronta" });
     expect(prepara.mock.calls).toEqual([[NUCLEO]]);
   });
@@ -59,7 +62,7 @@ describe("apri", () => {
 
 /// Le azioni di un editor finto per le voci del menu e della ricerca.
 function azioniFinte(riprova = vi.fn()) {
-  return { strumento: vi.fn(), applica: vi.fn(), sulFoglio: vi.fn(), riprova };
+  return { strumento: vi.fn(), riprova };
 }
 
 describe("menu e ricerca del Completo (K6 T9a)", () => {

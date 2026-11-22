@@ -68,6 +68,11 @@ function caricatoreFinto(stato: StatoFamiglia, dopo: StatoFamiglia = stato) {
   });
   return {
     famiglia,
+    // «Riprova» di un errore: rifà l'attesa, come `famiglia`.
+    riprova: vi.fn((_id: string): Promise<StatoFamiglia> => {
+      corrente = dopo;
+      return Promise.resolve(dopo);
+    }),
     stato: vi.fn((_id: string) => corrente),
   } as unknown as Caricatore & { famiglia: typeof famiglia };
 }
@@ -215,6 +220,17 @@ describe("eseguiVoce, con finestra", () => {
     expect(sessione.comando).toHaveBeenCalledWith(expect.objectContaining({ value: { radius: 12 }, preview: false }));
     expect(azioni.commit).toHaveBeenCalledWith(OPS);
     expect(risposta).toEqual({ anteprima: null, rifiuto: null });
+  });
+
+  it("«Riprova» della finestra rifà l'attesa della famiglia, con la stessa famiglia del comando", async () => {
+    const carica = caricatoreFinto({ kind: "pronta" });
+    const { d } = dipendenze({ finestra: () => Promise.resolve(schema()), carica });
+    eseguiVoce(voce({ finestra: true }), d);
+    await tick();
+    const riprova = vi.mocked(apriFinestra).mock.calls[0]![3].riprova;
+    expect(riprova).toBeDefined();
+    await riprova!();
+    expect(carica.riprova).toHaveBeenCalledWith(voce().famiglia);
   });
 
   it("l'anteprima della finestra non va alla cronologia, e ridà l'anteprima", async () => {

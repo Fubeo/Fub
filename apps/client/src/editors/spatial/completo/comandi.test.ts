@@ -3,12 +3,14 @@
 // e perché le altre non valgono; il motore assente lo dice; un indice vuoto e
 // uno che non arriva si vedono.
 import { describe, expect, it, vi } from "vitest";
-import type { DrawingCommandInfo, DrawingOutcome } from "../../../host/contract";
+import type { DrawingCommandInfo } from "../../../host/contract";
+import { displayBinding } from "../../../ui/commands";
 import type { MenuItem } from "../../../ui/menu";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { SessioneMotore } from "../motore/sessione";
-import { inviaComando, menuComando, menuNonCaricato, percorsoPosto, statoComandi, statoVoce, testoPerche, vociRicerca, type StatoComandi } from "./comandi";
+import { menuComando, menuNonCaricato, percorsoPosto, statoComandi, statoVoce, testoPerche, vociRicerca, type StatoComandi } from "./comandi";
 import { indiceDi, type VoceIndice } from "./indice";
+import { risolviTasti } from "./tasti";
 
 /// Una voce dell'indice, con i campi che le voci hanno sempre.
 function voce(id: string, posto: string, over: Partial<VoceIndice> = {}): VoceIndice {
@@ -67,10 +69,12 @@ describe("menuComando", () => {
     expect(oggetto[0]).toMatchObject({ label: "Voce a", disabled: true, description: "Scegli un tracciato." });
   });
 
-  it("il tasto dell'indice è la scorciatoia della voce", () => {
+  it("la riga mostra il tasto che la regola dà al comando, scritto come Fub, e nessuno senza regola", () => {
     const indice = indiceDi({ voci: [voce("a", "menu/oggetto", { tasto: "Ctrl+J" })] });
-    const menu = menuComando(indice, valgono({ id: "disegno.a", enabled: true, disabled_reason: null }), NESSUNO);
-    expect(sottovoci(trova(menu, "Oggetto"))[0]).toMatchObject({ hint: "Ctrl+J", disabled: false });
+    const stato = valgono({ id: "disegno.a", enabled: true, disabled_reason: null });
+    const regola = risolviTasti([{ id: "a", tasto: "Ctrl+J" }], {}, "other");
+    expect(sottovoci(trova(menuComando(indice, stato, NESSUNO, regola), "Oggetto"))[0]).toMatchObject({ hint: displayBinding("Ctrl-J"), disabled: false });
+    expect(sottovoci(trova(menuComando(indice, stato, NESSUNO, null), "Oggetto"))[0]?.hint).toBeUndefined();
   });
 
   it("senza voci pronte il menu lo dice, come voce spenta", () => {
@@ -172,8 +176,9 @@ describe("vociRicerca", () => {
         voce("b", "tavolozza"),
       ],
     });
-    const righe = vociRicerca(indice, valgono({ id: "disegno.a", enabled: true, disabled_reason: null }, { id: "disegno.b", enabled: false, disabled_reason: "needs_two" }), NESSUNO);
-    expect(righe[0]).toMatchObject({ key: "a", label: "Voce a", path: "Oggetto", hint: "Ctrl+J", disabled: false, altreLingue: ["Voce a", "Item a"] });
+    const regola = risolviTasti([{ id: "a", tasto: "Ctrl+J" }, { id: "b", tasto: null }], {}, "other");
+    const righe = vociRicerca(indice, valgono({ id: "disegno.a", enabled: true, disabled_reason: null }, { id: "disegno.b", enabled: false, disabled_reason: "needs_two" }), NESSUNO, regola);
+    expect(righe[0]).toMatchObject({ key: "a", label: "Voce a", path: "Oggetto", hint: displayBinding("Ctrl-J"), disabled: false, altreLingue: ["Voce a", "Item a"] });
     expect(righe[1]).toMatchObject({ key: "b", path: "Tavolozza", disabled: true, description: "Scegli almeno due oggetti." });
   });
 
@@ -186,13 +191,3 @@ describe("vociRicerca", () => {
   });
 });
 
-describe("inviaComando", () => {
-  it("manda il comando alla sessione e ne dà l'esito, o niente senza motore", async () => {
-    const esito = { revision: "1", preview: null, ops: "[]", selection: ["k1"], losses: [], refused: null, frame: null } as unknown as DrawingOutcome;
-    const comando = vi.fn(() => Promise.resolve(esito));
-    const motore = { adesso: () => ({ comando }) as unknown as SessioneMotore, pronta: () => Promise.resolve(null), assente: () => null } as unknown as MotoreDelDisegno;
-    expect(await inviaComando(motore, { id: "disegno.a", selection: ["k1"], value: { x: 1 } })).toBe(esito);
-    expect(comando).toHaveBeenCalledWith({ id: "disegno.a", selection: ["k1"], value: { x: 1 } });
-    expect(await inviaComando(null, { id: "disegno.a", selection: [], value: {} })).toBeNull();
-  });
-});

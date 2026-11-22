@@ -8,13 +8,13 @@
 // sezioni), e dà l'indice dei comandi e il caricatore delle famiglie. Oggi
 // `apri` porta l'indice e prepara il nucleo, e basta.
 
-import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore, type StatoFamiglia } from "./carica";
+import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
 import { creaSezioni, type Sezioni } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
-import { inviaComando, menuComando, menuNonCaricato, nomeVoce, statoComandi, vociRicerca, type VoceRicerca } from "./comandi";
-import { apriFinestra, type CampoFinestra, type EsitoComando, type ModuloFinestra } from "../motore/finestre";
-import type { DrawingOutcome, DrawingPreview } from "../../../host/contract";
+import { menuComando, menuNonCaricato, statoComandi, vociRicerca, type VoceRicerca } from "./comandi";
+import type { CampoFinestra, ModuloFinestra } from "../motore/finestre";
+import type { DrawingPreview } from "../../../host/contract";
 import type { MenuItem } from "../../../ui/menu";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
@@ -29,7 +29,7 @@ import { keyboardPlatform } from "../../../ui/commands";
 import { t } from "../strings";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
-import { eseguiVoce, type AzioniEsito, type OpzioniFinestraComando } from "./esegui";
+import { eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 import { montaTasti } from "./montaggio-tasti";
 import type { ModificheTasti, Piattaforma } from "./tasti";
 export type { GruppoLayout } from "./colonna";
@@ -69,14 +69,12 @@ export interface Completo {
   ricerca(selezione: () => readonly string[], azioni: AzioniVoci): Promise<VoceRicerca[] | null>;
 }
 
-/// Ciò che l'editor dà a una voce del menu o della ricerca (T9a).
+/// Ciò che l'editor dà a una voce del menu o della ricerca: lo strumento del
+/// motore, e «Riprova». Un comando del motore non passa di qui: parte da
+/// `eseguiVoce`, con le dipendenze del Completo (`esegui.ts`).
 export interface AzioniVoci {
   /// Lo strumento del motore: lo sceglie l'editor.
   readonly strumento: (id: string) => void;
-  /// Applica al disegno l'esito di un comando: le sue operazioni, o il rifiuto.
-  readonly applica: (esito: DrawingOutcome) => void;
-  /// Mette l'anteprima di una finestra sul foglio, o la toglie con `null`.
-  readonly sulFoglio: (anteprima: DrawingPreview | null) => void;
   /// Rifà l'indice, per chi lo mostra («Riprova»).
   readonly riprova: () => void;
 }
@@ -100,15 +98,13 @@ export interface OpzioniTastiCompleto extends AzioniEsito {
   readonly anteprima: (anteprima: DrawingPreview | null) => void;
   readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
   readonly modifiche?: () => ModificheTasti;
-  readonly finestra?: (voce: VoceIndice) => Promise<OpzioniFinestraComando | null>;
   readonly piattaforma?: Piattaforma;
 }
 
-/// Senza una finestra data, un comando con parametri dice che non ce l'ha.
-const nessunaFinestra = (): Promise<OpzioniFinestraComando | null> => Promise.resolve(null);
-
-/// La piattaforma per i tasti: Cmd su macOS, altrove Ctrl (come la shell).
-const piattaformaDi = (): Piattaforma => (keyboardPlatform(navigator.platform) === "mac" ? "mac" : "other");
+/// La piattaforma per i tasti: Cmd su macOS, altrove Ctrl (come la shell). Senza
+/// `navigator` (i test del Completo) è `other`.
+const piattaformaDi = (): Piattaforma =>
+  typeof navigator !== "undefined" && keyboardPlatform(navigator.platform) === "mac" ? "mac" : "other";
 
 /// Dice che il cassetto non si è aperto (il suo pezzo non è arrivato), con
 /// «Riprova», che lo apre di nuovo. Sta qui, non nel pezzo del cassetto: il
@@ -185,66 +181,53 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
   const indice = opzioni.indice ?? indiceVero;
   const sezioni = creaSezioni();
   const carica = caricatore({ ctx: { ...ctx, sezioni }, moduli: opzioni.moduli, prepara: opzioni.prepara });
-  // Una voce del menu o della ricerca (T9a): uno strumento lo sceglie l'editor;
-  // un comando con parametri apre la finestra di T6; gli altri girano subito.
-  const avvia = (voce: VoceIndice, selezione: readonly string[], azioni: AzioniVoci): void => {
+  // La finestra di un comando con parametri (T6): il modulo dello schema della sua
+  // famiglia. `null` se la famiglia non ha la finestra di quel comando.
+  const finestraDi = async (voce: VoceIndice): Promise<OpzioniFinestraComando | null> => {
+    const modulo = await moduloDi(voce.famiglia, voce.id);
+    if (modulo === null) return null;
+    return { modulo, campi: Object.fromEntries(modulo.campi.map((campo) => [campo.nome, campo.nome])) };
+  };
+  // Il percorso unico di un comando del motore (`esegui.ts`): il menu ≡, Ctrl+/ e
+  // i tasti lo usano con queste stesse dipendenze, costruite qui una volta sola.
+  const dipendenze: DipendenzeComando = {
+    motore: ctx.motore,
+    carica,
+    vita: ctx.life,
+    selezione: opzioni.tasti?.selezione ?? (() => []),
+    anteprima: opzioni.tasti?.anteprima ?? (() => undefined),
+    finestra: finestraDi,
+    leggi: opzioni.tasti?.leggi ?? (() => null),
+    commit: opzioni.tasti?.commit ?? (() => false),
+    seleziona: opzioni.tasti?.seleziona ?? (() => undefined),
+    annuncia: opzioni.tasti?.annuncia ?? (() => undefined),
+  };
+  // Una voce del menu o della ricerca: uno strumento lo sceglie l'editor; un
+  // comando del motore parte dal percorso unico.
+  const avvia = (voce: VoceIndice, azioni: AzioniVoci): void => {
     const chiamata = voce.chiamata;
     if ("strumento" in chiamata) {
       azioni.strumento(chiamata.strumento);
       return;
     }
-    if (!("comando" in chiamata)) return;
-    if (voce.finestra) {
-      finestraDi(voce, selezione, azioni);
-      return;
-    }
-    void inviaComando(ctx.motore, { id: chiamata.comando, selection: [...selezione], value: chiamata.valore ?? {} }).then(
-      (esito) => {
-        if (esito !== null) azioni.applica(esito);
-      },
-      (errore: unknown) => console.error(errore),
-    );
-  };
-  const finestraDi = (voce: VoceIndice, selezione: readonly string[], azioni: AzioniVoci): void => {
-    const famiglia = voce.famiglia;
-    // La famiglia pronta, o il suo errore: la finestra lo mostra con «Riprova».
-    const aspetta = (stato: StatoFamiglia): void => {
-      if (stato.kind === "errore") throw stato.perche;
-    };
-    void moduloDi(famiglia, voce.id).then(
-      (modulo) => {
-        apriFinestra(
-          modulo ?? { campi: [] },
-          modulo === null ? Promise.reject("chunk") : carica.famiglia(famiglia).then(aspetta),
-          (valori, anteprima) => eseguiFinestra(voce.id, selezione, valori, anteprima, azioni),
-          {
-            id: voce.id,
-            titolo: nomeVoce(voce),
-            campi: Object.fromEntries((modulo?.campi ?? []).map((campo) => [campo.nome, campo.nome])),
-            iniziali: {},
-            vita: ctx.life,
-            sulFoglio: azioni.sulFoglio,
-            riprova: () => carica.riprova(famiglia).then(aspetta),
-          },
-        );
-      },
-      (errore: unknown) => console.error(errore),
-    );
-  };
-  const eseguiFinestra = async (
-    id: string,
-    selezione: readonly string[],
-    valori: Readonly<Record<string, string | number | boolean>>,
-    anteprima: boolean,
-    azioni: AzioniVoci,
-  ): Promise<EsitoComando> => {
-    const esito = await inviaComando(ctx.motore, { id, selection: [...selezione], value: valori, preview: anteprima });
-    if (esito === null) return { anteprima: null, rifiuto: "closed" };
-    // OK manda il comando una volta sola: il suo esito entra nel disegno.
-    if (!anteprima && esito.refused === null) azioni.applica(esito);
-    return { anteprima: esito.preview, rifiuto: esito.refused };
+    eseguiVoce(voce, dipendenze);
   };
   let chiuso = false;
+  // La regola dei tasti (T9b, `montaggio-tasti.ts`): il menu e la tavolozza la
+  // leggono da qui, senza un secondo calcolo. Ascolta i tasti solo con un editor
+  // (la radice); senza, la regola c'è lo stesso.
+  const montaggio = montaTasti({
+    radice: opzioni.tasti?.radice ?? null,
+    vita: ctx.life,
+    indice,
+    modifiche: opzioni.tasti?.modifiche ?? (() => ({})),
+    stato: opzioni.tasti?.stato ?? (() => ({ vuoleTesto: false, componendo: false })),
+    piattaforma: opzioni.tasti?.piattaforma ?? piattaformaDi(),
+    esegui: (voce) => {
+      if (chiuso) return;
+      eseguiVoce(voce, dipendenze);
+    },
+  });
   const completo: Completo = {
     indice,
     carica,
@@ -282,14 +265,14 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       apri();
     },
     async menu(selezione, azioni) {
-      const esegui = (voce: VoceIndice): void => avvia(voce, selezione(), azioni);
+      const esegui = (voce: VoceIndice): void => avvia(voce, azioni);
       let pronto: Indice;
       try {
         pronto = await indice();
       } catch {
         return menuNonCaricato(azioni.riprova);
       }
-      return menuComando(pronto, await statoComandi(ctx.motore, selezione()), esegui);
+      return menuComando(pronto, await statoComandi(ctx.motore, selezione()), esegui, montaggio.regola());
     },
     async ricerca(selezione, azioni) {
       let pronto: Indice;
@@ -298,37 +281,11 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       } catch {
         return null;
       }
-      return vociRicerca(pronto, await statoComandi(ctx.motore, selezione()), (voce) => avvia(voce, selezione(), azioni));
+      return vociRicerca(pronto, await statoComandi(ctx.motore, selezione()), (voce) => avvia(voce, azioni), montaggio.regola());
     },
   };
   ctx.life.add(() => completo.chiudi());
   void indice().catch(() => {});
   void carica.famiglia(NUCLEO);
-  const tasti = opzioni.tasti;
-  if (tasti !== undefined) {
-    montaTasti({
-      radice: tasti.radice,
-      vita: ctx.life,
-      indice: () => completo.indice(),
-      modifiche: tasti.modifiche ?? (() => ({})),
-      stato: tasti.stato,
-      piattaforma: tasti.piattaforma ?? piattaformaDi(),
-      esegui: (voce) => {
-        if (chiuso) return;
-        eseguiVoce(voce, {
-          motore: ctx.motore,
-          carica,
-          vita: ctx.life,
-          selezione: tasti.selezione,
-          anteprima: tasti.anteprima,
-          finestra: tasti.finestra ?? nessunaFinestra,
-          leggi: tasti.leggi,
-          commit: tasti.commit,
-          seleziona: tasti.seleziona,
-          annuncia: tasti.annuncia,
-        });
-      },
-    });
-  }
   return completo;
 }
