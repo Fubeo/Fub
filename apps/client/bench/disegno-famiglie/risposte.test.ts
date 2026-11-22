@@ -16,12 +16,20 @@ describe("le risposte delle famiglie del banco", () => {
     // Sposta tracciato, coi contorni nuovi dell'ellisse della prima forma. La Selezione (K6 T15,
     // `livelli.json`): «Uguale › Colore riempimento», «Tutto nella tavola» e «Oggetti di testo».
     // Il colore (K6 T14, giro 1): l'anteprima di Satura, coi contorni della prima forma.
+    // I campioni (K6 T14, giro 2): Risorse › Campioni e il campione dato alla selezione, un passo
+    // senza operazioni (il banco non riscrive i campioni, la scena si guarda).
     // L'aspetto (K6 T15, giro 2): la trasparenza, che il banco non scrive (`aspetto.json`).
     // Il testo (K6 T16, giro 1): Carattere e Paragrafo, un passo senza operazioni (il banco non
     // riscrive il testo, la scena si guarda).
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
       "disegno.transparency.set",
       "disegno.edit.colors.saturate",
+      "disegno.swatch.new",
+      "disegno.swatch.edit",
+      "disegno.swatch.delete",
+      "disegno.swatch.addUsedColors",
+      "disegno.paint.setFill",
+      "disegno.paint.setStroke",
       "disegno.shape.rectangle",
       "disegno.select.same.fillColor",
       "disegno.select.same.strokeColor",
@@ -34,6 +42,7 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.object.path.offsetPath",
     ]);
     expect(rispostaDiFamiglia(richiesta("disegno.text.setRangeStyle", { size: 40 })).ops).toBe("[]");
+    expect(rispostaDiFamiglia(richiesta("disegno.swatch.new", { name: "Verde", color: "#009e73" })).refused).toBeNull();
     expect(rispostaDiFamiglia(richiesta("disegno.object.path.offsetPath", { offset: 10 })).preview?.overlays).toHaveLength(1);
     expect(rispostaDiFamiglia(richiesta("disegno.strumento.stato", { strumento: "lasso" })).state?.cursor).toBe("arrow");
   });

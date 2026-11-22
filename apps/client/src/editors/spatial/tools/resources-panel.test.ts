@@ -7,7 +7,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { creaSezioni, type ContestoSezione, type Sezione, type Sezioni } from "../completo/sezioni";
 import { doc } from "../scene/test-support";
 import { SceneEngine } from "../scene/engine";
-import { campioniDel, createResourcesPanel } from "./resources-panel";
+import { campioniDel, campioniNonUsati, createResourcesPanel } from "./resources-panel";
 
 const SWATCH = '<linearGradient id="r3" fub:role="swatch" fub:name="Blu"><stop stop-color="#0072b2"/></linearGradient>';
 const SWATCH_DUE = '<linearGradient id="r4" fub:role="swatch" fub:name="Rosso"><stop stop-color="#cc0000"/></linearGradient>';
@@ -81,6 +81,28 @@ describe("i campioni del documento", () => {
     expect(panel.element.textContent).toContain("2 campioni");
     expect(panel.element.querySelectorAll(".kit-color-swatch")).toHaveLength(2);
     expect(panel.element.querySelector('[aria-label="Blu"]')).not.toBeNull();
+  });
+
+  it("quelli che nessun elemento usa: un oggetto, un gruppo o un'altra risorsa li tengono (K6 T14, giro 2)", () => {
+    const VERDE = '<linearGradient id="r5" fub:role="swatch" fub:name="Verde"><stop stop-color="#009e73"/></linearGradient>';
+    const SFUMATURA = '<linearGradient id="r6" href="#r5"><stop offset="0" stop-color="#000"/></linearGradient>';
+    const engine = SceneEngine.open(
+      doc(`<defs id="fub-defs">${SWATCH}${SWATCH_DUE}${VERDE}${SFUMATURA}</defs><g id="l1" fub:layer="Livello 1"><g id="g1"><rect id="o1" width="5" height="5" fill="url(#r3) #0072b2"/></g></g>`),
+    );
+    expect(campioniNonUsati(engine.model!)).toEqual(["r4"]);
+    expect(campioniNonUsati(modello())).toEqual([]);
+  });
+
+  it("la sezione «swatches» del Completo prende il posto di quella che sa solo mostrarli, e riceve i campioni", () => {
+    const sezioni = creaSezioni();
+    const visti: ContestoSezione[] = [];
+    sezioni.registra(sezione("swatches", { ordine: 0, disegna: (ctx) => void visti.push(ctx) }));
+    const panel = pannello(modello(SWATCH, SWATCH_DUE));
+    panel.collega(sezioni, null);
+    fotogramma();
+    expect(idMontati(panel.element)).toEqual(["swatches"]);
+    expect(visti[visti.length - 1]!.campioni!.elenco.map((campione) => campione.name)).toEqual(["Blu", "Rosso"]);
+    expect(visti[visti.length - 1]!.campioni!.nonUsati()).toEqual(["r3", "r4"]);
   });
 
   it("senza campioni dice che il disegno non ne ha, e non fa gruppi", () => {

@@ -60,6 +60,7 @@ use vectorcraft_doc::{
 use vectorcraft_geom::{Affine, FillRule, PathData, Point};
 
 use crate::apertura::Copia;
+use crate::campioni::{self, NonSiScrive, Riferimenti};
 use crate::id::{self, Specie};
 use crate::mappa::{Elemento, Posti};
 use crate::ricetta::{self, Esito};
@@ -181,7 +182,27 @@ pub(crate) fn differenza(
         ricette: ricetta::Scritte::default(),
         liberati: HashSet::new(),
         assorbiti: HashSet::new(),
+        riferimenti: Riferimenti::default(),
     };
+    // I campioni per primi: gli id dei campioni nuovi servono a chi li usa.
+    let dei_campioni = {
+        let mappa = &copia.mappa;
+        let dati = &mut lavoro.dati;
+        campioni::operazioni(&copia.campioni, dopo, &mut || {
+            let id = id::nuovo(Specie::Risorsa, &|id| {
+                mappa.id_preso(id) || dati.contains(id)
+            })?;
+            dati.insert(id.clone());
+            Some(id)
+        })
+        .map_err(|e| match e {
+            NonSiScrive::Forma(m) => no(m),
+            NonSiScrive::NomeDiUnMotivo(nome) => {
+                no(format!("«{nome}» è già il nome di un motivo del documento"))
+            }
+        })?
+    };
+    lavoro.riferimenti = dei_campioni.riferimenti;
     lavoro.composti(&prima, &poi);
     // Il confronto per primo: dice quali oggetti si riscrivono interi
     // (tolti e rimessi con la loro ricetta), che le altre fasi saltano.
@@ -238,6 +259,20 @@ pub(crate) fn differenza(
         return Err(Rifiuto::TroppoGrande);
     }
     crate::perdite::controlla(&copia.perdite, &ops).map_err(Rifiuto::NonMappato)?;
+    // I campioni nuovi o cambiati prima di chi li usa, quelli tolti per
+    // ultimi, quando nessuno li usa più. Sono risorse, non oggetti del
+    // disegno: il controllo delle parti non mappate non li guarda.
+    let mut ops = if dei_campioni.davanti.is_empty() {
+        ops
+    } else {
+        let mut tutte = dei_campioni.davanti;
+        tutte.extend(ops);
+        tutte
+    };
+    ops.extend(dei_campioni.in_fondo);
+    if ops.len() > MAX_DRAWING_OPS {
+        return Err(Rifiuto::TroppoGrande);
+    }
     Ok(Differenza { ops, ids })
 }
 
@@ -312,6 +347,8 @@ struct Lavoro<'a> {
     /// Gli elementi di Fub finiti dentro un tracciato composto nuovo: si
     /// tolgono, e il composto si scrive come un solo `<path>`.
     assorbiti: HashSet<NodeId>,
+    /// Come si scrive un colore legato a un campione.
+    riferimenti: Riferimenti,
 }
 
 impl Lavoro<'_> {
@@ -343,6 +380,18 @@ impl Lavoro<'_> {
             .mappa
             .del_nodo(nodo)
             .and_then(|i| self.copia.mappa.elemento(i))
+    }
+
+    /// Vero se l'elemento o un suo antenato è bloccato nel file.
+    fn bloccato(&self, e: &Elemento) -> bool {
+        let mut corrente = Some(e);
+        while let Some(x) = corrente {
+            if x.bloccato {
+                return true;
+            }
+            corrente = x.genitore.and_then(|g| self.copia.mappa.elemento(g));
+        }
+        false
     }
 
     fn id_nuovo(&mut self, specie: Specie) -> Result<String, Rifiuto> {
@@ -659,7 +708,7 @@ impl Lavoro<'_> {
             } else {
                 let (tag, mut attrs) = match scritto {
                     Some(e) => e,
-                    None => elem(nodo, locale)?,
+                    None => elem(nodo, locale, &self.riferimenti)?,
                 };
                 attrs.insert("id".into(), json!(id));
                 json!({ "elem": { "tag": tag, "attrs": attrs } })
@@ -1142,13 +1191,22 @@ impl Lavoro<'_> {
         let t = e
             .propria
             .ok_or_else(|| no("la transform dell'elemento non si legge"))?;
+        // Un oggetto bloccato (lui o un antenato) tiene il ripiego di un
+        // campione che cambia colore: il riferimento lo ridipinge comunque.
+        let bloccato = self.bloccato(e);
+        let r = &self.riferimenti;
+        let da_scrivere = |prima: Option<&Paint>, dopo: Option<&Paint>| {
+            !(r.uguali(prima, dopo) || (bloccato && r.stesso_campione(prima, dopo)))
+        };
         // Il riempimento di un testo cambiato nei pezzi del motore è il
         // `fill` del `<text>`: il confronto va avanti col testo di prima già
         // ricolorato.
         let ricolorato = riempimento_dei_pezzi(b, a)?;
         let b = match &ricolorato {
-            Some((testo, colore)) => {
-                attrs.insert("fill".into(), json!(scrivi_colore(Some(colore))?));
+            Some((testo, prima, colore)) => {
+                if da_scrivere(Some(prima), Some(colore)) {
+                    attrs.insert("fill".into(), json!(scrivi_colore(r, Some(colore))?));
+                }
                 testo
             }
             None => b,
@@ -1213,12 +1271,13 @@ impl Lavoro<'_> {
             candidato.appearance.fill().map(|f| &f.paint),
             a.appearance.fill().map(|f| &f.paint),
         );
-        if fb != fa {
-            attrs.insert("fill".into(), json!(scrivi_colore(fa)?));
+        if da_scrivere(fb, fa) {
+            attrs.insert("fill".into(), json!(scrivi_colore(r, fa)?));
         }
         let (sb, sa) = (candidato.appearance.stroke(), a.appearance.stroke());
-        if sb.map(|s| &s.paint) != sa.map(|s| &s.paint) {
-            attrs.insert("stroke".into(), json!(scrivi_colore(sa.map(|s| &s.paint))?));
+        let (pb, pa) = (sb.map(|s| &s.paint), sa.map(|s| &s.paint));
+        if da_scrivere(pb, pa) {
+            attrs.insert("stroke".into(), json!(scrivi_colore(r, pa)?));
         }
         let (wb, wa) = (sb.map_or(0.0, |s| s.width), sa.map_or(0.0, |s| s.width));
         if !vicini(wb, wa) {
@@ -1562,7 +1621,7 @@ fn senza_colori_nuovi(prima: &Appearance, dopo: &Appearance) -> (Appearance, App
 /// scrive così solo se prima e dopo tutti i pezzi hanno lo stesso colore;
 /// pezzi di colori diversi (un `tspan` col suo `fill`) non si dicono con un
 /// attributo solo.
-fn riempimento_dei_pezzi(b: &Node, a: &Node) -> Result<Option<(Node, Paint)>, Rifiuto> {
+fn riempimento_dei_pezzi(b: &Node, a: &Node) -> Result<Option<(Node, Paint, Paint)>, Rifiuto> {
     let (NodeKind::Text(tb), NodeKind::Text(ta)) = (&b.kind, &a.kind) else {
         return Ok(None);
     };
@@ -1582,7 +1641,7 @@ fn riempimento_dei_pezzi(b: &Node, a: &Node) -> Result<Option<(Node, Paint)>, Ri
             .all(|r| r.style.fill == *primo)
             .then(|| primo.clone())
     };
-    let (Some(_), Some(colore)) = (unico(&tb.runs), unico(&ta.runs)) else {
+    let (Some(prima), Some(colore)) = (unico(&tb.runs), unico(&ta.runs)) else {
         return Err(no("i pezzi del testo hanno colori diversi"));
     };
     let mut ricolorato = b.clone();
@@ -1591,7 +1650,7 @@ fn riempimento_dei_pezzi(b: &Node, a: &Node) -> Result<Option<(Node, Paint)>, Ri
             r.style.fill = colore.clone();
         }
     }
-    Ok(Some((ricolorato, colore)))
+    Ok(Some((ricolorato, prima, colore)))
 }
 
 /// L'aspetto senza il colore del riempimento, quello del tratto e lo
@@ -1715,18 +1774,21 @@ fn ha_pezzi_di_prima(n: &Node, prima: &Posti<'_>) -> bool {
     })
 }
 
-fn scrivi_colore(p: Option<&Paint>) -> Result<String, Rifiuto> {
-    match p {
-        None | Some(Paint::None) => Ok("none".into()),
-        Some(Paint::Solid { color, .. }) => Ok(color.to_hex()),
-        Some(_) => Err(no("un colore che non è pieno (sfumatura, motivo)")),
-    }
+/// Il valore di `fill` o `stroke`: un colore, `none`, o un campione del file
+/// col suo ripiego ([`Riferimenti::scrivi`]).
+fn scrivi_colore(r: &Riferimenti, p: Option<&Paint>) -> Result<String, Rifiuto> {
+    r.scrivi(p)
+        .ok_or_else(|| no("un colore che non è pieno (sfumatura, motivo)"))
 }
 
 /// L'`Elem` comune di un oggetto nuovo, nello spazio del genitore (`locale`
 /// porta dal documento del motore lì): `rect`, `ellipse` e `line` quando la
 /// forma lo è ancora dopo il passaggio, altrimenti `path`.
-fn elem(n: &Node, locale: Affine) -> Result<(String, Map<String, Value>), Rifiuto> {
+fn elem(
+    n: &Node,
+    locale: Affine,
+    r: &Riferimenti,
+) -> Result<(String, Map<String, Value>), Rifiuto> {
     // Un tracciato composto fatto di tracciati: un solo `<path>` con tutti i
     // sottotracciati, come lo legge la scena.
     if let Some((path, regola)) = tracciato_composto(n) {
@@ -1735,7 +1797,7 @@ fn elem(n: &Node, locale: Affine) -> Result<(String, Map<String, Value>), Rifiut
         if regola != FillRule::NonZero {
             return Err(no(REGOLA_FUORI));
         }
-        scrivi_aspetto(n, locale, "path", &mut attrs)?;
+        scrivi_aspetto(n, locale, "path", r, &mut attrs)?;
         return Ok(("path".to_string(), attrs));
     }
     let NodeKind::Path { path, live, .. } = &n.kind else {
@@ -1791,7 +1853,7 @@ fn elem(n: &Node, locale: Affine) -> Result<(String, Map<String, Value>), Rifiut
     if tag == "path" {
         attrs.insert("d".into(), json!(scrivi_d(&p)));
     }
-    scrivi_aspetto(n, locale, tag, &mut attrs)?;
+    scrivi_aspetto(n, locale, tag, r, &mut attrs)?;
     Ok((tag.to_string(), attrs))
 }
 
@@ -1800,18 +1862,19 @@ fn scrivi_aspetto(
     n: &Node,
     locale: Affine,
     tag: &str,
+    r: &Riferimenti,
     attrs: &mut Map<String, Value>,
 ) -> Result<(), Rifiuto> {
     let fill = n.appearance.fill().map(|f| &f.paint);
     if tag != "line" || !matches!(fill, None | Some(Paint::None)) {
-        attrs.insert("fill".into(), json!(scrivi_colore(fill)?));
+        attrs.insert("fill".into(), json!(scrivi_colore(r, fill)?));
     }
     if let Some(s) = n
         .appearance
         .stroke()
         .filter(|s| !matches!(s.paint, Paint::None))
     {
-        attrs.insert("stroke".into(), json!(scrivi_colore(Some(&s.paint))?));
+        attrs.insert("stroke".into(), json!(scrivi_colore(r, Some(&s.paint))?));
         let scala = locale.determinant().abs().sqrt();
         attrs.insert("stroke-width".into(), json!(g2(s.width * scala)));
         match s.cap {

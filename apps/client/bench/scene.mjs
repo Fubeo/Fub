@@ -1598,6 +1598,14 @@ export const SCENE = touchLast(onPage("shell", [
     // di Modifica › Modifica colori con l'anteprima che il banco risponde (`disegno-famiglie/colore.json`).
     ["disegno-fam-colore", 1280, "La sezione Colore del Design con un oggetto scelto: riempimento attivo, contorno, Scambia, Nessuno e Di serie", "", (page) => openSezioneConUno(page, ".draw-color")],
     ["disegno-fam-colore-800", 800, "La sezione Colore con un oggetto scelto, nel cassetto dell'ispettore, 800 px", "", (page) => openSezioneConUno(page, ".draw-color")],
+    // I campioni (K6 T14, giro 2): Risorse › Campioni con 24 campioni e uno scelto, la finestra «Nuovo
+    // campione», e la sezione Colore con un testo scelto: il contorno che un testo non ha è «Nessuno», spento.
+    ["disegno-fam-campioni", 1280, "Risorse › Campioni: la griglia dei campioni del documento, uno scelto, e le azioni", "&campioni=24", openCampioni],
+    ["disegno-fam-campioni-800", 800, "Risorse › Campioni nel cassetto dell'ispettore, 800 px", "&campioni=24", openCampioni],
+    ["disegno-fam-campioni-nuovo", 1280, "La finestra «Nuovo campione» di Risorse › Campioni: il nome, il colore e la nota del campione globale", "&campioni=24", openNuovoCampione],
+    ["disegno-fam-campioni-nuovo-800", 800, "La finestra «Nuovo campione» nella finestra minima del desktop, 800 px", "&campioni=24", openNuovoCampione],
+    ["disegno-fam-colore-testo", 1280, "La sezione Colore con un testo scelto: il riempimento, e il contorno «Nessuno» spento col perché", "", openColoreTesto],
+    ["disegno-fam-colore-testo-800", 800, "La sezione Colore con un testo scelto, nel cassetto dell'ispettore, 800 px", "", openColoreTesto],
     // Il testo (K6 T16, giro 1): Carattere e Paragrafo del Design con un'etichetta scelta, e il Testo del
     // motore che scrive nella casella aperta da un clic (il banco risponde l'anteprima, `fake-ipc.ts`).
     ["disegno-fam-testo", 1280, "Carattere e Paragrafo del Design con un testo scelto: famiglia, stile, corpo, spaziatura e allineamento", "", openSezioniTesto],
@@ -5514,6 +5522,39 @@ async function openSezioneConUno(page, selettore, sceglie = scegliPrimo) {
       }
     }
   }, selettore);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Risorse › Campioni (K6 T14, giro 2): la scheda Risorse, nel cassetto sotto i 960 px, e il terzo
+/// campione scelto col clic (senza selezione non parte niente).
+async function openCampioni(page) {
+  await openDrawing(page);
+  if (await page.evaluate(() => window.innerWidth < 960)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+  }
+  await page.click('.inspector-tab[data-view-id="draw.resources"]');
+  await page.waitForSelector("#surface-panel-draw-resources:not([hidden]) .draw-resources-swatches .kit-color-swatch");
+  await page.locator("#surface-panel-draw-resources .draw-resources-swatches .kit-color-swatch").nth(2).click();
+  await page.waitForSelector('#surface-panel-draw-resources .kit-color-swatch[aria-pressed="true"]');
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La finestra «Nuovo campione» (K6 T14, giro 2): «Nuovo…» di Risorse › Campioni, col nome scritto.
+async function openNuovoCampione(page) {
+  await openCampioni(page);
+  await page.click('#surface-panel-draw-resources .draw-resources-swatches-actions [data-action="nuovo"]');
+  await page.waitForSelector(".kit-dialog.draw-resources-swatches-dialog input");
+  await page.fill(".kit-dialog.draw-resources-swatches-dialog input", "Verde salvia");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La sezione Colore con un testo scelto (K6 T14, giro 2): il titolo del Testo del Completo, poi Colore
+/// in vista. Il testo non ha contorno: il pozzo dice «Nessuno», spento, non «Misto».
+async function openColoreTesto(page) {
+  await openSezioniTesto(page);
+  await page.waitForSelector("#surface-panel-draw-design .draw-color");
+  await page.locator("#surface-panel-draw-design .draw-color").scrollIntoViewIfNeeded();
   await page.evaluate(() => document.fonts.ready);
 }
 

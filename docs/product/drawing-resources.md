@@ -104,8 +104,10 @@ famiglie portano:
 
 - **Campioni**: i colori con un nome che il documento ha. Il conto dice
   quanti sono («24 campioni»); senza, la sezione dice che il disegno non ne
-  ha. Sono i campioni del documento: quelli delle librerie e della tavolozza
-  del motore arrivano con le loro famiglie.
+  ha. Si scelgono, si danno agli oggetti scelti, si fanno e si cambiano
+  ([Disegni, colori](drawing-colors.md#i-campioni-nella-scheda-risorse)). Sono i campioni
+  del documento: quelli delle librerie e della tavolozza del motore arrivano
+  con le loro famiglie.
 - **Le sezioni delle famiglie**, nell'ordine della mappa. Ognuna si apre e si
   chiude dalla sua intestazione, e la sua lista è quella che la famiglia
   porta. Quando ce ne sono molte, la scheda scorre dentro sé: il titolo
@@ -125,4 +127,6 @@ Le risorse dell'editor stanno in
 `clipboard.ts`, e la superficie le disegna con `painter/paint.ts`. La scheda
 Risorse è `tools/resources-panel.ts`: le sue sezioni arrivano dal registro
 `completo/sezioni.ts`, che una famiglia riempie con `registraSezione` nel
-suo `registra(ctx)`.
+suo `registra(ctx)`. Campioni è `completo/campioni-sezione.ts`, registrata
+dal Completo; senza il Completo il pannello mostra i campioni da sé, senza
+azioni.

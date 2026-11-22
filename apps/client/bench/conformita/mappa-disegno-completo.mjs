@@ -186,14 +186,14 @@ export const PEZZI = [
     id: "risorse.campioni.intestazione",
     vista: "risorse",
     prototipo: '[data-section="swatches"] .draw-properties-toggle',
-    app: '[data-section="documento"] .draw-properties-toggle',
+    app: '[data-section="swatches"] .draw-properties-toggle',
     proprieta: [...BASE, ...DIMENSIONI],
   },
   {
     id: "risorse.campioni.nota",
     vista: "risorse",
     prototipo: '[data-section="swatches"] .draw-properties-note',
-    app: '[data-section="documento"] .draw-properties-note',
+    app: '[data-section="swatches"] .draw-properties-note',
     proprieta: [...BASE],
   },
   {
@@ -217,7 +217,7 @@ export const PEZZI = [
     id: "risorse.campioni.corpo",
     vista: "risorse",
     prototipo: '[data-section="swatches"] .draw-properties-body',
-    app: '[data-section="documento"] .draw-properties-body',
+    app: '[data-section="swatches"] .draw-properties-body',
     proprieta: [...DIMENSIONI, "display"],
   },
   {

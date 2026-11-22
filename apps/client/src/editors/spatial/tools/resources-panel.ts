@@ -21,9 +21,9 @@ import { textButton } from "../../../kit";
 import { iconEl } from "../../../ui/icons";
 import { identifier } from "../../../ui/a11y";
 import { openLifetime, type Lifetime, type Teardown } from "../../../ui/lifetime";
-import type { ContestoSezione, ColoriSelezione, MisureSelezione, Selezione, Sezione, Sezioni } from "../completo/sezioni";
+import type { CampioneDocumento, CampioniDocumento, ContestoSezione, ColoriSelezione, MisureSelezione, Selezione, Sezione, Sezioni } from "../completo/sezioni";
 import type { MotoreDelDisegno } from "../motore/gesti";
-import type { DocumentModel } from "../scene/model";
+import { elementChildren, type ContainerNode, type DocumentModel } from "../scene/model";
 import { t } from "../strings";
 import { resourcesOf } from "./resources";
 
@@ -76,6 +76,8 @@ export interface OpzioniSezioniList {
   readonly misure?: () => MisureSelezione;
   /// Il riempimento e il contorno della selezione per le sezioni (K6 T14); senza, non ce ne sono.
   readonly colori?: () => ColoriSelezione;
+  /// I campioni del documento per le sezioni (K6 T14, giro 2); senza, non ce ne sono.
+  readonly campioni?: () => CampioniDocumento;
 }
 
 /// Una sezione montata: il suo elemento, il giro che la disegna e ciò che
@@ -98,8 +100,8 @@ interface Montata {
 
 /// I campioni del documento, nell'ordine in cui stanno nel disegno: una
 /// risorsa con `details.swatch` (`scene/classify/facts.ts`).
-export function campioniDel(modello: DocumentModel): Array<{ readonly id: string; readonly name: string; readonly color: string }> {
-  const out: Array<{ readonly id: string; readonly name: string; readonly color: string }> = [];
+export function campioniDel(modello: DocumentModel): CampioneDocumento[] {
+  const out: CampioneDocumento[] = [];
   for (const [id, leaf] of resourcesOf(modello)) {
     const swatch = leaf.details?.swatch;
     if (swatch !== undefined) out.push({ id, name: swatch.name, color: swatch.color });
@@ -107,7 +109,41 @@ export function campioniDel(modello: DocumentModel): Array<{ readonly id: string
   return out;
 }
 
-/// La sezione dei campioni del documento: il solo gruppo che c'è adesso.
+/// Gli id dei campioni di `modello` che nessun elemento usa (K6 T14, giro 2): né un oggetto, né
+/// un'altra risorsa che rimanda a loro. Un campione che si usa da qualche parte non si conta mai fra
+/// questi: «Togli i non usati» non toglie niente che serva.
+export function campioniNonUsati(modello: DocumentModel): string[] {
+  const campioni = campioniDel(modello);
+  if (campioni.length === 0) return [];
+  const propri = new Set(campioni.map((campione) => campione.id));
+  const usati = new Set<string>();
+  const visita = (nodo: ContainerNode): void => {
+    for (const id of nodo.facts.refs) usati.add(id);
+    for (const figlio of elementChildren(nodo)) {
+      if (figlio.kind === "container") {
+        visita(figlio);
+        continue;
+      }
+      // Un campione non usa sé stesso; le altre unità contano coi loro figli.
+      if (figlio.facts.id !== null && propri.has(figlio.facts.id)) continue;
+      for (const id of figlio.refs) usati.add(id);
+    }
+  };
+  visita(modello.root);
+  return campioni.filter((campione) => !usati.has(campione.id)).map((campione) => campione.id);
+}
+
+/// I campioni del documento per le sezioni della scheda: l'elenco subito, quelli non usati quando
+/// servono.
+function campioniPerSezioni(modello: DocumentModel | null): CampioniDocumento {
+  return {
+    elenco: modello === null ? [] : campioniDel(modello),
+    nonUsati: () => (modello === null ? [] : campioniNonUsati(modello)),
+  };
+}
+
+/// La sezione dei campioni del documento: il solo gruppo che c'è adesso. Quando il Completo registra
+/// la sua sezione `swatches` (K6 T14, giro 2), questa si toglie.
 function sezioneCampioni(modello: () => DocumentModel | null): Sezione {
   return {
     id: "documento",
@@ -246,6 +282,7 @@ export function createSezioniList(host: HTMLElement, life: Lifetime, opzioni: Op
       motore: opzioni.motore(),
       misure: opzioni.misure?.() ?? {},
       colori: opzioni.colori?.() ?? {},
+      ...(opzioni.campioni === undefined ? {} : { campioni: opzioni.campioni() }),
       aggiorna: () => pianifica(),
       rileggi: () => opzioni.rileggi?.(),
       vita: giro,
@@ -357,9 +394,14 @@ export function createResourcesPanel(life: Lifetime, opzioni: OpzioniPannelloRis
   let stopRegistro: Teardown | null = null;
   let closed = false;
   const lista = createSezioniList(scroller, life, {
-    elenco: () => [campioni, ...(sezioni?.di("risorse") ?? [])],
+    elenco: () => {
+      const registrate = sezioni?.di("risorse") ?? [];
+      // La sezione dei campioni del Completo prende il posto di quella che sa solo mostrarli.
+      return registrate.some((sezione) => sezione.id === "swatches") ? registrate : [campioni, ...registrate];
+    },
     selezione: opzioni.selezione,
     motore: () => motore,
+    campioni: () => campioniPerSezioni(opzioni.modello()),
   });
 
   life.add(() => {

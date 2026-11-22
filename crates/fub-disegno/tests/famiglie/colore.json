@@ -460,6 +460,503 @@
       "id": "ui.colorBalanceDialog",
       "fonte": "interfaccia",
       "prova": "apps/client/src/editors/spatial/completo/finestre-colore.test.ts"
+    },
+    {
+      "id": "swatch.new",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Verde",
+        "color": "#009e73"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "fub-defs",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "linearGradient",
+              "attrs": {
+                "id": "r9z9z9z9z",
+                "fub:role": "swatch",
+                "fub:name": "Verde",
+                "gradientUnits": "userSpaceOnUse"
+              },
+              "children": [
+                {
+                  "tag": "stop",
+                  "attrs": {
+                    "stop-color": "#009e73"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dopo": "swatch-new.svg"
+    },
+    {
+      "id": "swatch.new",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Verde",
+        "color": "#009e73",
+        "global": false
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "#root",
+            "pos": {
+              "first": true
+            },
+            "elem": {
+              "tag": "defs",
+              "attrs": {
+                "id": "fub-defs"
+              },
+              "children": [
+                {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9z9z9z9z",
+                    "fub:role": "swatch",
+                    "fub:name": "Verde",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#009e73"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "dopo": "swatch-new-defs.svg"
+    },
+    {
+      "id": "swatch.new",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Rosa",
+        "color": "#ff00aa",
+        "spot": true
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "swatch.edit",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Blu",
+        "color": "#d55e00"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "r1a1a1a1a",
+                "part": [
+                  0
+                ],
+                "attrs": {
+                  "stop-color": "#d55e00"
+                }
+              },
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "url(#r1a1a1a1a) #d55e00"
+                }
+              },
+              {
+                "op": "set",
+                "id": "od4d4d4d4",
+                "attrs": {
+                  "fill": "url(#r1a1a1a1a) #d55e00"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "swatch-edit-colore.svg"
+    },
+    {
+      "id": "swatch.edit",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Blu",
+        "newName": "Blu mare"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "r1a1a1a1a",
+            "attrs": {
+              "fub:name": "Blu mare"
+            }
+          }
+        ]
+      },
+      "dopo": "swatch-edit-nome.svg"
+    },
+    {
+      "id": "swatch.edit",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Viola",
+        "color": "#56b4e9"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "r3c3c3c3c",
+            "part": [
+              0
+            ],
+            "attrs": {
+              "stop-color": "#56b4e9"
+            }
+          }
+        ]
+      },
+      "dopo": "swatch-edit-bloccato.svg"
+    },
+    {
+      "id": "swatch.delete",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Arancio"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "remove",
+            "target": "r2b2b2b2b"
+          }
+        ]
+      },
+      "dopo": "swatch-delete.svg"
+    },
+    {
+      "id": "swatch.delete",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Blu"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "fill": "#0072b2"
+                }
+              },
+              {
+                "op": "set",
+                "id": "od4d4d4d4",
+                "attrs": {
+                  "fill": "#0072b2"
+                }
+              },
+              {
+                "op": "remove",
+                "target": "r1a1a1a1a"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "swatch-delete-usato.svg"
+    },
+    {
+      "id": "swatch.delete",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Viola"
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "swatch": "Arancio"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "url(#r2b2b2b2b) #e69f00"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-setFill-campione.svg"
+    },
+    {
+      "id": "paint.setStroke",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "swatch": "Viola"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke": "url(#r3c3c3c3c) #cc79a7"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-setStroke-campione.svg"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "swatch": "Arancio"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "od4d4d4d4",
+            "attrs": {
+              "fill": "url(#r2b2b2b2b) #e69f00"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-setFill-campione-testo.svg"
+    },
+    {
+      "id": "swatch.addUsedColors",
+      "disegno": "campioni.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "selection": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9z9z9z9z",
+                    "fub:role": "swatch",
+                    "fub:name": "R=255 G=0 B=0",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#ff0000"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r8y8y8y8y",
+                    "fub:role": "swatch",
+                    "fub:name": "R=0 G=170 B=0",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#00aa00"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "fill": "url(#r9z9z9z9z) #ff0000",
+                  "stroke": "url(#r8y8y8y8y) #00aa00"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "swatch-addUsedColors.svg"
+    },
+    {
+      "id": "swatch.unused",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "names": [
+            "Arancio"
+          ]
+        }
+      }
+    },
+    {
+      "id": "swatch.list",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura": {
+          "swatches": [
+            {
+              "name": "[None]",
+              "group": null,
+              "global": false,
+              "spot": false,
+              "kind": "none"
+            },
+            {
+              "name": "[Registration]",
+              "group": null,
+              "global": true,
+              "spot": false,
+              "kind": "color",
+              "color": {
+                "model": "cmyk",
+                "c": 1.0,
+                "m": 1.0,
+                "y": 1.0,
+                "k": 1.0
+              },
+              "hex": "#000000"
+            },
+            {
+              "name": "Blu",
+              "group": null,
+              "global": true,
+              "spot": false,
+              "kind": "color",
+              "color": {
+                "model": "rgb",
+                "r": 0.0,
+                "g": 0.4470588266849518,
+                "b": 0.6980392336845398
+              },
+              "hex": "#0072b2"
+            },
+            {
+              "name": "Arancio",
+              "group": null,
+              "global": true,
+              "spot": false,
+              "kind": "color",
+              "color": {
+                "model": "rgb",
+                "r": 0.9019607901573181,
+                "g": 0.6235294342041016,
+                "b": 0.0
+              },
+              "hex": "#e69f00"
+            },
+            {
+              "name": "Viola",
+              "group": null,
+              "global": true,
+              "spot": false,
+              "kind": "color",
+              "color": {
+                "model": "rgb",
+                "r": 0.800000011920929,
+                "g": 0.4745098054409027,
+                "b": 0.6549019813537598
+              },
+              "hex": "#cc79a7"
+            }
+          ],
+          "groups": []
+        }
+      }
+    },
+    {
+      "id": "ui.newSwatch",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/campioni-sezione.test.ts"
+    },
+    {
+      "id": "ui.swatchOptions",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/campioni-sezione.test.ts"
+    },
+    {
+      "id": "swatches",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/campioni-sezione.test.ts"
     }
   ]
 }

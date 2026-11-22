@@ -7,6 +7,8 @@
 
 /// Aprire un disegno nel motore a partire dai byte del file.
 pub mod apertura;
+/// I campioni del documento fra il file e il motore.
+pub mod campioni;
 /// L'indice dei comandi del Disegno completo, letto dalla mappa.
 #[cfg(feature = "completo")]
 pub mod catalogo;

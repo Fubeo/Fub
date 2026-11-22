@@ -24,7 +24,13 @@ import { registraSezione, type ColoreSelezione, type ContestoSezione, type Sezio
 export type EseguiColore = (id: string, valori: Readonly<Record<string, unknown>>) => void;
 
 /// Un lato del colore: il riempimento o il contorno.
-type Lato = "fill" | "stroke";
+export type Lato = "fill" | "stroke";
+
+/// Il lato attivo che le sezioni del Completo condividono (K6 T14, giro 2): Colore lo cambia, e
+/// Risorse › Campioni dà il campione scelto a quel lato. Uno per Completo aperto.
+export interface LatoAttivo {
+  lato: Lato;
+}
 
 interface Parti {
   readonly radice: HTMLElement;
@@ -60,8 +66,7 @@ function pulsante(testo: string, nota: string): HTMLButtonElement {
 
 /// La sezione «Colore» per la scheda Design, da registrare nel Completo aperto: `vita` è quella del
 /// Completo, con cui vivono i pozzi.
-export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
-  let attivo: Lato = "fill";
+export function sezioneColore(esegui: EseguiColore, vita: Lifetime, stato: LatoAttivo = { lato: "fill" }): Sezione {
   let parti: Parti | null = null;
   /// I colori dell'ultimo giro, per i nomi di ciò che non è un colore semplice.
   let colori: Readonly<Partial<Record<Lato, ColoreSelezione>>> = {};
@@ -74,16 +79,16 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
     return valore.toLowerCase();
   };
 
-  const etichetta = (lato: Lato): string => (lato === attivo ? t("draw.colore.attivo", { lato: nomeDi(lato) }) : nomeDi(lato));
+  const etichetta = (lato: Lato): string => (lato === stato.lato ? t("draw.colore.attivo", { lato: nomeDi(lato) }) : nomeDi(lato));
 
   const segna = (p: Parti): void => {
     for (const lato of ["fill", "stroke"] as const) {
-      p.pozzi[lato].element.classList.toggle("draw-color-active", lato === attivo);
+      p.pozzi[lato].element.classList.toggle("draw-color-active", lato === stato.lato);
       p.pozzi[lato].relabel({ label: etichetta(lato), mixedText: t("draw.properties.mixed"), text: drawPickerText() });
       p.nomi[lato].textContent = nomeDi(lato);
-      p.nomi[lato].classList.toggle("draw-color-active", lato === attivo);
+      p.nomi[lato].classList.toggle("draw-color-active", lato === stato.lato);
     }
-    p.nessuno.title = t("draw.colore.nessuno.nota", { lato: nomeDi(attivo) });
+    p.nessuno.title = t("draw.colore.nessuno.nota", { lato: nomeDi(stato.lato) });
     p.nessuno.setAttribute("aria-label", p.nessuno.title);
   };
 
@@ -110,8 +115,8 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
       });
       // Aprire il pozzo dell'altro lato lo fa attivo: un comando solo, prima che il selettore si apra.
       vita.listen(uno.button, "click", () => {
-        if (attivo === lato || parti === null) return;
-        attivo = lato;
+        if (stato.lato === lato || parti === null) return;
+        stato.lato = lato;
         segna(parti);
         esegui("paint.toggleActive", { fill: lato === "fill" });
       });
@@ -130,13 +135,13 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
     const azioni = document.createElement("div");
     azioni.className = "draw-color-actions";
     const scambia = pulsante(t("draw.colore.scambia"), t("draw.colore.scambia.nota"));
-    const nessuno = pulsante(t("draw.colore.nessuno"), t("draw.colore.nessuno.nota", { lato: nomeDi(attivo) }));
+    const nessuno = pulsante(t("draw.colore.nessuno"), t("draw.colore.nessuno.nota", { lato: nomeDi(stato.lato) }));
     const diSerie = pulsante(t("draw.colore.diSerie"), t("draw.colore.diSerie.nota"));
     vita.listen(scambia, "click", () => {
       if (!scambia.disabled) esegui("paint.swap", {});
     });
     vita.listen(nessuno, "click", () => {
-      if (!nessuno.disabled) esegui(attivo === "fill" ? "paint.setFill" : "paint.setStroke", { none: true });
+      if (!nessuno.disabled) esegui(stato.lato === "fill" ? "paint.setFill" : "paint.setStroke", { none: true });
     });
     vita.listen(diSerie, "click", () => {
       if (!diSerie.disabled) esegui("paint.default", {});
@@ -152,18 +157,29 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
     const p = (parti ??= crea());
     colori = { fill: contesto.colori?.riempimento, stroke: contesto.colori?.contorno };
     const spenta = contesto.sel.numero === 0;
+    const mancanti: Lato[] = [];
     for (const lato of ["fill", "stroke"] as const) {
       const pozzo = p.pozzi[lato];
-      // Un lato che la selezione non ha (un'immagine non ha contorno) si spegne.
+      // Un lato che la selezione non ha (un testo o un'immagine non hanno contorno) si spegne e
+      // mostra «Nessuno», non «Misto»: `null` nel pozzo vuol dire colori diversi, e qui non ce n'è
+      // nessuno. Il perché sta nel suggerimento.
       const manca = spenta || colori[lato] === undefined;
-      pozzo.setValue(manca ? null : valoreDelPozzo(colori[lato]));
+      pozzo.setValue(manca ? "none" : valoreDelPozzo(colori[lato]));
       pozzo.button.disabled = manca;
-      if (manca) pozzo.close();
+      if (manca) {
+        pozzo.close();
+        mancanti.push(lato);
+      }
     }
     p.scambia.disabled = spenta;
     p.nessuno.disabled = spenta;
     p.diSerie.disabled = spenta;
     segna(p);
+    for (const lato of mancanti) {
+      const perche = t(spenta ? "draw.colore.vuota" : "draw.colore.manca", { lato: nomeDi(lato) });
+      p.pozzi[lato].button.title = perche;
+      p.pozzi[lato].button.setAttribute("aria-label", perche);
+    }
     contesto.corpo.append(p.radice);
     return () => contesto.corpo.replaceChildren();
   };
@@ -177,6 +193,6 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
 }
 
 /// Registra la sezione nel registro del Completo aperto. `false` se c'è già.
-export function registraColore(sezioni: Sezioni, esegui: EseguiColore, vita: Lifetime): boolean {
-  return registraSezione({ sezioni }, sezioneColore(esegui, vita));
+export function registraColore(sezioni: Sezioni, esegui: EseguiColore, vita: Lifetime, stato?: LatoAttivo): boolean {
+  return registraSezione({ sezioni }, sezioneColore(esegui, vita, stato));
 }
