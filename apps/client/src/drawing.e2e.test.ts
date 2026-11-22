@@ -613,7 +613,8 @@ describe("lo spazio e la griglia del disegno", () => {
     const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")] }));
     await open("casa.svg");
     const editor = focusedPane().querySelector(".draw-editor");
-    expect(tools()).toEqual(COLUMN_TOOLS_COMPLETO);
+    // La colonna del Completo c'è quando il suo modulo è montato: prima c'è quella semplice.
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
 
     await host.module.api.setSetting("draw.workspace", "simple");
     await waitFor("il Semplice", () => workspace() === "simple");
