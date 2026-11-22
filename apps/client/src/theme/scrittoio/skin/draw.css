@@ -1263,3 +1263,41 @@ button.draw-isolation-crumb:hover {
 .draw-point-coord .kit-number-box {
   height: 28px;
 }
+
+/* ── K6 · I righelli di bordo del foglio (T11, giro E) ───────────────────── */
+/* Due righe dentro il foglio, sul suo bordo in alto e a sinistra: sopra il disegno,
+   e il puntatore le attraversa. Le misure, 20 px la riga e 28 px la colonna, sono
+   quelle di `edge-rulers.ts`. */
+.draw-ruler-x,
+.draw-ruler-y {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg-elev);
+}
+.draw-ruler-x {
+  width: 100%;
+  height: 20px;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.draw-ruler-y {
+  width: 28px;
+  height: 100%;
+  box-shadow: inset -1px 0 0 var(--border);
+}
+.draw-ruler-x[hidden],
+.draw-ruler-y[hidden] {
+  display: none;
+}
+.draw-ruler-tick {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+.draw-ruler-label {
+  fill: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}

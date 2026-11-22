@@ -755,6 +755,70 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "view.grid",
+      "chiamata": {
+        "client": "view.grid"
+      },
+      "etichetta": {
+        "it": "Mostra griglia",
+        "en": "Show Grid"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.outline",
+      "chiamata": {
+        "client": "view.outline"
+      },
+      "etichetta": {
+        "it": "Contorno",
+        "en": "Outline"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.rotateReset",
+      "chiamata": {
+        "client": "view.rotateReset"
+      },
+      "etichetta": {
+        "it": "Reimposta rotazione vista",
+        "en": "Reset Rotate View"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.rulers",
+      "chiamata": {
+        "client": "view.rulers"
+      },
+      "etichetta": {
+        "it": "Mostra righelli",
+        "en": "Show Rulers"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "view.setZoom",
       "chiamata": {
         "client": "view.setZoom"
@@ -764,6 +828,22 @@
         "en": "Set Zoom"
       },
       "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.snapToGrid",
+      "chiamata": {
+        "client": "view.snapToGrid"
+      },
+      "etichetta": {
+        "it": "Aggancia alla griglia",
+        "en": "Snap to Grid"
+      },
+      "posto": "menu/visualizza",
       "famiglia": "vista",
       "tasto": null,
       "effetto": "mostra",
@@ -1258,6 +1338,22 @@
       "etichetta": {
         "it": "Info",
         "en": "Info"
+      },
+      "posto": "banda",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "navigator",
+      "chiamata": {
+        "client": "navigator"
+      },
+      "etichetta": {
+        "it": "Navigatore",
+        "en": "Navigator"
       },
       "posto": "banda",
       "famiglia": "vista",

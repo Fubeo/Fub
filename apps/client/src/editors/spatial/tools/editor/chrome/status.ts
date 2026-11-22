@@ -3,7 +3,8 @@
 // con `items()` e la ridisegna a ogni `subscribe`: nello Scrittoio è lo `status`
 // della superficie, al posto delle parole.
 //
-// Nel Disegno completo la voce dello zoom apre il suo menu (`zoom-menu.ts`); le
+// Nel Disegno completo la voce dello zoom apre il suo menu (`zoom-menu.ts`), e
+// la voce del navigatore accende e spegne la panoramica (`navigator.ts`); le
 // misure stanno in una voce sola, `info`, che si ricalcola al più una volta per
 // fotogramma: il puntatore si muove a ogni tocco, la selezione può avere 50 000
 // elementi, e una lettura vecchia non si mostra.
@@ -11,7 +12,8 @@
 import { plural, t } from "../../../strings";
 import type { Point } from "../../../scene/matrix";
 import type { EditorContext } from "../context";
-import { installZoomMenu, isComandoVista, type ComandoVista } from "./zoom-menu";
+import { creaMenuZoom, isComandoVista, type ComandoVista } from "./zoom-menu";
+import { comandoVisualizza, isComandoVisualizza, statoVisualizza, voceVisualizza, type ComandoVisualizza } from "./visualizza";
 
 /// Una voce della banda: un fatto, e se c'è che cosa fa un clic.
 export interface DrawStatusItem {
@@ -30,6 +32,14 @@ export interface DrawStatus {
   subscribe(listener: () => void): () => void;
 }
 
+/// I comandi che la banda e Ctrl+/ fanno nel Disegno completo: quelli dello zoom, quelli
+/// di ≡ › Visualizza, e il navigatore.
+export type ComandoBanda = ComandoVista | ComandoVisualizza | "navigator";
+
+export function isComandoBanda(id: string): id is ComandoBanda {
+  return isComandoVista(id) || isComandoVisualizza(id) || id === "navigator";
+}
+
 export interface StatusContext {
   status: DrawStatus;
   /// Dove sta il puntatore sul foglio, nella scena; `null` fuori.
@@ -39,8 +49,8 @@ export interface StatusContext {
   statusChanged: () => void;
   /// Apre il menu dello zoom dalla sua voce della banda (il Disegno completo).
   apriZoom: () => void;
-  /// Fa un comando `view.*` (la banda, Ctrl+/, la ricerca).
-  comandoVista: (id: ComandoVista) => void;
+  /// Fa un comando del Disegno completo: dalla banda, da Ctrl+/ o dalla ricerca.
+  comandoVista: (id: ComandoBanda) => void;
 }
 
 /// Il fotogramma che porta le misure: `requestAnimationFrame` nel browser, un suo
@@ -70,13 +80,27 @@ interface Misura {
 /// La misura lungo un lato di una cornice con la matrice `[a, b, c, d]`.
 const along = (length: number, x: number, y: number): number => length * Math.hypot(x, y);
 
-/// Le voci del client che la banda porta nel Disegno completo (Ctrl+/ e la ricerca,
-/// `completo/comandi.ts`): `null` se la voce si fa, il perché se è spenta, `undefined`
-/// se non è di questa parte.
+/// Le voci del client che la banda porta nel Disegno completo: `null` se la voce si fa,
+/// il perché se è spenta, `undefined` se non è di questa parte.
 export function voceClienteBanda(id: string): string | null | undefined {
   if (isComandoVista(id)) return null;
+  if (id === "navigator") return null;
   if (id === "info") return t("draw.status.info.shown");
   return undefined;
+}
+
+/// Tutte le voci del client del Disegno completo (la banda e ≡ › Visualizza): la regola
+/// di `completo/comandi.ts` le legge da qui, con l'editor che le fa.
+export function voceClienteCompleto(ctx: EditorContext, id: string): string | null | undefined {
+  // `null` vuol dire «si fa»: non si confonde con «non è di questa parte» (`??` lo
+  // scambierebbe per assente, e una voce fatta comparirebbe come non collegata).
+  const visualizza = voceVisualizza(ctx, id);
+  return visualizza !== undefined ? visualizza : voceClienteBanda(id);
+}
+
+/// Lo stato con la spunta delle voci del Disegno completo, `undefined` se non ne hanno.
+export function statoClienteCompleto(ctx: EditorContext, id: string): boolean | undefined {
+  return statoVisualizza(ctx, id);
 }
 
 export function installStatus(ctx: EditorContext, frame: StatusFrame = FOTOGRAMMA): void {
@@ -127,9 +151,10 @@ export function installStatus(ctx: EditorContext, frame: StatusFrame = FOTOGRAMM
     if (ctx.disposed) return [];
     const list: DrawStatusItem[] = [];
     const zoom = ctx.zoomText();
-    // Nel Disegno completo la voce apre il menu dello zoom; negli altri spazi resta
-    // com'è: un clic torna al 100 %, sul posto.
-    if (ctx.space === "full" && ctx.completoVoci?.() != null) {
+    // Nel Disegno completo la voce apre il menu dello zoom, e c'è il navigatore; negli
+    // altri spazi la banda resta com'era: un clic torna al 100 %, sul posto.
+    const nelCompleto = ctx.space === "full" && ctx.completoVoci?.() != null;
+    if (nelCompleto) {
       list.push({ id: "zoom", text: zoom, hint: t("draw.status.zoom.menu", { zoom }), open: () => ctx.apriZoom() });
     } else {
       list.push({ id: "zoom", text: zoom, hint: t("draw.zoom_reset", { zoom }), open: () => ctx.zoomBy(1 / ctx.camera.scale), inPlace: true });
@@ -143,6 +168,15 @@ export function installStatus(ctx: EditorContext, frame: StatusFrame = FOTOGRAMM
     const selezione = misura !== null && misura.versione === versione ? misura.selezione : null;
     const info = infoDi(ctx.statusPointer, selezione);
     if (info !== null) list.push({ id: "info", text: info, hint: t("draw.status.info.hint") });
+    if (nelCompleto) {
+      list.push({
+        id: "navigator",
+        text: t(ctx.navigator ? "draw.status.navigator.on" : "draw.status.navigator.off"),
+        hint: t("draw.status.navigator.hint"),
+        open: () => ctx.comandoVista("navigator"),
+        inPlace: true,
+      });
+    }
     const count = ctx.currentIndex().units.length;
     const chosen = ctx.selectedUnits();
     if (chosen.length > 0) {
@@ -160,5 +194,17 @@ export function installStatus(ctx: EditorContext, frame: StatusFrame = FOTOGRAMM
       return () => listeners.delete(listener);
     },
   };
-  installZoomMenu(ctx, () => ctx.root.ownerDocument.querySelector<HTMLElement>('[data-surface-item="zoom"]'));
+  const menu = creaMenuZoom(ctx, () => ctx.root.ownerDocument.querySelector<HTMLElement>('[data-surface-item="zoom"]'));
+  ctx.apriZoom = () => menu.apri(false);
+  ctx.comandoVista = (id) => {
+    if (id === "navigator") {
+      ctx.setNavigator(!ctx.navigator);
+      return;
+    }
+    if (isComandoVisualizza(id)) {
+      comandoVisualizza(ctx, id);
+      return;
+    }
+    menu.comando(id);
+  };
 }

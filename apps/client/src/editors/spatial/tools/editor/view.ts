@@ -16,6 +16,7 @@ import { fieldMin, fieldText, fromUnit, toUnit, UNIT_PLACES } from "../rulers";
 import { fitView, placedAt, toScene, toScreen, turnTo, viewTransform, zoomAt, type View } from "../../view";
 import { DRAW_SCALE_LIMITS, FIT_PAD, OPEN_MARGIN_PX } from "./constants";
 import type { EditorContext } from "./context";
+import { installEdgeRulers } from "./edge-rulers";
 import { union } from "./helpers";
 
 /// Sotto questa larghezza sullo schermo, in pixel, una tavola non mostra il
@@ -64,6 +65,9 @@ export interface ViewContext {
   fit: () => void;
   /// Inquadra la selezione, e lo dice se non c'è niente di scelto.
   fitSelection: () => void;
+  /// I righelli di bordo del foglio sono accesi (K6 T11, giro E: ≡ › Visualizza del Completo).
+  edgeRulers: boolean;
+  setEdgeRulers: (on: boolean) => void;
 }
 
 /// Monta gli annunci, la camera, l'unità e i righelli.
@@ -72,6 +76,8 @@ export function installView(ctx: EditorContext): void {
     life, folio, has, relabels, zoomText, turnText, root, surface, live, zoomLevel, turnButton, paper, sheetLayer, gridMark, gridMinor, gridMajor,
     painter, previewCamera, nameLayer, overlay, cursorMark, boardsNow, currentIndex, currentPage
   } = ctx;
+  // I righelli di bordo: spenti finché il Completo non li accende.
+  installEdgeRulers(ctx);
   // --- Annunci ------------------------------------------------------------
 
   let echo = false;

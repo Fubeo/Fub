@@ -1546,6 +1546,13 @@ export const SCENE = touchLast(onPage("shell", [
     // sua voce come lo apre chi preme.
     ["disegno-fam-vista", 1280, "Il menu dello zoom della banda: ingrandisci, riduci, 100 %, adatta tutto e il campo della percentuale", openZoomMenu],
     ["disegno-fam-vista-800", 800, "Il menu dello zoom della banda nella finestra minima del desktop, 800 px", openZoomMenu],
+    // ≡ › Visualizza del Completo (K6 T11, giro E) e il navigatore della banda.
+    ["disegno-visualizza", 1280, "≡ › Visualizza del Completo: le voci che il client fa, con la spunta vera, e il sottomenu aperto", openVisualizza],
+    ["disegno-visualizza-800", 800, "≡ › Visualizza del Completo nella finestra minima del desktop, 800 px", openVisualizza],
+    ["disegno-navigatore", 1280, "Il navigatore della banda acceso: la panoramica del foglio in basso a destra, con il riquadro della vista", openNavigatore],
+    ["disegno-navigatore-800", 800, "Il navigatore della banda nella finestra minima del desktop, 800 px", openNavigatore],
+    ["disegno-righelli", 1280, "I righelli del bordo del foglio, accesi da ≡ › Visualizza: tacche e numeri nell'unità del documento", openRighelli],
+    ["disegno-righelli-800", 800, "I righelli del bordo nella finestra minima del desktop, 800 px", openRighelli],
   ].map(([id, width, title, prepare]) => ({
     id,
     title,
@@ -5364,6 +5371,39 @@ async function scegliSelezioneDirettaCoiPunti(page) {
   // La posizione può stare nel «…» della riga: basta che ci sia.
   await page.waitForSelector(".draw-point-place .draw-point-coord input", { state: "attached" });
   await page.waitForFunction(() => document.querySelector(".draw-point-coord input")?.value !== "");
+}
+
+/// ≡ › Visualizza del Completo (K6 T11, giro E): il menu ≡ aperto dal suo bottone, e il
+/// sottomenu Visualizza aperto come lo apre chi usa il mouse.
+async function openVisualizza(page) {
+  await openDrawing(page);
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await page.click('.draw-header button[aria-label="Disegno"]');
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Visualizza')");
+  await page.hover("#context-menu [role='menuitem']:has-text('Visualizza')");
+  // Le voci con la spunta hanno il ruolo `menuitemcheckbox`: l'attesa li prende tutti.
+  await page.waitForSelector(".context-submenu [role^='menuitem']:has-text('Mostra griglia')");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// I righelli del bordo (K6 T11, giro E): «Mostra righelli» da ≡ › Visualizza, scelta come
+/// la sceglie chi usa il mouse.
+async function openRighelli(page) {
+  await openVisualizza(page);
+  await page.click(".context-submenu [role^='menuitem']:has-text('Mostra righelli')");
+  await page.waitForSelector(".draw-ruler-x:not([hidden])");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il navigatore della banda (K6 T11, giro E): la sua voce premuta come la preme chi
+/// usa il mouse; la panoramica compare in basso a destra del foglio.
+async function openNavigatore(page) {
+  await openDrawing(page);
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await page.waitForSelector('[data-surface-item="navigator"]');
+  await page.click('[data-surface-item="navigator"]');
+  await page.waitForSelector(".draw-navigator:not([hidden])");
+  await page.evaluate(() => document.fonts.ready);
 }
 
 /// «Tutti gli strumenti» (K6 T8): il cassetto aperto dalla sua casella; con
