@@ -2242,6 +2242,12 @@ soprastante e altri livelli e `object.sendToCurrentLayer` (aspettano T15),
 `select.reselect` (servirebbe uno stato nuovo nel contratto). La posizione X/Y del punto si legge
 (T12) ma non si sposta ancora (`path.moveAnchor`). Selezione, Mano e Zoom del motore si chiamano
 «… (Completo)» per non avere due nomi uguali nella tendina.
+Giro H unito in 5808c4d2e: tre interruttori di ≡ › Visualizza, «fatto»: Mostra griglia
+trasparenza (scacchi dipinti dal foglio sulla pagina e sulle tavole), Nascondi bordi (il
+contorno di ogni oggetto scelto) e Nascondi riquadro di delimitazione (senza cornice né
+maniglie). Restano «da fare»: guide intelligenti e aggancio ai punti (il gesto porta solo
+snap.grid e snap.free: servirebbe un campo nuovo nel contratto, non per la base) e il widget
+d'angolo (con T12).
 Aspetta: niente
 
 ## T12 · I tracciati e la penna di Bézier
