@@ -105,6 +105,24 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-22 · K6 T13 · Nel Completo il gruppo a icone dei sei allineamenti del Design non c'è: resta la sezione Allinea, con «alla tavola». Decisione del coordinatore (giro 3).
+  - Il Semplice non cambia. Nel Completo restano le due icone di «Distribuisci» e le
+    quattro di «Disponi», che la sezione Allinea non ripete.
+- 2026-11-22 · K6 T13 · La finestra delle forme si apre solo col clic sul foglio, come oggi. Decisione del coordinatore (giro 3).
+  - Scegliere una forma nella colonna non apre la finestra: la apre il clic sul foglio.
+- 2026-11-22 · K6 T13 · I valori di partenza delle finestre sono misure vere, non 0. Decisione del coordinatore (giro 3).
+  - Il predefinito dello schema del comando; se manca, 100 per larghezza, altezza e
+    raggio. Un valore sotto il minimo (0,01 per una misura, 0,01 % per la scala) è in
+    errore accanto al campo e OK resta spento; la prova è in finestre.test.ts, con il
+    DOM. Un valore fuori dai limiti non fa partire l'anteprima.
+- 2026-11-22 · K6 T13 · Allinea resta solo nell'app: il prototipo non la disegna. Decisione del coordinatore (giro 3).
+  - Lo dice PLAN.md. La mappa della conformità non la confronta, e il prototipo non
+    va toccato per questo.
+- 2026-11-22 · K6 T13 · Una trasformazione con un oggetto bloccato nella selezione è rifiutata, e la frase dice di sbloccarlo o toglierlo; il motore non la salta.
+  - È la stessa regola della decisione (b) dell'allineamento, estesa a Sposta, Ruota,
+    Scala, Rifletti, Inclina e alla sezione Trasforma. Il piano diceva «il motore lo
+    salta, e lo si dice»: la differenza resta dichiarata, e il salto richiede una
+    modifica del motore o della famiglia, da decidere.
 - 2026-11-22 · K6 T13 · La sezione «Allinea» sta nel Completo, costruita dall'indice; la famiglia `trasforma` si porta al primo clic, decisa dal coordinatore.
   - Perché: la sezione deve esserci in una sessione nuova senza caricare la
     famiglia per mostrarla. Le voci `align.*` dell'indice hanno già comando e
