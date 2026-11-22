@@ -1147,7 +1147,9 @@ impl DrawingCommandRequest {
                     .as_object()
                     .ok_or_else(|| bad("`value` must be an object with `strumento`".into()))?;
                 if let Some(altro) = campi.keys().find(|k| k.as_str() != "strumento") {
-                    return Err(bad(format!("`value.{altro}` is not a field of the request")));
+                    return Err(bad(format!(
+                        "`value.{altro}` is not a field of the request"
+                    )));
                 }
                 let strumento = campi
                     .get("strumento")

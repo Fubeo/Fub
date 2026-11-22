@@ -74,7 +74,8 @@ use fub_abi::{
 };
 use fub_abi::{
     DrawingDisabledReason, DrawingInput, DrawingKeyMods, DrawingOverlay, DrawingOverlayRole,
-    DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE,
+    DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION,
+    DRAWING_COMMAND_TOOL_STATE,
 };
 use fub_abi::{
     GridBook, GridBytesCell, GridBytesSession, GridBytesWindow, GridCalculation, GridCommand,

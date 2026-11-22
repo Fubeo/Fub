@@ -797,9 +797,12 @@ fn the_tool_option_and_the_family_requests_are_checked() {
             field,
         );
     }
-    request(DRAWING_COMMAND_TOOL_STATE, json!({"strumento": "directSelection"}))
-        .validate()
-        .unwrap();
+    request(
+        DRAWING_COMMAND_TOOL_STATE,
+        json!({"strumento": "directSelection"}),
+    )
+    .validate()
+    .unwrap();
     for (value, field) in [
         (json!("pen"), "value"),
         (json!({}), "value.strumento"),
