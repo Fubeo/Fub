@@ -32,11 +32,12 @@ use fub_abi::{
 };
 use serde_json::{json, Map, Value};
 use vectorcraft_doc::color::Paint;
-use vectorcraft_doc::{Document, Node, NodeId, NodeKind, Selection, TextKind};
+use vectorcraft_doc::{CharStyle, Document, Node, NodeId, NodeKind, Selection, TextKind};
 use vectorcraft_engine::tools::{Cursor, Mods, Overlay, ToolKey};
 use vectorcraft_engine::{EngineError, Session, ViewInfo};
 use vectorcraft_geom::{Affine, BezPath, PathEl, Point};
 
+use super::testo::{TEXT_FAMILY, TEXT_FONT, TEXT_SIZE};
 use super::{esito_vuoto, evento, forme, selezione_di_fub, Banco, Contesto, InCorso};
 use crate::apertura::Copia;
 use crate::differenza::{self, numero};
@@ -58,6 +59,13 @@ pub(crate) struct Ponte {
     punto: Option<Point>,
     /// I modificatori dell'ultimo puntatore, con lo spazio tenuto.
     mods: Mods,
+    /// Il corpo di un testo nuovo nel documento del motore: [`TEXT_SIZE`]
+    /// nello spazio del livello, portato nel motore come lo stile delle
+    /// forme ([`forme::destinazione`]).
+    corpo: f64,
+    /// I testi nuovi del gesto che hanno già preso il carattere di Fub
+    /// ([`col_carattere_di_fub`]): uno cambiato dopo resta com'è.
+    ritoccati: Vec<NodeId>,
 }
 
 /// Esegue un pezzo del gesto `gesto` con lo strumento del motore `id`.
@@ -100,8 +108,12 @@ pub(crate) fn gesto(
                 return rifiuta(banco, esito, DrawingRefusal::Unsupported);
             }
         }
+        let al_motore = forme::destinazione(&cx)
+            .map(|d| d.al_motore)
+            .unwrap_or(copia.radice);
         banco.ponte = Ponte {
             inizio: banco.documento(),
+            corpo: TEXT_SIZE * forme::scala(al_motore),
             ..Ponte::default()
         };
     }
@@ -115,6 +127,7 @@ pub(crate) fn gesto(
             ponte.mods = ev.mods;
             ponte.punto = Some(ev.pos);
             sessione.pointer(&ev, cx.vista)?;
+            col_carattere_di_fub(sessione, ponte, copia)?;
         }
         for i in &gesto.inputs {
             ingresso(sessione, ponte, i, cx.vista)?;
@@ -205,6 +218,55 @@ pub(crate) fn gesto(
     esito
 }
 
+/// Un testo che uno strumento del motore ha appena creato prende il carattere
+/// e il corpo di Fub, quelli del Testo del Semplice ([`TEXT_FONT`],
+/// [`TEXT_SIZE`]): il motore li farebbe col suo carattere di serie
+/// (`CharStyle::default()`), che Fub non ha fra i suoi. Conta solo un testo
+/// che il documento di prima non aveva e che ha ancora lo stile di serie in
+/// ogni pezzo, una volta per gesto; un testo che c'era resta com'è. Il cambio
+/// passa da `text.setStyle`, come il pannello, quindi segue la transform del
+/// testo; la differenza lo scrive nel `<text>` nuovo.
+fn col_carattere_di_fub(
+    sessione: &mut Session,
+    ponte: &mut Ponte,
+    copia: &Copia,
+) -> Result<(), EngineError> {
+    if !(ponte.corpo.is_finite() && ponte.corpo > 0.0) {
+        return Ok(());
+    }
+    let Ok(stato) = sessione.doc() else {
+        return Ok(());
+    };
+    let serie = CharStyle::default();
+    let prima = Posti::di(&copia.documento);
+    let ora = Posti::di(&stato.doc);
+    let nuovi: Vec<NodeId> = stato
+        .selection
+        .objects
+        .iter()
+        .copied()
+        .filter(|id| !prima.nodi.contains_key(id) && !ponte.ritoccati.contains(id))
+        .filter(|id| {
+            ora.nodi.get(id).is_some_and(|p| match &p.nodo.kind {
+                NodeKind::Text(t) => t.runs.iter().all(|r| {
+                    r.style.font_family == serie.font_family && r.style.size == serie.size
+                }),
+                _ => false,
+            })
+        })
+        .collect();
+    if nuovi.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<u64> = nuovi.iter().map(|id| id.0).collect();
+    sessione.execute(
+        "text.setStyle",
+        &json!({ "ids": ids, "font": TEXT_FONT, "size": ponte.corpo }),
+    )?;
+    ponte.ritoccati.extend(nuovi);
+    Ok(())
+}
+
 /// Il `<text>` di un testo a punto orizzontale fatto da uno strumento del
 /// motore: l'ancora (l'inizio della linea di base della prima riga), il
 /// colore, il carattere e la misura del primo pezzo. Le righe le aggiunge
@@ -228,7 +290,14 @@ fn scrivi_testo(nodo: &Node, locale: Affine) -> Option<(String, Map<String, Valu
     attrs.insert("x".into(), json!(numero(ancora.x, 2)));
     attrs.insert("y".into(), json!(numero(ancora.y, 2)));
     attrs.insert("fill".into(), json!(fill));
-    attrs.insert("font-family".into(), json!(primo.style.font_family));
+    // Il carattere di Fub si scrive come lo scrive il Testo del Semplice,
+    // con il ripiego generico (`TEXT_FAMILY`).
+    let famiglia = if primo.style.font_family == TEXT_FONT {
+        TEXT_FAMILY
+    } else {
+        primo.style.font_family.as_str()
+    };
+    attrs.insert("font-family".into(), json!(famiglia));
     let corpo = primo.style.size * forme::scala(m);
     attrs.insert("font-size".into(), json!(numero(corpo, 2)));
     // Il peso, il corsivo, la spaziatura e l'allineamento, quando non sono

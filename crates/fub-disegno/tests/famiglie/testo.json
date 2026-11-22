@@ -297,8 +297,8 @@
                 "x": "40",
                 "y": "260",
                 "fill": "#000000",
-                "font-family": "Source Sans 3",
-                "font-size": "12",
+                "font-family": "Inter, sans-serif",
+                "font-size": "32",
                 "id": "o0rpq5ny2"
               },
               "children": [
@@ -314,7 +314,7 @@
                   "tag": "tspan",
                   "attrs": {
                     "x": "40",
-                    "dy": "14.4"
+                    "dy": "38.4"
                   },
                   "text": "al mare 🌧"
                 }

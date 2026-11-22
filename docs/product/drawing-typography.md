@@ -73,8 +73,10 @@ Col Disegno completo acceso la casella del testo della colonna ha anche
   non scrive niente.
 - **Annulla** dopo una parola chiude la casella e toglie il testo intero, un
   passo solo.
-- Il testo nuovo ha il carattere e il corpo di serie del motore (Source Sans 3,
-  12): si cambiano dopo, da Carattere. Le righe vanno a capo con un a capo
+- Il testo nuovo nasce col carattere e il corpo del Testo del Semplice
+  (Inter, 32, scritto `font-family="Inter, sans-serif"`), non con quelli di
+  serie del motore: si cambiano dopo, da Carattere. Un testo che c'era resta
+  nel suo carattere. Le righe vanno a capo con un a capo
   semplice anche se si incolla un testo con gli a capo di Windows.
 
 Nella scheda Design, con un testo scelto, ci sono due sezioni:

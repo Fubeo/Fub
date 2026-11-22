@@ -233,6 +233,77 @@ fn il_testo_del_motore_compone_con_l_ime_poi_scrive() {
     assert!(!ops.contains("かな"), "la composizione non resta: {ops}");
 }
 
+/// Un disegno con un testo nel carattere di serie del motore, scritto prima.
+const CON_IL_TESTO_DEL_MOTORE: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <text id=\"ot1t1t1t1\" x=\"40\" y=\"80\" fill=\"#000000\" font-family=\"Source Sans 3\" font-size=\"12\"><tspan x=\"40\" dy=\"0\">Vecchio</tspan></text>\n  </g>\n</svg>\n";
+
+/// Le `add` di un esito: gli elementi nuovi.
+fn aggiunti(esito: &DrawingOutcome) -> Vec<Value> {
+    let ops = ops_di(esito);
+    ops.as_array()
+        .map(|a| a.iter().filter(|o| o["op"] == "add").cloned().collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn un_testo_nuovo_del_motore_nasce_col_carattere_e_il_corpo_di_fub() {
+    let (mut d, _) = Disegno::apri_con(&common::disegni_con_inter(), CON_IL_TESTO_DEL_MOTORE)
+        .expect("il disegno si apre");
+    let pronto = gesto(&mut d, "type", "preview", clic(60.0, 200.0), vec![]);
+    assert_eq!(pronto.refused, None, "{pronto:?}");
+    // Mentre si scrive, il testo che il client mostra è già in Inter a 32.
+    let scritto = gesto(
+        &mut d,
+        "type",
+        "preview",
+        vec![],
+        vec![json!({ "kind": "text", "text": "Ciao" })],
+    );
+    let forma = scritto
+        .preview
+        .as_ref()
+        .and_then(|p| p.shape.clone())
+        .expect("il testo in scrittura");
+    assert_eq!(
+        forma["attrs"]["font-family"], "Inter, sans-serif",
+        "{forma}"
+    );
+    assert_eq!(forma["attrs"]["font-size"], "32", "{forma}");
+    let fine = gesto(&mut d, "type", "commit", vec![], vec![tasto("Escape")]);
+    assert_eq!(fine.refused, None, "{fine:?}");
+    let nuovi = aggiunti(&fine);
+    assert_eq!(nuovi.len(), 1, "{nuovi:?}");
+    // Come il Testo del Semplice: `TEXT_FAMILY` e `TEXT_SIZE`.
+    let attrs = &nuovi[0]["elem"]["attrs"];
+    assert_eq!(attrs["font-family"], "Inter, sans-serif", "{attrs}");
+    assert_eq!(attrs["font-size"], "32", "{attrs}");
+    let ops = ops_di(&fine).to_string();
+    assert!(ops.contains("Ciao"), "{ops}");
+    // Il testo di prima non cambia: nessuna operazione lo tocca.
+    assert!(!ops.contains("ot1t1t1t1"), "{ops}");
+}
+
+#[test]
+fn un_testo_che_c_era_resta_nel_suo_carattere_quando_lo_si_scrive() {
+    let (mut d, _) = Disegno::apri_con(&common::disegni_con_inter(), CON_IL_TESTO_DEL_MOTORE)
+        .expect("il disegno si apre");
+    // Il clic sul testo di prima lo apre, non ne fa uno nuovo.
+    let pronto = gesto(&mut d, "type", "preview", clic(50.0, 76.0), vec![]);
+    assert_eq!(pronto.refused, None, "{pronto:?}");
+    let fine = gesto(
+        &mut d,
+        "type",
+        "commit",
+        vec![],
+        vec![json!({ "kind": "text", "text": "X" }), tasto("Escape")],
+    );
+    assert_eq!(fine.refused, None, "{fine:?}");
+    assert!(aggiunti(&fine).is_empty(), "{fine:?}");
+    let ops = ops_di(&fine).to_string();
+    assert!(ops.contains("ot1t1t1t1"), "{ops}");
+    assert!(!ops.contains("Inter"), "il carattere resta: {ops}");
+    assert!(!ops.contains("\"font-size\""), "il corpo resta: {ops}");
+}
+
 #[test]
 fn annullare_un_tracciato_a_meta_non_lascia_niente() {
     let (mut d, _) = apri(DISEGNO);
