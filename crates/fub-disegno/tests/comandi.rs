@@ -221,12 +221,14 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         ),
         DrawingRefusal::Unmapped
     );
-    // Scegliere tutto, l'inversa e nessuno non toccano ciò che è scelto: il
-    // resto (anche l'ordine del nucleo, K6 T11) è spento.
+    // Scegliere tutto, l'inversa e nessuno non toccano ciò che è scelto, e
+    // il lato attivo del colore (K6 T14) è della sessione, non degli oggetti:
+    // il resto (anche l'ordine del nucleo, K6 T11) è spento.
     let sempre = [
         "disegno.select.all",
         "disegno.select.inverse",
         "disegno.select.none",
+        "disegno.paint.toggleActive",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     assert!(comandi

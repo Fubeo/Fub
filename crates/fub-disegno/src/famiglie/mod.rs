@@ -76,6 +76,14 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         Ok(argomenti)
     }
 
+    /// Il comando `id`, che va nella cronologia del motore, è una lettura
+    /// quando non cambia il documento: cambia solo la sessione del motore e
+    /// rende un valore (`paint.toggleActive` rende `{fillActive}`). Di serie
+    /// no: un comando della cronologia che non cambia niente è `empty`.
+    fn legge(&self, _id: &str) -> bool {
+        false
+    }
+
     /// La lettura di un comando che non cambia il documento, nella forma di
     /// `DrawingOutcome.reading`. Di serie è il risultato del motore.
     fn lettura(&self, _id: &str, risultato: Value) -> Value {
@@ -862,7 +870,8 @@ fn si_legge_in_sola_lettura(id: &str) -> bool {
 /// Esegue il comando `disegno.<id>` della richiesta: prepara la sua
 /// famiglia, lo fa girare nella sessione del motore sulla selezione e passa
 /// per la differenza. Le operazioni, se il documento cambia; la lettura, se
-/// il comando non va nella cronologia del motore e rende un valore; se no
+/// il comando non va nella cronologia del motore (o la famiglia lo dice una
+/// lettura, `StatoFamiglia::legge`) e rende un valore; se no
 /// `empty`. Con `preview` il documento che cambierebbe dà i contorni dei
 /// tracciati nuovi o cambiati (`DrawingPreview::overlays`), senza operazioni:
 /// niente arriva al file finché il client non manda il comando senza. Un id che il motore non serve qui è `unsupported`, uno che il
@@ -1011,7 +1020,8 @@ pub(crate) fn esegui(
             esito.selection = selezione_di_fub(copia, &differenza, &selezione);
         }
         Ok(None) => {
-            let legge = vectorcraft_engine::find_command(&riga.id).is_some_and(|c| !c.journal);
+            let legge = vectorcraft_engine::find_command(&riga.id).is_some_and(|c| !c.journal)
+                || nata.stato().legge(&riga.id);
             if !legge || risultato.is_null() {
                 return Ok(rifiuta(DrawingRefusal::Empty));
             }

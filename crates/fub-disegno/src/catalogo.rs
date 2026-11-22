@@ -556,6 +556,12 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("gap", Tipo::Numero),
     ("fit", Tipo::SiNo),
     ("removeGaps", Tipo::SiNo),
+    // Le finestre di Modifica colori (T14, giro 1): Satura e Regola
+    // bilanciamento colore.
+    ("intensity", Tipo::Numero),
+    ("r", Tipo::Numero),
+    ("g", Tipo::Numero),
+    ("b", Tipo::Numero),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
@@ -573,8 +579,8 @@ pub struct FinestraScritta {
     pub limiti: &'static [(&'static str, Option<f64>, Option<f64>)],
 }
 
-/// Le finestre dei tracciati (T12, giro 3) e delle trasformazioni (T13,
-/// giro 3). Tracciati: Semplifica, Leviga, Sposta
+/// Le finestre dei tracciati (T12, giro 3), delle trasformazioni (T13,
+/// giro 3) e di Modifica colori (T14, giro 1). Tracciati: Semplifica, Leviga, Sposta
 /// tracciato, Espandi e Dividi in trattini. Semplifica chiede il cursore
 /// (`level`), non la tolleranza in punti: 50 è la tolleranza di serie, 1 pt.
 /// Espandi non chiede come espandere le sfumature (`gradient`, `steps`): vale
@@ -661,6 +667,34 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         schema: "{angle, axis?: \"horizontal\"|\"vertical\"}",
         predefiniti: &[("angle", "0"), ("axis", "horizontal")],
         limiti: &[],
+    },
+    // Modifica colori (T14, giro 1). Satura chiede solo l'intensità, da -100 %
+    // a 100 % (il motore porta un numero fuori al suo estremo). Regola
+    // bilanciamento colore chiede i tre canali RGB, da -100 % a 100 % in più
+    // per canale, e se cambiare riempimenti e tratti: il metodo è quello dei
+    // canali dati (`rgb`), e ogni colore tiene il suo modello (`convert`
+    // falso), come nel motore senza.
+    FinestraScritta {
+        id: "edit.colors.saturate",
+        schema: "{intensity}",
+        predefiniti: &[("intensity", "0")],
+        limiti: &[("intensity", Some(-100.0), Some(100.0))],
+    },
+    FinestraScritta {
+        id: "edit.colors.adjustBalance",
+        schema: "{r, g, b, fill, stroke}",
+        predefiniti: &[
+            ("r", "0"),
+            ("g", "0"),
+            ("b", "0"),
+            ("fill", "true"),
+            ("stroke", "true"),
+        ],
+        limiti: &[
+            ("r", Some(-100.0), Some(100.0)),
+            ("g", Some(-100.0), Some(100.0)),
+            ("b", Some(-100.0), Some(100.0)),
+        ],
     },
 ];
 
