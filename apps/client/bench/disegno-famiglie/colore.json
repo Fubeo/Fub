@@ -18,6 +18,42 @@
           ]
         }
       }
+    },
+    {
+      "comando": "disegno.swatch.new",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.swatch.edit",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.swatch.delete",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.swatch.addUsedColors",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.setFill",
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.paint.setStroke",
+      "esito": {
+        "ops": "[]"
+      }
     }
   ]
 }

@@ -25,10 +25,13 @@ colore solo, e chi lo usa scrive anche il colore, come ripiego.
 <rect id="o3c5e7g9j" x="40" y="40" width="200" height="120" fill="url(#r7k2m9q4x) #0072b2"/>
 ```
 
-- **Si usano, non si fanno.** L'editor non fa più campioni, non li
+- **Nell'editor di sempre si usano, non si fanno.** Non fa campioni, non li
   rinomina, non ne cambia il colore e non li elimina: la sezione «Colori del
   documento» se ne è andata col livello Standard (decisione 0231). Il campo
   di un colore li offre ancora, col loro nome, e chi ne sceglie uno lo usa.
+  Col Disegno completo si fanno e si cambiano da Risorse › Campioni (sotto).
+- **Ogni campione del file è globale**: cambiarlo cambia ogni oggetto che lo
+  usa. Il formato non ha tinte, colori spot né gruppi di colori.
 - **I testi** usano un campione intero. Le righe e le parole non ne usano,
   perché il formato non dà loro riferimenti: quelle che scrivono un colore
   loro lo tengono.
@@ -93,7 +96,34 @@ Completo, i campi tornano.
 - **Scambia** scambia riempimento e contorno; **Nessuno** toglie il colore del
   lato attivo; **Di serie** rimette il riempimento bianco e il contorno nero.
 - Senza niente di scelto la sezione è spenta; un lato che gli oggetti scelti
-  non hanno (un'immagine non ha contorno) si spegne da solo.
+  non hanno si spegne da solo e dice «Nessuno», col perché nel suggerimento
+  («Contorno: la selezione non ne ha»): un'immagine non ha contorno, e
+  nemmeno un testo, perché Fub non ne dà ai testi. «Misto» vuol dire solo
+  oggetti scelti con colori diversi.
+
+### Risorse › Campioni
+
+Nella scheda **Risorse** la sezione **Campioni** mostra i campioni del
+documento in una griglia, col conto («24 campioni»); con molti campioni la
+griglia scorre dentro la scheda.
+
+- **Un clic sceglie** un campione (il segno ✓) e, se ci sono oggetti scelti,
+  lo dà al lato attivo della sezione Colore, riempimento o contorno, con un
+  comando solo. Il doppio clic apre le opzioni. Le frecce, Inizio e Fine
+  muovono il fuoco fra i campioni.
+- **Nuovo…** apre la finestra «Nuovo campione»: il nome, il colore col
+  selettore dei colori e la nota che il campione è globale. Un nome vuoto o
+  già di un altro campione tiene la finestra aperta e lo dice.
+- **Opzioni…** apre «Opzioni del campione» per quello scelto: rinominarlo o
+  cambiarne il colore cambia tutti gli oggetti che lo usano, in un passo.
+- **Elimina** toglie il campione scelto: chi lo usava tiene il suo colore.
+- **Aggiungi i colori usati** fa un campione per ogni colore degli oggetti
+  scelti, o di tutto il disegno senza niente di scelto.
+- **Togli i non usati** elimina in un passo i campioni che nessun oggetto,
+  gruppo o altra risorsa usa; spento se sono usati tutti.
+
+Le stesse finestre si aprono dal menu ≡ e da Ctrl+/: «Nuovo campione…» e
+«Opzioni campione…», spenta finché non c'è un campione scelto.
 
 Modifica › **Modifica colori** cambia i colori degli oggetti scelti tutti
 insieme: Regola bilanciamento colore… e Satura…, poi Fondi dal davanti al
@@ -113,10 +143,12 @@ finestra.
   Sovrastampa nero non cambiano un SVG, che ha già i colori in RGB e non ha la
   sovrastampa. Quando non c'è niente da cambiare il file resta com'è.
 
-La sezione è in `apps/client/src/editors/spatial/completo/colore-sezione.ts`;
+La sezione è in `apps/client/src/editors/spatial/completo/colore-sezione.ts`,
+Campioni in `completo/campioni-sezione.ts`;
 le parole delle finestre nella famiglia `colore`
 (`apps/client/src/editors/spatial/completo/famiglie/colore/`), i comandi nel
-motore (`crates/fub-disegno/src/famiglie/colore.rs`).
+motore (`crates/fub-disegno/src/famiglie/colore.rs`), i campioni del file in
+`crates/fub-disegno/src/campioni.rs`.
 
 ## Chi monta l'editor
 
