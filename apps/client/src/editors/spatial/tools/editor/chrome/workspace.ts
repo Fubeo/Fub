@@ -240,6 +240,10 @@ export function installWorkspace(ctx: EditorContext): void {
                 const punti = id === null ? undefined : ctx.statoStrumento(id)?.anchors;
                 return Array.isArray(punti) ? punti : [];
               },
+              rileggiStato: () => {
+                const id = ctx.motoreTool;
+                if (id !== null && !ctx.disposed) ctx.rileggiStato(id);
+              },
               leggi: (ops) => {
                 const letto = opsDellEsito(ops);
                 return "ops" in letto ? letto.ops : null;

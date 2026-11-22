@@ -128,7 +128,13 @@ la famiglia `tracciati` registra la sua fila (`ContestoCompleto.registraFila`,
 `completo/famiglie/tracciati/opzioni-punto.ts`), che manda i comandi sui
 punti con `anchors` nel `value` e dopo l'esito rilegge lo stato. Gli
 strumenti e i comandi dei tracciati rifiutano l'inchiostro di Fub
-(`unmapped`) e la carta. Il prodotto: [penne](../product/drawing-pen.md#la-penna-di-bézier-disegno-completo).
+(`unmapped`) e la carta. I comandi su un punto solo (`path.moveAnchor`,
+`setHandle`, `insertAnchor`, `removeAnchor`, `convertAnchor`, `close`,
+`appendAnchor`, `split`) nominano il tracciato con `element` e i numeri del
+punto, in coordinate della scena: `famiglie/tracciati_punti.rs` controlla i
+numeri (`bad_args`), rifiuta un `id` del motore nel valore, e passa l'id e le
+coordinate nel documento del motore; Canc coi punti scelti è
+`path.deleteAnchors` (`Completo.cancellaPunti`). Il prodotto: [penne](../product/drawing-pen.md#la-penna-di-bézier-disegno-completo).
 
 ## I livelli
 
