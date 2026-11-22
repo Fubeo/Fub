@@ -29,5 +29,41 @@ sempre: `⌘` è il tasto di Fub, `Ctrl` è Control.
 Il menu ≡ e «Ctrl+/» mostrano il tasto che fa partire il comando, cioè lo
 stesso di questa regola: un comando il cui tasto è di Fub, o che ha perso un
 conflitto, non ne mostra nessuno. Finché l'indice dei comandi non è arrivato,
-nessun tasto è mostrato. «Impostazioni › Scorciatoie» non cambia ancora questi
-tasti.
+nessun tasto è mostrato.
+
+## Cambiare i tasti
+
+In **Impostazioni › Scorciatoie**, la sezione **«Disegno completo»** elenca i
+comandi del motore che hanno un tasto da scegliere. Il riquadro «Comandi e
+tasti del Disegno completo» si apre a richiesta: solo allora arriva la parte
+del disegno che conosce i comandi, e un'Impostazioni aperta senza aprirlo
+non la carica.
+
+- **Ogni riga** mostra il nome del comando, dove sta nel menu, e il tasto
+  che vale, scritto come le altre scorciatoie (`Mod-Shift-K`). Sotto dice se un
+  tasto di Fub lo copre (vince Fub, il comando resta senza) o se un altro
+  comando lo ha preso dopo (vince l'ultimo assegnato). La diagnosi cambia
+  mentre si scrive, prima di salvare.
+- **Cambiare un tasto** lo salva quando si esce dal campo; un campo vuoto vuol
+  dire «nessun tasto». Un tasto che non si sa premere (una lettera senza
+  modificatori, `Maiusc` su un segno) lo dice e non salva niente. «Azzera»
+  torna al tasto del motore.
+- **L'insieme di tasti** sceglie fra quelli del motore: «Di serie» e
+  «Classico». Con dei tasti cambiati la scelta mostra «Personalizzato», e
+  sceglierne un altro chiede conferma, perché toglie i tasti cambiati.
+- **«Importa un insieme…»** legge un file d'insieme del motore
+  (`vectorcraft-shortcuts`, versione 1) scelto con la finestra dei file. I
+  tasti dei comandi che questo Fub non ha restano fuori, e lo dice. Un file
+  rotto, di una versione più nuova o con un tasto che non si sa premere dice
+  perché e **non cambia niente**. Con dei tasti cambiati, chiede conferma.
+- **«Esporta l'insieme…»** salva lo stesso formato con la finestra di
+  salvataggio, per un altro computer o per il motore.
+
+I tasti cambiati valgono **subito** nel disegno aperto, senza riaprirlo, e sono
+di questa macchina: l'impostazione `draw.keys` (feature `draw`), un JSON con la
+sua versione, `{"v":1,"insieme":null,"tasti":{"<comando>":"Mod-j"}}`, dove
+`null` è «nessun tasto». Un valore che non si legge vale come i tasti del
+motore; uno scritto da un Fub più nuovo vale per i tasti che si capiscono. In
+tutti e due i casi la sezione lo dice, spegne i controlli e offre solo
+«Azzera i tasti del Disegno completo», per non riscriverlo perdendo ciò che
+non capisce.
