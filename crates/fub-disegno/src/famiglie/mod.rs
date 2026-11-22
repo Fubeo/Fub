@@ -174,6 +174,17 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
     {
         None
     }
+
+    /// Il rifiuto per un errore del motore sul comando `id`, quando la famiglia
+    /// sa che cosa vuol dire: un'operazione fra tracciati che non lascia
+    /// niente è `empty`, non un errore. Di serie nessuno, e `esegui` rende
+    /// `unsupported`; in ogni caso niente cambia.
+    fn rifiuto_del_motore(_id: &str, _errore: &EngineError) -> Option<DrawingRefusal>
+    where
+        Self: Sized,
+    {
+        None
+    }
 }
 
 /// Le 26 famiglie, nell'ordine di `fub_abi::DRAWING_FAMILIES`: per ognuna la
@@ -303,6 +314,15 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto_dopo(id, copia, dopo, scelti_dopo)
+                    })*
+                }
+            }
+
+            /// Il rifiuto per un errore del motore sul comando `id`, se la famiglia lo sa.
+            fn rifiuto_del_motore(self, id: &str, errore: &EngineError) -> Option<DrawingRefusal> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::rifiuto_del_motore(id, errore)
                     })*
                 }
             }
@@ -1076,10 +1096,12 @@ pub(crate) fn esegui(
             return Ok(rifiuta(DrawingRefusal::Empty));
         }
         // Il motore rifiuta il comando qui (nessun documento, un oggetto
-        // che non c'è, un errore suo): `unsupported`, e niente cambia.
-        Ok(Err(_)) => {
+        // che non c'è, un errore suo): `unsupported`, o il rifiuto che la
+        // famiglia sa dare a quell'errore, e niente cambia.
+        Ok(Err(errore)) => {
             banco.ripristina(copia);
-            return Ok(rifiuta(DrawingRefusal::Unsupported));
+            let motivo = famiglia.rifiuto_del_motore(&riga.id, &errore);
+            return Ok(rifiuta(motivo.unwrap_or(DrawingRefusal::Unsupported)));
         }
         Err(_panico) => {
             banco.ripristina(copia);

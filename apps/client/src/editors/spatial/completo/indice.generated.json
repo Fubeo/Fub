@@ -1091,6 +1091,166 @@
     },
     {
       "fonte": "motore",
+      "id": "object.pathfinder.crop",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.crop"
+      },
+      "etichetta": {
+        "it": "Ritaglia",
+        "en": "Crop"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.divide",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.divide"
+      },
+      "etichetta": {
+        "it": "Dividi",
+        "en": "Divide"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.exclude",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.exclude"
+      },
+      "etichetta": {
+        "it": "Escludi",
+        "en": "Exclude"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.intersect",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.intersect"
+      },
+      "etichetta": {
+        "it": "Intersezione",
+        "en": "Intersect"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.merge",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.merge"
+      },
+      "etichetta": {
+        "it": "Fondi",
+        "en": "Merge"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.minusBack",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.minusBack"
+      },
+      "etichetta": {
+        "it": "Meno dietro",
+        "en": "Minus Back"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.minusFront",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.minusFront"
+      },
+      "etichetta": {
+        "it": "Meno davanti",
+        "en": "Minus Front"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.outline",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.outline"
+      },
+      "etichetta": {
+        "it": "Contorno",
+        "en": "Outline"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.trim",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.trim"
+      },
+      "etichetta": {
+        "it": "Rifila",
+        "en": "Trim"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.pathfinder.unite",
+      "chiamata": {
+        "comando": "disegno.object.pathfinder.unite"
+      },
+      "etichetta": {
+        "it": "Unione",
+        "en": "Unite"
+      },
+      "posto": "menu/oggetto/elaborazione",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.reflect",
       "chiamata": {
         "comando": "disegno.object.reflect"
@@ -3307,6 +3467,22 @@
       },
       "posto": "ispettore/design",
       "famiglia": "testo",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "pathfinder",
+      "chiamata": {
+        "client": "pathfinder"
+      },
+      "etichetta": {
+        "it": "Elaborazione tracciati",
+        "en": "Pathfinder"
+      },
+      "posto": "ispettore/design/pathfinder",
+      "famiglia": "forme",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false
