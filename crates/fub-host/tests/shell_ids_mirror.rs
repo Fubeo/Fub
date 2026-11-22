@@ -114,6 +114,7 @@ fn the_draw_workspace_keys_are_the_owners_constants() {
     for key in [
         fub_features::DRAW_WORKSPACE_KEY,
         fub_features::DRAW_WORKSPACES_KEY,
+        fub_features::DRAW_KEYS_KEY,
     ] {
         assert!(
             SETTINGS_WITH_THEIR_OWN_GESTURE.contains(&key),

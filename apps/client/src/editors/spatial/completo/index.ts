@@ -31,6 +31,7 @@ import { t } from "../strings";
 // percorso di un comando che fanno partire.
 import { eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 import { montaTasti } from "./montaggio-tasti";
+import { seguiTastiUtente } from "./segui-tasti";
 import type { ModificheTasti, Piattaforma } from "./tasti";
 export type { GruppoLayout } from "./colonna";
 
@@ -97,6 +98,8 @@ export interface OpzioniTastiCompleto extends AzioniEsito {
   readonly selezione: () => readonly string[];
   readonly anteprima: (anteprima: DrawingPreview | null) => void;
   readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
+  /// Le modifiche dell'utente; senza, il Completo segue `draw.keys` da sé
+  /// (`segui-tasti.ts`), e un cambio vale subito.
   readonly modifiche?: () => ModificheTasti;
   readonly piattaforma?: Piattaforma;
 }
@@ -213,6 +216,13 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     eseguiVoce(voce, dipendenze);
   };
   let chiuso = false;
+  // I tasti dell'utente (`draw.keys`, T9c): con un editor e senza modifiche
+  // date da chi apre, il Completo li segue, e rifà la regola a ogni cambio.
+  // La lettura arriva sempre dopo il montaggio (è una promessa).
+  const modificheUtente: () => ModificheTasti =
+    opzioni.tasti === undefined
+      ? () => ({})
+      : (opzioni.tasti.modifiche ?? seguiTastiUtente(ctx.life, () => montaggio.aggiorna()));
   // La regola dei tasti (T9b, `montaggio-tasti.ts`): il menu e la tavolozza la
   // leggono da qui, senza un secondo calcolo. Ascolta i tasti solo con un editor
   // (la radice); senza, la regola c'è lo stesso.
@@ -220,7 +230,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     radice: opzioni.tasti?.radice ?? null,
     vita: ctx.life,
     indice,
-    modifiche: opzioni.tasti?.modifiche ?? (() => ({})),
+    modifiche: modificheUtente,
     stato: opzioni.tasti?.stato ?? (() => ({ vuoleTesto: false, componendo: false })),
     piattaforma: opzioni.tasti?.piattaforma ?? piattaformaDi(),
     esegui: (voce) => {

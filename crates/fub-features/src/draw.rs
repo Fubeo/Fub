@@ -196,6 +196,13 @@ pub const DRAW_TEMPLATES_KEY: &str = "draw.templates";
 pub const DRAW_TEMPLATES_DEFAULT: &str = "Templates";
 /// L'impostazione dei suggerimenti brevi dell'editor.
 pub const DRAW_SUGGESTIONS_KEY: &str = "draw.suggestions";
+/// I tasti del Disegno completo cambiati dall'utente: un testo JSON con la sua
+/// versione, `{"v":1,"insieme":…,"tasti":{"<comando>":"Mod-K"|null}}`; vuoto,
+/// i tasti del motore. Lo legge e lo scrive il client
+/// (`editors/spatial/completo/tasti-utente.ts`): un valore rotto o di una
+/// versione più nuova non si sovrascrive, e una scrittura che non riesce
+/// lascia il valore di prima.
+pub const DRAW_KEYS_KEY: &str = "draw.keys";
 
 /// La densità di riferimento dei pixel CSS: 96 per pollice.
 const CSS_DPI: f32 = 96.0;
@@ -224,6 +231,8 @@ const S_TEMPLATES: &str = "s_templates";
 const S_TEMPLATES_DESC: &str = "s_templates_desc";
 const S_SUGGESTIONS: &str = "s_suggestions";
 const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
+const S_KEYS: &str = "s_keys";
+const S_KEYS_DESC: &str = "s_keys_desc";
 
 /// Lo schema delle impostazioni dei disegni.
 ///
@@ -245,6 +254,9 @@ const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
 /// - **I suggerimenti** sono della **macchina**: spegnerli è una preferenza di
 ///   chi usa l'editor, non del vault. La scrive la casella «Non mostrare più
 ///   suggerimenti», quindi dall'interfaccia; non `program_writable`.
+/// - **I tasti del Disegno completo** sono della **macchina**, come le altre
+///   scorciatoie: sono le mani di chi usa l'editor. Li scrive la sezione
+///   «Disegno completo» di Impostazioni › Scorciatoie; non `program_writable`.
 pub fn settings() -> Vec<SettingSpec> {
     let [full, ..] = DRAW_WORKSPACES;
     vec![
@@ -287,6 +299,16 @@ pub fn settings() -> Vec<SettingSpec> {
             SettingKind::Toggle { default: true },
         )
         .describing(Text::key(S_SUGGESTIONS_DESC))
+        .grouped(Text::key(S_GROUP))
+        .for_machine(),
+        SettingSpec::new(
+            DRAW_KEYS_KEY,
+            Text::key(S_KEYS),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(S_KEYS_DESC))
         .grouped(Text::key(S_GROUP))
         .for_machine(),
     ]
@@ -346,6 +368,14 @@ pub fn catalog() -> Vec<StringCatalog> {
              fare in quel momento. Si spengono anche dalla casella «Non mostrare \
              più suggerimenti» che accompagna ognuno, e valgono per questa \
              macchina.",
+        )
+        .with(S_KEYS, "Tasti del Disegno completo")
+        .with(
+            S_KEYS_DESC,
+            "I tasti dei comandi del Disegno completo cambiati da te, e \
+             l'insieme di tasti scelto. Si cambiano in Impostazioni › \
+             Scorciatoie, nella sezione «Disegno completo», e valgono per \
+             questa macchina.",
         ),
         choice::in_english(annotated::in_english(annotate::in_english(
             create::in_english(StringCatalog::new("en")),
@@ -394,6 +424,13 @@ pub fn catalog() -> Vec<StringCatalog> {
             "Shows short tips in the drawing editor about what can be done at \
              that moment. They also turn off from the «Don’t show tips again» box \
              that comes with each one, and apply to this machine.",
+        )
+        .with(S_KEYS, "Complete drawing keys")
+        .with(
+            S_KEYS_DESC,
+            "The keys of the Complete drawing commands you changed, and the \
+             chosen key set. They are changed in Settings › Shortcuts, in the \
+             «Complete drawing» section, and apply to this machine.",
         ),
     ])
 }
@@ -509,7 +546,7 @@ mod tests {
     }
 
     #[test]
-    fn the_settings_are_five_in_one_group_with_their_defaults() {
+    fn the_settings_are_six_in_one_group_with_their_defaults() {
         use fub_abi::settings::{SettingScope, SettingValue};
         let specs = settings();
         let keys: Vec<_> = specs.iter().map(|spec| spec.key.as_str()).collect();
@@ -520,7 +557,8 @@ mod tests {
                 "draw.workspaces",
                 "draw.toolbar",
                 "draw.templates",
-                "draw.suggestions"
+                "draw.suggestions",
+                "draw.keys"
             ]
         );
         assert_eq!(
@@ -530,10 +568,12 @@ mod tests {
                 DRAW_WORKSPACES_KEY,
                 DRAW_TOOLBAR_KEY,
                 DRAW_TEMPLATES_KEY,
-                DRAW_SUGGESTIONS_KEY
+                DRAW_SUGGESTIONS_KEY,
+                DRAW_KEYS_KEY
             ]
         );
-        // Il vault, tranne i suggerimenti, che sono di chi usa la macchina.
+        // Il vault, tranne i suggerimenti e i tasti, che sono di chi usa la
+        // macchina.
         let scopes: Vec<_> = specs.iter().map(|spec| spec.scope).collect();
         assert_eq!(
             scopes,
@@ -542,13 +582,14 @@ mod tests {
                 SettingScope::Vault,
                 SettingScope::Vault,
                 SettingScope::Vault,
+                SettingScope::Machine,
                 SettingScope::Machine
             ]
         );
         // Un componente non cambia lo spazio di lavoro o la colonna e non
         // spegne i suggerimenti da sé: soltanto la cartella è di tutti.
         let writable: Vec<_> = specs.iter().map(|spec| spec.program_writable).collect();
-        assert_eq!(writable, [false, false, false, true, false]);
+        assert_eq!(writable, [false, false, false, true, false, false]);
 
         let defaults: Vec<_> = specs.iter().map(|spec| spec.kind.default_value()).collect();
         assert_eq!(
@@ -559,6 +600,7 @@ mod tests {
                 SettingValue::List(vec![]),
                 SettingValue::Text("Templates".into()),
                 SettingValue::Toggle(true),
+                SettingValue::Text(String::new()),
             ]
         );
         // Lo spazio è un id di testo: gli spazi di serie sono dieci, i due di

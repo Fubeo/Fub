@@ -253,7 +253,8 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
                 "draw.workspaces",
                 "draw.toolbar",
                 "draw.templates",
-                "draw.suggestions"
+                "draw.suggestions",
+                "draw.keys"
             ]
         );
         let entry = |key: &str| entries.iter().find(|entry| entry.spec.key == key).unwrap();

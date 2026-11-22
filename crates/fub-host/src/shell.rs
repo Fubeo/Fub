@@ -303,6 +303,10 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
     // `shell_ids_mirror` controlla che restino uguali.
     "draw.workspace",
     "draw.workspaces",
+    // I tasti del Disegno completo: si cambiano nella sezione «Disegno
+    // completo» di Impostazioni › Scorciatoie, non come un testo JSON nel
+    // form (`fub_features::DRAW_KEYS_KEY`, stesso test).
+    "draw.keys",
 ];
 
 /// Il job il cui esito, quando riesce, può portare gli artefatti di un export
