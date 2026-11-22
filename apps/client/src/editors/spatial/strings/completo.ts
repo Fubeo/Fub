@@ -613,6 +613,11 @@ export const COLONNA_IT = {
   "draw.engine.name.lineSegment": "Segmento linea",
   "draw.engine.name.arc": "Arco",
   "draw.engine.name.spiral": "Spirale",
+  // Gli strumenti di trasformazione (T13 giro 5): nella casella «modificare».
+  "draw.engine.name.rotate": "Ruota",
+  "draw.engine.name.reflect": "Rifletti",
+  "draw.engine.name.scale": "Scala",
+  "draw.engine.name.shear": "Inclina",
   // Il Testo del motore (K6 T16) sta nella casella del Testo di Fub.
   "draw.engine.name.type": "Testo (Completo)",
   "draw.engine.type.box": "Testo che stai scrivendo: Esc per uscire",
@@ -665,6 +670,10 @@ export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.engine.name.lineSegment": "Line Segment",
   "draw.engine.name.arc": "Arc",
   "draw.engine.name.spiral": "Spiral",
+  "draw.engine.name.rotate": "Rotate",
+  "draw.engine.name.reflect": "Reflect",
+  "draw.engine.name.scale": "Scale",
+  "draw.engine.name.shear": "Shear",
   "draw.engine.name.type": "Type (Full)",
   "draw.engine.type.box": "Text you are typing: Esc to leave",
   "draw.chrome.drawer.title": "All tools",
