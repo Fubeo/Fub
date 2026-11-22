@@ -2339,7 +2339,16 @@ nuovo (`g`). Giro 6 unito in 66855e852: dieci icone disegnate da zero
 (la parte che resta tratteggiata), l'annuncio di comando non pronto nomina
 la voce cliccata, il testo nuovo nasce in Inter a 32 (`text.setStyle` nel
 ponte, nessun formato nuovo). Restano nel carattere del motore il testo
-incollato, su tracciato, in una forma, le quote e i grafici.
+incollato, su tracciato, in una forma, le quote e i grafici. Giro 7
+unito in 00e8693b6: maschere di ritaglio (Crea, Rilascia, Modifica
+contenuto, Seleziona › Maschere di ritaglio) in SVG semplice, `<g
+clip-path>` più un clipPath privato in fub-defs; rilasciata, la forma che
+ritagliava torna prima nel gruppo senza riempimento; un clip-path scritto
+sull'oggetto (Illustrator) si apre intatto ma Rilascia lo rifiuta col
+perché; Media e Media e unisci (punti della Selezione diretta, o tracciati
+interi). Rimandati col perché nella mappa: Modifica tracciato di ritaglio,
+la maschera del livello, la regola di riempimento (il formato della scena
+non li ha).
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
