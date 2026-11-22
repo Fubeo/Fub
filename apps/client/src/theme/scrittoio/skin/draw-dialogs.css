@@ -175,6 +175,12 @@
 .draw-commands-row[data-active] {
   box-shadow: inset 2px 0 0 var(--accent);
 }
+/* Le righe della tavolozza stanno una sotto l'altra, come nel prototipo (28 px
+   per riga): il gap di 2 px che la lista del kit mette fra le sue figlie qui
+   non c'è. Il kit non cambia. */
+.draw-commands-dialog .draw-commands-list {
+  gap: 0;
+}
 /* La croce di cancellazione del browser non c'è nel prototipo, il cui campo non
    ha il fuoco: qui si cancella con la tastiera. Fub non ha una regola sua per i
    campi di ricerca (cercata nel tema e nel kit). */
