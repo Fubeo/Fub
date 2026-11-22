@@ -102,7 +102,12 @@ function comeOggetto(valore: unknown): Readonly<Record<string, unknown>> {
 
 /// I comandi del menu che valgono sui punti scelti, se ce ne sono (K6 T12):
 /// il menu ≡, Ctrl+/ e il tasto li mandano coi punti dello strumento.
-const SUI_PUNTI_SCELTI: ReadonlySet<string> = new Set(["disegno.path.average", "disegno.path.averageJoin"]);
+const SUI_PUNTI_SCELTI: ReadonlySet<string> = new Set([
+  "disegno.path.average",
+  "disegno.path.averageJoin",
+  "disegno.path.moveAnchors",
+  "disegno.path.deleteAnchors",
+]);
 
 /// Il valore di partenza del comando `id`: quello fisso della voce, più i punti
 /// scelti adesso per un comando che li usa e non li ha già.

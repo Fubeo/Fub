@@ -124,6 +124,12 @@ const PROBLEMI: Record<QuantityProblem, DrawKey> = {
   finite: "draw.properties.problem.finite",
 };
 
+/// La frase di un numero scritto che non si prende, per un campo del kit in
+/// una fila (`problem` di `numberField`): vuota per «misto».
+export function problemaDelNumero(problema: QuantityProblem | "mixed"): string {
+  return problema === "mixed" ? "" : t(PROBLEMI[problema], { units: "" });
+}
+
 /// L'etichetta di una chiave nella lingua di adesso.
 function etichettaDi(etichette: Etichette, chiave: string): string {
   const e = etichette[chiave]!;
@@ -141,7 +147,7 @@ function creaControllo(controllo: Controllo, nome: string, cambiato: (valore: bo
       label: nome,
       value: controllo.valore,
       outOfRange: () => "",
-      problem: (problema) => (problema === "mixed" ? "" : t(PROBLEMI[problema], { units: "" })),
+      problem: problemaDelNumero,
       onChange: cambiato,
       lifetime: vita,
     }).element;

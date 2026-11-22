@@ -22,6 +22,8 @@ import type { EditorContext } from "../context";
 /// Ciò che il Completo aperto dà alla testata per la fila dello strumento.
 export interface CompletoMotore {
   preparaStrumento(strumento: string): Promise<boolean>;
+  /// Canc coi punti scelti: li toglie, e dice `true`; senza punti `false`.
+  cancellaPunti?(): boolean;
   fila(
     strumento: string,
     opzioni: unknown,

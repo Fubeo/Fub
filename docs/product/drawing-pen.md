@@ -201,8 +201,9 @@ sul foglio danno la riga delle opzioni:
 
 Un pulsante che adesso non vale resta raggiungibile e dice perché: «Scegli
 prima i punti con la Selezione diretta.», o per unire «Scegli i due punti
-finali da unire.». La posizione per ora si legge e basta: il punto si sposta
-trascinandolo sul foglio. Ogni comando è un passo di Annulla. I comandi ci
+finali da unire.». Con un punto solo scelto, X e Y si scrivono: Invio porta il
+punto lì; con più punti i campi si leggono e basta, e dicono di sceglierne uno.
+**Canc** coi punti scelti toglie quei punti, non l'oggetto intero. Ogni comando è un passo di Annulla. I comandi ci
 sono anche nella palette (`Ctrl+/`) e nel menu ≡: con un tracciato scelto e
 nessun punto, Converti e Unisci valgono sul tracciato intero, Taglia ed
 Elimina chiedono i punti. Non toccano i tratti dell'Inchiostro né la carta.

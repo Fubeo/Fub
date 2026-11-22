@@ -82,15 +82,38 @@ describe("la fila dei punti scelti", () => {
     ]);
   });
 
-  it("uno stato nuovo rifà la fila: un punto solo mostra la sua posizione, in sola lettura", () => {
+  it("uno stato nuovo rifà la fila: un punto solo mostra la sua posizione, e la si scrive", () => {
     const { fila, host, pulsante } = monta([]);
     const campi = host.querySelectorAll<HTMLInputElement>(".draw-point-coord input");
     expect([...campi].map((campo) => campo.value)).toEqual(["", ""]);
+    expect([...campi].every((campo) => campo.readOnly && campo.title === TESTI["punto.serve_uno"]!.it)).toBe(true);
     fila.aggiorna(null, stato([punto(2, false, [12.5, 40])]));
     expect([...campi].map((campo) => campo.value)).toEqual(["12.5", "40"]);
-    expect([...campi].every((campo) => campo.readOnly && campo.title === TESTI["punto.sola_lettura"]!.it)).toBe(true);
+    expect([...campi].every((campo) => !campo.readOnly && campo.title === TESTI["punto.scrivi"]!.it)).toBe(true);
+    // Due punti: di nuovo in sola lettura.
+    fila.aggiorna(null, stato([punto(0, true), punto(3, true)]));
+    expect([...campi].every((campo) => campo.readOnly && campo.getAttribute("aria-readonly") === "true")).toBe(true);
+    fila.aggiorna(null, stato([punto(2, false, [12.5, 40])]));
     expect(pulsante("Elimina il punto").hasAttribute("aria-disabled")).toBe(false);
     expect(pulsante("Unisci i due punti").title).toContain(TESTI["punto.serve_estremi"]!.it);
+  });
+
+  it("X scritta con un punto solo lo manda lì, col tracciato e il numero del punto", () => {
+    const { host, esegui } = monta([punto(2, false, [12.5, 40])]);
+    const [cx, cy] = [...host.querySelectorAll<HTMLInputElement>(".draw-point-coord input")];
+    cx!.value = "30";
+    cx!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    cy!.value = "55";
+    cy!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(esegui.mock.calls.map(([id, valore, etichetta]) => [id, valore, etichetta])).toEqual([
+      [COMANDI_PUNTI.sposta, { element: "p1", subpath: 0, anchor: 2, x: 30, y: 40 }, TESTI["punto.sposta"]!.it],
+      [COMANDI_PUNTI.sposta, { element: "p1", subpath: 0, anchor: 2, x: 12.5, y: 55 }, TESTI["punto.sposta"]!.it],
+    ]);
+    // Un numero che non si legge non parte, e il campo lo dice.
+    cx!.value = "trenta";
+    cx!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(esegui).toHaveBeenCalledTimes(2);
+    expect(cx!.getAttribute("aria-invalid")).toBe("true");
   });
 
   it("la famiglia la registra per la Selezione diretta e il Punto di ancoraggio", () => {

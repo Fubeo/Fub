@@ -346,6 +346,12 @@ export function installVaultImages(ctx: EditorContext): void {
     } else if (event.key === "?") {
       void keys();
     } else if (event.key === "Delete" || event.key === "Backspace") {
+      // Coi punti scelti dalla Selezione diretta Canc toglie quei punti, non
+      // l'oggetto (il Completo, K6 T12).
+      if (ctx.current === null && ctx.completoMotore?.()?.cancellaPunti?.() === true) {
+        event.preventDefault();
+        return;
+      }
       if (ctx.selection.length === 0) return;
       deleteSelection();
     } else if (event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {

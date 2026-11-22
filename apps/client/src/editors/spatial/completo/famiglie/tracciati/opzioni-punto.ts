@@ -6,14 +6,15 @@
 // - **Converti**: angolo o morbido (`path.convertAnchors`, `to`);
 // - **Punto**: taglia il tracciato nel punto (`path.cutAtAnchors`), unisci
 //   i due punti finali (`path.join`), elimina il punto (`path.removeAnchors`);
-// - **Posizione del punto**: X e Y del punto scelto, in sola lettura. Il
-//   motore non ha ancora un comando pulito per spostare un punto a un numero
-//   (`path.moveAnchor` è «da fare» nella mappa): il punto si sposta
-//   trascinandolo, e il campo lo dice.
+// - **Posizione del punto**: X e Y del punto scelto. Con un punto solo si
+//   scrivono, e il punto va lì (`path.moveAnchor`, il tracciato nominato con
+//   `element` e il numero del punto, in coordinate della scena); con più punti
+//   o nessuno restano in sola lettura, e il campo dice perché.
 //
 // I punti vengono dallo stato dello strumento (`DrawingToolState.anchors`) e
 // vanno al motore nel `value` del comando (`anchors`), che li controlla sulla
-// copia: un punto che non c'è più è `stale`. Un pulsante che adesso non vale
+// copia: un punto che non c'è più è `stale`. Dopo un comando lo stato si
+// rilegge (`comandoDellaFila`), quindi la posizione mostrata segue il punto. Un pulsante che adesso non vale
 // resta raggiungibile (`aria-disabled`) e dice perché, nel suggerimento e,
 // premuto, a chi ascolta.
 
@@ -22,7 +23,7 @@ import { onLanguage, languageCurrent } from "../../../../../i18n/strings";
 import { numberField, type NumberField } from "../../../../../kit/number-field";
 import type { Lifetime } from "../../../../../ui/lifetime";
 import { iconEl } from "../../../../../ui/icons";
-import type { AzioniFila, Etichette, FilaOpzioni } from "../../opzioni";
+import { problemaDelNumero, type AzioniFila, type Etichette, type FilaOpzioni } from "../../opzioni";
 
 /// I comandi del motore sui punti scelti.
 export const COMANDI_PUNTI = {
@@ -30,6 +31,7 @@ export const COMANDI_PUNTI = {
   taglia: "path.cutAtAnchors",
   unisci: "path.join",
   elimina: "path.removeAnchors",
+  sposta: "path.moveAnchor",
 } as const;
 
 /// Le priorità dei tre pezzi nella riga delle opzioni, come nel prototipo
@@ -135,24 +137,35 @@ export function filaPunti(testi: Etichette, stato: DrawingToolState | null, azio
     azioni.esegui(COMANDI_PUNTI.elimina, { anchors: [...punti] }, parola("punto.elimina")),
   );
 
-  // La posizione del punto, in sola lettura.
+  // La posizione del punto: si scrive con un punto solo.
   const posizione = gruppo("draw-point-place", "group", "punto.posizione");
   /// Le parti nascoste delle etichette («X» si legge «X del punto»).
   const nascosti: HTMLSpanElement[] = [];
-  const campo = (lettera: string): NumberField => {
+  /// Manda il punto scelto, se è uno solo, a `x` o `y`; l'altra coordinata
+  /// resta la sua. Una stringa è il perché non si fa, e il campo la dice.
+  const sposta = (asse: 0 | 1, valore: number): string | void => {
+    const scelto = punti.length === 1 ? punti[0]! : null;
+    if (scelto === null) return parola("punto.serve_uno");
+    const at: [number, number] = [scelto.at[0], scelto.at[1]];
+    at[asse] = valore;
+    azioni.esegui(
+      COMANDI_PUNTI.sposta,
+      { element: scelto.element, subpath: scelto.subpath, anchor: scelto.anchor, x: at[0], y: at[1] },
+      parola("punto.sposta"),
+    );
+  };
+  const campo = (lettera: string, asse: 0 | 1): NumberField => {
     const f = numberField({
       label: lettera,
       value: null,
       unit: "px",
       places: 2,
       mixedText: "",
-      problem: () => "",
-      onCommit: () => undefined,
+      problem: problemaDelNumero,
+      onCommit: (valore) => sposta(asse, valore),
       lifetime: vita,
     });
     f.element.classList.add("draw-point-coord");
-    f.input.readOnly = true;
-    f.input.setAttribute("aria-readonly", "true");
     // Il nome intero per chi ascolta: «X del punto».
     const nascosto = document.createElement("span");
     nascosto.className = "sr-only";
@@ -161,8 +174,8 @@ export function filaPunti(testi: Etichette, stato: DrawingToolState | null, azio
     posizione.append(f.element);
     return f;
   };
-  const x = campo("X");
-  const y = campo("Y");
+  const x = campo("X", 0);
+  const y = campo("Y", 1);
 
   /// Le parole nella lingua di adesso: nomi, titoli e perché.
   const rinomina = (): void => {
@@ -173,7 +186,8 @@ export function filaPunti(testi: Etichette, stato: DrawingToolState | null, azio
       p.control.title = p.perche === null ? parola(p.titolo) : `${parola(p.titolo)} — ${parola(`punto.${p.perche}`)}`;
     }
     for (const nascosto of nascosti) nascosto.textContent = parola("punto.coordinata");
-    for (const f of [x, y]) f.input.title = parola("punto.sola_lettura");
+    const titolo = punti.length === 1 ? parola("punto.scrivi") : parola("punto.serve_uno");
+    for (const f of [x, y]) f.input.title = titolo;
   };
 
   /// La fila coi punti di adesso: chi vale, chi no e perché, e la posizione.
@@ -193,6 +207,12 @@ export function filaPunti(testi: Etichette, stato: DrawingToolState | null, azio
     }
     x.setValue(regole.posizione?.[0] ?? null);
     y.setValue(regole.posizione?.[1] ?? null);
+    // Con un punto solo i campi si scrivono; altrimenti sola lettura.
+    for (const f of [x, y]) {
+      f.input.readOnly = regole.posizione === null;
+      if (regole.posizione === null) f.input.setAttribute("aria-readonly", "true");
+      else f.input.removeAttribute("aria-readonly");
+    }
     rinomina();
   };
 

@@ -21,7 +21,9 @@ export const TESTI: Readonly<Record<string, { readonly it: string; readonly en: 
   "punto.elimina": { it: "Elimina il punto", en: "Delete the point" },
   "punto.posizione": { it: "Posizione del punto", en: "Point position" },
   "punto.coordinata": { it: " del punto", en: " of the point" },
-  "punto.sola_lettura": { it: "Per spostare il punto, trascinalo sul foglio.", en: "To move the point, drag it on the sheet." },
+  "punto.scrivi": { it: "Scrivi un numero e premi Invio: il punto va lì.", en: "Type a number and press Enter: the point moves there." },
+  "punto.serve_uno": { it: "Scegli un punto solo per scriverne la posizione.", en: "Pick a single point to type its position." },
+  "punto.sposta": { it: "Sposta il punto", en: "Move the point" },
   "punto.serve_punto": { it: "Scegli prima i punti con la Selezione diretta.", en: "Pick the points first with Direct Selection." },
   "punto.serve_estremi": { it: "Scegli i due punti finali da unire.", en: "Pick the two end points to join." },
 

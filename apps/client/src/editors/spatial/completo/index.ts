@@ -106,6 +106,10 @@ export interface Completo {
   /// ha una finestra delle misure, la apre col punto del clic; una trasformazione apre la
   /// sua finestra sulla selezione, e senza selezione dice perché. Altrimenti non fa niente.
   clicStrumento(strumento: string, punto: { readonly x: number; readonly y: number }): void;
+  /// Canc con dei punti scelti (Selezione diretta, Punto di ancoraggio): toglie quei
+  /// punti (`path.deleteAnchors`), non l'oggetto. `true` se c'erano punti scelti e il
+  /// comando è partito; `false` senza punti, e Canc resta quello dell'editor.
+  cancellaPunti(): boolean;
   /// La fila delle opzioni dello strumento `strumento` con le sue etichette, quando
   /// la sua famiglia è pronta (`carica.testi`); `null` prima, o se lo stato non ha
   /// controlli da mostrare. Le etichette non si inventano: senza famiglia pronta non
@@ -186,6 +190,9 @@ export interface OpzioniTastiCompleto extends AzioniEsito {
   readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
   /// I punti scelti con lo strumento del motore di adesso (`DipendenzeComando.punti`).
   readonly punti?: () => readonly DrawingAnchor[];
+  /// Fa rileggere al motore lo stato dello strumento di adesso, dopo un comando
+  /// sui punti scelti (i punti cambiano, o non ci sono più).
+  readonly rileggiStato?: () => void;
   /// Le modifiche dell'utente; senza, il Completo segue `draw.keys` da sé
   /// (`segui-tasti.ts`), e un cambio vale subito.
   readonly modifiche?: () => ModificheTasti;
@@ -350,10 +357,23 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // come VectorCraft): le forme composte non contano. Vale finché il Completo è aperto.
   let ultimaElaborazione: string | null = null;
   const ripetibili = new Set([...METODI_FORMA, ...OPERAZIONI_ELABORAZIONE]);
+  /// Canc con dei punti scelti con la Selezione diretta (o il Punto di ancoraggio)
+  /// toglie quei punti, non l'oggetto intero, come VectorCraft (K6 T12, punti): i
+  /// punti vanno nel `value` (`SUI_PUNTI_SCELTI`). `false` senza punti scelti.
+  const cancellaPunti = (): boolean => {
+    if (chiuso || (dipendenze.punti?.() ?? []).length === 0) return false;
+    void eseguiPerId("path.deleteAnchors", {}, { senzaFinestra: true });
+    return true;
+  };
   /// Il percorso unico dei comandi (`eseguiVoce`), che ricorda l'ultima elaborazione andata.
-  const lancia = async (voce: VoceIndice): Promise<void> => {
+  const lancia =async (voce: VoceIndice): Promise<void> => {
+    // ≡ › Modifica › Cancella con dei punti scelti toglie quei punti, come Canc.
+    if (voce.id === "edit.clear" && cancellaPunti()) return;
+    const coiPunti = (dipendenze.punti?.() ?? []).length > 0;
     const andata = await eseguiVoce(voce, dipendenze);
     if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
+    // I punti scelti possono essere cambiati: lo stato dello strumento si rilegge.
+    if (andata && coiPunti && !chiuso) opzioni.tasti?.rileggiStato?.();
   };
   // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,
   // che parte solo al clic di un suo comando.
@@ -589,6 +609,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       ctx.motore === null || opzioni.tasti === undefined
         ? null
         : creaPortaLivelli({ motore: ctx.motore, carica, vita: ctx.life, leggi: dipendenze.leggi }),
+    cancellaPunti,
     clicStrumento(strumento, punto) {
       if (chiuso) return;
       const clic = COMANDO_DEL_CLIC[strumento];

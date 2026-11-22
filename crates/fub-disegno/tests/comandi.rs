@@ -233,9 +233,19 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // Contagocce (K6 T14, giro 6) sono una preferenza del motore: non leggono
     // né cambiano ciò che è scelto. La griglia di trasparenza (K6 T11, giro H)
     // è della vista: il motore la dà accesa con ogni selezione, e il client la
-    // chiama da sé.
+    // chiama da sé. I comandi su un punto solo (K6 T12, punti) nominano il
+    // tracciato con `element` nel valore, non con ciò che è scelto: un
+    // `element` non mappato lo rifiutano all'esecuzione.
     let sempre = [
         "disegno.eyedropper.setOptions",
+        "disegno.path.moveAnchor",
+        "disegno.path.setHandle",
+        "disegno.path.insertAnchor",
+        "disegno.path.removeAnchor",
+        "disegno.path.convertAnchor",
+        "disegno.path.close",
+        "disegno.path.appendAnchor",
+        "disegno.path.split",
         "disegno.swatch.new",
         "disegno.swatch.edit",
         "disegno.swatch.delete",
