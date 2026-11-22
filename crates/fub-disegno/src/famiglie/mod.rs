@@ -1175,17 +1175,21 @@ pub(crate) fn esegui(
 /// Lo strumento del motore `id` trasforma la selezione (la famiglia `trasforma`,
 /// T13 giro 5): con un oggetto bloccato o non mappato il gesto si rifiuta come il
 /// comando della sua finestra (`object.rotate` e le altre), con lo stesso motivo.
-/// `None` per gli altri strumenti, che la selezione la trattano a modo loro.
+/// Il Contagocce (la famiglia `colore`, T14 giro 6) guarda anche l'oggetto sotto
+/// il primo clic, con [`colore::rifiuto_del_contagocce`]. `None` per gli altri
+/// strumenti, che la selezione la trattano a modo loro.
 pub(crate) fn rifiuto_dello_strumento(
     id: &str,
     copia: &Copia,
     selezione: &[String],
+    clic: Option<(vectorcraft_geom::Point, bool)>,
 ) -> Option<DrawingRefusal> {
     let riga = riga(Fonte::Strumento, id)?;
-    if riga.famiglia != Some(Famiglia::Trasforma) {
-        return None;
+    match riga.famiglia {
+        Some(Famiglia::Trasforma) => nodi_scelti(copia, selezione).err(),
+        Some(Famiglia::Colore) => colore::rifiuto_del_contagocce(copia, selezione, clic),
+        _ => None,
     }
-    nodi_scelti(copia, selezione).err()
 }
 
 /// Perché la selezione spegne un comando che la usa, o `None` se va bene: un

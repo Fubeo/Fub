@@ -78,7 +78,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T13 le quattro `object.compoundShape.*`, `object.expandShape` e `pathfinder.repeat`.
   // T12 giro 6 le tre maschere di ritaglio (`object.clippingMask.make`, `.release`, `.editContents`),
   // `select.object.clippingMasks`, e le due finestre di Media (`path.average`, `path.averageJoin`).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1188, fub: 114, escluso: 12, fatto: 237 });
+  // T14 contagocce (giro 6): `eyedropper` (strumento), `paint.sampleColor` e
+  // `eyedropper.setOptions` sono «fatto»; `appearance.copyFrom` resta «da fare» (T15).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1185, fub: 114, escluso: 12, fatto: 240 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -31,6 +31,15 @@
 //! colore è nel tratto, che è di Fub. Se il comando lo cambia lo stesso (un
 //! gruppo scelto che lo contiene), il risultato non si scrive (`unmapped`).
 //!
+//! - **Il Contagocce** (K6 T14 giro 6): `paint.sampleColor` prende un colore
+//!   sul riempimento o sul tratto del lato attivo; senza selezione cambia solo
+//!   i valori di Design › Colore, con la selezione cambia anche gli oggetti
+//!   scelti. `eyedropper.setOptions` sono le sue opzioni, una preferenza del
+//!   motore (`draw.motore`). Lo strumento `eyedropper` (il clic) passa da
+//!   [`rifiuto_del_contagocce`]: il clic copia l'aspetto dell'oggetto cliccato
+//!   sulla selezione, o, con Alt, quello della selezione sull'oggetto cliccato.
+//!   Un'immagine e un oggetto non mappato si rifiutano col motivo.
+//!
 //! Lo stato: i profili colore caricati, che pesano ma non si svuotano senza
 //! rompere i documenti che li nominano.
 
@@ -40,7 +49,9 @@ use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use vectorcraft_doc::color::Paint;
 use serde_json::Value;
+use vectorcraft_doc::hit::{hit_test_visible, HitOptions};
 use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
+use vectorcraft_geom::Point;
 
 use super::aspetto::testo;
 use super::tracciati::{inchiostro_toccato, sceglie_inchiostro};
@@ -51,7 +62,7 @@ use crate::apertura::Copia;
 pub(crate) const TABELLE: &[&str] = &["user_profiles"];
 
 /// I comandi del colore attivo che cambiano gli oggetti scelti.
-pub(crate) const SUL_COLORE_ATTIVO: [&str; 8] = [
+pub(crate) const SUL_COLORE_ATTIVO: [&str; 9] = [
     "paint.setFill",
     "paint.setStroke",
     "paint.swap",
@@ -60,7 +71,12 @@ pub(crate) const SUL_COLORE_ATTIVO: [&str; 8] = [
     "paint.invert",
     "paint.complement",
     "paint.lastColor",
+    "paint.sampleColor",
 ];
+
+/// Il campione del Contagocce: senza selezione cambia il colore attivo (il
+/// lato di Design › Colore), e non è spento.
+pub(crate) const CAMPIONA: &str = "paint.sampleColor";
 
 /// Le sfumature del riempimento o del contorno degli oggetti scelti (K6 T15,
 /// giro 5): i punti, il tipo e l'angolo, la geometria, l'ultima usata.
@@ -196,7 +212,7 @@ impl StatoFamiglia for Stato {
             return None;
         }
         if selezione.is_empty() {
-            return Some(DrawingDisabledReason::NoSelection);
+            return (id != CAMPIONA).then_some(DrawingDisabledReason::NoSelection);
         }
         if !copia.modificabile {
             return Some(DrawingDisabledReason::ReadOnly);
@@ -309,4 +325,57 @@ fn riempimenti_pieni(documento: &Document, scelti: &[NodeId]) -> usize {
         conta(nodo, &mut quanti);
     }
     quanti
+}
+
+/// Il Contagocce (`eyedropper`, K6 T14 giro 6), come Ruota e le altre
+/// trasformazioni (T13 giro 5): il rifiuto che la finestra del comando
+/// darebbe, prima che il motore cominci. `clic` è il punto del primo
+/// pulsante giù, nello spazio del disegno, con `true` se è un Alt che scrive
+/// l'oggetto cliccato (Maiusc+Alt lo lascia come sorgente).
+///
+/// Senza Alt la selezione è il bersaglio: un pezzo bloccato o non mappato, o
+/// un tratto dell'Inchiostro, la rifiutano. La sorgente è l'oggetto sotto il
+/// clic: un'immagine o un oggetto non mappato si rifiutano (`unsupported`,
+/// `unmapped`); l'Inchiostro di Fub è una sorgente buona, perché il suo colore
+/// si prende senza cambiarlo. Con Alt il bersaglio è l'oggetto cliccato, e
+/// vale la stessa regola di scrittura.
+pub(crate) fn rifiuto_del_contagocce(
+    copia: &Copia,
+    selezione: &[String],
+    clic: Option<(Point, bool)>,
+) -> Option<DrawingRefusal> {
+    let scrive_il_clic = clic.is_some_and(|(_, alt)| alt);
+    if !scrive_il_clic {
+        if let Err(motivo) = nodi_scelti(copia, selezione) {
+            return Some(motivo);
+        }
+        if sceglie_inchiostro(copia, selezione) {
+            return Some(DrawingRefusal::Unmapped);
+        }
+    }
+    let (punto, _) = clic?;
+    let colpito = hit_test_visible(&copia.documento, punto, HitOptions::default())?;
+    // Un'immagine non ha un id di Fub: si dice che è un'immagine, non che non è mappata.
+    if matches!(copia.documento.node(colpito.leaf).map(|n| &n.kind), Some(NodeKind::Image(_))) {
+        return Some(DrawingRefusal::Unsupported);
+    }
+    let Some(id) = id_del_nodo(copia, colpito.leaf) else {
+        return Some(DrawingRefusal::Unmapped);
+    };
+    if scrive_il_clic {
+        let scelto = [id];
+        if let Err(motivo) = nodi_scelti(copia, &scelto) {
+            return Some(motivo);
+        }
+        if sceglie_inchiostro(copia, &scelto) {
+            return Some(DrawingRefusal::Unmapped);
+        }
+    }
+    None
+}
+
+/// L'id del file dell'oggetto `nodo`, se la mappa lo conosce con un id.
+fn id_del_nodo(copia: &Copia, nodo: NodeId) -> Option<String> {
+    let i = copia.mappa.del_nodo(nodo)?;
+    copia.mappa.elemento(i)?.id.clone()
 }

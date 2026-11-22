@@ -9,7 +9,7 @@ motore	appearance.removeItem	Remove Item		aspetto	F1	T15	da fare	ispettore/desig
 motore	appearance.addEffect	Add Effect		aspetto	F1	T15	da fare	ispettore/design	famiglia		Aggiungi effetto
 motore	appearance.duplicateItem	Duplicate Item	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		Duplica elemento
 motore	appearance.moveItem	Reorder Appearance Item		aspetto	F1	T15	da fare	ispettore/design	famiglia		Riordina elemento aspetto
-motore	appearance.copyFrom	Eyedropper		aspetto	F1	T15	da fare	ispettore/design	famiglia		Contagocce
+motore	appearance.copyFrom	Eyedropper		aspetto	F1	T15	da fare	ispettore/design	famiglia	Il clic del Contagocce (strumento `eyedropper`, T14 giro 6) fa già questo comando nel motore, con la sorgente scelta dal motore; il comando con `source` come id del motore non si traduce dagli id di Fub: la famiglia è aspetto (T15), da chiudere lì	Contagocce
 motore	appearance.setActiveItem	Select Appearance Item		aspetto	F1	T15	da fare	ispettore/design	famiglia		Seleziona elemento aspetto
 motore	appearance.showAllHidden	Show All Hidden Attributes	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		Mostra tutti gli attributi nascosti
 motore	appearance.targetContents	Target Contents		aspetto	F1	T15	da fare	ispettore/design	famiglia		Contenuto destinazione
@@ -692,8 +692,8 @@ motore	webExport.presets.list	Save for Web Presets		web	F3	T22	da fare	interno	f
 motore	webExport.presets.save	Save Save for Web Preset		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Salva preset di Salva per il web
 motore	webExport.presets.delete	Delete Save for Web Preset		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Elimina preset di Salva per il web
 motore	object.distort	Free Distort		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distorsione libera
-motore	paint.sampleColor	Sample Color		colore	F1	T14	da fare	ispettore/design	famiglia		Campiona colore
-motore	eyedropper.setOptions	Eyedropper Options		colore	F1	T14	da fare	ispettore/design	famiglia		Opzioni contagocce
+motore	paint.sampleColor	Sample Color		colore	F1	T14	fatto	ispettore/design	famiglia		Campiona colore
+motore	eyedropper.setOptions	Eyedropper Options		colore	F1	T14	fatto	ispettore/design	famiglia		Opzioni contagocce
 motore	artboard.move	Move Artboard		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta tavola da disegno
 motore	addon.arrange.grid	Arrange in Grid	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Disponi in griglia
 motore	addon.arrange.swap	Swap Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Scambia oggetti
@@ -1341,7 +1341,7 @@ strumento	perspectiveGrid	Perspective Grid Tool		prospettiva	F4	T25	da fare	colo
 strumento	perspectiveSelection	Perspective Selection Tool		prospettiva	F4	T25	da fare	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»	Strumento Selezione prospettica
 strumento	mesh	Mesh Tool		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «mesh»	Strumento Trama
 strumento	gradient	Gradient Tool		colore	F1	T14	da fare	colonna/colore	famiglia	riquadro «gradient»	Strumento Sfumatura
-strumento	eyedropper	Eyedropper Tool		colore	F1	T14	da fare	colonna/colore	famiglia	riquadro «eyedropper»	Strumento Contagocce
+strumento	eyedropper	Eyedropper Tool		colore	F1	T14	fatto	colonna/colore	famiglia	riquadro «eyedropper»	Strumento Contagocce
 strumento	measure	Measure Tool		tavole	F2	T19	da fare	colonna/misura	famiglia	riquadro «eyedropper»	Strumento Misura
 strumento	blend	Blend Tool		dinamici	F2	T21	da fare	colonna/oggetti	famiglia	riquadro «blend»	Strumento Fusione
 strumento	objectsOnPath	Objects on Path Tool		dinamici	F2	T21	da fare	colonna/oggetti	famiglia	riquadro «blend»	Strumento Oggetti su tracciato

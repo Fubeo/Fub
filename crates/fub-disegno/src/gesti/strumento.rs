@@ -89,17 +89,29 @@ pub(crate) fn gesto(
     if !conosciuto(id) {
         return rifiuta(banco, esito, DrawingRefusal::UnknownTool);
     }
-    // Uno strumento che trasforma la selezione non tocca un oggetto bloccato: il rifiuto
-    // è quello della finestra del comando (T13 giro 5), e vale anche per l'anteprima.
-    if let Some(motivo) = crate::famiglie::rifiuto_dello_strumento(id, copia, &gesto.selection) {
-        return rifiuta(banco, esito, motivo);
-    }
     let qui = InCorso {
         tool: gesto.tool.clone(),
         revisione: gesto.revision,
     };
     let ricomincia = banco.in_corso.as_ref() != Some(&qui);
     let cx = Contesto::nuovo(gesto, copia, None, false);
+    // Uno strumento che trasforma la selezione non tocca un oggetto bloccato: il rifiuto
+    // è quello della finestra del comando (T13 giro 5), e vale anche per l'anteprima. Il
+    // Contagocce guarda l'oggetto sotto il primo clic, col punto preso come il motore lo
+    // prende (con la griglia).
+    let clic = gesto
+        .events
+        .iter()
+        .find(|e| e.kind == fub_abi::DrawingPointerKind::Down)
+        .map(|e| {
+            let e = sulla_griglia(*e, &cx);
+            (copia.radice * Point::new(e.x, e.y), e.alt && !e.shift)
+        });
+    if let Some(motivo) =
+        crate::famiglie::rifiuto_dello_strumento(id, copia, &gesto.selection, clic)
+    {
+        return rifiuta(banco, esito, motivo);
+    }
     if ricomincia {
         if banco.in_corso.is_some() {
             banco.ripristina(copia);
