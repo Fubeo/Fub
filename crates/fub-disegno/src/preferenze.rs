@@ -240,8 +240,10 @@ mod tests {
 
     #[test]
     fn un_preset_fuori_dall_elenco_si_rilegge() {
-        let mut con_preset = Prefs::default();
-        con_preset.keyboard_increment = 2.0;
+        let con_preset = Prefs {
+            keyboard_increment: 2.0,
+            ..Prefs::default()
+        };
         let salvate = json_di(&con_preset);
         let (rilette, avvisi) = componi(&salvate);
         assert!(avvisi.is_empty(), "{avvisi:?}");

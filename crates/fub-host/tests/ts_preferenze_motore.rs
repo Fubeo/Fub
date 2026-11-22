@@ -25,10 +25,9 @@ fn radice() -> PathBuf {
 
 /// `it.tsv`: sorgente → traduzione, dalle righe senza contesto.
 fn italiano() -> BTreeMap<String, String> {
-    let testo = std::fs::read_to_string(
-        radice().join("vendor/vectorcraft/crates/ui-egui/src/i18n/it.tsv"),
-    )
-    .expect("il catalogo italiano del motore");
+    let testo =
+        std::fs::read_to_string(radice().join("vendor/vectorcraft/crates/ui-egui/src/i18n/it.tsv"))
+            .expect("il catalogo italiano del motore");
     testo
         .lines()
         .filter(|riga| !riga.starts_with('#'))
