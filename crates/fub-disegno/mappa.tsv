@@ -529,7 +529,7 @@ motore	shaper.select	Select Shaper Face		forme	F1	T13	da fare	ispettore/design	f
 motore	shaper.release	Release Shaper Group	Object › Shaper	forme	F1	T13	da fare	menu/oggetto	famiglia		Rilascia gruppo Shaper
 motore	shaper.expand	Expand Shaper Group	Object › Shaper	forme	F1	T13	da fare	menu/oggetto	famiglia		Espandi gruppo Shaper
 motore	shaper.releaseSource	Remove from Shaper Group		forme	F1	T13	da fare	ispettore/design	famiglia		Rimuovi dal gruppo Shaper
-motore	shortcutSet.read	Read Shortcut Set File		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie: importa un insieme (domanda D7)	Leggi file di set di scelte rapide
+motore	shortcutSet.read	Read Shortcut Set File		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo: importa un insieme (D7 a)	Leggi file di set di scelte rapide
 motore	object.slice.make	Make	Object › Slice	web	F3	T22	da fare	menu/oggetto	famiglia		Crea
 motore	object.slice.release	Release	Object › Slice	web	F3	T22	da fare	menu/oggetto	famiglia		Rilascia
 motore	object.slice.fromGuides	Create from Guides	Object › Slice	web	F3	T22	da fare	menu/oggetto	famiglia		Crea da guide
@@ -976,15 +976,15 @@ interfaccia	file.newDialog	New…		fub	—	T2	fub	fub	—	nuovo disegno di Fub	N
 interfaccia	file.newWithoutDialog	New Without Dialog		fub	—	T2	fub	fub	—	nuovo disegno di Fub	Nuovo senza finestra di dialogo
 interfaccia	app.home	Home		fub	—	T2	fub	fub	—	il Benvenuto di Fub	Home
 interfaccia	edit.preferences	Preferences…		fub	—	T11	da fare	fub	—	Impostazioni › Disegno	Preferenze…
-interfaccia	edit.keyboardShortcuts	Keyboard Shortcuts…		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie	Scelte rapide da tastiera…
-interfaccia	shortcuts.set	Set Keyboard Shortcut		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)	Imposta scelta rapida da tastiera
-interfaccia	shortcuts.list	List Keyboard Shortcuts		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)	Elenca scelte rapide da tastiera
-interfaccia	shortcuts.conflicts	Keyboard Shortcut Conflicts		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)	Conflitti tra scelte rapide da tastiera
-interfaccia	shortcuts.reset	Reset Keyboard Shortcuts		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)	Reimposta scelte rapide da tastiera
-interfaccia	shortcuts.preset	Keyboard Shortcut Set		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)	Set di scelte rapide da tastiera
-interfaccia	shortcuts.export	Export Keyboard Shortcuts…		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)	Esporta scelte rapide da tastiera…
-interfaccia	shortcuts.import	Import Keyboard Shortcuts…		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)	Importa scelte rapide da tastiera…
-interfaccia	ui.shortcutImportDialog	Import Shortcut Set…		fub	—	T9	da fare	fub	—	Impostazioni › Scorciatoie	Importa set di scelte rapide…
+interfaccia	edit.keyboardShortcuts	Keyboard Shortcuts…		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie	Scelte rapide da tastiera…
+interfaccia	shortcuts.set	Set Keyboard Shortcut		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Imposta scelta rapida da tastiera
+interfaccia	shortcuts.list	List Keyboard Shortcuts		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Elenca scelte rapide da tastiera
+interfaccia	shortcuts.conflicts	Keyboard Shortcut Conflicts		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Conflitti tra scelte rapide da tastiera
+interfaccia	shortcuts.reset	Reset Keyboard Shortcuts		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Reimposta scelte rapide da tastiera
+interfaccia	shortcuts.preset	Keyboard Shortcut Set		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Set di scelte rapide da tastiera
+interfaccia	shortcuts.export	Export Keyboard Shortcuts…		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Esporta scelte rapide da tastiera…
+interfaccia	shortcuts.import	Import Keyboard Shortcuts…		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Importa scelte rapide da tastiera…
+interfaccia	ui.shortcutImportDialog	Import Shortcut Set…		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie	Importa set di scelte rapide…
 interfaccia	view.outline	Outline		vista	F1	T11	da fare	menu/visualizza	famiglia		Contorno
 interfaccia	view.pixelPreview	Pixel Preview		vista	F1	T11	da fare	menu/visualizza	famiglia		Anteprima pixel
 interfaccia	view.trimView	Trim View		stampa	F4	T25	da fare	menu/visualizza	famiglia		Vista rifilata
