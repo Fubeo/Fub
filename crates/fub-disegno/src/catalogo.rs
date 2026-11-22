@@ -580,7 +580,7 @@ pub fn predefiniti_del_comando(id: &str) -> Vec<(String, String)> {
         return Vec::new();
     }
     vectorcraft_engine::find_command(id)
-        .map(|c| predefiniti(&c.params))
+        .map(|c| predefiniti(c.params))
         .unwrap_or_default()
 }
 
@@ -750,7 +750,7 @@ pub fn schema_di(riga: &RigaMappa) -> String {
     match riga.fonte {
         FonteMappa::Motore if COMANDI_DI_FORMA.contains(&riga.id.as_str()) => {
             vectorcraft_engine::find_command(&riga.id)
-                .map(|c| schema_pulito(&c.params))
+                .map(|c| schema_pulito(c.params))
                 .unwrap_or_default()
         }
         FonteMappa::Motore => vectorcraft_engine::find_command(&riga.id)
