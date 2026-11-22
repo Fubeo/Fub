@@ -67,6 +67,9 @@ export interface NumberField {
   /// Scrive il valore senza confermarlo: è il programma, non l'utente. Ciò
   /// che si sta scrivendo resta, finché il campo ha il fuoco.
   setValue(value: number | null): void;
+  /// Mette o toglie l'errore del campo con la sua frase: chi conferma un valore che
+  /// il campo non prende (un valore di partenza fuori dai limiti) lo dice così.
+  setError(message: string | null): void;
   setDisabled(disabled: boolean): void;
   focus(): void;
 }
@@ -297,6 +300,7 @@ export function numberField(options: NumberFieldOptions): NumberField {
     element,
     input,
     value: () => value,
+    setError: showError,
     setValue(next) {
       value = next;
       const drafting = document.activeElement === input && input.value !== shown;

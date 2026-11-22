@@ -285,6 +285,28 @@ describe("OK, Annulla, Esc e Invio", () => {
   });
 });
 
+describe("il valore di partenza", () => {
+  it("con 0 sotto il minimo, OK è spento fin dall'apertura, e il campo dice il limite accanto a sé", async () => {
+    apriFinestra(
+      { campi: [{ nome: "width", tipo: "numero", min: 0.01 }] },
+      Promise.resolve(),
+      esegui,
+      opzioni({ campi: { width: "Larghezza" }, scelte: {}, unita: { width: "px" }, iniziali: { width: 0 } }),
+    );
+    await settle();
+    expect(numberInputs()[0]!.getAttribute("aria-invalid")).toBe("true");
+    expect(errorOf(0)).toBe("Scrivi un numero di almeno 0.01.");
+    expect(action("ok").disabled).toBe(true);
+    // Con anteprima accesa, un campo in errore non manda anteprime.
+    expect(chiamate.filter((call) => call.anteprima)).toHaveLength(0);
+    // Una misura vera riaccende OK.
+    typeAndCommit(numberInputs()[0]!, "100");
+    await settle();
+    expect(errorOf(0)).toBe("");
+    expect(action("ok").disabled).toBe(false);
+  });
+});
+
 describe("i limiti e la chiusura", () => {
   it("un numero fuori dai limiti non si prende, dice il limite, e OK è spento", async () => {
     await open();

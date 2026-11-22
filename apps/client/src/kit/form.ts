@@ -325,6 +325,10 @@ export function formNumber(options: FormNumberOptions): FormNumber {
   if (options.min !== undefined) field.input.setAttribute("aria-valuemin", String(options.min));
   if (options.max !== undefined) field.input.setAttribute("aria-valuemax", String(options.max));
 
+  // Il valore di partenza fuori dai limiti è in errore fin dall'apertura: la conferma non può
+  // partire con lui, e il campo dice il limite (K6 T13, giro 3).
+  if (outside(options.value)) field.setError(options.outOfRange(options.min, options.max));
+
   const valid = (): boolean => field.input.getAttribute("aria-invalid") !== "true";
   if (options.onValidity) {
     // Il browser consegna le modifiche in lotti: chi guarda vede lo stato
