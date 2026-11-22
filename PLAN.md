@@ -2584,7 +2584,13 @@ l'oggetto sotto il punto (era il banco, non il client né il motore: scene
 › Trasparenza con opacità e metodo di fusione dalla vista (dato `blend`
 nella vista del pannello), «Aspetto» del Semplice nascosto nel Completo.
 Mancano: Aspetto, Contorno, maschere d'opacità, Sfumatura, Stili grafici,
-la scheda Livelli (giro 3 in corso).
+la scheda Livelli (giro 3 in corso). Giro 3, parte del motore, unita in
+e96cfaa16: `layer.new` (in cima, nome «Livello N» libero, nascosto e
+bloccato) e `layer.setProps` (nome fino a 80 caratteri, occhio, lucchetto)
+nella famiglia `livelli`, finestre scritte a mano, colore `unsupported`; il
+nome si legge da `fub:layer` (il motore usa l'id); il livello implicito non
+si rinomina né si elimina (`unmapped`); sezione «I livelli» in
+`docs/architecture/disegno-completo.md`.
 Aspetta: niente
 
 ## T16 · Il testo
