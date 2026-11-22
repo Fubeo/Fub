@@ -272,12 +272,12 @@ motore	object.intertwine.arrange	Arrange Intertwine Area		dinamici	F2	T21	da far
 motore	layer.new	New Layer…	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	finestra	Nuovo livello…
 motore	layer.newSublayer	New Sublayer…	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	finestra	Nuovo sottolivello…
 motore	layer.delete	Delete Selection	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Elimina selezione
-motore	layer.duplicate	Duplicate Selection	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Duplica selezione
-motore	layer.setCurrent	Set Current Layer		livelli	F1	T15	da fare	ispettore/livelli	famiglia	aspetta T15, decisione: il motore lo dà disabilitato come id	Imposta livello corrente
+motore	layer.duplicate	Duplicate Selection	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	la copia di un livello nasce dentro il livello radice del motore, come sottolivello, e il differ non scrive un livello dentro un livello: lo rifiuta come «un oggetto nuovo che non è un tracciato» (`differenza.rs`, `elem`). Serve dire dove va nel file, DOMANDA del giro 2	Duplica selezione
+motore	layer.setCurrent	Set Current Layer		livelli	F1	T15	da fare	ispettore/livelli	famiglia	il livello corrente sta nella sessione del motore, e a ogni comando `Banco::ripristina` rimette il documento dalla copia (`gesti/mod.rs`): il livello scelto non arriva al comando dopo, e la richiesta non porta un livello. Serve un posto del livello corrente, DOMANDA del giro 2	Imposta livello corrente
 motore	layer.highlight	Highlight Rows		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Evidenzia righe
 motore	layer.setProps	Layer Options…	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia	finestra	Opzioni livello…
-motore	layer.collectInNew	Collect in New Layer	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Raccogli in un nuovo livello
-motore	layer.selectAll	Select Art		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Seleziona grafica
+motore	layer.collectInNew	Collect in New Layer	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il livello nuovo nasce dentro il livello radice del motore, come sottolivello, e il differ non scrive un livello dentro un livello (rifiuto «un oggetto nuovo che non è un tracciato»). Serve dire dove va nel file, DOMANDA del giro 2	Raccogli in un nuovo livello
+motore	layer.selectAll	Select Art		livelli	F1	T15	fatto	ispettore/livelli	famiglia		Seleziona grafica
 motore	layer.move	Move Rows		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Sposta righe
 motore	node.move	Reorder		livelli	F1	T15	da fare	ispettore/livelli	famiglia	aspetta T15, decisione: il motore lo dà disabilitato come id	Riordina
 motore	artboard.new	New Artboard	Window › Artboards	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Nuova tavola da disegno
@@ -289,11 +289,11 @@ motore	artboard.fitToSelection	Fit to Selected Art	Object › Artboards	tavole	F
 motore	layer.clippingMask.toggle	Make/Release Clipping Mask	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	un livello che ritaglia non ha ancora una forma nel formato della scena (§3 scrive nome, occhio e lucchetto)	Crea/rilascia maschera di ritaglio
 motore	layer.target	Target		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Destinazione
 motore	layer.pasteRemembersLayers	Paste Remembers Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Incolla nei livelli originali
-motore	layer.merge	Merge Selected	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Unisci selezionati
+motore	layer.merge	Merge Selected	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Unisci selezionati
 motore	layer.flatten	Flatten Artwork	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Appiattisci grafica
 motore	layer.releaseToLayers	Release to Layers (Sequence)	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Rilascia su livelli (sequenza)
 motore	layer.releaseToLayersBuild	Release to Layers (Build)	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Rilascia su livelli (accumulo)
-motore	layer.reverse	Reverse Order	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Inverti ordine
+motore	layer.reverse	Reverse Order	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Inverti ordine
 motore	layer.template	Template	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Modello
 motore	layer.hideOthers	Hide Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Nascondi altri
 motore	layer.showAll	Show All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Mostra tutti i livelli
@@ -332,11 +332,11 @@ motore	links.placementOptions	Placement Options		immagini	F3	T20	da fare	ispetto
 motore	transparency.editOpacityMask	Edit Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Modifica maschera di opacità
 motore	transparency.stopEditingOpacityMask	Stop Editing Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Interrompi modifica maschera di opacità
 motore	transparency.viewOpacityMask	View Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Visualizza maschera di opacità
-motore	object.lock.above	All Artwork Above	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto/blocca	nucleo	con Fub i livelli sono sottolivelli dentro l'unico livello radice del motore (il lettore li promuove, `promote_sublayers`): «Altri livelli» guarda solo i livelli radice, e «Tutta la grafica soprastante» confronta solo i figli diretti del livello, quindi dà 0 (provato su livelli/doppio.svg, il 23/11). Serve un modo di Fub per trattare i sottolivelli (DOMANDA del giro)	Tutta la grafica soprastante
-motore	object.lock.otherLayers	Other Layers	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto/blocca	nucleo	con Fub i livelli sono sottolivelli dentro l'unico livello radice del motore (il lettore li promuove, `promote_sublayers`): «Altri livelli» guarda solo i livelli radice, e «Tutta la grafica soprastante» confronta solo i figli diretti del livello, quindi dà 0 (provato su livelli/doppio.svg, il 23/11). Serve un modo di Fub per trattare i sottolivelli (DOMANDA del giro)	Altri livelli
+motore	object.lock.above	All Artwork Above	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto/blocca	nucleo	il motore sceglie per livello, e con Fub i livelli sono figli del livello radice (`livelli/doppio.svg`): blocca l'intero livello soprastante, non l'oggetto (provato il 23/11). Serve un modo di Fub per trattare i sottolivelli (DOMANDA del giro)	Tutta la grafica soprastante
+motore	object.lock.otherLayers	Other Layers	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto/blocca	nucleo	con Fub i livelli sono figli del livello radice: «Altri livelli» conta solo il livello radice, e su `livelli/doppio.svg` non cambia niente (rifiuto `empty`, provato il 23/11). Serve un modo di Fub per trattare i sottolivelli (DOMANDA del giro)	Altri livelli
 motore	object.lock.unselected	Unselected Artwork	Object › Lock	nucleo	F1	T11	fatto	menu/oggetto/blocca	nucleo		Grafica non selezionata
-motore	object.hide.above	All Artwork Above	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto/nascondi	nucleo	con Fub i livelli sono sottolivelli dentro l'unico livello radice del motore (il lettore li promuove, `promote_sublayers`): «Altri livelli» guarda solo i livelli radice, e «Tutta la grafica soprastante» confronta solo i figli diretti del livello, quindi dà 0 (provato su livelli/doppio.svg, il 23/11). Serve un modo di Fub per trattare i sottolivelli (DOMANDA del giro)	Tutta la grafica soprastante
-motore	object.hide.otherLayers	Other Layers	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto/nascondi	nucleo	con Fub i livelli sono sottolivelli dentro l'unico livello radice del motore (il lettore li promuove, `promote_sublayers`): «Altri livelli» guarda solo i livelli radice, e «Tutta la grafica soprastante» confronta solo i figli diretti del livello, quindi dà 0 (provato su livelli/doppio.svg, il 23/11). Serve un modo di Fub per trattare i sottolivelli (DOMANDA del giro)	Altri livelli
+motore	object.hide.above	All Artwork Above	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto/nascondi	nucleo	il motore sceglie per livello, e con Fub i livelli sono figli del livello radice (`livelli/doppio.svg`): per un oggetto sopra e sovrapposto nasconde l'intero livello soprastante, non l'oggetto (provato il 23/11). Serve un modo di Fub per trattare i sottolivelli (DOMANDA del giro)	Tutta la grafica soprastante
+motore	object.hide.otherLayers	Other Layers	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto/nascondi	nucleo	con Fub i livelli sono figli del livello radice: «Altri livelli» conta solo il livello radice, e su `livelli/doppio.svg` non cambia niente (rifiuto `empty`, provato il 23/11). Serve un modo di Fub per trattare i sottolivelli (DOMANDA del giro)	Altri livelli
 motore	object.hide.unselected	Unselected Artwork	Object › Hide	nucleo	F1	T11	fatto	menu/oggetto/nascondi	nucleo		Grafica non selezionata
 motore	object.transformEach	Transform Each…	Object › Transform	trasforma	F1	T13	da fare	menu/oggetto	famiglia	finestra	Trasforma singolarmente…
 motore	object.resetBoundingBox	Reset Bounding Box	Object › Transform	trasforma	F1	T13	fatto	menu/oggetto/trasforma	famiglia		Reimposta riquadro di delimitazione
@@ -859,7 +859,7 @@ motore	object.arrange.bringToFront	Bring to Front	Object › Arrange	nucleo	F1	T
 motore	object.arrange.bringForward	Bring Forward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta avanti
 motore	object.arrange.sendBackward	Send Backward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta indietro
 motore	object.arrange.sendToBack	Send to Back	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta in fondo
-motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo	il motore manda la selezione nel livello attivo del motore, che è l'unico livello: per il livello corrente di Fub serve che la richiesta porti quel livello, e il motore lo prenderebbe fuori dal gruppo (DOMANDA del giro)	Sposta sul livello corrente
+motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo	dipende dal livello corrente, che non sopravvive a un comando (vedi `layer.setCurrent`): senza, il motore porta l'oggetto fuori dal suo livello, nella radice (provato il 23/11 su livelli/base.svg). DOMANDA del giro 2	Sposta sul livello corrente
 motore	object.group	Group	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Raggruppa
 motore	object.ungroup	Ungroup	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Separa
 motore	object.lock	Selection	Object › Lock	nucleo	F1	T11	fatto	menu/oggetto/blocca	nucleo		Selezione

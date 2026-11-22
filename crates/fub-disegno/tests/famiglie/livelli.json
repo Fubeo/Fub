@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso). Giro 6 (K6 T12): «Maschere di ritaglio» sceglie i <g clip-path> del file (livelli/ritaglio-inkscape.svg).",
+  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso). Giro 6 (K6 T12): «Maschere di ritaglio» sceglie i <g clip-path> del file (livelli/ritaglio-inkscape.svg). Giro 2 (K6 T15): layer.selectAll, layer.merge e layer.reverse. Unire vuole almeno due livelli e invertire almeno due righe dello stesso livello o gruppo, con il perché in italiano; un livello bloccato si rifiuta. Duplica e raccogli in un livello nuovo non sono ancora fatti: il livello nuovo nascerebbe dentro il livello radice del motore, che il file non scrive.",
   "casi": [
     {
       "id": "select.same.fillColor",
@@ -801,6 +801,322 @@
         "selezione": [
           "op1a1a1a1"
         ]
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 7
+      },
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 6
+      },
+      "atteso": {
+        "selezione": [
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 4
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.selectAll",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "id": 77
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4,
+          6
+        ]
+      },
+      "dopo": "layer-merge-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "move",
+                "target": "oa1a1a1a1",
+                "parent": "l2b2b2b2b",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "remove",
+                "target": "l1a2b3c4d"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          6,
+          4
+        ]
+      },
+      "dopo": "layer-merge-ultimo-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "move",
+                "target": "ob2b2b2b2",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                }
+              },
+              {
+                "op": "remove",
+                "target": "l2b2b2b2b"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4,
+          6
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4,
+          77
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "layer.merge",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4,
+          6
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4,
+          6
+        ]
+      },
+      "dopo": "layer-reverse-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "move",
+            "target": "l2b2b2b2b",
+            "parent": "#root",
+            "pos": {
+              "after": "fub-paper"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "bloccato.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4,
+          6
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          5
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "sovrapposti-un-livello.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          3,
+          4
+        ]
+      },
+      "dopo": "layer-reverse-oggetti-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "move",
+            "target": "ob2b2b2b2",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "first": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "doppio.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.reverse",
+      "disegno": "sola-lettura.svg",
+      "selezione": [],
+      "argomenti": {
+        "ids": [
+          4,
+          6
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
       }
     }
   ]

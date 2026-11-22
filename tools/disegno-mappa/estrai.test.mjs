@@ -100,7 +100,11 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // `.eraseRegion`, `.eraseSegments`, `.knife`, `.smoothRegion` (gli strumenti erano già fatti).
   // T15 Seleziona giro 2: Riseleziona (`select.reselect`) è «fatto», con il ricordo del banco.
   // Le selezioni salvate, Oggetto › Testo di punto e in area, la bacchetta restano «da fare».
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1141, fub: 114, escluso: 12, fatto: 284 });
+  // T15 livelli giro 2 porta a «fatto» tre righe di livelli: `layer.selectAll`, `layer.merge` e
+  // `layer.reverse`. Duplica, raccogli in un livello nuovo, il livello corrente e le righe di
+  // Oggetto che lavorano sul livello (sopra e altri livelli, il livello corrente) restano «da fare»,
+  // con la causa nella nota.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1138, fub: 114, escluso: 12, fatto: 287 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

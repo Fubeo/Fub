@@ -1,6 +1,7 @@
 //! La famiglia `livelli` della mappa: le voci di ≡ › Selezione (K6 T15, giro 1; il testo uguale e i
 //! punti per specie, giro 6) e i comandi di livello della scheda Livelli del Completo (giro 3):
-//! nuovo livello, elimina, rinomina e colore, occhio, lucchetto, livello corrente e spostamento.
+//! nuovo livello, elimina, rinomina e colore, occhio, lucchetto, livello corrente e spostamento; e
+//! (giro 2) seleziona grafica, unisci e inverti l'ordine, con le loro righe che non valgono ancora.
 //! «Maschere di ritaglio» (K6 T12) sceglie le maschere, i `<g clip-path>` del file.
 //! Selezionare non cambia il documento: quelle voci non
 //! scrivono niente, e il motore dice che cosa seleziona. Un livello si nomina nei suoi argomenti col suo
@@ -104,6 +105,10 @@ impl StatoFamiglia for Stato {
     /// (`nome_di_livello_sbagliato`): se no `BadArgs` col perché, prima del motore. Un livello nuovo
     /// senza nome prende il primo «Livello N» libero, come la scheda nativa.
     fn argomenti_della_copia(id: &str, copia: &Copia, mut valore: Value) -> Result<Value, PluginError> {
+        if matches!(id, "layer.merge" | "layer.reverse") {
+            righe_da_unire_o_invertire(id, copia, &valore)?;
+            return Ok(valore);
+        }
         if !matches!(id, "layer.new" | "layer.setProps") {
             return Ok(valore);
         }
@@ -136,6 +141,13 @@ impl StatoFamiglia for Stato {
             // su un tracciato), che la selezione di Fub non sa dire: niente da scegliere.
             "select.object.clippingMasks" => (!c_e_una_maschera(copia)).then_some(DrawingRefusal::Empty),
             "layer.setCurrent" => livelli_del_valore(copia, valore).err(),
+            "layer.selectAll" => livelli_del_valore(copia, valore).err(),
+            // Unire o invertire cambia l'ordine o il contenuto di un livello bloccato: si rifiuta, con
+            // il perché. Le righe senza livello, o poche, le dice `argomenti_della_copia`.
+            "layer.merge" | "layer.reverse" => match livelli_del_valore(copia, valore) {
+                Ok(livelli) => livelli.iter().any(|&i| bloccato_con_antenati(copia, i)).then_some(DrawingRefusal::Locked),
+                Err(motivo) => Some(motivo),
+            },
             "layer.delete" => match livelli_del_valore(copia, valore) {
                 Ok(livelli) => livelli.iter().any(|&i| bloccato_con_antenati(copia, i)).then_some(DrawingRefusal::Locked),
                 Err(motivo) => Some(motivo),
@@ -186,7 +198,39 @@ fn vuole_selezione(id: &str) -> bool {
 
 /// I comandi che cambiano il documento su un livello: la scheda Livelli li chiama con il suo livello.
 fn cambia_il_livello(id: &str) -> bool {
-    matches!(id, "layer.delete" | "layer.setProps" | "node.move")
+    matches!(id, "layer.delete" | "layer.setProps" | "layer.merge" | "layer.reverse" | "node.move")
+}
+
+/// Unire e invertire (T15, giro 2): le righe del comando sono almeno due, e unire vuole dei livelli
+/// (il motore dice «highlight a layer to merge into» in inglese, qui si dice in italiano); invertire
+/// vuole righe che stanno nello stesso livello o gruppo. Un argomento sbagliato è `BadArgs` col perché,
+/// prima del motore. Le righe che la mappa non ha sono già passate da `rifiuto_valore`.
+fn righe_da_unire_o_invertire(id: &str, copia: &Copia, valore: &Value) -> Result<(), PluginError> {
+    let Ok(livelli) = livelli_del_valore(copia, valore) else {
+        return Ok(());
+    };
+    let mut distinte = livelli;
+    distinte.sort_unstable();
+    distinte.dedup();
+    if distinte.len() < 2 {
+        let perche = if id == "layer.merge" {
+            "Per unire servono almeno due livelli."
+        } else {
+            "Per invertire l'ordine servono almeno due righe."
+        };
+        return Err(PluginError::BadArgs(perche.into()));
+    }
+    if id == "layer.merge" {
+        if distinte.iter().any(|&i| copia.mappa.elemento(i).is_none_or(|e| e.ruolo != Role::Layer)) {
+            return Err(PluginError::BadArgs("Per unire servono livelli, non oggetti: scegli dei livelli.".into()));
+        }
+        return Ok(());
+    }
+    let genitori: Vec<Option<usize>> = distinte.iter().map(|&i| copia.mappa.elemento(i).and_then(|e| e.genitore)).collect();
+    if genitori.iter().any(|g| *g != genitori[0]) {
+        return Err(PluginError::BadArgs("Per invertire l'ordine le righe devono stare nello stesso livello o gruppo.".into()));
+    }
+    Ok(())
 }
 
 /// Il nuovo livello non vuole un livello scelto, ma cambia il documento.
