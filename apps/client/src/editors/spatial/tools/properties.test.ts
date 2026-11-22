@@ -835,6 +835,35 @@ describe("le scelte e i pulsanti", () => {
     expect(contorno.spessore.allaScena(3)).toBeCloseTo(4);
   });
 
+  it("la sezione del registro vede le sfumature della vista: riempimento, contorno, blocco e soli testi", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "sfumatura", scheda: "design", titolo: "Sfumatura", disegna: (contesto) => void visti.push(contesto.misure.sfumature) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    mount();
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    const stops = [
+      { offset: 0, color: "#ffffff", opacity: 1 },
+      { offset: 1, color: "#000000", opacity: 0.5 },
+    ];
+    panel.update({
+      ...view(),
+      gradients: {
+        fill: { count: 2, gradients: 1, kind: "radial", stops, angle: -45 },
+        stroke: { count: 2, gradients: 0, kind: null, stops: null, angle: null },
+        locked: true,
+        onlyText: false,
+      },
+    });
+    await fotogramma();
+    expect(visti[visti.length - 1]).toEqual({
+      riempimento: { parti: 2, conSfumatura: 1, tipo: "radial", punti: stops, angolo: -45 },
+      contorno: { parti: 2, conSfumatura: 0, tipo: null, punti: null, angolo: null },
+      bloccato: true,
+      soloTesto: false,
+    });
+  });
+
   it("nel Completo famiglia, corpo, peso, spaziatura e allineamento li danno Carattere e Paragrafo; l'enfasi resta; la sezione vede il testo della vista", async () => {
     const sezioni = creaSezioni();
     const visti: unknown[] = [];

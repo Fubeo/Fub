@@ -7,7 +7,7 @@ import { FIDELITY } from "../../../../bench/fidelity-corpus";
 import type { Point } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
-import { averageColor, defaultPlace, fadeOf, gradientOps, paintedParts, placeAngle, placeTurned, reversedStops, sortedStops, writtenPlace, type GradientChange, type GradientChanged, type GradientPlace, type GradientStop, type PaintChannel, type Painted } from "./gradients";
+import { averageColor, defaultPlace, fadeOf, gradientOps, gradientSummary, paintedParts, placeAngle, placeTurned, reversedStops, sortedStops, writtenPlace, type GradientChange, type GradientChanged, type GradientPlace, type GradientStop, type PaintChannel, type Painted } from "./gradients";
 import { estimate } from "./measure";
 import { LAYER, open, type Opened } from "./test-support";
 
@@ -266,6 +266,27 @@ describe("la selezione", () => {
     expect(added(change)).toHaveLength(2);
     applied(opened, change);
     expect(painted(opened).map((part) => part.gradient!.look.stops[0]!.color)).toEqual(["#d55e00", "#0072b2"]);
+  });
+});
+
+describe("il riassunto per la sezione Sfumatura", () => {
+  it("dice tipo, punti e angolo comuni, e quante parti hanno una sfumatura", () => {
+    const opened = open(doc(`${DEFS(LINEAR("rg"))}${LAYER}${RECT("oa", ' fill="url(#rg)"')}${RECT("ob")}</g>`));
+    const summary = gradientSummary(painted(opened));
+    expect(summary).toMatchObject({ count: 2, gradients: 1, kind: "linear", angle: 0 });
+    expect(summary.stops).toEqual([
+      { offset: 0, color: "#0072b2", opacity: 1 },
+      { offset: 1, color: "#ffffff", opacity: 1 },
+    ]);
+  });
+
+  it("punti, tipi e angoli diversi sono misti; senza sfumature non c'è niente", () => {
+    const VERTICAL = ' fub:role="private" gradientUnits="userSpaceOnUse" x1="30" y1="20" x2="30" y2="40"';
+    const other = `<linearGradient id="rh"${VERTICAL}><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#ffffff"/></linearGradient>`;
+    const opened = open(doc(`${DEFS(LINEAR("rg") + other)}${LAYER}${RECT("oa", ' fill="url(#rg)"')}${RECT("ob", ' fill="url(#rh)"')}</g>`));
+    expect(gradientSummary(painted(opened))).toMatchObject({ count: 2, gradients: 2, kind: "linear", stops: null, angle: null });
+    const solid = open(doc(`${LAYER}${RECT("oa")}</g>`));
+    expect(gradientSummary(painted(solid))).toEqual({ count: 1, gradients: 0, kind: null, stops: null, angle: null });
   });
 });
 

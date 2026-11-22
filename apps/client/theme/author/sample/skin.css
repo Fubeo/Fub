@@ -19709,7 +19709,7 @@ button.draw-isolation-crumb:hover {
 }
 .draw-color-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-1);
 }
 .draw-color-actions > .kit-button {
@@ -19717,6 +19717,78 @@ button.draw-isolation-crumb:hover {
   padding: var(--space-1) var(--space-2);
   white-space: normal;
   text-align: center;
+}
+
+/* ── K6 · La sezione Sfumatura del Design (T15, giro 5) ──────────────────── */
+/* Il colore da sfumare, poi tipo e angolo in una riga, la striscia dei colori
+   e i punti: per ognuno il pozzo, la posizione, l'opacità e «Togli». Il punto
+   scelto ha il bordo accento, come il lato attivo del Colore. */
+.draw-gradient {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.draw-gradient-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-gradient-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  align-items: end;
+}
+.draw-gradient-bar {
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg);
+}
+.draw-gradient-stops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.draw-gradient-stop {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) max-content;
+  gap: var(--space-1);
+  align-items: end;
+  padding: var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.draw-gradient-stop.draw-gradient-stop-chosen {
+  border-color: var(--accent);
+}
+.draw-gradient-stop .kit-color-well,
+.draw-gradient-stop .kit-color-well-button {
+  width: 100%;
+  min-width: 0;
+}
+.draw-gradient-stop .kit-color-well-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-gradient-stop > .kit-button,
+.draw-gradient-actions > .kit-button,
+.draw-gradient-create {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+}
+.draw-gradient-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
 }
 
 /* ── K6 · I righelli di bordo del foglio (T11, giro E) ───────────────────── */

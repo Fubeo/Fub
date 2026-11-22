@@ -82,7 +82,12 @@ describe("la sezione Colore del Design", () => {
     expect(riempimento!.querySelector("button")!.getAttribute("aria-label")).toBe(
       `${t("draw.colore.attivo", { lato: t("draw.properties.fill") })}: #ff0000`,
     );
-    expect(pulsanti(corpo).map((b) => b.textContent)).toEqual([t("draw.colore.scambia"), t("draw.colore.nessuno"), t("draw.colore.diSerie")]);
+    expect(pulsanti(corpo).map((b) => b.textContent)).toEqual([
+      t("draw.colore.scambia"),
+      t("draw.colore.nessuno"),
+      t("draw.colore.diSerie"),
+      t("draw.colore.sfumatura.applica"),
+    ]);
     c.chiudi();
   });
 
@@ -112,6 +117,27 @@ describe("la sezione Colore del Design", () => {
       ["disegno.paint.setFill", { none: true }],
       ["disegno.paint.default", {}],
     ]);
+    c.chiudi();
+  });
+
+  it("Sfumatura dà l'ultima sfumatura al lato attivo; con soli testi o un oggetto bloccato è spenta col perché", async () => {
+    const { c, corpo, comando, sezione } = completo(1);
+    pulsanti(corpo)[3]!.click();
+    expect(await arrivati(comando, 1)).toEqual([["disegno.paint.lastGradient", { stroke: false }]]);
+    pozzi(corpo)[1]!.querySelector("button")!.click();
+    await arrivati(comando, 2);
+    pulsanti(corpo)[3]!.click();
+    expect((await arrivati(comando, 3))[2]).toEqual(["disegno.paint.lastGradient", { stroke: true }]);
+    for (const [sfumature, perche] of [
+      [{ bloccato: false, soloTesto: true }, t("draw.sfumatura.testo")],
+      [{ bloccato: true, soloTesto: false }, t("draw.sfumatura.bloccato")],
+    ] as const) {
+      const altro = document.createElement("div");
+      sezione.disegna!({ corpo: altro, sel: { numero: 1 }, colori: ROSSO_E_BLU, misure: { sfumature }, aggiorna: () => undefined, vita: openLifetime() } as never);
+      const sfumatura = pulsanti(altro)[3]!;
+      expect(sfumatura.disabled).toBe(true);
+      expect(sfumatura.getAttribute("aria-label")).toBe(perche);
+    }
     c.chiudi();
   });
 

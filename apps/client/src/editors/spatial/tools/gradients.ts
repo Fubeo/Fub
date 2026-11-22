@@ -272,6 +272,38 @@ export interface GradientView {
   readonly angle: number | null;
 }
 
+/// La sfumatura di un colore della selezione come la mostra la sezione
+/// Sfumatura del Completo (K6 T15, giro 5).
+export interface GradientSummary {
+  /// Quante parti mostrano il colore, e quante con una sfumatura che si legge.
+  readonly count: number;
+  readonly gradients: number;
+  /// Il tipo comune delle parti con una sfumatura; `null` se misto o senza.
+  readonly kind: GradientKind | null;
+  /// I punti comuni, in ordine; `null` se misti o senza.
+  readonly stops: readonly GradientStop[] | null;
+  /// L'angolo comune della linea, o del primo raggio, come in
+  /// [`placeAngle`]: in senso orario; `null` se misto o senza.
+  readonly angle: number | null;
+}
+
+/// Due elenchi di punti uguali, al decimillesimo.
+function sameStops(p: readonly GradientStop[], q: readonly GradientStop[]): boolean {
+  const near = (a: number, b: number): boolean => Math.abs(a - b) < 1e-4;
+  return p.length === q.length && p.every((stop, at) => stop.color === q[at]!.color && near(stop.offset, q[at]!.offset) && near(stop.opacity, q[at]!.opacity));
+}
+
+/// La sfumatura comune di `parts`, le parti che mostrano un colore.
+export function gradientSummary(parts: readonly Painted[]): GradientSummary {
+  const used = parts.map((part) => part.gradient).filter((gradient): gradient is UsedGradient => gradient !== null);
+  const first = used[0];
+  const kind = first !== undefined && used.every((gradient) => gradient.look.kind === first.look.kind) ? first.look.kind : null;
+  const stops = first !== undefined && used.every((gradient) => sameStops(gradient.look.stops, first.look.stops)) ? first.look.stops : null;
+  const angles = used.map((gradient) => (gradient.place === null ? null : Math.round(placeAngle(gradient.place) * 100) / 100));
+  const angle = angles.length > 0 && angles.every((each) => each !== null && each === angles[0]) ? angles[0]! : null;
+  return { count: parts.length, gradients: used.length, kind, stops, angle };
+}
+
 /// I punti di `place`, nell'ordine in cui la tastiera li percorre.
 export function placeGrips(place: GradientPlace): Array<readonly [PlaceGrip, Point]> {
   return place.kind === "linear"

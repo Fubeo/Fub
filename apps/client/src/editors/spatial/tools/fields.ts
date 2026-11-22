@@ -49,6 +49,7 @@ import { orientationOf, orientedRect, presetOf, presetRect, PRESETS, type Preset
 import { angleOf, frameSize, MIN_SIZE, scales, type Frame } from "./frame";
 import type { Grid } from "./grid";
 import { ANCHORS, type Anchor, type Look, type LookChange } from "./look";
+import type { GradientSummary } from "./gradients";
 import { DASHES, type Cap, type Dash, type Join, type OutlineChange, type OutlineDetails, type OutlineLook } from "./outline";
 import {
   ACTION_LABELS,
@@ -205,6 +206,17 @@ export function lookUnit(unit: LengthUnit): LengthUnit {
 }
 
 /// La selezione, come la legge l'editor.
+/// Le sfumature della selezione per la sezione Sfumatura del Completo: quella del riempimento e quella
+/// del contorno (manca il colore che nessuna parte mostra), e perché non si cambiano.
+export interface SelectionGradients {
+  readonly fill?: GradientSummary;
+  readonly stroke?: GradientSummary;
+  /// Un oggetto scelto è bloccato, lui o un contenitore.
+  readonly locked: boolean;
+  /// Gli oggetti scelti sono soltanto testi: la scena non scrive la sfumatura dei caratteri.
+  readonly onlyText: boolean;
+}
+
 export interface SelectionFacts {
   /// Le chiavi degli oggetti scelti, una per riga.
   readonly keys: string;
@@ -221,6 +233,9 @@ export interface SelectionFacts {
   /// Il tratteggio e il lucchetto dei contorni scelti, per la sezione Contorno del Completo (K6 T15,
   /// giro 5); senza, o `null`, la sezione non li sa.
   readonly outlineDetails?: OutlineDetails | null;
+  /// Le sfumature del riempimento e del contorno, per la sezione Sfumatura del Completo (K6 T15,
+  /// giro 5); senza, la sezione non le sa.
+  readonly gradients?: SelectionGradients;
   /// Vero se c'è a che cosa allinearli: la pagina, per un oggetto solo.
   readonly alignable: boolean;
   /// Gli oggetti scelti che disegnano qualcosa: quelli che si distribuiscono.
@@ -674,6 +689,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     actions,
     blend,
     ...(outlineView === undefined ? {} : { outline: outlineView }),
+    ...(selection?.gradients === undefined ? {} : { gradients: selection.gradients }),
     exportSelection: selection !== null && input.exportSelection === true,
     swatches: input.swatches,
     recent: input.recent,

@@ -242,9 +242,9 @@ motore	paint.freeform.selectPoint	Select Freeform Point		colore	F1	T14	da fare	i
 motore	paint.freeform.get	Freeform Gradient		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Sfumatura a forma libera
 motore	select.globalEdit	Start Global Edit	Select	livelli	F1	T15	da fare	menu/selezione	famiglia		Avvia modifica globale
 motore	select.globalEditOptions	Global Edit Options		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Opzioni modifica globale
-motore	paint.editGradient	Gradient	Window › Gradient	colore	F1	T14	da fare	ispettore/design	famiglia		Sfumatura
-motore	paint.setGradientGeom	Gradient Vector		colore	F1	T14	da fare	ispettore/design	famiglia		Vettore sfumatura
-motore	gradient.selectStop	Select Gradient Stop		aspetto	F1	T15	da fare	ispettore/design	famiglia		Seleziona cursore colore
+motore	paint.editGradient	Gradient	Window › Gradient	colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	lineare e radiale, nella sezione Sfumatura: tipo, angolo, punti (aggiungi, togli, sposta, colore, opacità) e inverti; la scena la scrive come sfumatura privata. La sfumatura libera, il metodo percettivo, la retinatura, la sfumatura lungo il contorno e il punto di metà spostato la scena non li scrive: tornano non supportati	Sfumatura
+motore	paint.setGradientGeom	Gradient Vector		colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	gli estremi della sfumatura, dalla tavolozza dei comandi; lo strumento Sfumatura sulla tela è del giro dopo	Vettore sfumatura
+motore	gradient.selectStop	Select Gradient Stop		aspetto	F1	T15	fatto	ispettore/design/sfumatura	famiglia	scegliere un punto nella sezione Sfumatura lo dice al motore	Seleziona cursore colore
 motore	gradient.presets.list	Gradient Presets		aspetto	F1	T15	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Gradient Presets
 motore	gradient.presets.apply	Apply Gradient Preset		aspetto	F1	T15	da fare	ispettore/design	famiglia		Apply Gradient Preset
 motore	gradient.presets.save	Save Gradient Preset		aspetto	F1	T15	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Save Gradient Preset
@@ -382,7 +382,7 @@ motore	transparency.set	Transparency	Window › Transparency	aspetto	F1	T15	fatt
 motore	paint.invert	Invert		colore	F1	T14	fatto	ispettore/design	famiglia		Inverti
 motore	paint.complement	Complement		colore	F1	T14	fatto	ispettore/design	famiglia		Complementare
 motore	paint.lastColor	Apply Last Color		colore	F1	T14	fatto	ispettore/design	famiglia		Applica ultimo colore
-motore	paint.lastGradient	Apply Last Gradient		colore	F1	T14	da fare	ispettore/design	famiglia		Applica ultima sfumatura
+motore	paint.lastGradient	Apply Last Gradient		colore	F1	T14	fatto	ispettore/design/sfumatura	famiglia	il pulsante Sfumatura della sezione Colore, sul lato attivo	Applica ultima sfumatura
 motore	paint.recent	Recent Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori recenti
 motore	paint.proxies	Fill and Stroke		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riempimento e traccia
 motore	artboard.reorder	Move Artboard Up/Down		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta tavola da disegno su/giù

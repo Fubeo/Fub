@@ -38,7 +38,18 @@ import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 // Le sezioni del Design che il Completo registra (T10): in coda al pannello.
-import type { ColoreSelezione, ColoriSelezione, MisuraSelezione, MisureSelezione, Selezione, Sezioni, TestoSelezione } from "../completo/sezioni";
+import type {
+  ColoreSelezione,
+  ColoriSelezione,
+  MisuraSelezione,
+  MisureSelezione,
+  Selezione,
+  Sezioni,
+  SfumaturaSelezione,
+  SfumatureSelezione,
+  TestoSelezione,
+} from "../completo/sezioni";
+import type { GradientSummary } from "./gradients";
 import { UNITS, type LengthUnit } from "../scene/rulers";
 import { fromUnit } from "./rulers";
 import type { MotoreDelDisegno } from "../motore/gesti";
@@ -54,6 +65,7 @@ import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
+import type { SelectionGradients } from "./fields";
 import { composingKey } from "../../../kit/ime";
 
 /// Le sezioni, nell'ordine in cui si vedono.
@@ -291,6 +303,9 @@ export interface PropertiesView {
     readonly dashes: readonly number[] | null;
     readonly locked: boolean;
   };
+  /// Le sfumature del riempimento e del contorno della selezione. Non sono campi: le legge la sezione
+  /// Sfumatura del Completo (K6 T15, giro 5).
+  readonly gradients?: SelectionGradients;
   /// I campioni del documento, che i campi dei colori scrivono per nome e
   /// offrono nel menu del loro campione.
   readonly swatches?: readonly FieldSwatch[];
@@ -457,8 +472,23 @@ function misureDellaVista(vista: PropertiesView): MisureSelezione {
           trattini: vista.outline.dashes,
           bloccato: vista.outline.locked,
         };
+  const sfumatura = (summary: GradientSummary | undefined): SfumaturaSelezione | undefined =>
+    summary === undefined
+      ? undefined
+      : { parti: summary.count, conSfumatura: summary.gradients, tipo: summary.kind, punti: summary.stops, angolo: summary.angle };
+  const g = vista.gradients;
+  const sfumature: SfumatureSelezione | undefined =
+    g === undefined
+      ? undefined
+      : {
+          ...(g.fill === undefined ? {} : { riempimento: sfumatura(g.fill)! }),
+          ...(g.stroke === undefined ? {} : { contorno: sfumatura(g.stroke)! }),
+          bloccato: g.locked,
+          soloTesto: g.onlyText,
+        };
   return {
     ...(contorno === undefined ? {} : { contorno }),
+    ...(sfumature === undefined ? {} : { sfumature }),
     x: misura("x"),
     y: misura("y"),
     larghezza: misura("width"),

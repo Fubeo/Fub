@@ -27,6 +27,7 @@ import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore, type LatoAttivo } from "./colore-sezione";
 import { registraCampioni } from "./campioni-sezione";
 import { registraContorno } from "./contorno-sezione";
+import { registraSfumatura } from "./sfumatura-sezione";
 import { registraTrasparenza } from "./trasparenza-sezione";
 import { registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
@@ -351,6 +352,8 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   registraCampioni(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, vociDelCompleto);
   // La sezione «Contorno» (K6 T15, giro 5): spessore, estremi, angoli e tratteggio.
   registraContorno(sezioni, eseguiPerId);
+  // La sezione «Sfumatura» (K6 T15, giro 5): tipo, angolo e punti della sfumatura lineare o radiale.
+  registraSfumatura(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo);
   registraTrasparenza(sezioni, eseguiPerId);
   // Le sezioni «Carattere» e «Paragrafo» (K6 T16, giro 1): il testo scelto, un comando per cambio.
   registraTesto(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);

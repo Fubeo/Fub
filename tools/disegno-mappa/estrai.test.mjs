@@ -71,7 +71,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T15 giro 3 `layer.delete`, `layer.new` e `layer.setProps` (nome, occhio, lucchetto).
   // T16 giro 1 le cinque del testo di punto: lo strumento Testo, i pannelli
   // Carattere e Paragrafo e i loro due comandi (`text.setRangeStyle`, `text.setStyle`).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1220, fub: 114, escluso: 12, fatto: 205 });
+  // T15 giro 5 `stroke.set` (la sezione Contorno) e le quattro della sfumatura
+  // (`paint.editGradient`, `paint.setGradientGeom`, `gradient.selectStop`, `paint.lastGradient`).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1215, fub: 114, escluso: 12, fatto: 210 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
