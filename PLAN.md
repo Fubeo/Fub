@@ -2222,7 +2222,13 @@ pronta, e solo allora la fila si monta nella testata (`toolbar.ts`) con i
 controlli del kit al posto di quelli nativi di `costruisciFila`; l'ascolto di
 `StatiStrumenti` (oggi la fila non sa quando lo stato cambia). Con più di 6
 caselle in colonna si fa anche la prova dei 44×550 a 1280×800.
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-22). Giro A unito in b9ceb4cd2: i sette strumenti
+del nucleo passano dal motore, venti righe select.* e object.* «fatto»,
+`disegno.strumento.stato`. Mancano: le preferenze del motore (`draw.motore`,
+giro B in corso), `edit.clearHistory`, gli appunti, la vista e la banda. I
+campi X/Y della selezione diretta non ci sono: il motore non dà le
+coordinate del punto. Selezione, Mano e Zoom del motore si chiamano
+«… (Completo)» per non avere due nomi uguali nella tendina.
 Aspetta: niente
 
 ## T12 · I tracciati e la penna di Bézier
