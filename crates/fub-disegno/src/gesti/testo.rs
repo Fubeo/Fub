@@ -49,6 +49,10 @@ use crate::differenza::numero;
 /// Il carattere di un testo nuovo, come lo scrive il file (`TEXT_FAMILY`).
 pub const TEXT_FAMILY: &str = "Inter, sans-serif";
 
+/// La famiglia di [`TEXT_FAMILY`] senza il ripiego: il nome che il motore
+/// dà al carattere di un testo nuovo del Completo.
+pub const TEXT_FONT: &str = "Inter";
+
 /// Il corpo di un testo nuovo (`TEXT_SIZE`, Medio).
 pub const TEXT_SIZE: f64 = 32.0;
 

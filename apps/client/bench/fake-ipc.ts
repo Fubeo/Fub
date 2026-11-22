@@ -1095,7 +1095,8 @@ function benchWindowOutcome(request: DrawingCommandRequest): DrawingOutcome {
 /// Il banco non sa misurare il carattere: il cursore sta dopo l'ultima lettera a mezzo corpo per
 /// lettera, abbastanza per guardare la casella che si scrive.
 let benchTypeBox: { x: number; y: number; righe: string[] } | null = null;
-const BENCH_TYPE_SIZE = 24;
+/// Il corpo e il carattere di un testo nuovo, come il ponte del motore vero (`TEXT_SIZE`, `TEXT_FAMILY`).
+const BENCH_TYPE_SIZE = 32;
 
 /// L'esito di un gesto del Testo del motore del banco: il clic apre la casella, i tasti e il testo
 /// la riempiono, e finché è aperta l'anteprima mostra le righe e il cursore. La conferma scrive il
@@ -1118,7 +1119,7 @@ function benchTypeOutcome(gesture: DrawingGesture, outcome: DrawingOutcome): Dra
   const passo = BENCH_TYPE_SIZE * 1.2;
   const shape = {
     tag: "text",
-    attrs: { x: String(box.x), y: String(box.y), "font-family": "Source Sans 3, sans-serif", "font-size": String(BENCH_TYPE_SIZE), fill: "#1a1a1a" },
+    attrs: { x: String(box.x), y: String(box.y), "font-family": "Inter, sans-serif", "font-size": String(BENCH_TYPE_SIZE), fill: "#1a1a1a" },
     children: box.righe.map((riga, at) => ({
       tag: "tspan",
       attrs: { x: String(box.x), ...(at === 0 ? {} : { dy: String(passo) }) },

@@ -9,11 +9,17 @@ import type { MotoreDelDisegno } from "../motore/gesti";
 import type { SessioneMotore } from "../motore/sessione";
 import { openLifetime } from "../../../ui/lifetime";
 import { t } from "../strings";
+import { nomeVoce } from "./comandi";
 import { apri } from "./index";
 import { indiceDi } from "./indice";
 import indiceGenerato from "./indice.generated.json";
 
 const ESITO = { revision: "1", preview: null, ops: "[]", selection: ["k1", "k2"], losses: [], refused: null, frame: null };
+
+/// Il nome di una voce dell'indice, come lo dice la shell.
+function nomeDi(id: string): string {
+  return nomeVoce(indiceDi(indiceGenerato as never).voci.find((voce) => voce.id === id)!);
+}
 
 /// Il motore con la sessione che conta i comandi: `comando` riceve `{ id, selection, value }`.
 function motoreFinto() {
@@ -38,6 +44,10 @@ function completoCon(motore: MotoreDelDisegno, preparazione: (famiglia: string) 
       moduli: {
         "./famiglie/trasforma/index.ts": () => {
           caricati.push("trasforma");
+          return Promise.resolve({ default: { registra: () => undefined } });
+        },
+        "./famiglie/tracciati/index.ts": () => {
+          caricati.push("tracciati");
           return Promise.resolve({ default: { registra: () => undefined } });
         },
       },
@@ -84,7 +94,29 @@ describe("la sezione Allinea in una sessione nuova", () => {
     );
     const corpo = disegnaIn(sezione, motore, 2);
     corpo.querySelector<HTMLButtonElement>('button[data-id="align.horizontalLeft"]')!.click();
-    await vi.waitFor(() => expect(annuncia).toHaveBeenCalledWith(t("draw.allinea.nonPronto")));
+    await vi.waitFor(() => expect(annuncia).toHaveBeenCalledWith(t("draw.comando.nonPronto", { comando: nomeDi("align.horizontalLeft") })));
+    expect(comando).not.toHaveBeenCalled();
+    completo.chiudi();
+  });
+
+  it("l'annuncio nomina la voce della famiglia che non si prepara, non sempre Allinea", async () => {
+    const { motore, comando } = motoreFinto();
+    // Due famiglie, due errori diversi: tracciati senza memoria, trasforma col motore.
+    const { completo, annuncia } = completoCon(motore, (famiglia) =>
+      Promise.resolve(famiglia === "tracciati" ? { errore: "no-memory" } : famiglia === "trasforma" ? { errore: "motore" } : "pronta"),
+    );
+    const elaborazione = completo.sezioni.di("design").find((una) => una.id === "pathfinder")!;
+    disegnaIn(elaborazione, motore, 2).querySelector<HTMLButtonElement>('button[data-id="object.pathfinder.unite"]')!.click();
+    const unisci = t("draw.comando.nonPronto.memoria", { comando: nomeDi("object.pathfinder.unite") });
+    await vi.waitFor(() => expect(annuncia).toHaveBeenCalledWith(unisci));
+    expect(unisci).not.toContain(t("draw.allinea.titolo"));
+
+    disegnaIn(completo.sezioni.di("design").find((una) => una.id === "allinea")!, motore, 2)
+      .querySelector<HTMLButtonElement>('button[data-id="align.horizontalLeft"]')!
+      .click();
+    const allinea = t("draw.comando.nonPronto", { comando: nomeDi("align.horizontalLeft") });
+    await vi.waitFor(() => expect(annuncia).toHaveBeenCalledWith(allinea));
+    expect(annuncia.mock.calls.map(([testo]) => testo)).toEqual([unisci, allinea]);
     expect(comando).not.toHaveBeenCalled();
     completo.chiudi();
   });

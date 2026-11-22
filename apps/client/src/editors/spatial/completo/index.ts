@@ -13,7 +13,7 @@ import { costruisciFila, type CostruisciFila, type FilaOpzioni } from "./opzioni
 import { creaSezioni, type Sezioni, type VoceDelCompleto } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
-import { menuComando, menuNonCaricato, statoComandi, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
+import { menuComando, menuNonCaricato, nomeVoce, statoComandi, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
 import type { CampoFinestra, ModuloFinestra } from "../motore/finestre";
 import type { DrawingPreview, DrawingToolState } from "../../../host/contract";
 import type { MenuItem } from "../../../ui/menu";
@@ -326,7 +326,10 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
         carica.stato(voce.famiglia).kind === "errore" ? await carica.riprova(voce.famiglia) : await carica.famiglia(voce.famiglia);
       if (chiuso) return;
       if (stato.kind !== "pronta") {
-        dipendenze.annuncia(t("draw.allinea.nonPronto"));
+        // Il nome della voce, non della sezione: lo stesso percorso serve Allinea,
+        // Elaborazione tracciati e Trasforma, ognuna con la sua famiglia.
+        const chiave = stato.kind === "errore" && stato.perche === "no-memory" ? "draw.comando.nonPronto.memoria" : "draw.comando.nonPronto";
+        dipendenze.annuncia(t(chiave, { comando: nomeVoce(voce) }));
         return;
       }
       const fisso = (voce.chiamata as { readonly valore?: unknown }).valore;

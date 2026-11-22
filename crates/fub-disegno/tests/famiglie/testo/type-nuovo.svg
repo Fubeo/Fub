@@ -7,9 +7,9 @@
     </text>
     <text id="ot2t2t2t2" x="40" y="200" fill="#000000" font-family="Inter, sans-serif" font-size="20"><tspan x="40" dy="0">Una riga</tspan></text>
     <rect id="oa1a1a1a1" x="250" y="100" width="100" height="50" fill="#ff0000"/>
-    <text id="o0rpq5ny2" x="40" y="260" fill="#000000" font-family="Source Sans 3" font-size="12">
+    <text id="o0rpq5ny2" x="40" y="260" fill="#000000" font-family="Inter, sans-serif" font-size="32">
       <tspan x="40" dy="0">Città</tspan>
-      <tspan x="40" dy="14.4">al mare 🌧</tspan>
+      <tspan x="40" dy="38.4">al mare 🌧</tspan>
     </text>
   </g>
 </svg>
