@@ -562,6 +562,11 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("r", Tipo::Numero),
     ("g", Tipo::Numero),
     ("b", Tipo::Numero),
+    // Sovrastampa nero.
+    ("remove", Tipo::SiNo),
+    ("percentage", Tipo::Numero),
+    ("includeCmyBlacks", Tipo::SiNo),
+    ("includeSpotBlacks", Tipo::SiNo),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
@@ -668,7 +673,8 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         predefiniti: &[("angle", "0"), ("axis", "horizontal")],
         limiti: &[],
     },
-    // Modifica colori (T14, giro 1). Satura chiede solo l'intensità, da -100 %
+    // Modifica colori (T14, giro 1): Satura, Regola bilanciamento colore e
+    // Sovrastampa nero. Satura chiede solo l'intensità, da -100 %
     // a 100 % (il motore porta un numero fuori al suo estremo). Regola
     // bilanciamento colore chiede i tre canali RGB, da -100 % a 100 % in più
     // per canale, e se cambiare riempimenti e tratti: il metodo è quello dei
@@ -695,6 +701,21 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
             ("g", Some(-100.0), Some(100.0)),
             ("b", Some(-100.0), Some(100.0)),
         ],
+    },
+    // Sovrastampa nero chiede se aggiungere o togliere, da quanto nero, su che
+    // cosa e quali neri: non gli oggetti (`ids`), che sono quelli scelti.
+    FinestraScritta {
+        id: "edit.colors.overprintBlack",
+        schema: "{remove, percentage, fill, stroke, includeCmyBlacks, includeSpotBlacks}",
+        predefiniti: &[
+            ("remove", "false"),
+            ("percentage", "100"),
+            ("fill", "true"),
+            ("stroke", "true"),
+            ("includeCmyBlacks", "false"),
+            ("includeSpotBlacks", "false"),
+        ],
+        limiti: &[("percentage", Some(0.0), Some(100.0))],
     },
 ];
 

@@ -371,6 +371,166 @@
     },
     {
       "fonte": "motore",
+      "id": "edit.colors.adjustBalance",
+      "chiamata": {
+        "comando": "disegno.edit.colors.adjustBalance"
+      },
+      "etichetta": {
+        "it": "Regola bilanciamento colore…",
+        "en": "Adjust Color Balance…"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.blendFrontToBack",
+      "chiamata": {
+        "comando": "disegno.edit.colors.blendFrontToBack"
+      },
+      "etichetta": {
+        "it": "Fusione da davanti a dietro",
+        "en": "Blend Front to Back"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.blendHorizontally",
+      "chiamata": {
+        "comando": "disegno.edit.colors.blendHorizontally"
+      },
+      "etichetta": {
+        "it": "Fusione orizzontale",
+        "en": "Blend Horizontally"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.blendVertically",
+      "chiamata": {
+        "comando": "disegno.edit.colors.blendVertically"
+      },
+      "etichetta": {
+        "it": "Fusione verticale",
+        "en": "Blend Vertically"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.invert",
+      "chiamata": {
+        "comando": "disegno.edit.colors.invert"
+      },
+      "etichetta": {
+        "it": "Inverti colori",
+        "en": "Invert Colors"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.overprintBlack",
+      "chiamata": {
+        "comando": "disegno.edit.colors.overprintBlack"
+      },
+      "etichetta": {
+        "it": "Sovrastampa nero…",
+        "en": "Overprint Black…"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.saturate",
+      "chiamata": {
+        "comando": "disegno.edit.colors.saturate"
+      },
+      "etichetta": {
+        "it": "Satura…",
+        "en": "Saturate…"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.toCMYK",
+      "chiamata": {
+        "comando": "disegno.edit.colors.toCMYK"
+      },
+      "etichetta": {
+        "it": "Converti in CMYK",
+        "en": "Convert to CMYK"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.toGrayscale",
+      "chiamata": {
+        "comando": "disegno.edit.colors.toGrayscale"
+      },
+      "etichetta": {
+        "it": "Converti in scala di grigi",
+        "en": "Convert to Grayscale"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.toRGB",
+      "chiamata": {
+        "comando": "disegno.edit.colors.toRGB"
+      },
+      "etichetta": {
+        "it": "Converti in RGB",
+        "en": "Convert to RGB"
+      },
+      "posto": "menu/modifica/colori",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "edit.copy",
       "chiamata": {
         "comando": "disegno.edit.copy"
@@ -1075,6 +1235,150 @@
     },
     {
       "fonte": "motore",
+      "id": "paint.complement",
+      "chiamata": {
+        "comando": "disegno.paint.complement"
+      },
+      "etichetta": {
+        "it": "Complementare",
+        "en": "Complement"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.default",
+      "chiamata": {
+        "comando": "disegno.paint.default"
+      },
+      "etichetta": {
+        "it": "Riempimento e tratto predefiniti",
+        "en": "Default Fill and Stroke"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": "D",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.invert",
+      "chiamata": {
+        "comando": "disegno.paint.invert"
+      },
+      "etichetta": {
+        "it": "Inverti",
+        "en": "Invert"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.lastColor",
+      "chiamata": {
+        "comando": "disegno.paint.lastColor"
+      },
+      "etichetta": {
+        "it": "Applica ultimo colore",
+        "en": "Apply Last Color"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": ",",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.none",
+      "chiamata": {
+        "comando": "disegno.paint.none"
+      },
+      "etichetta": {
+        "it": "Nessuno",
+        "en": "None"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": "/",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.setFill",
+      "chiamata": {
+        "comando": "disegno.paint.setFill"
+      },
+      "etichetta": {
+        "it": "Riempimento",
+        "en": "Fill"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.setStroke",
+      "chiamata": {
+        "comando": "disegno.paint.setStroke"
+      },
+      "etichetta": {
+        "it": "Tratto",
+        "en": "Stroke"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.swap",
+      "chiamata": {
+        "comando": "disegno.paint.swap"
+      },
+      "etichetta": {
+        "it": "Inverti riempimento e tratto",
+        "en": "Swap Fill and Stroke"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": "Shift+X",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "paint.toggleActive",
+      "chiamata": {
+        "comando": "disegno.paint.toggleActive"
+      },
+      "etichetta": {
+        "it": "Alterna attivazione riempimento/tratto",
+        "en": "Toggle Fill/Stroke Focus"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "colore",
+      "tasto": "X",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.convertAnchors",
       "chiamata": {
         "comando": "disegno.path.convertAnchors"
@@ -1726,6 +2030,38 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.colorBalanceDialog",
+      "chiamata": {
+        "client": "ui.colorBalanceDialog"
+      },
+      "etichetta": {
+        "it": "Regola bilanciamento colore…",
+        "en": "Adjust Color Balance…"
+      },
+      "posto": "finestra",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.saturateDialog",
+      "chiamata": {
+        "client": "ui.saturateDialog"
+      },
+      "etichetta": {
+        "it": "Satura…",
+        "en": "Saturate…"
+      },
+      "posto": "finestra",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
     },
     {
       "fonte": "interfaccia",

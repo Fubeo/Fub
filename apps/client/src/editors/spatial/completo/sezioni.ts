@@ -19,6 +19,7 @@
 import type { DrawingAnchor } from "../../../host/contract";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 import type { MotoreDelDisegno } from "../motore/gesti";
+import type { PaintSample } from "../tools/resources";
 
 /// Le schede dell'ispettore che una sezione può prendere: le stesse del posto
 /// `ispettore/<scheda>` della mappa (`scripts/check-disegno-mappa.mjs`).
@@ -54,6 +55,21 @@ export interface MisureSelezione {
   readonly rotazione?: MisuraSelezione;
 }
 
+/// Un colore della selezione come lo mostra il pannello (K6 T14, giro 1): `#rrggbb`, `none`, `url(#id)`
+/// per una sfumatura, un motivo o un campione del disegno, `null` se gli oggetti ne hanno più d'uno; il
+/// campione dice come si chiama ciò che non è un colore semplice.
+export interface ColoreSelezione {
+  readonly valore: string | null;
+  readonly campione?: PaintSample;
+}
+
+/// Il riempimento e il contorno della selezione che le sezioni del Completo vedono, dalla vista del
+/// pannello; uno che la selezione non ha (un'immagine non ha contorno) manca.
+export interface ColoriSelezione {
+  readonly riempimento?: ColoreSelezione;
+  readonly contorno?: ColoreSelezione;
+}
+
 /// Ciò che una sezione riceve per disegnarsi.
 export interface ContestoSezione {
   /// Il corpo della sezione. Lo riempie `disegna`; lo svuota il pannello a
@@ -67,6 +83,9 @@ export interface ContestoSezione {
   /// Le misure della selezione come le mostra «Posizione e misure»: il pannello le prende dalla sua vista,
   /// senza chiedere il motore. Una misura che non si sa è `null`.
   readonly misure: MisureSelezione;
+  /// Il riempimento e il contorno della selezione come li mostra il pannello (K6 T14): dalla sua vista,
+  /// senza chiedere il motore.
+  readonly colori: ColoriSelezione;
   /// Il disegno che la sezione mostra cambia: `aggiorna` la chiede di nuovo,
   /// al più una volta per fotogramma.
   readonly aggiorna: () => void;

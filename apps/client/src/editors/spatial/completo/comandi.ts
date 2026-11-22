@@ -216,6 +216,15 @@ const FILE_TRACCIATO: readonly (readonly string[])[] = [
   ["addon.pen.closeJoin"],
 ];
 
+/// Le file di Modifica › Modifica colori (K6 T14): le finestre che regolano i colori, le tre
+/// fusioni, le conversioni di spazio, e Inverti con Sovrastampa nero.
+const FILE_COLORI: readonly (readonly string[])[] = [
+  ["edit.colors.adjustBalance", "edit.colors.saturate"],
+  ["edit.colors.blendFrontToBack", "edit.colors.blendHorizontally", "edit.colors.blendVertically"],
+  ["edit.colors.toCMYK", "edit.colors.toGrayscale", "edit.colors.toRGB"],
+  ["edit.colors.invert", "edit.colors.overprintBlack"],
+];
+
 /// Le file dei sottomenu del menu ≡ che le hanno (`<gruppo>`, o
 /// `<gruppo>/<sotto>` per il terzo livello): le righe, per id, nell'ordine
 /// della fila, e una riga di separazione fra una fila e l'altra. Un sottomenu
@@ -223,6 +232,7 @@ const FILE_TRACCIATO: readonly (readonly string[])[] = [
 const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = {
   visualizza: FILE_VISUALIZZA,
   "oggetto/tracciato": FILE_TRACCIATO,
+  "modifica/colori": FILE_COLORI,
 };
 
 /// I sottomenu che il client fa dentro un sottomenu del terzo livello: il loro

@@ -38,7 +38,7 @@ import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 // Le sezioni del Design che il Completo registra (T10): in coda al pannello.
-import type { MisuraSelezione, MisureSelezione, Selezione, Sezioni } from "../completo/sezioni";
+import type { ColoreSelezione, ColoriSelezione, MisuraSelezione, MisureSelezione, Selezione, Sezioni } from "../completo/sezioni";
 import { UNITS, type LengthUnit } from "../scene/rulers";
 import { fromUnit } from "./rulers";
 import type { MotoreDelDisegno } from "../motore/gesti";
@@ -398,6 +398,11 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
 /// Le sezioni che nel Completo non ci sono: la sezione Trasforma dà posizione e misure (K6 T13, giro 4).
 const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place"]);
 
+/// I campi che nel Completo non ci sono: i colori di riempimento e contorno li dà la sezione Colore
+/// (K6 T14, giro 1). Lo spessore, il tratteggio e le punte del contorno restano; la sezione
+/// Riempimento, che resta senza campi, si chiude da sé.
+const CAMPI_NASCOSTI_NEL_COMPLETO: ReadonlySet<FieldId> = new Set<FieldId>(["fill", "stroke"]);
+
 /// Le misure di «Posizione e misure» come le ha la vista del pannello (K6 T13, giro 4): il Trasforma del
 /// Completo le legge di qui, senza chiedere il motore. Il valore sta nell'unità del campo; `allaScena`
 /// lo riporta alle unità della scena, dove lavora il motore.
@@ -415,6 +420,17 @@ function misureDellaVista(vista: PropertiesView): MisureSelezione {
     };
   };
   return { x: misura("x"), y: misura("y"), larghezza: misura("width"), altezza: misura("height"), rotazione: misura("rotation") };
+}
+
+/// Il riempimento e il contorno come li ha la vista del pannello (K6 T14, giro 1): la sezione Colore
+/// del Completo li legge di qui, senza chiedere il motore.
+function coloriDellaVista(vista: PropertiesView): ColoriSelezione {
+  const colore = (id: PaintId): ColoreSelezione | undefined => {
+    const campo = vista.fields[id];
+    if (campo?.kind !== "paint") return undefined;
+    return campo.sample === undefined ? { valore: campo.value } : { valore: campo.value, campione: campo.sample };
+  };
+  return { riempimento: colore("fill"), contorno: colore("stroke") };
 }
 
 /// I comandi di «Disponi», in tre barre: allineare, distribuire, ordinare.
@@ -1690,7 +1706,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       for (const spec of SPECS) {
         const line = lines.get(spec.id)!;
         const state = next.fields[spec.id];
-        if (state === undefined || state.kind !== spec.kind) {
+        if (state === undefined || state.kind !== spec.kind || (completoAperto && CAMPI_NASCOSTI_NEL_COMPLETO.has(spec.id))) {
           line.root.hidden = true;
           continue;
         }
@@ -1745,6 +1761,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     motore: () => motoreCompleto,
     rileggi: () => rileggiStato(),
     misure: () => misureDellaVista(view),
+    colori: () => coloriDellaVista(view),
   });
   life.add(() => {
     stopRegistro?.();
@@ -1759,10 +1776,13 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       stopRegistro?.();
       stopRegistro = null;
       registro = nuovo;
+      const prima = completoAperto;
       completoAperto = nuovo !== null;
       motoreCompleto = motore;
       selezione = sceltaDiAdesso;
       rileggiStato = rileggi ?? (() => undefined);
+      // Ciò che nel Completo non c'è si toglie (o torna) subito, non al prossimo cambio.
+      if (prima !== completoAperto) update(view);
       if (nuovo !== null) stopRegistro = nuovo.ascolta(() => registrate?.aggiorna());
       registrate?.aggiorna();
     },

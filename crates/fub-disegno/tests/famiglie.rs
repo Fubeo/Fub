@@ -194,11 +194,11 @@ fn una_voce_dell_interfaccia_vuole_la_sua_prova() {
 #[test]
 fn una_riga_fatta_senza_caso_e_un_caso_senza_riga_cadono() {
     let file = file_delle_famiglie();
-    // Una riga da fare che diventa fatta, senza caso.
+    // Una riga da fare (di T22, lontana) che diventa fatta, senza caso.
     let mut righe = mappa().to_vec();
     let quale = righe
         .iter()
-        .position(|r| r.fonte == FonteMappa::Motore && r.id == "edit.colors.invert")
+        .position(|r| r.fonte == FonteMappa::Motore && r.id == "assets.export")
         .expect("la riga c'è");
     righe[quale].stato = Stato::Fatto;
     // I casi veri delle famiglie: le altre righe fatte li hanno.
@@ -210,9 +210,11 @@ fn una_riga_fatta_senza_caso_e_un_caso_senza_riga_cadono() {
     };
     let errori = controlla_righe(&righe, &veri, &file);
     assert_eq!(errori.len(), 1, "{errori:?}");
-    assert!(errori[0].contains("edit.colors.invert"), "{errori:?}");
+    assert!(errori[0].contains("assets.export"), "{errori:?}");
     // Col suo caso nel file della sua famiglia, non cade più.
+    // Il caso di prova di un'altra riga, preso in prestito: conta l'id.
     let mut caso = caso_di_prova("edit.colors.invert");
+    caso.id = "assets.export".into();
     caso.gruppo = righe[quale].famiglia.clone();
     assert!(controlla_righe(&righe, &con(&caso), &file).is_empty());
     // Nel file di un'altra famiglia, sì.

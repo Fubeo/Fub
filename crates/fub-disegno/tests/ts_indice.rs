@@ -500,3 +500,61 @@ fn le_finestre_delle_trasformazioni_hanno_i_loro_campi_e_le_misure_di_partenza()
         assert_eq!(misura["predefinito"], json!(100.0), "{misura}");
     }
 }
+
+/// Le finestre di Modifica colori (K6 T14, giro 1): Satura chiede l'intensità da -100 a 100,
+/// partendo da 0; Regola bilanciamento colore chiede rosso, verde e blu nello stesso intervallo
+/// e se toccare riempimento e tratto.
+#[test]
+fn le_finestre_dei_colori_hanno_i_loro_campi_e_i_loro_limiti() {
+    let voci = voci();
+    let colore = schema_json("colore", &voci);
+    let finestra = |id: &str| -> Value {
+        colore["finestre"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["id"] == id)
+            .cloned()
+            .unwrap_or_else(|| panic!("nessuna finestra per {id}: {colore}"))
+    };
+    let satura = finestra("edit.colors.saturate");
+    assert_eq!(satura["campi"].as_array().unwrap().len(), 1, "{satura}");
+    let intensita = &satura["campi"][0];
+    assert_eq!(intensita["nome"], "intensity");
+    assert_eq!(intensita["predefinito"], json!(0.0));
+    assert_eq!(intensita["minimo"], json!(-100.0));
+    assert_eq!(intensita["massimo"], json!(100.0));
+    let bilancia = finestra("edit.colors.adjustBalance");
+    let nomi: Vec<&str> = bilancia["campi"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["nome"].as_str().unwrap())
+        .collect();
+    assert_eq!(nomi, vec!["r", "g", "b", "fill", "stroke"]);
+    for campo in &bilancia["campi"].as_array().unwrap()[..3] {
+        assert_eq!(campo["minimo"], json!(-100.0), "{campo}");
+        assert_eq!(campo["massimo"], json!(100.0), "{campo}");
+    }
+    // Sovrastampa nero non chiede gli oggetti (`ids`): sono quelli scelti.
+    let sovrastampa = finestra("edit.colors.overprintBlack");
+    let nomi: Vec<&str> = sovrastampa["campi"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["nome"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        nomi,
+        vec![
+            "remove",
+            "percentage",
+            "fill",
+            "stroke",
+            "includeCmyBlacks",
+            "includeSpotBlacks"
+        ]
+    );
+    assert_eq!(sovrastampa["campi"][1]["predefinito"], json!(100.0));
+    assert_eq!(sovrastampa["campi"][1]["massimo"], json!(100.0));
+}

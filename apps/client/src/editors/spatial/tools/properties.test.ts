@@ -782,6 +782,31 @@ describe("le scelte e i pulsanti", () => {
     expect(visti[visti.length - 1]).toBe(25);
   });
 
+  it("nel Completo i colori di riempimento e contorno non ci sono (li dà la sezione Colore), il tratteggio resta; il Semplice non cambia", async () => {
+    const sezioni = creaSezioni();
+    const visti: unknown[] = [];
+    sezioni.registra({ id: "colori", scheda: "design", titolo: "Colori", disegna: (contesto) => void visti.push(contesto.colori) });
+    const fotogramma = (): Promise<void> => new Promise((ok) => requestAnimationFrame(() => ok()));
+    mount();
+    // Il Semplice: il campo del riempimento c'è, con la sua sezione.
+    expect(field("fill").hidden).toBe(false);
+    expect(section("fill").hidden).toBe(false);
+    // Il Completo aperto: il campo si toglie subito, e la sezione Riempimento, rimasta vuota, con lui.
+    panel.collegaSezioni(sezioni, null, () => ({ numero: 1, punti: [] }));
+    expect(field("fill").hidden).toBe(true);
+    expect(section("fill").hidden).toBe(true);
+    expect(field("dash").hidden).toBe(false);
+    expect(section("stroke").hidden).toBe(false);
+    // La sezione del registro vede il colore della vista, senza il motore.
+    panel.update(view());
+    await fotogramma();
+    expect(visti[visti.length - 1]).toEqual({ riempimento: { valore: "#0072b2" } });
+    // Il Completo chiuso: il campo torna.
+    panel.collegaSezioni(null, null, () => ({ numero: 0, punti: [] }));
+    expect(field("fill").hidden).toBe(false);
+    expect(section("fill").hidden).toBe(false);
+  });
+
   it("i comandi partono; uno che adesso non si usa resta raggiungibile e dice perché", () => {
     state.actions = {
       "align-left": { label: "Allinea a sinistra" },
