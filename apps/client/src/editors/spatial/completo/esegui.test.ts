@@ -242,6 +242,14 @@ describe("eseguiVoce, con finestra", () => {
     expect(risposta).toEqual({ anteprima: null, rifiuto: null });
   });
 
+  it("un allineamento con un oggetto bloccato nella selezione dice di sbloccarlo o toglierlo, e non il generico", async () => {
+    const { d, azioni } = dipendenze({ risposta: { ...esito(), refused: "locked", ops: null } });
+    eseguiVoce(voce({ id: "object.align", famiglia: "trasforma", chiamata: { comando: "disegno.object.align", valore: { horizontal: "left" } } }), d);
+    await tick();
+    expect(azioni.annuncia).toHaveBeenCalledWith(t("draw.align.locked"));
+    expect(azioni.annuncia).not.toHaveBeenCalledWith(expect.stringContaining(t("draw.reason.locked")));
+  });
+
   it("il clic di una forma: il punto è il valore fisso del comando, OK manda una volta sola e senza selezione", async () => {
     const { d, sessione, azioni } = dipendenze({ finestra: () => Promise.resolve(schema()) });
     // La voce come la fa il Completo al clic: il punto nel valore fisso (T13, giro 2).
