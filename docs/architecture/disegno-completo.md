@@ -146,6 +146,17 @@ bloccato è `locked`. I punti del valore passano da coordinate di scena a quelle
 del documento, e `extend`, `connect`, `redraw` (id del motore) sono `bad_args`.
 La Matita va nel livello più alto visibile, come le forme.
 
+**La Curvatura e la penna a passi (T12, giro curvatura).** `path.curvature` crea
+un tracciato che passa per i punti (con `element` ne sostituisce la forma),
+`path.setAnchors` ne sostituisce la geometria; `path.curvatureEdit`,
+`path.reshape`, `path.reshapeSegment` e le sei `addon.pen.*` (append, close,
+segment, removePoint, togglePoint, reshape) nominano il tracciato con `element`
+come i comandi su un punto (`tracciati_punti.rs`, dove stanno anche i delta
+`dx`/`dy` portati con la parte lineare della radice), e `tracciati_curva.rs`
+porta i punti di `path.curvature` e `path.setAnchors`. Un `id` del motore è
+`bad_args`; un elemento bloccato `locked`, un tratto della penna di Fub
+`unmapped`; chiudere un tracciato già chiuso è `empty`.
+
 ## Il Contagocce (T14, giri 6 e 7)
 
 Lo strumento `eyedropper` (famiglia `colore`) copia sulla selezione riempimento,
