@@ -5,9 +5,9 @@
 // posto dell'indice generato, che oggi è vuoto (nessuna riga è ancora fatta).
 // Il perché delle voci spente lo dà `comandiProva`, come il motore vero.
 //
-// Due differenze dal prototipo restano scritte qui: un sottomenu più in basso
-// (Oggetto › Tracciato) non ha posto nel catalogo di oggi, e le voci che il
-// prototipo mette in Trasforma o in Disponi finiscono in Oggetto.
+// Le voci del tracciato stanno in Oggetto › Tracciato, «Sposta…» in Oggetto ›
+// Trasforma e «Sposta sul livello corrente» in Oggetto › Disponi, come nel
+// prototipo: il terzo livello di ≡ (K6 T9c, `SOTTOMENU` del catalogo).
 
 import type { DrawingCommandInfo, DrawingDisabledReason } from "../src/host/contract";
 import type { FileIndice, VoceIndice } from "../src/editors/spatial/completo/indice";
@@ -34,12 +34,12 @@ export const INDICE_PROVA: FileIndice = {
     voce("draw.group", "menu/oggetto", "Raggruppa", "Group", "disegno.raggruppa", "Ctrl+G", "tracciati"),
     voce("draw.ungroup", "menu/oggetto", "Separa", "Ungroup", "disegno.separa", "Ctrl+Shift+G", "tracciati"),
     voce("draw.unlockAll", "menu/oggetto", "Sblocca tutto", "Unlock all", "disegno.sblocca-tutto", "Ctrl+Alt+2", "nucleo"),
-    voce("draw.path.join", "menu/oggetto", "Unisci", "Join", "disegno.unisci", "Ctrl+J", "tracciati"),
-    voce("draw.path.reverse", "menu/oggetto", "Inverti direzione tracciato", "Reverse path direction", "disegno.inverti", null, "tracciati"),
-    voce("draw.path.outline", "menu/oggetto", "Contorno in forma", "Outline shape", "disegno.contorno-in-forma", null, "tracciati"),
-    voce("draw.move.path", "menu/oggetto", "Sposta tracciato…", "Move path…", "disegno.sposta-tracciato", null, "tracciati"),
-    voce("draw.move", "menu/oggetto", "Sposta…", "Move…", "disegno.sposta", "Ctrl+Shift+M", "trasforma"),
-    voce("draw.move.layer", "menu/oggetto", "Sposta sul livello corrente", "Move to the current layer", "disegno.sposta-livello", null, "livelli"),
+    voce("draw.path.join", "menu/oggetto/tracciato", "Unisci", "Join", "disegno.unisci", "Ctrl+J", "tracciati"),
+    voce("draw.path.reverse", "menu/oggetto/tracciato", "Inverti direzione tracciato", "Reverse path direction", "disegno.inverti", null, "tracciati"),
+    voce("draw.path.outline", "menu/oggetto/tracciato", "Contorno in forma", "Outline shape", "disegno.contorno-in-forma", null, "tracciati"),
+    voce("draw.move.path", "menu/oggetto/tracciato", "Sposta tracciato…", "Move path…", "disegno.sposta-tracciato", null, "tracciati"),
+    voce("draw.move", "menu/oggetto/trasforma", "Sposta…", "Move…", "disegno.sposta", "Ctrl+Shift+M", "trasforma"),
+    voce("draw.move.layer", "menu/oggetto/disponi", "Sposta sul livello corrente", "Move to the current layer", "disegno.sposta-livello", null, "livelli"),
     voce("draw.symbol.move", "colonna/oggetti", "Spostamento simboli", "Symbol move", "disegno.sposta-simbolo", "Shift+S", "simboli"),
     voce("draw.sample.move", "ispettore/risorse", "Sposta campione", "Move swatch", "disegno.sposta-campione", null, "dati"),
   ],

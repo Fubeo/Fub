@@ -266,6 +266,23 @@ fn una_riga_fatta_entra_nell_indice_con_posto_effetto_e_tasto() {
 }
 
 #[test]
+fn una_riga_fatta_nel_terzo_livello_del_menu_tiene_il_posto_intero() {
+    let mut righe = con_fatte(&[(FonteMappa::Motore, "edit.colors.invert")]);
+    righe
+        .iter_mut()
+        .find(|r| r.id == "edit.colors.invert")
+        .unwrap()
+        .posto = "menu/modifica/colori".into();
+    assert!(senza_posto_o_etichetta(&righe).is_empty());
+    let fatte: Vec<&RigaMappa> = righe.iter().filter(|r| r.stato == Stato::Fatto).collect();
+    let voci = voci_di(&fatte).expect("il terzo livello si importa");
+    let inverti = voci.iter().find(|v| v.id == "edit.colors.invert").unwrap();
+    assert_eq!(inverti.posto, "menu/modifica/colori");
+    assert_eq!(inverti.comando.posto.scheda, "menu");
+    assert_eq!(inverti.comando.posto.gruppo, "modifica");
+}
+
+#[test]
 fn una_riga_fatta_senza_posto_cade() {
     let mut righe = con_fatte(&[(FonteMappa::Motore, "edit.colors.invert")]);
     let r = righe
@@ -287,4 +304,35 @@ fn una_riga_fatta_senza_posto_cade() {
         .etichetta_it
         .clear();
     assert_eq!(senza_posto_o_etichetta(&righe).len(), 1);
+}
+
+/// Il terzo livello di ≡ è lo stesso nel catalogo e nel controllo della mappa
+/// (`.github/scripts/check-disegno-mappa.mjs`): un sottomenu che uno solo dei
+/// due conosce farebbe cadere una riga buona o passare una che non si importa.
+#[test]
+fn il_terzo_livello_del_menu_e_lo_stesso_del_controllo_della_mappa() {
+    let percorso = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../.github/scripts/check-disegno-mappa.mjs");
+    let controllo = std::fs::read_to_string(percorso).expect("il controllo della mappa");
+    let mut nel_controllo = BTreeSet::new();
+    for riga in controllo
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("\"menu/") && l.matches('/').count() == 2)
+    {
+        let corpo = riga.trim_end_matches(',').trim_matches('"');
+        let (gruppo, sotti) = corpo
+            .strip_prefix("menu/")
+            .and_then(|r| r.split_once('/'))
+            .unwrap_or_else(|| panic!("riga del controllo: {riga}"));
+        let sotti = sotti.trim_start_matches("(?:").trim_end_matches(')');
+        for sotto in sotti.split('|') {
+            nel_controllo.insert(format!("{gruppo}/{sotto}"));
+        }
+    }
+    let nel_catalogo: BTreeSet<String> = catalogo::SOTTOMENU
+        .iter()
+        .flat_map(|(g, sotti)| sotti.iter().map(move |s| format!("{g}/{s}")))
+        .collect();
+    assert_eq!(nel_controllo, nel_catalogo);
 }

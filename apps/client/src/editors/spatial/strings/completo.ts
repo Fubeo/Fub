@@ -116,6 +116,19 @@ export const COMPLETO_IT = {
   "draw.completo.posto.tavolozza": "Tavolozza",
   "draw.completo.posto.testata": "Testata",
   "draw.completo.posto.interno": "Da un altro comando",
+  // Il terzo livello del menu ≡ (K6 T9c; `SOTTOMENU` del catalogo).
+  "draw.completo.sotto.colori": "Colori",
+  "draw.completo.sotto.tracciato": "Tracciato",
+  "draw.completo.sotto.disponi": "Disponi",
+  "draw.completo.sotto.fusione": "Fusione",
+  "draw.completo.sotto.inviluppo": "Inviluppo",
+  "draw.completo.sotto.blocca": "Blocca",
+  "draw.completo.sotto.nascondi": "Nascondi",
+  "draw.completo.sotto.uguale": "Simili",
+  "draw.completo.sotto.deforma": "Deforma",
+  "draw.completo.sotto.stilizza": "Stilizza",
+  "draw.completo.sotto.distorci": "Distorci",
+  "draw.completo.sotto.guide": "Guide",
 } as const;
 
 /// Chiave del catalogo del disegno: la stessa forma di `COMPLETO_IT`.
@@ -226,6 +239,18 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.completo.posto.tavolozza": "Palette",
   "draw.completo.posto.testata": "Header",
   "draw.completo.posto.interno": "From another command",
+  "draw.completo.sotto.colori": "Colors",
+  "draw.completo.sotto.tracciato": "Path",
+  "draw.completo.sotto.disponi": "Arrange",
+  "draw.completo.sotto.fusione": "Blend",
+  "draw.completo.sotto.inviluppo": "Envelope",
+  "draw.completo.sotto.blocca": "Lock",
+  "draw.completo.sotto.nascondi": "Hide",
+  "draw.completo.sotto.uguale": "Same",
+  "draw.completo.sotto.deforma": "Warp",
+  "draw.completo.sotto.stilizza": "Stylize",
+  "draw.completo.sotto.distorci": "Distort",
+  "draw.completo.sotto.guide": "Guides",
 };
 
 /// La scheda Risorse dell'ispettore (K6 T10): il suo titolo, i campioni del

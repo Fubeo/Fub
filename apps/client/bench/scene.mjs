@@ -5162,6 +5162,9 @@ async function openMenuOggetto(page) {
   await page.click(".draw-header button[aria-label=\"Disegno\"]");
   await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
   await page.hover("#context-menu [role='menuitem']:has-text('Oggetto')");
+  // Il terzo livello (K6 T9c): Oggetto › Tracciato, aperto come nel prototipo.
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Tracciato')");
+  await page.hover(".context-submenu [role='menuitem']:has-text('Tracciato')");
   await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Sposta tracciato')");
   await page.evaluate(() => document.fonts.ready);
 }

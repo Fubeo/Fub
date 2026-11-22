@@ -76,7 +76,8 @@ const FAMIGLIE = {
 const TASK_FUB = ["T2", "T7", "T8", "T9", "T10", "T11"];
 const STATI = ["da fare", "fatto", "fub", "escluso"];
 const PIGRO = ["famiglia", "nucleo", "—", "sotto:disegno-formati", "sotto:disegno-plugin", "sotto:disegno-script"];
-/// I posti del modello dei task di famiglia: i sottomenu di ≡, i gruppi della
+/// I posti del modello dei task di famiglia: i sottomenu di ≡ (con il loro
+/// terzo livello), i gruppi della
 /// colonna, le schede dell'ispettore (con una sezione), e i posti singoli.
 const POSTO = new RegExp(
   "^(?:" +
@@ -91,6 +92,12 @@ const POSTO = new RegExp(
       "interno",
       "colonna",
       "menu/(?:file|modifica|oggetto|testo|selezione|effetto|visualizza)",
+      // Il terzo livello di ≡: `SOTTOMENU` di `crates/fub-disegno/src/catalogo.rs`.
+      "menu/modifica/colori",
+      "menu/oggetto/(?:tracciato|trasforma|disponi|fusione|inviluppo|blocca|nascondi)",
+      "menu/selezione/(?:uguale|oggetto)",
+      "menu/effetto/(?:deforma|stilizza|distorci)",
+      "menu/visualizza/guide",
       "colonna/(?:scegli|disegna|forme|testo|trasforma|colore|oggetti|prospettiva|misura|vista)",
       "ispettore/(?:design|livelli|risorse|cronologia)(?:/[a-z][a-z-]*)?",
     ].join("|") +
