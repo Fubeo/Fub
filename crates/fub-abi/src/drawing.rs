@@ -1092,6 +1092,9 @@ pub enum DrawingDisabledReason {
     /// Servono punti di ancoraggio scelti (con la selezione diretta): un
     /// comando sui punti che la selezione di oggetti non dice.
     NeedsAnchors,
+    /// Ciò che è scelto è un tratto dell'Inchiostro di Fub (`fub:ink`), non un
+    /// tracciato del motore: i comandi sui tracciati non lo toccano.
+    FubInk,
     /// Il disegno, o ciò che è scelto, non si può modificare.
     ReadOnly,
     /// Ciò che è scelto è una parte che il motore non sa modificare.

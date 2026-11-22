@@ -77,6 +77,7 @@ const CHIAVI_PERCHE: Readonly<Record<Exclude<DrawingDisabledReason, { readonly o
   needs_group: "draw.disabled.needs_group",
   needs_two: "draw.disabled.needs_two",
   needs_anchors: "draw.disabled.needs_anchors",
+  fub_ink: "draw.disabled.fub_ink",
   read_only: "draw.disabled.read_only",
   unmapped: "draw.disabled.unmapped",
 };

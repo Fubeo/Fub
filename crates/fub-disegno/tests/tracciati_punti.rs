@@ -151,7 +151,7 @@ fn i_comandi_sui_punti_sono_spenti_col_perche() {
     // L'inchiostro di Fub non si cambia dai punti, nemmeno insieme a un tracciato.
     let inchiostro = perche(&["oc1c1c1c1", "oi8b8b8b8"]);
     assert!(
-        inchiostro.iter().all(|(_, r)| *r == Some(Unmapped)),
+        inchiostro.iter().all(|(_, r)| *r == Some(FubInk)),
         "{inchiostro:?}"
     );
 }
@@ -163,6 +163,42 @@ fn i_comandi_sui_punti_non_toccano_l_inchiostro() {
     for id in ["path.convertAnchors", "path.join"] {
         let esito = comando(&mut d, id, &["oi8b8b8b8"], json!({ "to": "smooth" }))
             .expect("la richiesta vale");
+        assert_eq!(
+            (esito.refused, esito.ops),
+            (Some(DrawingRefusal::Unmapped), None),
+            "{id}"
+        );
+    }
+    assert_eq!(d.revisione(), prima);
+}
+
+#[test]
+fn oggetto_tracciato_sull_inchiostro_dice_perche_e_non_cambia_niente() {
+    let (mut d, _) = apri(BASE);
+    let prima = d.revisione();
+    let scelti = vec!["oi8b8b8b8".to_string()];
+    let ids = [
+        "path.reverse",
+        "object.path.outlineStroke",
+        "object.compoundPath.make",
+        "addon.pathtools.smooth",
+    ];
+    // Spenti col perché vero: l'Inchiostro è di Fub, non un tracciato.
+    let stato = d.comandi(&scelti);
+    for id in ids {
+        let info = stato
+            .iter()
+            .find(|c| c.id == format!("disegno.{id}"))
+            .unwrap_or_else(|| panic!("{id} elencato"));
+        assert_eq!(
+            info.disabled_reason,
+            Some(DrawingDisabledReason::FubInk),
+            "{id}"
+        );
+    }
+    // E se il comando arriva lo stesso, il motore lo rifiuta e niente cambia.
+    for id in ids {
+        let esito = comando(&mut d, id, &["oi8b8b8b8"], json!({})).expect("la richiesta vale");
         assert_eq!(
             (esito.refused, esito.ops),
             (Some(DrawingRefusal::Unmapped), None),

@@ -1999,6 +1999,7 @@ export type DrawingDisabledReason =
   | "needs_group"
   | "needs_two"
   | "needs_anchors"
+  | "fub_ink"
   | "read_only"
   | "unmapped"
   | { other: { text: string } };

@@ -1756,6 +1756,7 @@ describe("mirror TS↔Rust", () => {
         case "needs_group":
         case "needs_two":
         case "needs_anchors":
+        case "fub_ink":
         case "read_only":
         case "unmapped":
           return r;
@@ -1828,7 +1829,7 @@ describe("mirror TS↔Rust", () => {
       ...infos.flatMap((i) => (i.disabled_reason == null ? [] : [i.disabled_reason])),
     ];
     expect(new Set(reasons.map(reason))).toEqual(
-      new Set(["no_selection", "needs_path", "needs_text", "needs_group", "needs_two", "needs_anchors", "read_only", "unmapped", "other"]),
+      new Set(["no_selection", "needs_path", "needs_text", "needs_group", "needs_two", "needs_anchors", "fub_ink", "read_only", "unmapped", "other"]),
     );
     const requests = fixture["DrawingCommandRequest"] as DrawingCommandRequest[];
     expect(requests.some((r) => r.preview === true)).toBe(true);

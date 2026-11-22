@@ -793,6 +793,10 @@ fn the_tool_state_and_the_disabled_reason_have_their_shape() {
         serde_json::to_value(DrawingDisabledReason::NeedsAnchors).unwrap(),
         json!("needs_anchors")
     );
+    assert_eq!(
+        serde_json::to_value(DrawingDisabledReason::FubInk).unwrap(),
+        json!("fub_ink")
+    );
 }
 
 #[test]

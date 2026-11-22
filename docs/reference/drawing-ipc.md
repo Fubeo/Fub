@@ -198,7 +198,9 @@ leggono come prima.
 - **Perché un comando è spento** (`DrawingCommandInfo.disabled_reason`,
   `null` se è acceso): `no_selection`, `needs_path`, `needs_text`,
   `needs_group`, `needs_two`, `needs_anchors` (servono punti scelti con la
-  selezione diretta), `read_only`, `unmapped`, oppure
+  selezione diretta), `fub_ink` (ciò che è scelto è un tratto
+  dell'Inchiostro di Fub, non un tracciato del motore), `read_only`,
+  `unmapped`, oppure
   `{"other": {"text": "…"}}` col testo del motore. Il client lo dice coi suoi
   testi.
 - **L'anteprima di un comando** (`DrawingCommandRequest.preview: true`): il

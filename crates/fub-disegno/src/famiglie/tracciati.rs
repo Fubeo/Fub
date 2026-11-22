@@ -104,7 +104,7 @@ impl StatoFamiglia for Stato {
             Err(_) => return Some(DrawingDisabledReason::Unmapped),
         };
         if sceglie_inchiostro(copia, selezione) {
-            return Some(DrawingDisabledReason::Unmapped);
+            return Some(DrawingDisabledReason::FubInk);
         }
         // La carta è bloccata per il motore: non è un tracciato da cambiare.
         // Un tracciato composto (un `<path>` coi buchi) vale come tracciato.
