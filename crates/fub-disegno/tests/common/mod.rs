@@ -154,7 +154,7 @@ fn canonicalizza(ops: &mut Value) {
                 // nel testo: anche quelli sono id nuovi, e casuali a ogni prova.
                 if let Some(xml) = o.get("raw").and_then(Value::as_str) {
                     for id in ids_xml(xml) {
-                        if !nuovi.iter().any(|n| *n == id) {
+                        if !nuovi.contains(&id) {
                             nuovi.push(id);
                         }
                     }
