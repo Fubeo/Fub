@@ -90,6 +90,17 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
     {
         None
     }
+
+    /// Perché il comando `id` non si fa su questa copia e selezione, pur essendo
+    /// acceso: un oggetto che quel comando non sa scrivere (per esempio il tratto
+    /// a penna con `object.setProps`). Di serie nessuno; `esegui` rende il motivo
+    /// come rifiuto del comando.
+    fn rifiuto(_id: &str, _copia: &Copia, _selezione: &[String]) -> Option<DrawingRefusal>
+    where
+        Self: Sized,
+    {
+        None
+    }
 }
 
 /// Le 26 famiglie, nell'ordine di `fub_abi::DRAWING_FAMILIES`: per ognuna la
@@ -134,6 +145,20 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::spento(id, copia, selezione)
+                    })*
+                }
+            }
+
+            /// Perché il comando `id` non si fa su questa copia e selezione, pur acceso.
+            fn rifiuto(
+                self,
+                id: &str,
+                copia: &Copia,
+                selezione: &[String],
+            ) -> Option<DrawingRefusal> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::rifiuto(id, copia, selezione)
                     })*
                 }
             }
@@ -810,6 +835,9 @@ pub(crate) fn esegui(
         Ok(scelti) => scelti,
         Err(r) => return Ok(rifiuta(r)),
     };
+    if let Some(motivo) = famiglia.rifiuto(&riga.id, copia, &richiesta.selection) {
+        return Ok(rifiuta(motivo));
+    }
     let argomenti = nata.stato().adatta(&riga.id, richiesta.value.clone())?;
     // Un gesto lasciato a metà non entra nel comando.
     if banco.in_corso.is_some() {

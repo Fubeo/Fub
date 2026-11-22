@@ -176,6 +176,35 @@ fn canonicalizza(ops: &mut Value) {
     rinomina(ops, &mappa);
 }
 
+/// Il confronto di una lettura parziale (`lettura_parziale` di un caso): ogni
+/// chiave dell'atteso dev'essere nell'esito, con lo stesso valore, scendendo negli
+/// oggetti; gli elenchi hanno la stessa lunghezza e si confrontano uno a uno. Serve
+/// alle letture con campi che cambiano da una prova all'altra (il `uid` del
+/// documento, la sua revisione): il resto è esatto.
+pub fn parziale(attesa: &Value, ottenuta: &Value, dove: &str) -> Result<(), String> {
+    match (attesa, ottenuta) {
+        (Value::Object(x), Value::Object(y)) => {
+            for (k, v) in x {
+                match y.get(k) {
+                    Some(w) => parziale(v, w, &format!("{dove}.{k}"))?,
+                    None => return Err(format!("{dove}.{k}: manca nell'esito")),
+                }
+            }
+            Ok(())
+        }
+        (Value::Array(x), Value::Array(y)) => {
+            if x.len() != y.len() {
+                return Err(format!("{dove}: {} elementi ≠ {}", x.len(), y.len()));
+            }
+            x.iter()
+                .zip(y)
+                .enumerate()
+                .try_for_each(|(i, (p, q))| parziale(p, q, &format!("{dove}[{i}]")))
+        }
+        _ => uguali(attesa, ottenuta, dove),
+    }
+}
+
 fn matrice(s: &str) -> Option<[f64; 6]> {
     let dentro = s.trim().strip_prefix("matrix(")?.strip_suffix(')')?;
     let n: Vec<f64> = dentro

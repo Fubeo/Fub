@@ -224,8 +224,9 @@ fn una_riga_fatta_entra_nell_indice_con_posto_effetto_e_tasto() {
     ]);
     let fatte: Vec<&RigaMappa> = righe.iter().filter(|r| r.stato == Stato::Fatto).collect();
     let voci = voci_di(&fatte).expect("le righe fatte si importano");
-    let gia_fatte = mappa().iter().filter(|r| r.stato == Stato::Fatto).count();
-    assert_eq!(voci.len(), 4 + gia_fatte);
+    // Ogni riga fatta ha la sua voce: le fatte della mappa (anche quelle già fatte
+    // prima di questo caso, come `edit.duplicate`) non si contano due volte.
+    assert_eq!(voci.len(), fatte.len());
     let duplica = voci.iter().find(|v| v.id == "edit.duplicate").unwrap();
     assert_eq!(duplica.comando.id, "disegno.edit.duplicate");
     assert_eq!(duplica.comando.effetto, fub_motori::Effetto::Cambia);
@@ -255,13 +256,14 @@ fn una_riga_fatta_entra_nell_indice_con_posto_effetto_e_tasto() {
     };
     let non_servito = |id: &str| non_servito(id).or_else(|| senza_riga_perche(id));
     copertura(&voci, &non_servito).expect("coperte");
-    // Senza il perché, un comando fuori dall'indice cade.
-    let errore = copertura(&voci, &|id| (id != "edit.clear").then_some("da fare"))
-        .expect_err("edit.clear è fuori senza perché");
+    // Senza il perché, un comando fuori dall'indice cade. (`select.reselect` è ancora
+    // da fare: il suo esempio resta fuori dall'indice.)
+    let errore = copertura(&voci, &|id| (id != "select.reselect").then_some("da fare"))
+        .expect_err("select.reselect è fuori senza perché");
     assert!(
         errore
             .iter()
-            .any(|m| matches!(m, Mancanza::Irraggiungibile(id) if id == "edit.clear")),
+            .any(|m| matches!(m, Mancanza::Irraggiungibile(id) if id == "select.reselect")),
         "{errore:?}"
     );
 }

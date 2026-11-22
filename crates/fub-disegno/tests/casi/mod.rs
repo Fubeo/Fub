@@ -72,6 +72,9 @@ pub fn cartella_prova() -> PathBuf {
 pub enum Atteso {
     Ops(Value),
     Lettura(Value),
+    /// Una lettura in parte: i campi dell'atteso (`lettura_parziale`), per le letture
+    /// con campi che cambiano da una prova all'altra.
+    LetturaParziale(Value),
     /// Nessuna operazione e nessuna lettura: la selezione dopo, gli id di Fub.
     Selezione(Vec<String>),
     /// Un rifiuto del motore, come lo scrive il contratto (`unsupported`).
@@ -171,6 +174,8 @@ pub fn leggi_file(file: &Path) -> Result<Vec<Caso>, String> {
             Atteso::Ops(ops.clone())
         } else if let Some(l) = atteso.get("lettura") {
             Atteso::Lettura(l.clone())
+        } else if let Some(l) = atteso.get("lettura_parziale") {
+            Atteso::LetturaParziale(l.clone())
         } else if let Some(s) = atteso.get("selezione").and_then(Value::as_array) {
             Atteso::Selezione(
                 s.iter()
@@ -493,6 +498,18 @@ pub fn esegui(disegni: &Arc<Disegni>, caso: &Caso) -> Result<(), String> {
                 ));
             }
             if let common::Confronto::Diverse(dove) = common::confronta_ops(attesa, &letta, None) {
+                return Err(format!("{nome}: lettura diversa: {dove}"));
+            }
+        }
+        (Atteso::LetturaParziale(attesa), Ok(e)) => {
+            let letta = e.reading.clone().unwrap_or(Value::Null);
+            if e.refused.is_some() || e.ops.is_some() {
+                return Err(format!(
+                    "{nome}: attesa una lettura, {}",
+                    esito_in_breve(&e)
+                ));
+            }
+            if let Err(dove) = common::parziale(attesa, &letta, "") {
                 return Err(format!("{nome}: lettura diversa: {dove}"));
             }
         }
