@@ -29,6 +29,8 @@ type Lato = "fill" | "stroke";
 interface Parti {
   readonly radice: HTMLElement;
   readonly pozzi: Readonly<Record<Lato, ColorWell>>;
+  /// Il nome visibile di ogni lato, accanto al suo pozzo (il pozzo mostra solo il colore).
+  readonly nomi: Readonly<Record<Lato, HTMLElement>>;
   readonly scambia: HTMLButtonElement;
   readonly nessuno: HTMLButtonElement;
   readonly diSerie: HTMLButtonElement;
@@ -78,6 +80,8 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
     for (const lato of ["fill", "stroke"] as const) {
       p.pozzi[lato].element.classList.toggle("draw-color-active", lato === attivo);
       p.pozzi[lato].relabel({ label: etichetta(lato), mixedText: t("draw.properties.mixed"), text: drawPickerText() });
+      p.nomi[lato].textContent = nomeDi(lato);
+      p.nomi[lato].classList.toggle("draw-color-active", lato === attivo);
     }
     p.nessuno.title = t("draw.colore.nessuno.nota", { lato: nomeDi(attivo) });
     p.nessuno.setAttribute("aria-label", p.nessuno.title);
@@ -114,7 +118,15 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
       return uno;
     };
     const pozzi = { fill: pozzo("fill"), stroke: pozzo("stroke") };
-    coppia.append(pozzi.fill.element, pozzi.stroke.element);
+    // Il nome si vede accanto al pozzo; per chi legge con lo screen reader lo dice già il pozzo.
+    const nome = (): HTMLElement => {
+      const testo = document.createElement("span");
+      testo.className = "draw-color-label";
+      testo.setAttribute("aria-hidden", "true");
+      return testo;
+    };
+    const nomi = { fill: nome(), stroke: nome() };
+    coppia.append(nomi.fill, pozzi.fill.element, nomi.stroke, pozzi.stroke.element);
     const azioni = document.createElement("div");
     azioni.className = "draw-color-actions";
     const scambia = pulsante(t("draw.colore.scambia"), t("draw.colore.scambia.nota"));
@@ -131,7 +143,7 @@ export function sezioneColore(esegui: EseguiColore, vita: Lifetime): Sezione {
     });
     azioni.append(scambia, nessuno, diSerie);
     radice.append(coppia, azioni);
-    const fatte: Parti = { radice, pozzi, scambia, nessuno, diSerie };
+    const fatte: Parti = { radice, pozzi, nomi, scambia, nessuno, diSerie };
     segna(fatte);
     return fatte;
   };

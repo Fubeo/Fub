@@ -1,3 +1,23 @@
 {
-  "risposte": []
+  "risposte": [
+    {
+      "comando": "disegno.edit.colors.saturate",
+      "esito": {
+        "preview": {
+          "shape": null,
+          "matrix": null,
+          "marquee": null,
+          "overlays": [
+            {
+              "kind": "path",
+              "d": "M292.99 170.14A73.3 36.07 0 1 0 146.39 170.14A73.3 36.07 0 1 0 292.99 170.14Z",
+              "role": "preview",
+              "width": 1,
+              "dashed": false
+            }
+          ]
+        }
+      }
+    }
+  ]
 }

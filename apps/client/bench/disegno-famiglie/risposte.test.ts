@@ -14,7 +14,9 @@ describe("le risposte delle famiglie del banco", () => {
     // Il Rettangolo del Completo risponde alla sua finestra (K6 T13, `forme.json`).
     // I tracciati (K6 T12, giro 4): Converti della sezione dei punti, e l'anteprima di
     // Sposta tracciato, coi contorni nuovi dell'ellisse della prima forma.
+    // Il colore (K6 T14, giro 1): l'anteprima di Satura, coi contorni della prima forma.
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
+      "disegno.edit.colors.saturate",
       "disegno.shape.rectangle",
       "disegno.strumento.stato",
       "disegno.path.convertAnchors",

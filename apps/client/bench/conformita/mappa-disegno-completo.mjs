@@ -134,6 +134,20 @@ export const VISTE = {
     },
     app: { scena: "disegno-fam-tracciati-sezione" },
   },
+  /// La sezione «Colore» del Design con un oggetto scelto (K6 T14, giro 1). Il
+  /// prototipo non ha una sezione Colore: si confrontano l'intestazione e il nome
+  /// di riga, che sono gli stessi di ogni sezione del Design, con quelli della
+  /// sezione «Punto di ancoraggio» del prototipo (stato `completo`).
+  sezioneColore: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.selectOption("#proto-stato", "completo");
+        await page.waitForSelector('#proto-box[data-pronto^="completo-"]');
+      },
+    },
+    app: { scena: "disegno-fam-colore" },
+  },
 };
 
 /// I pezzi. `prototipo` sta dentro lo schermo del prototipo, `app` nella pagina
@@ -372,6 +386,22 @@ export const PEZZI = [
     prototipo: '[data-section="anchor"] .draw-properties-segment[aria-label="Angolo"]',
     app: '[data-section="anchor"] .draw-properties-segment[aria-label="Angolo"]',
     proprieta: [...BASE, ...DIMENSIONI],
+  },
+  // ── la sezione «Colore» del Design (T14, giro 1) ─────────────────────────
+  // Senza una sezione Colore nel prototipo, i pezzi comuni a ogni sezione.
+  {
+    id: "sezione-colore.intestazione",
+    vista: "sezioneColore",
+    prototipo: '[data-section="anchor"] .draw-properties-toggle',
+    app: '[data-section="color"] .draw-properties-toggle',
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "sezione-colore.etichetta",
+    vista: "sezioneColore",
+    prototipo: '[data-section="anchor"] .draw-properties-label',
+    app: '[data-section="color"] .draw-color-label:not(.draw-color-active)',
+    proprieta: [...BASE],
   },
 ];
 

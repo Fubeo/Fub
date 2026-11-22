@@ -77,6 +77,47 @@ chi lo usa ne prende il colore come ripiego; altrimenti arriva, e con un nome
 già preso, o che si legge come un colore, prende il primo libero, «Vermiglio
 2» ([Disegni, risorse](drawing-resources.md#copiare-e-incollare)).
 
+## Nel Disegno completo
+
+Col Disegno completo acceso il colore degli oggetti scelti si cambia dalla
+sezione **Colore** della scheda Design, e i campi del colore di Riempimento e
+Contorno escono dal pannello: Spessore, Tratteggio e punte restano dove sono
+([Disegni, pannello delle proprietà](drawing-properties.md)). Spento il
+Completo, i campi tornano.
+
+- **Riempimento e Contorno**, uno sotto l'altro, col colore che il pannello ha
+  già: un colore, «nessuno», una sfumatura o un motivo per nome. Uno dei due è
+  il **lato attivo**, col bordo accento e il nome in grassetto; aprire il
+  colore dell'altro lo fa attivo, anche per i tasti del motore. Un colore
+  scelto va sul suo lato con un comando solo.
+- **Scambia** scambia riempimento e contorno; **Nessuno** toglie il colore del
+  lato attivo; **Di serie** rimette il riempimento bianco e il contorno nero.
+- Senza niente di scelto la sezione è spenta; un lato che gli oggetti scelti
+  non hanno (un'immagine non ha contorno) si spegne da solo.
+
+Modifica › **Modifica colori** cambia i colori degli oggetti scelti tutti
+insieme: Regola bilanciamento colore… e Satura…, poi Fondi dal davanti al
+retro, in orizzontale e in verticale, poi Converti in CMYK, in scala di grigi
+e in RGB, poi Inverti colori e Sovrastampa nero…. Satura chiede l'intensità,
+da -100 a 100 %; Regola bilanciamento colore il rosso, il verde e il blu in %
+e se cambiare il riempimento, il contorno o tutti e due; Sovrastampa nero la
+percentuale e quali neri. Con «Anteprima» la finestra mostra sul foglio i
+contorni di ciò che cambierebbe, e il disegno cambia solo con il pulsante della
+finestra.
+
+- Con un oggetto bloccato fra quelli scelti, o un disegno di sola lettura, le
+  voci sono spente e lo dicono: «Il disegno è di sola lettura, o un oggetto
+  scelto è bloccato.». Con un tratto dell'Inchiostro di Fub scelto: «Un tratto
+  dell'Inchiostro di Fub non si cambia da qui.».
+- Le fusioni vogliono almeno tre oggetti con un riempimento; Converti in RGB e
+  Sovrastampa nero non cambiano un SVG, che ha già i colori in RGB e non ha la
+  sovrastampa. Quando non c'è niente da cambiare il file resta com'è.
+
+La sezione è in `apps/client/src/editors/spatial/completo/colore-sezione.ts`;
+le parole delle finestre nella famiglia `colore`
+(`apps/client/src/editors/spatial/completo/famiglie/colore/`), i comandi nel
+motore (`crates/fub-disegno/src/famiglie/colore.rs`).
+
 ## Chi monta l'editor
 
 I recenti arrivano con `colors`, dal più recente, e ogni scelta li manda a
