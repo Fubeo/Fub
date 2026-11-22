@@ -1171,10 +1171,45 @@ function benchTypeOutcome(gesture: DrawingGesture, outcome: DrawingOutcome): Dra
   return { ...outcome, preview: { shape, matrix: null, marquee: null, overlays: [caret] }, state: stato(true) };
 }
 
+/// Dove è cominciato il trascinamento dello strumento Sfumatura del banco.
+let benchGradientStart: [number, number] | null = null;
+
+/// L'esito di un gesto dello strumento Sfumatura del motore del banco (K6 T15, giro 6): mentre si
+/// trascina, l'annotatore come lo disegna il motore vero (la barra dall'inizio al punto di adesso, la
+/// maniglia d'inizio e un campione per punto, qui i due della sfumatura di serie); il rilascio non
+/// scrive niente, come gli altri comandi dell'aspetto del banco.
+function benchGradientOutcome(gesture: DrawingGesture, outcome: DrawingOutcome): DrawingOutcome {
+  const primo = gesture.events[0];
+  if (benchGradientStart === null && primo !== undefined && primo.kind === "down") benchGradientStart = [primo.x, primo.y];
+  const ultimo = gesture.events[gesture.events.length - 1];
+  const inizio = benchGradientStart;
+  if (gesture.phase === "commit") {
+    benchGradientStart = null;
+    return inizio === null || gesture.selection.length === 0 ? { ...outcome, refused: "empty" } : { ...outcome, ops: "[]" };
+  }
+  if (inizio === null || ultimo === undefined) return outcome;
+  const fine: [number, number] = [ultimo.x, ultimo.y];
+  return {
+    ...outcome,
+    preview: {
+      shape: null,
+      matrix: null,
+      marquee: null,
+      overlays: [
+        { kind: "line", a: inizio, b: fine, role: "guide", dashed: false },
+        { kind: "handle", at: inizio, role: "guide" },
+        { kind: "swatch", at: inizio, color: "#ffffff", selected: false },
+        { kind: "swatch", at: fine, color: "#000000", selected: false },
+      ],
+    },
+  };
+}
+
 /// L'esito di un gesto del motore del banco sulla copia di testo `text`.
 function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutcome {
   const outcome: DrawingOutcome = { revision: gesture.revision, preview: null, ops: null, selection: gesture.selection, losses: [], refused: null, frame: null };
   if (typeof gesture.tool === "object" && gesture.tool.engine.id === "type") return benchTypeOutcome(gesture, outcome);
+  if (typeof gesture.tool === "object" && gesture.tool.engine.id === "gradient") return benchGradientOutcome(gesture, outcome);
   if (gesture.phase !== "commit") return outcome;
   const vector = GESTURE_VECTORS.find((each) => each.gesture.tool === gesture.tool && each.input === text);
   if (vector === undefined) {

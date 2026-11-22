@@ -20,7 +20,9 @@ describe("le risposte delle famiglie del banco", () => {
     // senza operazioni (il banco non riscrive i campioni, la scena si guarda).
     // L'aspetto (K6 T15): la trasparenza (giro 2), il contorno e il punto scelto della sfumatura
     // (giro 5), che il banco non scrive (`aspetto.json`). La sfumatura (K6 T15, giro 5): un passo
-    // senza operazioni in `colore.json`.
+    // senza operazioni in `colore.json`. Le preimpostate della sfumatura (K6 T15, giro 6): l'elenco, Applica
+    // senza operazioni, Salva «Lago» ed Elimina «Mare»; `paint.toggleActive`, che il salvataggio manda
+    // prima, in `colore.json`.
     // Il testo (K6 T16, giro 1): Carattere e Paragrafo, un passo senza operazioni (il banco non
     // riscrive il testo, la scena si guarda).
     // L'elaborazione dei tracciati (K6 T12, giro 5): Unione e Meno davanti sulle due forme di
@@ -29,6 +31,10 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.transparency.set",
       "disegno.stroke.set",
       "disegno.gradient.selectStop",
+      "disegno.gradient.presets.list",
+      "disegno.gradient.presets.apply",
+      "disegno.gradient.presets.save",
+      "disegno.gradient.presets.delete",
       "disegno.edit.colors.saturate",
       "disegno.swatch.new",
       "disegno.swatch.edit",
@@ -39,6 +45,7 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.paint.editGradient",
       "disegno.paint.setGradientGeom",
       "disegno.paint.lastGradient",
+      "disegno.paint.toggleActive",
       "disegno.shape.rectangle",
       "disegno.select.same.fillColor",
       "disegno.select.same.strokeColor",
@@ -62,6 +69,9 @@ describe("le risposte delle famiglie del banco", () => {
     expect(rispostaDiFamiglia(richiesta("disegno.swatch.new", { name: "Verde", color: "#009e73" })).refused).toBeNull();
     expect(rispostaDiFamiglia(richiesta("disegno.object.path.offsetPath", { offset: 10 })).preview?.overlays).toHaveLength(1);
     expect(rispostaDiFamiglia(richiesta("disegno.gradient.selectStop", { index: 2 })).reading).toEqual({ index: 0 });
+    const elenco = rispostaDiFamiglia(richiesta("disegno.gradient.presets.list", {})).reading as { presets: { name: string; builtIn: boolean }[] };
+    expect(elenco.presets.filter((p) => !p.builtIn).map((p) => p.name)).toEqual(["Mare"]);
+    expect(rispostaDiFamiglia(richiesta("disegno.gradient.presets.save", { name: "Lago" })).reading).toEqual({ name: "Lago" });
     expect(rispostaDiFamiglia(richiesta("disegno.strumento.stato", { strumento: "lasso" })).state?.cursor).toBe("arrow");
   });
 
