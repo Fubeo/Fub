@@ -9,6 +9,7 @@
 // `apri` porta l'indice e prepara il nucleo, e basta.
 
 import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
+import type { Etichette } from "./opzioni";
 import { costruisciFila, type CostruisciFila, type FilaOpzioni } from "./opzioni";
 import { creaSezioni, type Sezioni } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
@@ -234,6 +235,8 @@ interface CampoSchema {
   readonly valori?: readonly string[];
   /// Il minimo di un numero (T13, giro 2): sotto, OK resta spento.
   readonly minimo?: number;
+  /// Il massimo di un numero (T13, giro 3): sopra, OK resta spento (la scala).
+  readonly massimo?: number;
   /// Il valore di partenza che il motore dà al campo (`sides=6`).
   readonly predefinito?: string | number | boolean;
 }
@@ -243,10 +246,23 @@ interface SchemaFamiglia {
   readonly finestre: readonly { readonly id: string; readonly campi: readonly CampoSchema[] }[];
 }
 
+/// La parola della famiglia per `chiave` nella lingua di adesso, o `predefinito` se non c'è.
+function parolaDi(testi: Etichette | null, chiave: string, inglese: boolean, predefinito: string): string {
+  const parola = testi?.[chiave];
+  return parola === undefined ? predefinito : inglese ? parola.en : parola.it;
+}
+
 /// Un campo dello schema come lo legge la finestra di T6. I tipi che la
 /// finestra non conosce (`cella`, `json`) si leggono come testo.
 function campoDi(campo: CampoSchema): CampoFinestra {
-  if (campo.tipo === "numero") return campo.minimo === undefined ? { nome: campo.nome, tipo: "numero" } : { nome: campo.nome, tipo: "numero", min: campo.minimo };
+  if (campo.tipo === "numero") {
+    return {
+      nome: campo.nome,
+      tipo: "numero",
+      ...(campo.minimo === undefined ? {} : { min: campo.minimo }),
+      ...(campo.massimo === undefined ? {} : { max: campo.massimo }),
+    };
+  }
   if (campo.tipo === "scelta") return { nome: campo.nome, tipo: "scelta", valori: campo.valori ?? [] };
   if (campo.tipo === "sino") return { nome: campo.nome, tipo: "sino" };
   return { nome: campo.nome, tipo: "testo", facoltativo: campo.facoltativo === true };
@@ -339,7 +355,29 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       }),
     );
     const iniziali = Object.fromEntries(Object.entries(schema.predefiniti).filter(([nome]) => campi.some((campo) => campo.nome === nome)));
-    return { modulo: { campi }, campi: etichette, iniziali };
+    // Le scelte, le unità e il verbo del pulsante vengono dalle parole della famiglia (T13, giro 3).
+    const scelte = Object.fromEntries(
+      campi.flatMap((campo) =>
+        "valori" in campo
+          ? [[campo.nome, Object.fromEntries(campo.valori.map((valore): [string, string] => [valore, parolaDi(testi, `scelta:${campo.nome}:${valore}`, inglese, valore)]))]]
+          : [],
+      ),
+    );
+    const unita = Object.fromEntries(
+      campi.flatMap((campo) => {
+        const parola = testi?.[`unita:${campo.nome}`];
+        return parola === undefined ? [] : [[campo.nome, inglese ? parola.en : parola.it]];
+      }),
+    );
+    const azione = testi?.[`azione:${voce.id}`];
+    return {
+      modulo: { campi },
+      campi: etichette,
+      iniziali,
+      scelte,
+      unita,
+      ...(azione === undefined ? {} : { azione: inglese ? azione.en : azione.it }),
+    };
   };
   // Il percorso unico di un comando del motore (`esegui.ts`): il menu ≡, Ctrl+/ e
   // i tasti lo usano con queste stesse dipendenze, costruite qui una volta sola.

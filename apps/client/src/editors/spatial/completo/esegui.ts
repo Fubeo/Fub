@@ -182,7 +182,7 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): voi
       void apriFinestra(opzioni.modulo, dipendenze.carica.famiglia(voce.famiglia).then(attesaFamiglia), esegui, {
         ...opzioni,
         id: voce.id,
-        titolo: etichetta,
+        titolo: etichetta.replace(/…$/u, ""),
         iniziali: opzioni.iniziali ?? {},
         vita: dipendenze.vita,
         sulFoglio: dipendenze.anteprima,
