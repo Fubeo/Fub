@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DrawingAnchor, DrawingToolState } from "../../../../../host/contract";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
-import { COMANDI_PUNTI, filaPunti, regolePunti } from "./opzioni-punto";
+import { COMANDI_PUNTI, comandoDelMotore, filaPunti, regolePunti } from "./opzioni-punto";
 import { TESTI } from "./testi";
 import famiglia, { STRUMENTI_CON_I_PUNTI } from "./index";
 
@@ -75,11 +75,11 @@ describe("la fila dei punti scelti", () => {
     pulsante("Unisci i due punti").click();
     pulsante("Elimina il punto").click();
     expect(esegui.mock.calls.map(([id, valore]) => [id, valore])).toEqual([
-      [COMANDI_PUNTI.converti, { to: "corner", anchors: scelti }],
-      [COMANDI_PUNTI.converti, { to: "smooth", anchors: scelti }],
-      [COMANDI_PUNTI.taglia, { anchors: scelti }],
-      [COMANDI_PUNTI.unisci, { anchors: scelti }],
-      [COMANDI_PUNTI.elimina, { anchors: scelti }],
+      [comandoDelMotore(COMANDI_PUNTI.converti), { to: "corner", anchors: scelti }],
+      [comandoDelMotore(COMANDI_PUNTI.converti), { to: "smooth", anchors: scelti }],
+      [comandoDelMotore(COMANDI_PUNTI.taglia), { anchors: scelti }],
+      [comandoDelMotore(COMANDI_PUNTI.unisci), { anchors: scelti }],
+      [comandoDelMotore(COMANDI_PUNTI.elimina), { anchors: scelti }],
     ]);
   });
 
@@ -100,4 +100,9 @@ describe("la fila dei punti scelti", () => {
     expect(registraFila.mock.calls.map(([strumento]) => strumento)).toEqual([...STRUMENTI_CON_I_PUNTI]);
     expect(STRUMENTI_CON_I_PUNTI).toEqual(["directSelection", "anchorPoint"]);
   });
+});
+
+it("la fila manda i comandi dei punti al motore col prefisso disegno.", () => {
+  expect(comandoDelMotore(COMANDI_PUNTI.converti)).toBe("disegno.path.convertAnchors");
+  expect(comandoDelMotore(COMANDI_PUNTI.unisci)).toBe("disegno.path.join");
 });

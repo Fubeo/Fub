@@ -24,13 +24,19 @@ import type { Lifetime } from "../../../../../ui/lifetime";
 import { iconEl } from "../../../../../ui/icons";
 import type { AzioniFila, Etichette, FilaOpzioni } from "../../opzioni";
 
-/// I comandi del motore sui punti scelti.
+/// I comandi del motore sui punti scelti, come voci dell'indice (senza prefisso).
 export const COMANDI_PUNTI = {
   converti: "path.convertAnchors",
   taglia: "path.cutAtAnchors",
   unisci: "path.join",
   elimina: "path.removeAnchors",
 } as const;
+
+/// L'id che la fila manda al motore con `comandoDellaFila`: quello prefissato. Fub risponde solo
+/// agli id con `disegno.` (K6 T14, giro 8); la sezione passa dall'indice, che li ha già.
+export function comandoDelMotore(id: string): string {
+  return `disegno.${id}`;
+}
 
 /// Le priorità dei tre pezzi nella riga delle opzioni, come nel prototipo
 /// (`data-proto-priorita`): la posizione va per prima in «…».
@@ -119,20 +125,20 @@ export function filaPunti(testi: Etichette, stato: DrawingToolState | null, azio
   // sono due comandi, non una scelta con uno acceso.
   const converti = gruppo("", "group", "punto.converti");
   const comandoConverti = (to: "corner" | "smooth", nome: string) => () =>
-    azioni.esegui(COMANDI_PUNTI.converti, { to, anchors: [...punti] }, parola(nome));
+    azioni.esegui(comandoDelMotore(COMANDI_PUNTI.converti), { to, anchors: [...punti] }, parola(nome));
   const angolo = pulsante(converti, "punto.angolo", "punto.angolo.titolo", "draw-point-corner", comandoConverti("corner", "punto.angolo.titolo"));
   const morbido = pulsante(converti, "punto.morbido", "punto.morbido.titolo", "draw-point-smooth", comandoConverti("smooth", "punto.morbido.titolo"));
 
   // Punto: taglia, unisci, elimina.
   const punto = gruppo("", "group", "punto.gruppo");
   const taglia = pulsante(punto, "punto.taglia", "punto.taglia", "draw-point-cut", () =>
-    azioni.esegui(COMANDI_PUNTI.taglia, { anchors: [...punti] }, parola("punto.taglia")),
+    azioni.esegui(comandoDelMotore(COMANDI_PUNTI.taglia), { anchors: [...punti] }, parola("punto.taglia")),
   );
   const unisci = pulsante(punto, "punto.unisci", "punto.unisci", "draw-point-join", () =>
-    azioni.esegui(COMANDI_PUNTI.unisci, { anchors: [...punti] }, parola("punto.unisci")),
+    azioni.esegui(comandoDelMotore(COMANDI_PUNTI.unisci), { anchors: [...punti] }, parola("punto.unisci")),
   );
   const elimina = pulsante(punto, "punto.elimina", "punto.elimina", "draw-point-delete", () =>
-    azioni.esegui(COMANDI_PUNTI.elimina, { anchors: [...punti] }, parola("punto.elimina")),
+    azioni.esegui(comandoDelMotore(COMANDI_PUNTI.elimina), { anchors: [...punti] }, parola("punto.elimina")),
   );
 
   // La posizione del punto, in sola lettura.
