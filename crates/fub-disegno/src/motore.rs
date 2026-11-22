@@ -470,6 +470,26 @@ impl Disegno {
                 esito.validate()?;
                 return Ok(esito);
             }
+            // Lo stato di uno strumento non cambia niente: niente copia da
+            // aspettare, niente anteprima.
+            fub_abi::DRAWING_COMMAND_TOOL_STATE if richiesta.preview => {
+                return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));
+            }
+            fub_abi::DRAWING_COMMAND_TOOL_STATE => {
+                let strumento = richiesta
+                    .value
+                    .get("strumento")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                let esito = crate::gesti::strumento::stato_dello_strumento(
+                    &mut self.banco,
+                    &self.copia,
+                    richiesta.revision,
+                    strumento,
+                );
+                esito.validate()?;
+                return Ok(esito);
+            }
             // Preparare una famiglia non ha anteprima.
             fub_abi::DRAWING_COMMAND_FAMILY_PREPARE if richiesta.preview => {
                 return Ok(rifiutato(richiesta.revision, DrawingRefusal::NoPreview));

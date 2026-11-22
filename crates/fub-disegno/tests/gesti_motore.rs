@@ -10,6 +10,7 @@ use common::{apri, ops_di};
 use fub_abi::{
     DrawingCommandRequest, DrawingGesture, DrawingOutcome, DrawingOverlay, DrawingOverlayRole,
     DrawingRefusal, PluginError, DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_COMMAND_TOOL_OPTION,
+    DRAWING_COMMAND_TOOL_STATE,
 };
 use fub_disegno::motore::Disegno;
 use serde_json::{json, Value};
@@ -404,6 +405,58 @@ fn l_opzione_di_uno_strumento_resta_per_i_gesti_dopo() {
     // Una forma del valore sbagliata è `BadArgs`.
     let male = d.comando(DrawingCommandRequest {
         value: json!({ "chiave": "x", "valore": 1 }),
+        ..richiesta
+    });
+    assert!(matches!(male, Err(PluginError::BadArgs(_))));
+}
+
+#[test]
+fn lo_stato_di_uno_strumento_si_legge_senza_cambiare_niente() {
+    let (mut d, _) = apri(DISEGNO);
+    let revisione = d.revisione();
+    let richiesta = DrawingCommandRequest {
+        revision: revisione,
+        id: DRAWING_COMMAND_TOOL_STATE.into(),
+        selection: Vec::new(),
+        value: json!({ "strumento": "rectangle" }),
+        preview: false,
+    };
+    let esito = d.comando(richiesta.clone()).expect("lo stato");
+    assert_eq!(esito.refused, None, "{esito:?}");
+    assert_eq!(esito.ops, None);
+    assert_eq!(esito.reading, None);
+    assert_eq!(d.revisione(), revisione, "nessun passo");
+    let stato = esito.state.expect("lo stato dello strumento");
+    assert!(!stato.busy);
+    // Le opzioni sono quelle che un gesto darebbe.
+    let dal_gesto = gesto(
+        &mut d,
+        "rectangle",
+        "preview",
+        vec![evento("move", 1.0, 1.0)],
+        vec![],
+    );
+    assert_eq!(dal_gesto.state.map(|s| s.options), Some(stato.options));
+    gesto(&mut d, "rectangle", "cancel", vec![], vec![]);
+    // Il motore torna alla copia: nessuna differenza.
+    assert_eq!(d.a_mano(|_, _| {}).expect("la differenza").ops, None);
+    // Con l'anteprima non si fa; uno strumento che non c'è; una forma sbagliata.
+    let senza = d
+        .comando(DrawingCommandRequest {
+            preview: true,
+            ..richiesta.clone()
+        })
+        .expect("la risposta");
+    assert_eq!(senza.refused, Some(DrawingRefusal::NoPreview));
+    let ignoto = d
+        .comando(DrawingCommandRequest {
+            value: json!({ "strumento": "nessuno" }),
+            ..richiesta.clone()
+        })
+        .expect("la risposta");
+    assert_eq!(ignoto.refused, Some(DrawingRefusal::UnknownTool));
+    let male = d.comando(DrawingCommandRequest {
+        value: json!({ "strumento": "rectangle", "chiave": "x" }),
         ..richiesta
     });
     assert!(matches!(male, Err(PluginError::BadArgs(_))));

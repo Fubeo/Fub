@@ -307,6 +307,32 @@ pub(crate) fn opzione(
     chiave: &str,
     valore: &Value,
 ) -> DrawingOutcome {
+    scegli(banco, copia, revisione, strumento, Some((chiave, valore)))
+}
+
+/// `disegno.strumento.stato`: lo stato dello strumento `strumento`, senza
+/// cambiare niente. Lo strumento diventa quello attivo, come per
+/// [`opzione`]; il documento, la selezione e la cronologia restano come
+/// sono. Il client lo chiede quando la famiglia dello strumento è pronta,
+/// così la fila delle opzioni c'è prima del primo gesto.
+pub(crate) fn stato_dello_strumento(
+    banco: &mut Banco,
+    copia: &Copia,
+    revisione: u64,
+    strumento: &str,
+) -> DrawingOutcome {
+    scegli(banco, copia, revisione, strumento, None)
+}
+
+/// Sceglie lo strumento `strumento` (un gesto di un altro strumento si
+/// annulla prima), gli dà l'opzione se c'è, e rende il suo stato.
+fn scegli(
+    banco: &mut Banco,
+    copia: &Copia,
+    revisione: u64,
+    strumento: &str,
+    opzione: Option<(&str, &Value)>,
+) -> DrawingOutcome {
     let mut esito = esito_vuoto(revisione);
     if !conosciuto(strumento) {
         esito.refused = Some(DrawingRefusal::UnknownTool);
@@ -325,7 +351,9 @@ pub(crate) fn opzione(
         if sessione.tool_id() != strumento {
             sessione.select_tool(strumento, vista)?;
         }
-        sessione.set_tool_option(chiave, valore);
+        if let Some((chiave, valore)) = opzione {
+            sessione.set_tool_option(chiave, valore);
+        }
         Ok::<_, EngineError>(stato(sessione, ponte, copia, vista))
     });
     match fatto {
