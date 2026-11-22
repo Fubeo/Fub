@@ -164,6 +164,7 @@ export const COMPLETO_IT = {
   // Il terzo livello del menu ≡ (K6 T9c; `SOTTOMENU` del catalogo).
   "draw.completo.sotto.colori": "Colori",
   "draw.completo.sotto.tracciato": "Tracciato",
+  "draw.completo.sotto.composto": "Tracciato composto",
   "draw.completo.sotto.disponi": "Disponi",
   "draw.completo.sotto.fusione": "Fusione",
   "draw.completo.sotto.inviluppo": "Inviluppo",
@@ -331,6 +332,7 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.completo.posto.interno": "From another command",
   "draw.completo.sotto.colori": "Colors",
   "draw.completo.sotto.tracciato": "Path",
+  "draw.completo.sotto.composto": "Compound Path",
   "draw.completo.sotto.disponi": "Arrange",
   "draw.completo.sotto.fusione": "Blend",
   "draw.completo.sotto.inviluppo": "Envelope",
