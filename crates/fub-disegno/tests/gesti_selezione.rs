@@ -197,6 +197,18 @@ fn un_clic_sceglie_l_oggetto_in_cima_e_il_gruppo() {
     assert_eq!(esito.selection, ["og1g1g1g1"]);
 }
 
+/// Il clic sull'ellisse piena e su una linea senza riempimento, come nel disegno del banco: il motore
+/// sceglie ciò che sta sotto il punto, anche il tratto sottile, e il clic nel vuoto lascia la selezione
+/// vuota (K6 T15, giro 2: il banco non rispondeva ai gesti, e la causa era lì).
+#[test]
+fn un_clic_sceglie_l_ellisse_piena_e_la_linea_senza_riempimento() {
+    let corpo = "<ellipse id=\"oe1e1e1e1\" cx=\"220\" cy=\"170\" rx=\"60\" ry=\"40\" fill=\"#ecfccb\"/>\n    <path id=\"ol1l1l1l1\" d=\"M 100 250 L 300 250\" fill=\"none\" stroke=\"#1a202c\" stroke-width=\"2\"/>";
+    let testo = disegno(corpo);
+    assert_eq!(clic(&testo, &[], (220.0, 170.0)).selection, ["oe1e1e1e1"]);
+    assert_eq!(clic(&testo, &[], (200.0, 250.0)).selection, ["ol1l1l1l1"]);
+    assert!(clic(&testo, &[], (20.0, 20.0)).selection.is_empty());
+}
+
 #[test]
 fn un_oggetto_scelto_dentro_un_gruppo_si_sposta_da_solo() {
     let altro = "<rect id=\"ob2b2b2b2\" x=\"250\" y=\"100\" width=\"50\" height=\"50\"/>";
