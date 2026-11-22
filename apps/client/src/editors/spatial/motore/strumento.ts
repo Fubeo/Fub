@@ -17,6 +17,7 @@
 //   strumento di prima resta (`sceltaMentrePrepara`).
 
 import type { DrawingTool, DrawingToolState } from "../../../host/contract";
+import type { Teardown } from "../../../ui/lifetime";
 
 /// Lo strumento del motore con quell'id, nel nome del contratto.
 export function motoreDelloStrumento(id: string): DrawingTool {
@@ -43,18 +44,32 @@ export function cursoreCss(nome: string): string {
 }
 
 /// Lo stato di ogni strumento del motore, come l'ha lasciato l'ultimo esito che
-/// l'ha portato.
+/// l'ha portato. Chi mostra lo stato (la fila delle opzioni) si iscrive con
+/// `ascolta`: ogni iscrizione ha il suo disposer, e dopo quello non riceve più
+/// niente.
 export class StatiStrumenti {
   readonly #stati = new Map<string, DrawingToolState>();
+  readonly #ascolti = new Set<(id: string) => void>();
 
   /// Lo stato che lo strumento `id` ha dall'ultimo esito; `null` se non ne ha.
   stato(id: string): DrawingToolState | null {
     return this.#stati.get(id) ?? null;
   }
 
-  /// Un esito arrivato porta lo stato dello strumento: il gesto dopo lo legge.
+  /// Un esito arrivato porta lo stato dello strumento: il gesto dopo lo legge, e
+  /// chi ascolta lo sa, con l'id dello strumento.
   registra(id: string, stato: DrawingToolState): void {
     this.#stati.set(id, stato);
+    for (const ascolto of [...this.#ascolti]) if (this.#ascolti.has(ascolto)) ascolto(id);
+  }
+
+  /// Avvisa a ogni stato registrato, con l'id dello strumento. Il ritorno smette
+  /// questo ascoltatore, e solo lui.
+  ascolta(ascolto: (id: string) => void): Teardown {
+    this.#ascolti.add(ascolto);
+    return () => {
+      this.#ascolti.delete(ascolto);
+    };
   }
 }
 

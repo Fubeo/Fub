@@ -30,4 +30,31 @@ describe("lo strumento del motore", () => {
     expect(sceltaMentrePrepara("pronta")).toBe("avvia");
     expect(sceltaMentrePrepara("fallita")).toBe("errore");
   });
+
+  it("chi ascolta gli stati riceve l'id a ogni esito, e il disposer lo toglie dalla lista", () => {
+    const stati = new StatiStrumenti();
+    const primo: string[] = [];
+    const secondo: string[] = [];
+    const spegniPrimo = stati.ascolta((id) => primo.push(id));
+    stati.ascolta((id) => secondo.push(id));
+    stati.registra("directSelection", STATO);
+    expect(primo).toEqual(["directSelection"]);
+    expect(secondo).toEqual(["directSelection"]);
+    // Il disposer di uno solo: l'altro continua a sentire, il primo no.
+    spegniPrimo();
+    stati.registra("lasso", STATO);
+    expect(primo).toEqual(["directSelection"]);
+    expect(secondo).toEqual(["directSelection", "lasso"]);
+    expect(stati.stato("lasso")).toBe(STATO);
+  });
+
+  it("un ascoltatore che si toglie durante l'avviso non riceve più quell'esito", () => {
+    const stati = new StatiStrumenti();
+    const visti: string[] = [];
+    let spegni: () => void = () => {};
+    stati.ascolta(() => spegni());
+    spegni = stati.ascolta((id) => visti.push(id));
+    stati.registra("zoom", STATO);
+    expect(visti).toEqual([]);
+  });
 });
