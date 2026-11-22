@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DialogHandle } from "../../../kit/dialog";
 import { openDialog } from "../../../kit/dialog";
 import type { DrawingOutcome } from "../../../host/contract";
-import { readClipboard, writeClipboardData } from "../../../platform/clipboard";
+import { readClipboard, writeClipboardData, type ClipboardEntry } from "../../../platform/clipboard";
 import { displayBinding } from "../../../ui/commands";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { MAX_EDIT_BYTES } from "../scene/read";
@@ -347,6 +347,54 @@ describe("cancella cronologia", () => {
     expect(opzioni.description).toBe(t("draw.clear_history.body"));
     expect(t("draw.clear_history.body")).toContain("versioni");
     expect(opzioni.actions.map((a) => a.id)).toEqual(["cancel", "clear"]);
+  });
+});
+
+/// Una voce degli appunti di sistema che porta un SVG, come la legge la shell.
+function voceConSvg(testo: string): ClipboardEntry {
+  return { types: [SVG_TYPE], getType: (tipo: string) => Promise.resolve(new Blob([testo], { type: tipo })) } as unknown as ClipboardEntry;
+}
+
+describe("le varianti d'incolla (K6 T11, giro F)", () => {
+  const RISPOSTE_INCOLLA: Record<string, Partial<DrawingOutcome>> = {
+    "disegno.clipboard.importSvg": { reading: { count: 1 } },
+    "disegno.clipboard.conflicts": { reading: { swatches: [] } },
+  };
+
+  it("ogni variante fa il suo comando, con la stessa lettura, e il nome della sua voce nei messaggi", async () => {
+    const varianti = ["edit.pasteInFront", "edit.pasteInBack", "edit.pasteInPlace", "edit.pasteOnAllArtboards", "edit.pasteWithoutFormatting"] as const;
+    for (const comando of varianti) {
+      const { motore, ids } = motoreFinto({ ...RISPOSTE_INCOLLA, [`disegno.${comando}`]: { ops: "[]" } });
+      const { appunti, dipendenze } = creaCon(motore);
+      await appunti.incolla(letturaDi(ALTRO_SVG), { comando, etichetta: "Etichetta della voce" });
+      expect(ids()).toEqual(["disegno.clipboard.importSvg", "disegno.clipboard.conflicts", `disegno.${comando}`]);
+      expect(vi.mocked(dipendenze.applica)).toHaveBeenCalledWith(expect.objectContaining({ ops: "[]" }), "Etichetta della voce");
+    }
+  });
+
+  it("la copia del motore vale per ogni variante: si chiede solo il comando, senza importare", async () => {
+    const { motore, ids } = motoreFinto({ ...RISPOSTE_COPIA, ...RISPOSTE_INCOLLA, "disegno.edit.pasteInPlace": { ops: "[]" } });
+    const { appunti } = creaCon(motore);
+    await appunti.copia("copy");
+    await appunti.incolla(letturaDi(SVG), { comando: "edit.pasteInPlace" });
+    expect(ids().slice(5)).toEqual(["disegno.clipboard.conflicts", "disegno.edit.pasteInPlace"]);
+  });
+
+  it("dal menu la variante sulle tavole legge gli appunti di sistema e chiede il suo comando", async () => {
+    vi.mocked(readClipboard).mockResolvedValueOnce([voceConSvg(ALTRO_SVG)]);
+    const { motore, ids } = motoreFinto({ ...RISPOSTE_INCOLLA, "disegno.edit.pasteOnAllArtboards": { ops: "[]" } });
+    const { appunti, dipendenze } = creaCon(motore);
+    await appunti.incollaDaMenu({ comando: "edit.pasteOnAllArtboards", etichetta: "Incolla su tutte le tavole" });
+    expect(ids()).toEqual(["disegno.clipboard.importSvg", "disegno.clipboard.conflicts", "disegno.edit.pasteOnAllArtboards"]);
+    expect(vi.mocked(dipendenze.applica)).toHaveBeenCalledWith(expect.objectContaining({ ops: "[]" }), "Incolla su tutte le tavole");
+  });
+
+  it("senza opzioni l'incolla resta «Incolla» del motore", async () => {
+    const { motore, ids } = motoreFinto({ ...RISPOSTE_INCOLLA, "disegno.edit.paste": { ops: "[]" } });
+    const { appunti, dipendenze } = creaCon(motore);
+    await appunti.incolla(letturaDi(ALTRO_SVG));
+    expect(ids()).toContain("disegno.edit.paste");
+    expect(vi.mocked(dipendenze.applica)).toHaveBeenCalledWith(expect.anything(), t("draw.paste"));
   });
 });
 

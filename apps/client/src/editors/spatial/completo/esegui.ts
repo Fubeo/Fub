@@ -61,11 +61,17 @@ export interface DipendenzeComando extends AzioniEsito {
   appunti?: AppuntiCompleto;
 }
 
-/// I comandi del motore che passano dagli appunti del Completo (`appunti.ts`).
-const AZIONI_APPUNTI: Readonly<Record<string, (appunti: AppuntiCompleto) => Promise<void>>> = {
+/// I comandi del motore che passano dagli appunti del Completo (`appunti.ts`). Le
+/// varianti d'incolla ricevono il nome della loro voce, per i messaggi.
+const AZIONI_APPUNTI: Readonly<Record<string, (appunti: AppuntiCompleto, etichetta: string) => Promise<void>>> = {
   "disegno.edit.copy": (appunti) => appunti.copia("copy"),
   "disegno.edit.cut": (appunti) => appunti.copia("cut"),
-  "disegno.edit.paste": (appunti) => appunti.incollaDaMenu(),
+  "disegno.edit.paste": (appunti, etichetta) => appunti.incollaDaMenu({ comando: "edit.paste", etichetta }),
+  "disegno.edit.pasteInFront": (appunti, etichetta) => appunti.incollaDaMenu({ comando: "edit.pasteInFront", etichetta }),
+  "disegno.edit.pasteInBack": (appunti, etichetta) => appunti.incollaDaMenu({ comando: "edit.pasteInBack", etichetta }),
+  "disegno.edit.pasteInPlace": (appunti, etichetta) => appunti.incollaDaMenu({ comando: "edit.pasteInPlace", etichetta }),
+  "disegno.edit.pasteOnAllArtboards": (appunti, etichetta) => appunti.incollaDaMenu({ comando: "edit.pasteOnAllArtboards", etichetta }),
+  "disegno.edit.pasteWithoutFormatting": (appunti, etichetta) => appunti.incollaDaMenu({ comando: "edit.pasteWithoutFormatting", etichetta }),
   "disegno.edit.clearHistory": (appunti) => appunti.cancellaCronologia(),
 };
 
@@ -144,7 +150,7 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): voi
   const appunti = dipendenze.appunti;
   const azioneAppunti = AZIONI_APPUNTI[comando.id];
   if (appunti !== undefined && azioneAppunti !== undefined) {
-    void azioneAppunti(appunti);
+    void azioneAppunti(appunti, etichetta);
     return;
   }
 

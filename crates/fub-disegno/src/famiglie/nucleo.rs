@@ -27,15 +27,17 @@ impl StatoFamiglia for Stato {
     }
 
     /// I comandi del nucleo spenti, col perché, prima di chiedere al motore:
-    /// Seleziona tutto e Inversa valgono sempre; Deseleziona vuole qualcosa di
-    /// scelto; l'oggetto sopra o sotto e l'ordine vogliono oggetti che il
-    /// motore conosce (l'ordine cambia il file: non in sola lettura, non su
-    /// un oggetto bloccato); Separa vuole un gruppo.
+    /// Seleziona tutto e Inversa valgono sempre; le incolle, le letture del
+    /// documento e la selezione per id non vogliono una selezione; Deseleziona,
+    /// Pulisci, Duplica e gli oggetti vogliono qualcosa di scelto; l'oggetto
+    /// sopra o sotto e l'ordine vogliono oggetti che il motore conosce (chi
+    /// cambia il file non va in sola lettura, né su un oggetto bloccato); Separa
+    /// vuole un gruppo.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
-        let cambia = id.starts_with("object.");
+        let cambia = cambia_il_file(id);
         match id {
             "select.all" | "select.inverse" => return None,
-            _ if selezione.is_empty() => return Some(DrawingDisabledReason::NoSelection),
+            _ if selezione.is_empty() && vuole_selezione(id) => return Some(DrawingDisabledReason::NoSelection),
             "select.none" => return None,
             _ if cambia && !copia.modificabile => return Some(DrawingDisabledReason::ReadOnly),
             _ => {}
@@ -56,4 +58,25 @@ impl StatoFamiglia for Stato {
         }
         None
     }
+
+    /// `object.setProps` non scrive il tratto a penna di Fub (`fub:ink`): il
+    /// motore lo tiene come elemento grezzo, e lo riscriverebbe come un altro
+    /// oggetto. Lo si dice come `unmapped`.
+    fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        let tratto = |nome: &String| copia.mappa.dell_id(nome).and_then(|i| copia.mappa.elemento(i)).is_some_and(|e| e.ruolo == Role::Stroke);
+        (id == "object.setProps" && selezione.iter().any(tratto)).then_some(DrawingRefusal::Unmapped)
+    }
+}
+
+/// I comandi che cambiano il file: gli oggetti, le incolle, pulisci e duplica,
+/// taglia. In sola lettura non si fanno (la copia e le letture sì).
+fn cambia_il_file(id: &str) -> bool {
+    id.starts_with("object.") || id.starts_with("edit.paste") || matches!(id, "edit.clear" | "edit.duplicate" | "edit.cut")
+}
+
+/// I comandi che lavorano sulla selezione. Le incolle vanno dove sta il punto
+/// del disegno, le letture del documento leggono tutto, e la selezione per id
+/// prende i suoi id: nessuno di loro vuole una selezione.
+fn vuole_selezione(id: &str) -> bool {
+    !(id.starts_with("edit.paste") || id.starts_with("document.") || matches!(id, "select.set" | "select.add" | "select.toggle" | "edit.dropSelection"))
 }

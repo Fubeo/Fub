@@ -131,6 +131,86 @@
     },
     {
       "fonte": "motore",
+      "id": "document.find",
+      "chiamata": {
+        "comando": "disegno.document.find"
+      },
+      "etichetta": {
+        "it": "Trova oggetti",
+        "en": "Find Objects"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "document.inspect",
+      "chiamata": {
+        "comando": "disegno.document.inspect"
+      },
+      "etichetta": {
+        "it": "Ispeziona documento",
+        "en": "Inspect Document"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "document.json",
+      "chiamata": {
+        "comando": "disegno.document.json"
+      },
+      "etichetta": {
+        "it": "JSON del documento",
+        "en": "Document JSON"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "document.node",
+      "chiamata": {
+        "comando": "disegno.document.node"
+      },
+      "etichetta": {
+        "it": "Ispeziona oggetto",
+        "en": "Inspect Object"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.clear",
+      "chiamata": {
+        "comando": "disegno.edit.clear"
+      },
+      "etichetta": {
+        "it": "Cancella",
+        "en": "Clear"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Delete",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "edit.clearHistory",
       "chiamata": {
         "comando": "disegno.edit.clearHistory"
@@ -179,6 +259,38 @@
     },
     {
       "fonte": "motore",
+      "id": "edit.dropSelection",
+      "chiamata": {
+        "comando": "disegno.edit.dropSelection"
+      },
+      "etichetta": {
+        "it": "Rilascia illustrazione",
+        "en": "Drop Artwork"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.duplicate",
+      "chiamata": {
+        "comando": "disegno.edit.duplicate"
+      },
+      "etichetta": {
+        "it": "Duplica",
+        "en": "Duplicate"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "edit.paste",
       "chiamata": {
         "comando": "disegno.edit.paste"
@@ -190,6 +302,86 @@
       "posto": "menu/modifica",
       "famiglia": "nucleo",
       "tasto": "Cmd+V",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.pasteInBack",
+      "chiamata": {
+        "comando": "disegno.edit.pasteInBack"
+      },
+      "etichetta": {
+        "it": "Incolla dietro",
+        "en": "Paste in Back"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+B",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.pasteInFront",
+      "chiamata": {
+        "comando": "disegno.edit.pasteInFront"
+      },
+      "etichetta": {
+        "it": "Incolla davanti",
+        "en": "Paste in Front"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+F",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.pasteInPlace",
+      "chiamata": {
+        "comando": "disegno.edit.pasteInPlace"
+      },
+      "etichetta": {
+        "it": "Incolla nella stessa posizione",
+        "en": "Paste in Place"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Shift+V",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.pasteOnAllArtboards",
+      "chiamata": {
+        "comando": "disegno.edit.pasteOnAllArtboards"
+      },
+      "etichetta": {
+        "it": "Incolla su tutte le tavole",
+        "en": "Paste on All Artboards"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Alt+Shift+V",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.pasteWithoutFormatting",
+      "chiamata": {
+        "comando": "disegno.edit.pasteWithoutFormatting"
+      },
+      "etichetta": {
+        "it": "Incolla senza formattazione",
+        "en": "Paste without Formatting"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Alt+V",
       "effetto": "cambia",
       "finestra": false
     },
@@ -259,6 +451,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.setProps",
+      "chiamata": {
+        "comando": "disegno.object.setProps"
+      },
+      "etichetta": {
+        "it": "Proprietà oggetto",
+        "en": "Object Properties"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.ungroup",
       "chiamata": {
         "comando": "disegno.object.ungroup"
@@ -271,6 +479,22 @@
       "famiglia": "nucleo",
       "tasto": "Cmd+Shift+G",
       "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.add",
+      "chiamata": {
+        "comando": "disegno.select.add"
+      },
+      "etichetta": {
+        "it": "Aggiungi alla selezione",
+        "en": "Add to Selection"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "mostra",
       "finestra": false
     },
     {
@@ -350,6 +574,38 @@
       "posto": "menu/selezione",
       "famiglia": "nucleo",
       "tasto": "Cmd+Shift+A",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.set",
+      "chiamata": {
+        "comando": "disegno.select.set"
+      },
+      "etichetta": {
+        "it": "Seleziona oggetti",
+        "en": "Select Objects"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.toggle",
+      "chiamata": {
+        "comando": "disegno.select.toggle"
+      },
+      "etichetta": {
+        "it": "Alterna selezione",
+        "en": "Toggle Selection"
+      },
+      "posto": "interno",
+      "famiglia": "nucleo",
+      "tasto": null,
       "effetto": "mostra",
       "finestra": false
     },

@@ -33,7 +33,17 @@ import { MAX_EDIT_BYTES } from "../scene/read";
 import { utf8Length } from "../scene/text";
 import { plural, t, type DrawKey } from "../strings";
 import type { MotoreDelDisegno } from "../motore/gesti";
-import { cronologiaDi, leggiAppuntiDaVoci, PASTE_PROBLEMS, readPaste, SVG_TYPE, type AppuntiCompleto, type LetturaAppunti } from "../tools/clipboard";
+import {
+  cronologiaDi,
+  leggiAppuntiDaVoci,
+  PASTE_PROBLEMS,
+  readPaste,
+  SVG_TYPE,
+  type AppuntiCompleto,
+  type ComandoIncolla,
+  type LetturaAppunti,
+  type OpzioniIncolla,
+} from "../tools/clipboard";
 
 /// Quanto un comando aspetta la sessione del motore: come `esegui.ts`.
 const ATTESA_MOTORE_MS = 2_000;
@@ -194,9 +204,10 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
 
   // --- Incolla ----------------------------------------------------------------
 
-  /// Fa `edit.paste` con quello che il motore ha negli appunti, dopo aver
-  /// chiesto i conflitti di nomi. `false` se il motore non ha niente da incollare.
-  async function incollaDalMotore(): Promise<boolean> {
+  /// Fa il comando d'incolla `comando` con quello che il motore ha negli appunti,
+  /// dopo aver chiesto i conflitti di nomi: tutte le varianti vogliono la stessa
+  /// scelta. `false` se il motore non ha niente da incollare.
+  async function incollaDalMotore(comando: ComandoIncolla, etichetta: string): Promise<boolean> {
     const nomi = nomiDeiCampioni(letturaDi(await chiama("disegno.clipboard.conflicts", {})));
     let scelta: "merge" | "add" = "merge";
     if (nomi.length > 0) {
@@ -204,14 +215,14 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
       if (risposta === null || vita.closed) return true;
       scelta = risposta;
     }
-    const esito = await chiama("disegno.edit.paste", { swatchConflict: scelta });
+    const esito = await chiama(`disegno.${comando}`, { swatchConflict: scelta });
     if (vita.closed) return true;
     if (esito === null) {
       annuncia(t("draw.completo.key.failed"));
       return true;
     }
     if (esito.refused === "empty") return false;
-    applica(esito, t("draw.paste"));
+    applica(esito, etichetta);
     return true;
   }
 
@@ -296,18 +307,22 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
     return false;
   }
 
-  async function incolla(lettura: LetturaAppunti): Promise<void> {
+  /// Incolla `lettura` con il comando d'incolla di `opzioni` (per default «Incolla»):
+  /// la lettura, i conflitti e i limiti sono gli stessi per tutte le varianti.
+  async function incolla(lettura: LetturaAppunti, opzioni: OpzioniIncolla = {}): Promise<void> {
     if (vita.closed) return;
+    const comando = opzioni.comando ?? "edit.paste";
+    const etichetta = opzioni.etichetta ?? t("draw.paste");
     // Gli stessi appunti di una copia del Completo: il motore ha già gli oggetti.
     if (lettura.svg !== null && impronta !== null && stessoTesto(impronta, lettura.svg)) {
-      if (await incollaDalMotore()) return;
+      if (await incollaDalMotore(comando, etichetta)) return;
     }
     impronta = null;
     if (!(await porta(lettura)) || vita.closed) return;
-    await incollaDalMotore();
+    await incollaDalMotore(comando, etichetta);
   }
 
-  async function incollaDaMenu(): Promise<void> {
+  async function incollaDaMenu(opzioni: OpzioniIncolla = {}): Promise<void> {
     let voci: readonly ClipboardEntry[];
     try {
       voci = await readClipboard();
@@ -316,7 +331,7 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
       return;
     }
     if (vita.closed) return;
-    await incolla(await leggiAppuntiDaVoci(voci));
+    await incolla(await leggiAppuntiDaVoci(voci), opzioni);
   }
 
   // --- Cancella cronologia ----------------------------------------------------
@@ -342,7 +357,7 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
 
   return {
     copia: (tipo) => copia(tipo),
-    incolla: (lettura) => incolla(lettura),
+    incolla: (lettura, opzioni) => incolla(lettura, opzioni),
     incollaDaMenu,
     cancellaCronologia,
   };

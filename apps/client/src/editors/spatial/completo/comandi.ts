@@ -249,7 +249,8 @@ export function menuNonCaricato(riprova: () => void): MenuItem[] {
 /// Tutte le voci dell'indice per la ricerca Ctrl+/, col posto, il tasto e il
 /// perché di quelle spente. Chi le filtra sceglie con `rankCommands`.
 export function vociRicerca(indice: Indice, stato: StatoComandi, esegui: EseguiVoce, regola: RegolaTasti | null = null): VoceRicerca[] {
-  return indice.voci.map((voce) => {
+  // Le letture interne (posto `interno`) le usano l'ispettore e i test: non sono voci per chi cerca.
+  return indice.voci.filter((voce) => voce.posto !== "interno").map((voce) => {
     const { disabled, perche } = statoVoce(voce, stato);
     const hint = tastoMostrato(regola, voce.id);
     return {

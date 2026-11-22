@@ -748,10 +748,11 @@ export function installClipboardCommands(ctx: EditorContext): void {
   /// «Incolla» e «Incolla nello stesso punto» dal menu: gli appunti letti
   /// dalla shell, se lo lascia fare; altrimenti si dice di usare i tasti.
   async function pasteFromMenu(inPlace: boolean): Promise<void> {
-    // Il Completo incolla dal motore (K6 T11): gli appunti li legge lui.
+    // Il Completo incolla dal motore (K6 T11): gli appunti li legge lui, e «Nello
+    // stesso punto» è la sua variante `edit.pasteInPlace`.
     const completo = appuntiCompletoDi(options.motore);
     if (completo !== null) {
-      await completo.incollaDaMenu();
+      await completo.incollaDaMenu(inPlace ? { comando: "edit.pasteInPlace", etichetta: t("draw.paste.in_place") } : {});
       return;
     }
     const at = ctx.cursor;
@@ -800,12 +801,13 @@ export function installClipboardCommands(ctx: EditorContext): void {
     ctx.inPlaceUntil = -Infinity;
     if (!ownsClipboard(event)) return;
     // Il Completo incolla dal motore (K6 T11): gli appunti li legge da qui, subito.
+    // Ctrl+Maiusc+V è «Nello stesso punto», come nel motore (`edit.pasteInPlace`).
     const completo = appuntiCompletoDi(options.motore);
     if (completo !== null) {
       const lettura = leggiAppuntiDaEvento(event.clipboardData);
       if (lettura !== null) {
         event.preventDefault();
-        void completo.incolla(lettura);
+        void completo.incolla(lettura, inPlace ? { comando: "edit.pasteInPlace", etichetta: t("draw.paste.in_place") } : {});
       }
       return;
     }
