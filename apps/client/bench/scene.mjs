@@ -1581,6 +1581,25 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare,
   })),
+  // **Elaborazione tracciati** (K6 T12, giro 5): le due forme sovrapposte di `?elabora=1`
+  // scelte col clic, con la sezione «Elaborazione tracciati» del Design in vista; poi
+  // Unione e Meno davanti premuti, col tracciato del banco (`disegno-famiglie/tracciati.json`)
+  // al posto delle due forme. A 1280 e a 800 px.
+  ...[
+    ["disegno-fam-elaborazione", 1280, "Due forme sovrapposte scelte e la sezione Elaborazione tracciati del Design: i metodi forma e le operazioni", (page) => openElaborazione(page)],
+    ["disegno-fam-elaborazione-800", 800, "La sezione Elaborazione tracciati nel cassetto dell'ispettore, 800 px, con le due forme scelte", (page) => openElaborazione(page)],
+    ["disegno-fam-elaborazione-prima-800", 800, "Le due forme sovrapposte scelte, a cassetto chiuso, prima dell'elaborazione, 800 px", (page) => openElaborazione(page, null, { foglio: true })],
+    ["disegno-fam-elaborazione-unione", 1280, "Dopo Unione: un tracciato solo, con lo stile della forma davanti", (page) => openElaborazione(page, "object.pathfinder.unite")],
+    ["disegno-fam-elaborazione-unione-800", 800, "Dopo Unione nella finestra minima del desktop, 800 px", (page) => openElaborazione(page, "object.pathfinder.unite")],
+    ["disegno-fam-elaborazione-meno", 1280, "Dopo Meno davanti: il rettangolo dietro senza la parte coperta dal cerchio", (page) => openElaborazione(page, "object.pathfinder.minusFront")],
+    ["disegno-fam-elaborazione-meno-800", 800, "Dopo Meno davanti nella finestra minima del desktop, 800 px", (page) => openElaborazione(page, "object.pathfinder.minusFront")],
+  ].map(([id, width, title, prepare]) => ({
+    id,
+    title,
+    query: "connectors=6&drawing=acceso&elabora=1",
+    viewport: { width, height: 800 },
+    prepare,
+  })),
   // **La famiglia «forme»** (K6 T13, giro 2): la tendina della casella delle forme,
   // la finestra «Rettangolo» da Ctrl+/ con l'anteprima sul foglio, e la sezione
   // Allinea nel Design con il disegno scelto. A 1280 e a 800 px.
@@ -5581,6 +5600,52 @@ async function openSezioneConUno(page, selettore, sceglie = scegliPrimo) {
       }
     }
   }, selettore);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Le due forme sovrapposte di `?elabora=1` scelte col clic (il rettangolo, poi il cerchio con
+/// Maiusc), e la sezione «Elaborazione tracciati» del Design in vista (K6 T12, giro 5). Con
+/// `voce`, il pulsante della voce premuto: la scena aspetta che le due forme lascino il posto
+/// al tracciato del banco. Sotto i 960 px il cassetto copre il foglio: dopo il clic, o con
+/// `foglio`, si chiude, perché la foto mostri il disegno.
+async function openElaborazione(page, voce = null, { foglio = false } = {}) {
+  await sceltaElaborazione(page, voce);
+  const stretta = await page.evaluate(() => window.innerWidth < 960);
+  if (stretta && (foglio || voce !== null)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="false"]');
+  }
+  await page.evaluate(() => document.fonts.ready);
+}
+
+async function sceltaElaborazione(page, voce) {
+  const scegliDue = async (p) => {
+    await p.focus(".draw-editor .draw-surface");
+    await p.keyboard.press("v");
+    for (const [id, maiusc] of [["o0000001a", false], ["o0000001b", true]]) {
+      const forma = await p.locator(`.draw-editor .draw-surface [data-scene-id="${id}"]`).first().boundingBox();
+      if (!forma) throw new Error(`la forma ${id} del disegno non c'è`);
+      // Il rettangolo si prende nell'angolo che il cerchio non copre.
+      const [x, y] = maiusc ? [forma.x + forma.width * 0.75, forma.y + forma.height * 0.75] : [forma.x + 12, forma.y + 12];
+      if (maiusc) await p.keyboard.down("Shift");
+      await p.mouse.click(x, y);
+      if (maiusc) await p.keyboard.up("Shift");
+    }
+    await p.waitForFunction(() => /\b2 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
+      throw new Error("il clic con Maiusc non sceglie le due forme");
+    });
+  };
+  await openSezioneConUno(page, '#surface-panel-draw-design [data-section="pathfinder"]', scegliDue);
+  if (voce === null) return;
+  await page.click(`#surface-panel-draw-design button[data-id="${voce}"]`);
+  await page.waitForFunction(
+    () => document.querySelector('.draw-editor .draw-surface [data-scene-id="o0000001c"]') !== null
+      && document.querySelector('.draw-editor .draw-surface [data-scene-id="o0000001a"]') === null,
+    null,
+    { timeout: 6000 },
+  ).catch(() => {
+    throw new Error("il tracciato dell'elaborazione non arriva sul foglio");
+  });
   await page.evaluate(() => document.fonts.ready);
 }
 

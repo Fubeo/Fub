@@ -17,6 +17,21 @@
 //!   (Dividi gli oggetti sotto taglia anche quelli sotto), è rifiutato con
 //!   `unmapped`; un risultato che non divide niente è `empty`, e niente cambia
 //!   ([`StatoFamiglia::rifiuto_dopo`]).
+//! - **Elaborazione tracciati** (`ELABORAZIONE`, T12 giro 5): i quattro metodi
+//!   forma e le sei operazioni di `object.pathfinder.*`, senza finestra. Il
+//!   motore sostituisce gli oggetti scelti col risultato, nel posto del più
+//!   alto: un metodo forma dà un tracciato (composto, regola `nonzero`, se ha
+//!   più pezzi) con lo stile che sceglie il motore (fra due tracciati il più
+//!   alto per Unione, Intersezione, Escludi e Meno dietro, il più basso per
+//!   Meno davanti), un'operazione un gruppo nuovo di tracciati, che la
+//!   differenza scrive come un `g` con i pezzi dentro. Gli id sono nuovi.
+//!   Servono due oggetti scelti (`needs_two`); un testo diventa il contorno
+//!   delle sue lettere, un gruppo vale per le forme che ha. Un'immagine, una
+//!   guida, un gruppo di ritaglio o un gruppo vuoto il motore li toglierebbe
+//!   senza usarli: la voce è spenta con `needs_path` e il comando rifiutato con
+//!   `unmapped` ([`elaborabile`]). Un risultato vuoto (due forme che non si
+//!   toccano, con Intersezione) è `empty`, e niente cambia
+//!   ([`StatoFamiglia::rifiuto_del_motore`]).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -25,7 +40,8 @@ use fub_abi::{DrawingAnchor, DrawingDisabledReason, DrawingRefusal, MAX_DRAWING_
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use serde_json::Value;
-use vectorcraft_doc::{Document, NodeId, NodeKind};
+use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
+use vectorcraft_engine::EngineError;
 
 use super::{nodi_scelti, StatoFamiglia};
 use crate::apertura::Copia;
@@ -77,9 +93,76 @@ const CON_FINESTRA: [&str; 4] = [
 /// forma, un tratto), non solo sui tracciati.
 const ESPANDI: &str = "object.expand";
 
+/// I metodi forma e le operazioni di Elaborazione tracciati (T12, giro 5),
+/// nell'ordine del pannello del motore: senza finestra, su almeno due oggetti.
+pub(crate) const ELABORAZIONE: [&str; 10] = [
+    "object.pathfinder.unite",
+    "object.pathfinder.minusFront",
+    "object.pathfinder.intersect",
+    "object.pathfinder.exclude",
+    "object.pathfinder.divide",
+    "object.pathfinder.trim",
+    "object.pathfinder.merge",
+    "object.pathfinder.crop",
+    "object.pathfinder.outline",
+    "object.pathfinder.minusBack",
+];
+
+/// La fine del messaggio del motore quando un'operazione di Elaborazione
+/// tracciati non lascia niente (`run_pf` in `engine/src/cmd/pathops.rs`,
+/// «{label} produced an empty result»). Il caso `empty` di
+/// `tests/famiglie/tracciati.json` cade se il motore la cambia.
+const RISULTATO_VUOTO: &str = "produced an empty result";
+
 /// Il comando è uno di Oggetto › Tracciato (o Espandi) sugli oggetti scelti.
 fn sugli_oggetti(id: &str) -> bool {
-    SUGLI_OGGETTI.contains(&id) || CON_FINESTRA.contains(&id) || id == ESPANDI
+    SUGLI_OGGETTI.contains(&id)
+        || CON_FINESTRA.contains(&id)
+        || id == ESPANDI
+        || ELABORAZIONE.contains(&id)
+}
+
+/// Il motore sa usare tutto l'oggetto in un'operazione di Elaborazione
+/// tracciati: un tracciato, un composto, un testo, o un gruppo che ha almeno
+/// una forma e soltanto di questi. Il motore toglie gli oggetti scelti interi e
+/// mette il risultato al loro posto: un'immagine, una guida, un gruppo di
+/// ritaglio o un gruppo vuoto se ne andrebbero senza entrare nel risultato.
+fn elaborabile(nodo: &Node) -> bool {
+    fn conta(nodo: &Node, forme: &mut usize) -> bool {
+        match &nodo.kind {
+            NodeKind::Path { guide: true, .. } | NodeKind::Path { clipping: true, .. } => false,
+            NodeKind::Path { .. } | NodeKind::Compound { .. } => {
+                *forme += 1;
+                true
+            }
+            // Il motore usa il contorno delle lettere: un testo senza lettere
+            // disegnate (vuoto, o senza i caratteri della sua famiglia e del
+            // ripiego) sparirebbe senza entrare nel risultato.
+            NodeKind::Text(t) => {
+                let lettere =
+                    vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t).to_bezpath();
+                *forme += 1;
+                !lettere.elements().is_empty()
+            }
+            NodeKind::Group { clip: false, children } => children.iter().all(|c| conta(c, forme)),
+            _ => false,
+        }
+    }
+    let mut forme = 0;
+    conta(nodo, &mut forme) && forme > 0
+}
+
+/// Perché un'operazione di Elaborazione tracciati non vale sugli oggetti
+/// scelti `nodi`: meno di due (`needs_two`), o uno che il motore toglierebbe
+/// senza usarlo (`needs_path`).
+fn elaborazione_spenta(copia: &Copia, nodi: &[NodeId]) -> Option<DrawingDisabledReason> {
+    if nodi.len() < 2 {
+        return Some(DrawingDisabledReason::NeedsTwo);
+    }
+    let tutti = nodi
+        .iter()
+        .all(|n| copia.documento.node(*n).is_some_and(|nodo| !nodo.locked && elaborabile(nodo)));
+    (!tutti).then_some(DrawingDisabledReason::NeedsPath)
 }
 
 /// Quanto un punto può essersi spostato (in coordinate di scena) ed essere
@@ -129,6 +212,9 @@ impl StatoFamiglia for Stato {
         if id == ESPANDI {
             return None;
         }
+        if ELABORAZIONE.contains(&id) {
+            return elaborazione_spenta(copia, &nodi);
+        }
         // La carta è bloccata per il motore: non è un tracciato da cambiare.
         // Un tracciato composto (un `<path>` coi buchi) vale come tracciato.
         let tracciato = |n: &NodeId| {
@@ -149,9 +235,27 @@ impl StatoFamiglia for Stato {
 
     /// Un comando di Oggetto › Tracciato su un tratto della penna di Fub:
     /// `unmapped`, prima di farlo girare.
+    /// Elaborazione tracciati con meno di due oggetti non ha niente da
+    /// combinare: `empty`; con un oggetto che il motore toglierebbe senza
+    /// usarlo, `unmapped`.
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
-        (sugli_oggetti(id) && sceglie_inchiostro(copia, selezione))
-            .then_some(DrawingRefusal::Unmapped)
+        if sugli_oggetti(id) && sceglie_inchiostro(copia, selezione) {
+            return Some(DrawingRefusal::Unmapped);
+        }
+        if !ELABORAZIONE.contains(&id) {
+            return None;
+        }
+        let nodi = nodi_scelti(copia, selezione).ok()?;
+        match elaborazione_spenta(copia, &nodi)? {
+            DrawingDisabledReason::NeedsTwo => Some(DrawingRefusal::Empty),
+            _ => Some(DrawingRefusal::Unmapped),
+        }
+    }
+
+    /// Un'operazione di Elaborazione tracciati che non lascia niente: `empty`.
+    fn rifiuto_del_motore(id: &str, errore: &EngineError) -> Option<DrawingRefusal> {
+        let vuoto = matches!(errore, EngineError::Other(m) if m.ends_with(RISULTATO_VUOTO));
+        (ELABORAZIONE.contains(&id) && vuoto).then_some(DrawingRefusal::Empty)
     }
 
     /// Dopo il comando: un tratto della penna di Fub cambiato o tolto, anche

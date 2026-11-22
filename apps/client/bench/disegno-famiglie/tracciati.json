@@ -22,6 +22,20 @@
           ]
         }
       }
+    },
+    {
+      "comando": "disegno.object.pathfinder.unite",
+      "esito": {
+        "ops": "[{\"op\":\"batch\",\"ops\":[{\"op\":\"remove\",\"target\":\"o0000001b\"},{\"op\":\"remove\",\"target\":\"o0000001a\"},{\"op\":\"add\",\"parent\":\"l00000005\",\"pos\":{\"last\":true},\"elem\":{\"tag\":\"path\",\"attrs\":{\"d\":\"M620 320 L780 320 L780 360 A60 60 0 1 1 720 420 L620 420 Z\",\"fill\":\"#fce7f3\",\"stroke\":\"#1a202c\",\"stroke-width\":\"2\",\"id\":\"o0000001c\"}}}]}]",
+        "selection": ["o0000001c"]
+      }
+    },
+    {
+      "comando": "disegno.object.pathfinder.minusFront",
+      "esito": {
+        "ops": "[{\"op\":\"batch\",\"ops\":[{\"op\":\"remove\",\"target\":\"o0000001b\"},{\"op\":\"remove\",\"target\":\"o0000001a\"},{\"op\":\"add\",\"parent\":\"l00000005\",\"pos\":{\"last\":true},\"elem\":{\"tag\":\"path\",\"attrs\":{\"d\":\"M620 320 L780 320 L780 360 A60 60 0 0 0 720 420 L620 420 Z\",\"fill\":\"#e9d8fd\",\"id\":\"o0000001c\"}}}]}]",
+        "selection": ["o0000001c"]
+      }
     }
   ]
 }

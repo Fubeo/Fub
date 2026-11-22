@@ -440,6 +440,7 @@ pub const SOTTOMENU: &[(&str, &[&str])] = &[
         "oggetto",
         &[
             "tracciato",
+            "elaborazione",
             "trasforma",
             "disponi",
             "fusione",

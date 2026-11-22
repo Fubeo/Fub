@@ -650,7 +650,10 @@ impl Lavoro<'_> {
         }
         // Lo stampo del corpo espanso, fatto alla prima ricetta del gesto.
         let mut stampo: Option<crate::espansa::Stampo> = None;
-        for (genitore, fratelli, i) in nuovi {
+        let mut k = 0;
+        while k < nuovi.len() {
+            let (genitore, fratelli, i) = nuovi[k].clone();
+            k += 1;
             let nodo = fratelli[i];
             let parent = self.genitore(genitore)?;
             let locale = self.matrice_del_genitore(genitore)?.inverse();
@@ -667,6 +670,25 @@ impl Lavoro<'_> {
                     "op": "add", "parent": parent, "pos": pos,
                     "elem": { "tag": "g", "attrs": { "id": id } },
                 }));
+                continue;
+            }
+            // Un gruppo semplice nuovo fatto solo di pezzi nuovi (i pezzi che
+            // l'Elaborazione tracciati lascia divisi): il `g`, poi ogni pezzo
+            // dentro, subito dopo, ciascuno con il suo `add`.
+            if !riscritto && gruppo_tutto_nuovo(nodo, prima) {
+                let id = self.id_nuovo(Specie::Oggetto)?;
+                self.ids.insert(nodo.id, id.clone());
+                self.gruppi_nuovi.insert(nodo.id, genitore);
+                let pos = self.posto(&fratelli, i)?;
+                self.add.push(json!({
+                    "op": "add", "parent": parent, "pos": pos,
+                    "elem": { "tag": "g", "attrs": { "id": id } },
+                }));
+                if let Some(figli) = nodo.children() {
+                    let figli: Vec<&Arc<Node>> = figli.iter().collect();
+                    let dentro = (0..figli.len()).map(|j| (Some(nodo.id), figli.clone(), j));
+                    nuovi.splice(k..k, dentro);
+                }
                 continue;
             }
             // Un oggetto riscritto tiene il suo id se è già della forma nuova.
@@ -1309,6 +1331,33 @@ fn gruppo_di_prima(n: &Node, prima: &Posti<'_>, riscritti: &HashSet<NodeId>) -> 
         && children
             .iter()
             .all(|c| prima.nodi.contains_key(&c.id) && !riscritti.contains(&c.id))
+        && proprieta_uguali(
+            n,
+            &Node::new(
+                n.id,
+                NodeKind::Group {
+                    children: Vec::new(),
+                    clip: false,
+                },
+            ),
+        )
+}
+
+/// Vero per un gruppo semplice (senza ritaglio, senza proprietà sue) che
+/// tiene solo oggetti nuovi, nessuno dei quali c'era prima: si scrive come
+/// un `g` vuoto e i suoi pezzi dentro.
+fn gruppo_tutto_nuovo(n: &Node, prima: &Posti<'_>) -> bool {
+    let NodeKind::Group {
+        children,
+        clip: false,
+    } = &n.kind
+    else {
+        return false;
+    };
+    !children.is_empty()
+        && children
+            .iter()
+            .all(|c| !prima.nodi.contains_key(&c.id) && !ha_pezzi_di_prima(c, prima))
         && proprieta_uguali(
             n,
             &Node::new(

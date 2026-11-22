@@ -23,6 +23,7 @@ export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 // La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
 import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
 import { registraAllinea } from "./allinea";
+import { registraElaborazione } from "./elaborazione";
 import { registraTrasforma } from "./trasforma-sezione";
 import { registraColore, type LatoAttivo } from "./colore-sezione";
 import { registraCampioni } from "./campioni-sezione";
@@ -338,6 +339,9 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,
   // che parte solo al clic di un suo comando.
   registraAllinea(sezioni, eseguiPerId);
+  // La sezione «Elaborazione tracciati» (K6 T12, giro 5): le dieci voci dall'indice, senza
+  // finestra; la famiglia `tracciati` parte al primo clic.
+  registraElaborazione(sezioni, (id) => void eseguiPerId(id, {}, { senzaFinestra: true }));
   // La sezione «Trasforma» (K6 T13, giro 3): posizione, misura, rotazione e inclinazione.
   registraTrasforma(sezioni, eseguiPerId);
   // La sezione «Colore» (K6 T14, giro 1): riempimento e contorno, scambia, nessuno e di serie.

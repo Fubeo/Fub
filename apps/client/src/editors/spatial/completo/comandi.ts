@@ -177,6 +177,7 @@ const NOMI_PEZZO: Readonly<Record<string, DrawKey>> = {
   stilizza: "draw.completo.sotto.stilizza",
   distorci: "draw.completo.sotto.distorci",
   guide: "draw.completo.sotto.guide",
+  elaborazione: "draw.completo.sotto.elaborazione",
 };
 
 /// Dove sta un posto, come percorso leggibile: «Colonna › Disegna». Il
@@ -225,6 +226,33 @@ const FILE_COLORI: readonly (readonly string[])[] = [
   ["edit.colors.invert", "edit.colors.overprintBlack"],
 ];
 
+/// I quattro metodi forma di Elaborazione tracciati (K6 T12, giro 5), nell'ordine di
+/// Illustrator: la prima fila del sottomenu e la prima barra della sezione Design.
+export const METODI_FORMA: readonly string[] = [
+  "object.pathfinder.unite",
+  "object.pathfinder.minusFront",
+  "object.pathfinder.intersect",
+  "object.pathfinder.exclude",
+];
+
+/// Le sei operazioni di Elaborazione tracciati: la seconda fila e la seconda barra.
+export const OPERAZIONI_ELABORAZIONE: readonly string[] = [
+  "object.pathfinder.divide",
+  "object.pathfinder.trim",
+  "object.pathfinder.merge",
+  "object.pathfinder.crop",
+  "object.pathfinder.outline",
+  "object.pathfinder.minusBack",
+];
+
+/// Le file di Oggetto › Elaborazione tracciati: i metodi forma, le operazioni, poi le
+/// finestre (Trapping, Opzioni) quando ci saranno.
+const FILE_ELABORAZIONE: readonly (readonly string[])[] = [
+  METODI_FORMA,
+  OPERAZIONI_ELABORAZIONE,
+  ["object.pathfinder.trap", "object.pathfinder.options"],
+];
+
 /// Le file dei sottomenu del menu ≡ che le hanno (`<gruppo>`, o
 /// `<gruppo>/<sotto>` per il terzo livello): le righe, per id, nell'ordine
 /// della fila, e una riga di separazione fra una fila e l'altra. Un sottomenu
@@ -232,6 +260,7 @@ const FILE_COLORI: readonly (readonly string[])[] = [
 const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = {
   visualizza: FILE_VISUALIZZA,
   "oggetto/tracciato": FILE_TRACCIATO,
+  "oggetto/elaborazione": FILE_ELABORAZIONE,
   "modifica/colori": FILE_COLORI,
 };
 

@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`.",
+  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs).",
   "casi": [
     {
       "id": "pen",
@@ -3011,6 +3011,712 @@
       "atteso": {
         "rifiuto": "unmapped"
       }
+    },
+    {
+      "id": "object.pathfinder.unite",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M40 160 L40 40 L160 40 L160 100 L220 100 L220 220 L100 220 L100 160 Z",
+                    "fill": "#ff0000",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "otztz90rv"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-unione.svg"
+    },
+    {
+      "id": "object.pathfinder.minusFront",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M40 160 L40 40 L160 40 L160 100 L100 100 L100 160 Z",
+                    "fill": "#3366aa",
+                    "id": "o6dj1cfv1"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-meno-davanti.svg"
+    },
+    {
+      "id": "object.pathfinder.intersect",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M100 160 L100 100 L160 100 L160 160 Z",
+                    "fill": "#ff0000",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "osbiz0olm"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-intersezione.svg"
+    },
+    {
+      "id": "object.pathfinder.exclude",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M40 160 L40 40 L160 40 L160 100 L100 100 L100 160 Z M160 160 L160 100 L220 100 L220 220 L100 220 L100 160 Z",
+                    "fill": "#ff0000",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "o3dejvi3v"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-escludi.svg"
+    },
+    {
+      "id": "object.pathfinder.divide",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "ouyowizzd"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "ouyowizzd",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M160 160 L160 100 L220 100 L220 220 L100 220 L100 160 Z",
+                    "fill": "#ff0000",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "oip5baqb1"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "ouyowizzd",
+                "pos": {
+                  "after": "oip5baqb1"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M40 160 L40 40 L160 40 L160 100 L100 100 L100 160 Z",
+                    "fill": "#3366aa",
+                    "id": "o581rytuz"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "ouyowizzd",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M100 160 L100 100 L160 100 L160 160 Z",
+                    "fill": "#ff0000",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "obkeimwdc"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-dividi.svg"
+    },
+    {
+      "id": "object.pathfinder.trim",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "olrler0n0"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "olrler0n0",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M40 160 L40 40 L160 40 L160 100 L100 100 L100 160 Z",
+                    "fill": "#3366aa",
+                    "id": "o8645sn9r"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "olrler0n0",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M100 100 L220 100 L220 220 L100 220 Z",
+                    "fill": "#ff0000",
+                    "id": "olhz7jvoh"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-rifila.svg"
+    },
+    {
+      "id": "object.pathfinder.merge",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "oo6gkqf5r"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "oo6gkqf5r",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M40 160 L40 40 L160 40 L160 100 L100 100 L100 160 Z",
+                    "fill": "#3366aa",
+                    "id": "os9d4kfpp"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "oo6gkqf5r",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M100 100 L220 100 L220 220 L100 220 Z",
+                    "fill": "#ff0000",
+                    "id": "of1gpgj6b"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-fondi.svg"
+    },
+    {
+      "id": "object.pathfinder.crop",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "orboeai69"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "orboeai69",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M100 160 L100 100 L160 100 L160 160 Z",
+                    "fill": "#3366aa",
+                    "id": "okbz3xtii"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-ritaglia.svg"
+    },
+    {
+      "id": "object.pathfinder.outline",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "ouyg0rgdq"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "ouyg0rgdq",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M160 100 L160 160 L100 160",
+                    "fill": "none",
+                    "stroke": "#3366aa",
+                    "stroke-width": "1",
+                    "id": "o3s97qvoi"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "ouyg0rgdq",
+                "pos": {
+                  "after": "o3s97qvoi"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M100 160 L40 160 L40 40 L160 40 L160 100",
+                    "fill": "none",
+                    "stroke": "#3366aa",
+                    "stroke-width": "1",
+                    "id": "o51e0mi0i"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "ouyg0rgdq",
+                "pos": {
+                  "after": "o51e0mi0i"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M160 100 L220 100 L220 220 L100 220 L100 160",
+                    "fill": "none",
+                    "stroke": "#ff0000",
+                    "stroke-width": "1",
+                    "id": "orvzgsxnt"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "ouyg0rgdq",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M100 160 L100 100 L160 100",
+                    "fill": "none",
+                    "stroke": "#ff0000",
+                    "stroke-width": "1",
+                    "id": "os2g86qh1"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-contorno.svg"
+    },
+    {
+      "id": "object.pathfinder.minusBack",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M160 160 L160 100 L220 100 L220 220 L100 220 L100 160 Z",
+                    "fill": "#ff0000",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "o3pkguc5x"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-meno-dietro.svg"
+    },
+    {
+      "id": "object.pathfinder.intersect",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oc3c3c3c3"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.pathfinder.unite",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.pathfinder.unite",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oe5e5e5e5"
+      ],
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "object.pathfinder.unite",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.pathfinder.unite",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oc3c3c3c3",
+        "oh7h7h7h7"
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.pathfinder.unite",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "od4d4d4d4"
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.pathfinder.minusFront",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oc3c3c3c3",
+        "og6g6g6g6"
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "og6g6g6g6"
+              },
+              {
+                "op": "remove",
+                "target": "oc3c3c3c3"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oe5e5e5e5"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M300 260 L300 200 L360 200 L360 260 Z",
+                    "fill": "#009e73",
+                    "id": "oronormxb"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "elabora-meno-davanti-2.svg"
     }
   ]
 }

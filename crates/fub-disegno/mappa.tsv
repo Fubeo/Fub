@@ -108,10 +108,10 @@ motore	colorTheme.list	Color Themes		colore	F1	T14	da fare	interno	famiglia	lett
 motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Salva tema
 motore	colorTheme.delete	Delete Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Elimina tema
 motore	colorTheme.addToSwatches	Add to Swatches	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Aggiungi ai campioni
-motore	object.compoundShape.make	Make Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia		Crea forma composta
-motore	object.compoundShape.setMode	Shape Mode	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia		Metodo forma
-motore	object.compoundShape.release	Release Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia		Rilascia forma composta
-motore	object.compoundShape.expand	Expand Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia		Espandi forma composta
+motore	object.compoundShape.make	Make Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Crea forma composta
+motore	object.compoundShape.setMode	Shape Mode	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Metodo forma
+motore	object.compoundShape.release	Release Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Rilascia forma composta
+motore	object.compoundShape.expand	Expand Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Espandi forma composta
 motore	shape.rectangle	Rectangle		forme	F1	T13	fatto	finestra	famiglia		Rettangolo
 motore	shape.ellipse	Ellipse		forme	F1	T13	fatto	finestra	famiglia		Ellisse
 motore	shape.polygon	Polygon		forme	F1	T13	fatto	finestra	famiglia		Poligono
@@ -406,18 +406,18 @@ motore	path.deleteAnchors	Delete Anchor Points		tracciati	F1	T12	da fare	ispetto
 motore	path.reshape	Reshape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella
 motore	path.insertAnchor	Add Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Aggiungi punto di ancoraggio
 motore	path.cutAtAnchors	Cut Path at Selected Anchor Points		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglia tracciato nei punti di ancoraggio selezionati
-motore	object.pathfinder.unite	Unite	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Unione
-motore	object.pathfinder.minusFront	Minus Front	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Meno davanti
-motore	object.pathfinder.intersect	Intersect	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Intersezione
-motore	object.pathfinder.exclude	Exclude	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Escludi
-motore	object.pathfinder.divide	Divide	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Dividi
-motore	object.pathfinder.trim	Trim	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Rifila
-motore	object.pathfinder.merge	Merge	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Fondi
-motore	object.pathfinder.crop	Crop	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Ritaglia
-motore	object.pathfinder.outline	Outline	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Contorno
-motore	object.pathfinder.minusBack	Minus Back	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Meno dietro
-motore	object.pathfinder.trap	Trap…	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia	finestra	Trapping…
-motore	object.pathfinder.options	Pathfinder Options…	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia	finestra	Opzioni elaborazione tracciati…
+motore	object.pathfinder.unite	Unite	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Unione
+motore	object.pathfinder.minusFront	Minus Front	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Meno davanti
+motore	object.pathfinder.intersect	Intersect	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Intersezione
+motore	object.pathfinder.exclude	Exclude	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Escludi
+motore	object.pathfinder.divide	Divide	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Dividi
+motore	object.pathfinder.trim	Trim	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Rifila
+motore	object.pathfinder.merge	Merge	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Fondi
+motore	object.pathfinder.crop	Crop	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Ritaglia
+motore	object.pathfinder.outline	Outline	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Contorno
+motore	object.pathfinder.minusBack	Minus Back	Window › Pathfinder	tracciati	F1	T12	fatto	menu/oggetto/elaborazione	famiglia		Meno dietro
+motore	object.pathfinder.trap	Trap…	Window › Pathfinder	tracciati	F1	T12	da fare	menu/oggetto/elaborazione	famiglia	finestra	Trapping…
+motore	object.pathfinder.options	Pathfinder Options…	Window › Pathfinder	tracciati	F1	T12	da fare	menu/oggetto/elaborazione	famiglia	finestra	Opzioni elaborazione tracciati…
 motore	object.path.outlineStroke	Outline Stroke	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Contorna traccia
 motore	object.path.offsetPath	Offset Path…	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia	finestra, con l'anteprima (T12, giro 3: i campi in catalogo::FINESTRE_SCRITTE)	Sposta tracciato…
 motore	object.path.simplify	Simplify…	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia	finestra, con l'anteprima (T12, giro 3: i campi in catalogo::FINESTRE_SCRITTE)	Semplifica…
@@ -879,7 +879,7 @@ motore	object.align	Align	Window › Align	trasforma	F1	T13	fatto	ispettore/desi
 motore	object.distribute	Distribute	Window › Align	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci
 motore	object.distributeSpacing	Distribute Spacing	Window › Align	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci spaziatura
 motore	object.setBounds	Set Bounds		trasforma	F1	T13	fatto	ispettore/design	famiglia		Imposta limiti
-motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	da fare	menu/oggetto	famiglia		Espandi forma
+motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	da fare	menu/oggetto	famiglia	forma dal vivo: la scena non la tiene; la ricetta aspetta T27	Espandi forma
 motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	da fare	ispettore/design	famiglia	aspetta T27	Proprietà forma dinamica
 interfaccia	addon.pathtools.cornerTool	Corner Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Angoli
 interfaccia	addon.pathtools.sharedEdgeTool	Shared Edge Merge Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Fondi bordo condiviso
@@ -1094,7 +1094,7 @@ interfaccia	ui.paramDialog	Command Dialog		fub	—	T11	fub	fub	—	le finestre d
 interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	da fare	finestra	famiglia		Ricolora grafica…
 interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	da fare	finestra	famiglia		Ritaglia immagine
 interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	da fare	menu/effetto	famiglia		Applica ultimo effetto
-interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	da fare	ispettore/design	famiglia		Ripeti Elaborazione tracciati
+interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	da fare	ispettore/design	famiglia	il ricordo dell’ultima operazione sta nell’interfaccia del motore, non nel motore: resta da fare nel Completo	Ripeti Elaborazione tracciati
 interfaccia	file.export.pdf	Save as PDF…		formati	F3	T23	da fare	menu/file	sotto:disegno-formati		Salva come PDF…
 interfaccia	help.about	About VectorCraft		fub	—	T2	fub	fub	—	Informazioni su Fub e THIRD_PARTY_NOTICES	Informazioni su VectorCraft
 interfaccia	help.checkForUpdates	Check for Updates…		fub	—	T2	fub	fub	—	gli aggiornamenti di Fub: il motore viaggia dentro Fub	Check for Updates…
@@ -1538,7 +1538,7 @@ pannello	memo	Memo	Window	dati	F4	T26	da fare	ispettore/design/documento	famigli
 pannello	navigator	Navigator	Window	vista	F1	T11	fatto	banda	famiglia		Navigatore
 pannello	opentype	Opentype	Window	testo	F2	T16	da fare	ispettore/design	famiglia		Opentype
 pannello	paragraph	Paragraph	Window	testo	F2	T16	fatto	ispettore/design	famiglia		Paragrafo
-pannello	pathfinder	Pathfinder	Window	forme	F1	T13	da fare	ispettore/design	famiglia		Elaborazione tracciati
+pannello	pathfinder	Pathfinder	Window	forme	F1	T13	fatto	ispettore/design/pathfinder	famiglia		Elaborazione tracciati
 pannello	pattern_options	Pattern Options	Window	trame	F2	T21	da fare	ispettore/design	famiglia		Opzioni motivo
 pannello	properties	Properties	Window	fub	—	T11	fub	fub	—	l'ispettore del disegno di Fub (scheda Design)	Proprietà
 pannello	separations	Separations	Window	stampa	F4	T25	da fare	ispettore/design/documento	famiglia		Separations

@@ -386,3 +386,42 @@ fn i_livelli_scritti_si_rileggono_uguali() {
         "solo {provati} casi dei livelli con operazioni"
     );
 }
+
+/// Un testo entra nell'Elaborazione tracciati col contorno delle sue lettere
+/// quando il motore ha i caratteri (T12, giro 5): Unione del quadrato
+/// oa1a1a1a1 e di «Ciao» in Inter toglie i due oggetti e scrive un tracciato
+/// solo, il quadrato più le lettere. Senza caratteri lo stesso caso di
+/// `tracciati.json` è `unmapped`: il testo sparirebbe senza entrare.
+#[test]
+fn l_elaborazione_usa_le_lettere_di_un_testo() {
+    let disegni = common::disegni_con_inter();
+    disegni.filtra(fub_disegno::famiglie::Filtro::Tutte);
+    let casi = leggi_cartella(&cartella_famiglie()).expect("i casi si leggono");
+    let caso = casi
+        .iter()
+        .find(|c| c.id == "object.pathfinder.unite" && c.selezione == ["oa1a1a1a1", "od4d4d4d4"])
+        .expect("il caso di Unione col testo");
+    let (mut disegno, _) =
+        fub_disegno::motore::Disegno::apri_con(&disegni, &caso.disegno).expect("si apre");
+    let esito = casi::esegui_sul_disegno(&mut disegno, caso)
+        .expect("si esegue")
+        .expect("senza errore");
+    assert_eq!(esito.refused, None, "il testo con Inter entra");
+    let ops: serde_json::Value =
+        serde_json::from_str(&esito.ops.expect("le operazioni")).expect("json");
+    let ops = ops[0]["ops"].as_array().expect("un passo solo").clone();
+    let tolti: Vec<&str> = ops
+        .iter()
+        .filter(|o| o["op"] == "remove")
+        .filter_map(|o| o["target"].as_str())
+        .collect();
+    assert_eq!(tolti.len(), 2, "{ops:?}");
+    assert!(tolti.contains(&"oa1a1a1a1") && tolti.contains(&"od4d4d4d4"));
+    let aggiunti: Vec<&serde_json::Value> = ops.iter().filter(|o| o["op"] == "add").collect();
+    assert_eq!(aggiunti.len(), 1, "{ops:?}");
+    let d = aggiunti[0]["elem"]["attrs"]["d"]
+        .as_str()
+        .expect("un tracciato");
+    // Il quadrato e le lettere: C, i (asta e punto), a, o (con i buchi).
+    assert!(d.matches('M').count() >= 6, "solo il quadrato? {d}");
+}

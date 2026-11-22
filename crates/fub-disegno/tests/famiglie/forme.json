@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia forme (piano K6, T13, giro 1): le forme del motore, con il gesto dello strumento (lineSegment, arc, spiral, rectangle, roundedRectangle, ellipse, polygon, star, flare) e il comando della sua finestra delle misure (shape.*). Il disegno è forme/base.svg, lo stesso di nucleo: un livello l1a2b3c4d con due rettangoli, un gruppo di due quadrati, un triangolo e un tratto della penna. Le griglie (rectangularGrid, polarGrid) aspettano T27: il loro gruppo di percorsi composti è un costrutto ricco.",
+  "$nota": "I casi della famiglia forme (piano K6, T13, giro 1): le forme del motore, con il gesto dello strumento (lineSegment, arc, spiral, rectangle, roundedRectangle, ellipse, polygon, star, flare) e il comando della sua finestra delle misure (shape.*). Il disegno è forme/base.svg, lo stesso di nucleo: un livello l1a2b3c4d con due rettangoli, un gruppo di due quadrati, un triangolo e un tratto della penna. Le griglie (rectangularGrid, polarGrid) aspettano T27: il loro gruppo di percorsi composti è un costrutto ricco. Il pannello «pathfinder» (T12, giro 5: la sezione «Elaborazione tracciati» del Design) ha la sua prova nel client (apps/client/src/editors/spatial/completo/famiglie/tracciati/elaborazione.test.ts), che lo nomina; le dieci operazioni sono casi della famiglia tracciati.",
   "casi": [
     {
       "id": "lineSegment",
@@ -814,6 +814,11 @@
         ]
       },
       "dopo": "shape-arc-16.svg"
+    },
+    {
+      "id": "pathfinder",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/famiglie/tracciati/elaborazione.test.ts"
     }
   ]
 }
