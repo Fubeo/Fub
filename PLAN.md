@@ -2234,8 +2234,12 @@ Duplica) e le letture interne, sedici righe «fatto».
 Giro E unito in b14f18530: ≡ › Visualizza (griglia, aggancio, contorno,
 righelli di bordo, rotazione) e il navigatore nella banda; le altre voci di
 Visualizza restano «da fare» con la nota (aspettano T19, T27 o una finestra).
-Mancano: gruppo, blocca, nascondi e `select.reselect`, che toccano la
-differenza (un giro Opus, in corso). La posizione X/Y del punto si legge
+Giro G unito in 44d79e352: Raggruppa, Blocca, Nascondi e le varianti
+«grafica non selezionata», Sblocca tutto e Mostra tutto (questi due col
+comando di Fub `unflagAll`: il motore toccava anche livelli e gruppi
+bloccati), Visualizza in tre file. Restano «da fare»: Blocca/Nascondi
+soprastante e altri livelli e `object.sendToCurrentLayer` (aspettano T15),
+`select.reselect` (servirebbe uno stato nuovo nel contratto). La posizione X/Y del punto si legge
 (T12) ma non si sposta ancora (`path.moveAnchor`). Selezione, Mano e Zoom del motore si chiamano
 «… (Completo)» per non avere due nomi uguali nella tendina.
 Aspetta: niente
