@@ -2331,8 +2331,12 @@ dello strumento, niente IPC nuovo); `eseguiPerId` rende una Promise; il
 banco risponde ai comandi delle fixture con `?comandi=risposti`. Restano per
 dopo la base: raggio dell'angolo, la casella di
 Converti che non sa il tipo del punto, le foto di riferimento delle 4 scene
-nuove (dal runner). Giro 5 (Elaborazione tracciati: le dieci operazioni,
-il menu e la sezione `pathfinder` in Design) in corso.
+nuove (dal runner). Giro 5 unito in 50601fdef: Elaborazione tracciati
+(le dieci operazioni senza finestra, in un passo, nel menu e nella sezione
+`pathfinder` di Design); rifiuta meno di due oggetti, bloccati, immagini,
+testi senza lettere disegnate e risultati vuoti; il risultato è un gruppo
+nuovo (`g`). Giro 6 (icone di Elaborazione tracciati, annuncio di famiglia
+non pronta, carattere di serie del testo) in corso.
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
