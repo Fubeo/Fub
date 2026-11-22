@@ -2355,6 +2355,15 @@ perché; Media e Media e unisci (punti della Selezione diretta, o tracciati
 interi). Rimandati col perché nella mappa: Modifica tracciato di ritaglio,
 la maschera del livello, la regola di riempimento (il formato della scena
 non li ha).
+Giro 8 unito in 556aca43d: i comandi su un punto del tracciato
+(`disegno.path.moveAnchor`, `setHandle`, `insertAnchor`, `removeAnchor`,
+`convertAnchor`, `close`, `appendAnchor`, `split`), ogni punto nominato
+con `element` e numero nel valore, senza leggere ciò che è scelto; X e Y
+del punto nella sezione «Punto di ancoraggio» si scrivono, e Canc toglie i
+punti scelti con la Selezione diretta. Rischio annotato: quando lo
+spostamento è affine la differenza scrive un `transform` invece di
+riscrivere `d` (funziona, il file resta diverso da come lo scriverebbe
+Illustrator); i campi X/Y non sono ancora nella mappa della conformità.
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
