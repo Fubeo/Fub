@@ -142,6 +142,16 @@ export function apriErroreCassetto(anchor: HTMLElement, lifetime: Lifetime, ripr
 /// L'indice vero, dal suo chunk (`drawing-indice`).
 const indiceVero = (): Promise<Indice> => import("./indice").then((m) => m.indice());
 
+// La sezione «Disegno completo» di Impostazioni › Scorciatoie (T9c,
+// `panels/settings-disegno.ts`) porta questo modulo con un `import()` quando la
+// si apre, e ne prende l'indice, la regola dei tasti e il valore di `draw.keys`:
+// gli stessi pezzi dell'editor, non una copia.
+/// L'indice dei comandi, per chi non apre un disegno (le Impostazioni).
+export const indiceDeiComandi = (): Promise<Indice> => indiceVero();
+export { risolviTasti, tastoFub, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
+export { percorsoPosto } from "./comandi";
+export * as tastiUtente from "./tasti-utente";
+
 /// Un campo come lo scrive lo schema della famiglia (`schema.generated.json`).
 interface CampoSchema {
   readonly nome: string;
