@@ -128,11 +128,17 @@ export function creaAppuntiCompleto(dipendenze: DipendenzeAppunti): AppuntiCompl
 
   /// Il comando al motore, come `esegui.ts`: `null` se il motore non risponde.
   async function chiama(id: string, valore: unknown, selezione: readonly string[] = []): Promise<DrawingOutcome | null> {
-    const sessione: Sessione | null = await motore.pronta(ATTESA_MOTORE_MS);
-    if (sessione === null) return null;
-    const esito = await sessione.comando({ id, selection: [...selezione], value: valore, preview: false });
-    if (esito === null || "kind" in esito) return null;
-    return esito;
+    try {
+      const sessione: Sessione | null = await motore.pronta(ATTESA_MOTORE_MS);
+      if (sessione === null) return null;
+      const esito = await sessione.comando({ id, selection: [...selezione], value: valore, preview: false });
+      if (esito === null || "kind" in esito) return null;
+      return esito;
+    } catch {
+      // Un motore che lancia non ha fatto il comando: chi chiede lo dice, senza
+      // lasciare una promessa rifiutata.
+      return null;
+    }
   }
 
   // --- Copia e taglia ---------------------------------------------------------

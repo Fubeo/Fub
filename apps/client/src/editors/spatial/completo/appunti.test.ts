@@ -134,6 +134,15 @@ describe("copia e taglia", () => {
     expect(vi.mocked(writeClipboardData)).toHaveBeenCalledOnce();
   });
 
+  it("un motore che lancia lo dice, senza lasciare una promessa rifiutata", async () => {
+    const sessione = { comando: vi.fn(async () => Promise.reject({ kind: "bad_args", message: "non servito" })) };
+    const motore = { pronta: vi.fn(async () => sessione) } as unknown as MotoreDelDisegno;
+    const { appunti, dipendenze } = creaCon(motore);
+    await expect(appunti.copia("copy")).resolves.toBeUndefined();
+    expect(vi.mocked(dipendenze.annuncia)).toHaveBeenCalledWith(t("draw.completo.key.failed"));
+    expect(vi.mocked(writeClipboardData)).not.toHaveBeenCalled();
+  });
+
   it("senza selezione lo dice e non tocca il motore", async () => {
     const { motore } = motoreFinto(RISPOSTE_COPIA);
     const { appunti, dipendenze } = creaCon(motore, []);

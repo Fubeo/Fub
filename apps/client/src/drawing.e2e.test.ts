@@ -504,8 +504,12 @@ describe("uno screenshot incollato", () => {
     // happy-dom non decodifica immagini: il browser dice soltanto le misure.
     vi.stubGlobal("createImageBitmap", async () => ({ width: 120, height: 80, close() {} }));
     try {
-      const host = await start();
+      // Lo screenshot entra nel Semplice, dove l'immagine si incolla da sé. Nel
+      // Completo l'incolla passa dal motore (K6 T11), e il banco finto non ha
+      // ancora `clipboard.importImage`: lì la prova è `appunti.test.ts`.
+      const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("simple")] }));
       await open("casa.svg");
+      expect(workspace()).toBe("simple");
       const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
       const data = new DataTransfer();
       data.items.add(new File([png], "schermata.png", { type: "image/png" }));
