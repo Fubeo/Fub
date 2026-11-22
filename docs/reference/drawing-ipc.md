@@ -95,6 +95,21 @@ errore del contratto solo da un messaggio stringa (`asPluginError` di
   chiamata, col motivo nel log; si può riprovare, e un nuovo tentativo lo
   ricostruisce.
 
+Le preferenze del motore (`disegno.prefs.get`, `prefs.set`, `prefs.reset`,
+`prefs.list`) passano da `drawing_command` come gli altri comandi; l'host le
+salva in `draw.motore` dopo il comando
+([le preferenze del motore](../architecture/disegno-completo.md#le-preferenze-del-motore)).
+I loro rifiuti:
+
+- `conflict` con `host.drawing.prefs_newer` o `host.drawing.prefs_broken`:
+  `draw.motore` è di un Fub più nuovo o non si legge, e `prefs.set` o
+  `prefs.reset` (non in anteprima) non lo riscrivono; prima va azzerato;
+- `bad_args`: un `prefs.set` che nomina una cartella del motore
+  (`fontsFolder`, `pluginsFolder`, `recoveryFolder`, `templatesFolder`), o un
+  valore che il motore non accetta;
+- l'errore della scrittura delle impostazioni, se `draw.motore` non si
+  scrive: l'istanza torna alle preferenze di prima.
+
 Le istanze sono per vault: la chiusura del vault chiude le sue, e un'istanza
 che il vault non ha (chiusa, o mai aperta) è `not_found`, come un'istanza
 della griglia; con il motore spento nel vault è `unserved`.
