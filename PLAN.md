@@ -2662,7 +2662,17 @@ Casi limite:
   con il suo errore.
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/testo
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-22). Giro 1 unito in e91208f54: lo strumento
+`type` (testo di punto) dal ponte di T4, con tasti, IME, Esc, offset UTF-8
+tradotti e fine riga com'erano (`motore/scrittura.ts`); Design › Carattere
+(famiglia, stile, corpo, spaziatura) e Paragrafo (allineamento a sinistra,
+al centro, a destra), un comando per cambio (`text.setRangeStyle`,
+`text.setStyle`), senza i doppioni del Semplice; regola `peso_e_corsivo`
+dichiarata in fub-abi. Interlinea, crenatura, rientri e giustificato sono
+spenti: il motore li rifiuta (`unsupported`). Aperto: il carattere di
+serie del motore (Source Sans 3, 12) non è quello di Fub (Inter). Mancano:
+testo d'area, su tracciato e verticale, OpenType, glifi, stili, ≡ › Testo,
+caratteri mancanti, cerca e sostituisci.
 Aspetta: niente
 
 ## T17 · I pennelli, le deformazioni e la pulizia
