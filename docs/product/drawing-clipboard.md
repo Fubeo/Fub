@@ -86,8 +86,14 @@ i suoi campioni e i suoi stili, resta tale fra due disegni del Completo.
   leggere gli appunti restano possibili, tagliare e incollare no.
 - **Dove va l'incolla.** Nel Completo gli oggetti vanno nella posizione che dà
   il motore (scostati dalla copia, o nel primo tavolo per un'immagine o un
-  testo), non al cursore. «Incolla nello stesso punto» (`Ctrl+Maiusc+V`) non c'è
-  ancora nel Completo: incolla come «Incolla».
+  testo), non al cursore.
+- **Le varianti.** Nel menu ≡ › Modifica, «Incolla davanti» e «Incolla dietro»
+  mettono gli oggetti appena sopra o sotto la selezione (senza selezione, sopra
+  o sotto il livello). «Incolla nello stesso punto» (`Ctrl+Maiusc+V`) li rimette
+  dove stavano nella copia. «Incolla su tutte le tavole» ne mette una copia su
+  ogni tavola. «Incolla senza formattazione» (`Ctrl+Alt+V`) dà al testo incollato
+  lo stile di carattere predefinito, senza quello della copia. Tutte leggono gli
+  appunti e chiedono i campioni come «Incolla».
 
 ## Un SVG di un altro programma
 
