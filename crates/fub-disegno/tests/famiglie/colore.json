@@ -1785,7 +1785,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "paint-setFill.svg"
     },
     {
       "id": "paint.sampleColor",
@@ -1882,7 +1883,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "eyedropper-riempimento.svg"
     },
     {
       "id": "eyedropper",
@@ -1962,7 +1964,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "eyedropper-da-bloccato.svg"
     },
     {
       "id": "eyedropper",
@@ -2008,7 +2011,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "eyedropper-da-inchiostro.svg"
     },
     {
       "id": "eyedropper",
