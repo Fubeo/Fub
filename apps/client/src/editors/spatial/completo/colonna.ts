@@ -62,12 +62,31 @@ const GRUPPO_DI_FAMIGLIA: Readonly<Record<ToolSpec["group"], GruppoColonna>> = {
 /// Gli strumenti del motore che hanno la riga «fatto» nella mappa (le voci
 /// `strumento` dell'indice generato; un test lo controlla). Un id qui sblocca
 /// `motore:<id>` nella colonna: il chrome lo mostra con il nome della sua
-/// famiglia e l'icona di `ICONE_MOTORE`. T11: gli strumenti del nucleo.
-export const MOTORE_PRONTO: ReadonlySet<string> = new Set(["selection", "directSelection", "groupSelection", "lasso", "hand", "zoom", "rotateView"]);
+/// famiglia e l'icona di `ICONE_MOTORE`. T11: gli strumenti del nucleo. T13
+/// giro 1: gli strumenti di forma (la famiglia `forme`).
+export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
+  "selection",
+  "directSelection",
+  "groupSelection",
+  "lasso",
+  "hand",
+  "zoom",
+  "rotateView",
+  "lineSegment",
+  "arc",
+  "spiral",
+  "rectangle",
+  "roundedRectangle",
+  "ellipse",
+  "polygon",
+  "star",
+  "flare",
+]);
 
 /// L'icona di uno strumento del motore nella colonna e nel cassetto: quella
 /// del prototipo (`PLAN-ui/disegno-completo.html`), dal catalogo
-/// `editors/spatial/icons.ts`.
+/// `editors/spatial/icons.ts`. Le forme usano la serie che c'è (`draw-rect`,
+/// `draw-ellipse`…): il prototipo non le disegna tutte.
 export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   selection: "draw-select",
   directSelection: "draw-direct-select",
@@ -76,6 +95,15 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   hand: "draw-hand",
   zoom: "draw-zoom",
   rotateView: "draw-rotate",
+  lineSegment: "draw-line",
+  arc: "draw-arc",
+  spiral: "draw-spiral",
+  rectangle: "draw-rect",
+  roundedRectangle: "draw-rounded-rect",
+  ellipse: "draw-ellipse",
+  polygon: "draw-polygon",
+  star: "draw-star",
+  flare: "draw-flare",
 };
 
 /// L'icona di Fub per uno strumento del motore che il prototipo non disegna.
