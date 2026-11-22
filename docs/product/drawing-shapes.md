@@ -44,3 +44,8 @@ Le griglie rettangolare e polare non ci sono ancora: il loro gruppo di percorsi
 composti aspetta la ricetta del disegno (T27). Lo stesso vale per le forme dal
 vivo, cioè con angoli e lati che si cambiano dopo: quelle che il motore scrive
 come corpo espanso con la sua ricetta si salvano così, come oggi.
+
+La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
+e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla
+tavola» ne basta uno per allineare. Un pulsante spento dice perché. La famiglia
+`trasforma` si carica al primo clic di un pulsante, non prima.

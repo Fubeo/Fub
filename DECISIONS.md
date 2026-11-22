@@ -105,6 +105,14 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-22 · K6 T13 · La sezione «Allinea» sta nel Completo, costruita dall'indice; la famiglia `trasforma` si porta al primo clic, decisa dal coordinatore.
+  - Perché: la sezione deve esserci in una sessione nuova senza caricare la
+    famiglia per mostrarla. Le voci `align.*` dell'indice hanno già comando e
+    valore; acceso o spento lo dice il client dal numero di oggetti scelti (due,
+    alla tavola uno). Il comando passa dal percorso unico, e un errore di
+    preparazione si dice e si riprova al clic successivo. Il prototipo non mostra
+    la barra Allinea (sta in un modello nascosto): la mappa della conformità non
+    la confronta, e la scelta «selezione o tavola» non è nel prototipo.
 - 2026-11-22 · K6 T13 · Oggetto bloccato nella selezione dell'allineamento: opzione (b), decisa dal coordinatore.
   - Niente cambio a fub-abi: il comando resta rifiutato con il messaggio
     «sblocca o togli dalla selezione». Il piano voleva che il motore saltasse
