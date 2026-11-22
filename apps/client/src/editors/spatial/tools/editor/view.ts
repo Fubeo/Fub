@@ -211,10 +211,11 @@ export function installView(ctx: EditorContext): void {
   ctx.rereadSize = rereadSize;
 
   /// La griglia sullo schermo, se il livello la offre e la si vuole vedere. Con lei
-  /// lo sfondo della carta: la griglia di trasparenza (K6 T11) è a scacchi, dipinta
-  /// dal CSS del foglio, e si rifà qui perché cambia con le stesse scelte.
+  /// lo sfondo delle carte: la griglia di trasparenza (K6 T11) è a scacchi, dipinta
+  /// dal CSS del foglio su ogni carta della superficie (la pagina e le tavole), e si
+  /// rifà qui perché cambia con le stesse scelte.
   const showGrid = (): void => {
-    paper.toggleAttribute("data-transparency", ctx.grid.transparencyGrid === true);
+    surface.toggleAttribute("data-transparency", ctx.grid.transparencyGrid === true);
     const shown = has("grid") && ctx.grid.shown;
     gridMark.style.display = shown ? "" : "none";
     if (!shown) return;

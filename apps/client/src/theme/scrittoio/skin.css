@@ -18612,12 +18612,23 @@ input.canvas-toolbar-item {
     0 1px 3px rgb(0 0 0 / 0.18);
 }
 /* La griglia di trasparenza (K6 T11): la carta a scacchi, come un foglio che
-   non ha un fondo. La carta resta bianca nei due temi, e lo scacchiere è
-   fisso come lei; un fondo suo, o quello di un PDF, la copre. */
-.draw-page[data-transparency] {
+   non ha un fondo, anche le tavole. La carta resta bianca nei due temi, e lo
+   scacchiere è fisso come lei. Quadretti di 8 px, con quattro gradienti lineari
+   sfalsati (il sanitizzatore dei temi non ammette `conic-gradient`). */
+/* Il foglio del documento (il suo rettangolo nel disegno) non ha più il riempimento
+   bianco: lo scacchiere si vede dove il foglio non ha un fondo suo. */
+.draw-surface[data-transparency] [data-paper] {
+  fill: none;
+}
+.draw-surface[data-transparency] .draw-page {
   background-color: #ffffff;
-  background-image: conic-gradient(#e6e6e6 25%, transparent 0 50%, #e6e6e6 0 75%, transparent 0);
+  background-image:
+    linear-gradient(45deg, #e6e6e6 25%, transparent 25%),
+    linear-gradient(-45deg, #e6e6e6 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e6e6e6 75%),
+    linear-gradient(-45deg, transparent 75%, #e6e6e6 75%);
   background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 /* Il nome di una tavola, sul tavolo sopra di lei: quello della tavola
    scelta più scuro. */

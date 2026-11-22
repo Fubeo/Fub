@@ -44,6 +44,10 @@ const DUE = "o5e6f7a8b";
 const SOURCE = doc(
   `<title>Prova</title>${LAYER}<rect id="${UNO}" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`,
 );
+/// Con il foglio del documento (il suo rettangolo `fub:role="paper"`), come un disegno vero.
+const SOURCE_CON_FOGLIO = doc(
+  `<title>Prova</title><rect id="fub-paper" x="0" y="0" width="200" height="200" fill="#ffffff" fub:role="paper"/>${LAYER}<rect id="${UNO}" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`,
+);
 const DUE_OGGETTI = doc(
   `<title>Prova</title>${LAYER}<rect id="${UNO}" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/><rect id="${DUE}" x="120" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`,
 );
@@ -144,17 +148,23 @@ describe("Nascondi riquadro di delimitazione (K6 T11): cornice, maniglie e misur
 });
 
 describe("Mostra griglia trasparenza (K6 T11): la carta a scacchi", () => {
-  it("accesa, la carta ha l'attributo che il foglio dipinge a scacchi, e spenta lo toglie", () => {
+  it("accesa, la superficie ha l'attributo che il CSS dipinge a scacchi sulle carte, e spenta lo toglie", () => {
     const e = mount(SOURCE, { ...DEFAULT_GRID, transparencyGrid: true });
-    const carta = host.querySelector(".draw-page");
-    expect(carta?.hasAttribute("data-transparency")).toBe(true);
+    const superficie = host.querySelector(".draw-surface");
+    expect(superficie?.hasAttribute("data-transparency")).toBe(true);
     e.setGrid({ ...DEFAULT_GRID });
-    expect(carta?.hasAttribute("data-transparency")).toBe(false);
+    expect(superficie?.hasAttribute("data-transparency")).toBe(false);
   });
 
-  it("spenta di serie, la carta è quella di sempre", () => {
+  it("spenta di serie, la superficie è quella di sempre", () => {
     mount();
-    expect(host.querySelector(".draw-page")?.hasAttribute("data-transparency")).toBe(false);
+    expect(host.querySelector(".draw-surface")?.hasAttribute("data-transparency")).toBe(false);
+  });
+
+  it("il foglio del documento porta il marchio che il CSS rende senza fondo, e le sue forme restano", () => {
+    mount(SOURCE_CON_FOGLIO, { ...DEFAULT_GRID, transparencyGrid: true });
+    expect(host.querySelector("[data-paper]")).not.toBeNull();
+    expect(host.querySelector('[data-scene-id="' + UNO + '"]')).not.toBeNull();
   });
 
   it("la scelta non entra nella cronologia", () => {

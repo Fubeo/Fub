@@ -117,6 +117,9 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   const createShape = (shape: PaintShape): NodeRecord => {
     const { el, life: imageLife } = shapeElement(shape, shape.id, dom, options.images, null);
+    // Il foglio del documento: la griglia di trasparenza (K6 T11) lo rende senza
+    // fondo, con un marchio che il CSS del disegno vede.
+    if (shape.role === "paper") el.setAttribute("data-paper", "");
     anchor(el, shape.id);
     return { paint: shape, el, life: imageLife, children: [] };
   };
