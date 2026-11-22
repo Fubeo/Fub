@@ -2329,9 +2329,10 @@ ancoraggio» in Design (id `anchor`, come il prototipo), spenta senza punti,
 Converti con un solo comando e poi la rilettura dei punti (dallo stato
 dello strumento, niente IPC nuovo); `eseguiPerId` rende una Promise; il
 banco risponde ai comandi delle fixture con `?comandi=risposti`. Restano per
-dopo la base: raggio dell'angolo, Elaborazione tracciati, la casella di
+dopo la base: raggio dell'angolo, la casella di
 Converti che non sa il tipo del punto, le foto di riferimento delle 4 scene
-nuove (dal runner).
+nuove (dal runner). Giro 5 (Elaborazione tracciati: le dieci operazioni,
+il menu e la sezione `pathfinder` in Design) in corso.
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
@@ -2491,7 +2492,14 @@ serie; il lato attivo lo tiene il client; nel Completo il colore di
 Riempimento e Contorno del Semplice si nasconde), le dieci voci di Modifica
 › Modifica colori con le finestre Satura e Regola con anteprima (in
 `FINESTRE_SCRITTE`); le scene `disegno-fam-colore` sono Design › Colore,
-non Risorse › Campioni. Mancano: Risorse › Campioni e Temi, Guida dei
+non Risorse › Campioni. Giro 2 unito in b0278075c: Risorse › Campioni
+(`draw-resources-swatches`), i campioni nel motore (`campioni.rs`: un
+campione è un `linearGradient fub:role="swatch"` a una fermata, sempre
+globale; formato non esteso), griglia, scelta, «dai al lato attivo», le
+finestre Nuovo campione e Opzioni del campione, «Aggiungi i colori usati»,
+«Togli i non usati» (contato nel client), 2000 campioni che scorrono; con
+un testo scelto il Contorno è «Nessuno» spento col perché (Fub non dà un
+contorno ai testi). Mancano: gruppi, tinte piatte, Temi, Guida dei
 colori, Ricolora, contagocce e sfumatura, sfumature libere, profili e
 librerie.
 Aspetta: niente
