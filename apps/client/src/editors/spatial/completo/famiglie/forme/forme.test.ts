@@ -20,8 +20,8 @@ const STRUMENTI_FORME = VOCI.filter((voce) => voce.famiglia === "forme" && voce.
 const FORME_PRONTO: ReadonlySet<string> = new Set(STRUMENTI_FORME);
 
 describe("la famiglia forme nella colonna", () => {
-  it("ha nove strumenti fatti, senza le griglie (aspettano T27)", () => {
-    expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "flare", "lineSegment", "polygon", "rectangle", "roundedRectangle", "spiral", "star"]);
+  it("ha otto strumenti fatti: senza le griglie e il riflesso (aspettano T27)", () => {
+    expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "lineSegment", "polygon", "rectangle", "roundedRectangle", "spiral", "star"]);
   });
 
   it("ogni strumento fatto ha il nome corto nelle due lingue, l'icona del catalogo e un posto nel motore", () => {
@@ -46,7 +46,7 @@ describe("la famiglia forme nella colonna", () => {
     const gruppoShape = layoutCompleto([], FORME_PRONTO).find((gruppo) => gruppo.id === "shape");
     const caselle = gruppoShape?.caselle ?? [];
     const strumentiDiRettangolo = caselle.find((casella) => casella.includes("motore:rectangle")) ?? [];
-    expect(strumentiDiRettangolo).toEqual(expect.arrayContaining(["motore:rectangle", "motore:roundedRectangle", "motore:ellipse", "motore:polygon", "motore:star", "motore:flare", "motore:lineSegment", "motore:arc", "motore:spiral"]));
+    expect(strumentiDiRettangolo).toEqual(expect.arrayContaining(["motore:rectangle", "motore:roundedRectangle", "motore:ellipse", "motore:polygon", "motore:star", "motore:lineSegment", "motore:arc", "motore:spiral"]));
     expect(strumentiDiRettangolo).not.toContain("motore:rectangularGrid");
   });
 

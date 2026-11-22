@@ -53,8 +53,38 @@ fn chiamata(voce: &Voce) -> Value {
             "valore": { "effect": voce.id },
         }),
         FonteMappa::Strumento => json!({ "strumento": voce.id }),
-        FonteMappa::Interfaccia | FonteMappa::Pannello => json!({ "client": voce.id }),
+        FonteMappa::Interfaccia | FonteMappa::Pannello => match alias_allinea(&voce.id) {
+            Some((comando, valore)) => json!({
+                "comando": format!("{SPAZIO}.{comando}"),
+                "valore": valore,
+            }),
+            None => json!({ "client": voce.id }),
+        },
     }
+}
+
+/// Le voci `align.*` dell'interfaccia (T13, giro 2) sono il comando del motore con il
+/// suo valore fisso: così passano dal percorso unico, anche da Ctrl+/ (la sezione
+/// «Allinea» aggiunge `to`). Le altre voci dell'interfaccia restano del client.
+fn alias_allinea(id: &str) -> Option<(&'static str, Value)> {
+    Some(match id {
+        "align.horizontalLeft" => ("object.align", json!({ "horizontal": "left" })),
+        "align.horizontalCenter" => ("object.align", json!({ "horizontal": "center" })),
+        "align.horizontalRight" => ("object.align", json!({ "horizontal": "right" })),
+        "align.horizontalVerticalCenter" => ("object.align", json!({ "horizontal": "center", "vertical": "center" })),
+        "align.verticalTop" => ("object.align", json!({ "vertical": "top" })),
+        "align.verticalCenter" => ("object.align", json!({ "vertical": "center" })),
+        "align.verticalBottom" => ("object.align", json!({ "vertical": "bottom" })),
+        "align.distributeVerticalTop" => ("object.distribute", json!({ "vertical": "top" })),
+        "align.distributeVerticalCenter" => ("object.distribute", json!({ "vertical": "center" })),
+        "align.distributeVerticalBottom" => ("object.distribute", json!({ "vertical": "bottom" })),
+        "align.distributeHorizontalLeft" => ("object.distribute", json!({ "horizontal": "left" })),
+        "align.distributeHorizontalCenter" => ("object.distribute", json!({ "horizontal": "center" })),
+        "align.distributeHorizontalRight" => ("object.distribute", json!({ "horizontal": "right" })),
+        "align.distributeVerticalSpace" => ("object.distributeSpacing", json!({ "axis": "vertical" })),
+        "align.distributeHorizontalSpace" => ("object.distributeSpacing", json!({ "axis": "horizontal" })),
+        _ => return None,
+    })
 }
 
 fn voce(voce: &Voce) -> Value {

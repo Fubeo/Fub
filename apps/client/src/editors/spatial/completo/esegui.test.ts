@@ -242,6 +242,30 @@ describe("eseguiVoce, con finestra", () => {
     expect(risposta).toEqual({ anteprima: null, rifiuto: null });
   });
 
+  it("il clic di una forma: il punto è il valore fisso del comando, OK manda una volta sola e senza selezione", async () => {
+    const { d, sessione, azioni } = dipendenze({ finestra: () => Promise.resolve(schema()) });
+    // La voce come la fa il Completo al clic: il punto nel valore fisso (T13, giro 2).
+    const derivata = voce({ id: "shape.rectangle", famiglia: "forme", chiamata: { comando: "disegno.shape.rectangle", valore: { x: 40, y: 50 } }, finestra: true });
+    eseguiVoce(derivata, { ...d, selezione: () => [] });
+    await tick();
+    const [, , esegui] = vi.mocked(apriFinestra).mock.calls[0]!;
+    await esegui({ width: 80, height: 40 }, false);
+    expect(sessione.comando).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "disegno.shape.rectangle", selection: [], value: { x: 40, y: 50, width: 80, height: 40 }, preview: false }),
+    );
+    expect(azioni.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("Annulla della finestra del clic non manda niente al motore", async () => {
+    const { d, sessione, azioni } = dipendenze({ finestra: () => Promise.resolve(schema()) });
+    eseguiVoce(voce({ id: "shape.rectangle", famiglia: "forme", chiamata: { comando: "disegno.shape.rectangle", valore: { x: 40, y: 50 } }, finestra: true }), d);
+    await tick();
+    // Annulla non chiama `esegui`: il motore non riceve nulla e la cronologia non cambia.
+    expect(apriFinestra).toHaveBeenCalledTimes(1);
+    expect(sessione.comando).not.toHaveBeenCalled();
+    expect(azioni.commit).not.toHaveBeenCalled();
+  });
+
   it("«Riprova» della finestra rifà l'attesa della famiglia, con la stessa famiglia del comando", async () => {
     const carica = caricatoreFinto({ kind: "pronta" });
     const { d } = dipendenze({ finestra: () => Promise.resolve(schema()), carica });

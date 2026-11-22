@@ -21,7 +21,7 @@ import type { MenuItem } from "../../../ui/menu";
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
 export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 // La colonna (K6 T8): le caselle e il cassetto, con il suo pezzo col `import()`.
-import { iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
+import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
 import type { Teardown } from "../../../ui/lifetime";
 import { languageCurrent } from "../../../i18n/strings";
 import type { ToolSpec } from "../tools/registry";
@@ -87,6 +87,9 @@ export interface Completo {
   /// risolve `true` se è pronta. Uno strumento senza famiglia nell'indice, o una
   /// famiglia che non arriva, risolve `false`: il gesto non parte (K6 T8).
   preparaStrumento(strumento: string): Promise<boolean>;
+  /// Il clic senza trascinare di uno strumento del motore (T13, giro 2): se la forma
+  /// ha una finestra delle misure, la apre col punto del clic; altrimenti non fa niente.
+  clicStrumento(strumento: string, punto: { readonly x: number; readonly y: number }): void;
   /// La fila delle opzioni dello strumento `strumento` con le sue etichette, quando
   /// la sua famiglia è pronta (`carica.testi`); `null` prima, o se lo stato non ha
   /// controlli da mostrare. Le etichette non si inventano: senza famiglia pronta non
@@ -223,6 +226,10 @@ interface CampoSchema {
   readonly tipo: string;
   readonly facoltativo?: boolean;
   readonly valori?: readonly string[];
+  /// Il minimo di un numero (T13, giro 2): sotto, OK resta spento.
+  readonly minimo?: number;
+  /// Il valore di partenza che il motore dà al campo (`sides=6`).
+  readonly predefinito?: string | number | boolean;
 }
 
 /// Lo schema di una famiglia: le sue finestre, per id del comando.
@@ -233,7 +240,7 @@ interface SchemaFamiglia {
 /// Un campo dello schema come lo legge la finestra di T6. I tipi che la
 /// finestra non conosce (`cella`, `json`) si leggono come testo.
 function campoDi(campo: CampoSchema): CampoFinestra {
-  if (campo.tipo === "numero") return { nome: campo.nome, tipo: "numero" };
+  if (campo.tipo === "numero") return campo.minimo === undefined ? { nome: campo.nome, tipo: "numero" } : { nome: campo.nome, tipo: "numero", min: campo.minimo };
   if (campo.tipo === "scelta") return { nome: campo.nome, tipo: "scelta", valori: campo.valori ?? [] };
   if (campo.tipo === "sino") return { nome: campo.nome, tipo: "sino" };
   return { nome: campo.nome, tipo: "testo", facoltativo: campo.facoltativo === true };
@@ -241,12 +248,19 @@ function campoDi(campo: CampoSchema): CampoFinestra {
 
 /// Il modulo della finestra del comando `id`, dallo schema della sua famiglia
 /// (il suo chunk). `null` se lo schema non arriva o non ha il comando.
-async function moduloDi(famiglia: string, id: string): Promise<ModuloFinestra | null> {
+async function moduloDi(
+  famiglia: string,
+  id: string,
+): Promise<{ readonly modulo: ModuloFinestra; readonly predefiniti: Readonly<Record<string, string | number | boolean>> } | null> {
   try {
     const file = (await import(`./famiglie/${famiglia}/schema.generated.json`)) as { readonly default?: unknown };
     const schema = (file.default ?? file) as SchemaFamiglia;
     const finestra = schema.finestre.find((one) => one.id === id);
-    return finestra === undefined ? null : { campi: finestra.campi.map(campoDi) };
+    if (finestra === undefined) return null;
+    // Il valore di partenza che lo schema dà a un campo (`sides=6`), per nome.
+    const predefiniti: Record<string, string | number | boolean> = {};
+    for (const campo of finestra.campi) if (campo.predefinito !== undefined) predefiniti[campo.nome] = campo.predefinito;
+    return { modulo: { campi: finestra.campi.map(campoDi) }, predefiniti };
   } catch {
     return null;
   }
@@ -264,7 +278,7 @@ export function nomeCortoColonna(strumento: string): string | null {
 /// Apre il Completo di un disegno: chiede l'indice e prepara il nucleo. Un
 /// indice che non arriva non ferma niente: chi lo mostra (≡, Ctrl+/) lo
 /// richiede e dice che non si è caricato, con «Riprova».
-export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila">, opzioni: OpzioniCompleto = {}): Completo {
+export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "esegui">, opzioni: OpzioniCompleto = {}): Completo {
   const indice = opzioni.indice ?? indiceVero;
   const sezioni = creaSezioni();
   // Le file proprie che le famiglie registrano, per strumento (T12).
@@ -272,13 +286,42 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila">, op
   const registraFila = (strumento: string, costruisci: CostruisciFila): void => {
     fileProprie.set(strumento, costruisci);
   };
-  const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila }, moduli: opzioni.moduli, prepara: opzioni.prepara });
+  // Un comando dell'indice con altri valori fissi, dal percorso unico (`eseguiVoce`): la
+  // sezione «Allinea» lo usa per i suoi pulsanti. Senza indice, o chiuso il Completo, non parte.
+  const eseguiPerId = (id: string, valori: Readonly<Record<string, string>> = {}): void => {
+    if (chiuso) return;
+    void indiceVero().then((pronto) => {
+      if (chiuso) return;
+      const voce = pronto.voci.find((one) => one.id === id);
+      if (voce === undefined || !("comando" in voce.chiamata)) return;
+      const fisso = (voce.chiamata as { readonly valore?: unknown }).valore;
+      const base = typeof fisso === "object" && fisso !== null ? fisso : {};
+      eseguiVoce({ ...voce, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } }, dipendenze);
+    });
+  };
+  const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila, esegui: eseguiPerId }, moduli: opzioni.moduli, prepara: opzioni.prepara });
   // La finestra di un comando con parametri (T6): il modulo dello schema della sua
   // famiglia. `null` se la famiglia non ha la finestra di quel comando.
   const finestraDi = async (voce: VoceIndice): Promise<OpzioniFinestraComando | null> => {
-    const modulo = await moduloDi(voce.famiglia, voce.id);
-    if (modulo === null) return null;
-    return { modulo, campi: Object.fromEntries(modulo.campi.map((campo) => [campo.nome, campo.nome])) };
+    const schema = await moduloDi(voce.famiglia, voce.id);
+    if (schema === null) return null;
+    // Ciò che il comando ha già (il punto del clic) non si chiede: la finestra non lo
+    // manda, e il comando lo prende dalla voce.
+    const valore = (voce.chiamata as { readonly valore?: unknown }).valore;
+    const dati = typeof valore === "object" && valore !== null ? Object.keys(valore) : [];
+    const campi = schema.modulo.campi.filter((campo) => !dati.includes(campo.nome));
+    // Le parole dei campi sono della famiglia: ci sono quando è pronta; prima il nome.
+    const stato = await carica.famiglia(voce.famiglia);
+    const testi = stato.kind === "pronta" ? carica.testi(voce.famiglia) : null;
+    const inglese = languageCurrent().startsWith("en");
+    const etichette = Object.fromEntries(
+      campi.map((campo): [string, string] => {
+        const parola = testi?.[`campo:${campo.nome}`];
+        return [campo.nome, parola === undefined ? campo.nome : inglese ? parola.en : parola.it];
+      }),
+    );
+    const iniziali = Object.fromEntries(Object.entries(schema.predefiniti).filter(([nome]) => campi.some((campo) => campo.nome === nome)));
+    return { modulo: { campi }, campi: etichette, iniziali };
   };
   // Il percorso unico di un comando del motore (`esegui.ts`): il menu ≡, Ctrl+/ e
   // i tasti lo usano con queste stesse dipendenze, costruite qui una volta sola.
@@ -400,6 +443,20 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila">, op
     indice,
     carica,
     sezioni,
+    clicStrumento(strumento, punto) {
+      if (chiuso) return;
+      const comando = COMANDO_DEL_CLIC[strumento];
+      if (comando === undefined || indiceArrivato === null) return;
+      const voce = indiceArrivato.voci.find((one) => one.id === comando.forma);
+      if (voce === undefined || !("comando" in voce.chiamata)) return;
+      // La finestra parte dal punto del clic e senza selezione: una forma nuova non la
+      // usa, e la selezione di prima non entra nel comando.
+      const derivata: VoceIndice = {
+        ...voce,
+        chiamata: { comando: voce.chiamata.comando, valore: { [comando.x]: punto.x, [comando.y]: punto.y } },
+      };
+      eseguiVoce(derivata, { ...dipendenze, selezione: () => [] });
+    },
     async preparaStrumento(strumento) {
       const famiglia = await famigliaDi(strumento);
       if (famiglia === null) return false;

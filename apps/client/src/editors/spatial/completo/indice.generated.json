@@ -755,22 +755,6 @@
     },
     {
       "fonte": "motore",
-      "id": "shape.flare",
-      "chiamata": {
-        "comando": "disegno.shape.flare"
-      },
-      "etichetta": {
-        "it": "Riflesso",
-        "en": "Flare"
-      },
-      "posto": "finestra",
-      "famiglia": "forme",
-      "tasto": null,
-      "effetto": "cambia",
-      "finestra": true
-    },
-    {
-      "fonte": "motore",
       "id": "shape.line",
       "chiamata": {
         "comando": "disegno.shape.line"
@@ -853,7 +837,10 @@
       "fonte": "interfaccia",
       "id": "align.distributeHorizontalCenter",
       "chiamata": {
-        "client": "align.distributeHorizontalCenter"
+        "comando": "disegno.object.distribute",
+        "valore": {
+          "horizontal": "center"
+        }
       },
       "etichetta": {
         "it": "Distribuisci orizzontalmente i centri",
@@ -869,7 +856,10 @@
       "fonte": "interfaccia",
       "id": "align.distributeHorizontalLeft",
       "chiamata": {
-        "client": "align.distributeHorizontalLeft"
+        "comando": "disegno.object.distribute",
+        "valore": {
+          "horizontal": "left"
+        }
       },
       "etichetta": {
         "it": "Distribuisci orizzontalmente i bordi sinistri",
@@ -885,7 +875,10 @@
       "fonte": "interfaccia",
       "id": "align.distributeHorizontalRight",
       "chiamata": {
-        "client": "align.distributeHorizontalRight"
+        "comando": "disegno.object.distribute",
+        "valore": {
+          "horizontal": "right"
+        }
       },
       "etichetta": {
         "it": "Distribuisci orizzontalmente i bordi destri",
@@ -901,7 +894,10 @@
       "fonte": "interfaccia",
       "id": "align.distributeHorizontalSpace",
       "chiamata": {
-        "client": "align.distributeHorizontalSpace"
+        "comando": "disegno.object.distributeSpacing",
+        "valore": {
+          "axis": "horizontal"
+        }
       },
       "etichetta": {
         "it": "Distribuisci spazio orizzontalmente",
@@ -917,7 +913,10 @@
       "fonte": "interfaccia",
       "id": "align.distributeVerticalBottom",
       "chiamata": {
-        "client": "align.distributeVerticalBottom"
+        "comando": "disegno.object.distribute",
+        "valore": {
+          "vertical": "bottom"
+        }
       },
       "etichetta": {
         "it": "Distribuisci verticalmente i bordi inferiori",
@@ -933,7 +932,10 @@
       "fonte": "interfaccia",
       "id": "align.distributeVerticalCenter",
       "chiamata": {
-        "client": "align.distributeVerticalCenter"
+        "comando": "disegno.object.distribute",
+        "valore": {
+          "vertical": "center"
+        }
       },
       "etichetta": {
         "it": "Distribuisci verticalmente i centri",
@@ -949,7 +951,10 @@
       "fonte": "interfaccia",
       "id": "align.distributeVerticalSpace",
       "chiamata": {
-        "client": "align.distributeVerticalSpace"
+        "comando": "disegno.object.distributeSpacing",
+        "valore": {
+          "axis": "vertical"
+        }
       },
       "etichetta": {
         "it": "Distribuisci spazio verticalmente",
@@ -965,7 +970,10 @@
       "fonte": "interfaccia",
       "id": "align.distributeVerticalTop",
       "chiamata": {
-        "client": "align.distributeVerticalTop"
+        "comando": "disegno.object.distribute",
+        "valore": {
+          "vertical": "top"
+        }
       },
       "etichetta": {
         "it": "Distribuisci verticalmente i bordi superiori",
@@ -981,7 +989,10 @@
       "fonte": "interfaccia",
       "id": "align.horizontalCenter",
       "chiamata": {
-        "client": "align.horizontalCenter"
+        "comando": "disegno.object.align",
+        "valore": {
+          "horizontal": "center"
+        }
       },
       "etichetta": {
         "it": "Allinea centri orizzontalmente",
@@ -997,7 +1008,10 @@
       "fonte": "interfaccia",
       "id": "align.horizontalLeft",
       "chiamata": {
-        "client": "align.horizontalLeft"
+        "comando": "disegno.object.align",
+        "valore": {
+          "horizontal": "left"
+        }
       },
       "etichetta": {
         "it": "Allinea a sinistra orizzontalmente",
@@ -1013,7 +1027,10 @@
       "fonte": "interfaccia",
       "id": "align.horizontalRight",
       "chiamata": {
-        "client": "align.horizontalRight"
+        "comando": "disegno.object.align",
+        "valore": {
+          "horizontal": "right"
+        }
       },
       "etichetta": {
         "it": "Allinea a destra orizzontalmente",
@@ -1029,7 +1046,11 @@
       "fonte": "interfaccia",
       "id": "align.horizontalVerticalCenter",
       "chiamata": {
-        "client": "align.horizontalVerticalCenter"
+        "comando": "disegno.object.align",
+        "valore": {
+          "horizontal": "center",
+          "vertical": "center"
+        }
       },
       "etichetta": {
         "it": "Allinea centri orizzontalmente e verticalmente",
@@ -1045,7 +1066,10 @@
       "fonte": "interfaccia",
       "id": "align.verticalBottom",
       "chiamata": {
-        "client": "align.verticalBottom"
+        "comando": "disegno.object.align",
+        "valore": {
+          "vertical": "bottom"
+        }
       },
       "etichetta": {
         "it": "Allinea verticalmente in basso",
@@ -1061,7 +1085,10 @@
       "fonte": "interfaccia",
       "id": "align.verticalCenter",
       "chiamata": {
-        "client": "align.verticalCenter"
+        "comando": "disegno.object.align",
+        "valore": {
+          "vertical": "center"
+        }
       },
       "etichetta": {
         "it": "Allinea verticalmente al centro",
@@ -1077,7 +1104,10 @@
       "fonte": "interfaccia",
       "id": "align.verticalTop",
       "chiamata": {
-        "client": "align.verticalTop"
+        "comando": "disegno.object.align",
+        "valore": {
+          "vertical": "top"
+        }
       },
       "etichetta": {
         "it": "Allinea verticalmente in alto",
@@ -1389,22 +1419,6 @@
       },
       "posto": "colonna/disegna",
       "famiglia": "tracciati",
-      "tasto": null,
-      "effetto": "cambia",
-      "finestra": false
-    },
-    {
-      "fonte": "strumento",
-      "id": "flare",
-      "chiamata": {
-        "strumento": "flare"
-      },
-      "etichetta": {
-        "it": "Strumento Riflesso",
-        "en": "Flare Tool"
-      },
-      "posto": "colonna/forme",
-      "famiglia": "forme",
       "tasto": null,
       "effetto": "cambia",
       "finestra": false

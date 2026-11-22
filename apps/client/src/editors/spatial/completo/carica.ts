@@ -31,6 +31,9 @@ export interface ContestoCompleto {
   /// generica delle opzioni (T12: i punti della Selezione diretta). L'ultima
   /// registrata vale.
   readonly registraFila: (strumento: string, costruisci: CostruisciFila) => void;
+  /// Manda la voce `id` dell'indice (un comando del motore) con altri valori fissi, dal
+  /// percorso unico di `esegui.ts` (T13, giro 2): la sezione «Allinea» lo usa per i pulsanti.
+  readonly esegui: (id: string, valori?: Readonly<Record<string, string>>) => void;
 }
 
 /// Ciò che il file `index.ts` di una famiglia esporta di serie.
