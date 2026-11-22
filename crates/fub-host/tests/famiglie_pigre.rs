@@ -169,9 +169,11 @@ fn nel_semplice_nessuna_famiglia_nasce() {
         .host
         .drawing_commands(prova.vault(), &instance, &[RETTANGOLO.into()])
         .expect("i comandi");
-    // Nessuna riga è «fatto»: si elencano i tre di K5.
+    // Prima i tre di K5, poi le righe «fatto» (quelle del nucleo, K6 T11):
+    // elencarle non fa nascere la loro famiglia.
     let ids: Vec<&str> = comandi.iter().map(|c| c.id.as_str()).collect();
-    assert_eq!(ids, DRAWING_COMMANDS);
+    assert_eq!(ids[..DRAWING_COMMANDS.len()], DRAWING_COMMANDS);
+    assert!(ids.contains(&"disegno.select.all"), "{ids:?}");
     prova
         .comando(&instance, DRAWING_COMMAND_WIDTH, serde_json::json!(3))
         .expect("lo spessore");

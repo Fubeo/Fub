@@ -211,7 +211,12 @@ mod con_il_motore {
                 std::slice::from_ref(&nuovo),
             )
             .expect("i comandi");
-        let ids: Vec<&str> = comandi.iter().map(|c| c.id.as_str()).collect();
+        // Prima i tre di K5, poi le righe «fatto» delle famiglie del Completo.
+        let ids: Vec<&str> = comandi
+            .iter()
+            .take(DRAWING_COMMANDS.len())
+            .map(|c| c.id.as_str())
+            .collect();
         assert_eq!(ids, DRAWING_COMMANDS);
         let comando = host
             .drawing_command(

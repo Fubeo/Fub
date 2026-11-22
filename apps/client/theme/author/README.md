@@ -63,7 +63,7 @@ Un tema `theme-2` può ridisegnare per nome le icone della shell. Il manifest no
 
 Il tema non aggiunge icone: ridisegna quelle che ci sono. Un alias ridisegnato vale per il nome a cui punta (`folder` è `vault`). Un nome che oggi nessuno disegna non rifiuta il tema (un modulo può registrarlo più tardi), ma non si vede. Cambiato tema, o annullata l'anteprima, le icone già sullo schermo tornano a quelle del tema scelto.
 
-I 584 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
+I 585 nomi che un tema può ridisegnare (`theme/author/icon-names.json`, tenuto uguale a `iconNames()` da `src/ui/icon-names.test.ts`):
 
 ```text
 activity archive arrow-left arrow-right backlinks backup base-board base-cards base-chevron-down
@@ -81,8 +81,8 @@ draw-cover draw-design draw-direct-select draw-distribute-x draw-distribute-y dr
 draw-effects draw-ellipse draw-eraser draw-export draw-eyedropper draw-fit draw-flare draw-flip-h
 draw-flip-v draw-free-transform draw-gradient draw-graph draw-grid-polar draw-grid-rect draw-group
 draw-hand draw-here draw-hidden draw-hide-ui draw-highlighter draw-history draw-image
-draw-into-layer draw-keys draw-landscape draw-layers draw-line draw-link draw-live-paint draw-lock
-draw-mark draw-measure draw-menu draw-mesh draw-more draw-navigator draw-none draw-note
+draw-into-layer draw-keys draw-landscape draw-lasso draw-layers draw-line draw-link draw-live-paint
+draw-lock draw-mark draw-measure draw-menu draw-mesh draw-more draw-navigator draw-none draw-note
 draw-open-link draw-order draw-order-back draw-order-backward draw-order-forward draw-order-front
 draw-page-grid draw-parametric draw-pen draw-pen-nib draw-pencil draw-perspective draw-pf-crop
 draw-pf-divide draw-pf-exclude draw-pf-intersect draw-pf-merge draw-pf-minus draw-pf-minus-back
