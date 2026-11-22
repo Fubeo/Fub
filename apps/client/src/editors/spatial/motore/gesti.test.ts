@@ -13,6 +13,7 @@ import { DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, type DrawingFr
 import { createFakeHost, type DrawingFake, type FakeHost } from "../../../host/fake";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../../state/document-session";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { lineFeeds } from "../../core/text-operation";
 import { SceneEngine } from "../scene/engine";
 import { t } from "../strings";
 import { toScreen } from "../view";
@@ -1101,6 +1102,55 @@ describe("la penna del motore: il tracciato aperto (K6 T12)", () => {
     expect(editor.tool).toBe("select");
     // Il secondo Esc non manda niente al motore.
     expect(gestures(fake)).toHaveLength(prima);
+  });
+
+  it("un testo che cambia sotto non perde il tracciato aperto: il commit parte prima del sync, alla revisione vecchia, in un passo", async () => {
+    const fake = createFakeHost({ drawing: pennaFinta() });
+    const session = await documentOn(EMPTY);
+    motore = motoreDa(() => apriSessione(fake.module.api, DOC, EMPTY, session, { vault: "/vault" }));
+    await settle(0, 2);
+    // Il foglio qui non segue l'altra superficie: le sue modifiche vanno alla
+    // sessione senza pretendere che combacino.
+    const editor = createDrawEditor(host, SceneEngine.open(EMPTY), owner, {
+      motore: motore!,
+      onChange: (change) => void sessions!.acceptSurfaceChange(DOC, "editor", { text: change.text, operation: change.operation }),
+    });
+    editor.setEngineTool("pen");
+    await clic(editor, 220, 40);
+    await clic(editor, 300, 90);
+    await settle(16, 8);
+    const revisione = gestures(fake).slice(-1)[0]!.revision;
+    const prima = drawingCalls(fake).length;
+    // Un'altra superficie cambia il testo mentre il tracciato è aperto.
+    const before = lineFeeds(session.text());
+    const from = before.lastIndexOf("</svg>");
+    expect(sessions!.acceptSurfaceChange(DOC, "altro", {
+      text: `${before.slice(0, from)}\n${before.slice(from)}`,
+      operation: { beforeLength: before.length, afterLength: before.length + 1, edits: [{ from, to: from, deleted: "", inserted: "\n" }] },
+    })).toEqual({ kind: "accepted" });
+    await settle(16, 8);
+    expect(drawingCalls(fake).slice(prima, prima + 2)).toEqual(["drawingGesture", "drawingSync"]);
+    const commit = gestures(fake).filter((each) => each.phase === "commit");
+    expect(commit).toHaveLength(1);
+    expect(commit[0]!.revision).toBe(revisione);
+    expect(commit[0]!.inputs ?? []).toEqual([]);
+    // I punti sono nel foglio, in un passo; i segni del motore se ne vanno.
+    expect(editor.engine.text).not.toBe(EMPTY);
+    expect(host.querySelector(".draw-engine-marks")).toBeNull();
+    editor.undo();
+    expect(editor.engine.text).toBe(EMPTY);
+    expect(editor.canUndo).toBe(false);
+    // Chiuso, il tracciato non c'è più: un altro sync non manda un secondo
+    // commit.
+    const gesti = gestures(fake).length;
+    const adesso = lineFeeds(session.text());
+    const dove = adesso.lastIndexOf("\n</svg>");
+    expect(sessions!.acceptSurfaceChange(DOC, "altro", {
+      text: `${adesso.slice(0, dove)}${adesso.slice(dove + 1)}`,
+      operation: { beforeLength: adesso.length, afterLength: adesso.length - 1, edits: [{ from: dove, to: dove + 1, deleted: "\n", inserted: "" }] },
+    }).kind).toBe("accepted");
+    await settle(16, 8);
+    expect(gestures(fake)).toHaveLength(gesti);
   });
 
   it("con uno strumento del motore le opzioni dell'Inchiostro lasciano la riga; tornano con l'Inchiostro", async () => {
