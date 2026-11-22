@@ -563,7 +563,14 @@ pub const COMANDI_DI_FORMA: &[&str] = &[
 /// campi che la finestra chiede e il predefinito di partenza di ciascuno. Lo schema grezzo del
 /// motore porta anche `ids`, `objects`, `patterns`…: la finestra non li chiede, e li lascia al
 /// comando (la selezione, le impostazioni). Sposta è il modello, come dice il piano.
-pub const FINESTRE_DI_TRASFORMA: &[(&str, &str, &[(&str, &str)])] = &[
+/// Una finestra di trasformazione: il comando, lo schema dei suoi campi e i loro predefiniti.
+pub type FinestraDiTrasformazione = (
+    &'static str,
+    &'static str,
+    &'static [(&'static str, &'static str)],
+);
+
+pub const FINESTRE_DI_TRASFORMA: &[FinestraDiTrasformazione] = &[
     ("object.move", "{dx, dy}", &[("dx", "0"), ("dy", "0")]),
     ("object.rotate", "{angle}", &[("angle", "0")]),
     ("object.scale", "{sx}", &[("sx", "100")]),
