@@ -123,7 +123,7 @@ motore	shape.arc	Arc		forme	F1	T13	da fare	ispettore/design	famiglia		Arco
 motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	da fare	ispettore/design	famiglia		Griglia rettangolare
 motore	shape.polarGrid	Polar Grid		forme	F1	T13	da fare	ispettore/design	famiglia		Griglia polare
 motore	path.create	Create Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Crea tracciato
-motore	view.drawMode	Drawing Mode		vista	F1	T11	da fare	menu/visualizza	famiglia		Modalità di disegno
+motore	view.drawMode	Drawing Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	la modalità di disegno (dietro, dentro) non ce l'ha ancora il client	Modalità di disegno
 motore	text.create	Create Text		testo	F2	T16	da fare	ispettore/design	famiglia		Crea testo
 motore	css.selection	CSS Properties		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Proprietà CSS
 motore	css.generate	Generate CSS		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Genera CSS
@@ -199,7 +199,7 @@ motore	document.switchUnits	Switch Units		tavole	F2	T19	da fare	ispettore/design
 motore	document.rulerOrigin	Ruler Origin		tavole	F2	T19	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Origine dei righelli
 motore	document.setRulerOrigin	Ruler Origin		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Origine dei righelli
 motore	document.resetRulerOrigin	Reset Ruler Origin		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Ripristina origine dei righelli
-motore	view.globalRulers	Change to Global Rulers	View › Rulers	vista	F1	T11	da fare	menu/visualizza	famiglia		Passa a righelli globali
+motore	view.globalRulers	Change to Global Rulers	View › Rulers	vista	F1	T11	da fare	menu/visualizza	famiglia	aspetta T19 per i righelli per tavola, che vengono con le tavole	Passa a righelli globali
 motore	edit.dropSelection	Drop Artwork		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Rilascia illustrazione
 motore	edit.undo	Undo	Edit	fub	—	T11	fub	fub	—	«Annulla» di Fub: la cronologia della superficie	Annulla
 motore	edit.redo	Redo	Edit	fub	—	T11	fub	fub	—	«Ripeti» di Fub: la cronologia della superficie	Ripeti
@@ -677,10 +677,10 @@ motore	dataset.import	Import Data Sets…	Window › Variables	dati	F4	T26	da fa
 motore	dataset.export	Export Data Sets…	Window › Variables	dati	F4	T26	da fare	ispettore/design/documento	famiglia	finestra	Esporta set di dati…
 motore	variable.loadLibrary	Load Variable Library…	Window › Variables	dati	F4	T26	da fare	ispettore/design/documento	famiglia	finestra	Carica libreria di variabili…
 motore	view.capsLock	Caps Lock Cursor State		vista	F1	T11	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Caps Lock Cursor State
-motore	view.saved.new	New View…	View	vista	F1	T11	da fare	menu/visualizza	famiglia	finestra	Nuova vista…
-motore	view.saved.edit	Edit Views…	View	vista	F1	T11	da fare	menu/visualizza	famiglia	finestra	Modifica viste…
+motore	view.saved.new	New View…	View	vista	F1	T11	da fare	menu/visualizza	famiglia	finestra; aspetta T27 perché le viste salvate stanno nel documento, e la tabella di ricetta.rs non le ha ancora	Nuova vista…
+motore	view.saved.edit	Edit Views…	View	vista	F1	T11	da fare	menu/visualizza	famiglia	finestra; aspetta T27 perché le viste salvate stanno nel documento, e la tabella di ricetta.rs non le ha ancora	Modifica viste…
 motore	view.saved.list	Saved Views		vista	F1	T11	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Viste salvate
-motore	view.transparencyGrid	Show Transparency Grid	View	vista	F1	T11	da fare	menu/visualizza	famiglia		Mostra griglia trasparenza
+motore	view.transparencyGrid	Show Transparency Grid	View	vista	F1	T11	da fare	menu/visualizza	famiglia	la griglia della trasparenza non la disegna ancora il client	Mostra griglia trasparenza
 motore	view.snapToGlyph.options	Snap to Glyph Options		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Opzioni di aggancio a glifo
 motore	select.magicWand	Magic Wand		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Bacchetta magica
 motore	magicWand.set	Magic Wand Options	Window › Magic Wand	livelli	F1	T15	da fare	ispettore/design	famiglia		Opzioni bacchetta magica
@@ -985,13 +985,13 @@ interfaccia	shortcuts.preset	Keyboard Shortcut Set		fub	—	T9	fub	fub	—	Impos
 interfaccia	shortcuts.export	Export Keyboard Shortcuts…		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Esporta scelte rapide da tastiera…
 interfaccia	shortcuts.import	Import Keyboard Shortcuts…		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie › Disegno completo	Importa scelte rapide da tastiera…
 interfaccia	ui.shortcutImportDialog	Import Shortcut Set…		fub	—	T9	fub	fub	—	Impostazioni › Scorciatoie	Importa set di scelte rapide…
-interfaccia	view.outline	Outline		vista	F1	T11	da fare	menu/visualizza	famiglia		Contorno
-interfaccia	view.pixelPreview	Pixel Preview		vista	F1	T11	da fare	menu/visualizza	famiglia		Anteprima pixel
+interfaccia	view.outline	Outline		vista	F1	T11	fatto	menu/visualizza	famiglia		Contorno
+interfaccia	view.pixelPreview	Pixel Preview		vista	F1	T11	da fare	menu/visualizza	famiglia	l'anteprima dei pixel non la disegna ancora il client	Anteprima pixel
 interfaccia	view.trimView	Trim View		stampa	F4	T25	da fare	menu/visualizza	famiglia		Vista rifilata
-interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	da fare	menu/visualizza	famiglia		Nascondi widget angolo
-interfaccia	view.snapToPixel	Snap to Pixel		vista	F1	T11	da fare	menu/visualizza	famiglia		Aggancia ai pixel
+interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	da fare	menu/visualizza	famiglia	i widget d'angolo della selezione non ci sono ancora nel client	Nascondi widget angolo
+interfaccia	view.snapToPixel	Snap to Pixel		vista	F1	T11	da fare	menu/visualizza	famiglia	l'aggancio al pixel non c'è ancora: quello alla griglia è un passo diverso	Aggancia ai pixel
 interfaccia	view.snapToGlyph	Snap to Glyph		testo	F2	T16	da fare	menu/visualizza	famiglia		Aggancia a glifo
-interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	da fare	menu/visualizza	famiglia		Usa cursori di precisione
+interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	da fare	menu/visualizza	famiglia	il cursore a croce di precisione non c'è ancora nel client	Usa cursori di precisione
 interfaccia	imageTrace.preview	Image Trace Preview		immagini	F3	T20	da fare	ispettore/design	famiglia		Anteprima di Ricalco immagine
 interfaccia	view.textThreads	Hide Text Threads		testo	F2	T16	da fare	menu/visualizza	famiglia		Nascondi concatenamenti testo
 interfaccia	view.gradientAnnotator	Hide Gradient Annotator		aspetto	F1	T15	da fare	menu/visualizza	famiglia		Nascondi annotatore sfumatura
@@ -1036,22 +1036,22 @@ interfaccia	view.fitAll	Fit All in Window		vista	F1	T11	fatto	banda	famiglia		Ad
 interfaccia	view.actualSize	Actual Size		vista	F1	T11	fatto	banda	famiglia		Dimensioni effettive
 interfaccia	view.setZoom	Set Zoom		vista	F1	T11	fatto	banda	famiglia		Imposta zoom
 interfaccia	view.goToArtboard	Go to Artboard		tavole	F2	T19	da fare	menu/visualizza	famiglia		Vai alla tavola da disegno
-interfaccia	view.edges	Hide Edges		vista	F1	T11	da fare	menu/visualizza	famiglia		Nascondi bordi
+interfaccia	view.edges	Hide Edges		vista	F1	T11	da fare	menu/visualizza	famiglia	nascondere i bordi degli oggetti non c'è ancora nel client	Nascondi bordi
 interfaccia	view.artboards	Hide Artboards		tavole	F2	T19	da fare	menu/visualizza	famiglia		Nascondi tavole da disegno
-interfaccia	view.template	Hide Template		vista	F1	T11	da fare	menu/visualizza	famiglia		Nascondi modello
-interfaccia	view.rulers	Show Rulers		vista	F1	T11	da fare	menu/visualizza	famiglia		Mostra righelli
+interfaccia	view.template	Hide Template		vista	F1	T11	da fare	menu/visualizza	famiglia	il modello della pagina non c'è ancora nel client	Nascondi modello
+interfaccia	view.rulers	Show Rulers		vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra righelli
 interfaccia	view.videoRulers	Show Video Rulers		stampa	F4	T25	da fare	menu/visualizza	famiglia		Mostra righelli video
-interfaccia	view.boundingBox	Hide Bounding Box		vista	F1	T11	da fare	menu/visualizza	famiglia		Nascondi riquadro di delimitazione
+interfaccia	view.boundingBox	Hide Bounding Box		vista	F1	T11	da fare	menu/visualizza	famiglia	nascondere la cornice della selezione non c'è ancora nel client	Nascondi riquadro di delimitazione
 interfaccia	view.guides	Hide Guides		tavole	F2	T19	da fare	menu/visualizza	famiglia		Nascondi guide
-interfaccia	view.smartGuides	Smart Guides		vista	F1	T11	da fare	menu/visualizza	famiglia		Guide sensibili
-interfaccia	view.grid	Show Grid		vista	F1	T11	da fare	menu/visualizza	famiglia		Mostra griglia
-interfaccia	view.snapToGrid	Snap to Grid		vista	F1	T11	da fare	menu/visualizza	famiglia		Aggancia alla griglia
-interfaccia	view.snapToPoint	Snap to Point		vista	F1	T11	da fare	menu/visualizza	famiglia		Aggancia al punto
-interfaccia	view.presentation	Presentation Mode		vista	F1	T11	da fare	menu/visualizza	famiglia		Modalità presentazione
-interfaccia	view.screenMode	Screen Mode		vista	F1	T11	da fare	menu/visualizza	famiglia		Modalità schermo
-interfaccia	view.rotate	Rotate View		vista	F1	T11	da fare	menu/visualizza	famiglia		Ruota vista
-interfaccia	view.rotateToSelection	Rotate View to Selection		vista	F1	T11	da fare	menu/visualizza	famiglia		Ruota vista in base alla selezione
-interfaccia	view.rotateReset	Reset Rotate View		vista	F1	T11	da fare	menu/visualizza	famiglia		Reimposta rotazione vista
+interfaccia	view.smartGuides	Smart Guides		vista	F1	T11	da fare	menu/visualizza	famiglia	le guide intelligenti non ci sono ancora nel client	Guide sensibili
+interfaccia	view.grid	Show Grid		vista	F1	T11	fatto	menu/visualizza	famiglia		Mostra griglia
+interfaccia	view.snapToGrid	Snap to Grid		vista	F1	T11	fatto	menu/visualizza	famiglia		Aggancia alla griglia
+interfaccia	view.snapToPoint	Snap to Point		vista	F1	T11	da fare	menu/visualizza	famiglia	l'aggancio ai punti non c'è ancora nel client	Aggancia al punto
+interfaccia	view.presentation	Presentation Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	la modalità presentazione non c'è ancora nel client	Modalità presentazione
+interfaccia	view.screenMode	Screen Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	la modalità schermo non c'è ancora nel client	Modalità schermo
+interfaccia	view.rotate	Rotate View		vista	F1	T11	da fare	menu/visualizza	famiglia	chiede un angolo: la finestra per l'angolo non c'è ancora nel client	Ruota vista
+interfaccia	view.rotateToSelection	Rotate View to Selection		vista	F1	T11	da fare	menu/visualizza	famiglia	il client non legge ancora la rotazione condivisa della selezione	Ruota vista in base alla selezione
+interfaccia	view.rotateReset	Reset Rotate View		vista	F1	T11	fatto	menu/visualizza	famiglia		Reimposta rotazione vista
 interfaccia	window.control	Control		fub	—	T8	fub	fub	—	la testata del disegno	Controllo
 interfaccia	window.toolbar	Tools		fub	—	T8	fub	fub	—	la colonna del disegno	Strumenti
 interfaccia	window.toolbarColumns	Toolbar: Single/Double Column		fub	—	T8	fub	fub	—	la colonna di Fub è una sola: il resto nel cassetto «Tutti gli strumenti»	Barra degli strumenti: colonna singola/doppia
@@ -1535,7 +1535,7 @@ pannello	library_panel	Library Panel	Window	simboli	F3	T22	da fare	ispettore/ris
 pannello	links	Links	Window	immagini	F3	T20	da fare	ispettore/risorse	famiglia		Collegamenti
 pannello	magic_wand	Magic Wand	Window	livelli	F1	T15	da fare	testata	famiglia		Bacchetta magica
 pannello	memo	Memo	Window	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Memo
-pannello	navigator	Navigator	Window	vista	F1	T11	da fare	banda	famiglia		Navigatore
+pannello	navigator	Navigator	Window	vista	F1	T11	fatto	banda	famiglia		Navigatore
 pannello	opentype	Opentype	Window	testo	F2	T16	da fare	ispettore/design	famiglia		Opentype
 pannello	paragraph	Paragraph	Window	testo	F2	T16	da fare	ispettore/design	famiglia		Paragrafo
 pannello	pathfinder	Pathfinder	Window	forme	F1	T13	da fare	ispettore/design	famiglia		Elaborazione tracciati
