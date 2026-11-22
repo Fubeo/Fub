@@ -1554,7 +1554,7 @@ export const SCENE = touchLast(onPage("shell", [
   // poi l'errore di un file d'insieme rotto, che non cambia niente.
   ...[
     ["scorciatoie-disegno", 1280, "Scorciatoie › Disegno completo: i comandi coi tasti, un tasto di Fub che copre e un conflitto", openDrawingKeys],
-    ["scorciatoie-disegno-700", 700, "Scorciatoie › Disegno completo a 700 px", openDrawingKeys],
+    ["scorciatoie-disegno-800", 800, "Scorciatoie › Disegno completo nella finestra minima del desktop, 800 px", openDrawingKeys],
     ["scorciatoie-disegno-errore", 1280, "Scorciatoie › Disegno completo: un file d'insieme rotto lo dice e non cambia niente", importBrokenKeySet],
   ].map(([id, width, title, prepare]) => ({
     id,
