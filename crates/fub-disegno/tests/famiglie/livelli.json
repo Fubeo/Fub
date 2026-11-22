@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso).",
+  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo. Giro 3 (K6 T15): i comandi di livello della scheda Livelli, con il livello scelto nella selezione; il livello bloccato si sblocca, non si rinomina; un livello non va dentro se stesso. Giro 3 (K6 T15): elimina, occhio e lucchetto del livello, con i loro rifiuti (livello bloccato, nessun livello, spostamento dentro se stesso). Giro 6 (K6 T15): il testo uguale (testi.svg, con il rifiuto senza testo), i punti isolati e i tracciati aperti (tracciati.svg). Un punto isolato è `M x y Z`: un `M x y` nudo lo scarta l'importatore del motore. Il testo di punto e quello in area restano da fare: il motore vede il testo con fub:wrap come testo di punto, perché il suo importatore legge in area solo i flowRoot.",
   "casi": [
     {
       "id": "select.same.fillColor",
@@ -157,6 +157,135 @@
       "atteso": {
         "selezione": [
           "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontFamily",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontFamily",
+      "disegno": "testi.svg",
+      "selezione": [
+        "oe7e7e7e7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "select.same.fontFamilyStyle",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontFamilyStyleSize",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fontSize",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot5e5e5e5",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.textFillColor",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot1a1a1a1",
+          "ot2b2b2b2",
+          "ot3c3c3c3",
+          "ot4d4d4d4",
+          "ot6f6f6f6"
+        ]
+      }
+    },
+    {
+      "id": "select.same.textStrokeColor",
+      "disegno": "testi.svg",
+      "selezione": [
+        "ot5e5e5e5"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot3c3c3c3",
+          "ot5e5e5e5"
+        ]
+      }
+    },
+    {
+      "id": "select.object.strayPoints",
+      "disegno": "tracciati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ps3c3c3c3"
+        ]
+      }
+    },
+    {
+      "id": "select.object.openPaths",
+      "disegno": "tracciati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "op1a1a1a1"
         ]
       }
     },

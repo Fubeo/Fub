@@ -75,7 +75,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T15 giro 5 `stroke.set` (la sezione Contorno) e le quattro della sfumatura
   // (`paint.editGradient`, `paint.setGradientGeom`, `gradient.selectStop`, `paint.lastGradient`).
   // T13 le quattro `object.compoundShape.*`, `object.expandShape` e `pathfinder.repeat`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1198, fub: 114, escluso: 12, fatto: 227 });
+  // T15 giro 6 porta a «fatto» otto righe di ≡ › Selezione: il testo uguale (sei) e Punti isolati e
+  // Tracciati aperti. Il testo di punto e quello in area restano da fare: il motore vede il testo con
+  // fub:wrap come testo di punto, quindi il confronto per specie non è giusto.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1190, fub: 114, escluso: 12, fatto: 235 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

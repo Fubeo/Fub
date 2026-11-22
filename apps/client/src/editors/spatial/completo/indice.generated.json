@@ -1939,6 +1939,38 @@
     },
     {
       "fonte": "motore",
+      "id": "select.object.openPaths",
+      "chiamata": {
+        "comando": "disegno.select.object.openPaths"
+      },
+      "etichetta": {
+        "it": "Tracciati aperti",
+        "en": "Open Paths"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.object.strayPoints",
+      "chiamata": {
+        "comando": "disegno.select.object.strayPoints"
+      },
+      "etichetta": {
+        "it": "Punti isolati",
+        "en": "Stray Points"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.object.textObjects",
       "chiamata": {
         "comando": "disegno.select.object.textObjects"
@@ -2019,6 +2051,70 @@
     },
     {
       "fonte": "motore",
+      "id": "select.same.fontFamily",
+      "chiamata": {
+        "comando": "disegno.select.same.fontFamily"
+      },
+      "etichetta": {
+        "it": "Famiglia di font",
+        "en": "Font Family"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.fontFamilyStyle",
+      "chiamata": {
+        "comando": "disegno.select.same.fontFamilyStyle"
+      },
+      "etichetta": {
+        "it": "Famiglia e stile font",
+        "en": "Font Family & Style"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.fontFamilyStyleSize",
+      "chiamata": {
+        "comando": "disegno.select.same.fontFamilyStyleSize"
+      },
+      "etichetta": {
+        "it": "Famiglia, stile e dimensione font",
+        "en": "Font Family, Style & Size"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.fontSize",
+      "chiamata": {
+        "comando": "disegno.select.same.fontSize"
+      },
+      "etichetta": {
+        "it": "Dimensione font",
+        "en": "Font Size"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.same.opacity",
       "chiamata": {
         "comando": "disegno.select.same.opacity"
@@ -2090,6 +2186,38 @@
       "etichetta": {
         "it": "Istanza di simbolo",
         "en": "Symbol Instance"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.textFillColor",
+      "chiamata": {
+        "comando": "disegno.select.same.textFillColor"
+      },
+      "etichetta": {
+        "it": "Colore riempimento testo",
+        "en": "Text Fill Color"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.textStrokeColor",
+      "chiamata": {
+        "comando": "disegno.select.same.textStrokeColor"
+      },
+      "etichetta": {
+        "it": "Colore tratto testo",
+        "en": "Text Stroke Color"
       },
       "posto": "menu/selezione/uguale",
       "famiglia": "livelli",

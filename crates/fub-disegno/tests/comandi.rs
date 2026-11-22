@@ -240,6 +240,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.select.none",
         "disegno.select.allOnArtboard",
         "disegno.select.object.textObjects",
+        // Le specie di Oggetto (K6 T15, giro 6) guardano il disegno, non la scelta.
+        "disegno.select.object.strayPoints",
+        "disegno.select.object.openPaths",
         "disegno.paint.toggleActive",
         "disegno.gradient.selectStop",
     ];
@@ -703,5 +706,78 @@ fn lo_spessore_di_una_linea_variabile_insieme_a_una_forma() {
         confronta_ops(&attese, &ottenute, None),
         Confronto::Uguali,
         "{ottenute}"
+    );
+}
+
+/// Un testo di punto, senza tracciati; e un tracciato aperto e un punto isolato (`M x y Z`: un `M x y`
+/// nudo lo scarta l'importatore).
+const TESTO: &str = "    <text id=\"ot1a1a1a1\" x=\"20\" y=\"40\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"16\"><tspan x=\"20\" dy=\"0\">Primo</tspan></text>\n";
+const TRACCIATI: &str = "    <path id=\"op1a1a1a1\" d=\"M20 20 L120 20 L120 80\" fill=\"none\" stroke=\"#000000\"/>\n    <path id=\"ps3c3c3c3\" d=\"M60 200 Z\"/>\n";
+
+/// K6 T15, giro 6: le voci di ≡ › Selezione per il testo e per le specie. Il confronto del testo vuole
+/// un testo scelto, e senza lo dice «Serve un testo.»; le specie di Oggetto stanno accese solo se il
+/// disegno ne ha, e altrimenti dicono che cosa manca.
+#[test]
+fn le_voci_di_testo_e_di_specie_della_selezione_dicono_perche_sono_spente() {
+    const UGUALI: [&str; 6] = [
+        "disegno.select.same.fontFamily",
+        "disegno.select.same.fontFamilyStyle",
+        "disegno.select.same.fontFamilyStyleSize",
+        "disegno.select.same.fontSize",
+        "disegno.select.same.textFillColor",
+        "disegno.select.same.textStrokeColor",
+    ];
+    let stato = |comandi: &[fub_abi::DrawingCommandInfo], id: &str| {
+        let c = comandi
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap_or_else(|| panic!("manca {id}"));
+        (c.enabled, c.disabled_reason.clone())
+    };
+    let altro = |testo: &str| Some(fub_abi::DrawingDisabledReason::Other { text: testo.into() });
+    let senza_testo = Some(fub_abi::DrawingDisabledReason::NeedsText);
+
+    // Un rettangolo: niente testo fra gli oggetti scelti, e nel disegno niente di quelle specie.
+    let (rettangolo, _) = apri(&disegno(RETTANGOLO));
+    let scelto = rettangolo.comandi(&["oa1a1a1a1".into()]);
+    for id in UGUALI {
+        assert_eq!(stato(&scelto, id), (false, senza_testo.clone()), "{id}");
+    }
+    assert_eq!(
+        stato(&scelto, "disegno.select.object.strayPoints"),
+        (false, altro("Nel disegno non ci sono punti isolati."))
+    );
+    assert_eq!(
+        stato(&scelto, "disegno.select.object.openPaths"),
+        (false, altro("Nel disegno non ci sono tracciati aperti."))
+    );
+    // Senza scelta, Uguale dice di scegliere un oggetto, prima di dire del testo.
+    let vuota = rettangolo.comandi(&[]);
+    assert_eq!(
+        stato(&vuota, "disegno.select.same.fontSize"),
+        (false, Some(fub_abi::DrawingDisabledReason::NoSelection))
+    );
+
+    // Un testo scelto: il confronto è acceso; senza tracciati, le specie di tracciato dicono che non ce ne sono.
+    let (testo, _) = apri(&disegno(TESTO));
+    let con_testo = testo.comandi(&["ot1a1a1a1".into()]);
+    for id in UGUALI {
+        assert_eq!(stato(&con_testo, id), (true, None), "{id}");
+    }
+    assert_eq!(
+        stato(&con_testo, "disegno.select.object.openPaths"),
+        (false, altro("Nel disegno non ci sono tracciati aperti."))
+    );
+
+    // Un tracciato aperto e un punto isolato, senza testo: le due specie sono accese.
+    let (tracciati, _) = apri(&disegno(TRACCIATI));
+    let senza_scelta = tracciati.comandi(&[]);
+    assert_eq!(
+        stato(&senza_scelta, "disegno.select.object.openPaths"),
+        (true, None)
+    );
+    assert_eq!(
+        stato(&senza_scelta, "disegno.select.object.strayPoints"),
+        (true, None)
     );
 }

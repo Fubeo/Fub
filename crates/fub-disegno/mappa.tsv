@@ -157,15 +157,15 @@ motore	perspective.editText	Edit Text		prospettiva	F4	T25	da fare	interno	famigl
 motore	document.info	Document Info	Window › Document Info	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Informazioni documento
 motore	object.makePixelPerfect	Make Pixel Perfect	Object	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Allinea ai pixel
 motore	select.same.symbolInstance	Symbol Instance	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Istanza di simbolo
-motore	select.same.fontFamily	Font Family	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T18	Famiglia di font
-motore	select.same.fontFamilyStyle	Font Family & Style	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T18	Famiglia e stile font
-motore	select.same.fontFamilyStyleSize	Font Family, Style & Size	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T18	Famiglia, stile e dimensione font
-motore	select.same.fontSize	Font Size	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T18	Dimensione font
-motore	select.same.textFillColor	Text Fill Color	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T18	Colore riempimento testo
-motore	select.same.textStrokeColor	Text Stroke Color	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T18	Colore traccia testo
-motore	select.object.directionHandles	Direction Handles	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Maniglie di direzione
-motore	select.object.pointText	Point Text Objects	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Oggetti testo per punti
-motore	select.object.areaText	Area Text Objects	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Oggetti testo in area
+motore	select.same.fontFamily	Font Family	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Famiglia di font
+motore	select.same.fontFamilyStyle	Font Family & Style	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Famiglia e stile font
+motore	select.same.fontFamilyStyleSize	Font Family, Style & Size	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Famiglia, stile e dimensione font
+motore	select.same.fontSize	Font Size	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Dimensione font
+motore	select.same.textFillColor	Text Fill Color	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Colore riempimento testo
+motore	select.same.textStrokeColor	Text Stroke Color	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Colore traccia testo
+motore	select.object.directionHandles	Direction Handles	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	le ancore dei tracciati scelti sono nel motore (sel.anchors), ma la risposta a Fub porta solo gli oggetti: servono i punti nella risposta (fub-abi), da chiedere	Maniglie di direzione
+motore	select.object.pointText	Point Text Objects	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27 perché l'importatore del motore legge il testo in area solo dai flowRoot, e il testo con fub:wrap di Fub risulta di punto	Oggetti testo per punti
+motore	select.object.areaText	Area Text Objects	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27 perché l'importatore del motore legge il testo in area solo dai flowRoot, e il testo con fub:wrap di Fub risulta di punto	Oggetti testo in area
 motore	select.object.brushStrokes	Brush Strokes	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Pennellate
 motore	select.object.bristleBrushStrokes	Bristle Brush Strokes	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Pennellate a setole
 motore	select.save	Save Selection…	Select	livelli	F1	T15	da fare	menu/selezione	famiglia	finestra	Salva selezione…
@@ -520,8 +520,8 @@ motore	select.same.shapeType	Shape	Select › Same	livelli	F1	T15	fatto	menu/sel
 motore	select.object.allOnSameLayers	All on Same Layers	Select › Object	livelli	F1	T15	fatto	menu/selezione/oggetto	famiglia		Tutto sugli stessi livelli
 motore	select.object.clippingMasks	Clipping Masks	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Maschere di ritaglio
 motore	select.object.textObjects	All Text Objects	Select › Object	livelli	F1	T15	fatto	menu/selezione/oggetto	famiglia		Tutti gli oggetti di testo
-motore	select.object.strayPoints	Stray Points	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Punti isolati
-motore	select.object.openPaths	Open Paths	Select › Object	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T27	Tracciati aperti
+motore	select.object.strayPoints	Stray Points	Select › Object	livelli	F1	T15	fatto	menu/selezione/oggetto	famiglia		Punti isolati
+motore	select.object.openPaths	Open Paths	Select › Object	livelli	F1	T15	fatto	menu/selezione/oggetto	famiglia		Tracciati aperti
 motore	select.same.graphicStyle	Graphic Style	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T15 Aspetto	Stile grafico
 motore	select.same.appearanceAttribute	Appearance Attribute	Select › Same	livelli	F1	T15	da fare	menu/selezione	famiglia	aspetta T15 Aspetto	Attributo aspetto
 motore	shaper.scribble	Shaper		forme	F1	T13	da fare	ispettore/design	famiglia		Shaper
