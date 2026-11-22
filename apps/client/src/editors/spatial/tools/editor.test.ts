@@ -1315,10 +1315,20 @@ describe("i collegamenti a una nota", () => {
     mount(LINKED, { links: stub() });
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     expect([...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent)).toEqual([
-      "Livello «Livello 1», corrente",
+      "Livello 1",
       "Rettangolo, Nero",
       "Collegamento a «Ciclo dell'acqua», 1 oggetto",
     ]);
+  });
+
+  it("un livello mostra solo il suo nome, e a parole dice che è un livello e che è quello corrente", () => {
+    mount(LINKED, { links: stub() });
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    const layerRow = host.querySelector<HTMLElement>('[role="treeitem"][aria-level="1"]')!;
+    expect(layerRow.querySelector(".draw-object-label")!.textContent).toBe("Livello 1");
+    expect(layerRow.getAttribute("aria-label")).toBe("Livello «Livello 1», corrente");
+    // Un oggetto dice già che cos'è nella riga: non ha un nome accessibile a parte.
+    expect(host.querySelector('[role="treeitem"][aria-level="2"]')!.hasAttribute("aria-label")).toBe(false);
   });
 
   it("«?» elenca i tasti dei collegamenti", () => {
@@ -1407,17 +1417,17 @@ describe("i livelli, nel Completo", () => {
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     const labels = (): string[] => [...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent ?? "");
     // Dal davanti: il livello sopra è in cima.
-    expect(labels()).toEqual(["Livello «Note», corrente", "Rettangolo, Nero", "Livello «Sfondo»", "Rettangolo, Blu"]);
+    expect(labels()).toEqual(["Note", "Rettangolo, Nero", "Sfondo", "Rettangolo, Blu"]);
     editor.select([A]);
     expect(shownName()).toBe("Sfondo");
-    expect(labels()).toEqual(["Livello «Note»", "Rettangolo, Nero", "Livello «Sfondo», corrente", "Rettangolo, Blu"]);
+    expect(labels()).toEqual(["Note", "Rettangolo, Nero", "Sfondo", "Rettangolo, Blu"]);
     // Oggetti di due livelli non cambiano il livello corrente.
     editor.select([A, B]);
     expect(shownName()).toBe("Sfondo");
     editor.select([B]);
     expect(shownName()).toBe("Note");
     editor.setSpace("simple");
-    expect(labels()).toEqual(["Livello «Note»", "Rettangolo, Nero", "Livello «Sfondo»", "Rettangolo, Blu"]);
+    expect(labels()).toEqual(["Note", "Rettangolo, Nero", "Sfondo", "Rettangolo, Blu"]);
   });
 
   it("un livello nuovo sopra quello corrente, rinominato, nascosto e mostrato: un passo di annulla ciascuno", async () => {
@@ -2967,7 +2977,7 @@ describe("l'albero degli oggetti", () => {
     expect(panel.hidden).toBe(false);
     expect(button().getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(tree());
-    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Rettangolo, Nero"]);
+    expect(labels()).toEqual(["Livello 1", "Rettangolo, Nero"]);
     expect(host.querySelector(".draw-objects-count")!.textContent).toBe("1 oggetto");
     expect(formatIssues(checkAccessibility(host))).toBe("");
     button().click();
@@ -2996,10 +3006,10 @@ describe("l'albero degli oggetti", () => {
     button().click();
     editor.setTool("ellipse");
     drag([[10, 10], [50, 30]]);
-    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Ellisse, Nero", "Rettangolo, Nero"]);
+    expect(labels()).toEqual(["Livello 1", "Ellisse, Nero", "Rettangolo, Nero"]);
     editor.select(["o1a2b3c4d"]);
     editor.deleteSelection();
-    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Ellisse, Nero"]);
+    expect(labels()).toEqual(["Livello 1", "Ellisse, Nero"]);
   });
 
   it("Invio su un oggetto apre le sue proprietà, Canc lo elimina", () => {
@@ -3035,7 +3045,7 @@ describe("i nomi e il filtro dell'albero, nel Completo", () => {
     mount(NAMED);
     button().click();
     // Dal davanti: in cima il rettangolo che il documento ha per ultimo.
-    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Rettangolo, Blu", "Rettangolo, Nero"]);
+    expect(labels()).toEqual(["Livello 1", "Rettangolo, Blu", "Rettangolo, Nero"]);
     inTree("End");
     expect(editor.selection).toEqual(["oa1a1a1a1"]);
     expect(inTree("F2").defaultPrevented).toBe(true);
@@ -3087,7 +3097,7 @@ describe("i nomi e il filtro dell'albero, nel Completo", () => {
     rename("Disegno");
     expect(editor.engine.text).toContain('<g id="l1" fub:layer="Disegno">');
     expect(spoken()).toBe("Il livello ora si chiama «Disegno».");
-    expect(labels()[0]).toBe("Livello «Disegno», corrente");
+    expect(labels()[0]).toBe("Disegno");
     inTree("F2");
     rename("   ");
     expect(spoken()).toBe("Un livello ha sempre un nome: resta quello di prima.");
@@ -3180,7 +3190,7 @@ describe("i nomi e il filtro dell'albero, nel Completo", () => {
     expect(editor.tool).toBe(tool);
     search.value = "blu";
     search.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Rettangolo, Blu"]);
+    expect(labels()).toEqual(["Livello 1", "Rettangolo, Blu"]);
     expect(host.querySelector(".draw-objects-status")!.textContent).toBe("1 oggetto trovato.");
     expect(formatIssues(checkAccessibility(host))).toBe("");
     // Un oggetto nuovo che il filtro trova ci entra.
@@ -3821,7 +3831,7 @@ describe("la selezione avanzata, nel Completo", () => {
     const row = (key: string): HTMLElement => host.querySelector<HTMLElement>(`.draw-object[data-key="${key}"]`)!;
     const sign = (key: string, what: "lock" | "hide"): HTMLElement => row(key).querySelector<HTMLElement>(`.draw-object-sign[data-sign="${what}"]`)!;
     expect([...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent)).toEqual([
-      "Livello «Livello 1», corrente",
+      "Livello 1",
       "Gruppo, 2 oggetti",
       "Rettangolo, Blu",
       "Rettangolo, bloccato, Blu",

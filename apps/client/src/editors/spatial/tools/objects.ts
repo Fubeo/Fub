@@ -160,8 +160,13 @@ export interface TreeEntry {
   /// I figli di un livello, o di un gruppo o di un collegamento che si apre,
   /// in ordine di documento.
   readonly children: readonly TreeEntry[];
-  /// Il nome a parole; si chiede per le righe disegnate e per il filtro.
+  /// Il nome a parole; si chiede per il nome accessibile della riga e per il
+  /// filtro.
   label(): string;
+  /// Il testo che la riga mostra, quando è meno di `label()`: un livello mostra
+  /// il solo nome, e a parole dice anche che è un livello (`label()`, che resta
+  /// il nome accessibile). Senza, la riga mostra `label()`.
+  shown?(): string;
 }
 
 export interface ObjectTreeOptions {
@@ -503,6 +508,9 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     sign.toggleAttribute("data-on", on);
   };
 
+  /// Il testo che la riga di `entry` mostra: `shown()`, o a parole.
+  const shownOf = (entry: TreeEntry): string => entry.shown?.() ?? entry.label();
+
   /// Scrive `row` nel nodo `item`, nuovo o di prima.
   const paintRow = (item: HTMLElement, row: Row, index: number, virtual: boolean): void => {
     const { entry } = row;
@@ -562,8 +570,11 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     if (glyphs.textContent !== glyph) glyphs.textContent = glyph;
     thumb.hidden = entry.thumbnail === undefined;
     if (entry.thumbnail !== undefined) showThumb(thumb, entry);
-    const text = entry.label();
+    const text = shownOf(entry);
     if (label.textContent !== text) label.textContent = text;
+    // Una riga che mostra meno di quanto dice dà il resto al nome accessibile.
+    if (entry.shown === undefined) item.removeAttribute("aria-label");
+    else item.setAttribute("aria-label", entry.label());
     const [lock, hide] = signs.children as unknown as [HTMLElement, HTMLElement];
     const toggles = entry.toggles && options.onToggle !== undefined;
     signTitle(lock, entry.locked, toggles, "lock");
@@ -1220,7 +1231,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     const ghost = document.createElement("div");
     ghost.className = "draw-objects-ghost";
     ghost.setAttribute("aria-hidden", "true");
-    ghost.textContent = keys.length === 1 ? row.entry.label() : plural(keys.length, "draw.describe.parts.one", "draw.describe.parts.other");
+    ghost.textContent = keys.length === 1 ? shownOf(row.entry) : plural(keys.length, "draw.describe.parts.one", "draw.describe.parts.other");
     element.append(ghost);
     drag = { pointer: pressed.pointer, keys, moving: new Set(keys), layers: row.entry.layer, ghost, drop: null, x: pressed.x, y: pressed.y };
     tree.toggleAttribute("data-dragging", true);

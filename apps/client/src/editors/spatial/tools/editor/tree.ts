@@ -196,6 +196,7 @@ export function installTree(ctx: EditorContext): void {
       if (refusal !== null) refusals.set(node.key, refusal);
       const inner = under ?? (!locked ? null : layer ? "layer_locked" : "container_locked");
       const title = layer ? node.name : cleanName(node.item.title ?? "");
+      const name = title === null || title === "" ? null : title;
       return {
         key: node.key,
         layer,
@@ -203,9 +204,12 @@ export function installTree(ctx: EditorContext): void {
         locked,
         hidden: node.item.hidden === true,
         toggles: editable() && (layer ? has("layers") : has("selection") && under === null),
-        name: title === null || title === "" ? null : title,
+        name,
         renames: editable() && has("layers"),
         moves,
+        // Un livello mostra il suo nome, e «Livello «nome»» lo dice a parole
+        // (il nome accessibile): non si ripete la parola in ogni riga.
+        ...(layer ? { shown: () => name ?? t("draw.kind.layer") } : {}),
         ...(has("layers") ? { thumbnail: () => thumbnailOf(node.item) } : {}),
         kind: treeKind(node.item.role),
         children: layer || (holds && has("selection")) ? entriesOf(node.children, index, current, inner, refusals, moves) : [],

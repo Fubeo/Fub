@@ -215,7 +215,8 @@ sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
 Penna, evidenziatore, forme, testi e immagini, incollate o dal vault, vanno nel
 livello corrente. Se è nascosto o bloccato il gesto non scrive, e un annuncio
 dice perché e che cosa fare. Scegliere oggetti tutti in un livello lo rende
-corrente, e l'albero degli oggetti lo dice: «Livello «Note», corrente».
+corrente: la riga dell'albero degli oggetti mostra il nome («Note»), e
+per chi legge a voce il nome dice «Livello «Note», corrente».
 
 Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in cima
 a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo stile
