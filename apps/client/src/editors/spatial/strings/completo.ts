@@ -455,6 +455,9 @@ export const COLONNA_IT = {
   "draw.engine.name.lineSegment": "Segmento linea",
   "draw.engine.name.arc": "Arco",
   "draw.engine.name.spiral": "Spirale",
+  // Il Testo del motore (K6 T16) sta nella casella del Testo di Fub.
+  "draw.engine.name.type": "Testo (Completo)",
+  "draw.engine.type.box": "Testo che stai scrivendo: Esc per uscire",
   "draw.chrome.drawer.title": "Tutti gli strumenti",
   "draw.chrome.drawer.note": "Scegline uno per usarlo adesso.",
   "draw.chrome.drawer.search": "Cerca uno strumento",
@@ -504,6 +507,8 @@ export const COLONNA_EN: Record<keyof typeof COLONNA_IT, string> = {
   "draw.engine.name.lineSegment": "Line Segment",
   "draw.engine.name.arc": "Arc",
   "draw.engine.name.spiral": "Spiral",
+  "draw.engine.name.type": "Type (Full)",
+  "draw.engine.type.box": "Text you are typing: Esc to leave",
   "draw.chrome.drawer.title": "All tools",
   "draw.chrome.drawer.note": "Choose one to use it now.",
   "draw.chrome.drawer.search": "Search for a tool",
