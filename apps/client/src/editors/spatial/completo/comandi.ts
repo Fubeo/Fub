@@ -16,6 +16,7 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import { displayBinding } from "../../../ui/commands";
 import type { MenuItem } from "../../../ui/menu";
 import { t, type DrawKey } from "../strings";
+import { FILE_VISUALIZZA } from "../tools/editor/chrome/visualizza";
 import type { MotoreDelDisegno } from "../motore/gesti";
 import type { MotoreAssente, SessioneMotore } from "../motore/sessione";
 import type { Indice, VoceIndice } from "./indice";
@@ -196,13 +197,36 @@ export function tastoMostrato(regola: RegolaTasti | null, id: string): string | 
   return tasto === null ? undefined : displayBinding(tasto);
 }
 
+/// Le file dei sottomenu del menu ≡ che le hanno: le righe, per id, nell'ordine
+/// della fila, e una riga di separazione fra una fila e l'altra. Un sottomenu
+/// che non è qui tiene l'ordine dell'indice.
+const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = {
+  visualizza: FILE_VISUALIZZA,
+};
+
+/// Le righe di un sottomenu nelle sue file (`FILE_DEI_MENU`): l'ordine delle
+/// file, poi quello dell'indice; una riga che nessuna fila nomina va in fondo,
+/// in una fila sua. La prima riga di ogni fila dopo la prima porta la riga di
+/// separazione.
+function inFile<T>(gruppo: string, righe: Array<{ id: string; riga: T }>, separa: (riga: T) => T): T[] {
+  const file = FILE_DEI_MENU[gruppo];
+  if (file === undefined) return righe.map(({ riga }) => riga);
+  const filaDi = (id: string): number => {
+    const i = file.findIndex((fila) => fila.includes(id));
+    return i < 0 ? file.length : i;
+  };
+  const ordinate = righe.map((r) => ({ ...r, fila: filaDi(r.id) })).sort((a, b) => a.fila - b.fila);
+  return ordinate.map(({ riga, fila }, i) => (i > 0 && ordinate[i - 1]!.fila !== fila ? separa(riga) : riga));
+}
+
 /// Il menu ≡ con i sottomenu dell'indice (`menu/<sottomenu>`), nell'ordine in
 /// cui l'indice li dà. Una voce di `menu/<sottomenu>/<sotto>` sta in un
 /// sottomenu dentro il sottomenu, al posto della prima voce che lo porta. Una
-/// voce spenta si vede, col suo perché.
+/// voce spenta si vede, col suo perché. Un sottomenu con le sue file
+/// (`FILE_DEI_MENU`) le ha in ordine, separate da una riga.
 export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiVoce, regola: RegolaTasti | null = null): MenuItem[] {
   // Per ogni sottomenu le sue righe: una voce, o il nome di un sotto.
-  const gruppi = new Map<string, Array<MenuItem | string>>();
+  const gruppi = new Map<string, Array<{ id: string; riga: MenuItem | string }>>();
   const sotti = new Map<string, MenuItem[]>();
   for (const voce of indice.voci) {
     const [scheda, gruppo, sotto, oltre] = voce.posto.split("/");
@@ -226,25 +250,30 @@ export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiV
     const elenco = gruppi.get(gruppo) ?? [];
     gruppi.set(gruppo, elenco);
     if (sotto === undefined) {
-      elenco.push(riga);
+      elenco.push({ id: voce.id, riga });
       continue;
     }
     const chiave = `${gruppo}/${sotto}`;
     const dentro = sotti.get(chiave);
     if (dentro === undefined) {
       sotti.set(chiave, [riga]);
-      elenco.push(chiave);
+      elenco.push({ id: voce.id, riga: chiave });
     } else dentro.push(riga);
   }
   if (gruppi.size === 0) return [{ label: t("draw.completo.indice.empty"), disabled: true }];
   return [...gruppi].map(([gruppo, righe]) => ({
     label: t(NOMI_PEZZO[gruppo]),
     submenu: true,
-    items: righe.map((riga): MenuItem => {
-      if (typeof riga !== "string") return riga;
-      const sotto = riga.slice(gruppo.length + 1);
-      return { label: t(NOMI_PEZZO[sotto]), submenu: true, items: sotti.get(riga)! };
-    }),
+    items: inFile(
+      gruppo,
+      righe.map(({ id, riga }) => {
+        if (typeof riga !== "string") return { id, riga };
+        const sotto = riga.slice(gruppo.length + 1);
+        const voce: MenuItem = { label: t(NOMI_PEZZO[sotto]), submenu: true, items: sotti.get(riga)! };
+        return { id, riga: voce };
+      }),
+      (riga) => ({ ...riga, separator: true }),
+    ),
   }));
 }
 

@@ -65,7 +65,9 @@ comandi stanno in Ctrl+/ e nella ricerca dei comandi.
 Nel Disegno completo, ≡ › Visualizza ha la griglia («Mostra griglia» e
 «Aggancia alla griglia», le stesse impostazioni del Semplice), il contorno, i
 righelli del bordo del foglio («Mostra righelli») e «Reimposta rotazione
-vista», che è spenta finché la vista non è girata. I righelli stanno sul bordo
+vista», che è spenta finché la vista non è girata. Le voci stanno in tre
+file, separate da una riga: griglia e aggancio; contorno e righelli; la
+rotazione. I righelli stanno sul bordo
 in alto e a sinistra del foglio, con le tacche e i numeri nell'unità del
 documento; non spostano il disegno, e con la vista girata non si leggono. Lo
 stato dei righelli non si salva nel file. Le altre voci di Visualizza (la
