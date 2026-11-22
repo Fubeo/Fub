@@ -42,6 +42,9 @@ const DEL_NUCLEO: &str = "disegno.edit.duplicate";
 /// Un comando dei tracciati.
 const DEI_TRACCIATI: &str = "disegno.object.expand";
 
+/// Un comando dei tracciati la cui riga della mappa è ancora da fare.
+const DEI_TRACCIATI_DA_FARE: &str = "disegno.path.setFillRule";
+
 const ATTESA: Duration = Duration::from_secs(20);
 
 /// Un vault temporaneo con il disegno, aperto da un host con un motore suo.
@@ -367,7 +370,7 @@ fn con_le_sole_righe_fatte_una_da_fare_e_unserved() {
     let prova = Prova::nuova();
     prova.disegni.filtra(Filtro::Fatte);
     let instance = prova.apri();
-    unserved(prova.comando(&instance, DEI_TRACCIATI, serde_json::Value::Null));
+    unserved(prova.comando(&instance, DEI_TRACCIATI_DA_FARE, serde_json::Value::Null));
     assert!(prova.nate().is_empty());
     assert_eq!(prova.cache(), 0);
 }
