@@ -387,6 +387,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.align",
+      "chiamata": {
+        "comando": "disegno.object.align"
+      },
+      "etichetta": {
+        "it": "Allinea",
+        "en": "Align"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.arrange.bringForward",
       "chiamata": {
         "comando": "disegno.object.arrange.bringForward"
@@ -446,6 +462,38 @@
       "posto": "menu/oggetto",
       "famiglia": "nucleo",
       "tasto": "Cmd+Shift+[",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.distribute",
+      "chiamata": {
+        "comando": "disegno.object.distribute"
+      },
+      "etichetta": {
+        "it": "Distribuisci",
+        "en": "Distribute"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.distributeSpacing",
+      "chiamata": {
+        "comando": "disegno.object.distributeSpacing"
+      },
+      "etichetta": {
+        "it": "Distribuisci spaziatura",
+        "en": "Distribute Spacing"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -610,6 +658,374 @@
       "finestra": false
     },
     {
+      "fonte": "motore",
+      "id": "shape.arc",
+      "chiamata": {
+        "comando": "disegno.shape.arc"
+      },
+      "etichetta": {
+        "it": "Arco",
+        "en": "Arc"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.ellipse",
+      "chiamata": {
+        "comando": "disegno.shape.ellipse"
+      },
+      "etichetta": {
+        "it": "Ellisse",
+        "en": "Ellipse"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.flare",
+      "chiamata": {
+        "comando": "disegno.shape.flare"
+      },
+      "etichetta": {
+        "it": "Riflesso",
+        "en": "Flare"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.line",
+      "chiamata": {
+        "comando": "disegno.shape.line"
+      },
+      "etichetta": {
+        "it": "Segmento linea",
+        "en": "Line Segment"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.polygon",
+      "chiamata": {
+        "comando": "disegno.shape.polygon"
+      },
+      "etichetta": {
+        "it": "Poligono",
+        "en": "Polygon"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.rectangle",
+      "chiamata": {
+        "comando": "disegno.shape.rectangle"
+      },
+      "etichetta": {
+        "it": "Rettangolo",
+        "en": "Rectangle"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.spiral",
+      "chiamata": {
+        "comando": "disegno.shape.spiral"
+      },
+      "etichetta": {
+        "it": "Spirale",
+        "en": "Spiral"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "shape.star",
+      "chiamata": {
+        "comando": "disegno.shape.star"
+      },
+      "etichetta": {
+        "it": "Stella",
+        "en": "Star"
+      },
+      "posto": "finestra",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.distributeHorizontalCenter",
+      "chiamata": {
+        "client": "align.distributeHorizontalCenter"
+      },
+      "etichetta": {
+        "it": "Distribuisci orizzontalmente i centri",
+        "en": "Horizontal Distribute Center"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.distributeHorizontalLeft",
+      "chiamata": {
+        "client": "align.distributeHorizontalLeft"
+      },
+      "etichetta": {
+        "it": "Distribuisci orizzontalmente i bordi sinistri",
+        "en": "Horizontal Distribute Left"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.distributeHorizontalRight",
+      "chiamata": {
+        "client": "align.distributeHorizontalRight"
+      },
+      "etichetta": {
+        "it": "Distribuisci orizzontalmente i bordi destri",
+        "en": "Horizontal Distribute Right"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.distributeHorizontalSpace",
+      "chiamata": {
+        "client": "align.distributeHorizontalSpace"
+      },
+      "etichetta": {
+        "it": "Distribuisci spazio orizzontalmente",
+        "en": "Horizontal Distribute Space"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.distributeVerticalBottom",
+      "chiamata": {
+        "client": "align.distributeVerticalBottom"
+      },
+      "etichetta": {
+        "it": "Distribuisci verticalmente i bordi inferiori",
+        "en": "Vertical Distribute Bottom"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.distributeVerticalCenter",
+      "chiamata": {
+        "client": "align.distributeVerticalCenter"
+      },
+      "etichetta": {
+        "it": "Distribuisci verticalmente i centri",
+        "en": "Vertical Distribute Center"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.distributeVerticalSpace",
+      "chiamata": {
+        "client": "align.distributeVerticalSpace"
+      },
+      "etichetta": {
+        "it": "Distribuisci spazio verticalmente",
+        "en": "Vertical Distribute Space"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.distributeVerticalTop",
+      "chiamata": {
+        "client": "align.distributeVerticalTop"
+      },
+      "etichetta": {
+        "it": "Distribuisci verticalmente i bordi superiori",
+        "en": "Vertical Distribute Top"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.horizontalCenter",
+      "chiamata": {
+        "client": "align.horizontalCenter"
+      },
+      "etichetta": {
+        "it": "Allinea centri orizzontalmente",
+        "en": "Horizontal Align Center"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.horizontalLeft",
+      "chiamata": {
+        "client": "align.horizontalLeft"
+      },
+      "etichetta": {
+        "it": "Allinea a sinistra orizzontalmente",
+        "en": "Horizontal Align Left"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.horizontalRight",
+      "chiamata": {
+        "client": "align.horizontalRight"
+      },
+      "etichetta": {
+        "it": "Allinea a destra orizzontalmente",
+        "en": "Horizontal Align Right"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.horizontalVerticalCenter",
+      "chiamata": {
+        "client": "align.horizontalVerticalCenter"
+      },
+      "etichetta": {
+        "it": "Allinea centri orizzontalmente e verticalmente",
+        "en": "Horizontal & Vertical Align Center"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.verticalBottom",
+      "chiamata": {
+        "client": "align.verticalBottom"
+      },
+      "etichetta": {
+        "it": "Allinea verticalmente in basso",
+        "en": "Vertical Align Bottom"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.verticalCenter",
+      "chiamata": {
+        "client": "align.verticalCenter"
+      },
+      "etichetta": {
+        "it": "Allinea verticalmente al centro",
+        "en": "Vertical Align Center"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "align.verticalTop",
+      "chiamata": {
+        "client": "align.verticalTop"
+      },
+      "etichetta": {
+        "it": "Allinea verticalmente in alto",
+        "en": "Vertical Align Top"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
       "fonte": "interfaccia",
       "id": "tool.options",
       "chiamata": {
@@ -739,6 +1155,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "arc",
+      "chiamata": {
+        "strumento": "arc"
+      },
+      "etichetta": {
+        "it": "Strumento Arco",
+        "en": "Arc Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "directSelection",
       "chiamata": {
         "strumento": "directSelection"
@@ -750,6 +1182,38 @@
       "posto": "colonna/scegli",
       "famiglia": "nucleo",
       "tasto": "A",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "ellipse",
+      "chiamata": {
+        "strumento": "ellipse"
+      },
+      "etichetta": {
+        "it": "Strumento Ellisse",
+        "en": "Ellipse Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": "L",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "flare",
+      "chiamata": {
+        "strumento": "flare"
+      },
+      "etichetta": {
+        "it": "Strumento Riflesso",
+        "en": "Flare Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -803,6 +1267,54 @@
     },
     {
       "fonte": "strumento",
+      "id": "lineSegment",
+      "chiamata": {
+        "strumento": "lineSegment"
+      },
+      "etichetta": {
+        "it": "Strumento Segmento linea",
+        "en": "Line Segment Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": "\\",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "polygon",
+      "chiamata": {
+        "strumento": "polygon"
+      },
+      "etichetta": {
+        "it": "Strumento Poligono",
+        "en": "Polygon Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "rectangle",
+      "chiamata": {
+        "strumento": "rectangle"
+      },
+      "etichetta": {
+        "it": "Strumento Rettangolo",
+        "en": "Rectangle Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": "M",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "rotateView",
       "chiamata": {
         "strumento": "rotateView"
@@ -814,6 +1326,22 @@
       "posto": "colonna/vista",
       "famiglia": "nucleo",
       "tasto": "Shift+H",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "roundedRectangle",
+      "chiamata": {
+        "strumento": "roundedRectangle"
+      },
+      "etichetta": {
+        "it": "Strumento Rettangolo arrotondato",
+        "en": "Rounded Rectangle Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -835,6 +1363,38 @@
     },
     {
       "fonte": "strumento",
+      "id": "spiral",
+      "chiamata": {
+        "strumento": "spiral"
+      },
+      "etichetta": {
+        "it": "Strumento Spirale",
+        "en": "Spiral Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "star",
+      "chiamata": {
+        "strumento": "star"
+      },
+      "etichetta": {
+        "it": "Strumento Stella",
+        "en": "Star Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "zoom",
       "chiamata": {
         "strumento": "zoom"
@@ -847,6 +1407,22 @@
       "famiglia": "nucleo",
       "tasto": "Z",
       "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "align",
+      "chiamata": {
+        "client": "align"
+      },
+      "etichetta": {
+        "it": "Allinea",
+        "en": "Align"
+      },
+      "posto": "ispettore/design/allinea",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "mostra",
       "finestra": false
     },
     {

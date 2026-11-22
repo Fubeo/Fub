@@ -101,6 +101,16 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
     {
         None
     }
+
+    /// Il livello dove il comando `id` mette ciò che crea, quando la richiesta
+    /// non ne dà uno (un comando non porta il livello, lo strumento sì). Di
+    /// serie `None`: il motore lascia lo stato del documento com'è.
+    fn livello(_id: &str, _copia: &Copia) -> Result<Option<NodeId>, DrawingRefusal>
+    where
+        Self: Sized,
+    {
+        Ok(None)
+    }
 }
 
 /// Le 26 famiglie, nell'ordine di `fub_abi::DRAWING_FAMILIES`: per ognuna la
@@ -159,6 +169,19 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::rifiuto(id, copia, selezione)
+                    })*
+                }
+            }
+
+            /// Il livello dove il comando `id` mette ciò che crea, se la famiglia lo sceglie.
+            fn livello(
+                self,
+                id: &str,
+                copia: &Copia,
+            ) -> Result<Option<NodeId>, DrawingRefusal> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::livello(id, copia)
                     })*
                 }
             }
@@ -838,6 +861,10 @@ pub(crate) fn esegui(
     if let Some(motivo) = famiglia.rifiuto(&riga.id, copia, &richiesta.selection) {
         return Ok(rifiuta(motivo));
     }
+    let livello = match famiglia.livello(&riga.id, copia) {
+        Ok(livello) => livello,
+        Err(motivo) => return Ok(rifiuta(motivo)),
+    };
     let argomenti = nata.stato().adatta(&riga.id, richiesta.value.clone())?;
     // Un gesto lasciato a metà non entra nel comando.
     if banco.in_corso.is_some() {
@@ -851,6 +878,9 @@ pub(crate) fn esegui(
         let fatto = sessione.doc_mut().map(|stato| {
             stato.selection = Selection::default();
             scelti.iter().for_each(|n| stato.selection.add(*n));
+            if let Some(livello) = livello {
+                stato.active_layer = Some(livello);
+            }
         });
         let fatto = fatto.and_then(|()| sessione.execute(&riga.id, &argomenti));
         sessione.paint = stile;

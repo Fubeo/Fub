@@ -112,16 +112,16 @@ motore	object.compoundShape.make	Make Compound Shape	Window › Pathfinder	forme
 motore	object.compoundShape.setMode	Shape Mode	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia		Metodo forma
 motore	object.compoundShape.release	Release Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia		Rilascia forma composta
 motore	object.compoundShape.expand	Expand Compound Shape	Window › Pathfinder	forme	F1	T13	da fare	ispettore/design	famiglia		Espandi forma composta
-motore	shape.rectangle	Rectangle		forme	F1	T13	da fare	ispettore/design	famiglia		Rettangolo
-motore	shape.ellipse	Ellipse		forme	F1	T13	da fare	ispettore/design	famiglia		Ellisse
-motore	shape.polygon	Polygon		forme	F1	T13	da fare	ispettore/design	famiglia		Poligono
-motore	shape.star	Star		forme	F1	T13	da fare	ispettore/design	famiglia		Stella
-motore	shape.flare	Flare		forme	F1	T13	da fare	ispettore/design	famiglia		Riflesso
-motore	shape.line	Line Segment		forme	F1	T13	da fare	ispettore/design	famiglia		Segmento linea
-motore	shape.spiral	Spiral		forme	F1	T13	da fare	ispettore/design	famiglia		Spirale
-motore	shape.arc	Arc		forme	F1	T13	da fare	ispettore/design	famiglia		Arco
-motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	da fare	ispettore/design	famiglia		Griglia rettangolare
-motore	shape.polarGrid	Polar Grid		forme	F1	T13	da fare	ispettore/design	famiglia		Griglia polare
+motore	shape.rectangle	Rectangle		forme	F1	T13	fatto	finestra	famiglia		Rettangolo
+motore	shape.ellipse	Ellipse		forme	F1	T13	fatto	finestra	famiglia		Ellisse
+motore	shape.polygon	Polygon		forme	F1	T13	fatto	finestra	famiglia		Poligono
+motore	shape.star	Star		forme	F1	T13	fatto	finestra	famiglia		Stella
+motore	shape.flare	Flare		forme	F1	T13	fatto	finestra	famiglia		Riflesso
+motore	shape.line	Line Segment		forme	F1	T13	fatto	finestra	famiglia		Segmento linea
+motore	shape.spiral	Spiral		forme	F1	T13	fatto	finestra	famiglia		Spirale
+motore	shape.arc	Arc		forme	F1	T13	fatto	finestra	famiglia		Arco
+motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	da fare	finestra	famiglia	aspetta T27	Griglia rettangolare
+motore	shape.polarGrid	Polar Grid		forme	F1	T13	da fare	finestra	famiglia	aspetta T27	Griglia polare
 motore	path.create	Create Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Crea tracciato
 motore	view.drawMode	Drawing Mode		vista	F1	T11	da fare	menu/visualizza	famiglia		Modalità di disegno
 motore	text.create	Create Text		testo	F2	T16	da fare	ispettore/design	famiglia		Crea testo
@@ -875,12 +875,12 @@ motore	object.clippingMask.editMask	Edit Clipping Path	Object › Clipping Mask	
 motore	object.isolate	Enter Isolation Mode		fub	—	T11	fub	fub	—	«Isola» di Fub nel tasto destro del disegno (il motore non tiene lo stato fra le richieste)	Entra in modalità isolamento
 motore	object.exitIsolation	Exit Isolation Mode		fub	—	T11	fub	fub	—	«Esci dall'isolamento» di Fub nel tasto destro, o Esc	Esci dalla modalità isolamento
 motore	object.setProps	Object Properties		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Proprietà oggetto
-motore	object.align	Align	Window › Align	trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea
-motore	object.distribute	Distribute	Window › Align	trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci
-motore	object.distributeSpacing	Distribute Spacing	Window › Align	trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci spaziatura
+motore	object.align	Align	Window › Align	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea
+motore	object.distribute	Distribute	Window › Align	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci
+motore	object.distributeSpacing	Distribute Spacing	Window › Align	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci spaziatura
 motore	object.setBounds	Set Bounds		trasforma	F1	T13	da fare	ispettore/design	famiglia		Imposta limiti
 motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	da fare	menu/oggetto	famiglia		Espandi forma
-motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	da fare	ispettore/design	famiglia		Proprietà forma dinamica
+motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	da fare	ispettore/design	famiglia	aspetta T27	Proprietà forma dinamica
 interfaccia	addon.pathtools.cornerTool	Corner Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Angoli
 interfaccia	addon.pathtools.sharedEdgeTool	Shared Edge Merge Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Fondi bordo condiviso
 interfaccia	addon.arrange.zoomSelection	Zoom to Selection		trasforma	F1	T13	da fare	ispettore/design	famiglia		Zoom sulla selezione
@@ -1005,21 +1005,21 @@ interfaccia	type.justifyAll	Justify all lines		testo	F2	T16	da fare	menu/testo	f
 interfaccia	type.applyBullets	Apply Bullets		testo	F2	T16	da fare	menu/testo	famiglia		Applica punti elenco
 interfaccia	type.applyNumbers	Apply Numbers		testo	F2	T16	da fare	menu/testo	famiglia		Applica numerazione
 interfaccia	type.convertListToText	Convert to Text		testo	F2	T16	da fare	menu/testo	famiglia		Converti in testo
-interfaccia	align.horizontalLeft	Horizontal Align Left		trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea a sinistra orizzontalmente
-interfaccia	align.horizontalCenter	Horizontal Align Center		trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea centri orizzontalmente
-interfaccia	align.horizontalRight	Horizontal Align Right		trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea a destra orizzontalmente
-interfaccia	align.horizontalVerticalCenter	Horizontal & Vertical Align Center		trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea centri orizzontalmente e verticalmente
-interfaccia	align.verticalTop	Vertical Align Top		trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea verticalmente in alto
-interfaccia	align.verticalCenter	Vertical Align Center		trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea verticalmente al centro
-interfaccia	align.verticalBottom	Vertical Align Bottom		trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea verticalmente in basso
-interfaccia	align.distributeVerticalTop	Vertical Distribute Top		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci verticalmente i bordi superiori
-interfaccia	align.distributeVerticalCenter	Vertical Distribute Center		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci verticalmente i centri
-interfaccia	align.distributeVerticalBottom	Vertical Distribute Bottom		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci verticalmente i bordi inferiori
-interfaccia	align.distributeHorizontalLeft	Horizontal Distribute Left		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci orizzontalmente i bordi sinistri
-interfaccia	align.distributeHorizontalCenter	Horizontal Distribute Center		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci orizzontalmente i centri
-interfaccia	align.distributeHorizontalRight	Horizontal Distribute Right		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci orizzontalmente i bordi destri
-interfaccia	align.distributeVerticalSpace	Vertical Distribute Space		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci spazio verticalmente
-interfaccia	align.distributeHorizontalSpace	Horizontal Distribute Space		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci spazio orizzontalmente
+interfaccia	align.horizontalLeft	Horizontal Align Left		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea a sinistra orizzontalmente
+interfaccia	align.horizontalCenter	Horizontal Align Center		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea centri orizzontalmente
+interfaccia	align.horizontalRight	Horizontal Align Right		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea a destra orizzontalmente
+interfaccia	align.horizontalVerticalCenter	Horizontal & Vertical Align Center		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea centri orizzontalmente e verticalmente
+interfaccia	align.verticalTop	Vertical Align Top		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea verticalmente in alto
+interfaccia	align.verticalCenter	Vertical Align Center		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea verticalmente al centro
+interfaccia	align.verticalBottom	Vertical Align Bottom		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea verticalmente in basso
+interfaccia	align.distributeVerticalTop	Vertical Distribute Top		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci verticalmente i bordi superiori
+interfaccia	align.distributeVerticalCenter	Vertical Distribute Center		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci verticalmente i centri
+interfaccia	align.distributeVerticalBottom	Vertical Distribute Bottom		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci verticalmente i bordi inferiori
+interfaccia	align.distributeHorizontalLeft	Horizontal Distribute Left		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci orizzontalmente i bordi sinistri
+interfaccia	align.distributeHorizontalCenter	Horizontal Distribute Center		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci orizzontalmente i centri
+interfaccia	align.distributeHorizontalRight	Horizontal Distribute Right		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci orizzontalmente i bordi destri
+interfaccia	align.distributeVerticalSpace	Vertical Distribute Space		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci spazio verticalmente
+interfaccia	align.distributeHorizontalSpace	Horizontal Distribute Space		trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Distribuisci spazio orizzontalmente
 interfaccia	type.bold	Bold		testo	F2	T16	da fare	menu/testo	famiglia		Grassetto
 interfaccia	type.italic	Italic		testo	F2	T16	da fare	menu/testo	famiglia		Corsivo
 interfaccia	type.highlightFontName	Highlight Font Name		testo	F2	T16	da fare	menu/testo	famiglia		Evidenzia nome del font
@@ -1189,7 +1189,7 @@ interfaccia	ui.javascriptFilesDialog	Link JavaScript Files…		automazione	F4	T2
 interfaccia	ui.spotColors	Spot Colors…		colore	F1	T14	da fare	finestra	famiglia		Colori spot…
 interfaccia	ui.menuDialog	Menu Dialog		fub	—	T2	fub	fub	—	la tavolozza e il menu del disegno	Finestra di dialogo menu
 interfaccia	ui.widthPointEdit	Width Point Edit…		pennelli	F2	T17	da fare	finestra	famiglia		Modifica punto di larghezza…
-interfaccia	ui.corners	Corners…		forme	F1	T13	da fare	finestra	famiglia		Angoli…
+interfaccia	ui.corners	Corners…		forme	F1	T13	da fare	finestra	famiglia	aspetta T27	Angoli…
 interfaccia	ui.simplifyAuto	Auto-Simplify		tracciati	F1	T12	da fare	finestra	famiglia		Semplifica automaticamente
 interfaccia	ui.smoothAuto	Auto-Smooth		tracciati	F1	T12	da fare	finestra	famiglia		Smussa automaticamente
 interfaccia	ui.simplifyMoreOptions	More Options		tracciati	F1	T12	da fare	finestra	famiglia		Altre opzioni
@@ -1295,17 +1295,17 @@ strumento	verticalType	Vertical Type Tool		testo	F2	T16	da fare	colonna/testo	fa
 strumento	verticalAreaType	Vertical Area Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo in area verticale
 strumento	verticalTypeOnPath	Vertical Type on a Path Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo verticale su tracciato
 strumento	touchType	Touch Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Ritocco testo
-strumento	lineSegment	Line Segment Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Segmento linea
-strumento	arc	Arc Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Arco
-strumento	spiral	Spiral Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Spirale
-strumento	rectangularGrid	Rectangular Grid Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Griglia rettangolare
-strumento	polarGrid	Polar Grid Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Griglia polare
-strumento	rectangle	Rectangle Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «rectangle»	Strumento Rettangolo
-strumento	roundedRectangle	Rounded Rectangle Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «rectangle»	Strumento Rettangolo arrotondato
-strumento	ellipse	Ellipse Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «rectangle»	Strumento Ellisse
-strumento	polygon	Polygon Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «rectangle»	Strumento Poligono
-strumento	star	Star Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «rectangle»	Strumento Stella
-strumento	flare	Flare Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «rectangle»	Strumento Riflesso
+strumento	lineSegment	Line Segment Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Segmento linea
+strumento	arc	Arc Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Arco
+strumento	spiral	Spiral Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «lineSegment»	Strumento Spirale
+strumento	rectangularGrid	Rectangular Grid Tool		forme	F1	T13	da fare	colonna/forme	famiglia	aspetta T27	Strumento Griglia rettangolare
+strumento	polarGrid	Polar Grid Tool		forme	F1	T13	da fare	colonna/forme	famiglia	aspetta T27	Strumento Griglia polare
+strumento	rectangle	Rectangle Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Rettangolo
+strumento	roundedRectangle	Rounded Rectangle Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Rettangolo arrotondato
+strumento	ellipse	Ellipse Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Ellisse
+strumento	polygon	Polygon Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Poligono
+strumento	star	Star Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Stella
+strumento	flare	Flare Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Riflesso
 strumento	paintbrush	Paintbrush Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «paintbrush»	Strumento Pennello
 strumento	blobBrush	Blob Brush Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «paintbrush»	Strumento Pennello tondo
 strumento	shaper	Shaper Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «shaper»	Strumento Sagomatore
@@ -1509,7 +1509,7 @@ effetto	pathfinder.outline	Outline	Effect › Pathfinder	effetti	F2	T18	da fare	
 effetto	pathfinder.hardMix	Hard Mix	Effect › Pathfinder	effetti	F2	T18	da fare	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»	Miscela intensa
 effetto	pathfinder.softMix	Soft Mix	Effect › Pathfinder	effetti	F2	T18	da fare	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»	Miscela soffice
 pannello	actions	Actions	Window	automazione	F4	T26	da fare	ispettore/cronologia	famiglia		Azioni
-pannello	align	Align	Window	trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea
+pannello	align	Align	Window	trasforma	F1	T13	fatto	ispettore/design/allinea	famiglia		Allinea
 pannello	appearance	Appearance	Window	aspetto	F1	T15	da fare	ispettore/design	famiglia		Aspetto
 pannello	artboards	Artboards	Window	tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Tavole da disegno
 pannello	asset_export	Asset Export	Window	web	F3	T22	da fare	ispettore/design/documento	famiglia		Esportazione risorse

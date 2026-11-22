@@ -21,7 +21,8 @@ use std::path::PathBuf;
 
 use fub_abi::DRAWING_FAMILIES;
 use fub_disegno::catalogo::{
-    glossario, indice, mappa, FonteMappa, Glossario, Lingua, Stato, Voce, SPAZIO,
+    glossario, indice, mappa, minimo_del_campo, predefiniti_del_comando, FonteMappa, Glossario,
+    Lingua, Stato, Voce, SPAZIO,
 };
 use fub_motori::{Campo, Tipo};
 use regex::Regex;
@@ -89,6 +90,31 @@ fn indice_json(voci: &[Voce]) -> Value {
     })
 }
 
+/// Un campo con i suoi vincoli di finestra (`minimo`, `predefinito`) se il
+/// comando ne ha: i predefiniti vengono dallo schema del motore, i minimi da
+/// `catalogo::minimo_del_campo`.
+fn campo_con_vincoli(campo_del_modulo: &Campo, comando: &str) -> Value {
+    let mut out = campo(campo_del_modulo);
+    let Value::Object(mappa) = &mut out else {
+        return out;
+    };
+    if let Some(minimo) = minimo_del_campo(comando, &campo_del_modulo.nome) {
+        mappa.insert("minimo".into(), json!(minimo));
+    }
+    if let Some((_, valore)) = predefiniti_del_comando(comando)
+        .into_iter()
+        .find(|(nome, _)| *nome == campo_del_modulo.nome)
+    {
+        let predefinito = valore
+            .parse::<f64>()
+            .map(|n| json!(n))
+            .or_else(|_| valore.parse::<bool>().map(|b| json!(b)))
+            .unwrap_or_else(|_| json!(valore));
+        mappa.insert("predefinito".into(), predefinito);
+    }
+    out
+}
+
 fn campo(campo: &Campo) -> Value {
     let mut out = Map::new();
     out.insert("nome".into(), json!(campo.nome));
@@ -114,7 +140,14 @@ fn schema_json(famiglia: &str, voci: &[Voce]) -> Value {
             let mut out = Map::new();
             out.insert("fonte".into(), json!(v.fonte.nome()));
             out.insert("id".into(), json!(v.id));
-            out.insert("campi".into(), modulo.campi.iter().map(campo).collect());
+            out.insert(
+                "campi".into(),
+                modulo
+                    .campi
+                    .iter()
+                    .map(|c| campo_con_vincoli(c, &v.id))
+                    .collect(),
+            );
             if !modulo.altre_forme.is_empty() {
                 out.insert(
                     "altreForme".into(),
