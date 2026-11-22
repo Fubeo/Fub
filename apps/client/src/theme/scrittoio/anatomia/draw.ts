@@ -82,5 +82,10 @@ export const DRAW: PartAnatomy = {
         "pdf-list-marks",
       ],
     },
+    {
+      name: "align-section",
+      states: [S("rest"), S("focused")],
+      hooks: ["draw-align-to", "draw-align-group"],
+    },
   ],
 };

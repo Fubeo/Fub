@@ -19634,6 +19634,23 @@ button.draw-isolation-crumb:hover {
 .draw-point-coord .kit-number-box {
   height: 28px;
 }
+/* La sezione Allinea (T13, giro 2): le due scelte di «Allinea a» e i gruppi dei pulsanti. */
+.draw-align-to {
+  display: flex;
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+.draw-align-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+.draw-align-group > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-weight: 600;
+}
 
 /* ── skin/media.css ─────────────────────────────────────────────────────── */
 
