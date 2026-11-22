@@ -117,6 +117,15 @@ describe("il menu dello zoom della banda", () => {
     expect(document.activeElement).toBe(primo);
   });
 
+  it("la voce della banda è un interruttore: a menu aperto lo chiude", () => {
+    const { menu, bottone } = fingi();
+    menu.apri();
+    expect(document.querySelector(".draw-zoom-popover")).not.toBeNull();
+    menu.apri();
+    expect(document.querySelector(".draw-zoom-popover")).toBeNull();
+    expect(bottone.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("Esc chiude il menu e riporta il fuoco alla voce della banda", () => {
     const { menu, bottone } = fingi();
     bottone.focus();

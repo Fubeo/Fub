@@ -68,8 +68,8 @@ function problema(problem: QuantityProblem | "mixed"): string {
 }
 
 export interface ZoomMenu {
-  /// Apre il menu dalla voce della banda. Con `campo`, il fuoco va al campo della
-  /// percentuale (`view.setZoom`, da Ctrl+/).
+  /// Apre il menu dalla voce della banda, o lo chiude se è aperto. Con `campo`, il
+  /// fuoco va al campo della percentuale (`view.setZoom`, da Ctrl+/).
   apri(campo?: boolean): void;
   /// Fa il comando `view.*` `id`: le voci del menu, Ctrl+/ e la ricerca lo chiamano così.
   comando(id: ComandoVista): void;
@@ -111,10 +111,13 @@ export function creaMenuZoom(ctx: EditorContext, bottone: () => HTMLElement | nu
     }
   };
 
+  // Il bottone della banda è un interruttore: a menu aperto lo chiude. Con `campo`,
+  // invece, porta il fuoco al campo della percentuale.
   const apri = (campo = false): void => {
     if (ctx.disposed) return;
     if (aperto !== null) {
-      (campo ? aperto.campo : aperto.primo).focus();
+      if (campo) aperto.campo.focus();
+      else chiudi();
       return;
     }
     const ancora = bottone() ?? ctx.root;

@@ -250,6 +250,9 @@ export function installWorkspace(ctx: EditorContext): void {
           applicaSpazio();
           mostraRisorse();
           ctx.syncRail(ctx.editable());
+          // La voce dello zoom della banda sceglie il suo menu solo col Completo
+          // presente (`status.ts`): la banda si rilegge adesso.
+          ctx.statusChanged();
           options.onWorkspaceChange?.();
         },
         // Un chunk che non arriva: lo spazio di prima resta, e «Riprova» ci
@@ -265,6 +268,7 @@ export function installWorkspace(ctx: EditorContext): void {
     portaCompleto();
     mostraRisorse();
     ctx.syncRail(ctx.editable());
+    ctx.statusChanged();
   }));
 
   ctx.setSpace = (next, toolbar) => {
@@ -284,6 +288,7 @@ export function installWorkspace(ctx: EditorContext): void {
     portaCompleto();
     applicaSpazio();
     mostraRisorse();
+    ctx.statusChanged();
   };
   ctx.resetSpace = applicaSpazio;
   ctx.retryCompleto = () => portaCompleto();
