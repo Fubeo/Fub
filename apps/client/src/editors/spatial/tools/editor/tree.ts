@@ -209,7 +209,7 @@ export function installTree(ctx: EditorContext): void {
         moves,
         // Un livello mostra il suo nome, e «Livello «nome»» lo dice a parole
         // (il nome accessibile): non si ripete la parola in ogni riga.
-        ...(layer ? { shown: () => name ?? t("draw.kind.layer") } : {}),
+        ...(layer ? { shown: () => name ?? t("draw.kind.layer"), current: node.key === current } : {}),
         ...(has("layers") ? { thumbnail: () => thumbnailOf(node.item) } : {}),
         kind: treeKind(node.item.role),
         children: layer || (holds && has("selection")) ? entriesOf(node.children, index, current, inner, refusals, moves) : [],

@@ -18940,6 +18940,17 @@ button.draw-isolation-crumb:hover {
   color: var(--muted);
   font-style: italic;
 }
+/* Il livello corrente: un puntino nel segno, nel colore del tema. Non ha
+   parole: a voce il nome dice che è quello corrente. */
+.draw-object[data-current] > .draw-object-mark::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
 /* Col filtro, una riga che c'è per ciò che contiene è in grigio: la sua
    freccia aperta dice che i trovati sono sotto. */
 .draw-object[data-context] {

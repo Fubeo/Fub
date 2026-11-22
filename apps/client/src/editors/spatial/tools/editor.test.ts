@@ -1327,6 +1327,8 @@ describe("i collegamenti a una nota", () => {
     const layerRow = host.querySelector<HTMLElement>('[role="treeitem"][aria-level="1"]')!;
     expect(layerRow.querySelector(".draw-object-label")!.textContent).toBe("Livello 1");
     expect(layerRow.getAttribute("aria-label")).toBe("Livello «Livello 1», corrente");
+    expect(layerRow.hasAttribute("data-current")).toBe(true);
+    expect(host.querySelector('[role="treeitem"][aria-level="2"]')!.hasAttribute("data-current")).toBe(false);
     // Un oggetto dice già che cos'è nella riga: non ha un nome accessibile a parte.
     expect(host.querySelector('[role="treeitem"][aria-level="2"]')!.hasAttribute("aria-label")).toBe(false);
   });

@@ -34,4 +34,11 @@ describe("il filtro dell'albero dei livelli", () => {
     const coarse = CSS.match(/@media \(pointer: coarse\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
     expect(coarse).toMatch(/\.draw-objects-filter \.draw-objects-search,\s*\.draw-objects-filter \.draw-objects-kind\s*\{\s*min-height:\s*44px;/);
   });
+
+  it("il livello corrente ha un puntino nel segno, a colore del tema", () => {
+    const rule = declarations(".draw-object[data-current] > .draw-object-mark::before");
+    expect(rule.content).toBe('""');
+    expect(rule.background).toBe("var(--accent)");
+    expect(rule["border-radius"]).toBe("50%");
+  });
 });

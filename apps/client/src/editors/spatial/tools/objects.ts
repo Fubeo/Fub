@@ -167,6 +167,9 @@ export interface TreeEntry {
   /// il solo nome, e a parole dice anche che è un livello (`label()`, che resta
   /// il nome accessibile). Senza, la riga mostra `label()`.
   shown?(): string;
+  /// Il livello corrente: un puntino nel segno, senza parole; a voce lo dice
+  /// `label()`.
+  readonly current?: boolean;
 }
 
 export interface ObjectTreeOptions {
@@ -548,6 +551,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
     if (!entry.layer && !entry.selectable) item.setAttribute("aria-disabled", "true");
     else item.removeAttribute("aria-disabled");
     item.toggleAttribute("data-active", entry.key === active);
+    item.toggleAttribute("data-current", entry.current === true);
     item.toggleAttribute("data-toggles", entry.toggles && options.onToggle !== undefined);
     item.toggleAttribute("data-context", row.context);
     item.toggleAttribute("data-moving", drag !== null && drag.moving.has(entry.key));

@@ -43,6 +43,7 @@ function layer(key: string, children: readonly TreeEntry[], state = ""): TreeEnt
     children,
     label: () => `Livello «${key}»${state}`,
     shown: () => key,
+    current: key === "l2",
   };
 }
 
@@ -137,6 +138,8 @@ describe("le righe", () => {
     expect(locked.getAttribute("aria-label")).toBe("Livello «l1», bloccato");
     expect(rows()[1]!.getAttribute("aria-label")).toBe("Livello «l2»");
     expect(rows()[2]!.hasAttribute("aria-label")).toBe(false);
+    // Il livello corrente ha il puntino; gli altri no, e l'oggetto no.
+    expect(rows().map((row) => row.hasAttribute("data-current"))).toEqual([false, true, false, false, false, false, false]);
     expect(rows().map((row) => row.getAttribute("aria-selected"))).toEqual(["false", null, "false", "true", "false", null, "false"]);
     // Il fuoco non è nell'albero: la riga attiva va al primo oggetto scelto.
     expect(active()?.dataset.key).toBe("c");
