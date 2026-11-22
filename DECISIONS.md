@@ -105,6 +105,12 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-22 · K6 T13 · Nel Completo non ci sono «Posizione e misure» né i gruppi Distribuisci: li dà la sezione Trasforma e la sezione Allinea. Decisione del coordinatore (giro 4).
+  - Il Semplice non cambia. La sezione Trasforma prende i valori dalla vista del
+    pannello, senza chiedere il motore, e li mostra nell'unità del pannello. Il
+    valore scritto va alle unità della scena (1 px è 1 unità) prima del comando.
+- 2026-11-22 · K6 T13 · Le finestre di Sposta, Ruota, Scala, Rifletti e Inclina misurano in px, cioè nelle unità della scena, non in pt. Correzione del giro 3.
+  - Il motore sposta in unità della scena; l'etichetta «pt» diceva un'altra misura.
 - 2026-11-22 · K6 T13 · Nel Completo il gruppo a icone dei sei allineamenti del Design non c'è: resta la sezione Allinea, con «alla tavola». Decisione del coordinatore (giro 3).
   - Il Semplice non cambia. Nel Completo restano le due icone di «Distribuisci» e le
     quattro di «Disponi», che la sezione Allinea non ripete.
