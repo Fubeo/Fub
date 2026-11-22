@@ -35,6 +35,25 @@ export interface Selezione {
   readonly punti: readonly DrawingAnchor[];
 }
 
+/// Una misura di «Posizione e misure» come la mostra il pannello (K6 T13, giro 4): il valore nell'unità
+/// del campo (`null` se la selezione non ne ha uno solo), la sua unità, i decimali, e il passaggio
+/// all'unità della scena, dove lavora il motore.
+export interface MisuraSelezione {
+  readonly valore: number | null;
+  readonly unita: string;
+  readonly decimali: number;
+  readonly allaScena: (valore: number) => number;
+}
+
+/// Le misure della selezione che le sezioni del Completo vedono; una misura che manca non c'è.
+export interface MisureSelezione {
+  readonly x?: MisuraSelezione;
+  readonly y?: MisuraSelezione;
+  readonly larghezza?: MisuraSelezione;
+  readonly altezza?: MisuraSelezione;
+  readonly rotazione?: MisuraSelezione;
+}
+
 /// Ciò che una sezione riceve per disegnarsi.
 export interface ContestoSezione {
   /// Il corpo della sezione. Lo riempie `disegna`; lo svuota il pannello a
@@ -45,6 +64,9 @@ export interface ContestoSezione {
   /// Il motore del disegno, se il Completo ne ha uno; i comandi della
   /// famiglia passano da lui.
   readonly motore: MotoreDelDisegno | null;
+  /// Le misure della selezione come le mostra «Posizione e misure»: il pannello le prende dalla sua vista,
+  /// senza chiedere il motore. Una misura che non si sa è `null`.
+  readonly misure: MisureSelezione;
   /// Il disegno che la sezione mostra cambia: `aggiorna` la chiede di nuovo,
   /// al più una volta per fotogramma.
   readonly aggiorna: () => void;

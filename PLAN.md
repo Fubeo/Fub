@@ -2324,7 +2324,14 @@ voci spente con l'Inchiostro (oggi «Non ancora collegato»). Giro 3 unito
 in 3b51c0e28: sottomenu «Tracciato composto», il perché `fub_ink` (variante
 nuova di `DrawingDisabledReason`), finestre con anteprima di Semplifica,
 Smussa, Sposta tracciato, Espandi e Dividi in trattini (i contorni senza
-operazioni; OK scrive). Manca la sezione Tracciato in Design (giro 4).
+operazioni; OK scrive). Giro 4 unito in 3ba0e570e: la sezione «Punto di
+ancoraggio» in Design (id `anchor`, come il prototipo), spenta senza punti,
+Converti con un solo comando e poi la rilettura dei punti (dallo stato
+dello strumento, niente IPC nuovo); `eseguiPerId` rende una Promise; il
+banco risponde ai comandi delle fixture con `?comandi=risposti`. Restano per
+dopo la base: raggio dell'angolo, Elaborazione tracciati, la casella di
+Converti che non sa il tipo del punto, le foto di riferimento delle 4 scene
+nuove (dal runner).
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
@@ -2403,12 +2410,15 @@ bloccato rifiutato col perché (decisione b estesa: rifiuto, non salto),
 gruppo `align` nascosto nel Completo, sezione «Trasforma» in Design,
 finestre Sposta/Ruota/Rifletti/Scala/Inclina con anteprima (rotazione con
 `object.rotate`, inclinazione con `object.shear`); le finestre stanno in
-`catalogo::FINESTRE_SCRITTE` con quelle dei tracciati. Mancano: i campi di
-Trasforma che leggono il valore della selezione (oggi vuoti), «Posizione
-e misure» e «Distribuisci» doppi nel Completo (da nascondere), Ripeti
-trasformazione senza una precedente (oggi `unsupported`), Trasforma
-ciascuno, Distorci, «Elaborazione tracciati», costruttore di forme, perni
-e strumento forma.
+`catalogo::FINESTRE_SCRITTE` con quelle dei tracciati. Giro 4 unito in
+9f4cea005: i campi di Trasforma leggono la vista del pannello (vuoti se la
+selezione non ha un valore solo; l'inclinazione resta vuota), «Posizione e
+misure» e i gruppi Distribuisci nascosti nel Completo, le finestre misurano
+in px (unità della scena). Rimandati a dopo la base: Ripeti trasformazione
+senza una precedente (oggi `unsupported`; spegnerla chiede un motivo nuovo
+in `DrawingDisabledReason` e il ricordo dell'ultima trasformazione lato
+Fub, gesti compresi), Trasforma ciascuno, Distorci, «Elaborazione
+tracciati», costruttore di forme, perni e strumento forma.
 Aspetta: niente
 
 ## T14 · Il colore

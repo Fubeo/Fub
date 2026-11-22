@@ -85,7 +85,7 @@ describe("le finestre di trasformazione dal Completo", () => {
     await apriVoce(c, "Sposta…");
     const [spostaModulo, , , spostaOpzioni] = vi.mocked(apriFinestra).mock.calls[0]!;
     expect(spostaModulo).toEqual({ campi: [{ nome: "dx", tipo: "numero" }, { nome: "dy", tipo: "numero" }] });
-    expect(spostaOpzioni).toMatchObject({ titolo: "Sposta", azione: "Sposta", unita: { dx: "pt", dy: "pt" }, campi: { dx: "Orizzontale", dy: "Verticale" } });
+    expect(spostaOpzioni).toMatchObject({ titolo: "Sposta", azione: "Sposta", unita: { dx: "px", dy: "px" }, campi: { dx: "Orizzontale", dy: "Verticale" } });
     c.chiudi();
   });
 });

@@ -26,7 +26,7 @@ function disegna(sel: Selezione) {
   const vita = openLifetime();
   vite.push(vita);
   const sezione = sezionePunto(TESTI, esegui);
-  sezione.disegna({ corpo, sel, motore: null, aggiorna: vi.fn(), rileggi, vita });
+  sezione.disegna({ corpo, sel, motore: null, misure: {}, aggiorna: vi.fn(), rileggi, vita });
   const pulsanti = [...corpo.querySelectorAll<HTMLButtonElement>(".draw-properties-segment")];
   return { sezione, corpo, esegui, rileggi, pulsanti, nota: corpo.querySelector<HTMLElement>(".draw-properties-note")! };
 }

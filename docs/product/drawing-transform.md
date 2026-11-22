@@ -78,10 +78,12 @@ nuovo l'ultima. Con un oggetto bloccato nella selezione il comando non parte,
 e la frase dice di sbloccarlo o toglierlo dalla selezione.
 
 La sezione Trasforma, nella scheda Design, dà posizione, misura, rotazione e
-inclinazione, e Reimposta riquadro. Ogni campo manda il suo comando quando si
-conferma; rotazione e inclinazione vanno senza finestra. I suoi campi partono
-vuoti: il valore attuale della selezione lo mostra la sezione «Posizione e
-misure».
+inclinazione, e Reimposta riquadro. I campi mostrano i valori della selezione,
+nell'unità del pannello, e restano vuoti se la selezione non ha un valore solo.
+L'inclinazione non ha un valore da leggere: si scrive di quanto inclinare, da 0.
+Ogni campo manda il suo comando quando si conferma; rotazione e inclinazione
+vanno senza finestra. Nel Disegno completo «Posizione e misure» e i gruppi
+Distribuisci non ci sono: li dà questa sezione e la sezione Allinea.
 
 Trasforma ciascuno, Distorci e le forme dal vivo non ci sono ancora: le forme
 dal vivo aspettano T27.

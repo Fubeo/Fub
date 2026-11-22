@@ -1592,6 +1592,10 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-fam-trasforma", 1280, "La finestra «Ruota…» di Oggetto › Trasforma, con l'anteprima sul foglio", "", openRuotaFinestra],
     ["disegno-fam-trasforma-800", 800, "La finestra «Ruota…» nella finestra minima del desktop, 800 px", "", openRuotaFinestra],
     ["disegno-fam-trasforma-sezione", 1280, "La sezione Trasforma nel Design: posizione, misura, rotazione, inclinazione e il riquadro", "", openTrasformaSezione],
+    ["disegno-scelte-trasforma", 1280, "La sezione Trasforma con un oggetto scelto: X, Y, larghezza, altezza e rotazione dal pannello", "", (page) => openSezioneConUno(page, ".draw-transform-grid")],
+    ["disegno-scelte-trasforma-800", 800, "La sezione Trasforma con un oggetto scelto, nel cassetto dell'ispettore, 800 px", "", (page) => openSezioneConUno(page, ".draw-transform-grid")],
+    ["disegno-scelte-pannello", 1280, "Il pannello Design del Completo con un oggetto scelto: senza Posizione e misure né Distribuisci", "", (page) => openSezioneConUno(page, ".draw-properties")],
+    ["disegno-scelte-pannello-800", 800, "Il pannello Design del Completo nel cassetto dell'ispettore, 800 px: senza i doppioni", "", (page) => openSezioneConUno(page, ".draw-properties")],
     ["disegno-fam-trasforma-sezione-800", 800, "La sezione Trasforma nel cassetto dell'ispettore, 800 px", "", openTrasformaSezione],
     ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
     ["disegno-fam-forme-finestra-800", 800, "La finestra delle misure del Rettangolo nella finestra minima del desktop, 800 px", "", openFormeFinestra],
@@ -5461,6 +5465,36 @@ async function openAllinea(page) {
 /// La sezione Trasforma nel Design (K6 T13, giro 3) con il disegno scelto per intero.
 async function openTrasformaSezione(page) {
   await openSezioneDesign(page, ".draw-transform-grid");
+}
+
+/// Il Design del Completo con un oggetto scelto (K6 T13, giro 4): la scheda Design, poi la sezione
+/// `selettore` portata in vista. Sotto i 960 px l'ispettore è un cassetto, come per le altre sezioni.
+async function openSezioneConUno(page, selettore) {
+  await openDrawing(page);
+  await scegliPrimo(page);
+  if (await page.evaluate(() => window.innerWidth >= 960)) {
+    await page.click('.inspector-tab[data-view-id="draw.design"]');
+  } else {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+    await page.click('.inspector-tab[data-view-id="draw.design"]');
+  }
+  await page.waitForSelector('#surface-panel-draw-design:not([hidden]) section.draw-properties');
+  await page.waitForFunction(() => {
+    const soggetto = document.querySelector("#surface-panel-draw-design .draw-properties-subject");
+    return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
+  });
+  await page.waitForSelector(selettore);
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) {
+        p.scrollTop += el.getBoundingClientRect().top - p.getBoundingClientRect().top - 8;
+        break;
+      }
+    }
+  }, selettore);
+  await page.evaluate(() => document.fonts.ready);
 }
 
 /// La finestra «Ruota…» di Oggetto › Trasforma (K6 T13, giro 3): il disegno scelto per intero, poi

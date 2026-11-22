@@ -1,14 +1,15 @@
-// La sezione «Trasforma» dell'ispettore Design del Completo (K6 T13, giro 3): posizione, misura,
-// rotazione e inclinazione, e il riquadro da reimpostare. Ogni campo manda il suo comando del
-// motore quando si conferma: `object.setBounds` per X, Y, larghezza e altezza; `object.rotate`
-// assoluto per la rotazione; `object.shear` per l'inclinazione (di quanto si inclina, da 0);
-// `object.resetBoundingBox` per il riquadro. I comandi passano dal percorso unico (`eseguiPerId`),
-// senza la finestra della voce. I campi partono vuoti: il valore attuale della selezione non
-// arriva al Completo, e lo mostra ancora la sezione «Posizione e misure» del Semplice.
+// La sezione «Trasforma» dell'ispettore Design del Completo (K6 T13, giro 3 e 4): posizione, misura,
+// rotazione e inclinazione, e il riquadro da reimpostare. I campi mostrano le misure della selezione
+// che il pannello ha già nella sua vista (giro 4), nell'unità del pannello, e restano vuoti se la
+// selezione non ha un valore solo. Ogni campo confermato manda il suo comando del motore, con il
+// valore riportato alle unità della scena: `object.setBounds` per X, Y, larghezza e altezza;
+// `object.rotate` assoluto per la rotazione; `object.shear` per l'inclinazione (di quanto si inclina,
+// da 0); `object.resetBoundingBox` per il riquadro. I comandi passano dal percorso unico
+// (`eseguiPerId`), senza la finestra della voce.
 
 import { numberField, type NumberField } from "../../../kit/number-field";
 import { t, type DrawKey } from "../strings";
-import { registraSezione, type ContestoSezione, type Sezione, type Sezioni } from "./sezioni";
+import { registraSezione, type ContestoSezione, type MisuraSelezione, type MisureSelezione, type Sezione, type Sezioni } from "./sezioni";
 
 /// Un valore che il comando riceve: un numero, un testo o un sì/no.
 export type ValoreTrasforma = string | number | boolean;
@@ -18,21 +19,24 @@ export type EseguiTrasforma = (id: string, valori: Readonly<Record<string, Valor
 
 interface CampoTrasforma {
   readonly chiave: DrawKey;
+  /// L'unità che il campo mostra se il pannello non ne dà una.
   readonly unita: string;
   /// L'id della voce dell'indice (`object.setBounds`…).
   readonly voce: string;
-  /// I valori che il comando riceve per il numero del campo.
+  /// I valori che il comando riceve per il numero del campo (in unità della scena).
   readonly valori: (valore: number) => Readonly<Record<string, ValoreTrasforma>>;
   readonly senzaFinestra: boolean;
+  /// La misura del pannello che il campo mostra, se ce n'è una.
+  readonly misura?: keyof MisureSelezione;
 }
 
 /// I campi della sezione, nell'ordine in cui si vedono.
 const CAMPI: readonly CampoTrasforma[] = [
-  { chiave: "draw.trasforma.x", unita: "pt", voce: "object.setBounds", valori: (x) => ({ x }), senzaFinestra: false },
-  { chiave: "draw.trasforma.y", unita: "pt", voce: "object.setBounds", valori: (y) => ({ y }), senzaFinestra: false },
-  { chiave: "draw.trasforma.width", unita: "pt", voce: "object.setBounds", valori: (width) => ({ width }), senzaFinestra: false },
-  { chiave: "draw.trasforma.height", unita: "pt", voce: "object.setBounds", valori: (height) => ({ height }), senzaFinestra: false },
-  { chiave: "draw.trasforma.rotation", unita: "°", voce: "object.rotate", valori: (angle) => ({ angle, absolute: true }), senzaFinestra: true },
+  { chiave: "draw.trasforma.x", unita: "px", voce: "object.setBounds", valori: (x) => ({ x }), senzaFinestra: false, misura: "x" },
+  { chiave: "draw.trasforma.y", unita: "px", voce: "object.setBounds", valori: (y) => ({ y }), senzaFinestra: false, misura: "y" },
+  { chiave: "draw.trasforma.width", unita: "px", voce: "object.setBounds", valori: (width) => ({ width }), senzaFinestra: false, misura: "larghezza" },
+  { chiave: "draw.trasforma.height", unita: "px", voce: "object.setBounds", valori: (height) => ({ height }), senzaFinestra: false, misura: "altezza" },
+  { chiave: "draw.trasforma.rotation", unita: "°", voce: "object.rotate", valori: (angle) => ({ angle, absolute: true }), senzaFinestra: true, misura: "rotazione" },
   { chiave: "draw.trasforma.skew", unita: "°", voce: "object.shear", valori: (angle) => ({ angle, axis: "horizontal" }), senzaFinestra: true },
 ];
 
@@ -48,19 +52,23 @@ const PROBLEMI: Readonly<Record<string, DrawKey>> = {
 /// senza una selezione, come gli allineamenti.
 function disegnaTrasforma(contesto: ContestoSezione, esegui: EseguiTrasforma): () => void {
   const corpo = contesto.corpo;
+  const misure: MisureSelezione = contesto.misure ?? {};
   const campi: NumberField[] = [];
   const griglia = document.createElement("div");
   griglia.className = "draw-transform-grid";
   for (const campo of CAMPI) {
+    const misura: MisuraSelezione | undefined = campo.misura === undefined ? undefined : misure[campo.misura];
     const numero = numberField({
       label: t(campo.chiave),
-      value: null,
-      unit: campo.unita,
-      places: 2,
+      value: misura?.valore ?? null,
+      unit: misura?.unita ?? campo.unita,
+      places: misura?.decimali ?? 2,
       mixedText: "",
-      problem: (problema) => (problema === "mixed" ? t("draw.properties.problem.mixed") : t(PROBLEMI[problema] ?? "draw.properties.problem.syntax", { units: campo.unita })),
+      problem: (problema) => (problema === "mixed" ? t("draw.properties.problem.mixed") : t(PROBLEMI[problema] ?? "draw.properties.problem.syntax", { units: misura?.unita ?? campo.unita })),
       onCommit: (valore) => {
-        esegui(campo.voce, campo.valori(valore), { senzaFinestra: campo.senzaFinestra });
+        // Il valore scritto è nell'unità del pannello: il motore lavora nelle unità della scena.
+        const allaScena = misura?.allaScena ?? ((v: number) => v);
+        esegui(campo.voce, campo.valori(allaScena(valore)), { senzaFinestra: campo.senzaFinestra });
         return undefined;
       },
       lifetime: contesto.vita,
