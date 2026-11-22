@@ -2484,7 +2484,16 @@ Casi limite:
 - «Ricolora» con l'anteprima e poi Annulla: niente resta.
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/colore
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-22). Giro 1 unito in a81253987: la famiglia
+`colore` nel motore per i nove `paint.*` del colore attivo, Design ›
+Colore (riempimento e contorno con `kit/color`, Scambia, Nessuno, Di
+serie; il lato attivo lo tiene il client; nel Completo il colore di
+Riempimento e Contorno del Semplice si nasconde), le dieci voci di Modifica
+› Modifica colori con le finestre Satura e Regola con anteprima (in
+`FINESTRE_SCRITTE`); le scene `disegno-fam-colore` sono Design › Colore,
+non Risorse › Campioni. Mancano: Risorse › Campioni e Temi, Guida dei
+colori, Ricolora, contagocce e sfumatura, sfumature libere, profili e
+librerie.
 Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
@@ -2563,7 +2572,14 @@ Casi limite:
   della maschera, e niente altro cambia.
 Fatto quando: il modello.
 Prova: scripts/check.sh --rapido; cargo test -p fub-disegno --test famiglie; npx vitest run src/editors/spatial/completo/famiglie/aspetto src/editors/spatial/completo/famiglie/livelli
-Stato: [ ] da fare
+Stato: [~] in corso (2026-11-22). Giro 1 unito in ebf777b69: ≡ ›
+Selezione con «Uguale» (nove voci) e «Oggetto» (tutto sugli stessi
+livelli, oggetti di testo), «Tutto nella tavola». Le altre voci di Oggetto
+aspettano T27 (il modello non distingue la specie dell'oggetto); punti,
+segmenti e colore vogliono un argomento e restano all'ispettore; le
+selezioni salvate, la modifica globale e la bacchetta magica dopo.
+Mancano: Aspetto, Contorno, Trasparenza (giro 2 in corso), Sfumatura,
+Stili grafici, la scheda Livelli.
 Aspetta: niente
 
 ## T16 · Il testo
