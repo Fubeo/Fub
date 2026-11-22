@@ -3377,6 +3377,38 @@
     },
     {
       "fonte": "strumento",
+      "id": "reflect",
+      "chiamata": {
+        "strumento": "reflect"
+      },
+      "etichetta": {
+        "it": "Strumento Rifletti",
+        "en": "Reflect Tool"
+      },
+      "posto": "colonna/trasforma",
+      "famiglia": "trasforma",
+      "tasto": "O",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "rotate",
+      "chiamata": {
+        "strumento": "rotate"
+      },
+      "etichetta": {
+        "it": "Strumento Ruota",
+        "en": "Rotate Tool"
+      },
+      "posto": "colonna/trasforma",
+      "famiglia": "trasforma",
+      "tasto": "R",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "rotateView",
       "chiamata": {
         "strumento": "rotateView"
@@ -3404,6 +3436,22 @@
       "posto": "colonna/forme",
       "famiglia": "forme",
       "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "scale",
+      "chiamata": {
+        "strumento": "scale"
+      },
+      "etichetta": {
+        "it": "Strumento Scala",
+        "en": "Scale Tool"
+      },
+      "posto": "colonna/trasforma",
+      "famiglia": "trasforma",
+      "tasto": "S",
       "effetto": "cambia",
       "finestra": false
     },
@@ -3451,6 +3499,22 @@
       },
       "posto": "colonna/disegna",
       "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "shear",
+      "chiamata": {
+        "strumento": "shear"
+      },
+      "etichetta": {
+        "it": "Strumento Inclina",
+        "en": "Shear Tool"
+      },
+      "posto": "colonna/trasforma",
+      "famiglia": "trasforma",
       "tasto": null,
       "effetto": "cambia",
       "finestra": false

@@ -101,8 +101,9 @@ export interface Completo {
   /// risolve `true` se è pronta. Uno strumento senza famiglia nell'indice, o una
   /// famiglia che non arriva, risolve `false`: il gesto non parte (K6 T8).
   preparaStrumento(strumento: string): Promise<boolean>;
-  /// Il clic senza trascinare di uno strumento del motore (T13, giro 2): se la forma
-  /// ha una finestra delle misure, la apre col punto del clic; altrimenti non fa niente.
+  /// Il clic senza trascinare di uno strumento del motore (T13, giro 2 e 5): se la forma
+  /// ha una finestra delle misure, la apre col punto del clic; una trasformazione apre la
+  /// sua finestra sulla selezione, e senza selezione dice perché. Altrimenti non fa niente.
   clicStrumento(strumento: string, punto: { readonly x: number; readonly y: number }): void;
   /// La fila delle opzioni dello strumento `strumento` con le sue etichette, quando
   /// la sua famiglia è pronta (`carica.testi`); `null` prima, o se lo stato non ha
@@ -575,17 +576,25 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
         : creaPortaLivelli({ motore: ctx.motore, carica, vita: ctx.life, leggi: dipendenze.leggi }),
     clicStrumento(strumento, punto) {
       if (chiuso) return;
-      const comando = COMANDO_DEL_CLIC[strumento];
-      if (comando === undefined || indiceArrivato === null) return;
-      const voce = indiceArrivato.voci.find((one) => one.id === comando.forma);
+      const clic = COMANDO_DEL_CLIC[strumento];
+      if (clic === undefined || indiceArrivato === null) return;
+      const voce = indiceArrivato.voci.find((one) => one.id === clic.comando);
       if (voce === undefined || !("comando" in voce.chiamata)) return;
+      // Una trasformazione lavora sulla selezione di adesso: senza, la finestra non si
+      // apre e si dice perché (il motivo che la finestra usa già).
+      if (clic.sullaSelezione === true) {
+        if (dipendenze.selezione().length === 0) {
+          dipendenze.annuncia(t("draw.disabled.no_selection"));
+          return;
+        }
+        void eseguiVoce(voce, dipendenze);
+        return;
+      }
       // La finestra parte dal punto del clic e senza selezione: una forma nuova non la
       // usa, e la selezione di prima non entra nel comando.
-      const derivata: VoceIndice = {
-        ...voce,
-        chiamata: { comando: voce.chiamata.comando, valore: { [comando.x]: punto.x, [comando.y]: punto.y } },
-      };
-      eseguiVoce(derivata, { ...dipendenze, selezione: () => [] });
+      const campi = clic.x !== undefined && clic.y !== undefined ? { [clic.x]: punto.x, [clic.y]: punto.y } : {};
+      const derivata: VoceIndice = { ...voce, chiamata: { comando: voce.chiamata.comando, valore: campi } };
+      void eseguiVoce(derivata, { ...dipendenze, selezione: () => [] });
     },
     async preparaStrumento(strumento) {
       const famiglia = await famigliaDi(strumento);

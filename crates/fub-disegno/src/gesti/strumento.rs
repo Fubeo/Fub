@@ -89,6 +89,11 @@ pub(crate) fn gesto(
     if !conosciuto(id) {
         return rifiuta(banco, esito, DrawingRefusal::UnknownTool);
     }
+    // Uno strumento che trasforma la selezione non tocca un oggetto bloccato: il rifiuto
+    // è quello della finestra del comando (T13 giro 5), e vale anche per l'anteprima.
+    if let Some(motivo) = crate::famiglie::rifiuto_dello_strumento(id, copia, &gesto.selection) {
+        return rifiuta(banco, esito, motivo);
+    }
     let qui = InCorso {
         tool: gesto.tool.clone(),
         revisione: gesto.revision,

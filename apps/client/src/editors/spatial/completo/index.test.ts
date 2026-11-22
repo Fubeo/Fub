@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { EsitoPrepara } from "./carica";
 import { apri, NUCLEO } from "./index";
+import { t } from "../strings";
 import { creaIndice, indiceDi, type VoceIndice } from "./indice";
 
 const lifetimes: Lifetime[] = [];
@@ -163,5 +164,61 @@ describe("menu e ricerca del Completo (K6 T9a)", () => {
     const oggetto = menu.find((item) => item.label === "Oggetto");
     const voci = typeof oggetto?.items === "object" ? oggetto.items : [];
     expect(voci[0]).toMatchObject({ label: "Voce a", hint: "Ctrl+J", disabled: true, description: "Motore del disegno spento." });
+  });
+});
+
+/// I soli tasti che il clic di una trasformazione usa: la selezione e l'annuncio.
+function tastiDelClic(selezione: () => readonly string[], annuncia: (testo: string) => void): NonNullable<Parameters<typeof apri>[1]>["tasti"] {
+  return { selezione, annuncia } as unknown as NonNullable<Parameters<typeof apri>[1]>["tasti"];
+}
+
+describe("il clic di una trasformazione (T13, giro 5)", () => {
+  // La voce del comando della Ruota come la dà l'indice: una finestra, della famiglia trasforma.
+  const ruota = {
+    fonte: "motore",
+    id: "object.rotate",
+    chiamata: { comando: "disegno.object.rotate" },
+    etichetta: { it: "Ruota…", en: "Rotate…" },
+    posto: "menu/oggetto/trasforma",
+    famiglia: "trasforma",
+    tasto: null,
+    effetto: "cambia",
+    finestra: true,
+  } as VoceIndice;
+
+  it("senza selezione non apre la finestra e dice perché, con il motivo che c'è già", async () => {
+    const annuncia = vi.fn();
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [ruota] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+      tasti: tastiDelClic(() => [], annuncia),
+    });
+    await completo.indice();
+    completo.clicStrumento("rotate", { x: 10, y: 20 });
+    expect(annuncia).toHaveBeenCalledWith(t("draw.disabled.no_selection"));
+  });
+
+  it("con una selezione il clic non dice che manca la selezione", async () => {
+    const annuncia = vi.fn();
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [ruota] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+      tasti: tastiDelClic(() => ["oa1a1a1a1"], annuncia),
+    });
+    await completo.indice();
+    completo.clicStrumento("rotate", { x: 10, y: 20 });
+    expect(annuncia).not.toHaveBeenCalledWith(t("draw.disabled.no_selection"));
+  });
+
+  it("uno strumento senza finestra non fa niente, nemmeno con la selezione vuota", async () => {
+    const annuncia = vi.fn();
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [ruota] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+      tasti: tastiDelClic(() => [], annuncia),
+    });
+    await completo.indice();
+    completo.clicStrumento("selection", { x: 10, y: 20 });
+    expect(annuncia).not.toHaveBeenCalled();
   });
 });

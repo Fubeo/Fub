@@ -1172,6 +1172,22 @@ pub(crate) fn esegui(
     Ok(esito)
 }
 
+/// Lo strumento del motore `id` trasforma la selezione (la famiglia `trasforma`,
+/// T13 giro 5): con un oggetto bloccato o non mappato il gesto si rifiuta come il
+/// comando della sua finestra (`object.rotate` e le altre), con lo stesso motivo.
+/// `None` per gli altri strumenti, che la selezione la trattano a modo loro.
+pub(crate) fn rifiuto_dello_strumento(
+    id: &str,
+    copia: &Copia,
+    selezione: &[String],
+) -> Option<DrawingRefusal> {
+    let riga = riga(Fonte::Strumento, id)?;
+    if riga.famiglia != Some(Famiglia::Trasforma) {
+        return None;
+    }
+    nodi_scelti(copia, selezione).err()
+}
+
 /// Perché la selezione spegne un comando che la usa, o `None` se va bene: un
 /// pezzo che il motore non ha è `unmapped`, uno bloccato è di sola lettura. È
 /// la stessa regola che `esegui` applica a ogni comando (le famiglie che

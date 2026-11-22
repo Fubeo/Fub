@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia trasforma (piano K6, T13, giro 1 e 3): la sezione «Allinea» dell'ispettore, e le finestre con anteprima di Sposta, Ruota, Scala, Rifletti e Inclina (giro 3). Il disegno è trasforma/base.svg: due rettangoli a y 100 (oa1a1a1a1 e ob2b2b2b2), un gruppo di due quadrati, un tracciato op7a7a7a7 a destra e un tratto della penna. Le voci «interfaccia» e il pannello «align» hanno la loro prova nel client (apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts), che nomina ciascuna.",
+  "$nota": "I casi della famiglia trasforma (piano K6, T13, giro 1 e 3): la sezione «Allinea» dell'ispettore, e le finestre con anteprima di Sposta, Ruota, Scala, Rifletti e Inclina (giro 3). Il disegno è trasforma/base.svg: due rettangoli a y 100 (oa1a1a1a1 e ob2b2b2b2), un gruppo di due quadrati, un tracciato op7a7a7a7 a destra e un tratto della penna. Le voci «interfaccia» e il pannello «align» hanno la loro prova nel client (apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts), che nomina ciascuna. Giro 5: gli strumenti di «modificare» (Ruota, Rifletti, Scala, Inclina) trascinano la selezione attorno al suo centro, in un passo solo (`fonte: strumento`); un clic senza trascinare prima del gesto non cambia il centro; con un oggetto bloccato nella selezione il gesto è `locked`, come il comando.",
   "casi": [
     {
       "id": "object.align",
@@ -473,6 +473,399 @@
       "atteso": {
         "rifiuto": "locked"
       }
+    },
+    {
+      "id": "rotate",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 190,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(0 1 -1 0 275 -25)"
+            }
+          }
+        ]
+      },
+      "dopo": "strumento-rotate.svg"
+    },
+    {
+      "id": "reflect",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 190,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(-1 0 0 1 300 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "strumento-reflect.svg"
+    },
+    {
+      "id": "scale",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 210,
+              "y": 160,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 250,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 250,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(2 0 0 2 -150 -125)"
+            }
+          }
+        ]
+      },
+      "dopo": "strumento-scale.svg"
+    },
+    {
+      "id": "shear",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 200,
+              "y": 132,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 200,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 200,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0.3 0 1 0 -45)"
+            }
+          }
+        ]
+      },
+      "dopo": "strumento-shear.svg"
+    },
+    {
+      "id": "rotate",
+      "fonte": "strumento",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 190,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "rotate",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 120,
+              "y": 110,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 120,
+              "y": 110,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 200,
+              "y": 125,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 190,
+              "y": 140,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 150,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 150,
+              "y": 175,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(0 1 -1 0 275 -25)"
+            }
+          }
+        ]
+      },
+      "dopo": "strumento-rotate.svg"
     }
   ]
 }

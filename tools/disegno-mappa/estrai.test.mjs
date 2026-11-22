@@ -65,6 +65,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // trentaquattro righe. Le griglie e il riflesso aspettano T27.
   // T12 giro 2 le quattordici di Oggetto › Tracciato senza finestra; T12
   // giro 3 le cinque finestre dei tracciati. T13 giro 3 le nove di Trasforma.
+  // T13 giro 5 i quattro strumenti di «modificare» (Ruota, Rifletti, Scala, Inclina).
   // T15 giro 1 le dodici del menu Selezione. T14 giro 1 le ventuno del
   // colore: i nove `paint.*` del colore attivo, le dieci di Modifica › Modifica
   // colori e le due finestre `ui.*` del client. T15 giro 2 `transparency.set`;
@@ -75,7 +76,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T15 giro 5 `stroke.set` (la sezione Contorno) e le quattro della sfumatura
   // (`paint.editGradient`, `paint.setGradientGeom`, `gradient.selectStop`, `paint.lastGradient`).
   // T13 le quattro `object.compoundShape.*`, `object.expandShape` e `pathfinder.repeat`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1198, fub: 114, escluso: 12, fatto: 227 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1194, fub: 114, escluso: 12, fatto: 231 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

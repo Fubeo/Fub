@@ -24,9 +24,14 @@ function finestra(id: string): { readonly id: string; readonly campi: readonly C
   return trovata;
 }
 
+// Gli strumenti di forma (giro 2): hanno il punto del clic. Le trasformazioni (giro 5)
+// stanno in `famiglie/trasforma/clic.test.ts`.
+const FORME: ReadonlySet<string> = new Set(["rectangle", "ellipse", "polygon", "star", "lineSegment", "arc", "spiral"]);
+
 describe("il clic di una forma apre la finestra del suo comando", () => {
   it("ogni forma del clic ha un comando con finestra, della famiglia forme", () => {
-    for (const [strumento, { forma }] of Object.entries(COMANDO_DEL_CLIC)) {
+    for (const [strumento, { comando: forma }] of Object.entries(COMANDO_DEL_CLIC)) {
+      if (!FORME.has(strumento)) continue;
       const voce = VOCI.find((one) => one.id === forma);
       expect(voce, strumento).toBeDefined();
       expect(voce!.finestra, strumento).toBe(true);
@@ -35,7 +40,8 @@ describe("il clic di una forma apre la finestra del suo comando", () => {
   });
 
   it("il punto del clic è nello schema, e il Completo non lo chiede: il resto ha una parola", () => {
-    for (const [strumento, { forma, x, y }] of Object.entries(COMANDO_DEL_CLIC)) {
+    for (const [strumento, { comando: forma, x, y }] of Object.entries(COMANDO_DEL_CLIC)) {
+      if (!FORME.has(strumento) || x === undefined || y === undefined) continue;
       const nomi = finestra(forma).campi.map((campo) => campo.nome);
       expect(nomi, strumento).toContain(x);
       expect(nomi, strumento).toContain(y);

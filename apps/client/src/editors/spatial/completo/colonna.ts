@@ -64,7 +64,8 @@ const GRUPPO_DI_FAMIGLIA: Readonly<Record<ToolSpec["group"], GruppoColonna>> = {
 /// `motore:<id>` nella colonna: il chrome lo mostra con il nome della sua
 /// famiglia e l'icona di `ICONE_MOTORE`. T11: gli strumenti del nucleo; T12:
 /// i ventuno di «disegnare» dei tracciati; T13 giro 1: gli strumenti di forma
-/// (la famiglia `forme`); T16 giro 1: il Testo di punto (`type`).
+/// (la famiglia `forme`); T13 giro 5: i quattro di trasformazione (la famiglia
+/// `trasforma`); T16 giro 1: il Testo di punto (`type`).
 export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "selection",
   "directSelection",
@@ -102,6 +103,11 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "ellipse",
   "polygon",
   "star",
+  // T13 giro 5: Ruota, Rifletti, Scala e Inclina (la casella «modificare»).
+  "rotate",
+  "reflect",
+  "scale",
+  "shear",
   // T16 giro 1: il Testo di punto.
   "type",
 ]);
@@ -120,6 +126,11 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   hand: "draw-hand",
   zoom: "draw-zoom",
   rotateView: "draw-rotate",
+  // Le trasformazioni (T13 giro 5): Inclina ha il parallelogramma del catalogo.
+  rotate: "draw-rotate",
+  reflect: "draw-flip-h",
+  scale: "draw-scale",
+  shear: "draw-shear",
   lineSegment: "draw-line",
   arc: "draw-arc",
   spiral: "draw-spiral",
@@ -155,19 +166,32 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   type: "draw-text",
 };
 
-/// La finestra che un clic senza trascinare apre per uno strumento di forma (T13,
-/// giro 2): il comando `shape.*` delle sue misure, e i due campi del punto del clic
-/// (`x`, `y` o `cx`, `cy`…), che il comando prende dal disegno e la finestra non
-/// chiede. Il Rettangolo arrotondato non ce l'ha: `shape.rectangle` non porta il
-/// raggio d'angolo, che il motore prende dalle sue preferenze.
-export const COMANDO_DEL_CLIC: Readonly<Record<string, { readonly forma: string; readonly x: string; readonly y: string }>> = {
-  rectangle: { forma: "shape.rectangle", x: "x", y: "y" },
-  ellipse: { forma: "shape.ellipse", x: "x", y: "y" },
-  polygon: { forma: "shape.polygon", x: "cx", y: "cy" },
-  star: { forma: "shape.star", x: "cx", y: "cy" },
-  lineSegment: { forma: "shape.line", x: "x1", y: "y1" },
-  arc: { forma: "shape.arc", x: "x1", y: "y1" },
-  spiral: { forma: "shape.spiral", x: "cx", y: "cy" },
+/// La finestra che un clic senza trascinare apre per uno strumento del motore (T13,
+/// giro 2 e 5): il comando del motore della sua finestra. Le forme (giro 2) portano i
+/// due campi del punto del clic (`x`, `y` o `cx`, `cy`…), che il comando prende dal
+/// disegno e la finestra non chiede; il Rettangolo arrotondato non ce l'ha, perché
+/// `shape.rectangle` non porta il raggio d'angolo. Le trasformazioni (giro 5) non
+/// hanno un campo del punto (`object.rotate` gira attorno al centro della selezione),
+/// e lavorano sulla selezione di adesso: senza selezione la finestra non si apre.
+export interface ComandoDelClic {
+  readonly comando: string;
+  readonly x?: string;
+  readonly y?: string;
+  readonly sullaSelezione?: true;
+}
+
+export const COMANDO_DEL_CLIC: Readonly<Record<string, ComandoDelClic>> = {
+  rectangle: { comando: "shape.rectangle", x: "x", y: "y" },
+  ellipse: { comando: "shape.ellipse", x: "x", y: "y" },
+  polygon: { comando: "shape.polygon", x: "cx", y: "cy" },
+  star: { comando: "shape.star", x: "cx", y: "cy" },
+  lineSegment: { comando: "shape.line", x: "x1", y: "y1" },
+  arc: { comando: "shape.arc", x: "x1", y: "y1" },
+  spiral: { comando: "shape.spiral", x: "cx", y: "cy" },
+  rotate: { comando: "object.rotate", sullaSelezione: true },
+  reflect: { comando: "object.reflect", sullaSelezione: true },
+  scale: { comando: "object.scale", sullaSelezione: true },
+  shear: { comando: "object.shear", sullaSelezione: true },
 };
 
 /// L'icona di Fub per uno strumento del motore che il prototipo non disegna.
