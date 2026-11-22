@@ -31,3 +31,16 @@ poligoni e stelle](../reference/scene-format-shapes.md).
 La geometria e il `d` stanno in
 `apps/client/src/editors/spatial/scene/parametric.ts`, che la scena usa per
 leggere il file. Non c'è niente da montare.
+
+## Nel disegno completo
+
+Con il componente «Disegno completo» acceso, la colonna ha nel gruppo delle
+forme gli strumenti del motore (la famiglia `forme` del piano K6, T13): Rettangolo
+arrotondato, Poligono, Stella, Riflesso, Segmento linea, Arco e Spirale. Rettangolo
+ed Ellisse esistono anche nel Semplice, e nella stessa tendina portano
+«(Completo)», come Selezione, Mano e Zoom.
+
+Le griglie rettangolare e polare non ci sono ancora: il loro gruppo di percorsi
+composti aspetta la ricetta del disegno (T27). Lo stesso vale per le forme dal
+vivo, cioè con angoli e lati che si cambiano dopo: quelle che il motore scrive
+come corpo espanso con la sua ricetta si salvano così, come oggi.
