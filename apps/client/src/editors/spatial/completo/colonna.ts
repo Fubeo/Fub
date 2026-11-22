@@ -102,6 +102,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   // T13 giro 7: le due griglie (la casella «forme»).
   "rectangularGrid",
   "polarGrid",
+  // T13 giro 7: il Generatore forme (la casella «modificare», come nel prototipo).
+  "shapeBuilder",
   "rectangle",
   "roundedRectangle",
   "ellipse",
@@ -146,6 +148,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   // Le griglie (T13 giro 7): le icone del catalogo della griglia rettangolare e polare.
   rectangularGrid: "draw-grid-rect",
   polarGrid: "draw-grid-polar",
+  shapeBuilder: "draw-shape-builder",
   rectangle: "draw-rect",
   roundedRectangle: "draw-rounded-rect",
   ellipse: "draw-ellipse",

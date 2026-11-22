@@ -59,8 +59,8 @@ motore	symbol.unused	Select All Unused		simboli	F3	T22	da fare	interno	famiglia	
 motore	symbol.selectInstances	Select All Instances		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Seleziona tutte le istanze
 motore	symbol.spray	Symbol Sprayer		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Spruzzo simboli
 motore	symbol.adjust	Symbolism Tool		simboli	F3	T22	da fare	ispettore/risorse	famiglia		Strumento Simbolismo
-motore	shapeBuilder.merge	Shape Builder		forme	F1	T13	da fare	ispettore/design	famiglia		Generatore forme
-motore	shapeBuilder.regions	Shape Builder Regions		forme	F1	T13	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aree del Generatore forme
+motore	shapeBuilder.merge	Shape Builder		forme	F1	T13	fatto	ispettore/design	famiglia		Generatore forme
+motore	shapeBuilder.regions	Shape Builder Regions		forme	F1	T13	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aree del Generatore forme
 motore	livePaint.make	Make	Object › Live Paint	trame	F2	T21	da fare	menu/oggetto	famiglia		Crea
 motore	livePaint.merge	Merge	Object › Live Paint	trame	F2	T21	da fare	menu/oggetto	famiglia		Fondi
 motore	livePaint.release	Release	Object › Live Paint	trame	F2	T21	da fare	menu/oggetto	famiglia		Rilascia
@@ -1334,7 +1334,7 @@ strumento	crystallize	Crystallize Tool		pennelli	F2	T17	da fare	colonna/disegna	
 strumento	wrinkle	Wrinkle Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «width»	Strumento Grinza
 strumento	freeTransform	Free Transform Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Trasformazione libera
 strumento	puppetWarp	Puppet Warp Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «freeTransform»	Strumento Alterazione marionetta
-strumento	shapeBuilder	Shape Builder Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «shapeBuilder»	Strumento Generatore forme
+strumento	shapeBuilder	Shape Builder Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «shapeBuilder»	Strumento Generatore forme
 strumento	livePaintBucket	Live Paint Bucket		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «shapeBuilder»	Secchiello pittura dinamica
 strumento	livePaintSelection	Live Paint Selection Tool		trame	F2	T21	da fare	colonna/colore	famiglia	riquadro «shapeBuilder»	Strumento Selezione pittura dinamica
 strumento	perspectiveGrid	Perspective Grid Tool		prospettiva	F4	T25	da fare	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»	Strumento Griglia prospettica

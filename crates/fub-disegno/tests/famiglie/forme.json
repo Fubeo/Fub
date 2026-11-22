@@ -859,6 +859,61 @@
       "dopo": "strumento-polar-grid.svg"
     },
     {
+      "id": "shapeBuilder.merge",
+      "disegno": "generatore.svg",
+      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
+      "argomenti": {"points": [[120, 125], [220, 125]]},
+      "atteso": {"ops": [{"op": "batch", "ops": [{"op": "remove", "target": "ob2b2b2b2"}, {"op": "remove", "target": "oa1a1a1a1"}, {"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M100 150 L100 100 L150 100 L200 100 L250 100 L250 150 L200 150 L150 150 Z", "fill": "#000000", "id": "og0000001"}}}]}]},
+      "dopo": "shape-builder-merge.svg"
+    },
+    {
+      "id": "shapeBuilder.merge",
+      "disegno": "generatore.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"points": [[120, 125], [220, 125]]},
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
+      "id": "shapeBuilder.merge",
+      "disegno": "generatore.svg",
+      "selezione": ["oa1a1a1a1", "oimmagin1"],
+      "argomenti": {"points": [[120, 125], [220, 125]]},
+      "atteso": {"rifiuto": "unmapped"}
+    },
+    {
+      "id": "shapeBuilder.regions",
+      "disegno": "generatore.svg",
+      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
+      "argomenti": {},
+      "atteso": {"lettura": {"regions": [{"bounds": [200.0, 100.0, 250.0, 150.0], "area": 2500.0, "sources": [4]}, {"bounds": [100.0, 100.0, 150.0, 150.0], "area": 2500.0, "sources": [3]}, {"bounds": [150.0, 100.0, 200.0, 150.0], "area": 2500.0, "sources": [3, 4]}], "lines": [], "edges": [{"bounds": [100.0, 100.0, 150.0, 150.0], "source": 3}, {"bounds": [150.0, 100.0, 200.0, 100.0], "source": 4}, {"bounds": [150.0, 100.0, 150.0, 150.0], "source": 4}, {"bounds": [150.0, 150.0, 200.0, 150.0], "source": 4}, {"bounds": [200.0, 100.0, 250.0, 150.0], "source": 4}, {"bounds": [200.0, 100.0, 200.0, 150.0], "source": 3}]}}
+    },
+    {
+      "id": "shapeBuilder",
+      "fonte": "strumento",
+      "disegno": "generatore.svg",
+      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
+      "gesto": [{"phase": "commit", "events": [{"kind": "down", "x": 120, "y": 125, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 170, "y": 125, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "up", "x": 220, "y": 125, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}],
+      "atteso": {"ops": [{"op": "batch", "ops": [{"op": "remove", "target": "ob2b2b2b2"}, {"op": "remove", "target": "oa1a1a1a1"}, {"op": "add", "parent": "l1a2b3c4d", "pos": {"last": true}, "elem": {"tag": "path", "attrs": {"d": "M100 150 L100 100 L150 100 L200 100 L250 100 L250 150 L200 150 L150 150 Z", "fill": "#000000", "id": "og0000001"}}}]}]},
+      "dopo": "strumento-shape-builder.svg"
+    },
+    {
+      "id": "shapeBuilder",
+      "fonte": "strumento",
+      "disegno": "generatore.svg",
+      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
+      "gesto": [{"phase": "commit", "events": [{"kind": "down", "x": 120, "y": 125, "pressure": 0.5, "shift": false, "alt": true, "cmd": false}, {"kind": "drag", "x": 170, "y": 125, "pressure": 0.5, "shift": false, "alt": true, "cmd": false}, {"kind": "up", "x": 220, "y": 125, "pressure": 0.5, "shift": false, "alt": true, "cmd": false}]}],
+      "atteso": {"ops": [{"op": "batch", "ops": [{"op": "remove", "target": "ob2b2b2b2"}, {"op": "remove", "target": "oa1a1a1a1"}]}]},
+      "dopo": "strumento-shape-builder-alt.svg"
+    },
+    {
+      "id": "shapeBuilder",
+      "fonte": "strumento",
+      "disegno": "generatore.svg",
+      "selezione": ["oa1a1a1a1"],
+      "gesto": [{"phase": "commit", "events": [{"kind": "down", "x": 120, "y": 125, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "drag", "x": 170, "y": 125, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}, {"kind": "up", "x": 220, "y": 125, "pressure": 0.5, "shift": false, "alt": false, "cmd": false}]}],
+      "atteso": {"rifiuto": "empty"}
+    },
+    {
       "id": "pathfinder",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/famiglie/tracciati/elaborazione.test.ts"

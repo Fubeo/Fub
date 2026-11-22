@@ -60,6 +60,72 @@ const METODO_FORMA: &str = "object.compoundShape.setMode";
 /// Espandi forma: le forme dal vivo scelte diventano tracciati.
 const ESPANDI_FORMA: &str = "object.expandShape";
 
+/// Il Generatore forme (T13 giro 7): il comando che unisce o toglie le regioni
+/// (`shapeBuilder.merge`), che lo strumento del motore `shapeBuilder` manda al
+/// trascinare. Le sue regioni si leggono con `shapeBuilder.regions`, una lettura.
+const GENERATORE: &str = "shapeBuilder.merge";
+
+/// Lo strumento del Generatore forme nella colonna.
+pub(crate) const STRUMENTO_GENERATORE: &str = "shapeBuilder";
+
+/// Un oggetto che il Generatore unisce: un tracciato che non è una guida, una forma
+/// composta, o un gruppo fatto solo di questi. Un'immagine o un testo non entrano
+/// (il motore li lascerebbe com'erano, ma la forma unita non li contiene).
+fn unibile(nodo: &Node) -> bool {
+    match &nodo.kind {
+        NodeKind::Path { guide, .. } => !guide,
+        NodeKind::Compound { .. } => true,
+        NodeKind::Group { children, .. } => {
+            !children.is_empty() && children.iter().all(|c| unibile(c))
+        }
+        _ => false,
+    }
+}
+
+/// Perché il Generatore non unisce gli oggetti scelti, per il gesto: meno di due
+/// (`empty`, il solo motivo che un gesto ha per «non tocca niente»), un oggetto che
+/// non si unisce (`unmapped`), o uno bloccato (`locked`, da [`nodi_scelti`]).
+pub(crate) fn rifiuto_del_generatore(
+    copia: &Copia,
+    selezione: &[String],
+) -> Option<DrawingRefusal> {
+    let nodi = match nodi_scelti(copia, selezione) {
+        Ok(nodi) => nodi,
+        Err(motivo) => return Some(motivo),
+    };
+    if nodi.len() < 2 {
+        return Some(DrawingRefusal::Empty);
+    }
+    let tutti = nodi
+        .iter()
+        .all(|n| copia.documento.node(*n).is_some_and(|nodo| unibile(nodo)));
+    (!tutti).then_some(DrawingRefusal::Unmapped)
+}
+
+/// Perché il comando del Generatore è spento sulla selezione: niente scelto, il
+/// disegno o un oggetto bloccato (`read_only`), meno di due oggetti (`needs_two`),
+/// un oggetto che non è una forma (`needs_path`).
+fn generatore_spento(copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+    if selezione.is_empty() {
+        return Some(DrawingDisabledReason::NoSelection);
+    }
+    if !copia.modificabile {
+        return Some(DrawingDisabledReason::ReadOnly);
+    }
+    let nodi = match nodi_scelti(copia, selezione) {
+        Ok(nodi) => nodi,
+        Err(DrawingRefusal::Locked) => return Some(DrawingDisabledReason::ReadOnly),
+        Err(_) => return Some(DrawingDisabledReason::Unmapped),
+    };
+    if nodi.len() < 2 {
+        return Some(DrawingDisabledReason::NeedsTwo);
+    }
+    let tutti = nodi
+        .iter()
+        .all(|n| copia.documento.node(*n).is_some_and(|nodo| unibile(nodo)));
+    (!tutti).then_some(DrawingDisabledReason::NeedsPath)
+}
+
 /// La fine del messaggio del motore quando Espandi forma composta non lascia
 /// niente (`expand` in `engine/src/cmd/compoundshape.rs`, «Expand Compound
 /// Shape produced an empty result»). Il caso `empty` di
@@ -159,6 +225,9 @@ impl StatoFamiglia for Stato {
     /// (`esegui` lo rifiuta comunque). I comandi delle forme composte vogliono
     /// una selezione che sanno usare, col perché.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        if id == GENERATORE {
+            return generatore_spento(copia, selezione);
+        }
         if !delle_composte(id) {
             return super::selezione_spenta(copia, selezione);
         }
@@ -184,6 +253,9 @@ impl StatoFamiglia for Stato {
     /// `unmapped`. Un comando su una composta senza una composta scelta è
     /// `empty`: non c'è niente da cambiare.
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if id == GENERATORE {
+            return rifiuto_del_generatore(copia, selezione);
+        }
         if !delle_composte(id) {
             return None;
         }

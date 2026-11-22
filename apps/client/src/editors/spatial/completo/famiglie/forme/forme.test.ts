@@ -20,8 +20,8 @@ const STRUMENTI_FORME = VOCI.filter((voce) => voce.famiglia === "forme" && voce.
 const FORME_PRONTO: ReadonlySet<string> = new Set(STRUMENTI_FORME);
 
 describe("la famiglia forme nella colonna", () => {
-  it("ha dieci strumenti fatti: le otto forme e le due griglie (T13 giro 7); senza il riflesso (aspetta T27)", () => {
-    expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "lineSegment", "polarGrid", "polygon", "rectangle", "rectangularGrid", "roundedRectangle", "spiral", "star"]);
+  it("ha undici strumenti fatti: le otto forme, le due griglie e il Generatore (T13 giro 7); senza il riflesso (aspetta T27)", () => {
+    expect([...STRUMENTI_FORME].sort()).toEqual(["arc", "ellipse", "lineSegment", "polarGrid", "polygon", "rectangle", "rectangularGrid", "roundedRectangle", "shapeBuilder", "spiral", "star"]);
   });
 
   it("ogni strumento fatto ha il nome corto nelle due lingue nel catalogo della colonna, l'icona e un posto nel motore", () => {
@@ -62,6 +62,16 @@ describe("la famiglia forme nella colonna", () => {
     }
     expect(COLONNA_IT["draw.engine.name.rectangularGrid"]).toBe("Griglia rettangolare");
     expect(COLONNA_IT["draw.engine.name.polarGrid"]).toBe("Griglia polare");
+  });
+
+  // Il Generatore forme (T13 giro 7): la casella «modificare» del prototipo, con l'id del
+  // motore `shapeBuilder` (la colonna lo manda così al gesto, senza il prefisso).
+  it("il Generatore forme sta nella casella di «modificare» e il suo id al motore è shapeBuilder", () => {
+    expect(MOTORE_PRONTO.has("shapeBuilder")).toBe(true);
+    const gruppo = layoutCompleto([], MOTORE_PRONTO).find((g) => g.id === "modify");
+    const casella = gruppo?.caselle.find((c) => c.includes("motore:shapeBuilder")) ?? [];
+    expect(casella).toContain("motore:shapeBuilder");
+    expect(casella.find((voce) => voce === "motore:shapeBuilder")?.replace(/^motore:/, "")).toBe("shapeBuilder");
   });
 
   it("le griglie compaiono nella colonna quando sono fatte", () => {

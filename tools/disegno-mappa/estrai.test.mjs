@@ -94,7 +94,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (`object.transformEach`) è «fatto», con la sua finestra con l'anteprima; le due
   // griglie (`shape.rectangularGrid`, `shape.polarGrid`) e i loro strumenti (`rectangularGrid`,
   // `polarGrid`) sono «fatto», senza più «aspetta T27»: quattro in più.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1153, fub: 114, escluso: 12, fatto: 272 });
+  // T13 generatore (giro 7): il Generatore forme (`shapeBuilder.merge`, la lettura
+  // `shapeBuilder.regions` e lo strumento `shapeBuilder`) è «fatto»: tre in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1150, fub: 114, escluso: 12, fatto: 275 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

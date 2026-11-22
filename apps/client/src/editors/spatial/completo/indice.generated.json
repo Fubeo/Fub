@@ -2771,6 +2771,38 @@
     },
     {
       "fonte": "motore",
+      "id": "shapeBuilder.merge",
+      "chiamata": {
+        "comando": "disegno.shapeBuilder.merge"
+      },
+      "etichetta": {
+        "it": "Generatore forme",
+        "en": "Shape Builder"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "shapeBuilder.regions",
+      "chiamata": {
+        "comando": "disegno.shapeBuilder.regions"
+      },
+      "etichetta": {
+        "it": "Aree del Generatore forme",
+        "en": "Shape Builder Regions"
+      },
+      "posto": "interno",
+      "famiglia": "forme",
+      "tasto": null,
+      "effetto": "legge",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "stroke.set",
       "chiamata": {
         "comando": "disegno.stroke.set"
@@ -4124,6 +4156,22 @@
       "posto": "colonna/scegli",
       "famiglia": "nucleo",
       "tasto": "V",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "shapeBuilder",
+      "chiamata": {
+        "strumento": "shapeBuilder"
+      },
+      "etichetta": {
+        "it": "Strumento Generatore forme",
+        "en": "Shape Builder Tool"
+      },
+      "posto": "colonna/forme",
+      "famiglia": "forme",
+      "tasto": "Shift+M",
       "effetto": "cambia",
       "finestra": false
     },
