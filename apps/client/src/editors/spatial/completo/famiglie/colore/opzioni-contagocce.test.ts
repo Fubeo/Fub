@@ -113,3 +113,45 @@ describe("la fila montata", () => {
     expect(scelta(document.body, "1 punto").getAttribute("aria-checked")).toBe("true");
   });
 });
+
+describe("gli id dei comandi del Contagocce", () => {
+  it("sono quelli del motore, col prefisso disegno.", () => {
+    expect(COMANDO_OPZIONI_CONTAGOCCE).toBe("disegno.eyedropper.setOptions");
+    expect(COMANDO_PREFERENZE_LETTURA).toBe("disegno.prefs.get");
+  });
+});
+
+describe("ogni controllo della fila manda il suo valore", () => {
+  it("ogni scelta del campione manda il suo numero di punti (la scelta già accesa non manda niente)", () => {
+    const { vita, azioni, esegui } = azioniFinte();
+    const fila = filaContagocce(azioni, vita)!;
+    for (const voce of fila.voci!) document.body.append(voce.element);
+    scelta(document.body, "3 punti").click();
+    scelta(document.body, "5 punti").click();
+    scelta(document.body, "1 punto").click();
+    expect(esegui.mock.calls).toEqual([
+      [COMANDO_OPZIONI_CONTAGOCCE, { sampleSize: 3 }, "Opzioni contagocce: Campione"],
+      [COMANDO_OPZIONI_CONTAGOCCE, { sampleSize: 5 }, "Opzioni contagocce: Campione"],
+      [COMANDO_OPZIONI_CONTAGOCCE, { sampleSize: 1 }, "Opzioni contagocce: Campione"],
+    ]);
+  });
+
+  it("ogni casella della copia manda il suo ramo spento, in raccogli e in applica", () => {
+    const casse: [string, Parameters<typeof comandoDellaCopia>[0]][] = [
+      ["Riempimento", "riempimento"],
+      ["Contorno", "contorno"],
+      ["Opacità", "opacita"],
+      ["Testo", "testo"],
+    ];
+    for (const [etichetta, copia] of casse) {
+      const { vita, azioni, esegui } = azioniFinte();
+      const fila = filaContagocce(azioni, vita)!;
+      for (const voce of fila.voci!) document.body.append(voce.element);
+      const c = casella(document.body, etichetta);
+      c.checked = false;
+      c.dispatchEvent(new Event("change"));
+      expect(esegui).toHaveBeenLastCalledWith(COMANDO_OPZIONI_CONTAGOCCE, comandoDellaCopia(copia, false), "Opzioni contagocce: " + etichetta);
+      document.body.replaceChildren();
+    }
+  });
+});
