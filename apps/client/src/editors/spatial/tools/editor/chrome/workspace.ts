@@ -190,6 +190,9 @@ export function installWorkspace(ctx: EditorContext): void {
   // Il Completo aperto e acceso, per il menu ≡ e la ricerca Ctrl+/ (K6 T9a):
   // le sue voci vengono dall'indice. Senza, quelli di oggi.
   ctx.completoVoci = () => (aperto === null || !vuoleCompleto() ? null : aperto);
+  // La fila delle opzioni dello strumento del motore (K6 T11) col Completo aperto e
+  // acceso; senza, la testata non ha fila.
+  ctx.completoMotore = () => (aperto === null || !vuoleCompleto() ? null : aperto);
   const portaCompleto = (): void => {
     if ((completo !== "no" && completo !== "fallito") || !vuoleCompleto()) return;
     completo = "verifica";
@@ -228,6 +231,9 @@ export function installWorkspace(ctx: EditorContext): void {
             },
           });
           sezioniAperte = aperto.sezioni;
+          // Lo strumento del motore aspetta la sua famiglia dal Completo aperto
+          // (`sceltaMotore`): una famiglia che non arriva non fa partire il gesto.
+          ctx.preparaStrumento = (id) => aperto!.preparaStrumento(id);
           completo = "aperto";
           applicaSpazio();
           mostraRisorse();

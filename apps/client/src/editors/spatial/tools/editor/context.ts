@@ -41,6 +41,7 @@ import type { StateContext } from "./state";
 import type { StylingContext } from "./styling";
 import type { SheetCursorContext } from "./sheet-cursor";
 import type { ToolbarContext } from "./toolbar";
+import type { FilaMotoreContext } from "./chrome/fila-motore";
 import type { ToolingContext } from "./tooling";
 import type { TreeContext } from "./tree";
 import type { VaultImagesContext } from "./vault-images";
@@ -58,7 +59,7 @@ export interface EditorContext extends
     ArrangingContext, SelectionCommandsContext, InkShapeContext,
     LayersGridContext, KeysContext, ClipboardCommandsContext, VaultImagesContext, LifeContext, RailContext, PenOptionsContext,
     StatusContext, HandZoomContext, BareContext, OutlineContext, CommandSearchContext, NavigatorContext, CommandsContext,
-    WorkspaceContext, NibContext, ReplayContext, RulerContext, GestiMotoreContext {
+    WorkspaceContext, NibContext, ReplayContext, RulerContext, GestiMotoreContext, FilaMotoreContext {
   readonly host: HTMLElement;
   readonly initial: SceneEngine;
   readonly owner: Lifetime;
