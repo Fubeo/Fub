@@ -6,7 +6,8 @@
 // operazioni passano da `parseWireOp` (`opsDellEsito`, come un esito del
 // motore) e si applicano in un passo solo (`gesture`, come `ctx.commit`) sul
 // disegno di partenza: il testo dopo è il `.svg` di `dopo`, byte per byte; e
-// l'annullamento torna al disegno di partenza, byte per byte. Con
+// l'annullamento torna al disegno di partenza, byte per byte, e il ripristino
+// di nuovo a quello dopo. Con
 // `FUB_CASI_SCRIVI=1` il test scrive i `dopo` invece di confrontarli.
 
 import { describe, expect, it } from "vitest";
@@ -69,7 +70,7 @@ async function tuttiICasi(): Promise<{ fs: NodeFs; casi: CasoDaApplicare[] }> {
 }
 
 describe("il banco delle righe, lato client", () => {
-  it("applica le operazioni di ogni caso in un passo, e le annulla", async () => {
+  it("applica le operazioni di ogni caso in un passo, le annulla e le rifà", async () => {
     const { fs, casi } = await tuttiICasi();
     const conOps = casi.filter(({ caso }) => Array.isArray(caso.atteso?.ops));
     // I casi di prova hanno almeno un comando e uno strumento con operazioni.
@@ -100,8 +101,15 @@ describe("il banco delle righe, lato client", () => {
       const fileDopo = `${cartella}${caso.dopo}`;
       if (SCRIVI) fs.writeFileSync(fileDopo, engine.text);
       else if (engine.text !== fs.readFileSync(fileDopo, "utf8")) errori.push(`${nome}: il testo dopo non è ${caso.dopo}`);
+      const dopo = engine.text;
       const indietro = engine.undo(esito.undo);
-      if (indietro.outcome !== "applied" || engine.text !== prima) errori.push(`${nome}: l'annullamento non torna al disegno di partenza`);
+      if (indietro.outcome !== "applied" || engine.text !== prima) {
+        errori.push(`${nome}: l'annullamento non torna al disegno di partenza`);
+        continue;
+      }
+      // Il ripristino rifà il passo intero, ancora in un passo solo.
+      const ancora = engine.undo(indietro.undo);
+      if (ancora.outcome !== "applied" || engine.text !== dopo) errori.push(`${nome}: il ripristino non torna al disegno dopo`);
     }
     expect(errori).toEqual([]);
   });

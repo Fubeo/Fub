@@ -421,7 +421,9 @@ pub(crate) fn esito_vuoto(revisione: u64) -> DrawingOutcome {
     }
 }
 
-/// Gli id di Fub della selezione del motore; un oggetto senza id resta fuori.
+/// Gli id di Fub della selezione del motore; un oggetto senza id resta fuori,
+/// e così il foglio di Fub, che non si sceglie (Sblocca tutto del motore lo
+/// sblocca e lo sceglie con gli altri).
 pub(crate) fn selezione_di_fub(
     copia: &Copia,
     differenza: &Differenza,
@@ -434,6 +436,7 @@ pub(crate) fn selezione_di_fub(
                 .mappa
                 .del_nodo(*n)
                 .and_then(|i| copia.mappa.elemento(i))
+                .filter(|e| e.ruolo != fub_scene::Role::Paper)
                 .and_then(|e| e.id.clone())
         });
         if let Some(id) = id {

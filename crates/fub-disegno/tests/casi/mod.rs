@@ -371,7 +371,7 @@ pub fn valore_dell_effetto(caso: &Caso) -> Value {
 }
 
 /// Esegue il comando o il gesto del caso su `disegno`.
-fn esegui_sul_disegno(
+pub fn esegui_sul_disegno(
     disegno: &mut Disegno,
     caso: &Caso,
 ) -> Result<Result<DrawingOutcome, fub_abi::PluginError>, String> {

@@ -332,12 +332,12 @@ motore	links.placementOptions	Placement Options		immagini	F3	T20	da fare	ispetto
 motore	transparency.editOpacityMask	Edit Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Modifica maschera di opacità
 motore	transparency.stopEditingOpacityMask	Stop Editing Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Interrompi modifica maschera di opacità
 motore	transparency.viewOpacityMask	View Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Visualizza maschera di opacità
-motore	object.lock.above	All Artwork Above	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Tutta la grafica soprastante
-motore	object.lock.otherLayers	Other Layers	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Altri livelli
-motore	object.lock.unselected	Unselected Artwork	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Grafica non selezionata
-motore	object.hide.above	All Artwork Above	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Tutta la grafica soprastante
-motore	object.hide.otherLayers	Other Layers	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Altri livelli
-motore	object.hide.unselected	Unselected Artwork	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto	nucleo		Grafica non selezionata
+motore	object.lock.above	All Artwork Above	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto	nucleo	aspetta T15: con il foglio di Fub i livelli di Fub stanno nel motore come gruppi di un livello solo, e «Tutta la grafica soprastante» del motore guarda i livelli del motore	Tutta la grafica soprastante
+motore	object.lock.otherLayers	Other Layers	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto	nucleo	aspetta T15: con il foglio di Fub i livelli di Fub stanno nel motore come gruppi di un livello solo, e «Altri livelli» del motore guarda i livelli del motore	Altri livelli
+motore	object.lock.unselected	Unselected Artwork	Object › Lock	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Grafica non selezionata
+motore	object.hide.above	All Artwork Above	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto	nucleo	aspetta T15: con il foglio di Fub i livelli di Fub stanno nel motore come gruppi di un livello solo, e «Tutta la grafica soprastante» del motore guarda i livelli del motore	Tutta la grafica soprastante
+motore	object.hide.otherLayers	Other Layers	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto	nucleo	aspetta T15: con il foglio di Fub i livelli di Fub stanno nel motore come gruppi di un livello solo, e «Altri livelli» del motore guarda i livelli del motore	Altri livelli
+motore	object.hide.unselected	Unselected Artwork	Object › Hide	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Grafica non selezionata
 motore	object.transformEach	Transform Each…	Object › Transform	trasforma	F1	T13	da fare	menu/oggetto	famiglia	finestra	Trasforma singolarmente…
 motore	object.resetBoundingBox	Reset Bounding Box	Object › Transform	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Reimposta riquadro di delimitazione
 motore	object.rasterize	Rasterize…	Object	immagini	F3	T20	da fare	menu/oggetto	famiglia	finestra	Rasterizza…
@@ -497,7 +497,7 @@ motore	script.check	Check Script		automazione	F4	T26	da fare	interno	sotto:diseg
 motore	select.all	All	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Tutto
 motore	select.allOnArtboard	All on Active Artboard	Select	livelli	F1	T15	da fare	menu/selezione	famiglia		Tutto nella tavola da disegno attiva
 motore	select.none	Deselect	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Deseleziona
-motore	select.reselect	Reselect	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo	manca ancora: il motore non ricorda la selezione di prima fra le richieste	Riseleziona
+motore	select.reselect	Reselect	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo	manca ancora: il motore non ricorda la selezione di prima fra le richieste (ogni comando parte da un motore tornato alla copia), e tenerla vorrebbe uno stato nuovo nel contratto	Riseleziona
 motore	select.inverse	Inverse	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Inversa
 motore	select.nextAbove	Next Object Above	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Oggetto successivo sopra
 motore	select.nextBelow	Next Object Below	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Oggetto successivo sotto
@@ -859,13 +859,13 @@ motore	object.arrange.bringToFront	Bring to Front	Object › Arrange	nucleo	F1	T
 motore	object.arrange.bringForward	Bring Forward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta avanti
 motore	object.arrange.sendBackward	Send Backward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta indietro
 motore	object.arrange.sendToBack	Send to Back	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta in fondo
-motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: il livello attivo di Fub non arriva al motore	Sposta sul livello corrente
-motore	object.group	Group	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non sa ancora scrivere un gruppo nuovo	Raggruppa
+motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo	aspetta T15: la richiesta non porta il livello attivo di Fub al motore	Sposta sul livello corrente
+motore	object.group	Group	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Raggruppa
 motore	object.ungroup	Ungroup	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Separa
-motore	object.lock	Selection	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non scrive ancora fub:locked; oggi «Blocca» di Fub nel tasto destro	Selezione
-motore	object.unlockAll	Unlock All	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non scrive ancora fub:locked; oggi «Sblocca» di Fub nel tasto destro	Sblocca tutto
-motore	object.hide	Selection	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non scrive ancora display; oggi «Nascondi» di Fub nel tasto destro	Selezione
-motore	object.showAll	Show All	Object	nucleo	F1	T11	da fare	menu/oggetto	nucleo	manca ancora: la differenza non scrive ancora display; oggi «Mostra» di Fub nel tasto destro	Mostra tutto
+motore	object.lock	Selection	Object › Lock	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Selezione
+motore	object.unlockAll	Unlock All	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Sblocca tutto
+motore	object.hide	Selection	Object › Hide	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Selezione
+motore	object.showAll	Show All	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Mostra tutto
 motore	object.compoundPath.make	Make	Object › Compound Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Crea
 motore	object.compoundPath.release	Release	Object › Compound Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Rilascia
 motore	object.clippingMask.make	Make	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Crea

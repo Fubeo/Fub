@@ -17,7 +17,14 @@
 //!   cambiato in un modo che nessuna matrice spiega diventa `d`.
 //! - **`add`** per gli oggetti nuovi, con l'`Elem` come lo scrive il client
 //!   (`rect`, `ellipse`, `line` o `path`, geometria con due decimali); uno
-//!   strumento può scriverlo lui ([`Scrittore`]).
+//!   strumento può scriverlo lui ([`Scrittore`]). Un gruppo nuovo fatto di
+//!   oggetti che c'erano già (Raggruppa) è un `<g>` vuoto con un id nuovo,
+//!   dove il motore lo mette, e un `move` per ognuno dei suoi figli, dopo
+//!   l'`add`: gli elementi restano quelli, con i loro byte.
+//! - **Bloccato e nascosto** sono gli attributi di Fub (`fub:locked="true"`,
+//!   `display="none"`, `docs/reference/scene-format.md` §3), come li scrivono
+//!   «Blocca» e «Nascondi» del client: un `set` che li mette o li toglie.
+//!   Il foglio di Fub resta bloccato com'è.
 //! - **`remove`** per quelli tolti, **`move`** per l'ordine e il genitore.
 //! - **`ident`** prima di tutto, per gli elementi senza id che un'operazione
 //!   nomina: un id nuovo del formato di [`crate::id`].
@@ -140,8 +147,10 @@ pub(crate) fn differenza(
         remove: Vec::new(),
         moves: Vec::new(),
         add: Vec::new(),
+        dentro: Vec::new(),
         set: Vec::new(),
         ids: HashMap::new(),
+        gruppi_nuovi: HashMap::new(),
         dati: HashSet::new(),
         riscritti: HashSet::new(),
         ricette: ricetta::Scritte::default(),
@@ -156,14 +165,17 @@ pub(crate) fn differenza(
     }
     let ident_del_confronto = std::mem::take(&mut lavoro.ident);
     lavoro.tolti(&prima, &poi)?;
-    lavoro.ordine(&prima, dopo)?;
+    // I nuovi prima dell'ordine: un gruppo nuovo dev'essere noto quando i
+    // suoi figli ci si spostano dentro.
     lavoro.nuovi(&prima, dopo)?;
+    lavoro.ordine(&prima, dopo)?;
     lavoro.ident.extend(ident_del_confronto);
     let Lavoro {
         ident,
         mut remove,
         moves,
         mut add,
+        dentro,
         set,
         ids,
         ricette: scritte,
@@ -174,6 +186,7 @@ pub(crate) fn differenza(
         && remove.is_empty()
         && moves.is_empty()
         && add.is_empty()
+        && dentro.is_empty()
         && set.is_empty())
     {
         let (via, nuovo) = scritte.operazioni(copia.mappa.ricette());
@@ -191,6 +204,7 @@ pub(crate) fn differenza(
     ops.extend(remove.into_iter().map(|(_, op)| op));
     ops.extend(moves);
     ops.extend(add);
+    ops.extend(dentro);
     ops.extend(set);
     if ops.len() > MAX_DRAWING_OPS {
         return Err(Rifiuto::TroppoGrande);
@@ -250,8 +264,13 @@ struct Lavoro<'a> {
     remove: Vec<(Vec<usize>, Value)>,
     moves: Vec<Value>,
     add: Vec<Value>,
+    /// I `move` dentro un gruppo nuovo: dopo il suo `add`.
+    dentro: Vec<Value>,
     set: Vec<Value>,
     ids: HashMap<NodeId, String>,
+    /// I gruppi nuovi fatti di oggetti di prima, col loro genitore: il
+    /// `<g>` non ha `transform`, il suo spazio è quello del genitore.
+    gruppi_nuovi: HashMap<NodeId, Option<NodeId>>,
     /// Gli id dati in questo gesto.
     dati: HashSet<String>,
     /// Gli oggetti che si riscrivono interi: l'elemento di prima si toglie e
@@ -319,6 +338,9 @@ impl Lavoro<'_> {
     fn matrice_del_genitore(&self, nodo: Option<NodeId>) -> Result<Affine, Rifiuto> {
         match nodo {
             Some(g) if self.copia.mappa.e_radice(g) => Ok(self.copia.radice),
+            Some(g) if self.gruppi_nuovi.contains_key(&g) => {
+                self.matrice_del_genitore(self.gruppi_nuovi[&g])
+            }
             Some(g) => self
                 .elemento(g)
                 .ok_or_else(|| {
@@ -464,8 +486,11 @@ impl Lavoro<'_> {
                     Some(prec) => json!({ "after": self.bersaglio(prec.id)? }),
                     None => json!({ "first": true }),
                 };
-                self.moves
-                    .push(json!({ "op": "move", "target": target, "parent": parent, "pos": pos }));
+                let op = json!({ "op": "move", "target": target, "parent": parent, "pos": pos });
+                match genitore {
+                    Some(g) if self.gruppi_nuovi.contains_key(&g) => self.dentro.push(op),
+                    _ => self.moves.push(op),
+                }
             }
         }
         Ok(())
@@ -507,6 +532,17 @@ impl Lavoro<'_> {
                 return Err(no("il genitore ha una transform che non si inverte"));
             }
             let riscritto = self.riscritti.contains(&nodo.id);
+            if !riscritto && gruppo_di_prima(nodo, prima, &self.riscritti) {
+                let id = self.id_nuovo(Specie::Oggetto)?;
+                self.ids.insert(nodo.id, id.clone());
+                self.gruppi_nuovi.insert(nodo.id, genitore);
+                let pos = self.posto(&fratelli, i)?;
+                self.add.push(json!({
+                    "op": "add", "parent": parent, "pos": pos,
+                    "elem": { "tag": "g", "attrs": { "id": id } },
+                }));
+                continue;
+            }
             // Un oggetto riscritto tiene il suo id se è già della forma nuova.
             let vecchio = riscritto
                 .then(|| self.elemento(nodo.id).and_then(Elemento::id_del_file))
@@ -552,14 +588,7 @@ impl Lavoro<'_> {
                 json!({ "elem": { "tag": tag, "attrs": attrs } })
             };
             self.ids.insert(nodo.id, id);
-            let pos = if i + 1 == fratelli.len() {
-                json!({ "last": true })
-            } else {
-                match i.checked_sub(1).map(|j| fratelli[j]) {
-                    Some(prec) => json!({ "after": self.bersaglio(prec.id)? }),
-                    None => json!({ "first": true }),
-                }
-            };
+            let pos = self.posto(&fratelli, i)?;
             let mut op = json!({ "op": "add", "parent": parent, "pos": pos });
             if let (Some(op), Value::Object(corpo)) = (op.as_object_mut(), elem_o_raw) {
                 op.extend(corpo);
@@ -569,6 +598,63 @@ impl Lavoro<'_> {
         Ok(())
     }
 
+    /// Il posto di un oggetto nuovo fra i fratelli di dopo.
+    fn posto(&mut self, fratelli: &[&Arc<Node>], i: usize) -> Result<Value, Rifiuto> {
+        if i + 1 == fratelli.len() {
+            return Ok(json!({ "last": true }));
+        }
+        Ok(match i.checked_sub(1).map(|j| fratelli[j]) {
+            Some(prec) => json!({ "after": self.bersaglio(prec.id)? }),
+            None => json!({ "first": true }),
+        })
+    }
+
+    /// Bloccato e nascosto: il `set` di `fub:locked` e di `display` se il
+    /// motore li ha cambiati, e l'oggetto di prima con lo stato di dopo, per
+    /// il resto del confronto. Si scrive ciò che il file non dice già; il
+    /// foglio resta bloccato. Un oggetto mostrato che il file nasconde in un
+    /// altro modo (uno stile) non si scrive con `display`.
+    fn stato(&mut self, b: &Arc<Node>, a: &Arc<Node>) -> Result<Arc<Node>, Rifiuto> {
+        if b.visible == a.visible && b.locked == a.locked {
+            return Ok(b.clone());
+        }
+        let Some(e) = self.elemento(a.id).cloned() else {
+            return Err(Rifiuto::NonMappato(format!(
+                "il gesto blocca o nasconde l'oggetto {} che non viene da Fub",
+                a.id.0
+            )));
+        };
+        let mut attrs = Map::new();
+        if b.locked != a.locked && e.ruolo != fub_scene::Role::Paper && a.locked != e.bloccato {
+            attrs.insert(
+                "fub:locked".into(),
+                if a.locked { json!("true") } else { Value::Null },
+            );
+        }
+        if b.visible != a.visible {
+            if e.ruolo == fub_scene::Role::Paper {
+                return Err(no("il foglio di Fub non si nasconde"));
+            }
+            if a.visible && !e.nascosto {
+                return Err(no("l'oggetto è nascosto da uno stile, che display non toglie"));
+            }
+            if a.visible == e.nascosto {
+                attrs.insert(
+                    "display".into(),
+                    if a.visible { Value::Null } else { json!("none") },
+                );
+            }
+        }
+        if !attrs.is_empty() {
+            let id = self.bersaglio(a.id)?;
+            self.set.push(json!({ "op": "set", "id": id, "attrs": attrs }));
+        }
+        let mut c = (**b).clone();
+        c.visible = a.visible;
+        c.locked = a.locked;
+        Ok(Arc::new(c))
+    }
+
     /// Gli oggetti che ci sono prima e dopo, dall'alto: i `set`.
     fn confronta(
         &mut self,
@@ -576,6 +662,10 @@ impl Lavoro<'_> {
         a: &Arc<Node>,
         prima: &Posti<'_>,
     ) -> Result<(), Rifiuto> {
+        if uguali(b, a) {
+            return Ok(());
+        }
+        let b = &self.stato(b, a)?;
         if uguali(b, a) {
             return Ok(());
         }
@@ -711,12 +801,7 @@ impl Lavoro<'_> {
                     "cambia un gruppo o un livello in un modo che non si scrive",
                 ));
             }
-            for c in figli {
-                let Some(p) = prima.nodi.get(&c.id) else {
-                    continue;
-                };
-                self.confronta(p.nodo, c, prima)?;
-            }
+            self.confronta_figli(figli, prima)?;
             return Ok(());
         }
         if radice || livello {
@@ -733,6 +818,21 @@ impl Lavoro<'_> {
             let id = self.bersaglio(a.id)?;
             self.set
                 .push(json!({ "op": "set", "id": id, "attrs": attrs }));
+        }
+        Ok(())
+    }
+
+    /// I figli che c'erano già, e quelli di un gruppo nuovo che li raccoglie.
+    fn confronta_figli(&mut self, figli: &[Arc<Node>], prima: &Posti<'_>) -> Result<(), Rifiuto> {
+        for c in figli {
+            match prima.nodi.get(&c.id) {
+                Some(p) => self.confronta(p.nodo, c, prima)?,
+                None => {
+                    if let Some(nipoti) = c.children() {
+                        self.confronta_figli(nipoti, prima)?;
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -844,6 +944,33 @@ impl Lavoro<'_> {
         }
         Ok(attrs)
     }
+}
+
+/// Vero se `n` è un gruppo nuovo semplice (nessuna proprietà sua: niente
+/// opacità, maschera, nome, aspetto) fatto solo di oggetti che c'erano già e
+/// non si riscrivono: Raggruppa.
+fn gruppo_di_prima(n: &Node, prima: &Posti<'_>, riscritti: &HashSet<NodeId>) -> bool {
+    let NodeKind::Group {
+        children,
+        clip: false,
+    } = &n.kind
+    else {
+        return false;
+    };
+    !children.is_empty()
+        && children
+            .iter()
+            .all(|c| prima.nodi.contains_key(&c.id) && !riscritti.contains(&c.id))
+        && proprieta_uguali(
+            n,
+            &Node::new(
+                n.id,
+                NodeKind::Group {
+                    children: Vec::new(),
+                    clip: false,
+                },
+            ),
+        )
 }
 
 /// `transform = G⁻¹·M·G·T`.
