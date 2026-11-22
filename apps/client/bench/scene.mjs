@@ -1602,6 +1602,7 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-selezione-tratto", 1280, "Uguale › Colore tratto: l'ellisse e le due linee con lo stesso tratto scelte insieme sul foglio", "", openUgualeTratto],
     ["disegno-selezione-tratto-800", 800, "Lo stesso risultato nella finestra minima del desktop, 800 px", "", openUgualeTratto],
     ["disegno-clic-ellisse", 1280, "Un clic del mouse sull'ellisse del disegno: la barra di stato dice che è scelta", "", clicSullEllisse],
+    ["disegno-clic-ellisse-semplice", 1280, "Lo spazio Semplice: un clic del mouse sull'ellisse la sceglie, come nel Completo", "", clicSullEllisseSemplice],
     ["disegno-trasparenza", 1280, "Design › Trasparenza con l'ellisse scelta col clic: l'opacità e il metodo di fusione coi valori", "", (page) => openSezioneConUno(page, "#surface-panel-draw-design .draw-transparency-blend", sceltaConIlClic)],
     ["disegno-trasparenza-800", 800, "La sezione Trasparenza nel cassetto dell'ispettore, 800 px: l'ellisse scelta col clic", "", (page) => openSezioneConUno(page, "#surface-panel-draw-design .draw-transparency-blend", sceltaConIlClic)],
     ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
@@ -5569,6 +5570,19 @@ async function sceltaEllisse(page) {
 /// sceglie, la scena si ferma: così il banco prova che il clic funziona (K6 T15, giro 2).
 async function clicSullEllisse(page) {
   await openDrawing(page);
+  await sceltaConIlClic(page);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Lo stesso clic nello spazio Semplice: la scelta passa dallo stesso motore, e la barra dice «1 di 11
+/// scelti» come nel Completo (K6 T15, giro 2).
+async function clicSullEllisseSemplice(page) {
+  await openDrawing(page);
+  await page.click("#status-workspace");
+  await page.waitForSelector("#context-menu [role='menuitemradio']:has-text('Semplice')");
+  await page.click("#context-menu [role='menuitemradio']:has-text('Semplice')");
+  await page.waitForTimeout(1500);
+  await page.waitForSelector(".draw-editor .draw-surface ellipse[data-scene-id]", { timeout: 15000 });
   await sceltaConIlClic(page);
   await page.evaluate(() => document.fonts.ready);
 }
