@@ -2224,8 +2224,10 @@ controlli del kit al posto di quelli nativi di `costruisciFila`; l'ascolto di
 caselle in colonna si fa anche la prova dei 44×550 a 1280×800.
 Stato: [~] in corso (2026-11-22). Giro A unito in b9ceb4cd2: i sette strumenti
 del nucleo passano dal motore, venti righe select.* e object.* «fatto»,
-`disegno.strumento.stato`. Mancano: le preferenze del motore (`draw.motore`,
-giro B in corso), `edit.clearHistory`, gli appunti, la vista e la banda. I
+`disegno.strumento.stato`. Giro B unito in 0967c1140: `draw.motore` e la
+sezione «Motore del disegno» in Impostazioni › Configurazione › Disegni.
+Mancano: `edit.clearHistory` e gli appunti (giro C), la banda (giro D), la
+vista. I
 campi X/Y della selezione diretta non ci sono: il motore non dà le
 coordinate del punto. Selezione, Mano e Zoom del motore si chiamano
 «… (Completo)» per non avere due nomi uguali nella tendina.
