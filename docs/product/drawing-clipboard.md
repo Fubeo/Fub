@@ -60,6 +60,31 @@ Dal menu della selezione «Incolla» e «Incolla nello stesso punto» leggono gl
 appunti dove il sistema lo consente, che la prima volta può chiedere il
 permesso; dove non si può lo dicono, e i tasti funzionano sempre.
 
+## Nel Disegno completo
+
+Nel [Disegno completo](drawing.md#completo-e-semplice) copiare, tagliare e
+incollare passano dal motore del disegno: un oggetto che il motore conosce, con
+i suoi campioni e i suoi stili, resta tale fra due disegni del Completo.
+
+- **Copia e taglia** mettono negli appunti di sistema un SVG, un PNG (dove il
+  sistema lo consente) e il testo, quando gli oggetti ne hanno uno: il testo
+  degli oggetti di testo, altrimenti l'SVG.
+- **Incolla** usa la copia del motore quando negli appunti di sistema c'è
+  ancora l'SVG dell'ultima copia del Completo. Altrimenti porta al motore ciò
+  che c'è negli appunti: un SVG, con i limiti di un disegno modificabile (20
+  MiB, o si dice perché non si incolla); un'immagine PNG, JPEG, GIF, WebP,
+  TIFF o BMP, fino a 5 MiB; un testo, fino a 20 MiB; un disegno di Excalidraw o
+  di draw.io, come nel Semplice.
+- **Campioni con lo stesso nome.** Se gli oggetti usano campioni che nel
+  disegno hanno un altro colore, Fub lo chiede una volta: «Unisci» usa i colori
+  del disegno, la scelta di base; «Aggiungi» porta i campioni copiati con un
+  nome nuovo.
+- **Un formato che Fub non legge** (PDF, EPS, metafile) si dice, e il disegno
+  resta com'è. PDF ed EPS arrivano con i formati del disegno.
+- **Dove va l'incolla.** Nel Completo gli oggetti vanno nella posizione che dà
+  il motore (scostati dalla copia, o nel primo tavolo per un'immagine o un
+  testo), non al cursore.
+
 ## Un SVG di un altro programma
 
 Un SVG incollato, o un file `.svg` lasciato sul foglio, entra in un gruppo
