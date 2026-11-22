@@ -246,6 +246,8 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.path.close",
         "disegno.path.appendAnchor",
         "disegno.path.split",
+        // La Matita (K6 T12, giro 9) fa un tracciato nuovo: non guarda la scelta.
+        "disegno.path.freehand",
         "disegno.swatch.new",
         "disegno.swatch.edit",
         "disegno.swatch.delete",

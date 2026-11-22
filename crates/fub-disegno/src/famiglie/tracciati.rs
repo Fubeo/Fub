@@ -62,6 +62,9 @@ use ritagli::{ritaglio_rifiutato, ritaglio_spento, RITAGLI};
 mod su_un_punto;
 use su_un_punto::{argomenti_del_punto, punto_rifiutato, SU_UN_PUNTO};
 
+#[path = "tracciati_mano.rs"]
+mod mano;
+
 /// I comandi che lavorano sui punti di ancoraggio scelti.
 pub(crate) const SUI_PUNTI: [&str; 9] = [
     "path.moveAnchors",
@@ -282,6 +285,10 @@ impl StatoFamiglia for Stato {
     /// la selezione di oggetti non dice: da ≡ sono spenti, con
     /// `needs_anchors`; la fila dei punti li manda con i suoi punti.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        // I gesti a mano libera (T12 giro 9) hanno le loro regole.
+        if mano::MANO.contains(&id) {
+            return mano::spento(id, copia, selezione);
+        }
         // Un comando su un punto nomina il suo tracciato nel valore: senza il
         // valore si sa solo se il disegno si cambia.
         if SU_UN_PUNTO.contains(&id) {
@@ -358,6 +365,9 @@ impl StatoFamiglia for Stato {
     /// coordinate della scena passano nel suo documento, gli indici si
     /// controllano sulla copia (`tracciati_punti.rs`).
     fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, fub_abi::PluginError> {
+        if mano::MANO.contains(&id) {
+            return mano::argomenti(id, copia, valore);
+        }
         argomenti_del_punto(id, copia, valore)
     }
 
@@ -366,7 +376,14 @@ impl StatoFamiglia for Stato {
     /// Elaborazione tracciati con meno di due oggetti non ha niente da
     /// combinare: `empty`; con un oggetto che il motore toglierebbe senza
     /// usarlo, `unmapped`.
+    fn livello(id: &str, copia: &Copia) -> Result<Option<NodeId>, DrawingRefusal> {
+        mano::livello(id, copia)
+    }
+
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if mano::MANO.contains(&id) {
+            return mano::rifiuto(id, copia, selezione);
+        }
         if (sugli_oggetti(id) || RITAGLI.contains(&id)) && sceglie_inchiostro(copia, selezione) {
             return Some(DrawingRefusal::Unmapped);
         }

@@ -4691,6 +4691,499 @@
       "atteso": {
         "errore": "bad_args"
       }
+    },
+    {
+      "id": "path.freehand",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            20,
+            150
+          ],
+          [
+            40,
+            170
+          ],
+          [
+            70,
+            180
+          ],
+          [
+            100,
+            190
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M20 150 C41.99 178.28 67.38 179.13 100 190",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "opcljsb48"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "matita-comando.svg"
+    },
+    {
+      "id": "path.knife",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            110,
+            210
+          ],
+          [
+            140,
+            230
+          ],
+          [
+            170,
+            250
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      },
+      "dopo": "coltello.svg"
+    },
+    {
+      "id": "path.eraseRegion",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            110,
+            210
+          ],
+          [
+            140,
+            230
+          ],
+          [
+            170,
+            250
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      },
+      "dopo": "gomma.svg"
+    },
+    {
+      "id": "path.eraseSegments",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            330,
+            200
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M334 200 L360 200 L330 260 L300 200 L326 200"
+            }
+          }
+        ]
+      },
+      "dopo": "gomma-tracciato.svg"
+    },
+    {
+      "id": "path.smoothRegion",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            290,
+            180
+          ],
+          [
+            320,
+            220
+          ],
+          [
+            350,
+            240
+          ],
+          [
+            380,
+            270
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M360 200 L330 260 L315.82 231.63 C299.94 199.88 289.12 200 320 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "smussa.svg"
+    },
+    {
+      "id": "path.freehand",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            1,
+            2
+          ]
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.freehand",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            20,
+            150
+          ],
+          [
+            100,
+            190
+          ]
+        ],
+        "extend": {
+          "id": 1
+        }
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.knife",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            0,
+            0
+          ]
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.knife",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oe5e5e5e5"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            290,
+            180
+          ],
+          [
+            320,
+            220
+          ],
+          [
+            350,
+            240
+          ],
+          [
+            380,
+            270
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "path.knife",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            290,
+            180
+          ],
+          [
+            320,
+            220
+          ],
+          [
+            350,
+            240
+          ],
+          [
+            380,
+            270
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.knife",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oh7h7h7h7"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            290,
+            180
+          ],
+          [
+            320,
+            220
+          ],
+          [
+            350,
+            240
+          ],
+          [
+            380,
+            270
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.knife",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            10,
+            10
+          ],
+          [
+            20,
+            10
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.eraseRegion",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            10,
+            280
+          ],
+          [
+            20,
+            280
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.eraseRegion",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            130,
+            230
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.eraseRegion",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            330,
+            200
+          ]
+        ],
+        "size": -1
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "path.eraseSegments",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            330,
+            200
+          ],
+          [
+            330,
+            260
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.eraseSegments",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oh7h7h7h7"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            330,
+            30
+          ],
+          [
+            330,
+            60
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "path.smoothRegion",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            290,
+            180
+          ],
+          [
+            320,
+            220
+          ],
+          [
+            350,
+            240
+          ],
+          [
+            380,
+            270
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "path.smoothRegion",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            290,
+            180
+          ],
+          [
+            320,
+            220
+          ],
+          [
+            350,
+            240
+          ],
+          [
+            380,
+            270
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
     }
   ]
 }

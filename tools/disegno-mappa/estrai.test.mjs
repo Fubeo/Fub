@@ -96,7 +96,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T13 disponi porta a «fatto» le sette voci di ≡ › Oggetto › Disponi (`addon.arrange.*`), con i
   // loro casi in trasforma.json; Sposta leggermente (`object.nudge`) e Trasforma singolarmente
   // (`object.transformEach`) restano «da fare».
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1147, fub: 114, escluso: 12, fatto: 278 });
+  // T12 mano libera (giro 9) porta a «fatto» i cinque comandi a mano libera: `path.freehand`,
+  // `.eraseRegion`, `.eraseSegments`, `.knife`, `.smoothRegion` (gli strumenti erano già fatti).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1142, fub: 114, escluso: 12, fatto: 283 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

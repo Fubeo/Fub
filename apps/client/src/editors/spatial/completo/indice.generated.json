@@ -2115,6 +2115,54 @@
     },
     {
       "fonte": "motore",
+      "id": "path.eraseRegion",
+      "chiamata": {
+        "comando": "disegno.path.eraseRegion"
+      },
+      "etichetta": {
+        "it": "Gomma",
+        "en": "Eraser"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.eraseSegments",
+      "chiamata": {
+        "comando": "disegno.path.eraseSegments"
+      },
+      "etichetta": {
+        "it": "Gomma tracciato",
+        "en": "Path Eraser"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.freehand",
+      "chiamata": {
+        "comando": "disegno.path.freehand"
+      },
+      "etichetta": {
+        "it": "Matita",
+        "en": "Pencil"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.insertAnchor",
       "chiamata": {
         "comando": "disegno.path.insertAnchor"
@@ -2142,6 +2190,22 @@
       "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": "Cmd+J",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.knife",
+      "chiamata": {
+        "comando": "disegno.path.knife"
+      },
+      "etichetta": {
+        "it": "Coltello",
+        "en": "Knife"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -2234,6 +2298,22 @@
       "etichetta": {
         "it": "Sposta maniglia di direzione",
         "en": "Move Direction Handle"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.smoothRegion",
+      "chiamata": {
+        "comando": "disegno.path.smoothRegion"
+      },
+      "etichetta": {
+        "it": "Smussa",
+        "en": "Smooth"
       },
       "posto": "ispettore/design",
       "famiglia": "tracciati",
