@@ -120,6 +120,21 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
         Ok(None)
     }
 
+    /// Perché il comando `id` non si fa con questi argomenti sulla copia e sulla selezione, pur acceso:
+    /// un livello bloccato non si rinomina né si colora, e un livello non va dentro se stesso. Di serie
+    /// nessuno.
+    fn rifiuto_valore(
+        _id: &str,
+        _copia: &Copia,
+        _selezione: &[String],
+        _valore: &Value,
+    ) -> Option<DrawingRefusal>
+    where
+        Self: Sized,
+    {
+        None
+    }
+
     /// Perché il risultato del comando `id` non si scrive, visto il documento
     /// del motore `dopo` e gli oggetti che il motore ha lasciato scelti: un
     /// oggetto toccato che la famiglia non lascia cambiare, un risultato che
@@ -180,6 +195,21 @@ macro_rules! famiglie {
                 match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::spento(id, copia, selezione)
+                    })*
+                }
+            }
+
+            /// Perché il comando `id` non si fa con questi argomenti, pur acceso.
+            fn rifiuto_valore(
+                self,
+                id: &str,
+                copia: &Copia,
+                selezione: &[String],
+                valore: &Value,
+            ) -> Option<DrawingRefusal> {
+                match self {
+                    $(Famiglia::$variante => {
+                        <$modulo::Stato as StatoFamiglia>::rifiuto_valore(id, copia, selezione, valore)
                     })*
                 }
             }
@@ -906,6 +936,11 @@ pub(crate) fn esegui(
         Err(r) => return Ok(rifiuta(r)),
     };
     if let Some(motivo) = famiglia.rifiuto(&riga.id, copia, &richiesta.selection) {
+        return Ok(rifiuta(motivo));
+    }
+    if let Some(motivo) =
+        famiglia.rifiuto_valore(&riga.id, copia, &richiesta.selection, &richiesta.value)
+    {
         return Ok(rifiuta(motivo));
     }
     let livello = match famiglia.livello(&riga.id, copia) {
