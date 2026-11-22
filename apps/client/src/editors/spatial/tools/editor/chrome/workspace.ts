@@ -18,6 +18,7 @@ import { gesture } from "../../edit";
 import { opsDellEsito } from "../../../motore/gesti";
 import type { Sezioni } from "../../../completo/sezioni";
 import { railLayout } from "./rail";
+import { voceClienteBanda } from "./status";
 import type { Completo } from "../../../completo";
 import type { EffettiSpazio, SchedaSpazio } from "../../../completo/spazi";
 
@@ -230,6 +231,8 @@ export function installWorkspace(ctx: EditorContext): void {
               commit: (ops, nome) => ctx.commit({ name: nome }, gesture(ops)) !== null,
               annuncia: (testo) => ctx.announce(testo),
             },
+            // Le voci del client che la banda fa (il menu dello zoom, le misure).
+            clientVoce: voceClienteBanda,
           });
           sezioniAperte = aperto.sezioni;
           // Lo strumento del motore aspetta la sua famiglia dal Completo aperto

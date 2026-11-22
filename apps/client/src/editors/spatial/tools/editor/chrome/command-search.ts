@@ -37,6 +37,8 @@ export interface AzioniVociCompleto {
   /// Lo strumento del motore: l'editor lo sceglie. I comandi del motore non
   /// passano di qui: partono da `eseguiVoce`.
   readonly strumento: (id: string) => void;
+  /// Una voce del client (la vista della banda, K6 T11): l'editor la fa con il suo id.
+  readonly client: (id: string) => void;
   /// Rifà la richiesta dell'indice, per chi lo mostra.
   readonly riprova: () => void;
 }

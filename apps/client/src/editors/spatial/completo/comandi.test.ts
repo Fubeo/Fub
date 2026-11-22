@@ -144,6 +144,20 @@ describe("statoVoce e testoPerche", () => {
     const client = voce("x", "tavolozza", { fonte: "interfaccia", chiamata: { client: "x" } });
     expect(statoVoce(client, valgono()).disabled).toBe(true);
   });
+
+  it("una voce del client vale se l'editor la fa, spenta col suo perché se la dice spenta", () => {
+    const stato: StatoComandi = {
+      per: null,
+      assente: null,
+      clientVoce: (id) => (id === "view.zoomIn" ? null : id === "info" ? "Si vede già." : undefined),
+    };
+    const zoom = voce("view.zoomIn", "banda", { fonte: "interfaccia", chiamata: { client: "view.zoomIn" } });
+    expect(statoVoce(zoom, stato)).toEqual({ disabled: false });
+    const info = voce("info", "banda", { fonte: "pannello", chiamata: { client: "info" } });
+    expect(statoVoce(info, stato)).toEqual({ disabled: true, perche: "Si vede già." });
+    const altra = voce("tool.select", "colonna", { fonte: "interfaccia", chiamata: { client: "tool.select" } });
+    expect(statoVoce(altra, stato)).toEqual({ disabled: true, perche: "Non ancora collegato." });
+  });
 });
 
 describe("statoComandi", () => {

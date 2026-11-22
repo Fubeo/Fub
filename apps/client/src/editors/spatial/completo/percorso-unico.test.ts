@@ -91,7 +91,7 @@ function completoCon(voci: readonly VoceIndice[], tasti: OpzioniTastiCompleto, m
   );
 }
 
-const AZIONI = { strumento: vi.fn(), riprova: vi.fn() };
+const AZIONI = { strumento: vi.fn(), client: vi.fn(), riprova: vi.fn() };
 
 /// La voce con quel nome, in un sottomenu del menu.
 function nelMenu(menu: readonly MenuItem[], nome: string): MenuItem {

@@ -40,6 +40,9 @@ export interface StatoComandi {
   readonly per: ReadonlyMap<string, DrawingCommandInfo> | null;
   /// Perché il motore manca, se manca.
   readonly assente: MotoreAssente["perche"] | null;
+  /// Le voci del client che l'editor sa fare (K6 T11): `null` se la voce si fa, il
+  /// perché se è spenta, `undefined` se l'editor non la conosce.
+  readonly clientVoce?: (id: string) => string | null | undefined;
 }
 
 /// Una voce della ricerca Ctrl+/, come la legge la tavolozza.
@@ -100,10 +103,16 @@ export async function statoComandi(motore: MotoreDelDisegno | null, selezione: r
 }
 
 /// Se una voce vale adesso, e il suo perché se no. Uno strumento lo sceglie
-/// l'editor, e vale sempre. Una voce del client non è ancora collegata.
+/// l'editor, e vale sempre. Una voce del client vale se l'editor la fa (`clientVoce`),
+/// spenta col suo perché se la dice spenta, e non collegata se non la conosce.
 export function statoVoce(voce: VoceIndice, stato: StatoComandi): { readonly disabled: boolean; readonly perche?: string } {
   if ("strumento" in voce.chiamata) return { disabled: false };
-  if ("client" in voce.chiamata) return { disabled: true, perche: t("draw.disabled.unmapped") };
+  if ("client" in voce.chiamata) {
+    const cliente = stato.clientVoce?.(voce.chiamata.client);
+    if (cliente === null) return { disabled: false };
+    if (typeof cliente === "string") return { disabled: true, perche: cliente };
+    return { disabled: true, perche: t("draw.disabled.unmapped") };
+  }
   if (stato.per === null) return { disabled: true, perche: testoAssente(stato.assente ?? "spento") };
   const info = stato.per.get(voce.chiamata.comando);
   if (info === undefined) return { disabled: true, perche: t("draw.disabled.unmapped") };
