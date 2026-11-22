@@ -2335,8 +2335,11 @@ nuove (dal runner). Giro 5 unito in 50601fdef: Elaborazione tracciati
 (le dieci operazioni senza finestra, in un passo, nel menu e nella sezione
 `pathfinder` di Design); rifiuta meno di due oggetti, bloccati, immagini,
 testi senza lettere disegnate e risultati vuoti; il risultato è un gruppo
-nuovo (`g`). Giro 6 (icone di Elaborazione tracciati, annuncio di famiglia
-non pronta, carattere di serie del testo) in corso.
+nuovo (`g`). Giro 6 unito in 66855e852: dieci icone disegnate da zero
+(la parte che resta tratteggiata), l'annuncio di comando non pronto nomina
+la voce cliccata, il testo nuovo nasce in Inter a 32 (`text.setStyle` nel
+ponte, nessun formato nuovo). Restano nel carattere del motore il testo
+incollato, su tracciato, in una forma, le quote e i grafici.
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
@@ -2423,7 +2426,9 @@ in px (unità della scena). Rimandati a dopo la base: Ripeti trasformazione
 senza una precedente (oggi `unsupported`; spegnerla chiede un motivo nuovo
 in `DrawingDisabledReason` e il ricordo dell'ultima trasformazione lato
 Fub, gesti compresi), Trasforma ciascuno, Distorci, «Elaborazione
-tracciati», costruttore di forme, perni e strumento forma.
+tracciati», costruttore di forme, perni e strumento forma. Giro 5 (gli
+strumenti Ruota, Rifletti, Scala e Inclina nella colonna) e giro 6 (forme
+composte, Espandi forma, Ripeti Elaborazione tracciati) in corso.
 Aspetta: niente
 
 ## T14 · Il colore
