@@ -160,6 +160,31 @@ describe("statoVoce e testoPerche", () => {
   });
 });
 
+describe("le voci del client con la spunta (K6 T11, giro E)", () => {
+  it("in ≡ › Visualizza una voce del client con la spunta mostra lo stato della superficie", () => {
+    const grid = voce("view.grid", "menu/visualizza", { fonte: "interfaccia", chiamata: { client: "view.grid" } });
+    const stato: StatoComandi = {
+      per: null,
+      assente: null,
+      clientVoce: () => null,
+      clientStato: (id) => (id === "view.grid" ? true : undefined),
+    };
+    const menu = menuComando(indiceDi({ voci: [grid] }), stato, vi.fn());
+    const righe = menu[0]!.items as readonly MenuItem[];
+    expect(righe[0]).toMatchObject({ choice: "checkbox", checked: true, disabled: false });
+  });
+
+  it("una voce del client senza spunta resta una voce semplice", () => {
+    const rotazione = voce("view.rotateReset", "menu/visualizza", { fonte: "interfaccia", chiamata: { client: "view.rotateReset" } });
+    const stato: StatoComandi = { per: null, assente: null, clientVoce: () => "La vista non è girata.", clientStato: () => undefined };
+    const menu = menuComando(indiceDi({ voci: [rotazione] }), stato, vi.fn());
+    const riga = (menu[0]!.items as readonly MenuItem[])[0]!;
+    expect(riga.choice).toBeUndefined();
+    expect(riga.disabled).toBe(true);
+    expect(riga.description).toBe("La vista non è girata.");
+  });
+});
+
 describe("statoComandi", () => {
   /// Un motore finto: la sessione, o il suo stato di apertura.
   function motore(over: Partial<Pick<MotoreDelDisegno, "adesso" | "pronta" | "assente">>): MotoreDelDisegno {

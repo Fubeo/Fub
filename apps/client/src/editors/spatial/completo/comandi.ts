@@ -43,6 +43,9 @@ export interface StatoComandi {
   /// Le voci del client che l'editor sa fare (K6 T11): `null` se la voce si fa, il
   /// perché se è spenta, `undefined` se l'editor non la conosce.
   readonly clientVoce?: (id: string) => string | null | undefined;
+  /// La spunta di una voce del client, dove l'editor ne ha una (K6 T11, giro E): ≡ ›
+  /// Visualizza mostra lo stato vero della superficie. `undefined` se la voce non ne ha.
+  readonly clientStato?: (id: string) => boolean | undefined;
 }
 
 /// Una voce della ricerca Ctrl+/, come la legge la tavolozza.
@@ -213,6 +216,12 @@ export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiV
       ...(perche === undefined ? {} : { description: perche }),
       run: () => esegui(voce),
     };
+    // Una voce del client con la spunta mostra lo stato vero della superficie.
+    const spunta = "client" in voce.chiamata ? stato.clientStato?.(voce.chiamata.client) : undefined;
+    if (typeof spunta === "boolean") {
+      riga.choice = "checkbox";
+      riga.checked = spunta;
+    }
     const elenco = gruppi.get(gruppo) ?? [];
     gruppi.set(gruppo, elenco);
     if (sotto === undefined) {

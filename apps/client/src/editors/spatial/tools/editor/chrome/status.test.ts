@@ -57,6 +57,8 @@ function fingi(opzioni: { readonly spazio?: string; readonly completo?: boolean 
     currentIndex: () => ({ units: [{}, {}, {}] }),
     fit: vi.fn(),
     announce: vi.fn(),
+    navigator: false,
+    setNavigator: vi.fn(),
   } as unknown as EditorContext;
   installStatus(ctx, frame);
   const voci = (): readonly DrawStatusItem[] => ctx.status.items();
@@ -167,11 +169,26 @@ describe("la banda di stato del disegno", () => {
     expect(voce("zoom")?.inPlace).toBe(true);
   });
 
-  it("le voci del client della banda: lo zoom si fa, le misure si vedono già", () => {
+  it("le voci del client della banda: lo zoom si fa, il navigatore si fa, le misure si vedono già", () => {
     expect(voceClienteBanda("view.zoomIn")).toBeNull();
     expect(voceClienteBanda("view.setZoom")).toBeNull();
+    expect(voceClienteBanda("navigator")).toBeNull();
     expect(voceClienteBanda("info")).toBe("Si vede già nella banda di stato");
     expect(voceClienteBanda("tool.select")).toBeUndefined();
+  });
+
+  it("nel Disegno completo la banda ha il navigatore, che accende e spegne la panoramica", () => {
+    const { ctx, voce } = fingi({ spazio: "full", completo: true });
+    const navigatore = voce("navigator")!;
+    expect(navigatore.text).toBe("Navigatore: spento");
+    expect(navigatore.inPlace).toBe(true);
+    navigatore.open?.();
+    expect(ctx.setNavigator).toHaveBeenCalledWith(true);
+  });
+
+  it("negli altri spazi la banda non ha il navigatore: resta com'era", () => {
+    const { voce } = fingi({ spazio: "simple" });
+    expect(voce("navigator")).toBeUndefined();
   });
 
   it("comandoVista fa lo zoom del comando", () => {
