@@ -10,7 +10,7 @@ import { gesture as asGesture, moveOps, roundDelta } from "../edit";
 import { elemOf, orderOps, type Order } from "../arrange";
 import { textLines, wordsOf } from "../text";
 import { orderChanges } from "../order-changes";
-import { lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf } from "../outline";
+import { detailsOf as outlineDetails, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf } from "../outline";
 import { boundsAfter, numericOps } from "../transform";
 import {
   lookAction,
@@ -355,6 +355,7 @@ export function installPanel(ctx: EditorContext): void {
       ratio: ratioOn(units),
       look: selectionLook(model, units),
       outline: outlines.length === 0 && widths.length === 0 ? null : outlineLook(outlines, widths),
+      outlineDetails: outlines.length === 0 ? null : outlineDetails(outlines),
       alignable: ctx.alignReference(units) !== null,
       drawn: ctx.drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => changes.has(order)) : []),

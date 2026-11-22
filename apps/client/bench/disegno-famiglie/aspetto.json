@@ -1,9 +1,17 @@
 {
-  "$nota": "Le risposte della famiglia aspetto del banco (K6 T15, giro 2): la trasparenza. Il banco non scrive l'aspetto: l'esito non cambia niente (`ops` vuoto), come la finestra dei tracciati. La sezione Trasparenza si vede e mostra i valori del disegno.",
+  "$nota": "Le risposte della famiglia aspetto del banco (K6 T15): la trasparenza (giro 2) e il contorno (giro 5). Il banco non scrive l'aspetto: l'esito non cambia niente (`ops` vuoto), come la finestra dei tracciati. Le sezioni Trasparenza e Contorno si vedono e mostrano i valori del disegno.",
   "risposte": [
     {
       "comando": "disegno.transparency.set",
-      "esito": { "ops": "[]" }
+      "esito": {
+        "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.stroke.set",
+      "esito": {
+        "ops": "[]"
+      }
     }
   ]
 }

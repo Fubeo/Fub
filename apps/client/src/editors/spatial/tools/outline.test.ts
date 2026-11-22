@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { parsePath } from "../scene/geometry";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
-import { dashOf, dashValue, lookOf, outlineOps, outlinesOf, widthLinesOf, type OutlineChange, type Outlined } from "./outline";
+import { dashOf, dashValue, detailsOf, lookOf, outlineOps, outlinesOf, widthLinesOf, type OutlineChange, type Outlined } from "./outline";
 import { widthAttrs } from "./profile";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
@@ -114,6 +114,30 @@ describe("i contorni della selezione", () => {
     });
     expect(of(`${RECT("oaaaaaaaa")}${RECT("obbbbbbbb", ' stroke="#000000" stroke-width="2" stroke-dasharray="8 6"')}`).dash).toBeNull();
     expect(of(RECT("oaaaaaaaa", ' fill="#000000"'))).toEqual({ dashable: false, dash: null, custom: null, cap: null, join: null });
+  });
+
+  it("per la sezione Contorno del Completo: le lunghezze del tratteggio comune, e se uno è bloccato", () => {
+    const of = (body: string) => {
+      const opened = open(doc(`${LAYER}${body}</g>`));
+      return detailsOf(outlinesOf(opened.engine.model!, opened.index.units));
+    };
+    const DASHED = (id: string, dashes: string) => RECT(id, ` fill="none" stroke="#000000" stroke-width="2" stroke-dasharray="${dashes}"`);
+    expect(of(RECT("oaaaaaaaa"))).toEqual({ lengths: [], locked: false });
+    expect(of(DASHED("oaaaaaaaa", "5,1 2"))).toEqual({ lengths: [5, 1, 2], locked: false });
+    // Tutto a zero è pieno, come per SVG; due tratteggi diversi non hanno lunghezze comuni.
+    expect(of(DASHED("oaaaaaaaa", "0 0"))).toEqual({ lengths: [], locked: false });
+    expect(of(`${DASHED("oaaaaaaaa", "5 1")}${DASHED("obbbbbbbb", "1 5")}`).lengths).toBeNull();
+    expect(of(`${DASHED("oaaaaaaaa", "5 1")}${DASHED("obbbbbbbb", "5 1")}`).lengths).toEqual([5, 1]);
+    // Bloccato lui, o un contenitore: il pannello non sceglie un oggetto bloccato sul foglio, ma
+    // la scheda Livelli sì, e il contorno allora è spento.
+    const opened = open(doc(`${LAYER}<g id="ogggggggg">${RECT("oaaaaaaaa")}</g></g>`));
+    const [outline] = outlinesOf(opened.engine.model!, opened.index.units);
+    const group = outline!.node.parent!;
+    const lockedSelf = { ...outline!, node: { ...outline!.node, details: { ...outline!.node.details!, locked: true as const } } };
+    const lockedGroup = { ...outline!, node: { ...outline!.node, parent: { ...group, details: { ...group.details!, locked: true as const } } } };
+    expect(detailsOf([outline!]).locked).toBe(false);
+    expect(detailsOf([outline!, lockedSelf]).locked).toBe(true);
+    expect(detailsOf([lockedGroup]).locked).toBe(true);
   });
 
   it("con le linee a spessore variabile: gli estremi e gli angoli di tutte, il tratteggio dei soli contorni", () => {

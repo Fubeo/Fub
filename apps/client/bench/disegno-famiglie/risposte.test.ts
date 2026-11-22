@@ -18,11 +18,13 @@ describe("le risposte delle famiglie del banco", () => {
     // Il colore (K6 T14, giro 1): l'anteprima di Satura, coi contorni della prima forma.
     // I campioni (K6 T14, giro 2): Risorse › Campioni e il campione dato alla selezione, un passo
     // senza operazioni (il banco non riscrive i campioni, la scena si guarda).
-    // L'aspetto (K6 T15, giro 2): la trasparenza, che il banco non scrive (`aspetto.json`).
+    // L'aspetto (K6 T15): la trasparenza (giro 2) e il contorno (giro 5), che il banco non scrive
+    // (`aspetto.json`).
     // Il testo (K6 T16, giro 1): Carattere e Paragrafo, un passo senza operazioni (il banco non
     // riscrive il testo, la scena si guarda).
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
       "disegno.transparency.set",
+      "disegno.stroke.set",
       "disegno.edit.colors.saturate",
       "disegno.swatch.new",
       "disegno.swatch.edit",

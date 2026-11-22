@@ -49,7 +49,7 @@ import { orientationOf, orientedRect, presetOf, presetRect, PRESETS, type Preset
 import { angleOf, frameSize, MIN_SIZE, scales, type Frame } from "./frame";
 import type { Grid } from "./grid";
 import { ANCHORS, type Anchor, type Look, type LookChange } from "./look";
-import { DASHES, type Dash, type OutlineChange, type OutlineLook } from "./outline";
+import { DASHES, type Cap, type Dash, type Join, type OutlineChange, type OutlineDetails, type OutlineLook } from "./outline";
 import {
   ACTION_LABELS,
   type ActionId,
@@ -218,6 +218,9 @@ export interface SelectionFacts {
   readonly look: Look;
   /// Il contorno dei contorni scelti; `null` se non ce ne sono.
   readonly outline: OutlineLook | null;
+  /// Il tratteggio e il lucchetto dei contorni scelti, per la sezione Contorno del Completo (K6 T15,
+  /// giro 5); senza, o `null`, la sezione non li sa.
+  readonly outlineDetails?: OutlineDetails | null;
   /// Vero se c'è a che cosa allinearli: la pagina, per un oggetto solo.
   readonly alignable: boolean;
   /// Gli oggetti scelti che disegnano qualcosa: quelli che si distribuiscono.
@@ -450,6 +453,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
   // Il metodo di fusione dell'oggetto scelto: non è un campo del pannello del Semplice; lo legge la
   // sezione Trasparenza del Completo, dalla vista (K6 T15, giro 2).
   let blend: PropertiesView["blend"];
+  let outlineView: PropertiesView["outline"];
   const actions: Partial<Record<ActionId, ActionState>> = {};
 
   if (selection !== null) {
@@ -518,6 +522,14 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       // Un tratteggio che non è del menu c'è, col suo valore.
       if (outline.dash === "custom") dashes.push({ value: "custom", label: t("draw.outline.custom", { value: outline.custom ?? "" }) });
       if (outline.dashable) fields.dash = { kind: "choice", label: t("draw.properties.dash"), value: outline.dash, options: dashes };
+      // Gli estremi, gli angoli e i trattini uno per uno, per la sezione Contorno del Completo.
+      const details = selection.outlineDetails;
+      if (outline.dashable && details != null) {
+        const cap: Cap | null = outline.cap;
+        const join: Join | null = outline.join;
+        const dashLengths = details.lengths === null ? null : details.lengths.map((length) => toUnit(length, thin));
+        outlineView = { cap, join, dashes: dashLengths, locked: details.locked };
+      }
     }
     // Le punte delle linee, se il livello le offre e ci sono linee che ne
     // abbiano.
@@ -661,6 +673,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     fields,
     actions,
     blend,
+    ...(outlineView === undefined ? {} : { outline: outlineView }),
     exportSelection: selection !== null && input.exportSelection === true,
     swatches: input.swatches,
     recent: input.recent,

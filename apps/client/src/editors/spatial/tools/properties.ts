@@ -281,6 +281,16 @@ export interface PropertiesView {
   /// `value` è `null` se la selezione ne ha più d'uno. Non è un campo: lo legge la sezione Trasparenza
   /// del Completo (K6 T15, giro 2).
   readonly blend?: { readonly value: string | null; readonly count: number };
+  /// Gli estremi, gli angoli e il tratteggio dei contorni scelti: `null` dove non sono uguali per
+  /// tutti; i trattini e gli spazi nell'unità dello spessore, vuoti per un contorno pieno. Manca se la
+  /// selezione non ha un contorno da tratteggiare (un testo, un'immagine). Non sono campi: li legge la
+  /// sezione Contorno del Completo (K6 T15, giro 5).
+  readonly outline?: {
+    readonly cap: "butt" | "round" | "square" | null;
+    readonly join: "miter" | "round" | "bevel" | null;
+    readonly dashes: readonly number[] | null;
+    readonly locked: boolean;
+  };
   /// I campioni del documento, che i campi dei colori scrivono per nome e
   /// offrono nel menu del loro campione.
   readonly swatches?: readonly FieldSwatch[];
@@ -404,11 +414,16 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
 const NASCOSTE_NEL_COMPLETO: ReadonlySet<SectionId> = new Set<SectionId>(["place", "look"]);
 
 /// I campi che nel Completo non ci sono: i colori di riempimento e contorno li dà la sezione Colore
-/// (K6 T14, giro 1). Lo spessore, il tratteggio e le punte del contorno restano; la sezione
-/// Riempimento, che resta senza campi, si chiude da sé. La famiglia, il corpo, il peso, la
-/// spaziatura e l'allineamento li danno Carattere e Paragrafo (K6 T16, giro 1); le parole, lo stile
-/// di Fub, l'enfasi (con sottolineato e barrato) e l'interlinea restano.
-const CAMPI_NASCOSTI_NEL_COMPLETO: ReadonlySet<FieldId> = new Set<FieldId>(["fill", "stroke", "family", "size", "weight", "spacing", "anchor"]);
+/// (K6 T14, giro 1); lo spessore e il tratteggio la sezione Contorno (K6 T15, giro 5). Le punte del
+/// contorno restano, nella sezione che nel Completo si chiama «Punte»; la sezione Riempimento, che
+/// resta senza campi, si chiude da sé. La famiglia, il corpo, il peso, la spaziatura e
+/// l'allineamento li danno Carattere e Paragrafo (K6 T16, giro 1); le parole, lo stile di Fub,
+/// l'enfasi (con sottolineato e barrato) e l'interlinea restano.
+const CAMPI_NASCOSTI_NEL_COMPLETO: ReadonlySet<FieldId> = new Set<FieldId>(["fill", "stroke", "strokeWidth", "dash", "family", "size", "weight", "spacing", "anchor"]);
+
+/// Le sezioni che nel Completo hanno un altro titolo: del Contorno restano solo le punte, perché il
+/// resto lo dà la sezione Contorno del Completo, e due sezioni «Contorno» confonderebbero.
+const TITOLI_NEL_COMPLETO: Readonly<Partial<Record<SectionId, DrawKey>>> = { stroke: "draw.properties.tips" };
 
 /// La misura del campo numerico `id` della vista, con il passaggio alle unità della scena; `undefined`
 /// se il campo non c'è.
@@ -431,7 +446,19 @@ function misuraDelCampo(vista: PropertiesView, id: FieldId): MisuraSelezione | u
 function misureDellaVista(vista: PropertiesView): MisureSelezione {
   const misura = (id: FieldId): MisuraSelezione | undefined => misuraDelCampo(vista, id);
   const fusione = vista.blend === undefined ? undefined : { valore: vista.blend.value, mista: vista.blend.value === null };
+  const spessore = misura("strokeWidth");
+  const contorno =
+    vista.outline === undefined
+      ? undefined
+      : {
+          ...(spessore === undefined ? {} : { spessore }),
+          estremi: vista.outline.cap,
+          angoli: vista.outline.join,
+          trattini: vista.outline.dashes,
+          bloccato: vista.outline.locked,
+        };
   return {
+    ...(contorno === undefined ? {} : { contorno }),
     x: misura("x"),
     y: misura("y"),
     larghezza: misura("width"),
@@ -1717,10 +1744,13 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     return null;
   };
 
+  /// Il titolo della sezione `id`: nel Completo aperto, quello di `TITOLI_NEL_COMPLETO` se c'è.
+  const titoloDi = (id: SectionId, label: DrawKey): DrawKey => (completoAperto ? (TITOLI_NEL_COMPLETO[id] ?? label) : label);
+
   const relabel = (): void => {
     formats.clear();
     heading.textContent = t("draw.properties");
-    for (const { id, label } of SECTIONS) sections.get(id)!.title.textContent = t(label);
+    for (const { id, label } of SECTIONS) sections.get(id)!.title.textContent = t(titoloDi(id, label));
     for (const { bar, label } of actionBars) bar.setAttribute("aria-label", t(label));
     for (const [id, control] of actionButtons) {
       const text = view.actions[id]?.label ?? t(ACTION_LABELS[id]);
@@ -1826,7 +1856,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       selezione = sceltaDiAdesso;
       rileggiStato = rileggi ?? (() => undefined);
       // Ciò che nel Completo non c'è si toglie (o torna) subito, non al prossimo cambio.
-      if (prima !== completoAperto) update(view);
+      if (prima !== completoAperto) {
+        for (const { id, label } of SECTIONS) sections.get(id)!.title.textContent = t(titoloDi(id, label));
+        update(view);
+      }
       if (nuovo !== null) stopRegistro = nuovo.ascolta(() => registrate?.aggiorna());
       registrate?.aggiorna();
     },
