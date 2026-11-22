@@ -332,7 +332,8 @@ mod engine {
             prefs.extend(changed.clone());
             let defaults = fub_disegno::preferenze::di_serie();
             prefs.retain(|key, value| {
-                !fub_disegno::preferenze::e_cartella(key) && defaults.get(key) != Some(value)
+                !fub_disegno::preferenze::e_cartella(key)
+                    && !fub_disegno::preferenze::e_di_serie(&defaults, key, value)
             });
             if prefs.is_empty() {
                 return None;
