@@ -109,7 +109,17 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.newSwatch",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.saturateDialog",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.swatchOptions",
       "campi": []
     }
   ]

@@ -2385,6 +2385,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.newSwatch",
+      "chiamata": {
+        "client": "ui.newSwatch"
+      },
+      "etichetta": {
+        "it": "Nuovo campione…",
+        "en": "New Swatch…"
+      },
+      "posto": "finestra",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.saturateDialog",
       "chiamata": {
         "client": "ui.saturateDialog"
@@ -2392,6 +2408,22 @@
       "etichetta": {
         "it": "Satura…",
         "en": "Saturate…"
+      },
+      "posto": "finestra",
+      "famiglia": "colore",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.swatchOptions",
+      "chiamata": {
+        "client": "ui.swatchOptions"
+      },
+      "etichetta": {
+        "it": "Opzioni campione…",
+        "en": "Swatch Options…"
       },
       "posto": "finestra",
       "famiglia": "colore",
@@ -3227,6 +3259,22 @@
       },
       "posto": "ispettore/design",
       "famiglia": "testo",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "pannello",
+      "id": "swatches",
+      "chiamata": {
+        "client": "swatches"
+      },
+      "etichetta": {
+        "it": "Campioni",
+        "en": "Swatches"
+      },
+      "posto": "ispettore/risorse",
+      "famiglia": "colore",
       "tasto": null,
       "effetto": "mostra",
       "finestra": false

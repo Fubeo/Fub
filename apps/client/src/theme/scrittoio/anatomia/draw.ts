@@ -109,5 +109,15 @@ export const DRAW: PartAnatomy = {
       states: [S("rest"), S("focused")],
       hooks: ["draw-type", "draw-type-family", "draw-type-style", "draw-type-sizes", "draw-type-align", "kit-font-button"],
     },
+    {
+      // Risorse › Campioni (K6 T14, giro 2): la griglia del kit, il campione scelto, le azioni e la
+      // finestra «Nuovo campione» col selettore del kit.
+      name: "swatches-section",
+      states: [S("rest"), S("focused"), S("selected"), S("disabled")],
+      hooks: [
+        "draw-resources-swatches", "draw-resources-swatches-actions", "draw-resources-swatches-label",
+        "draw-resources-swatches-picker", "kit-color", "kit-button",
+      ],
+    },
   ],
 };

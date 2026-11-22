@@ -1812,6 +1812,9 @@
     "draw-type-style",
     "draw-type-sizes",
     "draw-type-align",
+    "draw-resources-swatches-actions",
+    "draw-resources-swatches-label",
+    "draw-resources-swatches-picker",
     "media-image",
     "zoom-view",
     "zoom-stage",
@@ -4306,6 +4309,9 @@
     "draw-type-style": "cornice",
     "draw-type-sizes": "cornice",
     "draw-type-align": "cornice",
+    "draw-resources-swatches-actions": "cornice",
+    "draw-resources-swatches-label": "cornice",
+    "draw-resources-swatches-picker": "cornice",
     "media-image": "contenuto",
     "zoom-view": "contenuto",
     "zoom-stage": "contenuto",
@@ -9320,6 +9326,24 @@
       ]
     },
     {
+      "name": "swatches-section",
+      "part": "draw",
+      "hooks": [
+        "draw-resources-swatches",
+        "draw-resources-swatches-actions",
+        "draw-resources-swatches-label",
+        "draw-resources-swatches-picker",
+        "kit-color",
+        "kit-button"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected",
+        "disabled"
+      ]
+    },
+    {
       "name": "markdown-preview",
       "part": "media",
       "hooks": [
@@ -12904,10 +12928,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2492,
+    "hooks": 2495,
     "state_names": 7,
-    "assigned_states": 1120,
-    "components": 330,
+    "assigned_states": 1124,
+    "components": 331,
     "preference_tokens": 196
   }
 }

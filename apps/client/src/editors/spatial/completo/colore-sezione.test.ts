@@ -94,6 +94,10 @@ describe("la sezione Colore del Design", () => {
     const [riempimento, contorno] = pozzi(immagine.corpo).map((p) => p.querySelector("button")!);
     expect(riempimento!.disabled).toBe(false);
     expect(contorno!.disabled).toBe(true);
+    // Un testo scelto non ha contorno: il pozzo dice «Nessuno», non «Misto», e il perché.
+    expect(contorno!.querySelector(".kit-color-well-name")?.textContent).not.toBe(t("draw.properties.mixed"));
+    expect(contorno!.querySelector(".kit-color-chip")!.classList.contains("mixed")).toBe(false);
+    expect(contorno!.getAttribute("aria-label")).toBe(t("draw.colore.manca", { lato: t("draw.properties.stroke") }));
     immagine.c.chiudi();
   });
 

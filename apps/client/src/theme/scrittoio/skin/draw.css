@@ -1414,3 +1414,28 @@ button.draw-isolation-crumb:hover {
 .draw-type-align {
   margin-block-end: var(--space-2);
 }
+
+/* ── K6 · Risorse › Campioni: scelta, azioni e finestre (T14, giro 2) ────── */
+/* La griglia è quella del prototipo (`kit-color-swatches`); sotto, le azioni
+   in due colonne che vanno a capo. La finestra «Nuovo campione» tiene il
+   selettore del kit a tutta larghezza. */
+.draw-resources-swatches-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+.draw-resources-swatches-actions > .kit-button {
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  text-align: center;
+}
+.draw-resources-swatches-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.kit-color.draw-resources-swatches-picker {
+  width: auto;
+  padding: 0;
+}

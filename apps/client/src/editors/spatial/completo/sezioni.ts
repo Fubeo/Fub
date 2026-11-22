@@ -103,6 +103,31 @@ export interface ColoriSelezione {
   readonly contorno?: ColoreSelezione;
 }
 
+/// Un campione del documento come lo legge il modello (K6 T14, giro 2): l'id della risorsa, il nome e
+/// il colore `#rrggbb`.
+export interface CampioneDocumento {
+  readonly id: string;
+  readonly name: string;
+  readonly color: string;
+}
+
+/// I campioni del documento per la sezione Risorse › Campioni, dal modello del disegno: nessuna
+/// richiesta al motore per mostrarli.
+export interface CampioniDocumento {
+  /// Nell'ordine in cui stanno nel disegno.
+  readonly elenco: readonly CampioneDocumento[];
+  /// Gli id dei campioni che nessun oggetto usa; si contano solo quando servono.
+  readonly nonUsati: () => readonly string[];
+}
+
+/// Una voce del client (`chiamata.client` dell'indice) che il Completo fa da sé, con una sezione
+/// (K6 T14, giro 2: «Nuovo campione…» e «Opzioni campione…» del menu). `stato` è `null` se la voce
+/// si fa adesso, o il perché se è spenta; `esegui` la fa.
+export interface VoceDelCompleto {
+  readonly stato: () => string | null;
+  readonly esegui: () => void;
+}
+
 /// Ciò che una sezione riceve per disegnarsi.
 export interface ContestoSezione {
   /// Il corpo della sezione. Lo riempie `disegna`; lo svuota il pannello a
@@ -119,6 +144,9 @@ export interface ContestoSezione {
   /// Il riempimento e il contorno della selezione come li mostra il pannello (K6 T14): dalla sua vista,
   /// senza chiedere il motore.
   readonly colori: ColoriSelezione;
+  /// I campioni del documento (K6 T14, giro 2): li dà la scheda Risorse, che ha il modello; altrove
+  /// mancano.
+  readonly campioni?: CampioniDocumento;
   /// Il disegno che la sezione mostra cambia: `aggiorna` la chiede di nuovo,
   /// al più una volta per fotogramma.
   readonly aggiorna: () => void;

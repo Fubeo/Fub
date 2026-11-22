@@ -10,7 +10,7 @@
 
 import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
 import { costruisciFila, type CostruisciFila, type FilaOpzioni } from "./opzioni";
-import { creaSezioni, type Sezioni } from "./sezioni";
+import { creaSezioni, type Sezioni, type VoceDelCompleto } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
 import { menuComando, menuNonCaricato, statoComandi, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
@@ -24,7 +24,8 @@ export type { EffettiSpazio, SchedaSpazio, SpazioPreset } from "./spazi";
 import { COMANDO_DEL_CLIC, iconaMotore, layoutCompleto, MOTORE_PRONTO, type GruppoLayout } from "./colonna";
 import { registraAllinea } from "./allinea";
 import { registraTrasforma } from "./trasforma-sezione";
-import { registraColore } from "./colore-sezione";
+import { registraColore, type LatoAttivo } from "./colore-sezione";
+import { registraCampioni } from "./campioni-sezione";
 import { registraTrasparenza } from "./trasparenza-sezione";
 import { registraTesto } from "./testo-sezioni";
 import type { Teardown } from "../../../ui/lifetime";
@@ -335,7 +336,13 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   // La sezione «Trasforma» (K6 T13, giro 3): posizione, misura, rotazione e inclinazione.
   registraTrasforma(sezioni, eseguiPerId);
   // La sezione «Colore» (K6 T14, giro 1): riempimento e contorno, scambia, nessuno e di serie.
-  registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);
+  // Il lato attivo che Colore cambia e Risorse › Campioni usa (K6 T14, giro 2).
+  const latoAttivo: LatoAttivo = { lato: "fill" };
+  // Le voci del client che il Completo fa da sé, con una sua sezione: le altre vanno all'editor.
+  const vociDelCompleto = new Map<string, VoceDelCompleto>();
+  registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo);
+  // La sezione «Campioni» di Risorse (K6 T14, giro 2): la griglia, la scelta, le finestre del kit.
+  registraCampioni(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, vociDelCompleto);
   registraTrasparenza(sezioni, eseguiPerId);
   // Le sezioni «Carattere» e «Paragrafo» (K6 T16, giro 1): il testo scelto, un comando per cambio.
   registraTesto(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life);
@@ -447,14 +454,23 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       return;
     }
     if ("client" in chiamata) {
-      azioni.client(chiamata.client);
+      const propria = vociDelCompleto.get(chiamata.client);
+      if (propria !== undefined) propria.esegui();
+      else azioni.client(chiamata.client);
       return;
     }
     eseguiVoce(voce, dipendenze);
   };
   /// Lo stato dei comandi con le voci del client dell'editor: la regola di
   /// `statoVoce` le legge da qui.
-  const conVociClient = (stato: StatoComandi): StatoComandi => ({ ...stato, clientVoce: opzioni.clientVoce, clientStato: opzioni.clientStato });
+  const conVociClient = (stato: StatoComandi): StatoComandi => ({
+    ...stato,
+    clientVoce: (id) => {
+      const propria = vociDelCompleto.get(id);
+      return propria !== undefined ? propria.stato() : opzioni.clientVoce?.(id);
+    },
+    clientStato: opzioni.clientStato,
+  });
   let chiuso = false;
   // I tasti dell'utente (`draw.keys`, T9c): con un editor e senza modifiche
   // date da chi apre, il Completo li segue, e rifà la regola a ogni cambio.

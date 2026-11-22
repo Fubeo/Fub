@@ -942,6 +942,21 @@
           "groups": []
         }
       }
+    },
+    {
+      "id": "ui.newSwatch",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/campioni-sezione.test.ts"
+    },
+    {
+      "id": "ui.swatchOptions",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/campioni-sezione.test.ts"
+    },
+    {
+      "id": "swatches",
+      "fonte": "pannello",
+      "prova": "apps/client/src/editors/spatial/completo/campioni-sezione.test.ts"
     }
   ]
 }
