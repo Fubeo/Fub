@@ -99,6 +99,9 @@ pub enum RifiutoDisco {
     /// Il comando lo serve Fub, non il motore (una riga `fub` dell'elenco):
     /// arrivato al motore toccherebbe il disco.
     Fub { comando: String },
+    /// `prefs.set` nomina una delle preferenze che sono cartelle
+    /// ([`crate::preferenze::CARTELLE`]): le cartelle sono del kernel.
+    Cartella { chiave: String },
     /// L'elenco nel crate non si legge: ogni comando con un percorso o
     /// escluso si rifiuta finché non si corregge.
     Elenco(String),
@@ -117,6 +120,10 @@ impl fmt::Display for RifiutoDisco {
             RifiutoDisco::Fub { comando } => write!(
                 f,
                 "`{comando}` lo fa Fub, non il motore del disegno: si chiede a Fub, non al motore"
+            ),
+            RifiutoDisco::Cartella { chiave } => write!(
+                f,
+                "`prefs.set` non cambia `{chiave}`: le cartelle del disegno sono di Fub, il motore non tocca il disco"
             ),
             RifiutoDisco::Elenco(errore) => {
                 write!(f, "l'elenco dei file del motore non si legge: {errore}")
@@ -333,6 +340,9 @@ pub fn percorsi() -> &'static HashMap<&'static str, Vec<String>> {
 /// porta un percorso in `valore` (un argomento dello schema non nullo), salvo
 /// le forme che l'elenco dice `byte` o `kernel`.
 pub fn controlla(id: &str, valore: &Value) -> Result<(), RifiutoDisco> {
+    if id == "prefs.set" {
+        cartella_in(valore)?;
+    }
     let elenco = elenco().map_err(|e| RifiutoDisco::Elenco(e.to_string()))?;
     if let Some(perche) = elenco.esclusi.get(id) {
         return Err(RifiutoDisco::Escluso {
@@ -360,10 +370,48 @@ pub fn controlla(id: &str, valore: &Value) -> Result<(), RifiutoDisco> {
     Ok(())
 }
 
+/// Una cartella in `prefs.set`, come `{key, value}` o fra i `values`.
+fn cartella_in(valore: &Value) -> Result<(), RifiutoDisco> {
+    let nominate = valore.get("key").and_then(Value::as_str).into_iter().chain(
+        valore
+            .get("values")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flat_map(|values| values.keys().map(String::as_str)),
+    );
+    for chiave in nominate {
+        if crate::preferenze::e_cartella(chiave) {
+            return Err(RifiutoDisco::Cartella {
+                chiave: chiave.to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn prefs_set_con_una_cartella_si_rifiuta() {
+        for valore in [
+            json!({"key": "fontsFolder", "value": "/etc"}),
+            json!({"values": {"keyboardIncrement": 2, "templatesFolder": "/tmp"}}),
+        ] {
+            assert!(
+                matches!(
+                    controlla("prefs.set", &valore),
+                    Err(RifiutoDisco::Cartella { .. })
+                ),
+                "{valore}"
+            );
+        }
+        let ok = json!({"key": "keyboardIncrement", "value": 2});
+        assert!(controlla("prefs.set", &ok).is_ok());
+        assert!(controlla("prefs.list", &json!({})).is_ok());
+    }
 
     #[test]
     fn le_chiavi_di_percorso_si_leggono_dallo_schema() {

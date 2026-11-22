@@ -307,6 +307,10 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
     // completo» di Impostazioni › Scorciatoie, non come un testo JSON nel
     // form (`fub_features::DRAW_KEYS_KEY`, stesso test).
     "draw.keys",
+    // Le preferenze del motore del disegno: si cambiano nella sezione
+    // «Motore del disegno» di Impostazioni › Disegni, costruita dal motore
+    // (`fub_features::DRAW_ENGINE_PREFS_KEY`, stesso test).
+    "draw.motore",
 ];
 
 /// Il job il cui esito, quando riesce, può portare gli artefatti di un export
