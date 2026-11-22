@@ -1187,6 +1187,22 @@
     },
     {
       "fonte": "motore",
+      "id": "select.allOnArtboard",
+      "chiamata": {
+        "comando": "disegno.select.allOnArtboard"
+      },
+      "etichetta": {
+        "it": "Tutto nella tavola attiva",
+        "en": "All on Active Artboard"
+      },
+      "posto": "menu/selezione",
+      "famiglia": "livelli",
+      "tasto": "Cmd+Alt+A",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.inverse",
       "chiamata": {
         "comando": "disegno.select.inverse"
@@ -1246,6 +1262,182 @@
       "posto": "menu/selezione",
       "famiglia": "nucleo",
       "tasto": "Cmd+Shift+A",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.object.allOnSameLayers",
+      "chiamata": {
+        "comando": "disegno.select.object.allOnSameLayers"
+      },
+      "etichetta": {
+        "it": "Tutto sugli stessi livelli",
+        "en": "All on Same Layers"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.object.textObjects",
+      "chiamata": {
+        "comando": "disegno.select.object.textObjects"
+      },
+      "etichetta": {
+        "it": "Tutti gli oggetti di testo",
+        "en": "All Text Objects"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.appearance",
+      "chiamata": {
+        "comando": "disegno.select.same.appearance"
+      },
+      "etichetta": {
+        "it": "Aspetto",
+        "en": "Appearance"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.blendingMode",
+      "chiamata": {
+        "comando": "disegno.select.same.blendingMode"
+      },
+      "etichetta": {
+        "it": "Metodo di fusione",
+        "en": "Blending Mode"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.fillAndStroke",
+      "chiamata": {
+        "comando": "disegno.select.same.fillAndStroke"
+      },
+      "etichetta": {
+        "it": "Riempimento e tratto",
+        "en": "Fill & Stroke"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.fillColor",
+      "chiamata": {
+        "comando": "disegno.select.same.fillColor"
+      },
+      "etichetta": {
+        "it": "Colore riempimento",
+        "en": "Fill Color"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.opacity",
+      "chiamata": {
+        "comando": "disegno.select.same.opacity"
+      },
+      "etichetta": {
+        "it": "Opacità",
+        "en": "Opacity"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.shapeType",
+      "chiamata": {
+        "comando": "disegno.select.same.shapeType"
+      },
+      "etichetta": {
+        "it": "Forma",
+        "en": "Shape"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.strokeColor",
+      "chiamata": {
+        "comando": "disegno.select.same.strokeColor"
+      },
+      "etichetta": {
+        "it": "Colore tratto",
+        "en": "Stroke Color"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.strokeWeight",
+      "chiamata": {
+        "comando": "disegno.select.same.strokeWeight"
+      },
+      "etichetta": {
+        "it": "Spessore tratto",
+        "en": "Stroke Weight"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.same.symbolInstance",
+      "chiamata": {
+        "comando": "disegno.select.same.symbolInstance"
+      },
+      "etichetta": {
+        "it": "Istanza di simbolo",
+        "en": "Symbol Instance"
+      },
+      "posto": "menu/selezione/uguale",
+      "famiglia": "livelli",
+      "tasto": null,
       "effetto": "mostra",
       "finestra": false
     },

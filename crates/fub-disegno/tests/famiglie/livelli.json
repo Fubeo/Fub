@@ -1,3 +1,178 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia livelli (piano K6, T15, giro 1): il menu ≡ › Selezione che si fa ora. Il disegno è livelli/base.svg: due rettangoli rossi (oa1a1a1a1, ob2b2b2b2), un blu (oc3c3c3c3) e un testo (ot4d4d4d4). Selezionare non cambia il documento: nessuna operazione, solo la selezione dopo.",
+  "casi": [
+    {
+      "id": "select.same.fillColor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "select.same.strokeColor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.strokeWeight",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.fillAndStroke",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "select.same.opacity",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.blendingMode",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.same.appearance",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2"
+        ]
+      }
+    },
+    {
+      "id": "select.same.shapeType",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3"
+        ]
+      }
+    },
+    {
+      "id": "select.same.symbolInstance",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": []
+      }
+    },
+    {
+      "id": "select.object.allOnSameLayers",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.object.textObjects",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "ot4d4d4d4"
+        ]
+      }
+    },
+    {
+      "id": "select.allOnArtboard",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "selezione": [
+          "oa1a1a1a1",
+          "ob2b2b2b2",
+          "oc3c3c3c3",
+          "ot4d4d4d4"
+        ]
+      }
+    }
+  ]
 }
