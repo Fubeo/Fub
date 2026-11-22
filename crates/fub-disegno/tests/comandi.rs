@@ -231,7 +231,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // preimpostate (K6 T15, giro 6) si elencano, si salvano e si tolgono
     // nelle preferenze del motore: il file non cambia. Le opzioni del
     // Contagocce (K6 T14, giro 6) sono una preferenza del motore: non leggono
-    // né cambiano ciò che è scelto.
+    // né cambiano ciò che è scelto. La griglia di trasparenza (K6 T11, giro H)
+    // è della vista: il motore la dà accesa con ogni selezione, e il client la
+    // chiama da sé.
     let sempre = [
         "disegno.eyedropper.setOptions",
         "disegno.swatch.new",
@@ -253,6 +255,7 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.gradient.presets.list",
         "disegno.gradient.presets.save",
         "disegno.gradient.presets.delete",
+        "disegno.view.transparencyGrid",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

@@ -35,7 +35,8 @@
 //!   esegue): il test del client che la prova, che deve esistere e nominare
 //!   l'id. Anche uno strumento della vista (`hand`, `zoom`, `rotateView`)
 //!   ha solo la `prova`, senza gesto: il motore non lo fa (è un suo
-//!   strumento vuoto), la vista è di Fub.
+//!   strumento vuoto), la vista è di Fub. Così una riga del motore che il
+//!   client fa da sé (`MOTORE_DEL_CLIENT`, la griglia di trasparenza).
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
@@ -262,10 +263,17 @@ fn leggi_prima(v: &Value, dove: &str) -> Result<Vec<Passo>, String> {
 /// vuoti, `NoopTool`), la vista di Fub sì. Il loro caso è la prova del client.
 pub const STRUMENTI_DELLA_VISTA: [&str; 3] = ["hand", "zoom", "rotateView"];
 
+/// Le righe del motore che il client fa da sé (K6 T11, giro H): il motore le
+/// dichiara (`cmd!`), ma la griglia di trasparenza è uno stato della superficie di
+/// Fub, che il comando del motore porterebbe nel documento. Il loro caso è la prova
+/// del client. La stessa lista è `DEL_CLIENT` in `ts_indice.rs`: cambiano insieme.
+pub const MOTORE_DEL_CLIENT: [&str; 1] = ["view.transparencyGrid"];
+
 /// Una riga che il motore non esegue: il suo caso è solo la prova del client.
 pub fn solo_prova(fonte: FonteMappa, id: &str) -> bool {
     matches!(fonte, FonteMappa::Interfaccia | FonteMappa::Pannello)
         || (fonte == FonteMappa::Strumento && STRUMENTI_DELLA_VISTA.contains(&id))
+        || (fonte == FonteMappa::Motore && MOTORE_DEL_CLIENT.contains(&id))
 }
 
 /// I casi di tutti i `.json` di una cartella, in ordine di nome.

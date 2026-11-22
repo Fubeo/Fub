@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingEntry } from "../../host/contract";
 import type { FakeHost } from "../../host/fake";
 import { DEFAULT_CURVE } from "../../ink/input/pressure";
+import { DEFAULT_GRID } from "./tools/grid";
 
 const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
 
@@ -157,6 +158,17 @@ describe("la griglia ricordata", () => {
     const grid = await readGrid();
     expect(grid.shown).toBe(true);
     expect("steady" in grid).toBe(false);
+  });
+
+  it("gli interruttori della vista (K6 T11) tornano se accesi, e spenti non ci sono; un valore che non è vero o falso butta la griglia", async () => {
+    const host = createFakeHost();
+    const { readGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, transparencyGrid: true, hideEdges: true, hideBoundingBox: false });
+    const letta = await readGrid();
+    expect(letta).toEqual({ shown: true, snap: false, step: 10, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE, transparencyGrid: true, hideEdges: true });
+    expect("hideBoundingBox" in letta).toBe(false);
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, hideBoundingBox: "sì" });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
   });
 
   it("la gomma e la penna ricordate tornano; quelle che non si leggono valgono quelle di serie", async () => {

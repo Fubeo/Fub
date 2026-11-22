@@ -239,9 +239,9 @@ export function currentGrid(): Grid {
 /// penna com'è. Un passo ricordato che la griglia non accetta non conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, steps, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity, transparencyGrid, hideEdges, hideBoundingBox } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
-  for (const flag of [bar, shapes, twist, taps]) if (flag !== undefined && typeof flag !== "boolean") return null;
+  for (const flag of [bar, shapes, twist, taps, transparencyGrid, hideEdges, hideBoundingBox]) if (flag !== undefined && typeof flag !== "boolean") return null;
   if (panel !== undefined && panel !== null && typeof panel !== "boolean") return null;
   if (steps !== undefined && (typeof steps !== "object" || steps === null)) return null;
   const sections = closed === undefined ? DEFAULT_GRID.closed : validClosed(closed);
@@ -269,6 +269,10 @@ function gridOf(value: unknown): Grid | null {
     ...(isBarrelAction(barrel) ? { barrel } : {}),
     ...(isPenOutput(output) ? { output } : {}),
     ...(isFidelity(fidelity) ? { fidelity } : {}),
+    // Gli interruttori della vista: assenti se spenti (K6 T11).
+    ...(transparencyGrid === true ? { transparencyGrid: true } : {}),
+    ...(hideEdges === true ? { hideEdges: true } : {}),
+    ...(hideBoundingBox === true ? { hideBoundingBox: true } : {}),
   };
 }
 

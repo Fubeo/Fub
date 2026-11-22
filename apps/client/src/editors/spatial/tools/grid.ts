@@ -74,6 +74,17 @@ export interface Grid {
   /// Quanto il tracciato segue l'inchiostro, nell'uscita e in «Inchiostro
   /// in tracciato». Assente, «media».
   readonly fidelity?: Fidelity;
+  /// Mostra griglia trasparenza (K6 T11): la carta ha uno sfondo a scacchi,
+  /// dove non ha un fondo suo. Assente, spenta. È stato della vista, come
+  /// `shown`: non entra nel file né nella cronologia.
+  readonly transparencyGrid?: boolean;
+  /// Nascondi bordi (K6 T11): niente contorni di evidenziazione attorno agli
+  /// oggetti scelti. Assente, si vedono.
+  readonly hideEdges?: boolean;
+  /// Nascondi riquadro di delimitazione (K6 T11): niente cornice della
+  /// selezione né maniglie, né misure, e nessuna maniglia si può prendere.
+  /// Assente, si vedono.
+  readonly hideBoundingBox?: boolean;
 }
 
 /// Che cosa resta di un tratto della Penna.

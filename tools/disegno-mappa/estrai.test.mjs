@@ -84,7 +84,11 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T15 giro 6 porta a «fatto» otto righe di ≡ › Selezione: il testo uguale (sei) e Punti isolati e
   // Tracciati aperti. Il testo di punto e quello in area restano da fare: il motore vede il testo con
   // fub:wrap come testo di punto, quindi il confronto per specie non è giusto.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1171, fub: 114, escluso: 12, fatto: 254 });
+  // T11 giro H (interruttori della vista) porta a «fatto» tre righe di ≡ › Visualizza:
+  // la griglia di trasparenza (fonte motore, ma la fa il client), i bordi e il riquadro
+  // di delimitazione. Guide intelligenti, aggancio ai punti e widget d'angolo restano
+  // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1168, fub: 114, escluso: 12, fatto: 257 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
