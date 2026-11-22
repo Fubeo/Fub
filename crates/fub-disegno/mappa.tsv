@@ -190,17 +190,17 @@ motore	document.setup	Document Setup		tavole	F2	T19	da fare	ispettore/design/doc
 motore	file.new	New…	File	fub	—	T2	fub	fub	—	nuovo disegno di Fub (menu File, «Nuovo disegno…»); finestra	Nuovo…
 motore	file.close	Close	File	fub	—	T2	fub	fub	—	chiudere la scheda di Fub	Chiudi
 motore	document.activate	Activate Document		fub	—	T2	fub	fub	—	le schede di Fub	Attiva documento
-motore	document.inspect	Inspect Document		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Ispeziona documento
-motore	document.node	Inspect Object		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Ispeziona oggetto
-motore	document.find	Find Objects		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Trova oggetti
-motore	document.json	Document JSON		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	JSON del documento
+motore	document.inspect	Inspect Document		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Ispeziona documento
+motore	document.node	Inspect Object		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Ispeziona oggetto
+motore	document.find	Find Objects		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Trova oggetti
+motore	document.json	Document JSON		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	JSON del documento
 motore	document.setUnits	Units	File › Document Setup	tavole	F2	T19	da fare	menu/file	famiglia		Unità
 motore	document.switchUnits	Switch Units		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Cambia unità
 motore	document.rulerOrigin	Ruler Origin		tavole	F2	T19	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Origine dei righelli
 motore	document.setRulerOrigin	Ruler Origin		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Origine dei righelli
 motore	document.resetRulerOrigin	Reset Ruler Origin		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Ripristina origine dei righelli
 motore	view.globalRulers	Change to Global Rulers	View › Rulers	vista	F1	T11	da fare	menu/visualizza	famiglia		Passa a righelli globali
-motore	edit.dropSelection	Drop Artwork		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Rilascia illustrazione
+motore	edit.dropSelection	Drop Artwork		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Rilascia illustrazione
 motore	edit.undo	Undo	Edit	fub	—	T11	fub	fub	—	«Annulla» di Fub: la cronologia della superficie	Annulla
 motore	edit.redo	Redo	Edit	fub	—	T11	fub	fub	—	«Ripeti» di Fub: la cronologia della superficie	Ripeti
 motore	edit.clearHistory	Clear History		nucleo	F1	T11	fatto	tavolozza	nucleo		Cancella cronologia
@@ -209,12 +209,12 @@ motore	edit.undoGroup.end	End Undo Group		fub	—	T11	fub	fub	—	un gesto o un 
 motore	edit.cut	Cut	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Taglia
 motore	edit.copy	Copy	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Copia
 motore	edit.paste	Paste	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Incolla
-motore	edit.pasteInFront	Paste in Front	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla davanti
-motore	edit.pasteInBack	Paste in Back	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla dietro
-motore	edit.pasteInPlace	Paste in Place	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla nella stessa posizione
-motore	edit.pasteOnAllArtboards	Paste on All Artboards	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla su tutte le tavole da disegno
-motore	edit.clear	Clear	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Cancella
-motore	edit.duplicate	Duplicate	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Duplica
+motore	edit.pasteInFront	Paste in Front	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Incolla davanti
+motore	edit.pasteInBack	Paste in Back	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Incolla dietro
+motore	edit.pasteInPlace	Paste in Place	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Incolla nella stessa posizione
+motore	edit.pasteOnAllArtboards	Paste on All Artboards	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Incolla su tutte le tavole da disegno
+motore	edit.clear	Clear	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Cancella
+motore	edit.duplicate	Duplicate	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Duplica
 motore	effect.apply	Apply Effect		effetti	F2	T18	da fare	menu/effetto	famiglia		Applica effetto
 motore	effect.list	Effects		effetti	F2	T18	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Effetti
 motore	effect.remove	Remove Effect		effetti	F2	T18	da fare	menu/effetto	famiglia		Rimuovi effetto
@@ -501,9 +501,9 @@ motore	select.reselect	Reselect	Select	nucleo	F1	T11	da fare	menu/selezione	nucl
 motore	select.inverse	Inverse	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Inversa
 motore	select.nextAbove	Next Object Above	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Oggetto successivo sopra
 motore	select.nextBelow	Next Object Below	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Oggetto successivo sotto
-motore	select.set	Select Objects		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Seleziona oggetti
-motore	select.add	Add to Selection		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Aggiungi alla selezione
-motore	select.toggle	Toggle Selection		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Alterna selezione
+motore	select.set	Select Objects		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Seleziona oggetti
+motore	select.add	Add to Selection		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Aggiungi alla selezione
+motore	select.toggle	Toggle Selection		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Alterna selezione
 motore	select.key	Cancel Key Object		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Annulla oggetto chiave
 motore	select.anchors	Select Anchors		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Seleziona punti di ancoraggio
 motore	select.segments	Select Segments		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Seleziona segmenti
@@ -650,7 +650,7 @@ motore	type.fillPlaceholder	Fill with Placeholder Text	Type	testo	F2	T16	da fare
 motore	type.insert	Insert Character	Type	testo	F2	T16	da fare	menu/testo	famiglia		Inserisci carattere
 motore	edit.findReplace	Find and Replace…	Edit	testo	F2	T16	da fare	menu/modifica	famiglia	finestra	Trova e sostituisci…
 motore	edit.findNext	Find Next	Edit	testo	F2	T16	da fare	menu/modifica	famiglia		Trova successivo
-motore	edit.pasteWithoutFormatting	Paste without Formatting	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla senza formattazione
+motore	edit.pasteWithoutFormatting	Paste without Formatting	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Incolla senza formattazione
 motore	variable.define	New Variable…	Window › Variables	dati	F4	T26	da fare	ispettore/design/documento	famiglia	finestra	Nuova variabile…
 motore	variable.delete	Delete Variable	Window › Variables	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Elimina variabile
 motore	variable.rename	Rename Variable	Window › Variables	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Rinomina variabile
@@ -874,7 +874,7 @@ motore	object.clippingMask.editContents	Edit Contents	Object › Clipping Mask	t
 motore	object.clippingMask.editMask	Edit Clipping Path	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Modifica tracciato di ritaglio
 motore	object.isolate	Enter Isolation Mode		fub	—	T11	fub	fub	—	«Isola» di Fub nel tasto destro del disegno (il motore non tiene lo stato fra le richieste)	Entra in modalità isolamento
 motore	object.exitIsolation	Exit Isolation Mode		fub	—	T11	fub	fub	—	«Esci dall'isolamento» di Fub nel tasto destro, o Esc	Esci dalla modalità isolamento
-motore	object.setProps	Object Properties		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Proprietà oggetto
+motore	object.setProps	Object Properties		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Proprietà oggetto
 motore	object.align	Align	Window › Align	trasforma	F1	T13	da fare	ispettore/design	famiglia		Allinea
 motore	object.distribute	Distribute	Window › Align	trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci
 motore	object.distributeSpacing	Distribute Spacing	Window › Align	trasforma	F1	T13	da fare	ispettore/design	famiglia		Distribuisci spaziatura
