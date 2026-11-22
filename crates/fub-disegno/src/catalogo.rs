@@ -541,7 +541,95 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("fill", Tipo::SiNo),
     ("closed", Tipo::SiNo),
     ("clockwise", Tipo::SiNo),
+    // Le finestre dei tracciati (T12, giro 3): `FINESTRE_SCRITTE`.
+    ("offset", Tipo::Numero),
+    ("miterLimit", Tipo::Numero),
+    ("level", Tipo::Numero),
+    ("cornerAngle", Tipo::Numero),
+    ("straightLines", Tipo::SiNo),
+    ("object", Tipo::SiNo),
+    ("stroke", Tipo::SiNo),
+    ("dash", Tipo::Numero),
+    ("gap", Tipo::Numero),
+    ("fit", Tipo::SiNo),
+    ("removeGaps", Tipo::SiNo),
 ];
+
+/// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
+/// parametri a parole (i predefiniti e i limiti fra parentesi, opzioni che
+/// la finestra non chiede): i campi nel dialetto di [`fub_motori::Modulo`],
+/// i valori di partenza e i limiti, presi dal codice del comando del motore.
+pub struct FinestraScritta {
+    /// L'id del comando.
+    pub id: &'static str,
+    /// I campi che la finestra chiede, nell'ordine in cui li mostra.
+    pub schema: &'static str,
+    /// Il valore di partenza di ogni campo, come il motore lo prende senza.
+    pub predefiniti: &'static [(&'static str, &'static str)],
+    /// Il minimo e il massimo di un numero, che il motore fa rispettare.
+    pub limiti: &'static [(&'static str, Option<f64>, Option<f64>)],
+}
+
+/// Le finestre dei tracciati (T12, giro 3): Semplifica, Leviga, Sposta
+/// tracciato, Espandi e Dividi in trattini. Semplifica chiede il cursore
+/// (`level`), non la tolleranza in punti: 50 è la tolleranza di serie, 1 pt.
+/// Espandi non chiede come espandere le sfumature (`gradient`, `steps`): vale
+/// quello del motore, strisce piene.
+pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
+    FinestraScritta {
+        id: "object.path.simplify",
+        schema: "{level, cornerAngle, straightLines}",
+        predefiniti: &[
+            ("level", "50"),
+            ("cornerAngle", "30"),
+            ("straightLines", "false"),
+        ],
+        limiti: &[
+            ("level", Some(0.0), Some(100.0)),
+            ("cornerAngle", Some(0.0), Some(180.0)),
+        ],
+    },
+    FinestraScritta {
+        id: "object.path.smooth",
+        schema: "{level}",
+        predefiniti: &[("level", "50")],
+        limiti: &[("level", Some(0.0), Some(100.0))],
+    },
+    FinestraScritta {
+        id: "object.path.offsetPath",
+        schema: "{offset, joins: miter|round|bevel, miterLimit}",
+        predefiniti: &[("offset", "10"), ("joins", "miter"), ("miterLimit", "4")],
+        limiti: &[
+            ("offset", Some(-100_000.0), Some(100_000.0)),
+            ("miterLimit", Some(1.0), Some(500.0)),
+        ],
+    },
+    FinestraScritta {
+        id: "object.expand",
+        schema: "{object, fill, stroke}",
+        predefiniti: &[("object", "true"), ("fill", "true"), ("stroke", "true")],
+        limiti: &[],
+    },
+    FinestraScritta {
+        id: "addon.pathtools.divideDashes",
+        schema: "{dash, gap, fit, removeGaps}",
+        predefiniti: &[
+            ("dash", "10"),
+            ("gap", "0"),
+            ("fit", "false"),
+            ("removeGaps", "true"),
+        ],
+        limiti: &[
+            ("dash", Some(0.01), Some(1_000_000.0)),
+            ("gap", Some(0.0), Some(1_000_000.0)),
+        ],
+    },
+];
+
+/// La finestra scritta da Fub per il comando `id`, se ne ha una.
+pub fn finestra_scritta(id: &str) -> Option<&'static FinestraScritta> {
+    FINESTRE_SCRITTE.iter().find(|f| f.id == id)
+}
 
 /// I comandi di forma che hanno una finestra delle misure (T13, giro 1): per
 /// loro lo schema va ripulito come dice [`schema_pulito`].
@@ -573,9 +661,16 @@ pub fn predefiniti(schema: &str) -> Vec<(String, String)> {
     analizza(schema).1
 }
 
-/// I predefiniti del comando di forma `id`, dallo schema del motore (vuoti per
-/// un comando che non è di forma).
+/// I predefiniti del comando di forma `id`, dallo schema del motore, o quelli
+/// della sua finestra scritta ([`FINESTRE_SCRITTE`]); vuoti per gli altri.
 pub fn predefiniti_del_comando(id: &str) -> Vec<(String, String)> {
+    if let Some(finestra) = finestra_scritta(id) {
+        return finestra
+            .predefiniti
+            .iter()
+            .map(|(nome, valore)| (nome.to_string(), valore.to_string()))
+            .collect();
+    }
     if !COMANDI_DI_FORMA.contains(&id) {
         return Vec::new();
     }
@@ -667,8 +762,16 @@ fn senza_note(pezzo: &str) -> String {
 /// Il limite minimo di un campo di una finestra di forma: le misure sono
 /// positive (il campo mostra due decimali, e lo zero è una forma che non c'è),
 /// e i conteggi hanno il loro minimo (un poligono ha almeno tre lati). Nessun
-/// massimo: il motore non ne dà uno.
+/// massimo: il motore non ne dà uno. Una finestra scritta
+/// ([`FINESTRE_SCRITTE`]) dà i suoi limiti.
 pub fn minimo_del_campo(comando: &str, campo: &str) -> Option<f64> {
+    if let Some(finestra) = finestra_scritta(comando) {
+        return finestra
+            .limiti
+            .iter()
+            .find(|(n, ..)| *n == campo)
+            .and_then(|(_, min, _)| *min);
+    }
     if !COMANDI_DI_FORMA.contains(&comando) {
         return None;
     }
@@ -678,6 +781,16 @@ pub fn minimo_del_campo(comando: &str, campo: &str) -> Option<f64> {
         "segments" | "rays" | "rings" => Some(1.0),
         _ => None,
     }
+}
+
+/// Il limite massimo di un campo di una finestra scritta ([`FINESTRE_SCRITTE`]):
+/// le finestre di forma non ne hanno.
+pub fn massimo_del_campo(comando: &str, campo: &str) -> Option<f64> {
+    finestra_scritta(comando)?
+        .limiti
+        .iter()
+        .find(|(n, ..)| *n == campo)
+        .and_then(|(_, _, max)| *max)
 }
 
 /// La riga ha una finestra: la nota lo dice, il posto è `finestra`, o
@@ -753,9 +866,12 @@ pub fn schema_di(riga: &RigaMappa) -> String {
                 .map(|c| schema_pulito(c.params))
                 .unwrap_or_default()
         }
-        FonteMappa::Motore => vectorcraft_engine::find_command(&riga.id)
-            .map(|c| c.params.to_string())
-            .unwrap_or_default(),
+        FonteMappa::Motore => match finestra_scritta(&riga.id) {
+            Some(finestra) => finestra.schema.to_string(),
+            None => vectorcraft_engine::find_command(&riga.id)
+                .map(|c| c.params.to_string())
+                .unwrap_or_default(),
+        },
         FonteMappa::Effetto => effetti_del_motore()
             .get(&riga.id)
             .cloned()

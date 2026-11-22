@@ -17,6 +17,7 @@ use fub_disegno::motore::Disegno;
 use serde_json::{json, Value};
 
 const BASE: &str = include_str!("famiglie/tracciati/base.svg");
+const SEGHETTATO: &str = include_str!("famiglie/tracciati/seghettato.svg");
 
 fn ev(kind: &str, x: f64, y: f64) -> Value {
     json!({ "kind": kind, "x": x, "y": y, "pressure": 0.5, "shift": false, "alt": false, "cmd": false })
@@ -206,6 +207,84 @@ fn oggetto_tracciato_sull_inchiostro_dice_perche_e_non_cambia_niente() {
         );
     }
     assert_eq!(d.revisione(), prima);
+}
+
+/// Le finestre dei tracciati (T12, giro 3) e i loro argomenti di prova.
+const FINESTRE: [(&str, &str, &str, &str); 5] = [
+    (
+        "object.path.simplify",
+        BASE,
+        "oc1c1c1c1",
+        r#"{"level": 100, "cornerAngle": 30, "straightLines": true}"#,
+    ),
+    (
+        "object.path.smooth",
+        SEGHETTATO,
+        "os9c9c9c9",
+        r#"{"level": 50}"#,
+    ),
+    (
+        "object.path.offsetPath",
+        BASE,
+        "of4f4f4f4",
+        r#"{"offset": 10, "joins": "round", "miterLimit": 4}"#,
+    ),
+    (
+        "object.expand",
+        BASE,
+        "oc1c1c1c1",
+        r#"{"object": true, "fill": true, "stroke": true}"#,
+    ),
+    (
+        "addon.pathtools.divideDashes",
+        BASE,
+        "oc1c1c1c1",
+        r#"{"dash": 20, "gap": 10, "fit": false, "removeGaps": true}"#,
+    ),
+];
+
+/// L'anteprima di una finestra dei tracciati: i contorni nuovi sul foglio,
+/// nessuna operazione, la revisione ferma e il disegno uguale; OK, con gli
+/// stessi argomenti, scrive.
+#[test]
+fn l_anteprima_delle_finestre_non_scrive_e_ok_si() {
+    for (id, disegno, scelto, argomenti) in FINESTRE {
+        let (mut d, _) = apri(disegno);
+        let prima = d.revisione();
+        let valore: Value = serde_json::from_str(argomenti).expect("json");
+        let richiesta = |d: &Disegno, preview| DrawingCommandRequest {
+            revision: d.revisione(),
+            id: format!("disegno.{id}"),
+            selection: vec![scelto.to_string()],
+            value: valore.clone(),
+            preview,
+        };
+        // Due anteprime di fila: nessuna scrive, la seconda vede la copia
+        // di partenza, non la prima anteprima.
+        for _ in 0..2 {
+            let esito = d.comando(richiesta(&d, true)).expect("l'anteprima vale");
+            assert_eq!((esito.refused, &esito.ops), (None, &None), "{id}");
+            let segni = esito.preview.map(|p| p.overlays).unwrap_or_default();
+            assert!(
+                !segni.is_empty(),
+                "{id}: l'anteprima mostra i contorni nuovi"
+            );
+            assert_eq!(esito.selection, vec![scelto.to_string()], "{id}");
+            assert_eq!(
+                d.revisione(),
+                prima,
+                "{id}: l'anteprima non cambia la revisione"
+            );
+        }
+        let fermo = d.a_mano(|_, _| {}).expect("il motore si rilegge");
+        assert!(fermo.ops.is_none(), "{id}: il motore è tornato alla copia");
+        let esito = d.comando(richiesta(&d, false)).expect("OK vale");
+        assert!(
+            esito.refused.is_none() && esito.ops.is_some(),
+            "{id}: OK scrive"
+        );
+        assert!(esito.preview.is_none(), "{id}");
+    }
 }
 
 #[test]

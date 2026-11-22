@@ -234,6 +234,8 @@ interface CampoSchema {
   readonly valori?: readonly string[];
   /// Il minimo di un numero (T13, giro 2): sotto, OK resta spento.
   readonly minimo?: number;
+  /// Il massimo di un numero (T12, giro 3): sopra, OK resta spento.
+  readonly massimo?: number;
   /// Il valore di partenza che il motore dà al campo (`sides=6`).
   readonly predefinito?: string | number | boolean;
 }
@@ -246,7 +248,14 @@ interface SchemaFamiglia {
 /// Un campo dello schema come lo legge la finestra di T6. I tipi che la
 /// finestra non conosce (`cella`, `json`) si leggono come testo.
 function campoDi(campo: CampoSchema): CampoFinestra {
-  if (campo.tipo === "numero") return campo.minimo === undefined ? { nome: campo.nome, tipo: "numero" } : { nome: campo.nome, tipo: "numero", min: campo.minimo };
+  if (campo.tipo === "numero") {
+    return {
+      nome: campo.nome,
+      tipo: "numero",
+      ...(campo.minimo === undefined ? {} : { min: campo.minimo }),
+      ...(campo.massimo === undefined ? {} : { max: campo.massimo }),
+    };
+  }
   if (campo.tipo === "scelta") return { nome: campo.nome, tipo: "scelta", valori: campo.valori ?? [] };
   if (campo.tipo === "sino") return { nome: campo.nome, tipo: "sino" };
   return { nome: campo.nome, tipo: "testo", facoltativo: campo.facoltativo === true };
@@ -328,18 +337,45 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     const valore = (voce.chiamata as { readonly valore?: unknown }).valore;
     const dati = typeof valore === "object" && valore !== null ? Object.keys(valore) : [];
     const campi = schema.modulo.campi.filter((campo) => !dati.includes(campo.nome));
-    // Le parole dei campi sono della famiglia: ci sono quando è pronta; prima il nome.
+    // Le parole della finestra sono della famiglia: ci sono quando è pronta; prima il
+    // nome del campo, e niente frase, verbo, parole delle scelte né unità.
     const stato = await carica.famiglia(voce.famiglia);
     const testi = stato.kind === "pronta" ? carica.testi(voce.famiglia) : null;
     const inglese = languageCurrent().startsWith("en");
+    const parola = (chiave: string): string | undefined => {
+      const una = testi?.[chiave];
+      return una === undefined ? undefined : inglese ? una.en : una.it;
+    };
+    // Il nome di un campo: quello del comando (`campo:<id>:<nome>`) se c'è, poi quello
+    // della famiglia (`campo:<nome>`): lo stesso `level` è la semplificazione o la smussatura.
     const etichette = Object.fromEntries(
-      campi.map((campo): [string, string] => {
-        const parola = testi?.[`campo:${campo.nome}`];
-        return [campo.nome, parola === undefined ? campo.nome : inglese ? parola.en : parola.it];
-      }),
+      campi.map((campo): [string, string] => [campo.nome, parola(`campo:${voce.id}:${campo.nome}`) ?? parola(`campo:${campo.nome}`) ?? campo.nome]),
     );
+    const scelte: Record<string, Readonly<Record<string, string>>> = {};
+    const unita: Record<string, string> = {};
+    for (const campo of campi) {
+      if (campo.tipo === "scelta") {
+        const parole = campo.valori.flatMap((valore): [string, string][] => {
+          const una = parola(`scelta:${campo.nome}:${valore}`);
+          return una === undefined ? [] : [[valore, una]];
+        });
+        if (parole.length > 0) scelte[campo.nome] = Object.fromEntries(parole);
+      }
+      const sigla = campo.tipo === "numero" ? parola(`unita:${campo.nome}`) : undefined;
+      if (sigla !== undefined) unita[campo.nome] = sigla;
+    }
+    const descrizione = parola(`descrizione:${voce.id}`);
+    const azione = parola(`azione:${voce.id}`);
     const iniziali = Object.fromEntries(Object.entries(schema.predefiniti).filter(([nome]) => campi.some((campo) => campo.nome === nome)));
-    return { modulo: { campi }, campi: etichette, iniziali };
+    return {
+      modulo: { campi },
+      campi: etichette,
+      iniziali,
+      ...(descrizione === undefined ? {} : { descrizione }),
+      ...(azione === undefined ? {} : { azione }),
+      ...(Object.keys(scelte).length === 0 ? {} : { scelte }),
+      ...(Object.keys(unita).length === 0 ? {} : { unita }),
+    };
   };
   // Il percorso unico di un comando del motore (`esegui.ts`): il menu ≡, Ctrl+/ e
   // i tasti lo usano con queste stesse dipendenze, costruite qui una volta sola.

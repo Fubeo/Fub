@@ -252,6 +252,27 @@ sotto, Angolo su punti già angoli) non cambia il file e lo dice. Come gli
 strumenti, i comandi non toccano i tratti dell'Inchiostro: con un tratto a
 mano scelto sono spenti e dicono «L'Inchiostro di Fub non è un tracciato.».
 
-Le voci con una finestra (Media, Sposta tracciato, Semplifica, Pulisci,
-Dividi in griglia, Dividi in trattini…) e le maschere di ritaglio non ci
-sono ancora: sono spente e dicono perché.
+Cinque voci aprono una finestra, con l'anteprima sul foglio:
+
+- **Sposta tracciato…**: un tracciato nuovo, parallelo, alla distanza
+  scritta (un numero negativo lo porta dentro), con le giunzioni ad angolo
+  vivo, arrotondate o smussate e il limite dell'angolo vivo;
+- **Semplifica…**: meno punti di ancoraggio, con la soglia degli angoli e
+  la scelta dei soli segmenti dritti;
+- **Smussa…**: curve morbide al posto delle linee spezzate;
+- **Dividi in trattini**: trattini della lunghezza scritta, con lo spazio
+  fra l'uno e l'altro;
+- **≡ › Oggetto › Espandi…**: il riempimento e il tratto diventano forme
+  piene, su ogni oggetto scelto e non solo sui tracciati.
+
+L'anteprima mostra i contorni nuovi mentre si cambiano i valori: parte
+quando un campo prende il valore (Invio, Tab o un clic fuori), non a ogni
+tasto, e non cambia il file. OK fa il comando in un passo di Annulla;
+Annulla ed Esc chiudono la finestra e lasciano il file com'era. Anche qui un
+tratto dell'Inchiostro scelto spegne le voci. I campi, i valori di partenza
+e i limiti vengono dal motore (`FINESTRE_SCRITTE` in
+`crates/fub-disegno/src/catalogo.rs`); le parole della finestra sono della
+famiglia (`completo/famiglie/tracciati/testi.ts`).
+
+Le altre voci con una finestra (Media, Pulisci, Dividi in griglia…) e le
+maschere di ritaglio non ci sono ancora: sono spente e dicono perché.

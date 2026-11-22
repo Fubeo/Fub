@@ -21,8 +21,8 @@ use std::path::PathBuf;
 
 use fub_abi::DRAWING_FAMILIES;
 use fub_disegno::catalogo::{
-    glossario, indice, mappa, minimo_del_campo, predefiniti_del_comando, FonteMappa, Glossario,
-    Lingua, Stato, Voce, SPAZIO,
+    glossario, indice, mappa, massimo_del_campo, minimo_del_campo, predefiniti_del_comando,
+    FonteMappa, Glossario, Lingua, Stato, Voce, SPAZIO,
 };
 use fub_motori::{Campo, Tipo};
 use regex::Regex;
@@ -131,7 +131,7 @@ fn indice_json(voci: &[Voce]) -> Value {
     })
 }
 
-/// Un campo con i suoi vincoli di finestra (`minimo`, `predefinito`) se il
+/// Un campo con i suoi vincoli di finestra (`minimo`, `massimo`, `predefinito`) se il
 /// comando ne ha: i predefiniti vengono dallo schema del motore, i minimi da
 /// `catalogo::minimo_del_campo`.
 fn campo_con_vincoli(campo_del_modulo: &Campo, comando: &str) -> Value {
@@ -141,6 +141,9 @@ fn campo_con_vincoli(campo_del_modulo: &Campo, comando: &str) -> Value {
     };
     if let Some(minimo) = minimo_del_campo(comando, &campo_del_modulo.nome) {
         mappa.insert("minimo".into(), json!(minimo));
+    }
+    if let Some(massimo) = massimo_del_campo(comando, &campo_del_modulo.nome) {
+        mappa.insert("massimo".into(), json!(massimo));
     }
     if let Some((_, valore)) = predefiniti_del_comando(comando)
         .into_iter()

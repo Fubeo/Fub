@@ -839,6 +839,42 @@ fn rgb_guide(sessione: &Session) -> [u8; 3] {
     }
 }
 
+/// I contorni dei tracciati che un comando ha fatto o cambiato in `dopo`
+/// rispetto alla copia, in coordinate di scena: l'anteprima di un comando con
+/// finestra (K6 T12). Solo i contorni, che stanno nei limiti del contratto:
+/// un contorno troppo lungo per un segno si salta, e i segni si fermano a
+/// [`MAX_DRAWING_OVERLAYS`].
+pub(crate) fn contorni_cambiati(copia: &Copia, dopo: &Document) -> Vec<DrawingOverlay> {
+    let indietro = copia.radice.inverse();
+    let prima = Posti::di(&copia.documento);
+    let ora = Posti::di(dopo);
+    let mut cambiati: Vec<_> = ora
+        .nodi
+        .values()
+        .filter(|p| {
+            p.nodo.path_data().is_some()
+                && prima
+                    .nodi
+                    .get(&p.nodo.id)
+                    .is_none_or(|q| !Arc::ptr_eq(q.nodo, p.nodo))
+        })
+        .collect();
+    cambiati.sort_by_key(|p| p.nodo.id);
+    cambiati
+        .into_iter()
+        .filter_map(|p| {
+            let d = d_di(&(indietro * p.nodo.path_data()?.to_bezpath()));
+            (d.len() <= MAX_DRAWING_OVERLAY_PATH_BYTES).then_some(DrawingOverlay::Path {
+                d,
+                role: DrawingOverlayRole::Preview,
+                width: 1.0,
+                dashed: false,
+            })
+        })
+        .take(MAX_DRAWING_OVERLAYS)
+        .collect()
+}
+
 /// I contorni e i punti dei tracciati che il gesto ha fatto o cambiato e
 /// che il client non ha ancora: la penna fra un clic e l'altro tiene il
 /// tracciato nella sessione, e l'editor del motore lo mostra scelto: per il

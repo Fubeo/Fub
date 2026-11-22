@@ -205,7 +205,12 @@ leggono come prima.
   testi.
 - **L'anteprima di un comando** (`DrawingCommandRequest.preview: true`): il
   comando gira su una copia e le operazioni non entrano nella cronologia; un
-  comando che non ne sa dare risponde `no_preview`.
+  comando che non ne sa dare risponde `no_preview`. Un comando di una
+  famiglia (le finestre di Oggetto › Tracciato) risponde senza `ops`, con la
+  selezione di prima e i contorni nuovi o cambiati come `preview.overlays`
+  di ruolo `preview`, in coordinate di scena; la revisione non cambia, e il
+  motore torna alla copia per la richiesta dopo. Un rifiuto vale come senza
+  anteprima.
 - **L'opzione di uno strumento**, `disegno.strumento.opzione`:
 
   ```json

@@ -51,6 +51,22 @@
     },
     {
       "fonte": "motore",
+      "id": "addon.pathtools.divideDashes",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.divideDashes"
+      },
+      "etichetta": {
+        "it": "Dividi in trattini",
+        "en": "Divide into Dashes"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.equalize",
       "chiamata": {
         "comando": "disegno.addon.pathtools.equalize"
@@ -659,6 +675,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.expand",
+      "chiamata": {
+        "comando": "disegno.object.expand"
+      },
+      "etichetta": {
+        "it": "Espandi…",
+        "en": "Expand…"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.group",
       "chiamata": {
         "comando": "disegno.object.group"
@@ -771,6 +803,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.path.offsetPath",
+      "chiamata": {
+        "comando": "disegno.object.path.offsetPath"
+      },
+      "etichetta": {
+        "it": "Sposta tracciato…",
+        "en": "Offset Path…"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.path.outlineStroke",
       "chiamata": {
         "comando": "disegno.object.path.outlineStroke"
@@ -784,6 +832,38 @@
       "tasto": null,
       "effetto": "cambia",
       "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.path.simplify",
+      "chiamata": {
+        "comando": "disegno.object.path.simplify"
+      },
+      "etichetta": {
+        "it": "Semplifica…",
+        "en": "Simplify…"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.path.smooth",
+      "chiamata": {
+        "comando": "disegno.object.path.smooth"
+      },
+      "etichetta": {
+        "it": "Smussa…",
+        "en": "Smooth…"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
     },
     {
       "fonte": "motore",
