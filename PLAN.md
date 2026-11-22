@@ -2578,8 +2578,13 @@ livelli, oggetti di testo), «Tutto nella tavola». Le altre voci di Oggetto
 aspettano T27 (il modello non distingue la specie dell'oggetto); punti,
 segmenti e colore vogliono un argomento e restano all'ispettore; le
 selezioni salvate, la modifica globale e la bacchetta magica dopo.
-Mancano: Aspetto, Contorno, Trasparenza (giro 2 in corso), Sfumatura,
-Stili grafici, la scheda Livelli.
+Giro 2 unito in f69d06ddb: il clic di Selezione del banco sceglie
+l'oggetto sotto il punto (era il banco, non il client né il motore: scene
+`disegno-clic-ellisse`), `transparency.set` nella famiglia `aspetto`, Design
+› Trasparenza con opacità e metodo di fusione dalla vista (dato `blend`
+nella vista del pannello), «Aspetto» del Semplice nascosto nel Completo.
+Mancano: Aspetto, Contorno, maschere d'opacità, Sfumatura, Stili grafici,
+la scheda Livelli (giro 3 in corso).
 Aspetta: niente
 
 ## T16 · Il testo
