@@ -67,8 +67,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // giro 3 le cinque finestre dei tracciati. T13 giro 3 le nove di Trasforma.
   // T15 giro 1 le dodici del menu Selezione. T14 giro 1 le ventuno del
   // colore: i nove `paint.*` del colore attivo, le dieci di Modifica › Modifica
-  // colori e le due finestre `ui.*` del client. T15 giro 2 `transparency.set`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1236, fub: 114, escluso: 12, fatto: 189 });
+  // colori e le due finestre `ui.*` del client. T15 giro 2 `transparency.set`;
+  // T15 giro 3 `layer.delete`, `layer.new` e `layer.setProps` (nome, occhio, lucchetto).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1234, fub: 114, escluso: 12, fatto: 191 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

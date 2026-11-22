@@ -567,6 +567,9 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("percentage", Tipo::Numero),
     ("includeCmyBlacks", Tipo::SiNo),
     ("includeSpotBlacks", Tipo::SiNo),
+    // Le opzioni di un livello (T15, giro 3): occhio e lucchetto.
+    ("visible", Tipo::SiNo),
+    ("locked", Tipo::SiNo),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
@@ -716,6 +719,24 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
             ("includeSpotBlacks", "false"),
         ],
         limiti: &[("percentage", Some(0.0), Some(100.0))],
+    },
+    // Nuovo livello… e Opzioni livello… (T15, giro 3) chiedono solo ciò che il
+    // formato della scena scrive: il nome, l'occhio e il lucchetto. Il colore,
+    // il modello, la stampa, l'anteprima e le immagini attenuate non hanno un
+    // attributo nel file, e il comando li rifiuta. Il nome di serie di un
+    // livello nuovo lo dà Fub (il primo «Livello N» libero); i livelli che le
+    // opzioni cambiano (`ids`) li dà il pannello, non la finestra.
+    FinestraScritta {
+        id: "layer.new",
+        schema: "{name?, visible, locked}",
+        predefiniti: &[("visible", "true"), ("locked", "false")],
+        limiti: &[],
+    },
+    FinestraScritta {
+        id: "layer.setProps",
+        schema: "{name?, visible?, locked?}",
+        predefiniti: &[],
+        limiti: &[],
     },
 ];
 
