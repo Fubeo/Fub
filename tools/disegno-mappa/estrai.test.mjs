@@ -63,7 +63,7 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // delle misure dei comandi `shape.*` (senza le griglie), le tre voci di
   // Allinea del motore, le quindici `align.*` e il pannello `align`:
   // trentaquattro righe. Le griglie e il riflesso aspettano T27.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1299, fub: 114, escluso: 12, fatto: 126 });
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1290, fub: 114, escluso: 12, fatto: 135 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
