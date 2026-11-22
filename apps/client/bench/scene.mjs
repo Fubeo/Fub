@@ -1547,6 +1547,22 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare,
   })),
+  // **I tasti del Disegno completo in Impostazioni › Scorciatoie** (K6 T9c):
+  // la sezione col riquadro aperto, sui comandi dell'indice di prova, con un
+  // tasto di Fub che copre (Ctrl+G), un conflitto vinto dall'ultimo assegnato
+  // e un comando lasciato senza tasto (`?tasti=conflitto`, vedi `fake-ipc.ts`);
+  // poi l'errore di un file d'insieme rotto, che non cambia niente.
+  ...[
+    ["scorciatoie-disegno", 1280, "Scorciatoie › Disegno completo: i comandi coi tasti, un tasto di Fub che copre e un conflitto", openDrawingKeys],
+    ["scorciatoie-disegno-800", 800, "Scorciatoie › Disegno completo nella finestra minima del desktop, 800 px", openDrawingKeys],
+    ["scorciatoie-disegno-errore", 1280, "Scorciatoie › Disegno completo: un file d'insieme rotto lo dice e non cambia niente", importBrokenKeySet],
+  ].map(([id, width, title, prepare]) => ({
+    id,
+    title,
+    query: "indice=prova&tasti=conflitto",
+    viewport: { width, height: 800 },
+    prepare,
+  })),
   // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
   // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
   // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
@@ -5162,6 +5178,9 @@ async function openMenuOggetto(page) {
   await page.click(".draw-header button[aria-label=\"Disegno\"]");
   await page.waitForSelector("#context-menu [role='menuitem']:has-text('Oggetto')");
   await page.hover("#context-menu [role='menuitem']:has-text('Oggetto')");
+  // Il terzo livello (K6 T9c): Oggetto › Tracciato, aperto come nel prototipo.
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Tracciato')");
+  await page.hover(".context-submenu [role='menuitem']:has-text('Tracciato')");
   await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Sposta tracciato')");
   await page.evaluate(() => document.fonts.ready);
 }
@@ -5177,6 +5196,28 @@ async function openTavolozza(page) {
   await page.fill(".draw-commands-dialog .draw-commands-field input", "sposta");
   await page.waitForFunction(() => document.querySelectorAll(".draw-commands-dialog .draw-commands-row").length >= 5);
   await page.evaluate(() => document.fonts.ready);
+}
+
+/// Impostazioni › Scorciatoie con la sezione «Disegno completo» aperta e
+/// portata in cima.
+async function openDrawingKeys(page) {
+  await page.click("#open-settings");
+  await page.click('#settings-tabs button[data-tab="shortcuts"]');
+  await page.waitForSelector("#settings-body details.drawing-keys > summary");
+  await page.click("#settings-body details.drawing-keys > summary");
+  await page.waitForSelector('#settings-body .setting-row[data-setting-key="draw.keys:draw.path.reverse"]');
+  await page.$eval("#settings-body details.drawing-keys", (details) => details.closest("section")?.scrollIntoView({ block: "start" }));
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La stessa sezione dopo «Importa un insieme…» con un file che non è JSON.
+async function importBrokenKeySet(page) {
+  await openDrawingKeys(page);
+  const chooser = page.waitForEvent("filechooser");
+  await page.click("#settings-body .drawing-keys-set button:first-of-type");
+  await (await chooser).setFiles({ name: "tasti.json", mimeType: "application/json", buffer: Buffer.from("{non è json") });
+  await page.waitForSelector('#settings-body .drawing-keys [role="alert"]');
+  await page.$eval("#settings-body details.drawing-keys", (details) => details.closest("section")?.scrollIntoView({ block: "start" }));
 }
 
 async function openWorkspaceMenu(page) {

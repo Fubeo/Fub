@@ -226,7 +226,7 @@ export function installWorkspace(ctx: EditorContext): void {
                 const letto = opsDellEsito(ops);
                 return "ops" in letto ? letto.ops : null;
               },
-              commit: (ops) => ctx.commit("draw.completo.key.history", gesture(ops)) !== null,
+              commit: (ops, nome) => ctx.commit({ name: nome }, gesture(ops)) !== null,
               annuncia: (testo) => ctx.announce(testo),
             },
           });

@@ -66,12 +66,12 @@ export const COMPLETO_IT = {
   "draw.workspace.manage.delete.done": "Spazio eliminato",
   "draw.workspace.manage.failed": "Non si è potuto cambiare lo spazio: {reason}",
   // I tasti del motore (K6 T9b, `completo/esegui.ts`): il comando che aspetta, che
-  // non ha la sua finestra, che è fatto o non è andato, e il nome nella cronologia.
+  // non ha la sua finestra, che è fatto, che non cambiava niente o non è andato.
   "draw.completo.key.waiting": "La parte del disegno per questo comando sta arrivando: il comando parte appena è pronta.",
   "draw.completo.key.nowindow": "Questo comando non ha ancora la sua finestra.",
   "draw.completo.key.done": "{command}: fatto.",
   "draw.completo.key.failed": "Il comando non è andato a buon fine: il disegno è com'era.",
-  "draw.completo.key.history": "Comando del motore",
+  "draw.completo.key.unchanged": "{command}: non c’era niente da cambiare.",
   // Il menu ≡ e la ricerca Ctrl+/ del Completo (K6 T9a; `completo/comandi.ts`).
   "draw.disabled.generic": "Non vale adesso.",
   "draw.disabled.no_selection": "Scegli un oggetto.",
@@ -116,6 +116,19 @@ export const COMPLETO_IT = {
   "draw.completo.posto.tavolozza": "Tavolozza",
   "draw.completo.posto.testata": "Testata",
   "draw.completo.posto.interno": "Da un altro comando",
+  // Il terzo livello del menu ≡ (K6 T9c; `SOTTOMENU` del catalogo).
+  "draw.completo.sotto.colori": "Colori",
+  "draw.completo.sotto.tracciato": "Tracciato",
+  "draw.completo.sotto.disponi": "Disponi",
+  "draw.completo.sotto.fusione": "Fusione",
+  "draw.completo.sotto.inviluppo": "Inviluppo",
+  "draw.completo.sotto.blocca": "Blocca",
+  "draw.completo.sotto.nascondi": "Nascondi",
+  "draw.completo.sotto.uguale": "Simili",
+  "draw.completo.sotto.deforma": "Deforma",
+  "draw.completo.sotto.stilizza": "Stilizza",
+  "draw.completo.sotto.distorci": "Distorci",
+  "draw.completo.sotto.guide": "Guide",
 } as const;
 
 /// Chiave del catalogo del disegno: la stessa forma di `COMPLETO_IT`.
@@ -181,7 +194,7 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.completo.key.nowindow": "This command does not have its window yet.",
   "draw.completo.key.done": "{command}: done.",
   "draw.completo.key.failed": "The command did not finish: the drawing is as it was.",
-  "draw.completo.key.history": "Engine command",
+  "draw.completo.key.unchanged": "{command}: there was nothing to change.",
   // The ≡ menu and the Ctrl+/ search of the complete drawing (K6 T9a).
   "draw.disabled.generic": "Not available now.",
   "draw.disabled.no_selection": "Choose an object.",
@@ -226,6 +239,18 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.completo.posto.tavolozza": "Palette",
   "draw.completo.posto.testata": "Header",
   "draw.completo.posto.interno": "From another command",
+  "draw.completo.sotto.colori": "Colors",
+  "draw.completo.sotto.tracciato": "Path",
+  "draw.completo.sotto.disponi": "Arrange",
+  "draw.completo.sotto.fusione": "Blend",
+  "draw.completo.sotto.inviluppo": "Envelope",
+  "draw.completo.sotto.blocca": "Lock",
+  "draw.completo.sotto.nascondi": "Hide",
+  "draw.completo.sotto.uguale": "Same",
+  "draw.completo.sotto.deforma": "Warp",
+  "draw.completo.sotto.stilizza": "Stylize",
+  "draw.completo.sotto.distorci": "Distort",
+  "draw.completo.sotto.guide": "Guides",
 };
 
 /// La scheda Risorse dell'ispettore (K6 T10): il suo titolo, i campioni del

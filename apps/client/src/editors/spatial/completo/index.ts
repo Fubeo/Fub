@@ -32,6 +32,7 @@ import { t } from "../strings";
 // percorso di un comando che fanno partire.
 import { eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 import { montaTasti } from "./montaggio-tasti";
+import { seguiTastiUtente } from "./segui-tasti";
 import type { ModificheTasti, Piattaforma } from "./tasti";
 export type { GruppoLayout } from "./colonna";
 
@@ -107,6 +108,8 @@ export interface OpzioniTastiCompleto extends AzioniEsito {
   readonly selezione: () => readonly string[];
   readonly anteprima: (anteprima: DrawingPreview | null) => void;
   readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
+  /// Le modifiche dell'utente; senza, il Completo segue `draw.keys` da sé
+  /// (`segui-tasti.ts`), e un cambio vale subito.
   readonly modifiche?: () => ModificheTasti;
   readonly piattaforma?: Piattaforma;
 }
@@ -148,6 +151,16 @@ export function apriErroreCassetto(anchor: HTMLElement, lifetime: Lifetime, ripr
 
 /// L'indice vero, dal suo chunk (`drawing-indice`).
 const indiceVero = (): Promise<Indice> => import("./indice").then((m) => m.indice());
+
+// La sezione «Disegno completo» di Impostazioni › Scorciatoie (T9c,
+// `panels/settings-disegno.ts`) porta questo modulo con un `import()` quando la
+// si apre, e ne prende l'indice, la regola dei tasti e il valore di `draw.keys`:
+// gli stessi pezzi dell'editor, non una copia.
+/// L'indice dei comandi, per chi non apre un disegno (le Impostazioni).
+export const indiceDeiComandi = (): Promise<Indice> => indiceVero();
+export { risolviTasti, tastoFub, type ModificheTasti, type Piattaforma, type RegolaTasti } from "./tasti";
+export { percorsoPosto } from "./comandi";
+export * as tastiUtente from "./tasti-utente";
 
 /// Un campo come lo scrive lo schema della famiglia (`schema.generated.json`).
 interface CampoSchema {
@@ -223,6 +236,13 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     eseguiVoce(voce, dipendenze);
   };
   let chiuso = false;
+  // I tasti dell'utente (`draw.keys`, T9c): con un editor e senza modifiche
+  // date da chi apre, il Completo li segue, e rifà la regola a ogni cambio.
+  // La lettura arriva sempre dopo il montaggio (è una promessa).
+  const modificheUtente: () => ModificheTasti =
+    opzioni.tasti === undefined
+      ? () => ({})
+      : (opzioni.tasti.modifiche ?? seguiTastiUtente(ctx.life, () => montaggio.aggiorna()));
   // La regola dei tasti (T9b, `montaggio-tasti.ts`): il menu e la tavolozza la
   // leggono da qui, senza un secondo calcolo. Ascolta i tasti solo con un editor
   // (la radice); senza, la regola c'è lo stesso.
@@ -230,7 +250,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     radice: opzioni.tasti?.radice ?? null,
     vita: ctx.life,
     indice,
-    modifiche: opzioni.tasti?.modifiche ?? (() => ({})),
+    modifiche: modificheUtente,
     stato: opzioni.tasti?.stato ?? (() => ({ vuoleTesto: false, componendo: false })),
     piattaforma: opzioni.tasti?.piattaforma ?? piattaformaDi(),
     esegui: (voce) => {

@@ -6,10 +6,10 @@
 // voce che non vale si vede spenta, col suo perché. Una voce con parametri
 // apre la finestra di T6 (`motore/finestre.ts`); le altre girano subito.
 //
-// Il posto dice dove sta: `menu/<sottomenu>` nel menu ≡, e ogni posto nella
-// ricerca. Il catalogo di oggi non ha il terzo pezzo sotto `menu` (`posto_di`
-// di `crates/fub-disegno/src/catalogo.rs`): un sottomenu più in basso aspetta
-// che il catalogo lo accetti.
+// Il posto dice dove sta: `menu/<sottomenu>` nel menu ≡, o
+// `menu/<sottomenu>/<sotto>` per un sottomenu dentro il sottomenu (i nomi che
+// il catalogo accetta sono `SOTTOMENU` di `crates/fub-disegno/src/catalogo.rs`),
+// e ogni posto, col percorso intero, nella ricerca.
 
 import type { DrawingCommandInfo, DrawingDisabledReason } from "../../../host/contract";
 import { resolvedLanguage } from "../../../i18n/strings";
@@ -148,6 +148,20 @@ const NOMI_PEZZO: Readonly<Record<string, DrawKey>> = {
   tavolozza: "draw.completo.posto.tavolozza",
   testata: "draw.completo.posto.testata",
   interno: "draw.completo.posto.interno",
+  // Il terzo livello di ≡ (`SOTTOMENU` del catalogo); `trasforma` e `oggetto`
+  // hanno già il loro nome.
+  colori: "draw.completo.sotto.colori",
+  tracciato: "draw.completo.sotto.tracciato",
+  disponi: "draw.completo.sotto.disponi",
+  fusione: "draw.completo.sotto.fusione",
+  inviluppo: "draw.completo.sotto.inviluppo",
+  blocca: "draw.completo.sotto.blocca",
+  nascondi: "draw.completo.sotto.nascondi",
+  uguale: "draw.completo.sotto.uguale",
+  deforma: "draw.completo.sotto.deforma",
+  stilizza: "draw.completo.sotto.stilizza",
+  distorci: "draw.completo.sotto.distorci",
+  guide: "draw.completo.sotto.guide",
 };
 
 /// Dove sta un posto, come percorso leggibile: «Colonna › Disegna». Il
@@ -170,26 +184,49 @@ export function tastoMostrato(regola: RegolaTasti | null, id: string): string | 
 }
 
 /// Il menu ≡ con i sottomenu dell'indice (`menu/<sottomenu>`), nell'ordine in
-/// cui l'indice li dà. Una voce spenta si vede, col suo perché.
+/// cui l'indice li dà. Una voce di `menu/<sottomenu>/<sotto>` sta in un
+/// sottomenu dentro il sottomenu, al posto della prima voce che lo porta. Una
+/// voce spenta si vede, col suo perché.
 export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiVoce, regola: RegolaTasti | null = null): MenuItem[] {
-  const gruppi = new Map<string, MenuItem[]>();
+  // Per ogni sottomenu le sue righe: una voce, o il nome di un sotto.
+  const gruppi = new Map<string, Array<MenuItem | string>>();
+  const sotti = new Map<string, MenuItem[]>();
   for (const voce of indice.voci) {
-    const [scheda, gruppo] = voce.posto.split("/");
-    if (scheda !== "menu" || gruppo === undefined || !(gruppo in NOMI_PEZZO)) continue;
+    const [scheda, gruppo, sotto, oltre] = voce.posto.split("/");
+    if (scheda !== "menu" || gruppo === undefined || !(gruppo in NOMI_PEZZO) || oltre !== undefined) continue;
+    if (sotto !== undefined && !(sotto in NOMI_PEZZO)) continue;
     const { disabled, perche } = statoVoce(voce, stato);
-    const elenco = gruppi.get(gruppo) ?? [];
     const hint = tastoMostrato(regola, voce.id);
-    elenco.push({
+    const riga: MenuItem = {
       label: nomeVoce(voce),
       ...(hint === undefined ? {} : { hint }),
       disabled,
       ...(perche === undefined ? {} : { description: perche }),
       run: () => esegui(voce),
-    });
+    };
+    const elenco = gruppi.get(gruppo) ?? [];
     gruppi.set(gruppo, elenco);
+    if (sotto === undefined) {
+      elenco.push(riga);
+      continue;
+    }
+    const chiave = `${gruppo}/${sotto}`;
+    const dentro = sotti.get(chiave);
+    if (dentro === undefined) {
+      sotti.set(chiave, [riga]);
+      elenco.push(chiave);
+    } else dentro.push(riga);
   }
   if (gruppi.size === 0) return [{ label: t("draw.completo.indice.empty"), disabled: true }];
-  return [...gruppi].map(([gruppo, items]) => ({ label: t(NOMI_PEZZO[gruppo]), submenu: true, items }));
+  return [...gruppi].map(([gruppo, righe]) => ({
+    label: t(NOMI_PEZZO[gruppo]),
+    submenu: true,
+    items: righe.map((riga): MenuItem => {
+      if (typeof riga !== "string") return riga;
+      const sotto = riga.slice(gruppo.length + 1);
+      return { label: t(NOMI_PEZZO[sotto]), submenu: true, items: sotti.get(riga)! };
+    }),
+  }));
 }
 
 /// Il menu ≡ quando l'indice non arriva: lo dice, con «Riprova».

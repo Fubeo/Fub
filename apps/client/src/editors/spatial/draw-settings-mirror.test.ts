@@ -23,6 +23,7 @@ import { describe, expect, it } from "vitest";
 import DRAW_RS from "../../../../../crates/fub-features/src/draw.rs?raw";
 import { SAVED_WORKSPACES_KEY, SUGGESTIONS_KEY, TOOLBAR_KEY, WORKSPACE_KEY, currentWorkspace } from "./preferences";
 import { SPAZI_COMPLETO, WORKSPACES } from "./tools/registry";
+import { DRAW_KEYS_KEY } from "./completo/tasti-utente";
 import { DRAW_BUNDLE, TEMPLATES_FOLDER, TEMPLATES_SETTING, templatesFolder } from "./templates/choices";
 
 /// Il valore, come testo, della costante pubblica `name` di `draw.rs`.
@@ -66,6 +67,7 @@ describe("le impostazioni dei disegni, Rust e client", () => {
     expect(text("DRAW_TOOLBAR_KEY")).toBe(TOOLBAR_KEY);
     expect(text("DRAW_SUGGESTIONS_KEY")).toBe(SUGGESTIONS_KEY);
     expect(text("DRAW_TEMPLATES_KEY")).toBe(TEMPLATES_SETTING);
+    expect(text("DRAW_KEYS_KEY")).toBe(DRAW_KEYS_KEY);
     // Le chiavi tolte (ADR 0231) non tornano da una parte sola.
     for (const gone of ["DRAW_SYMBOLS_KEY", "DRAW_LEVEL_KEY", "DRAW_CUSTOM_KEY"]) expect(DRAW_RS).not.toContain(gone);
     expect(text("DRAW_ID")).toBe(DRAW_BUNDLE);

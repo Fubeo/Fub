@@ -48,8 +48,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   assert.equal(mappa.righe.length, 1551);
   // Le sette righe `window.workspace*` sono di Fub (T7), e T10 chiude le sette
   // righe `window.*` del menu Finestra: da «da fare» a «fub». T8 chiude le dieci
-  // righe della colonna e del cassetto, e passano a «fub» allo stesso modo.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1449, fub: 90, escluso: 12 });
+  // righe della colonna e del cassetto, e passano a «fub» allo stesso modo; T9c
+  // le dieci di Impostazioni › Scorciatoie (i tasti, i conflitti, gli insiemi).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1439, fub: 100, escluso: 12 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

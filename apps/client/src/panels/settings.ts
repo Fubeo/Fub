@@ -126,6 +126,7 @@ import {
   type NumberProblem,
 } from "./settings-model";
 import { composingKey } from "../kit/ime";
+import { DRAW_KEYS_SETTING, dimenticaTastiDisegno, riempiTastiDisegno } from "./settings-disegno";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
 /// una chiave che ha composto invece di leggerla da un elenco.
@@ -717,6 +718,7 @@ function close(): void {
   rowErrors.clear();
   writtenRows.clear();
   openDetails.clear();
+  dimenticaTastiDisegno();
   release = null;
   renderedTab = null;
   renderedForm = null;
@@ -3115,6 +3117,18 @@ async function renderShortcuts(): Promise<HTMLElement[]> {
     const shell = sectionBlock(t("settings.shortcuts.shell.title"), index++, { hint: t("settings.shortcuts.shell") });
     for (const command of fromShell) addCommand(shell, command, command.title, command.description);
     finish(shell);
+  }
+  // I comandi del Disegno completo (K6 T9c): il loro modulo arriva solo a
+  // riquadro aperto (`settings-disegno.ts`), e i tasti stanno in `draw.keys`.
+  const drawKeys = byKey.get(DRAW_KEYS_SETTING);
+  if (drawKeys) {
+    const drawing = sectionBlock(t("settings.drawing_keys.title"), index++, { hint: t("settings.drawing_keys.hint") });
+    const changed = await riempiTastiDisegno(drawing.body, drawKeys, {
+      scrivi: (action) => write(action),
+      ridisegna: () => void render(),
+    });
+    markModified(drawing, changed);
+    nodes.push(drawing.section);
   }
   if (count === 0) nodes.push(row("muted settings-note", t("settings.shortcuts.none")));
   return nodes;

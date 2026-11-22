@@ -62,6 +62,25 @@ describe("menuComando", () => {
     expect(sottovoci(trova(menu, "Oggetto")).map((item) => item.label)).toEqual(["Voce a", "Voce c"]);
   });
 
+  it("una voce del terzo livello sta in un sottomenu dentro il sottomenu, al posto della sua prima voce", () => {
+    const indice = indiceDi({
+      voci: [
+        voce("a", "menu/oggetto"),
+        voce("b", "menu/oggetto/tracciato"),
+        voce("c", "menu/oggetto"),
+        voce("d", "menu/oggetto/tracciato"),
+        voce("e", "menu/oggetto/sconosciuto"),
+        voce("f", "menu/oggetto/tracciato/troppo"),
+      ],
+    });
+    const stato = valgono(...["a", "b", "c", "d"].map((id) => ({ id: `disegno.${id}`, enabled: true, disabled_reason: null })));
+    const oggetto = sottovoci(trova(menuComando(indice, stato, NESSUNO), "Oggetto"));
+    expect(oggetto.map((item) => item.label)).toEqual(["Voce a", "Tracciato", "Voce c"]);
+    const tracciato = trova(oggetto, "Tracciato");
+    expect(tracciato.submenu).toBe(true);
+    expect(sottovoci(tracciato).map((item) => item.label)).toEqual(["Voce b", "Voce d"]);
+  });
+
   it("una voce spenta si vede col perché che il motore ha detto", () => {
     const indice = indiceDi({ voci: [voce("a", "menu/oggetto")] });
     const menu = menuComando(indice, valgono({ id: "disegno.a", enabled: false, disabled_reason: "needs_path" }), NESSUNO);
@@ -165,6 +184,9 @@ describe("percorsoPosto", () => {
     expect(percorsoPosto("colonna/disegna")).toBe("Colonna › Disegna");
     expect(percorsoPosto("ispettore/design/documento")).toBe("Ispettore › Design › Documento");
     expect(percorsoPosto("tavolozza")).toBe("Tavolozza");
+    // Il terzo livello di ≡: il percorso intero.
+    expect(percorsoPosto("menu/oggetto/tracciato")).toBe("Oggetto › Tracciato");
+    expect(percorsoPosto("menu/selezione/uguale")).toBe("Selezione › Simili");
   });
 });
 

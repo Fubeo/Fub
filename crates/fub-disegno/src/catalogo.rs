@@ -427,19 +427,54 @@ pub const SCHEDE: &[Scheda] = &[
     scheda("interno", &[g(PRINCIPALE)]),
 ];
 
+/// I sottomenu del menu ≡ che hanno un terzo livello (`menu/oggetto/tracciato`),
+/// per gruppo: sono i sottomenu del motore che raccolgono più comandi
+/// (Object › Path, Object › Transform, Select › Same…). Il `Posto` di K3 resta
+/// `menu`/`<gruppo>`; la voce dell'indice tiene il posto intero, e il client ne
+/// fa un sottomenu dentro il sottomenu. Va tenuto uguale alla regex `POSTO` di
+/// `.github/scripts/check-disegno-mappa.mjs` e ai nomi di `NOMI_PEZZO` in
+/// `apps/client/src/editors/spatial/completo/comandi.ts`.
+pub const SOTTOMENU: &[(&str, &[&str])] = &[
+    ("modifica", &["colori"]),
+    (
+        "oggetto",
+        &[
+            "tracciato",
+            "trasforma",
+            "disponi",
+            "fusione",
+            "inviluppo",
+            "blocca",
+            "nascondi",
+        ],
+    ),
+    ("selezione", &["uguale", "oggetto"]),
+    ("effetto", &["deforma", "stilizza", "distorci"]),
+    ("visualizza", &["guide"]),
+];
+
 /// Il `Posto` di K3 della colonna `posto`; `None` per `fub`, `escluso` o un
-/// posto che [`SCHEDE`] non ha.
+/// posto che [`SCHEDE`] non ha. Un terzo pezzo vale per una sezione
+/// dell'ispettore (qualsiasi nome) e per un sottomenu di [`SOTTOMENU`].
 pub fn posto_di(posto: &str) -> Option<Posto> {
     let mut pezzi = posto.split('/');
     let prima = pezzi.next()?;
     let seconda = pezzi.next();
-    // Una sezione dell'ispettore ha un terzo pezzo; nient'altro.
     let terza = pezzi.next();
-    if pezzi.next().is_some() || (terza.is_some() && prima != "ispettore") {
+    if pezzi.next().is_some() || terza.is_some_and(str::is_empty) {
         return None;
     }
-    if terza.is_some_and(str::is_empty) {
-        return None;
+    if let Some(sotto) = terza {
+        let ammesso = match prima {
+            "ispettore" => true,
+            "menu" => SOTTOMENU
+                .iter()
+                .any(|(gruppo, sotti)| Some(*gruppo) == seconda && sotti.contains(&sotto)),
+            _ => false,
+        };
+        if !ammesso {
+            return None;
+        }
     }
     let s = SCHEDE.iter().find(|s| s.id == prima)?;
     let gruppo = seconda.unwrap_or(PRINCIPALE);
@@ -732,7 +767,19 @@ mod tests {
         assert_eq!(p("finestra"), Some(("finestra", PRINCIPALE)));
         assert_eq!(p("fub"), None);
         assert_eq!(p("escluso"), None);
+        assert_eq!(p("menu/oggetto/tracciato"), Some(("menu", "oggetto")));
+        assert_eq!(p("menu/selezione/uguale"), Some(("menu", "selezione")));
         assert_eq!(p("menu/oggetto/altro"), None);
+        assert_eq!(p("menu/file/tracciato"), None);
+        assert_eq!(p("menu/oggetto/tracciato/punti"), None);
+        assert_eq!(p("menu/oggetto/"), None);
+        assert_eq!(p("colonna/forme/tracciato"), None);
+        // Ogni sottomenu del terzo livello sta in un gruppo del menu ≡.
+        let menu = SCHEDE.iter().find(|s| s.id == "menu").unwrap();
+        for (gruppo, sotti) in SOTTOMENU {
+            assert!(menu.gruppi.iter().any(|g| g.id == *gruppo), "{gruppo}");
+            assert!(!sotti.is_empty(), "{gruppo}");
+        }
         assert_eq!(p("ispettore/design/"), None);
         assert_eq!(p("menu/nessuno"), None);
     }

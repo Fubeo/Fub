@@ -85,7 +85,7 @@ function dipendenze(over: Partial<DipendenzeComando> & { risposta?: DrawingOutco
   const motore = { pronta: vi.fn(() => Promise.resolve(sessione)) };
   const azioni = {
     leggi: vi.fn((_ops: string | null): readonly Op[] | null => OPS),
-    commit: vi.fn((_ops: readonly Op[]) => true),
+    commit: vi.fn((_ops: readonly Op[], _nome: string) => true),
     seleziona: vi.fn((_ids: readonly string[]) => undefined),
     annuncia: vi.fn((_testo: string) => undefined),
   };
@@ -112,7 +112,7 @@ describe("eseguiVoce, senza finestra", () => {
     eseguiVoce(voce(), d);
     await tick();
     expect(sessione.comando).toHaveBeenCalledWith({ id: "shape.round", selection: ["n1", "n2"], value: {}, preview: false });
-    expect(azioni.commit).toHaveBeenCalledWith(OPS);
+    expect(azioni.commit).toHaveBeenCalledWith(OPS, etichettaDi(voce()));
     expect(azioni.seleziona).toHaveBeenCalledWith(["n1"]);
     expect(azioni.annuncia).toHaveBeenCalledWith(expect.stringContaining(etichettaDi(voce())));
   });
@@ -172,7 +172,26 @@ describe("eseguiVoce, senza finestra", () => {
     await tick();
     expect(azioni.commit).not.toHaveBeenCalled();
     expect(azioni.seleziona).toHaveBeenCalledWith(["n9"]);
-    expect(azioni.annuncia).toHaveBeenLastCalledWith(t("draw.window.refused"));
+    expect(azioni.annuncia).toHaveBeenLastCalledWith(t("draw.rejected", { reason: t("draw.reason.locked") }));
+    expect(azioni.annuncia).not.toHaveBeenCalledWith(t("draw.window.refused"));
+  });
+
+  it("ogni rifiuto dice il suo motivo, come per i colori; «niente da cambiare» non è un errore", async () => {
+    for (const [refused, motivo] of [
+      ["unmapped", "draw.reason.foreign"],
+      ["too_large", "draw.reason.limit"],
+      ["stale", "draw.reason.invalid"],
+    ] as const) {
+      const { d, azioni } = dipendenze({ risposta: esito({ refused }) });
+      eseguiVoce(voce(), d);
+      await tick();
+      expect(azioni.annuncia).toHaveBeenLastCalledWith(t("draw.rejected", { reason: t(motivo) }));
+    }
+    const { d, azioni } = dipendenze({ risposta: esito({ refused: "empty" }) });
+    eseguiVoce(voce(), d);
+    await tick();
+    expect(azioni.commit).not.toHaveBeenCalled();
+    expect(azioni.annuncia).toHaveBeenLastCalledWith(t("draw.completo.key.unchanged", { command: etichettaDi(voce()) }));
   });
 
   it("le operazioni che non valgono non si applicano, e lo si dice", async () => {
@@ -218,7 +237,7 @@ describe("eseguiVoce, con finestra", () => {
     // OK: il motore riceve i valori della finestra, e il risultato va alla cronologia.
     const risposta = await esegui({ radius: 12 }, false);
     expect(sessione.comando).toHaveBeenCalledWith(expect.objectContaining({ value: { radius: 12 }, preview: false }));
-    expect(azioni.commit).toHaveBeenCalledWith(OPS);
+    expect(azioni.commit).toHaveBeenCalledWith(OPS, etichettaDi(voce()));
     expect(risposta).toEqual({ anteprima: null, rifiuto: null });
   });
 
@@ -271,7 +290,7 @@ describe("applicaEsito", () => {
     const azioni = { leggi: vi.fn(() => OPS), commit: vi.fn(() => true), seleziona: vi.fn(), annuncia: vi.fn() };
     applicaEsito(esito({ ops: "[1]", selection: ["a"] }), "Etichetta", azioni);
     expect(azioni.leggi).toHaveBeenCalledWith("[1]");
-    expect(azioni.commit).toHaveBeenCalledWith(OPS);
+    expect(azioni.commit).toHaveBeenCalledWith(OPS, "Etichetta");
     expect(azioni.seleziona).toHaveBeenCalledWith(["a"]);
     expect(azioni.annuncia).toHaveBeenCalledWith(expect.stringContaining("Etichetta"));
   });

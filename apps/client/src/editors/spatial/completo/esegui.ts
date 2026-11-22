@@ -13,6 +13,7 @@ import { languageCurrent } from "../../../i18n/strings";
 import type { Lifetime } from "../../../ui/lifetime";
 import { apriFinestra, type Esegui, type EsitoComando, type FinestraOpzioni, type ModuloFinestra } from "../motore/finestre";
 import type { MotoreDelDisegno } from "../motore/gesti";
+import { motivoDelRifiuto } from "../motore/rifiuto";
 import type { Op } from "../scene/ops";
 import { t } from "../strings";
 import type { Caricatore, StatoFamiglia } from "./carica";
@@ -27,8 +28,10 @@ const ATTESA_MOTORE_MS = 2_000;
 export interface AzioniEsito {
   /// Le operazioni dell'esito come lista, o `null` se non valgono.
   readonly leggi: (ops: string | null) => readonly Op[] | null;
-  /// Le operazioni in un solo passo della cronologia; `false` se il disegno le rifiuta.
-  readonly commit: (ops: readonly Op[]) => boolean;
+  /// Le operazioni in un solo passo della cronologia, col nome del comando
+  /// (`nome`, come negli annunci); `false` se il disegno le rifiuta. Due
+  /// comandi diversi sono due passi anche se arrivano a meno di `MERGE_MS`.
+  readonly commit: (ops: readonly Op[], nome: string) => boolean;
   readonly seleziona: (ids: readonly string[]) => void;
   readonly annuncia: (testo: string) => void;
 }
@@ -96,11 +99,13 @@ async function chiama(
 }
 
 /// Un esito che non è un'anteprima: la selezione, le operazioni in un passo, e
-/// lo si dice. Un rifiuto del motore si dice e non cambia niente.
+/// lo si dice. Un rifiuto del motore si dice col suo motivo (`motivoDelRifiuto`,
+/// come per i colori) e non cambia niente.
 export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: AzioniEsito): void {
   if (esito.refused !== null) {
     azioni.seleziona(esito.selection);
-    azioni.annuncia(t("draw.window.refused"));
+    const motivo = motivoDelRifiuto(esito.refused);
+    azioni.annuncia(motivo === null ? t("draw.completo.key.unchanged", { command: etichetta }) : t("draw.rejected", { reason: t(motivo) }));
     return;
   }
   const ops = azioni.leggi(esito.ops);
@@ -108,7 +113,7 @@ export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: A
     azioni.annuncia(t("draw.completo.key.failed"));
     return;
   }
-  if (ops.length > 0 && !azioni.commit(ops)) {
+  if (ops.length > 0 && !azioni.commit(ops, etichetta)) {
     azioni.annuncia(t("draw.completo.key.failed"));
     return;
   }
