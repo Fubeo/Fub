@@ -77,7 +77,7 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { DEFS_ID } from "../src/editors/spatial/scene/ids";
 import { RISPOSTE, rispostaDiFamiglia } from "./disegno-famiglie/risposte";
-import { comandiProva, comandiTrasformazioni, INDICE_PROVA } from "./disegno-indice-prova";
+import { comandiProva, comandiSelezione, comandiTrasformazioni, INDICE_PROVA } from "./disegno-indice-prova";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { documentEmbedHtml, LIVE_DOC, liveCase } from "./live-fixture";
 import { treeFixture, type TreeFixture } from "./vault-fixture";
@@ -1110,13 +1110,13 @@ function benchDrawingEngine(): DrawingFake | undefined {
     // Con `?comandi=risposti` valgono quelli a cui il banco sa rispondere
     // (`disegno-famiglie/`, K6 T12 giro 4): la finestra di Sposta tracciato e
     // Converti della sezione dei punti si aprono come col motore vero. Senza,
-    // quelli delle trasformazioni (K6 T13 giro 3).
+    // quelli delle trasformazioni (K6 T13 giro 3) e della Selezione (K6 T15).
     comandi:
       INDICE_PARAM === "prova"
         ? (selection) => comandiProva(selection)
         : params.get("comandi") === "risposti"
           ? () => comandiRisposti()
-          : (selection) => comandiTrasformazioni(selection),
+          : (selection) => [...comandiTrasformazioni(selection), ...comandiSelezione(selection)],
     open: () => {
       const instance = `banco-${++instances}`;
       benchLastInstance = instance;

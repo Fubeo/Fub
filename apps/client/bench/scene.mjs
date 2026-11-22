@@ -1597,6 +1597,10 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-scelte-pannello", 1280, "Il pannello Design del Completo con un oggetto scelto: senza Posizione e misure né Distribuisci", "", (page) => openSezioneConUno(page, ".draw-properties")],
     ["disegno-scelte-pannello-800", 800, "Il pannello Design del Completo nel cassetto dell'ispettore, 800 px: senza i doppioni", "", (page) => openSezioneConUno(page, ".draw-properties")],
     ["disegno-fam-trasforma-sezione-800", 800, "La sezione Trasforma nel cassetto dell'ispettore, 800 px", "", openTrasformaSezione],
+    ["disegno-selezione-uguale", 1280, "≡ › Selezione › Uguale con l'ellisse scelta: le voci accese, e il perché di quelle spente", "", openMenuUguale],
+    ["disegno-selezione-uguale-800", 800, "Lo stesso menu nella finestra minima del desktop, 800 px", "", openMenuUguale],
+    ["disegno-selezione-tratto", 1280, "Uguale › Colore tratto: l'ellisse e le due linee con lo stesso tratto scelte insieme sul foglio", "", openUgualeTratto],
+    ["disegno-selezione-tratto-800", 800, "Lo stesso risultato nella finestra minima del desktop, 800 px", "", openUgualeTratto],
     ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
     ["disegno-fam-forme-finestra-800", 800, "La finestra delle misure del Rettangolo nella finestra minima del desktop, 800 px", "", openFormeFinestra],
   ].map(([id, width, title, extra, prepare]) => ({
@@ -5513,6 +5517,41 @@ async function openRuotaFinestra(page) {
   await page.evaluate(() => [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Ruota")).click());
   await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
   await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Il menu ≡ del Completo con ≡ › Selezione › Uguale aperto, con l'ellisse scelta (K6 T15, giro 1).
+/// Uguale vuole un oggetto scelto: «Colore tratto» e le altre voci valgono, e «Istanza di simbolo»
+/// è spenta col perché del motore. Se l'ellisse non è scelta la scena si ferma: una foto con tutto
+/// spento direbbe una cosa falsa.
+async function openMenuUguale(page) {
+  await openDrawing(page);
+  // Il primo oggetto, l'ellisse, scelto da tastiera come in openMenuOggetto: il clic del mouse sul
+  // disegno del banco non lo sceglie (misurato sull'ellisse e sulle linee, K6 T15 giro 1).
+  // Lo strumento di selezione col tasto «v», come nella scena «draw-selection»: la penna resterebbe attiva.
+  await page.keyboard.press("v");
+  await scegliPrimo(page);
+  await page.click('.draw-header button[aria-label="Disegno"]');
+  await page.waitForSelector("#context-menu [role='menuitem']:has-text('Selezione')");
+  await page.hover("#context-menu [role='menuitem']:has-text('Selezione')");
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Uguale')");
+  await page.hover(".context-submenu [role='menuitem']:has-text('Uguale')");
+  await page.waitForSelector(".context-submenu [role='menuitem']:has-text('Colore tratto')");
+  const scelta = await page.evaluate(() => {
+    const voce = [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Colore tratto"));
+    return voce !== undefined && !voce.textContent.includes("Scegli un oggetto.");
+  });
+  if (!scelta) throw new Error("l'ellisse non è scelta: le voci di Uguale restano spente");
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// «Uguale › Colore tratto» sul foglio: l'ellisse e le due linee con lo stesso tratto scelte insieme
+/// (K6 T15, giro 1). Il clic sulla voce è quello dell'elemento: il menu si chiude a ogni movimento del
+/// puntatore, come in Oggetto › Trasforma.
+async function openUgualeTratto(page) {
+  await openMenuUguale(page);
+  await page.evaluate(() => [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Colore tratto")).click());
+  await page.waitForTimeout(600);
   await page.evaluate(() => document.fonts.ready);
 }
 

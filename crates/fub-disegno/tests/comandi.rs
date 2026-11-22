@@ -222,11 +222,14 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         DrawingRefusal::Unmapped
     );
     // Scegliere tutto, l'inversa e nessuno non toccano ciò che è scelto: il
-    // resto (anche l'ordine del nucleo, K6 T11) è spento.
+    // resto (anche l'ordine del nucleo, K6 T11) è spento. Tutto nella tavola e
+    // gli oggetti di testo non leggono ciò che è scelto, come Tutto (K6 T15).
     let sempre = [
         "disegno.select.all",
         "disegno.select.inverse",
         "disegno.select.none",
+        "disegno.select.allOnArtboard",
+        "disegno.select.object.textObjects",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     assert!(comandi

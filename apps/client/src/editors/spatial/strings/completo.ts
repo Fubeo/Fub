@@ -179,7 +179,7 @@ export const COMPLETO_IT = {
   "draw.completo.sotto.inviluppo": "Inviluppo",
   "draw.completo.sotto.blocca": "Blocca",
   "draw.completo.sotto.nascondi": "Nascondi",
-  "draw.completo.sotto.uguale": "Simili",
+  "draw.completo.sotto.uguale": "Uguale",
   "draw.completo.sotto.deforma": "Deforma",
   "draw.completo.sotto.stilizza": "Stilizza",
   "draw.completo.sotto.distorci": "Distorci",

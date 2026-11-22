@@ -1,3 +1,20 @@
 {
-  "risposte": []
+  "risposte": [
+    {
+      "comando": "disegno.select.same.fillColor",
+      "esito": { "selection": ["o00000009", "o0000000a", "o0000000b", "o0000000c", "o0000000d", "o0000000f"] }
+    },
+    {
+      "comando": "disegno.select.same.strokeColor",
+      "esito": { "selection": ["o00000001", "o00000009", "o0000000c"] }
+    },
+    {
+      "comando": "disegno.select.allOnArtboard",
+      "esito": { "selection": ["o00000001", "o00000002", "o00000003", "o00000004", "o00000009", "o0000000a", "o0000000b", "o0000000c", "o0000000d", "o0000000f", "o0000000e"] }
+    },
+    {
+      "comando": "disegno.select.object.textObjects",
+      "esito": { "selection": ["o0000000e"] }
+    }
+  ]
 }
