@@ -1,5 +1,5 @@
 {
-  "$nota": "Le risposte della famiglia aspetto del banco (K6 T15): la trasparenza (giro 2) e il contorno (giro 5). Il banco non scrive l'aspetto: l'esito non cambia niente (`ops` vuoto), come la finestra dei tracciati. Le sezioni Trasparenza e Contorno si vedono e mostrano i valori del disegno.",
+  "$nota": "Le risposte della famiglia aspetto del banco (K6 T15): la trasparenza (giro 2), il contorno e il punto scelto della sfumatura (giro 5). Il banco non scrive l'aspetto: l'esito non cambia niente (`ops` vuoto), come la finestra dei tracciati; `gradient.selectStop` è una lettura che rende sempre il primo punto (la sezione non la legge). Le sezioni Trasparenza, Contorno e Sfumatura si vedono e mostrano i valori del disegno.",
   "risposte": [
     {
       "comando": "disegno.transparency.set",
@@ -11,6 +11,14 @@
       "comando": "disegno.stroke.set",
       "esito": {
         "ops": "[]"
+      }
+    },
+    {
+      "comando": "disegno.gradient.selectStop",
+      "esito": {
+        "reading": {
+          "index": 0
+        }
       }
     }
   ]

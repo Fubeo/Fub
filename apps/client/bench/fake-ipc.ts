@@ -943,9 +943,45 @@ function conCampioni(text: string, count: number): string {
   return text.replace(/<defs\b[^>]*[^/]>/, (open) => `${open}${campioni}`);
 }
 
+// `?aspetto=contorno|sfumatura` (K6 T15, giro 5, le sezioni Contorno e Sfumatura): la prima forma del
+// disegno dei connettori con un contorno spesso e tratteggiato, o riempita da una sfumatura lineare
+// privata a tre punti, scritta come la scrive la scena. Senza, il disegno è quello di sempre.
+const ASPETTO_PARAM = params.get("aspetto");
+
+/// Il testo del disegno con l'aspetto `aspetto` sulla prima forma.
+function conAspetto(text: string, fixture: ConnectorsFixture, aspetto: string): string {
+  const forma = fixture.shapes[0];
+  if (forma === undefined) return text;
+  const apertura = new RegExp(`<(rect|ellipse|polygon)\\b[^>]*\\bid="${forma.id}"[^>]*?(/?)>`);
+  const senza = (tag: string, nomi: readonly string[]): string => nomi.reduce((t, nome) => t.replace(new RegExp(`\\s${nome}="[^"]*"`), ""), tag);
+  if (aspetto === "contorno") {
+    return text.replace(apertura, (tag) =>
+      senza(tag, ["stroke", "stroke-width", "stroke-dasharray"]).replace(/\s*(\/?)>$/, ' stroke="#1f2937" stroke-width="8" stroke-dasharray="20 8"$1>'));
+  }
+  if (aspetto !== "sfumatura") throw new RangeError("aspetto must be contorno or sfumatura");
+  const g = forma.geometry;
+  const [x1, x2, y] = forma.kind === "rect"
+    ? [g[0]!, g[0]! + g[2]!, g[1]! + g[3]! / 2]
+    : forma.kind === "ellipse"
+      ? [g[0]! - g[2]!, g[0]! + g[2]!, g[1]!]
+      : [Math.min(...g.filter((_, i) => i % 2 === 0)), Math.max(...g.filter((_, i) => i % 2 === 0)), g[1]!];
+  const sfumatura = `<linearGradient id="rbanco001" fub:role="private" gradientUnits="userSpaceOnUse" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}">`
+    + '<stop offset="0" stop-color="#0072b2"/><stop offset="0.5" stop-color="#f0e442"/><stop offset="1" stop-color="#d55e00"/></linearGradient>';
+  const conDefs = /<defs\b[^>]*[^/]>/.test(text)
+    ? text.replace(/<defs\b[^>]*[^/]>/, (open) => `${open}${sfumatura}`)
+    : text.replace(/(<svg\b[^>]*>)/, `$1<defs id="fub-defs">${sfumatura}</defs>`);
+  return conDefs.replace(apertura, (tag) => senza(tag, ["fill"]).replace(/\s*(\/?)>$/, ' fill="url(#rbanco001) #a8a07a"$1>'));
+}
+
+/// Il testo del disegno dei connettori con i parametri della pagina.
+function testoDeiConnettori(fixture: ConnectorsFixture): string {
+  const conIParametri = CAMPIONI_PARAM === null ? fixture.text : conCampioni(fixture.text, Number(CAMPIONI_PARAM));
+  return ASPETTO_PARAM === null ? conIParametri : conAspetto(conIParametri, fixture, ASPETTO_PARAM);
+}
+
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
-  ? { doc: CONNECTORS_DOC, text: CAMPIONI_PARAM === null ? CONNECTORS.text : conCampioni(CONNECTORS.text, Number(CAMPIONI_PARAM)) }
+  ? { doc: CONNECTORS_DOC, text: testoDeiConnettori(CONNECTORS) }
   : LARGE !== null
     ? { doc: LARGE_DOC, text: LARGE.text }
     : null;

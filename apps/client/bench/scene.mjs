@@ -1598,6 +1598,12 @@ export const SCENE = touchLast(onPage("shell", [
     // di Modifica › Modifica colori con l'anteprima che il banco risponde (`disegno-famiglie/colore.json`).
     ["disegno-fam-colore", 1280, "La sezione Colore del Design con un oggetto scelto: riempimento attivo, contorno, Scambia, Nessuno e Di serie", "", (page) => openSezioneConUno(page, ".draw-color")],
     ["disegno-fam-colore-800", 800, "La sezione Colore con un oggetto scelto, nel cassetto dell'ispettore, 800 px", "", (page) => openSezioneConUno(page, ".draw-color")],
+    // Il contorno e la sfumatura (K6 T15, giro 5): la prima forma con un contorno spesso e tratteggiato, o con
+    // una sfumatura lineare a tre punti (`?aspetto=`, `fake-ipc.ts`), e la sua sezione del Design in vista.
+    ["disegno-fam-contorno", 1280, "La sezione Contorno del Design con una forma dal contorno spesso e tratteggiato: spessore, estremi, angoli, trattino e spazio", "&aspetto=contorno", (page) => openSezioneConUno(page, '#surface-panel-draw-design [data-section="contorno"]')],
+    ["disegno-fam-contorno-800", 800, "La sezione Contorno con il contorno tratteggiato, nel cassetto dell'ispettore, 800 px", "&aspetto=contorno", (page) => openSezioneConUno(page, '#surface-panel-draw-design [data-section="contorno"]')],
+    ["disegno-fam-sfumatura", 1280, "La sezione Sfumatura del Design con una forma dalla sfumatura lineare a tre punti: tipo, angolo, la striscia e i punti", "&aspetto=sfumatura", (page) => openSezioneConUno(page, '#surface-panel-draw-design [data-section="sfumatura"]')],
+    ["disegno-fam-sfumatura-800", 800, "La sezione Sfumatura con la sfumatura a tre punti, nel cassetto dell'ispettore, 800 px", "&aspetto=sfumatura", (page) => openSezioneConUno(page, '#surface-panel-draw-design [data-section="sfumatura"]')],
     // I campioni (K6 T14, giro 2): Risorse › Campioni con 24 campioni e uno scelto, la finestra «Nuovo
     // campione», e la sezione Colore con un testo scelto: il contorno che un testo non ha è «Nessuno», spento.
     ["disegno-fam-campioni", 1280, "Risorse › Campioni: la griglia dei campioni del documento, uno scelto, e le azioni", "&campioni=24", openCampioni],
