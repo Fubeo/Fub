@@ -95,8 +95,22 @@ Ogni campo manda il suo comando quando si conferma; rotazione e inclinazione
 vanno senza finestra. Nel Disegno completo «Posizione e misure» e i gruppi
 Distribuisci non ci sono: li dà questa sezione e la sezione Allinea.
 
-Trasforma ciascuno, Distorci e le forme dal vivo non ci sono ancora: le forme
-dal vivo aspettano T27.
+Nel menu ≡ › Oggetto › Disponi ci sono le sette voci che dispongono gli oggetti
+scelti: Disponi in griglia, Scambia oggetti, Sostituisci con l'oggetto superiore,
+Imposta dimensione di ciascuno, Raggruppa oggetti sovrapposti, Opacità casuale e
+Ordina oggetti. Disponi in griglia mette gli oggetti in righe e colonne a partire
+dall'angolo in alto a sinistra della selezione, con una cella per il più largo
+della colonna e il più alto della riga. Scambia oggetti vuole esattamente due
+oggetti; Sostituisci con l'oggetto superiore, Raggruppa oggetti sovrapposti e
+Ordina oggetti ne vogliono almeno due; le altre bastano a una selezione. Imposta
+dimensione di ciascuno e Opacità casuale aprono una finestra: larghezza e altezza
+(con «Proporzionale» l'altezza segue), oppure minimo, massimo e seme. Lo stesso
+seme, sugli stessi oggetti nello stesso ordine, dà la stessa scelta. Con un
+oggetto bloccato o con un inchiostro di Fub il comando non parte, e la voce dice
+perché; se non cambia niente, non parte.
+
+Sposta leggermente e Trasforma ciascuno non ci sono ancora nel menu, e Distorci
+e le forme dal vivo nemmeno: le forme dal vivo aspettano T27.
 
 ## Che cosa si scrive
 
