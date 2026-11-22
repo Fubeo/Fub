@@ -13,7 +13,7 @@ import { costruisciFila, type CostruisciFila, type FilaOpzioni } from "./opzioni
 import { creaSezioni, type Sezioni, type VoceDelCompleto } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
-import { menuComando, menuNonCaricato, nomeVoce, statoComandi, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
+import { menuComando, menuNonCaricato, nomeVoce, statoComandi, METODI_FORMA, OPERAZIONI_ELABORAZIONE, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
 import type { CampoFinestra, ModuloFinestra } from "../motore/finestre";
 import type { DrawingPreview, DrawingToolState } from "../../../host/contract";
 import type { MenuItem } from "../../../ui/menu";
@@ -338,15 +338,32 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       const base = typeof fisso === "object" && fisso !== null ? fisso : {};
       // Una sezione che manda il comando lo manda senza la finestra della voce (la rotazione, K6 T13 giro 3).
       const senza = opzioni.senzaFinestra === true ? { ...voce, finestra: false } : voce;
-      await eseguiVoce({ ...senza, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } }, dipendenze);
+      await lancia({ ...senza, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } });
     });
+  };
+  // L'ultima elaborazione andata (`object.pathfinder.*`, dalla sezione, dal menu o dai
+  // tasti), che Ripeti Elaborazione tracciati rifà sugli oggetti scelti adesso (K6 T13,
+  // come VectorCraft): le forme composte non contano. Vale finché il Completo è aperto.
+  let ultimaElaborazione: string | null = null;
+  const ripetibili = new Set([...METODI_FORMA, ...OPERAZIONI_ELABORAZIONE]);
+  /// Il percorso unico dei comandi (`eseguiVoce`), che ricorda l'ultima elaborazione andata.
+  const lancia = async (voce: VoceIndice): Promise<void> => {
+    const andata = await eseguiVoce(voce, dipendenze);
+    if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
   };
   // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,
   // che parte solo al clic di un suo comando.
   registraAllinea(sezioni, eseguiPerId);
   // La sezione «Elaborazione tracciati» (K6 T12, giro 5): le dieci voci dall'indice, senza
-  // finestra; la famiglia `tracciati` parte al primo clic.
-  registraElaborazione(sezioni, (id) => void eseguiPerId(id, {}, { senzaFinestra: true }));
+  // finestra; la famiglia `tracciati` parte al primo clic. I metodi forma fanno e cambiano
+  // le forme composte (K6 T13): se ce n'è una fra gli oggetti scelti lo dice il motore.
+  registraElaborazione(sezioni, {
+    esegui: (id, valori = {}) => void eseguiPerId(id, valori, { senzaFinestra: true }),
+    composta: async () => {
+      const stato = await statoComandi(ctx.motore, dipendenze.selezione());
+      return stato.per?.get("disegno.object.compoundShape.setMode")?.enabled === true;
+    },
+  });
   // La sezione «Trasforma» (K6 T13, giro 3): posizione, misura, rotazione e inclinazione.
   registraTrasforma(sezioni, eseguiPerId);
   // La sezione «Colore» (K6 T14, giro 1): riempimento e contorno, scambia, nessuno e di serie.
@@ -354,6 +371,12 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
   const latoAttivo: LatoAttivo = { lato: "fill" };
   // Le voci del client che il Completo fa da sé, con una sua sezione: le altre vanno all'editor.
   const vociDelCompleto = new Map<string, VoceDelCompleto>();
+  vociDelCompleto.set("pathfinder.repeat", {
+    stato: () => (ultimaElaborazione === null ? t("draw.disabled.nothing_to_repeat") : null),
+    esegui: () => {
+      if (ultimaElaborazione !== null) void eseguiPerId(ultimaElaborazione, {}, { senzaFinestra: true });
+    },
+  });
   registraColore(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo);
   // La sezione «Campioni» di Risorse (K6 T14, giro 2): la griglia, la scelta, le finestre del kit.
   registraCampioni(sezioni, (id, valori) => void eseguiPerId(id, valori, { senzaFinestra: true }), ctx.life, latoAttivo, vociDelCompleto);
@@ -477,7 +500,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
       else azioni.client(chiamata.client);
       return;
     }
-    eseguiVoce(voce, dipendenze);
+    void lancia(voce);
   };
   /// Lo stato dei comandi con le voci del client dell'editor: la regola di
   /// `statoVoce` le legge da qui.
@@ -509,7 +532,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     piattaforma: opzioni.tasti?.piattaforma ?? piattaformaDi(),
     esegui: (voce) => {
       if (chiuso) return;
-      eseguiVoce(voce, dipendenze);
+      void lancia(voce);
     },
   });
   // La famiglia di uno strumento del motore, dall'indice: si chiede una volta

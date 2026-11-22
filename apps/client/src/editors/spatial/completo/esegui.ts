@@ -121,30 +121,32 @@ async function chiama(
 
 /// Un esito che non è un'anteprima: la selezione, le operazioni in un passo, e
 /// lo si dice. Un rifiuto del motore si dice col suo motivo (`motivoDelRifiuto`,
-/// come per i colori) e non cambia niente.
-export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: AzioniEsito): void {
+/// come per i colori) e non cambia niente. `true` se il comando è andato: le
+/// operazioni sono entrate (o non ce n'erano), senza un rifiuto.
+export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: AzioniEsito): boolean {
   if (esito.refused !== null) {
     azioni.seleziona(esito.selection);
     const motivo = motivoDelRifiuto(esito.refused);
     // Un oggetto bloccato nella selezione dice da sé di sbloccarlo o toglierlo (T13).
     if (motivo === "draw.reason.lockedSelection") {
       azioni.annuncia(t(motivo));
-      return;
+      return false;
     }
     azioni.annuncia(motivo === null ? t("draw.completo.key.unchanged", { command: etichetta }) : t("draw.rejected", { reason: t(motivo) }));
-    return;
+    return false;
   }
   const ops = azioni.leggi(esito.ops);
   if (ops === null) {
     azioni.annuncia(t("draw.completo.key.failed"));
-    return;
+    return false;
   }
   if (ops.length > 0 && !azioni.commit(ops, etichetta)) {
     azioni.annuncia(t("draw.completo.key.failed"));
-    return;
+    return false;
   }
   azioni.seleziona(esito.selection);
   azioni.annuncia(t("draw.completo.key.done", { command: etichetta }));
+  return true;
 }
 
 /// Fa partire il comando della voce `voce`: subito se non ha parametri (dopo
@@ -152,28 +154,30 @@ export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: A
 /// Una voce che non è un comando del motore non fa niente. La promessa si
 /// risolve quando il giro è finito: l'esito applicato (o detto), o la finestra
 /// aperta. La sezione dei punti (T12, giro 4) la aspetta per rileggere lo stato
-/// dello strumento.
-export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Promise<void> {
+/// dello strumento. `true` solo per un comando senza finestra andato
+/// (`applicaEsito`): Ripeti Elaborazione tracciati ricorda così l'ultima
+/// elaborazione fatta (T13).
+export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Promise<boolean> {
   const comando = comandoDi(voce);
-  if (comando === null) return Promise.resolve();
+  if (comando === null) return Promise.resolve(false);
   const etichetta = etichettaDi(voce);
   // Gli appunti e la cronologia del Completo (K6 T11): non passano dal motore come un comando qualsiasi.
   const appunti = dipendenze.appunti;
   const azioneAppunti = AZIONI_APPUNTI[comando.id];
   if (appunti !== undefined && azioneAppunti !== undefined) {
-    return azioneAppunti(appunti, etichetta);
+    return azioneAppunti(appunti, etichetta).then(() => false);
   }
   // «Sblocca tutto» e «Mostra tutto» sono quelli di Fub: il motore non sa che
   // un livello bloccato o nascosto di Fub resta com'è, con ciò che contiene.
-  if (dipendenze.diFub?.(comando.id) === true) return Promise.resolve();
+  if (dipendenze.diFub?.(comando.id) === true) return Promise.resolve(false);
 
   if (voce.finestra) {
     return dipendenze.finestra(voce).then((opzioni) => {
       if (opzioni === null) {
         dipendenze.annuncia(t("draw.completo.key.nowindow"));
-        return;
+        return false;
       }
-      if (dipendenze.vita.closed) return;
+      if (dipendenze.vita.closed) return false;
       const esegui: Esegui = async (valori, anteprima): Promise<EsitoComando> => {
         const esito = await chiama(dipendenze, comando.id, { ...comeOggetto(comando.valore), ...valori }, anteprima);
         if (esito === null) return { anteprima: null, rifiuto: "not_ready" };
@@ -191,6 +195,7 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
         // «Riprova» dell'errore della famiglia: rifà la sua attesa.
         riprova: () => dipendenze.carica.riprova(voce.famiglia).then(attesaFamiglia),
       });
+      return false;
     });
   }
 
@@ -199,17 +204,17 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): Pro
     dipendenze.annuncia(t("draw.completo.key.waiting"));
   }
   return dipendenze.carica.famiglia(voce.famiglia).then(async (stato) => {
-    if (dipendenze.vita.closed) return;
+    if (dipendenze.vita.closed) return false;
     if (stato.kind !== "pronta") {
       dipendenze.annuncia(t("draw.window.failed"));
-      return;
+      return false;
     }
     const esito = await chiama(dipendenze, comando.id, comeOggetto(comando.valore), false);
-    if (dipendenze.vita.closed) return;
+    if (dipendenze.vita.closed) return false;
     if (esito === null) {
       dipendenze.annuncia(t("draw.window.unanswered"));
-      return;
+      return false;
     }
-    applicaEsito(esito, etichetta, dipendenze);
+    return applicaEsito(esito, etichetta, dipendenze);
   });
 }

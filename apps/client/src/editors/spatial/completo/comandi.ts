@@ -245,12 +245,22 @@ export const OPERAZIONI_ELABORAZIONE: readonly string[] = [
   "object.pathfinder.minusBack",
 ];
 
-/// Le file di Oggetto › Elaborazione tracciati: i metodi forma, le operazioni, poi le
-/// finestre (Trapping, Opzioni) quando ci saranno.
+/// I comandi delle forme composte (K6 T13), nell'ordine del loro sottomenu «Forma
+/// composta» dentro Oggetto › Elaborazione tracciati (`RACCOLTE_DEI_MENU`).
+export const FORME_COMPOSTE: readonly string[] = [
+  "object.compoundShape.make",
+  "object.compoundShape.setMode",
+  "object.compoundShape.release",
+  "object.compoundShape.expand",
+];
+
+/// Le file di Oggetto › Elaborazione tracciati: i metodi forma, le operazioni, le forme
+/// composte, poi Ripeti e le finestre (Trapping, Opzioni) quando ci saranno.
 const FILE_ELABORAZIONE: readonly (readonly string[])[] = [
   METODI_FORMA,
   OPERAZIONI_ELABORAZIONE,
-  ["object.pathfinder.trap", "object.pathfinder.options"],
+  FORME_COMPOSTE,
+  ["pathfinder.repeat", "object.pathfinder.trap", "object.pathfinder.options"],
 ];
 
 /// Le file dei sottomenu del menu ≡ che le hanno (`<gruppo>`, o
@@ -270,6 +280,7 @@ const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = 
 /// le mostra, e Ctrl+/ le trova col posto della mappa.
 const RACCOLTE_DEI_MENU: Readonly<Record<string, readonly { readonly nome: DrawKey; readonly ids: readonly string[] }[]>> = {
   "oggetto/tracciato": [{ nome: "draw.completo.sotto.composto", ids: ["object.compoundPath.make", "object.compoundPath.release"] }],
+  "oggetto/elaborazione": [{ nome: "draw.completo.sotto.formaComposta", ids: FORME_COMPOSTE }],
 };
 
 /// Le voci di `chiave` che una raccolta (`RACCOLTE_DEI_MENU`) prende diventano

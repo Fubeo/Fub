@@ -739,6 +739,15 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         predefiniti: &[],
         limiti: &[],
     },
+    // Metodo forma (T13) dal menu chiede il metodo: i membri delle forme
+    // composte scelte lo prendono tutti. I pulsanti della sezione «Elaborazione
+    // tracciati» lo mandano senza finestra, col metodo del pulsante.
+    FinestraScritta {
+        id: "object.compoundShape.setMode",
+        schema: "{mode: add|subtract|intersect|exclude}",
+        predefiniti: &[("mode", "add")],
+        limiti: &[],
+    },
 ];
 
 /// La finestra scritta da Fub per il comando `id`, se ne ha una.

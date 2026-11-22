@@ -4,6 +4,25 @@
   "finestre": [
     {
       "fonte": "motore",
+      "id": "object.compoundShape.setMode",
+      "campi": [
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "add",
+            "subtract",
+            "intersect",
+            "exclude"
+          ],
+          "aperta": false,
+          "predefinito": "add"
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
       "id": "shape.arc",
       "campi": [
         {
