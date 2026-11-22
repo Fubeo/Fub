@@ -867,3 +867,107 @@ describe("«Esporta…» su un disegno", () => {
   });
 });
 
+
+// La scheda Livelli del Completo (K6 T15, giro 4): l'albero è quello nativo, e occhio, lucchetto e
+// rinomina passano dal motore coi numeri che `document.inspect` dà ai livelli. Il motore finto
+// conosce il livello `l1` della casa col numero 3, e risponde alle proprietà con le operazioni che
+// il motore vero scrive (`crates/fub-disegno/src/famiglie/livelli.rs`).
+function livelliFinti(bloccato: boolean): { fake: DrawingFake; chiamate: { id: string; value: unknown }[] } {
+  const chiamate: { id: string; value: unknown }[] = [];
+  const fake: DrawingFake = {
+    comando: (request, copia) => {
+      chiamate.push({ id: request.id, value: request.value });
+      const esito = (extra: Partial<DrawingOutcome>): DrawingOutcome => ({
+        revision: copia.revision,
+        preview: null,
+        ops: null,
+        selection: [...request.selection],
+        losses: [],
+        refused: null,
+        frame: null,
+        ...extra,
+      });
+      switch (request.id) {
+        case "disegno.famiglia.prepara":
+          return esito({ reading: { stato: "pronta" } });
+        case "disegno.document.inspect":
+          return esito({ reading: { layers: [{ id: 3, name: "l1", kind: "Layer", visible: true, locked: bloccato, children: [] }] } });
+        case "disegno.layer.setProps": {
+          const value = request.value as { visible?: boolean; locked?: boolean; name?: string };
+          const attrs: Record<string, string | null> = {};
+          if (value.visible !== undefined) attrs.display = value.visible ? null : "none";
+          if (value.locked !== undefined) attrs["fub:locked"] = value.locked ? "true" : null;
+          if (value.name !== undefined) attrs["fub:layer"] = value.name;
+          return esito({ ops: JSON.stringify([{ op: "set", id: "l1", attrs }]) });
+        }
+        default:
+          return esito({ refused: "unsupported" });
+      }
+    },
+  };
+  return { fake, chiamate };
+}
+
+/// La riga del livello `l1` nella scheda Livelli dell'ispettore.
+const rigaLivello = (): HTMLElement | null => document.querySelector<HTMLElement>('.draw-object[data-key="l1"]');
+
+/// Apre la scheda Livelli e aspetta la riga del livello `l1`.
+async function schedaLivelli(): Promise<HTMLElement> {
+  const { selectInspectorTab } = await import("./ui/views");
+  await waitFor("la scheda Livelli", () => selectInspectorTab("draw.layers"));
+  await waitFor("la riga del livello", () => rigaLivello() !== null);
+  return rigaLivello()!;
+}
+
+describe("la scheda Livelli del Completo", () => {
+  it("l'occhio di un livello passa dal motore col suo numero, e il file lo scrive", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    // La porta dei livelli c'è col Completo montato, come la sua colonna.
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    await schedaLivelli();
+    rigaLivello()!.querySelector<HTMLElement>('[data-sign="hide"]')!.click();
+    await waitFor("il livello nascosto arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<g id="l1" fub:layer="Livello 1" display="none">/);
+    expect(chiamate.filter((c) => c.id === "disegno.layer.setProps")).toEqual([{ id: "disegno.layer.setProps", value: { ids: [3], visible: false } }]);
+    expect(chiamate.map((c) => c.id)).toContain("disegno.document.inspect");
+  });
+
+  it("un livello bloccato non si rinomina nel Completo: il doppio clic non apre il nome", async () => {
+    const bloccata = { ...VAULT, "casa.svg": HOUSE.replace('fub:layer="Livello 1"', 'fub:layer="Livello 1" fub:locked="true"') };
+    const { fake, chiamate } = livelliFinti(true);
+    const host = await start(createFakeHost({ file: bloccata, draw: true, settings: [drawWorkspace("full", "default")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    await schedaLivelli();
+    rigaLivello()!.querySelector(".draw-object-label")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await settle();
+    expect(document.querySelector(".draw-object-rename")).toBeNull();
+    expect(chiamate.filter((c) => c.id === "disegno.layer.setProps")).toEqual([]);
+    expect(written(host, "casa.svg")).toEqual([]);
+    // Il lucchetto si toglie anche bloccato, dal motore; poi il doppio clic apre il nome.
+    rigaLivello()!.querySelector<HTMLElement>('[data-sign="lock"]')!.click();
+    await waitFor("il livello sbloccato arriva al disco", () => written(host, "casa.svg").length === 1);
+    expect(written(host, "casa.svg")[0]).toMatch(/<g id="l1" fub:layer="Livello 1">/);
+    expect(chiamate.filter((c) => c.id === "disegno.layer.setProps")).toEqual([{ id: "disegno.layer.setProps", value: { ids: [3], locked: false } }]);
+    rigaLivello()!.querySelector(".draw-object-label")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await waitFor("il campo del nome", () => document.querySelector(".draw-object-rename") !== null);
+  });
+
+  it("nel Semplice l'albero resta com'era: i livelli non si cambiano, e il motore non sente niente", async () => {
+    const { fake, chiamate } = livelliFinti(false);
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("simple")], drawing: fake }));
+    await open("casa.svg");
+    await waitFor("il Semplice", () => workspace() === "simple");
+    await schedaLivelli();
+    // Il Semplice non ha i livelli fra le sue funzioni: la riga si guarda, non si tocca.
+    expect(rigaLivello()!.hasAttribute("data-toggles")).toBe(false);
+    rigaLivello()!.querySelector<HTMLElement>('[data-sign="hide"]')!.click();
+    rigaLivello()!.querySelector(".draw-object-label")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await settle();
+    expect(document.querySelector(".draw-object-rename")).toBeNull();
+    expect(written(host, "casa.svg")).toEqual([]);
+    expect(chiamate.filter((c) => c.id.startsWith("disegno.layer.") || c.id === "disegno.document.inspect")).toEqual([]);
+  });
+});

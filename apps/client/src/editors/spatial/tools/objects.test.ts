@@ -330,6 +330,10 @@ describe("dentro i gruppi", () => {
   });
 });
 
+/// Il tetto di una costruzione misurata dell'albero, anche su una macchina carica: sopra, chi
+/// scorre o clicca sente il ritardo.
+const MISURA_MS = 1_000;
+
 describe("tante righe", () => {
   it(`oltre ${VIRTUAL_AFTER} ne disegna una finestra, con posizioni e totale veri`, () => {
     const many = Array.from({ length: 2000 }, (_, index) => object(`o${index}`));
@@ -350,6 +354,24 @@ describe("tante righe", () => {
     scroller.scrollTop = 1000 * ROW_PX;
     scroller.dispatchEvent(new Event("scroll"));
     expect(rows().some((row) => row.dataset.key === "o1000")).toBe(true);
+  });
+
+  // La scheda Livelli del Completo è questo stesso albero (K6 T15, giro 4): con 5 000 livelli,
+  // ciascuno con un oggetto, la costruzione ne disegna una finestra, e così l'aggiornamento.
+  it("5 000 livelli: la costruzione disegna una finestra, in un tempo che non si sente", () => {
+    const layers = Array.from({ length: 5_000 }, (_, index) => layer(`l${index}`, [object(`o${index}`)]));
+    const inizio = performance.now();
+    mount(layers);
+    const durata = performance.now() - inizio;
+    expect(treeEl().hasAttribute("data-virtual")).toBe(true);
+    expect(rows().length).toBeLessThan(100);
+    // Un aggiornamento con lo stesso albero (l'occhio di un livello) disegna ancora una finestra.
+    const prima = performance.now();
+    tree.update(layers, [], 6);
+    const aggiorna = performance.now() - prima;
+    expect(rows().length).toBeLessThan(100);
+    expect(durata).toBeLessThan(MISURA_MS);
+    expect(aggiorna).toBeLessThan(MISURA_MS);
   });
 
   it(`fino a ${VIRTUAL_AFTER} le disegna tutte`, () => {

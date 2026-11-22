@@ -197,6 +197,9 @@ export function installWorkspace(ctx: EditorContext): void {
   // La fila delle opzioni dello strumento del motore (K6 T11) col Completo aperto e
   // acceso; senza, la testata non ha fila.
   ctx.completoMotore = () => (aperto === null || !vuoleCompleto() ? null : aperto);
+  // I comandi di livello dell'albero (K6 T15, giro 4) passano dal motore col Completo
+  // aperto e acceso; nel Semplice, o senza motore, li fa l'editor come sempre.
+  ctx.livelliMotore = () => (aperto === null || !vuoleCompleto() ? null : aperto.livelli);
   const portaCompleto = (): void => {
     if ((completo !== "no" && completo !== "fallito") || !vuoleCompleto()) return;
     completo = "verifica";
