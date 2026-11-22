@@ -57,8 +57,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (le incolle nelle varianti, pulisci, duplica) e le letture interne.
   // Il giro E di T11 porta a «fatto» le sei di ≡ › Visualizza e del navigatore.
   // T12 giro 1 porta a «fatto» i ventuno strumenti di «disegnare» e i quattro
-  // comandi sui punti che la fila dei punti chiama.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1340, fub: 114, escluso: 12, fatto: 85 });
+  // comandi sui punti che la fila dei punti chiama. Il giro «oggetti» di T11
+  // le sette di Raggruppa, Blocca e Nascondi (la selezione, il resto, tutto).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1333, fub: 114, escluso: 12, fatto: 92 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

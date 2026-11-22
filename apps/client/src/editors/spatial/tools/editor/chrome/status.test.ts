@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLifetime } from "../../../../../ui/lifetime";
 import { ZOOM_STEP } from "../constants";
 import type { EditorContext } from "../context";
-import { installStatus, voceClienteBanda, type DrawStatusItem, type StatusFrame } from "./status";
+import { comandoDiFub, installStatus, voceClienteBanda, type DrawStatusItem, type StatusFrame } from "./status";
 
 /// Un fotogramma finto: le richieste si accumulano, e `avanza` le esegue. Annullare
 /// una richiesta la toglie, come fa il browser.
@@ -196,5 +196,17 @@ describe("la banda di stato del disegno", () => {
     ctx.comandoVista("view.zoomIn");
     expect(ctx.zoomBy).toHaveBeenCalledWith(ZOOM_STEP);
     expect(camera.scale).toBeCloseTo(ZOOM_STEP);
+  });
+});
+
+describe("i comandi del motore che il Completo fa con la regola di Fub", () => {
+  it("Sblocca tutto e Mostra tutto passano da unflagAll; gli altri vanno al motore", () => {
+    const unflagAll = vi.fn();
+    const ctx = { unflagAll } as unknown as EditorContext;
+    expect(comandoDiFub(ctx, "disegno.object.unlockAll")).toBe(true);
+    expect(comandoDiFub(ctx, "disegno.object.showAll")).toBe(true);
+    expect(unflagAll.mock.calls).toEqual([["locked"], ["hidden"]]);
+    expect(comandoDiFub(ctx, "disegno.object.lock")).toBe(false);
+    expect(unflagAll).toHaveBeenCalledTimes(2);
   });
 });

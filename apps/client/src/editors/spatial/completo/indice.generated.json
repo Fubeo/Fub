@@ -451,6 +451,86 @@
     },
     {
       "fonte": "motore",
+      "id": "object.group",
+      "chiamata": {
+        "comando": "disegno.object.group"
+      },
+      "etichetta": {
+        "it": "Raggruppa",
+        "en": "Group"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+G",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.hide",
+      "chiamata": {
+        "comando": "disegno.object.hide"
+      },
+      "etichetta": {
+        "it": "Selezione",
+        "en": "Selection"
+      },
+      "posto": "menu/oggetto/nascondi",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+3",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.hide.unselected",
+      "chiamata": {
+        "comando": "disegno.object.hide.unselected"
+      },
+      "etichetta": {
+        "it": "Grafica non selezionata",
+        "en": "Unselected Artwork"
+      },
+      "posto": "menu/oggetto/nascondi",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Alt+Shift+3",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.lock",
+      "chiamata": {
+        "comando": "disegno.object.lock"
+      },
+      "etichetta": {
+        "it": "Selezione",
+        "en": "Selection"
+      },
+      "posto": "menu/oggetto/blocca",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+2",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.lock.unselected",
+      "chiamata": {
+        "comando": "disegno.object.lock.unselected"
+      },
+      "etichetta": {
+        "it": "Grafica non selezionata",
+        "en": "Unselected Artwork"
+      },
+      "posto": "menu/oggetto/blocca",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Alt+Shift+2",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.setProps",
       "chiamata": {
         "comando": "disegno.object.setProps"
@@ -467,6 +547,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.showAll",
+      "chiamata": {
+        "comando": "disegno.object.showAll"
+      },
+      "etichetta": {
+        "it": "Mostra tutto",
+        "en": "Show All"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Alt+3",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.ungroup",
       "chiamata": {
         "comando": "disegno.object.ungroup"
@@ -478,6 +574,22 @@
       "posto": "menu/oggetto",
       "famiglia": "nucleo",
       "tasto": "Cmd+Shift+G",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.unlockAll",
+      "chiamata": {
+        "comando": "disegno.object.unlockAll"
+      },
+      "etichetta": {
+        "it": "Sblocca tutto",
+        "en": "Unlock All"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "nucleo",
+      "tasto": "Cmd+Alt+2",
       "effetto": "cambia",
       "finestra": false
     },

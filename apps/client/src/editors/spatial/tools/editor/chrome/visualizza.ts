@@ -11,6 +11,15 @@ import type { EditorContext } from "../context";
 export const COMANDI_VISUALIZZA = ["view.grid", "view.snapToGrid", "view.outline", "view.rulers", "view.rotateReset"] as const;
 export type ComandoVisualizza = (typeof COMANDI_VISUALIZZA)[number];
 
+/// Le file di ≡ › Visualizza, in ordine, con una riga di separazione fra l'una e
+/// l'altra: griglia e aggancio, poi come si vede il disegno (contorno, righelli),
+/// poi la rotazione della vista.
+export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
+  ["view.grid", "view.snapToGrid"],
+  ["view.outline", "view.rulers"],
+  ["view.rotateReset"],
+];
+
 export function isComandoVisualizza(id: string): id is ComandoVisualizza {
   return (COMANDI_VISUALIZZA as readonly string[]).includes(id);
 }

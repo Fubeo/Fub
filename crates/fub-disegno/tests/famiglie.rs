@@ -233,3 +233,23 @@ fn una_riga_fatta_senza_caso_e_un_caso_senza_riga_cadono() {
         "{errori:?}"
     );
 }
+
+/// Sblocca tutto del motore sblocca anche il foglio di Fub e lo sceglie con
+/// gli altri: il foglio resta bloccato nel file (nessun `set` su di lui) e
+/// fuori dalla selezione di Fub, che ha solo gli oggetti sbloccati.
+#[test]
+fn sblocca_tutto_non_tocca_il_foglio() {
+    let disegni = disegni_di_prova();
+    let casi = leggi_cartella(&cartella_famiglie()).expect("i casi si leggono");
+    let caso = casi
+        .iter()
+        .find(|c| c.id == "object.unlockAll")
+        .expect("il caso di Sblocca tutto");
+    let (mut disegno, _) =
+        fub_disegno::motore::Disegno::apri_con(&disegni, &caso.disegno).expect("si apre");
+    let esito = casi::esegui_sul_disegno(&mut disegno, caso)
+        .expect("si esegue")
+        .expect("senza errore");
+    assert_eq!(esito.selection, ["oa1a1a1a1", "of6f6f6f6"]);
+    assert!(!esito.ops.unwrap_or_default().contains("fub-paper"));
+}

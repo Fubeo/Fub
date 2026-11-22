@@ -161,6 +161,28 @@ stesso `Ctrl+Maiusc+L` e `Ctrl+Maiusc+H` sulla riga attiva, e il cambio si
 dice: «Gruppo, 2 oggetti: nascosto.». Ciò che sta in un livello o in un
 gruppo bloccato si sblocca da lui, e il suo segno non si tocca.
 
+### Nel menu ≡ › Oggetto del Disegno completo
+
+Nel Disegno completo il menu ≡ › Oggetto ha anche i comandi del motore del
+disegno, e ognuno è un passo solo di Annulla e di Ripristina:
+
+- **Raggruppa** mette gli oggetti scelti in un gruppo nuovo, con un id nuovo,
+  nel livello e al posto che il motore sceglie; gli oggetti tengono id,
+  ordine e testo, e il resto del file non cambia.
+- **Blocca** e **Nascondi** scrivono `fub:locked="true"` e `display="none"`
+  sugli oggetti scelti, come sopra; **Blocca tutto ciò che non è scelto** e
+  **Nascondi tutto ciò che non è scelto** fanno lo stesso con gli altri
+  oggetti dei livelli che si vedono.
+- **Sblocca tutto** e **Mostra tutto** sono quelli di Fub, con la regola di
+  «Bloccare e nascondere»: un livello bloccato o nascosto resta com'è, con ciò
+  che contiene.
+
+Un oggetto nascosto da uno stile (`style="display:none"`) non si mostra da
+qui: il motore lo rifiuta, e il file non cambia. In un documento in sola
+lettura questi comandi sono spenti. Non ci sono ancora «Tutta la grafica
+soprastante» e «Altri livelli» di Blocca e Nascondi, «Invia al livello
+corrente» e «Riseleziona».
+
 ## Spazi e tasti
 
 Nel Semplice non c'è niente di questa pagina: la freccia sceglie gli

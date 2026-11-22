@@ -103,6 +103,24 @@ export function statoClienteCompleto(ctx: EditorContext, id: string): boolean | 
   return statoVisualizza(ctx, id);
 }
 
+/// I comandi del motore che il Disegno completo fa con la regola di Fub: «Sblocca
+/// tutto» e «Mostra tutto» toccano solo gli oggetti che si vedono e si cambiano
+/// (`flagged`), e un livello bloccato o nascosto resta com'è, con ciò che
+/// contiene; il motore vede i livelli di Fub come gruppi e li attraverserebbe.
+const COMANDI_DI_FUB: Readonly<Record<string, (ctx: EditorContext) => void>> = {
+  "disegno.object.unlockAll": (ctx) => ctx.unflagAll("locked"),
+  "disegno.object.showAll": (ctx) => ctx.unflagAll("hidden"),
+};
+
+/// Fa il comando del motore `id` con la regola di Fub, se è uno di quelli
+/// (`COMANDI_DI_FUB`): vero se è partito, falso se va al motore.
+export function comandoDiFub(ctx: EditorContext, id: string): boolean {
+  const comando = COMANDI_DI_FUB[id];
+  if (comando === undefined) return false;
+  comando(ctx);
+  return true;
+}
+
 export function installStatus(ctx: EditorContext, frame: StatusFrame = FOTOGRAMMA): void {
   const listeners = new Set<() => void>();
   ctx.statusPointer = null;

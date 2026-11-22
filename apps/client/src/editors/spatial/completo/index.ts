@@ -169,6 +169,9 @@ export interface OpzioniTastiCompleto extends AzioniEsito {
   /// (`segui-tasti.ts`), e un cambio vale subito.
   readonly modifiche?: () => ModificheTasti;
   readonly piattaforma?: Piattaforma;
+  /// I comandi del motore che l'editor fa con la regola di Fub
+  /// (`DipendenzeComando.diFub`).
+  readonly diFub?: (id: string) => boolean;
 }
 
 /// La piattaforma per i tasti: Cmd su macOS, altrove Ctrl (come la shell). Senza
@@ -295,6 +298,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila">, op
     commit: opzioni.tasti?.commit ?? (() => false),
     seleziona: opzioni.tasti?.seleziona ?? (() => undefined),
     annuncia: opzioni.tasti?.annuncia ?? (() => undefined),
+    ...(opzioni.tasti?.diFub === undefined ? {} : { diFub: opzioni.tasti.diFub }),
   };
   // Gli appunti del motore (K6 T11): mentre il Completo è aperto, copiare e incollare
   // passano dal motore, e il Semplice li cede qui (`tools/clipboard.ts`). Senza

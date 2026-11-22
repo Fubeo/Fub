@@ -59,6 +59,9 @@ export interface DipendenzeComando extends AzioniEsito {
   /// Gli appunti del Completo per questo motore (K6 T11): copia, taglia,
   /// incolla e cancella cronologia passano di qui, non dal motore. `null` senza motore.
   appunti?: AppuntiCompleto;
+  /// I comandi del motore che Fub fa da sé, con la sua regola: vero se il
+  /// comando `id` è uno di quelli ed è partito. Senza, ogni comando va al motore.
+  readonly diFub?: (id: string) => boolean;
 }
 
 /// I comandi del motore che passano dagli appunti del Completo (`appunti.ts`). Le
@@ -153,6 +156,9 @@ export function eseguiVoce(voce: VoceIndice, dipendenze: DipendenzeComando): voi
     void azioneAppunti(appunti, etichetta);
     return;
   }
+  // «Sblocca tutto» e «Mostra tutto» sono quelli di Fub: il motore non sa che
+  // un livello bloccato o nascosto di Fub resta com'è, con ciò che contiene.
+  if (dipendenze.diFub?.(comando.id) === true) return;
 
   if (voce.finestra) {
     void dipendenze.finestra(voce).then((opzioni) => {
