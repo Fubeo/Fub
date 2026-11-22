@@ -89,7 +89,7 @@ draw-pf-divide draw-pf-exclude draw-pf-intersect draw-pf-merge draw-pf-minus dra
 draw-pf-outline draw-pf-trim draw-pf-unite draw-point-corner draw-point-cut draw-point-delete
 draw-point-join draw-point-smooth draw-polygon draw-portrait draw-ratio draw-rect draw-redo
 draw-resources draw-rotate draw-rounded-rect draw-scale draw-scissors draw-section draw-select
-draw-selection draw-shape-builder draw-simple draw-slice draw-snap draw-spiral draw-star
+draw-selection draw-shape-builder draw-shear draw-simple draw-slice draw-snap draw-spiral draw-star
 draw-suggestion draw-swap draw-symbol-spray draw-symbols draw-text draw-text-bold draw-text-italic
 draw-text-strike draw-text-underline draw-tip-bar-end draw-tip-bar-start draw-tip-circle-end
 draw-tip-circle-start draw-tip-diamond-end draw-tip-diamond-start draw-tip-none draw-tip-other-end
