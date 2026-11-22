@@ -19655,10 +19655,10 @@ button.draw-isolation-crumb:hover {
   margin: 0;
   font-weight: 600;
 }
-/* La sezione Trasforma (K6 T13, giro 3): i campi X, Y, larghezza, altezza, rotazione e inclinazione a due colonne. */
+/* La sezione Trasforma (K6 T13, giro 3): i campi X, Y, larghezza, altezza, rotazione e inclinazione, una riga piena per campo. */
 .draw-transform-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
   margin-block-end: var(--space-2);
 }
