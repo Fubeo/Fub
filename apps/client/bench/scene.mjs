@@ -1583,6 +1583,8 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-fam-forme-800", 800, "La tendina della casella delle forme nella finestra minima del desktop, 800 px", "", openFormeTendina],
     ["disegno-fam-trasforma", 1280, "La sezione Allinea nel Design con il disegno scelto: i pulsanti e «Allinea a»", "", openAllinea],
     ["disegno-fam-trasforma-800", 800, "La sezione Allinea nella finestra minima del desktop, 800 px", "", openAllinea],
+    ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
+    ["disegno-fam-forme-finestra-800", 800, "La finestra delle misure del Rettangolo nella finestra minima del desktop, 800 px", "", openFormeFinestra],
   ].map(([id, width, title, extra, prepare]) => ({
     id,
     title,
@@ -5390,11 +5392,55 @@ async function openFormeTendina(page) {
   await page.evaluate(() => document.fonts.ready);
 }
 
+/// La finestra delle misure del Rettangolo (K6 T13, giro 2): la voce «Rettangolo (Completo)»
+/// della tendina della casella `rect`, poi un clic sul foglio. È il clic sul foglio ad
+/// aprirla, come nel Completo: la sola scelta dalla tendina non apre niente.
+async function openFormeFinestra(page) {
+  await openFormeTendina(page);
+  await page.locator(".kit-rail-flyout [role='menuitemradio']", { hasText: "Rettangolo (Completo)" }).first().click();
+  const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+  if (!foglio) throw new Error("il foglio del disegno non c'è");
+  await page.mouse.click(foglio.x + foglio.width / 2, foglio.y + foglio.height / 2);
+  await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.evaluate(() => document.fonts.ready);
+}
+
 /// La sezione Allinea nel Design (K6 T13, giro 2) con il disegno scelto per intero:
-/// la scheda Design, poi Ctrl+A, come chi allinea una selezione.
+/// la scheda Design, poi Ctrl+A, come chi allinea una selezione. Sotto i 960 px
+/// l'ispettore è un cassetto che si apre dal suo pulsante: lì il disegno si sceglie
+/// a cassetto chiuso, poi si apre il cassetto e la scheda Design.
 async function openAllinea(page) {
-  await openDesignoScelto(page);
+  if (await page.evaluate(() => window.innerWidth >= 960)) {
+    await openDesignoScelto(page);
+  } else {
+    await openDrawing(page);
+    await page.click('.draw-rail [aria-label="Selezione"]');
+    const foglio = await page.locator(".draw-editor .draw-surface").first().boundingBox();
+    if (!foglio) throw new Error("il foglio del disegno non c'è");
+    await page.mouse.click(foglio.x + 30, foglio.y + 30);
+    await page.keyboard.press("Control+a");
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+    await page.click('.inspector-tab[data-view-id="draw.design"]');
+    await page.waitForSelector('#surface-panel-draw-design:not([hidden]) section.draw-properties');
+    await page.waitForFunction(() => {
+      const soggetto = document.querySelector("#surface-panel-draw-design .draw-properties-subject");
+      return soggetto !== null && soggetto.textContent.trim() !== "" && !soggetto.textContent.includes("Il disegno");
+    });
+  }
   await page.waitForSelector(".draw-align-to");
+  // Sotto le sezioni Posizione e Disponi: la foto la porta in vista.
+  // Scorre solo il primo contenitore scrollabile sopra la sezione (il pannello), non la pagina.
+  await page.evaluate(() => {
+    const el = document.querySelector(".draw-align-to");
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      if (p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY)) {
+        p.scrollTop += el.getBoundingClientRect().top - p.getBoundingClientRect().top - 8;
+        break;
+      }
+    }
+  });
   await page.evaluate(() => document.fonts.ready);
 }
 
