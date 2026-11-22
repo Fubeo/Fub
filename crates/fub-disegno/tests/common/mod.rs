@@ -220,6 +220,9 @@ fn pezzi(s: &str) -> Vec<Result<f64, String>> {
 
 fn uguali(a: &Value, o: &Value, dove: &str) -> Result<(), String> {
     match (a, o) {
+        // `"*"` nell'atteso vale qualunque testo: i byte di un PNG dipendono dal
+        // compressore della build, e il contratto è la forma (misure, avvisi).
+        (Value::String(x), Value::String(_)) if x == "*" => Ok(()),
         (Value::String(x), Value::String(y)) => {
             if x == y {
                 return Ok(());

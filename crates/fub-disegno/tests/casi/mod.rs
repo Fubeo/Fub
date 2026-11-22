@@ -24,7 +24,8 @@
 //!   `{"selezione": […]}` (niente operazioni, niente lettura, e la selezione
 //!   dopo, gli id di Fub nell'ordine; un gesto che sceglie e basta può
 //!   rispondere `empty`, come in K5),
-//!   `{"rifiuto": "unsupported"}` o `{"errore": "bad_args"}`;
+//!   `{"rifiuto": "unsupported"}` o `{"errore": "bad_args"}`; in una lettura un
+//!   testo `"*"` vale qualunque testo (i byte di un PNG dipendono dalla build);
 //! - `dopo`: il `.svg` del disegno dopo le operazioni, che il client
 //!   controlla byte per byte; per un effetto anche l'oracolo a pixel lo
 //!   confronta col disegno del motore stesso, e con il disegno di partenza
