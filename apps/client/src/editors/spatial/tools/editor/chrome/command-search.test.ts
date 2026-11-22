@@ -45,7 +45,7 @@ afterEach(() => {
 describe("la ricerca Ctrl+/ con il Completo (K6 T9a)", () => {
   it("una voce spenta non parte, e ripete il perché", async () => {
     const aGiu = riga("a", "Voce a");
-    const spenta = riga("b", "Voce b", { disabled: true, description: "Scegli almeno due oggetti." });
+    const spenta = riga("b", "Voce b", { disabled: true, description: "Servono due oggetti." });
     const completo: VociCompleto = {
       menu: () => Promise.resolve([]),
       ricerca: () => Promise.resolve([aGiu, spenta]),
@@ -61,7 +61,7 @@ describe("la ricerca Ctrl+/ con il Completo (K6 T9a)", () => {
     input?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await attesa();
     expect(spenta.run).not.toHaveBeenCalled();
-    expect(document.querySelector(".draw-commands-empty")?.textContent).toBe("Scegli almeno due oggetti.");
+    expect(document.querySelector(".draw-commands-empty")?.textContent).toBe("Servono due oggetti.");
     expect(document.querySelector(".kit-dialog")).not.toBeNull();
   });
 

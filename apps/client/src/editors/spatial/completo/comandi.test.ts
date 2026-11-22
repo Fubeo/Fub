@@ -179,7 +179,7 @@ describe("vociRicerca", () => {
     const regola = risolviTasti([{ id: "a", tasto: "Ctrl+J" }, { id: "b", tasto: null }], {}, "other");
     const righe = vociRicerca(indice, valgono({ id: "disegno.a", enabled: true, disabled_reason: null }, { id: "disegno.b", enabled: false, disabled_reason: "needs_two" }), NESSUNO, regola);
     expect(righe[0]).toMatchObject({ key: "a", label: "Voce a", path: "Oggetto", hint: displayBinding("Ctrl-J"), disabled: false, altreLingue: ["Voce a", "Item a"] });
-    expect(righe[1]).toMatchObject({ key: "b", path: "Tavolozza", disabled: true, description: "Scegli almeno due oggetti." });
+    expect(righe[1]).toMatchObject({ key: "b", path: "Tavolozza", disabled: true, description: "Servono due oggetti." });
   });
 
   it("una voce spenta non parte col suo run se la si sceglie", () => {
