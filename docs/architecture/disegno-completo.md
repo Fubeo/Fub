@@ -361,6 +361,10 @@ nell'impostazione di macchina `draw.motore` (`crates/fub-features/src/draw.rs`,
   sovrascrive. In tutti e due i casi `prefs.set` e `prefs.reset` si rifiutano
   con `conflict` (`host.drawing.prefs_newer`, `host.drawing.prefs_broken`)
   prima del motore, finché l'utente non azzera `draw.motore`;
+  `gradient.presets.save` e `gradient.presets.delete` invece tornano con un
+  rifiuto nell'esito (`unsupported`, il perché in `reading`), perché vengono
+  dalla sessione del disegno aperto, che un errore fermerebbe; la sezione
+  Sfumatura lo dice con la frase del caso;
 - **le quattro cartelle** (`fontsFolder`, `pluginsFolder`, `recoveryFolder`,
   `templatesFolder`: `preferenze::CARTELLE`) non si leggono, non si scrivono e
   non si mostrano: `prefs.get` e `prefs.list` le tolgono, e un `prefs.set` che

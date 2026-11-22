@@ -359,6 +359,26 @@ mod engine {
         PluginError::Conflict(Text::key("host.drawing.prefs_broken"))
     }
 
+    /// Il rifiuto di un comando delle preimpostate quando `draw.motore` è più
+    /// nuova (`"newer"`) o rotta (`"broken"`): nessuna operazione, il perché
+    /// in `reading` (`{"prefs": "newer"}`).
+    pub(super) fn prefs_refused(
+        request: &fub_abi::DrawingCommandRequest,
+        perche: &str,
+    ) -> fub_abi::DrawingOutcome {
+        fub_abi::DrawingOutcome {
+            revision: request.revision,
+            preview: None,
+            ops: None,
+            selection: request.selection.clone(),
+            losses: Vec::new(),
+            refused: Some(fub_abi::DrawingRefusal::Unsupported),
+            frame: None,
+            state: None,
+            reading: Some(serde_json::json!({ "prefs": perche })),
+        }
+    }
+
     /// La selezione di `drawing_commands`, con le regole delle selezioni di
     /// `fub_abi::drawing`: nessun id vuoto o ripetuto, al più
     /// [`MAX_DRAWING_OPS`].
@@ -705,6 +725,20 @@ impl Host {
                     engine::EnginePrefs::Newer(_) => return Err(engine::prefs_newer()),
                     engine::EnginePrefs::Broken(_) => return Err(engine::prefs_broken()),
                     engine::EnginePrefs::Empty | engine::EnginePrefs::Current(_) => {}
+                }
+            }
+            // Le preimpostate della sfumatura stanno nelle stesse preferenze: lo stesso
+            // controllo, ma un rifiuto nell'esito e non un errore, perché la sessione del
+            // disegno che le chiede dalla sezione Sfumatura resti viva. Il motore e
+            // `draw.motore` non si toccano; `reading` dice perché.
+            if matches!(id, "gradient.presets.save" | "gradient.presets.delete") && !request.preview {
+                let perche = match self.engine_prefs(vault) {
+                    engine::EnginePrefs::Newer(_) => Some("newer"),
+                    engine::EnginePrefs::Broken(_) => Some("broken"),
+                    engine::EnginePrefs::Empty | engine::EnginePrefs::Current(_) => None,
+                };
+                if let Some(perche) = perche {
+                    return Ok(engine::prefs_refused(&request, perche));
                 }
             }
             let (outcome, changed) = self.with_drawing(vault, instance, |drawing| {

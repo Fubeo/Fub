@@ -210,6 +210,43 @@ fn un_valore_rotto_si_salta_e_non_si_sovrascrive() {
         .is_some_and(|t| t.contains("keyboardIncrement")));
 }
 
+/// Salvare e togliere una preimpostata della sfumatura con `draw.motore` che non si
+/// scrive: un rifiuto nell'esito col perché, non un errore (la sessione del client
+/// resta viva), il valore su disco non si tocca e l'istanza risponde ancora.
+fn le_preimpostate_si_rifiutano_col_perche(testo: &str, perche: &str) {
+    let posto = Posto::con_preferenze(Some(testo));
+    let host = posto.host();
+    let istanza = apri(&host, &posto);
+    for (id, valore) in [
+        ("disegno.gradient.presets.save", json!({"name": "Mare"})),
+        ("disegno.gradient.presets.delete", json!({"name": "Mare"})),
+    ] {
+        let esito = comando(&host, &posto, &istanza, id, valore)
+            .unwrap_or_else(|e| panic!("{id}: un rifiuto, non un errore: {e:?}"));
+        assert_eq!(
+            esito.refused,
+            Some(fub_abi::DrawingRefusal::Unsupported),
+            "{id}: {esito:?}"
+        );
+        assert_eq!(esito.ops, None, "{id}");
+        assert_eq!(esito.reading, Some(json!({"prefs": perche})), "{id}");
+        assert_eq!(posto.salvato().as_deref(), Some(testo), "{id}");
+    }
+    // L'istanza è viva: una lettura risponde ancora.
+    assert!(leggi(&host, &posto, &istanza, "keyboardIncrement").is_number());
+}
+
+#[test]
+fn le_preimpostate_con_una_versione_piu_nuova_si_rifiutano_col_perche() {
+    let testo = json!({"v": 2, "prefs": {"keyboardIncrement": 6.0}}).to_string();
+    le_preimpostate_si_rifiutano_col_perche(&testo, "newer");
+}
+
+#[test]
+fn le_preimpostate_con_un_valore_rotto_si_rifiutano_col_perche() {
+    le_preimpostate_si_rifiutano_col_perche("{non è JSON", "broken");
+}
+
 #[test]
 fn una_cartella_si_rifiuta_prima_del_motore_e_non_si_salva_mai() {
     let testo =

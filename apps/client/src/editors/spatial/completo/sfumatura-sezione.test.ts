@@ -313,4 +313,33 @@ describe("le preimpostate della sezione Sfumatura (gradient presets)", () => {
     pulsante(elemento, t("draw.sfumatura.preimpostate.riprova")).click();
     await vi.waitFor(() => expect(guasta.elenco).toHaveBeenCalledTimes(2));
   });
+
+  it("con le preferenze del motore più nuove o rotte Salva ed Elimina dicono il perché e la sezione resta usabile", async () => {
+    for (const [perche, chiave] of [["nuove", "draw.sfumatura.preimpostate.nuove"], ["rotte", "draw.sfumatura.preimpostate.rotte"]] as const) {
+      const porta = {
+        ...portaFinta(PREIMPOSTATE),
+        salva: vi.fn(() => Promise.resolve({ kind: "bloccato" as const, perche })),
+        togli: vi.fn(() => Promise.resolve({ kind: "bloccato" as const, perche })),
+      } satisfies PortaPreimpostate;
+      const { elemento } = corpoConPreimpostate(1, { sfumature: sfumature() }, porta);
+      await apriPreimpostate(elemento);
+      const nome = elemento.querySelector<HTMLInputElement>("input.draw-gradient-save-name")!;
+      nome.value = "Lago";
+      nome.dispatchEvent(new Event("input"));
+      pulsante(elemento, t("draw.sfumatura.salva")).click();
+      await vi.waitFor(() => expect(elemento.textContent).toContain(t(chiave)));
+      expect([...scelta(elemento, "draw-gradient-preset").options].map((o) => o.value)).toEqual(["Dawn", "Red Glow", "Mare"]);
+      const select = scelta(elemento, "draw-gradient-preset");
+      select.value = "Mare";
+      select.dispatchEvent(new Event("change"));
+      await vi.waitFor(() => expect(pulsante(elemento, t("draw.sfumatura.elimina")).disabled).toBe(false));
+      pulsante(elemento, t("draw.sfumatura.elimina")).click();
+      await vi.waitFor(() => expect(porta.togli).toHaveBeenCalledWith("Mare"));
+      await vi.waitFor(() => expect(elemento.textContent).toContain(t(chiave)));
+      // Mare resta scelta e c'è ancora; Applica e Salva tornano accesi.
+      expect(scelta(elemento, "draw-gradient-preset").value).toBe("Mare");
+      expect(pulsante(elemento, t("draw.sfumatura.applica")).disabled).toBe(false);
+      expect(pulsante(elemento, t("draw.sfumatura.salva")).disabled).toBe(false);
+    }
+  });
 });

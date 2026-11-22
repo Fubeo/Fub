@@ -211,6 +211,10 @@ export const COMPLETO_IT = {
   "draw.sfumatura.salva.fatto": "«{nome}» è tra le salvate: la trovi in ogni disegno.",
   "draw.sfumatura.salva.niente": "Gli oggetti scelti hanno sfumature diverse: scegline uno per salvarla.",
   "draw.sfumatura.preimpostate.motore": "Il motore del disegno non ha risposto: riprova fra poco.",
+  "draw.sfumatura.preimpostate.nuove":
+    "Le preferenze del Motore del disegno vengono da una versione più nuova di Fub: questa non cambia le sfumature salvate.",
+  "draw.sfumatura.preimpostate.rotte":
+    "Le preferenze del Motore del disegno non si leggono: per salvare o eliminare sfumature, azzerale in Impostazioni › Disegni.",
   "draw.sfumatura.tema.salvate": "Salvate",
   "draw.sfumatura.tema.spettro": "Spettro",
   "draw.sfumatura.tema.cielo": "Cielo",
@@ -585,6 +589,10 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.sfumatura.salva.fatto": "“{nome}” is among the saved ones: you’ll find it in every drawing.",
   "draw.sfumatura.salva.niente": "The selected objects have different gradients: select one to save it.",
   "draw.sfumatura.preimpostate.motore": "The drawing engine didn’t respond: try again shortly.",
+  "draw.sfumatura.preimpostate.nuove":
+    "The drawing engine preferences come from a newer version of Fub: this one does not change the saved gradients.",
+  "draw.sfumatura.preimpostate.rotte":
+    "The drawing engine preferences cannot be read: to save or delete gradients, reset them in Settings › Drawings.",
   "draw.sfumatura.tema.salvate": "Saved",
   "draw.sfumatura.tema.spettro": "Spectrum Gradients",
   "draw.sfumatura.tema.cielo": "Sky Gradients",

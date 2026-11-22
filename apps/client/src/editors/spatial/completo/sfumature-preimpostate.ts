@@ -44,7 +44,19 @@ export type EsitoElenco = { readonly kind: "pronte"; readonly preimpostate: read
 
 /// Com'è andato Salva o Elimina: `fatto` col nome; `vuoto` se il motore non aveva niente da fare (la
 /// sfumatura mostrata non è una sola, la salvata non c'è più); `assente` se il motore non ha risposto.
-export type EsitoPreimpostata = { readonly kind: "fatto"; readonly nome: string } | { readonly kind: "vuoto" } | { readonly kind: "assente" };
+export type EsitoPreimpostata =
+  | { readonly kind: "fatto"; readonly nome: string }
+  | { readonly kind: "vuoto" }
+  /// Le preferenze del motore (`draw.motore`) vengono da un Fub più nuovo o non si leggono: l'host
+  /// rifiuta di salvare o togliere, senza toccare il motore né il disco.
+  | { readonly kind: "bloccato"; readonly perche: "nuove" | "rotte" }
+  | { readonly kind: "assente" };
+
+/// Il perché del rifiuto dell'host, da `reading` (`{"prefs": "newer" | "broken"}`), o `null`.
+function bloccoDi(reading: unknown): "nuove" | "rotte" | null {
+  const perche = (reading as { prefs?: unknown } | null | undefined)?.prefs;
+  return perche === "newer" ? "nuove" : perche === "broken" ? "rotte" : null;
+}
 
 /// La porta delle preimpostate del Completo aperto.
 export interface PortaPreimpostate {
@@ -138,11 +150,16 @@ export function creaPortaPreimpostate(dipendenze: DipendenzePreimpostate): Porta
   ): Promise<unknown> => {
     const esito = await s.comando({ id: `disegno.${id}`, selection: [...selection], value, preview: false });
     if (esito === null || "kind" in esito || dipendenze.vita.closed) return null;
-    if (esito.refused !== null) return "vuoto";
+    if (esito.refused !== null) {
+      const perche = bloccoDi(esito.reading);
+      return perche === null ? "vuoto" : { bloccato: perche };
+    }
     return esito.reading ?? "vuoto";
   };
   const nomeDi = (lettura: unknown, campo: "name" | "deleted"): EsitoPreimpostata => {
     if (lettura === null) return { kind: "assente" };
+    const perche = (lettura as { bloccato?: "nuove" | "rotte" }).bloccato;
+    if (perche !== undefined) return { kind: "bloccato", perche };
     const nome = (lettura as Record<string, unknown> | "vuoto")[campo as never] as unknown;
     return typeof nome === "string" ? { kind: "fatto", nome } : { kind: "vuoto" };
   };

@@ -40,6 +40,11 @@ const TIPI: ReadonlyArray<readonly ["linear" | "radial", DrawKey]> = [
   ["radial", "draw.sfumatura.radiale"],
 ];
 
+/// Il perché di un Salva o Elimina rifiutato dall'host: le preferenze del motore non si scrivono.
+function testoDelBlocco(perche: "nuove" | "rotte"): string {
+  return t(perche === "nuove" ? "draw.sfumatura.preimpostate.nuove" : "draw.sfumatura.preimpostate.rotte");
+}
+
 /// I punti di una sfumatura, al minimo.
 const PUNTI_MINIMI = 2;
 
@@ -306,8 +311,10 @@ export function sezioneSfumatura(
                 ? { testo: t("draw.sfumatura.elimina.fatto", { nome: scelta.nome }), errore: false }
                 : esito.kind === "vuoto"
                   ? { testo: t("draw.sfumatura.elimina.vuota", { nome: scelta.nome }), errore: true }
-                  : { testo: t("draw.sfumatura.preimpostate.motore"), errore: true };
-            if (esito.kind !== "assente") preimpostataScelta = null;
+                  : esito.kind === "bloccato"
+                    ? { testo: testoDelBlocco(esito.perche), errore: true }
+                    : { testo: t("draw.sfumatura.preimpostate.motore"), errore: true };
+            if (esito.kind === "fatto" || esito.kind === "vuoto") preimpostataScelta = null;
           });
         });
         azioni.append(elimina);
@@ -356,7 +363,13 @@ export function sezioneSfumatura(
             nomeScritto = "";
             preimpostataScelta = esito.nome;
           } else {
-            avviso = { testo: t(esito.kind === "vuoto" ? "draw.sfumatura.salva.niente" : "draw.sfumatura.preimpostate.motore"), errore: true };
+            avviso = {
+              testo:
+                esito.kind === "bloccato"
+                  ? testoDelBlocco(esito.perche)
+                  : t(esito.kind === "vuoto" ? "draw.sfumatura.salva.niente" : "draw.sfumatura.preimpostate.motore"),
+              errore: true,
+            };
           }
         });
       };

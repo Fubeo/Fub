@@ -124,6 +124,16 @@ describe("le sfumature preimpostate", () => {
     expect(comando).toHaveBeenLastCalledWith({ id: "disegno.gradient.presets.delete", selection: [], value: { name: "Mare" }, preview: false });
   });
 
+  it("le preferenze del motore più nuove o rotte bloccano salvare e togliere col perché", async () => {
+    for (const [prefs, perche] of [["newer", "nuove"], ["broken", "rotte"]] as const) {
+      const rifiuto = esito({ prefs }, "unsupported");
+      const { motore } = motoreFinto({ "disegno.gradient.presets.save": rifiuto, "disegno.gradient.presets.delete": rifiuto });
+      const porta = creaPortaPreimpostate({ motore, carica: pronta, vita: openLifetime(), selezione: () => [] });
+      expect(await porta.salva("Lago", "stroke", "fill")).toEqual({ kind: "bloccato", perche });
+      expect(await porta.togli("Mare")).toEqual({ kind: "bloccato", perche });
+    }
+  });
+
   it("senza motore, con una famiglia in errore o con la vita chiusa è assente", async () => {
     const senza = creaPortaPreimpostate({ motore: null, carica: pronta, vita: openLifetime(), selezione: () => [] });
     expect(await senza.elenco()).toEqual({ kind: "assente" });
