@@ -42,6 +42,8 @@ import { COLONNA_IT } from "../strings/completo";
 import { applicaEsito, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 // Gli appunti del motore (K6 T11): copia, taglia e incolla passano dal motore.
 import { creaAppuntiCompleto } from "./appunti";
+import { creaPortaLivelli, type PortaLivelli } from "./livelli-porta";
+export type { EsitoLivello, PortaLivelli, RichiestaLivello } from "./livelli-porta";
 import { registraAppuntiCompleto } from "../tools/clipboard";
 import { montaTasti } from "./montaggio-tasti";
 import { seguiTastiUtente } from "./segui-tasti";
@@ -63,6 +65,9 @@ export interface Completo {
   /// Le sezioni dell'ispettore che le famiglie registrano (T10); il pannello
   /// Risorse e le sezioni del Design le leggono di qui.
   readonly sezioni: Sezioni;
+  /// I comandi di livello dell'albero nativo che passano dal motore (K6 T15, giro 4:
+  /// `livelli-porta.ts`); `null` senza motore o senza editor.
+  readonly livelli: PortaLivelli | null;
   /// Il disegno si chiude: gli esiti in volo si buttano.
   chiudi(): void;
   /// Applica lo spazio `space` del Completo (un preset, o `full` per i dati di
@@ -527,6 +532,11 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     indice,
     carica,
     sezioni,
+    // I comandi di livello dell'albero nativo (K6 T15, giro 4): con un editor e un motore.
+    livelli:
+      ctx.motore === null || opzioni.tasti === undefined
+        ? null
+        : creaPortaLivelli({ motore: ctx.motore, carica, vita: ctx.life, leggi: dipendenze.leggi }),
     clicStrumento(strumento, punto) {
       if (chiuso) return;
       const comando = COMANDO_DEL_CLIC[strumento];

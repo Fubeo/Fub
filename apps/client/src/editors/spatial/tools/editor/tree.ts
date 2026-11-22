@@ -324,6 +324,13 @@ export function installTree(ctx: EditorContext): void {
       announce(t("draw.rename.foreign"));
       return false;
     }
+    // Nel Completo del motore un livello bloccato non cambia nome (K6 T15, giro 4).
+    const layer = outlined.item.role === "layer" ? currentIndex().layers.find((each) => keyOf(each) === key) : undefined;
+    const frozen = layer === undefined ? null : ctx.layerFrozen(layer);
+    if (frozen !== null) {
+      announce(t(frozen));
+      return false;
+    }
     return true;
   }
   ctx.canRename = canRename;
@@ -344,11 +351,21 @@ export function installTree(ctx: EditorContext): void {
         announce(t("draw.layer.name.required"));
         return null;
       }
-      const arranged = renameLayerOps(model, layer, next, newIds());
-      const now = arranged.keys[0] ?? key;
+      if (next === layer.name) {
+        announce(t("draw.unchanged"));
+        return null;
+      }
       // Il livello corrente resta lui anche se riceve un id.
       const before = ctx.currentLayer();
       const isCurrent = before !== null && keyOf(before) === key;
+      // Col Completo del motore acceso il nome passa dal motore (K6 T15, giro 4), e arriva
+      // dopo: la chiave resta la stessa, perché ci passa solo un livello che ha già il suo id.
+      if ((ctx.livelliMotore?.() ?? null) !== null && layer.id !== null) {
+        ctx.layerWrite(ctx.layerRename(layer, next, isCurrent));
+        return key;
+      }
+      const arranged = renameLayerOps(model, layer, next, newIds());
+      const now = arranged.keys[0] ?? key;
       if (!ctx.writeLayers("draw.action.layer_rename", arranged, isCurrent ? now : null)) return null;
       announce(t("draw.layer.renamed", { name: layerTitle({ ...layer, name: next }) }));
       return now;

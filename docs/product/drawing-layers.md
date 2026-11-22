@@ -126,6 +126,32 @@ l'oggetto, ciò che lo contiene o la pagina.
 - **Oltre**, o per un oggetto che il disegno non sa leggere, la riga non ha
   miniatura e ne tiene il posto vuoto, perché i nomi restino in colonna.
 
+## Nel Completo, la scheda Livelli
+
+Nello spazio Completo il pannello sta anche nella scheda «Livelli»
+dell'ispettore, ed è lo stesso albero, con le stesse righe, lo stesso filtro e
+le stesse miniature. L'occhio, il lucchetto, il nome di un livello, «Nuovo
+livello» ed «Elimina livello» passano dal motore di disegno del Completo
+([Il Completo](../architecture/disegno-completo.md#i-livelli)); il file cambia
+negli stessi attributi di sempre, `display`, `fub:locked` e `fub:layer`, e
+ognuno è un passo di annulla.
+
+- **Un livello bloccato** non si rinomina e non si elimina: il doppio clic sul
+  nome non apre il campo e l'editor dice di sbloccarlo. Il lucchetto e
+  l'occhio restano attivi.
+- **Un livello nuovo** nasce sopra tutti gli altri, col primo nome «Livello N»
+  libero, e diventa quello in cui si disegna.
+- **Lo spostamento delle righe** resta quello di questa pagina: il motore non
+  ha ancora un comando per spostare, e un livello dentro sé stesso resta
+  rifiutato come prima.
+- **Se il motore non può**, perché non c'è o perché la sua famiglia non si è
+  caricata, l'editor scrive da sé le stesse modifiche: il file è lo stesso.
+
+Le scene del banco `disegno-fam-livelli`, `disegno-fam-livelli-stati`,
+`disegno-fam-livelli-stati-800` e `disegno-fam-livelli-filtro` mostrano la
+scheda con due livelli, con un livello rinominato, bloccato e uno nascosto, e
+col filtro.
+
 ## Spazi e tasti
 
 Nel Semplice l'albero non ha niente di questa pagina: le righe non hanno
