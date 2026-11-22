@@ -1586,6 +1586,22 @@
       "finestra": true
     },
     {
+      "fonte": "motore",
+      "id": "transparency.set",
+      "chiamata": {
+        "comando": "disegno.transparency.set"
+      },
+      "etichetta": {
+        "it": "Trasparenza",
+        "en": "Transparency"
+      },
+      "posto": "ispettore/design/trasparenza",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
       "fonte": "interfaccia",
       "id": "align.distributeHorizontalCenter",
       "chiamata": {

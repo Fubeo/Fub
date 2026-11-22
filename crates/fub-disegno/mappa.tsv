@@ -378,7 +378,7 @@ motore	paint.swap	Swap Fill and Stroke		colore	F1	T14	da fare	ispettore/design	f
 motore	paint.default	Default Fill and Stroke		colore	F1	T14	da fare	ispettore/design	famiglia		Riempimento e traccia predefiniti
 motore	paint.toggleActive	Toggle Fill/Stroke Focus		colore	F1	T14	da fare	ispettore/design	famiglia		Alterna attivazione riempimento/traccia
 motore	paint.none	None		colore	F1	T14	da fare	ispettore/design	famiglia		Nessuno
-motore	transparency.set	Transparency	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Trasparenza
+motore	transparency.set	Transparency	Window › Transparency	aspetto	F1	T15	fatto	ispettore/design/trasparenza	famiglia		Trasparenza
 motore	paint.invert	Invert		colore	F1	T14	da fare	ispettore/design	famiglia		Inverti
 motore	paint.complement	Complement		colore	F1	T14	da fare	ispettore/design	famiglia		Complementare
 motore	paint.lastColor	Apply Last Color		colore	F1	T14	da fare	ispettore/design	famiglia		Applica ultimo colore

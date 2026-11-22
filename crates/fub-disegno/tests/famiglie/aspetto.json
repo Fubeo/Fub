@@ -1,3 +1,57 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia aspetto (piano K6, T15, giro 2): l'opacità e il metodo di fusione dell'oggetto scelto, transparency.set. Il disegno è aspetto/base.svg: un rettangolo rosso e un'ellisse blu, nel livello l1a2b3c4d. Scrivere l'aspetto cambia il file di un passo di Annulla; con niente di scelto il comando è spento.",
+  "casi": [
+    {
+      "id": "transparency.set",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "opacity": 50,
+        "blend": "multiply"
+      },
+      "dopo": "transparency-dopo.svg",
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#ff0000\" opacity=\"0.5\" style=\"mix-blend-mode:multiply\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"@hash\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJvcGFjaXR5IjowLjUsImJsZW5kIjoiTXVsdGlwbHkiLCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MS4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzEwMC4wLDEwMC4wXX0seyJwIjpbMjAwLjAsMTAwLjBdfSx7InAiOlsyMDAuMCwxNTAuMF19LHsicCI6WzEwMC4wLDE1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "transparency.set",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "opacity": 50
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    }
+  ]
 }
