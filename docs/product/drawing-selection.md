@@ -134,6 +134,36 @@ selezione, Rinomina, Sblocca tutto e Mostra tutto, si trova scrivendo, come dice
 Una voce che adesso non serve resta nel menu, sbiadita, e dice perché: «Scegli
 prima degli oggetti.», o «Gli oggetti scelti non hanno questa proprietà.».
 
+### Nel menu ≡ › Selezione del Disegno completo
+
+Nel Disegno completo il menu ≡ › Selezione ha le voci del motore che scelgono
+gli oggetti. Scegliere non cambia il file e non passa da Annulla.
+
+- **Tutto nella tavola attiva** (`Ctrl+Alt+A`) sceglie tutti gli oggetti della
+  tavola attiva.
+- **Uguale** sceglie gli oggetti che hanno lo stesso valore di quello scelto,
+  con il confronto del motore: **Aspetto**, **Metodo di fusione**, **Riempimento
+  e tratto**, **Colore riempimento**, **Opacità**, **Forma** (il tipo di forma),
+  **Colore tratto**, **Spessore tratto** e **Istanza di simbolo**, che sceglie
+  le istanze dello stesso simbolo. Gli oggetti senza tratto sono uguali fra
+  loro: con un oggetto senza tratto, **Colore tratto** sceglie tutti quelli
+  senza tratto.
+- **Oggetto** ha **Tutto sugli stessi livelli**, che sceglie gli oggetti dei
+  livelli dell'oggetto scelto, e **Tutti gli oggetti di testo**, che sceglie
+  tutti gli oggetti di testo del disegno.
+
+Una voce che non vale per ciò che è scelto resta nel menu, sbiadita, con il
+perché del motore: «Scegli un oggetto.» senza scelta, e, sulla voce Istanza di
+simbolo, «Non è un'istanza.» quando la scelta non è un'istanza.
+
+Restano «Non ancora collegato»: **Tutto**, **Inversa**, **Oggetto successivo
+sopra** e **sotto**, e **Deseleziona**. Dentro **Oggetto** mancano le voci che
+dipendono dalla specie dell'oggetto (maschere di ritaglio, punti isolati,
+tracciati aperti, testo di punto e d'area, maniglie, pennellate): il modello
+del Completo non dice ancora di che specie è un oggetto. **Punti**, **segmenti**
+e **colore** non sono voci del menu: il motore le vuole con un punto o un colore
+già scelti, e restano nell'ispettore.
+
 ## Bloccare e nascondere
 
 Un oggetto bloccato si vede e non si sceglie, né sul foglio né con
