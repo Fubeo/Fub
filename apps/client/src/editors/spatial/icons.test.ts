@@ -3,6 +3,7 @@
 // I sorgenti si leggono con `import.meta.glob`, come in `ink/boundary.test.ts`.
 import { describe, expect, it } from "vitest";
 import { icon } from "../../ui/icons";
+import { THEME_ICON_LIMITS } from "../../rules/mirrored";
 import { DRAW_ICONS, ensureDrawIcons } from "./icons";
 import { TOOLS } from "./tools/registry";
 
@@ -42,5 +43,27 @@ describe("il catalogo delle icone del disegno", () => {
       .filter(([path, text]) => /registerIcon\(\s*["'`]draw-/.test(text) || (spatial.has(path) && /registerIcon\(/.test(text)))
       .map(([path]) => path);
     expect(outside).toEqual([]);
+  });
+
+  it("le dieci figure di Elaborazione tracciati sono diverse, e ognuna fa vedere la parte che resta", () => {
+    const nomi = Object.keys(DRAW_ICONS).filter((nome) => nome.startsWith("draw-pf-"));
+    expect(nomi).toHaveLength(10);
+    const corpi = new Set(nomi.map((nome) => DRAW_ICONS[nome]!.join("|")));
+    expect(corpi.size).toBe(10);
+    // Il pieno è un tratteggio a 45°: tanti segmenti `Ma bLc d` con c - a = b - d.
+    const pieno = (d: string) =>
+      [...d.matchAll(/M([\d.]+) ([\d.]+)L([\d.]+) ([\d.]+)/g)].filter(
+        ([, a, b, c, e]) => Math.abs(Number(c) - Number(a) - (Number(b) - Number(e))) < 1e-6 && Number(c) > Number(a),
+      ).length;
+    for (const nome of nomi) {
+      const tracciati = DRAW_ICONS[nome]!;
+      const righe = Math.max(...tracciati.map(pieno));
+      // Contorno lascia solo i bordi: è l'unica senza pieno.
+      if (nome === "draw-pf-outline") expect(righe, nome).toBe(0);
+      else expect(righe, nome).toBeGreaterThanOrEqual(3);
+      // Reggono anche nei limiti di un set del tema, che può ridisegnarle.
+      expect(tracciati.length, nome).toBeLessThanOrEqual(THEME_ICON_LIMITS.paths);
+      expect(tracciati.join("").length, nome).toBeLessThan(THEME_ICON_LIMITS.icon_bytes);
+    }
   });
 });
