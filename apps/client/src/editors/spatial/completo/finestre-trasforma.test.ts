@@ -58,6 +58,36 @@ async function apriVoce(c: ReturnType<typeof completo>["c"], etichetta: string):
 }
 
 describe("le finestre di trasformazione dal Completo", () => {
+  it("Trasforma singolarmente (T13 giro 7): le cinque misure con le loro unità; OK manda l'id con il valore", async () => {
+    vi.mocked(apriFinestra).mockClear();
+    const { c, comando } = completo();
+    await apriVoce(c, "Trasforma singolarmente…");
+    const [modulo, , esegui, opzioni] = vi.mocked(apriFinestra).mock.calls[0]!;
+    expect(modulo).toEqual({
+      campi: [
+        { nome: "scaleH", tipo: "numero", min: 0.01, max: 10000 },
+        { nome: "scaleV", tipo: "numero", min: 0.01, max: 10000 },
+        { nome: "moveH", tipo: "numero" },
+        { nome: "moveV", tipo: "numero" },
+        { nome: "rotate", tipo: "numero" },
+      ],
+    });
+    expect(opzioni).toMatchObject({
+      titolo: "Trasforma singolarmente",
+      azione: "Trasforma singolarmente",
+      unita: { scaleH: "%", scaleV: "%", moveH: "px", moveV: "px", rotate: "°" },
+      campi: { scaleH: "Scala orizzontale", moveH: "Spostamento orizzontale", rotate: "Angolo" },
+      iniziali: { scaleH: 100, scaleV: 100, moveH: 0, moveV: 0, rotate: 0 },
+    });
+    await esegui({ scaleH: 50, scaleV: 50, moveH: 20, moveV: 0, rotate: 0 }, false);
+    expect(comando).toHaveBeenCalledTimes(1);
+    expect(comando).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "disegno.object.transformEach", value: { scaleH: 50, scaleV: 50, moveH: 20, moveV: 0, rotate: 0 }, preview: false }),
+    );
+    c.chiudi();
+  });
+
+
   it("Scala: il titolo, il verbo, l'unità e il limite vengono dal catalogo; OK manda il valore una volta sola", async () => {
     vi.mocked(apriFinestra).mockClear();
     const { c, caricati, comando } = completo();

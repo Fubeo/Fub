@@ -90,7 +90,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
   // T12 punti le dieci sui punti di un tracciato: `path.moveAnchor`, `.moveAnchors`, `.setHandle`,
   // `.insertAnchor`, `.removeAnchor`, `.convertAnchor`, `.deleteAnchors`, `.close`, `.appendAnchor`, `.split`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1158, fub: 114, escluso: 12, fatto: 267 });
+  // T13 generatore (giro 7): Oggetto › Trasforma › Trasforma singolarmente
+  // (`object.transformEach`) è «fatto», con la sua finestra con l'anteprima.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1157, fub: 114, escluso: 12, fatto: 268 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

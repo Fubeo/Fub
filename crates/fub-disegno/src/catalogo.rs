@@ -572,6 +572,23 @@ pub const NOMI: &[(&str, Tipo)] = &[
     // Le opzioni di un livello (T15, giro 3): occhio e lucchetto.
     ("visible", Tipo::SiNo),
     ("locked", Tipo::SiNo),
+    // Trasforma singolarmente (T13, giro 7): scala, spostamento e angolo.
+    ("scaleH", Tipo::Numero),
+    ("scaleV", Tipo::Numero),
+    ("moveH", Tipo::Numero),
+    ("moveV", Tipo::Numero),
+    ("rotate", Tipo::Numero),
+    // Le griglie (T13, giro 7): righe, colonne, inclinazioni, cerchi e raggi.
+    ("rows", Tipo::Numero),
+    ("columns", Tipo::Numero),
+    ("rowSkew", Tipo::Numero),
+    ("columnSkew", Tipo::Numero),
+    ("concentric", Tipo::Numero),
+    ("radial", Tipo::Numero),
+    ("concentricSkew", Tipo::Numero),
+    ("radialSkew", Tipo::Numero),
+    ("frame", Tipo::SiNo),
+    ("compound", Tipo::SiNo),
 ];
 
 /// Una finestra che Fub scrive da sé, perché lo schema del motore descrive i
@@ -677,6 +694,24 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
         schema: "{angle, axis?: \"horizontal\"|\"vertical\"}",
         predefiniti: &[("angle", "0"), ("axis", "horizontal")],
         limiti: &[],
+    },
+    // Trasforma singolarmente (T13, giro 7): ogni oggetto scelto si scala, si sposta e
+    // gira attorno al suo centro (`reference` 4, quello del motore senza). La scala sta
+    // fra 0,01 % e 10000 %, come Scala; lo zero lo rifiuta il motore.
+    FinestraScritta {
+        id: "object.transformEach",
+        schema: "{scaleH, scaleV, moveH, moveV, rotate}",
+        predefiniti: &[
+            ("scaleH", "100"),
+            ("scaleV", "100"),
+            ("moveH", "0"),
+            ("moveV", "0"),
+            ("rotate", "0"),
+        ],
+        limiti: &[
+            ("scaleH", Some(0.01), Some(10_000.0)),
+            ("scaleV", Some(0.01), Some(10_000.0)),
+        ],
     },
     // Modifica colori (T14, giro 1): Satura, Regola bilanciamento colore e
     // Sovrastampa nero. Satura chiede solo l'intensità, da -100 %

@@ -866,6 +866,43 @@
         ]
       },
       "dopo": "strumento-rotate.svg"
+    },
+    {
+      "id": "object.transformEach",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"scaleH": 50, "scaleV": 50, "moveH": 20},
+      "atteso": {"ops": [{"op": "set", "id": "oa1a1a1a1", "attrs": {"transform": "matrix(0.5 0 0 0.5 95 62.5)"}}]},
+      "dopo": "object-transform-each-50-20.svg"
+    },
+    {
+      "id": "object.transformEach",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"rotate": 90},
+      "atteso": {"ops": [{"op": "set", "id": "oa1a1a1a1", "attrs": {"transform": "matrix(0 -1 1 0 25 275)"}}]},
+      "dopo": "object-transform-each-rotate-90.svg"
+    },
+    {
+      "id": "object.transformEach",
+      "disegno": "bloccato.svg",
+      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
+      "argomenti": {"moveH": 20},
+      "atteso": {"rifiuto": "locked"}
+    },
+    {
+      "id": "object.transformEach",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"scaleH": 0},
+      "atteso": {"errore": "bad_args"}
+    },
+    {
+      "id": "object.transformEach",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "argomenti": {"moveH": 0},
+      "atteso": {"rifiuto": "empty"}
     }
   ]
 }

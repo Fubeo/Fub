@@ -1635,6 +1635,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.transformEach",
+      "chiamata": {
+        "comando": "disegno.object.transformEach"
+      },
+      "etichetta": {
+        "it": "Trasforma singolarmente…",
+        "en": "Transform Each…"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": "Cmd+Alt+Shift+D",
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "object.ungroup",
       "chiamata": {
         "comando": "disegno.object.ungroup"

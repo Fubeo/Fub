@@ -85,6 +85,46 @@
           "predefinito": "horizontal"
         }
       ]
+    },
+    {
+      "fonte": "motore",
+      "id": "object.transformEach",
+      "campi": [
+        {
+          "nome": "scaleH",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "massimo": 10000.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "scaleV",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.01,
+          "massimo": 10000.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "moveH",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "moveV",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "rotate",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        }
+      ]
     }
   ]
 }
