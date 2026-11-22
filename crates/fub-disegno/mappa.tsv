@@ -762,7 +762,7 @@ motore	clipboard.importText	Load Text into Clipboard		nucleo	F1	T11	fatto	intern
 motore	clipboard.importPdf	Load PDF into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	aspetta T23	Carica PDF negli appunti
 motore	clipboard.importEmf	Load Metafile into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	aspetta T23	Carica metafile negli appunti
 motore	clipboard.importEps	Load EPS into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	aspetta T23	Carica EPS negli appunti
-motore	path.freehand	Pencil		tracciati	F1	T12	da fare	ispettore/design	famiglia		Matita
+motore	path.freehand	Pencil		tracciati	F1	T12	fatto	ispettore/design	famiglia		Matita
 motore	path.curvature	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
 motore	path.curvatureEdit	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
 motore	path.removeAnchor	Delete Anchor Point		tracciati	F1	T12	fatto	ispettore/design	famiglia		Elimina punto di ancoraggio
@@ -770,10 +770,10 @@ motore	path.removeAnchors	Remove Anchor Points	Object › Path	tracciati	F1	T12	
 motore	path.convertAnchor	Convert Anchor Point		tracciati	F1	T12	fatto	ispettore/design	famiglia		Converti punto di ancoraggio
 motore	path.reshapeSegment	Reshape Segment		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella segmento
 motore	path.split	Split Path		tracciati	F1	T12	fatto	ispettore/design	famiglia		Dividi tracciato
-motore	path.knife	Knife		tracciati	F1	T12	da fare	ispettore/design	famiglia		Coltello
-motore	path.eraseRegion	Eraser		tracciati	F1	T12	da fare	ispettore/design	famiglia		Gomma
-motore	path.eraseSegments	Path Eraser		tracciati	F1	T12	da fare	ispettore/design	famiglia		Gomma tracciato
-motore	path.smoothRegion	Smooth		tracciati	F1	T12	da fare	ispettore/design	famiglia		Smussa
+motore	path.knife	Knife		tracciati	F1	T12	fatto	ispettore/design	famiglia		Coltello
+motore	path.eraseRegion	Eraser		tracciati	F1	T12	fatto	ispettore/design	famiglia		Gomma
+motore	path.eraseSegments	Path Eraser		tracciati	F1	T12	fatto	ispettore/design	famiglia		Gomma tracciato
+motore	path.smoothRegion	Smooth		tracciati	F1	T12	fatto	ispettore/design	famiglia		Smussa
 motore	path.joinScrub	Join		tracciati	F1	T12	da fare	ispettore/design	famiglia		Unisci
 motore	path.blob	Blob Brush		tracciati	F1	T12	da fare	ispettore/design	famiglia		Pennello tondo
 motore	document.open	Open Document		fub	—	T2	fub	fub	—	aprire dal vault (il motore non legge il disco)	Apri documento

@@ -90,7 +90,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
   // T12 punti le dieci sui punti di un tracciato: `path.moveAnchor`, `.moveAnchors`, `.setHandle`,
   // `.insertAnchor`, `.removeAnchor`, `.convertAnchor`, `.deleteAnchors`, `.close`, `.appendAnchor`, `.split`.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1158, fub: 114, escluso: 12, fatto: 267 });
+  // T12 mano libera (giro 9) porta a «fatto» i cinque comandi a mano libera: `path.freehand`,
+  // `.eraseRegion`, `.eraseSegments`, `.knife`, `.smoothRegion` (gli strumenti erano già fatti).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1153, fub: 114, escluso: 12, fatto: 272 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
