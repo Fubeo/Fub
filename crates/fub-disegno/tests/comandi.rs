@@ -225,8 +225,14 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // il lato attivo del colore (K6 T14) è della sessione, non degli oggetti:
     // il resto (anche l'ordine del nucleo, K6 T11) è spento. Tutto nella
     // tavola e gli oggetti di testo non leggono ciò che è scelto, come Tutto
-    // (K6 T15).
+    // (K6 T15). I campioni del documento (K6 T14) non sono gli oggetti scelti.
     let sempre = [
+        "disegno.swatch.new",
+        "disegno.swatch.edit",
+        "disegno.swatch.delete",
+        "disegno.swatch.list",
+        "disegno.swatch.unused",
+        "disegno.swatch.addUsedColors",
         "disegno.select.all",
         "disegno.select.inverse",
         "disegno.select.none",

@@ -1,0 +1,545 @@
+//! I campioni del documento fra il file e il motore
+//! (`docs/reference/scene-format-resources.md` §2, §7, §9;
+//! `docs/product/drawing-colors.md`).
+//!
+//! Nel file un campione è una `linearGradient` con `fub:role="swatch"`, un
+//! nome in `fub:name` e un solo `stop`, nella `defs` della radice; chi lo usa
+//! scrive `url(#id) #rrggbb`, il riferimento e il colore di ripiego. Nel
+//! motore è uno `Swatch` di `Document::swatches`, e chi lo usa ha un
+//! `Paint::Solid` legato per nome.
+//!
+//! - **All'apertura** ([`nel_motore`]) i campioni del motore di serie se ne
+//!   vanno (resta «Nessuno»): restano quelli del file, tutti **globali**,
+//!   perché nel file un campione si usa sempre per riferimento. Il
+//!   riempimento e il contorno scritti `url(#campione)` si legano al loro
+//!   campione, nelle forme e nei pezzi dei testi.
+//! - **Dopo un comando** ([`operazioni`]) la differenza confronta i campioni
+//!   di prima e di dopo per nome: un campione nuovo è un `add` nella `defs`
+//!   di Fub (che nasce se manca), uno tolto un `remove` in fondo al passo,
+//!   dopo che chi lo usava ha preso il suo colore; un colore cambiato è un
+//!   `set` del suo `stop` (`part: [0]`), un nome cambiato un `set` di
+//!   `fub:name`. Chi usa un campione lo scrive col riferimento
+//!   ([`Riferimenti`]).
+//!
+//! Il formato non ha campioni non globali, tinte, sfumature o motivi del
+//! motore come campioni, né gruppi di colori: un comando che li fa si
+//! rifiuta, e il file resta com'è.
+
+use std::collections::HashMap;
+
+use fub_scene::{Item, Role};
+use serde_json::{json, Value};
+use vectorcraft_doc::color::{Color, Paint, Swatch};
+use vectorcraft_doc::{Document, NodeKind};
+
+use crate::apertura::{attributi, valore};
+use crate::mappa::Mappa;
+
+/// Il nome del campione «Nessuno» del motore, che resta: non è del file.
+const NESSUNO: &str = "[None]";
+
+/// L'id della `defs` che FubDraw crea per le sue risorse.
+pub(crate) const DEFS_DI_FUB: &str = "fub-defs";
+
+/// Un campione del file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Campione {
+    /// L'id della `linearGradient`.
+    pub id: String,
+    /// `fub:name`, com'è scritto.
+    pub nome: String,
+    /// Il colore del suo `stop`, `#rrggbb` minuscolo.
+    pub colore: String,
+}
+
+/// I campioni del file e dove ne nascono di nuovi.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CampioniDelFile {
+    /// In ordine di documento.
+    pub elenco: Vec<Campione>,
+    /// L'id della `defs` della radice dove va un campione nuovo: `fub-defs`,
+    /// o la prima con un id; `None` se non c'è, e allora nasce `fub-defs`.
+    pub defs: Option<String>,
+    /// I nomi dei motivi del documento: un campione nuovo non li prende.
+    pub motivi: Vec<String>,
+}
+
+/// I campioni che un elemento usa: l'id del campione del riempimento e
+/// quello del contorno.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Usi {
+    pub riempimento: Option<String>,
+    pub contorno: Option<String>,
+}
+
+/// I campioni della scena e, per percorso, gli elementi che li usano.
+pub(crate) fn leggi(testo: &str, items: &[Item]) -> (CampioniDelFile, HashMap<Vec<usize>, Usi>) {
+    let mut campioni = CampioniDelFile::default();
+    let mut prima_defs: Option<String> = None;
+    for item in items {
+        let Item::Element(e) = item else { continue };
+        if e.role == Role::Defs && e.path.len() == 1 {
+            if let Some(id) = &e.id {
+                if id == DEFS_DI_FUB {
+                    campioni.defs = Some(id.clone());
+                } else if prima_defs.is_none() {
+                    prima_defs = Some(id.clone());
+                }
+            }
+        }
+        if e.role == Role::Resource {
+            if let (Some(id), Some(s)) = (&e.id, &e.swatch) {
+                campioni.elenco.push(Campione {
+                    id: id.clone(),
+                    nome: s.name.clone(),
+                    colore: s.color.clone(),
+                });
+            }
+            if let Some(m) = &e.motif {
+                campioni.motivi.push(m.name.clone());
+            }
+        }
+    }
+    if campioni.defs.is_none() {
+        campioni.defs = prima_defs;
+    }
+    let mut usi = HashMap::new();
+    if campioni.elenco.is_empty() {
+        return (campioni, usi);
+    }
+    let del_campione = |v: Option<&str>| -> Option<String> {
+        let id = riferimento(v?)?;
+        campioni
+            .elenco
+            .iter()
+            .any(|c| c.id == id)
+            .then(|| id.to_string())
+    };
+    for item in items {
+        let Item::Element(e) = item else { continue };
+        if matches!(e.role, Role::Defs | Role::Resource) {
+            continue;
+        }
+        let Some((_, attr)) = attributi(testo, e.span.bytes[0]) else {
+            continue;
+        };
+        let u = Usi {
+            riempimento: del_campione(valore(&attr, "fill")),
+            contorno: del_campione(valore(&attr, "stroke")),
+        };
+        if u.riempimento.is_some() || u.contorno.is_some() {
+            usi.insert(e.path.clone(), u);
+        }
+    }
+    (campioni, usi)
+}
+
+/// L'id di `url(#id)` in testa a un valore di `fill` o `stroke`.
+fn riferimento(v: &str) -> Option<&str> {
+    let resto = v.trim_start().strip_prefix("url(")?.trim_start();
+    let resto = resto.strip_prefix('#')?;
+    let fine = resto.find(|c: char| c == ')' || c.is_whitespace())?;
+    Some(&resto[..fine])
+}
+
+/// I campioni del file nel motore, globali, e i colori di chi li usa legati
+/// a loro. I campioni di serie del motore se ne vanno: resta «Nessuno».
+pub(crate) fn nel_motore(
+    campioni: &CampioniDelFile,
+    usi: &HashMap<Vec<usize>, Usi>,
+    mappa: &Mappa,
+    documento: &mut Document,
+) {
+    let nessuno = documento
+        .swatches
+        .iter()
+        .find(|s| s.name == NESSUNO)
+        .cloned();
+    let mut elenco: Vec<Swatch> = nessuno.into_iter().collect();
+    for c in &campioni.elenco {
+        let Some(colore) = Color::from_hex(&c.colore) else {
+            continue;
+        };
+        if elenco.iter().any(|s| s.name == c.nome) {
+            continue;
+        }
+        elenco.push(Swatch {
+            name: c.nome.clone(),
+            paint: Paint::solid(colore),
+            global: true,
+            spot: false,
+        });
+    }
+    *documento.swatches = elenco;
+    documento.swatch_groups.clear();
+    if usi.is_empty() {
+        return;
+    }
+    let nome_di = |id: &Option<String>| -> Option<String> {
+        let id = id.as_deref()?;
+        campioni
+            .elenco
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.nome.clone())
+    };
+    for e in mappa.elementi() {
+        let (Some(nodo), Some(u)) = (e.nodo, usi.get(&e.percorso)) else {
+            continue;
+        };
+        let (riempimento, contorno) = (nome_di(&u.riempimento), nome_di(&u.contorno));
+        let Some(n) = documento.node_mut(nodo) else {
+            continue;
+        };
+        for it in n.appearance.items.iter_mut() {
+            let (paint, nome) = match it {
+                vectorcraft_doc::AppearanceItem::Fill(l) => (&mut l.paint, &riempimento),
+                vectorcraft_doc::AppearanceItem::Stroke(l) => (&mut l.paint, &contorno),
+            };
+            lega(paint, nome);
+        }
+        if let NodeKind::Text(t) = &mut n.kind {
+            for r in t.runs.iter_mut() {
+                lega(&mut r.style.fill, &riempimento);
+                lega(&mut r.style.stroke, &contorno);
+            }
+        }
+    }
+}
+
+/// Lega un colore pieno al campione `nome`.
+fn lega(paint: &mut Paint, nome: &Option<String>) {
+    if let (Paint::Solid { swatch, tint, .. }, Some(nome)) = (paint, nome) {
+        *swatch = Some(nome.clone());
+        *tint = 1.0;
+    }
+}
+
+/// Come si scrive chi usa un campione: l'id del campione per nome, prima e
+/// dopo il comando.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Riferimenti {
+    prima: HashMap<String, String>,
+    dopo: HashMap<String, String>,
+}
+
+impl Riferimenti {
+    /// I riferimenti dei campioni del file, senza comando.
+    pub(crate) fn del_file(campioni: &CampioniDelFile) -> Riferimenti {
+        let prima: HashMap<String, String> = campioni
+            .elenco
+            .iter()
+            .map(|c| (c.nome.clone(), c.id.clone()))
+            .collect();
+        Riferimenti {
+            dopo: prima.clone(),
+            prima,
+        }
+    }
+
+    /// Il valore di `fill` o `stroke` di un colore di dopo il comando:
+    /// `url(#id) #rrggbb` se è legato a un campione del file, se no il
+    /// colore; `none` per nessun colore. Una sfumatura o un motivo non si
+    /// scrivono così: `None`.
+    pub(crate) fn scrivi(&self, p: Option<&Paint>) -> Option<String> {
+        match p {
+            None | Some(Paint::None) => Some("none".into()),
+            Some(Paint::Solid { color, swatch, .. }) => {
+                Some(match swatch.as_deref().and_then(|n| self.dopo.get(n)) {
+                    Some(id) => format!("url(#{id}) {}", color.to_hex()),
+                    None => color.to_hex(),
+                })
+            }
+            Some(_) => None,
+        }
+    }
+
+    /// Vero se due colori, uno di prima e uno di dopo, si scrivono uguali:
+    /// lo stesso colore e lo stesso campione del file, anche col nome
+    /// cambiato.
+    pub(crate) fn uguali(&self, prima: Option<&Paint>, dopo: Option<&Paint>) -> bool {
+        match (prima, dopo) {
+            (
+                Some(Paint::Solid {
+                    color: cp,
+                    swatch: sp,
+                    ..
+                }),
+                Some(Paint::Solid {
+                    color: cd,
+                    swatch: sd,
+                    ..
+                }),
+            ) => {
+                cp.to_hex() == cd.to_hex()
+                    && sp.as_deref().and_then(|n| self.prima.get(n))
+                        == sd.as_deref().and_then(|n| self.dopo.get(n))
+            }
+            (a, b) => a == b,
+        }
+    }
+
+    /// Vero se il colore di prima e quello di dopo sono legati allo stesso
+    /// campione del file: solo il colore del campione è cambiato.
+    pub(crate) fn stesso_campione(&self, prima: Option<&Paint>, dopo: Option<&Paint>) -> bool {
+        match (prima, dopo) {
+            (Some(Paint::Solid { swatch: sp, .. }), Some(Paint::Solid { swatch: sd, .. })) => {
+                let (a, b) = (
+                    sp.as_deref().and_then(|n| self.prima.get(n)),
+                    sd.as_deref().and_then(|n| self.dopo.get(n)),
+                );
+                a.is_some() && a == b
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Le operazioni dei campioni di un comando.
+#[derive(Debug, Default)]
+pub(crate) struct OpsDeiCampioni {
+    /// Gli `add` e i `set` dei campioni: in testa al passo, prima di chi li
+    /// usa.
+    pub davanti: Vec<Value>,
+    /// I `remove` dei campioni tolti: in fondo, dopo che chi li usava ha
+    /// preso il suo colore.
+    pub in_fondo: Vec<Value>,
+    /// Come si scrive chi li usa.
+    pub riferimenti: Riferimenti,
+}
+
+/// Perché i campioni di dopo non si scrivono nel file.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum NonSiScrive {
+    /// Un campione che il formato non ha: una sfumatura, un motivo, una
+    /// tinta, un colore non globale o spot, un gruppo di colori.
+    Forma(String),
+    /// Un nome che è già di un motivo del documento.
+    NomeDiUnMotivo(String),
+}
+
+/// I campioni del motore di dopo il comando che il file deve avere: tutti
+/// tranne «Nessuno» e la Registrazione.
+fn del_documento(dopo: &Document) -> Result<Vec<(&str, String)>, NonSiScrive> {
+    if !dopo.swatch_groups.is_empty() {
+        return Err(NonSiScrive::Forma(
+            "un gruppo di colori: il formato non ne ha".into(),
+        ));
+    }
+    let mut fuori = Vec::new();
+    for s in dopo.swatches.iter() {
+        if s.is_reserved() {
+            continue;
+        }
+        match &s.paint {
+            Paint::Solid {
+                color,
+                swatch: None,
+                ..
+            } if s.global && !s.spot => fuori.push((s.name.as_str(), color.to_hex())),
+            _ => {
+                return Err(NonSiScrive::Forma(format!(
+                    "il campione «{}» non è un colore globale: il formato non lo scrive",
+                    s.name
+                )))
+            }
+        }
+    }
+    Ok(fuori)
+}
+
+/// Le operazioni dei campioni fra il file e il documento di dopo. `id_nuovo`
+/// dà l'id di una risorsa nuova.
+pub(crate) fn operazioni(
+    campioni: &CampioniDelFile,
+    dopo: &Document,
+    id_nuovo: &mut dyn FnMut() -> Option<String>,
+) -> Result<OpsDeiCampioni, NonSiScrive> {
+    let mut fuori = OpsDeiCampioni {
+        riferimenti: Riferimenti::del_file(campioni),
+        ..OpsDeiCampioni::default()
+    };
+    let poi = del_documento(dopo)?;
+    let prima = &campioni.elenco;
+    let uguali_di_prima = prima.len() == poi.len()
+        && prima
+            .iter()
+            .zip(&poi)
+            .all(|(a, (nome, colore))| a.nome == *nome && a.colore == *colore);
+    if uguali_di_prima {
+        return Ok(fuori);
+    }
+    // Per nome; quelli rimasti senza compagno, uno a uno nell'ordine, se
+    // sono tanti quanti: un nome cambiato.
+    let mut compagno: Vec<Option<usize>> = vec![None; poi.len()];
+    let mut preso = vec![false; prima.len()];
+    for (j, (nome, _)) in poi.iter().enumerate() {
+        if let Some(i) = prima.iter().position(|c| c.nome == *nome) {
+            if !preso[i] {
+                preso[i] = true;
+                compagno[j] = Some(i);
+            }
+        }
+    }
+    let soli_prima: Vec<usize> = (0..prima.len()).filter(|i| !preso[*i]).collect();
+    let soli_dopo: Vec<usize> = (0..poi.len()).filter(|j| compagno[*j].is_none()).collect();
+    if soli_prima.len() == soli_dopo.len() {
+        for (i, j) in soli_prima.iter().zip(&soli_dopo) {
+            compagno[*j] = Some(*i);
+            preso[*i] = true;
+        }
+    }
+    let mut nuovi = Vec::new();
+    for (j, (nome, colore)) in poi.iter().enumerate() {
+        match compagno[j] {
+            Some(i) => {
+                let c = &prima[i];
+                if c.nome != *nome {
+                    if campioni.motivi.iter().any(|m| m == nome) {
+                        return Err(NonSiScrive::NomeDiUnMotivo((*nome).to_string()));
+                    }
+                    fuori.davanti.push(json!({
+                        "op": "set", "id": c.id, "attrs": { "fub:name": nome },
+                    }));
+                }
+                if c.colore != *colore {
+                    fuori.davanti.push(json!({
+                        "op": "set", "id": c.id, "part": [0],
+                        "attrs": { "stop-color": colore },
+                    }));
+                }
+                fuori.riferimenti.dopo.remove(&c.nome);
+                fuori
+                    .riferimenti
+                    .dopo
+                    .insert((*nome).to_string(), c.id.clone());
+            }
+            None => {
+                if campioni.motivi.iter().any(|m| m == nome) {
+                    return Err(NonSiScrive::NomeDiUnMotivo((*nome).to_string()));
+                }
+                let Some(id) = id_nuovo() else {
+                    return Err(NonSiScrive::Forma("nessun id nuovo libero".into()));
+                };
+                fuori
+                    .riferimenti
+                    .dopo
+                    .insert((*nome).to_string(), id.clone());
+                nuovi.push(json!({
+                    "tag": "linearGradient",
+                    "attrs": {
+                        "id": id, "fub:role": "swatch", "fub:name": nome,
+                        "gradientUnits": "userSpaceOnUse",
+                    },
+                    "children": [ { "tag": "stop", "attrs": { "stop-color": colore } } ],
+                }));
+            }
+        }
+    }
+    // Un nome di prima può tornare a un altro campione (due nomi scambiati):
+    // le mappe tengono l'ultimo, e i rinominati sono già scritti sopra.
+    for (i, c) in prima.iter().enumerate() {
+        if !preso[i] {
+            fuori.riferimenti.dopo.remove(&c.nome);
+            fuori
+                .in_fondo
+                .push(json!({ "op": "remove", "target": c.id }));
+        }
+    }
+    if !nuovi.is_empty() {
+        match &campioni.defs {
+            Some(defs) => {
+                for elem in nuovi {
+                    fuori.davanti.push(json!({
+                        "op": "add", "parent": defs, "pos": { "last": true }, "elem": elem,
+                    }));
+                }
+            }
+            None => fuori.davanti.push(json!({
+                "op": "add", "parent": "#root", "pos": { "first": true },
+                "elem": { "tag": "defs", "attrs": { "id": DEFS_DI_FUB }, "children": nuovi },
+            })),
+        }
+    }
+    Ok(fuori)
+}
+
+/// Vero se il comando ha sciolto da un campione un colore di un oggetto
+/// bloccato (lui o un antenato): eliminare un campione che un oggetto
+/// bloccato usa riscriverebbe l'oggetto.
+pub(crate) fn tolto_a_un_bloccato(copia: &crate::apertura::Copia, dopo: &Document) -> bool {
+    use vectorcraft_doc::swatches::node_paints;
+    let mappa = &copia.mappa;
+    let bloccato = |mut i: usize| {
+        while let Some(e) = mappa.elemento(i) {
+            if e.bloccato {
+                return true;
+            }
+            match e.genitore {
+                Some(g) => i = g,
+                None => return false,
+            }
+        }
+        false
+    };
+    let legato = |p: &Paint| {
+        matches!(
+            p,
+            Paint::Solid {
+                swatch: Some(_),
+                ..
+            }
+        )
+    };
+    mappa.elementi().iter().enumerate().any(|(i, e)| {
+        let Some(nodo) = e.nodo else { return false };
+        let (Some(b), Some(a)) = (copia.documento.node(nodo), dopo.node(nodo)) else {
+            return false;
+        };
+        node_paints(b).any(legato)
+            && bloccato(i)
+            && node_paints(b)
+                .zip(node_paints(a))
+                .any(|(x, y)| legato(x) && !legato(y))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn il_riferimento_si_legge_col_ripiego_e_senza() {
+        assert_eq!(riferimento("url(#r1a2b3c4d) #0072b2"), Some("r1a2b3c4d"));
+        assert_eq!(riferimento(" url( #r1a2b3c4d)"), Some("r1a2b3c4d"));
+        assert_eq!(riferimento("#0072b2"), None);
+        assert_eq!(riferimento("url(r1)"), None);
+    }
+
+    #[test]
+    fn un_colore_legato_si_scrive_col_riferimento() {
+        let campioni = CampioniDelFile {
+            elenco: vec![Campione {
+                id: "r1a2b3c4d".into(),
+                nome: "Blu".into(),
+                colore: "#0072b2".into(),
+            }],
+            ..CampioniDelFile::default()
+        };
+        let r = Riferimenti::del_file(&campioni);
+        let legato = Paint::Solid {
+            color: Color::from_hex("#0072b2").unwrap_or(Color::BLACK),
+            swatch: Some("Blu".into()),
+            tint: 1.0,
+        };
+        assert_eq!(
+            r.scrivi(Some(&legato)).as_deref(),
+            Some("url(#r1a2b3c4d) #0072b2")
+        );
+        assert_eq!(r.scrivi(None).as_deref(), Some("none"));
+        let sciolto = Paint::solid(Color::from_hex("#0072b2").unwrap_or(Color::BLACK));
+        assert_eq!(r.scrivi(Some(&sciolto)).as_deref(), Some("#0072b2"));
+        assert!(!r.uguali(Some(&legato), Some(&sciolto)));
+        assert!(r.stesso_campione(Some(&legato), Some(&legato)));
+    }
+}

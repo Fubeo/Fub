@@ -573,16 +573,16 @@ motore	graphicStyle.library	Graphic Style Library		aspetto	F1	T15	da fare	intern
 motore	graphicStyle.addFromLibrary	Add to Graphic Styles	Window › Graphic Style Libraries	aspetto	F1	T15	da fare	ispettore/risorse	famiglia		Aggiungi agli stili grafici
 motore	graphicStyle.saveLibrary	Save Graphic Style Library…	Window › Graphic Styles	aspetto	F1	T15	da fare	ispettore/risorse	famiglia	finestra	Salva libreria stili grafici…
 motore	graphicStyle.loadLibrary	Other Library…	Window › Graphic Style Libraries	aspetto	F1	T15	da fare	ispettore/risorse	famiglia	finestra	Altra libreria…
-motore	swatch.new	New Swatch	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Nuovo campione
-motore	swatch.delete	Delete Swatch	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Elimina campione
+motore	swatch.new	New Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Nuovo campione
+motore	swatch.delete	Delete Swatch	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Elimina campione
 motore	swatch.newGroup	New Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Nuovo gruppo colori
 motore	swatch.duplicate	Duplicate Swatch	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Duplica campione
 motore	swatch.sortByName	Sort by Name	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Ordina per nome
-motore	swatch.edit	Swatch Options	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Opzioni campione
-motore	swatch.list	Swatches		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Campioni
+motore	swatch.edit	Swatch Options	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Opzioni campione
+motore	swatch.list	Swatches		colore	F1	T14	fatto	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Campioni
 motore	swatch.move	Move Swatch	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Sposta campione
-motore	swatch.addUsedColors	Add Used Colors	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Aggiungi colori usati
-motore	swatch.unused	Select All Unused	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Seleziona tutti gli elementi non usati
+motore	swatch.addUsedColors	Add Used Colors	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Aggiungi colori usati
+motore	swatch.unused	Select All Unused	Window › Swatches	colore	F1	T14	fatto	ispettore/risorse	famiglia		Seleziona tutti gli elementi non usati
 motore	swatch.merge	Merge Swatches	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Unisci campioni
 motore	swatch.ungroup	Ungroup Color Group	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Separa gruppo colori
 motore	swatch.sortByKind	Sort by Kind	Window › Swatches	colore	F1	T14	da fare	ispettore/risorse	famiglia		Ordina per tipo

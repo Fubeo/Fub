@@ -173,6 +173,23 @@ fn canonicalizza(ops: &mut Value) {
                         nuovi.push(id.to_string());
                     }
                 }
+                // I figli di un elemento nuovo (i campioni nelle `defs` nuove)
+                // portano anche loro id nuovi.
+                if o.get("op").and_then(Value::as_str) == Some("add") {
+                    fn figli(e: &Value, nuovi: &mut Vec<String>) {
+                        for f in e["children"].as_array().into_iter().flatten() {
+                            if let Some(id) = f["attrs"]["id"].as_str() {
+                                if !nuovi.iter().any(|n| n == id) {
+                                    nuovi.push(id.to_string());
+                                }
+                            }
+                            figli(f, nuovi);
+                        }
+                    }
+                    if let Some(e) = o.get("elem") {
+                        figli(e, nuovi);
+                    }
+                }
                 // Un gruppo che il motore scrive come XML (`raw`) porta i suoi id
                 // nel testo: anche quelli sono id nuovi, e casuali a ogni prova.
                 if let Some(xml) = o.get("raw").and_then(Value::as_str) {
@@ -198,6 +215,11 @@ fn canonicalizza(ops: &mut Value) {
             Value::String(s) => {
                 if let Some(n) = mappa.get(s.as_str()) {
                     *s = n.clone();
+                } else if s.starts_with("url(#") && !s.contains('<') {
+                    // Un colore legato a un campione: `url(#id) #hex`.
+                    for (vecchio, nuovo) in mappa {
+                        *s = s.replace(&format!("url(#{vecchio})"), &format!("url(#{nuovo})"));
+                    }
                 } else if s.contains('<') {
                     // XML: l'attributo `id="…"`, il riferimento `url(#…)` o
                     // `href="#…"`, e `for="…"` della ricetta (il metadato che dice

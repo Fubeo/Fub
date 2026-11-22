@@ -27,6 +27,7 @@ use fub_scene::{Item, ReadOnly, Role};
 use vectorcraft_doc::{Document, LayerColor, Node, NodeKind};
 use vectorcraft_geom::Affine;
 
+use crate::campioni::{self, CampioniDelFile};
 use crate::mappa::{Elemento, Mappa};
 use crate::perdite::{self, Perdite};
 use crate::ricetta;
@@ -51,6 +52,8 @@ pub(crate) struct Copia {
     /// Dallo spazio della radice (le coordinate della scena) al documento
     /// del motore.
     pub radice: Affine,
+    /// I campioni del file, che il motore ha come campioni globali.
+    pub campioni: CampioniDelFile,
 }
 
 impl Copia {
@@ -121,6 +124,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         .and_then(|at| attributi(testo, at))
         .map_or(Affine::IDENTITY, |(_, a)| matrice_della_radice(&a));
     let mut elementi = elementi(testo, &scena.items, base);
+    let (campioni_del_file, usi) = campioni::leggi(testo, &scena.items);
     let (copia_testo, _) = copia_per_l_import(testo, &mut elementi, &scena.items);
 
     let documento = if elementi.is_empty() && scena.items.len() <= 1 {
@@ -169,6 +173,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
     }
     let mut mappa = Mappa::nuova(elementi, &mut documento);
     mappa.ricette = ricette;
+    campioni::nel_motore(&campioni_del_file, &usi, &mappa, &mut documento);
     perdite::classifica(&mut perdite, testo, &scena.items, &mappa);
     Ok(Copia {
         revisione,
@@ -177,6 +182,7 @@ pub(crate) fn importa(testo: &str, revisione: u64) -> Result<Copia, ErroreApertu
         mappa,
         perdite: perdite.in_elenco(),
         radice: base,
+        campioni: campioni_del_file,
     })
 }
 

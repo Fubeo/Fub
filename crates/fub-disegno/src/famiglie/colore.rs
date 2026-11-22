@@ -15,6 +15,16 @@
 //!   almeno tre oggetti con un riempimento pieno: con meno il motore non fa
 //!   niente, e il comando è `empty`.
 //!
+//! - **I campioni del documento** (`swatch.*`, Risorse › Campioni): nuovo,
+//!   opzioni (nome e colore), elimina, «Aggiungi i colori usati» e l'elenco
+//!   di quelli che nessuno usa. Nel file un campione si usa sempre per
+//!   riferimento, quindi è sempre **globale**: la famiglia lo chiede al motore
+//!   anche se gli argomenti dicono altro, così cambiarlo cambia in un passo chi
+//!   lo usa ([`crate::campioni`]). Eliminare lascia a chi lo usava il suo
+//!   colore. Applicarne uno è `paint.setFill` o `paint.setStroke` con
+//!   `swatch`. Non cambiano gli oggetti scelti, e la selezione non li spegne;
+//!   un campione usato da un oggetto bloccato non si elimina (`locked`).
+//!
 //! **Che cosa non si tocca.** Un oggetto bloccato (lui o un antenato) o un
 //! disegno in sola lettura spengono i comandi (`read_only`); un tratto
 //! dell'Inchiostro di Fub (`fub:ink`) scelto li spegne (`fub_ink`): il suo
@@ -26,9 +36,10 @@
 
 use std::sync::Arc;
 
-use fub_abi::{DrawingDisabledReason, DrawingRefusal};
+use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use vectorcraft_doc::color::Paint;
+use serde_json::Value;
 use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
 
 use super::tracciati::{inchiostro_toccato, sceglie_inchiostro};
@@ -67,6 +78,14 @@ pub(crate) const MODIFICA_COLORI: [&str; 10] = [
     "edit.colors.overprintBlack",
 ];
 
+/// I comandi dei campioni del documento che cambiano il file.
+pub(crate) const CAMPIONI: [&str; 4] = [
+    "swatch.new",
+    "swatch.edit",
+    "swatch.delete",
+    "swatch.addUsedColors",
+];
+
 /// Le fusioni: almeno tre oggetti con un riempimento pieno.
 const FUSIONI: [&str; 3] = [
     "edit.colors.blendFrontToBack",
@@ -102,11 +121,35 @@ impl StatoFamiglia for Stato {
         id == ALTERNA
     }
 
+    /// Un campione nuovo, cambiato o fatto dai colori usati è globale;
+    /// eliminarne uno lascia a chi lo usava il suo colore.
+    fn adatta(&self, id: &str, argomenti: Value) -> Result<Value, PluginError> {
+        if !CAMPIONI.contains(&id) {
+            return Ok(argomenti);
+        }
+        let mut argomenti = match argomenti {
+            Value::Null => Value::Object(serde_json::Map::new()),
+            Value::Object(o) => Value::Object(o),
+            _ => return Err(PluginError::BadArgs("gli argomenti sono un oggetto".into())),
+        };
+        if let Some(o) = argomenti.as_object_mut() {
+            if id == "swatch.delete" {
+                o.insert("unlink".into(), Value::Bool(true));
+            } else {
+                o.insert("global".into(), Value::Bool(true));
+            }
+        }
+        Ok(argomenti)
+    }
+
     /// Senza selezione, su un disegno in sola lettura, su un oggetto bloccato
     /// o su un tratto dell'Inchiostro di Fub, i comandi che cambiano i colori
     /// sono spenti col perché. `paint.toggleActive` non cambia il file: resta
     /// acceso.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        if CAMPIONI.contains(&id) {
+            return (!copia.modificabile).then_some(DrawingDisabledReason::ReadOnly);
+        }
         if !sugli_scelti(id) {
             return None;
         }
@@ -147,6 +190,10 @@ impl StatoFamiglia for Stato {
         dopo: &Document,
         _scelti_dopo: &[NodeId],
     ) -> Option<DrawingRefusal> {
+        if CAMPIONI.contains(&id) {
+            return crate::campioni::tolto_a_un_bloccato(copia, dopo)
+                .then_some(DrawingRefusal::Locked);
+        }
         (sugli_scelti(id) && inchiostro_toccato(copia, dopo)).then_some(DrawingRefusal::Unmapped)
     }
 }
