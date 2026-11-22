@@ -126,6 +126,14 @@ fn campione_del_file(copia: &Copia, nome: &str) -> Result<(), PluginError> {
     Ok(())
 }
 
+/// Vero se nessuno dei nomi torna due volte.
+fn senza_doppioni(nomi: &[&str]) -> bool {
+    let mut visti = nomi.to_vec();
+    visti.sort_unstable();
+    visti.dedup();
+    visti.len() == nomi.len()
+}
+
 /// I nomi dei campioni in `names`, se sono tutti testi.
 fn nomi_di_campioni(valore: &Value) -> Option<Vec<&str>> {
     valore
@@ -243,14 +251,31 @@ impl StatoFamiglia for Stato {
                 if nomi.len() < 2 {
                     return Err(PluginError::BadArgs("Scegli due o più campioni da unire.".into()));
                 }
-                for nome in nomi {
+                for nome in &nomi {
                     campione_del_file(copia, nome)?;
+                }
+                if !senza_doppioni(&nomi) {
+                    return Err(PluginError::BadArgs("Un campione si unisce una volta sola: togli il doppione.".into()));
+                }
+                // Il primo resta; gli altri si tolgono, e chi li usa da un oggetto bloccato non si riscrive.
+                if let Some(nome) = crate::campioni::usato_da_un_bloccato(copia, &nomi[1..]) {
+                    return Err(PluginError::BadArgs(
+                        format!("«{nome}» è usato da un oggetto bloccato: sbloccalo prima di unirlo.").into(),
+                    ));
                 }
             }
             "swatch.move" => {
+                if valore.get("group").is_some_and(|g| !g.is_null()) {
+                    return Err(PluginError::BadArgs(
+                        "Il formato non ha gruppi di colori: si sposta un campione, non un gruppo.".into(),
+                    ));
+                }
                 let nomi = nomi_di_campioni(&valore).filter(|nomi| !nomi.is_empty()).ok_or_else(senza_nome)?;
-                for nome in nomi {
+                for nome in &nomi {
                     campione_del_file(copia, nome)?;
+                }
+                if !senza_doppioni(&nomi) {
+                    return Err(PluginError::BadArgs("Un campione si sposta una volta sola: togli il doppione.".into()));
                 }
                 if valore.get("to").is_some_and(|to| !to.is_null() && to.as_u64().is_none()) {
                     return Err(PluginError::BadArgs("La posizione è un numero intero, dal primo campione: 0.".into()));
@@ -319,10 +344,7 @@ impl StatoFamiglia for Stato {
         _selezione: &[String],
         valore: &Value,
     ) -> Option<DrawingRefusal> {
-        // Un gruppo di colori non c'è nel formato: lo spostamento dentro un gruppo non si fa.
-        let sfumatura = SFUMATURE.contains(&id) && sfumatura_fuori_dalla_scena(valore);
-        let gruppo = id == "swatch.move" && valore.get("group").is_some_and(|g| !g.is_null());
-        (sfumatura || gruppo).then_some(DrawingRefusal::Unsupported)
+        (SFUMATURE.contains(&id) && sfumatura_fuori_dalla_scena(valore)).then_some(DrawingRefusal::Unsupported)
     }
 
     /// In una selezione con testi e forme la sfumatura va alle forme, una

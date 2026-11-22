@@ -529,24 +529,54 @@ fn ordine_non_scrivibile() -> NonSiScrive {
     )
 }
 
+/// L'elemento `i` della mappa, o un suo antenato, è bloccato.
+fn bloccato_con_antenati(mappa: &crate::mappa::Mappa, mut i: usize) -> bool {
+    while let Some(e) = mappa.elemento(i) {
+        if e.bloccato {
+            return true;
+        }
+        match e.genitore {
+            Some(g) => i = g,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// Il primo dei campioni `nomi` che un oggetto bloccato (lui o un antenato) usa come riempimento o
+/// contorno, se c'è: unirlo riscriverebbe l'oggetto, e la fusione non si fa.
+pub(crate) fn usato_da_un_bloccato(
+    copia: &crate::apertura::Copia,
+    nomi: &[&str],
+) -> Option<String> {
+    use vectorcraft_doc::swatches::node_paints;
+    copia
+        .mappa
+        .elementi()
+        .iter()
+        .enumerate()
+        .find_map(|(i, e)| {
+            let nodo = e.nodo?;
+            if !bloccato_con_antenati(&copia.mappa, i) {
+                return None;
+            }
+            let b = copia.documento.node(nodo)?;
+            node_paints(b).find_map(|p| match p {
+                Paint::Solid {
+                    swatch: Some(nome), ..
+                } if nomi.contains(&nome.as_str()) => Some(nome.clone()),
+                _ => None,
+            })
+        })
+}
+
 /// Vero se il comando ha sciolto da un campione, o ha legato a un altro, un
 /// colore di un oggetto bloccato (lui o un antenato): eliminare o unire un
 /// campione che un oggetto bloccato usa riscriverebbe l'oggetto.
 pub(crate) fn tolto_a_un_bloccato(copia: &crate::apertura::Copia, dopo: &Document) -> bool {
     use vectorcraft_doc::swatches::node_paints;
     let mappa = &copia.mappa;
-    let bloccato = |mut i: usize| {
-        while let Some(e) = mappa.elemento(i) {
-            if e.bloccato {
-                return true;
-            }
-            match e.genitore {
-                Some(g) => i = g,
-                None => return false,
-            }
-        }
-        false
-    };
+    let bloccato = |i: usize| bloccato_con_antenati(mappa, i);
     // Il campione a cui un colore è legato: se il comando lo toglie o lo cambia con un altro (la
     // fusione), l'oggetto bloccato cambia.
     let campione = |p: &Paint| match p {

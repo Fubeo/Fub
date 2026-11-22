@@ -2420,7 +2420,7 @@
         ]
       },
       "atteso": {
-        "rifiuto": "locked"
+        "errore": "bad_args"
       }
     },
     {
@@ -2524,7 +2524,7 @@
         "group": "Grigi"
       },
       "atteso": {
-        "rifiuto": "unsupported"
+        "errore": "bad_args"
       }
     },
     {
@@ -2590,6 +2590,206 @@
         ]
       },
       "dopo": "swatch-sort-inversi.svg"
+    },
+    {
+      "id": "swatch.merge",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Blu",
+          "Blu"
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.move",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "names": [
+          "Viola",
+          "Viola"
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.list",
+      "disegno": "swatch-sort.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "swatches": [
+            {
+              "name": "[None]"
+            },
+            {
+              "name": "[Registration]"
+            },
+            {
+              "name": "Arancio"
+            },
+            {
+              "name": "Blu"
+            },
+            {
+              "name": "Viola"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "swatch.list",
+      "disegno": "swatch-sort-inversi.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "swatches": [
+            {
+              "name": "[None]"
+            },
+            {
+              "name": "[Registration]"
+            },
+            {
+              "name": "Arancio"
+            },
+            {
+              "name": "Blu"
+            },
+            {
+              "name": "Viola"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "swatch.list",
+      "disegno": "swatch-move.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "swatches": [
+            {
+              "name": "[None]"
+            },
+            {
+              "name": "[Registration]"
+            },
+            {
+              "name": "Viola"
+            },
+            {
+              "name": "Blu"
+            },
+            {
+              "name": "Arancio"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "swatch.list",
+      "disegno": "swatch-duplicate.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "swatches": [
+            {
+              "name": "[None]"
+            },
+            {
+              "name": "[Registration]"
+            },
+            {
+              "name": "Blu"
+            },
+            {
+              "name": "Blu copy"
+            },
+            {
+              "name": "Arancio"
+            },
+            {
+              "name": "Viola"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "swatch.list",
+      "disegno": "swatch-merge.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "swatches": [
+            {
+              "name": "[None]"
+            },
+            {
+              "name": "[Registration]"
+            },
+            {
+              "name": "Blu"
+            },
+            {
+              "name": "Viola"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "swatch.list",
+      "disegno": "swatch-merge-collega.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "swatches": [
+            {
+              "name": "[None]"
+            },
+            {
+              "name": "[Registration]"
+            },
+            {
+              "name": "Blu"
+            },
+            {
+              "name": "Viola"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "swatch.unused",
+      "disegno": "swatch-merge-collega.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "names": [
+            "Viola"
+          ]
+        }
+      }
     }
   ]
 }
