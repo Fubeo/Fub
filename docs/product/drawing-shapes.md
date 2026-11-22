@@ -43,7 +43,7 @@ ed Ellisse esistono anche nel Semplice, e nella stessa tendina portano
 Le griglie rettangolare e polare non ci sono ancora: il loro gruppo di percorsi
 composti aspetta la ricetta del disegno (T27). Lo stesso vale per le forme dal
 vivo, cioè con angoli e lati che si cambiano dopo: quelle che il motore scrive
-come corpo espanso con la sua ricetta si salvano così, come oggi.
+come corpo espanso con la sua ricetta si salvano così.
 
 La sezione «Allinea», nella scheda Design dell'ispettore, offre gli allineamenti
 e le distribuzioni del motore. Alla selezione servono due oggetti; con «alla
