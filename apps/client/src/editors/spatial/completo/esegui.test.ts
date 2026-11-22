@@ -265,6 +265,32 @@ describe("eseguiVoce, con finestra", () => {
     expect(azioni.commit).toHaveBeenCalledTimes(1);
   });
 
+  it("Media manda i punti scelti quando la finestra si apre; senza punti, i tracciati interi", async () => {
+    const punto = { element: "o1", subpath: 0, anchor: 2, at: [160, 80] as [number, number], end: true };
+    let punti: (typeof punto)[] = [punto];
+    const { d, sessione } = dipendenze({ finestra: () => Promise.resolve(schema()) });
+    const media = voce({ id: "path.average", famiglia: "tracciati", chiamata: { comando: "disegno.path.average" }, finestra: true });
+    eseguiVoce(media, { ...d, punti: () => punti });
+    await tick();
+    // Cambiano dopo l'apertura: valgono quelli di quando si è aperta.
+    punti = [];
+    const [, , esegui] = vi.mocked(apriFinestra).mock.calls[0]!;
+    await esegui({ axis: "vertical" }, false);
+    expect(sessione.comando).toHaveBeenLastCalledWith(expect.objectContaining({ value: { anchors: [punto], axis: "vertical" } }));
+    // Senza punti scelti: niente `anchors`, il motore prende i tracciati scelti.
+    eseguiVoce(media, { ...d, punti: () => [] });
+    await tick();
+    const [, , ancora] = vi.mocked(apriFinestra).mock.calls[1]!;
+    await ancora({ axis: "both" }, false);
+    expect(sessione.comando).toHaveBeenLastCalledWith(expect.objectContaining({ value: { axis: "both" } }));
+    // Un altro comando con finestra non riceve i punti.
+    eseguiVoce(voce({ finestra: true }), { ...d, punti: () => [punto] });
+    await tick();
+    const [, , altro] = vi.mocked(apriFinestra).mock.calls[2]!;
+    await altro({ radius: 3 }, false);
+    expect(sessione.comando).toHaveBeenLastCalledWith(expect.objectContaining({ value: { radius: 3 } }));
+  });
+
   it("Annulla della finestra del clic non manda niente al motore", async () => {
     const { d, sessione, azioni } = dipendenze({ finestra: () => Promise.resolve(schema()) });
     eseguiVoce(voce({ id: "shape.rectangle", famiglia: "forme", chiamata: { comando: "disegno.shape.rectangle", valore: { x: 40, y: 50 } }, finestra: true }), d);

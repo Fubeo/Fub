@@ -15,7 +15,7 @@ import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
 import { menuComando, menuNonCaricato, nomeVoce, statoComandi, METODI_FORMA, OPERAZIONI_ELABORAZIONE, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
 import type { CampoFinestra, ModuloFinestra } from "../motore/finestre";
-import type { DrawingPreview, DrawingToolState } from "../../../host/contract";
+import type { DrawingAnchor, DrawingPreview, DrawingToolState } from "../../../host/contract";
 import type { MenuItem } from "../../../ui/menu";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
@@ -183,6 +183,8 @@ export interface OpzioniTastiCompleto extends AzioniEsito {
   readonly selezione: () => readonly string[];
   readonly anteprima: (anteprima: DrawingPreview | null) => void;
   readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
+  /// I punti scelti con lo strumento del motore di adesso (`DipendenzeComando.punti`).
+  readonly punti?: () => readonly DrawingAnchor[];
   /// Le modifiche dell'utente; senza, il Completo segue `draw.keys` da sé
   /// (`segui-tasti.ts`), e un cambio vale subito.
   readonly modifiche?: () => ModificheTasti;
@@ -446,6 +448,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     carica,
     vita: ctx.life,
     selezione: opzioni.tasti?.selezione ?? (() => []),
+    punti: opzioni.tasti?.punti ?? (() => []),
     anteprima: opzioni.tasti?.anteprima ?? (() => undefined),
     finestra: finestraDi,
     leggi: opzioni.tasti?.leggi ?? (() => null),

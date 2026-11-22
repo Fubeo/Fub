@@ -420,6 +420,7 @@ fn elementi(testo: &str, items: &[Item], base: Affine) -> Vec<Elemento> {
                 nodo: None,
                 motivo,
                 testo: (e.tag == "text").then(|| info_testo(testo, e)),
+                clip_path: valore(&attr, "clip-path").is_some(),
             });
         }
         visti.insert(

@@ -234,6 +234,12 @@ export function installWorkspace(ctx: EditorContext): void {
                 const stato = id === null ? null : ctx.statoStrumento(id);
                 return { vuoleTesto: stato?.wants_text === true, componendo: stato?.composing === true };
               },
+              // I punti scelti con lo strumento del motore di adesso (Media, K6 T12).
+              punti: () => {
+                const id = ctx.motoreTool;
+                const punti = id === null ? undefined : ctx.statoStrumento(id)?.anchors;
+                return Array.isArray(punti) ? punti : [];
+              },
               leggi: (ops) => {
                 const letto = opsDellEsito(ops);
                 return "ops" in letto ? letto.ops : null;

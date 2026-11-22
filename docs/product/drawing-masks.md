@@ -8,12 +8,38 @@
 Un **ritaglio** mostra soltanto una parte di un'immagine, che resta intera
 nel file. Le **maschere** fanno lo stesso con ogni oggetto: una forma
 ritaglia gli oggetti di un gruppo, o ne fa la trasparenza col suo chiaro e il
-suo scuro. Fub li mostra e li rispetta quando un disegno li porta, scritti da
-un altro programma o da una versione precedente, ma non li crea, non li
-cambia e non li toglie: i comandi «Maschera» se ne sono andati col livello
+suo scuro. Fuori dal livello Completo, Fub li mostra e li rispetta quando
+un disegno li porta, scritti da un altro programma o da una versione
+precedente, ma non li crea, non li cambia e non li toglie: i comandi
+«Maschera» se ne sono andati col livello
 Esperto, e «Ritaglia…» e «Togli il ritaglio» col livello Standard (decisione
-0231). La parte che si vede, per la selezione e i riquadri, è in
+0231). Il livello Completo crea e rilascia le maschere di ritaglio (sotto).
+La parte che si vede, per la selezione e i riquadri, è in
 `apps/client/src/editors/spatial/tools/clips.ts`.
+
+## Maschere di ritaglio nel Completo
+
+Con il livello Completo, **≡ › Oggetto › Maschera di ritaglio** torna a
+crearle, in un passo di Annulla ciascuna:
+
+- **Crea**: il tracciato più in alto fra gli oggetti scelti ritaglia gli
+  altri, che vanno in un gruppo al suo posto. Servono almeno due oggetti, e
+  quello in cima deve essere un tracciato o una forma: con un testo in cima
+  la voce è spenta e dice perché;
+- **Rilascia**: il gruppo perde il ritaglio, e il tracciato che ritagliava
+  torna primo nel gruppo, senza colore, perché si possa riprendere;
+- **Modifica contenuto**: sceglie gli oggetti dentro la maschera;
+- **≡ › Selezione › Oggetto › Maschere di ritaglio** sceglie tutte le
+  maschere del disegno.
+
+Nel file la maschera è SVG semplice: un `<g clip-path="url(#…)">` con gli
+oggetti e un `clipPath` fra le risorse col tracciato che ritaglia, quindi un
+altro programma la legge com'è e Fub la riapre uguale. Si aprono e si
+rilasciano anche le maschere scritte da Inkscape, col loro `clipPath` in
+`<defs>`, che resta nel file. Un ritaglio scritto sull'oggetto stesso e non
+su un gruppo, come lo scrive Illustrator, si vede e si tiene, ma Rilascia
+non lo toglie ancora e lo dice. Modifica tracciato di ritaglio e il ritaglio
+di un livello non ci sono ancora: sono spenti e dicono perché.
 
 ## Ciò che si vede è ciò che si tocca
 

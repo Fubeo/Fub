@@ -36,6 +36,13 @@
         "ops": "[{\"op\":\"batch\",\"ops\":[{\"op\":\"remove\",\"target\":\"o0000001b\"},{\"op\":\"remove\",\"target\":\"o0000001a\"},{\"op\":\"add\",\"parent\":\"l00000005\",\"pos\":{\"last\":true},\"elem\":{\"tag\":\"path\",\"attrs\":{\"d\":\"M620 320 L780 320 L780 360 A60 60 0 0 0 720 420 L620 420 Z\",\"fill\":\"#e9d8fd\",\"id\":\"o0000001c\"}}}]}]",
         "selection": ["o0000001c"]
       }
+    },
+    {
+      "comando": "disegno.object.clippingMask.make",
+      "esito": {
+        "ops": "[{\"op\":\"batch\",\"ops\":[{\"op\":\"add\",\"parent\":\"fub-defs\",\"pos\":{\"last\":true},\"elem\":{\"tag\":\"clipPath\",\"attrs\":{\"id\":\"r0000001e\",\"fub:role\":\"private\",\"clipPathUnits\":\"userSpaceOnUse\"},\"children\":[{\"tag\":\"path\",\"attrs\":{\"d\":\"M840 420 C840 453.14 813.14 480 780 480 C746.86 480 720 453.14 720 420 C720 386.86 746.86 360 780 360 C813.14 360 840 386.86 840 420 Z\",\"fill\":\"#000000\"}}]}},{\"op\":\"remove\",\"target\":\"o0000001b\"},{\"op\":\"add\",\"parent\":\"l00000005\",\"pos\":{\"last\":true},\"elem\":{\"tag\":\"g\",\"attrs\":{\"id\":\"o0000001d\",\"clip-path\":\"url(#r0000001e)\"}}},{\"op\":\"move\",\"target\":\"o0000001a\",\"parent\":\"o0000001d\",\"pos\":{\"first\":true}}]}]",
+        "selection": ["o0000001d"]
+      }
     }
   ]
 }

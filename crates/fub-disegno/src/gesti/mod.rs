@@ -423,7 +423,9 @@ pub(crate) fn esito_vuoto(revisione: u64) -> DrawingOutcome {
 
 /// Gli id di Fub della selezione del motore; un oggetto senza id resta fuori,
 /// e così il foglio di Fub, che non si sceglie (Sblocca tutto del motore lo
-/// sblocca e lo sceglie con gli altri).
+/// sblocca e lo sceglie con gli altri). Il tracciato che ritaglia una maschera
+/// sta nel `clipPath` del file, non è un elemento: scelto, vale per la sua
+/// maschera, il `<g clip-path>` (Seleziona › Oggetto › Maschere di ritaglio).
 pub(crate) fn selezione_di_fub(
     copia: &Copia,
     differenza: &Differenza,
@@ -431,6 +433,7 @@ pub(crate) fn selezione_di_fub(
 ) -> Vec<String> {
     let mut fuori: Vec<String> = Vec::new();
     for n in selezione {
+        let n = &maschera_del_ritaglio(&copia.documento, *n).unwrap_or(*n);
         let id = differenza.ids.get(n).cloned().or_else(|| {
             copia
                 .mappa
@@ -446,6 +449,21 @@ pub(crate) fn selezione_di_fub(
         }
     }
     fuori
+}
+
+/// La maschera di cui `n` è il tracciato che ritaglia (il primo figlio di un
+/// gruppo di ritaglio), o `None`.
+fn maschera_del_ritaglio(doc: &Document, n: NodeId) -> Option<NodeId> {
+    let nodo = doc.node(n)?;
+    if !matches!(
+        nodo.kind,
+        vectorcraft_doc::NodeKind::Path { clipping: true, .. }
+    ) {
+        return None;
+    }
+    let (genitore, indice, _) = doc.position(n)?;
+    let g = genitore?;
+    (indice == 0 && doc.node(g).is_some_and(Node::clips)).then_some(g)
 }
 
 /// Un evento della penna di Fub come lo vuole il motore: dalle coordinate

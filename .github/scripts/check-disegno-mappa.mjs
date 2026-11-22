@@ -94,7 +94,7 @@ const POSTO = new RegExp(
       "menu/(?:file|modifica|oggetto|testo|selezione|effetto|visualizza)",
       // Il terzo livello di ≡: `SOTTOMENU` di `crates/fub-disegno/src/catalogo.rs`.
       "menu/modifica/colori",
-      "menu/oggetto/(?:tracciato|trasforma|disponi|fusione|inviluppo|blocca|nascondi|elaborazione)",
+      "menu/oggetto/(?:tracciato|trasforma|disponi|fusione|inviluppo|blocca|nascondi|elaborazione|ritaglio)",
       "menu/selezione/(?:uguale|oggetto)",
       "menu/effetto/(?:deforma|stilizza|distorci)",
       "menu/visualizza/guide",

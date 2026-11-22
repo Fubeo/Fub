@@ -178,6 +178,7 @@ const NOMI_PEZZO: Readonly<Record<string, DrawKey>> = {
   distorci: "draw.completo.sotto.distorci",
   guide: "draw.completo.sotto.guide",
   elaborazione: "draw.completo.sotto.elaborazione",
+  ritaglio: "draw.completo.sotto.ritaglio",
 };
 
 /// Dove sta un posto, come percorso leggibile: «Colonna › Disegna». Il
@@ -203,7 +204,7 @@ export function tastoMostrato(regola: RegolaTasti | null, id: string): string | 
 /// il tracciato composto (un sottomenu, `RACCOLTE_DEI_MENU`), gli strumenti di precisione, la penna intelligente.
 /// Gli id sono quelli della mappa del motore (`crates/fub-disegno/mappa.tsv`).
 const FILE_TRACCIATO: readonly (readonly string[])[] = [
-  ["path.join", "path.reverse", "object.path.outlineStroke", "object.path.addAnchorPoints", "path.removeAnchors", "object.path.divideObjectsBelow"],
+  ["path.join", "path.average", "path.averageJoin", "path.reverse", "object.path.outlineStroke", "object.path.addAnchorPoints", "path.removeAnchors", "object.path.divideObjectsBelow"],
   ["object.compoundPath.make", "object.compoundPath.release"],
   [
     "addon.pathtools.smooth",
@@ -215,6 +216,12 @@ const FILE_TRACCIATO: readonly (readonly string[])[] = [
     "addon.pathtools.expandDashes",
   ],
   ["addon.pen.closeJoin"],
+];
+
+/// La fila di Oggetto › Maschera di ritaglio (K6 T12, giro 6), nell'ordine di Illustrator: Crea e
+/// Rilascia, poi le due modifiche.
+const FILE_RITAGLIO: readonly (readonly string[])[] = [
+  ["object.clippingMask.make", "object.clippingMask.release", "object.clippingMask.editMask", "object.clippingMask.editContents"],
 ];
 
 /// Le file di Modifica › Modifica colori (K6 T14): le finestre che regolano i colori, le tre
@@ -271,6 +278,7 @@ const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = 
   visualizza: FILE_VISUALIZZA,
   "oggetto/tracciato": FILE_TRACCIATO,
   "oggetto/elaborazione": FILE_ELABORAZIONE,
+  "oggetto/ritaglio": FILE_RITAGLIO,
   "modifica/colori": FILE_COLORI,
 };
 

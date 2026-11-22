@@ -305,6 +305,7 @@ export const COMPLETO_IT = {
   "draw.completo.sotto.distorci": "Distorci",
   "draw.completo.sotto.guide": "Guide",
   "draw.completo.sotto.elaborazione": "Elaborazione tracciati",
+  "draw.completo.sotto.ritaglio": "Maschera di ritaglio",
 } as const;
 
 /// Chiave del catalogo del disegno: la stessa forma di `COMPLETO_IT`.
@@ -602,6 +603,7 @@ export const COMPLETO_EN: Record<CompletoKey, string> = {
   "draw.completo.sotto.distorci": "Distort",
   "draw.completo.sotto.guide": "Guides",
   "draw.completo.sotto.elaborazione": "Pathfinder",
+  "draw.completo.sotto.ritaglio": "Clipping Mask",
 };
 
 /// La scheda Risorse dell'ispettore (K6 T10): il suo titolo, i campioni del

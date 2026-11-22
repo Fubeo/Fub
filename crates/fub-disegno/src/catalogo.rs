@@ -447,6 +447,7 @@ pub const SOTTOMENU: &[(&str, &[&str])] = &[
             "inviluppo",
             "blocca",
             "nascondi",
+            "ritaglio",
         ],
     ),
     ("selezione", &["uguale", "oggetto"]),
@@ -742,6 +743,20 @@ pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
     // Metodo forma (T13) dal menu chiede il metodo: i membri delle forme
     // composte scelte lo prendono tutti. I pulsanti della sezione «Elaborazione
     // tracciati» lo mandano senza finestra, col metodo del pulsante.
+    // Media e Media e unisci (T12): l'asse, e il punto che l'unione lascia.
+    // Il motore media su entrambi gli assi senza `axis`; `to` lo vuole.
+    FinestraScritta {
+        id: "path.average",
+        schema: "{axis: \"both\"|\"horizontal\"|\"vertical\"}",
+        predefiniti: &[("axis", "both")],
+        limiti: &[],
+    },
+    FinestraScritta {
+        id: "path.averageJoin",
+        schema: "{to: \"corner\"|\"smooth\"}",
+        predefiniti: &[("to", "corner")],
+        limiti: &[],
+    },
     FinestraScritta {
         id: "object.compoundShape.setMode",
         schema: "{mode: add|subtract|intersect|exclude}",

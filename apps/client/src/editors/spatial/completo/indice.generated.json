@@ -835,6 +835,54 @@
     },
     {
       "fonte": "motore",
+      "id": "object.clippingMask.editContents",
+      "chiamata": {
+        "comando": "disegno.object.clippingMask.editContents"
+      },
+      "etichetta": {
+        "it": "Modifica contenuto",
+        "en": "Edit Contents"
+      },
+      "posto": "menu/oggetto/ritaglio",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.clippingMask.make",
+      "chiamata": {
+        "comando": "disegno.object.clippingMask.make"
+      },
+      "etichetta": {
+        "it": "Crea",
+        "en": "Make"
+      },
+      "posto": "menu/oggetto/ritaglio",
+      "famiglia": "tracciati",
+      "tasto": "Cmd+7",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.clippingMask.release",
+      "chiamata": {
+        "comando": "disegno.object.clippingMask.release"
+      },
+      "etichetta": {
+        "it": "Rilascia",
+        "en": "Release"
+      },
+      "posto": "menu/oggetto/ritaglio",
+      "famiglia": "tracciati",
+      "tasto": "Cmd+Alt+7",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.compoundPath.make",
       "chiamata": {
         "comando": "disegno.object.compoundPath.make"
@@ -1731,6 +1779,38 @@
     },
     {
       "fonte": "motore",
+      "id": "path.average",
+      "chiamata": {
+        "comando": "disegno.path.average"
+      },
+      "etichetta": {
+        "it": "Media…",
+        "en": "Average…"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": "Cmd+Alt+J",
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "path.averageJoin",
+      "chiamata": {
+        "comando": "disegno.path.averageJoin"
+      },
+      "etichetta": {
+        "it": "Media e unisci…",
+        "en": "Average & Join…"
+      },
+      "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": "Cmd+Alt+Shift+J",
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "path.convertAnchors",
       "chiamata": {
         "comando": "disegno.path.convertAnchors"
@@ -1930,6 +2010,22 @@
       "etichetta": {
         "it": "Tutto sugli stessi livelli",
         "en": "All on Same Layers"
+      },
+      "posto": "menu/selezione/oggetto",
+      "famiglia": "livelli",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "select.object.clippingMasks",
+      "chiamata": {
+        "comando": "disegno.select.object.clippingMasks"
+      },
+      "etichetta": {
+        "it": "Maschere di ritaglio",
+        "en": "Clipping Masks"
       },
       "posto": "menu/selezione/oggetto",
       "famiglia": "livelli",
