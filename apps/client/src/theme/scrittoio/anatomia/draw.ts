@@ -94,5 +94,10 @@ export const DRAW: PartAnatomy = {
       states: [S("rest"), S("focused")],
       hooks: ["draw-align-to", "draw-align-group", "kit-button"],
     },
+    {
+      name: "transform-section",
+      states: [S("rest"), S("focused")],
+      hooks: ["draw-transform-grid"],
+    },
   ],
 };

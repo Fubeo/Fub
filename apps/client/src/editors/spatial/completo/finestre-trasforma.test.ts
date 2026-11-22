@@ -38,7 +38,7 @@ function completo() {
       moduli: {
         "./famiglie/trasforma/index.ts": () => {
           caricati.push("trasforma");
-          return import("./famiglie/trasforma/index.ts");
+          return import("./famiglie/trasforma/index");
         },
       },
       tasti: { selezione: () => ["oa1a1a1a1"], annuncia } as never,
