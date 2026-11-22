@@ -1602,6 +1602,8 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-selezione-tratto", 1280, "Uguale › Colore tratto: l'ellisse e le due linee con lo stesso tratto scelte insieme sul foglio", "", openUgualeTratto],
     ["disegno-selezione-tratto-800", 800, "Lo stesso risultato nella finestra minima del desktop, 800 px", "", openUgualeTratto],
     ["disegno-clic-ellisse", 1280, "Un clic del mouse sull'ellisse del disegno: la barra di stato dice che è scelta", "", clicSullEllisse],
+    ["disegno-trasparenza", 1280, "Design › Trasparenza con l'ellisse scelta col clic: l'opacità e il metodo di fusione coi valori", "", (page) => openSezioneConUno(page, "#surface-panel-draw-design .draw-transparency-blend", sceltaConIlClic)],
+    ["disegno-trasparenza-800", 800, "La sezione Trasparenza nel cassetto dell'ispettore, 800 px: l'ellisse scelta col clic", "", (page) => openSezioneConUno(page, "#surface-panel-draw-design .draw-transparency-blend", sceltaConIlClic)],
     ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
     ["disegno-fam-forme-finestra-800", 800, "La finestra delle misure del Rettangolo nella finestra minima del desktop, 800 px", "", openFormeFinestra],
   ].map(([id, width, title, extra, prepare]) => ({
@@ -5474,9 +5476,9 @@ async function openTrasformaSezione(page) {
 
 /// Il Design del Completo con un oggetto scelto (K6 T13, giro 4): la scheda Design, poi la sezione
 /// `selettore` portata in vista. Sotto i 960 px l'ispettore è un cassetto, come per le altre sezioni.
-async function openSezioneConUno(page, selettore) {
+async function openSezioneConUno(page, selettore, sceglie = scegliPrimo) {
   await openDrawing(page);
-  await scegliPrimo(page);
+  await sceglie(page);
   if (await page.evaluate(() => window.innerWidth >= 960)) {
     await page.click('.inspector-tab[data-view-id="draw.design"]');
   } else {
@@ -5567,13 +5569,18 @@ async function sceltaEllisse(page) {
 /// sceglie, la scena si ferma: così il banco prova che il clic funziona (K6 T15, giro 2).
 async function clicSullEllisse(page) {
   await openDrawing(page);
+  await sceltaConIlClic(page);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Lo strumento di selezione e il clic sull'ellisse, che la barra di stato deve dire scelta (K6 T15, giro 2).
+async function sceltaConIlClic(page) {
   await page.focus(".draw-editor .draw-surface");
   await page.keyboard.press("v");
   await sceltaEllisse(page);
   await page.waitForFunction(() => /\b1 di \d+ scelt/.test(document.body.innerText), null, { timeout: 4000 }).catch(() => {
     throw new Error("il clic sull'ellisse non la sceglie");
   });
-  await page.evaluate(() => document.fonts.ready);
 }
 
 /// La Selezione diretta del motore con un punto scelto (K6 T12, `?punti=1`):

@@ -15,7 +15,9 @@ describe("le risposte delle famiglie del banco", () => {
     // I tracciati (K6 T12, giro 4): Converti della sezione dei punti, e l'anteprima di
     // Sposta tracciato, coi contorni nuovi dell'ellisse della prima forma. La Selezione (K6 T15,
     // `livelli.json`): «Uguale › Colore riempimento», «Tutto nella tavola» e «Oggetti di testo».
+    // L'aspetto (K6 T15, giro 2): la trasparenza, che il banco non scrive (`aspetto.json`).
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
+      "disegno.transparency.set",
       "disegno.shape.rectangle",
       "disegno.select.same.fillColor",
       "disegno.select.same.strokeColor",
