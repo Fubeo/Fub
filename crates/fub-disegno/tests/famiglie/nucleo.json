@@ -304,6 +304,58 @@
       "disegno": "base.svg",
       "argomenti": { "text": "Ciao" },
       "atteso": { "lettura": { "count": 1 } }
+    },
+    {
+      "id": "edit.copy",
+      "disegno": "sola-lettura.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "clipboard.flavours",
+      "disegno": "sola-lettura.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "flavours": ["text/plain", "image/svg+xml", "image/png"] } }
+    },
+    {
+      "id": "clipboard.exportSvg",
+      "disegno": "sola-lettura.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "svg": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"100\" height=\"50\" viewBox=\"0 0 100 50\">\n  <title>Untitled-1</title>\n  <g>\n    <rect x=\"0\" y=\"0\" width=\"100\" height=\"50\" fill=\"#000000\"/>\n  </g>\n</svg>\n" } }
+    },
+    {
+      "id": "clipboard.exportPng",
+      "disegno": "sola-lettura.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "dataBase64": "*", "width": 100, "height": 50, "warnings": [] } }
+    },
+    {
+      "id": "clipboard.exportText",
+      "disegno": "sola-lettura.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "text": null } }
+    },
+    {
+      "id": "edit.cut",
+      "disegno": "sola-lettura.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "rifiuto": "unsupported" }
+    },
+    {
+      "id": "edit.paste",
+      "disegno": "sola-lettura.svg",
+      "atteso": { "rifiuto": "unsupported" }
+    },
+    {
+      "id": "clipboard.importSvg",
+      "disegno": "sola-lettura.svg",
+      "argomenti": { "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect x=\"10\" y=\"10\" width=\"30\" height=\"20\" fill=\"#ff0000\"/></svg>" },
+      "atteso": { "rifiuto": "unsupported" }
+    },
+    {
+      "id": "clipboard.conflicts",
+      "disegno": "sola-lettura.svg",
+      "atteso": { "rifiuto": "unsupported" }
     }
   ]
 }

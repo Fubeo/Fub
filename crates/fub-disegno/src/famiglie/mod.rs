@@ -761,6 +761,20 @@ pub(crate) fn elenco(copia: &Copia, selezione: &[String]) -> Vec<fub_abi::Drawin
         .collect()
 }
 
+/// I comandi che un disegno in sola lettura fa lo stesso: copiare e leggere gli
+/// appunti, che non cambiano il file. Tagliare, incollare, importare e i
+/// conflitti di campioni restano rifiutati.
+fn si_legge_in_sola_lettura(id: &str) -> bool {
+    matches!(
+        id,
+        "edit.copy"
+            | "clipboard.flavours"
+            | "clipboard.exportSvg"
+            | "clipboard.exportPng"
+            | "clipboard.exportText"
+    )
+}
+
 /// Esegue il comando `disegno.<id>` della richiesta: prepara la sua
 /// famiglia, lo fa girare nella sessione del motore sulla selezione e passa
 /// per la differenza. Le operazioni, se il documento cambia; la lettura, se
@@ -787,7 +801,9 @@ pub(crate) fn esegui(
         Ok(None) => return Ok(rifiuta(DrawingRefusal::NoMemory)),
         Err(errore) => return Err(PluginError::Internal(errore.to_string().into())),
     };
-    if !copia.modificabile {
+    // In sola lettura il file non cambia: si copia e si leggono gli appunti (il
+    // Completo copia da qui), ma non si taglia, non si incolla e non si importa.
+    if !copia.modificabile && !si_legge_in_sola_lettura(&riga.id) {
         return Ok(rifiuta(DrawingRefusal::Unsupported));
     }
     let scelti = match nodi_scelti(copia, &richiesta.selection) {
