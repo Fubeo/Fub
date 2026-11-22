@@ -1617,6 +1617,13 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-clic-ellisse-semplice", 1280, "Lo spazio Semplice: un clic del mouse sull'ellisse la sceglie, come nel Completo", "", clicSullEllisseSemplice],
     ["disegno-trasparenza", 1280, "Design › Trasparenza con l'ellisse scelta col clic: l'opacità e il metodo di fusione coi valori", "", (page) => openSezioneConUno(page, "#surface-panel-draw-design .draw-transparency-blend", sceltaConIlClic)],
     ["disegno-trasparenza-800", 800, "La sezione Trasparenza nel cassetto dell'ispettore, 800 px: l'ellisse scelta col clic", "", (page) => openSezioneConUno(page, "#surface-panel-draw-design .draw-transparency-blend", sceltaConIlClic)],
+    // La scheda Livelli del Completo (K6 T15, giro 4): l'albero nativo, coi comandi che passano dal motore del
+    // banco (`fake-ipc.ts`, `benchLivelliOutcome`). Due livelli, uno con gli oggetti; poi uno rinominato e
+    // bloccato e uno nascosto; poi il filtro.
+    ["disegno-fam-livelli", 1280, "La scheda Livelli del Completo: due livelli, Livello 1 aperto con i suoi oggetti, il nuovo in cima", "", openLivelli],
+    ["disegno-fam-livelli-stati", 1280, "La scheda Livelli: «Sfondo» rinominato e bloccato, Livello 1 nascosto, coi segni sulla riga", "", livelliCambiati],
+    ["disegno-fam-livelli-stati-800", 800, "La scheda Livelli nel cassetto dell'ispettore, 800 px: un livello rinominato e bloccato, uno nascosto", "", livelliCambiati],
+    ["disegno-fam-livelli-filtro", 1280, "La scheda Livelli col filtro «Ellisse»: l'ellisse e i connettori che ne partono, dentro il loro livello", "", livelliFiltrati],
     ["disegno-fam-forme-finestra", 1280, "La finestra delle misure del Rettangolo (Completo), aperta col clic sul foglio dopo la scelta nella tendina", "", openFormeFinestra],
     ["disegno-fam-forme-finestra-800", 800, "La finestra delle misure del Rettangolo nella finestra minima del desktop, 800 px", "", openFormeFinestra],
   ].map(([id, width, title, extra, prepare]) => ({
@@ -5485,6 +5492,58 @@ async function openAllinea(page) {
 /// La sezione Trasforma nel Design (K6 T13, giro 3) con il disegno scelto per intero.
 async function openTrasformaSezione(page) {
   await openSezioneDesign(page, ".draw-transform-grid");
+}
+
+/// La scheda Livelli in vista, sotto i 960 px nel cassetto dell'ispettore come per le sezioni.
+async function schedaLivelli(page) {
+  if (await page.evaluate(() => window.innerWidth < 960)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+  }
+  await page.click('.inspector-tab[data-view-id="draw.layers"]');
+  await page.waitForSelector('.draw-objects-tree .draw-object[aria-level="1"]');
+}
+
+/// La riga del livello che si chiama `nome` nella scheda Livelli: l'etichetta dice «Livello «nome»».
+const rigaDelLivello = (nome) => `.draw-objects-tree .draw-object[aria-level="1"]:has(.draw-object-label:has-text("«${nome}»"))`;
+
+/// La scheda Livelli del Completo (K6 T15, giro 4): il disegno aperto, la scheda Livelli in vista, e un livello
+/// nuovo dal menu dei livelli, che passa dal motore del banco e va in cima. Livello 1 resta aperto coi suoi oggetti.
+async function openLivelli(page) {
+  await openDrawing(page);
+  await schedaLivelli(page);
+  // Nel Completo il pulsante dei livelli sta nel «…» della barra: lo si preme da DOM, il menu è lo stesso.
+  await page.$eval(".draw-editor .draw-layer-button", (button) => button.click());
+  await page.click(`#context-menu [role^="menuitem"]:has-text("Nuovo livello")`);
+  await page.waitForSelector(rigaDelLivello("Livello 2"));
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Due livelli, poi «Livello 2» rinominato «Sfondo» col doppio clic e bloccato col lucchetto della riga, e
+/// «Livello 1» nascosto con l'occhio: ogni comando passa dal motore del banco.
+async function livelliCambiati(page) {
+  await openLivelli(page);
+  await page.dblclick(`${rigaDelLivello("Livello 2")} .draw-object-label`);
+  await page.waitForSelector(".draw-object-rename");
+  await page.fill(".draw-object-rename", "Sfondo");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector(rigaDelLivello("Sfondo"));
+  // I segni si vedono col puntatore sulla riga, come nel pannello degli oggetti.
+  await page.hover(rigaDelLivello("Sfondo"));
+  await page.click(`${rigaDelLivello("Sfondo")} [data-sign="lock"]`);
+  await page.waitForSelector(`${rigaDelLivello("Sfondo")} [data-sign="lock"][data-on]`);
+  await page.hover(rigaDelLivello("Livello 1"));
+  await page.click(`${rigaDelLivello("Livello 1")} [data-sign="hide"]`);
+  await page.waitForSelector(`${rigaDelLivello("Livello 1")} [data-sign="hide"][data-on]`);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Due livelli e il filtro «Ellisse»: restano l'ellisse e i connettori che ne partono, dentro il loro livello.
+async function livelliFiltrati(page) {
+  await openLivelli(page);
+  await page.fill(".draw-objects-search", "Ellisse");
+  await page.waitForFunction(() => document.querySelectorAll(".draw-objects-tree .draw-object").length < 8);
+  await page.evaluate(() => document.fonts.ready);
 }
 
 /// Il Design del Completo con un oggetto scelto (K6 T13, giro 4): la scheda Design, poi la sezione

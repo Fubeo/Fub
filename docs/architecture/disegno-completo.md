@@ -149,6 +149,20 @@ elementi fuori da ogni livello stanno in un livello del motore senza elemento
 nel file, che non si rinomina, non si nasconde e non si elimina (`Unmapped`);
 un livello nuovo sotto di lui non ha un posto da scrivere (`Unsupported`).
 
+Nel client la scheda Livelli del Completo è l'albero nativo
+(`apps/client/src/editors/spatial/tools/objects.ts`): l'occhio, il lucchetto,
+il nome, Nuovo livello ed Elimina livello chiedono a
+`apps/client/src/editors/spatial/completo/livelli-porta.ts`, che legge
+`document.inspect`, lega l'id della scena all'id del motore
+(`completo/livelli-modello.ts`) e manda `disegno.layer.setProps`, `new` o
+`delete` con quegli `ids`. Le operazioni che tornano passano dal commit di
+sempre. Quando la porta risponde `nativo` (motore assente, famiglia non pronta,
+livello che il motore non conosce) l'editor scrive le stesse operazioni da sé;
+un livello bloccato si ferma prima, col motivo `draw.livelli.bloccato`. Lo
+spostamento delle righe resta nativo, perché `node.move` non è nell'indice.
+L'albero si rifà dalla scena dopo ogni commit, quindi non serve un aggancio in
+più per sapere che il motore ha cambiato il documento.
+
 ## Chi possiede che cosa
 
 | Che cosa | Chi lo possiede | Perché |

@@ -1143,6 +1143,57 @@ function benchDrawingOutcome(gesture: DrawingGesture, text: string): DrawingOutc
   };
 }
 
+/// I livelli di Fub del testo `testo` come li legge `document.inspect` nel motore vero (K6 T15, giro 4): il
+/// `name` è l'id della scena, il nome a parole resta in `fub:layer`; il numero è la posizione nel testo, così
+/// resta lo stesso fra una lettura e la successiva. Occhio e lucchetto vengono dagli attributi.
+function benchLivelli(testo: string): { id: number; name: string; kind: "Layer"; visible: boolean; locked: boolean; children: [] }[] {
+  return [...testo.matchAll(/<g\s([^>]*\bfub:layer="[^"]*"[^>]*)>/g)].flatMap((trovato, indice) => {
+    const attributi = trovato[1] ?? "";
+    const id = /\bid="([^"]+)"/.exec(attributi)?.[1];
+    if (id === undefined) return [];
+    const visible = !/\bdisplay="none"/.test(attributi);
+    const locked = /\bfub:locked="true"/.test(attributi);
+    return [{ id: indice + 1, name: id, kind: "Layer" as const, visible, locked, children: [] as [] }];
+  });
+}
+
+/// I comandi della famiglia `livelli` sul disegno del banco (K6 T15, giro 4), con la regola del motore vero
+/// (`crates/fub-disegno/src/famiglie/livelli.rs`): un livello bloccato non cambia nome e non si elimina, occhio
+/// e lucchetto sì; un livello nuovo va in cima. `null` per gli altri comandi.
+function benchLivelliOutcome(request: DrawingCommandRequest, testo: string): DrawingOutcome | null {
+  const esito = (extra: Partial<DrawingOutcome>): DrawingOutcome => ({
+    revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null, ...extra,
+  });
+  const livelli = benchLivelli(testo);
+  const valore = (request.value ?? {}) as { ids?: number[]; name?: string; visible?: boolean; locked?: boolean };
+  const scelto = livelli.find((livello) => livello.id === valore.ids?.[0]);
+  switch (request.id) {
+    case "disegno.document.inspect":
+      return esito({ reading: { layers: [...livelli].reverse() } });
+    case "disegno.layer.new": {
+      // Un id di livello come quelli della scena (`l` e otto cifre o lettere).
+      const id = `lz${String(++benchDrawingIds).padStart(7, "0")}`;
+      const elem = { tag: "g", attrs: { id, "fub:layer": valore.name ?? "Livello" }, children: [] };
+      return esito({ ops: JSON.stringify([{ op: "add", parent: "#root", pos: { last: true }, elem }]) });
+    }
+    case "disegno.layer.setProps": {
+      if (scelto === undefined) return esito({ refused: "empty" });
+      if (valore.name !== undefined && scelto.locked) return esito({ refused: "locked" });
+      const attrs: Record<string, string | null> = {};
+      if (valore.name !== undefined) attrs["fub:layer"] = valore.name;
+      if (valore.visible !== undefined) attrs.display = valore.visible ? null : "none";
+      if (valore.locked !== undefined) attrs["fub:locked"] = valore.locked ? "true" : null;
+      return esito({ ops: JSON.stringify([{ op: "set", id: scelto.name, attrs }]) });
+    }
+    case "disegno.layer.delete":
+      if (scelto === undefined) return esito({ refused: "empty" });
+      if (scelto.locked) return esito({ refused: "locked" });
+      return esito({ ops: JSON.stringify([{ op: "remove", target: scelto.name }]) });
+    default:
+      return null;
+  }
+}
+
 /// Il motore del disegno del banco, se la query ne chiede uno.
 function benchDrawingEngine(): DrawingFake | undefined {
   if (DRAWING_ENGINE_PARAM === "spento") return { spento: () => true };
@@ -1181,8 +1232,9 @@ function benchDrawingEngine(): DrawingFake | undefined {
     // Il comando delle scene della finestra ha la sua risposta; gli altri
     // comandi del Disegno completo hanno quelle di `disegno-famiglie/`, e
     // `unserved` un comando che non ne ha una.
-    comando: (request) =>
-      benchStatoCoiPunti(request) ?? (request.id === BENCH_WINDOW_COMMAND
+    // I livelli (K6 T15, giro 4) leggono e cambiano la copia del disegno, come il motore vero.
+    comando: (request, copia) =>
+      benchStatoCoiPunti(request) ?? benchLivelliOutcome(request, copia.text) ?? (request.id === BENCH_WINDOW_COMMAND
         ? benchWindowOutcome(request)
         : MOTORE_PARAM !== null && request.id.startsWith("disegno.prefs.")
           ? benchPrefsOutcome(request)
