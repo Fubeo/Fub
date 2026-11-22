@@ -2555,6 +2555,18 @@ perché. Restano: `appearance.copyFrom` (la sorgente è un id del motore),
 il messaggio del rifiuto su un'immagine (oggi generico) e la fila delle
 opzioni (giro in corso). Gestione dei campioni (duplica, sposta, ordina,
 gruppi, unisci, di serie) in corso.
+Giro 7 unito in 2d1995cca: la fila delle opzioni del Contagocce (che cosa
+prende e che cosa dà, salvate con `eyedropper.setOptions`), con i comandi
+mandati col prefisso `disegno.`; `appearance.copyFrom` resta «da fare» per
+T15. All'unione X e Y dei punti mandavano `path.moveAnchor` senza prefisso:
+corretto in d9de5f0fe, con il test. Giro 8 unito in c8f595e7a: nei campioni
+`swatches.duplicate`, `merge`, `sortByName` e `move` sono fatti, e l'ordine
+nuovo si salva nel file; restano «da fare» col perché i tre comandi dei
+gruppi e i campioni di serie (il formato non li ha) e l'ordine per specie
+(tutti i campioni sono colori). Rischi annotati: la copia di un campione si
+chiama «… copy» in inglese (stringa del motore);
+`docs/reference/scene-format-resources.md` non dice ancora che l'ordine dei
+campioni è quello del file; Ordina per nome tace se la lista è già in ordine.
 Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
