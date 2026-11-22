@@ -1801,6 +1801,12 @@
     "draw-align-to",
     "draw-align-group",
     "draw-transform-grid",
+    "draw-color",
+    "draw-color-wells",
+    "draw-color-label",
+    "draw-color-active",
+    "draw-color-actions",
+    "kit-color-well-name",
     "media-image",
     "zoom-view",
     "zoom-stage",
@@ -4284,6 +4290,12 @@
     "draw-align-to": "cornice",
     "draw-align-group": "cornice",
     "draw-transform-grid": "cornice",
+    "draw-color": "cornice",
+    "draw-color-wells": "cornice",
+    "draw-color-label": "cornice",
+    "draw-color-active": "cornice",
+    "draw-color-actions": "cornice",
+    "kit-color-well-name": "cornice",
     "media-image": "contenuto",
     "zoom-view": "contenuto",
     "zoom-stage": "contenuto",
@@ -9262,6 +9274,26 @@
       ]
     },
     {
+      "name": "color-section",
+      "part": "draw",
+      "hooks": [
+        "draw-color",
+        "draw-color-wells",
+        "draw-color-label",
+        "draw-color-active",
+        "draw-color-actions",
+        "kit-color-well",
+        "kit-color-well-button",
+        "kit-color-well-name",
+        "kit-button"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "markdown-preview",
       "part": "media",
       "hooks": [
@@ -12846,10 +12878,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2481,
+    "hooks": 2487,
     "state_names": 7,
-    "assigned_states": 1115,
-    "components": 328,
+    "assigned_states": 1118,
+    "components": 329,
     "preference_tokens": 196
   }
 }

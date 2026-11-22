@@ -125,7 +125,7 @@ describe("menuNonCaricato", () => {
 describe("statoVoce e testoPerche", () => {
   it("le ragioni tipate del motore hanno il loro testo, e quella libera passa com'è", () => {
     expect(testoPerche("no_selection")).toBe("Scegli un oggetto.");
-    expect(testoPerche("read_only")).toBe("Disegno di sola lettura.");
+    expect(testoPerche("read_only")).toBe("Il disegno è di sola lettura, o un oggetto scelto è bloccato.");
     expect(testoPerche({ other: { text: "il livello è bloccato" } })).toBe("il livello è bloccato");
     expect(testoPerche(null)).toBe("Non vale adesso.");
   });
@@ -218,6 +218,37 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
     const composto = sottovoci(righe[2]);
     expect(composto.map((r) => r.label)).toEqual([nome("object.compoundPath.make"), nome("object.compoundPath.release")]);
     expect(composto.every((r) => r.disabled === true)).toBe(true);
+  });
+
+  it("≡ › Modifica › Modifica colori ha le sue file: le regolazioni, le fusioni, le conversioni, Inverti e Sovrastampa", () => {
+    // L'indice le dà in ordine di id.
+    const ids = [
+      "edit.colors.adjustBalance",
+      "edit.colors.blendFrontToBack",
+      "edit.colors.blendHorizontally",
+      "edit.colors.blendVertically",
+      "edit.colors.invert",
+      "edit.colors.overprintBlack",
+      "edit.colors.saturate",
+      "edit.colors.toCMYK",
+      "edit.colors.toGrayscale",
+      "edit.colors.toRGB",
+    ];
+    const voci = ids.map((id) => voce(id, "menu/modifica/colori"));
+    const righe = sottovoci(sottovoci(menuComando(indiceDi({ voci }), { per: null, assente: null }, vi.fn())[0])[0]);
+    const nome = (id: string) => nomeVoce(voci.find((v) => v.id === id)!);
+    expect(righe.map((r) => [r.label, r.separator === true])).toEqual([
+      [nome("edit.colors.adjustBalance"), false],
+      [nome("edit.colors.saturate"), false],
+      [nome("edit.colors.blendFrontToBack"), true],
+      [nome("edit.colors.blendHorizontally"), false],
+      [nome("edit.colors.blendVertically"), false],
+      [nome("edit.colors.toCMYK"), true],
+      [nome("edit.colors.toGrayscale"), false],
+      [nome("edit.colors.toRGB"), false],
+      [nome("edit.colors.invert"), true],
+      [nome("edit.colors.overprintBlack"), false],
+    ]);
   });
 
   it("un sottomenu senza file tiene l'ordine dell'indice, senza separazioni", () => {

@@ -1,5 +1,116 @@
 {
   "$generato": "File generato da crates/fub-disegno/tests/ts_indice.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-disegno --test ts_indice",
   "famiglia": "colore",
-  "finestre": []
+  "finestre": [
+    {
+      "fonte": "motore",
+      "id": "edit.colors.adjustBalance",
+      "campi": [
+        {
+          "nome": "r",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": -100.0,
+          "massimo": 100.0,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "g",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": -100.0,
+          "massimo": 100.0,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "b",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": -100.0,
+          "massimo": 100.0,
+          "predefinito": 0.0
+        },
+        {
+          "nome": "fill",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "stroke",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.overprintBlack",
+      "campi": [
+        {
+          "nome": "remove",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "percentage",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "fill",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "stroke",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": true
+        },
+        {
+          "nome": "includeCmyBlacks",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        },
+        {
+          "nome": "includeSpotBlacks",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.colors.saturate",
+      "campi": [
+        {
+          "nome": "intensity",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": -100.0,
+          "massimo": 100.0,
+          "predefinito": 0.0
+        }
+      ]
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.colorBalanceDialog",
+      "campi": []
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "ui.saturateDialog",
+      "campi": []
+    }
+  ]
 }

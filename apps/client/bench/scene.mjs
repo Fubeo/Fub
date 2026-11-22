@@ -1594,6 +1594,12 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-fam-trasforma-sezione", 1280, "La sezione Trasforma nel Design: posizione, misura, rotazione, inclinazione e il riquadro", "", openTrasformaSezione],
     ["disegno-scelte-trasforma", 1280, "La sezione Trasforma con un oggetto scelto: X, Y, larghezza, altezza e rotazione dal pannello", "", (page) => openSezioneConUno(page, ".draw-transform-grid")],
     ["disegno-scelte-trasforma-800", 800, "La sezione Trasforma con un oggetto scelto, nel cassetto dell'ispettore, 800 px", "", (page) => openSezioneConUno(page, ".draw-transform-grid")],
+    // Il colore (K6 T14, giro 1): la sezione Colore del Design con un oggetto scelto, e la finestra «Satura…»
+    // di Modifica › Modifica colori con l'anteprima che il banco risponde (`disegno-famiglie/colore.json`).
+    ["disegno-fam-colore", 1280, "La sezione Colore del Design con un oggetto scelto: riempimento attivo, contorno, Scambia, Nessuno e Di serie", "", (page) => openSezioneConUno(page, ".draw-color")],
+    ["disegno-fam-colore-800", 800, "La sezione Colore con un oggetto scelto, nel cassetto dell'ispettore, 800 px", "", (page) => openSezioneConUno(page, ".draw-color")],
+    ["disegno-fam-colore-satura", 1280, "La finestra «Satura…» di Modifica colori, con l'intensità in % e l'anteprima sul foglio", "&comandi=risposti", openSaturaFinestra],
+    ["disegno-fam-colore-satura-800", 800, "La finestra «Satura…» nella finestra minima del desktop, 800 px", "&comandi=risposti", openSaturaFinestra],
     ["disegno-scelte-pannello", 1280, "Il pannello Design del Completo con un oggetto scelto: senza Posizione e misure né Distribuisci", "", (page) => openSezioneConUno(page, ".draw-properties")],
     ["disegno-scelte-pannello-800", 800, "Il pannello Design del Completo nel cassetto dell'ispettore, 800 px: senza i doppioni", "", (page) => openSezioneConUno(page, ".draw-properties")],
     ["disegno-fam-trasforma-sezione-800", 800, "La sezione Trasforma nel cassetto dell'ispettore, 800 px", "", openTrasformaSezione],
@@ -5552,6 +5558,23 @@ async function openUgualeTratto(page) {
   await openMenuUguale(page);
   await page.evaluate(() => [...document.querySelectorAll(".context-submenu [role='menuitem']")].find((el) => el.textContent.includes("Colore tratto")).click());
   await page.waitForTimeout(600);
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// La finestra «Satura…» di Modifica › Modifica colori (K6 T14, giro 1) da Ctrl+/ con la prima forma
+/// scelta: l'intensità in %, e l'anteprima che il banco risponde (`disegno-famiglie/colore.json`).
+async function openSaturaFinestra(page) {
+  await openDrawing(page);
+  await scegliPrimo(page);
+  await page.keyboard.press("Control+/");
+  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
+  await page.fill(".draw-commands-dialog .draw-commands-field input", "satura");
+  await page.locator(".draw-commands-dialog .draw-commands-row", { hasText: "Satura…" }).first().click();
+  await page.waitForSelector(".kit-dialog.draw-effect-dialog .kit-number-input");
+  await page.fill(".kit-dialog.draw-effect-dialog .kit-number-input", "40");
+  await page.keyboard.press("Tab");
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.waitForTimeout(400);
   await page.evaluate(() => document.fonts.ready);
 }
 

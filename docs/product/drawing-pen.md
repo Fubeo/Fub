@@ -257,7 +257,8 @@ uguale dopo due Inverti. Un tracciato di un altro programma con la regola
 comando che non trova niente da fare (Dividi gli oggetti sotto senza niente
 sotto, Angolo su punti già angoli) non cambia il file e lo dice. Come gli
 strumenti, i comandi non toccano i tratti dell'Inchiostro: con un tratto a
-mano scelto sono spenti e dicono «L'Inchiostro di Fub non è un tracciato.».
+mano scelto sono spenti e dicono «Un tratto dell'Inchiostro di Fub non si
+cambia da qui.».
 
 Cinque voci aprono una finestra, con l'anteprima sul foglio:
 

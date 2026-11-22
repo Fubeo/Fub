@@ -80,15 +80,15 @@ motore	imageTrace.presets.delete	Delete Image Trace Preset		immagini	F3	T20	da f
 motore	clipboard.exportSvg	Clipboard as SVG		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Appunti come SVG
 motore	clipboard.importSvg	Load SVG into Clipboard		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Carica SVG negli appunti
 motore	clipboard.conflicts	Swatch Conflicts		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Conflitti campioni
-motore	edit.colors.invert	Invert Colors	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Inverti colori
-motore	edit.colors.toCMYK	Convert to CMYK	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Converti in CMYK
-motore	edit.colors.toGrayscale	Convert to Grayscale	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Converti in scala di grigi
-motore	edit.colors.toRGB	Convert to RGB	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Converti in RGB
-motore	edit.colors.saturate	Saturate…	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia	finestra	Satura…
-motore	edit.colors.adjustBalance	Adjust Color Balance…	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia	finestra	Regola bilanciamento colore…
-motore	edit.colors.blendFrontToBack	Blend Front to Back	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Fusione da davanti a dietro
-motore	edit.colors.blendHorizontally	Blend Horizontally	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Fusione orizzontale
-motore	edit.colors.blendVertically	Blend Vertically	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Fusione verticale
+motore	edit.colors.invert	Invert Colors	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Inverti colori
+motore	edit.colors.toCMYK	Convert to CMYK	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Converti in CMYK
+motore	edit.colors.toGrayscale	Convert to Grayscale	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Converti in scala di grigi
+motore	edit.colors.toRGB	Convert to RGB	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Converti in RGB
+motore	edit.colors.saturate	Saturate…	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia	finestra	Satura…
+motore	edit.colors.adjustBalance	Adjust Color Balance…	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia	finestra	Regola bilanciamento colore…
+motore	edit.colors.blendFrontToBack	Blend Front to Back	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione da davanti a dietro
+motore	edit.colors.blendHorizontally	Blend Horizontally	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione orizzontale
+motore	edit.colors.blendVertically	Blend Vertically	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia		Fusione verticale
 motore	color.harmony	Color Guide		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Guida colori
 motore	edit.colorSettings	Color Settings…	Edit	stampa	F4	T25	da fare	menu/modifica	famiglia	finestra	Impostazioni colore…
 motore	color.loadProfile	Load Color Profile…		colore	F1	T14	da fare	ispettore/design	famiglia	finestra	Carica profilo colore…
@@ -102,7 +102,7 @@ motore	view.proofColors	Proof Colors	View	stampa	F4	T25	da fare	menu/visualizza	
 motore	view.overprintPreview	Overprint Preview	View	stampa	F4	T25	da fare	menu/visualizza	famiglia		Anteprima sovrastampa
 motore	view.separationsPreview	Separations Preview		stampa	F4	T25	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Anteprima separazioni
 motore	color.plates	Plates		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Lastre
-motore	edit.colors.overprintBlack	Overprint Black…	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia	finestra	Sovrastampa nero…
+motore	edit.colors.overprintBlack	Overprint Black…	Edit › Edit Colors	colore	F1	T14	fatto	menu/modifica/colori	famiglia	finestra	Sovrastampa nero…
 motore	swatch.setSpot	Spot Color		colore	F1	T14	da fare	ispettore/design	famiglia		Colore spot
 motore	colorTheme.list	Color Themes		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Temi colore
 motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	da fare	ispettore/risorse	famiglia		Salva tema
@@ -372,16 +372,16 @@ motore	transparency.togglePageKnockoutGroup	Page Knockout Group	Window › Trans
 motore	object.setOverprint	Overprint		stampa	F4	T25	da fare	menu/file	famiglia		Sovrastampa
 motore	attributes.info	Attributes		dati	F4	T26	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Attributi
 motore	file.package	Package		formati	F3	T23	da fare	menu/file	famiglia		Crea pacchetto
-motore	paint.setFill	Fill		colore	F1	T14	da fare	ispettore/design	famiglia		Riempimento
-motore	paint.setStroke	Stroke		colore	F1	T14	da fare	ispettore/design	famiglia		Traccia
-motore	paint.swap	Swap Fill and Stroke		colore	F1	T14	da fare	ispettore/design	famiglia		Inverti riempimento e traccia
-motore	paint.default	Default Fill and Stroke		colore	F1	T14	da fare	ispettore/design	famiglia		Riempimento e traccia predefiniti
-motore	paint.toggleActive	Toggle Fill/Stroke Focus		colore	F1	T14	da fare	ispettore/design	famiglia		Alterna attivazione riempimento/traccia
-motore	paint.none	None		colore	F1	T14	da fare	ispettore/design	famiglia		Nessuno
+motore	paint.setFill	Fill		colore	F1	T14	fatto	ispettore/design	famiglia		Riempimento
+motore	paint.setStroke	Stroke		colore	F1	T14	fatto	ispettore/design	famiglia		Traccia
+motore	paint.swap	Swap Fill and Stroke		colore	F1	T14	fatto	ispettore/design	famiglia		Inverti riempimento e traccia
+motore	paint.default	Default Fill and Stroke		colore	F1	T14	fatto	ispettore/design	famiglia		Riempimento e traccia predefiniti
+motore	paint.toggleActive	Toggle Fill/Stroke Focus		colore	F1	T14	fatto	ispettore/design	famiglia		Alterna attivazione riempimento/traccia
+motore	paint.none	None		colore	F1	T14	fatto	ispettore/design	famiglia		Nessuno
 motore	transparency.set	Transparency	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Trasparenza
-motore	paint.invert	Invert		colore	F1	T14	da fare	ispettore/design	famiglia		Inverti
-motore	paint.complement	Complement		colore	F1	T14	da fare	ispettore/design	famiglia		Complementare
-motore	paint.lastColor	Apply Last Color		colore	F1	T14	da fare	ispettore/design	famiglia		Applica ultimo colore
+motore	paint.invert	Invert		colore	F1	T14	fatto	ispettore/design	famiglia		Inverti
+motore	paint.complement	Complement		colore	F1	T14	fatto	ispettore/design	famiglia		Complementare
+motore	paint.lastColor	Apply Last Color		colore	F1	T14	fatto	ispettore/design	famiglia		Applica ultimo colore
 motore	paint.lastGradient	Apply Last Gradient		colore	F1	T14	da fare	ispettore/design	famiglia		Applica ultima sfumatura
 motore	paint.recent	Recent Colors		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Colori recenti
 motore	paint.proxies	Fill and Stroke		colore	F1	T14	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Riempimento e traccia
@@ -1115,8 +1115,8 @@ interfaccia	ui.newParaStyle	New Paragraph Style…		testo	F2	T16	da fare	finestr
 interfaccia	ui.symbolOptions	Symbol Options…		simboli	F3	T22	da fare	finestra	famiglia		Opzioni simbolo…
 interfaccia	tool.options	Tool Options…		nucleo	F1	T11	fatto	colonna	nucleo	la fila delle opzioni in testata	Opzioni strumento…
 interfaccia	ui.colorGuideOptions	Color Guide Options…		colore	F1	T14	da fare	finestra	famiglia		Opzioni guida colori…
-interfaccia	ui.colorBalanceDialog	Adjust Color Balance…		colore	F1	T14	da fare	finestra	famiglia		Regola bilanciamento colore…
-interfaccia	ui.saturateDialog	Saturate…		colore	F1	T14	da fare	finestra	famiglia		Satura…
+interfaccia	ui.colorBalanceDialog	Adjust Color Balance…		colore	F1	T14	fatto	finestra	famiglia		Regola bilanciamento colore…
+interfaccia	ui.saturateDialog	Saturate…		colore	F1	T14	fatto	finestra	famiglia		Satura…
 interfaccia	window.swatchLibrary	Swatch Library		colore	F1	T14	da fare	ispettore/design	famiglia		Libreria campioni
 interfaccia	window.swatchLibrary.other	Other Library…		colore	F1	T14	da fare	ispettore/design	famiglia		Altra libreria…
 interfaccia	ui.libraryPanel	Library Panel Options		simboli	F3	T22	da fare	finestra	famiglia		Opzioni pannello libreria

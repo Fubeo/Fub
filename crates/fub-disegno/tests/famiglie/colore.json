@@ -1,3 +1,465 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre.",
+  "casi": [
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#00aa00"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-setFill.svg"
+    },
+    {
+      "id": "paint.setStroke",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "color": "#ffaa00"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke": "#ffaa00"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-setStroke.svg"
+    },
+    {
+      "id": "paint.swap",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#0000ff",
+              "stroke": "#ff0000"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-swap.svg"
+    },
+    {
+      "id": "paint.default",
+      "disegno": "base.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "#ffffff",
+              "stroke": "#000000",
+              "stroke-width": "1"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-default.svg"
+    },
+    {
+      "id": "paint.toggleActive",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "fill": false
+      },
+      "atteso": {
+        "lettura": {
+          "fillActive": false
+        }
+      }
+    },
+    {
+      "id": "paint.none",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "none"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-none.svg"
+    },
+    {
+      "id": "paint.invert",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "stroke": false
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#00ffff"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-invert.svg"
+    },
+    {
+      "id": "paint.complement",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "stroke": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "stroke": "#ffff00"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-complement.svg"
+    },
+    {
+      "id": "paint.lastColor",
+      "disegno": "base.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "stroke": false
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "#ffffff"
+            }
+          }
+        ]
+      },
+      "dopo": "paint-lastColor.svg"
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "paint.setFill",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "color": "#00aa00"
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "edit.colors.invert",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#00ffff",
+              "stroke": "#ffff00"
+            }
+          }
+        ]
+      },
+      "dopo": "edit-colors-invert.svg"
+    },
+    {
+      "id": "edit.colors.toCMYK",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#e90e1f",
+              "stroke": "#2e2c8c"
+            }
+          }
+        ]
+      },
+      "dopo": "edit-colors-toCMYK.svg"
+    },
+    {
+      "id": "edit.colors.toGrayscale",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "fill": "#4c4c4c",
+              "stroke": "#1d1d1d"
+            }
+          }
+        ]
+      },
+      "dopo": "edit-colors-toGrayscale.svg"
+    },
+    {
+      "id": "edit.colors.toRGB",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "edit.colors.saturate",
+      "disegno": "base.svg",
+      "selezione": [
+        "gd4d4d4d4"
+      ],
+      "argomenti": {
+        "intensity": -50
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oe5e5e5e5",
+                "attrs": {
+                  "fill": "#80ff80"
+                }
+              },
+              {
+                "op": "set",
+                "id": "of6f6f6f6",
+                "attrs": {
+                  "fill": "#8080ff"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "edit-colors-saturate.svg"
+    },
+    {
+      "id": "edit.colors.adjustBalance",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "r": 20,
+        "g": 0,
+        "b": -20,
+        "fill": true,
+        "stroke": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "fill": "#ffcc99"
+            }
+          }
+        ]
+      },
+      "dopo": "edit-colors-adjustBalance.svg"
+    },
+    {
+      "id": "edit.colors.blendFrontToBack",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "op7a7a7a7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "#e66666"
+            }
+          }
+        ]
+      },
+      "dopo": "edit-colors-blendFrontToBack.svg"
+    },
+    {
+      "id": "edit.colors.blendHorizontally",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "op7a7a7a7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "#e66666"
+            }
+          }
+        ]
+      },
+      "dopo": "edit-colors-blendHorizontally.svg"
+    },
+    {
+      "id": "edit.colors.blendVertically",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "op7a7a7a7"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ob2b2b2b2",
+            "attrs": {
+              "fill": "#e66666"
+            }
+          }
+        ]
+      },
+      "dopo": "edit-colors-blendVertically.svg"
+    },
+    {
+      "id": "edit.colors.blendHorizontally",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "edit.colors.overprintBlack",
+      "disegno": "base.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "includeCmyBlacks": true
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "edit.colors.invert",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "ui.saturateDialog",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/finestre-colore.test.ts"
+    },
+    {
+      "id": "ui.colorBalanceDialog",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/finestre-colore.test.ts"
+    }
+  ]
 }
