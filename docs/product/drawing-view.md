@@ -63,17 +63,28 @@ Semplice, un clic sulla voce dello zoom torna al 100%, come prima. Gli stessi
 comandi stanno in Ctrl+/ e nella ricerca dei comandi.
 
 Nel Disegno completo, ≡ › Visualizza ha la griglia («Mostra griglia» e
-«Aggancia alla griglia», le stesse impostazioni del Semplice), il contorno, i
-righelli del bordo del foglio («Mostra righelli») e «Reimposta rotazione
-vista», che è spenta finché la vista non è girata. Le voci stanno in tre
-file, separate da una riga: griglia e aggancio; contorno e righelli; la
-rotazione. I righelli stanno sul bordo
-in alto e a sinistra del foglio, con le tacche e i numeri nell'unità del
-documento; non spostano il disegno, e con la vista girata non si leggono. Lo
-stato dei righelli non si salva nel file. Le altre voci di Visualizza (la
-rotazione con un angolo, l'anteprima dei pixel, la modalità presentazione e lo
-schermo intero, le guide intelligenti, l'aggancio ai punti e ai pixel, le
-viste salvate) non ci sono ancora: non compaiono nel menu.
+«Aggancia alla griglia», le stesse impostazioni del Semplice), «Mostra griglia
+trasparenza», il contorno, i righelli del bordo del foglio («Mostra righelli»),
+«Nascondi bordi» e «Nascondi riquadro di delimitazione», e «Reimposta rotazione
+vista», che è spenta finché la vista non è girata. Le voci stanno in quattro
+file, separate da una riga: griglia e aggancio; trasparenza, contorno e
+righelli; bordi e riquadro; la rotazione. Le voci «Nascondi» hanno la spunta
+quando nascondono davvero.
+
+La griglia di trasparenza mette la carta a scacchi, dove il foglio non ha un
+fondo suo: un PDF di sfondo, con la sua pagina, la copre. «Nascondi bordi»
+toglie il contorno di ogni oggetto scelto. «Nascondi riquadro di delimitazione»
+toglie la cornice della selezione, le sue maniglie, le misure e il rotore: senza
+maniglie non si ridimensiona né si gira la selezione con il mouse, ma la si
+sposta ancora trascinandola. I righelli stanno sul bordo in alto e a sinistra
+del foglio, con le tacche e i numeri nell'unità del documento; non spostano il
+disegno, e con la vista girata non si leggono. Lo stato dei righelli non si
+salva nel file. Gli interruttori della vista (trasparenza, bordi, riquadro) si
+ricordano come la griglia, nelle sue stesse impostazioni: non cambiano il file e
+non entrano nella cronologia. Le altre voci di Visualizza (la rotazione con un
+angolo, l'anteprima dei pixel, la modalità presentazione e lo schermo intero, le
+guide intelligenti, l'aggancio ai punti e ai pixel, il widget d'angolo, le viste
+salvate) non ci sono ancora: non compaiono nel menu.
 
 Il navigatore si accende e si spegne dalla banda, con la voce «Navigatore» nel
 Disegno completo, o da Vista nel Semplice. La panoramica mostra tutto il
