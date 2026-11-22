@@ -57,13 +57,13 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (le incolle nelle varianti, pulisci, duplica) e le letture interne. T12
   // giro 1 porta a «fatto» i ventuno strumenti di «disegnare» e i quattro
   // comandi sui punti che la fila dei punti chiama. T13 giro 1 porta a «fatto»
-  // le nove forme del Completo (gli strumenti di colonna/forme senza le griglie),
+  // le otto forme del Completo (gli strumenti di colonna/forme senza le griglie e il riflesso),
   // le otto finestre delle misure dei comandi `shape.*` (senza le griglie), le
   // tre voci di Allinea del motore, le quindici `align.*` e il pannello
   // `align`: trentasei righe. Le griglie e le forme dal vivo aspettano T27.
   // Sulla base 1ca956950 (54 fatte, 1371 da fare) la somma dei due giri dà
-  // 54 + 25 + 36 = 115 fatte e 1371 - 25 - 36 = 1310 da fare.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1310, fub: 114, escluso: 12, fatto: 115 });
+  // 54 + 25 + 34 = 113 fatte e 1371 - 25 - 34 = 1312 da fare (il riflesso torna da fare, T27).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1312, fub: 114, escluso: 12, fatto: 113 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

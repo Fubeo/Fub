@@ -113,6 +113,10 @@ La più recente in cima: data · piano · decisione · perché.
 - 2026-11-22 · K6 T13 · Oggetto chiave di «allinea a»: opzione (a), decisa dal coordinatore.
   - La riga select.key (T15, «livelli») resta «da fare» con la nota «aspetta
     T15»: l'oggetto chiave non c'è nel Completo finché T15 non la porta.
+- 2026-11-22 · K6 T13 · Il Riflesso (flare) torna «da fare», strumento e comando.
+  - Il suo alone è un g senza id: la scena del client non lo applica, e la
+    prova dei casi del client (casi.test.ts) lo ha trovato, non il banco Rust.
+    Aspetta T27, come le griglie: il gruppo con sfumature è un costrutto ricco.
 
 - 2026-11-21 · K6 T28 · Il motore senza disco, scelte del coder.
   - Le radici vuote si chiamano `AutomationRoots::deny_all()`, non

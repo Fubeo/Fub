@@ -116,7 +116,7 @@ motore	shape.rectangle	Rectangle		forme	F1	T13	fatto	finestra	famiglia		Rettango
 motore	shape.ellipse	Ellipse		forme	F1	T13	fatto	finestra	famiglia		Ellisse
 motore	shape.polygon	Polygon		forme	F1	T13	fatto	finestra	famiglia		Poligono
 motore	shape.star	Star		forme	F1	T13	fatto	finestra	famiglia		Stella
-motore	shape.flare	Flare		forme	F1	T13	fatto	finestra	famiglia		Riflesso
+motore	shape.flare	Flare		forme	F1	T13	da fare	finestra	famiglia	aspetta T27 (l'alone è un g senza id che la scena del client non applica)	Riflesso
 motore	shape.line	Line Segment		forme	F1	T13	fatto	finestra	famiglia		Segmento linea
 motore	shape.spiral	Spiral		forme	F1	T13	fatto	finestra	famiglia		Spirale
 motore	shape.arc	Arc		forme	F1	T13	fatto	finestra	famiglia		Arco
@@ -1305,7 +1305,7 @@ strumento	roundedRectangle	Rounded Rectangle Tool		forme	F1	T13	fatto	colonna/fo
 strumento	ellipse	Ellipse Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Ellisse
 strumento	polygon	Polygon Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Poligono
 strumento	star	Star Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Stella
-strumento	flare	Flare Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro «rectangle»	Strumento Riflesso
+strumento	flare	Flare Tool		forme	F1	T13	da fare	colonna/forme	famiglia	aspetta T27 (l'alone è un g senza id che la scena del client non applica)	Strumento Riflesso
 strumento	paintbrush	Paintbrush Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «paintbrush»	Strumento Pennello
 strumento	blobBrush	Blob Brush Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «paintbrush»	Strumento Pennello tondo
 strumento	shaper	Shaper Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «shaper»	Strumento Sagomatore

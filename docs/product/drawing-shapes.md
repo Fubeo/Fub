@@ -36,7 +36,7 @@ leggere il file. Non c'è niente da montare.
 
 Con il componente «Disegno completo» acceso, la colonna ha nel gruppo delle
 forme gli strumenti del motore (la famiglia `forme` del piano K6, T13): Rettangolo
-arrotondato, Poligono, Stella, Riflesso, Segmento linea, Arco e Spirale. Rettangolo
+arrotondato, Poligono, Stella, Segmento linea, Arco e Spirale. Rettangolo
 ed Ellisse esistono anche nel Semplice, e nella stessa tendina portano
 «(Completo)», come Selezione, Mano e Zoom.
 

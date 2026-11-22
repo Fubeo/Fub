@@ -22,7 +22,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "object-align-0.svg"
     },
     {
       "id": "object.align",
@@ -58,7 +59,8 @@
             ]
           }
         ]
-      }
+      },
+      "dopo": "object-align-1.svg"
     },
     {
       "id": "object.align",
@@ -93,7 +95,8 @@
             ]
           }
         ]
-      }
+      },
+      "dopo": "object-align-2.svg"
     },
     {
       "id": "object.align",
@@ -158,7 +161,8 @@
             }
           }
         ]
-      }
+      },
+      "dopo": "object-distribute-6.svg"
     },
     {
       "id": "object.distributeSpacing",
