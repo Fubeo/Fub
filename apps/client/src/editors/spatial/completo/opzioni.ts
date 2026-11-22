@@ -24,6 +24,7 @@
 // place: un valore cambiato rifà solo il suo controllo, e il fuoco resta dove
 // stava; una chiave in più o in meno rifà la fila.
 
+import type { DrawingToolState } from "../../../host/contract";
 import { formCheck, formChoice, formNumber } from "../../../kit/form";
 import { colorWell } from "../../../kit/color/well";
 import type { QuantityProblem } from "../../../kit/quantity";
@@ -88,12 +89,31 @@ function sceltaValida(valore: unknown): valore is SceltaGrezza {
 }
 
 /// La fila montata: il suo elemento, e `aggiorna` con lo stato nuovo dello
-/// strumento. `aggiorna` dice se la fila ha ancora controlli: se non ne ha, chi
-/// la monta la toglie.
+/// strumento (le sue opzioni, e lo stato intero per chi legge altro, come i
+/// punti scelti). `aggiorna` dice se la fila ha ancora controlli: se non ne
+/// ha, chi la monta la toglie.
 export interface FilaOpzioni {
   readonly element: HTMLElement;
-  aggiorna(opzioni: unknown): boolean;
+  /// Le voci della fila nella riga delle opzioni, ognuna con la sua priorità
+  /// (la più bassa va prima in «…»), come i pezzi del prototipo. Senza, la
+  /// fila è una voce sola, `element`.
+  readonly voci?: readonly { readonly element: HTMLElement; readonly priorita: number }[];
+  aggiorna(opzioni: unknown, stato?: DrawingToolState | null): boolean;
 }
+
+/// Ciò che una fila propria di una famiglia sa fare: un comando del motore
+/// col suo valore, in un passo della cronologia col nome `etichetta`, e una
+/// frase per chi ascolta.
+export interface AzioniFila {
+  esegui(id: string, valore: unknown, etichetta: string): void;
+  annuncia(testo: string): void;
+}
+
+/// Una fila che una famiglia monta da sé per uno strumento (anche di un'altra
+/// famiglia, come la Selezione diretta per i punti dei tracciati), al posto di
+/// quella generica delle opzioni (`ContestoCompleto.registraFila`). `null` se
+/// non c'è niente da mostrare.
+export type CostruisciFila = (stato: DrawingToolState | null, azioni: AzioniFila, vita: Lifetime) => FilaOpzioni | null;
 
 /// Le frasi di un numero che non si prende, come le vuole il campo del kit.
 const PROBLEMI: Record<QuantityProblem, DrawKey> = {

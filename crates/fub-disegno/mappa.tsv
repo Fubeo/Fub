@@ -398,14 +398,14 @@ motore	path.setHandle	Move Direction Handle		tracciati	F1	T12	da fare	ispettore/
 motore	path.moveAnchor	Move Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Sposta punto di ancoraggio
 motore	path.setAnchors	Set Anchors		tracciati	F1	T12	da fare	ispettore/design	famiglia		Imposta punti di ancoraggio
 motore	path.reverse	Reverse Path Direction	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Inverti direzione tracciato
-motore	path.join	Join	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Unisci
+motore	path.join	Join	Object › Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Unisci
 motore	path.average	Average…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra	Media…
 motore	path.averageJoin	Average & Join…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra	Media e unisci…
-motore	path.convertAnchors	Convert Anchor Points		tracciati	F1	T12	da fare	ispettore/design	famiglia		Converti punti di ancoraggio
+motore	path.convertAnchors	Convert Anchor Points		tracciati	F1	T12	fatto	ispettore/design	famiglia		Converti punti di ancoraggio
 motore	path.deleteAnchors	Delete Anchor Points		tracciati	F1	T12	da fare	ispettore/design	famiglia		Elimina punti di ancoraggio
 motore	path.reshape	Reshape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella
 motore	path.insertAnchor	Add Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Aggiungi punto di ancoraggio
-motore	path.cutAtAnchors	Cut Path at Selected Anchor Points		tracciati	F1	T12	da fare	ispettore/design	famiglia		Taglia tracciato nei punti di ancoraggio selezionati
+motore	path.cutAtAnchors	Cut Path at Selected Anchor Points		tracciati	F1	T12	fatto	ispettore/design	famiglia		Taglia tracciato nei punti di ancoraggio selezionati
 motore	object.pathfinder.unite	Unite	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Unione
 motore	object.pathfinder.minusFront	Minus Front	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Meno davanti
 motore	object.pathfinder.intersect	Intersect	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Intersezione
@@ -504,7 +504,7 @@ motore	select.nextBelow	Next Object Below	Select	nucleo	F1	T11	fatto	menu/selezi
 motore	select.set	Select Objects		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Seleziona oggetti
 motore	select.add	Add to Selection		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Aggiungi alla selezione
 motore	select.toggle	Toggle Selection		nucleo	F1	T11	fatto	interno	nucleo	lettura del motore per l’ispettore e i test: nessuna voce di menu	Alterna selezione
-motore	select.key	Cancel Key Object		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Annulla oggetto chiave
+motore	select.key	Cancel Key Object		livelli	F1	T15	da fare	ispettore/livelli	famiglia	aspetta T15 (oggetto chiave di «allinea a», T13)	Annulla oggetto chiave
 motore	select.anchors	Select Anchors		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Seleziona punti di ancoraggio
 motore	select.segments	Select Segments		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Seleziona segmenti
 motore	select.anchorsMany	Select Anchors		livelli	F1	T15	da fare	ispettore/livelli	famiglia		Seleziona punti di ancoraggio
@@ -766,7 +766,7 @@ motore	path.freehand	Pencil		tracciati	F1	T12	da fare	ispettore/design	famiglia	
 motore	path.curvature	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
 motore	path.curvatureEdit	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
 motore	path.removeAnchor	Delete Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Elimina punto di ancoraggio
-motore	path.removeAnchors	Remove Anchor Points	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Rimuovi punti di ancoraggio
+motore	path.removeAnchors	Remove Anchor Points	Object › Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Rimuovi punti di ancoraggio
 motore	path.convertAnchor	Convert Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Converti punto di ancoraggio
 motore	path.reshapeSegment	Reshape Segment		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella segmento
 motore	path.split	Split Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Dividi tracciato
@@ -1283,11 +1283,11 @@ strumento	directSelection	Direct Selection Tool		nucleo	F1	T11	fatto	colonna/sce
 strumento	groupSelection	Group Selection Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «directSelection»	Strumento Selezione gruppo
 strumento	magicWand	Magic Wand Tool		livelli	F1	T15	da fare	colonna/scegli	famiglia	riquadro «magicWand»	Strumento Bacchetta magica
 strumento	lasso	Lasso Tool		nucleo	F1	T11	fatto	colonna/scegli	nucleo	riquadro «lasso»	Strumento Lazo
-strumento	pen	Pen Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «pen»	Strumento Penna
-strumento	addAnchor	Add Anchor Point Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «pen»	Strumento Aggiungi punto di ancoraggio
-strumento	deleteAnchor	Delete Anchor Point Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «pen»	Strumento Elimina punto di ancoraggio
-strumento	anchorPoint	Anchor Point Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «pen»	Strumento Punto di ancoraggio
-strumento	curvature	Curvature Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «curvature»	Strumento Curvatura
+strumento	pen	Pen Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Penna
+strumento	addAnchor	Add Anchor Point Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Aggiungi punto di ancoraggio
+strumento	deleteAnchor	Delete Anchor Point Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Elimina punto di ancoraggio
+strumento	anchorPoint	Anchor Point Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «pen»	Strumento Punto di ancoraggio
+strumento	curvature	Curvature Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «curvature»	Strumento Curvatura
 strumento	type	Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo
 strumento	areaType	Area Type Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo in area
 strumento	typeOnPath	Type on a Path Tool		testo	F2	T16	da fare	colonna/testo	famiglia	riquadro «type»	Strumento Testo su tracciato
@@ -1309,16 +1309,16 @@ strumento	flare	Flare Tool		forme	F1	T13	fatto	colonna/forme	famiglia	riquadro �
 strumento	paintbrush	Paintbrush Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «paintbrush»	Strumento Pennello
 strumento	blobBrush	Blob Brush Tool		pennelli	F2	T17	da fare	colonna/disegna	famiglia	riquadro «paintbrush»	Strumento Pennello tondo
 strumento	shaper	Shaper Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «shaper»	Strumento Sagomatore
-strumento	pencil	Pencil Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «shaper»	Strumento Matita
-strumento	smooth	Smooth Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «shaper»	Strumento Smussa
-strumento	pathEraser	Path Eraser Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «shaper»	Strumento Gomma tracciato
-strumento	join	Join Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «shaper»	Strumento Unisci
-strumento	eraser	Eraser Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «eraser»	Strumento Gomma
-strumento	scissors	Scissors Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «eraser»	Strumento Forbici
-strumento	knife	Knife		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «eraser»	Coltello
-strumento	mirrorCut	Mirror & Cut Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «eraser»	Strumento Specchia e taglia
-strumento	lineCut	Line Cut Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «eraser»	Strumento Taglio linea
-strumento	rectCut	Rectangle Cut Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «eraser»	Strumento Taglio rettangolare
+strumento	pencil	Pencil Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Matita
+strumento	smooth	Smooth Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Smussa
+strumento	pathEraser	Path Eraser Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Gomma tracciato
+strumento	join	Join Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «shaper»	Strumento Unisci
+strumento	eraser	Eraser Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Strumento Gomma
+strumento	scissors	Scissors Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Strumento Forbici
+strumento	knife	Knife		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Coltello
+strumento	mirrorCut	Mirror & Cut Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Strumento Specchia e taglia
+strumento	lineCut	Line Cut Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Strumento Taglio linea
+strumento	rectCut	Rectangle Cut Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «eraser»	Strumento Taglio rettangolare
 strumento	rotate	Rotate Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «rotate»	Strumento Ruota
 strumento	reflect	Reflect Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «rotate»	Strumento Rifletti
 strumento	scale	Scale Tool		trasforma	F1	T13	da fare	colonna/trasforma	famiglia	riquadro «scale»	Strumento Scala
@@ -1370,14 +1370,14 @@ strumento	hand	Hand Tool		nucleo	F1	T11	fatto	colonna/vista	nucleo	la vista di F
 strumento	rotateView	Rotate View Tool		nucleo	F1	T11	fatto	colonna/vista	nucleo	la vista di Fub gira il foglio (lo strumento del motore è vuoto)	Strumento Ruota vista
 strumento	printTiling	Print Tiling Tool		stampa	F4	T25	da fare	colonna/misura	sotto:disegno-formati	riquadro «hand»	Strumento Affiancamento di stampa
 strumento	zoom	Zoom Tool		nucleo	F1	T11	fatto	colonna/vista	nucleo	la vista di Fub ingrandisce (lo strumento del motore è vuoto)	Strumento Zoom
-strumento	anchorEraserBrush	Anchor Eraser Brush		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «anchorEraserBrush» (aggiunta di VectorCraft)	Pennello gomma punti di ancoraggio
-strumento	extendPath	Extend Path Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «extendPath» (aggiunta di VectorCraft)	Strumento Estendi tracciato
+strumento	anchorEraserBrush	Anchor Eraser Brush		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «anchorEraserBrush» (aggiunta di VectorCraft)	Pennello gomma punti di ancoraggio
+strumento	extendPath	Extend Path Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «extendPath» (aggiunta di VectorCraft)	Strumento Estendi tracciato
 strumento	measureInspect	Measure & Inspect Tool		tavole	F2	T19	da fare	colonna/misura	famiglia	riquadro «measureInspect» (aggiunta di VectorCraft)	Strumento Misura e ispeziona
 strumento	parametricShape	Parametric Shape Tool		forme	F1	T13	da fare	colonna/forme	famiglia	riquadro «parametricShape» (aggiunta di VectorCraft)	Strumento Forma parametrica
-strumento	cornerTool	Corner Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «cornerTool» (aggiunta di VectorCraft)	Strumento Angoli
-strumento	slideAnchor	Slide Anchor Along Path		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «slideAnchor» (aggiunta di VectorCraft)	Fai scorrere il punto di ancoraggio lungo il tracciato
-strumento	sharedEdge	Shared Edge Merge Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «sharedEdge» (aggiunta di VectorCraft)	Strumento Fondi bordo condiviso
-strumento	smartPen	Smart Pen Tool		tracciati	F1	T12	da fare	colonna/disegna	famiglia	riquadro «smartPen» (aggiunta di VectorCraft)	Strumento Penna intelligente
+strumento	cornerTool	Corner Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «cornerTool» (aggiunta di VectorCraft)	Strumento Angoli
+strumento	slideAnchor	Slide Anchor Along Path		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «slideAnchor» (aggiunta di VectorCraft)	Fai scorrere il punto di ancoraggio lungo il tracciato
+strumento	sharedEdge	Shared Edge Merge Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «sharedEdge» (aggiunta di VectorCraft)	Strumento Fondi bordo condiviso
+strumento	smartPen	Smart Pen Tool		tracciati	F1	T12	fatto	colonna/disegna	famiglia	riquadro «smartPen» (aggiunta di VectorCraft)	Strumento Penna intelligente
 effetto	threeD.revolve	Revolve…	Effect › 3D and Materials	tre-d	F3	T24	da fare	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»	Rivoluzione…
 effetto	threeD.extrude	Extrude & Bevel…	Effect › 3D and Materials	tre-d	F3	T24	da fare	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»	Estrusione e smusso…
 effetto	threeD.inflate	Inflate…	Effect › 3D and Materials	tre-d	F3	T24	da fare	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»	Gonfia…

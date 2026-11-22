@@ -194,6 +194,10 @@ macro_rules! famiglie {
     };
 }
 
+/// L'inchiostro di Fub e gli strumenti dei tracciati (T12): il ponte lo
+/// chiede a ogni `commit`.
+pub(crate) use tracciati::inchiostro_toccato;
+
 famiglie! {
     Aspetto, aspetto, "aspetto";
     Automazione, automazione, "automazione";
@@ -865,7 +869,24 @@ pub(crate) fn esegui(
         Ok(livello) => livello,
         Err(motivo) => return Ok(rifiuta(motivo)),
     };
-    let argomenti = nata.stato().adatta(&riga.id, richiesta.value.clone())?;
+    // I punti scelti di un comando sui punti (T12): tolti dal valore, vanno
+    // nella selezione del motore.
+    let mut valore = richiesta.value.clone();
+    let punti = if famiglia == Famiglia::Tracciati
+        && tracciati::SUI_PUNTI.contains(&riga.id.as_str())
+    {
+        if tracciati::sceglie_inchiostro(copia, &richiesta.selection) {
+            return Ok(rifiuta(DrawingRefusal::Unmapped));
+        }
+        match tracciati::punti(copia, &mut valore) {
+            Ok(punti) => punti,
+            Err(tracciati::Rifiuto::Motore(r)) => return Ok(rifiuta(r)),
+            Err(tracciati::Rifiuto::Argomenti(m)) => return Err(PluginError::BadArgs(m.into())),
+        }
+    } else {
+        Default::default()
+    };
+    let argomenti = nata.stato().adatta(&riga.id, valore)?;
     // Un gesto lasciato a metà non entra nel comando.
     if banco.in_corso.is_some() {
         banco.ripristina(copia);
@@ -880,6 +901,12 @@ pub(crate) fn esegui(
             scelti.iter().for_each(|n| stato.selection.add(*n));
             if let Some(livello) = livello {
                 stato.active_layer = Some(livello);
+            }
+            for (n, set) in &punti {
+                if !stato.selection.objects.contains(n) {
+                    stato.selection.add(*n);
+                }
+                stato.selection.anchors.insert(*n, set.clone());
             }
         });
         let fatto = fatto.and_then(|()| sessione.execute(&riga.id, &argomenti));

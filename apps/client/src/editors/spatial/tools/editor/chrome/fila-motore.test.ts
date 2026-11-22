@@ -8,7 +8,8 @@ import type { DrawingToolState } from "../../../../../host/contract";
 import { openLifetime, type Lifetime } from "../../../../../ui/lifetime";
 import { costruisciFila, type Etichette, type FilaOpzioni } from "../../../completo/opzioni";
 import type { EditorContext } from "../context";
-import { installFilaMotore, type CompletoMotore } from "./fila-motore";
+import { conLaFila, installFilaMotore, type CompletoMotore } from "./fila-motore";
+import type { OptionItem } from "../../../../../kit/options-bar";
 
 const ETICHETTE: Etichette = {
   attivo: { it: "Attivo", en: "On" },
@@ -33,6 +34,7 @@ function contestoFinto(completo: CompletoMotore | null) {
   const ascoltiStati = new Set<(id: string) => void>();
   const ascoltiStrumento = new Set<() => void>();
   const setItems = vi.fn();
+  const syncPenOptions = vi.fn();
   const ctx = {
     life,
     disposed: false,
@@ -53,7 +55,8 @@ function contestoFinto(completo: CompletoMotore | null) {
     },
     opzioneMotore: vi.fn(),
     optionsBar: { setItems },
-    toolbarGroups: [],
+    syncPenOptions,
+    toolbarGroups: [] as OptionItem[],
   };
   installFilaMotore(ctx as unknown as EditorContext);
   /// Lo strumento scelto cambia (come `sceltaMotore`): avvisa chi ascolta.
@@ -66,7 +69,7 @@ function contestoFinto(completo: CompletoMotore | null) {
     statiPer[id] = nuovo;
     for (const ascolto of [...ascoltiStati]) ascolto(id);
   };
-  return { ctx, life, setItems, scegli, registra, ascoltiStati, ascoltiStrumento };
+  return { ctx, life, setItems, syncPenOptions, scegli, registra, ascoltiStati, ascoltiStrumento };
 }
 
 describe("la fila dello strumento del motore nella testata", () => {
@@ -102,7 +105,7 @@ describe("la fila dello strumento del motore nella testata", () => {
     registra("directSelection", stato({ attivo: false, spessore: 2 }));
     scegli("directSelection");
     registra("directSelection", stato({ attivo: true, spessore: 9 }));
-    expect(spia.aggiorna).toHaveBeenLastCalledWith({ attivo: true, spessore: 9 });
+    expect(spia.aggiorna).toHaveBeenLastCalledWith({ attivo: true, spessore: 9 }, expect.objectContaining({ options: { attivo: true, spessore: 9 } }));
     expect(fila.element.querySelector<HTMLInputElement>(".kit-form-checkbox")!.checked).toBe(true);
     expect(fila.element.querySelector<HTMLInputElement>(".kit-number-input")!.value).toBe("9");
   });
@@ -138,5 +141,23 @@ describe("la fila dello strumento del motore nella testata", () => {
     life.close();
     expect(ascoltiStati.size).toBe(0);
     expect(ascoltiStrumento.size).toBe(0);
+  });
+
+  it("la fila sta dopo il colore e gli spessori, prima della modifica (K6 T12)", () => {
+    const voce = (id: string): OptionItem => ({ id, element: document.createElement("div"), priority: 0 });
+    const gruppi = ["draw.colors", "draw.widths", "draw.pen.choose", "draw.edit", "draw.layers"].map(voce);
+    const fila = [voce("motore-directSelection"), voce("motore-directSelection-1")];
+    expect(conLaFila(gruppi, fila).map((v) => v.id)).toEqual(["draw.colors", "draw.widths", "draw.pen.choose", "motore-directSelection", "motore-directSelection-1", "draw.edit", "draw.layers"]);
+    // Senza la modifica nella riga, in fondo.
+    expect(conLaFila(gruppi.slice(0, 2), fila).map((v) => v.id)).toEqual(["draw.colors", "draw.widths", "motore-directSelection", "motore-directSelection-1"]);
+  });
+
+  it("scelto o lasciato uno strumento del motore, le opzioni dell'Inchiostro si rileggono (K6 T12)", () => {
+    const { scegli, syncPenOptions } = contestoFinto({ preparaStrumento: () => Promise.resolve(true), fila: () => null });
+    syncPenOptions.mockClear();
+    scegli("directSelection");
+    expect(syncPenOptions).toHaveBeenCalledTimes(1);
+    scegli(null);
+    expect(syncPenOptions).toHaveBeenCalledTimes(2);
   });
 });

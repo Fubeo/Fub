@@ -222,8 +222,10 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 /// La colonna del Completo (K6 T8): sei gruppi nell'ordine del prototipo, con
 /// la Mano in fondo al suo gruppo e «Tutti gli strumenti» dopo; con il motore
-/// acceso, le caselle della Selezione diretta e del Lazo del nucleo (K6 T11).
-const COLUMN_TOOLS_COMPLETO = ["select", "motore:directSelection", "motore:lasso", "pen", "eraser", "rect", "text", "hand", "all"];
+/// acceso, le caselle della Selezione diretta e del Lazo del nucleo (K6 T11),
+/// e il gruppo «disegnare» con tre caselle: la Penna di Bézier, la Matita (che
+/// tiene l'Inchiostro di Fub) e la Gomma del Completo (K6 T12).
+const COLUMN_TOOLS_COMPLETO = ["select", "motore:directSelection", "motore:lasso", "motore:pen", "pen", "motore:eraser", "rect", "text", "hand", "all"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;

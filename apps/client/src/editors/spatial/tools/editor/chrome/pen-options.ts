@@ -433,10 +433,13 @@ export function installPenOptions(ctx: EditorContext, penGroup: HTMLElement, era
   const syncPenOptions = (): void => {
     const canEdit = ctx.editable();
     // In «Semplice» bastano il pozzo del colore e gli spessori della barra.
-    const inking = (ctx.tool === "pen" || ctx.tool === "highlighter") && ctx.workspace !== "simple";
+    // Con uno strumento del motore scelto (K6) le opzioni dell'Inchiostro e
+    // della gomma di Fub non valgono: la riga mostra quelle del motore.
+    const motore = (ctx.motoreTool ?? null) !== null;
+    const inking = (ctx.tool === "pen" || ctx.tool === "highlighter") && ctx.workspace !== "simple" && !motore;
     penGroup.hidden = !inking;
     penButton.hidden = ctx.tool !== "pen";
-    eraserGroup.hidden = ctx.tool !== "eraser";
+    eraserGroup.hidden = ctx.tool !== "eraser" || motore;
     const name = t(PEN_LABELS[ctx.penId]);
     if (penName.textContent !== name) penName.textContent = name;
     const label = `${t("draw.pen.choose")}: ${name}`;

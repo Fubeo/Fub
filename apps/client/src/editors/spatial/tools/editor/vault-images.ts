@@ -330,7 +330,10 @@ export function installVaultImages(ctx: EditorContext): void {
       renameSelection();
     } else if (onSurface && event.key === "Enter") {
       if (ctx.pressed !== null) release();
-      else if (folio === undefined) {
+      // Il tracciato aperto della penna del motore si chiude.
+      else if (ctx.current === null && ctx.motoreTasto?.("Enter") === true) {
+        // Chiuso dal motore.
+      } else if (folio === undefined) {
         void properties();
       } else if (ctx.selection.length > 0) {
         // Sul foglio una nota scelta si cambia, e il resto mostra le sue
@@ -351,7 +354,10 @@ export function installVaultImages(ctx: EditorContext): void {
       ctx.flipSelection(event.code === "KeyH" ? "x" : "y");
     } else if (event.key === "Escape") {
       if (ctx.current !== null) cancelGesture();
-      else if (leaveIsolation(false)) {
+      else if (ctx.motoreTasto?.("Escape") === true) {
+        // Il tracciato aperto si chiude; senza, uno strumento dei tracciati
+        // torna alla Selezione.
+      } else if (leaveIsolation(false)) {
         // Fuori di un gruppo, scelto quello da cui si è usciti.
       } else if (ctx.selection.length > 0) {
         select([]);

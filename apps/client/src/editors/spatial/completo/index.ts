@@ -9,13 +9,13 @@
 // `apri` porta l'indice e prepara il nucleo, e basta.
 
 import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
-import { costruisciFila, type FilaOpzioni } from "./opzioni";
+import { costruisciFila, type CostruisciFila, type FilaOpzioni } from "./opzioni";
 import { creaSezioni, type Sezioni } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
 import { menuComando, menuNonCaricato, statoComandi, vociRicerca, type StatoComandi, type VoceRicerca } from "./comandi";
 import type { CampoFinestra, ModuloFinestra } from "../motore/finestre";
-import type { DrawingPreview } from "../../../host/contract";
+import type { DrawingPreview, DrawingToolState } from "../../../host/contract";
 import type { MenuItem } from "../../../ui/menu";
 // Blocco degli spazi del Completo (T7): i preset e la loro applicazione.
 import { applicaSpazio, presetDi, type EffettiSpazio } from "./spazi";
@@ -29,7 +29,8 @@ import type { Lifetime } from "../../../ui/lifetime";
 import type { CassettoOptions } from "../tools/editor/chrome/drawer";
 import { openPopover } from "../../../kit/popover";
 import { keyboardPlatform } from "../../../ui/commands";
-import { t } from "../strings";
+import { t, type DrawKey } from "../strings";
+import { COLONNA_IT } from "../strings/completo";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
 import { applicaEsito, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
@@ -89,9 +90,36 @@ export interface Completo {
   /// La fila delle opzioni dello strumento `strumento` con le sue etichette, quando
   /// la sua famiglia è pronta (`carica.testi`); `null` prima, o se lo stato non ha
   /// controlli da mostrare. Le etichette non si inventano: senza famiglia pronta non
-  /// c'è fila.
-  fila(strumento: string, opzioni: unknown, cambia: (chiave: string, valore: boolean | number | string) => void, vita: Lifetime): FilaOpzioni | null;
+  /// c'è fila. Una famiglia pronta che ha registrato una fila propria per lo
+  /// strumento (`registraFila`, T12: i punti della Selezione diretta) dà quella:
+  /// legge lo stato intero di `ambiente`, e dopo un suo comando lo fa rileggere.
+  fila(
+    strumento: string,
+    opzioni: unknown,
+    cambia: (chiave: string, valore: boolean | number | string) => void,
+    vita: Lifetime,
+    ambiente?: AmbienteFila,
+  ): FilaOpzioni | null;
 }
+
+/// Ciò che la testata dà a una fila propria: lo stato intero dello strumento, e
+/// come farlo rileggere al motore dopo un comando che lo cambia.
+export interface AmbienteFila {
+  readonly stato: DrawingToolState | null;
+  readonly rileggi: () => void;
+}
+
+/// Le famiglie che uno strumento porta con sé, oltre alla sua: la Selezione
+/// diretta e il Punto di ancoraggio sceglie i punti, e i comandi sui punti
+/// stanno nei tracciati (T12). Una famiglia in più che non arriva non ferma lo
+/// strumento: la sua fila non c'è.
+const FAMIGLIE_IN_PIU: Readonly<Record<string, readonly string[]>> = {
+  directSelection: ["tracciati"],
+};
+
+/// Quanto un comando di una fila propria aspetta la sessione del motore, come
+/// in `esegui.ts`.
+const ATTESA_MOTORE_FILA_MS = 2_000;
 
 /// Uno strumento del motore nella colonna (T11): il nome (dai testi della sua
 /// famiglia, o dall'indice finché la famiglia non è pronta), l'icona del
@@ -224,13 +252,27 @@ async function moduloDi(famiglia: string, id: string): Promise<ModuloFinestra | 
   }
 }
 
+/// Il nome corto dello strumento del motore `strumento` dalle parole della
+/// colonna (`draw.engine.name.<id>`, K6 T12): c'è per gli strumenti che la
+/// colonna mostra prima che la loro famiglia arrivi. `null` per gli altri, che
+/// lo prendono dai testi della famiglia pronta o dall'indice.
+export function nomeCortoColonna(strumento: string): string | null {
+  const chiave = `draw.engine.name.${strumento}`;
+  return Object.prototype.hasOwnProperty.call(COLONNA_IT, chiave) ? t(chiave as DrawKey) : null;
+}
+
 /// Apre il Completo di un disegno: chiede l'indice e prepara il nucleo. Un
 /// indice che non arriva non ferma niente: chi lo mostra (≡, Ctrl+/) lo
 /// richiede e dice che non si è caricato, con «Riprova».
-export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCompleto = {}): Completo {
+export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila">, opzioni: OpzioniCompleto = {}): Completo {
   const indice = opzioni.indice ?? indiceVero;
   const sezioni = creaSezioni();
-  const carica = caricatore({ ctx: { ...ctx, sezioni }, moduli: opzioni.moduli, prepara: opzioni.prepara });
+  // Le file proprie che le famiglie registrano, per strumento (T12).
+  const fileProprie = new Map<string, CostruisciFila>();
+  const registraFila = (strumento: string, costruisci: CostruisciFila): void => {
+    fileProprie.set(strumento, costruisci);
+  };
+  const carica = caricatore({ ctx: { ...ctx, sezioni, registraFila }, moduli: opzioni.moduli, prepara: opzioni.prepara });
   // La finestra di un comando con parametri (T6): il modulo dello schema della sua
   // famiglia. `null` se la famiglia non ha la finestra di quel comando.
   const finestraDi = async (voce: VoceIndice): Promise<OpzioniFinestraComando | null> => {
@@ -266,6 +308,25 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     dipendenze.appunti = appunti;
     ctx.life.add(registraAppuntiCompleto(ctx.motore, appunti));
   }
+  /// Un comando di una fila propria (T12: i comandi sui punti), col suo valore:
+  /// l'esito passa da `applicaEsito` come i comandi del menu, in un passo, e
+  /// lo stato dello strumento si rilegge, perché i punti scelti cambiano.
+  const comandoDellaFila = async (id: string, valore: unknown, etichetta: string, rileggi: (() => void) | undefined): Promise<void> => {
+    const sessione = ctx.motore === null ? null : await ctx.motore.pronta(ATTESA_MOTORE_FILA_MS);
+    if (ctx.life.closed) return;
+    if (sessione === null) {
+      dipendenze.annuncia(t("draw.window.unanswered"));
+      return;
+    }
+    const esito = await sessione.comando({ id, selection: [...dipendenze.selezione()], value: valore });
+    if (ctx.life.closed) return;
+    if (esito === null || "kind" in esito) {
+      dipendenze.annuncia(t("draw.window.unanswered"));
+      return;
+    }
+    applicaEsito(esito, etichetta, dipendenze);
+    rileggi?.();
+  };
   // Una voce del menu o della ricerca: uno strumento lo sceglie l'editor; un
   // comando del motore parte dal percorso unico.
   const avvia = (voce: VoceIndice, azioni: AzioniVoci): void => {
@@ -342,12 +403,23 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     async preparaStrumento(strumento) {
       const famiglia = await famigliaDi(strumento);
       if (famiglia === null) return false;
+      // Le famiglie in più arrivano insieme; il loro esito non conta qui.
+      const inPiu = (FAMIGLIE_IN_PIU[strumento] ?? []).map((altra) => (carica.stato(altra).kind === "errore" ? carica.riprova(altra) : carica.famiglia(altra)));
       // Una famiglia in errore si riprova: chi sceglie lo strumento di nuovo
       // chiede di nuovo la famiglia.
       const stato = carica.stato(famiglia).kind === "errore" ? await carica.riprova(famiglia) : await carica.famiglia(famiglia);
+      await Promise.all(inPiu);
       return stato.kind === "pronta";
     },
-    fila(strumento, opzioni, cambia, vita) {
+    fila(strumento, opzioni, cambia, vita, ambiente) {
+      const propria = fileProprie.get(strumento);
+      if (propria !== undefined && ctx.motore !== null) {
+        const azioni = {
+          esegui: (id: string, valore: unknown, etichetta: string) => void comandoDellaFila(id, valore, etichetta, ambiente?.rileggi),
+          annuncia: dipendenze.annuncia,
+        };
+        return propria(ambiente?.stato ?? null, azioni, vita);
+      }
       const famiglia = famiglie.get(strumento);
       if (famiglia === undefined) return null;
       // Le etichette ci sono solo con la famiglia pronta (`carica.testi`).
@@ -376,7 +448,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       if (voce === undefined) return null;
       const inglese = languageCurrent().startsWith("en");
       const corto = carica.testi(voce.famiglia)?.[`strumento:${strumento}`];
-      const nome = corto !== undefined ? (inglese ? corto.en : corto.it) : inglese ? voce.etichetta.en : voce.etichetta.it;
+      const nome = corto !== undefined ? (inglese ? corto.en : corto.it) : (nomeCortoColonna(strumento) ?? (inglese ? voce.etichetta.en : voce.etichetta.it));
       const stato = carica.stato(voce.famiglia).kind;
       return { nome, icona: iconaMotore(strumento), famiglia: stato };
     },

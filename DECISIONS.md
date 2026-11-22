@@ -105,6 +105,15 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-22 · K6 T13 · Oggetto bloccato nella selezione dell'allineamento: opzione (b), decisa dal coordinatore.
+  - Niente cambio a fub-abi: il comando resta rifiutato con il messaggio
+    «sblocca o togli dalla selezione». Il piano voleva che il motore saltasse
+    l'elemento bloccato e lo dicesse: quel salto con la perdita resta un lavoro
+    dichiarato, da riprendere solo con un cambio ABI approvato.
+- 2026-11-22 · K6 T13 · Oggetto chiave di «allinea a»: opzione (a), decisa dal coordinatore.
+  - La riga select.key (T15, «livelli») resta «da fare» con la nota «aspetta
+    T15»: l'oggetto chiave non c'è nel Completo finché T15 non la porta.
+
 - 2026-11-21 · K6 T28 · Il motore senza disco, scelte del coder.
   - Le radici vuote si chiamano `AutomationRoots::deny_all()`, non
     `nessuna()`: è un nome dell'API del motore, in inglese come il resto. La

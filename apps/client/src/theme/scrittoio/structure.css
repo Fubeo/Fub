@@ -7580,3 +7580,9 @@ textarea.draw-properties-input {
     border-color: CanvasText;
   }
 }
+/* Il punto nella fila delle opzioni (K6 T12): la posizione del punto scelto,
+   X e Y in fila. */
+.draw-point-place {
+  display: flex;
+  align-items: center;
+}

@@ -5,17 +5,17 @@
 use std::path::PathBuf;
 
 use fub_abi::{
+    DrawingAnchor, DrawingCommandInfo, DrawingDisabledReason, DrawingInput, DrawingKeyMods,
+    DrawingOverlay, DrawingOverlayRole, DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE,
+    DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, DRAWING_FAMILIES, MAX_DRAWING_ANCHORS,
+    MAX_DRAWING_INPUTS, MAX_DRAWING_OVERLAY_TEXT_BYTES, MAX_DRAWING_TOOL_ID_BYTES,
+};
+use fub_abi::{
     DrawingChange, DrawingCommandRequest, DrawingEdit, DrawingFrame, DrawingGesture, DrawingLoss,
     DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase, DrawingPointer, DrawingPointerKind,
     DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle, DrawingSync, DrawingTool,
     PluginError, DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH,
     MAX_DRAWING_LOSSES, MAX_DRAWING_OPS_BYTES, MAX_DRAWING_TEXT_BYTES, MAX_GESTURE_EVENTS,
-};
-use fub_abi::{
-    DrawingCommandInfo, DrawingDisabledReason, DrawingInput, DrawingKeyMods, DrawingOverlay,
-    DrawingOverlayRole, DrawingToolState, DRAWING_COMMAND_FAMILY_PREPARE,
-    DRAWING_COMMAND_TOOL_OPTION, DRAWING_COMMAND_TOOL_STATE, DRAWING_FAMILIES, MAX_DRAWING_INPUTS,
-    MAX_DRAWING_OVERLAY_TEXT_BYTES, MAX_DRAWING_TOOL_ID_BYTES,
 };
 use serde_json::{json, Value};
 
@@ -728,11 +728,41 @@ fn the_tool_state_and_the_disabled_reason_have_their_shape() {
         composing: false,
         cursor: "pen_close".into(),
         options: json!({"rubber_band": true}),
+        anchors: Vec::new(),
     });
     o.reading = Some(json!({"w": 1}));
     o.validate().unwrap();
     let v = serde_json::to_value(&o).unwrap();
     assert_eq!(v["state"]["cursor"], "pen_close");
+    // Senza punti scelti `anchors` non si scrive, e se manca vale vuoto.
+    assert!(v["state"].get("anchors").is_none());
+    let letto: DrawingToolState = serde_json::from_value(v["state"].clone()).unwrap();
+    assert!(letto.anchors.is_empty());
+    let punto = DrawingAnchor {
+        element: "p1".into(),
+        subpath: 0,
+        anchor: 3,
+        at: [1.0, 2.0],
+        end: false,
+    };
+    let mut con = o.clone();
+    con.state.as_mut().unwrap().anchors = vec![punto.clone(); MAX_DRAWING_ANCHORS];
+    con.validate().unwrap();
+    assert_eq!(
+        serde_json::to_value(&con).unwrap()["state"]["anchors"][0],
+        json!({"element": "p1", "subpath": 0, "anchor": 3, "at": [1.0, 2.0], "end": false})
+    );
+    // Troppi punti, un elemento vuoto o un punto non finito: lo stato non parte.
+    con.state.as_mut().unwrap().anchors.push(punto.clone());
+    assert!(con.validate().is_err());
+    let mut vuoto = punto.clone();
+    vuoto.element.clear();
+    con.state.as_mut().unwrap().anchors = vec![vuoto];
+    assert!(con.validate().is_err());
+    let mut lontano = punto;
+    lontano.at = [f64::NAN, 0.0];
+    con.state.as_mut().unwrap().anchors = vec![lontano];
+    assert!(con.validate().is_err());
     assert_eq!(v["reading"], json!({"w": 1}));
     for (r, s) in [
         (DrawingRefusal::NoMemory, "no_memory"),
@@ -758,6 +788,10 @@ fn the_tool_state_and_the_disabled_reason_have_their_shape() {
     assert_eq!(
         serde_json::to_value(DrawingDisabledReason::NeedsPath).unwrap(),
         json!("needs_path")
+    );
+    assert_eq!(
+        serde_json::to_value(DrawingDisabledReason::NeedsAnchors).unwrap(),
+        json!("needs_anchors")
     );
 }
 

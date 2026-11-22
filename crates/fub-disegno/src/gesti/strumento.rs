@@ -25,9 +25,10 @@
 use std::sync::Arc;
 
 use fub_abi::{
-    DrawingGesture, DrawingInput, DrawingOutcome, DrawingOverlay, DrawingOverlayRole, DrawingPhase,
-    DrawingPoint, DrawingPointer, DrawingPreview, DrawingRefusal, DrawingToolState,
-    MAX_DRAWING_OVERLAYS, MAX_DRAWING_OVERLAY_PATH_BYTES, MAX_DRAWING_OVERLAY_TEXT_BYTES,
+    DrawingAnchor, DrawingGesture, DrawingInput, DrawingOutcome, DrawingOverlay,
+    DrawingOverlayRole, DrawingPhase, DrawingPoint, DrawingPointer, DrawingPreview, DrawingRefusal,
+    DrawingToolState, MAX_DRAWING_ANCHORS, MAX_DRAWING_OVERLAYS, MAX_DRAWING_OVERLAY_PATH_BYTES,
+    MAX_DRAWING_OVERLAY_TEXT_BYTES,
 };
 use serde_json::{json, Map, Value};
 use vectorcraft_doc::color::Paint;
@@ -152,6 +153,15 @@ pub(crate) fn gesto(
     let Some(dopo) = banco.documento() else {
         return rifiuta(banco, esito, DrawingRefusal::Unsupported);
     };
+    // Uno strumento dei tracciati (forbici, coltello, gomma, penna…) non
+    // cambia un tratto della penna di Fub: `unmapped`, e niente cambia.
+    let dei_tracciati = crate::famiglie::riga(crate::famiglie::Fonte::Strumento, id)
+        .and_then(|r| r.famiglia)
+        == Some(crate::famiglie::Famiglia::Tracciati);
+    if dei_tracciati && crate::famiglie::inchiostro_toccato(copia, &dopo) {
+        let _ = vectorcraft_engine::guard::catch_panic(|| banco.sessione.cancel_interaction());
+        return rifiuta(banco, esito, DrawingRefusal::Unmapped);
+    }
     let selezione: Vec<NodeId> = banco
         .sessione
         .doc()
@@ -539,6 +549,7 @@ fn stato(
         _ => false,
     };
     let punto = ponte.punto.unwrap_or(copia.radice * Point::ORIGIN);
+    let anchors = punti_scelti(sessione, copia);
     DrawingToolState {
         busy: sessione.tool_busy() || cambiato,
         transforming: sessione.tool_transforming(),
@@ -546,7 +557,55 @@ fn stato(
         composing: sessione.tool_composing(),
         cursor: cursore(sessione.cursor(punto, ponte.mods, vista)),
         options: sessione.tool_options(),
+        anchors,
     }
+}
+
+/// I punti di ancoraggio scelti nella sessione, sugli elementi della copia
+/// che hanno un id (quelli di un oggetto appena nato non si possono ancora
+/// nominare): dove stanno in scena, e se sono l'estremo di un sottotracciato
+/// aperto. Al più [`MAX_DRAWING_ANCHORS`], i primi.
+fn punti_scelti(sessione: &Session, copia: &Copia) -> Vec<DrawingAnchor> {
+    let Ok(stato) = sessione.doc() else {
+        return Vec::new();
+    };
+    let indietro = copia.radice.inverse();
+    let mut fuori = Vec::new();
+    for (nodo, set) in &stato.selection.anchors {
+        let Some(element) = copia
+            .mappa
+            .del_nodo(*nodo)
+            .and_then(|i| copia.mappa.elemento(i))
+            .and_then(|e| e.id.clone())
+        else {
+            continue;
+        };
+        let Some(pd) = stato.doc.node(*nodo).and_then(|n| n.path_data()) else {
+            continue;
+        };
+        for &(si, ai) in set {
+            let Some(sp) = pd.subpaths.get(si) else {
+                continue;
+            };
+            let Some(a) = sp.anchors.get(ai) else {
+                continue;
+            };
+            let (Ok(subpath), Ok(anchor)) = (u32::try_from(si), u32::try_from(ai)) else {
+                continue;
+            };
+            if fuori.len() >= MAX_DRAWING_ANCHORS {
+                return fuori;
+            }
+            fuori.push(DrawingAnchor {
+                element: element.clone(),
+                subpath,
+                anchor,
+                at: in_scena(a.p, indietro),
+                end: !sp.closed && (ai == 0 || ai + 1 == sp.anchors.len()),
+            });
+        }
+    }
+    fuori
 }
 
 /// Il nome di un cursore del motore in `snake_case`: `PenClose` è
