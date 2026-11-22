@@ -126,13 +126,11 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   hand: "draw-hand",
   zoom: "draw-zoom",
   rotateView: "draw-rotate",
-  // Le trasformazioni (T13 giro 5). Inclina non ha un'icona nel catalogo: prende
-  // quella generica (`draw-all-tools`, `ICONA_MOTORE_GENERICA`), scelta da chiedere
-  // al disegnatore.
+  // Le trasformazioni (T13 giro 5): Inclina ha il parallelogramma del catalogo.
   rotate: "draw-rotate",
   reflect: "draw-flip-h",
   scale: "draw-scale",
-  shear: "draw-all-tools",
+  shear: "draw-shear",
   lineSegment: "draw-line",
   arc: "draw-arc",
   spiral: "draw-spiral",

@@ -47,6 +47,13 @@ describe("gli strumenti di trasformazione nella colonna", () => {
     expect(COLONNA_IT["draw.engine.name.shear"]).toBe("Inclina");
   });
 
+  it("Inclina ha il suo parallelogramma, non l'icona di «Tutti gli strumenti»", () => {
+    expect(iconaMotore("shear")).toBe("draw-shear");
+    expect(iconaMotore("shear")).not.toBe("draw-all-tools");
+    expect(DRAW_ICONS["draw-shear"]).toBeDefined();
+    expect(DRAW_ICONS[iconaMotore("shear")]).not.toEqual(DRAW_ICONS["draw-all-tools"]);
+  });
+
   it("stanno nel gruppo «modificare», nella casella della Ruota, senza gli altri (Rimodella e le altre aspettano)", () => {
     const gruppo = layoutCompleto(toolsFor("full", "vector"), MOTORE_PRONTO).find((g) => g.id === "modify");
     const casella = gruppo?.caselle.find((c) => c.includes("motore:rotate")) ?? [];
