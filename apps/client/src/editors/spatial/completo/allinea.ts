@@ -48,19 +48,18 @@ function parolaDelPulsante(id: string): string {
 
 /// La sezione: due modi, poi i gruppi dei pulsanti. Un pulsante acceso manda il comando
 /// col `to` del modo scelto; il disegno non cambia da sé.
-function disegnaAllinea(contesto: ContestoSezione, esegui: EseguiAllinea): () => void {
+function disegnaAllinea(contesto: ContestoSezione, esegui: EseguiAllinea, stato: { modo: ModoAllinea }): () => void {
   const corpo = contesto.corpo;
-  let modo: ModoAllinea = "selection";
   const bottoni: { readonly id: string; readonly el: HTMLButtonElement }[] = [];
   const modi: { readonly modo: ModoAllinea; readonly el: HTMLButtonElement }[] = [];
 
   const aggiorna = (): void => {
     for (const { id, el } of bottoni) {
-      const off = spento(id, modo, contesto.sel.numero);
+      const off = spento(id, stato.modo, contesto.sel.numero);
       el.disabled = off;
       el.title = off ? t("draw.disabled.needs_two") : parolaDelPulsante(id);
     }
-    for (const { modo: m, el } of modi) el.setAttribute("aria-pressed", String(m === modo));
+    for (const { modo: m, el } of modi) el.setAttribute("aria-pressed", String(m === stato.modo));
   };
 
   const riga = document.createElement("div");
@@ -70,7 +69,7 @@ function disegnaAllinea(contesto: ContestoSezione, esegui: EseguiAllinea): () =>
     el.type = "button";
     el.textContent = t(m === "selection" ? "draw.allinea.selezione" : "draw.allinea.tavola");
     el.addEventListener("click", () => {
-      modo = m;
+      stato.modo = m;
       aggiorna();
     });
     modi.push({ modo: m, el });
@@ -90,7 +89,7 @@ function disegnaAllinea(contesto: ContestoSezione, esegui: EseguiAllinea): () =>
       el.dataset.id = id;
       el.textContent = parolaDelPulsante(id);
       el.addEventListener("click", () => {
-        if (!el.disabled) esegui(id, { to: modo });
+        if (!el.disabled) esegui(id, { to: stato.modo });
       });
       bottoni.push({ id, el });
       blocco.append(el);
@@ -104,11 +103,13 @@ function disegnaAllinea(contesto: ContestoSezione, esegui: EseguiAllinea): () =>
 /// La sezione per la scheda Design, da registrare nel Completo aperto. Non tocca nessuna
 /// famiglia: `esegui` è il percorso unico dei comandi, che carica la famiglia al clic.
 export function sezioneAllinea(esegui: EseguiAllinea): Sezione {
+  // Il modo sta qui e non nel disegno: il pannello rifà la sezione a ogni selezione, e la scelta resta.
+  const stato: { modo: ModoAllinea } = { modo: "selection" };
   return {
     id: "allinea",
     scheda: "design",
     titolo: t("draw.allinea.titolo"),
-    disegna: (contesto) => disegnaAllinea(contesto, esegui),
+    disegna: (contesto) => disegnaAllinea(contesto, esegui, stato),
   };
 }
 

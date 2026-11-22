@@ -290,13 +290,22 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     fileProprie.set(strumento, costruisci);
   };
   // Un comando dell'indice con altri valori fissi, dal percorso unico (`eseguiVoce`): la
-  // sezione «Allinea» lo usa per i suoi pulsanti. Senza indice, o chiuso il Completo, non parte.
+  // sezione «Allinea» lo usa per i suoi pulsanti. Il primo clic porta la famiglia della voce
+  // (chunk e preparazione), come la finestra di un comando; dopo un errore il clic la riprova.
+  // Il comando parte solo da una famiglia pronta. Chiuso il Completo, non parte.
   const eseguiPerId = (id: string, valori: Readonly<Record<string, string>> = {}): void => {
     if (chiuso) return;
-    void indiceVero().then((pronto) => {
+    void indice().then(async (pronto) => {
       if (chiuso) return;
       const voce = pronto.voci.find((one) => one.id === id);
       if (voce === undefined || !("comando" in voce.chiamata)) return;
+      const stato =
+        carica.stato(voce.famiglia).kind === "errore" ? await carica.riprova(voce.famiglia) : await carica.famiglia(voce.famiglia);
+      if (chiuso) return;
+      if (stato.kind !== "pronta") {
+        dipendenze.annuncia(t("draw.allinea.nonPronto"));
+        return;
+      }
       const fisso = (voce.chiamata as { readonly valore?: unknown }).valore;
       const base = typeof fisso === "object" && fisso !== null ? fisso : {};
       eseguiVoce({ ...voce, chiamata: { comando: voce.chiamata.comando, valore: { ...base, ...valori } } }, dipendenze);
