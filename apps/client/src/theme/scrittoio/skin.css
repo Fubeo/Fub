@@ -19837,7 +19837,7 @@ button.draw-isolation-crumb:hover {
   padding-top: var(--space-2);
   border-top: 1px solid var(--border);
 }
-.draw-gradient-presets > * + * {
+.draw-gradient-presets > :nth-child(n + 2) {
   margin-top: var(--space-2);
 }
 .draw-gradient-presets-title {
@@ -19862,7 +19862,7 @@ button.draw-isolation-crumb:hover {
   gap: var(--space-1);
   align-items: stretch;
 }
-.draw-gradient-save > .kit-field,
+.draw-gradient-save > :first-child,
 .draw-gradient-save-name {
   min-width: 0;
 }

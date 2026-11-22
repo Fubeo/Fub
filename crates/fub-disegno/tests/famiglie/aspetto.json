@@ -719,7 +719,8 @@
             ]
           }
         ]
-      }
+      },
+      "dopo": "gradient-presets-apply-dopo.svg"
     },
     {
       "id": "gradient.presets.apply",

@@ -325,6 +325,11 @@ export function sezioneSfumatura(
         labelHidden: true,
         placeholder: t("draw.sfumatura.salva.segnaposto"),
         value: nomeScritto,
+        onInput: (valore) => {
+          nomeScritto = valore;
+        },
+        // Invio salva, come il pulsante; il campo del kit non lo prende a metà di una composizione.
+        onSubmit: () => fai(),
       });
       const nome = campoNome.input;
       nome.classList.add("draw-gradient-save-name");
@@ -355,14 +360,6 @@ export function sezioneSfumatura(
           }
         });
       };
-      nome.addEventListener("input", () => {
-        nomeScritto = nome.value;
-      });
-      nome.addEventListener("keydown", (evento) => {
-        if (evento.key !== "Enter" || evento.isComposing) return;
-        evento.preventDefault();
-        fai();
-      });
       salva.addEventListener("click", fai);
       riga.append(campoNome.element, salva);
       blocco.append(riga);
