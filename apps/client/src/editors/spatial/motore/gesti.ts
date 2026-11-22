@@ -65,6 +65,7 @@ import type { EditorContext } from "../tools/editor/context";
 import { layerRefusal, layerTitle, matrixText } from "../tools/editor/helpers";
 import type { GestureBase, MotoreGesture } from "../tools/editor/types";
 import type { ToolId } from "../tools/registry";
+import { motivoDelRifiutoDelloStrumento } from "./rifiuto";
 import type { GestoMotore, MotoreAssente, SessioneMotore } from "./sessione";
 import { cursoreCss, motoreDelloStrumento, StatiStrumenti } from "./strumento";
 import { Scrittura, STRUMENTI_CHE_SCRIVONO } from "./scrittura";
@@ -1207,6 +1208,12 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// dicono gli strumenti di oggi.
   const refuse = (g: MotoreGesture, refused: DrawingRefusal): void => {
     ctx.showHandles();
+    // Il Contagocce dice perché non legge un'immagine, con la sua frase (K6 T14, giro 7).
+    const strumento = typeof g.tool === "object" ? g.tool.engine.id : null;
+    if (motivoDelRifiutoDelloStrumento(refused, strumento) === "draw.contagocce.immagine") {
+      ctx.announce(t("draw.contagocce.immagine"));
+      return;
+    }
     switch (refused) {
       case "empty":
         if (g.tool === "select") ctx.announceSelection();
