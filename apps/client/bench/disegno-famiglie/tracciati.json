@@ -1,3 +1,27 @@
 {
-  "risposte": []
+  "risposte": [
+    {
+      "comando": "disegno.path.convertAnchors",
+      "esito": { "ops": "[]" }
+    },
+    {
+      "comando": "disegno.object.path.offsetPath",
+      "esito": {
+        "preview": {
+          "shape": null,
+          "matrix": null,
+          "marquee": null,
+          "overlays": [
+            {
+              "kind": "path",
+              "d": "M302.99 170.14A83.3 46.07 0 1 0 136.39 170.14A83.3 46.07 0 1 0 302.99 170.14Z",
+              "role": "preview",
+              "width": 1,
+              "dashed": false
+            }
+          ]
+        }
+      }
+    }
+  ]
 }

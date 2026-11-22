@@ -122,6 +122,18 @@ export const VISTE = {
     },
     app: { scena: "disegno-fam-tracciati-punto" },
   },
+  /// La sezione «Punto di ancoraggio» del Design con un punto scelto (K6 T12,
+  /// giro 4, stato `completo`): Converti in angolo o in morbido.
+  sezionePunto: {
+    stati: TUTTI,
+    prototipo: {
+      prepara: async (page) => {
+        await page.selectOption("#proto-stato", "completo");
+        await page.waitForSelector('#proto-box[data-pronto^="completo-"]');
+      },
+    },
+    app: { scena: "disegno-fam-tracciati-sezione" },
+  },
 };
 
 /// I pezzi. `prototipo` sta dentro lo schermo del prototipo, `app` nella pagina
@@ -330,6 +342,35 @@ export const PEZZI = [
     vista: "punto",
     prototipo: '.draw-button[aria-label="Taglia il tracciato nel punto"]',
     app: '.draw-button[aria-label="Taglia il tracciato nel punto"]',
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  // ── la sezione «Punto di ancoraggio» del Design (T12, giro 4) ────────────
+  {
+    id: "sezione-punto.intestazione",
+    vista: "sezionePunto",
+    prototipo: '[data-section="anchor"] .draw-properties-toggle',
+    app: '[data-section="anchor"] .draw-properties-toggle',
+    proprieta: [...BASE, ...DIMENSIONI],
+  },
+  {
+    id: "sezione-punto.etichetta",
+    vista: "sezionePunto",
+    prototipo: '[data-section="anchor"] .draw-properties-label',
+    app: '[data-section="anchor"] .draw-properties-label',
+    proprieta: [...BASE],
+  },
+  {
+    id: "sezione-punto.barra",
+    vista: "sezionePunto",
+    prototipo: '[data-section="anchor"] .draw-properties-bar',
+    app: '[data-section="anchor"] .draw-properties-bar',
+    proprieta: [...BASE, ...ALLINEAMENTO],
+  },
+  {
+    id: "sezione-punto.angolo",
+    vista: "sezionePunto",
+    prototipo: '[data-section="anchor"] .draw-properties-segment[aria-label="Angolo"]',
+    app: '[data-section="anchor"] .draw-properties-segment[aria-label="Angolo"]',
     proprieta: [...BASE, ...DIMENSIONI],
   },
 ];

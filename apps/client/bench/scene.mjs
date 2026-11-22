@@ -1568,6 +1568,12 @@ export const SCENE = touchLast(onPage("shell", [
     ["disegno-fam-tracciati-penna-800", 800, "La tendina della casella «Penna» nella finestra minima del desktop, 800 px", "", (page) => openRailFlyout(page, "motore:pen")],
     ["disegno-fam-tracciati-punto", 1280, "La Selezione diretta con un punto scelto: Converti, Punto e la posizione del punto", "&punti=1", scegliSelezioneDirettaCoiPunti],
     ["disegno-fam-tracciati-punto-800", 800, "La Selezione diretta con un punto scelto nella finestra minima del desktop, 800 px", "&punti=1", scegliSelezioneDirettaCoiPunti],
+    // La sezione «Punto di ancoraggio» del Design coi punti scelti (giro 4), e
+    // Sposta tracciato con l'anteprima del banco (`disegno-famiglie/tracciati.json`).
+    ["disegno-fam-tracciati-sezione", 1280, "La sezione «Punto di ancoraggio» del Design con un punto scelto: Converti in angolo o morbido", "&punti=1&comandi=risposti", openSezionePunto],
+    ["disegno-fam-tracciati-sezione-800", 800, "La sezione «Punto di ancoraggio» nella finestra minima del desktop, 800 px", "&punti=1&comandi=risposti", openSezionePunto],
+    ["disegno-fam-tracciati-sposta", 1280, "Sposta tracciato da Ctrl+/ con l'anteprima del motore sul foglio", "&comandi=risposti", openSpostaTracciato],
+    ["disegno-fam-tracciati-sposta-800", 800, "Sposta tracciato con l'anteprima nella finestra minima del desktop, 800 px", "&comandi=risposti", openSpostaTracciato],
   ].map(([id, width, title, extra, prepare]) => ({
     id,
     title,
@@ -5451,6 +5457,38 @@ async function scegliSelezioneDirettaCoiPunti(page) {
   // La posizione può stare nel «…» della riga: basta che ci sia.
   await page.waitForSelector(".draw-point-place .draw-point-coord input", { state: "attached" });
   await page.waitForFunction(() => document.querySelector(".draw-point-coord input")?.value !== "");
+}
+
+/// La sezione «Punto di ancoraggio» del Design (K6 T12, giro 4): la Selezione
+/// diretta con un punto scelto, poi la scheda Design; sotto i 960 px l'ispettore
+/// è un cassetto, che si apre dal suo pulsante.
+async function openSezionePunto(page) {
+  await scegliSelezioneDirettaCoiPunti(page);
+  if (await page.evaluate(() => window.innerWidth < 960)) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="true"]');
+  }
+  await page.click('.inspector-tab[data-view-id="draw.design"]');
+  const sezione = '#surface-panel-draw-design:not([hidden]) .draw-properties-section[data-section="anchor"]';
+  await page.waitForSelector(`${sezione} .draw-properties-segment:not([aria-disabled])`);
+  // La sezione sta sotto Proprietà e Documento: la si porta in vista, come chi scorre.
+  await page.locator(sezione).scrollIntoViewIfNeeded();
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Sposta tracciato (K6 T12, giro 4) da Ctrl+/ con la prima forma scelta: la
+/// finestra con l'anteprima che il banco risponde (`disegno-famiglie/tracciati.json`).
+async function openSpostaTracciato(page) {
+  await openDrawing(page);
+  await page.waitForSelector('.draw-rail .kit-rail-slot[data-slot="motore:directSelection"]');
+  await scegliPrimo(page);
+  await page.keyboard.press("Control+/");
+  await page.waitForSelector(".draw-commands-dialog .draw-commands-row");
+  await page.fill(".draw-commands-dialog .draw-commands-field input", "sposta tracciato");
+  await page.locator(".draw-commands-dialog .draw-commands-row", { hasText: "Sposta tracciato" }).first().click();
+  await page.waitForSelector('.kit-dialog.draw-effect-dialog [data-action="ok"]:not([disabled])');
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.fonts.ready);
 }
 
 /// ≡ › Visualizza del Completo (K6 T11, giro E): il menu ≡ aperto dal suo bottone, e il
