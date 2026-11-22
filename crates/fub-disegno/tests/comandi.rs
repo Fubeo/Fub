@@ -227,8 +227,11 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // tavola e gli oggetti di testo non leggono ciò che è scelto, come Tutto
     // (K6 T15). I campioni del documento (K6 T14) non sono gli oggetti scelti.
     // Il punto scelto della sfumatura (K6 T15, giro 5) è della sessione, come
-    // il lato attivo: una lettura che non cambia il file.
+    // il lato attivo: una lettura che non cambia il file. Le opzioni del
+    // Contagocce (K6 T14, giro 6) sono una preferenza del motore: non leggono
+    // né cambiano ciò che è scelto.
     let sempre = [
+        "disegno.eyedropper.setOptions",
         "disegno.swatch.new",
         "disegno.swatch.edit",
         "disegno.swatch.delete",

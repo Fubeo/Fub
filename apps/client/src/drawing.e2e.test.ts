@@ -226,7 +226,7 @@ const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 /// e il gruppo «disegnare» con tre caselle: la Penna di Bézier, la Matita (che
 /// tiene l'Inchiostro di Fub) e la Gomma del Completo (K6 T12), e il gruppo
 /// «modificare» con la Ruota (K6 T13 giro 5: le sue altre tre voci stanno nella stessa casella).
-const COLUMN_TOOLS_COMPLETO = ["select", "motore:directSelection", "motore:lasso", "motore:pen", "pen", "motore:eraser", "rect", "text", "motore:rotate", "hand", "all"];
+const COLUMN_TOOLS_COMPLETO = ["select", "motore:directSelection", "motore:lasso", "motore:pen", "pen", "motore:eraser", "rect", "text", "motore:rotate", "motore:eyedropper", "hand", "all"];
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;
