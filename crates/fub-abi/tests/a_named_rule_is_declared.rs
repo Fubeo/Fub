@@ -1073,6 +1073,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-disegno/src/differenza_testo.rs::peso_e_corsivo",
+            (
+                Family::AsciiCase,
+                "non confronta nomi fra loro: legge il peso e il corsivo dal nome dello stile di \
+                 una faccia che il motore di disegno manda («Bold Italic», «SemiBold»), parole \
+                 inglesi del vocabolario OpenType, ASCII per contratto, dove `Bold` e `bold` sono \
+                 lo stesso peso. Non è il nome di una nota, di un tag, di un path o di una \
+                 famiglia (quella resta a `fonts.rs::same_family`).",
+            ),
+        ),
+        (
             "crates/fub-disegno/src/catalogo.rs::sostituisci",
             (
                 Family::PerCharacterCase,

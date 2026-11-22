@@ -20,6 +20,7 @@
 //   com'è, in un passo.
 
 import type { DrawingInput, DrawingKeyMods } from "../../../host/contract";
+import { composingKey } from "../../../kit/ime";
 
 /// Gli strumenti del motore che scrivono: al rilascio del clic il gesto resta
 /// aperto (`busy`), e la tastiera va a lui finché il testo non si chiude.
@@ -188,7 +189,7 @@ export class Scrittura {
 
   #tasto(event: KeyboardEvent): void {
     // L'IME tiene i tasti mentre compone (`Process`, o il 229 di alcuni sistemi).
-    if (this.#compone || event.isComposing || event.key === "Process" || event.keyCode === 229) {
+    if (this.#compone || composingKey(event) || event.key === "Process") {
       event.stopPropagation();
       return;
     }

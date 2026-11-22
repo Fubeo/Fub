@@ -79,7 +79,8 @@ pub(super) fn testo_cambiato(
     paragrafo(tb, ta, &mut attrs)?;
     carattere(e, tb, ta, &mut attrs)?;
     for nome in attrs.keys() {
-        if info.attributi_delle_righe.contains(nome) || info.attributi_delle_righe.contains("style") {
+        if info.attributi_delle_righe.contains(nome) || info.attributi_delle_righe.contains("style")
+        {
             return Err(no(format!(
                 "una riga del testo scrive il suo {nome}: il {nome} del <text> non ci arriva"
             )));
@@ -134,7 +135,11 @@ fn testo_dei_pezzi(pezzi: &[TextRun]) -> String {
 
 /// L'allineamento: `text-anchor` per sinistra, centro e destra; il resto del
 /// paragrafo non cambia.
-fn paragrafo(tb: &TextObject, ta: &TextObject, attrs: &mut Map<String, Value>) -> Result<(), Rifiuto> {
+fn paragrafo(
+    tb: &TextObject,
+    ta: &TextObject,
+    attrs: &mut Map<String, Value>,
+) -> Result<(), Rifiuto> {
     let senza_allineamento = |p: &ParaStyle| {
         let mut p = p.clone();
         p.justify = Justify::Left;
@@ -163,9 +168,10 @@ fn paragrafo(tb: &TextObject, ta: &TextObject, attrs: &mut Map<String, Value>) -
         Justify::Left | Justify::Auto => Value::Null,
         Justify::Center => json!("middle"),
         Justify::Right => json!("end"),
-        Justify::JustifyLeft | Justify::JustifyCenter | Justify::JustifyRight | Justify::JustifyAll => {
-            return Err(no(GIUSTIFICATO))
-        }
+        Justify::JustifyLeft
+        | Justify::JustifyCenter
+        | Justify::JustifyRight
+        | Justify::JustifyAll => return Err(no(GIUSTIFICATO)),
     };
     attrs.insert("text-anchor".into(), ancora);
     Ok(())
@@ -237,11 +243,11 @@ fn carattere(
         return Err(no(INTERLINEA));
     }
     let crenatura = |s: &CharStyle| (s.kerning.map(f64::to_bits), s.optical_kerning);
-    if ta
-        .runs
-        .iter()
-        .any(|r| !tb.runs.iter().any(|q| crenatura(&q.style) == crenatura(&r.style)))
-    {
+    if ta.runs.iter().any(|r| {
+        !tb.runs
+            .iter()
+            .any(|q| crenatura(&q.style) == crenatura(&r.style))
+    }) {
         return Err(no(CRENATURA));
     }
     // Ciò che resta, senza ciò che si scrive: uguale a quello di un pezzo di
@@ -267,7 +273,11 @@ fn carattere(
     };
     let uguali_ai_pezzi = |f: &dyn Fn(&CharStyle) -> String| {
         tb.runs.len() == ta.runs.len()
-            && tb.runs.iter().zip(&ta.runs).all(|(x, y)| f(&x.style) == f(&y.style))
+            && tb
+                .runs
+                .iter()
+                .zip(&ta.runs)
+                .all(|(x, y)| f(&x.style) == f(&y.style))
     };
     // La famiglia e lo stile.
     let famiglia = |s: &CharStyle| s.font_family.clone();

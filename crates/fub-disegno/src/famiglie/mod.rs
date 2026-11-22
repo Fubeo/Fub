@@ -957,11 +957,12 @@ pub(crate) fn esegui(
     };
     // Un comando che il motore vuole su un oggetto solo gira una volta per
     // oggetto, nella stessa copia: la differenza li scrive in un passo.
-    let giri: Vec<Vec<NodeId>> = match famiglia.uno_alla_volta(&riga.id, copia, &richiesta.selection) {
-        Some(uno) if uno.is_empty() => return Ok(rifiuta(DrawingRefusal::Empty)),
-        Some(uno) => uno.into_iter().map(|n| vec![n]).collect(),
-        None => vec![scelti.clone()],
-    };
+    let giri: Vec<Vec<NodeId>> =
+        match famiglia.uno_alla_volta(&riga.id, copia, &richiesta.selection) {
+            Some(uno) if uno.is_empty() => return Ok(rifiuta(DrawingRefusal::Empty)),
+            Some(uno) => uno.into_iter().map(|n| vec![n]).collect(),
+            None => vec![scelti.clone()],
+        };
     let argomenti = nata.stato().adatta(&riga.id, valore)?;
     // Un gesto lasciato a metà non entra nel comando.
     if banco.in_corso.is_some() {

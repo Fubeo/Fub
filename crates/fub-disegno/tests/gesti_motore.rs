@@ -554,7 +554,10 @@ fn il_testo_che_si_scrive_si_vede_nell_anteprima_con_emoji_e_accenti() {
     assert_eq!(scritto.refused, None, "{scritto:?}");
     let f = forma(&scritto);
     assert_eq!(f["tag"], "text", "{f}");
-    assert!(f["attrs"].get("id").is_none(), "un testo nuovo non ha id: {f}");
+    assert!(
+        f["attrs"].get("id").is_none(),
+        "un testo nuovo non ha id: {f}"
+    );
     assert_eq!(righe_della_forma(&f), [parola]);
     // Invio va a capo: due righe, la seconda giù di un'interlinea.
     let a_capo = gesto(
@@ -594,12 +597,13 @@ fn la_cancellazione_toglie_un_carattere_intero() {
     );
     // Il Backspace toglie l'emoji intera, non metà della coppia surrogata
     // che JavaScript vedrebbe.
-    assert_eq!(righe_della_forma(&forma(&esito)), ["abc"]);}
+    assert_eq!(righe_della_forma(&forma(&esito)), ["abc"]);
+}
 
 #[test]
 fn scrivere_in_un_testo_che_c_e_cambia_le_sue_righe() {
-    let (mut d, _) = Disegno::apri_con(&common::disegni_con_inter(), CON_IL_TESTO)
-        .expect("il disegno si apre");
+    let (mut d, _) =
+        Disegno::apri_con(&common::disegni_con_inter(), CON_IL_TESTO).expect("il disegno si apre");
     // Un clic sulla seconda riga, Fine, e un punto esclamativo.
     let dentro = gesto(&mut d, "type", "preview", clic(60.0, 115.0), vec![]);
     assert_eq!(dentro.refused, None, "{dentro:?}");
