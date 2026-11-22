@@ -227,8 +227,18 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
     // tavola e gli oggetti di testo non leggono ciò che è scelto, come Tutto
     // (K6 T15). I campioni del documento (K6 T14) non sono gli oggetti scelti.
     // Il punto scelto della sfumatura (K6 T15, giro 5) è della sessione, come
-    // il lato attivo: una lettura che non cambia il file.
+    // il lato attivo: una lettura che non cambia il file. I comandi su un punto
+    // solo (K6 T12, punti) nominano il tracciato con `element` nel valore, non
+    // con ciò che è scelto: un `element` non mappato lo rifiutano all'esecuzione.
     let sempre = [
+        "disegno.path.moveAnchor",
+        "disegno.path.setHandle",
+        "disegno.path.insertAnchor",
+        "disegno.path.removeAnchor",
+        "disegno.path.convertAnchor",
+        "disegno.path.close",
+        "disegno.path.appendAnchor",
+        "disegno.path.split",
         "disegno.swatch.new",
         "disegno.swatch.edit",
         "disegno.swatch.delete",
