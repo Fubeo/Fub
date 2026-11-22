@@ -135,21 +135,6 @@ con due decimali), i tolti `remove` e l'ordine `move`, uno per ogni oggetto
 fuori dalla sottosequenza crescente più lunga dei fratelli. Ciò che non si
 scrive così è `Unsupported`; un oggetto fuori dalla mappa toccato è `Unmapped`.
 
-Nel motore un livello di Fub si chiama col suo id, perché la mappa lega per
-nome; il nome che si vede resta `fub:layer`. Un livello rinominato è il `set`
-di `fub:layer`, l'occhio `display`, il lucchetto `fub:locked`. Un livello
-nuovo in cima al documento del motore è l'`add` di
-`<g id="l…" fub:layer="Livello N">` vuoto nella radice, al suo posto fra i
-livelli (in fondo se va sopra tutti, se no dopo il livello che ha sotto), con
-`fub:locked` e `display` se nasce bloccato o nascosto; il nome di serie è il
-primo «Livello N» libero. Un nome vuoto, oltre 80 caratteri o con caratteri di
-controllo è un errore `BadArgs` prima del motore, e la differenza lo rifiuta
-di nuovo. Il colore, il modello, la stampa, l'anteprima e le immagini attenuate
-di un livello non hanno un attributo nel formato: `Unsupported`. Gli elementi
-fuori da ogni livello stanno in un livello del motore senza elemento nel file,
-che non si rinomina, non si nasconde e non si elimina (`Unmapped`), e un
-livello nuovo sotto di lui non ha un posto da scrivere (`Unsupported`).
-
 Dopo ogni gesto la sessione del motore torna alla copia: lo stato vero è il
 file. Un panico del motore lo prende `vectorcraft_engine::guard::catch_panic`:
 il gesto è `Unsupported`, la sessione si ricarica dalla copia e l'istanza

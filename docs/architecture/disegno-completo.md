@@ -130,6 +130,25 @@ punti con `anchors` nel `value` e dopo l'esito rilegge lo stato. Gli
 strumenti e i comandi dei tracciati rifiutano l'inchiostro di Fub
 (`unmapped`) e la carta. Il prodotto: [penne](../product/drawing-pen.md#la-penna-di-bézier-disegno-completo).
 
+## I livelli
+
+Nel motore un livello di Fub si chiama col suo id, perché la mappa lega per
+nome; il nome che si vede resta `fub:layer`, e `document.inspect` dà l'id.
+Per la differenza (`crates/fub-disegno/src/differenza.rs`) un livello
+rinominato è il `set` di `fub:layer`, l'occhio `display`, il lucchetto
+`fub:locked`. Un livello nuovo in cima al documento del motore è l'`add` di
+`<g id="l…" fub:layer="Livello N">` vuoto nella radice, al suo posto fra i
+livelli (in fondo se va sopra tutti, se no dopo il livello che ha sotto), con
+`fub:locked` e `display` se nasce bloccato o nascosto; il nome di serie è il
+primo «Livello N» libero. Un nome vuoto, oltre 80 caratteri o con caratteri di
+controllo è un errore `BadArgs` prima del motore, e la differenza lo rifiuta
+di nuovo. Il colore, il modello, la stampa, l'anteprima e le immagini attenuate
+di un livello non hanno un attributo nel formato: `Unsupported`, e le finestre
+di Nuovo livello e Opzioni livello chiedono solo nome, occhio e lucchetto. Gli
+elementi fuori da ogni livello stanno in un livello del motore senza elemento
+nel file, che non si rinomina, non si nasconde e non si elimina (`Unmapped`);
+un livello nuovo sotto di lui non ha un posto da scrivere (`Unsupported`).
+
 ## Chi possiede che cosa
 
 | Che cosa | Chi lo possiede | Perché |
