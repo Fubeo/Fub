@@ -332,11 +332,11 @@ motore	links.placementOptions	Placement Options		immagini	F3	T20	da fare	ispetto
 motore	transparency.editOpacityMask	Edit Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Modifica maschera di opacità
 motore	transparency.stopEditingOpacityMask	Stop Editing Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Interrompi modifica maschera di opacità
 motore	transparency.viewOpacityMask	View Opacity Mask	Window › Transparency	aspetto	F1	T15	da fare	ispettore/design	famiglia		Visualizza maschera di opacità
-motore	object.lock.above	All Artwork Above	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto/blocca	nucleo	aspetta T15, con il foglio di Fub i livelli di Fub stanno nel motore come gruppi di un livello solo, e «Tutta la grafica soprastante» del motore guarda i livelli del motore	Tutta la grafica soprastante
-motore	object.lock.otherLayers	Other Layers	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto/blocca	nucleo	aspetta T15, con il foglio di Fub i livelli di Fub stanno nel motore come gruppi di un livello solo, e «Altri livelli» del motore guarda i livelli del motore	Altri livelli
+motore	object.lock.above	All Artwork Above	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto/blocca	nucleo	il motore guarda i livelli del motore, e con Fub un livello è un gruppo dentro l'unico livello del motore: «Tutta la grafica soprastante» e «Altri livelli» non trovano oggetti o livelli (rispondono 0 senza cambiare niente). Serve decidere come Fub presenta i livelli al motore (DOMANDA del giro)	Tutta la grafica soprastante
+motore	object.lock.otherLayers	Other Layers	Object › Lock	nucleo	F1	T11	da fare	menu/oggetto/blocca	nucleo	il motore guarda i livelli del motore, e con Fub un livello è un gruppo dentro l'unico livello del motore: «Tutta la grafica soprastante» e «Altri livelli» non trovano oggetti o livelli (rispondono 0 senza cambiare niente). Serve decidere come Fub presenta i livelli al motore (DOMANDA del giro)	Altri livelli
 motore	object.lock.unselected	Unselected Artwork	Object › Lock	nucleo	F1	T11	fatto	menu/oggetto/blocca	nucleo		Grafica non selezionata
-motore	object.hide.above	All Artwork Above	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto/nascondi	nucleo	aspetta T15, con il foglio di Fub i livelli di Fub stanno nel motore come gruppi di un livello solo, e «Tutta la grafica soprastante» del motore guarda i livelli del motore	Tutta la grafica soprastante
-motore	object.hide.otherLayers	Other Layers	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto/nascondi	nucleo	aspetta T15, con il foglio di Fub i livelli di Fub stanno nel motore come gruppi di un livello solo, e «Altri livelli» del motore guarda i livelli del motore	Altri livelli
+motore	object.hide.above	All Artwork Above	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto/nascondi	nucleo	il motore guarda i livelli del motore, e con Fub un livello è un gruppo dentro l'unico livello del motore: «Tutta la grafica soprastante» e «Altri livelli» non trovano oggetti o livelli (rispondono 0 senza cambiare niente). Serve decidere come Fub presenta i livelli al motore (DOMANDA del giro)	Tutta la grafica soprastante
+motore	object.hide.otherLayers	Other Layers	Object › Hide	nucleo	F1	T11	da fare	menu/oggetto/nascondi	nucleo	il motore guarda i livelli del motore, e con Fub un livello è un gruppo dentro l'unico livello del motore: «Tutta la grafica soprastante» e «Altri livelli» non trovano oggetti o livelli (rispondono 0 senza cambiare niente). Serve decidere come Fub presenta i livelli al motore (DOMANDA del giro)	Altri livelli
 motore	object.hide.unselected	Unselected Artwork	Object › Hide	nucleo	F1	T11	fatto	menu/oggetto/nascondi	nucleo		Grafica non selezionata
 motore	object.transformEach	Transform Each…	Object › Transform	trasforma	F1	T13	da fare	menu/oggetto	famiglia	finestra	Trasforma singolarmente…
 motore	object.resetBoundingBox	Reset Bounding Box	Object › Transform	trasforma	F1	T13	fatto	menu/oggetto/trasforma	famiglia		Reimposta riquadro di delimitazione
@@ -497,7 +497,7 @@ motore	script.check	Check Script		automazione	F4	T26	da fare	interno	sotto:diseg
 motore	select.all	All	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Tutto
 motore	select.allOnArtboard	All on Active Artboard	Select	livelli	F1	T15	fatto	menu/selezione	famiglia		Tutto nella tavola da disegno attiva
 motore	select.none	Deselect	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Deseleziona
-motore	select.reselect	Reselect	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo	manca ancora: il motore non ricorda la selezione di prima fra le richieste (ogni comando parte da un motore tornato alla copia), e tenerla vorrebbe uno stato nuovo nel contratto	Riseleziona
+motore	select.reselect	Reselect	Select	nucleo	F1	T11	da fare	menu/selezione	nucleo	il motore ricorda l'ultima selezione in `last_selection_cmd`, che vive nella sessione e si azzera a ogni richiesta: senza uno stato fra le richieste il comando non fa niente (DOMANDA del giro)	Riseleziona
 motore	select.inverse	Inverse	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Inversa
 motore	select.nextAbove	Next Object Above	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Oggetto successivo sopra
 motore	select.nextBelow	Next Object Below	Select	nucleo	F1	T11	fatto	menu/selezione	nucleo		Oggetto successivo sotto
@@ -859,7 +859,7 @@ motore	object.arrange.bringToFront	Bring to Front	Object › Arrange	nucleo	F1	T
 motore	object.arrange.bringForward	Bring Forward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta avanti
 motore	object.arrange.sendBackward	Send Backward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta indietro
 motore	object.arrange.sendToBack	Send to Back	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta in fondo
-motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo	aspetta T15, la richiesta non porta il livello attivo di Fub al motore	Sposta sul livello corrente
+motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	da fare	menu/oggetto	nucleo	il motore manda la selezione nel livello attivo del motore, che è l'unico livello: per il livello corrente di Fub serve che la richiesta porti quel livello, e il motore lo prenderebbe fuori dal gruppo (DOMANDA del giro)	Sposta sul livello corrente
 motore	object.group	Group	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Raggruppa
 motore	object.ungroup	Ungroup	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Separa
 motore	object.lock	Selection	Object › Lock	nucleo	F1	T11	fatto	menu/oggetto/blocca	nucleo		Selezione
