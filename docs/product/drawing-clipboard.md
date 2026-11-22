@@ -83,7 +83,8 @@ i suoi campioni e i suoi stili, resta tale fra due disegni del Completo.
   resta com'è. PDF ed EPS arrivano con i formati del disegno.
 - **Dove va l'incolla.** Nel Completo gli oggetti vanno nella posizione che dà
   il motore (scostati dalla copia, o nel primo tavolo per un'immagine o un
-  testo), non al cursore.
+  testo), non al cursore. «Incolla nello stesso punto» (`Ctrl+Maiusc+V`) non c'è
+  ancora nel Completo: incolla come «Incolla».
 
 ## Un SVG di un altro programma
 
