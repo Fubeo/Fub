@@ -279,7 +279,7 @@ describe("percorsoPosto", () => {
     expect(percorsoPosto("tavolozza")).toBe("Tavolozza");
     // Il terzo livello di ≡: il percorso intero.
     expect(percorsoPosto("menu/oggetto/tracciato")).toBe("Oggetto › Tracciato");
-    expect(percorsoPosto("menu/selezione/uguale")).toBe("Selezione › Simili");
+    expect(percorsoPosto("menu/selezione/uguale")).toBe("Selezione › Uguale");
   });
 });
 

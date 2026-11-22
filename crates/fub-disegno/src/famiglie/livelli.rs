@@ -47,7 +47,7 @@ impl StatoFamiglia for Stato {
                         .is_some_and(|e| e.ruolo == Role::Instance)
                 };
                 (!selezione.iter().any(istanza)).then(|| DrawingDisabledReason::Other {
-                    text: "Ciò che è scelto non è un'istanza di simbolo.".into(),
+                    text: "Non è un'istanza.".into(),
                 })
             }
             "select.object.textObjects" => {
