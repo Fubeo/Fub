@@ -2617,8 +2617,15 @@ nell'indice del motore); 5000 livelli: 52 ms a costruire, 9 ms ad
 aggiornare. La prima scheda (lista piatta, ramo `feat/k6-t15-livelli`) non
 è entrata (DECISIONS 2026-11-22). Rifinitura dell'albero unita: la riga
 di un livello mostra solo il nome, il filtro è alto quanto i campi del kit,
-il livello corrente ha un puntino (a voce «corrente»). Giro 5 (Contorno e
-Sfumatura) in corso.
+il livello corrente ha un puntino (a voce «corrente»). Giro 5 unito in
+1e4b4ae8e: le sezioni Contorno (spessore, estremi, angoli, tratteggio) e
+Sfumatura (lineare e radiale, angolo mostrato in senso orario, punti:
+aggiungi, togli, sposta, colore, opacità, inverti) passano dal motore, un
+passo di Annulla per cambio; le sfumature sono risorse private
+(`src/sfumature.rs`); limite dell'angolo e allineamento del contorno
+spenti col perché (l'SVG non li scrive); il profilo dello spessore resta
+da fare. Giro 6 (preimpostate, strumento Sfumatura sulla tela, «Punte» nel
+Completo) in corso.
 Aspetta: niente
 
 ## T16 · Il testo
