@@ -1,3 +1,6 @@
 {
-  "risposte": []
+  "risposte": [
+    { "comando": "disegno.text.setRangeStyle", "esito": { "ops": "[]" } },
+    { "comando": "disegno.text.setStyle", "esito": { "ops": "[]" } }
+  ]
 }

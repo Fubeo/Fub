@@ -107,7 +107,7 @@ export const DRAW: PartAnatomy = {
     {
       name: "text-section",
       states: [S("rest"), S("focused")],
-      hooks: ["draw-type", "draw-type-style", "draw-type-sizes", "draw-type-align", "kit-font-button"],
+      hooks: ["draw-type", "draw-type-family", "draw-type-style", "draw-type-sizes", "draw-type-align", "kit-font-button"],
     },
   ],
 };

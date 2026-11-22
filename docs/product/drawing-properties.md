@@ -44,7 +44,11 @@ le tavole): arrivano nell'ordine della mappa e si vedono o no secondo la
 selezione. Il colore di Riempimento e Contorno, col Completo acceso, si
 cambia dalla sua sezione «Colore» ([Disegni, colori](drawing-colors.md#nel-disegno-completo)):
 i due campi del colore escono dal pannello, e Spessore, Tratteggio e punte
-restano. Senza il Completo acceso il pannello è quello di sempre.
+restano. Il carattere e l'allineamento di un testo si cambiano dalle sezioni
+«Carattere» e «Paragrafo» ([Disegni, tipografia](drawing-typography.md#nel-disegno-completo)):
+Carattere, Dimensione, Peso, Spaziatura e Allineamento escono dal pannello,
+Enfasi, Stile e Interlinea restano. Senza il Completo acceso il pannello è
+quello di sempre.
 
 - **Posizione e misure.** X e Y sono l'angolo in alto a sinistra della
   cornice, anche di un oggetto ruotato; Larghezza e Altezza le misure lungo i

@@ -222,7 +222,16 @@ export function sezioneCarattere(esegui: EseguiTesto, vita: Lifetime): Sezione {
       );
     }
     for (const campo of campi) misure.append(campo.element);
-    radice.append(pulsante.element, campoStile(testo, esegui, contesto.vita), misure);
+    // Il nome sopra il pulsante, come gli altri campi; chi legge lo schermo lo sente dal pulsante
+    // stesso («Famiglia: Inter»), una volta sola.
+    const famiglia = document.createElement("div");
+    famiglia.className = "draw-properties-field draw-type-family";
+    const nome = document.createElement("span");
+    nome.className = "draw-properties-label";
+    nome.setAttribute("aria-hidden", "true");
+    nome.textContent = t("draw.carattere.famiglia");
+    famiglia.append(nome, pulsante.element);
+    radice.append(famiglia, campoStile(testo, esegui, contesto.vita), misure);
     contesto.corpo.append(radice);
     return () => contesto.corpo.replaceChildren();
   };

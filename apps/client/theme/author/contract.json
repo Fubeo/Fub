@@ -1808,6 +1808,7 @@
     "draw-color-actions",
     "kit-color-well-name",
     "draw-type",
+    "draw-type-family",
     "draw-type-style",
     "draw-type-sizes",
     "draw-type-align",
@@ -4301,6 +4302,7 @@
     "draw-color-actions": "cornice",
     "kit-color-well-name": "cornice",
     "draw-type": "cornice",
+    "draw-type-family": "cornice",
     "draw-type-style": "cornice",
     "draw-type-sizes": "cornice",
     "draw-type-align": "cornice",
@@ -9306,6 +9308,7 @@
       "part": "draw",
       "hooks": [
         "draw-type",
+        "draw-type-family",
         "draw-type-style",
         "draw-type-sizes",
         "draw-type-align",
@@ -12901,7 +12904,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 73,
-    "hooks": 2491,
+    "hooks": 2492,
     "state_names": 7,
     "assigned_states": 1120,
     "components": 330,

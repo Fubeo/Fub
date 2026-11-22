@@ -19766,18 +19766,21 @@ button.draw-isolation-crumb:hover {
   gap: var(--space-2);
   margin-block-end: var(--space-2);
 }
-.draw-type > .kit-font-button {
+.draw-type-family > .kit-font-button {
   width: 100%;
+  max-width: none;
   min-width: 0;
 }
+.draw-type-family,
 .draw-type-style,
 .draw-type-align {
   min-width: 0;
 }
+/* Corpo e spaziatura una riga piena per campo, come Trasforma. */
 .draw-type-sizes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-1) var(--space-2);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
 }
 .draw-type-align {
   margin-block-end: var(--space-2);

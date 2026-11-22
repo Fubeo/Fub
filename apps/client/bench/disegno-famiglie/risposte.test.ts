@@ -16,6 +16,8 @@ describe("le risposte delle famiglie del banco", () => {
     // Sposta tracciato, coi contorni nuovi dell'ellisse della prima forma. La Selezione (K6 T15,
     // `livelli.json`): «Uguale › Colore riempimento», «Tutto nella tavola» e «Oggetti di testo».
     // Il colore (K6 T14, giro 1): l'anteprima di Satura, coi contorni della prima forma.
+    // Il testo (K6 T16, giro 1): Carattere e Paragrafo, un passo senza operazioni (il banco non
+    // riscrive il testo, la scena si guarda).
     expect(RISPOSTE.map((r) => r.comando)).toEqual([
       "disegno.edit.colors.saturate",
       "disegno.shape.rectangle",
@@ -24,9 +26,12 @@ describe("le risposte delle famiglie del banco", () => {
       "disegno.select.allOnArtboard",
       "disegno.select.object.textObjects",
       "disegno.strumento.stato",
+      "disegno.text.setRangeStyle",
+      "disegno.text.setStyle",
       "disegno.path.convertAnchors",
       "disegno.object.path.offsetPath",
     ]);
+    expect(rispostaDiFamiglia(richiesta("disegno.text.setRangeStyle", { size: 40 })).ops).toBe("[]");
     expect(rispostaDiFamiglia(richiesta("disegno.object.path.offsetPath", { offset: 10 })).preview?.overlays).toHaveLength(1);
     expect(rispostaDiFamiglia(richiesta("disegno.strumento.stato", { strumento: "lasso" })).state?.cursor).toBe("arrow");
   });
