@@ -64,6 +64,8 @@ export interface ToolbarContext {
   showWidthLabels: () => void;
   /// La riga delle opzioni, che è la barra.
   optionsBar: OptionsBar;
+  /// Le voci di sempre della riga delle opzioni (la fila del motore vi si aggiunge).
+  toolbarGroups: OptionItem[];
   /// La barra in alto, ai due capi della riga delle opzioni.
   topStart: HTMLDivElement;
   topEnd: HTMLDivElement;
@@ -155,6 +157,9 @@ export function installToolbar(ctx: EditorContext): void {
   toolbar.classList.add("draw-toolbar");
   for (const name of ["role", "aria-orientation", "aria-label"]) toolbar.removeAttribute(name);
   const toolbarGroups: OptionItem[] = [];
+  // Le voci della riga delle opzioni di sempre: la fila dello strumento del motore
+  // (`chrome/fila-motore.ts`) si aggiunge a loro, e le ritrova quando si toglie.
+  ctx.toolbarGroups = toolbarGroups;
   const surface = document.createElement("div");
   ctx.surface = surface;
   surface.className = "draw-surface";

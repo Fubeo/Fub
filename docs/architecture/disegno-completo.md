@@ -101,6 +101,18 @@ un ponte solo (arriva con T4):
 5. il rilascio fa un passo della cronologia di Fub; Esc o la perdita del
    fuoco annullano lo strumento e non lasciano operazioni.
 
+**La fila delle opzioni (T11).** Lo strumento scelto prima prepara la sua
+famiglia: `completo/index.ts` (`preparaStrumento`) trova la famiglia nella
+voce dell'indice dello strumento e la porta con `carica.ts`. Il gesto aspetta
+quella preparazione; se non arriva, lo strumento di prima resta e lo si dice.
+Quando la famiglia è pronta, `carica.ts` dà le sue etichette (`testi`), e solo
+allora `completo/index.ts` (`fila`) costruisce la fila con i controlli del kit
+(`completo/opzioni.ts`). La testata (`tools/editor/chrome/fila-motore.ts`) la
+monta nella riga delle opzioni; ogni stato registrato dello strumento la
+aggiorna (`StatiStrumenti.ascolta`), e smontata la fila il suo ascolto si
+spegne. Il motore non ha ancora un comando di sola lettura per lo stato di uno
+strumento: lo stato arriva con un esito (un gesto, o `disegno.strumento.opzione`).
+
 ## Chi possiede che cosa
 
 | Che cosa | Chi lo possiede | Perché |

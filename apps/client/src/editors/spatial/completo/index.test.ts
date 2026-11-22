@@ -1,11 +1,13 @@
+// @vitest-environment happy-dom
 // L'ingresso del Completo (piano K6, T5): `apri` chiede l'indice e prepara il
 // nucleo, e basta; un indice che non arriva non ferma niente; la vita chiusa
-// butta gli esiti in volo.
+// butta gli esiti in volo. Con T11: la preparazione di uno strumento del motore
+// e la sua fila, che c'è solo a famiglia pronta.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import type { EsitoPrepara } from "./carica";
 import { apri, NUCLEO } from "./index";
-import { creaIndice, indiceDi } from "./indice";
+import { creaIndice, indiceDi, type VoceIndice } from "./indice";
 
 const lifetimes: Lifetime[] = [];
 afterEach(() => {
@@ -17,6 +19,57 @@ function vita(): Lifetime {
   lifetimes.push(life);
   return life;
 }
+
+/// Una voce dell'indice per uno strumento del motore, della famiglia `famiglia`.
+function voceStrumento(strumento: string, famiglia: string): VoceIndice {
+  return {
+    fonte: "strumento",
+    id: strumento,
+    chiamata: { strumento },
+    etichetta: { it: "Selezione diretta", en: "Direct Selection" },
+    posto: "colonna/scegli",
+    famiglia,
+    tasto: null,
+    effetto: "cambia",
+    finestra: false,
+  } as VoceIndice;
+}
+
+describe("la preparazione e la fila di uno strumento del motore", () => {
+  const ETICHETTE = { attivo: { it: "Attivo", en: "On" } };
+
+  it("uno strumento senza famiglia nell'indice non si prepara, e non ha fila", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+    });
+    expect(await completo.preparaStrumento("directSelection")).toBe(false);
+    expect(completo.fila("directSelection", { attivo: true }, vi.fn(), vita())).toBeNull();
+  });
+
+  it("la fila c'è solo con la famiglia pronta: prima della preparazione no, dopo sì, con i controlli del kit", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [voceStrumento("directSelection", "nucleo")] })),
+      prepara: () => Promise.resolve<EsitoPrepara>("pronta"),
+      moduli: { "./famiglie/nucleo/index.ts": () => Promise.resolve({ default: { registra() {}, testi: ETICHETTE } }) },
+    });
+    // La famiglia non è stata chiesta dallo strumento: niente fila.
+    expect(completo.fila("directSelection", { attivo: true }, vi.fn(), vita())).toBeNull();
+    expect(await completo.preparaStrumento("directSelection")).toBe(true);
+    const fila = completo.fila("directSelection", { attivo: true }, vi.fn(), vita());
+    expect(fila?.element.querySelector(".kit-form-checkbox")).not.toBeNull();
+  });
+
+  it("una famiglia che non arriva non è pronta: il gesto non parte, e non c'è fila", async () => {
+    const completo = apri({ motore: null, life: vita() }, {
+      indice: () => Promise.resolve(indiceDi({ voci: [voceStrumento("directSelection", "nucleo")] })),
+      prepara: () => Promise.resolve<EsitoPrepara>({ errore: "motore" }),
+      moduli: { "./famiglie/nucleo/index.ts": () => Promise.resolve({ default: { registra() {}, testi: ETICHETTE } }) },
+    });
+    expect(await completo.preparaStrumento("directSelection")).toBe(false);
+    expect(completo.fila("directSelection", { attivo: true }, vi.fn(), vita())).toBeNull();
+  });
+});
 
 describe("apri", () => {
   it("chiede l'indice e prepara il nucleo, nient'altro", async () => {

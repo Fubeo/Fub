@@ -38,6 +38,27 @@ function moduli(registra = vi.fn<(ctx: ContestoCompleto) => void>()) {
   return { tutti, carichi, registra };
 }
 
+describe("testi(id)", () => {
+  it("le etichette della famiglia ci sono solo quando è pronta", async () => {
+    const etichette = { angolo: { it: "Angolo", en: "Corner" } };
+    const tutti = { "./famiglie/nucleo/index.ts": () => Promise.resolve({ default: { registra() {}, testi: etichette } }) };
+    const prepara = vi.fn(() => Promise.resolve<EsitoPrepara>("pronta"));
+    const carica = caricatore({ ctx: contesto(), moduli: tutti, prepara });
+    expect(carica.testi("nucleo")).toBeNull();
+    await carica.famiglia("nucleo");
+    expect(carica.testi("nucleo")).toEqual(etichette);
+  });
+
+  it("una famiglia in errore non ha etichette: la fila non si monta", async () => {
+    const tutti = { "./famiglie/nucleo/index.ts": () => Promise.resolve({ default: { registra() {}, testi: { x: { it: "x", en: "x" } } } }) };
+    const prepara = vi.fn(() => Promise.resolve<EsitoPrepara>({ errore: "motore" }));
+    const carica = caricatore({ ctx: contesto(), moduli: tutti, prepara });
+    await carica.famiglia("nucleo");
+    expect(carica.stato("nucleo")).toEqual({ kind: "errore", perche: "motore" });
+    expect(carica.testi("nucleo")).toBeNull();
+  });
+});
+
 describe("famiglia(id)", () => {
   it("assente → in arrivo → pronta, e registra una volta sola", async () => {
     const { tutti, registra } = moduli();

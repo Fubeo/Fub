@@ -16,6 +16,7 @@
 import { DRAWING_COMMAND_FAMILY_PREPARE, DRAWING_FAMILIES } from "../../../host/contract";
 import type { Lifetime, Teardown } from "../../../ui/lifetime";
 import type { MotoreDelDisegno } from "../motore/gesti";
+import type { Etichette } from "./opzioni";
 import type { Sezioni } from "./sezioni";
 
 /// Ciò che il Completo aperto dà alle sue famiglie.
@@ -33,6 +34,9 @@ export interface ModuloFamiglia {
   /// Monta i pezzi della famiglia (finestre, sezioni, strumenti): una volta
   /// sola per Completo aperto, quando la famiglia è pronta.
   registra(ctx: ContestoCompleto): void;
+  /// Le etichette della famiglia (le sue finestre, sezioni e opzioni degli
+  /// strumenti), nelle due lingue. Le legge `testi(id)` quando è pronta.
+  readonly testi?: Etichette;
 }
 
 /// Perché una famiglia non è pronta: il motore non ha memoria per lei, il
@@ -57,6 +61,9 @@ export interface Caricatore {
   /// errore aspetta «Riprova».
   famiglia(id: string): Promise<StatoFamiglia>;
   stato(id: string): StatoFamiglia;
+  /// Le etichette della famiglia, solo quando è pronta: `null` prima (la fila
+  /// delle opzioni non si monta con etichette che non ci sono).
+  testi(id: string): Etichette | null;
   /// «Riprova»: un giro nuovo per una famiglia in errore (o in arrivo da
   /// troppo). Su una famiglia pronta non fa niente.
   riprova(id: string): Promise<StatoFamiglia>;
@@ -113,6 +120,8 @@ interface Voce {
   stato: StatoFamiglia;
   /// La promessa del giro in corso; `null` se non ce n'è uno.
   promessa: Promise<StatoFamiglia> | null;
+  /// Le etichette della famiglia, da quando è pronta; `null` prima.
+  testi: Etichette | null;
 }
 
 export function caricatore(opzioni: OpzioniCaricatore): Caricatore {
@@ -128,7 +137,7 @@ export function caricatore(opzioni: OpzioniCaricatore): Caricatore {
   const voce = (id: string): Voce => {
     let v = voci.get(id);
     if (!v) {
-      v = { stato: ASSENTE, promessa: null };
+      v = { stato: ASSENTE, promessa: null, testi: null };
       voci.set(id, v);
     }
     return v;
@@ -172,6 +181,8 @@ export function caricatore(opzioni: OpzioniCaricatore): Caricatore {
           }
         }
       }
+      // Le etichette arrivano con la famiglia pronta, e solo con lei.
+      v.testi = finale.kind === "pronta" ? (modulo?.testi ?? {}) : null;
       v.promessa = null;
       cambia(id, finale);
       return finale;
@@ -193,6 +204,7 @@ export function caricatore(opzioni: OpzioniCaricatore): Caricatore {
       return giro(id);
     },
     stato: (id) => voci.get(id)?.stato ?? ASSENTE,
+    testi: (id) => voci.get(id)?.testi ?? null,
     riprova(id) {
       if (chiuso) return Promise.resolve(ASSENTE);
       if (!noto(id)) return Promise.resolve<StatoFamiglia>({ kind: "errore", perche: "chunk" });

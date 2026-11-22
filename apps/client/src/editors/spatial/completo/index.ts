@@ -9,6 +9,7 @@
 // `apri` porta l'indice e prepara il nucleo, e basta.
 
 import { caricatore, type Caricatore, type ContestoCompleto, type OpzioniCaricatore } from "./carica";
+import { costruisciFila, type FilaOpzioni } from "./opzioni";
 import { creaSezioni, type Sezioni } from "./sezioni";
 import type { Indice, VoceIndice } from "./indice";
 // I comandi nel menu ≡ e nella ricerca Ctrl+/ (T9a): le voci, il perché e l'avvio.
@@ -67,6 +68,15 @@ export interface Completo {
   /// Le voci della ricerca Ctrl+/ (T9a), con il tasto, il posto e il perché.
   /// `null` se l'indice non arriva: chi cerca lo dice, con «Riprova».
   ricerca(selezione: () => readonly string[], azioni: AzioniVoci): Promise<VoceRicerca[] | null>;
+  /// La famiglia dello strumento del motore `strumento` (dall'indice) si prepara:
+  /// risolve `true` se è pronta. Uno strumento senza famiglia nell'indice, o una
+  /// famiglia che non arriva, risolve `false`: il gesto non parte (K6 T8).
+  preparaStrumento(strumento: string): Promise<boolean>;
+  /// La fila delle opzioni dello strumento `strumento` con le sue etichette, quando
+  /// la sua famiglia è pronta (`carica.testi`); `null` prima, o se lo stato non ha
+  /// controlli da mostrare. Le etichette non si inventano: senza famiglia pronta non
+  /// c'è fila.
+  fila(strumento: string, opzioni: unknown, cambia: (chiave: string, valore: boolean | number | string) => void, vita: Lifetime): FilaOpzioni | null;
 }
 
 /// Ciò che l'editor dà a una voce del menu o della ricerca: lo strumento del
@@ -228,10 +238,44 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
       eseguiVoce(voce, dipendenze);
     },
   });
+  // La famiglia di uno strumento del motore, dall'indice: si chiede una volta
+  // sola per strumento (la voce dell'indice non cambia). Uno strumento senza
+  // voce, o un indice che non arriva, non ha famiglia.
+  const famiglie = new Map<string, string>();
+  const famigliaDi = async (strumento: string): Promise<string | null> => {
+    const nota = famiglie.get(strumento);
+    if (nota !== undefined) return nota;
+    let pronto: Indice;
+    try {
+      pronto = await indice();
+    } catch {
+      return null;
+    }
+    const voce = pronto.voci.find((one) => "strumento" in one.chiamata && one.chiamata.strumento === strumento);
+    if (voce === undefined) return null;
+    famiglie.set(strumento, voce.famiglia);
+    return voce.famiglia;
+  };
   const completo: Completo = {
     indice,
     carica,
     sezioni,
+    async preparaStrumento(strumento) {
+      const famiglia = await famigliaDi(strumento);
+      if (famiglia === null) return false;
+      // Una famiglia in errore si riprova: chi sceglie lo strumento di nuovo
+      // chiede di nuovo la famiglia.
+      const stato = carica.stato(famiglia).kind === "errore" ? await carica.riprova(famiglia) : await carica.famiglia(famiglia);
+      return stato.kind === "pronta";
+    },
+    fila(strumento, opzioni, cambia, vita) {
+      const famiglia = famiglie.get(strumento);
+      if (famiglia === undefined) return null;
+      // Le etichette ci sono solo con la famiglia pronta (`carica.testi`).
+      const testi = carica.testi(famiglia);
+      if (testi === null) return null;
+      return costruisciFila(testi, opzioni, cambia, vita);
+    },
     chiudi() {
       if (chiuso) return;
       chiuso = true;

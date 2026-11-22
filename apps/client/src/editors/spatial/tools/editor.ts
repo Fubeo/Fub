@@ -173,6 +173,7 @@ import { installClipboardCommands } from "./editor/clipboard-commands";
 import { installVaultImages } from "./editor/vault-images";
 import { installLife } from "./editor/life";
 import { installGestiMotore, type MotoreDelDisegno } from "../motore/gesti";
+import { installFilaMotore } from "./editor/chrome/fila-motore";
 import type { DrawingToolState } from "../../../host/contract";
 import type { SpazioSalvato } from "./saved-workspaces";
 
@@ -509,6 +510,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installInserts(ctx);
   installStrokeShapes(ctx);
   installGestiMotore(ctx);
+  // La fila delle opzioni dello strumento del motore: dopo i gesti (stato e cambio
+  // di strumento) e dopo la testata (la sua riga).
+  installFilaMotore(ctx);
   installCurvatureTool(ctx);
   installSheetCursor(ctx);
   installInput(ctx);

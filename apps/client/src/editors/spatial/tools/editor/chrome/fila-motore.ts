@@ -1,0 +1,110 @@
+// La fila delle opzioni dello strumento del motore, nella testata (piano K6, T11,
+// «Riceve da T8»; `completo/opzioni.ts`). Lo strumento del motore scelto ha una
+// fila solo quando la sua famiglia è pronta (`completo/index.ts`, `fila`), e
+// solo se lo stato dello strumento ha controlli da mostrare: prima niente fila,
+// niente controlli finti.
+//
+// - **Chi monta.** La fila è DOM del Completo: qui si mette nella riga delle
+//   opzioni della testata (`kit/options-bar`), come una voce con la sua priorità.
+// - **Quando.** Lo strumento scelto (`sceltaMotore`) e la sua preparazione
+//   avvisano (`ascoltaStrumentoMotore`); a ogni avviso la fila si rimonta, si
+//   aggiorna o si toglie.
+// - **Lo stato.** Mentre la fila è montata, ogni stato registrato dello
+//   strumento la aggiorna (`ascoltaStati`). Smontata, il suo ascolto è spento: il
+//   disposer sta nella vita della fila, e la fila nella vita dell'editor.
+
+import type { OptionItem } from "../../../../../kit/options-bar";
+import { openLifetime, type Lifetime, type Teardown } from "../../../../../ui/lifetime";
+import type { FilaOpzioni } from "../../../completo/opzioni";
+import type { EditorContext } from "../context";
+
+/// Ciò che il Completo aperto dà alla testata per la fila dello strumento.
+export interface CompletoMotore {
+  preparaStrumento(strumento: string): Promise<boolean>;
+  fila(
+    strumento: string,
+    opzioni: unknown,
+    cambia: (chiave: string, valore: boolean | number | string) => void,
+    vita: Lifetime,
+  ): FilaOpzioni | null;
+}
+
+export interface FilaMotoreContext {
+  /// Il Completo aperto e acceso; `null` se non c'è (il Semplice, un Completo
+  /// spento). Senza, la testata non ha fila.
+  completoMotore?: () => CompletoMotore | null;
+}
+
+/// La priorità della fila nella riga delle opzioni: va in «…» dopo il colore e
+/// gli spessori (priorità 3), e alla pari con la modifica (2), prima dei livelli (1).
+const PRIORITA_FILA = 2;
+
+interface Montata {
+  readonly id: string;
+  readonly fila: FilaOpzioni;
+  readonly voce: OptionItem;
+  readonly vita: Lifetime;
+  /// Lo smontaggio dell'ascolto degli stati di questa fila.
+  readonly spegniStati: Teardown;
+}
+
+/// Monta la fila dello strumento del motore scelto nella riga delle opzioni.
+/// Va dopo `installGestiMotore` (usa lo stato e il cambio di strumento) e dopo
+/// la testata (usa `optionsBar`).
+export function installFilaMotore(ctx: EditorContext): void {
+  let montata: Montata | null = null;
+
+  /// Toglie la fila montata, se c'è: il suo ascolto si spegne e la riga torna
+  /// quella di sempre.
+  const smonta = (): void => {
+    if (montata === null) return;
+    const vecchia = montata;
+    montata = null;
+    vecchia.spegniStati();
+    vecchia.vita.close();
+    // Chiudendo l'editor la riga non si tocca più: lo fa la sua vita.
+    if (!ctx.disposed) ctx.optionsBar.setItems(ctx.toolbarGroups);
+  };
+
+  /// Rimonta, aggiorna o toglie la fila secondo lo strumento scelto e il suo stato.
+  const sincronizza = (): void => {
+    if (ctx.disposed) {
+      smonta();
+      return;
+    }
+    const id = ctx.motoreTool;
+    const completo = ctx.completoMotore?.() ?? null;
+    if (id === null || completo === null) {
+      smonta();
+      return;
+    }
+    const opzioni = ctx.statoStrumento(id)?.options ?? null;
+    // La stessa fila per lo stesso strumento: si aggiorna, e se non ha più
+    // controlli si toglie.
+    if (montata !== null && montata.id === id) {
+      if (!montata.fila.aggiorna(opzioni)) smonta();
+      return;
+    }
+    smonta();
+    const vita = openLifetime();
+    const fila = completo.fila(id, opzioni, (chiave, valore) => ctx.opzioneMotore(id, chiave, valore), vita);
+    if (fila === null) {
+      vita.close();
+      return;
+    }
+    const holder = document.createElement("div");
+    holder.className = "draw-options-item";
+    holder.append(fila.element);
+    const voce: OptionItem = { id: `motore-${id}`, element: holder, priority: PRIORITA_FILA };
+    // Lo stato dello strumento: la fila montata lo segue, e nessun altro.
+    const spegniStati = ctx.ascoltaStati((altro) => {
+      if (montata !== null && montata.id === altro) sincronizza();
+    });
+    montata = { id, fila, voce, vita, spegniStati };
+    ctx.optionsBar.setItems([...ctx.toolbarGroups, voce]);
+  };
+
+  // Lo strumento scelto e la sua preparazione: a ogni avviso si sincronizza.
+  ctx.life.add(ctx.ascoltaStrumentoMotore(sincronizza));
+  ctx.life.add(() => smonta());
+}

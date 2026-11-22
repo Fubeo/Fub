@@ -447,6 +447,17 @@ export interface GestiMotoreContext {
   /// Lo stato dello strumento del motore `id`, dall'ultimo esito che l'ha
   /// portato; `null` se non ne ha ancora.
   statoStrumento: (id: string) => DrawingToolState | null;
+  /// Avvisa a ogni stato registrato di uno strumento del motore, con il suo id
+  /// (`StatiStrumenti.ascolta`). Il ritorno smette questo ascoltatore.
+  ascoltaStati: (ascolto: (id: string) => void) => Teardown;
+  /// Avvisa quando cambia lo strumento del motore scelto, e quando la sua
+  /// preparazione finisce (la famiglia è pronta, o non è arrivata). Il ritorno
+  /// smette questo ascoltatore.
+  ascoltaStrumentoMotore: (ascolto: () => void) => Teardown;
+  /// La famiglia dello strumento del motore `id` si prepara: risolve `true` se
+  /// è pronta. Di serie è pronta da sé; il Completo la porta con la sua
+  /// preparazione (`completo/index.ts`).
+  preparaStrumento: (id: string) => Promise<boolean>;
   /// Manda l'opzione `chiave` (con il valore JSON `valore`) dello strumento
   /// `id` (`disegno.strumento.opzione`). Il gesto dopo la vede; un gesto in
   /// corso no.
@@ -482,7 +493,18 @@ export function installGestiMotore(ctx: EditorContext): void {
   /// La preparazione della famiglia di ogni strumento del motore scelto: il
   /// gesto aspetta, e risolve `false` se non arriva.
   const preparazioni = new Map<string, Promise<boolean>>();
+  /// Chi ascolta il cambio di strumento del motore o della sua preparazione.
+  const cambi = new Set<() => void>();
+  const avvisa = (): void => {
+    for (const ascolto of [...cambi]) if (cambi.has(ascolto)) ascolto();
+  };
   ctx.motoreTool = null;
+  // Di serie la famiglia è pronta da sé; il Completo la sostituisce con la sua
+  // preparazione (`ctx.preparaStrumento`), che porta la famiglia dall'indice.
+  ctx.preparaStrumento = (id) => {
+    const porta = ctx.options.preparaMotore;
+    return porta === undefined ? Promise.resolve(true) : porta(id).catch(() => false);
+  };
 
   /// Sceglie lo strumento del motore `id`, o torna a quelli di oggi con
   /// `null`. Il gesto in corso si annulla (come per ogni cambio di strumento).
@@ -493,23 +515,34 @@ export function installGestiMotore(ctx: EditorContext): void {
     if (id === null) {
       ctx.motoreTool = null;
       ctx.surface.style.cursor = "";
+      avvisa();
       return;
     }
     const precedente = ctx.motoreTool;
     ctx.motoreTool = id;
-    // La famiglia dello strumento si prepara con `preparaMotore` (di serie è
-    // pronta da sé); se non arriva, risolve `false`.
-    const prepara = ctx.options.preparaMotore;
-    const pronta = prepara === undefined ? Promise.resolve(true) : prepara(id).catch(() => false);
+    const pronta = ctx.preparaStrumento(id);
     preparazioni.set(id, pronta);
+    avvisa();
     void pronta.then((ok) => {
-      if (ok || ctx.disposed || ctx.motoreTool !== id) return;
-      ctx.motoreTool = precedente;
-      ctx.announce(t("draw.engine.prepare.failed"));
+      if (ctx.disposed) return;
+      if (!ok && ctx.motoreTool === id) {
+        ctx.motoreTool = precedente;
+        ctx.announce(t("draw.engine.prepare.failed"));
+      }
+      // La fine della preparazione avvisa: la fila dello strumento si monta solo
+      // ora che la sua famiglia è pronta (o si toglie, se non è arrivata).
+      avvisa();
     });
   };
   ctx.sceltaMotore = sceltaMotore;
   ctx.statoStrumento = (id) => stati.stato(id);
+  ctx.ascoltaStati = (ascolto) => stati.ascolta(ascolto);
+  ctx.ascoltaStrumentoMotore = (ascolto) => {
+    cambi.add(ascolto);
+    return () => {
+      cambi.delete(ascolto);
+    };
+  };
 
   /// Manda l'opzione dello strumento `id` (`disegno.strumento.opzione`). Va in
   /// fila con i gesti, così il gesto dopo la vede e quello in corso no. Un
