@@ -88,7 +88,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // la griglia di trasparenza (fonte motore, ma la fa il client), i bordi e il riquadro
   // di delimitazione. Guide intelligenti, aggancio ai punti e widget d'angolo restano
   // «da fare»: il gesto non porta i flag di vista, e il widget arriva con T12.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1168, fub: 114, escluso: 12, fatto: 257 });
+  // T13 disponi porta a «fatto» le sette voci di ≡ › Oggetto › Disponi (`addon.arrange.*`), con i
+  // loro casi in trasforma.json; Sposta leggermente (`object.nudge`) e Trasforma singolarmente
+  // (`object.transformEach`) restano «da fare».
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1161, fub: 114, escluso: 12, fatto: 264 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

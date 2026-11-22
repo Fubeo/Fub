@@ -546,6 +546,10 @@ pub const NOMI: &[(&str, Tipo)] = &[
     ("fill", Tipo::SiNo),
     ("closed", Tipo::SiNo),
     ("clockwise", Tipo::SiNo),
+    // Le finestre di Disponi (K6 T13): la misura di ciascuno, l'opacità casuale.
+    ("min", Tipo::Numero),
+    ("max", Tipo::Numero),
+    ("proportional", Tipo::SiNo),
     // Le finestre dei tracciati (T12, giro 3): `FINESTRE_SCRITTE`.
     ("offset", Tipo::Numero),
     ("miterLimit", Tipo::Numero),
@@ -596,6 +600,30 @@ pub struct FinestraScritta {
 /// Espandi non chiede come espandere le sfumature (`gradient`, `steps`): vale
 /// quello del motore, strisce piene.
 pub const FINESTRE_SCRITTE: &[FinestraScritta] = &[
+    // Le finestre di Disponi (K6 T13): la misura di ciascun oggetto scelto, e
+    // l'opacità casuale fra un minimo e un massimo (il seme dà la stessa scelta).
+    FinestraScritta {
+        id: "addon.arrange.size",
+        schema: "{width, height, proportional}",
+        predefiniti: &[
+            ("width", "100"),
+            ("height", "50"),
+            ("proportional", "false"),
+        ],
+        limiti: &[
+            ("width", Some(0.001), Some(1_000_000.0)),
+            ("height", Some(0.001), Some(1_000_000.0)),
+        ],
+    },
+    FinestraScritta {
+        id: "addon.arrange.randomizeOpacity",
+        schema: "{min, max, seed}",
+        predefiniti: &[("min", "30"), ("max", "100"), ("seed", "0")],
+        limiti: &[
+            ("min", Some(0.0), Some(100.0)),
+            ("max", Some(0.0), Some(100.0)),
+        ],
+    },
     FinestraScritta {
         id: "object.path.simplify",
         schema: "{level, cornerAngle, straightLines}",

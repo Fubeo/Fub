@@ -695,13 +695,13 @@ motore	object.distort	Free Distort		trasforma	F1	T13	da fare	ispettore/design	fa
 motore	paint.sampleColor	Sample Color		colore	F1	T14	fatto	ispettore/design	famiglia		Campiona colore
 motore	eyedropper.setOptions	Eyedropper Options		colore	F1	T14	fatto	ispettore/design	famiglia		Opzioni contagocce
 motore	artboard.move	Move Artboard		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta tavola da disegno
-motore	addon.arrange.grid	Arrange in Grid	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Disponi in griglia
-motore	addon.arrange.swap	Swap Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Scambia oggetti
-motore	addon.arrange.replace	Replace with Top Object	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Sostituisci con l’oggetto superiore
-motore	addon.arrange.size	Set Size of Each	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Imposta dimensione di ciascuno
-motore	addon.arrange.groupOverlapping	Group Overlapping Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Raggruppa oggetti sovrapposti
-motore	addon.arrange.randomizeOpacity	Randomize Opacity	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Opacità casuale
-motore	addon.arrange.sort	Sort Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Ordina oggetti
+motore	addon.arrange.grid	Arrange in Grid	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia		Disponi in griglia
+motore	addon.arrange.swap	Swap Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia		Scambia oggetti
+motore	addon.arrange.replace	Replace with Top Object	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia		Sostituisci con l’oggetto superiore
+motore	addon.arrange.size	Set Size of Each	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia	finestra	Imposta dimensione di ciascuno
+motore	addon.arrange.groupOverlapping	Group Overlapping Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia		Raggruppa oggetti sovrapposti
+motore	addon.arrange.randomizeOpacity	Randomize Opacity	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia	finestra	Opacità casuale
+motore	addon.arrange.sort	Sort Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	fatto	menu/oggetto	famiglia		Ordina oggetti
 motore	addon.cleanup.simplify	Simplify Anchors (Keep Shape)…	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia	finestra	Semplifica punti di ancoraggio (mantieni forma)…
 motore	addon.cleanup.check	Health Check	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Controllo integrità
 motore	addon.cleanup.show	Show Issue	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Mostra problema

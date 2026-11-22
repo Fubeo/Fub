@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia trasforma (piano K6, T13, giro 1 e 3): la sezione «Allinea» dell'ispettore, e le finestre con anteprima di Sposta, Ruota, Scala, Rifletti e Inclina (giro 3). Il disegno è trasforma/base.svg: due rettangoli a y 100 (oa1a1a1a1 e ob2b2b2b2), un gruppo di due quadrati, un tracciato op7a7a7a7 a destra e un tratto della penna. Le voci «interfaccia» e il pannello «align» hanno la loro prova nel client (apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts), che nomina ciascuna. Giro 5: gli strumenti di «modificare» (Ruota, Rifletti, Scala, Inclina) trascinano la selezione attorno al suo centro, in un passo solo (`fonte: strumento`); un clic senza trascinare prima del gesto non cambia il centro; con un oggetto bloccato nella selezione il gesto è `locked`, come il comando.",
+  "$nota": "I casi della famiglia trasforma (piano K6, T13, giro 1, 3 e «disponi»): la sezione «Allinea» dell'ispettore, e le finestre con anteprima di Sposta, Ruota, Scala, Rifletti e Inclina (giro 3). Il disegno è trasforma/base.svg: due rettangoli a y 100 (oa1a1a1a1 e ob2b2b2b2), un gruppo di due quadrati, un tracciato op7a7a7a7 a destra e un tratto della penna. Le voci «interfaccia» e il pannello «align» hanno la loro prova nel client (apps/client/src/editors/spatial/completo/famiglie/trasforma/allinea.test.ts), che nomina ciascuna. Giro 5: gli strumenti di «modificare» (Ruota, Rifletti, Scala, Inclina) trascinano la selezione attorno al suo centro, in un passo solo (`fonte: strumento`); un clic senza trascinare prima del gesto non cambia il centro; con un oggetto bloccato nella selezione il gesto è `locked`, come il comando. Giro «disponi» (T13): le sette voci di ≡ › Oggetto › Disponi (`addon.arrange.*`) sul disegno `disponi.svg` (sei oggetti, due che si toccano, un tratto di Fub, un oggetto bloccato in `bloccato.svg`): riuscito con le operazioni del motore e il file «dopo», rifiutato (vuoto, bloccato, inchiostro di Fub), argomenti sbagliati (`errore`); la scelta casuale è ripetibile con il suo seme.",
   "casi": [
     {
       "id": "object.align",
@@ -866,6 +866,908 @@
         ]
       },
       "dopo": "strumento-rotate.svg"
+    },
+    {
+      "id": "addon.arrange.grid",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3",
+        "od4d4d4d4"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 -130 -15)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "oc3c3c3c3",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 -95 -40)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "od4d4d4d4",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 -25 40)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-grid.svg"
+    },
+    {
+      "id": "addon.arrange.grid",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3",
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "layout": "row",
+        "centerOnArtboard": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 75 115)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 -55 100)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "oc3c3c3c3",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 95 20)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "od4d4d4d4",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 155 100)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-grid-riga.svg"
+    },
+    {
+      "id": "addon.arrange.grid",
+      "disegno": "disponi.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.grid",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.arrange.grid",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.arrange.grid",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "columns": 0
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.arrange.swap",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 190 15)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 -190 -15)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-swap.svg"
+    },
+    {
+      "id": "addon.arrange.swap",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.swap",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "size": "sì"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.arrange.replace",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "of6f6f6f6"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M15 10 L65 10 L65 60 L15 60 Z",
+                    "fill": "#800080",
+                    "id": "obts7v8cr"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "obts7v8cr"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M205 25 L255 25 L255 75 L205 75 Z",
+                    "fill": "#800080",
+                    "id": "oqjc0uend"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-replace.svg"
+    },
+    {
+      "id": "addon.arrange.replace",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "of6f6f6f6"
+      ],
+      "argomenti": {
+        "keep": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M15 10 L65 10 L65 60 L15 60 Z",
+                    "fill": "#800080",
+                    "id": "ofsssg4mo"
+                  }
+                }
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "ob2b2b2b2"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M205 25 L255 25 L255 75 L205 75 Z",
+                    "fill": "#800080",
+                    "id": "opif6cpgc"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-replace-tenendo.svg"
+    },
+    {
+      "id": "addon.arrange.replace",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.replace",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "fit": "stretch"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.arrange.size",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "width": 80,
+        "height": 40
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(2 0 0 1.3333 -40 -11.6667)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1.3333 0 0 2 -76.6667 -50)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-size.svg"
+    },
+    {
+      "id": "addon.arrange.size",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "width": 80,
+        "proportional": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(2 0 0 2 -40 -35)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1.3333 0 0 1.3333 -76.6667 -16.6667)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-size-proporzionale.svg"
+    },
+    {
+      "id": "addon.arrange.size",
+      "disegno": "disponi.svg",
+      "selezione": [],
+      "argomenti": {
+        "width": 80,
+        "height": 40
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.size",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "width": 0
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.arrange.groupOverlapping",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oe5e5e5e5",
+        "of6f6f6f6"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "od4d4d4d4"
+                },
+                "elem": {
+                  "tag": "g",
+                  "attrs": {
+                    "id": "o3by6ybjo"
+                  }
+                }
+              },
+              {
+                "op": "move",
+                "target": "oe5e5e5e5",
+                "parent": "o3by6ybjo",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "move",
+                "target": "of6f6f6f6",
+                "parent": "o3by6ybjo",
+                "pos": {
+                  "after": "oe5e5e5e5"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-raggruppa.svg"
+    },
+    {
+      "id": "addon.arrange.groupOverlapping",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.groupOverlapping",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.randomizeOpacity",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "min": 20,
+        "max": 80,
+        "seed": 7
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oc3c3c3c3"
+              },
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"20\" y=\"20\" width=\"40\" height=\"30\" fill=\"#000000\" opacity=\"0.442\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                },
+                "raw": "<rect id=\"ob2b2b2b2\" x=\"200\" y=\"40\" width=\"60\" height=\"20\" fill=\"#ff0000\" opacity=\"0.444\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "ob2b2b2b2"
+                },
+                "raw": "<rect id=\"oc3c3c3c3\" x=\"120\" y=\"100\" width=\"30\" height=\"60\" fill=\"#00aa00\" opacity=\"0.555\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"5ca2792cf9187d3d\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJvcGFjaXR5IjowLjQ0MTY4ODc0NjIxMzkxMjk2LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC4wLCJnIjowLjAsImIiOjAuMH19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzIwLjAsMjAuMF19LHsicCI6WzYwLjAsMjAuMF19LHsicCI6WzYwLjAsNTAuMF19LHsicCI6WzIwLjAsNTAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"d6c8113807f6745c\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo0LCJvcGFjaXR5IjowLjQ0MzUwNDc1MDcyODYwNzIsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAwLjAsNDAuMF19LHsicCI6WzI2MC4wLDQwLjBdfSx7InAiOlsyNjAuMCw2MC4wXX0seyJwIjpbMjAwLjAsNjAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oc3c3c3c3\" hash=\"b83cadd13680c4fe\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJvcGFjaXR5IjowLjU1NDYyNjEwNzIxNTg4MTMsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuNjY2NjY2Njg2NTM0ODgxNiwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMTIwLjAsMTAwLjBdfSx7InAiOlsxNTAuMCwxMDAuMF19LHsicCI6WzE1MC4wLDE2MC4wXX0seyJwIjpbMTIwLjAsMTYwLjBdfV0sImNsb3NlZCI6dHJ1ZX1dfX19fQ==</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-opacita.svg"
+    },
+    {
+      "id": "addon.arrange.randomizeOpacity",
+      "disegno": "disponi.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.randomizeOpacity",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.arrange.randomizeOpacity",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "min": 90,
+        "max": 10
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.arrange.sort",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3",
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "by": "width",
+        "apply": "stacking"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "move",
+                "target": "oc3c3c3c3",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                }
+              },
+              {
+                "op": "move",
+                "target": "od4d4d4d4",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-ordina.svg"
+    },
+    {
+      "id": "addon.arrange.sort",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.sort",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "by": "volume"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.arrange.randomizeOpacity",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3"
+      ],
+      "argomenti": {
+        "min": 20,
+        "max": 80,
+        "seed": 8
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "oc3c3c3c3"
+              },
+              {
+                "op": "remove",
+                "target": "ob2b2b2b2"
+              },
+              {
+                "op": "remove",
+                "target": "oa1a1a1a1"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<rect id=\"oa1a1a1a1\" x=\"20\" y=\"20\" width=\"40\" height=\"30\" fill=\"#000000\" opacity=\"0.788\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oa1a1a1a1"
+                },
+                "raw": "<rect id=\"ob2b2b2b2\" x=\"200\" y=\"40\" width=\"60\" height=\"20\" fill=\"#ff0000\" opacity=\"0.524\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "ob2b2b2b2"
+                },
+                "raw": "<rect id=\"oc3c3c3c3\" x=\"120\" y=\"100\" width=\"30\" height=\"60\" fill=\"#00aa00\" opacity=\"0.783\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oa1a1a1a1\" hash=\"6b0b7f6d2fa225d8\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjozLCJvcGFjaXR5IjowLjc4Nzk2OTExMjM5NjI0MDIsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjowLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAuMCwyMC4wXX0seyJwIjpbNjAuMCwyMC4wXX0seyJwIjpbNjAuMCw1MC4wXX0seyJwIjpbMjAuMCw1MC4wXX1dLCJjbG9zZWQiOnRydWV9XX19fX0=</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"ob2b2b2b2\" hash=\"6f54ddf527a47ad7\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo0LCJvcGFjaXR5IjowLjUyNDI5MDU2MTY3NjAyNTQsImFwcGVhcmFuY2UiOnsiaXRlbXMiOlt7ImtpbmQiOiJmaWxsIiwicGFpbnQiOnsidHlwZSI6InNvbGlkIiwiY29sb3IiOnsibW9kZWwiOiJyZ2IiLCJyIjoxLjAsImciOjAuMCwiYiI6MC4wfX19XX0sImtpbmQiOnsidHlwZSI6InBhdGgiLCJwYXRoIjp7InN1YnBhdGhzIjpbeyJhbmNob3JzIjpbeyJwIjpbMjAwLjAsNDAuMF19LHsicCI6WzI2MC4wLDQwLjBdfSx7InAiOlsyNjAuMCw2MC4wXX0seyJwIjpbMjAwLjAsNjAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"oc3c3c3c3\" hash=\"6a0fc3a043cc3e65\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo1LCJvcGFjaXR5IjowLjc4MjY1MDM1MTUyNDM1MywiYXBwZWFyYW5jZSI6eyJpdGVtcyI6W3sia2luZCI6ImZpbGwiLCJwYWludCI6eyJ0eXBlIjoic29saWQiLCJjb2xvciI6eyJtb2RlbCI6InJnYiIsInIiOjAuMCwiZyI6MC42NjY2NjY2ODY1MzQ4ODE2LCJiIjowLjB9fX1dfSwia2luZCI6eyJ0eXBlIjoicGF0aCIsInBhdGgiOnsic3VicGF0aHMiOlt7ImFuY2hvcnMiOlt7InAiOlsxMjAuMCwxMDAuMF19LHsicCI6WzE1MC4wLDEwMC4wXX0seyJwIjpbMTUwLjAsMTYwLjBdfSx7InAiOlsxMjAuMCwxNjAuMF19XSwiY2xvc2VkIjp0cnVlfV19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "arrange-opacita-seme-8.svg"
+    },
+    {
+      "id": "addon.arrange.swap",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.arrange.swap",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.arrange.replace",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.arrange.replace",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.arrange.size",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "width": 80,
+        "height": 40
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.arrange.size",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "width": 80,
+        "height": 40
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.arrange.groupOverlapping",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.arrange.groupOverlapping",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.arrange.sort",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "by": "area",
+        "apply": "stacking"
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.arrange.sort",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "by": "area",
+        "apply": "stacking"
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.arrange.sort",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2",
+        "oc3c3c3c3",
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "by": "area",
+        "apply": "stacking"
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.arrange.randomizeOpacity",
+      "disegno": "disponi.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "oi8b8b8b8"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
     }
   ]
 }

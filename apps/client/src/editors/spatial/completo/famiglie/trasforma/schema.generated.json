@@ -4,6 +4,62 @@
   "finestre": [
     {
       "fonte": "motore",
+      "id": "addon.arrange.randomizeOpacity",
+      "campi": [
+        {
+          "nome": "min",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 30.0
+        },
+        {
+          "nome": "max",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.0,
+          "massimo": 100.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "seed",
+          "tipo": "numero",
+          "facoltativo": false,
+          "predefinito": 0.0
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.size",
+      "campi": [
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.001,
+          "massimo": 1000000.0,
+          "predefinito": 100.0
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false,
+          "minimo": 0.001,
+          "massimo": 1000000.0,
+          "predefinito": 50.0
+        },
+        {
+          "nome": "proportional",
+          "tipo": "sino",
+          "facoltativo": false,
+          "predefinito": false
+        }
+      ]
+    },
+    {
+      "fonte": "motore",
       "id": "object.move",
       "campi": [
         {

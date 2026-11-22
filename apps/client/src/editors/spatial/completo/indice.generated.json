@@ -3,6 +3,118 @@
   "voci": [
     {
       "fonte": "motore",
+      "id": "addon.arrange.grid",
+      "chiamata": {
+        "comando": "disegno.addon.arrange.grid"
+      },
+      "etichetta": {
+        "it": "Disponi in griglia",
+        "en": "Arrange in Grid"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.groupOverlapping",
+      "chiamata": {
+        "comando": "disegno.addon.arrange.groupOverlapping"
+      },
+      "etichetta": {
+        "it": "Raggruppa oggetti sovrapposti",
+        "en": "Group Overlapping Objects"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.randomizeOpacity",
+      "chiamata": {
+        "comando": "disegno.addon.arrange.randomizeOpacity"
+      },
+      "etichetta": {
+        "it": "Opacità casuale",
+        "en": "Randomize Opacity"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.replace",
+      "chiamata": {
+        "comando": "disegno.addon.arrange.replace"
+      },
+      "etichetta": {
+        "it": "Sostituisci con l’oggetto superiore",
+        "en": "Replace with Top Object"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.size",
+      "chiamata": {
+        "comando": "disegno.addon.arrange.size"
+      },
+      "etichetta": {
+        "it": "Imposta dimensione di ciascuno",
+        "en": "Set Size of Each"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.sort",
+      "chiamata": {
+        "comando": "disegno.addon.arrange.sort"
+      },
+      "etichetta": {
+        "it": "Ordina oggetti",
+        "en": "Sort Objects"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.arrange.swap",
+      "chiamata": {
+        "comando": "disegno.addon.arrange.swap"
+      },
+      "etichetta": {
+        "it": "Scambia oggetti",
+        "en": "Swap Objects"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.close",
       "chiamata": {
         "comando": "disegno.addon.pathtools.close"
