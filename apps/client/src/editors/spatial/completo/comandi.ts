@@ -197,25 +197,47 @@ export function tastoMostrato(regola: RegolaTasti | null, id: string): string | 
   return tasto === null ? undefined : displayBinding(tasto);
 }
 
-/// Le file dei sottomenu del menu ≡ che le hanno: le righe, per id, nell'ordine
+/// Le file di Oggetto › Tracciato (K6 T12): i comandi sul tracciato intero,
+/// il tracciato composto, gli strumenti di precisione, la penna intelligente.
+/// Gli id sono quelli della mappa del motore (`crates/fub-disegno/mappa.tsv`).
+const FILE_TRACCIATO: readonly (readonly string[])[] = [
+  ["path.join", "path.reverse", "object.path.outlineStroke", "object.path.addAnchorPoints", "path.removeAnchors", "object.path.divideObjectsBelow"],
+  ["object.compoundPath.make", "object.compoundPath.release"],
+  [
+    "addon.pathtools.smooth",
+    "addon.pathtools.corner",
+    "addon.pathtools.equalize",
+    "addon.pathtools.removeKeepShape",
+    "addon.pathtools.close",
+    "addon.pathtools.crossings",
+    "addon.pathtools.expandDashes",
+  ],
+  ["addon.pen.closeJoin"],
+];
+
+/// Le file dei sottomenu del menu ≡ che le hanno (`<gruppo>`, o
+/// `<gruppo>/<sotto>` per il terzo livello): le righe, per id, nell'ordine
 /// della fila, e una riga di separazione fra una fila e l'altra. Un sottomenu
 /// che non è qui tiene l'ordine dell'indice.
 const FILE_DEI_MENU: Readonly<Record<string, readonly (readonly string[])[]>> = {
   visualizza: FILE_VISUALIZZA,
+  "oggetto/tracciato": FILE_TRACCIATO,
 };
 
 /// Le righe di un sottomenu nelle sue file (`FILE_DEI_MENU`): l'ordine delle
-/// file, poi quello dell'indice; una riga che nessuna fila nomina va in fondo,
-/// in una fila sua. La prima riga di ogni fila dopo la prima porta la riga di
-/// separazione.
+/// file e, dentro una fila, il suo; una riga che nessuna fila nomina va in
+/// fondo, in una fila sua, nell'ordine dell'indice. La prima riga di ogni fila
+/// dopo la prima porta la riga di separazione.
 function inFile<T>(gruppo: string, righe: Array<{ id: string; riga: T }>, separa: (riga: T) => T): T[] {
   const file = FILE_DEI_MENU[gruppo];
   if (file === undefined) return righe.map(({ riga }) => riga);
-  const filaDi = (id: string): number => {
-    const i = file.findIndex((fila) => fila.includes(id));
-    return i < 0 ? file.length : i;
+  const posto = (id: string): { fila: number; dentro: number } => {
+    const fila = file.findIndex((each) => each.includes(id));
+    return fila < 0 ? { fila: file.length, dentro: 0 } : { fila, dentro: file[fila]!.indexOf(id) };
   };
-  const ordinate = righe.map((r) => ({ ...r, fila: filaDi(r.id) })).sort((a, b) => a.fila - b.fila);
+  const ordinate = righe
+    .map((r) => ({ ...r, ...posto(r.id) }))
+    .sort((a, b) => a.fila - b.fila || a.dentro - b.dentro);
   return ordinate.map(({ riga, fila }, i) => (i > 0 && ordinate[i - 1]!.fila !== fila ? separa(riga) : riga));
 }
 
@@ -227,7 +249,7 @@ function inFile<T>(gruppo: string, righe: Array<{ id: string; riga: T }>, separa
 export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiVoce, regola: RegolaTasti | null = null): MenuItem[] {
   // Per ogni sottomenu le sue righe: una voce, o il nome di un sotto.
   const gruppi = new Map<string, Array<{ id: string; riga: MenuItem | string }>>();
-  const sotti = new Map<string, MenuItem[]>();
+  const sotti = new Map<string, Array<{ id: string; riga: MenuItem }>>();
   for (const voce of indice.voci) {
     const [scheda, gruppo, sotto, oltre] = voce.posto.split("/");
     if (scheda !== "menu" || gruppo === undefined || !(gruppo in NOMI_PEZZO) || oltre !== undefined) continue;
@@ -256,9 +278,9 @@ export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiV
     const chiave = `${gruppo}/${sotto}`;
     const dentro = sotti.get(chiave);
     if (dentro === undefined) {
-      sotti.set(chiave, [riga]);
+      sotti.set(chiave, [{ id: voce.id, riga }]);
       elenco.push({ id: voce.id, riga: chiave });
-    } else dentro.push(riga);
+    } else dentro.push({ id: voce.id, riga });
   }
   if (gruppi.size === 0) return [{ label: t("draw.completo.indice.empty"), disabled: true }];
   return [...gruppi].map(([gruppo, righe]) => ({
@@ -269,7 +291,8 @@ export function menuComando(indice: Indice, stato: StatoComandi, esegui: EseguiV
       righe.map(({ id, riga }) => {
         if (typeof riga !== "string") return { id, riga };
         const sotto = riga.slice(gruppo.length + 1);
-        const voce: MenuItem = { label: t(NOMI_PEZZO[sotto]), submenu: true, items: sotti.get(riga)! };
+        const items = inFile(riga, sotti.get(riga)!, (dentro) => ({ ...dentro, separator: true }));
+        const voce: MenuItem = { label: t(NOMI_PEZZO[sotto]), submenu: true, items };
         return { id, riga: voce };
       }),
       (riga) => ({ ...riga, separator: true }),

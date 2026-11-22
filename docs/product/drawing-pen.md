@@ -218,20 +218,28 @@ programma che cambia il tracciato perde solo la ricetta.
 
 ### Oggetto › Tracciato
 
-Con dei tracciati scelti, il menu **Oggetto › Tracciato** (e la palette,
-`Ctrl+/`) fa, in un passo di Annulla e senza finestre:
+Con dei tracciati scelti, il sottomenu **≡ › Oggetto › Tracciato** (e la
+palette, `Ctrl+/`) fa, in un passo di Annulla e senza finestre. Le voci
+stanno in quattro file, separate da una riga:
 
-- **Inverti direzione tracciato**; **Contorna traccia**, che fa del tratto
-  una forma piena; **Aggiungi punti di ancoraggio**, uno a metà di ogni
-  segmento; **Dividi gli oggetti sotto**, che taglia ciò che sta sotto col
-  tracciato scelto, che se ne va;
-- **Tracciato composto › Crea** e **Rilascia**: due tracciati diventano uno
-  solo, col buco dove si sovrappongono, e tornano separati;
-- dagli strumenti di precisione: **Morbido**, **Angolo**, **Pareggia le
-  maniglie**, **Rimuovi mantenendo la forma** (sui punti scelti),
-  **Chiudi**, **Incroci** (un punto dove due tracciati si incrociano),
-  **Espandi i trattini** (un tracciato per trattino), e **Chiudi o unisci**
-  della Penna intelligente.
+- il tracciato intero: **Unisci** e **Rimuovi punti di ancoraggio** (i
+  [punti scelti](#i-punti-scelti)), **Inverti direzione tracciato**,
+  **Contorna tratto**, che fa del tratto una forma piena, **Aggiungi punti
+  di ancoraggio**, uno a metà di ogni segmento, **Dividi oggetti
+  sottostanti**, che taglia ciò che sta sotto col tracciato scelto, che se
+  ne va;
+- il tracciato composto, **Crea** e **Rilascia**: due tracciati diventano
+  uno solo, col buco dove si sovrappongono, e tornano separati;
+- gli strumenti di precisione: **Rendi arrotondato**, **Rendi angolo**,
+  **Uguaglia maniglie**, **Rimuovi punti, mantieni forma** (sui punti
+  scelti), **Chiudi tracciato**, **Aggiungi punti agli incroci** (dove due
+  tracciati si incrociano), **Espandi trattini in tracciati** (un tracciato
+  per trattino);
+- **Chiudi o unisci** della Penna intelligente.
+
+Le file sono del client (`FILE_TRACCIATO` in
+`apps/client/src/editors/spatial/completo/comandi.ts`); il posto
+`menu/oggetto/tracciato` è nella mappa del motore.
 
 Il buco di un tracciato composto viene dal verso dei suoi pezzi, come vuole
 la regola `nonzero` di SVG: Inverti e Rilascia lo rispettano, e il file torna

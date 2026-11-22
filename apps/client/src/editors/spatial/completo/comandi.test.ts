@@ -191,6 +191,22 @@ describe("le voci del client con la spunta (K6 T11, giro E)", () => {
     ]);
   });
 
+  it("≡ › Oggetto › Tracciato ha le sue file: il tracciato intero, il composto, la precisione, la penna intelligente", () => {
+    // L'indice le dà in ordine di id.
+    const ids = ["addon.pathtools.close", "addon.pathtools.smooth", "addon.pen.closeJoin", "object.compoundPath.make", "path.join", "path.reverse"];
+    const voci = ids.map((id) => voce(id, "menu/oggetto/tracciato"));
+    const righe = sottovoci(sottovoci(menuComando(indiceDi({ voci }), { per: null, assente: null }, vi.fn())[0])[0]);
+    const nome = (id: string) => nomeVoce(voci.find((v) => v.id === id)!);
+    expect(righe.map((r) => [r.label, r.separator === true])).toEqual([
+      [nome("path.join"), false],
+      [nome("path.reverse"), false],
+      [nome("object.compoundPath.make"), true],
+      [nome("addon.pathtools.smooth"), true],
+      [nome("addon.pathtools.close"), false],
+      [nome("addon.pen.closeJoin"), true],
+    ]);
+  });
+
   it("un sottomenu senza file tiene l'ordine dell'indice, senza separazioni", () => {
     const voci = ["object.b", "object.a"].map((id) => voce(id, "menu/oggetto"));
     const stato: StatoComandi = { per: null, assente: null };

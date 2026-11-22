@@ -397,10 +397,10 @@ motore	path.moveAnchors	Move Anchors		tracciati	F1	T12	da fare	ispettore/design	
 motore	path.setHandle	Move Direction Handle		tracciati	F1	T12	da fare	ispettore/design	famiglia		Sposta maniglia di direzione
 motore	path.moveAnchor	Move Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Sposta punto di ancoraggio
 motore	path.setAnchors	Set Anchors		tracciati	F1	T12	da fare	ispettore/design	famiglia		Imposta punti di ancoraggio
-motore	path.reverse	Reverse Path Direction	Object › Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Inverti direzione tracciato
-motore	path.join	Join	Object › Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Unisci
-motore	path.average	Average…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Media…
-motore	path.averageJoin	Average & Join…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Media e unisci…
+motore	path.reverse	Reverse Path Direction	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Inverti direzione tracciato
+motore	path.join	Join	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Unisci
+motore	path.average	Average…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Media…
+motore	path.averageJoin	Average & Join…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Media e unisci…
 motore	path.convertAnchors	Convert Anchor Points		tracciati	F1	T12	fatto	ispettore/design	famiglia		Converti punti di ancoraggio
 motore	path.deleteAnchors	Delete Anchor Points		tracciati	F1	T12	da fare	ispettore/design	famiglia		Elimina punti di ancoraggio
 motore	path.reshape	Reshape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella
@@ -418,14 +418,14 @@ motore	object.pathfinder.outline	Outline	Window › Pathfinder	tracciati	F1	T12	
 motore	object.pathfinder.minusBack	Minus Back	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia		Meno dietro
 motore	object.pathfinder.trap	Trap…	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia	finestra	Trapping…
 motore	object.pathfinder.options	Pathfinder Options…	Window › Pathfinder	tracciati	F1	T12	da fare	ispettore/design	famiglia	finestra	Opzioni elaborazione tracciati…
-motore	object.path.outlineStroke	Outline Stroke	Object › Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Contorna traccia
-motore	object.path.offsetPath	Offset Path…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Sposta tracciato…
-motore	object.path.simplify	Simplify…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Semplifica…
-motore	object.path.smooth	Smooth…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Smussa…
-motore	object.path.addAnchorPoints	Add Anchor Points	Object › Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Aggiungi punti di ancoraggio
-motore	object.path.divideObjectsBelow	Divide Objects Below	Object › Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Dividi oggetti sottostanti
-motore	object.path.splitIntoGrid	Split Into Grid…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Dividi in griglia…
-motore	object.path.cleanUp	Clean Up…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Pulisci…
+motore	object.path.outlineStroke	Outline Stroke	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Contorna traccia
+motore	object.path.offsetPath	Offset Path…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Sposta tracciato…
+motore	object.path.simplify	Simplify…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Semplifica…
+motore	object.path.smooth	Smooth…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Smussa…
+motore	object.path.addAnchorPoints	Add Anchor Points	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Aggiungi punti di ancoraggio
+motore	object.path.divideObjectsBelow	Divide Objects Below	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Dividi oggetti sottostanti
+motore	object.path.splitIntoGrid	Split Into Grid…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Dividi in griglia…
+motore	object.path.cleanUp	Clean Up…	Object › Path	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Pulisci…
 motore	object.pattern.make	Make	Object › Pattern	trame	F2	T21	da fare	menu/oggetto	famiglia		Crea
 motore	object.pattern.edit	Edit Pattern	Object › Pattern	trame	F2	T21	da fare	menu/oggetto	famiglia		Modifica motivo
 motore	object.pattern.done	Done		trame	F2	T21	da fare	ispettore/design	famiglia		Fine
@@ -720,24 +720,24 @@ motore	addon.pathtools.erase	Anchor Eraser Brush		tracciati	F1	T12	da fare	ispet
 motore	addon.pathtools.extend	Extend Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Estendi tracciato
 motore	addon.pathtools.inspect	Measure & Inspect		tracciati	F1	T12	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Misura e ispeziona
 motore	addon.pathtools.setAnchor	Set Anchor		tracciati	F1	T12	da fare	ispettore/design	famiglia		Imposta punto di ancoraggio
-motore	addon.pathtools.smooth	Make Smooth	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Rendi arrotondato
-motore	addon.pathtools.corner	Make Corner	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Rendi angolo
-motore	addon.pathtools.equalize	Equalize Handles	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Uguaglia maniglie
-motore	addon.pathtools.removeKeepShape	Remove Points, Keep Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Rimuovi punti, mantieni forma
-motore	addon.pathtools.addPoints	Add Points to Segments…	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Aggiungi punti ai segmenti…
-motore	addon.pathtools.close	Close Path	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Chiudi tracciato
-motore	addon.pathtools.crossings	Add Points at Crossings	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Aggiungi punti agli incroci
+motore	addon.pathtools.smooth	Make Smooth	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Rendi arrotondato
+motore	addon.pathtools.corner	Make Corner	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Rendi angolo
+motore	addon.pathtools.equalize	Equalize Handles	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Uguaglia maniglie
+motore	addon.pathtools.removeKeepShape	Remove Points, Keep Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Rimuovi punti, mantieni forma
+motore	addon.pathtools.addPoints	Add Points to Segments…	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3: le finestre con l'anteprima)	Aggiungi punti ai segmenti…
+motore	addon.pathtools.close	Close Path	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Chiudi tracciato
+motore	addon.pathtools.crossings	Add Points at Crossings	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Aggiungi punti agli incroci
 motore	addon.pathtools.slideAnchor	Slide Anchor Along Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Fai scorrere il punto di ancoraggio lungo il tracciato
-motore	addon.pathtools.divideDashes	Divide into Dashes	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto	famiglia	finestra, aspetta T12 (giro 3): la lunghezza dei trattini è un parametro, e i pezzi tratteggiati si scriverebbero con la ricetta	Dividi in trattini
-motore	addon.pathtools.expandDashes	Expand Dashes into Paths	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Espandi trattini in tracciati
+motore	addon.pathtools.divideDashes	Divide into Dashes	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	finestra, aspetta T12 (giro 3): la lunghezza dei trattini è un parametro, e i pezzi tratteggiati si scriverebbero con la ricetta	Dividi in trattini
+motore	addon.pathtools.expandDashes	Expand Dashes into Paths	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Espandi trattini in tracciati
 motore	addon.pen.append	Smart Pen		tracciati	F1	T12	da fare	ispettore/design	famiglia		Penna intelligente
 motore	addon.pen.close	Close Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Chiudi tracciato
 motore	addon.pen.segment	Straight or Curved Segment		tracciati	F1	T12	da fare	ispettore/design	famiglia		Segmento diritto o curvo
 motore	addon.pen.removePoint	Remove Points, Keep Shape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimuovi punti, mantieni forma
 motore	addon.pen.togglePoint	Convert Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Converti punto di ancoraggio
 motore	addon.pen.reshape	Reshape Segment		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella segmento
-motore	addon.pen.nextSegment	Next Segment	Object › Plug-ins › Smart Pen	tracciati	F1	T12	da fare	menu/oggetto	famiglia	preferenza della penna intelligente (il prossimo segmento curvo o dritto), aspetta T12 (giro 3)	Segmento successivo
-motore	addon.pen.closeJoin	Close or Join	Object › Plug-ins › Smart Pen	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Chiudi o unisci
+motore	addon.pen.nextSegment	Next Segment	Object › Plug-ins › Smart Pen	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	preferenza della penna intelligente (il prossimo segmento curvo o dritto), aspetta T12 (giro 3)	Segmento successivo
+motore	addon.pen.closeJoin	Close or Join	Object › Plug-ins › Smart Pen	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Chiudi o unisci
 motore	addon.cleanup.breakText	Break Text	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Dividi testo
 motore	addon.cleanup.combineText	Combine Point Text	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Combina testo con punto
 motore	addon.cleanup.joinText	Join Point Text	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	da fare	menu/oggetto	famiglia		Unisci testo con punto
@@ -750,7 +750,7 @@ motore	addon.pathtools.cornerSet	Set Corners		tracciati	F1	T12	da fare	ispettore
 motore	addon.pathtools.cornerRemove	Remove Corners		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimuovi angoli
 motore	addon.pathtools.shape.create	Parametric Shape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Forma parametrica
 motore	addon.pathtools.shape.set	Edit Parametric Shape		tracciati	F1	T12	da fare	ispettore/design	famiglia		Modifica forma parametrica
-motore	addon.pathtools.shape.convert	Convert to Parametric Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto	famiglia	la forma viva non si scrive come tracciato semplice, aspetta T13 (le forme)	Converti in forma parametrica
+motore	addon.pathtools.shape.convert	Convert to Parametric Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto/tracciato	famiglia	la forma viva non si scrive come tracciato semplice, aspetta T13 (le forme)	Converti in forma parametrica
 motore	addon.pathtools.mergeEdge	Merge Shared Edge		tracciati	F1	T12	da fare	ispettore/design	famiglia		Fondi bordo condiviso
 motore	addon.pathtools.movePointsTogether	Keep Shared Points Together		tracciati	F1	T12	da fare	ispettore/design	famiglia		Mantieni uniti i punti condivisi
 motore	clipboard.exportPng	Clipboard as PNG		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Appunti come PNG
@@ -766,7 +766,7 @@ motore	path.freehand	Pencil		tracciati	F1	T12	da fare	ispettore/design	famiglia	
 motore	path.curvature	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
 motore	path.curvatureEdit	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
 motore	path.removeAnchor	Delete Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Elimina punto di ancoraggio
-motore	path.removeAnchors	Remove Anchor Points	Object › Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Rimuovi punti di ancoraggio
+motore	path.removeAnchors	Remove Anchor Points	Object › Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Rimuovi punti di ancoraggio
 motore	path.convertAnchor	Convert Anchor Point		tracciati	F1	T12	da fare	ispettore/design	famiglia		Converti punto di ancoraggio
 motore	path.reshapeSegment	Reshape Segment		tracciati	F1	T12	da fare	ispettore/design	famiglia		Rimodella segmento
 motore	path.split	Split Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Dividi tracciato
@@ -866,8 +866,8 @@ motore	object.lock	Selection	Object › Lock	nucleo	F1	T11	fatto	menu/oggetto/bl
 motore	object.unlockAll	Unlock All	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Sblocca tutto
 motore	object.hide	Selection	Object › Hide	nucleo	F1	T11	fatto	menu/oggetto/nascondi	nucleo		Selezione
 motore	object.showAll	Show All	Object	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Mostra tutto
-motore	object.compoundPath.make	Make	Object › Compound Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Crea
-motore	object.compoundPath.release	Release	Object › Compound Path	tracciati	F1	T12	fatto	menu/oggetto	famiglia		Rilascia
+motore	object.compoundPath.make	Make	Object › Compound Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Crea
+motore	object.compoundPath.release	Release	Object › Compound Path	tracciati	F1	T12	fatto	menu/oggetto/tracciato	famiglia		Rilascia
 motore	object.clippingMask.make	Make	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia	aspetta T27	Crea
 motore	object.clippingMask.release	Release	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia	aspetta T27	Rilascia
 motore	object.clippingMask.editContents	Edit Contents	Object › Clipping Mask	tracciati	F1	T12	da fare	menu/oggetto	famiglia	aspetta T27	Modifica contenuto

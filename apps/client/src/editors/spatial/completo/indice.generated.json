@@ -11,7 +11,7 @@
         "it": "Chiudi tracciato",
         "en": "Close Path"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -27,7 +27,7 @@
         "it": "Rendi angolo",
         "en": "Make Corner"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -43,7 +43,7 @@
         "it": "Aggiungi punti agli incroci",
         "en": "Add Points at Crossings"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -59,7 +59,7 @@
         "it": "Uguaglia maniglie",
         "en": "Equalize Handles"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -75,7 +75,7 @@
         "it": "Espandi trattini in tracciati",
         "en": "Expand Dashes into Paths"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -91,7 +91,7 @@
         "it": "Rimuovi punti, mantieni forma",
         "en": "Remove Points, Keep Shape"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -107,7 +107,7 @@
         "it": "Rendi arrotondato",
         "en": "Make Smooth"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -123,7 +123,7 @@
         "it": "Chiudi o unisci",
         "en": "Close or Join"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -587,7 +587,7 @@
         "it": "Crea",
         "en": "Make"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": "Cmd+8",
       "effetto": "cambia",
@@ -603,7 +603,7 @@
         "it": "Rilascia",
         "en": "Release"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": "Cmd+Alt+Shift+8",
       "effetto": "cambia",
@@ -699,7 +699,7 @@
         "it": "Aggiungi punti di ancoraggio",
         "en": "Add Anchor Points"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -715,7 +715,7 @@
         "it": "Dividi oggetti sottostanti",
         "en": "Divide Objects Below"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -731,7 +731,7 @@
         "it": "Contorna tratto",
         "en": "Outline Stroke"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -843,7 +843,7 @@
         "it": "Unisci",
         "en": "Join"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": "Cmd+J",
       "effetto": "cambia",
@@ -859,7 +859,7 @@
         "it": "Rimuovi punti di ancoraggio",
         "en": "Remove Anchor Points"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
@@ -875,7 +875,7 @@
         "it": "Inverti direzione tracciato",
         "en": "Reverse Path Direction"
       },
-      "posto": "menu/oggetto",
+      "posto": "menu/oggetto/tracciato",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",
