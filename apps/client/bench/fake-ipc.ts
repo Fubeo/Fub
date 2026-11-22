@@ -973,6 +973,42 @@ const INDICE_PARAM = params.get("indice");
 if (DRAWING_ENGINE_PARAM !== null && !["acceso", "spento", "errore"].includes(DRAWING_ENGINE_PARAM)) {
   throw new RangeError("drawing must be acceso, spento or errore");
 }
+/// `?motore=prova|nuovo|rotto` (K6 T11): le preferenze del motore in
+/// Impostazioni › Disegni, con il motore acceso (`?drawing=acceso`). `prova`:
+/// `draw.motore` vuoto, campi accesi; `nuovo`: scritto da un Fub più nuovo;
+/// `rotto`: non si legge. Nelle ultime due il riquadro è in sola lettura.
+const MOTORE_PARAM = params.get("motore");
+if (MOTORE_PARAM !== null && !["prova", "nuovo", "rotto"].includes(MOTORE_PARAM)) {
+  throw new RangeError("motore must be prova, nuovo or rotto");
+}
+
+/// Le righe di `prefs.list` del banco: un pezzo dell'elenco vero del motore
+/// (`vendor/vectorcraft/crates/engine/src/cmd/prefscmds.rs`), con ogni tipo di
+/// campo, nelle parole del motore che la sezione traduce.
+const BENCH_PREFS: readonly Record<string, unknown>[] = [
+  { key: "keyboardIncrement", category: "General", section: "", label: "Keyboard Increment", value: 1, kind: "number", min: 0.001, max: 1296, unit: "pt", measure: "General" },
+  { key: "constrainAngle", category: "General", section: "", label: "Constrain Angle", value: 0, kind: "number", min: -360, max: 360, unit: "°" },
+  { key: "cornerRadius", category: "General", section: "", label: "Corner Radius", value: 12, kind: "number", min: 0, max: 1296, unit: "pt", measure: "General" },
+  { key: "usePreciseCursors", category: "General", section: "Options", label: "Use Precise Cursors", value: false, kind: "bool" },
+  { key: "showToolTips", category: "General", section: "Options", label: "Show Tool Tips", value: true, kind: "bool" },
+  { key: "scaleStrokes", category: "General", section: "Options", label: "Scale Strokes & Effects", value: false, kind: "bool" },
+  { key: "zoomWithMouseWheel", category: "General", section: "Options", label: "Zoom with Mouse Wheel", value: false, kind: "bool" },
+  { key: "selectionTolerance", category: "Selection & Anchor Display", section: "Selection", label: "Tolerance", value: 3, kind: "number", min: 1, max: 8, unit: "px" },
+  { key: "anchorSize", category: "Selection & Anchor Display", section: "Anchor Points, Handle, and Bounding Box Display", label: "Size", value: 3, kind: "integer", min: 1, max: 7 },
+  { key: "handleStyle", category: "Selection & Anchor Display", section: "Anchor Points, Handle, and Bounding Box Display", label: "Handles", value: "solid", kind: "choice", options: ["solid", "hollow", "large"] },
+  { key: "guideColor", category: "Guides & Grid", section: "Guides", label: "Color", value: "#4affff", kind: "color" },
+  { key: "guideStyle", category: "Guides & Grid", section: "Guides", label: "Style", value: "lines", kind: "choice", options: ["lines", "dots"] },
+  { key: "gridColor", category: "Guides & Grid", section: "Grid", label: "Color", value: "#d0d0d0", kind: "color" },
+  { key: "gridlineEvery", category: "Guides & Grid", section: "Grid", label: "Gridline every", value: 72, kind: "number", min: 1, max: 16383, unit: "pt", measure: "General" },
+  { key: "gridSubdivisions", category: "Guides & Grid", section: "Grid", label: "Subdivisions", value: 8, kind: "integer", min: 1, max: 1000 },
+  { key: "hyphenationExceptions", category: "Hyphenation", section: "", label: "Exceptions (comma separated)", value: "", kind: "text" },
+];
+
+/// L'esito di un comando delle preferenze del motore del banco.
+function benchPrefsOutcome(request: DrawingCommandRequest): DrawingOutcome {
+  const outcome: DrawingOutcome = { revision: request.revision, preview: null, ops: null, selection: request.selection, losses: [], refused: null, frame: null };
+  return { ...outcome, reading: request.id === "disegno.prefs.list" ? BENCH_PREFS : null };
+}
 
 /// Un vettore dei gesti, per quel che il motore del banco ne legge.
 interface BenchGestureVector {
@@ -1059,7 +1095,11 @@ function benchDrawingEngine(): DrawingFake | undefined {
     // comandi del Disegno completo hanno quelle di `disegno-famiglie/`, e
     // `unserved` un comando che non ne ha una.
     comando: (request) =>
-      request.id === BENCH_WINDOW_COMMAND ? benchWindowOutcome(request) : rispostaDiFamiglia(request),
+      request.id === BENCH_WINDOW_COMMAND
+        ? benchWindowOutcome(request)
+        : MOTORE_PARAM !== null && request.id.startsWith("disegno.prefs.")
+          ? benchPrefsOutcome(request)
+          : rispostaDiFamiglia(request),
   };
 }
 
@@ -1847,6 +1887,27 @@ const DRAW_KEYS: readonly SettingEntry[] =
               ? JSON.stringify({ v: 1, insieme: null, tasti: { "draw.path.reverse": "Mod-j", "draw.ungroup": null } })
               : "",
           source: params.get("tasti") === "conflitto" ? "machine" : "default",
+        },
+      ];
+
+/// Le preferenze del motore (K6 T11, `draw.motore`): solo con `?motore=`, che
+/// le dà al riquadro «Motore del disegno» di Impostazioni › Disegni.
+const DRAW_ENGINE_PREFS: readonly SettingEntry[] =
+  MOTORE_PARAM === null
+    ? []
+    : [
+        {
+          spec: {
+            key: "draw.motore",
+            label: "Preferenze del Motore del disegno",
+            description: "",
+            group: "Disegni",
+            scope: "machine",
+            kind: { kind: "text", default: "" },
+            program_writable: false,
+          },
+          value: MOTORE_PARAM === "nuovo" ? JSON.stringify({ v: 2, prefs: { gridStyle: "dots" } }) : MOTORE_PARAM === "rotto" ? "{non si legge" : "",
+          source: MOTORE_PARAM === "prova" ? "default" : "machine",
         },
       ];
 
@@ -2853,7 +2914,7 @@ const options: Options = {
     // Con `export.run` il riquadro di una nota ha «Esporta ▸»: HTML e PDF.
     ...(EXPORT_MENU ? [command("export.run", "Export documents", "Run a registered export target", null)] : []),
   ],
-  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : [...DRAW_WORKSPACE, ...DRAW_SAVED_WORKSPACES]), ...DRAW_KEYS, ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES, ...MAP_TILE_SETTING],
+  settings: [...SETTINGS, ...DAY_FOLDER, ...(DRAWING === null && PDF_SCENE !== "annotato" && !LIVE_DRAWS ? [] : [...DRAW_WORKSPACE, ...DRAW_SAVED_WORKSPACES]), ...DRAW_KEYS, ...DRAW_ENGINE_PREFS, ...CRAFT_SETTINGS, ...WORKBOOK_CHROME, ...PROPERTIES_DISPLAY, ...PROPERTY_TYPES_SETTING, ...TOOLBAR_SETTING_ROW, ...MATH_SETTINGS, ...GRID_PREFERENCES, ...MAP_TILE_SETTING],
   // Le tessere della mappa (`?base=mappa`): il finto le chiede solo dopo il
   // controllo della riga `map.tile-hosts`, come l'host.
   ...(TILES_PARAM === null ? {} : { mapTile: benchTile }),

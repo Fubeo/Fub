@@ -1563,6 +1563,23 @@ export const SCENE = touchLast(onPage("shell", [
     viewport: { width, height: 800 },
     prepare,
   })),
+  // **Le preferenze del motore in Impostazioni › Disegni** (K6 T11): il
+  // riquadro «Motore del disegno» aperto con la categoria «Guide e griglia»
+  // (colori, scelte, numeri con l'unità), largo e nella finestra minima; poi
+  // un `draw.motore` scritto da un Fub più nuovo, in sola lettura col perché
+  // (`?motore=`, vedi `fake-ipc.ts`).
+  ...[
+    ["impostazioni-motore", 1280, "prova", "Impostazioni › Disegni › Motore del disegno: le categorie del motore, «Guide e griglia» aperta"],
+    ["impostazioni-motore-800", 800, "prova", "Impostazioni › Disegni › Motore del disegno nella finestra minima del desktop, 800 px"],
+    ["impostazioni-motore-nuovo", 1280, "nuovo", "Impostazioni › Disegni › Motore del disegno: preferenze di un Fub più nuovo, in sola lettura col perché"],
+    ["impostazioni-motore-nuovo-800", 800, "nuovo", "Impostazioni › Disegni › Motore del disegno in sola lettura, 800 px"],
+  ].map(([id, width, motore, title]) => ({
+    id,
+    title,
+    query: `drawing=acceso&motore=${motore}`,
+    viewport: { width, height: 800 },
+    prepare: openEnginePrefs,
+  })),
   // **La lavagna** (T61): vuota, con le schede e con una scheda attiva, le
   // lavagne di `?lavagna=1` (vedi `fake-ipc.ts`). Le schede si raggiungono
   // col Tab, come le raggiunge chi usa la tastiera, e ognuna ha il suo nome.
@@ -5207,6 +5224,21 @@ async function openDrawingKeys(page) {
   await page.click("#settings-body details.drawing-keys > summary");
   await page.waitForSelector('#settings-body .setting-row[data-setting-key="draw.keys:draw.path.reverse"]');
   await page.$eval("#settings-body details.drawing-keys", (details) => details.closest("section")?.scrollIntoView({ block: "start" }));
+  await page.evaluate(() => document.fonts.ready);
+}
+
+/// Impostazioni con il riquadro «Motore del disegno» aperto, la categoria
+/// «Guide e griglia» aperta e il riquadro portato in cima.
+async function openEnginePrefs(page) {
+  await page.click("#open-settings");
+  const riquadro = '#settings-body details[data-details-key="drawing-engine"]';
+  await page.waitForSelector(`${riquadro} > summary`);
+  await page.click(`${riquadro} > summary`);
+  const griglia = `${riquadro} details[data-details-key="drawing-engine:Guides & Grid"]`;
+  await page.waitForSelector(`${griglia} > summary`);
+  await page.click(`${griglia} > summary`);
+  await page.waitForSelector(`${griglia}[open] .kit-form`);
+  await page.$eval(riquadro, (details) => details.scrollIntoView({ block: "start" }));
   await page.evaluate(() => document.fonts.ready);
 }
 
