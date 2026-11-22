@@ -1939,6 +1939,22 @@
     },
     {
       "fonte": "motore",
+      "id": "stroke.set",
+      "chiamata": {
+        "comando": "disegno.stroke.set"
+      },
+      "etichetta": {
+        "it": "Opzioni tratto",
+        "en": "Stroke Options"
+      },
+      "posto": "ispettore/design/contorno",
+      "famiglia": "aspetto",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "swatch.addUsedColors",
       "chiamata": {
         "comando": "disegno.swatch.addUsedColors"
