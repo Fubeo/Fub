@@ -225,5 +225,11 @@ describe("vociRicerca", () => {
     riga?.run();
     expect(esegui).toHaveBeenCalledTimes(1);
   });
+
+  it("le letture interne (posto «interno») non sono voci per chi cerca", () => {
+    const indice = indiceDi({ voci: [voce("a", "menu/oggetto"), voce("lettura", "interno"), voce("b", "tavolozza")] });
+    const righe = vociRicerca(indice, valgono(), NESSUNO);
+    expect(righe.map((riga) => riga.key)).toEqual(["a", "b"]);
+  });
 });
 

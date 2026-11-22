@@ -329,6 +329,17 @@ describe("eseguiVoce, con gli appunti del Completo (K6 T11)", () => {
     expect(sessione.comando).not.toHaveBeenCalled();
   });
 
+  it("le varianti d'incolla vanno agli appunti col loro comando e il nome della loro voce", () => {
+    const appunti = appuntiFinti();
+    const { d } = dipendenze({ appunti });
+    const davanti = voce({ id: "edit.pasteInFront", chiamata: { comando: "disegno.edit.pasteInFront", valore: {} }, etichetta: { it: "Incolla davanti", en: "Paste in Front" } });
+    const senzaFormato = voce({ id: "edit.pasteWithoutFormatting", chiamata: { comando: "disegno.edit.pasteWithoutFormatting", valore: {} } });
+    eseguiVoce(davanti, d);
+    eseguiVoce(senzaFormato, d);
+    expect(appunti.incollaDaMenu).toHaveBeenNthCalledWith(1, { comando: "edit.pasteInFront", etichetta: etichettaDi(davanti) });
+    expect(appunti.incollaDaMenu).toHaveBeenNthCalledWith(2, { comando: "edit.pasteWithoutFormatting", etichetta: etichettaDi(senzaFormato) });
+  });
+
   it("senza appunti (motore assente) i comandi di appunti seguono il percorso di sempre", async () => {
     const { d, sessione } = dipendenze();
     eseguiVoce(voce({ id: "edit.copy", chiamata: { comando: "disegno.edit.copy", valore: {} } }), d);

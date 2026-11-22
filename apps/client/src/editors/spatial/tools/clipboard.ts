@@ -146,12 +146,29 @@ export async function leggiAppuntiDaVoci(voci: readonly ClipboardEntry[]): Promi
   return { testo, svg: svg !== null && looksLikeSvg(svg) ? svg : null, immagini, altri: [...altri] };
 }
 
+/// Il comando del motore con cui si incolla: «Incolla», le sue varianti (davanti,
+/// dietro, nello stesso punto, su tutte le tavole) e «Incolla senza formattazione».
+export type ComandoIncolla =
+  | "edit.paste"
+  | "edit.pasteInFront"
+  | "edit.pasteInBack"
+  | "edit.pasteInPlace"
+  | "edit.pasteOnAllArtboards"
+  | "edit.pasteWithoutFormatting";
+
+/// Come si incolla: il comando (per default «Incolla») e il nome nei messaggi e nel
+/// passo della cronologia, che è l'etichetta della voce (per default «Incolla»).
+export interface OpzioniIncolla {
+  readonly comando?: ComandoIncolla;
+  readonly etichetta?: string;
+}
+
 /// Gli appunti del Completo per un motore: copia, taglia, incolla e cancella la
 /// cronologia (`completo/appunti.ts`).
 export interface AppuntiCompleto {
   copia(tipo: "copy" | "cut"): Promise<void>;
-  incolla(lettura: LetturaAppunti): Promise<void>;
-  incollaDaMenu(): Promise<void>;
+  incolla(lettura: LetturaAppunti, opzioni?: OpzioniIncolla): Promise<void>;
+  incollaDaMenu(opzioni?: OpzioniIncolla): Promise<void>;
   cancellaCronologia(): Promise<void>;
 }
 
