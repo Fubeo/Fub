@@ -1,3 +1,2027 @@
 {
-  "casi": []
+  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti dei tracciati non toccano (`unmapped`), e i comandi sui punti scelti con i loro `anchors`. Il disegno è `tracciati/base.svg`.",
+  "casi": [
+    {
+      "id": "pen",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 20,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 80,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 80,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M20 200 L80 200 L80 260",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "oqtuv96is"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "penna-esc.svg"
+    },
+    {
+      "id": "pen",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 20,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 80,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 80,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Enter",
+              "code": "Enter",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M20 200 L80 200 L80 260",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "oz998f7ep"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "penna-invio.svg"
+    },
+    {
+      "id": "pen",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 20,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 80,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 80,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": []
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M20 200 L80 200 L80 260",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "ocs93s9sc"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "penna-aperta.svg"
+    },
+    {
+      "id": "pen",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Escape",
+              "code": "Escape",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "pen",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 140,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 140,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addAnchor",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 200 L330 200 L360 200 L330 260 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "aggiungi-punto.svg"
+    },
+    {
+      "id": "deleteAnchor",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 100,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 100,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "elimina-punto.svg"
+    },
+    {
+      "id": "anchorPoint",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 300,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 290,
+              "y": 190,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 280,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 280,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 200 C280 180 360 200 360 200 L330 260 C330 260 320 220 300 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "punto-maniglie.svg"
+    },
+    {
+      "id": "curvature",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 200 C300 200 320 200 330 200 C340 200 360 200 360 200 L330 260 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "curvatura.svg"
+    },
+    {
+      "id": "smartPen",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 20,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 80,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "preview",
+          "events": [
+            {
+              "kind": "down",
+              "x": 80,
+              "y": 290,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 80,
+              "y": 290,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        },
+        {
+          "phase": "commit",
+          "events": [],
+          "inputs": [
+            {
+              "kind": "key",
+              "key": "Enter",
+              "code": "Enter",
+              "pressed": true
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M20 250 L80 250 L80 290",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "oqobge1v2"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "penna-intelligente.svg"
+    },
+    {
+      "id": "pencil",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 20,
+              "y": 150,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 40,
+              "y": 170,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 70,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 100,
+              "y": 190,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 100,
+              "y": 190,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "last": true
+            },
+            "elem": {
+              "tag": "path",
+              "attrs": {
+                "d": "M20 150 C41.99 178.28 67.38 179.13 100 190",
+                "fill": "none",
+                "stroke": "#000000",
+                "stroke-width": "2",
+                "id": "opcljsb48"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "matita.svg"
+    },
+    {
+      "id": "smooth",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 290,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 320,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 350,
+              "y": 240,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 380,
+              "y": 270,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 380,
+              "y": 270,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M360 200 L330 260 L315.82 231.63 C299.94 199.88 289.12 200 320 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "smussa.svg"
+    },
+    {
+      "id": "pathEraser",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M334 200 L360 200 L330 260 L300 200 L326 200"
+            }
+          }
+        ]
+      },
+      "dopo": "gomma-tracciato.svg"
+    },
+    {
+      "id": "eraser",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M330 260 L300 200 L325 200 C325 202.76 327.24 205 330 205 L330.01 205 C332.77 205 335.01 202.76 335.01 200 L360 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "gomma.svg"
+    },
+    {
+      "id": "eraser",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 110,
+              "y": 210,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 140,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 170,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 170,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "anchorEraserBrush",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 95,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 100,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 105,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 105,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "gomma-punti.svg"
+    },
+    {
+      "id": "join",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 155,
+              "y": 115,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 160,
+              "y": 120,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 166,
+              "y": 124,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 170,
+              "y": 128,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 170,
+              "y": 128,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "od2d2d2d2"
+              },
+              {
+                "op": "set",
+                "id": "oc1c1c1c1",
+                "attrs": {
+                  "d": "M40 60 L100 60 L160 60 L163 122 L230 124"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "unisci.svg"
+    },
+    {
+      "id": "extendPath",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 40,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 30,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 20,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 20,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M20 60 L40 60 L100 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "estendi.svg"
+    },
+    {
+      "id": "cornerTool",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 260,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "op7a7a7a7"
+              },
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "of4f4f4f4"
+                },
+                "raw": "<path id=\"op7a7a7a7\" d=\"M300 200 L360 200 L338.944 242.111 C335.259 249.482 324.741 249.482 321.056 242.111 Z\" fill=\"#cccccc\"/>"
+              },
+              {
+                "op": "add",
+                "parent": "#root",
+                "pos": {
+                  "first": true
+                },
+                "raw": "<metadata><vectorcraft:recipe xmlns:vectorcraft=\"urn:vectorcraft:editing\" for=\"op7a7a7a7\" hash=\"8c4ee97097b4b8ab\" v=\"1\">eyJmb3JtYXQiOiJ2ZWN0b3JjcmFmdC1yZWNpcGUiLCJ2ZXJzaW9uIjoxLCJub2RlIjp7ImlkIjo3LCJhcHBlYXJhbmNlIjp7Iml0ZW1zIjpbeyJraW5kIjoiZmlsbCIsInBhaW50Ijp7InR5cGUiOiJzb2xpZCIsImNvbG9yIjp7Im1vZGVsIjoicmdiIiwiciI6MC44MDAwMDAwMTE5MjA5MjksImciOjAuODAwMDAwMDExOTIwOTI5LCJiIjowLjgwMDAwMDAxMTkyMDkyOX19fV19LCJraW5kIjp7InR5cGUiOiJwYXRoIiwicGF0aCI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMwMC4wLDIwMC4wXX0seyJwIjpbMzYwLjAsMjAwLjBdfSx7InAiOlszMzguOTQ0MjcxOTA5OTk5MTUsMjQyLjExMTQ1NjE4MDAwMTY4XSwib3V0IjpbMzM1LjI1OTAyOTIxMzMzMjIsMjQ5LjQ4MTk0MTU3MzMzNTU4XX0seyJwIjpbMzIxLjA1NTcyODA5MDAwMDg1LDI0Mi4xMTE0NTYxODAwMDE2OF0sImluIjpbMzI0Ljc0MDk3MDc4NjY2NzgsMjQ5LjQ4MTk0MTU3MzMzNTU4XX1dLCJjbG9zZWQiOnRydWV9XX0sImxpdmUiOnsic2hhcGUiOiJwYXRoIiwiYmFzZSI6eyJzdWJwYXRocyI6W3siYW5jaG9ycyI6W3sicCI6WzMwMC4wLDIwMC4wXX0seyJwIjpbMzYwLjAsMjAwLjBdfSx7InAiOlszMzAuMCwyNjAuMF19XSwiY2xvc2VkIjp0cnVlfV19LCJyYWRpaSI6WzAuMCwwLjAsMTAuMF19fX19</vectorcraft:recipe></metadata>"
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "angolo.svg"
+    },
+    {
+      "id": "slideAnchor",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 100,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 110,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 120,
+              "y": 60,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L120 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "scorri-punto.svg"
+    },
+    {
+      "id": "sharedEdge",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe3e3e3e3",
+        "of4f4f4f4"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "move",
+              "x": 279,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "move",
+              "x": 280.2,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "down",
+              "x": 280.2,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 280.2,
+              "y": 50,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oe3e3e3e3",
+                "attrs": {
+                  "d": "M220 20 L280 20 C280 20 282 42.5 282 50 C282 57.5 280 80 280 80 L220 80 Z"
+                }
+              },
+              {
+                "op": "set",
+                "id": "of4f4f4f4",
+                "attrs": {
+                  "d": "M280 20 L340 20 L340 80 L280 80 C280 80 282 57.5 282 50 C282 42.5 280 20 280 20 Z"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "bordo-condiviso.svg"
+    },
+    {
+      "id": "scissors",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 330,
+              "y": 200,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M330 200 L360 200 L330 260 L300 200 L330 200"
+            }
+          }
+        ]
+      },
+      "dopo": "forbici.svg"
+    },
+    {
+      "id": "scissors",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 140,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 140,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "knife",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 290,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 320,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 350,
+              "y": 240,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 380,
+              "y": 270,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 380,
+              "y": 270,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "op7a7a7a7"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M320.02 219.98 L305.03 200 L360 200 L342.51 234.98 Z",
+                    "fill": "#cccccc",
+                    "id": "o269wid36"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "op7a7a7a7",
+                "attrs": {
+                  "d": "M330 260 L300 200 L304.97 200 L319.98 220.02 C319.98 220.02 319.98 220.02 319.99 220.02 L342.49 235.02 Z"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "coltello.svg"
+    },
+    {
+      "id": "knife",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 110,
+              "y": 210,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 140,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 170,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 170,
+              "y": 250,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "mirrorCut",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 290,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 320,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 350,
+              "y": 240,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 380,
+              "y": 270,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 380,
+              "y": 270,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M310 200 L310 190 L370 220 L343.33 233.33 L330 260 L300 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "specchia-taglia.svg"
+    },
+    {
+      "id": "lineCut",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 290,
+              "y": 180,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 320,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 350,
+              "y": 240,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 380,
+              "y": 270,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 380,
+              "y": 270,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "op7a7a7a7"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M343.33 233.33 L310 200 L360 200 Z",
+                    "fill": "#cccccc",
+                    "id": "oa87qm8nc"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "op7a7a7a7",
+                "attrs": {
+                  "d": "M330 260 L300 200 L310 200 L343.33 233.33 Z"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "taglio-linea.svg"
+    },
+    {
+      "id": "rectCut",
+      "fonte": "strumento",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "gesto": [
+        {
+          "phase": "commit",
+          "events": [
+            {
+              "kind": "down",
+              "x": 320,
+              "y": 190,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 340,
+              "y": 220,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "drag",
+              "x": 345,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            },
+            {
+              "kind": "up",
+              "x": 345,
+              "y": 230,
+              "pressure": 0.5,
+              "shift": false,
+              "alt": false,
+              "cmd": false
+            }
+          ]
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M320 230 L320 200 L345 200 L345 230 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "taglio-rettangolo.svg"
+    },
+    {
+      "id": "path.convertAnchors",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "to": "smooth",
+        "anchors": [
+          {
+            "element": "op7a7a7a7",
+            "subpath": 0,
+            "anchor": 0,
+            "at": [
+              300,
+              200
+            ],
+            "end": false
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "d": "M300 200 C308.94 182.11 360 200 360 200 L330 260 C330 260 290 220 300 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "punto-morbido.svg"
+    },
+    {
+      "id": "path.cutAtAnchors",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "anchors": [
+          {
+            "element": "oc1c1c1c1",
+            "subpath": 0,
+            "anchor": 1,
+            "at": [
+              100,
+              60
+            ],
+            "end": false
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "l1a2b3c4d",
+                "pos": {
+                  "after": "oc1c1c1c1"
+                },
+                "elem": {
+                  "tag": "path",
+                  "attrs": {
+                    "d": "M100 60 L160 60 L160 120",
+                    "fill": "none",
+                    "stroke": "#000000",
+                    "stroke-width": "2",
+                    "id": "o3mz2gtyo"
+                  }
+                }
+              },
+              {
+                "op": "set",
+                "id": "oc1c1c1c1",
+                "attrs": {
+                  "d": "M40 60 L100 60"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "taglia-nel-punto.svg"
+    },
+    {
+      "id": "path.join",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1",
+        "od2d2d2d2"
+      ],
+      "argomenti": {
+        "anchors": [
+          {
+            "element": "oc1c1c1c1",
+            "subpath": 0,
+            "anchor": 3,
+            "at": [
+              160,
+              120
+            ],
+            "end": true
+          },
+          {
+            "element": "od2d2d2d2",
+            "subpath": 0,
+            "anchor": 0,
+            "at": [
+              166,
+              124
+            ],
+            "end": true
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "remove",
+                "target": "od2d2d2d2"
+              },
+              {
+                "op": "set",
+                "id": "oc1c1c1c1",
+                "attrs": {
+                  "d": "M40 60 L100 60 L160 60 L160 120 L166 124 L230 124"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "unisci-i-punti.svg"
+    },
+    {
+      "id": "path.removeAnchors",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "anchors": [
+          {
+            "element": "oc1c1c1c1",
+            "subpath": 0,
+            "anchor": 1,
+            "at": [
+              100,
+              60
+            ],
+            "end": false
+          }
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "elimina-il-punto.svg"
+    }
+  ]
 }

@@ -52,7 +52,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // le dieci di Impostazioni › Scorciatoie (i tasti, i conflitti, gli insiemi).
   // T11 giro A porta a «fatto» le venti del nucleo (select, object), il giro B
   // a «fub» le cinque delle preferenze del motore (Impostazioni › Disegni).
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1405, fub: 114, escluso: 12, fatto: 20 });
+  // T12 giro 1 porta a «fatto» i ventuno strumenti di «disegnare» e i quattro
+  // comandi sui punti che la fila dei punti chiama.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1380, fub: 114, escluso: 12, fatto: 45 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -83,6 +83,70 @@
     },
     {
       "fonte": "motore",
+      "id": "path.convertAnchors",
+      "chiamata": {
+        "comando": "disegno.path.convertAnchors"
+      },
+      "etichetta": {
+        "it": "Converti punti di ancoraggio",
+        "en": "Convert Anchor Points"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.cutAtAnchors",
+      "chiamata": {
+        "comando": "disegno.path.cutAtAnchors"
+      },
+      "etichetta": {
+        "it": "Taglia tracciato nei punti di ancoraggio selezionati",
+        "en": "Cut Path at Selected Anchor Points"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.join",
+      "chiamata": {
+        "comando": "disegno.path.join"
+      },
+      "etichetta": {
+        "it": "Unisci",
+        "en": "Join"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": "Cmd+J",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "path.removeAnchors",
+      "chiamata": {
+        "comando": "disegno.path.removeAnchors"
+      },
+      "etichetta": {
+        "it": "Rimuovi punti di ancoraggio",
+        "en": "Remove Anchor Points"
+      },
+      "posto": "menu/oggetto",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "select.all",
       "chiamata": {
         "comando": "disegno.select.all"
@@ -211,6 +275,102 @@
     },
     {
       "fonte": "strumento",
+      "id": "addAnchor",
+      "chiamata": {
+        "strumento": "addAnchor"
+      },
+      "etichetta": {
+        "it": "Strumento Aggiungi punto di ancoraggio",
+        "en": "Add Anchor Point Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": "+",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "anchorEraserBrush",
+      "chiamata": {
+        "strumento": "anchorEraserBrush"
+      },
+      "etichetta": {
+        "it": "Pennello gomma punti di ancoraggio",
+        "en": "Anchor Eraser Brush"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "anchorPoint",
+      "chiamata": {
+        "strumento": "anchorPoint"
+      },
+      "etichetta": {
+        "it": "Strumento Punto di ancoraggio",
+        "en": "Anchor Point Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": "Shift+C",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "cornerTool",
+      "chiamata": {
+        "strumento": "cornerTool"
+      },
+      "etichetta": {
+        "it": "Strumento Angoli",
+        "en": "Corner Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "curvature",
+      "chiamata": {
+        "strumento": "curvature"
+      },
+      "etichetta": {
+        "it": "Strumento Curvatura",
+        "en": "Curvature Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": "Shift+~",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "deleteAnchor",
+      "chiamata": {
+        "strumento": "deleteAnchor"
+      },
+      "etichetta": {
+        "it": "Strumento Elimina punto di ancoraggio",
+        "en": "Delete Anchor Point Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": "-",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "directSelection",
       "chiamata": {
         "strumento": "directSelection"
@@ -222,6 +382,38 @@
       "posto": "colonna/scegli",
       "famiglia": "nucleo",
       "tasto": "A",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "eraser",
+      "chiamata": {
+        "strumento": "eraser"
+      },
+      "etichetta": {
+        "it": "Strumento Gomma",
+        "en": "Eraser Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": "Shift+E",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "extendPath",
+      "chiamata": {
+        "strumento": "extendPath"
+      },
+      "etichetta": {
+        "it": "Strumento Estendi tracciato",
+        "en": "Extend Path Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -259,6 +451,38 @@
     },
     {
       "fonte": "strumento",
+      "id": "join",
+      "chiamata": {
+        "strumento": "join"
+      },
+      "etichetta": {
+        "it": "Strumento Unisci",
+        "en": "Join Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "knife",
+      "chiamata": {
+        "strumento": "knife"
+      },
+      "etichetta": {
+        "it": "Coltello",
+        "en": "Knife"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "lasso",
       "chiamata": {
         "strumento": "lasso"
@@ -270,6 +494,102 @@
       "posto": "colonna/scegli",
       "famiglia": "nucleo",
       "tasto": "Q",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "lineCut",
+      "chiamata": {
+        "strumento": "lineCut"
+      },
+      "etichetta": {
+        "it": "Strumento Taglio linea",
+        "en": "Line Cut Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "mirrorCut",
+      "chiamata": {
+        "strumento": "mirrorCut"
+      },
+      "etichetta": {
+        "it": "Strumento Specchia e taglia",
+        "en": "Mirror & Cut Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "pathEraser",
+      "chiamata": {
+        "strumento": "pathEraser"
+      },
+      "etichetta": {
+        "it": "Strumento Gomma tracciato",
+        "en": "Path Eraser Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "pen",
+      "chiamata": {
+        "strumento": "pen"
+      },
+      "etichetta": {
+        "it": "Strumento Penna",
+        "en": "Pen Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": "P",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "pencil",
+      "chiamata": {
+        "strumento": "pencil"
+      },
+      "etichetta": {
+        "it": "Strumento Matita",
+        "en": "Pencil Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": "N",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "rectCut",
+      "chiamata": {
+        "strumento": "rectCut"
+      },
+      "etichetta": {
+        "it": "Strumento Taglio rettangolare",
+        "en": "Rectangle Cut Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
@@ -291,6 +611,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "scissors",
+      "chiamata": {
+        "strumento": "scissors"
+      },
+      "etichetta": {
+        "it": "Strumento Forbici",
+        "en": "Scissors Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": "C",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "selection",
       "chiamata": {
         "strumento": "selection"
@@ -302,6 +638,70 @@
       "posto": "colonna/scegli",
       "famiglia": "nucleo",
       "tasto": "V",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "sharedEdge",
+      "chiamata": {
+        "strumento": "sharedEdge"
+      },
+      "etichetta": {
+        "it": "Strumento Fondi bordo condiviso",
+        "en": "Shared Edge Merge Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "slideAnchor",
+      "chiamata": {
+        "strumento": "slideAnchor"
+      },
+      "etichetta": {
+        "it": "Fai scorrere il punto di ancoraggio lungo il tracciato",
+        "en": "Slide Anchor Along Path"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "smartPen",
+      "chiamata": {
+        "strumento": "smartPen"
+      },
+      "etichetta": {
+        "it": "Strumento Penna intelligente",
+        "en": "Smart Pen Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
+      "id": "smooth",
+      "chiamata": {
+        "strumento": "smooth"
+      },
+      "etichetta": {
+        "it": "Strumento Smussa",
+        "en": "Smooth Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "tracciati",
+      "tasto": null,
       "effetto": "cambia",
       "finestra": false
     },
