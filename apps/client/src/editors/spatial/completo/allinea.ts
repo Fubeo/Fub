@@ -67,6 +67,7 @@ function disegnaAllinea(contesto: ContestoSezione, esegui: EseguiAllinea, stato:
   for (const m of ["selection", "artboard"] as const) {
     const el = document.createElement("button");
     el.type = "button";
+    el.className = "draw-button draw-properties-segment";
     el.textContent = t(m === "selection" ? "draw.allinea.selezione" : "draw.allinea.tavola");
     el.addEventListener("click", () => {
       stato.modo = m;
@@ -86,6 +87,7 @@ function disegnaAllinea(contesto: ContestoSezione, esegui: EseguiAllinea, stato:
     for (const id of gruppo.ids) {
       const el = document.createElement("button");
       el.type = "button";
+      el.className = "kit-button";
       el.dataset.id = id;
       el.textContent = parolaDelPulsante(id);
       el.addEventListener("click", () => {

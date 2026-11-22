@@ -19640,9 +19640,13 @@ button.draw-isolation-crumb:hover {
   gap: var(--space-1);
   margin-block-end: var(--space-2);
 }
+.draw-align-to > .draw-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .draw-align-group {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-1);
   margin-block-end: var(--space-2);
 }
@@ -19650,6 +19654,13 @@ button.draw-isolation-crumb:hover {
   grid-column: 1 / -1;
   margin: 0;
   font-weight: 600;
+}
+.draw-align-group > .kit-button {
+  min-width: 0;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  white-space: normal;
+  text-align: center;
 }
 
 /* ── K6 · I righelli di bordo del foglio (T11, giro E) ───────────────────── */
