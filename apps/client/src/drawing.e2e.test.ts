@@ -8,8 +8,8 @@
 // cablaggio è quello di `surface-modes.e2e.test.ts` — `main.ts` sulla scocca
 // vera, contro l'host finto — con il registro vero e nessuna famiglia finta.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CommandSpec, SettingEntry } from "./host/contract";
-import type { FakeHost } from "./host/fake";
+import type { CommandSpec, DrawingOutcome, SettingEntry } from "./host/contract";
+import type { DrawingFake, FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
 import { DEFAULT_CURVE } from "./ink/input/pressure";
@@ -499,13 +499,89 @@ describe("«Apri come sorgente accanto» su un disegno", () => {
   });
 });
 
+// Le risposte del motore alla copia, come nel banco delle righe per un disegno in
+// sola lettura (`tests/famiglie/nucleo/sola-lettura.svg`): la copia non cambia il
+// file, e le letture degli appunti passano. Nell'app un disegno in sola lettura
+// si apre come immagine inerte (`surface.ts`), senza il Completo: qui il Completo è
+// su un disegno modificabile, con le risposte che il motore dà alla copia.
+const SVG_COPIA =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" viewBox="0 0 100 50">\n  <rect x="0" y="0" width="100" height="50" fill="#000000"/>\n</svg>\n';
+const PNG_COPIA = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const COPIA_IN_SOLA_LETTURA: DrawingFake = {
+  comando: (request, copia) => {
+    const esito = (extra: Partial<DrawingOutcome>): DrawingOutcome => ({
+      revision: copia.revision,
+      preview: null,
+      ops: null,
+      selection: [...request.selection],
+      losses: [],
+      refused: null,
+      frame: null,
+      ...extra,
+    });
+    switch (request.id) {
+      case "disegno.edit.copy":
+        return esito({ refused: "empty" });
+      case "disegno.clipboard.flavours":
+        return esito({ reading: { flavours: ["text/plain", "image/svg+xml", "image/png"] } });
+      case "disegno.clipboard.exportSvg":
+        return esito({ reading: { svg: SVG_COPIA } });
+      case "disegno.clipboard.exportPng":
+        return esito({ reading: { dataBase64: PNG_COPIA, width: 100, height: 50, warnings: [] } });
+      case "disegno.clipboard.exportText":
+        return esito({ reading: { text: null } });
+      default:
+        return esito({ refused: "unsupported" });
+    }
+  },
+};
+
+describe("gli appunti del Completo con Ctrl+C", () => {
+  it("Ctrl+C copia: SVG, PNG e testo del motore arrivano agli appunti di sistema", async () => {
+    // Lo spazio è il Completo, come nei casi del Completo qui sopra.
+    await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")], drawing: COPIA_IN_SOLA_LETTURA }));
+    await open("casa.svg");
+    // La colonna del Completo c'è solo quando il suo modulo è montato, e con lui gli appunti del motore.
+    await waitFor("la colonna del Completo", () => tools().join(",") === COLUMN_TOOLS_COMPLETO.join(","));
+    // Dopo l'avvio, così il modulo degli appunti è quello dell'app.
+    const { declareClipboard } = await import("./platform/clipboard");
+    const scritti: Record<string, Blob>[] = [];
+    const ritira = declareClipboard(() => Promise.resolve(), {
+      write: (contenuto) => {
+        scritti.push({ ...contenuto } as Record<string, Blob>);
+        return Promise.resolve();
+      },
+      read: () => Promise.resolve([]),
+      supports: (tipo) => tipo === "text/plain" || tipo === "image/svg+xml" || tipo === "image/png",
+    });
+    try {
+      press("a", { ctrlKey: true });
+      await settle();
+      // Ctrl+C: il browser manda l'evento di copia sulla superficie.
+      focusedPane()
+        .querySelector<HTMLElement>(".draw-surface")!
+        .dispatchEvent(new ClipboardEvent("copy", { bubbles: true, cancelable: true, clipboardData: new DataTransfer() }));
+      await waitFor("la copia arriva agli appunti di sistema", () => scritti.length === 1);
+      expect(await scritti[0]!["image/svg+xml"]!.text()).toBe(SVG_COPIA);
+      expect(await scritti[0]!["text/plain"]!.text()).toBe(SVG_COPIA);
+      expect(scritti[0]!["image/png"]!.type).toBe("image/png");
+    } finally {
+      ritira();
+    }
+  });
+});
+
 describe("uno screenshot incollato", () => {
   it("si annota, e il file su disco resta uno, con l'immagine dentro", async () => {
     // happy-dom non decodifica immagini: il browser dice soltanto le misure.
     vi.stubGlobal("createImageBitmap", async () => ({ width: 120, height: 80, close() {} }));
     try {
-      const host = await start();
+      // Lo screenshot entra nel Semplice, dove l'immagine si incolla da sé. Nel
+      // Completo l'incolla passa dal motore (K6 T11), e il banco finto non ha
+      // ancora `clipboard.importImage`: lì la prova è `appunti.test.ts`.
+      const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("simple")] }));
       await open("casa.svg");
+      expect(workspace()).toBe("simple");
       const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
       const data = new DataTransfer();
       data.items.add(new File([png], "schermata.png", { type: "image/png" }));

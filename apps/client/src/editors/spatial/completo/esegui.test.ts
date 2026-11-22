@@ -99,6 +99,7 @@ function dipendenze(over: Partial<DipendenzeComando> & { risposta?: DrawingOutco
     ...azioni,
     ...(over.leggi === undefined ? {} : { leggi: over.leggi }),
     ...(over.commit === undefined ? {} : { commit: over.commit }),
+    ...(over.appunti === undefined ? {} : { appunti: over.appunti }),
   };
   return { d, sessione, motore, azioni };
 }
@@ -300,5 +301,38 @@ describe("applicaEsito", () => {
     applicaEsito(esito({ ops: null }), "Lettura", azioni);
     expect(azioni.commit).not.toHaveBeenCalled();
     expect(azioni.seleziona).toHaveBeenCalled();
+  });
+});
+
+describe("eseguiVoce, con gli appunti del Completo (K6 T11)", () => {
+  /// Gli appunti finti: ogni azione registra la sua chiamata.
+  function appuntiFinti() {
+    return {
+      copia: vi.fn((_tipo: "copy" | "cut") => Promise.resolve()),
+      incolla: vi.fn((_lettura: unknown) => Promise.resolve()),
+      incollaDaMenu: vi.fn(() => Promise.resolve()),
+      cancellaCronologia: vi.fn(() => Promise.resolve()),
+    };
+  }
+
+  it("copia, taglia, incolla e cancella cronologia vanno agli appunti, non al motore", () => {
+    const appunti = appuntiFinti();
+    const { d, sessione } = dipendenze({ appunti });
+    eseguiVoce(voce({ id: "edit.copy", chiamata: { comando: "disegno.edit.copy", valore: {} } }), d);
+    eseguiVoce(voce({ id: "edit.cut", chiamata: { comando: "disegno.edit.cut", valore: {} } }), d);
+    eseguiVoce(voce({ id: "edit.paste", chiamata: { comando: "disegno.edit.paste", valore: {} } }), d);
+    eseguiVoce(voce({ id: "edit.clearHistory", chiamata: { comando: "disegno.edit.clearHistory", valore: {} } }), d);
+    expect(appunti.copia).toHaveBeenNthCalledWith(1, "copy");
+    expect(appunti.copia).toHaveBeenNthCalledWith(2, "cut");
+    expect(appunti.incollaDaMenu).toHaveBeenCalledOnce();
+    expect(appunti.cancellaCronologia).toHaveBeenCalledOnce();
+    expect(sessione.comando).not.toHaveBeenCalled();
+  });
+
+  it("senza appunti (motore assente) i comandi di appunti seguono il percorso di sempre", async () => {
+    const { d, sessione } = dipendenze();
+    eseguiVoce(voce({ id: "edit.copy", chiamata: { comando: "disegno.edit.copy", valore: {} } }), d);
+    await tick();
+    expect(sessione.comando).toHaveBeenCalledOnce();
   });
 });

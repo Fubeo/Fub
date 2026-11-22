@@ -22,7 +22,20 @@ import { snapDelta, wholeSteps } from "../grid";
 import { sceneBox, seenBox, toScene, toScreen } from "../../view";
 import { elemBounds, type Unit } from "../hit";
 import { foreignDrawing } from "../../import/foreign";
-import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, SVG_TYPE, type PasteProblem, type PasteSource } from "../clipboard";
+import {
+  appuntiCompletoDi,
+  copySvg,
+  leggiAppuntiDaEvento,
+  looksLikeSvg,
+  PASTE_PROBLEMS,
+  pasteFrame,
+  planPaste,
+  readPaste,
+  registraCronologia,
+  SVG_TYPE,
+  type PasteProblem,
+  type PasteSource,
+} from "../clipboard";
 import {
   browserCodec,
   budgetFor,
@@ -92,15 +105,6 @@ async function sliced<T>(run: Generator<number, T>, progress: (done: number) => 
     if (stop()) return null;
   }
 }
-
-/// Perché un SVG non si incolla, a parole.
-const PASTE_PROBLEMS: Readonly<Record<PasteProblem, DrawKey>> = {
-  "too-large": "draw.paste.too_large",
-  malformed: "draw.paste.malformed",
-  "not-svg": "draw.paste.not_svg",
-  empty: "draw.paste.empty",
-  entities: "draw.paste.entities",
-};
 
 /// Un incolla che non viene dagli appunti, come un simbolo di una libreria:
 /// il nome del passo, il riquadro della scena dove va il primo SVG, come
@@ -458,6 +462,13 @@ export function installClipboardCommands(ctx: EditorContext): void {
       if (event !== copyEvent) copyRound++;
       return;
     }
+    // Il Completo copia dal motore (K6 T11): il browser non scrive più, lo fa lui.
+    const completo = appuntiCompletoDi(options.motore);
+    if (completo !== null) {
+      event.preventDefault();
+      void completo.copia(kind);
+      return;
+    }
     const data = event.clipboardData;
     if (data === null) return;
     const units = selectedUnits();
@@ -491,6 +502,11 @@ export function installClipboardCommands(ctx: EditorContext): void {
   /// «Copia» e «Taglia» dal menu: la copia che il browser manda col comando.
   /// Dove non la manda, si dice di usare i tasti.
   const clipboardCommand = (kind: "copy" | "cut"): void => {
+    const completo = appuntiCompletoDi(options.motore);
+    if (completo !== null) {
+      void completo.copia(kind);
+      return;
+    }
     commanded = kind;
     let sent: boolean;
     try {
@@ -732,6 +748,12 @@ export function installClipboardCommands(ctx: EditorContext): void {
   /// «Incolla» e «Incolla nello stesso punto» dal menu: gli appunti letti
   /// dalla shell, se lo lascia fare; altrimenti si dice di usare i tasti.
   async function pasteFromMenu(inPlace: boolean): Promise<void> {
+    // Il Completo incolla dal motore (K6 T11): gli appunti li legge lui.
+    const completo = appuntiCompletoDi(options.motore);
+    if (completo !== null) {
+      await completo.incollaDaMenu();
+      return;
+    }
     const at = ctx.cursor;
     let items: readonly ClipboardEntry[];
     try {
@@ -777,6 +799,16 @@ export function installClipboardCommands(ctx: EditorContext): void {
     const inPlace = event.timeStamp <= ctx.inPlaceUntil;
     ctx.inPlaceUntil = -Infinity;
     if (!ownsClipboard(event)) return;
+    // Il Completo incolla dal motore (K6 T11): gli appunti li legge da qui, subito.
+    const completo = appuntiCompletoDi(options.motore);
+    if (completo !== null) {
+      const lettura = leggiAppuntiDaEvento(event.clipboardData);
+      if (lettura !== null) {
+        event.preventDefault();
+        void completo.incolla(lettura);
+      }
+      return;
+    }
     const carried = carriedBy(event.clipboardData);
     if (carried === null) {
       announce(t("draw.paste.nothing"));
@@ -785,6 +817,16 @@ export function installClipboardCommands(ctx: EditorContext): void {
     event.preventDefault();
     void pasteCarried(carried, ctx.cursor, inPlace);
   });
+  // La cronologia della superficie: «Cancella cronologia» del Completo la svuota
+  // (K6 T11). Il file e le sue versioni restano come sono.
+  if (options.motore) {
+    life.add(
+      registraCronologia(options.motore, () => {
+        ctx.history.clear();
+        syncControls();
+      }),
+    );
+  }
   life.listen(progressStop, "click", () => {
     if (ctx.pasting !== null) ctx.pasting.stopped = true;
   });

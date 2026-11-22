@@ -32,7 +32,10 @@ import { keyboardPlatform } from "../../../ui/commands";
 import { t } from "../strings";
 // I tasti del motore (K6 T9b): il montaggio sulla radice dell'editor, e il
 // percorso di un comando che fanno partire.
-import { eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
+import { applicaEsito, eseguiVoce, type AzioniEsito, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
+// Gli appunti del motore (K6 T11): copia, taglia e incolla passano dal motore.
+import { creaAppuntiCompleto } from "./appunti";
+import { registraAppuntiCompleto } from "../tools/clipboard";
 import { montaTasti } from "./montaggio-tasti";
 import { seguiTastiUtente } from "./segui-tasti";
 import type { ModificheTasti, Piattaforma } from "./tasti";
@@ -249,6 +252,20 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni">, opzioni: OpzioniCom
     seleziona: opzioni.tasti?.seleziona ?? (() => undefined),
     annuncia: opzioni.tasti?.annuncia ?? (() => undefined),
   };
+  // Gli appunti del motore (K6 T11): mentre il Completo è aperto, copiare e incollare
+  // passano dal motore, e il Semplice li cede qui (`tools/clipboard.ts`). Senza
+  // motore o senza tasti non ci sono.
+  if (ctx.motore !== null && opzioni.tasti !== undefined) {
+    const appunti = creaAppuntiCompleto({
+      motore: ctx.motore,
+      vita: ctx.life,
+      selezione: dipendenze.selezione,
+      applica: (esito, etichetta) => applicaEsito(esito, etichetta, dipendenze),
+      annuncia: dipendenze.annuncia,
+    });
+    dipendenze.appunti = appunti;
+    ctx.life.add(registraAppuntiCompleto(ctx.motore, appunti));
+  }
   // Una voce del menu o della ricerca: uno strumento lo sceglie l'editor; un
   // comando del motore parte dal percorso unico.
   const avvia = (voce: VoceIndice, azioni: AzioniVoci): void => {

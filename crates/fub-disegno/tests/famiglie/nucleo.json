@@ -215,6 +215,147 @@
       "selezione": ["op7a7a7a7"],
       "atteso": { "ops": [{ "op": "move", "target": "op7a7a7a7", "parent": "l1a2b3c4d", "pos": { "first": true } }] },
       "dopo": "in-fondo.svg"
+    },
+    {
+      "id": "edit.copy",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "edit.cut",
+      "disegno": "base.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "ops": [{ "op": "remove", "target": "oa1a1a1a1" }] },
+      "dopo": "taglia-rettangolo.svg"
+    },
+    {
+      "id": "edit.paste",
+      "disegno": "base.svg",
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "edit.paste",
+      "disegno": "base.svg",
+      "prima": [
+        { "id": "clipboard.importSvg", "argomenti": { "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect x=\"10\" y=\"10\" width=\"30\" height=\"20\" fill=\"#ff0000\"/></svg>" } }
+      ],
+      "atteso": { "ops": [{ "op": "add", "parent": "#root", "pos": { "last": true }, "elem": { "tag": "path", "attrs": { "d": "M195 150 L225 150 L225 170 L195 170 Z", "fill": "#ff0000", "id": "oe1e1e1e1" } } }] },
+      "dopo": "incolla-rettangolo.svg"
+    },
+    {
+      "id": "edit.clearHistory",
+      "disegno": "base.svg",
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "clipboard.flavours",
+      "disegno": "base.svg",
+      "atteso": { "lettura": { "flavours": [] } }
+    },
+    {
+      "id": "clipboard.flavours",
+      "disegno": "base.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "flavours": ["text/plain", "image/svg+xml", "image/png"] } }
+    },
+    {
+      "id": "clipboard.exportSvg",
+      "disegno": "base.svg",
+      "atteso": { "lettura": { "svg": null } }
+    },
+    {
+      "id": "clipboard.exportSvg",
+      "disegno": "base.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "svg": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"100\" height=\"50\" viewBox=\"0 0 100 50\">\n  <title>Untitled-1</title>\n  <g>\n    <rect x=\"0\" y=\"0\" width=\"100\" height=\"50\" fill=\"#000000\"/>\n  </g>\n</svg>\n" } }
+    },
+    {
+      "id": "clipboard.exportPng",
+      "disegno": "base.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "dataBase64": "*", "width": 100, "height": 50, "warnings": [] } }
+    },
+    {
+      "id": "clipboard.exportText",
+      "disegno": "base.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "text": null } }
+    },
+    {
+      "id": "clipboard.conflicts",
+      "disegno": "base.svg",
+      "atteso": { "lettura": { "swatches": [] } }
+    },
+    {
+      "id": "clipboard.importSvg",
+      "disegno": "base.svg",
+      "argomenti": { "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect x=\"10\" y=\"10\" width=\"30\" height=\"20\" fill=\"#ff0000\"/></svg>" },
+      "atteso": { "lettura": { "count": 1 } }
+    },
+    {
+      "id": "clipboard.importImage",
+      "disegno": "base.svg",
+      "argomenti": { "dataBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "mime": "image/png" },
+      "atteso": { "lettura": { "count": 1, "width": 1, "height": 1, "pixelWidth": 1, "pixelHeight": 1 } }
+    },
+    {
+      "id": "clipboard.importText",
+      "disegno": "base.svg",
+      "argomenti": { "text": "Ciao" },
+      "atteso": { "lettura": { "count": 1 } }
+    },
+    {
+      "id": "edit.copy",
+      "disegno": "sola-lettura.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "clipboard.flavours",
+      "disegno": "sola-lettura.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "flavours": ["text/plain", "image/svg+xml", "image/png"] } }
+    },
+    {
+      "id": "clipboard.exportSvg",
+      "disegno": "sola-lettura.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "svg": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"100\" height=\"50\" viewBox=\"0 0 100 50\">\n  <title>Untitled-1</title>\n  <g>\n    <rect x=\"0\" y=\"0\" width=\"100\" height=\"50\" fill=\"#000000\"/>\n  </g>\n</svg>\n" } }
+    },
+    {
+      "id": "clipboard.exportPng",
+      "disegno": "sola-lettura.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "dataBase64": "*", "width": 100, "height": 50, "warnings": [] } }
+    },
+    {
+      "id": "clipboard.exportText",
+      "disegno": "sola-lettura.svg",
+      "prima": [{ "id": "edit.copy", "selezione": ["oa1a1a1a1"] }],
+      "atteso": { "lettura": { "text": null } }
+    },
+    {
+      "id": "edit.cut",
+      "disegno": "sola-lettura.svg",
+      "selezione": ["oa1a1a1a1"],
+      "atteso": { "rifiuto": "unsupported" }
+    },
+    {
+      "id": "edit.paste",
+      "disegno": "sola-lettura.svg",
+      "atteso": { "rifiuto": "unsupported" }
+    },
+    {
+      "id": "clipboard.importSvg",
+      "disegno": "sola-lettura.svg",
+      "argomenti": { "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect x=\"10\" y=\"10\" width=\"30\" height=\"20\" fill=\"#ff0000\"/></svg>" },
+      "atteso": { "rifiuto": "unsupported" }
+    },
+    {
+      "id": "clipboard.conflicts",
+      "disegno": "sola-lettura.svg",
+      "atteso": { "rifiuto": "unsupported" }
     }
   ]
 }

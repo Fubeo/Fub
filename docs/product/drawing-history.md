@@ -87,6 +87,13 @@ scorrono come dieci.
 In sola lettura la cronologia si guarda soltanto: le frecce scelgono la riga,
 e nient'altro.
 
+## Cancellare la cronologia
+
+Nel Completo, **«Cancella cronologia»** sta solo nella ricerca `Ctrl+/` (non nei
+menu). Chiede una conferma: poi svuota i passi di annulla e di ripeti di questa
+superficie, e i segni con loro. Il disegno resta com'è, e le versioni salvate
+del file restano come sono: cancellare la cronologia non è un passo di annulla.
+
 ## Quando se ne va
 
 Passati al Semplice, o tolta la

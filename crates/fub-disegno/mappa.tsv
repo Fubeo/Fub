@@ -77,9 +77,9 @@ motore	imageTrace.setView	Image Trace View		immagini	F3	T20	da fare	ispettore/de
 motore	imageTrace.presets	Image Trace Presets		immagini	F3	T20	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Preset ricalco immagine
 motore	imageTrace.presets.save	Save Image Trace Preset		immagini	F3	T20	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Salva preset ricalco immagine
 motore	imageTrace.presets.delete	Delete Image Trace Preset		immagini	F3	T20	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Elimina preset ricalco immagine
-motore	clipboard.exportSvg	Clipboard as SVG		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Appunti come SVG
-motore	clipboard.importSvg	Load SVG into Clipboard		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Carica SVG negli appunti
-motore	clipboard.conflicts	Swatch Conflicts		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Conflitti campioni
+motore	clipboard.exportSvg	Clipboard as SVG		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Appunti come SVG
+motore	clipboard.importSvg	Load SVG into Clipboard		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Carica SVG negli appunti
+motore	clipboard.conflicts	Swatch Conflicts		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Conflitti campioni
 motore	edit.colors.invert	Invert Colors	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Inverti colori
 motore	edit.colors.toCMYK	Convert to CMYK	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Converti in CMYK
 motore	edit.colors.toGrayscale	Convert to Grayscale	Edit › Edit Colors	colore	F1	T14	da fare	menu/modifica	famiglia		Converti in scala di grigi
@@ -203,12 +203,12 @@ motore	view.globalRulers	Change to Global Rulers	View › Rulers	vista	F1	T11	da
 motore	edit.dropSelection	Drop Artwork		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Rilascia illustrazione
 motore	edit.undo	Undo	Edit	fub	—	T11	fub	fub	—	«Annulla» di Fub: la cronologia della superficie	Annulla
 motore	edit.redo	Redo	Edit	fub	—	T11	fub	fub	—	«Ripeti» di Fub: la cronologia della superficie	Ripeti
-motore	edit.clearHistory	Clear History		nucleo	F1	T11	da fare	tavolozza	nucleo		Cancella cronologia
+motore	edit.clearHistory	Clear History		nucleo	F1	T11	fatto	tavolozza	nucleo		Cancella cronologia
 motore	edit.undoGroup.begin	Begin Undo Group		fub	—	T11	fub	fub	—	un gesto o un comando di Fub è un passo solo della cronologia	Inizia gruppo di annullamento
 motore	edit.undoGroup.end	End Undo Group		fub	—	T11	fub	fub	—	un gesto o un comando di Fub è un passo solo della cronologia	Termina gruppo di annullamento
-motore	edit.cut	Cut	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Taglia
-motore	edit.copy	Copy	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Copia
-motore	edit.paste	Paste	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla
+motore	edit.cut	Cut	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Taglia
+motore	edit.copy	Copy	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Copia
+motore	edit.paste	Paste	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Incolla
 motore	edit.pasteInFront	Paste in Front	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla davanti
 motore	edit.pasteInBack	Paste in Back	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla dietro
 motore	edit.pasteInPlace	Paste in Place	Edit	nucleo	F1	T11	da fare	menu/modifica	nucleo		Incolla nella stessa posizione
@@ -753,15 +753,15 @@ motore	addon.pathtools.shape.set	Edit Parametric Shape		tracciati	F1	T12	da fare
 motore	addon.pathtools.shape.convert	Convert to Parametric Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	da fare	menu/oggetto	famiglia		Converti in forma parametrica
 motore	addon.pathtools.mergeEdge	Merge Shared Edge		tracciati	F1	T12	da fare	ispettore/design	famiglia		Fondi bordo condiviso
 motore	addon.pathtools.movePointsTogether	Keep Shared Points Together		tracciati	F1	T12	da fare	ispettore/design	famiglia		Mantieni uniti i punti condivisi
-motore	clipboard.exportPng	Clipboard as PNG		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Appunti come PNG
-motore	clipboard.exportPdf	Clipboard as PDF		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Appunti come PDF
-motore	clipboard.exportText	Clipboard as Text		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Appunti come testo
-motore	clipboard.flavours	Clipboard Formats		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Formati degli appunti
-motore	clipboard.importImage	Load Image into Clipboard		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Carica immagine negli appunti
-motore	clipboard.importText	Load Text into Clipboard		nucleo	F1	T11	da fare	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Carica testo negli appunti
-motore	clipboard.importPdf	Load PDF into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Carica PDF negli appunti
-motore	clipboard.importEmf	Load Metafile into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Carica metafile negli appunti
-motore	clipboard.importEps	Load EPS into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Carica EPS negli appunti
+motore	clipboard.exportPng	Clipboard as PNG		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Appunti come PNG
+motore	clipboard.exportPdf	Clipboard as PDF		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	aspetta T23	Appunti come PDF
+motore	clipboard.exportText	Clipboard as Text		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Appunti come testo
+motore	clipboard.flavours	Clipboard Formats		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Formati degli appunti
+motore	clipboard.importImage	Load Image into Clipboard		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Carica immagine negli appunti
+motore	clipboard.importText	Load Text into Clipboard		nucleo	F1	T11	fatto	interno	nucleo	lettura degli appunti del Completo (completo/appunti.ts)	Carica testo negli appunti
+motore	clipboard.importPdf	Load PDF into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	aspetta T23	Carica PDF negli appunti
+motore	clipboard.importEmf	Load Metafile into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	aspetta T23	Carica metafile negli appunti
+motore	clipboard.importEps	Load EPS into Clipboard		nucleo	F1	T11	da fare	interno	sotto:disegno-formati	aspetta T23	Carica EPS negli appunti
 motore	path.freehand	Pencil		tracciati	F1	T12	da fare	ispettore/design	famiglia		Matita
 motore	path.curvature	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura
 motore	path.curvatureEdit	Curvature		tracciati	F1	T12	da fare	ispettore/design	famiglia		Curvatura

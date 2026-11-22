@@ -61,7 +61,125 @@
 // si incolla (`read.ts`), il trasloco delle risorse (`lift.ts`) e il piano
 // dell'incolla (`plan.ts`). Questo file ne ri-esporta i nomi pubblici.
 
+import type { ClipboardEntry } from "../../../platform/clipboard";
+import type { Teardown } from "../../../ui/lifetime";
+import type { MotoreDelDisegno } from "../motore/gesti";
+import type { DrawKey } from "../strings";
+import { SVG_TYPE } from "./clipboard/base";
+import { looksLikeSvg, type PasteProblem } from "./clipboard/read";
+
 export { SVG_TYPE } from "./clipboard/base";
 export { copySvg, type CopyInput } from "./clipboard/copy";
 export { looksLikeSvg, readPaste, pasteFrame, symbolKey, type PasteProblem, type PasteSource, type PasteTarget, type PastePlan } from "./clipboard/read";
 export { planPaste } from "./clipboard/plan";
+
+/// Perché un SVG non si incolla, a parole: le stesse frasi per il Semplice e per
+/// il Completo.
+export const PASTE_PROBLEMS: Readonly<Record<PasteProblem, DrawKey>> = {
+  "too-large": "draw.paste.too_large",
+  malformed: "draw.paste.malformed",
+  "not-svg": "draw.paste.not_svg",
+  empty: "draw.paste.empty",
+  entities: "draw.paste.entities",
+};
+
+// --- Il ponte con il Completo (K6 T11) ---------------------------------------
+//
+// Copiare e incollare nel Completo passano dal motore (`completo/appunti.ts`),
+// e i tasti e il menu del Semplice li raggiungono di qui: il Completo registra i
+// suoi appunti per il motore che apre, mentre è aperto, e la superficie registra
+// la sua cronologia. Un motore senza registrazione resta nel Semplice.
+
+/// Ciò che c'è negli appunti di sistema, letto una volta: il testo, un SVG, le
+/// immagini che il motore sa leggere, e i tipi che non sa leggere (`altri`), di
+/// cui chi incolla dice che non si incolla niente.
+export interface LetturaAppunti {
+  readonly testo: string | null;
+  readonly svg: string | null;
+  readonly immagini: readonly { readonly tipo: string; readonly byte: Blob }[];
+  readonly altri: readonly string[];
+}
+
+/// Le immagini che `clipboard.importImage` del motore legge.
+const IMMAGINI_LETTE: ReadonlySet<string> = new Set(["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/tiff", "image/bmp"]);
+/// I tipi che non sono un contenuto da incollare: il testo, l'HTML e gli elenchi
+/// del browser, e l'SVG, che ha la sua lettura.
+const TIPI_NEUTRI: ReadonlySet<string> = new Set(["text/plain", "text/html", "text/uri-list", "Files", SVG_TYPE]);
+
+/// Gli appunti che un evento `paste` porta: il browser li dà solo lì, in modo
+/// sincrono. `null` se l'evento non ha `clipboardData`.
+export function leggiAppuntiDaEvento(data: DataTransfer | null): LetturaAppunti | null {
+  if (data === null) return null;
+  const testo = data.getData("text/plain");
+  const svgTesto = data.getData(SVG_TYPE);
+  const svg = looksLikeSvg(svgTesto) ? svgTesto : looksLikeSvg(testo) ? testo : null;
+  const immagini = Array.from(data.files)
+    .filter((file) => IMMAGINI_LETTE.has(file.type))
+    .map((file) => ({ tipo: file.type, byte: file }));
+  const altri = Array.from(data.types).filter((tipo) => !TIPI_NEUTRI.has(tipo) && !IMMAGINI_LETTE.has(tipo));
+  return { testo: testo === "" ? null : testo, svg, immagini, altri: [...new Set(altri)] };
+}
+
+/// Gli appunti che il menu legge dalla shell (`readClipboard`). Un tipo che non
+/// si legge non c'è: nessuno errore.
+export async function leggiAppuntiDaVoci(voci: readonly ClipboardEntry[]): Promise<LetturaAppunti> {
+  let testo: string | null = null;
+  let svg: string | null = null;
+  const immagini: { tipo: string; byte: Blob }[] = [];
+  const altri = new Set<string>();
+  const leggi = (voce: ClipboardEntry, tipo: string): Promise<Blob | null> => voce.getType(tipo).catch(() => null);
+  for (const voce of voci) {
+    for (const tipo of voce.types) {
+      if (IMMAGINI_LETTE.has(tipo)) {
+        const byte = await leggi(voce, tipo);
+        if (byte !== null) immagini.push({ tipo, byte });
+      } else if (tipo === "text/plain" && testo === null) {
+        testo = (await (await leggi(voce, tipo))?.text().catch(() => null)) || null;
+      } else if (tipo === SVG_TYPE && svg === null) {
+        svg = (await (await leggi(voce, tipo))?.text().catch(() => null)) || null;
+      } else if (!TIPI_NEUTRI.has(tipo) && !IMMAGINI_LETTE.has(tipo)) {
+        altri.add(tipo);
+      }
+    }
+  }
+  if (svg === null && testo !== null && looksLikeSvg(testo)) svg = testo;
+  return { testo, svg: svg !== null && looksLikeSvg(svg) ? svg : null, immagini, altri: [...altri] };
+}
+
+/// Gli appunti del Completo per un motore: copia, taglia, incolla e cancella la
+/// cronologia (`completo/appunti.ts`).
+export interface AppuntiCompleto {
+  copia(tipo: "copy" | "cut"): Promise<void>;
+  incolla(lettura: LetturaAppunti): Promise<void>;
+  incollaDaMenu(): Promise<void>;
+  cancellaCronologia(): Promise<void>;
+}
+
+const completi = new WeakMap<MotoreDelDisegno, AppuntiCompleto>();
+const cronologie = new WeakMap<MotoreDelDisegno, () => void>();
+
+/// Il Completo registra i suoi appunti per il motore che ha aperto; il teardown li ritira.
+export function registraAppuntiCompleto(motore: MotoreDelDisegno, appunti: AppuntiCompleto): Teardown {
+  completi.set(motore, appunti);
+  return () => {
+    if (completi.get(motore) === appunti) completi.delete(motore);
+  };
+}
+
+/// Gli appunti del Completo registrati per `motore`, o `null`: il Semplice copia da sé.
+export function appuntiCompletoDi(motore: MotoreDelDisegno | null | undefined): AppuntiCompleto | null {
+  return motore ? (completi.get(motore) ?? null) : null;
+}
+
+/// La superficie registra come svuotare la sua cronologia di annulla e ripeti.
+export function registraCronologia(motore: MotoreDelDisegno, svuota: () => void): Teardown {
+  cronologie.set(motore, svuota);
+  return () => {
+    if (cronologie.get(motore) === svuota) cronologie.delete(motore);
+  };
+}
+
+/// La cronologia della superficie che `motore` ha, o `null`.
+export function cronologiaDi(motore: MotoreDelDisegno | null | undefined): (() => void) | null {
+  return motore ? (cronologie.get(motore) ?? null) : null;
+}
