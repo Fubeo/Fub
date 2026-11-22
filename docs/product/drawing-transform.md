@@ -77,6 +77,16 @@ errore accanto al campo, e OK resta spento. Ripeti trasformazione applica di
 nuovo l'ultima. Con un oggetto bloccato nella selezione il comando non parte,
 e la frase dice di sbloccarlo o toglierlo dalla selezione.
 
+Nella colonna, il gruppo «modificare» ha Ruota, Rifletti, Scala e Inclina come
+strumenti. Con uno di loro un clic senza trascinare sulla tavola apre la finestra
+del suo comando, sulla selezione: senza selezione la finestra non si apre e si
+dice «Scegli un oggetto.». Il clic non cambia il centro: Ruota, Rifletti, Scala
+e Inclina lavorano attorno al centro della selezione, che la finestra non chiede
+(il suo comando non ha un punto). Un trascinamento sulla tavola con lo strumento
+trasforma la selezione attorno a quel centro, e il rilascio è un solo passo di
+annulla. Con un oggetto bloccato nella
+selezione il gesto è rifiutato, con la stessa frase della finestra.
+
 La sezione Trasforma, nella scheda Design, dà posizione, misura, rotazione e
 inclinazione, e Reimposta riquadro. I campi mostrano i valori della selezione,
 nell'unità del pannello, e restano vuoti se la selezione non ha un valore solo.
