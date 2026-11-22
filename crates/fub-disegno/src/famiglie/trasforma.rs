@@ -27,11 +27,15 @@ impl StatoFamiglia for Stato {
         0
     }
 
-    /// Allineare e distribuire vogliono qualcosa di scelto. Quanti oggetti
-    /// servono dipende da «allinea a» (un oggetto solo si allinea alla tavola),
-    /// e lo decide la sezione del client: qui non si dice `needs_two`.
-    fn spento(id: &str, _copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+    /// Allineare e distribuire vogliono qualcosa di scelto, e la selezione
+    /// senza pezzi che il motore non tocca (o bloccati). Quanti oggetti servono
+    /// dipende da «allinea a» (un oggetto solo si allinea alla tavola), e lo
+    /// decide la sezione del client: qui non si dice `needs_two`.
+    fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
         let allinea = matches!(id, "object.align" | "object.distribute" | "object.distributeSpacing");
-        (allinea && selezione.is_empty()).then_some(DrawingDisabledReason::NoSelection)
+        if allinea && selezione.is_empty() {
+            return Some(DrawingDisabledReason::NoSelection);
+        }
+        super::selezione_spenta(copia, selezione)
     }
 }

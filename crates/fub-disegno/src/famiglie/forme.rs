@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use fub_abi::DrawingRefusal;
+use fub_abi::{DrawingDisabledReason, DrawingRefusal};
 use fub_motori::{ErroreMotore, Servizi};
 use fub_scene::Role;
 use vectorcraft_doc::NodeId;
@@ -28,6 +28,13 @@ impl StatoFamiglia for Stato {
 
     fn libera(&self) -> u64 {
         0
+    }
+
+    /// Una forma nuova non usa la selezione, ma con un pezzo che il motore non
+    /// sa toccare, o bloccato, la selezione spegne il comando come per gli altri
+    /// (`esegui` lo rifiuta comunque).
+    fn spento(_id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        super::selezione_spenta(copia, selezione)
     }
 
     /// Una forma nuova va nello stesso livello dove andrebbe lo strumento senza

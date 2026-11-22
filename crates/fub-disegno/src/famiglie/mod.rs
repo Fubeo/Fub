@@ -957,10 +957,28 @@ pub(crate) fn esegui(
     Ok(esito)
 }
 
+/// Perché la selezione spegne un comando che la usa, o `None` se va bene: un
+/// pezzo che il motore non ha è `unmapped`, uno bloccato è di sola lettura. È
+/// la stessa regola che `esegui` applica a ogni comando (le famiglie che
+/// chiedono la selezione la riusano, senza ripeterla).
+pub(crate) fn selezione_spenta(
+    copia: &Copia,
+    selezione: &[String],
+) -> Option<fub_abi::DrawingDisabledReason> {
+    match nodi_scelti(copia, selezione) {
+        Ok(_) => None,
+        Err(DrawingRefusal::Locked) => Some(fub_abi::DrawingDisabledReason::ReadOnly),
+        Err(_) => Some(fub_abi::DrawingDisabledReason::Unmapped),
+    }
+}
+
 /// Gli oggetti del motore della selezione di Fub: un id che la mappa non ha,
 /// o che il motore non sa modificare, è `unmapped`; uno bloccato (lui o un
 /// antenato) `locked`.
-fn nodi_scelti(copia: &Copia, selezione: &[String]) -> Result<Vec<NodeId>, DrawingRefusal> {
+pub(crate) fn nodi_scelti(
+    copia: &Copia,
+    selezione: &[String],
+) -> Result<Vec<NodeId>, DrawingRefusal> {
     let mappa = &copia.mappa;
     selezione
         .iter()
