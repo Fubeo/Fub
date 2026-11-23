@@ -201,11 +201,32 @@ ed Esc non lasciano niente.
   dell'Inchiostro di Fub la voce è spenta, col perché.
 - Un testo cambia il colore del testo; un'immagine non ha colori da cambiare
   e viene rifiutata.
-- Un oggetto legato a un campione globale prende il suo colore pieno: il
-  campione resta com'era, e gli altri oggetti che lo usano non cambiano.
+- Un oggetto legato a un campione globale si stacca dal campione quando lo ricolori: il campione e gli altri oggetti che lo usano restano com'erano.
 - Una sfumatura cambia il colore delle sue fermate, e resta una sfumatura.
 - Lo stesso colore su riempimento e contorno cambia su tutti e due.
 - Un gruppo scelto cambia i colori dei suoi oggetti.
+
+### La guida dei colori
+
+La sezione **Guida colori** del Design mostra le armonie del colore di
+riempimento o di contorno, calcolate dal motore: una riga per colore della
+guida, con i suoi passi e il colore di partenza al centro. Un clic su un passo
+dà quel colore al lato attivo degli oggetti scelti, in un solo passo della
+cronologia.
+
+- **Opzioni guida colori…** sceglie l'armonia (ventuno), i passi (da 1 a 20),
+  la variazione (tinte e ombre, caldo e freddo, vivi e spenti) e l'ampiezza
+  (da 0 a 100%). Non cambia il disegno: la guida si ridisegna.
+- **Limita guida colori…** sceglie fra nessun limite, una libreria di colori di
+  base del motore, o i campioni del documento. Se il disegno non ha campioni,
+  quella scelta è spenta e la frase lo dice. Le librerie personali non ci sono
+  ancora.
+- Senza niente di scelto la guida parte dal colore attivo del lato, e i suoi
+  passi sono spenti: scegli un oggetto per dargli il colore.
+- Le scelte della guida valgono per la pagina aperta: non si salvano nel file,
+  e riaprendo il disegno si parte da quelle di serie.
+- Se il motore non risponde, la sezione lo dice. Una lettura che arriva dopo
+  un cambio più recente non sostituisce quella nuova.
 
 ## Chi monta l'editor
 
