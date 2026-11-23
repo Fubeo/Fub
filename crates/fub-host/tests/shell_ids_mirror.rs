@@ -87,6 +87,11 @@ fn every_key_with_its_own_gesture_is_declared() {
         .map(|spec| spec.key)
         .collect();
     for key in SETTINGS_WITH_THEIR_OWN_GESTURE {
+        // Senza il disegno nessuno dichiara le chiavi del suo bundle: con il
+        // disegno acceso le controlla `the_draw_workspace_keys_are_the_owners_constants`.
+        if cfg!(not(feature = "draw")) && key.starts_with("draw.") {
+            continue;
+        }
         assert!(
             declared.iter().any(|d| d == key),
             "`{key}` is in SETTINGS_WITH_THEIR_OWN_GESTURE but nobody declares it"
