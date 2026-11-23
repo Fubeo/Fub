@@ -2377,7 +2377,14 @@ triangolo scrive un `transform` invece di riscrivere `d`; Curvatura senza
 `element` crea un tracciato col riempimento bianco della sessione del
 motore. Imposta angoli e Rimuovi angoli uniti in d24a60a66; il difetto
 visto nel banco era del banco (il metadata della ricetta prima della
-carta), non del comando.
+carta), non del comando. Taglia con una linea, con un rettangolo e
+Taglia a specchio uniti in a8ea227e1 (41 casi). Rischi accettati: un
+`rect` primitivo è rifiutato (`unsupported`, il differ non lo riscrive in
+pezzi); un taglio col rettangolo tutto fuori dall'oggetto lo toglie (è il
+contratto del motore); una ricetta con due riempimenti si taglia in copie,
+una per riempimento (uguale a vedersi, il file cambia forma). In giro: gomma
+dei punti, allunga, imposta e fai scorrere un punto; le finestre di Espandi
+e Semplifica.
 Aspetta: niente
 
 ## T13 · Le forme e le trasformazioni
@@ -2496,8 +2503,15 @@ uniti in 56a83d11c: tutti e due rifiutano l'Inchiostro (`unmapped`).
 Converti in forma resta «da fare» (il motore la fa come forma viva, che il
 formato non scrive) e lo zoom sulla scelta è una vista, non un comando del
 file. Rischio accettato: Sposta su un oggetto nascosto scelto a mano lo
-sposta (fissato nei casi). In giro: Distorci sul testo, le trasformazioni
-sull'Inchiostro e sul testo, Rendi perfetto al pixel.
+sposta (fissato nei casi). Rendi perfetto al pixel unito in 818788b33;
+Distorci e le trasformazioni sul testo e sull'Inchiostro uniti in
+a92f2ec14: il testo di punto e su tracciato prende il `transform` sul
+`<text>`; il testo in area accetta solo Scala e Sposta (Ruota, Inclina e
+Rifletti sono rifiutati con la frase: il riquadro di `fub:wrap` resta
+dritto). Rischi: il testo dentro un gruppo non è provato con le cinque
+trasformazioni; un testo su tracciato col tracciato nei `defs` perde già
+alla riapertura dell'originale. In giro: Altera marionetta, il gruppo
+Shaper.
 Aspetta: niente
 
 ## T14 · Il colore
@@ -2624,7 +2638,11 @@ a mano si ricolora, la sfumatura vecchia resta nei defs. Letture del colore
 salva, togli); `colorTheme.addToSwatches` resta «da fare» perché crea un
 gruppo di colori, che il formato non ha. Rischi: nome vuoto o già usato
 danno la frase del motore in inglese; Togli è acceso con la libreria
-vuota. In giro: la guida colori, le frasi dei temi e il pannello dei temi.
+vuota. Guida colori unita in d86a512aa; rischi: un oggetto nascosto scelto
+a mano si ricolora, la sfumatura vecchia resta nei `defs`. Frasi dei temi in
+italiano e pannello dei temi in Risorse uniti in 790193a8a; salvare e
+togliere un tema passano in sola lettura. Rischi: Togli resta acceso con la
+libreria vuota; il pannello non è stato visto nell'app vera.
 Aspetta: niente
 
 ## T15 · L'aspetto e i livelli
@@ -2793,8 +2811,13 @@ figlio della radice) il motore importa un solo livello (`import.rs`
 `layer_mode`) e «gli altri» si contano sul livello corrente, non sulla
 scelta; vanno col modello dei livelli. Seleziona testo di punto e
 testo in area uniti in 503c1ccf8; rischio: Seleziona testo di punto può
-prendere un testo con `fub:wrap`. In giro: Seleziona per carattere e
-Modifica globale; le ricette all'Opus prima del modello dei livelli.
+prendere un testo con `fub:wrap`. Ricette riaperte senza perdite unite in
+7cf2c4eaf (un gruppo è ricco solo per ciò che è suo; un solo riempimento su
+un gruppo conta come aspetto impilato). Seleziona per carattere e le opzioni
+della modifica globale uniti in 7e5673120, «fatto» senza la finestra (lavoro
+del client); Avvia modifica globale resta «da fare»: lo stato nel motore si
+azzera a ogni ripristino del documento. In giro: il modello dei livelli
+(carta fuori dall'import), togli, duplica e sposta una voce dell'aspetto.
 Aspetta: niente
 
 ## T16 · Il testo
