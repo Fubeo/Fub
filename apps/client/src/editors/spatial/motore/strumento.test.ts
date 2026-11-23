@@ -56,6 +56,24 @@ describe("lo strumento del motore", () => {
     expect(stati.stato("lasso")).toBe(STATO);
   });
 
+  it("avvisa solo se lo stato cambia, e un'anteprima a metà gesto lo tiene senza avvisare", () => {
+    const stati = new StatiStrumenti();
+    const visti: string[] = [];
+    stati.ascolta((id) => visti.push(id));
+    stati.registra("directSelection", STATO);
+    // Lo stesso stato di nuovo: i pannelli non si rifanno.
+    stati.registra("directSelection", { ...STATO });
+    expect(visti).toEqual(["directSelection"]);
+    // A metà gesto: si legge subito, ma nessuno è avvisato.
+    const mosso = { ...STATO, cursor: "move" };
+    stati.registra("directSelection", mosso, false);
+    expect(stati.stato("directSelection")).toBe(mosso);
+    expect(visti).toEqual(["directSelection"]);
+    // L'esito che chiude il gesto avvisa, anche se uguale all'ultima anteprima.
+    stati.registra("directSelection", { ...mosso });
+    expect(visti).toEqual(["directSelection", "directSelection"]);
+  });
+
   it("un ascoltatore che si toglie durante l'avviso non riceve più quell'esito", () => {
     const stati = new StatiStrumenti();
     const visti: string[] = [];

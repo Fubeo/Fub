@@ -918,7 +918,10 @@ export function installGestiMotore(ctx: EditorContext): void {
         // Lo stato dello strumento del motore che ha fatto il gesto: il gesto
         // dopo lo legge, e il cursore del foglio segue lo strumento scelto.
         if (typeof g.tool === "object" && outcome.state) {
-          stati.registra(g.tool.engine.id, outcome.state);
+          // Un'anteprima a metà gesto tiene lo stato senza rifare i pannelli
+          // (a ogni fotogramma costerebbe il disegno fluido); l'esito che
+          // chiude il gesto, o un'anteprima dopo il rilascio, avvisa.
+          stati.registra(g.tool.engine.id, outcome.state, phase !== "preview" || g.ended);
           if (ctx.motoreTool === g.tool.engine.id) applyToolCursor();
         }
         return outcome;

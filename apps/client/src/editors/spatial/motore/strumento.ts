@@ -80,8 +80,15 @@ export function cursoreDelloStrumento(id: string | null, nome: string | undefine
 /// l'ha portato. Chi mostra lo stato (la fila delle opzioni) si iscrive con
 /// `ascolta`: ogni iscrizione ha il suo disposer, e dopo quello non riceve più
 /// niente.
+///
+/// Chi ascolta rifà pannelli interi: si avvisa solo quando lo stato è davvero
+/// diverso da quello dell'ultimo avviso, e un'anteprima a metà gesto lo tiene
+/// senza avvisare (`avvisa` falso). Come in VectorCraft, durante il gesto
+/// cambia solo il foglio; i pannelli si allineano all'esito che lo chiude.
 export class StatiStrumenti {
   readonly #stati = new Map<string, DrawingToolState>();
+  /// Lo stato dell'ultimo avviso, scritto: per non avvisare due volte lo stesso.
+  readonly #avvisati = new Map<string, string>();
   readonly #ascolti = new Set<(id: string) => void>();
 
   /// Lo stato che lo strumento `id` ha dall'ultimo esito; `null` se non ne ha.
@@ -90,9 +97,15 @@ export class StatiStrumenti {
   }
 
   /// Un esito arrivato porta lo stato dello strumento: il gesto dopo lo legge, e
-  /// chi ascolta lo sa, con l'id dello strumento.
-  registra(id: string, stato: DrawingToolState): void {
+  /// chi ascolta lo sa, con l'id dello strumento, se lo stato è cambiato
+  /// dall'ultimo avviso. Con `avvisa` falso (un'anteprima a metà gesto) lo
+  /// stato si tiene e basta: l'esito che chiude il gesto avvisa.
+  registra(id: string, stato: DrawingToolState, avvisa = true): void {
     this.#stati.set(id, stato);
+    if (!avvisa) return;
+    const scritto = JSON.stringify(stato);
+    if (this.#avvisati.get(id) === scritto) return;
+    this.#avvisati.set(id, scritto);
     for (const ascolto of [...this.#ascolti]) if (this.#ascolti.has(ascolto)) ascolto(id);
   }
 
