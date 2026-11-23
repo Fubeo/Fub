@@ -104,6 +104,7 @@ import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
 import { motoreDa, type MotoreAperto } from "./motore/gesti";
 import { apriSessione } from "./motore/sessione";
+import { cellaLivelloDi } from "./livello-corrente";
 import { drawStanding, MOTORE_VETTORIALE } from "./motore/standing";
 import { components, onComponents } from "../../state/components";
 import { showComponent } from "../../ui/commands";
@@ -552,7 +553,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const editorLifetime = openLifetime();
     const drawing = openMotore();
     const made = compact ? null : inspectorChrome();
+    // Il livello corrente è del disegno: gli altri riquadri sullo stesso
+    // documento, e l'editor rimontato, ritrovano lo stesso.
+    const session = documentSessions.get(context.documentId);
     const mounted = createDrawEditor(drawHost, engine, editorLifetime, {
+      ...(session === undefined ? {} : { livello: cellaLivelloDi(session) }),
       ...(made === null
         ? { chrome: cardChrome(), compact: true, workspace: cardWorkspace }
         : {

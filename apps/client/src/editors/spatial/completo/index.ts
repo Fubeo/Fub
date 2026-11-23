@@ -200,6 +200,8 @@ export interface OpzioniTastiCompleto extends AzioniEsito {
   readonly stato: () => { readonly vuoleTesto: boolean; readonly componendo: boolean };
   /// I punti scelti con lo strumento del motore di adesso (`DipendenzeComando.punti`).
   readonly punti?: () => readonly DrawingAnchor[];
+  /// L'id di Fub del livello corrente (`DipendenzeComando.livello`).
+  readonly livello?: () => string | null;
   /// Fa rileggere al motore lo stato dello strumento di adesso, dopo un comando
   /// sui punti scelti (i punti cambiano, o non ci sono più).
   readonly rileggiStato?: () => void;
@@ -505,6 +507,7 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     vita: ctx.life,
     selezione: opzioni.tasti?.selezione ?? (() => []),
     punti: opzioni.tasti?.punti ?? (() => []),
+    ...(opzioni.tasti?.livello === undefined ? {} : { livello: opzioni.tasti.livello }),
     anteprima: opzioni.tasti?.anteprima ?? (() => undefined),
     finestra: finestraDi,
     leggi: opzioni.tasti?.leggi ?? (() => null),

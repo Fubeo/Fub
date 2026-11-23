@@ -292,6 +292,22 @@ describe("eseguiVoce, con finestra", () => {
     expect(sessione.comando).toHaveBeenLastCalledWith(expect.objectContaining({ value: { radius: 3 } }));
   });
 
+  it("Sposta sul livello corrente manda il livello corrente del disegno; senza, niente", async () => {
+    const { d, sessione } = dipendenze();
+    const sposta = voce({ id: "object.arrange.sendToCurrentLayer", famiglia: "nucleo", chiamata: { comando: "disegno.object.arrange.sendToCurrentLayer" } });
+    eseguiVoce(sposta, { ...d, livello: () => "l1a2b3c4d" });
+    await tick();
+    expect(sessione.comando).toHaveBeenLastCalledWith(expect.objectContaining({ id: "disegno.object.arrange.sendToCurrentLayer", value: { layer: "l1a2b3c4d" } }));
+    // Un livello senza id, o nessun livello: il ponte usa il più alto libero.
+    eseguiVoce(sposta, { ...d, livello: () => null });
+    await tick();
+    expect(sessione.comando).toHaveBeenLastCalledWith(expect.objectContaining({ value: {} }));
+    // Un altro comando non riceve il livello.
+    eseguiVoce(voce({ id: "object.arrange.sendToBack", famiglia: "nucleo", chiamata: { comando: "disegno.object.arrange.sendToBack" } }), { ...d, livello: () => "l1a2b3c4d" });
+    await tick();
+    expect(sessione.comando).toHaveBeenLastCalledWith(expect.objectContaining({ value: {} }));
+  });
+
   it("Annulla della finestra del clic non manda niente al motore", async () => {
     const { d, sessione, azioni } = dipendenze({ finestra: () => Promise.resolve(schema()) });
     eseguiVoce(voce({ id: "shape.rectangle", famiglia: "forme", chiamata: { comando: "disegno.shape.rectangle", valore: { x: 40, y: 50 } }, finestra: true }), d);

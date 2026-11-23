@@ -41,6 +41,7 @@ import { featuresFor, startTool, toolsOf, toolSpec, type Feature, type ToolId, t
 import { browserMeasure, estimate, type Font, type Measure } from "../measure";
 import { TEXT_SIZE } from "../text";
 import type { DrawSheet } from "../editor";
+import { cellaLivello, type CellaLivello, type LivelloScelto } from "../../livello-corrente";
 import type { EditorContext } from "./context";
 import { checkedGrid } from "./helpers";
 import type { DrawStyle, Entered, Gesture } from "./types";
@@ -118,8 +119,11 @@ export interface StateContext {
   loads: number;
   /// Il livello corrente scelto, dal livello Standard: la sua chiave, e il
   /// suo posto fra i figli della radice per ritrovarlo quando la chiave non
-  /// c'è più. `null` finché nessuno ne sceglie uno.
-  chosen: { readonly key: string; readonly at: number } | null;
+  /// c'è più. `null` finché nessuno ne sceglie uno. Legge e scrive `livello`.
+  chosen: LivelloScelto | null;
+  /// La cella del livello corrente del disegno, condivisa dagli editor sullo
+  /// stesso documento (`livello-corrente.ts`).
+  livello: CellaLivello;
   /// La griglia, e se Ctrl o ⌘ è tenuto durante un gesto del puntatore: col
   /// tasto giù l'aggancio aspetta.
   grid: Grid;
@@ -299,7 +303,17 @@ export function installState(ctx: EditorContext): void {
   ctx.keyStrokes = 0;
   ctx.asking = false;
   ctx.loads = 0;
-  ctx.chosen = null;
+  // Il livello corrente sta nella cella del disegno (`livello-corrente.ts`),
+  // condivisa con gli altri editor sullo stesso documento: montare un editor
+  // non la svuota.
+  const cella = options.livello ?? cellaLivello();
+  ctx.livello = cella;
+  Object.defineProperty(ctx, "chosen", {
+    get: () => cella.get(),
+    set: (scelto: LivelloScelto | null) => cella.set(scelto),
+    enumerable: true,
+    configurable: true,
+  });
   ctx.grid = options.grid === undefined ? DEFAULT_GRID : checkedGrid(options.grid, DEFAULT_GRID);
   ctx.free = false;
   ctx.alt = false;

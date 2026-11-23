@@ -132,6 +132,7 @@ import { checkedGrid } from "./editor/helpers";
 import type { EditorContext } from "./editor/context";
 import type { DrawChrome } from "./editor/chrome/hosts";
 import { installState } from "./editor/state";
+import type { CellaLivello } from "../livello-corrente";
 import { installBare } from "./editor/chrome/bare";
 import { installOutline } from "./editor/chrome/outline";
 import { installCommandSearch } from "./editor/chrome/command-search";
@@ -280,6 +281,9 @@ export interface DrawSheet {
 }
 
 export interface DrawEditorOptions {
+  /// Il livello corrente del disegno, condiviso dagli editor sullo stesso
+  /// documento (`livello-corrente.ts`); senza, l'editor ne ha uno suo.
+  readonly livello?: CellaLivello;
   /// Lo spazio di lavoro, che sceglie le parti (default `full`); cambia con
   /// `setSpace`.
   readonly workspace?: Workspace;
@@ -633,7 +637,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       closeDescriptions();
       history.clear();
       ctx.selection = [];
-      ctx.chosen = null;
+      // Il livello corrente resta (è del disegno, non dell'editor): il testo
+      // riletto lo ritrova, o disegna in cima finché non c'è.
       ctx.boardChosen = null;
       ctx.isolation = null;
       ctx.cursor = null;
