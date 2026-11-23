@@ -82,6 +82,8 @@ export function mountDrawingSurface(
       vaultFonts: callbacks.drawingFonts,
       // «Esporta» apre la finestra dello Scrittoio.
       onExport: shellCommand === undefined ? undefined : () => shellCommand("shell.doc.export"),
+      // Tab nel Completo nasconde anche i pannelli, che stanno nell'ispettore.
+      onToggleInspector: shellCommand === undefined ? undefined : () => shellCommand("shell.inspector.toggle"),
     });
   }
   if (profile === PDF_PROFILE) {

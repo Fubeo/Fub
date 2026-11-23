@@ -320,6 +320,7 @@ export function installWorkspace(ctx: EditorContext): void {
     ctx.root.dataset.workspace = ctx.workspace;
     ctx.rail.element.dataset.size = sizeOf(ctx.workspace);
     full.hidden = fullHidden(ctx.workspace);
+    if (!vuoleCompleto()) ctx.pannelliTab(null);
     ctx.offer(ctx.featuresOf(ctx.workspace));
     ctx.syncRail(ctx.editable());
     ctx.syncPenOptions();

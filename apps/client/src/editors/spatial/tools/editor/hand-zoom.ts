@@ -201,6 +201,8 @@ export function installHandZoom(ctx: EditorContext): void {
         return;
       }
       if (!hovering || !ctx.cursorMark.hidden || ctx.pressed !== null || ctx.current !== null) return;
+      // Lo strumento del motore che scrive (il Testo) prende lo Spazio, come in VectorCraft.
+      if (ctx.motoreTool !== null && ctx.statoStrumento(ctx.motoreTool)?.wants_text === true) return;
       event.preventDefault();
       ctx.spaceHeld = true;
       showMode();

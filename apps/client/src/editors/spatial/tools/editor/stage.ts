@@ -19,6 +19,7 @@ import { SceneIndex, SceneIndexer } from "../hit";
 import type { DrawImages } from "../editor";
 import { INK_KEY, inkCopyKey, PAGE_SHEET } from "./constants";
 import { inlineChrome, type DrawChrome, type DrawPanelId, type DrawPanelPiece } from "./chrome/hosts";
+import { pannelliTab } from "./chrome/pannelli-tab";
 // La scheda Risorse (T10): il pannello, e i tipi del registro del Completo.
 import { createResourcesPanel, type PannelloRisorse } from "../resources-panel";
 import type { Selezione, Sezioni } from "../../completo/sezioni";
@@ -55,6 +56,11 @@ export interface StageContext {
   /// sezioni (`null` la toglie); `showResources` la apre o la chiude.
   collegaCompleto: (sezioni: Sezioni | null, motore: MotoreDelDisegno | null) => void;
   showResources: (open: boolean, focus?: boolean) => void;
+  /// Tab e Maiusc+Tab di VectorCraft (`window.dock`, `window.panels`): Tab nasconde la
+  /// barra, la colonna e i pannelli che si vedono, o rimostra quelli che l'ultimo Tab ha
+  /// nascosto (tutti e tre se nessuno si vede); `soloPannelli` mostra o nasconde i soli
+  /// pannelli. `null` rimostra tutto, uscendo dal Completo.
+  pannelliTab: (soloPannelli: boolean | null) => void;
   /// Il tipo del prossimo connettore: l'ultimo scelto nel pannello.
   connectorKind: ConnectorKind;
   /// I capi dei connettori che si possono prendere, per l'indice `index`.
@@ -197,6 +203,22 @@ export function installStage(ctx: EditorContext): void {
     ],
     tail: [suggestions.element, surfaceHint, live],
   });
+
+  // Tab e Maiusc+Tab come VectorCraft. Il dock si nasconde con lo stile: `hidden` lo
+  // tiene `syncDock` (il dock c'è se un pannello è aperto). Con i pannelli
+  // nell'ispettore dello Scrittoio li mostra e li nasconde l'ispettore.
+  const tab = pannelliTab(header, ctx.railColumn, {
+    siVedono: () => chrome.panelsShown?.() ?? (!dock.hidden && dock.style.display !== "none"),
+    mostra(si) {
+      if (chrome.panelsShown !== undefined) {
+        if (chrome.panelsShown() !== si) ctx.options.onToggleInspector?.();
+      } else dock.style.display = si ? "" : "none";
+    },
+  });
+  ctx.pannelliTab = (soloPannelli) => {
+    tab(soloPannelli);
+    ctx.syncDock();
+  };
 
   // Risorse (T10): si apre solo col Completo. Senza, la sua scheda non c'è,
   // e il pannello, se era aperto nel dock, si chiude.

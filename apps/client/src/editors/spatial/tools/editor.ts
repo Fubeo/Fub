@@ -356,6 +356,8 @@ export interface DrawEditorOptions {
   /// chiede («Esporta la selezione» dell'ispettore). Senza, il pulsante non
   /// c'è.
   readonly onExport?: (what?: "selection") => void;
+  /// Mostra o nasconde l'ispettore di chi ospita l'editor (Tab del Completo).
+  readonly onToggleInspector?: () => void;
   /// Il motore del disegno (K5): con lui Selezione, Rettangolo, Ellisse,
   /// Linea e Freccia chiedono a lui che cosa fare (`motore/gesti.ts`).
   /// Senza, o finché non c'è, gli strumenti fanno da sé, come sempre. Il

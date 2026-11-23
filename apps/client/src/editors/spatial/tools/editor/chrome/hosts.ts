@@ -68,6 +68,8 @@ export interface DrawChrome {
   reveal?(id: DrawPanelId): void;
   /// Gli strumenti offerti possono essere cambiati: le schede si rileggono.
   refresh?(): void;
+  /// Con i pannelli fuori dall'editor: vero se una loro scheda si vede adesso.
+  panelsShown?(): boolean;
 }
 
 /// La barra sopra, poi la colonna, il foglio e, se c'è, il dock in fila.
@@ -196,6 +198,7 @@ export function inspectorChrome(): InspectorChrome {
     reveal(id) {
       for (const listener of [...reveals]) listener(`draw.${id}`);
     },
+    panelsShown: () => [...mounted.values()].some((at) => at.sheet.isConnected && at.sheet.getClientRects().length > 0),
     refresh() {
       if (!parts || disposed) return;
       for (const part of parts.panels) arrange(part);

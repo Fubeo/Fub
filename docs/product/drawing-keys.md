@@ -74,11 +74,17 @@ Col motore presente i tasti senza `Ctrl` o `Alt` sono quelli di VectorCraft:
   l'ultima sfumatura, `Maiusc+D` la modalità di disegno;
 - `Esc` e `Invio` vanno prima allo strumento; senza niente da chiudere `Esc`
   toglie la selezione;
-- la lettera di uno strumento lo sceglie (sopra).
+- la lettera di uno strumento lo sceglie (sopra);
+- dal foglio `Tab` nasconde la barra, la colonna e i pannelli che si vedono, e
+  il `Tab` dopo rimostra quelli che aveva nascosto (tutti e tre se non se ne
+  vedeva nessuno); `Maiusc+Tab` mostra o nasconde i soli pannelli. Nello
+  Scrittoio i pannelli sono l'ispettore. Fuori dal foglio `Tab` va avanti fra i
+  comandi; uscendo dal Completo torna tutto;
+- `Spazio` tenuto, col puntatore sul foglio, trascina la vista come la Mano.
 
-Mentre lo strumento Testo scrive, le lettere, le frecce, `Invio` e `Canc` sono
-del testo. I tasti che aveva solo lo Standard (`Tab` fra gli oggetti,
-`Pag Su/Giù`, `Home` e `Fine`, `Spazio` per afferrare, `F2`, `?`, le cifre,
+Mentre lo strumento Testo scrive, le lettere, le frecce, lo `Spazio`, `Invio` e
+`Canc` sono del testo. I tasti che aveva solo lo Standard (`Tab` fra gli oggetti,
+`Pag Su/Giù`, `Home` e `Fine`, `Spazio` premuto per afferrare, `F2`, `?`, le cifre,
 `Maiusc+1` e `Maiusc+2`, `[` e `]` per ruotare, `#` e `%` per la griglia) non
 valgono.
 

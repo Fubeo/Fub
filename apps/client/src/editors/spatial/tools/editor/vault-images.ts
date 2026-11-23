@@ -397,6 +397,10 @@ export function installVaultImages(ctx: EditorContext): void {
       } else if (scriveTesto) {
         // Le lettere, Invio e Canc sono del testo che si scrive.
         return;
+      } else if (onSurface && event.key === "Tab") {
+        // Dal foglio Tab nasconde e rimostra barra, colonna e pannelli, Maiusc+Tab i
+        // pannelli (`window.dock`, `window.panels`). Fuori dal foglio Tab va avanti fra i comandi.
+        ctx.pannelliTab(event.shiftKey);
       } else if (onSurface && event.key === "Enter" && ctx.current === null && ctx.motoreTasto?.("Enter") === true) {
         // Chiuso dal motore.
       } else if ((event.key === "Delete" || event.key === "Backspace") && ctx.current === null && completo?.cancellaPunti?.() === true) {

@@ -137,6 +137,8 @@ export interface VectorSurfaceOptions {
   vaultFonts?: VaultFontPort;
   /// Apre la finestra «Esporta» della shell.
   onExport?(): void;
+  /// Mostra o nasconde l'ispettore dello Scrittoio, dove stanno i pannelli del disegno.
+  onToggleInspector?(): void;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -614,6 +616,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
               options.onExport!();
             },
           }),
+      ...(options.onToggleInspector === undefined || compact ? {} : { onToggleInspector: options.onToggleInspector }),
       onFontNotes: sayFonts,
       place,
       ...(drawing === null ? {} : { motore: drawing }),
