@@ -155,7 +155,7 @@ export async function chiama(
 }
 
 /// Un esito che non è un'anteprima: la selezione, le operazioni in un passo, e
-/// lo si dice. Un rifiuto del motore si dice col suo motivo (`motivoDelRifiuto`,
+/// lo si dice, con le perdite dell'esito se ce ne sono. Un rifiuto del motore si dice col suo motivo (`motivoDelRifiuto`,
 /// come per i colori) e non cambia niente. `true` se il comando è andato: le
 /// operazioni sono entrate (o non ce n'erano), senza un rifiuto.
 export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: AzioniEsito): boolean {
@@ -180,7 +180,14 @@ export function applicaEsito(esito: DrawingOutcome, etichetta: string, azioni: A
     return false;
   }
   azioni.seleziona(esito.selection);
-  azioni.annuncia(t("draw.completo.key.done", { command: etichetta }));
+  // Quello che il comando non ha potuto scrivere (per esempio le sfumature di
+  // «Campioni predefiniti») si dice con la frase del motore, mai in silenzio.
+  const perdite = esito.losses.map((perdita) => perdita.detail).join(" ");
+  azioni.annuncia(
+    perdite === ""
+      ? t("draw.completo.key.done", { command: etichetta })
+      : t("draw.completo.key.doneWithLosses", { command: etichetta, losses: perdite }),
+  );
   return true;
 }
 

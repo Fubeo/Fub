@@ -378,6 +378,20 @@ describe("applicaEsito", () => {
     expect(azioni.commit).not.toHaveBeenCalled();
     expect(azioni.seleziona).toHaveBeenCalled();
   });
+
+  it("le perdite dell'esito si dicono con la frase del motore, non in silenzio (K6 T14)", () => {
+    const azioni = { leggi: vi.fn(() => OPS), commit: vi.fn(() => true), seleziona: vi.fn(), annuncia: vi.fn() };
+    const losses = [
+      { element: "Tramonto", kind: "unsupported", detail: "«Tramonto» è una sfumatura." },
+      { element: "Oceano", kind: "unsupported", detail: "«Oceano» è una sfumatura." },
+    ] as DrawingOutcome["losses"];
+    expect(applicaEsito(esito({ ops: "[1]", losses }), "Campioni predefiniti", azioni)).toBe(true);
+    expect(azioni.commit).toHaveBeenCalledWith(OPS, "Campioni predefiniti");
+    const detto = azioni.annuncia.mock.calls[0]?.[0] as string;
+    expect(detto).toContain("Campioni predefiniti");
+    expect(detto).toContain("«Tramonto» è una sfumatura. «Oceano» è una sfumatura.");
+    expect(detto).not.toContain("{losses}");
+  });
 });
 
 describe("eseguiVoce, con gli appunti del Completo (K6 T11)", () => {
