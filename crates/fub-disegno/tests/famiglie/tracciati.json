@@ -6935,6 +6935,11 @@
       "atteso": {
         "rifiuto": "locked"
       }
+    },
+    {
+      "id": "ui.expandDialog",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/finestre-espandi.test.ts"
     }
   ]
 }

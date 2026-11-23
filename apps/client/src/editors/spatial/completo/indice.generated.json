@@ -4609,6 +4609,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "ui.expandDialog",
+      "chiamata": {
+        "client": "ui.expandDialog"
+      },
+      "etichetta": {
+        "it": "Espandi…",
+        "en": "Expand…"
+      },
+      "posto": "finestra",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": true
+    },
+    {
+      "fonte": "interfaccia",
       "id": "ui.newSwatch",
       "chiamata": {
         "client": "ui.newSwatch"

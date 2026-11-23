@@ -167,7 +167,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (Taglio con rettangolo) e `path.mirrorCut` (Specchia e taglia). Casi in `tests/famiglie/tracciati.json`.
   // T15 giro 7 porta a «fatto» Seleziona testo per font e Opzioni modifica globale (livelli); Avvia la
   // modifica globale resta «da fare», con la causa nella nota.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1065, fub: 114, escluso: 12, fatto: 360 });
+  // T12 finestre (Semplifica e Smussa): `ui.expandDialog` è «fatto», la stessa finestra di
+  // `object.expand` (la finestra di Espandi, con il suo test). Gli altri tre restano «da fare».
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1064, fub: 114, escluso: 12, fatto: 361 });
 });
 
 // --- un motore finto ---------------------------------------------------------------
