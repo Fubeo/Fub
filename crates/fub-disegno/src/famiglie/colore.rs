@@ -87,6 +87,22 @@ pub(crate) const SFUMATURE: [&str; 3] = ["paint.editGradient", "paint.setGradien
 /// Il comando che porta davanti il riempimento o il tratto: una lettura.
 pub(crate) const ALTERNA: &str = "paint.toggleActive";
 
+/// Il perché di Applica e Trova campione più vicino quando il documento non ha campioni
+/// (K6 T14 giro 9): il motore lo direbbe in inglese, e la frase è questa.
+pub(crate) const TESTO_SENZA_CAMPIONI: &str =
+    "Il disegno non ha campioni: aggiungine uno in Risorse › Campioni, o scegli «Aggiungi i colori usati», prima di cercare il campione più vicino.";
+
+/// Il documento non ha nessun campione con un colore pieno, come lo conta il motore
+/// (`library_colors`): i campioni riservati di sistema (Nessuno, Registro) non valgono,
+/// e una sfumatura non è un colore.
+fn senza_campioni(copia: &Copia) -> bool {
+    !copia
+        .documento
+        .swatches
+        .iter()
+        .any(|s| !s.is_reserved() && matches!(s.paint, Paint::Solid { .. }))
+}
+
 /// Il campione più vicino (T14 giro 9): Applica lo dà ai colori degli oggetti scelti, e
 /// Trova li cerca nei loro colori (o in un colore dato): sono sugli oggetti scelti.
 pub(crate) const DAGLI_OGGETTI_AGGIUNTI: [&str; 2] = [
@@ -301,6 +317,13 @@ impl StatoFamiglia for Stato {
     /// sono spenti col perché. `paint.toggleActive` non cambia il file: resta
     /// acceso.
     fn spento(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingDisabledReason> {
+        // Il campione più vicino cerca nei campioni del documento: senza, il motore
+        // risponderebbe in inglese. Il perché si dice qui, in italiano (K6 T14 giro 9).
+        if DAGLI_OGGETTI_AGGIUNTI.contains(&id) && senza_campioni(copia) {
+            return Some(DrawingDisabledReason::Other {
+                text: TESTO_SENZA_CAMPIONI.into(),
+            });
+        }
         if CAMPIONI.contains(&id) {
             return (!copia.modificabile).then_some(DrawingDisabledReason::ReadOnly);
         }
@@ -329,6 +352,11 @@ impl StatoFamiglia for Stato {
     /// Un tratto dell'Inchiostro scelto è `unmapped`; una fusione con meno di
     /// tre riempimenti pieni non fa niente: `empty`.
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        // Senza campioni nel documento il comando non fa niente: `empty`, e il perché è
+        // quello di `spento`.
+        if DAGLI_OGGETTI_AGGIUNTI.contains(&id) && senza_campioni(copia) {
+            return Some(DrawingRefusal::Empty);
+        }
         if sugli_scelti(id) && sceglie_inchiostro(copia, selezione) {
             return Some(DrawingRefusal::Unmapped);
         }

@@ -3006,7 +3006,7 @@
       ],
       "argomenti": {},
       "atteso": {
-        "errore": "bad_args"
+        "rifiuto": "empty"
       }
     },
     {
@@ -3017,7 +3017,7 @@
       ],
       "argomenti": {},
       "atteso": {
-        "errore": "bad_args"
+        "rifiuto": "empty"
       }
     },
     {
@@ -3038,6 +3038,188 @@
         "od4d4d4d4"
       ],
       "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni-scenari.svg",
+      "selezione": [
+        "ox1x1x1x1",
+        "ox2x2x2x2"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "ox1x1x1x1",
+                "attrs": {
+                  "fill": "url(#r3c3c3c3c) #cc79a7"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ox2x2x2x2",
+                "attrs": {
+                  "fill": "url(#r2b2b2b2b) #e69f00",
+                  "stroke": "url(#r1a1a1a1a) #0072b2"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "colore-scenari-piu-oggetti.svg"
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni-scenari.svg",
+      "selezione": [
+        "og6g6g6g6"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "og6g6g6g6",
+            "attrs": {
+              "fill": "url(#r2b2b2b2b) #e69f00"
+            }
+          }
+        ]
+      },
+      "dopo": "colore-scenari-dentro-gruppo.svg"
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni-scenari.svg",
+      "selezione": [
+        "og5g5g5g5"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "og6g6g6g6",
+                "attrs": {
+                  "fill": "url(#r2b2b2b2b) #e69f00"
+                }
+              },
+              {
+                "op": "set",
+                "id": "og7g7g7g7",
+                "attrs": {
+                  "fill": "url(#r3c3c3c3c) #cc79a7",
+                  "stroke": "url(#r1a1a1a1a) #0072b2"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "colore-scenari-gruppo-intero.svg"
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni-scenari.svg",
+      "selezione": [
+        "oh8h8h8h8"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oh8h8h8h8",
+            "attrs": {
+              "fill": "url(#r3c3c3c3c) #cc79a7"
+            }
+          }
+        ]
+      },
+      "dopo": "colore-scenari-nascosto.svg"
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni-scenari.svg",
+      "selezione": [
+        "ol1l1l1l1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni-scenari.svg",
+      "selezione": [
+        "oi9i9i9i9"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "campioni-scenari.svg",
+      "selezione": [
+        "ox3x3x3x3"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ox3x3x3x3",
+            "attrs": {
+              "stroke": "url(#r2b2b2b2b) #e69f00"
+            }
+          }
+        ]
+      },
+      "dopo": "colore-scenari-senza-riempimento.svg"
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "immagini-tipo.svg",
+      "selezione": [
+        "ir1r1r1r1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.color.applyNearestSwatch",
+      "disegno": "immagini-tipo.svg",
+      "selezione": [
+        "ig4g4g4g4"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.color.nearestSwatch",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "color": "#ff0000"
+      },
       "atteso": {
         "rifiuto": "empty"
       }
