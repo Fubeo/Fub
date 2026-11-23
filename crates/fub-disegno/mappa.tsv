@@ -295,11 +295,11 @@ motore	layer.releaseToLayers	Release to Layers (Sequence)	Window › Layers	live
 motore	layer.releaseToLayersBuild	Release to Layers (Build)	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Rilascia su livelli (accumulo)
 motore	layer.reverse	Reverse Order	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Inverti ordine
 motore	layer.template	Template	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Modello
-motore	layer.hideOthers	Hide Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il comando non cambia niente sui livelli di un disegno di Fub, nemmeno con il livello scelto: lavora sui livelli di primo livello (layerpanel.rs, others) e la prova di tre livelli dà «empty»; la causa non è ancora trovata, va indagata con una prova a parte	Nascondi altri
+motore	layer.hideOthers	Hide Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	con la carta il motore importa un solo livello di primo livello (vendor/vectorcraft/crates/svg/src/import.rs, layer_mode), e «gli altri» sono quelli di primo livello rispetto al livello corrente, non alla scelta (layerpanel.rs, others): aspetta T15 (il modello dei livelli)	Nascondi altri
 motore	layer.showAll	Show All Layers	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Mostra tutti i livelli
 motore	layer.outlineOthers	Outline Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Altri in contorno
 motore	layer.previewAll	Preview All Layers	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Anteprima di tutti i livelli
-motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	il comando non cambia niente sui livelli di un disegno di Fub, nemmeno con il livello scelto: lavora sui livelli di primo livello (layerpanel.rs, others) e la prova di tre livelli dà «empty»; la causa non è ancora trovata, va indagata con una prova a parte	Blocca altri
+motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia	con la carta il motore importa un solo livello di primo livello (vendor/vectorcraft/crates/svg/src/import.rs, layer_mode), e «gli altri» sono quelli di primo livello rispetto al livello corrente, non alla scelta (layerpanel.rs, others): aspetta T15 (il modello dei livelli)	Blocca altri
 motore	layer.unlockAll	Unlock All Layers	Window › Layers	livelli	F1	T15	fatto	ispettore/livelli	famiglia		Sblocca tutti i livelli
 motore	layer.locate	Locate Object	Window › Layers	livelli	F1	T15	da fare	ispettore/livelli	famiglia		Individua oggetto
 motore	library.list	Libraries		simboli	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Librerie
@@ -345,7 +345,7 @@ motore	object.createObjectMosaic	Create Object Mosaic…	Object	immagini	F3	T20	
 motore	object.cropImage	Crop Image	Object	immagini	F3	T20	da fare	menu/oggetto	famiglia		Ritaglia immagine
 motore	object.maskImage	Mask		immagini	F3	T20	da fare	ispettore/design	famiglia		Maschera
 motore	object.createTrimMarks	Create Trim Marks	Object	stampa	F4	T25	da fare	menu/oggetto	famiglia		Crea segni di taglio
-motore	object.shape.convertToShape	Convert to Shape	Object › Shape	forme	F1	T13	da fare	menu/oggetto	famiglia		Converti in forma
+motore	object.shape.convertToShape	Convert to Shape	Object › Shape	forme	F1	T13	da fare	menu/oggetto	famiglia	il motore la fa come forma viva (rettangolo, ellisse) e la scena non scrive una forma viva di quelle forme: fub:shape ha solo freccia, connettore, poligono, stella e spessore variabile (docs/reference/scene-format-shapes.md, scene-format.md); la forma viva è in Ricetta (scene-format-recipe.md)	Converti in forma
 motore	artboard.convertToArtboards	Convert to Artboards	Object › Artboards	tavole	F2	T19	da fare	menu/oggetto	famiglia		Converti in tavole da disegno
 motore	artboard.rearrange	Rearrange All Artboards…	Object › Artboards	tavole	F2	T19	da fare	menu/oggetto	famiglia	finestra	Ridisponi tutte le tavole da disegno…
 motore	appearance.setNewArtBasic	New Art Has Basic Appearance	Window › Appearance	aspetto	F1	T15	da fare	ispettore/design	famiglia		La nuova grafica ha aspetto di base
@@ -691,7 +691,7 @@ motore	webExport.settings	Save for Web Settings		web	F3	T22	da fare	interno	fami
 motore	webExport.presets.list	Save for Web Presets		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Preset di Salva per il web
 motore	webExport.presets.save	Save Save for Web Preset		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Salva preset di Salva per il web
 motore	webExport.presets.delete	Delete Save for Web Preset		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Elimina preset di Salva per il web
-motore	object.distort	Free Distort		trasforma	F1	T13	da fare	ispettore/design	famiglia		Distorsione libera
+motore	object.distort	Free Distort		trasforma	F1	T13	fatto	ispettore/design	famiglia		Distorsione libera
 motore	paint.sampleColor	Sample Color		colore	F1	T14	fatto	ispettore/design	famiglia		Campiona colore
 motore	eyedropper.setOptions	Eyedropper Options		colore	F1	T14	fatto	ispettore/design	famiglia		Opzioni contagocce
 motore	artboard.move	Move Artboard		tavole	F2	T19	da fare	ispettore/design/documento	famiglia		Sposta tavola da disegno
@@ -854,7 +854,7 @@ motore	object.scale	Scale…	Object › Transform	trasforma	F1	T13	fatto	menu/og
 motore	object.reflect	Reflect…	Object › Transform	trasforma	F1	T13	fatto	menu/oggetto/trasforma	famiglia	finestra	Rifletti…
 motore	object.shear	Shear…	Object › Transform	trasforma	F1	T13	fatto	menu/oggetto/trasforma	famiglia	finestra	Inclina…
 motore	object.transformAgain	Transform Again	Object › Transform	trasforma	F1	T13	fatto	menu/oggetto/trasforma	famiglia		Ripeti trasformazione
-motore	object.nudge	Nudge		trasforma	F1	T13	da fare	ispettore/design	famiglia		Sposta leggermente
+motore	object.nudge	Nudge		trasforma	F1	T13	fatto	ispettore/design	famiglia		Sposta leggermente
 motore	object.arrange.bringToFront	Bring to Front	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta in primo piano
 motore	object.arrange.bringForward	Bring Forward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta avanti
 motore	object.arrange.sendBackward	Send Backward	Object › Arrange	nucleo	F1	T11	fatto	menu/oggetto	nucleo		Porta indietro
@@ -883,7 +883,7 @@ motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	fatto	menu/
 motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	da fare	ispettore/design	famiglia	aspetta T27	Proprietà forma dinamica
 interfaccia	addon.pathtools.cornerTool	Corner Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Angoli
 interfaccia	addon.pathtools.sharedEdgeTool	Shared Edge Merge Tool		tracciati	F1	T12	da fare	ispettore/design	famiglia		Strumento Fondi bordo condiviso
-interfaccia	addon.arrange.zoomSelection	Zoom to Selection		trasforma	F1	T13	da fare	ispettore/design	famiglia		Zoom sulla selezione
+interfaccia	addon.arrange.zoomSelection	Zoom to Selection		trasforma	F1	T13	da fare	ispettore/design	famiglia	è una vista, non un comando del file: lo zoom sulla scelta è nell'editor (tools/editor/view.ts, fitSelection), e il Completo non lo collega ancora a questo comando; il lavoro è della vista del client	Zoom sulla selezione
 interfaccia	app.language	Interface Language		fub	—	T2	fub	fub	—	la lingua di Fub	Lingua interfaccia
 interfaccia	file.open	Open…		fub	—	T2	fub	fub	—	aprire dal vault	Apri…
 interfaccia	file.save	Save		fub	—	T2	fub	fub	—	il salvataggio di Fub (DocumentSession)	Salva

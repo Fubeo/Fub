@@ -1555,6 +1555,22 @@
     },
     {
       "fonte": "motore",
+      "id": "object.distort",
+      "chiamata": {
+        "comando": "disegno.object.distort"
+      },
+      "etichetta": {
+        "it": "Distorsione libera",
+        "en": "Free Distort"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.distribute",
       "chiamata": {
         "comando": "disegno.object.distribute"
@@ -1712,6 +1728,22 @@
       "tasto": "Cmd+Shift+M",
       "effetto": "cambia",
       "finestra": true
+    },
+    {
+      "fonte": "motore",
+      "id": "object.nudge",
+      "chiamata": {
+        "comando": "disegno.object.nudge"
+      },
+      "etichetta": {
+        "it": "Sposta leggermente",
+        "en": "Nudge"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
     },
     {
       "fonte": "motore",

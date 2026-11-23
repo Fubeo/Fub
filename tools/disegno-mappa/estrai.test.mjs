@@ -149,7 +149,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // `addon.pathtools.cornerRemove` («Rimuovi angoli»): la ricetta riscritta si applica nella scena del client.
   // T15 seleziona tipo: Seleziona testo di punto e in area («fatto», nel sottomenu Oggetto); le maniglie
   // di direzione e i pennelli restano «da fare», con la causa provata nella nota.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1081, fub: 114, escluso: 12, fatto: 344 });
+  // T13 sposta e distorci: `object.nudge` (Sposta leggermente) e `object.distort` (Distorsione libera)
+  // diventano «fatto», con i loro casi in trasforma.json. `object.shape.convertToShape` e lo zoom sulla
+  // selezione restano «da fare», con la causa nella nota (la forma viva non c'è nel formato; lo zoom è della vista).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1079, fub: 114, escluso: 12, fatto: 346 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -1772,39 +1772,691 @@
     {
       "id": "object.transformEach",
       "disegno": "base.svg",
-      "selezione": ["oa1a1a1a1"],
-      "argomenti": {"scaleH": 50, "scaleV": 50, "moveH": 20},
-      "atteso": {"ops": [{"op": "set", "id": "oa1a1a1a1", "attrs": {"transform": "matrix(0.5 0 0 0.5 95 62.5)"}}]},
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "scaleH": 50,
+        "scaleV": 50,
+        "moveH": 20
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(0.5 0 0 0.5 95 62.5)"
+            }
+          }
+        ]
+      },
       "dopo": "object-transform-each-50-20.svg"
     },
     {
       "id": "object.transformEach",
       "disegno": "base.svg",
-      "selezione": ["oa1a1a1a1"],
-      "argomenti": {"rotate": 90},
-      "atteso": {"ops": [{"op": "set", "id": "oa1a1a1a1", "attrs": {"transform": "matrix(0 -1 1 0 25 275)"}}]},
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "rotate": 90
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(0 -1 1 0 25 275)"
+            }
+          }
+        ]
+      },
       "dopo": "object-transform-each-rotate-90.svg"
     },
     {
       "id": "object.transformEach",
       "disegno": "bloccato.svg",
-      "selezione": ["oa1a1a1a1", "ob2b2b2b2"],
-      "argomenti": {"moveH": 20},
-      "atteso": {"rifiuto": "locked"}
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "moveH": 20
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
     },
     {
       "id": "object.transformEach",
       "disegno": "base.svg",
-      "selezione": ["oa1a1a1a1"],
-      "argomenti": {"scaleH": 0},
-      "atteso": {"errore": "bad_args"}
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "scaleH": 0
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
     },
     {
       "id": "object.transformEach",
       "disegno": "base.svg",
-      "selezione": ["oa1a1a1a1"],
-      "argomenti": {"moveH": 0},
-      "atteso": {"rifiuto": "empty"}
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "moveH": 0
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 1,
+        "dy": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 1 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-dx.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 0,
+        "dy": -1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 0 -1)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-su.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": -1,
+        "dy": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 -1 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-sx.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 0,
+        "dy": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 0 1)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-giu.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 1,
+        "dy": 0,
+        "big": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 10 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-grande.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 0,
+        "dy": 0
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": "abc"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 1 0)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 1 0)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "nudge-due.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "gd4d4d4d4"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "gd4d4d4d4",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 1 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-gruppo.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [
+        "oe5e5e5e5"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oe5e5e5e5",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 1 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-dentro-gruppo.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "testo.svg",
+      "selezione": [
+        "ot1t1t1t1"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "ot1t1t1t1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 1 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-testo.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "t13-ruotato.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 1,
+        "dy": 0
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(0.866 0.5 -0.5 0.866 83.5962 -58.2532)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-ruotato.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "bloccato.svg",
+      "selezione": [
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "t13-livello-bloccato-davvero.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "t13-nascosto.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 1 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "nudge-nascosto.svg"
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "t13-inchiostro.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.distort",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            120,
+            100
+          ],
+          [
+            220,
+            100
+          ],
+          [
+            220,
+            150
+          ],
+          [
+            120,
+            150
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 20 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "distorci-rettangolo.svg"
+    },
+    {
+      "id": "object.distort",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            200,
+            100
+          ],
+          [
+            100,
+            100
+          ],
+          [
+            100,
+            150
+          ],
+          [
+            200,
+            150
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(-1 0 0 1 300 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "distorci-incrociati.svg"
+    },
+    {
+      "id": "object.distort",
+      "disegno": "t13-distorci.svg",
+      "selezione": [
+        "oc2c2c2c2"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            190,
+            190
+          ],
+          [
+            310,
+            180
+          ],
+          [
+            300,
+            230
+          ],
+          [
+            200,
+            210
+          ]
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc2c2c2c2",
+            "attrs": {
+              "d": "M195.32 200.63 C181.94 149.27 245.33 243.49 304.19 209.07 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "distorci-curva.svg"
+    },
+    {
+      "id": "object.distort",
+      "disegno": "t13-distorci.svg",
+      "selezione": [
+        "oc2c2c2c2"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            200,
+            200
+          ],
+          [
+            300,
+            190
+          ],
+          [
+            300,
+            210
+          ],
+          [
+            200,
+            200
+          ]
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.distort",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            120,
+            220
+          ],
+          [
+            170,
+            220
+          ],
+          [
+            170,
+            250
+          ],
+          [
+            120,
+            250
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "object.distort",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "object.distort",
+      "disegno": "base.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "corners": [
+          [
+            100,
+            100
+          ],
+          [
+            200,
+            100
+          ],
+          [
+            200,
+            150
+          ],
+          [
+            100,
+            150
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "object.nudge",
+      "disegno": "t13-tre-livelli.svg",
+      "selezione": [
+        "oa1a1a1a1",
+        "ob2b2b2b2"
+      ],
+      "argomenti": {
+        "dx": 1
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "oa1a1a1a1",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 1 0)"
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "transform": "matrix(1 0 0 1 1 0)"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "t13-due-livelli-dopo.svg"
     }
   ]
 }
