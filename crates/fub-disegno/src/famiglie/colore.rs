@@ -95,6 +95,61 @@ pub(crate) const LETTURE: [&str; 3] = ["paint.toggleActive", "paint.recent", "pa
 /// Aggiungere ai campioni cambia il disegno: quello è un passo normale, e non sta qui.
 pub(crate) const TEMI_LETTURE: [&str; 2] = ["colorTheme.save", "colorTheme.delete"];
 
+/// Le librerie di campioni (K6 T14, librerie): salvarne una (`swatch.library.save`) e caricarne una dal suo
+/// contenuto (`swatch.library.load`, con `data` o `dataBase64`) sono letture. Il motore restituisce il
+/// contenuto, o lo tiene nella sua sessione: il file del disegno non cambia e non c'è un passo d'annulla.
+/// Un percorso o la cartella utente non passano mai al motore, che leggerebbe o scriverebbe il disco:
+/// Fub non dà accesso ai file. Per questo `copyToUser` non è qui (da fare, vedi la mappa).
+pub(crate) const LIBRERIE_LETTURE: [&str; 2] = ["swatch.library.save", "swatch.library.load"];
+
+/// I formati di libreria che Fub lascia passare al motore (`palette_io::PaletteFormat`). Un formato che non
+/// c'è si ferma qui: un errore del motore ferma la sessione del disegno.
+const FORMATI_LIBRERIE: [&str; 4] = ["vcswatches", "gpl", "ase", "css"];
+
+/// Gli argomenti delle librerie che Fub ferma prima del motore: un percorso o la cartella utente, un formato
+/// che non c'è, un nome vuoto da salvare, un caricamento senza contenuto.
+fn argomenti_delle_librerie(id: &str, argomenti: &Value) -> Option<String> {
+    if !LIBRERIE_LETTURE.contains(&id) {
+        return None;
+    }
+    if ["path", "user"].iter().any(|k| argomenti.get(*k).is_some_and(|v| !v.is_null())) {
+        return Some("Questa operazione non può scrivere o leggere un file.".into());
+    }
+    if id == "swatch.library.save" {
+        if let Some(formato) = argomenti.get("format").filter(|v| !v.is_null()) {
+            let formato = formato.as_str().map(|f| f.trim_start_matches('.').to_ascii_lowercase());
+            if !formato.as_deref().is_some_and(|f| FORMATI_LIBRERIE.contains(&f)) {
+                return Some("Il formato non c'è: scegli vcswatches, gpl, ase o css.".into());
+            }
+        }
+        if argomenti.get("name").and_then(Value::as_str).is_some_and(|n| n.trim().is_empty()) {
+            return Some("La libreria ha bisogno di un nome.".into());
+        }
+        return None;
+    }
+    let ha = |k: &str| argomenti.get(k).and_then(Value::as_str).is_some_and(|t| !t.is_empty());
+    if !ha("data") && !ha("dataBase64") {
+        return Some("La libreria da caricare non ha un contenuto: scegli di nuovo il file.".into());
+    }
+    None
+}
+
+/// Il motore dice i rifiuti delle librerie in inglese (`swatch.library.*`, `swatchlib.rs`): qui le frasi
+/// italiane. Le richieste sbagliate le ferma `argomenti_delle_librerie`; qui restano i casi che solo il
+/// motore vede, cioè il contenuto che non si legge.
+fn messaggio_delle_librerie(id: &str, messaggio: &str) -> Option<String> {
+    if !LIBRERIE_LETTURE.contains(&id) {
+        return None;
+    }
+    if messaggio == "bad dataBase64" {
+        return Some("Il contenuto della libreria non si legge: scegli di nuovo il file.".into());
+    }
+    if id == "swatch.library.load" {
+        return Some("Il file non è una libreria di campioni che Fub legge: sono vcswatches, gpl, ase o acb.".into());
+    }
+    Some("La libreria non si è potuta salvare.".into())
+}
+
 /// Il motore dice i rifiuti dei temi in inglese (`colorTheme.*`, `colortheme.rs`): qui le frasi
 /// italiane. Il nome di un tema è quello che il motore scrive tra le parole, e lo si riprende così.
 /// `None` per un messaggio che non si riconosce: resta com'è.
@@ -410,18 +465,21 @@ impl StatoFamiglia for Stato {
     fn legge(&self, id: &str) -> bool {
         // Le letture del colore e quelle di Ricolora (i colori della scelta, le proposte di
         // riduzione e casuali) non cambiano il file; `recolor.apply` sì.
-        LETTURE.contains(&id) || LETTURE_DELLA_SCELTA.contains(&id) || TEMI_LETTURE.contains(&id)
+        LETTURE.contains(&id) || LETTURE_DELLA_SCELTA.contains(&id) || TEMI_LETTURE.contains(&id) || LIBRERIE_LETTURE.contains(&id)
     }
 
     /// Le frasi in italiano per i rifiuti dei temi (K6 T14, temi): il nome vuoto o già usato, il tema
     /// che non c'è, i colori fuori dal numero o non validi. Il motore le dice in inglese.
     fn messaggio_del_motore(id: &str, messaggio: &str) -> Option<String> {
-        messaggio_dei_temi(id, messaggio)
+        messaggio_dei_temi(id, messaggio).or_else(|| messaggio_delle_librerie(id, messaggio))
     }
 
     /// Un campione nuovo, cambiato o fatto dai colori usati è globale;
     /// eliminarne uno lascia a chi lo usava il suo colore.
     fn adatta(&self, id: &str, argomenti: Value) -> Result<Value, PluginError> {
+        if let Some(motivo) = argomenti_delle_librerie(id, &argomenti) {
+            return Err(PluginError::BadArgs(motivo.into()));
+        }
         if let Some(motivo) = argomenti_delle_letture(id, &argomenti) {
             return Err(PluginError::BadArgs(motivo.into()));
         }

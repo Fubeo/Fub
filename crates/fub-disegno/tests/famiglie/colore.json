@@ -7056,6 +7056,185 @@
       }
     },
     {
+      "id": "swatch.library.save",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "format": "gpl",
+        "name": "Mia"
+      },
+      "atteso": {
+        "lettura_parziale": {
+          "format": "gpl",
+          "count": 3
+        }
+      }
+    },
+    {
+      "id": "swatch.library.save",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "format": "vcswatches",
+          "count": 3
+        }
+      }
+    },
+    {
+      "id": "swatch.library.save",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "lettura_parziale": {
+          "format": "vcswatches",
+          "count": 0
+        }
+      }
+    },
+    {
+      "id": "swatch.library.save",
+      "disegno": "libreria-sfumatura.svg",
+      "selezione": [],
+      "argomenti": {
+        "format": "gpl"
+      },
+      "atteso": {
+        "lettura_parziale": {
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "swatch.library.save",
+      "disegno": "libreria-sfumatura.svg",
+      "selezione": [],
+      "argomenti": {
+        "format": "vcswatches"
+      },
+      "atteso": {
+        "lettura_parziale": {
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "swatch.library.save",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": ""
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.save",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "path": "libreria-prova.gpl"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.save",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "user": true
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.save",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "format": "pdf"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.load",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Mia",
+        "data": "GIMP Palette\nName: Mia\n#\n255   0   0 Rosso\n"
+      },
+      "atteso": {
+        "lettura_parziale": {
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "swatch.library.load",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Mia",
+        "dataBase64": "R0lNUCBQYWxldHRlCk5hbWU6IE1pYQojCjI1NSAgIDAgICAwIFJvc3NvCg=="
+      },
+      "atteso": {
+        "lettura_parziale": {
+          "count": 1
+        }
+      }
+    },
+    {
+      "id": "swatch.library.load",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.load",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "path": "libreria-prova.gpl"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.load",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "data": "non e' una libreria"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.library.load",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "dataBase64": "@@@"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
       "id": "color_themes",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/temi-sezione.test.ts"
