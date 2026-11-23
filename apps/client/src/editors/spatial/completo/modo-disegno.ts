@@ -4,6 +4,7 @@
 // riga `view.drawMode` resta «da fare» in mappa). Il modo sta nella sessione del motore: il Completo
 // lo tiene per il segno e lo rilegge dal valore che il motore ha accettato, non dal clic.
 import { openDialog } from "../../../kit/dialog";
+import { textButton } from "../../../kit/button";
 import { openLifetime } from "../../../ui/lifetime";
 import { t } from "../strings";
 
@@ -22,14 +23,20 @@ export interface PortaModoDisegno {
 export function apriModoDisegno(porta: PortaModoDisegno): Promise<void> {
   const vita = openLifetime();
   const attivo = porta.leggi();
-  const dentro = document.createElement("p");
-  dentro.textContent = t("draw.view.modo.dentroPerche");
+  // Dentro è nella scelta, spenta: il pulsante è disabilitato, e sotto c'è il perché.
+  const corpo = document.createElement("div");
+  const dentro = textButton({ label: t("draw.view.modo.inside"), onPress: () => undefined, lifetime: vita });
+  dentro.dataset.action = "inside";
+  dentro.disabled = true;
+  const perche = document.createElement("p");
+  perche.textContent = t("draw.view.modo.dentroPerche");
+  corpo.append(dentro, perche);
   const etichetta = (modo: ModoDisegno, chiave: "draw.view.modo.normal" | "draw.view.modo.behind"): string =>
     modo === attivo ? t("draw.view.modo.attivo", { nome: t(chiave) }) : t(chiave);
   const dialogo = openDialog<"annulla" | ModoDisegno>({
     title: t("draw.view.modo.title"),
     description: t("draw.view.modo.description"),
-    body: dentro,
+    body: corpo,
     actions: [
       { id: "cancel", label: t("draw.view.modo.cancel"), value: "annulla" },
       {

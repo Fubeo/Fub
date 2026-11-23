@@ -123,7 +123,7 @@ motore	shape.arc	Arc		forme	F1	T13	fatto	finestra	famiglia		Arco
 motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	fatto	finestra	famiglia		Griglia rettangolare
 motore	shape.polarGrid	Polar Grid		forme	F1	T13	fatto	finestra	famiglia		Griglia polare
 motore	path.create	Create Path		tracciati	F1	T12	da fare	ispettore/design	famiglia		Crea tracciato
-motore	view.drawMode	Drawing Mode		vista	F1	T11	da fare	menu/visualizza	famiglia	una voce di ≡ › Visualizza («Modalità di disegno») che apre la scelta Normale / Dietro / Dentro (completo/modo-disegno.ts). Normale e Dietro funzionano: il motore li accetta e il segno segue il modo accettato (K6 T11, tests/modo_di_disegno.rs). Dentro non si fa: il motore crea un gruppo di ritaglio attorno al tracciato, e la differenza generica del file risponde unsupported, il disegno non cambia; la voce è spenta col suo perché. Per questo la riga resta da fare	Modalità di disegno
+motore	view.drawMode	Drawing Mode		vista	F1	T11	fatto	menu/visualizza	famiglia	Dentro spenta: il motore crea un gruppo di ritaglio che la differenza del file rifiuta (unsupported); test tests/modo_di_disegno.rs	Modalità di disegno
 motore	text.create	Create Text		testo	F2	T16	da fare	ispettore/design	famiglia		Crea testo
 motore	css.selection	CSS Properties		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Proprietà CSS
 motore	css.generate	Generate CSS		web	F3	T22	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Genera CSS

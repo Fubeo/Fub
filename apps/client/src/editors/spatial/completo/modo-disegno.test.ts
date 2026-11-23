@@ -134,14 +134,26 @@ function pulsante(azione: "normal" | "behind" | "cancel"): HTMLButtonElement {
 const giro = () => new Promise((fine) => setTimeout(fine, 0));
 
 describe("Modalità di disegno nel menu Visualizza (K6 T11)", () => {
-  it("la voce apre la scelta con Normale attiva; Dentro è una riga spenta col suo perché, senza pulsante", async () => {
+  it("la voce apre la scelta con Normale attiva; Dentro è spenta col suo perché", async () => {
     const { motore } = motoreFinto();
     const completo = completoCon(motore);
     await apriDalMenu(completo);
     expect(pulsante("normal").textContent).toContain("(attiva)");
     expect(pulsante("behind").textContent).not.toContain("(attiva)");
-    expect(scelta()?.querySelector('[data-action="inside"]')).toBeNull();
+    const dentro = scelta()?.querySelector<HTMLButtonElement>('[data-action="inside"]');
+    expect(dentro?.disabled).toBe(true);
     expect(scelta()?.textContent).toContain("gruppo di ritaglio");
+  });
+
+  it("dalla ricerca e dal menu la voce «Modalità di disegno» c'è ed è accesa", async () => {
+    const { motore } = motoreFinto();
+    const completo = completoCon(motore);
+    const righe = await completo.ricerca(() => ["k1"], AZIONI);
+    const riga = righe?.find((one) => one.label === "Modalità di disegno");
+    expect(riga, "la ricerca offre la voce").toBeDefined();
+    expect(riga?.disabled).toBe(false);
+    const menu = await completo.menu(() => ["k1"], AZIONI);
+    expect(nelMenu(menu, "Modalità di disegno").disabled).toBeFalsy();
   });
 
   it("(1) Normale è il modo di partenza: scegliere Normale quando è attivo non manda niente", async () => {
