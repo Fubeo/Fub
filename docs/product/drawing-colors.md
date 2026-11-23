@@ -147,7 +147,11 @@ griglia scorre dentro la scheda.
   con lo stesso colore non si raddoppia; con un colore diverso prende un numero
   (per esempio «Clay 1 2»). Le librerie di sfumature non si aggiungono: il formato
   ha solo colori pieni, e la finestra lo dice prima. «Altra libreria…» (caricare
-  un file) non c'è ancora.
+  un file) non c'è ancora. Anche «Salva libreria campioni…» non c'è ancora: il
+  motore sa dare il contenuto di una libreria da salvare e caricarne una dai suoi
+  dati, ma il client non lo usa, perché l'indice non legge lo schema di questi due
+  comandi (`path` e `data` senza tipo). Le librerie dell'utente staranno in
+  `.fub/plugins/fub.draw/librerie/` (D11): le scrive Fub, il motore non tocca il disco.
 
 Le stesse finestre si aprono dal menu ≡ e da Ctrl+/: «Nuovo campione…» e
 «Opzioni campione…», spenta finché non c'è un campione scelto.

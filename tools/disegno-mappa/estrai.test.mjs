@@ -167,6 +167,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // (Taglio con rettangolo) e `path.mirrorCut` (Specchia e taglia). Casi in `tests/famiglie/tracciati.json`.
   // T15 giro 7 porta a «fatto» Seleziona testo per font e Opzioni modifica globale (livelli); Avvia la
   // modifica globale resta «da fare», con la causa nella nota.
+  // T14 librerie: le letture salva e carica sono nel motore e nei casi, ma restano «da fare»: l'indice del
+  // client non legge il loro schema (path e data senza tipo).
   assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1065, fub: 114, escluso: 12, fatto: 360 });
 });
 
