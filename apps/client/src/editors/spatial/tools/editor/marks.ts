@@ -12,7 +12,7 @@ import { t } from "../../strings";
 import type { OverlayHandle } from "../../painter/overlay";
 import { movedMatrix } from "../edit";
 import { fubAttributes, linkTarget, nodeOf, plainAttributes } from "../arrange";
-import { segniDeiPunti, STRUMENTI_CHE_CAMBIANO_I_PUNTI, STRUMENTI_CON_LA_CORNICE } from "../../motore/punti-diretti";
+import { segniDeiPunti, STRUMENTI_CHE_CAMBIANO_I_PUNTI, STRUMENTI_CON_LA_CORNICE, TAG_CON_I_PUNTI } from "../../motore/punti-diretti";
 import { vistaDelMotore } from "./hand-zoom";
 import {
   angleOf,
@@ -214,9 +214,10 @@ export function installMarks(ctx: EditorContext): void {
   };
 
   /// Un oggetto che il motore segna col suo contorno invece che col riquadro:
-  /// un tracciato vero, non un tratto dell'Inchiostro.
+  /// un tracciato o una forma che VectorCraft legge come tracciato (rettangolo,
+  /// cerchio, ellisse), non un tratto dell'Inchiostro.
   const tracciatoVero = (unit: Unit): boolean =>
-    (unit.tag === "path" || unit.tag === "polyline" || unit.tag === "polygon" || unit.tag === "line") && !fubAttributes(unit.node).has("ink");
+    TAG_CON_I_PUNTI.has(unit.tag) && !fubAttributes(unit.node).has("ink");
 
   /// I segni dei tracciati scelti con uno strumento del motore, a gesto
   /// fermo (`motore/punti-diretti.ts`): il contorno, i punti e le maniglie.

@@ -16,7 +16,9 @@
 //   cubica che arriva e di quella che parte, o il punto di controllo di una
 //   quadratica. Si riconosce dalla posizione in coordinate di scena, perché il
 //   motore e il file contano i punti a modo loro.
-// - **Solo tracciati veri**: `path`, `polyline`, `polygon` e `line`. Un tratto
+// - **Tracciati e forme**: `path`, `polyline`, `polygon` e `line`, e `rect`,
+//   `circle` ed `ellipse`, che VectorCraft legge come tracciati: i loro punti
+//   sono quelli del tracciato che l'import ne fa (`puntiDellaForma`). Un tratto
 //   dell'Inchiostro di Fub non ha punti da spostare (gli strumenti dei
 //   tracciati lo rifiutano), e chi lo chiama lo lascia fuori.
 
@@ -101,10 +103,87 @@ function puntiDelD(d: string): Punto[][] {
 
 const uguali = (a: Point, b: Point): boolean => Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
 
+/// Quanto è lunga la maniglia di un quarto d'ellisse, in raggi: la cubica che
+/// usvg (e quindi VectorCraft all'import) mette al posto dell'arco.
+const KAPPA = 0.5522847498307936;
+
+/// Un punto di una forma: dove sta, e la maniglia che arriva e quella che parte.
+interface PuntoForma {
+  readonly at: Point;
+  readonly entra: Point | null;
+  readonly esce: Point | null;
+}
+
+/// I punti di `<rect>`, `<circle>` ed `<ellipse>` come VectorCraft li ha dopo
+/// l'import di un SVG, dove ogni forma è un tracciato (`svg/src/import`, usvg):
+/// un rettangolo ha i quattro angoli dall'alto a sinistra in senso orario; con
+/// gli angoli tondi ne ha otto, due per angolo, dal lato in alto; un'ellisse
+/// ne ha quattro, da destra passando per il basso, con le maniglie dei quarti.
+/// `null` per una forma senza misure (larghezza o raggio nullo).
+function puntiDellaForma(tag: string, a: ReadonlyMap<string, string>): PuntoForma[] | null {
+  const n = (nome: string): number | null => {
+    const v = a.get(nome);
+    return v === undefined ? null : length(v);
+  };
+  if (tag === "rect") {
+    const x = n("x") ?? 0;
+    const y = n("y") ?? 0;
+    const w = n("width") ?? 0;
+    const h = n("height") ?? 0;
+    if (!(w > 0 && h > 0)) return null;
+    let rx = n("rx");
+    let ry = n("ry");
+    if (rx === null || rx < 0) rx = ry !== null && ry > 0 ? ry : 0;
+    if (ry === null || ry < 0) ry = rx;
+    rx = Math.min(rx, w / 2);
+    ry = Math.min(ry, h / 2);
+    const semplice = (p: Point): PuntoForma => ({ at: p, entra: null, esce: null });
+    if (!(rx > 0 && ry > 0)) return [semplice([x, y]), semplice([x + w, y]), semplice([x + w, y + h]), semplice([x, y + h])];
+    const kx = rx * KAPPA;
+    const ky = ry * KAPPA;
+    const r = x + w;
+    const b = y + h;
+    return [
+      { at: [x + rx, y], entra: [x + rx - kx, y], esce: null },
+      { at: [r - rx, y], entra: null, esce: [r - rx + kx, y] },
+      { at: [r, y + ry], entra: [r, y + ry - ky], esce: null },
+      { at: [r, b - ry], entra: null, esce: [r, b - ry + ky] },
+      { at: [r - rx, b], entra: [r - rx + kx, b], esce: null },
+      { at: [x + rx, b], entra: null, esce: [x + rx - kx, b] },
+      { at: [x, b - ry], entra: [x, b - ry + ky], esce: null },
+      { at: [x, y + ry], entra: null, esce: [x, y + ry - ky] },
+    ];
+  }
+  if (tag === "circle" || tag === "ellipse") {
+    const cx = n("cx") ?? 0;
+    const cy = n("cy") ?? 0;
+    const rx = tag === "circle" ? (n("r") ?? 0) : (n("rx") ?? n("ry") ?? 0);
+    const ry = tag === "circle" ? rx : (n("ry") ?? n("rx") ?? 0);
+    if (!(rx > 0 && ry > 0)) return null;
+    const kx = rx * KAPPA;
+    const ky = ry * KAPPA;
+    return [
+      { at: [cx + rx, cy], entra: [cx + rx, cy - ky], esce: [cx + rx, cy + ky] },
+      { at: [cx, cy + ry], entra: [cx + kx, cy + ry], esce: [cx - kx, cy + ry] },
+      { at: [cx - rx, cy], entra: [cx - rx, cy + ky], esce: [cx - rx, cy - ky] },
+      { at: [cx, cy - ry], entra: [cx - kx, cy - ry], esce: [cx + kx, cy - ry] },
+    ];
+  }
+  return null;
+}
+
+/// I tag che il foglio segna come tracciati col motore: quelli veri e le forme
+/// che VectorCraft legge come tracciati.
+export const TAG_CON_I_PUNTI: ReadonlySet<string> = new Set(["path", "polyline", "polygon", "line", "rect", "circle", "ellipse"]);
+
 /// I punti di un tracciato scelto, nelle coordinate dell'oggetto.
 function puntiDi(tracciato: TracciatoScelto): Punto[] {
   const a = tracciato.attributi;
   switch (tracciato.tag) {
+    case "rect":
+    case "circle":
+    case "ellipse":
+      return (puntiDellaForma(tracciato.tag, a) ?? []).map((p) => ({ at: p.at, maniglie: [p.entra, p.esce].filter((m): m is Point => m !== null) }));
     case "path":
       return puntiDelD(a.get("d") ?? "").flat();
     case "polyline":
@@ -161,6 +240,30 @@ export function contornoDi(tracciato: TracciatoScelto): OverlayHandle | null {
     case "line":
       spezzata(puntiDi(tracciato).map((p) => p.at), false);
       break;
+    case "rect":
+    case "circle":
+    case "ellipse": {
+      // Il contorno chiuso della forma: un lato dritto dove i due punti non
+      // hanno maniglie fra loro, una cubica dove le hanno.
+      const punti = puntiDellaForma(tracciato.tag, a);
+      if (punti === null) return null;
+      punti.forEach((p, i) => {
+        if (i === 0) {
+          parts.push({ kind: "move", to: apply(m, p.at) });
+          return;
+        }
+        const prima = punti[i - 1]!;
+        if (prima.esce === null && p.entra === null) parts.push({ kind: "line", to: apply(m, p.at) });
+        else parts.push({ kind: "cubic", c1: apply(m, prima.esce ?? prima.at), c2: apply(m, p.entra ?? p.at), to: apply(m, p.at) });
+      });
+      const ultimo = punti[punti.length - 1]!;
+      const primo = punti[0]!;
+      if (ultimo.esce !== null || primo.entra !== null) {
+        parts.push({ kind: "cubic", c1: apply(m, ultimo.esce ?? ultimo.at), c2: apply(m, primo.entra ?? primo.at), to: apply(m, primo.at) });
+      }
+      parts.push({ kind: "close" });
+      break;
+    }
     default:
       return null;
   }

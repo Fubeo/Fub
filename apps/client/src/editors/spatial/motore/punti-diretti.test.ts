@@ -72,7 +72,7 @@ describe("i punti della Selezione diretta", () => {
     const arco = parti(tracciato("path", { d: "M0 0 A 10 10 0 0 1 20 0" }));
     expect(arco.length).toBeGreaterThan(3);
     expect(arco[arco.length - 1]).toEqual({ kind: "line", to: [20, 0] });
-    expect(contornoDi(tracciato("rect", { width: "10", height: "10" }))).toBeNull();
+    expect(contornoDi(tracciato("g", {}))).toBeNull();
   });
 
   it("non ripete il primo punto di un sottotracciato chiuso che ci torna", () => {
@@ -123,6 +123,58 @@ describe("i punti della Selezione diretta", () => {
     expect(ancore(segni).map((a) => a.pieno)).toEqual([true, true, false, true]);
   });
 
+  it("un rettangolo, un cerchio e un'ellisse hanno i punti del tracciato che VectorCraft ne fa all'import", () => {
+    // Il rettangolo: i quattro angoli dall'alto a sinistra, senza maniglie.
+    expect(ancore(segniDeiPunti([tracciato("rect", { x: "10", y: "20", width: "30", height: "40" })], [], 0.5, { diretto: false, contorni: false }))).toEqual([
+      { x: 10, y: 20, pieno: true },
+      { x: 40, y: 20, pieno: true },
+      { x: 40, y: 60, pieno: true },
+      { x: 10, y: 60, pieno: true },
+    ]);
+    // Con gli angoli tondi: due punti per angolo, dal lato in alto; `ry` mancante vale `rx`.
+    const tondo = ancore(segniDeiPunti([tracciato("rect", { width: "100", height: "50", rx: "10" })], [], 0.5)).map((a) => [a.x, a.y]);
+    expect(tondo).toEqual([
+      [10, 0],
+      [90, 0],
+      [100, 10],
+      [100, 40],
+      [90, 50],
+      [10, 50],
+      [0, 40],
+      [0, 10],
+    ]);
+    // L'ellisse: quattro punti da destra passando per il basso, con le maniglie dei quarti
+    // solo con uno strumento che cambia i punti.
+    const ellisse = tracciato("ellipse", { cx: "50", cy: "50", rx: "20", ry: "10" });
+    expect(ancore(segniDeiPunti([ellisse], [], 0.5)).map((a) => [a.x, a.y])).toEqual([
+      [70, 50],
+      [50, 60],
+      [30, 50],
+      [50, 40],
+    ]);
+    expect(segniDeiPunti([ellisse], [], 0.5, { diretto: true, contorni: false }).filter((s) => s.kind === "control")).toHaveLength(8);
+    expect(segniDeiPunti([ellisse], [], 0.5, { diretto: false, contorni: false }).filter((s) => s.kind === "control")).toHaveLength(0);
+    expect(ancore(segniDeiPunti([tracciato("circle", { cx: "5", cy: "5", r: "5" })], [], 0.5))).toHaveLength(4);
+    // Una forma senza misure non ha punti.
+    expect(segniDeiPunti([tracciato("rect", { width: "0", height: "10" })], [], 0.5)).toEqual([]);
+    expect(segniDeiPunti([tracciato("circle", { r: "0" })], [], 0.5)).toEqual([]);
+  });
+
+  it("il contorno di un rettangolo è chiuso coi lati dritti, quello di un'ellisse con quattro cubiche", () => {
+    expect(contornoDi(tracciato("rect", { width: "10", height: "5" }))).toEqual({
+      kind: "outline",
+      parts: [
+        { kind: "move", to: [0, 0] },
+        { kind: "line", to: [10, 0] },
+        { kind: "line", to: [10, 5] },
+        { kind: "line", to: [0, 5] },
+        { kind: "close" },
+      ],
+    });
+    const ellisse = contornoDi(tracciato("circle", { r: "10" }));
+    expect(ellisse?.kind === "outline" ? ellisse.parts.map((p) => p.kind) : null).toEqual(["move", "cubic", "cubic", "cubic", "cubic", "close"]);
+  });
+
   it("legge anche polyline, polygon e line, e ignora gli altri tag", () => {
     expect(ancore(segniDeiPunti([tracciato("polyline", { points: "0,0 5,5 10,0" })], [], 0.5))).toHaveLength(3);
     expect(ancore(segniDeiPunti([tracciato("polygon", { points: "0 0 5 5 10 0" })], [], 0.5))).toHaveLength(3);
@@ -130,7 +182,7 @@ describe("i punti della Selezione diretta", () => {
       [1, 2],
       [3, 4],
     ]);
-    expect(segniDeiPunti([tracciato("rect", { width: "10", height: "10" })], [], 0.5)).toEqual([]);
+    expect(segniDeiPunti([tracciato("g", {})], [], 0.5)).toEqual([]);
     expect(segniDeiPunti([tracciato("path", { d: "non è un tracciato" })], [], 0.5)).toEqual([]);
   });
 

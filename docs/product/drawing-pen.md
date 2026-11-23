@@ -211,6 +211,10 @@ I segni sul foglio sono quelli di VectorCraft (licenza MIT):
   e vuoti gli altri;
 - la **cornice** con le maniglie per ridimensionare e girare c'è solo con la
   Selezione e con gli strumenti delle forme; con gli altri strumenti non c'è.
+- un **rettangolo**, un **cerchio** e un'**ellisse** mostrano i punti del
+  tracciato che VectorCraft ne fa quando legge l'SVG: i quattro angoli del
+  rettangolo (otto, due per angolo, se gli angoli sono tondi) e i quattro punti
+  dell'ellisse a destra, in basso, a sinistra e in alto.
 
 Con la **Selezione diretta**, un clic su un punto lo sceglie da solo (Maiusc
 lo aggiunge o lo toglie) e trascinarlo lo sposta; trascinare un punto di un
