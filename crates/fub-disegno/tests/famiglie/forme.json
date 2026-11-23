@@ -2449,6 +2449,100 @@
       "atteso": {
         "rifiuto": "unsupported"
       }
+    },
+    {
+      "id": "shape.rectangle",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "x": 20,
+        "y": 150,
+        "width": 30,
+        "height": 20
+      },
+      "prima": [
+        {
+          "id": "view.drawMode",
+          "selezione": [
+            "op7a7a7a7"
+          ],
+          "argomenti": {
+            "mode": "behind"
+          }
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "after": "gd4d4d4d4"
+            },
+            "elem": {
+              "tag": "rect",
+              "attrs": {
+                "x": "20",
+                "y": "150",
+                "width": "30",
+                "height": "20",
+                "fill": "#ffffff",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "og0000001"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "modo-dietro-scelto.svg"
+    },
+    {
+      "id": "shape.rectangle",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "x": 20,
+        "y": 150,
+        "width": 30,
+        "height": 20
+      },
+      "prima": [
+        {
+          "id": "view.drawMode",
+          "selezione": [],
+          "argomenti": {
+            "mode": "behind"
+          }
+        }
+      ],
+      "atteso": {
+        "ops": [
+          {
+            "op": "add",
+            "parent": "l1a2b3c4d",
+            "pos": {
+              "first": true
+            },
+            "elem": {
+              "tag": "rect",
+              "attrs": {
+                "x": "20",
+                "y": "150",
+                "width": "30",
+                "height": "20",
+                "fill": "#ffffff",
+                "stroke": "#000000",
+                "stroke-width": "1",
+                "id": "og0000001"
+              }
+            }
+          }
+        ]
+      },
+      "dopo": "modo-dietro-niente.svg"
     }
   ]
 }

@@ -4435,6 +4435,22 @@
     },
     {
       "fonte": "motore",
+      "id": "view.drawMode",
+      "chiamata": {
+        "comando": "disegno.view.drawMode"
+      },
+      "etichetta": {
+        "it": "Modalità di disegno",
+        "en": "Drawing Mode"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": "Shift+D",
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "view.transparencyGrid",
       "chiamata": {
         "client": "view.transparencyGrid"

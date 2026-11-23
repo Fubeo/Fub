@@ -126,6 +126,18 @@ l'oggetto, ciò che lo contiene o la pagina.
 - **Oltre**, o per un oggetto che il disegno non sa leggere, la riga non ha
   miniatura e ne tiene il posto vuoto, perché i nomi restino in colonna.
 
+## Disegnare dietro
+
+La modalità «Disegna dietro» mette il nuovo oggetto sotto il primo oggetto
+scelto, nello stesso livello; senza scelta va in fondo al livello. «Disegna
+normale» torna al modo di sempre, che mette il nuovo in cima. Il modo sta
+nella sessione: cambiarlo non cambia il file, e riaprendo il disegno torna
+normale. Il comando è `view.drawMode` (famiglia `vista`, K6 T11).
+
+«Disegna dentro», che crea il nuovo oggetto dentro un tracciato, non c'è
+ancora nel Completo: il file non ha ancora il gruppo di ritaglio che serve.
+Chi lo chiede riceve la frase che lo dice, e il modo resta quello di prima.
+
 ## Nel Completo, la scheda Livelli
 
 Nello spazio Completo il pannello sta anche nella scheda «Livelli»
