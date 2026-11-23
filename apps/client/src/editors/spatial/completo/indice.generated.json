@@ -5031,6 +5031,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "view.rotate",
+      "chiamata": {
+        "client": "view.rotate"
+      },
+      "etichetta": {
+        "it": "Ruota vista",
+        "en": "Rotate View"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "view.rotateReset",
       "chiamata": {
         "client": "view.rotateReset"

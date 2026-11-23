@@ -28,7 +28,7 @@ function fingi(angle = 0) {
 }
 
 describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
-  it("il client fa griglia, aggancio, trasparenza, contorno, righelli, bordi, riquadro e rotateReset, e nessun'altra", () => {
+  it("il client fa griglia, aggancio, trasparenza, contorno, righelli, bordi, riquadro, ruota vista e rotateReset, e nessun'altra", () => {
     expect(COMANDI_VISUALIZZA).toEqual([
       "view.grid",
       "view.snapToGrid",
@@ -37,6 +37,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
       "view.rulers",
       "view.edges",
       "view.boundingBox",
+      "view.rotate",
       "view.rotateReset",
     ]);
     expect(isComandoVisualizza("view.grid")).toBe(true);
@@ -47,13 +48,13 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     expect(isComandoVisualizza("view.smartGuides")).toBe(false);
     expect(isComandoVisualizza("view.snapToPoint")).toBe(false);
     expect(isComandoVisualizza("view.cornerWidget")).toBe(false);
-    expect(isComandoVisualizza("view.rotate")).toBe(false);
+    expect(isComandoVisualizza("view.rotate")).toBe(true);
     expect(isComandoVisualizza("tool.select")).toBe(false);
   });
 
   it("le file del menu portano ognuna voce una volta sola, nell'ordine dei comandi", () => {
     expect(FILE_VISUALIZZA.flat()).toEqual([...COMANDI_VISUALIZZA]);
-    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([2, 3, 2, 1]);
+    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([2, 3, 2, 2]);
   });
 
   it("una voce che il client fa è attiva; rotateReset è spenta col perché se la vista non è girata", () => {
