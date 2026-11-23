@@ -259,6 +259,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.addon.pen.removePoint",
         "disegno.addon.pen.togglePoint",
         "disegno.addon.pen.reshape",
+        // Allunga e Fai scorrere (K6 T12, strumenti dei punti) prendono il tratto dal valore (`element`).
+        "disegno.addon.pathtools.extend",
+        "disegno.addon.pathtools.slideAnchor",
         // Mostra tutti e Sblocca tutti (K6 T15, livelli altri) guardano tutti i livelli, non la scelta.
         "disegno.layer.showAll",
         "disegno.layer.unlockAll",

@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg). T12 punti: i comandi su un punto nominato con `element` e il suo numero (sposta un punto o una maniglia, aggiungi, elimina, converti, chiudi, continua, dividi), con un elemento bloccato (`locked`), l'inchiostro (`unmapped`), un numero che il tracciato non ha o un `id` del motore nel valore (`bad_args`); Sposta ancoraggi ed Elimina punti di ancoraggio sui punti scelti (`anchors`). Giro angoli (K6 T12): Imposta angoli e Rimuovi angoli tagliano e tolgono gli angoli vivi di un tracciato, con la ricetta nel file. Un raggio fuori limiti, uno smusso che non c'è o un punto che il tracciato non ha è un errore degli argomenti in italiano, o `empty` quando non c'è nessun angolo da cambiare; Rimuovi angoli riporta la forma viva: un tracciato tagliato torna con gli stessi punti, come `polygon` con la ricetta a raggi zero (non il byte di partenza); senza angoli tagliati non c'è niente da togliere (`empty`). Giro tagli (K6 T12): Taglio con linea, Taglio con rettangolo e Specchia e taglia tagliano i tracciati scelti. Una linea o un rettangolo che non tocca niente non danno passo; un testo e un rettangolo primitivo non si tagliano (`unsupported`); un oggetto nascosto non si tocca (`empty`). Il taglio con linea di un'ellisse con contorno e tratteggio tiene il contorno e il tratteggio nei pezzi.",
+  "$nota": "I casi della famiglia «tracciati» (piano K6, T12): la penna di Bézier (Esc, Invio e lo strumento cambiato, cioè il commit senza tasti, lasciano il tracciato aperto, in un passo; un Esc senza tracciato non fa niente), gli strumenti di «disegnare», l'inchiostro di Fub che gli strumenti e i comandi dei tracciati non toccano (`unmapped`), i comandi sui punti scelti con i loro `anchors`, e i comandi di Oggetto › Tracciato senza finestra. Un tracciato composto (un `<path>` di più sottotracciati, il buco fatto col verso) va e torna uguale: Inverti su `composto.svg` dà `composto-rovescio.svg`, e Inverti su quello ridà `composto.svg`; la regola `evenodd` non è un attributo della scena, e chi la tocca o la porta (`composto-pari.svg`) non cambia niente. Un risultato vuoto è `empty`. Le finestre (Semplifica, Smussa, Sposta tracciato, Espandi, Dividi in trattini) hanno i loro argomenti; Smussa vuole un tracciato seghettato (`seghettato.svg`), e su un tratto della penna di Fub anche Espandi è `unmapped`. Il disegno di partenza è di solito `tracciati/base.svg`. L'Elaborazione tracciati (giro 5) va su `elabora.svg`: due quadrati che si sovrappongono (oa1a1a1a1 sotto, blu; ob2b2b2b2 sopra, rosso con il bordo), un quadrato lontano, un testo, un oggetto bloccato, un gruppo, un'immagine e un tratto della penna. I due oggetti di prima spariscono e il risultato, con un id nuovo, prende il posto del più alto; fra due tracciati i metodi forma tengono lo stile di quello davanti (Meno davanti quello dietro), le operazioni lasciano un gruppo di pezzi. Con un oggetto solo, o un'intersezione che non lascia niente, è `empty` e niente sparisce; un oggetto bloccato è `locked`; un'immagine o l'inchiostro di Fub sono `unmapped`; un gruppo si espande. Un testo entra col contorno delle sue lettere: qui il motore non ha caratteri, il testo non ne ha, e sparirebbe senza entrare nel risultato, quindi è `unmapped`; con Inter entra (la prova `l_elaborazione_usa_le_lettere_di_un_testo` in famiglie.rs). Giro 6 (K6 T12): le maschere di ritaglio (tracciati/ritaglio*.svg: una fatta da Fub, una scritta da Inkscape con il clipPath in <defs>, una col clip-path sul tracciato come la scrive Illustrator) e Media, Media e unisci (tracciati/media.svg). T12 punti: i comandi su un punto nominato con `element` e il suo numero (sposta un punto o una maniglia, aggiungi, elimina, converti, chiudi, continua, dividi), con un elemento bloccato (`locked`), l'inchiostro (`unmapped`), un numero che il tracciato non ha o un `id` del motore nel valore (`bad_args`); Sposta ancoraggi ed Elimina punti di ancoraggio sui punti scelti (`anchors`). Giro angoli (K6 T12): Imposta angoli e Rimuovi angoli tagliano e tolgono gli angoli vivi di un tracciato, con la ricetta nel file. Un raggio fuori limiti, uno smusso che non c'è o un punto che il tracciato non ha è un errore degli argomenti in italiano, o `empty` quando non c'è nessun angolo da cambiare; Rimuovi angoli riporta la forma viva: un tracciato tagliato torna con gli stessi punti, come `polygon` con la ricetta a raggi zero (non il byte di partenza); senza angoli tagliati non c'è niente da togliere (`empty`). Giro tagli (K6 T12): Taglio con linea, Taglio con rettangolo e Specchia e taglia tagliano i tracciati scelti. Una linea o un rettangolo che non tocca niente non danno passo; un testo e un rettangolo primitivo non si tagliano (`unsupported`); un oggetto nascosto non si tocca (`empty`). Il taglio con linea di un'ellisse con contorno e tratteggio tiene il contorno e il tratteggio nei pezzi. Giro strumenti dei punti (K6 T12): Allunga tracciato, Fai scorrere il punto, Imposta punto di ancoraggio e la Gomma dei punti. Un tracciato a due punti non scende sotto i due: la gomma non dà passo. Un estremo di un tracciato aperto non scorre (`bad_args`, in italiano), e il tracciato chiuso non si allunga.",
   "casi": [
     {
       "id": "pen",
@@ -6934,6 +6934,761 @@
       },
       "atteso": {
         "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "end",
+        "length": 20
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L100 60 L160 60 L160 120 L160 140"
+            }
+          }
+        ]
+      },
+      "dopo": "estendi-aperto.svg"
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "start",
+        "length": -10
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M50 60 L100 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "accorcia-aperto.svg"
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "end",
+        "length": -179.9
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L40.1 60"
+            }
+          }
+        ]
+      },
+      "dopo": "accorcia-quasi-tutto.svg"
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "end",
+        "length": -180
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "end",
+        "length": -181
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "element": "op7a7a7a7",
+        "end": "end",
+        "length": 20
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "nope",
+        "length": 5
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.slideAnchor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "anchor": 1,
+        "t": 0.3
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L112.96 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "fai-scorrere-punto.svg"
+    },
+    {
+      "id": "addon.pathtools.slideAnchor",
+      "disegno": "base.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "element": "op7a7a7a7",
+        "anchor": 0,
+        "t": 0.3
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "op7a7a7a7",
+            "attrs": {
+              "transform": "matrix(0.784 0 -0.108 1 99.36 0)"
+            }
+          }
+        ]
+      },
+      "dopo": "scorri-chiuso.svg"
+    },
+    {
+      "id": "addon.pathtools.slideAnchor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "anchor": 0,
+        "t": 0.3
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.slideAnchor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "anchor": 1,
+        "t": 1.5
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.setAnchor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "anchors": [
+          {
+            "element": "oc1c1c1c1",
+            "subpath": 0,
+            "anchor": 1,
+            "at": [
+              100,
+              60
+            ],
+            "end": false
+          }
+        ],
+        "x": 110,
+        "y": 70
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L110 70 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "muovi-punto.svg"
+    },
+    {
+      "id": "addon.pathtools.setAnchor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "anchors": [
+          {
+            "element": "oc1c1c1c1",
+            "subpath": 0,
+            "anchor": 1,
+            "at": [
+              100,
+              60
+            ],
+            "end": false
+          }
+        ],
+        "inLength": 0
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.setAnchor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "x": 110,
+        "y": 70
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.setAnchor",
+      "disegno": "curvo.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "anchors": [
+          {
+            "element": "oa1a1a1a1",
+            "subpath": 0,
+            "anchor": 1,
+            "at": [
+              360,
+              200
+            ],
+            "end": false
+          }
+        ],
+        "x": 370,
+        "y": 200
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "d": "M300 200 C320 170 357.68 180.07 370 200 C382.32 219.93 356.2 260 330 260 C303.8 260 287.68 219.93 300 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "curvo-muovi.svg"
+    },
+    {
+      "id": "addon.pathtools.slideAnchor",
+      "disegno": "curvo.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "element": "oa1a1a1a1",
+        "anchor": 1,
+        "t": 0.3
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "d": "M300 200 C325.13 162.31 367.86 187.74 363.9 221.75 C361.74 240.37 348.34 260 330 260 C303.8 260 287.68 219.93 300 200 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "curvo-scorri.svg"
+    },
+    {
+      "id": "addon.pathtools.setAnchor",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "anchors": [
+          {
+            "element": "oc1c1c1c1",
+            "subpath": 0,
+            "anchor": 3,
+            "at": [
+              160,
+              120
+            ],
+            "end": true
+          }
+        ],
+        "x": 170,
+        "y": 130
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "transform": "matrix(1 0 0.1667 1.1667 -10 -10)",
+              "stroke-width": "1.85"
+            }
+          }
+        ]
+      },
+      "dopo": "ultimo-punto.svg"
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            90,
+            60
+          ],
+          [
+            110,
+            60
+          ]
+        ],
+        "diameter": 20
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "gomma-punto.svg"
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            90,
+            60
+          ],
+          [
+            110,
+            60
+          ]
+        ],
+        "diameter": 20,
+        "plain": true
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L160 60 L160 120"
+            }
+          }
+        ]
+      },
+      "dopo": "gomma-piano.svg"
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "punti-due.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            40,
+            60
+          ],
+          [
+            50,
+            60
+          ]
+        ],
+        "diameter": 10
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "punti-due.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            160,
+            60
+          ],
+          [
+            150,
+            60
+          ]
+        ],
+        "diameter": 10
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            90,
+            60
+          ],
+          [
+            110,
+            60
+          ]
+        ],
+        "diameter": 0
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": []
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            90,
+            60
+          ],
+          [
+            110,
+            60
+          ]
+        ],
+        "ids": [
+          "x"
+        ]
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            90,
+            60
+          ],
+          [
+            110,
+            60
+          ]
+        ],
+        "plain": "si"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {
+        "points": [
+          [
+            90,
+            60
+          ],
+          [
+            110,
+            60
+          ]
+        ]
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "od4d4d4d4"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            50,
+            50
+          ],
+          [
+            60,
+            60
+          ]
+        ],
+        "diameter": 4
+      },
+      "atteso": {
+        "rifiuto": "unsupported"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "base.svg",
+      "selezione": [
+        "oi8b8b8b8"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            120,
+            220
+          ],
+          [
+            160,
+            220
+          ]
+        ],
+        "diameter": 4
+      },
+      "atteso": {
+        "rifiuto": "unmapped"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "elabora.svg",
+      "selezione": [
+        "oe5e5e5e5"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            250,
+            50
+          ],
+          [
+            260,
+            60
+          ]
+        ],
+        "diameter": 10
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "taglio-pixel.svg",
+      "selezione": [
+        "om0m0m0m0"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            300,
+            80
+          ],
+          [
+            310,
+            90
+          ]
+        ],
+        "diameter": 10
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "angoli-livello-bloccato.svg",
+      "selezione": [
+        "op7a7a7a7"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            300,
+            200
+          ],
+          [
+            310,
+            210
+          ]
+        ],
+        "diameter": 10
+      },
+      "atteso": {
+        "rifiuto": "locked"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "taglio-contorno.svg",
+      "selezione": [
+        "oa1a1a1a1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            100,
+            100
+          ],
+          [
+            104,
+            104
+          ]
+        ],
+        "diameter": 10
+      },
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "addon.pathtools.erase",
+      "disegno": "gomma-punto.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "points": [
+          [
+            90,
+            60
+          ],
+          [
+            110,
+            60
+          ]
+        ],
+        "diameter": 20
+      },
+      "atteso": {
+        "rifiuto": "empty"
       }
     }
   ]

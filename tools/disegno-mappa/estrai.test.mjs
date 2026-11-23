@@ -169,7 +169,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // modifica globale resta «da fare», con la causa nella nota.
   // T13 marionetta: `object.puppetWarp` (Altera marionetta, spilli e spostamento in un comando) e
   // `object.puppetWarp.pins` (la lettura degli spilli proposti) diventano «fatto», con i casi in trasforma.json.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1063, fub: 114, escluso: 12, fatto: 362 });
+  // T12 strumenti dei punti porta a «fatto» tre righe dei tracciati: Allunga tracciato (`extend`), Imposta
+  // punto di ancoraggio (`setAnchor`) e Fai scorrere il punto (`slideAnchor`). La Gomma dei punti
+  // (`addon.pathtools.erase`) resta «da fare»: manca il gesto nel client. Casi in `tests/famiglie/tracciati.json`.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1060, fub: 114, escluso: 12, fatto: 365 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -291,6 +291,22 @@
     },
     {
       "fonte": "motore",
+      "id": "addon.pathtools.extend",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.extend"
+      },
+      "etichetta": {
+        "it": "Estendi tracciato",
+        "en": "Extend Path"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "addon.pathtools.removeKeepShape",
       "chiamata": {
         "comando": "disegno.addon.pathtools.removeKeepShape"
@@ -300,6 +316,38 @@
         "en": "Remove Points, Keep Shape"
       },
       "posto": "menu/oggetto/tracciato",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.setAnchor",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.setAnchor"
+      },
+      "etichetta": {
+        "it": "Imposta punto di ancoraggio",
+        "en": "Set Anchor"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "addon.pathtools.slideAnchor",
+      "chiamata": {
+        "comando": "disegno.addon.pathtools.slideAnchor"
+      },
+      "etichetta": {
+        "it": "Fai scorrere il punto di ancoraggio lungo il tracciato",
+        "en": "Slide Anchor Along Path"
+      },
+      "posto": "ispettore/design",
       "famiglia": "tracciati",
       "tasto": null,
       "effetto": "cambia",

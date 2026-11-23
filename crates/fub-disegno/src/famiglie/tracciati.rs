@@ -74,8 +74,11 @@ mod angoli;
 #[path = "tracciati_tagli.rs"]
 mod tagli;
 
+#[path = "tracciati_strumenti.rs"]
+mod strumenti;
+
 /// I comandi che lavorano sui punti di ancoraggio scelti.
-pub(crate) const SUI_PUNTI: [&str; 9] = [
+pub(crate) const SUI_PUNTI: [&str; 10] = [
     "path.moveAnchors",
     "path.deleteAnchors",
     "path.convertAnchors",
@@ -85,19 +88,22 @@ pub(crate) const SUI_PUNTI: [&str; 9] = [
     "path.averageJoin",
     "path.removeAnchors",
     "addon.pathtools.removeKeepShape",
+    // Imposta punto di ancoraggio: muove i punti scelti (con le maniglie) e ne imposta le maniglie.
+    "addon.pathtools.setAnchor",
 ];
 
 /// I comandi sui punti che senza punti scelti non fanno niente: da ≡ sono
 /// spenti con `needs_anchors`.
-const SOLO_COI_PUNTI: [&str; 4] = [
+const SOLO_COI_PUNTI: [&str; 5] = [
     "path.deleteAnchors",
     "path.cutAtAnchors",
     "path.removeAnchors",
     "addon.pathtools.removeKeepShape",
+    "addon.pathtools.setAnchor",
 ];
 
 /// I comandi di Oggetto › Tracciato senza finestra, sui tracciati scelti.
-const SUGLI_OGGETTI: [&str; 18] = [
+const SUGLI_OGGETTI: [&str; 19] = [
     "path.reverse",
     "object.path.outlineStroke",
     "object.path.addAnchorPoints",
@@ -116,6 +122,7 @@ const SUGLI_OGGETTI: [&str; 18] = [
     "path.lineCut",
     "path.rectCut",
     "path.mirrorCut",
+    "addon.pathtools.erase",
 ];
 
 /// I comandi di Oggetto › Tracciato con una finestra (T12, giro 3), sui
@@ -400,6 +407,9 @@ impl StatoFamiglia for Stato {
         if tagli::TAGLI.contains(&id) {
             return tagli::argomenti(id, &valore);
         }
+        if strumenti::STRUMENTI.contains(&id) {
+            return strumenti::argomenti(id, copia, valore);
+        }
         argomenti_del_punto(id, copia, valore)
     }
 
@@ -421,6 +431,12 @@ impl StatoFamiglia for Stato {
         }
         if tagli::TAGLI.contains(&id) {
             return tagli::rifiuto(copia, selezione);
+        }
+        if id == strumenti::GOMMA_PUNTI {
+            if sceglie_inchiostro(copia, selezione) {
+                return Some(DrawingRefusal::Unmapped);
+            }
+            return strumenti::rifiuto(copia, selezione);
         }
         if (sugli_oggetti(id) || RITAGLI.contains(&id)) && sceglie_inchiostro(copia, selezione) {
             return Some(DrawingRefusal::Unmapped);

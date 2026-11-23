@@ -150,7 +150,7 @@ pub(super) fn argomenti(id: &str, copia: &Copia, mut valore: Value) -> Result<Va
 
 /// Porta i punti `[x, y]` o `[x, y, pressione]` dalla scena al documento; ciò che
 /// non è un punto numerico lo lascia com'è, e il motore lo rifiuta.
-fn nel_documento(punti: &mut [Value], copia: &Copia) {
+pub(super) fn nel_documento(punti: &mut [Value], copia: &Copia) {
     let radice = copia.radice;
     for p in punti.iter_mut() {
         let Some(a) = p.as_array_mut() else { continue };
