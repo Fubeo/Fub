@@ -1,5 +1,5 @@
 {
-  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti. Giro librerie 2 (K6 T14): swatch.library.add copia una libreria di base. I campioni diventano globali e senza gruppo, nell'ordine della libreria; un nome già presente con lo stesso colore non si raddoppia (si salta), con un colore diverso prende un numero («Clay 1 2»). Una libreria o un campione che non c'è, o `apply`, sono errori degli argomenti in italiano. Giro finestra (K6 T14): la finestra «Librerie di campioni» (window.swatchLibrary) è una voce del client che legge l'elenco e i campioni, e aggiunge con swatch.library.add; la sua prova è il test del client.",
+  "$nota": "I casi della famiglia colore (piano K6, T14, giro 1): il colore attivo di Design › Colore (`paint.*`) e Modifica › Modifica colori (`edit.colors.*`) sugli oggetti scelti. Un tratto dell'Inchiostro di Fub scelto non cambia (`unmapped`), un oggetto bloccato nemmeno (`locked`); una fusione vuole tre riempimenti pieni; i colori di un SVG sono già RGB, e Converti in RGB non cambia niente (`empty`), e nemmeno Sovrastampa nero, che tocca solo l'inchiostro nero CMYK o grigio (`empty`). Le finestre di Satura e Regola bilanciamento colore sono voci del client: la loro prova è il test che le apre. Giro librerie (K6 T14): swatch.library.list e swatch.library.get leggono le librerie di base del motore (la mappa le dà «fatto»); la lettura non cambia il disegno, e una libreria che non c'è è un errore degli argomenti. Giro librerie 2 (K6 T14): swatch.library.add copia una libreria di base. I campioni diventano globali e senza gruppo, nell'ordine della libreria; un nome già presente con lo stesso colore non si raddoppia (si salta), con un colore diverso prende un numero («Clay 1 2»). Una libreria o un campione che non c'è, o `apply`, sono errori degli argomenti in italiano. Giro finestra (K6 T14): la finestra «Librerie di campioni» (window.swatchLibrary) è una voce del client che legge l'elenco e i campioni, e aggiunge con swatch.library.add; la sua prova è il test del client. Giro gruppi (K6 T14): i gruppi di colori sono l'attributo fub:group dei loro campioni. swatch.newGroup (senza nome «Gruppo colori»), swatch.editGroup, swatch.ungroup e colorTheme.addToSwatches scrivono o tolgono l'attributo; un gruppo che resterebbe vuoto, o che non c'è, è un errore degli argomenti in italiano. swatch.resetDefaults rimette i campioni di serie del motore coi nomi in italiano (un nome già presente non torna), i grigi e i brillanti come gruppi; le quattro sfumature sono perdite dell'esito (tests/campioni_gruppi.rs). Con replace, un campione usato da un oggetto bloccato non si toglie (locked).",
   "casi": [
     {
       "id": "paint.setFill",
@@ -7260,6 +7260,1350 @@
       "argomenti": {},
       "atteso": {
         "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "swatch.newGroup",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Miei",
+        "swatches": [
+          "Blu",
+          "Arancio"
+        ]
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "r1a1a1a1a",
+                "attrs": {
+                  "fub:group": "Miei"
+                }
+              },
+              {
+                "op": "set",
+                "id": "r2b2b2b2b",
+                "attrs": {
+                  "fub:group": "Miei"
+                }
+              },
+              {
+                "op": "move",
+                "target": "r3c3c3c3c",
+                "parent": "fub-defs",
+                "pos": {
+                  "first": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "gruppi-nuovo-dopo.svg"
+    },
+    {
+      "id": "swatch.ungroup",
+      "disegno": "gruppi.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Caldi"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "r2b2b2b2b",
+                "attrs": {
+                  "fub:group": null
+                }
+              },
+              {
+                "op": "set",
+                "id": "r3c3c3c3c",
+                "attrs": {
+                  "fub:group": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "gruppi-separa-dopo.svg"
+    },
+    {
+      "id": "swatch.editGroup",
+      "disegno": "gruppi.svg",
+      "selezione": [],
+      "argomenti": {
+        "group": "Freddi",
+        "colors": [
+          "#00aa00",
+          "#56b4e9",
+          "#123456"
+        ],
+        "rename": "Mari"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "r4d4d4d4d",
+                "part": [
+                  0
+                ],
+                "attrs": {
+                  "stop-color": "#00aa00"
+                }
+              },
+              {
+                "op": "set",
+                "id": "r4d4d4d4d",
+                "attrs": {
+                  "fub:group": "Mari"
+                }
+              },
+              {
+                "op": "set",
+                "id": "r5e5e5e5e",
+                "attrs": {
+                  "fub:group": "Mari"
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rte5hx81q",
+                    "fub:role": "swatch",
+                    "fub:name": "R=18 G=52 B=86",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Mari"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#123456"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "set",
+                "id": "ob2b2b2b2",
+                "attrs": {
+                  "fill": "url(#r4d4d4d4d) #00aa00"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "gruppi-modifica-dopo.svg"
+    },
+    {
+      "id": "swatch.resetDefaults",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "ry1uskc7e",
+                    "fub:role": "swatch",
+                    "fub:name": "Bianco",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#ffffff"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rb7madnj7",
+                    "fub:role": "swatch",
+                    "fub:name": "Nero",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#000000"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rgctoxrxm",
+                    "fub:role": "swatch",
+                    "fub:name": "Rosso",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#ed1c24"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rpzs1598w",
+                    "fub:role": "swatch",
+                    "fub:name": "Rosso arancio",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#f15a24"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rksb69maz",
+                    "fub:role": "swatch",
+                    "fub:name": "Ambra",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#fbb03b"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r2u093e2z",
+                    "fub:role": "swatch",
+                    "fub:name": "Giallo",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#fcee21"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rvs5a62ci",
+                    "fub:role": "swatch",
+                    "fub:name": "Giallo verde",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#d9e021"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rnt5mwomb",
+                    "fub:role": "swatch",
+                    "fub:name": "Lime",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#8cc63f"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r8cbh673a",
+                    "fub:role": "swatch",
+                    "fub:name": "Verde",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#39b54a"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rz4zktecy",
+                    "fub:role": "swatch",
+                    "fub:name": "Smeraldo",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#009245"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r2xllhwy3",
+                    "fub:role": "swatch",
+                    "fub:name": "Verde petrolio",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#006837"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r40q8xsrt",
+                    "fub:role": "swatch",
+                    "fub:name": "Acquamarina",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#22b573"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rqw1di5aa",
+                    "fub:role": "swatch",
+                    "fub:name": "Verde ciano",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#00a99d"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rsfms8oc0",
+                    "fub:role": "swatch",
+                    "fub:name": "Ciano",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#29abe2"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rj39381x8",
+                    "fub:role": "swatch",
+                    "fub:name": "Azzurro",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#0071bc"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rxtrb5iwn",
+                    "fub:role": "swatch",
+                    "fub:name": "Indaco",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#1b1464"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rigjigptt",
+                    "fub:role": "swatch",
+                    "fub:name": "Porpora",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#93278f"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rjddevnmv",
+                    "fub:role": "swatch",
+                    "fub:name": "Magenta",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#9e005d"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rgzob09u6",
+                    "fub:role": "swatch",
+                    "fub:name": "Rosa",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#d4145a"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rjoxu139r",
+                    "fub:role": "swatch",
+                    "fub:name": "Rosa acceso",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#ed1e79"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r8bca7j2e",
+                    "fub:role": "swatch",
+                    "fub:name": "Nocciola",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#c7b299"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9qeeqctc",
+                    "fub:role": "swatch",
+                    "fub:name": "Cuoio",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#998675"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rl4seauac",
+                    "fub:role": "swatch",
+                    "fub:name": "Caffè",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#736357"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rmrh5q9rw",
+                    "fub:role": "swatch",
+                    "fub:name": "Cioccolato",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#534741"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rcuzjyz8u",
+                    "fub:role": "swatch",
+                    "fub:name": "Sabbia",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#c69c6d"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rzn7fnajk",
+                    "fub:role": "swatch",
+                    "fub:name": "Rame",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#a67c52"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rvo9qo7wy",
+                    "fub:role": "swatch",
+                    "fub:name": "Ruggine",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#8c6239"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rvlev16yu",
+                    "fub:role": "swatch",
+                    "fub:name": "Noce",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#754c24"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r08ak0z0n",
+                    "fub:role": "swatch",
+                    "fub:name": "Espresso",
+                    "gradientUnits": "userSpaceOnUse"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#603813"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r5ucetjkd",
+                    "fub:role": "swatch",
+                    "fub:name": "K=90",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#1a1a1a"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rszyrbm5a",
+                    "fub:role": "swatch",
+                    "fub:name": "K=80",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#333333"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rpg4sadrd",
+                    "fub:role": "swatch",
+                    "fub:name": "K=70",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#4d4d4d"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rlcczrjip",
+                    "fub:role": "swatch",
+                    "fub:name": "K=60",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#666666"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r5fcgoi9a",
+                    "fub:role": "swatch",
+                    "fub:name": "K=50",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#808080"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r0a9bj516",
+                    "fub:role": "swatch",
+                    "fub:name": "K=40",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#999999"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rjwdgehzk",
+                    "fub:role": "swatch",
+                    "fub:name": "K=30",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#b3b3b3"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rb143gugk",
+                    "fub:role": "swatch",
+                    "fub:name": "K=20",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#cccccc"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rwixo01oc",
+                    "fub:role": "swatch",
+                    "fub:name": "K=10",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Grigi"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#e6e6e6"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "roc4ym065",
+                    "fub:role": "swatch",
+                    "fub:name": "Rosso brillante",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Brillanti"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#ff1d25"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "r9skee0fr",
+                    "fub:role": "swatch",
+                    "fub:name": "Giallo brillante",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Brillanti"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#ffe600"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rcycnr15a",
+                    "fub:role": "swatch",
+                    "fub:name": "Verde brillante",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Brillanti"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#00e676"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "robyp6kbe",
+                    "fub:role": "swatch",
+                    "fub:name": "Blu brillante",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Brillanti"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#2979ff"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rwhhh9pzl",
+                    "fub:role": "swatch",
+                    "fub:name": "Viola brillante",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Brillanti"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#d500f9"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "campioni-predefiniti-dopo.svg"
+    },
+    {
+      "id": "colorTheme.addToSwatches",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Tema"
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rie812dq9",
+                    "fub:role": "swatch",
+                    "fub:name": "R=255 G=0 B=0",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Tema"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#ff0000"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "op": "add",
+                "parent": "fub-defs",
+                "pos": {
+                  "last": true
+                },
+                "elem": {
+                  "tag": "linearGradient",
+                  "attrs": {
+                    "id": "rg5q1o170",
+                    "fub:role": "swatch",
+                    "fub:name": "R=0 G=255 B=0",
+                    "gradientUnits": "userSpaceOnUse",
+                    "fub:group": "Tema"
+                  },
+                  "children": [
+                    {
+                      "tag": "stop",
+                      "attrs": {
+                        "stop-color": "#00ff00"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "gruppi-tema-dopo.svg",
+      "prima": [
+        {
+          "id": "colorTheme.save",
+          "selezione": [],
+          "argomenti": {
+            "colors": [
+              "#ff0000",
+              "#00ff00"
+            ],
+            "name": "Tema"
+          }
+        }
+      ]
+    },
+    {
+      "id": "swatch.newGroup",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Vuoto"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.editGroup",
+      "disegno": "gruppi.svg",
+      "selezione": [],
+      "argomenti": {
+        "group": "Freddi",
+        "colors": []
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.ungroup",
+      "disegno": "gruppi.svg",
+      "selezione": [],
+      "argomenti": {
+        "name": "Tiepidi"
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "swatch.resetDefaults",
+      "disegno": "campioni.svg",
+      "selezione": [],
+      "argomenti": {
+        "replace": true
+      },
+      "atteso": {
+        "rifiuto": "locked"
       }
     }
   ]

@@ -136,6 +136,30 @@ I livelli nel motore (l'id e il nome, la differenza, i comandi sui livelli,
 la selezione per carattere e il livello corrente) stanno in
 [I livelli del motore nel Completo](disegno-livelli.md).
 
+## I campioni e i gruppi di colori
+
+I campioni del motore diventano i campioni del file
+([il formato](../reference/scene-format-resources.md#2-le-risorse)) in
+`crates/fub-disegno/src/campioni.rs`, che legge il file nel documento del motore
+e porta nel formato ciò che il comando ha cambiato. Un gruppo di colori è
+l'attributo `fub:group` dei suoi campioni, uno dopo l'altro nella stessa
+`defs`: nessun elemento nuovo, nessuna versione e nessuna migrazione, e un Fub
+più vecchio vede i campioni senza gruppo. Un `fub:group` che non si legge come
+gruppo (vuoto, col nome di un campione o di un motivo, sparso) lascia i campioni
+senza gruppo e resta com'è nel file.
+
+Nuovo gruppo colori, Modifica gruppo colori, Separa gruppo colori e Aggiungi ai
+campioni di un tema scrivono o tolgono l'attributo; un comando che farebbe un
+gruppo vuoto è un `BadArgs` col perché in italiano, e il file resta com'era.
+Campioni predefiniti (`swatch.resetDefaults`) rimette i campioni di serie del
+motore coi nomi in italiano (`campioni_predefiniti.rs`: nel motore non c'è una
+strada per la lingua dell'app); un nome già nel disegno non torna, e con
+`replace` chi usava un campione tolto tiene il suo colore. Ciò che il formato
+non sa dire, le sfumature di serie e i colori non RGB scritti come `#rrggbb`,
+va nelle `losses` dell'esito (`Unsupported`, `Approximated`), e il client lo
+dice con «fatto» (`applicaEsito` in `completo/esegui.ts`). La finestra del
+nuovo gruppo (`ui.newColorGroup`) non c'è ancora.
+
 ## Chi possiede che cosa
 
 | Che cosa | Chi lo possiede | Perché |

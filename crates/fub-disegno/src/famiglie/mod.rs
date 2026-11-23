@@ -32,8 +32,8 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
 use fub_abi::{
-    DrawingCommandRequest, DrawingDisabledReason, DrawingOutcome, DrawingPreview, DrawingRefusal,
-    PluginError, Text, MAX_DRAWING_OPS_BYTES,
+    DrawingCommandRequest, DrawingDisabledReason, DrawingLoss, DrawingOutcome, DrawingPreview,
+    DrawingRefusal, PluginError, Text, MAX_DRAWING_OPS_BYTES,
 };
 use fub_motori::{Cache, ErroreMotore, Pigro, Servizi};
 use serde_json::Value;
@@ -50,6 +50,14 @@ pub const PREFISSO: &str = "disegno.";
 /// La mappa, letta dal sorgente: le righe e le colonne sono quelle che la
 /// guardia `check-disegno-mappa.mjs` controlla.
 const MAPPA: &str = include_str!("../../mappa.tsv");
+
+/// Il documento di dopo un comando portato nel formato del disegno da una famiglia
+/// ([`StatoFamiglia::traduci_dopo`]), e ciò che la traduzione ha lasciato fuori: va nelle
+/// `losses` dell'esito, perché la perdita si dica.
+pub(crate) struct Tradotto {
+    pub documento: Document,
+    pub perdite: Vec<DrawingLoss>,
+}
 
 /// Lo stato di una famiglia, nel suo file `famiglie/<id>.rs`.
 ///
@@ -184,13 +192,19 @@ pub(crate) trait StatoFamiglia: Send + Sync + 'static {
 
     /// La traduzione del documento che il motore ha lasciato dopo il comando `id`, nel formato del
     /// disegno, prima della differenza: un comando che copia roba che il file non scrive (K6 T14, i
-    /// campioni di una libreria) la riporta com'è il file. `None` se non c'è niente da tradurre. Di
-    /// serie nessuna traduzione.
-    fn traduci_dopo(_id: &str, _copia: &Copia, _dopo: &Document) -> Option<Document>
+    /// campioni di una libreria o quelli predefiniti) la riporta com'è il file, e dice ciò che ha
+    /// lasciato fuori ([`Tradotto::perdite`]). `Ok(None)` se non c'è niente da tradurre; un errore
+    /// per un risultato che il file non prende e che la famiglia sa dire in italiano (un gruppo di
+    /// colori vuoto). Di serie nessuna traduzione.
+    fn traduci_dopo(
+        _id: &str,
+        _copia: &Copia,
+        _dopo: &Document,
+    ) -> Result<Option<Tradotto>, PluginError>
     where
         Self: Sized,
     {
-        None
+        Ok(None)
     }
 
     /// Il rifiuto per un errore del motore sul comando `id`, quando la famiglia
@@ -362,14 +376,23 @@ macro_rules! famiglie {
                 }
             }
 
-            /// La traduzione del documento dopo il comando `id`, se la famiglia ne ha una.
-            fn traduci_dopo(self, id: &str, copia: &Copia, dopo: Arc<Document>) -> Arc<Document> {
+            /// La traduzione del documento dopo il comando `id`, se la famiglia ne ha una, con ciò
+            /// che ha lasciato fuori.
+            fn traduci_dopo(
+                self,
+                id: &str,
+                copia: &Copia,
+                dopo: Arc<Document>,
+            ) -> Result<(Arc<Document>, Vec<DrawingLoss>), PluginError> {
                 let tradotto = match self {
                     $(Famiglia::$variante => {
                         <$modulo::Stato as StatoFamiglia>::traduci_dopo(id, copia, &dopo)
                     })*
-                };
-                tradotto.map_or(dopo, Arc::new)
+                }?;
+                Ok(match tradotto {
+                    Some(t) => (Arc::new(t.documento), t.perdite),
+                    None => (dopo, Vec::new()),
+                })
             }
 
             /// Il rifiuto per un errore del motore sul comando `id`, se la famiglia lo sa.
@@ -1218,8 +1241,15 @@ pub(crate) fn esegui(
         banco.ripristina(copia);
         return Ok(rifiuta(DrawingRefusal::Unsupported));
     };
-    // Il documento che il motore lascia, tradotto nel formato dalla famiglia (se lo chiede).
-    let dopo = famiglia.traduci_dopo(&riga.id, copia, dopo);
+    // Il documento che il motore lascia, tradotto nel formato dalla famiglia (se lo chiede), e ciò
+    // che la traduzione lascia fuori: va nell'esito, non in silenzio.
+    let (dopo, perdite) = match famiglia.traduci_dopo(&riga.id, copia, dopo) {
+        Ok(tradotto) => tradotto,
+        Err(errore) => {
+            banco.ripristina(copia);
+            return Err(errore);
+        }
+    };
     let selezione: Vec<NodeId> = banco
         .sessione
         .doc()
@@ -1251,6 +1281,7 @@ pub(crate) fn esegui(
         Ok(Some(ops)) => {
             esito.selection = selezione_di_fub(copia, &differenza, &selezione);
             esito.ops = Some(ops);
+            esito.losses = perdite;
         }
         // Il documento non cambia ma la selezione sì (`select.all`,
         // `select.inverse`…): l'esito porta la selezione nuova, senza

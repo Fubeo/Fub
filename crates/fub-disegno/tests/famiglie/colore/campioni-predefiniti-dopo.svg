@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <defs id="fub-defs">
+    <linearGradient id="r1a1a1a1a" fub:role="swatch" fub:name="Blu" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>
+    <linearGradient id="r2b2b2b2b" fub:role="swatch" fub:name="Arancio" gradientUnits="userSpaceOnUse"><stop stop-color="#e69f00"/></linearGradient>
+    <linearGradient id="r3c3c3c3c" fub:role="swatch" fub:name="Viola" gradientUnits="userSpaceOnUse"><stop stop-color="#cc79a7"/></linearGradient>
+    <linearGradient id="ry1uskc7e" fub:role="swatch" fub:name="Bianco" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="rb7madnj7" fub:role="swatch" fub:name="Nero" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#000000"/>
+    </linearGradient>
+    <linearGradient id="rgctoxrxm" fub:role="swatch" fub:name="Rosso" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ed1c24"/>
+    </linearGradient>
+    <linearGradient id="rpzs1598w" fub:role="swatch" fub:name="Rosso arancio" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f15a24"/>
+    </linearGradient>
+    <linearGradient id="rksb69maz" fub:role="swatch" fub:name="Ambra" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fbb03b"/>
+    </linearGradient>
+    <linearGradient id="r2u093e2z" fub:role="swatch" fub:name="Giallo" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fcee21"/>
+    </linearGradient>
+    <linearGradient id="rvs5a62ci" fub:role="swatch" fub:name="Giallo verde" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d9e021"/>
+    </linearGradient>
+    <linearGradient id="rnt5mwomb" fub:role="swatch" fub:name="Lime" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8cc63f"/>
+    </linearGradient>
+    <linearGradient id="r8cbh673a" fub:role="swatch" fub:name="Verde" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#39b54a"/>
+    </linearGradient>
+    <linearGradient id="rz4zktecy" fub:role="swatch" fub:name="Smeraldo" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#009245"/>
+    </linearGradient>
+    <linearGradient id="r2xllhwy3" fub:role="swatch" fub:name="Verde petrolio" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#006837"/>
+    </linearGradient>
+    <linearGradient id="r40q8xsrt" fub:role="swatch" fub:name="Acquamarina" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22b573"/>
+    </linearGradient>
+    <linearGradient id="rqw1di5aa" fub:role="swatch" fub:name="Verde ciano" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00a99d"/>
+    </linearGradient>
+    <linearGradient id="rsfms8oc0" fub:role="swatch" fub:name="Ciano" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#29abe2"/>
+    </linearGradient>
+    <linearGradient id="rj39381x8" fub:role="swatch" fub:name="Azzurro" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0071bc"/>
+    </linearGradient>
+    <linearGradient id="rxtrb5iwn" fub:role="swatch" fub:name="Indaco" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1b1464"/>
+    </linearGradient>
+    <linearGradient id="rigjigptt" fub:role="swatch" fub:name="Porpora" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#93278f"/>
+    </linearGradient>
+    <linearGradient id="rjddevnmv" fub:role="swatch" fub:name="Magenta" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9e005d"/>
+    </linearGradient>
+    <linearGradient id="rgzob09u6" fub:role="swatch" fub:name="Rosa" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d4145a"/>
+    </linearGradient>
+    <linearGradient id="rjoxu139r" fub:role="swatch" fub:name="Rosa acceso" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ed1e79"/>
+    </linearGradient>
+    <linearGradient id="r8bca7j2e" fub:role="swatch" fub:name="Nocciola" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c7b299"/>
+    </linearGradient>
+    <linearGradient id="r9qeeqctc" fub:role="swatch" fub:name="Cuoio" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#998675"/>
+    </linearGradient>
+    <linearGradient id="rl4seauac" fub:role="swatch" fub:name="Caffè" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#736357"/>
+    </linearGradient>
+    <linearGradient id="rmrh5q9rw" fub:role="swatch" fub:name="Cioccolato" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#534741"/>
+    </linearGradient>
+    <linearGradient id="rcuzjyz8u" fub:role="swatch" fub:name="Sabbia" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c69c6d"/>
+    </linearGradient>
+    <linearGradient id="rzn7fnajk" fub:role="swatch" fub:name="Rame" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a67c52"/>
+    </linearGradient>
+    <linearGradient id="rvo9qo7wy" fub:role="swatch" fub:name="Ruggine" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8c6239"/>
+    </linearGradient>
+    <linearGradient id="rvlev16yu" fub:role="swatch" fub:name="Noce" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#754c24"/>
+    </linearGradient>
+    <linearGradient id="r08ak0z0n" fub:role="swatch" fub:name="Espresso" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#603813"/>
+    </linearGradient>
+    <linearGradient id="r5ucetjkd" fub:role="swatch" fub:name="K=90" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="rszyrbm5a" fub:role="swatch" fub:name="K=80" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#333333"/>
+    </linearGradient>
+    <linearGradient id="rpg4sadrd" fub:role="swatch" fub:name="K=70" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#4d4d4d"/>
+    </linearGradient>
+    <linearGradient id="rlcczrjip" fub:role="swatch" fub:name="K=60" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#666666"/>
+    </linearGradient>
+    <linearGradient id="r5fcgoi9a" fub:role="swatch" fub:name="K=50" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#808080"/>
+    </linearGradient>
+    <linearGradient id="r0a9bj516" fub:role="swatch" fub:name="K=40" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#999999"/>
+    </linearGradient>
+    <linearGradient id="rjwdgehzk" fub:role="swatch" fub:name="K=30" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#b3b3b3"/>
+    </linearGradient>
+    <linearGradient id="rb143gugk" fub:role="swatch" fub:name="K=20" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#cccccc"/>
+    </linearGradient>
+    <linearGradient id="rwixo01oc" fub:role="swatch" fub:name="K=10" gradientUnits="userSpaceOnUse" fub:group="Grigi">
+      <stop stop-color="#e6e6e6"/>
+    </linearGradient>
+    <linearGradient id="roc4ym065" fub:role="swatch" fub:name="Rosso brillante" gradientUnits="userSpaceOnUse" fub:group="Brillanti">
+      <stop stop-color="#ff1d25"/>
+    </linearGradient>
+    <linearGradient id="r9skee0fr" fub:role="swatch" fub:name="Giallo brillante" gradientUnits="userSpaceOnUse" fub:group="Brillanti">
+      <stop stop-color="#ffe600"/>
+    </linearGradient>
+    <linearGradient id="rcycnr15a" fub:role="swatch" fub:name="Verde brillante" gradientUnits="userSpaceOnUse" fub:group="Brillanti">
+      <stop stop-color="#00e676"/>
+    </linearGradient>
+    <linearGradient id="robyp6kbe" fub:role="swatch" fub:name="Blu brillante" gradientUnits="userSpaceOnUse" fub:group="Brillanti">
+      <stop stop-color="#2979ff"/>
+    </linearGradient>
+    <linearGradient id="rwhhh9pzl" fub:role="swatch" fub:name="Viola brillante" gradientUnits="userSpaceOnUse" fub:group="Brillanti">
+      <stop stop-color="#d500f9"/>
+    </linearGradient>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <rect id="oa1a1a1a1" x="100" y="100" width="100" height="50" fill="url(#r1a1a1a1a) #0072b2" stroke="#000000" stroke-width="2"/>
+    <rect id="ob2b2b2b2" x="220" y="100" width="60" height="50" fill="#ff0000" stroke="#00aa00" stroke-width="2"/>
+    <rect id="oc3c3c3c3" x="20" y="200" width="40" height="40" fill="url(#r3c3c3c3c) #cc79a7" fub:locked="true"/>
+    <text id="od4d4d4d4" x="200" y="250" fill="url(#r1a1a1a1a) #0072b2" font-family="Inter, sans-serif" font-size="24"><tspan x="200" dy="0">Ciao</tspan></text>
+  </g>
+</svg>

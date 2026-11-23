@@ -9,6 +9,9 @@
 pub mod apertura;
 /// I campioni del documento fra il file e il motore.
 pub mod campioni;
+/// I campioni predefiniti del motore portati nel formato (`swatch.resetDefaults`).
+#[cfg(feature = "completo")]
+mod campioni_predefiniti;
 /// L'indice dei comandi del Disegno completo, letto dalla mappa.
 #[cfg(feature = "completo")]
 pub mod catalogo;
