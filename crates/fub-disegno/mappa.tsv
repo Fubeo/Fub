@@ -139,8 +139,8 @@ motore	stroke.widthPoint.remove	Delete Width Point		aspetto	F1	T15	da fare	ispet
 motore	stroke.widthPoint.copy	Copy Width Point		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Copia punto di larghezza
 motore	stroke.widthProfile.set	Width Profile		aspetto	F1	T15	da fare	ispettore/design	famiglia	il profilo di spessore del motore non passa ancora alla linea a spessore variabile della scena (fub:shape=width): aspetta T27	Profilo larghezza
 motore	object.liquify	Liquify		pennelli	F2	T17	da fare	ispettore/risorse	famiglia		Fluidifica
-motore	object.puppetWarp	Puppet Warp		trasforma	F1	T13	da fare	ispettore/design	famiglia		Alterazione marionetta
-motore	object.puppetWarp.pins	Puppet Warp Pins		trasforma	F1	T13	da fare	ispettore/design	famiglia		Perni alterazione marionetta
+motore	object.puppetWarp	Puppet Warp		trasforma	F1	T13	fatto	ispettore/design	famiglia		Alterazione marionetta
+motore	object.puppetWarp.pins	Puppet Warp Pins		trasforma	F1	T13	fatto	ispettore/design	famiglia		Perni alterazione marionetta
 motore	perspective.grid.set	Define Perspective Grid		prospettiva	F4	T25	da fare	menu/visualizza	famiglia		Definisci griglia prospettica
 motore	perspective.grid.preset	Perspective Grid Preset		prospettiva	F4	T25	da fare	menu/visualizza	famiglia		Preset griglia prospettica
 motore	perspective.grid.show	Show Perspective Grid		prospettiva	F4	T25	da fare	menu/visualizza	famiglia		Mostra griglia prospettica

@@ -2083,6 +2083,38 @@
     },
     {
       "fonte": "motore",
+      "id": "object.puppetWarp",
+      "chiamata": {
+        "comando": "disegno.object.puppetWarp"
+      },
+      "etichetta": {
+        "it": "Alterazione marionetta",
+        "en": "Puppet Warp"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "object.puppetWarp.pins",
+      "chiamata": {
+        "comando": "disegno.object.puppetWarp.pins"
+      },
+      "etichetta": {
+        "it": "Perni alterazione marionetta",
+        "en": "Puppet Warp Pins"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "trasforma",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "object.reflect",
       "chiamata": {
         "comando": "disegno.object.reflect"
