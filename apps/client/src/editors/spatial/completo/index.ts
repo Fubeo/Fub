@@ -376,14 +376,25 @@ export function apri(ctx: Omit<ContestoCompleto, "sezioni" | "registraFila" | "e
     return true;
   };
   /// Il percorso unico dei comandi (`eseguiVoce`), che ricorda l'ultima elaborazione andata.
-  const lancia =async (voce: VoceIndice): Promise<void> => {
-    // ≡ › Modifica › Cancella con dei punti scelti toglie quei punti, come Canc.
-    if (voce.id === "edit.clear" && cancellaPunti()) return;
-    const coiPunti = (dipendenze.punti?.() ?? []).length > 0;
-    const andata = await eseguiVoce(voce, dipendenze);
-    if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
-    // I punti scelti possono essere cambiati: lo stato dello strumento si rilegge.
-    if (andata && coiPunti && !chiuso) opzioni.tasti?.rileggiStato?.();
+  // I comandi in volo, per voce, valori e selezione: un secondo clic identico mentre il primo è in
+  // volo (il doppio clic) non manda un altro comando al motore, che lo riceverebbe con la stessa copia.
+  // Un comando diverso (altri valori, altra selezione) parte lo stesso.
+  const inVolo = new Set<string>();
+  const lancia = async (voce: VoceIndice): Promise<void> => {
+    const chiave = JSON.stringify([voce.id, voce.chiamata, dipendenze.selezione()]);
+    if (inVolo.has(chiave)) return;
+    inVolo.add(chiave);
+    try {
+      // ≡ › Modifica › Cancella con dei punti scelti toglie quei punti, come Canc.
+      if (voce.id === "edit.clear" && cancellaPunti()) return;
+      const coiPunti = (dipendenze.punti?.() ?? []).length > 0;
+      const andata = await eseguiVoce(voce, dipendenze);
+      if (andata && ripetibili.has(voce.id)) ultimaElaborazione = voce.id;
+      // I punti scelti possono essere cambiati: lo stato dello strumento si rilegge.
+      if (andata && coiPunti && !chiuso) opzioni.tasti?.rileggiStato?.();
+    } finally {
+      inVolo.delete(chiave);
+    }
   };
   // La sezione «Allinea» (T13, giro 2): dall'indice, senza caricare la famiglia `trasforma`,
   // che parte solo al clic di un suo comando.
