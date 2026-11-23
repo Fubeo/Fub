@@ -147,7 +147,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // i loro casi in livelli.json); `layer.hideOthers` e `layer.lockOthers` restano «da fare», con la causa.
   // T12 angoli porta a «fatto» `addon.pathtools.cornerSet` («Imposta angoli», con la finestra del raggio) e
   // `addon.pathtools.cornerRemove` («Rimuovi angoli»): la ricetta riscritta si applica nella scena del client.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1083, fub: 114, escluso: 12, fatto: 342 });
+  // T13 porta a «fatto» `object.makePixelPerfect` («Rendi perfetto al pixel»): la famiglia `trasforma`
+  // lo lascia correre sugli oggetti scelti (casi in `tests/famiglie/trasforma.json`, disegno `pixel.svg`).
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1082, fub: 114, escluso: 12, fatto: 343 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

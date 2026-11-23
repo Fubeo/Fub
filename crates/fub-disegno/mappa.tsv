@@ -155,7 +155,7 @@ motore	perspective.plane.move	Move Plane		prospettiva	F4	T25	da fare	interno	fam
 motore	perspective.plane.matchObject	Move Plane to Match Object		prospettiva	F4	T25	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Sposta piano in base all'oggetto
 motore	perspective.editText	Edit Text		prospettiva	F4	T25	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Modifica testo
 motore	document.info	Document Info	Window › Document Info	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Informazioni documento
-motore	object.makePixelPerfect	Make Pixel Perfect	Object	trasforma	F1	T13	da fare	menu/oggetto	famiglia		Allinea ai pixel
+motore	object.makePixelPerfect	Make Pixel Perfect	Object	trasforma	F1	T13	fatto	menu/oggetto	famiglia	sposta e arrotonda gli oggetti scelti con una matrice `transform` e la larghezza del tratto intera; nascosto e Inchiostro non si toccano	Allinea ai pixel
 motore	select.same.symbolInstance	Symbol Instance	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Istanza di simbolo
 motore	select.same.fontFamily	Font Family	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Famiglia di font
 motore	select.same.fontFamilyStyle	Font Family & Style	Select › Same	livelli	F1	T15	fatto	menu/selezione/uguale	famiglia		Famiglia e stile font
