@@ -60,6 +60,7 @@ import { parseWireOp, type Op, type Reason } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { plural, t, type DrawKey } from "../strings";
 import { gesture as asGesture, transformedMatrix, transformValue } from "../tools/edit";
+import { agganciDelMotore } from "../tools/grid";
 import { ADDED, DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX } from "../tools/editor/constants";
 import type { EditorContext } from "../tools/editor/context";
 import { layerRefusal, layerTitle, matrixText } from "../tools/editor/helpers";
@@ -756,7 +757,7 @@ export function installGestiMotore(ctx: EditorContext): void {
       layer,
       selection: [...ctx.selection],
       zoom: ctx.camera.scale,
-      snap: { grid: ctx.snapOn() ? ctx.snapStep() : null, free: ctx.free },
+      snap: { grid: ctx.snapOn() ? ctx.snapStep() : null, free: ctx.free, ...agganciDelMotore(ctx.grid) },
       style: shape ? { stroke: color, width, fill: null } : null,
       // Il Testo scrive la parola del testo nuovo, che poi si cambia
       // nel campo «Testo» dell'ispettore.

@@ -551,6 +551,21 @@ pub struct DrawingSnap {
     pub grid: Option<f64>,
     /// Ctrl/⌘ tenuto per tutto il gesto: l'aggancio non agisce.
     pub free: bool,
+    /// Visualizza › Guide sensibili, per gli strumenti del motore: le guide che
+    /// allineano a punti, centri e bordi degli altri oggetti. `None` vale accese,
+    /// come in VectorCraft.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guides: Option<bool>,
+    /// Visualizza › Aggancia al punto: un punto preso (come il riferimento di una
+    /// trasformazione) cade sui punti vicini. `None` vale acceso, come in
+    /// VectorCraft.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points: Option<bool>,
+    /// Visualizza › Aggancia a glifo: con le guide sensibili, il disegno aggancia
+    /// i riquadri dei glifi e le righe di un testo. `None` vale spento, come in
+    /// VectorCraft.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glyphs: Option<bool>,
 }
 
 impl DrawingSnap {

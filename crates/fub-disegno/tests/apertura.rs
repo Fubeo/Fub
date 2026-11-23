@@ -43,6 +43,7 @@ fn gesto(revision: u64, tool: DrawingTool) -> DrawingGesture {
         snap: DrawingSnap {
             grid: None,
             free: false,
+            ..DrawingSnap::default()
         },
         style: None,
         text: None,

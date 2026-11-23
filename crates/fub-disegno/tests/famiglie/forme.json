@@ -2447,8 +2447,24 @@
       ],
       "argomenti": {},
       "atteso": {
-        "rifiuto": "unsupported"
-      }
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 100 L200 100 L200 150 L100 150 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "forma-diventa-tracciato.svg"
     },
     {
       "id": "shape.rectangle",

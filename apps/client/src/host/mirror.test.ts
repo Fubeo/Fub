@@ -791,7 +791,6 @@ const RECORD_KEYS: Record<string, string[]> = {
   DrawingEdit: keysOf<DrawingEdit>({ from: true, to: true, deleted: true, inserted: true }),
   DrawingSynced: keysOf<DrawingSynced>({ revision: true }),
   DrawingPointer: keysOf<DrawingPointer>({ kind: true, x: true, y: true, pressure: true, shift: true, alt: true, cmd: true }),
-  DrawingSnap: keysOf<DrawingSnap>({ grid: true, free: true }),
   DrawingStyle: keysOf<DrawingStyle>({ stroke: true, width: true, fill: true }),
   DrawingFrame: keysOf<DrawingFrame>({ matrix: true, bounds: true, geometry: true }),
   DrawingGesture: keysOf<DrawingGesture>({
@@ -942,6 +941,11 @@ const RECORD_KEYS: Record<string, string[]> = {
 /// ci siano, non che ci siano tutte. Un campo aggiunto in Rust e non qui resta
 /// comunque rosso — arriva nella fixture e non è fra le chiavi dichiarate.
 const PARTIAL_RECORD_KEYS: Record<string, { all: string[]; required: string[] }> = {
+  // Gli interruttori della vista del motore (Visualizza) ci sono solo se diversi da quelli di serie.
+  DrawingSnap: {
+    all: keysOf<Required<DrawingSnap>>({ grid: true, free: true, guides: true, points: true, glyphs: true }),
+    required: ["grid", "free"],
+  },
   // La nota c'è solo sui testi conservati (`version.keep`), assente altrove.
   VersionRef: {
     all: keysOf<Required<VersionRef>>({ ts: true, hash: true, size: true, note: true }),
@@ -1788,7 +1792,8 @@ describe("mirror TS↔Rust", () => {
     const kinds = gestures.flatMap((g) => g.events.map((e) => pointer(e.kind)));
     expect(new Set(kinds)).toEqual(new Set(["down", "drag", "up", "move", "double_click"]));
     for (const g of gestures) {
-      expect(Object.keys(g.snap).sort()).toEqual(RECORD_KEYS.DrawingSnap);
+      for (const key of Object.keys(g.snap)) expect(PARTIAL_RECORD_KEYS.DrawingSnap!.all).toContain(key);
+      for (const key of PARTIAL_RECORD_KEYS.DrawingSnap!.required) expect(Object.keys(g.snap)).toContain(key);
       if (g.style !== null) expect(Object.keys(g.style).sort()).toEqual(RECORD_KEYS.DrawingStyle);
       for (const e of g.events) expect(Object.keys(e).sort()).toEqual(RECORD_KEYS.DrawingPointer);
       if (g.frame !== null) expect(Object.keys(g.frame).sort()).toEqual(RECORD_KEYS.DrawingFrame);

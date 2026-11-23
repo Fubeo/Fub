@@ -95,6 +95,9 @@ impl<'a> Contesto<'a> {
                         .sqrt()
                         .max(f64::MIN_POSITIVE)
                         .recip(),
+                smart_guides: gesto.snap.guides.unwrap_or(true),
+                snap_to_point: gesto.snap.points.unwrap_or(true),
+                snap_to_glyph: gesto.snap.glyphs.unwrap_or(false),
                 ..ViewInfo::default()
             },
         }

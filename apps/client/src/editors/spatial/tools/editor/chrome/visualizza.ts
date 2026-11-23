@@ -2,7 +2,9 @@
 // Lo stato è della superficie, non del file: sta nella griglia (`Grid`), come lo
 // stato della griglia, e non entra nella cronologia. Griglia e aggancio sono quelli
 // del Semplice (lo stesso `changeGrid`, così restano uguali fra i due spazi); l'aggancio
-// al pixel è la stessa scrittura, col passo di un pixel (`snapPixel`); il
+// al pixel è la stessa scrittura, col passo di un pixel (`snapPixel`); guide sensibili,
+// aggancio al punto e ai glifi li fa il motore, e il gesto gli porta lo stato
+// (`snap.guides`, `snap.points`, `snap.glyphs`, accesi e spenti come in VectorCraft); il
 // contorno è la vista del contorno; i righelli di bordo stanno in `edge-rulers.ts`;
 // la rotazione è quella della vista; la griglia di trasparenza, i bordi e il
 // riquadro di delimitazione li disegnano `view.ts` e `marks.ts`. Una voce che il
@@ -16,6 +18,9 @@ export const COMANDI_VISUALIZZA = [
   "view.grid",
   "view.snapToGrid",
   "view.snapToPixel",
+  "view.smartGuides",
+  "view.snapToPoint",
+  "view.snapToGlyph",
   "view.transparencyGrid",
   "view.outline",
   "view.rulers",
@@ -28,11 +33,12 @@ export const COMANDI_VISUALIZZA = [
 export type ComandoVisualizza = (typeof COMANDI_VISUALIZZA)[number];
 
 /// Le file di ≡ › Visualizza, in ordine, con una riga di separazione fra l'una e
-/// l'altra: griglia e aggancio, poi come si vede la carta e il disegno (la griglia di
+/// l'altra: griglia e aggancio, poi le guide sensibili e gli agganci del motore, poi come si vede la carta e il disegno (la griglia di
 /// trasparenza, contorno, righelli), poi ciò che si nasconde attorno agli oggetti
 /// scelti (bordi, riquadro), poi i cursori di precisione, poi la rotazione della vista.
 export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
   ["view.grid", "view.snapToGrid", "view.snapToPixel"],
+  ["view.smartGuides", "view.snapToPoint", "view.snapToGlyph"],
   ["view.transparencyGrid", "view.outline", "view.rulers"],
   ["view.edges", "view.boundingBox"],
   ["view.preciseCursors"],
@@ -66,6 +72,12 @@ export function statoVisualizza(ctx: EditorContext, id: string): boolean | undef
       return ctx.grid.snap;
     case "view.snapToPixel":
       return ctx.grid.snapPixel === true;
+    case "view.smartGuides":
+      return ctx.grid.smartGuidesOff !== true;
+    case "view.snapToPoint":
+      return ctx.grid.snapPointOff !== true;
+    case "view.snapToGlyph":
+      return ctx.grid.snapGlyph === true;
     case "view.transparencyGrid":
       return ctx.grid.transparencyGrid === true;
     case "view.outline":
@@ -95,6 +107,15 @@ export function comandoVisualizza(ctx: EditorContext, id: ComandoVisualizza): vo
       return;
     case "view.snapToPixel":
       ctx.changeGrid({ ...ctx.grid, snapPixel: ctx.grid.snapPixel !== true });
+      return;
+    case "view.smartGuides":
+      ctx.changeGrid({ ...ctx.grid, smartGuidesOff: ctx.grid.smartGuidesOff !== true });
+      return;
+    case "view.snapToPoint":
+      ctx.changeGrid({ ...ctx.grid, snapPointOff: ctx.grid.snapPointOff !== true });
+      return;
+    case "view.snapToGlyph":
+      ctx.changeGrid({ ...ctx.grid, snapGlyph: ctx.grid.snapGlyph !== true });
       return;
     case "view.transparencyGrid":
       ctx.changeGrid({ ...ctx.grid, transparencyGrid: ctx.grid.transparencyGrid !== true });

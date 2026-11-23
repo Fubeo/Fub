@@ -3142,3 +3142,11 @@ La più recente in cima: data · piano · decisione · perché.
   un documento con `<style>` o una freccia (`marker-*`) rifiuta il cambio, perché
   il tracciato sarebbe estraneo. Contratto: `docs/reference/scene-operations.md`
   §2, vettore 94. Supera «deformare con Ctrl un `<rect>` è rifiutato» sopra.
+- 2026-11-23 · K6 guide sensibili e agganci di Visualizza · Deciso
+  dall'orchestratore: il motore aveva già guide sensibili, aggancio al punto e
+  ai glifi, ma il gesto non gli diceva se erano accesi. `DrawingSnap` prende
+  `guides`, `points` e `glyphs`, facoltativi (assenti = i valori di serie di
+  VectorCraft: accese, acceso, spento), così i gesti e i vettori di prima non
+  cambiano. Il client li tiene nella griglia ricordata (`smartGuidesOff`,
+  `snapPointOff`, `snapGlyph`, scritti solo se diversi da quelli di serie) e
+  le tre voci sono in ≡ › Visualizza.

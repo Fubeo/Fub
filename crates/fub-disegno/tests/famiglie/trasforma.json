@@ -3266,8 +3266,24 @@
         ]
       },
       "atteso": {
-        "rifiuto": "unsupported"
-      }
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 100 L200 100 L200 170 L100 150 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "marionetta-rettangolo.svg"
     },
     {
       "id": "object.puppetWarp",
@@ -3419,8 +3435,24 @@
         ]
       },
       "atteso": {
-        "rifiuto": "unsupported"
-      }
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 110 L199.37 98.77 L204.98 148.45 L105.62 159.68 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "marionetta-nascosto.svg"
     },
     {
       "id": "object.puppetWarp.pins",
@@ -3868,8 +3900,24 @@
         }
       ],
       "atteso": {
-        "rifiuto": "unsupported"
-      }
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "tag": "path",
+            "attrs": {
+              "x": null,
+              "y": null,
+              "width": null,
+              "height": null,
+              "rx": null,
+              "ry": null,
+              "d": "M100 100 L200 100 L250 190 L100 150 Z"
+            }
+          }
+        ]
+      },
+      "dopo": "libera-rettangolo.svg"
     },
     {
       "id": "freeTransform",

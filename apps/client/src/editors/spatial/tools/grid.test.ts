@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { UNITS } from "../scene/rulers";
 import {
   DEFAULT_GRID,
+  agganciDelMotore,
   GRID_MIN_PX,
   GRID_STEPS,
   PIXEL_STEP,
@@ -247,5 +248,18 @@ describe("l'aggancio al pixel (K6 T11)", () => {
       expect(agganciato.map((n) => Number.isInteger(n)), JSON.stringify(view)).toEqual([true, true]);
       expect(Math.abs(agganciato[0] - scena[0]) <= 0.5 && Math.abs(agganciato[1] - scena[1]) <= 0.5, JSON.stringify(view)).toBe(true);
     }
+  });
+});
+
+describe("gli agganci del motore nel gesto (Visualizza, K6)", () => {
+  it("la griglia di serie non porta niente: il motore tiene quelli di VectorCraft", () => {
+    expect(agganciDelMotore(DEFAULT_GRID)).toEqual({});
+  });
+
+  it("porta solo ciò che è diverso da VectorCraft", () => {
+    expect(agganciDelMotore({ ...DEFAULT_GRID, smartGuidesOff: true })).toEqual({ guides: false });
+    expect(agganciDelMotore({ ...DEFAULT_GRID, snapPointOff: true })).toEqual({ points: false });
+    expect(agganciDelMotore({ ...DEFAULT_GRID, snapGlyph: true })).toEqual({ glyphs: true });
+    expect(agganciDelMotore({ ...DEFAULT_GRID, smartGuidesOff: false, snapPointOff: false, snapGlyph: false })).toEqual({});
   });
 });

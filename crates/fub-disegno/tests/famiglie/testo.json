@@ -373,6 +373,11 @@
       "dopo": "type-nuovo.svg"
     },
     {
+      "id": "view.snapToGlyph",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/tools/editor/chrome/visualizza.test.ts"
+    },
+    {
       "id": "character",
       "fonte": "pannello",
       "prova": "apps/client/src/editors/spatial/completo/famiglie/testo/testo.test.ts"

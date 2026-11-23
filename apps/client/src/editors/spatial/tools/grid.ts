@@ -89,6 +89,15 @@ export interface Grid {
   /// una griglia di un pixel che non si vede. La griglia, se aggancia, vince
   /// (come nel motore). Assente, spento: è stato della vista, come `shown`.
   readonly snapPixel?: boolean;
+  /// Guide sensibili spente (Visualizza, K6): gli strumenti del motore non
+  /// allineano agli altri oggetti. Assente, accese, come in VectorCraft.
+  readonly smartGuidesOff?: boolean;
+  /// Aggancia al punto spento (Visualizza, K6): un punto preso dagli strumenti
+  /// del motore non cade sui punti vicini. Assente, acceso, come in VectorCraft.
+  readonly snapPointOff?: boolean;
+  /// Aggancia a glifo (Visualizza, K6): con le guide sensibili, gli strumenti
+  /// del motore agganciano i glifi di un testo. Assente, spento.
+  readonly snapGlyph?: boolean;
 }
 
 /// Che cosa resta di un tratto della Penna.
@@ -365,4 +374,15 @@ function turnedLines(view: View, width: number, height: number, pitch: number): 
     }
   }
   return { minor: minor.join(""), major: major.join("") };
+}
+
+/// Gli interruttori di Visualizza che il gesto porta agli strumenti del motore
+/// (`DrawingSnap`): ci sono solo quelli che non valgono come in VectorCraft, dove
+/// guide sensibili e aggancio al punto sono accesi e l'aggancio ai glifi spento.
+export function agganciDelMotore(grid: Grid): { guides?: false; points?: false; glyphs?: true } {
+  return {
+    ...(grid.smartGuidesOff === true ? { guides: false as const } : {}),
+    ...(grid.snapPointOff === true ? { points: false as const } : {}),
+    ...(grid.snapGlyph === true ? { glyphs: true as const } : {}),
+  };
 }

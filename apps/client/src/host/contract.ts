@@ -2056,10 +2056,18 @@ export interface DrawingPointer {
   cmd: boolean;
 }
 
-/** La griglia magnetica: `grid` è il passo (`null` se spenta), `free` Ctrl/⌘ tenuto. */
+/**
+ * La griglia magnetica: `grid` è il passo (`null` se spenta), `free` Ctrl/⌘ tenuto.
+ * Gli interruttori di Visualizza per gli strumenti del motore, assenti se valgono
+ * quelli di VectorCraft: `guides` le guide sensibili (accese), `points` l'aggancio
+ * al punto (acceso), `glyphs` l'aggancio ai glifi (spento).
+ */
 export interface DrawingSnap {
   grid: number | null;
   free: boolean;
+  guides?: boolean;
+  points?: boolean;
+  glyphs?: boolean;
 }
 
 export interface DrawingStyle {

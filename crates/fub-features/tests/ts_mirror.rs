@@ -1716,6 +1716,9 @@ fn drawing_samples() -> Value {
     let snap = DrawingSnap {
         grid: Some(10.0),
         free: true,
+        guides: Some(false),
+        points: Some(false),
+        glyphs: Some(true),
     };
     let style = DrawingStyle {
         stroke: "#000000".into(),

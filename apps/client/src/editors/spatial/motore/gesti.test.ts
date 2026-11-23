@@ -366,6 +366,25 @@ describe("i gesti sul motore", () => {
     expect(griglia.map((gesto) => gesto.snap.grid)).toEqual(griglia.map(() => 20));
   });
 
+  it("guide sensibili e agganci di Visualizza (K6) vanno nel gesto solo se diversi da VectorCraft", async () => {
+    const fake = createFakeHost({ drawing: replaying(VECTORS.find((vector) => vector.name === "rettangolo")!, new Map()) });
+    const editor = await mount(EMPTY, fake, null);
+    editor.setGrid({ ...DEFAULT_GRID, smartGuidesOff: true, snapPointOff: true, snapGlyph: true });
+    editor.setTool("rect");
+    await drag(editor, [[10, 3], [60, 40]]);
+    await settle(16, 8);
+    const spenti = gestures(fake);
+    expect(spenti.length).toBeGreaterThan(0);
+    expect(spenti.map((gesto) => gesto.snap)).toEqual(spenti.map(() => ({ grid: null, free: false, guides: false, points: false, glyphs: true })));
+
+    editor.setGrid(DEFAULT_GRID);
+    await drag(editor, [[200, 40], [260, 70]]);
+    await settle(16, 8);
+    const diSerie = gestures(fake).slice(spenti.length);
+    expect(diSerie.length).toBeGreaterThan(0);
+    expect(diSerie.map((gesto) => gesto.snap)).toEqual(diSerie.map(() => ({ grid: null, free: false })));
+  });
+
   it("aspetta il motore che si apre, poi manda il gesto", async () => {
     const fake = createFakeHost({ drawing: replaying(VECTORS.find((vector) => vector.name === "rettangolo")!, new Map()) });
     const session = await documentOn(EMPTY);

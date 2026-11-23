@@ -64,6 +64,7 @@ fn gesture() -> DrawingGesture {
         snap: DrawingSnap {
             grid: Some(10.0),
             free: false,
+            ..DrawingSnap::default()
         },
         style: Some(DrawingStyle {
             stroke: "#000000".into(),

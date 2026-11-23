@@ -191,6 +191,17 @@ describe("la griglia ricordata", () => {
     heal();
   });
 
+  it("guide sensibili e agganci del motore (Visualizza) tornano se diversi da quelli di serie; un valore che non si legge butta la griglia", async () => {
+    const host = createFakeHost();
+    const { readGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, smartGuidesOff: true, snapPointOff: true, snapGlyph: true });
+    expect(await readGrid()).toEqual({ ...DEFAULT_GRID, smartGuidesOff: true, snapPointOff: true, snapGlyph: true });
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, smartGuidesOff: false, snapPointOff: false, snapGlyph: false });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
+    await host.module.api.setViewState(GRID_KEY, { shown: false, snap: false, step: 20, snapGlyph: "sì" });
+    expect(await readGrid()).toEqual(DEFAULT_GRID);
+  });
+
   it("la gomma e la penna ricordate tornano; quelle che non si leggono valgono quelle di serie", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);

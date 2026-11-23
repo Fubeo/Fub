@@ -142,6 +142,13 @@ passo dell'aggancio (`snap.grid`, la griglia o il pixel) sono sopra zero, la pre
 riquadri non finiscono prima di cominciare. Un gesto senza `revision` o `phase` (come i
 [vettori dei gesti](scene-gestures.md)) vale revisione 0 e `commit`.
 
+`snap` porta anche tre interruttori facoltativi della vista del motore, tutti
+aggiunti senza cambiare i gesti di prima: `guides` (le guide sensibili,
+assenti valgono accese), `points` (l'aggancio al punto, assente acceso) e
+`glyphs` (l'aggancio ai glifi, assente spento), i valori di serie di
+VectorCraft. Il client li manda solo quando sono diversi da quelli di serie;
+gli strumenti della 0239 li ignorano.
+
 ## Gli strumenti del motore
 
 Oltre ai sei strumenti di K5 (`select`, `rect`, `ellipse`, `line`, `arrow`,

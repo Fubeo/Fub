@@ -9,6 +9,9 @@ interface GrigliaFinta {
   shown: boolean;
   snap: boolean;
   snapPixel?: boolean;
+  smartGuidesOff?: boolean;
+  snapPointOff?: boolean;
+  snapGlyph?: boolean;
   transparencyGrid?: boolean;
   hideEdges?: boolean;
   hideBoundingBox?: boolean;
@@ -32,11 +35,14 @@ function fingi(angle = 0) {
 }
 
 describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
-  it("il client fa griglia, aggancio, trasparenza, contorno, righelli, bordi, riquadro, ruota vista e rotateReset, e nessun'altra", () => {
+  it("il client fa griglia, agganci, guide sensibili, trasparenza, contorno, righelli, bordi, riquadro, ruota vista e rotateReset, e nessun'altra", () => {
     expect(COMANDI_VISUALIZZA).toEqual([
       "view.grid",
       "view.snapToGrid",
       "view.snapToPixel",
+      "view.smartGuides",
+      "view.snapToPoint",
+      "view.snapToGlyph",
       "view.transparencyGrid",
       "view.outline",
       "view.rulers",
@@ -51,9 +57,9 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     expect(isComandoVisualizza("view.transparencyGrid")).toBe(true);
     expect(isComandoVisualizza("view.edges")).toBe(true);
     expect(isComandoVisualizza("view.boundingBox")).toBe(true);
-    // Guide intelligenti, aggancio ai punti e widget d'angolo restano «da fare» in mappa.
-    expect(isComandoVisualizza("view.smartGuides")).toBe(false);
-    expect(isComandoVisualizza("view.snapToPoint")).toBe(false);
+    expect(isComandoVisualizza("view.smartGuides")).toBe(true);
+    expect(isComandoVisualizza("view.snapToPoint")).toBe(true);
+    // Il widget d'angolo resta «da fare» in mappa.
     expect(isComandoVisualizza("view.cornerWidget")).toBe(false);
     expect(isComandoVisualizza("view.rotate")).toBe(true);
     expect(isComandoVisualizza("tool.select")).toBe(false);
@@ -61,7 +67,7 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
 
   it("le file del menu portano ognuna voce una volta sola, nell'ordine dei comandi", () => {
     expect(FILE_VISUALIZZA.flat()).toEqual([...COMANDI_VISUALIZZA]);
-    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 2, 1, 2]);
+    expect(FILE_VISUALIZZA.map((file) => file.length)).toEqual([3, 3, 3, 2, 1, 2]);
   });
 
   it("una voce che il client fa è attiva; rotateReset è spenta col perché se la vista non è girata", () => {
@@ -138,6 +144,35 @@ describe("le righe view.* di ≡ › Visualizza del Disegno completo", () => {
     // È una scrittura della griglia: il contorno e i righelli non si toccano.
     expect(spento.setOutline).not.toHaveBeenCalled();
     expect(spento.setEdgeRulers).not.toHaveBeenCalled();
+  });
+
+  it("guide sensibili e aggancio al punto sono accesi di serie, l'aggancio ai glifi spento, come in VectorCraft", () => {
+    const ctx = fingi();
+    const editor = ctx as unknown as EditorContext;
+    // Assenti, come una griglia ricordata prima di loro.
+    expect(statoVisualizza(editor, "view.smartGuides")).toBe(true);
+    expect(statoVisualizza(editor, "view.snapToPoint")).toBe(true);
+    expect(statoVisualizza(editor, "view.snapToGlyph")).toBe(false);
+    ctx.grid = { shown: false, snap: false, smartGuidesOff: true, snapPointOff: true, snapGlyph: true };
+    expect(statoVisualizza(editor, "view.smartGuides")).toBe(false);
+    expect(statoVisualizza(editor, "view.snapToPoint")).toBe(false);
+    expect(statoVisualizza(editor, "view.snapToGlyph")).toBe(true);
+  });
+
+  it("guide sensibili, aggancio al punto e ai glifi si scambiano nella griglia, senza toccare il resto", () => {
+    const ctx = fingi();
+    const editor = ctx as unknown as EditorContext;
+    comandoVisualizza(editor, "view.smartGuides");
+    expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, smartGuidesOff: true });
+    comandoVisualizza(editor, "view.snapToPoint");
+    expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, snapPointOff: true });
+    comandoVisualizza(editor, "view.snapToGlyph");
+    expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, snapGlyph: true });
+    ctx.grid = { shown: false, snap: false, smartGuidesOff: true, snapPointOff: true, snapGlyph: true };
+    comandoVisualizza(editor, "view.smartGuides");
+    expect(ctx.changeGrid).toHaveBeenLastCalledWith({ shown: false, snap: false, smartGuidesOff: false, snapPointOff: true, snapGlyph: true });
+    expect(ctx.setOutline).not.toHaveBeenCalled();
+    expect(ctx.turnView).not.toHaveBeenCalled();
   });
 
   it("ogni comando cambia lo stato che gli compete, senza toccare gli altri", () => {

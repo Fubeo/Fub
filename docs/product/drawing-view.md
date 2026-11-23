@@ -64,10 +64,12 @@ comandi stanno in Ctrl+/ e nella ricerca dei comandi.
 
 Nel Disegno completo, ≡ › Visualizza ha la griglia («Mostra griglia» e
 «Aggancia alla griglia», le stesse impostazioni del Semplice), «Aggancia ai
-pixel», «Mostra griglia trasparenza», il contorno, i righelli del bordo del foglio
+pixel», «Guide sensibili», «Aggancia al punto», «Aggancia ai glifi», «Mostra
+griglia trasparenza», il contorno, i righelli del bordo del foglio
 («Mostra righelli»), «Nascondi bordi» e «Nascondi riquadro di delimitazione», e
 «Reimposta rotazione vista», che è spenta finché la vista non è girata. Le voci
-stanno in cinque file, separate da una riga: griglia e aggancio; trasparenza,
+stanno in sei file, separate da una riga: griglia e aggancio; guide e agganci
+del motore; trasparenza,
 contorno e righelli; bordi e riquadro; la croce di precisione; la rotazione. Le
 voci «Nascondi» hanno la spunta quando nascondono davvero. «Usa cursori di
 precisione» mette la croce al posto del cursore degli strumenti che disegnano
@@ -83,6 +85,16 @@ restano quelle che si vedono. Le frecce spostano la selezione fino al pixel
 seguente, e con Maiusc di cinque. Nel Semplice l'aggancio al pixel non agisce:
 il valore resta salvato con la griglia, e lì i punti non si arrotondano.
 
+«Guide sensibili», «Aggancia al punto» e «Aggancia ai glifi» sono gli
+interruttori di VectorCraft, con i suoi valori di serie: le prime due accese, la
+terza spenta. Valgono per gli strumenti del motore. Con le guide accese, un bordo
+o un punto tirato vicino al bordo, al centro o a un punto di un altro oggetto ci
+va sopra, e si vedono le linee della guida. Con le guide spente, «Aggancia al
+punto» porta il punto preso sul punto più vicino di un altro oggetto; spente
+tutte e due, il puntatore resta dov'è. Con la griglia che aggancia, le guide non
+agiscono, come in VectorCraft. «Aggancia ai glifi» arriva al motore, ma il motore
+la usa solo con i testi.
+
 La griglia di trasparenza mette la carta a scacchi, dove il foglio non ha un
 fondo suo: un PDF di sfondo, con la sua pagina, la copre. «Nascondi bordi»
 toglie il contorno di ogni oggetto scelto. «Nascondi riquadro di delimitazione»
@@ -92,10 +104,10 @@ sposta ancora trascinandola. I righelli stanno sul bordo in alto e a sinistra
 del foglio, con le tacche e i numeri nell'unità del documento; non spostano il
 disegno, e con la vista girata non si leggono. Lo stato dei righelli non si
 salva nel file. Gli interruttori della vista (trasparenza, bordi, riquadro,
-aggancio ai pixel) si ricordano come la griglia, nelle sue stesse impostazioni:
+agganci e guide) si ricordano come la griglia, nelle sue stesse impostazioni:
 non cambiano il file e non entrano nella cronologia. Le altre voci di Visualizza
-(l'anteprima dei pixel, la modalità presentazione e lo schermo intero, le guide
-intelligenti, l'aggancio ai punti, il widget d'angolo, le viste salvate) non ci
+(l'anteprima dei pixel, la modalità presentazione e lo schermo intero, il
+widget d'angolo, le viste salvate) non ci
 sono ancora: non compaiono nel menu.
 
 Il navigatore si accende e si spegne dalla banda, con la voce «Navigatore» nel

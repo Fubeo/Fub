@@ -195,7 +195,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T12: «Pulisci…» (object.path.cleanUp) è fatta: vale su tutto il disegno, con i tre interruttori del motore.
   // T14: «Nuovo gruppo colori…» (ui.newColorGroup) è fatta, un dialogo del kit in Ctrl+/.
   // T13: la Trasformazione libera (strumento freeTransform, `E`) è fatta: scala, sposta e deforma un tracciato.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1029, fub: 114, escluso: 12, fatto: 396 });
+  // T11 guide e agganci del motore: `view.smartGuides`, `view.snapToPoint` e `view.snapToGlyph` diventano
+  // «fatto», con le prove in vista.json e testo.json: il gesto porta i tre interruttori (`snap.guides`,
+  // `snap.points`, `snap.glyphs`) alla vista del motore. Tre righe in più.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1026, fub: 114, escluso: 12, fatto: 399 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

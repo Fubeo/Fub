@@ -5351,6 +5351,38 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "view.smartGuides",
+      "chiamata": {
+        "client": "view.smartGuides"
+      },
+      "etichetta": {
+        "it": "Guide sensibili",
+        "en": "Smart Guides"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.snapToGlyph",
+      "chiamata": {
+        "client": "view.snapToGlyph"
+      },
+      "etichetta": {
+        "it": "Aggancia a glifo",
+        "en": "Snap to Glyph"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "view.snapToGrid",
       "chiamata": {
         "client": "view.snapToGrid"
@@ -5374,6 +5406,22 @@
       "etichetta": {
         "it": "Aggancia ai pixel",
         "en": "Snap to Pixel"
+      },
+      "posto": "menu/visualizza",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "mostra",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
+      "id": "view.snapToPoint",
+      "chiamata": {
+        "client": "view.snapToPoint"
+      },
+      "etichetta": {
+        "it": "Aggancia al punto",
+        "en": "Snap to Point"
       },
       "posto": "menu/visualizza",
       "famiglia": "vista",

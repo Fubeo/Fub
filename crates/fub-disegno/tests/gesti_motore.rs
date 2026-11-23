@@ -819,3 +819,88 @@ fn il_tracciato_con_il_passo_di_un_pixel_cade_su_interi() {
         assert_eq!(dd, atteso, "passo {passo:?}");
     }
 }
+
+/// Il rettangolo del motore disegnato da (30, 10) fino a `x` = 98, a due unità dal
+/// bordo sinistro del rettangolo che c'è (x = 100), con le guide date dal gesto:
+/// la larghezza che resta scritta.
+fn larghezza_con_le_guide(guides: Option<bool>) -> String {
+    let (mut d, _) = apri(DISEGNO);
+    let mut g = richiesta(
+        "rectangle",
+        "preview",
+        vec![evento("down", 30.0, 10.0), evento("drag", 98.0, 40.0)],
+        vec![],
+    );
+    g.snap.guides = guides;
+    let esito = d.gesto(g.clone()).expect("il gesto");
+    assert_eq!(esito.refused, None, "{esito:?}");
+    g.phase = fub_abi::DrawingPhase::Commit;
+    g.events = vec![serde_json::from_value(evento("up", 98.0, 40.0)).unwrap()];
+    let fine = d.gesto(g).expect("il gesto");
+    assert_eq!(fine.refused, None, "{fine:?}");
+    let ops = ops_di(&fine);
+    let add = ops
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["op"] == "add")
+        .unwrap_or_else(|| panic!("{ops}"))
+        .clone();
+    add["elem"]["attrs"]["width"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// K6, Visualizza › Guide sensibili: il gesto porta l'interruttore alla vista
+/// del motore. Accese (anche assenti, come in VectorCraft) il bordo tirato va sul
+/// bordo vicino; spente resta dove l'ha lasciato il puntatore.
+#[test]
+fn le_guide_sensibili_vengono_dal_gesto() {
+    assert_eq!(larghezza_con_le_guide(None), "70", "accese di serie");
+    assert_eq!(larghezza_con_le_guide(Some(true)), "70");
+    assert_eq!(larghezza_con_le_guide(Some(false)), "68", "spente");
+}
+
+/// K6, Visualizza › Aggancia al punto: la Selezione del motore prende un
+/// triangolo per il vertice in alto e lo lascia a un'unità e mezza dall'angolo di
+/// un rettangolo. Con le guide spente decide l'aggancio al punto: acceso (anche
+/// assente, come in VectorCraft) il vertice cade sull'angolo, spento resta dove
+/// l'ha lasciato il puntatore.
+#[test]
+fn l_aggancio_al_punto_viene_dal_gesto() {
+    let testo = DISEGNO.replace(
+        "<rect id=\"oa1a1a1a1\" x=\"100\" y=\"100\" width=\"100\" height=\"50\" fill=\"#000000\"/>",
+        "<path id=\"oa1a1a1a1\" d=\"M100 150 L130 100 L200 150 Z\" fill=\"#000000\"/>\n    <rect id=\"ob2b2b2b2\" x=\"250\" y=\"100\" width=\"50\" height=\"50\"/>",
+    );
+    let sposta = |points: Option<bool>| {
+        let (mut d, _) = apri(&testo);
+        let mut g = richiesta(
+            "selection",
+            "commit",
+            vec![
+                evento("down", 130.0, 100.0),
+                evento("drag", 200.0, 101.0),
+                evento("drag", 249.0, 101.0),
+                evento("up", 249.0, 101.0),
+            ],
+            vec![],
+        );
+        g.selection = vec!["oa1a1a1a1".into()];
+        g.snap.guides = Some(false);
+        g.snap.points = points;
+        let esito = d.gesto(g).expect("il gesto");
+        assert_eq!(esito.refused, None, "{esito:?}");
+        let ops = ops_di(&esito);
+        ops.as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["op"] == "set" && o["id"] == "oa1a1a1a1")
+            .and_then(|o| o["attrs"]["transform"].as_str())
+            .unwrap_or_else(|| panic!("{ops}"))
+            .to_owned()
+    };
+    assert_eq!(sposta(None), "matrix(1 0 0 1 120 0)", "acceso di serie");
+    assert_eq!(sposta(Some(true)), "matrix(1 0 0 1 120 0)");
+    assert_eq!(sposta(Some(false)), "matrix(1 0 0 1 119 1)", "spento");
+}
