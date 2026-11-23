@@ -1096,6 +1096,30 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-disegno/src/famiglie/livelli.rs::testo_in_carattere",
+            (
+                Family::AsciiCase,
+                "predice quali testi sceglierà `select.font` del motore di disegno, per dire il \
+                 perché in italiano prima di chiamarlo: deve confrontare famiglia e stile come \
+                 fa il motore (`vendor/vectorcraft/crates/engine/src/cmd/fonts.rs`, \
+                 `eq_ignore_ascii_case`), altrimenti Fub rifiuterebbe una scelta che il motore \
+                 farebbe o viceversa. Non è il nome di una nota, di un tag o di un path, e non \
+                 decide se due famiglie installate sono la stessa (quella resta a \
+                 `fonts.rs::same_family`).",
+            ),
+        ),
+        (
+            "crates/fub-disegno/src/famiglie/livelli.rs::opzioni_della_modifica_globale",
+            (
+                Family::AsciiCase,
+                "riconosce la parola chiave `all` del campo `artboards` delle opzioni della \
+                 modifica globale, come fa il motore di disegno \
+                 (`vendor/vectorcraft/crates/engine/src/cmd/globaledit.rs`), per controllare \
+                 l'argomento prima del motore: una parola inglese e ASCII di un vocabolario \
+                 chiuso, non il nome di una nota, di un tag o di un path.",
+            ),
+        ),
+        (
             "crates/fub-disegno/src/catalogo.rs::sostituisci",
             (
                 Family::PerCharacterCase,
