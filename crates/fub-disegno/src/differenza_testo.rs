@@ -30,6 +30,10 @@ pub(crate) const RIENTRI: &str =
 pub(crate) const GIUSTIFICATO: &str =
     "il giustificato vale per un testo in area: un testo di punto si allinea a sinistra, al centro o a destra";
 
+/// Il perché di un testo scalato che scrive il carattere in `style`.
+const STILE_IN_LINEA: &str =
+    "il testo scrive il suo carattere nell'attributo style: la sua grandezza non si riscrive";
+
 /// Il cambio di un testo di punto.
 pub(super) struct CambioDelTesto {
     /// Il testo di prima con le parole, il carattere e l'allineamento di
@@ -186,11 +190,14 @@ pub(super) fn riscrittura(e: &Elemento, b: &Node, a: &Node) -> Result<TestoRiscr
         ));
     }
     // Il carattere e l'allineamento come attributi del `<text>`: l'interlinea
-    // la scrivono i `dy` delle righe.
+    // la scrivono i `dy` delle righe, lo spessore del contorno delle lettere
+    // `scala_il_carattere` (il motore lo tiene nello spazio del testo, che
+    // Scala cambia).
     let senza_interlinea = |t: &TextObject| {
         let mut t = t.clone();
         for r in &mut t.runs {
             r.style.leading = None;
+            r.style.stroke_width = 0.0;
         }
         t
     };
@@ -216,6 +223,7 @@ pub(super) fn riscrittura(e: &Elemento, b: &Node, a: &Node) -> Result<TestoRiscr
         .ok_or_else(|| no("la transform del testo non si legge"))?;
     let m = ctm.inverse() * ta.xf;
     let scritte = righe_scritte(ta, m, righe_di_punto).map_err(no)?;
+    scala_il_carattere(info, tb, ta, ctm.inverse() * tb.xf, m, &mut cambiati)?;
     let mut attrs = Map::new();
     for (nome, valore) in &info.attributi {
         if nome != "id" {
@@ -243,6 +251,102 @@ pub(super) fn riscrittura(e: &Elemento, b: &Node, a: &Node) -> Result<TestoRiscr
         attrs,
         righe: scritte.righe,
     })
+}
+
+/// Il carattere di un testo riscritto che il motore ha scalato (Scala su un
+/// testo in area): `righe_scritte` porta già nel file la posizione, la
+/// larghezza e il passo delle righe, e il carattere va con loro, come il
+/// motore lo mostra (`TextObject::effective_char_style`, che moltiplica il
+/// corpo, l'interlinea e lo spostamento dalla linea di base per la scala, e
+/// disegna il contorno delle lettere nello spazio del testo). Senza, il file
+/// avrebbe le righe a metà passo con il corpo di prima: un altro disegno, e
+/// alla riapertura un testo di punto. `prima` e `dopo` portano il testo
+/// nello spazio del `<text>` (già controllate uniformi da `righe_scritte`).
+fn scala_il_carattere(
+    info: &crate::mappa::InfoTesto,
+    tb: &TextObject,
+    ta: &TextObject,
+    prima: vectorcraft_geom::Affine,
+    dopo: vectorcraft_geom::Affine,
+    cambiati: &mut Map<String, Value>,
+) -> Result<(), Rifiuto> {
+    let scala = |m: vectorcraft_geom::Affine| m.determinant().abs().sqrt();
+    let (sb, sa) = (scala(prima), scala(dopo));
+    if !(sb.is_finite() && sb > 1e-9 && sa.is_finite() && sa > 1e-9) {
+        return Err(no("il testo sta in uno spazio schiacciato"));
+    }
+    // Il contorno delle lettere, come si vede: il motore lo disegna nello
+    // spazio del testo, quindi Scala lo fa crescere e calare con lui, se non
+    // lo compensa.
+    let spessore = |t: &TextObject, scala: f64| {
+        unico(&t.runs, |s| s.stroke_width.to_bits()).map(|w| f64::from_bits(w) * scala)
+    };
+    let contorno = |t: &TextObject| {
+        t.runs
+            .iter()
+            .any(|r| r.style.stroke != Default::default() && r.style.stroke_width > 0.0)
+    };
+    if contorno(tb) || contorno(ta) {
+        let diversi = || no("le parti del testo hanno contorni diversi: il file ne scrive uno");
+        let (wb, wa) = (
+            spessore(tb, sb).ok_or_else(diversi)?,
+            spessore(ta, sa).ok_or_else(diversi)?,
+        );
+        if !vicini(wa, wb) {
+            if ta.runs.iter().any(|r| r.style.stroke_dash.is_some()) {
+                return Err(no(
+                    "il contorno tratteggiato delle lettere non si riscala nel file",
+                ));
+            }
+            if info.attributi.iter().any(|(nome, _)| nome == "style") {
+                return Err(no(STILE_IN_LINEA));
+            }
+            cambiati.insert("stroke-width".into(), json!(numero(wa, DECIMALI_GEOMETRIA)));
+        }
+    }
+    if vicini(sa / sb, 1.0) {
+        return Ok(());
+    }
+    if ["font-size", "letter-spacing"]
+        .iter()
+        .any(|nome| cambiati.contains_key(*nome))
+    {
+        return Err(no(
+            "il testo cambia carattere e grandezza insieme: un gesto alla volta",
+        ));
+    }
+    if info.attributi.iter().any(|(nome, _)| nome == "style") {
+        return Err(no(STILE_IN_LINEA));
+    }
+    let diversi = || no("le parti del testo hanno corpi diversi: Scala non le riscrive");
+    let corpo = unico(&ta.runs, |s| s.size.to_bits()).ok_or_else(diversi)?;
+    let corpo = f64::from_bits(corpo);
+    if !(corpo.is_finite() && corpo > 0.0) {
+        return Err(diversi());
+    }
+    if ta.runs.iter().any(|r| r.style.baseline_shift.abs() > 1e-9) {
+        return Err(no(
+            "il testo ha lettere spostate dalla linea di base: il file non lo scrive",
+        ));
+    }
+    cambiati.insert(
+        "font-size".into(),
+        json!(numero(corpo * sa, DECIMALI_GEOMETRIA)),
+    );
+    let em = unico(&ta.runs, |s| (s.tracking / 1000.0 * s.size).to_bits())
+        .map(f64::from_bits)
+        .ok_or_else(diversi)?;
+    let spaziatura = em * sa;
+    let scritta = info.attributi.iter().any(|(n, _)| n == "letter-spacing");
+    if spaziatura.abs() >= 0.005 {
+        cambiati.insert(
+            "letter-spacing".into(),
+            json!(numero(spaziatura, DECIMALI_GEOMETRIA)),
+        );
+    } else if scritta {
+        cambiati.insert("letter-spacing".into(), Value::Null);
+    }
+    Ok(())
 }
 
 /// L'allineamento di un testo riscritto: `text-anchor` per sinistra, centro

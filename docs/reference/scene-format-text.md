@@ -152,6 +152,12 @@ secondo è «Fine.».
   due grafemi, e soltanto un grafema da solo può andare oltre. Le larghezze
   sono quelle dei caratteri con cui il testo si disegna (§9), come li disegna
   l'esportazione; la spaziatura delle lettere conta dopo ogni grafema.
+- **Scalare un testo in area** non scrive una `transform`: riscrive il
+  testo con `x`, `y`, `fub:wrap`, i `dy` delle righe, `font-size` e
+  `letter-spacing` moltiplicati per la scala, così il passo delle righe
+  resta quello del corpo e gli a capo restano gli stessi. Il contorno delle
+  lettere ha lo spessore che si vede dopo la scala. Una scala diversa in
+  orizzontale e in verticale non si scrive, come una rotazione.
 - **Una riga nuova di un paragrafo** copia gli attributi della prima, tranne
   `id`, e scende dell'interlinea del testo.
 - **Chi non legge `fub:*`**, un browser o un altro programma, vede un testo
