@@ -709,7 +709,9 @@ export function installGestiMotore(ctx: EditorContext): void {
     kind,
     x: sample.x,
     y: sample.y,
-    pressure: kind === "up" ? 0 : (sample.p ?? 0.5),
+    // Un campione senza pressione (il mouse, un dito) è premuto in pieno, come in VectorCraft
+    // (`PointerEvent::new`, pressione 1): il Pennello ne fa un contorno uniforme.
+    pressure: kind === "up" ? 0 : (sample.p ?? 1),
     shift: ctx.shift,
     alt: ctx.alt,
     cmd: ctx.free,

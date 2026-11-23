@@ -5895,6 +5895,22 @@
     },
     {
       "fonte": "strumento",
+      "id": "paintbrush",
+      "chiamata": {
+        "strumento": "paintbrush"
+      },
+      "etichetta": {
+        "it": "Strumento Pennello",
+        "en": "Paintbrush Tool"
+      },
+      "posto": "colonna/disegna",
+      "famiglia": "pennelli",
+      "tasto": "B",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "strumento",
       "id": "pathEraser",
       "chiamata": {
         "strumento": "pathEraser"

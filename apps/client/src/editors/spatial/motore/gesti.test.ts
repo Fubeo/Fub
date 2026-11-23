@@ -975,6 +975,16 @@ describe("lo strumento del motore nei gesti (K6 T8)", () => {
     expect(editor.statoStrumento("pencil")).toEqual(expect.objectContaining({ cursor: "arrow" }));
   });
 
+  it("il mouse preme in pieno (pressione 1), come in VectorCraft: il rilascio porta 0", async () => {
+    const fake = createFakeHost({ drawing: { comando: statoDiSerie } as DrawingFake });
+    const editor = await montaConPreparazione(EMPTY, fake);
+    editor.setEngineTool("paintbrush");
+    await drag(editor, [[220, 40], [260, 70], [300, 90]]);
+    const eventi = gestures(fake).flatMap((each) => each.events);
+    expect(eventi.filter((e) => e.kind === "down" || e.kind === "drag").map((e) => e.pressure)).toEqual([1, 1, 1]);
+    expect(eventi.filter((e) => e.kind === "up").map((e) => e.pressure)).toEqual([0]);
+  });
+
   it("un'opzione cambiata va al motore, e lo stato che torna si registra", async () => {
     const fake = createFakeHost({
       drawing: {

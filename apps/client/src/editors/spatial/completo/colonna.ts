@@ -85,6 +85,8 @@ export const MOTORE_PRONTO: ReadonlySet<string> = new Set([
   "slideAnchor",
   "extendPath",
   "pencil",
+  // Il Pennello: la Matita con lo stile «pennello», senza riempimento.
+  "paintbrush",
   "blobBrush",
   "smooth",
   "join",
@@ -187,6 +189,7 @@ export const ICONE_MOTORE: Readonly<Record<string, string>> = {
   extendPath: "draw-point-join",
   // La Matita e la Gomma: la prima dal prototipo, le altre dal catalogo.
   pencil: "draw-pencil",
+  paintbrush: "draw-paintbrush",
   smooth: "draw-pencil",
   join: "draw-point-join",
   sharedEdge: "draw-point-join",

@@ -196,6 +196,7 @@ const COLUMN: Readonly<Record<string, readonly string[]>> = {
   "draw-mesh": ["M4 4h16v16H4z", "M4 12c5-3 11 3 16 0", "M12 4c-3 5 3 11 0 16"],
   "draw-parametric": ["M12 3l8 5v8l-8 5-8-5V8z", "M12 3v18"],
   "draw-pen-nib": ["M12 3l5 8-2.5 5h-5L7 11z", "M12 3v7", "M9.5 20h5"],
+  "draw-paintbrush": ["M14 4l6 6-7 7-6-6z", "M7 11c-3 1-4 4-4 9 5 0 8-1 9-4"],
   "draw-pencil": ["M15 4l5 5L9 20H4v-5z", "M12.5 6.5l5 5"],
   "draw-perspective": ["M3 20L12 4l9 16z", "M7.5 12h9", "M12 4v16"],
   // Elaborazione tracciati: due quadrati, il dietro in alto a sinistra e il davanti

@@ -168,7 +168,7 @@ scrivono tracciati veri, `<path>`, non tratti a mano:
 | Casella | Strumenti |
 |---|---|
 | **Penna** | Penna, Penna intelligente, Curvatura, Aggiungi e Elimina punto di ancoraggio, Punto di ancoraggio, Angoli, Fai scorrere il punto di ancoraggio, Estendi tracciato |
-| **Matita** | Matita, poi l'Inchiostro e l'Evidenziatore di Fub, Smussa, Unisci, Fondi bordo condiviso |
+| **Matita** | Matita, poi l'Inchiostro e l'Evidenziatore di Fub, Pennello, Pennello tondo, Smussa, Unisci, Fondi bordo condiviso |
 | **Gomma** | Gomma (Completo), poi la gomma di Fub, Gomma tracciato, Pennello gomma punti, Forbici, Coltello, Specchia e taglia, Taglio linea, Taglio rettangolare |
 
 La tendina di una casella dà i nomi corti degli strumenti anche prima che la
@@ -191,6 +191,11 @@ Lo chiudono:
 In tutti i casi il tracciato è **un passo** di Annulla. Un secondo Esc,
 senza niente di aperto, torna alla Selezione. Lo stesso vale per la Penna
 intelligente e la Curvatura.
+
+**Il Pennello** traccia a mano libera come la Matita, ma il tracciato è solo
+contorno, senza riempimento, come in VectorCraft. Col mouse il contorno è
+uniforme; con una penna la pressione resta scritta nel file, ma lo spessore che
+cambia lungo il tratto non si vede ancora.
 
 Gli strumenti dei tracciati non toccano i tratti dell'**Inchiostro**
 (`fub:ink`): Forbici, Coltello o Gomma su un tratto a mano sono spenti, e il
