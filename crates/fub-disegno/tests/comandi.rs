@@ -295,6 +295,10 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         // Le librerie di campioni (K6 T14) si leggono dal motore, senza guardare la scelta.
         "disegno.swatch.library.list",
         "disegno.swatch.library.get",
+        // Le letture della Trasparenza (K6 T15, giro maschere) non cambiano il disegno: con un
+        // elemento non mappato danno il vuoto, come le altre letture.
+        "disegno.transparency.info",
+        "disegno.transparency.opacityMaskInfo",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

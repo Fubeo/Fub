@@ -41,6 +41,14 @@ su un gruppo, come lo scrive Illustrator, si vede e si tiene, ma Rilascia
 non lo toglie ancora e lo dice. Modifica tracciato di ritaglio e il ritaglio
 di un livello non ci sono ancora: sono spenti e dicono perché.
 
+**Maschera di opacità.** Il comando Crea maschera di opacità, nel pannello
+Trasparenza, prende il più alto dei due o più oggetti scelti come maschera
+degli altri: la luminanza della maschera fa da opacità, e il file la scrive
+con una `mask`. Con un oggetto solo, con una maschera che non ritaglia o
+invertita, e con un oggetto bloccato il comando non parte e dice perché.
+Rilascia, Disattiva, Scollega, le opzioni, la modifica della maschera e le
+impostazioni delle nuove maschere non ci sono ancora (K6 T15 giro maschere).
+
 ## Ciò che si vede è ciò che si tocca
 
 La selezione, la cornice, l'aggancio, la gomma e l'export della selezione
