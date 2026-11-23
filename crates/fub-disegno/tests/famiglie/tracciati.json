@@ -6988,6 +6988,60 @@
       "id": "addon.pathtools.extend",
       "disegno": "base.svg",
       "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "end",
+        "length": -179.9
+      },
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "oc1c1c1c1",
+            "attrs": {
+              "d": "M40 60 L40.1 60"
+            }
+          }
+        ]
+      },
+      "dopo": "accorcia-quasi-tutto.svg"
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "end",
+        "length": -180
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
+        "oc1c1c1c1"
+      ],
+      "argomenti": {
+        "element": "oc1c1c1c1",
+        "end": "end",
+        "length": -181
+      },
+      "atteso": {
+        "errore": "bad_args"
+      }
+    },
+    {
+      "id": "addon.pathtools.extend",
+      "disegno": "base.svg",
+      "selezione": [
         "op7a7a7a7"
       ],
       "argomenti": {

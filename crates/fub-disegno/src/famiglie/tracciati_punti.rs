@@ -137,6 +137,9 @@ fn intero_dovuto(id: &str, o: &Map<String, Value>, chiave: &str) -> Result<usize
 
 /// Controlla che il punto, il segmento o il sottotracciato che il comando
 /// nomina ci siano nel tracciato `dati`.
+/// Quanto dev'essere lasciato di un tracciato accorciato (pt): il `MIN_LEFT` di pathops.
+const LASCIA_ALMENO: f64 = 1e-3;
+
 fn controlla_gli_indici(id: &str, o: &Map<String, Value>, dati: &PathData) -> Result<(), PluginError> {
     let quanti = dati.subpaths.len();
     let sotto = intero(id, o, "subpath")?;
@@ -190,9 +193,19 @@ fn controlla_gli_indici(id: &str, o: &Map<String, Value>, dati: &PathData) -> Re
                 return Err(sbagliato(id, "questo tracciato è chiuso: non ha estremi da allungare"));
             }
             match o.get("end").and_then(Value::as_str) {
-                Some("start" | "end") => Ok(()),
-                _ => Err(sbagliato(id, "`end` è «start» o «end»: l'estremo da allungare")),
+                Some("start" | "end") => {}
+                _ => return Err(sbagliato(id, "`end` è «start» o «end»: l'estremo da allungare")),
             }
+            // Accorciare: il motore lascia almeno un millesimo di punto (`MIN_LEFT` di pathops). La
+            // lunghezza è quella di geometria del motore (`PathData::length`), sul solo sottotracciato.
+            if let Some(accorcia) = o.get("length").and_then(Value::as_f64).filter(|l| l.is_finite() && *l < 0.0) {
+                let mut solo = dati.clone();
+                solo.subpaths = vec![sottotracciato(sotto.unwrap_or(0))?.clone()];
+                if -accorcia >= solo.length() - LASCIA_ALMENO {
+                    return Err(sbagliato(id, "il tracciato è troppo corto per accorciarlo di tanto: resterebbe un punto"));
+                }
+            }
+            Ok(())
         }
         // La curvatura muove un punto o inserisce su un segmento: il numero che c'è si controlla.
         "path.curvatureEdit" => {
