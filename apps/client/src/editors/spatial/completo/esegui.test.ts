@@ -501,3 +501,18 @@ describe("eseguiVoce, Aggiungi riempimento e Aggiungi contorno (K6 T15, aggiungi
     expect(azioni.commit).toHaveBeenCalledOnce();
   });
 });
+
+describe("eseguiVoce, Seleziona testo di punto e in area (K6 T15, seleziona tipo)", () => {
+  it.each([
+    ["select.object.pointText", "Oggetti testo per punti"],
+    ["select.object.areaText", "Oggetti testo in area"],
+  ])("%s manda al motore disegno.%s e sceglie: nessun passo nella cronologia", async (id, etichetta) => {
+    // Solo una scelta: nessuna operazione, quindi nessun passo, e la scelta del motore va alla selezione.
+    const { d, sessione, azioni } = dipendenze({ risposta: esito({ ops: null, selection: ["n1"] }), leggi: () => [] });
+    eseguiVoce(voce({ id, famiglia: "livelli", etichetta: { it: etichetta, en: id }, chiamata: { comando: `disegno.${id}`, valore: {} } }), d);
+    await tick();
+    expect(sessione.comando).toHaveBeenCalledWith({ id: `disegno.${id}`, selection: ["n1", "n2"], value: {}, preview: false });
+    expect(azioni.commit).not.toHaveBeenCalled();
+    expect(azioni.seleziona).toHaveBeenCalledWith(["n1"]);
+  });
+});
