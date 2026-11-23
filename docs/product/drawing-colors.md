@@ -134,8 +134,12 @@ griglia scorre dentro la scheda.
   campioni in ordine di nome, e il file salva quell'ordine. **Unisci campioni**
   e **Sposta campione** sono nell'indice dei comandi (Ctrl+/), senza un'interfaccia
   nella sezione: chiedono i campioni da unire o da spostare, e dicono che cosa manca.
-  I gruppi di colori non ci sono, perché il formato del disegno non ne ha, e
   «Ordina per specie» non cambia niente, perché ogni campione è un colore.
+- **Nuovo gruppo colori…** (Ctrl+/) apre la finestra «Nuovo gruppo colori»: il nome
+  (senza nome il gruppo si chiama «Gruppo colori») e, con una casella per campione, i
+  campioni di colore pieno che ci entrano. OK li mette nel gruppo in un solo passo di
+  Annulla. Un gruppo senza campioni non si salva: la finestra lo dice, e non parte
+  niente. Gradienti, motivi e «Nessuno» non si mostrano.
 - **Aggiungi i colori usati** fa un campione per ogni colore degli oggetti
   scelti, o di tutto il disegno senza niente di scelto.
 - **Togli i non usati** elimina in un passo i campioni che nessun oggetto,

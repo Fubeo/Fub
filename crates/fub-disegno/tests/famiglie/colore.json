@@ -4783,6 +4783,11 @@
       "prova": "apps/client/src/editors/spatial/completo/selettore-colore.test.ts"
     },
     {
+      "id": "ui.newColorGroup",
+      "fonte": "interfaccia",
+      "prova": "apps/client/src/editors/spatial/completo/nuovo-gruppo.test.ts"
+    },
+    {
       "id": "recolor.apply",
       "disegno": "ricolora-scena.svg",
       "selezione": [

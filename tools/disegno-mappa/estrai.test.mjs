@@ -193,7 +193,8 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 gruppi di colori: newGroup, ungroup, editGroup, addToSwatches e resetDefaults sono fatti (`fub:group` sui campioni).
   // T12: il Pennello tondo (path.blob e lo strumento blobBrush) è fatto, con Maiusc+B.
   // T12: «Pulisci…» (object.path.cleanUp) è fatta: vale su tutto il disegno, con i tre interruttori del motore.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1031, fub: 114, escluso: 12, fatto: 394 });
+  // T14: «Nuovo gruppo colori…» (ui.newColorGroup) è fatta, un dialogo del kit in Ctrl+/.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1030, fub: 114, escluso: 12, fatto: 395 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -49,15 +49,20 @@ export function partenzaDel(colore: ColoreSelezione | undefined): string | null 
 const coloreDel = (colori: ColoriSelezione, lato: Lato): ColoreSelezione | undefined =>
   lato === "fill" ? colori.riempimento : colori.contorno;
 
+/// La famiglia `colore` è pronta prima di un suo comando, come per ogni voce del menu (`eseguiPerId`): `true`
+/// se lo è, anche dopo «Riprova» se era in errore.
+export async function famigliaColorePronta(carica: DipendenzeComando["carica"]): Promise<boolean> {
+  const stato = carica.stato("colore").kind === "errore" ? await carica.riprova("colore") : await carica.famiglia("colore");
+  return stato.kind === "pronta";
+}
+
 /// Manda il colore del lato dal percorso del pozzo: `paint.setFill` o `paint.setStroke`, con `{none: true}`
 /// per nessun colore. Risolve con il perché in italiano se il motore lo rifiuta; `null` se è andata, o se
 /// non c'è niente da dire. Le risposte che arrivano a finestra chiusa non cambiano niente.
 async function applicaColore(dipendenze: DipendenzeComando, lato: Lato, colore: string, finestra: Lifetime): Promise<DrawKey | null> {
-  // La famiglia `colore` è pronta prima del comando, come per ogni voce del menu (`eseguiPerId`).
-  const famiglia =
-    dipendenze.carica.stato("colore").kind === "errore" ? await dipendenze.carica.riprova("colore") : await dipendenze.carica.famiglia("colore");
+  const pronta = await famigliaColorePronta(dipendenze.carica);
   if (finestra.closed) return null;
-  if (famiglia.kind !== "pronta") return "draw.window.failed";
+  if (!pronta) return "draw.window.failed";
   const id = lato === "fill" ? "disegno.paint.setFill" : "disegno.paint.setStroke";
   const esito = await chiama(dipendenze, id, colore === "none" ? { none: true } : { color: colore }, false);
   if (finestra.closed) return null;
