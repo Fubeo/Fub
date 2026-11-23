@@ -6942,3 +6942,20 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     expect(onToolbar).toHaveBeenLastCalledWith([]);
   });
 });
+
+describe("l'aggancio al pixel (K6 T11): nel Completo sì, nel Semplice il valore resta e non agisce", () => {
+  it("nel Semplice il pixel acceso non arrotonda: un rettangolo da 10,4 resta 10,4, e il valore resta nella griglia", () => {
+    mount(SOURCE, { workspace: "simple", grid: { ...DEFAULT_GRID, snapPixel: true } });
+    editor.setTool("rect");
+    drag([[10.4, 3.2], [60.7, 40.4]]);
+    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="10.4" y="3.2"/);
+    expect(editor.grid.snapPixel).toBe(true);
+  });
+
+  it("nel Completo lo stesso valore porta il rettangolo su interi: da 10,4 va su 10", () => {
+    mount(SOURCE, { workspace: "full", grid: { ...DEFAULT_GRID, snapPixel: true } });
+    editor.setTool("rect");
+    drag([[10.4, 3.2], [60.7, 40.4]]);
+    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="10" y="3" width="51" height="37"/);
+  });
+});

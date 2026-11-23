@@ -198,9 +198,10 @@ export function installTooling(ctx: EditorContext): void {
   const gridOn = (at: ReadonlySet<Feature> = ctx.features): boolean => at.has("grid") && ctx.grid.snap;
   ctx.gridOn = gridOn;
 
-  /// L'aggancio agisce se il livello offre la griglia e la griglia o il pixel
-  /// aggancia: `gridOn` resta la sola griglia, per le scritte della tastiera.
-  const snapOn = (at: ReadonlySet<Feature> = ctx.features): boolean => at.has("grid") && snapActive(ctx.grid);
+  /// L'aggancio agisce se il livello offre la griglia e la griglia, o il pixel
+  /// nel Completo, aggancia: `gridOn` resta la sola griglia, per le scritte della
+  /// tastiera. Il pixel non vale nel Semplice: lì il valore resta salvato, e basta.
+  const snapOn = (at: ReadonlySet<Feature> = ctx.features): boolean => at.has("grid") && snapActive(ctx.grid, ctx.workspace === "full");
   ctx.snapOn = snapOn;
 
   /// Un punto di un gesto: sull'incrocio più vicino quando l'aggancio agisce e

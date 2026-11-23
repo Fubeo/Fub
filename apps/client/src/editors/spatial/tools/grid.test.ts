@@ -210,10 +210,16 @@ describe("l'aggancio al pixel (K6 T11)", () => {
   });
 
   it("è acceso col suo segno, e la griglia, se aggancia, vince sul pixel come nel motore", () => {
-    expect(snapActive(DEFAULT_GRID)).toBe(false);
-    expect(snapActive(pixel)).toBe(true);
+    expect(snapActive(DEFAULT_GRID, true)).toBe(false);
+    expect(snapActive(pixel, true)).toBe(true);
     expect(snapStepOf(both, "px")).toBe(20);
     expect(snapStepOf(both, "mm")).toBe(gridStep(both, "mm"));
+  });
+
+  it("nel Semplice (`pixel` falso) il pixel acceso non agisce, e la griglia, se aggancia, resta", () => {
+    expect(snapActive(pixel, false)).toBe(false);
+    expect(snapActive(both, false)).toBe(true);
+    expect(snapActive({ ...DEFAULT_GRID, snapPixel: false }, true)).toBe(false);
   });
 
   it("porta un punto all'intero più vicino: un rettangolo a x = 10,4 va su 10", () => {

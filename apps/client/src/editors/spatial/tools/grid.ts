@@ -236,9 +236,10 @@ export function gridStep(grid: Grid, unit: LengthUnit): number {
 export const PIXEL_STEP = 1;
 
 /// Vero se l'aggancio porta i punti da qualche parte: la griglia se aggancia,
-/// altrimenti il pixel se è acceso.
-export function snapActive(grid: Grid): boolean {
-  return grid.snap || grid.snapPixel === true;
+/// altrimenti il pixel, se è acceso e lo spazio lo vuole (`pixel`: il Completo).
+/// Nel Semplice il valore del pixel resta nella griglia salvata, ma non agisce.
+export function snapActive(grid: Grid, pixel: boolean): boolean {
+  return grid.snap || (pixel && grid.snapPixel === true);
 }
 
 /// Il passo a cui l'aggancio porta i punti, in unità della scena: quello della

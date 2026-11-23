@@ -77,7 +77,8 @@ cioè un px CSS (1/96 di pollice): un pt vale 4/3 di pixel. Lo zoom non lo
 cambia: a 200% un pixel della scena sono due pixel dello schermo. Se la griglia
 aggancia anche lei, vince la griglia, come nel motore; le righe della griglia
 restano quelle che si vedono. Le frecce spostano la selezione fino al pixel
-seguente, e con Maiusc di cinque.
+seguente, e con Maiusc di cinque. Nel Semplice l'aggancio al pixel non agisce:
+il valore resta salvato con la griglia, e lì i punti non si arrotondano.
 
 La griglia di trasparenza mette la carta a scacchi, dove il foglio non ha un
 fondo suo: un PDF di sfondo, con la sua pagina, la copre. «Nascondi bordi»
