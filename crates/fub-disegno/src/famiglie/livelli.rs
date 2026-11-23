@@ -91,6 +91,7 @@ impl StatoFamiglia for Stato {
             }
             "select.object.strayPoints" => senza_oggetti(copia, e_punto_isolato, "Nel disegno non ci sono punti isolati."),
             "select.object.openPaths" => senza_oggetti(copia, e_tracciato_aperto, "Nel disegno non ci sono tracciati aperti."),
+            "select.object.pointText" | "select.object.areaText" => spento_testi(id, copia),
             _ => None,
         }
     }
@@ -98,6 +99,10 @@ impl StatoFamiglia for Stato {
     /// Il confronto del testo senza un testo fra gli oggetti scelti non parte: `empty`, come un comando
     /// che non tocca niente. Il motore lo direbbe con un errore in inglese («select a text object»).
     fn rifiuto(id: &str, copia: &Copia, selezione: &[String]) -> Option<DrawingRefusal> {
+        if matches!(id, "select.object.pointText" | "select.object.areaText") {
+            spento_testi(id, copia)?;
+            return Some(DrawingRefusal::Empty);
+        }
         (vuole_testo(id) && !ha_testo(copia, selezione)).then_some(DrawingRefusal::Empty)
     }
 
@@ -277,6 +282,60 @@ fn senza_oggetti(copia: &Copia, specie: fn(&Node) -> bool, perche: &str) -> Opti
     let mut c_e = false;
     copia.documento.walk(|n| c_e |= specie(n));
     (!c_e).then(|| DrawingDisabledReason::Other { text: perche.into() })
+}
+
+fn spento_testi(id: &str, copia: &Copia) -> Option<DrawingDisabledReason> {
+    let (specie, assenti, nascosti): (fn(&Node) -> bool, &str, &str) = match id {
+        "select.object.pointText" => (
+            e_testo_di_punto,
+            "Nel disegno non ci sono testi di punto.",
+            "I testi di punto sono nascosti o bloccati: il motore non li sceglie.",
+        ),
+        "select.object.areaText" => (
+            e_testo_in_area,
+            "Nel disegno non ci sono testi in area.",
+            "I testi in area sono nascosti o bloccati: il motore non li sceglie.",
+        ),
+        _ => return None,
+    };
+    if let Some(perche) = senza_oggetti(copia, specie, assenti) {
+        return Some(perche);
+    }
+    // Un testo è scelto se è visibile e sbloccato, lui e i suoi livelli e gruppi (il motore non prende
+    // gli altri: un testo su un livello bloccato o nascosto resta fuori).
+    let c_e_scelto = copia.mappa.elementi().iter().enumerate().any(|(i, e)| {
+        e.ruolo == Role::Text
+            && !bloccato_con_antenati(copia, i)
+            && !nascosto_con_antenati(copia, i)
+            && e.nodo.and_then(|n| copia.documento.node(n)).is_some_and(specie)
+    });
+    (!c_e_scelto).then(|| DrawingDisabledReason::Other { text: nascosti.into() })
+}
+
+/// L'elemento `i` o un suo antenato è nascosto nella mappa.
+fn nascosto_con_antenati(copia: &Copia, mut i: usize) -> bool {
+    loop {
+        let Some(e) = copia.mappa.elemento(i) else {
+            return false;
+        };
+        if e.nascosto {
+            return true;
+        }
+        match e.genitore {
+            Some(genitore) => i = genitore,
+            None => return false,
+        }
+    }
+}
+
+/// Un testo di punto, come «Oggetti testo per punti»: il motore lo dice `TextKind::Point`.
+fn e_testo_di_punto(n: &Node) -> bool {
+    matches!(&n.kind, NodeKind::Text(t) if matches!(t.kind, vectorcraft_doc::TextKind::Point))
+}
+
+/// Un testo in area, come «Oggetti testo in area»: il testo con `fub:wrap` che il motore apre in area.
+fn e_testo_in_area(n: &Node) -> bool {
+    matches!(&n.kind, NodeKind::Text(t) if matches!(t.kind, vectorcraft_doc::TextKind::Area { .. }))
 }
 
 /// Un punto isolato: un tracciato con un solo punto, come «Punti isolati».

@@ -1313,6 +1313,55 @@
         ]
       },
       "dopo": "sblocca-tutti-nascosto-bloccato.svg"
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "sel-testi.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "selezione": ["ot1t1t1t1", "ot3t3t3t3"] }
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "sel-testi.svg",
+      "selezione": ["ot2t2t2t2"],
+      "argomenti": {},
+      "atteso": { "selezione": ["ot1t1t1t1", "ot3t3t3t3"] }
+    },
+    {
+      "id": "select.object.areaText",
+      "disegno": "sel-testi.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "selezione": ["ot2t2t2t2"] }
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "selezione": ["ot4d4d4d4"] }
+    },
+    {
+      "id": "select.object.areaText",
+      "disegno": "base.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "sel-livello-bloccato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "rifiuto": "empty" }
+    },
+    {
+      "id": "select.object.pointText",
+      "disegno": "sel-livello-nascosto.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": { "rifiuto": "empty" }
     }
   ]
 }
