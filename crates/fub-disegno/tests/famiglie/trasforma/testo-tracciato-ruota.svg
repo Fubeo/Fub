@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <defs id="fub-defs">
+    <path id="r1a2b3c4d" fub:role="private" d="M40 200 C120 150 260 250 360 180"/>
+  </defs>
+  <g id="l1a2b3c4d" fub:layer="Livello 1">
+    <text id="ot9t9t9t9" fill="#000000" font-family="Inter, sans-serif" font-size="20" transform="matrix(0 -1 1 0 7.0796 392.9204)">
+      <textPath href="#r1a2b3c4d">Ciao <tspan font-weight="bold">mondo</tspan></textPath>
+    </text>
+  </g>
+</svg>

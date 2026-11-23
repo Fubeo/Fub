@@ -9,7 +9,8 @@ use std::sync::Arc;
 use fub_abi::{DrawingDisabledReason, DrawingRefusal, PluginError};
 use fub_motori::{ErroreMotore, Servizi};
 use serde_json::Value;
-use vectorcraft_doc::{Document, Node, NodeId};
+use vectorcraft_doc::text::TextKind;
+use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
 
 /// Due decimali, come li scrive la differenza per la geometria (`DECIMALI_GEOMETRIA`): uno scarto
 /// più piccolo di così non si vede e non si scrive.
@@ -33,9 +34,29 @@ const DISPONI: [&str; 7] = [
     "addon.arrange.sort",
 ];
 
-/// Le voci di ≡ › Oggetto › Sposta e Distorci (K6 T13, giro «sposta»): spostano o deformano
-/// gli oggetti scelti, e un tratto dell'inchiostro di Fub non si cambia (`unmapped`, come Disponi).
-const SPOSTA_E_DISTORCI: [&str; 2] = ["object.nudge", "object.distort"];
+/// Le voci di ≡ › Oggetto › Sposta, Distorci, Ruota, Scala, Inclina e Rifletti (K6 T13): cambiano la
+/// forma o la posizione degli oggetti scelti con un `transform`, e un tratto dell'inchiostro di Fub
+/// non si cambia (`unmapped`, come Disponi).
+const SPOSTA_E_TRASFORMA: [&str; 6] = [
+    "object.nudge",
+    "object.distort",
+    "object.rotate",
+    "object.scale",
+    "object.shear",
+    "object.reflect",
+];
+
+/// Il perché di Distorci sul testo spento: un testo deformato a quadrilatero non è più un testo,
+/// quindi si crea prima il contorno (il testo si trasforma per intero con Ruota, Scala e le altre).
+const DISTORCI_SUL_TESTO: &str = "Distorci non vale sul testo: crea prima i contorni.";
+
+/// Le trasformazioni che ruotano o inclinano il piano del testo: un testo in area resta orizzontale
+/// (`differenza_righe.rs`, RIQUADRO_FUORI), quindi per lui non valgono.
+const RUOTANO_IL_TESTO: [&str; 3] = ["object.rotate", "object.shear", "object.reflect"];
+
+/// Il perché di Ruota, Inclina e Rifletti spenti su un testo in area.
+const TESTO_IN_AREA_ORIZZONTALE: &str =
+    "Il testo in area resta orizzontale: Ruota, Inclina e Rifletti non valgono su di lui.";
 
 /// Quanti oggetti scelti vuole una voce di Disponi, come dice il motore: lo
 /// scambio esattamente due, le sostituzioni, il raggruppamento e l'ordine almeno
@@ -73,11 +94,21 @@ impl StatoFamiglia for Stato {
         if DISPONI.contains(&id) {
             return disponi_spenta(id, copia, selezione);
         }
-        if SPOSTA_E_DISTORCI.contains(&id) && sceglie_inchiostro(copia, selezione) {
+        if SPOSTA_E_TRASFORMA.contains(&id) && sceglie_inchiostro(copia, selezione) {
             return Some(DrawingDisabledReason::FubInk);
         }
         if id == RENDI_PERFETTO && selezione.is_empty() {
             return Some(DrawingDisabledReason::NoSelection);
+        }
+        if id == "object.distort" && contiene_testo(copia, selezione, |_| true) {
+            return Some(DrawingDisabledReason::Other {
+                text: DISTORCI_SUL_TESTO.into(),
+            });
+        }
+        if RUOTANO_IL_TESTO.contains(&id) && contiene_testo(copia, selezione, in_area) {
+            return Some(DrawingDisabledReason::Other {
+                text: TESTO_IN_AREA_ORIZZONTALE.into(),
+            });
         }
         let allinea = matches!(id, "object.align" | "object.distribute" | "object.distributeSpacing");
         if allinea && selezione.is_empty() {
@@ -115,8 +146,14 @@ impl StatoFamiglia for Stato {
             }
             return scelto_nascosto(copia, selezione).then_some(DrawingRefusal::Empty);
         }
-        let inchiostro = DISPONI.contains(&id) || SPOSTA_E_DISTORCI.contains(&id);
-        (inchiostro && sceglie_inchiostro(copia, selezione)).then_some(DrawingRefusal::Unmapped)
+        let inchiostro = DISPONI.contains(&id) || SPOSTA_E_TRASFORMA.contains(&id);
+        if inchiostro && sceglie_inchiostro(copia, selezione) {
+            return Some(DrawingRefusal::Unmapped);
+        }
+        if id == "object.distort" && contiene_testo(copia, selezione, |_| true) {
+            return Some(DrawingRefusal::Unsupported);
+        }
+        (RUOTANO_IL_TESTO.contains(&id) && contiene_testo(copia, selezione, in_area)).then_some(DrawingRefusal::Unsupported)
     }
 
     /// Gli angoli di Distorci (TL, TR, BR, BL) devono formare un quadrilatero: due angoli
@@ -210,4 +247,23 @@ fn quadrilatero_valido(angoli: &Value) -> Result<(), &'static str> {
         return Err("gli angoli sono allineati: non formano un quadrilatero");
     }
     Ok(())
+}
+
+/// Vero se fra gli oggetti scelti, anche dentro un gruppo, c'è un testo che `vale` (per esempio un
+/// testo in area).
+fn contiene_testo(copia: &Copia, selezione: &[String], vale: fn(&TextKind) -> bool) -> bool {
+    fn cerca(nodo: &Node, vale: fn(&TextKind) -> bool) -> bool {
+        match &nodo.kind {
+            NodeKind::Text(t) => vale(&t.kind),
+            NodeKind::Group { children, .. } => children.iter().any(|c| cerca(c, vale)),
+            _ => false,
+        }
+    }
+    let nodi: Vec<NodeId> = nodi_scelti(copia, selezione).unwrap_or_default();
+    nodi.iter().any(|n| copia.documento.node(*n).is_some_and(|nodo| cerca(nodo, vale)))
+}
+
+/// Il testo è un testo in area.
+fn in_area(t: &TextKind) -> bool {
+    matches!(t, TextKind::Area { .. })
 }
