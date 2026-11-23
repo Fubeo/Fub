@@ -403,6 +403,38 @@
     },
     {
       "fonte": "motore",
+      "id": "appearance.addFill",
+      "chiamata": {
+        "comando": "disegno.appearance.addFill"
+      },
+      "etichetta": {
+        "it": "Aggiungi nuovo riempimento",
+        "en": "Add New Fill"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": "Cmd+/",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "appearance.addStroke",
+      "chiamata": {
+        "comando": "disegno.appearance.addStroke"
+      },
+      "etichetta": {
+        "it": "Aggiungi nuovo tratto",
+        "en": "Add New Stroke"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "aspetto",
+      "tasto": "Cmd+Alt+/",
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "appearance.reduceToBasic",
       "chiamata": {
         "comando": "disegno.appearance.reduceToBasic"

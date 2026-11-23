@@ -67,6 +67,120 @@ fn la_maschera_di_opacita_si_riapre_senza_perdite_e_resta_una_maschera() {
     assert_eq!(m["linked"], json!(true), "{m}");
 }
 
+/// Aggiungi riempimento (K6 T15, aggiungi aspetto): il file con due riempimenti si riapre con due, dello
+/// stesso colore (la copia del primo), e un Riduci ne toglie uno.
+#[test]
+fn aggiungere_un_riempimento_si_riapre_con_due_riempimenti() {
+    const DUE: &str = include_str!("famiglie/aspetto/aggiungi-riempimento-dopo.svg");
+    assert_eq!(
+        DUE.matches("fill=\"#ff0000\"").count(),
+        2,
+        "due riempimenti rossi nel file"
+    );
+    let (mut disegno, aperto) = apri_tutte(DUE);
+    assert!(aperto.losses.is_empty(), "perdite: {:?}", aperto.losses);
+    let riduci = disegno
+        .comando(comando(
+            "disegno.appearance.reduceToBasic",
+            &["oa1a1a1a1"],
+            json!({}),
+            aperto.revision,
+        ))
+        .expect("Riduci");
+    assert!(
+        riduci.ops.is_some(),
+        "due riempimenti riaperti: Riduci ne toglie uno"
+    );
+}
+
+/// Aggiungi riempimento su un oggetto che ne ha già due (K6 T15, aggiungi aspetto): il file con tre si
+/// riapre con tre (Riduci ne toglie due, ma uno alla volta nel passo) e i colori restano.
+#[test]
+fn aggiungere_un_terzo_riempimento_si_riapre_con_tre() {
+    const TRE: &str = include_str!("famiglie/aspetto/aggiungi-tre-dopo.svg");
+    assert_eq!(
+        TRE.matches("fill=\"#ff0000\"").count(),
+        3,
+        "tre riempimenti rossi nel file"
+    );
+    let (mut disegno, aperto) = apri_tutte(TRE);
+    assert!(aperto.losses.is_empty(), "perdite: {:?}", aperto.losses);
+    let riduci = disegno
+        .comando(comando(
+            "disegno.appearance.reduceToBasic",
+            &["oa1a1a1a1"],
+            json!({}),
+            aperto.revision,
+        ))
+        .expect("Riduci");
+    assert!(
+        riduci.ops.is_some(),
+        "tre riempimenti riaperti: Riduci ne toglie"
+    );
+}
+
+/// Aggiungi contorno su un oggetto senza contorno (K6 T15, aggiungi aspetto): il file ha un contorno nero
+/// di spessore 1, si riapre senza perdite, e con un contorno e un riempimento Riduci non dà un passo.
+#[test]
+fn aggiungere_un_contorno_si_riapre_con_il_contorno() {
+    const CONTORNO_NUOVO: &str = include_str!("famiglie/aspetto/aggiungi-contorno-dopo.svg");
+    assert!(
+        CONTORNO_NUOVO.contains("stroke=\"#000000\" stroke-width=\"1\""),
+        "il contorno nero di spessore 1"
+    );
+    let (mut disegno, aperto) = apri_tutte(CONTORNO_NUOVO);
+    assert!(aperto.losses.is_empty(), "perdite: {:?}", aperto.losses);
+    let riduci = disegno
+        .comando(comando(
+            "disegno.appearance.reduceToBasic",
+            &["oa1a1a1a1"],
+            json!({}),
+            aperto.revision,
+        ))
+        .expect("Riduci");
+    assert!(
+        riduci.ops.is_none(),
+        "un riempimento e un contorno riaperti: niente da togliere"
+    );
+    assert_eq!(riduci.refused, Some(fub_abi::DrawingRefusal::Empty));
+}
+
+/// Aggiungi riempimento su un gruppo senza scegliere i suoi oggetti (K6 T15, aggiungi aspetto): il
+/// riempimento va nella ricetta del gruppo (non come attributo visibile), i figli restano com'erano, e il
+/// file si riapre senza perdite.
+#[test]
+fn aggiungere_un_riempimento_al_gruppo_si_riapre_senza_perdite() {
+    const GRUPPO: &str = include_str!("famiglie/aspetto/aggiungi-gruppo-intero-dopo.svg");
+    let (_, aperto) = apri_tutte(GRUPPO);
+    assert!(aperto.losses.is_empty(), "perdite: {:?}", aperto.losses);
+}
+
+/// Aggiungi riempimento e poi Riduci (K6 T15, aggiungi aspetto): resta il riempimento in cima, la copia,
+/// rosso come il primo: un solo riempimento rosso, riaperto senza perdite.
+#[test]
+fn aggiungi_riempimento_e_poi_riduci_lascia_un_riempimento_rosso() {
+    const UNO: &str = include_str!("famiglie/aspetto/riduci-dopo-2.svg");
+    assert_eq!(
+        UNO.matches("fill=\"#ff0000\"").count(),
+        1,
+        "un riempimento rosso"
+    );
+    let (mut disegno, aperto) = apri_tutte(UNO);
+    assert!(aperto.losses.is_empty(), "perdite: {:?}", aperto.losses);
+    let di_nuovo = disegno
+        .comando(comando(
+            "disegno.appearance.reduceToBasic",
+            &["oa1a1a1a1"],
+            json!({}),
+            aperto.revision,
+        ))
+        .expect("Riduci");
+    assert!(
+        di_nuovo.ops.is_none(),
+        "un riempimento solo: niente da togliere"
+    );
+}
+
 /// Rischio noto, da correggere in un giro dedicato (non qui): quando un comando riscrive la ricetta di un
 /// oggetto con una maschera di opacità, la riapertura non trova più l'oggetto nel motore. Qui il comando
 /// è Svuota (`appearance.clear`), che la famiglia Aspetto non serve più sulle maschere: la prova va
