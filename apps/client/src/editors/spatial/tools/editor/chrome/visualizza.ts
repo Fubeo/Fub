@@ -37,6 +37,10 @@ export const FILE_VISUALIZZA: readonly (readonly ComandoVisualizza[])[] = [
   ["view.rotate", "view.rotateReset"],
 ];
 
+/// «Zoom sulla selezione» (`addon.arrange.zoomSelection`): la vista di Fub, `fitSelection` dell'editor.
+/// Sta fuori da `COMANDI_VISUALIZZA` (che è il menu ≡ › Visualizza): è una voce di Disegno, non di quel menu.
+export const COMANDO_ZOOM_SCELTA = "addon.arrange.zoomSelection";
+
 export function isComandoVisualizza(id: string): id is ComandoVisualizza {
   return (COMANDI_VISUALIZZA as readonly string[]).includes(id);
 }
@@ -44,6 +48,7 @@ export function isComandoVisualizza(id: string): id is ComandoVisualizza {
 /// La voce del Completo: `null` se il client la fa, il perché se è spenta adesso,
 /// `undefined` se non è una delle sue.
 export function voceVisualizza(ctx: EditorContext, id: string): string | null | undefined {
+  if (id === COMANDO_ZOOM_SCELTA) return ctx.selection.length === 0 ? t("draw.selection.empty") : null;
   if (!isComandoVisualizza(id)) return undefined;
   if (id === "view.rotateReset" && ctx.camera.angle === 0) return t("draw.view.not_turned");
   return null;

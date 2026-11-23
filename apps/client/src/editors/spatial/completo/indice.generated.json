@@ -4435,6 +4435,22 @@
     },
     {
       "fonte": "interfaccia",
+      "id": "addon.arrange.zoomSelection",
+      "chiamata": {
+        "client": "addon.arrange.zoomSelection"
+      },
+      "etichetta": {
+        "it": "Zoom sulla selezione",
+        "en": "Zoom to Selection"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "vista",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "interfaccia",
       "id": "align.distributeHorizontalCenter",
       "chiamata": {
         "comando": "disegno.object.distribute",
