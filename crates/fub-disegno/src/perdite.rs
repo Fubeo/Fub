@@ -129,7 +129,9 @@ pub(crate) fn classifica(perdite: &mut Perdite, testo: &str, items: &[Item], map
         }
     }
     for e in mappa.elementi() {
-        if e.motivo == Some(crate::ricetta::COPERTO) {
+        if e.motivo == Some(crate::ricetta::COPERTO)
+            || e.motivo == Some(crate::apertura::CARTA_FUORI)
+        {
             continue;
         }
         let nome = nome(e.id.as_deref(), e.tag, &e.percorso);

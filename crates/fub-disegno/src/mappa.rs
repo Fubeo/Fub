@@ -210,14 +210,22 @@ impl Mappa {
         self.elementi.get(i)
     }
 
-    /// Quanti elementi sono mappati.
+    /// Quanti elementi sono mappati: quelli che il motore ha, più la carta che Fub tiene fuori dal
+    /// motore apposta ([`crate::apertura::CARTA_FUORI`]), che non è una perdita.
     pub fn mappati(&self) -> usize {
-        self.per_nodo.len()
+        self.per_nodo.len() + self.carte_fuori()
     }
 
     /// Quanti elementi non lo sono.
     pub fn non_mappati(&self) -> usize {
-        self.elementi.len() - self.per_nodo.len()
+        self.elementi.len() - self.mappati()
+    }
+
+    fn carte_fuori(&self) -> usize {
+        self.elementi
+            .iter()
+            .filter(|e| e.motivo == Some(crate::apertura::CARTA_FUORI))
+            .count()
     }
 
     /// L'indice dell'elemento da cui viene l'oggetto `nodo`.
@@ -233,6 +241,15 @@ impl Mappa {
     /// Vero se `nodo` è un livello del motore che sta per la radice.
     pub fn e_radice(&self, nodo: NodeId) -> bool {
         self.radici.contains(&nodo)
+    }
+
+    /// L'id della carta del file (il `rect` della radice con
+    /// `fub:role="paper"`), se c'è: dentro il motore o fuori.
+    pub fn carta(&self) -> Option<&str> {
+        self.elementi
+            .iter()
+            .find(|e| e.ruolo == Role::Paper && e.genitore.is_none())
+            .and_then(Elemento::id_del_file)
     }
 
     /// Le ricette del file.

@@ -143,10 +143,12 @@ fn i_comandi_sui_punti_sono_spenti_col_perche() {
             ("removeAnchors".into(), Some(NeedsAnchors)),
         ]
     );
-    // La carta è bloccata: non è un tracciato da cambiare.
+    // La carta sta fuori dal motore ed è bloccata, come in ogni famiglia: «un oggetto scelto è bloccato».
     let carta = perche(&["fub-paper"]);
     assert!(
-        carta.iter().all(|(_, r)| *r == Some(NeedsPath)),
+        carta
+            .iter()
+            .all(|(_, r)| *r == Some(DrawingDisabledReason::ReadOnly)),
         "{carta:?}"
     );
     // L'inchiostro di Fub non si cambia dai punti, nemmeno insieme a un tracciato.

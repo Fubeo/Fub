@@ -387,7 +387,7 @@ impl StatoFamiglia for Stato {
     /// I comandi su un punto: `element` diventa l'oggetto del motore, le
     /// coordinate della scena passano nel suo documento, gli indici si
     /// controllano sulla copia (`tracciati_punti.rs`).
-    fn argomenti_della_copia(id: &str, copia: &Copia, valore: Value) -> Result<Value, fub_abi::PluginError> {
+    fn argomenti_della_copia(id: &str, copia: &Copia, _selezione: &[String], valore: Value) -> Result<Value, fub_abi::PluginError> {
         if mano::MANO.contains(&id) {
             return mano::argomenti(id, copia, valore);
         }

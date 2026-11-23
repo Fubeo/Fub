@@ -628,6 +628,10 @@ impl Lavoro<'_> {
                 }
             }
         }
+        // La cima del motore per prima: senza la carta i livelli di Fub
+        // sono i livelli in cima, e il loro ordine è quello dei figli della
+        // radice.
+        contenitori.push((None, &dopo.layers));
         for l in &dopo.layers {
             raccogli(l, &self.riscritti, prima, &mut contenitori);
         }
@@ -675,10 +679,13 @@ impl Lavoro<'_> {
                     }
                 }
                 let target = self.bersaglio(c.id)?;
-                let parent = self.genitore(genitore)?;
+                let parent = match genitore {
+                    None => "#root".to_string(),
+                    Some(_) => self.genitore(genitore)?,
+                };
                 let pos = match i.checked_sub(1).and_then(|j| rimasti.get(j)) {
                     Some(prec) => json!({ "after": self.bersaglio(prec.id)? }),
-                    None => json!({ "first": true }),
+                    None => self.primo_fra(genitore),
                 };
                 let op = json!({ "op": "move", "target": target, "parent": parent, "pos": pos });
                 match genitore {
@@ -736,7 +743,7 @@ impl Lavoro<'_> {
             let riscritto = self.riscritti.contains(&nodo.id);
             if !riscritto && ritagli::ritaglio_nuovo(nodo, prima, &self.assorbiti, &self.riscritti)
             {
-                let pos = self.posto(&fratelli, i)?;
+                let pos = self.posto(genitore, &fratelli, i)?;
                 self.scrivi_ritaglio(nodo, genitore, parent, pos, locale)?;
                 continue;
             }
@@ -744,7 +751,7 @@ impl Lavoro<'_> {
                 let id = self.id_nuovo(Specie::Oggetto)?;
                 self.ids.insert(nodo.id, id.clone());
                 self.gruppi_nuovi.insert(nodo.id, genitore);
-                let pos = self.posto(&fratelli, i)?;
+                let pos = self.posto(genitore, &fratelli, i)?;
                 self.add.push(json!({
                     "op": "add", "parent": parent, "pos": pos,
                     "elem": { "tag": "g", "attrs": { "id": id } },
@@ -758,7 +765,7 @@ impl Lavoro<'_> {
                 let id = self.id_nuovo(Specie::Oggetto)?;
                 self.ids.insert(nodo.id, id.clone());
                 self.gruppi_nuovi.insert(nodo.id, genitore);
-                let pos = self.posto(&fratelli, i)?;
+                let pos = self.posto(genitore, &fratelli, i)?;
                 self.add.push(json!({
                     "op": "add", "parent": parent, "pos": pos,
                     "elem": { "tag": "g", "attrs": { "id": id } },
@@ -782,7 +789,7 @@ impl Lavoro<'_> {
                 attrs.insert("id".into(), json!(id));
                 attrs.extend(testo.attrs);
                 self.ids.insert(nodo.id, id);
-                let pos = self.posto(&fratelli, i)?;
+                let pos = self.posto(genitore, &fratelli, i)?;
                 self.add.push(json!({
                     "op": "add", "parent": parent, "pos": pos,
                     "elem": { "tag": "text", "attrs": attrs, "children": testo.righe },
@@ -836,7 +843,7 @@ impl Lavoro<'_> {
                 json!({ "elem": { "tag": tag, "attrs": attrs } })
             };
             self.ids.insert(nodo.id, id);
-            let pos = self.posto(&fratelli, i)?;
+            let pos = self.posto(genitore, &fratelli, i)?;
             let mut op = json!({ "op": "add", "parent": parent, "pos": pos });
             if let (Some(op), Value::Object(corpo)) = (op.as_object_mut(), elem_o_raw) {
                 op.extend(corpo);
@@ -932,15 +939,33 @@ impl Lavoro<'_> {
         }
     }
 
-    /// Il posto di un oggetto nuovo fra i fratelli di dopo.
-    fn posto(&mut self, fratelli: &[&Arc<Node>], i: usize) -> Result<Value, Rifiuto> {
+    /// Il posto di un oggetto nuovo fra i fratelli di dopo, figli di
+    /// `genitore`.
+    fn posto(
+        &mut self,
+        genitore: Option<NodeId>,
+        fratelli: &[&Arc<Node>],
+        i: usize,
+    ) -> Result<Value, Rifiuto> {
         if i + 1 == fratelli.len() {
             return Ok(json!({ "last": true }));
         }
         Ok(match i.checked_sub(1).map(|j| fratelli[j]) {
             Some(prec) => json!({ "after": self.bersaglio(prec.id)? }),
-            None => json!({ "first": true }),
+            None => self.primo_fra(genitore),
         })
+    }
+
+    /// Il primo posto fra i figli di `genitore`: fra i figli della radice
+    /// (la cima del motore o il livello che sta per la radice) è subito
+    /// dopo la carta, se il file ne ha una, perché la carta resta sotto ogni
+    /// cosa; altrimenti il primo.
+    fn primo_fra(&self, genitore: Option<NodeId>) -> Value {
+        let radice = genitore.is_none_or(|g| self.copia.mappa.e_radice(g));
+        match self.copia.mappa.carta().filter(|_| radice) {
+            Some(carta) => json!({ "after": carta }),
+            None => json!({ "first": true }),
+        }
     }
 
     /// Bloccato e nascosto: il `set` di `fub:locked` e di `display` se il
@@ -1085,7 +1110,12 @@ impl Lavoro<'_> {
                     .iter()
                     .find(|x| x.percorso == [k])
             });
-            match prima_di_lui.and_then(Elemento::id_del_file) {
+            match self
+                .copia
+                .mappa
+                .carta()
+                .or_else(|| prima_di_lui.and_then(Elemento::id_del_file))
+            {
                 Some(id) => json!({ "after": id }),
                 None if indice == 0 => json!({ "first": true }),
                 None => {

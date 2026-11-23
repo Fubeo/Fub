@@ -160,7 +160,7 @@ impl StatoFamiglia for Stato {
     /// uguali, cioè un lato di lunghezza zero, o quattro angoli allineati danno una trasformazione
     /// che schiaccia il tracciato (il motore ne scrive un punto solo, in 0 0). Angoli che si
     /// incrociano (un quadrilatero che si rovescia) sono uno specchio, e valgono.
-    fn argomenti_della_copia(id: &str, _copia: &Copia, valore: Value) -> Result<Value, PluginError> {
+    fn argomenti_della_copia(id: &str, _copia: &Copia, _selezione: &[String], valore: Value) -> Result<Value, PluginError> {
         if id == "object.distort" {
             let angoli = valore.get("corners").unwrap_or(&Value::Null);
             quadrilatero_valido(angoli).map_err(|perche| PluginError::BadArgs(format!("{id}: {perche}").into()))?;

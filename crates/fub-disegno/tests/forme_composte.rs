@@ -29,7 +29,7 @@ const COMPOSTE: &str = include_str!("famiglie/forme/composte.svg");
 const SOTTO: &str = "oa1a1a1a1";
 /// Un rettangolo arrotondato del Completo, con la sua ricetta.
 const ARROTONDATO: &str = include_str!("famiglie/forme/roundedrectangle-4.svg");
-const VIVO: &str = "oeopq71hl";
+const VIVO: &str = "o5qgdpjl6";
 const SOPRA: &str = "ob2b2b2b2";
 
 /// Un motore con tutte le righe accese: le prove non dipendono dallo stato
