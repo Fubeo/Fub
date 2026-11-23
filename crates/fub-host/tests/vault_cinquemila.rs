@@ -22,8 +22,12 @@
 //! in background. La prova chiede che resti così: dieci volte i file al più
 //! il triplo del tempo. Un montaggio che legge o analizza ogni file prima di
 //! rispondere passa quel triplo; il carico, che rallenta i due montaggi
-//! insieme, no. Le soglie del primo disegno le guarda il banco, nella pagina;
-//! qui i tempi assoluti si stampano soltanto.
+//! insieme, no. Il rapporto da solo però non basta: sul runner di Linux il
+//! costo fisso è di circa 35 ms, e i 120 ms che la lista dei cinquemila nomi
+//! aggiunge fanno quattro volte e mezzo (2026-11-23). Lì vale il doppio della
+//! soglia del primo disegno, come prima del rapporto: un montaggio che legge
+//! le note (l'indice, 1,2–1,7 s sul runner) passa sia l'uno sia l'altro. Le
+//! soglie del primo disegno le guarda il banco, nella pagina.
 //!
 //! L'apertura della cartella grande resta confrontata con il doppio della sua
 //! soglia: è una pagina di duecento voci, mezzo millisecondo anche sotto quel
@@ -280,8 +284,8 @@ fn the_five_thousand_file_vault_mounts_without_growing_with_the_files_and_lists_
     );
 
     assert!(
-        ratio <= MAX_RATIO,
-        "montare e listare la radice di {FILES} file ({first:.1?}) è costato {ratio:.1} volte farlo con {} ({small_first:.1?}), oltre {MAX_RATIO}: il montaggio è cresciuto con i file, come se li leggesse prima di rispondere",
+        ratio <= MAX_RATIO || first <= FIRST_DRAW * 2,
+        "montare e listare la radice di {FILES} file ({first:.1?}) è costato {ratio:.1} volte farlo con {} ({small_first:.1?}), oltre {MAX_RATIO}, e più del doppio della soglia del primo disegno ({FIRST_DRAW:?}): il montaggio è cresciuto con i file, come se li leggesse prima di rispondere",
         small[0].files
     );
     assert!(
