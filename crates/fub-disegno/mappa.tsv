@@ -775,7 +775,7 @@ motore	path.eraseRegion	Eraser		tracciati	F1	T12	fatto	ispettore/design	famiglia
 motore	path.eraseSegments	Path Eraser		tracciati	F1	T12	fatto	ispettore/design	famiglia		Gomma tracciato
 motore	path.smoothRegion	Smooth		tracciati	F1	T12	fatto	ispettore/design	famiglia		Smussa
 motore	path.joinScrub	Join		tracciati	F1	T12	da fare	ispettore/design	famiglia		Unisci
-motore	path.blob	Blob Brush		tracciati	F1	T12	da fare	ispettore/design	famiglia		Pennello tondo
+motore	path.blob	Blob Brush		tracciati	F1	T12	fatto	ispettore/design	famiglia	colpo a rilascio col colore `color` (#rrggbb) e i punti; diametro di serie del motore (10 pt); fonde col tracciato pieno dello stesso colore che tocca; lo strumento in barra è la riga blobBrush	Pennello tondo
 motore	document.open	Open Document		fub	—	T2	fub	fub	—	aprire dal vault (il motore non legge il disco)	Apri documento
 motore	file.list	List Folder		fub	—	T2	fub	fub	—	le schede aperte di Fub	Elenca cartella
 motore	document.serialize	Serialize Document		formati	F3	T23	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Serializza documento

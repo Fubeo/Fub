@@ -2771,6 +2771,22 @@
     },
     {
       "fonte": "motore",
+      "id": "path.blob",
+      "chiamata": {
+        "comando": "disegno.path.blob"
+      },
+      "etichetta": {
+        "it": "Pennello tondo",
+        "en": "Blob Brush"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "tracciati",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "path.close",
       "chiamata": {
         "comando": "disegno.path.close"
