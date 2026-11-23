@@ -140,6 +140,7 @@ import { installToolbar } from "./editor/toolbar";
 import { installBars } from "./editor/bars";
 import { installStage } from "./editor/stage";
 import { installView } from "./editor/view";
+import { installPreciseCursors } from "./editor/precise-cursors";
 import { installMarks } from "./editor/marks";
 import { installTree } from "./editor/tree";
 import { installPanel } from "./editor/panel";
@@ -318,6 +319,11 @@ export interface DrawEditorOptions {
   readonly grid?: Grid;
   /// Chi disegna ha cambiato la griglia, dal menu o coi tasti.
   readonly onGridChange?: (grid: Grid) => void;
+  /// «Usa cursori di precisione» di chi apre il disegno (la scelta ricordata, di serie spenta).
+  readonly preciseCursors?: boolean;
+  /// Chi disegna ha cambiato «Usa cursori di precisione»: `true` se la scelta è stata scritta; altrimenti resta
+  /// com'era.
+  readonly onPreciseCursorsChange?: (on: boolean) => Promise<boolean>;
   /// I colori scelti di recente, `#rrggbb`, dal più recente (default
   /// nessuno).
   readonly colors?: readonly string[];
@@ -443,6 +449,9 @@ export interface DrawEditor {
   /// Un'altra griglia, da chi monta l'editor: non si annuncia e non torna a
   /// `onGridChange`. Un passo fuori dai limiti lascia quello di prima.
   setGrid(grid: Grid): void;
+  /// Un'altra scelta dei cursori di precisione, da chi monta l'editor: non si scrive e non torna a
+  /// `onPreciseCursorsChange`.
+  setPreciseCursors(on: boolean): void;
   /// Altri colori recenti, da chi monta l'editor: non tornano a
   /// `onColorsChange`.
   setRecentColors(colors: readonly string[]): void;
@@ -493,6 +502,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installBars(ctx);
   installStage(ctx);
   installView(ctx);
+  installPreciseCursors(ctx, options.onPreciseCursorsChange);
   installMarks(ctx);
   installTree(ctx);
   installPanel(ctx);
@@ -585,6 +595,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return redoable();
     },
     stage,
+    setPreciseCursors(next) {
+      if (ctx.disposed) return;
+      ctx.preciseCursors = next;
+      ctx.applyToolCursor();
+    },
     get grid() {
       return ctx.grid;
     },

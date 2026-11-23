@@ -12,7 +12,14 @@ import { apri } from "./index";
 import { indiceDi } from "./indice";
 import indiceGenerato from "./indice.generated.json";
 
-vi.mock("../motore/finestre", () => ({ apriFinestra: vi.fn(() => Promise.resolve(true)) }));
+// La finestra vera aspetta `pronto` e ne gestisce il rifiuto (`motore`, `no_memory`); la finta lo
+// consuma allo stesso modo, sennò col motore assente il rifiuto resterebbe senza nessuno che lo guarda.
+vi.mock("../motore/finestre", () => ({
+  apriFinestra: vi.fn((_modulo: unknown, pronto: Promise<unknown>) => {
+    pronto.catch(() => undefined);
+    return Promise.resolve(true);
+  }),
+}));
 
 const ESITO = { revision: "1", preview: null, ops: "[]", selection: ["k1"], losses: [], refused: null, frame: null };
 

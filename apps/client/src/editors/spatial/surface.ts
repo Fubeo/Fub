@@ -67,17 +67,20 @@ import { DrawingFonts, markupFonts, vaultFontsOf, type FontNotes, type VaultFont
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import {
   currentGrid,
+  currentPreciseCursors,
   currentRecentColors,
   currentSuggested,
   currentWorkspace,
   readExportMemory,
   readGrid,
+  readPreciseCursors,
   readRecentColors,
   readSavedPens,
   saveSavedPens,
   currentSavedPens,
   saveExportMemory,
   saveGrid,
+  savePreciseCursors,
   saveRecentColors,
   saveSuggested,
   saveToolbar,
@@ -347,6 +350,10 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// dell'ultima lettura, finché non arriva quella di questa superficie.
   let workspace = currentWorkspace();
   let grid = currentGrid();
+  /// «Usa cursori di precisione»: la scelta dell'ultima lettura, finché non arriva quella di questa superficie.
+  let preciseCursors = currentPreciseCursors();
+  /// Chi disegna l'ha già scelta qui: la lettura non la riporta indietro.
+  let preciseCursorsChosen = false;
   /// Chi disegna ha già scelto la griglia qui: la lettura non la riporta
   /// indietro.
   let gridChosen = false;
@@ -570,6 +577,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         grid = next;
         gridChosen = true;
         saveGrid(next);
+      },
+      preciseCursors,
+      onPreciseCursorsChange: (on) => {
+        preciseCursorsChosen = true;
+        return savePreciseCursors(on);
       },
       colors,
       onColorsChange: (next) => {
@@ -935,6 +947,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     if (life.closed || gridChosen) return;
     grid = next;
     editor?.setGrid(next);
+  });
+  void readPreciseCursors().then((next) => {
+    if (life.closed || preciseCursorsChosen) return;
+    preciseCursors = next;
+    editor?.setPreciseCursors(next);
   });
   void readRecentColors().then((next) => {
     if (life.closed || colorsChosen) return;
