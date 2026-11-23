@@ -121,7 +121,10 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // libreria (`swatch.library.add`) e le finestre restano «da fare», con la causa nella nota.
   // T15 maschere: Crea maschera di opacità e le due letture della Trasparenza («fatto»); le altre
   // maschere, il pannello e l'isolamento della pagina restano «da fare» con la causa nella nota.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1112, fub: 114, escluso: 12, fatto: 313 });
+  // T16 testo base le sette del testo: `type.changeCase`, `type.createOutlines`,
+  // `type.convertToAreaType`, `type.convertToPointType`, `edit.findReplace`, `edit.findNext`
+  // e `text.editRange`.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1105, fub: 114, escluso: 12, fatto: 320 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

@@ -86,6 +86,40 @@ Il ponte degli strumenti del motore, la fila delle opzioni, i tracciati,
 i gesti a mano libera e il Contagocce stanno in
 [Gli strumenti del motore nel Completo](disegno-strumenti.md).
 
+## Il testo (T16)
+
+La famiglia `testo` (`crates/fub-disegno/src/famiglie/testo.rs`) passa al
+motore i comandi sul testo scelto; il formato è quello di
+[scene-format-text](../reference/scene-format-text.md), senza campi nuovi.
+
+- **All'apertura** (`crates/fub-disegno/src/apertura.rs`, `testi_in_area`) un
+  `<text fub:wrap>` con le righe unite da `fub:join` diventa nel motore un
+  testo in area: un solo stile, il testo con gli spazi e gli a capo che le
+  unioni dicono, il riquadro largo `fub:wrap` (nelle unità del testo) e alto
+  quanto le righe. Un testo con più stili o una scala non uniforme resta
+  da punto, e i comandi che lo cambiano si rifiutano come prima.
+- **La differenza** (`differenza_testo.rs`, `riscrittura`) riscrive intero un
+  testo in area prima o dopo, o con un'interlinea nuova: rimuove il
+  `<text>` e lo aggiunge con lo stesso id, gli attributi del file nel loro
+  ordine (cambiati solo carattere, allineamento, `x`, `y`, `fub:wrap`) e le
+  righe come le impagina il motore (`differenza_righe.rs`, `righe_scritte`:
+  `x`, `dy`, `fub:join`). Lo stesso scrive lo strumento trascinato
+  (`gesti/strumento.rs`). Un testo con più colori, stili per riga o caratteri
+  fuori da XML si rifiuta.
+- **`text.editRange`** si chiama con l'id di Fub (`element`) e il testo
+  intero (`text`); Fub calcola il pezzo diverso in byte del testo del motore
+  (`argomenti_della_copia`), e il motore lo sostituisce in un passo. Un
+  testo bloccato o nascosto si rifiuta prima (`locked`, `hidden`).
+- **Il doppio clic** con la Selezione su un testo scelto porta al campo
+  «Testo» dell'ispettore (`motore/gesti.ts`, `doubleTap`), che scrive alla
+  conferma: nessun IPC per tasto.
+- `type.createOutlines` trasforma il testo in tracciati; senza i caratteri
+  si rifiuta (`unsupported`). `edit.findReplace` ha una finestra scritta da
+  Fub (`FINESTRE_SCRITTE`, senza `ids`).
+
+Restano da fare `text.areaOptions` (colonne e margini interni non hanno un
+attributo nel formato) e il campo dell'interlinea nella sezione Carattere.
+
 ## I livelli
 
 Nel motore un livello di Fub si chiama col suo id, perché la mappa lega per

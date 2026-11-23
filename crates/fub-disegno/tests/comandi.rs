@@ -299,6 +299,11 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         // elemento non mappato danno il vuoto, come le altre letture.
         "disegno.transparency.info",
         "disegno.transparency.opacityMaskInfo",
+        // Trova e sostituisci e Trova successivo (K6 T16) cercano in tutto il
+        // disegno; Modifica testo nomina il suo testo nel valore (`element`).
+        "disegno.edit.findReplace",
+        "disegno.edit.findNext",
+        "disegno.text.editRange",
     ];
     let comandi = d.comandi(&["oa1a1a1a1".into(), "onessuno1".into()]);
     let accesi: Vec<&str> = comandi

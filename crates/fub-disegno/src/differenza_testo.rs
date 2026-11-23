@@ -13,7 +13,8 @@ use serde_json::{json, Map, Value};
 use vectorcraft_doc::text::{CharStyle, Justify, ParaStyle, TextKind, TextObject, TextRun};
 use vectorcraft_doc::{Node, NodeKind};
 
-use super::{matrici_vicine, no, numero, vicini, Rifiuto, DECIMALI_GEOMETRIA};
+use super::righe::{dividi, righe_scritte, GIUSTIFICATO_IN_AREA};
+use super::{matrici_vicine, no, numero, proprieta_uguali, vicini, Rifiuto, DECIMALI_GEOMETRIA};
 use crate::mappa::Elemento;
 
 /// Il perché di un'interlinea cambiata.
@@ -116,6 +117,180 @@ pub(super) fn testo_cambiato(
         attrs,
         righe,
     }))
+}
+
+/// Un `<text>` che si riscrive intero: tolto e rimesso con lo stesso id, gli
+/// attributi di prima (nell'ordine del file) con quelli cambiati, e un
+/// `<tspan>` per riga.
+#[derive(Debug, Clone)]
+pub(super) struct TestoRiscritto {
+    pub attrs: Map<String, Value>,
+    pub righe: Vec<Value>,
+}
+
+/// Vero se il cambio fra il testo `b` e il testo `a` si scrive solo
+/// riscrivendo il `<text>` intero: un testo in area, prima o dopo, o un
+/// testo di punto con un'altra interlinea (il `dy` di ogni riga).
+pub(super) fn da_riscrivere(b: &Node, a: &Node) -> bool {
+    let (NodeKind::Text(tb), NodeKind::Text(ta)) = (&b.kind, &a.kind) else {
+        return false;
+    };
+    if tb == ta {
+        return false;
+    }
+    let area = |t: &TextObject| matches!(t.kind, TextKind::Area { .. });
+    if area(tb) || area(ta) {
+        return true;
+    }
+    // Un'interlinea che nessun pezzo di prima aveva (scrivere o cancellare
+    // unisce e divide i pezzi senza cambiarla).
+    let interlinea = |r: &TextRun| r.style.leading.map(f64::to_bits);
+    let prima: Vec<Option<u64>> = tb.runs.iter().map(interlinea).collect();
+    ta.runs.iter().any(|r| !prima.contains(&interlinea(r)))
+}
+
+/// Il `<text>` `e` riscritto col testo `a` del motore, che era `b` (K6
+/// T16): la conversione fra testo di punto e testo in area, le parole e il
+/// carattere di un testo in area, l'interlinea. Si riscrive soltanto un
+/// testo di sole righe (niente pezzi, niente attributi sui `<tspan>` oltre a
+/// `x`, `dy` e `fub:join`), con lo stesso colore e le stesse proprietà di
+/// prima; il resto si rifiuta con il perché.
+pub(super) fn riscrittura(e: &Elemento, b: &Node, a: &Node) -> Result<TestoRiscritto, Rifiuto> {
+    let (NodeKind::Text(tb), NodeKind::Text(ta)) = (&b.kind, &a.kind) else {
+        return Err(no("un testo del motore che non è più un testo"));
+    };
+    let info = e
+        .testo
+        .as_ref()
+        .ok_or_else(|| no("un testo del motore che non viene da un <text>"))?;
+    if !info.di_punto && info.wrap.is_none() {
+        return Err(no(
+            "un testo su un tracciato o l'etichetta di un connettore non si riscrive dal motore",
+        ));
+    }
+    if info.pezzi || !info.attributi_delle_righe.is_empty() {
+        return Err(no(
+            "una riga del testo ha attributi o pezzi suoi: il testo non si riscrive intero",
+        ));
+    }
+    let mut stesse = a.clone();
+    stesse.kind = b.kind.clone();
+    if !proprieta_uguali(b, &stesse) {
+        return Err(no("il testo cambia anche in altro: un gesto alla volta"));
+    }
+    let colore = unico(&tb.runs, |s| s.fill.clone())
+        .ok_or_else(|| no("le parti del testo hanno colori diversi"))?;
+    if ta.runs.iter().any(|r| r.style.fill != colore) {
+        return Err(no(
+            "il colore e le righe del testo cambiano insieme: un gesto alla volta",
+        ));
+    }
+    // Il carattere e l'allineamento come attributi del `<text>`: l'interlinea
+    // la scrivono i `dy` delle righe.
+    let senza_interlinea = |t: &TextObject| {
+        let mut t = t.clone();
+        for r in &mut t.runs {
+            r.style.leading = None;
+        }
+        t
+    };
+    let (sb, sa) = (senza_interlinea(tb), senza_interlinea(ta));
+    let mut cambiati = Map::new();
+    allineamento(tb, ta, &mut cambiati)?;
+    carattere(e, &sb, &sa, &mut cambiati)?;
+    let (testo_b, testo_a) = (testo_dei_pezzi(&tb.runs), testo_dei_pezzi(&ta.runs));
+    let righe_di_punto = match (&tb.kind, &ta.kind) {
+        (TextKind::Point, TextKind::Point) if info.di_punto => {
+            Some(righe_nuove(&info.righe, &testo_b, &testo_a)?)
+        }
+        _ => None,
+    };
+    if let Some(c) = testo_a.chars().find(|c| !carattere_xml(*c)) {
+        return Err(no(format!(
+            "il carattere U+{:04X} non si scrive in un file SVG",
+            c as u32
+        )));
+    }
+    let ctm = e
+        .ctm()
+        .ok_or_else(|| no("la transform del testo non si legge"))?;
+    let m = ctm.inverse() * ta.xf;
+    let scritte = righe_scritte(ta, m, righe_di_punto).map_err(no)?;
+    let mut attrs = Map::new();
+    for (nome, valore) in &info.attributi {
+        if nome != "id" {
+            attrs.insert(nome.clone(), json!(valore));
+        }
+    }
+    for (nome, valore) in cambiati {
+        if valore.is_null() {
+            attrs.remove(&nome);
+        } else {
+            attrs.insert(nome, valore);
+        }
+    }
+    attrs.insert("x".into(), json!(scritte.x));
+    attrs.insert("y".into(), json!(scritte.y));
+    match scritte.wrap {
+        Some(w) => {
+            attrs.insert("fub:wrap".into(), json!(w));
+        }
+        None => {
+            attrs.remove("fub:wrap");
+        }
+    }
+    Ok(TestoRiscritto {
+        attrs,
+        righe: scritte.righe,
+    })
+}
+
+/// L'allineamento di un testo riscritto: `text-anchor` per sinistra, centro
+/// e destra, uguale in tutti i paragrafi; il resto dei paragrafi non cambia
+/// (Converti in testo di punto fa un paragrafo per riga, con lo stile del
+/// suo).
+fn allineamento(
+    tb: &TextObject,
+    ta: &TextObject,
+    attrs: &mut Map<String, Value>,
+) -> Result<(), Rifiuto> {
+    let senza_allineamento = |p: &ParaStyle| {
+        let mut p = p.clone();
+        p.justify = Justify::Left;
+        p
+    };
+    let primo = tb.para_at(0);
+    let tutti = |t: &TextObject| {
+        (0..t.paras.len().max(1))
+            .map(|i| t.para_at(i).clone())
+            .collect::<Vec<_>>()
+    };
+    let (pb, pa) = (tutti(tb), tutti(ta));
+    if pb
+        .iter()
+        .chain(&pa)
+        .any(|p| senza_allineamento(p) != senza_allineamento(primo))
+    {
+        return Err(no(RIENTRI));
+    }
+    let giusto = ta.para_at(0).justify;
+    if pa.iter().any(|p| p.justify != giusto) {
+        return Err(no(
+            "i paragrafi del testo hanno allineamenti diversi: il file ne scrive uno",
+        ));
+    }
+    if giusto == primo.justify {
+        return Ok(());
+    }
+    let ancora = match giusto {
+        Justify::Left | Justify::Auto => Value::Null,
+        Justify::Center => json!("middle"),
+        Justify::Right => json!("end"),
+        _ if matches!(ta.kind, TextKind::Area { .. }) => return Err(no(GIUSTIFICATO_IN_AREA)),
+        _ => return Err(no(GIUSTIFICATO)),
+    };
+    attrs.insert("text-anchor".into(), ancora);
+    Ok(())
 }
 
 /// Vero se i pezzi dicono le stesse parole con lo stesso carattere (il
@@ -354,22 +529,7 @@ fn carattere(
 /// Le righe di un testo: si va a capo con LF, CRLF, CR e i separatori di
 /// riga e di paragrafo del motore.
 fn righe_di(testo: &str) -> Vec<&str> {
-    let mut fuori = Vec::new();
-    let mut da = 0;
-    let mut it = testo.char_indices().peekable();
-    while let Some((i, c)) = it.next() {
-        if matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}' | '\u{3}') {
-            fuori.push(&testo[da..i]);
-            let mut fine = i + c.len_utf8();
-            if c == '\r' && it.peek().is_some_and(|(_, d)| *d == '\n') {
-                it.next();
-                fine += 1;
-            }
-            da = fine;
-        }
-    }
-    fuori.push(&testo[da..]);
-    fuori
+    dividi(testo)
 }
 
 /// Vero se `c` si scrive in un testo XML.

@@ -10,6 +10,7 @@ import { apriFinestra } from "../motore/finestre";
 import type { Caricatore, StatoFamiglia } from "./carica";
 import { applicaEsito, etichettaDi, eseguiVoce, type DipendenzeComando, type OpzioniFinestraComando } from "./esegui";
 import type { VoceIndice } from "./indice";
+import indiceGenerato from "./indice.generated.json";
 import { t } from "../strings";
 
 // La finestra vera è di T6 (`motore/finestre.test.ts`): qui si guarda solo
@@ -451,5 +452,29 @@ describe("eseguiVoce, Crea maschera di opacità (K6 T15, giro maschere)", () => 
       preview: false,
     });
     expect(azioni.commit).toHaveBeenCalledOnce();
+  });
+});
+
+describe("eseguiVoce, coi comandi del testo (K6 T16, testo base)", () => {
+  const T16 = ["type.changeCase", "type.createOutlines", "type.convertToAreaType", "type.convertToPointType", "edit.findReplace", "edit.findNext", "text.editRange"];
+  const dellIndice = (id: string): VoceIndice => (indiceGenerato.voci as readonly VoceIndice[]).find((una) => una.fonte === "motore" && una.id === id)!;
+
+  it("le sette righe del testo sono nell'indice vero, col prefisso del Disegno", () => {
+    for (const id of T16) {
+      const una = dellIndice(id);
+      expect(una, id).toBeDefined();
+      expect(una.chiamata).toMatchObject({ comando: `disegno.${id}` });
+      expect(una.famiglia).toBe("testo");
+    }
+    expect(dellIndice("edit.findReplace").finestra).toBe(true);
+  });
+
+  it("Crea contorni e Converti in testo in area arrivano al motore col loro id, sulla selezione", async () => {
+    for (const id of ["type.createOutlines", "type.convertToAreaType"]) {
+      const { d, sessione } = dipendenze();
+      eseguiVoce(dellIndice(id), d);
+      await tick();
+      expect(sessione.comando).toHaveBeenCalledWith({ id: `disegno.${id}`, selection: ["n1", "n2"], value: {}, preview: false });
+    }
   });
 });

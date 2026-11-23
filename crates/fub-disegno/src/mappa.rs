@@ -102,6 +102,14 @@ pub struct InfoTesto {
     /// I nomi degli attributi dei `<tspan>` oltre a `x`, `dy` e `fub:join`:
     /// un attributo del `<text>` non arriva dove una riga ne scrive uno suo.
     pub attributi_delle_righe: std::collections::BTreeSet<String>,
+    /// Gli attributi del `<text>`, nell'ordine del file e con le entità
+    /// sciolte: un testo che si riscrive intero (in area, con un'altra
+    /// interlinea) li tiene.
+    pub attributi: Vec<(String, String)>,
+    /// `fub:wrap` letto: la larghezza di un testo in area.
+    pub wrap: Option<f64>,
+    /// Il `fub:join` di ogni `<tspan>`, come è scritto.
+    pub unioni: Vec<Option<String>>,
 }
 
 impl Elemento {

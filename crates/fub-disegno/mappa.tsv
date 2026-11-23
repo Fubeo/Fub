@@ -603,7 +603,7 @@ motore	symbol.loadLibrary	Other Library…	Window › Symbol Libraries	simboli	F
 motore	text.tabs.set	Set Tab Stops	Window › Tabs	testo	F2	T16	da fare	ispettore/design	famiglia		Imposta tabulazioni
 motore	text.tabs.get	Tab Stops		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Tabulazioni
 motore	text.tabs.clear	Clear All Tabs	Window › Tabs	testo	F2	T16	da fare	ispettore/design	famiglia		Cancella tutte le tabulazioni
-motore	text.editRange	Edit Text		testo	F2	T16	da fare	ispettore/design	famiglia		Modifica testo
+motore	text.editRange	Edit Text		testo	F2	T16	fatto	ispettore/design	famiglia		Modifica testo
 motore	text.startList	Bullets and Numbering		testo	F2	T16	da fare	ispettore/design	famiglia		Punti elenco e numerazione
 motore	text.setRangeStyle	Character		testo	F2	T16	fatto	ispettore/design	famiglia		Carattere
 motore	text.touchType	Touch Type		testo	F2	T16	da fare	ispettore/design	famiglia		Ritocco testo
@@ -629,7 +629,7 @@ motore	text.thread.break	Break Thread		testo	F2	T16	da fare	ispettore/design	fam
 motore	text.thread.info	Threads		testo	F2	T16	da fare	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce	Concatenamenti
 motore	type.orientation.vertical	Vertical	Type › Orientation	testo	F2	T16	da fare	menu/testo	famiglia		Verticale
 motore	type.orientation.horizontal	Horizontal	Type › Orientation	testo	F2	T16	da fare	menu/testo	famiglia		Orizzontale
-motore	type.createOutlines	Create Outlines	Type	testo	F2	T16	da fare	menu/testo	famiglia		Crea contorni
+motore	type.createOutlines	Create Outlines	Type	testo	F2	T16	fatto	menu/testo	famiglia		Crea contorni
 motore	type.scaleTextAttributes	Scale Text Attributes	Type	testo	F2	T16	da fare	menu/testo	famiglia		Scala attributi di testo
 motore	type.opticalMarginAlignment	Optical Margin Alignment	Type	testo	F2	T16	da fare	menu/testo	famiglia		Allineamento ottico dei margini
 motore	type.systemLayout	System Layout		testo	F2	T16	da fare	ispettore/design	famiglia		Layout di sistema
@@ -641,15 +641,15 @@ motore	text.reshapePath	Reshape Type Path		testo	F2	T16	da fare	ispettore/design
 motore	text.fitHeadline	Fit Headline	Type	testo	F2	T16	da fare	menu/testo	famiglia		Adatta titolo
 motore	text.setStyle	Character		testo	F2	T16	fatto	ispettore/design	famiglia		Carattere
 motore	type.ruby	Ruby…		testo	F2	T16	da fare	ispettore/design	famiglia	finestra	Ruby…
-motore	type.changeCase	Change Case	Type › Change Case	testo	F2	T16	da fare	menu/testo	famiglia		Maiuscole/minuscole
+motore	type.changeCase	Change Case	Type › Change Case	testo	F2	T16	fatto	menu/testo	famiglia		Maiuscole/minuscole
 motore	type.smartPunctuation	Smart Punctuation…	Type	testo	F2	T16	da fare	menu/testo	famiglia	finestra	Punteggiatura intelligente…
-motore	type.convertToAreaType	Convert To Area Type	Type	testo	F2	T16	da fare	menu/testo	famiglia		Converti in testo in area
-motore	type.convertToPointType	Convert To Point Type	Type	testo	F2	T16	da fare	menu/testo	famiglia		Converti in testo per punti
+motore	type.convertToAreaType	Convert To Area Type	Type	testo	F2	T16	fatto	menu/testo	famiglia		Converti in testo in area
+motore	type.convertToPointType	Convert To Point Type	Type	testo	F2	T16	fatto	menu/testo	famiglia		Converti in testo per punti
 motore	type.pathOptions	Type on a Path Options…	Type › Type on a Path	testo	F2	T16	da fare	menu/testo	famiglia	finestra	Opzioni testo su tracciato…
 motore	type.fillPlaceholder	Fill with Placeholder Text	Type	testo	F2	T16	da fare	menu/testo	famiglia		Riempi con testo segnaposto
 motore	type.insert	Insert Character	Type	testo	F2	T16	da fare	menu/testo	famiglia		Inserisci carattere
-motore	edit.findReplace	Find and Replace…	Edit	testo	F2	T16	da fare	menu/modifica	famiglia	finestra	Trova e sostituisci…
-motore	edit.findNext	Find Next	Edit	testo	F2	T16	da fare	menu/modifica	famiglia		Trova successivo
+motore	edit.findReplace	Find and Replace…	Edit	testo	F2	T16	fatto	menu/modifica	famiglia	finestra	Trova e sostituisci…
+motore	edit.findNext	Find Next	Edit	testo	F2	T16	fatto	menu/modifica	famiglia		Trova successivo
 motore	edit.pasteWithoutFormatting	Paste without Formatting	Edit	nucleo	F1	T11	fatto	menu/modifica	nucleo		Incolla senza formattazione
 motore	variable.define	New Variable…	Window › Variables	dati	F4	T26	da fare	ispettore/design/documento	famiglia	finestra	Nuova variabile…
 motore	variable.delete	Delete Variable	Window › Variables	dati	F4	T26	da fare	ispettore/design/documento	famiglia		Elimina variabile

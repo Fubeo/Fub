@@ -803,6 +803,38 @@
     },
     {
       "fonte": "motore",
+      "id": "edit.findNext",
+      "chiamata": {
+        "comando": "disegno.edit.findNext"
+      },
+      "etichetta": {
+        "it": "Trova successivo",
+        "en": "Find Next"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "edit.findReplace",
+      "chiamata": {
+        "comando": "disegno.edit.findReplace"
+      },
+      "etichetta": {
+        "it": "Trova e sostituisci…",
+        "en": "Find and Replace…"
+      },
+      "posto": "menu/modifica",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": true
+    },
+    {
+      "fonte": "motore",
       "id": "edit.paste",
       "chiamata": {
         "comando": "disegno.edit.paste"
@@ -3475,6 +3507,22 @@
     },
     {
       "fonte": "motore",
+      "id": "text.editRange",
+      "chiamata": {
+        "comando": "disegno.text.editRange"
+      },
+      "etichetta": {
+        "it": "Modifica testo",
+        "en": "Edit Text"
+      },
+      "posto": "ispettore/design",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
       "id": "text.setRangeStyle",
       "chiamata": {
         "comando": "disegno.text.setRangeStyle"
@@ -3566,6 +3614,70 @@
       "posto": "ispettore/design/trasparenza",
       "famiglia": "aspetto",
       "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.changeCase",
+      "chiamata": {
+        "comando": "disegno.type.changeCase"
+      },
+      "etichetta": {
+        "it": "Maiuscole/minuscole",
+        "en": "Change Case"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.convertToAreaType",
+      "chiamata": {
+        "comando": "disegno.type.convertToAreaType"
+      },
+      "etichetta": {
+        "it": "Converti in testo in area",
+        "en": "Convert To Area Type"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.convertToPointType",
+      "chiamata": {
+        "comando": "disegno.type.convertToPointType"
+      },
+      "etichetta": {
+        "it": "Converti in testo per punti",
+        "en": "Convert To Point Type"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": null,
+      "effetto": "cambia",
+      "finestra": false
+    },
+    {
+      "fonte": "motore",
+      "id": "type.createOutlines",
+      "chiamata": {
+        "comando": "disegno.type.createOutlines"
+      },
+      "etichetta": {
+        "it": "Crea contorni",
+        "en": "Create Outlines"
+      },
+      "posto": "menu/testo",
+      "famiglia": "testo",
+      "tasto": "Cmd+Shift+O",
       "effetto": "cambia",
       "finestra": false
     },

@@ -92,9 +92,38 @@ Ogni cambio manda un comando solo e vale per tutti i testi scelti; i valori
 sono quelli che il pannello ha già. Le stesse righe escono dal pannello
 (Carattere, Dimensione, Peso, Spaziatura, Allineamento); l'Enfasi resta, per
 sottolineato e barrato, e restano lo Stile di Fub e l'Interlinea. Spento il
-Completo, il pannello è quello di sempre. L'interlinea, la crenatura, i
-rientri e il giustificato del motore non ci sono ancora: il motore non li sa
-scrivere in un SVG.
+Completo, il pannello è quello di sempre. Le sezioni non hanno ancora un
+campo per l'interlinea: il comando del motore la scrive (le righe del testo
+riscritte col loro `dy`), ma la riga resta quella del pannello. La crenatura
+e i rientri del motore non ci sono ancora: il motore non li sa scrivere in un
+SVG.
+
+Col Completo il testo si fa e si cambia anche così:
+
+- **Trascinare** col Testo (Completo) disegna un riquadro: il testo che vi si
+  scrive è **in area** e va a capo nella sua larghezza. Un clic senza
+  trascinare fa un testo da punto.
+- **Testo › Converti in testo in area** mette un testo da punto in un
+  riquadro largo quanto la sua riga più lunga; **Converti in testo per
+  punti** lo toglie, e le righe restano quelle che si vedevano. Lo stesso
+  `id` resta al testo.
+- **Il doppio clic** su un testo scelto, con la Selezione, porta nel campo
+  «Testo» dell'ispettore: le parole confermate sono un passo solo di
+  Annulla, e nessun tasto va al motore mentre si scrive. Il comando
+  **Modifica testo** (`text.editRange`) riceve il testo intero e cambia solo
+  il pezzo diverso, così lo stile delle altre parole resta.
+- **Testo › Maiuscole/minuscole** e **Testo › Crea contorni**: il secondo
+  trasforma le lettere in tracciati pieni, che non si scrivono più (serve il
+  carattere sul computer).
+- **Modifica › Trova e sostituisci…** cerca in tutti i testi del disegno
+  (maiuscole uguali, parole intere a scelta); **Trova successivo** sceglie il
+  testo che segue quello scelto. Una parola a cavallo di due stili non si
+  trova.
+
+Un testo in area cambiato dal Completo è riscritto intero, con gli a capo
+nuovi, lo stesso `id` e gli altri attributi del file al loro posto. Senza i
+caratteri sul computer il testo in area non si fa: il motore non sa dove
+andare a capo, e lo dice.
 
 Le sezioni sono in `apps/client/src/editors/spatial/completo/testo-sezioni.ts`,
 la casella in `apps/client/src/editors/spatial/motore/scrittura.ts`, i comandi

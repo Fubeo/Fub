@@ -832,6 +832,32 @@ describe("il Testo sul motore", () => {
     expect(editor.engine.text.match(/<text /g)).toHaveLength(1);
     expect(document.activeElement).toBe(wordsField());
   });
+
+  it("il doppio clic della selezione su un testo ci entra: il campo «Testo» a fuoco, niente cambia nel file", async () => {
+    const input = CLIC.input.replace(
+      "</g>",
+      '  <text id="ot1t1t1t1" x="100" y="80" fill="#000000" font-family="Inter, sans-serif" font-size="32"><tspan x="100" dy="0">Pioggia</tspan></text>\n  </g>',
+    );
+    expect(input).toContain('id="ot1t1t1t1"');
+    // Il motore sceglie il testo a ogni clic, senza operazioni.
+    const fake = createFakeHost({
+      drawing: {
+        gesto: (gesture) => ({ revision: gesture.revision, preview: null, ops: null, selection: gesture.phase === "commit" ? ["ot1t1t1t1"] : gesture.selection, losses: [], refused: null, frame: null }),
+      },
+    });
+    const editor = await mountClosed(input, fake);
+    editor.setTool("select");
+    await click(editor, 110, 70);
+    expect(editor.selection).toEqual(["ot1t1t1t1"]);
+    expect(document.activeElement).not.toBe(wordsField());
+    await click(editor, 110, 70);
+    expect(panelOf().hidden).toBe(false);
+    const field = wordsField()!;
+    expect(document.activeElement).toBe(field);
+    expect(field.value).toBe("Pioggia");
+    expect(editor.engine.text).toBe(input);
+    expect(editor.canUndo).toBe(false);
+  });
 });
 
 // --- I pezzi ------------------------------------------------------------------
