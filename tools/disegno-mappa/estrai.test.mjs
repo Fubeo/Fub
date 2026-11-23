@@ -136,7 +136,9 @@ test("la mappa del repository ha le righe dell'estrazione e la loro revisione", 
   // T14 colori aggiunti (giro 9, punto 1): Seleziona per tipo di colore (con la sua finestra),
   // Trova e Applica il campione più vicino: tre in più. Le letture del colore e le tinte piatte
   // restano «da fare» in questo giro; stampa e filtro restano «da fare» con la causa.
-  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1098, fub: 114, escluso: 12, fatto: 327 });
+  // T15 livelli altri: `layer.showAll` e `layer.unlockAll` diventano «fatto» (la visita dell'albero, con
+  // i loro casi in livelli.json); `layer.hideOthers` e `layer.lockOthers` restano «da fare», con la causa.
+  assert.deepEqual(conta(mappa.righe, "stato"), { "da fare": 1096, fub: 114, escluso: 12, fatto: 329 });
 });
 
 // --- un motore finto ---------------------------------------------------------------

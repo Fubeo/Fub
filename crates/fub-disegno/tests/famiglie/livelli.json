@@ -1118,6 +1118,201 @@
       "atteso": {
         "rifiuto": "unsupported"
       }
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-altri-nascosti.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "l1a2b3c4d",
+                "attrs": {
+                  "display": null
+                }
+              },
+              {
+                "op": "set",
+                "id": "l3c3c3c3c",
+                "attrs": {
+                  "display": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-dopo-altri.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-nascosto-sbloccato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l3c3c3c3c",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-nascosto.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-nascosto-bloccato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l3c3c3c3c",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-nascosto-bloccato.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-ricetta-nascosta.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-ricetta.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-inchiostro-nascosto.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l2b2b2b2b",
+            "attrs": {
+              "display": null
+            }
+          }
+        ]
+      },
+      "dopo": "mostra-tutti-inchiostro.svg"
+    },
+    {
+      "id": "layer.showAll",
+      "disegno": "tre-livelli-sottolivello-nascosto.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.unlockAll",
+      "disegno": "tre-livelli-altri-bloccati.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "batch",
+            "ops": [
+              {
+                "op": "set",
+                "id": "l1a2b3c4d",
+                "attrs": {
+                  "fub:locked": null
+                }
+              },
+              {
+                "op": "set",
+                "id": "l3c3c3c3c",
+                "attrs": {
+                  "fub:locked": null
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dopo": "sblocca-tutti-dopo-blocca.svg"
+    },
+    {
+      "id": "layer.unlockAll",
+      "disegno": "tre-livelli.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "rifiuto": "empty"
+      }
+    },
+    {
+      "id": "layer.unlockAll",
+      "disegno": "tre-livelli-bloccato-mostrato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l3c3c3c3c",
+            "attrs": {
+              "fub:locked": null
+            }
+          }
+        ]
+      },
+      "dopo": "sblocca-tutti-bloccato.svg"
+    },
+    {
+      "id": "layer.unlockAll",
+      "disegno": "tre-livelli-nascosto-bloccato.svg",
+      "selezione": [],
+      "argomenti": {},
+      "atteso": {
+        "ops": [
+          {
+            "op": "set",
+            "id": "l3c3c3c3c",
+            "attrs": {
+              "fub:locked": null
+            }
+          }
+        ]
+      },
+      "dopo": "sblocca-tutti-nascosto-bloccato.svg"
     }
   ]
 }

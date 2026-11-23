@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 400 300" width="400" height="300">
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="400" height="300" fill="#ffffff"/>
+  <g id="l1a2b3c4d" fub:locked="true" fub:layer="Livello 1">
+    <rect id="oa1a1a1a1" x="100" y="100" width="100" height="50" fill="#ff0000"/>
+  </g>
+  <g id="l2b2b2b2b" fub:layer="Livello 2">
+    <rect id="ob2b2b2b2" x="220" y="100" width="60" height="50" fill="#00aa00"/>
+  </g>
+  <g id="l3c3c3c3c" fub:locked="true" fub:layer="Livello 3">
+    <rect id="oc3c3c3c3" x="20" y="200" width="60" height="40" fill="#0000ff"/>
+  </g>
+</svg>

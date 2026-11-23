@@ -259,6 +259,9 @@ fn una_selezione_con_un_elemento_non_mappato_non_cambia_niente() {
         "disegno.addon.pen.removePoint",
         "disegno.addon.pen.togglePoint",
         "disegno.addon.pen.reshape",
+        // Mostra tutti e Sblocca tutti (K6 T15, livelli altri) guardano tutti i livelli, non la scelta.
+        "disegno.layer.showAll",
+        "disegno.layer.unlockAll",
         // I colori recenti e i proxy di riempimento e tratto (K6 T14) sono letture della sessione:
         // non guardano la scelta.
         "disegno.paint.recent",
